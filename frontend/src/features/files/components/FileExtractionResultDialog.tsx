@@ -1,4 +1,5 @@
 import { AlertTriangle, CircleCheck } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import {
   Dialog,
@@ -17,27 +18,35 @@ export interface FileExtractionResultDialogProps {
 }
 
 export function FileExtractionResultDialog({ model }: FileExtractionResultDialogProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={model.resultOpen} onOpenChange={model.setResultOpen}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CircleCheck className="text-forensics-success-text" />
-            文件提取完成
+            {t('fileBrowser.extraction.completedTitle')}
           </DialogTitle>
           <DialogDescription>{model.result?.destinationFileName}</DialogDescription>
         </DialogHeader>
 
         {model.result ? (
           <div className="grid gap-2 text-[11px] sm:grid-cols-2">
-            <KeyValueField label="提取大小" value={formatBytes(model.result.bytesWritten)} />
             <KeyValueField
-              label="大小校验"
-              value={model.result.sizeVerified ? '通过' : '未通过'}
+              label={t('fileBrowser.extraction.extractedSize')}
+              value={formatBytes(model.result.bytesWritten)}
             />
             <KeyValueField
-              label="审计记录"
-              value={model.result.auditPersisted ? '已写入' : '写入失败'}
+              label={t('fileBrowser.extraction.sizeVerification')}
+              value={model.result.sizeVerified
+                ? t('fileBrowser.extraction.sizeVerified')
+                : t('fileBrowser.extraction.sizeMismatch')}
+            />
+            <KeyValueField
+              label={t('fileBrowser.extraction.auditRecord')}
+              value={model.result.auditPersisted
+                ? t('fileBrowser.extraction.auditWritten')
+                : t('fileBrowser.extraction.auditWriteFailed')}
             />
             <KeyValueField
               className="sm:col-span-2"
@@ -60,7 +69,7 @@ export function FileExtractionResultDialog({ model }: FileExtractionResultDialog
 
         <DialogFooter>
           <Button type="button" variant="forensicsPrimary" onClick={() => model.setResultOpen(false)}>
-            确定
+            {t('fileBrowser.extraction.confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>

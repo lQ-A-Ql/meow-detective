@@ -537,62 +537,9 @@ Assert-NoMatchesInRuntimeFiles `
 
 # Hardcoded-copy baseline: these files still carry user-facing text outside i18n. The list
 # may only shrink; any file not listed here that carries hardcoded copy fails the guard.
-$hardcodedCopyBaseline = @(
-  'frontend/src/components/preview/FilePreviewDialog.tsx',
-  'frontend/src/components/preview/FilePreviewTabs.tsx',
-  'frontend/src/components/tables/DenseDataTable.tsx',
-  'frontend/src/components/tree/TreeConnector.tsx',
-  'frontend/src/components/tree/TreeSearch.tsx',
-  'frontend/src/components/viewers/AudioViewer.tsx',
-  'frontend/src/components/viewers/ImageViewer.tsx',
-  'frontend/src/components/viewers/TextViewer.tsx',
-  'frontend/src/components/viewers/VideoViewer.tsx',
-  'frontend/src/features/analysis/components/AnalysisProgressDrawer.tsx',
-  'frontend/src/features/analysis/components/ClusterView.tsx',
-  'frontend/src/features/analysis/components/CorrelationPanel.tsx',
-  'frontend/src/features/analysis/components/CorrelationWorkspace.tsx',
-  'frontend/src/features/analysis/components/LeadDetail.tsx',
-  'frontend/src/features/analysis/components/LeadList.tsx',
-  'frontend/src/features/analysis/components/LimitationsPanel.tsx',
-  'frontend/src/features/analysis/components/panels/ClassificationPanel.tsx',
-  'frontend/src/features/analysis/components/panels/ClassificationSubcategoryTable.tsx',
-  'frontend/src/features/analysis/components/panels/EmailExtractionPanel.tsx',
-  'frontend/src/features/analysis/components/panels/EventLogPanel.tsx',
-  'frontend/src/features/analysis/components/panels/FileClassificationBoard.tsx',
-  'frontend/src/features/analysis/components/panels/helpers.tsx',
-  'frontend/src/features/analysis/components/panels/SystemInfoPanel.tsx',
-  'frontend/src/features/analysis/components/V2GovernancePanels.tsx',
-  'frontend/src/features/analysis/components/V2WorkbenchWorkspace.tsx',
-  'frontend/src/features/analysis/components/VerificationPanel.tsx',
-  'frontend/src/features/analysis/wechat/mappers.ts',
-  'frontend/src/features/case/hooks.ts',
-  'frontend/src/features/files/components/FileEntryContextMenu.tsx',
-  'frontend/src/features/files/components/FileExtractionDialog.tsx',
-  'frontend/src/features/files/components/FileExtractionResultDialog.tsx',
-  'frontend/src/features/files/components/FileIconWithStatusOverlay.tsx',
-  'frontend/src/features/files/components/FileListPanel.tsx',
-  'frontend/src/features/files/components/FilePreviewPanel.tsx',
-  'frontend/src/features/files/components/FileTreePanel.tsx',
-  'frontend/src/features/files/components/FileVisibilityToggle.tsx',
-  'frontend/src/features/files/components/VirtualFileTree.tsx',
-  'frontend/src/features/files/hooks/use-bitlocker-volume.ts',
-  'frontend/src/features/files/hooks/use-file-extraction.ts',
-  'frontend/src/features/files/hooks/use-file-preview.ts',
-  'frontend/src/features/files/hooks/use-image-mount-model.ts',
-  'frontend/src/features/infrastructure/model/cluster-status-map.ts',
-  'frontend/src/features/jobs/components/BottomDrawer.tsx',
-  'frontend/src/features/recovery/hooks.ts',
-  'frontend/src/features/reports/components/ReportsWorkspace.tsx',
-  'frontend/src/features/reports/use-reports-workspace-model.ts',
-  'frontend/src/features/search/components/SearchWorkspace.tsx',
-  'frontend/src/features/timeline/components/TimelineHistogram.tsx',
-  'frontend/src/features/timeline/components/TimelineWorkspace.tsx',
-  'frontend/src/lib/api/client.ts',
-  'frontend/src/lib/file-icons.ts',
-  'frontend/src/lib/partition-display.ts',
-  'frontend/src/stores/mcp-error-utils.ts'
-)
-
+# Hardcoded-copy baseline: intentionally EMPTY. Every runtime file routes user-facing text
+# through i18n now, so a non-empty row here would be newly added debt.
+$hardcodedCopyBaseline = @()
 $hardcodedCopyViolations = @()
 foreach ($file in $styleExemptRuntimeFiles) {
   $relative = Get-RelativePath $file.FullName
@@ -600,13 +547,13 @@ foreach ($file in $styleExemptRuntimeFiles) {
     continue
   }
   $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
-  foreach ($line in ($content -split "\r?\n")) {
-    $trimmed = $line.Trim()
-    if ($trimmed.StartsWith('//') -or $trimmed.StartsWith('*') -or $trimmed.StartsWith('/*')) {
-      continue
-    }
-    if ($trimmed -match '[\u4e00-\u9fff]') {
-      $hardcodedCopyViolations += "${relative}: $trimmed"
+  # Comments are not copy: strip block and line comments first, so a one-line JSX comment
+  # such as {/* ... */} is not reported as hardcoded user-facing text.
+  $code = [regex]::Replace($content, '/\*[\s\S]*?\*/', '')
+  $code = [regex]::Replace($code, '(?m)//.*$', '')
+  foreach ($line in ($code -split "\r?\n")) {
+    if ($line -match '[\u4e00-\u9fff]') {
+      $hardcodedCopyViolations += "${relative}: $($line.Trim())"
       break
     }
   }

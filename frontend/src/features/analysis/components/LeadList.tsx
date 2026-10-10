@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type {
   CorrelationFamilyCoverage,
   CorrelationLead,
@@ -15,13 +16,15 @@ import {
 } from './correlation-helpers';
 
 export function CorrelationFamilyCoveragePanel({ items }: { items: CorrelationFamilyCoverage[] }) {
+  const { t } = useTranslation();
+
   return (
     <div className="rounded-none border border-forensics-border bg-forensics-surface p-4" data-testid="correlation-family-coverage-panel">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-[12px] font-light text-forensics-text">规则家族覆盖</div>
+          <div className="text-[12px] font-light text-forensics-text">{t('correlation.lead.coverageTitle')}</div>
           <div className="mt-1 text-[11px] text-forensics-muted">
-            直接展示关联快照产出的家族覆盖、线索强度与命中信号。
+            {t('correlation.lead.coverageDescription')}
           </div>
         </div>
       </div>
@@ -43,8 +46,8 @@ export function CorrelationFamilyCoveragePanel({ items }: { items: CorrelationFa
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
               <Metric label="Lead" value={item.leadCount.toString()} />
-              <Metric label="高置信" value={item.highConfidenceLeadCount.toString()} />
-              <Metric label="待复核" value={item.reviewLeadCount.toString()} />
+              <Metric label={t('correlation.metrics.highConfidence')} value={item.highConfidenceLeadCount.toString()} />
+              <Metric label={t('dashboard.status.review')} value={item.reviewLeadCount.toString()} />
               <Metric label="Cluster" value={item.clusterCount.toString()} />
             </div>
             {item.sampleSignals.length > 0 ? (
@@ -57,7 +60,7 @@ export function CorrelationFamilyCoveragePanel({ items }: { items: CorrelationFa
                 </div>
               </div>
             ) : (
-              <div className="mt-3 text-[11px] text-forensics-muted">当前没有可展示的该家族命中信号。</div>
+              <div className="mt-3 text-[11px] text-forensics-muted">{t('correlation.lead.hitsEmpty')}</div>
             )}
           </div>
         ))}
@@ -77,6 +80,8 @@ export function LeadCard({
   onJump: (route: string, targetId: string) => void;
   onSelect: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div
       role="button"
@@ -106,10 +111,10 @@ export function LeadCard({
         </span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-        <Metric label="主文件" value={lead.primaryFileId} mono />
-        <Metric label="支撑节点" value={lead.supportingNodeIds.length.toString()} />
-        <Metric label="来源类别" value={summarizeLeadKinds(lead) || '-'} />
-        <Metric label="告警数" value={lead.caveats.length.toString()} />
+        <Metric label={t('correlation.lead.metricPrimaryFile')} value={lead.primaryFileId} mono />
+        <Metric label={t('correlation.lead.metricSupportingNodes')} value={lead.supportingNodeIds.length.toString()} />
+        <Metric label={t('correlation.lead.metricSourceCategory')} value={summarizeLeadKinds(lead) || '-'} />
+        <Metric label={t('correlation.lead.metricCaveatCount')} value={lead.caveats.length.toString()} />
       </div>
       <FamilyPills families={lead.families} testId={`lead-families-${lead.id}`} />
       {lead.matchSignals.length > 0 ? (

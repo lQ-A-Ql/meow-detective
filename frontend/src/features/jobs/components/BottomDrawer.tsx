@@ -63,7 +63,7 @@ export function BottomDrawer({ model, analysisProgress }: BottomDrawerProps) {
               isResizing ? 'bg-forensics-info-bg' : 'hover:bg-forensics-info-bg'
             }`}
             onMouseDown={onResizeStart}
-            title="拖拽调整抽屉高度"
+            title={t('bottomDrawer.resizeHandle')}
           />
           <div
             data-testid="bottom-drawer-panels"

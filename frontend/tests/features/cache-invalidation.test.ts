@@ -69,6 +69,10 @@ describe('projection cache invalidation', () => {
       ['artifacts'],
       ['search'],
       ['analysis'],
+      ['graph'],
+      ['linux-evidence-sets'],
+      ['linux-evidence-set-summary'],
+      ['linux-evidence-set-events'],
     ]);
   });
 
@@ -86,6 +90,10 @@ describe('projection cache invalidation', () => {
       ['artifacts'],
       ['search'],
       ['analysis'],
+      ['graph'],
+      ['linux-evidence-sets'],
+      ['linux-evidence-set-summary'],
+      ['linux-evidence-set-events'],
       ['jobs', 'warnings'],
       ['jobs', 'trace'],
     ]);
@@ -148,9 +156,12 @@ describe('projection cache invalidation', () => {
     invalidateEventProjectionQueries(queryClient, 'job-cancelled');
 
     const keys = invalidatedKeys(invalidateSpy);
-    expect(keys).toHaveLength(30);
+    // 3 terminal events x (8 import projections + graph + 3 Linux evidence-set keys + 2 job diagnostics)
+    expect(keys).toHaveLength(42);
     expect(keys.filter((key) => Array.isArray(key) && key[0] === 'analysis')).toHaveLength(3);
     expect(keys.filter((key) => Array.isArray(key) && key[0] === 'jobs')).toHaveLength(6);
+    expect(keys.filter((key) => Array.isArray(key) && key[0] === 'graph')).toHaveLength(3);
+    expect(keys.filter((key) => Array.isArray(key) && key[0] === 'linux-evidence-sets')).toHaveLength(3);
   });
 
   it('routes cache status updates by cache key when materialized', () => {

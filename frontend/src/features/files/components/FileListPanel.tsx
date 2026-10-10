@@ -1,5 +1,5 @@
 import { ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useCallback, type ReactElement } from 'react';
+import { useCallback, useMemo, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
@@ -7,58 +7,6 @@ import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { FileIconWithStatusOverlay } from '@/features/files/components/FileIconWithStatusOverlay';
 import { FileEntryContextMenu } from '@/features/files/components/FileEntryContextMenu';
 import type { FileEntryRow } from '@/types/models';
-
-// Module-level columns: a stable reference keeps DenseDataTable's memoized
-// rows from re-rendering on every parent render.
-const FILE_LIST_COLUMNS: DenseColumn<FileEntryRow>[] = [
-  {
-    key: 'name',
-    title: '名称',
-    className: 'w-[34%]',
-    sortable: true,
-    sortKey: 'name',
-    render: (row) => (
-      <div className="flex items-center gap-2 min-w-0">
-        <FileIconWithStatusOverlay
-          name={row.name}
-          entryType={row.entryType}
-          deleted={row.deleted}
-          hidden={row.hidden}
-          system={row.system}
-          size={12}
-        />
-        <span className="truncate">{row.name}</span>
-      </div>
-    ),
-  },
-  {
-    key: 'size',
-    title: '大小',
-    className: 'w-28 text-forensics-muted',
-    sortable: true,
-    sortKey: 'size',
-    render: (row) =>
-      row.entryType === 'directory'
-        ? '-'
-        : row.size
-          ? `${Math.round(row.size / 1000)} KB`
-          : '0 KB',
-  },
-  {
-    key: 'modifiedAt',
-    title: '修改时间',
-    className: 'w-44 text-forensics-muted',
-    sortable: true,
-    sortKey: 'modifiedAt',
-    render: (row) => row.modifiedAt ?? '-',
-  },
-  {
-    key: 'attr',
-    title: '属性',
-    className: 'text-forensics-muted-light',
-    render: (row) => formatEntryAttributes(row),
-  },
-];
 
 /**
  * `ls -l` style ten-character rendering of a Unix mode: one type character
@@ -142,6 +90,61 @@ export function FileListPanel({
 }: FileListPanelProps) {
   const { t } = useTranslation();
   const selectedFile = sortedRows.find((row) => row.id === selectedFileId);
+  // Column labels are translated, so the array is rebuilt only when the active
+  // language changes; a stable reference keeps DenseDataTable's memoized rows
+  // from re-rendering on every parent render.
+  const columns = useMemo<DenseColumn<FileEntryRow>[]>(
+    () => [
+      {
+        key: 'name',
+        title: t('common.sort.name'),
+        className: 'w-[34%]',
+        sortable: true,
+        sortKey: 'name',
+        render: (row) => (
+          <div className="flex items-center gap-2 min-w-0">
+            <FileIconWithStatusOverlay
+              name={row.name}
+              entryType={row.entryType}
+              deleted={row.deleted}
+              hidden={row.hidden}
+              system={row.system}
+              size={12}
+            />
+            <span className="truncate">{row.name}</span>
+          </div>
+        ),
+      },
+      {
+        key: 'size',
+        title: t('common.sort.size'),
+        className: 'w-28 text-forensics-muted',
+        sortable: true,
+        sortKey: 'size',
+        render: (row) =>
+          row.entryType === 'directory'
+            ? '-'
+            : row.size
+              ? `${Math.round(row.size / 1000)} KB`
+              : '0 KB',
+      },
+      {
+        key: 'modifiedAt',
+        title: t('common.sort.modifiedAt'),
+        className: 'w-44 text-forensics-muted',
+        sortable: true,
+        sortKey: 'modifiedAt',
+        render: (row) => row.modifiedAt ?? '-',
+      },
+      {
+        key: 'attr',
+        title: t('fileBrowser.list.columnAttributes'),
+        className: 'text-forensics-muted-light',
+        render: (row) => formatEntryAttributes(row),
+      },
+    ],
+    [t],
+  );
   const handleRowClick = useCallback(
     (row: FileEntryRow) => {
       if (row.entryType === 'directory') {
@@ -192,8 +195,8 @@ export function FileListPanel({
               size="iconXs"
               onClick={goToPreviousRows}
               disabled={!canGoToPreviousRows}
-              aria-label="上一页"
-              title="上一页"
+              aria-label={t('fileBrowser.list.previousPage')}
+              title={t('fileBrowser.list.previousPage')}
             >
               <ChevronLeft size={12} />
             </Button>
@@ -203,8 +206,8 @@ export function FileListPanel({
               size="iconXs"
               onClick={goToNextRows}
               disabled={!canGoToNextRows}
-              aria-label="下一页"
-              title="下一页"
+              aria-label={t('fileBrowser.list.nextPage')}
+              title={t('fileBrowser.list.nextPage')}
             >
               <ChevronRight size={12} />
             </Button>
@@ -218,16 +221,16 @@ export function FileListPanel({
         selectedRowKey={selectedFile?.id}
         onRowClick={handleRowClick}
         renderRowContextMenu={renderRowContextMenu}
-        emptyTitle="当前目录为空"
+        emptyTitle={t('fileBrowser.list.emptyTitle')}
         emptyDescription={
           rowsPage?.truncated
-            ? `当前仅加载前 ${rowsPage.limit} 项，共 ${rowsPage.totalCount} 项。`
-            : '所选路径下没有可展示的文件对象。'
+            ? t('fileBrowser.list.emptyTruncated', { limit: rowsPage.limit, total: rowsPage.totalCount })
+            : t('fileBrowser.list.emptyDescription')
         }
         sortKey={fileSortKey}
         sortDirection={fileSortDirection}
         onSort={handleSort}
-        columns={FILE_LIST_COLUMNS}
+        columns={columns}
         />
       </DenseDataTableFrame>
     </div>

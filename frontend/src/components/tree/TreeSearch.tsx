@@ -8,6 +8,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, X } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -23,9 +24,10 @@ interface TreeSearchProps {
 
 export function TreeSearch({
   onFilter,
-  placeholder = '过滤目录...',
+  placeholder,
   debounceMs = 150,
 }: TreeSearchProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
 
   // 防抖处理
@@ -53,7 +55,7 @@ export function TreeSearch({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={placeholder}
+          placeholder={placeholder ?? t('tree.filterPlaceholder')}
           variant="mono"
           inputSize="compact"
           className="pl-7 pr-6"
@@ -65,8 +67,8 @@ export function TreeSearch({
             size="iconXs"
             onClick={handleClear}
             className="absolute right-1.5 top-1/2 -translate-y-1/2 text-forensics-muted-lighter"
-            title="清除"
-            aria-label="清除"
+            title={t('tree.clear')}
+            aria-label={t('tree.clear')}
           >
             <X size={10} className="text-forensics-muted-lighter" />
           </Button>

@@ -1,4 +1,5 @@
 import type { McpPermissionProfile } from '@/lib/api/mcp-protocol';
+import i18n from '@/i18n';
 
 export function defaultPermissions(): McpPermissionProfile {
   return {
@@ -22,5 +23,5 @@ export function formatError(err: unknown): string {
   if (hasMessage(err)) {
     return String(err.message);
   }
-  return '未知错误';
+  return i18n.t('errorBoundary.unknownError');
 }

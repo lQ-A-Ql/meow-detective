@@ -44,12 +44,11 @@ describe('graph API', () => {
     });
   });
 
-  it('getNodeNeighborhood sends nodeId and depth', async () => {
+  it('getNodeNeighborhood sends a request wrapper with nodeId and depth', async () => {
     requestMock.mockResolvedValueOnce({ nodes: [], edges: [] } as never);
     await getNodeNeighborhood('node-1', 3);
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.graph.GET_NODE_NEIGHBORHOOD, {
-      nodeId: 'node-1',
-      depth: 3,
+      request: { nodeId: 'node-1', depth: 3 },
     });
   });
 
@@ -57,8 +56,7 @@ describe('graph API', () => {
     requestMock.mockResolvedValueOnce({ nodes: [], edges: [] } as never);
     await getNodeNeighborhood('node-2');
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.graph.GET_NODE_NEIGHBORHOOD, {
-      nodeId: 'node-2',
-      depth: 1,
+      request: { nodeId: 'node-2', depth: 1 },
     });
   });
 
@@ -66,7 +64,7 @@ describe('graph API', () => {
     requestMock.mockResolvedValueOnce([] as never);
     const result = await getProvenanceChain('edge-1');
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.graph.GET_PROVENANCE_CHAIN, {
-      edgeId: 'edge-1',
+      request: { edgeId: 'edge-1' },
     });
     expect(result).toEqual([]);
   });

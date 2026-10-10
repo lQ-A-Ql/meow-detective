@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+import i18n from '@/i18n';
 import type { LinuxEvidenceSetSummary, LinuxTopologyScopeSummary } from '@/types/linuxCluster';
 
 export type EvidenceStatus = 'complete' | 'partial' | 'failed' | 'pending' | 'candidate' | 'proven' | 'indeterminate' | 'unsupported' | 'unknown';
@@ -54,12 +55,12 @@ export function capabilitiesForSummary(summary: LinuxEvidenceSetSummary): Cluste
   const rbd = derived.find((item) => item.kind.toLowerCase().includes('rbd'));
   const cephFs = derived.find((item) => item.kind.toLowerCase().includes('cephfs'));
   return [
-    { kind: 'linux_host', level: host ? 'metadata-browseable' : 'unsupported', status: host?.status ?? 'unsupported', diagnostics: host?.diagnostics ?? (['未发现 Linux host scope evidence']) },
-    { kind: 'pve', level: pve ? 'metadata-only' : 'unsupported', status: pve?.identityState ?? 'unsupported', diagnostics: pve?.diagnostics ?? ['未发现 PVE scope evidence'] },
-    { kind: 'ceph', level: ceph ? 'metadata-only' : 'unsupported', status: ceph?.evidenceCompleteness ?? 'unsupported', diagnostics: ceph?.diagnostics ?? ['未发现 Ceph scope evidence'] },
-    { kind: 'rbd', level: rbd?.importState === 'ready' ? 'bounded-preview' : 'metadata-only', status: rbd?.provenanceStatus ?? 'unsupported', diagnostics: rbd ? [] : ['没有派生 RBD 数据源'] },
-    { kind: 'cephfs', level: cephFs?.importState === 'ready' ? 'bounded-preview' : 'metadata-only', status: cephFs?.provenanceStatus ?? 'indeterminate', diagnostics: cephFs ? [] : ['没有派生 CephFS 数据源'] },
-    { kind: 'kubernetes', level: kubernetes ? 'metadata-only' : 'unsupported', status: kubernetes?.identityState ?? 'candidate', diagnostics: kubernetes?.diagnostics ?? ['未发现 Kubernetes scope evidence'] },
+    { kind: 'linux_host', level: host ? 'metadata-browseable' : 'unsupported', status: host?.status ?? 'unsupported', diagnostics: host?.diagnostics ?? [i18n.t('infrastructure.capabilitiesDiagnostics.linuxHost')] },
+    { kind: 'pve', level: pve ? 'metadata-only' : 'unsupported', status: pve?.identityState ?? 'unsupported', diagnostics: pve?.diagnostics ?? [i18n.t('infrastructure.capabilitiesDiagnostics.pve')] },
+    { kind: 'ceph', level: ceph ? 'metadata-only' : 'unsupported', status: ceph?.evidenceCompleteness ?? 'unsupported', diagnostics: ceph?.diagnostics ?? [i18n.t('infrastructure.capabilitiesDiagnostics.ceph')] },
+    { kind: 'rbd', level: rbd?.importState === 'ready' ? 'bounded-preview' : 'metadata-only', status: rbd?.provenanceStatus ?? 'unsupported', diagnostics: rbd ? [] : [i18n.t('infrastructure.capabilitiesDiagnostics.rbd')] },
+    { kind: 'cephfs', level: cephFs?.importState === 'ready' ? 'bounded-preview' : 'metadata-only', status: cephFs?.provenanceStatus ?? 'indeterminate', diagnostics: cephFs ? [] : [i18n.t('infrastructure.capabilitiesDiagnostics.cephfs')] },
+    { kind: 'kubernetes', level: kubernetes ? 'metadata-only' : 'unsupported', status: kubernetes?.identityState ?? 'candidate', diagnostics: kubernetes?.diagnostics ?? [i18n.t('infrastructure.capabilitiesDiagnostics.kubernetes')] },
   ];
 }
 

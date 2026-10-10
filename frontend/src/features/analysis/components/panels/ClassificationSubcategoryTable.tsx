@@ -1,19 +1,26 @@
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { DenseColumn } from '@/components/tables/DenseDataTable';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import type { ClassifiedFileRow, ClassificationSubcategory } from '@/types/models';
 import { formatSize } from './helpers';
 
-const CLASSIFICATION_COLUMNS: DenseColumn<ClassifiedFileRow>[] = [
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+// Column titles are translated, so the array is built from `t` and memoized in
+// the component; the stable reference keeps DenseDataTable row memoization intact.
+function classificationColumns(t: Translate): DenseColumn<ClassifiedFileRow>[] {
+  return [
   {
     key: 'name',
-    title: '文件名',
+    title: t('analysisPanels.subcategory.fileName'),
     className: 'min-w-[220px]',
     render: (row) => row.name,
   },
   {
     key: 'path',
-    title: '路径',
+    title: t('search.columns.path'),
     className: 'min-w-[260px]',
     render: (row) => (
       <span className="font-mono text-[10px] text-forensics-muted-light">{row.path}</span>
@@ -21,13 +28,13 @@ const CLASSIFICATION_COLUMNS: DenseColumn<ClassifiedFileRow>[] = [
   },
   {
     key: 'magicType',
-    title: '魔数类型',
+    title: t('analysisPanels.subcategory.magicType'),
     className: 'w-[90px]',
     render: (row) => row.magicType ?? '-',
   },
   {
     key: 'source',
-    title: '判定',
+    title: t('analysisPanels.subcategory.source'),
     className: 'w-[70px]',
     render: (row) => (
       <span
@@ -37,17 +44,18 @@ const CLASSIFICATION_COLUMNS: DenseColumn<ClassifiedFileRow>[] = [
             : 'text-forensics-muted'
         }
       >
-        {row.classificationSource === 'magic' ? '魔数' : '推断'}
+        {row.classificationSource === 'magic' ? t('analysisPanels.subcategory.magic') : t('analysisPanels.subcategory.inferred')}
       </span>
     ),
   },
   {
     key: 'size',
-    title: '大小',
+    title: t('common.sort.size'),
     className: 'w-[100px] text-right',
     render: (row) => formatSize(row.size),
   },
-];
+  ];
+}
 
 export function ClassificationSubcategoryTable({
   subcategory,
@@ -58,6 +66,8 @@ export function ClassificationSubcategoryTable({
   selectedFileId?: string;
   onSelect: (row: ClassifiedFileRow) => void;
 }) {
+  const { t } = useTranslation();
+  const columns = useMemo(() => classificationColumns(t), [t]);
   return (
     <div>
       <div className="mb-1 flex items-center gap-2 text-[11px]">
@@ -65,19 +75,21 @@ export function ClassificationSubcategoryTable({
           {subcategory.name}
         </span>
         <span className="text-forensics-muted-lighter">
-          {subcategory.fileCount} 个 · {formatSize(subcategory.totalSize)}
-          {subcategory.truncated ? ` · 抽样 ${subcategory.files.length} 个` : ''}
+          {t('analysisPanels.countWithSize', { count: subcategory.fileCount, size: formatSize(subcategory.totalSize) })}
+          {subcategory.truncated
+            ? ` · ${t('analysisPanels.subcategory.sampled', { count: subcategory.files.length })}`
+            : ''}
         </span>
       </div>
       <DenseDataTableFrame rowCount={subcategory.files.length}>
         <DenseDataTable
           rows={subcategory.files}
-          columns={CLASSIFICATION_COLUMNS}
+          columns={columns}
           getRowKey={(row) => row.fileId}
           selectedRowKey={selectedFileId}
           onRowClick={onSelect}
-          emptyTitle="暂无文件"
-          emptyDescription="该子分类当前没有可展示的抽样文件。"
+          emptyTitle={t('analysisPanels.subcategory.emptyTitle')}
+          emptyDescription={t('analysisPanels.subcategory.emptyDescription')}
         />
       </DenseDataTableFrame>
     </div>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { EyeOff, X } from 'lucide-react';
 import { getFileIcon } from '@/lib/file-icons';
 import { TokenIcon } from '@/components/data-display';
@@ -14,18 +15,6 @@ export interface FileIconWithStatusOverlayProps {
   className?: string;
 }
 
-function statusTitle({
-  deleted,
-  hidden,
-  system,
-}: Pick<FileIconWithStatusOverlayProps, 'deleted' | 'hidden' | 'system'>) {
-  const parts = [];
-  if (deleted) parts.push('已删除');
-  if (hidden) parts.push('隐藏');
-  if (system) parts.push('系统');
-  return parts.length ? parts.join(' / ') : undefined;
-}
-
 export function FileIconWithStatusOverlay({
   name,
   entryType,
@@ -37,9 +26,14 @@ export function FileIconWithStatusOverlay({
   size = 12,
   className = '',
 }: FileIconWithStatusOverlayProps) {
+  const { t } = useTranslation();
   const iconInfo = getFileIcon({ name, entryType, status, expanded });
   const IconComponent = iconInfo.icon;
-  const title = statusTitle({ deleted, hidden, system });
+  const statusParts: string[] = [];
+  if (deleted) statusParts.push(t('wechatWorkspace.deleted'));
+  if (hidden) statusParts.push(t('fileBrowser.status.hidden'));
+  if (system) statusParts.push(t('fileBrowser.status.system'));
+  const title = statusParts.length ? statusParts.join(' / ') : undefined;
 
   return (
     <span

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { CollapsibleSection } from '@/components/layout/CollapsibleSection';
 import { ClassificationSubcategoryTable } from './ClassificationSubcategoryTable';
 import type {
@@ -36,26 +37,27 @@ export function FileClassificationBoard({
   selectedFileId?: string;
   onSelect: (row: ClassifiedFileRow) => void;
 }) {
+  const { t } = useTranslation();
   if (!board) {
-    return <EmptyLine text="文件分类数据暂不可用。" />;
+    return <EmptyLine text={t('analysisPanels.board.unavailable')} />;
   }
 
   return (
     <div className="space-y-6">
       <SummaryStrip
         items={[
-          ['文件总数', board.totalFiles.toString()],
-          ['文件总大小', formatSize(board.totalSize)],
-          ['魔数识别', board.magicClassifiedCount.toString()],
-          ['元数据推断', board.metadataClassifiedCount.toString()],
-          ['分类族', board.groups.length.toString()],
+          [t('analysisPanels.board.totalFiles'), board.totalFiles.toString()],
+          [t('analysisPanels.board.totalSize'), formatSize(board.totalSize)],
+          [t('analysisPanels.board.magicClassified'), board.magicClassifiedCount.toString()],
+          [t('analysisPanels.board.metadataClassified'), board.metadataClassifiedCount.toString()],
+          [t('analysisPanels.board.groupCount'), board.groups.length.toString()],
         ]}
       />
 
       {board.warnings?.length ? <WarningList warnings={board.warnings} /> : null}
 
       {board.groups.length === 0 ? (
-        <EmptyLine text="未发现可分类文件。" />
+        <EmptyLine text={t('analysisPanels.board.empty')} />
       ) : (
         <div className="space-y-5">
           {board.groups.map((group) => {
@@ -72,7 +74,7 @@ export function FileClassificationBoard({
                     <TokenIcon icon={Icon} size={17} color={color} />
                     <h4 className="text-[13px] font-light text-forensics-text">{group.displayName}</h4>
                     <span className="text-[11px] text-forensics-muted-lighter">
-                      {group.fileCount} 个 · {formatSize(group.totalSize)}
+                      {t('analysisPanels.countWithSize', { count: group.fileCount, size: formatSize(group.totalSize) })}
                     </span>
                   </>
                 }

@@ -15,6 +15,7 @@ import {
   renameDataSource,
 } from '@/lib/api/case';
 import { getFileTree } from '@/lib/api/files';
+import i18n from '@/i18n';
 
 export function useCurrentCase() {
   return useQuery({ queryKey: ['case', 'current'], queryFn: getCurrentCase, retry: false });
@@ -112,7 +113,7 @@ export function useDeleteCase() {
       qc.invalidateQueries();
     },
     onError: (error: Error) => {
-      toast.error(`删除案件失败: ${error.message}`);
+      toast.error(i18n.t('caseActions.deleteCaseFailed', { message: error.message }));
     },
   });
 }
@@ -133,7 +134,7 @@ export function useDeleteDataSource() {
       qc.invalidateQueries({ queryKey: ['analysis'] });
     },
     onError: (error: Error) => {
-      toast.error(`删除数据源失败: ${error.message}`);
+      toast.error(i18n.t('caseActions.deleteDataSourceFailed', { message: error.message }));
     },
   });
 }

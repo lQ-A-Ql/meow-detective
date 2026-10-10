@@ -16,13 +16,14 @@ type EventLogTabKey = 'boot' | 'logon' | 'process' | 'account' | 'application';
 
 const TABS: EventLogTabKey[] = ['boot', 'logon', 'process', 'account', 'application'];
 
-const BOOT_EVENT_LABELS: Record<string, string> = {
-  operatingSystemStarted: '操作系统启动完成',
-  operatingSystemShutdown: '操作系统进入关闭阶段',
-  eventLogStarted: '事件日志服务启动',
-  eventLogStopped: '事件日志服务停止',
-  unexpectedShutdown: '异常关机报告',
-  plannedShutdown: '关机或重启发起',
+/** Boot/shutdown kinds mapped to their i18n keys; labels resolve with the active `t`. */
+const BOOT_EVENT_LABEL_KEYS: Record<string, string> = {
+  operatingSystemStarted: 'analysisPanels.bootLabels.operatingSystemStarted',
+  operatingSystemShutdown: 'analysisPanels.bootLabels.operatingSystemShutdown',
+  eventLogStarted: 'analysisPanels.bootLabels.eventLogStarted',
+  eventLogStopped: 'analysisPanels.bootLabels.eventLogStopped',
+  unexpectedShutdown: 'analysisPanels.bootLabels.unexpectedShutdown',
+  plannedShutdown: 'analysisPanels.bootLabels.plannedShutdown',
 };
 
 export function EventLogPanel({
@@ -103,7 +104,15 @@ export function EventLogPanel({
   const bootColumns = useMemo<DenseColumn<EvtxBootEvent>[]>(() => [
     { key: 'timestamp', title: t('eventLog.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp },
     { key: 'eventId', title: t('eventLog.columns.eventId'), className: 'w-[70px]', render: (row) => row.eventId },
-    { key: 'kind', title: t('eventLog.columns.kind'), className: 'w-[160px]', render: (row) => BOOT_EVENT_LABELS[row.kind] ?? row.kind },
+    {
+      key: 'kind',
+      title: t('eventLog.columns.kind'),
+      className: 'w-[160px]',
+      render: (row) => {
+        const labelKey = BOOT_EVENT_LABEL_KEYS[row.kind];
+        return labelKey ? t(labelKey) : row.kind;
+      },
+    },
     { key: 'provider', title: t('eventLog.columns.provider'), className: 'w-[120px]', render: (row) => row.provider ?? '-' },
     { key: 'recordId', title: t('eventLog.columns.recordId'), className: 'w-[70px]', render: (row) => row.recordId?.toString() ?? '-' },
     { key: 'sourcePath', title: t('eventLog.columns.sourcePath'), className: 'min-w-[200px]', render: (row) => row.sourcePath },

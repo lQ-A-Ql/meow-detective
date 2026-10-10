@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type {
   CorrelationCluster,
   CorrelationLead,
@@ -27,11 +28,13 @@ export function LeadDetailPanel({
   relatedClusters: CorrelationCluster[];
   onJump: (route: string, targetId: string) => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="rounded-none border border-forensics-border bg-forensics-surface p-4" data-testid="selected-lead-panel">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[12px] uppercase tracking-wider text-forensics-muted-light">Lead 明细</div>
+          <div className="text-[12px] uppercase tracking-wider text-forensics-muted-light">{t('correlation.lead.detailTitle')}</div>
           <div className="mt-1 text-[15px] font-light text-forensics-text" data-testid="selected-lead-title">
             {lead.title}
           </div>
@@ -43,9 +46,9 @@ export function LeadDetailPanel({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-[11px]">
-        <Metric label="主文件" value={lead.primaryFileId} mono />
-        <Metric label="支撑节点" value={lead.supportingNodeIds.length.toString()} />
-        <Metric label="匹配信号" value={lead.matchSignals.length.toString()} />
+        <Metric label={t('correlation.lead.metricPrimaryFile')} value={lead.primaryFileId} mono />
+        <Metric label={t('correlation.lead.metricSupportingNodes')} value={lead.supportingNodeIds.length.toString()} />
+        <Metric label={t('correlation.lead.metricMatchSignals')} value={lead.matchSignals.length.toString()} />
         <Metric label="Provenance" value={lead.provenance.length.toString()} />
       </div>
 
@@ -80,12 +83,12 @@ export function LeadDetailPanel({
       <div className="mt-4 grid grid-cols-1 gap-4 2xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-4">
           <div className="rounded-none border border-forensics-border-light bg-forensics-surface p-3">
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">关联节点</div>
+            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.correlation.nodes')}</div>
             <div className="space-y-2">
               {primaryFileNode ? (
                 <NodeSummaryCard
                   node={primaryFileNode}
-                  title="主文件节点"
+                  title={t('correlation.lead.primaryFileNode')}
                   onJump={onJump}
                 />
               ) : null}
@@ -94,18 +97,18 @@ export function LeadDetailPanel({
                   <NodeSummaryCard
                     key={node.id}
                     node={node}
-                    title="支撑节点"
+                    title={t('correlation.lead.metricSupportingNodes')}
                     onJump={onJump}
                   />
                 ))
               ) : (
-                <div className="text-[11px] text-forensics-muted">当前没有额外的支撑节点。</div>
+                <div className="text-[11px] text-forensics-muted">{t('correlation.lead.noSupportingNodes')}</div>
               )}
             </div>
           </div>
 
           <div className="rounded-none border border-forensics-border-light bg-forensics-surface p-3">
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">相关边</div>
+            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('correlation.lead.relatedEdges')}</div>
             {edges.length > 0 ? (
               <div className="space-y-2">
                 {edges.map((edge) => (
@@ -124,14 +127,14 @@ export function LeadDetailPanel({
                 ))}
               </div>
             ) : (
-              <div className="text-[11px] text-forensics-muted">当前 lead 尚未挂接可展示的关联边。</div>
+              <div className="text-[11px] text-forensics-muted">{t('correlation.lead.noEdges')}</div>
             )}
           </div>
         </div>
 
         <div className="space-y-4">
           <div className="rounded-none border border-forensics-border-light bg-forensics-surface p-3">
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">相关聚合</div>
+            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('correlation.lead.relatedClusters')}</div>
             {relatedClusters.length > 0 ? (
               <div className="space-y-2">
                 {relatedClusters.map((cluster) => (
@@ -147,7 +150,7 @@ export function LeadDetailPanel({
                 ))}
               </div>
             ) : (
-              <div className="text-[11px] text-forensics-muted">当前没有同主文件的聚合 cluster。</div>
+              <div className="text-[11px] text-forensics-muted">{t('correlation.lead.noRelatedClusters')}</div>
             )}
           </div>
 
@@ -170,14 +173,14 @@ export function LeadDetailPanel({
                     </div>
                     {item.warningSummary.length > 0 ? (
                       <div className="mt-2 rounded-none border border-forensics-warning-border bg-forensics-warning-bg px-2 py-1 text-[10px] text-forensics-warning-text">
-                        {item.warningSummary.join('；')}
+                        {item.warningSummary.join(t('correlation.lead.warningSeparator'))}
                       </div>
                     ) : null}
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-[11px] text-forensics-muted">当前没有可展示的 provenance。</div>
+              <div className="text-[11px] text-forensics-muted">{t('correlation.lead.noProvenance')}</div>
             )}
           </div>
         </div>

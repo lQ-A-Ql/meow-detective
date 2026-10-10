@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useMemo, useState } from 'react';
 import { GitBranch, Link2, ListFilter, Network, Search, TimerReset } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
@@ -30,6 +31,7 @@ export function CorrelationWorkspace({
   refreshing?: boolean;
   onJumpToTarget?: (route: string, targetId: string) => void;
 }) {
+  const { t } = useTranslation();
   const [selectedLeadId, setSelectedLeadId] = useState<string | undefined>(snapshot.leads[0]?.id);
   const [leadSearch, setLeadSearch] = useState('');
   const [focusMode, setFocusMode] = useState<'all' | 'highConfidence' | 'review'>('all');
@@ -197,7 +199,7 @@ export function CorrelationWorkspace({
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
           <Network size={16} />
-          关联分析工作台
+          {t('correlation.workspace.title')}
         </div>
         {onRefresh ? (
           <Button
@@ -208,7 +210,7 @@ export function CorrelationWorkspace({
             className="h-8 rounded-none border-forensics-border bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"
           >
             <TimerReset size={14} className={refreshing ? 'opacity-70' : ''} />
-            刷新关联
+            {t('correlation.workspace.refresh')}
           </Button>
         ) : null}
       </div>
@@ -218,8 +220,8 @@ export function CorrelationWorkspace({
         <OverviewCard label="Cluster" value={snapshot.clusterCount.toString()} />
         <OverviewCard label="Node" value={snapshot.nodeCount.toString()} />
         <OverviewCard label="Edge" value={snapshot.edgeCount.toString()} />
-        <OverviewCard label="规则家族" value={snapshot.familyCoverage.length.toString()} />
-        <OverviewCard label="已覆盖家族" value={coveredFamilyCount.toString()} />
+        <OverviewCard label={t('correlation.metrics.ruleFamilies')} value={snapshot.familyCoverage.length.toString()} />
+        <OverviewCard label={t('correlation.metrics.coveredFamilies')} value={coveredFamilyCount.toString()} />
       </div>
 
       <CorrelationFamilyCoveragePanel items={snapshot.familyCoverage} />
@@ -231,7 +233,7 @@ export function CorrelationWorkspace({
             <Input
               value={leadSearch}
               onChange={(event) => setLeadSearch(event.target.value)}
-              placeholder="搜索线索标题、路径、信号"
+              placeholder={t('correlation.workspace.searchPlaceholder')}
               className="pl-9"
               data-testid="correlation-lead-search"
             />
@@ -249,14 +251,14 @@ export function CorrelationWorkspace({
             size="sm"
             className="w-full xl:w-auto"
           >
-            <ToggleGroupItem value="all" aria-label="显示全部线索">
-              全部
+            <ToggleGroupItem value="all" aria-label={t('correlation.workspace.toggleAllAria')}>
+              {t('timeline.all')}
             </ToggleGroupItem>
-            <ToggleGroupItem value="highConfidence" aria-label="只看高置信线索">
-              高置信
+            <ToggleGroupItem value="highConfidence" aria-label={t('correlation.workspace.toggleHighConfidenceAria')}>
+              {t('correlation.metrics.highConfidence')}
             </ToggleGroupItem>
-            <ToggleGroupItem value="review" aria-label="只看待复核线索">
-              待复核
+            <ToggleGroupItem value="review" aria-label={t('correlation.workspace.toggleReviewAria')}>
+              {t('dashboard.status.review')}
             </ToggleGroupItem>
           </ToggleGroup>
 
@@ -265,10 +267,10 @@ export function CorrelationWorkspace({
             onValueChange={(value) => setConfidenceFilter(value as 'all' | CorrelationConfidence)}
           >
             <SelectTrigger className="w-full xl:w-[180px]" data-testid="correlation-confidence-filter">
-              <SelectValue placeholder="全部置信度" />
+              <SelectValue placeholder={t('correlation.workspace.confidenceAll')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部置信度</SelectItem>
+              <SelectItem value="all">{t('correlation.workspace.confidenceAll')}</SelectItem>
               <SelectItem value="direct">Direct</SelectItem>
               <SelectItem value="strong">Strong</SelectItem>
               <SelectItem value="weak">Weak</SelectItem>
@@ -281,17 +283,22 @@ export function CorrelationWorkspace({
           <div className="flex items-center gap-2 rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
             <ListFilter size={14} className="text-forensics-muted-light" />
             <span>
-              显示 {filteredLeads.length} / {snapshot.leadCount} 条线索
+              {t('correlation.workspace.summaryCount', {
+                shown: filteredLeads.length,
+                total: snapshot.leadCount,
+              })}
             </span>
           </div>
           <div className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
-            高置信 {highConfidenceLeadCount}
+            {t('correlation.workspace.summaryHighConfidence', { count: highConfidenceLeadCount })}
           </div>
           <div className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
-            待复核 {reviewLeadCount}
+            {t('correlation.workspace.summaryReview', { count: reviewLeadCount })}
           </div>
           <div className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
-            生成时间 {snapshot.generatedAt.slice(0, 19).replace('T', ' ')}
+            {t('correlation.workspace.generatedAt', {
+              time: snapshot.generatedAt.slice(0, 19).replace('T', ' '),
+            })}
           </div>
         </div>
       </div>
@@ -301,7 +308,7 @@ export function CorrelationWorkspace({
           <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
             <div className="mb-3 flex items-center gap-2 text-[12px] font-light text-forensics-text">
               <GitBranch size={14} />
-              线索总览
+              {t('correlation.workspace.leadsTitle')}
             </div>
             <div className="space-y-3">
               {filteredLeads.length > 0 ? (
@@ -315,7 +322,7 @@ export function CorrelationWorkspace({
                   />
                 ))
               ) : (
-                <div className="text-[12px] text-forensics-muted">当前筛选条件下没有可展示的关联线索。</div>
+                <div className="text-[12px] text-forensics-muted">{t('correlation.workspace.leadsEmpty')}</div>
               )}
             </div>
           </div>
@@ -323,7 +330,7 @@ export function CorrelationWorkspace({
           <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
             <div className="mb-3 flex items-center gap-2 text-[12px] font-light text-forensics-text">
               <Link2 size={14} />
-              证据聚合
+              {t('correlation.workspace.clustersTitle')}
             </div>
             <div className="space-y-3">
               {filteredClusters.length > 0 ? (
@@ -331,7 +338,7 @@ export function CorrelationWorkspace({
                   <ClusterCard key={cluster.id} cluster={cluster} onJump={jumpToTarget} />
                 ))
               ) : (
-                <div className="text-[12px] text-forensics-muted">当前筛选条件下没有可展示的聚合 cluster。</div>
+                <div className="text-[12px] text-forensics-muted">{t('correlation.workspace.clustersEmpty')}</div>
               )}
             </div>
           </div>
@@ -349,12 +356,12 @@ export function CorrelationWorkspace({
             />
           ) : (
             <div className="rounded-none border border-forensics-border bg-forensics-surface p-4 text-[12px] text-forensics-muted">
-              当前暂无可展开的 lead 明细。
+              {t('correlation.workspace.detailEmpty')}
             </div>
           )}
 
           <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
-            <div className="mb-3 text-[12px] font-light text-forensics-text">节点分布</div>
+            <div className="mb-3 text-[12px] font-light text-forensics-text">{t('correlation.workspace.nodesTitle')}</div>
             <div className="space-y-2 text-[11px] text-forensics-text-tertiary">
               {distributionNodes.map((node) => (
                 <div key={node.id} className="rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2">
@@ -369,11 +376,11 @@ export function CorrelationWorkspace({
           </div>
 
           <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
-            <div className="mb-3 text-[12px] font-light text-forensics-text">当前规则边界</div>
+            <div className="mb-3 text-[12px] font-light text-forensics-text">{t('correlation.workspace.boundariesTitle')}</div>
             <ul className="space-y-2 text-[11px] text-forensics-text-tertiary">
-              <li>当前已接入 source object、路径匹配、名称匹配与 Recycle Bin 原路径恢复。</li>
-              <li>线索用于 investigator 导航，不输出结论型判定。</li>
-              <li>名称类与时间线类命中仍需回跳原始事件或工件字段复核。</li>
+              <li>{t('correlation.workspace.boundarySourceObject')}</li>
+              <li>{t('correlation.workspace.boundaryNavigational')}</li>
+              <li>{t('correlation.workspace.boundaryReviewRequired')}</li>
             </ul>
           </div>
         </div>

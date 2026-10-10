@@ -9,6 +9,7 @@ import {
   FilePreviewTabs,
   type FilePreviewTabsProps,
 } from '@/components/preview/FilePreviewTabs';
+import { useTranslation } from 'react-i18next';
 
 export interface FilePreviewDialogProps extends FilePreviewTabsProps {
   open: boolean;
@@ -26,12 +27,13 @@ export function FilePreviewDialog({
   selectedFile,
   ...previewProps
 }: FilePreviewDialogProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[80vh] w-[calc(100vw-4rem)] max-w-[calc(100vw-4rem)] flex-col overflow-hidden sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle className="truncate font-mono text-[13px]">
-            {selectedFile?.name ?? '文件预览'}
+            {selectedFile?.name ?? t('preview.dialogTitle')}
           </DialogTitle>
           <DialogDescription className="truncate font-mono text-[11px]">
             {selectedFile?.path ?? ''}

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import i18n from '@/i18n';
 import { ApiErrorDto } from '@/types/models';
 import { isApiErrorDto } from '@/lib/errors';
 
@@ -27,7 +28,7 @@ function toApiError(error: unknown, fallbackCode: string): ApiErrorDto {
 
   return {
     code: fallbackCode,
-    message: '未知接口错误',
+    message: i18n.t('common.errors.unknownApi'),
     category: 'internal',
     details: error,
     recoverable: true,

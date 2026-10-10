@@ -1,4 +1,5 @@
 import { FolderOpen, LoaderCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import {
   Dialog,
@@ -19,21 +20,24 @@ export interface FileExtractionDialogProps {
 }
 
 export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
+  const { t } = useTranslation();
   const totalBytes = model.progress?.totalBytes;
   const copiedBytesText = totalBytes === undefined
     ? undefined
     : `${formatBytes(model.progress?.bytesWritten ?? 0)} / ${formatBytes(totalBytes)}`;
   const progressText = model.progress?.phase === 'finalizing'
-    ? `已复制 ${copiedBytesText ?? formatBytes(model.progress.bytesWritten)}，正在同步并发布目标文件...`
-    : copiedBytesText ?? '正在准备证据读取...';
+    ? t('fileBrowser.extraction.copying', {
+      copied: copiedBytesText ?? formatBytes(model.progress.bytesWritten),
+    })
+    : copiedBytesText ?? t('fileBrowser.extraction.preparing');
 
   return (
     <Dialog open={model.formOpen} onOpenChange={model.setFormOpen}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>提取文件</DialogTitle>
+          <DialogTitle>{t('fileBrowser.inspector.extract.button')}</DialogTitle>
           <DialogDescription className="break-all">
-            {model.file?.name ?? '未选择文件'}
+            {model.file?.name ?? t('fileBrowser.extraction.noFile')}
           </DialogDescription>
         </DialogHeader>
 
@@ -45,7 +49,7 @@ export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
           }}
         >
           <Field>
-            <FieldLabel htmlFor="file-extraction-destination">目标路径</FieldLabel>
+            <FieldLabel htmlFor="file-extraction-destination">{t('browser.columns.targetPath')}</FieldLabel>
             <FieldRow>
               <Input
                 id="file-extraction-destination"
@@ -64,10 +68,10 @@ export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
                 disabled={model.isExtracting}
               >
                 <FolderOpen />
-                浏览
+                {t('fileBrowser.extraction.browse')}
               </Button>
             </FieldRow>
-            <FieldHint>已存在的目标文件不会被覆盖。</FieldHint>
+            <FieldHint>{t('fileBrowser.extraction.noOverwriteHint')}</FieldHint>
             {model.validationError ? <FieldError>{model.validationError}</FieldError> : null}
           </Field>
 
@@ -82,7 +86,7 @@ export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
               <Progress
                 value={model.progress?.percent ?? 0}
                 indeterminate={model.progress?.percent === undefined}
-                aria-label="文件提取进度"
+                aria-label={t('fileBrowser.extraction.progressLabel')}
               />
             </div>
           ) : null}
@@ -96,11 +100,13 @@ export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
               onClick={() => model.setFormOpen(false)}
               disabled={model.isExtracting}
             >
-              取消
+              {t('common.cancel')}
             </Button>
             <Button type="submit" variant="forensicsPrimary" disabled={model.isExtracting}>
               {model.isExtracting ? <LoaderCircle className="animate-spin" /> : null}
-              {model.isExtracting ? '正在提取' : '开始提取'}
+              {model.isExtracting
+                ? t('fileBrowser.extraction.extracting')
+                : t('fileBrowser.extraction.start')}
             </Button>
           </DialogFooter>
         </form>

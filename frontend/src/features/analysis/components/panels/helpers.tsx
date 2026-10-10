@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Archive,
   Clock,
@@ -15,6 +17,7 @@ import { Progress } from '@/app/components/ui/progress';
 import { EmptyState, MetricCard, StatGrid } from '@/components/data-display';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
+import i18n from '@/i18n';
 import {
   AnalysisFieldProvenance,
   AnalysisProvenance,
@@ -88,19 +91,19 @@ export function formatSize(bytes: number) {
 export function statusLabel(status: string) {
   switch (status) {
     case 'parsed':
-      return '已解析';
+      return i18n.t('analysis.kubernetes.status.parsed');
     case 'notParsed':
-      return '未解析';
+      return i18n.t('analysis.kubernetes.status.notParsed');
     case 'unavailable':
-      return '不可用';
+      return i18n.t('analysis.kubernetes.status.unavailable');
     case 'partial':
-      return '部分解析';
+      return i18n.t('analysis.kubernetes.status.partial');
     case 'candidateFound':
-      return '已发现候选';
+      return i18n.t('analysisPanels.status.candidateFound');
     case 'notFound':
-      return '未发现';
+      return i18n.t('analysis.kubernetes.status.notFound');
     case 'failed':
-      return '解析失败';
+      return i18n.t('analysisPanels.status.parseFailed');
     default:
       return status;
   }
@@ -109,16 +112,16 @@ export function statusLabel(status: string) {
 function extractionProgressLabel(status: AnalysisExtractionProgressState) {
   switch (status) {
     case 'running':
-      return '运行中';
+      return i18n.t('bottomDrawer.jobs.running');
     case 'success':
-      return '已完成';
+      return i18n.t('dashboard.batch.completed');
     case 'partial':
-      return '部分完成';
+      return i18n.t('caseHome.jobStates.partial');
     case 'failed':
-      return '失败';
+      return i18n.t('infrastructure.states.failed');
     case 'idle':
     default:
-      return '等待';
+      return i18n.t('analysisPanels.progress.idle');
   }
 }
 
@@ -199,6 +202,7 @@ export function ExtractionTableSection({
   stats: Array<[string, string]>;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -206,7 +210,7 @@ export function ExtractionTableSection({
           <h3 className="text-[14px] font-light text-forensics-text">{title}</h3>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-forensics-muted">
             <StatusPill status={status} />
-            <span>生成时间：{generatedAt || '-'}</span>
+            <span>{t('analysisPanels.generatedAt', { value: generatedAt || '-' })}</span>
           </div>
         </div>
       </div>
@@ -280,12 +284,16 @@ export function ProvenancePanel({
   );
 }
 
-// Module-level columns: stable reference keeps DenseDataTable row memoization
-// intact across panel re-renders.
-const FIELD_PROVENANCE_COLUMNS: DenseColumn<AnalysisFieldProvenance>[] = [
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+// Column titles are translated, so the array is built from `t` and memoized in
+// the panel; the stable reference keeps DenseDataTable row memoization intact
+// across panel re-renders.
+function fieldProvenanceColumns(t: Translate): DenseColumn<AnalysisFieldProvenance>[] {
+  return [
   {
     key: 'field',
-    title: '字段',
+    title: t('analysisPanels.fieldProvenance.field'),
     className: 'w-[160px]',
     render: (item) => item.field,
   },
@@ -313,28 +321,31 @@ const FIELD_PROVENANCE_COLUMNS: DenseColumn<AnalysisFieldProvenance>[] = [
     className: 'w-[160px]',
     render: (item) => item.parser || '-',
   },
-];
+  ];
+}
 
 export function FieldProvenancePanel({ fieldProvenance }: { fieldProvenance: AnalysisFieldProvenance[] }) {
+  const { t } = useTranslation();
+  const columns = useMemo(() => fieldProvenanceColumns(t), [t]);
 
   return (
     <section>
       <h3 className="mb-3 flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <Database size={16} />
-        字段级来源
+        {t('analysisPanels.fieldProvenance.title')}
       </h3>
       {fieldProvenance.length > 0 ? (
         <DenseDataTableFrame rowCount={fieldProvenance.length}>
           <DenseDataTable
             rows={fieldProvenance}
-            columns={FIELD_PROVENANCE_COLUMNS}
+            columns={columns}
             getRowKey={(item) => `${item.field}-${item.hivePath}-${item.keyPath}-${item.valueName}`}
-            emptyTitle="暂无字段级来源"
-            emptyDescription="字段级 Registry provenance 暂不可用。"
+            emptyTitle={t('analysisPanels.fieldProvenance.emptyTitle')}
+            emptyDescription={t('analysisPanels.fieldProvenance.emptyDescription')}
           />
         </DenseDataTableFrame>
       ) : (
-        <EmptyLine text="字段级 Registry provenance 暂不可用。" />
+        <EmptyLine text={t('analysisPanels.fieldProvenance.emptyDescription')} />
       )}
     </section>
   );
@@ -345,7 +356,15 @@ export function formatProvenanceSummary(provenance: AnalysisProvenance) {
 }
 
 export function InfoCard({ label, value }: { label: string; value?: string }) {
-  return <MetricCard label={label} value={value || '未解析'} size="md" className="bg-forensics-panel" />;
+  const { t } = useTranslation();
+  return (
+    <MetricCard
+      label={label}
+      value={value || t('analysis.kubernetes.status.notParsed')}
+      size="md"
+      className="bg-forensics-panel"
+    />
+  );
 }
 
 export function StatCard({ label, value }: { label: string; value: string }) {

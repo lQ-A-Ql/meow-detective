@@ -42,7 +42,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             <div className="flex items-center gap-2 font-mono text-[11px] text-forensics-muted">
               <Clock size={12} className="text-forensics-muted-light" />
               <span className="text-forensics-text">{model.timeRange.start}</span>
-              <span className="text-forensics-500">至</span>
+              <span className="text-forensics-500">{t('timeline.rangeTo')}</span>
               <span className="text-forensics-text">{model.timeRange.end}</span>
             </div>
             <div className="h-4 border-l border-forensics-border" />
@@ -73,8 +73,8 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             <Button type="button" variant="forensicsOutline" size="compact" onClick={model.clearFilters}>{t('timeline.clear')}</Button>
           </div>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="forensicsGhost" size="iconSm" onClick={model.zoomOut} disabled={!model.canZoomOut} aria-label="缩小"><ZoomOut size={14} /></Button>
-            <Button type="button" variant="forensicsGhost" size="iconSm" onClick={model.zoomIn} disabled={!model.canZoomIn} aria-label="放大"><ZoomIn size={14} /></Button>
+            <Button type="button" variant="forensicsGhost" size="iconSm" onClick={model.zoomOut} disabled={!model.canZoomOut} aria-label={t('graph.controls.zoomOut')}><ZoomOut size={14} /></Button>
+            <Button type="button" variant="forensicsGhost" size="iconSm" onClick={model.zoomIn} disabled={!model.canZoomIn} aria-label={t('graph.controls.zoomIn')}><ZoomIn size={14} /></Button>
           </div>
         </div>
       </PageSubbar>

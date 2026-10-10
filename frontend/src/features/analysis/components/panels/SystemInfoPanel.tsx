@@ -16,11 +16,12 @@ import {
 } from './helpers';
 
 export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
+  const { t } = useTranslation();
   const info = systemInfo ?? {
     networkAdapters: [],
     bootHistory: [],
     status: 'unavailable' as const,
-    warnings: ['系统信息暂不可用。'],
+    warnings: [t('analysisPanels.systemInfo.unavailable')],
     provenance: [],
     fieldProvenance: [],
   };
@@ -33,31 +34,31 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
       <section>
         <h3 className="mb-3 flex items-center gap-2 text-[14px] font-light text-forensics-text">
           <Monitor size={16} />
-          系统信息
+          {t('analysis.tabs.system')}
         </h3>
         <div className="mb-3 flex items-center gap-2 text-[12px] text-forensics-muted">
           <StatusPill status={info.status} />
           {info.warnings[0] ? <span>{info.warnings[0]}</span> : null}
         </div>
         {parserFailures.length > 0 ? (
-          <WarningList warnings={['已发现 Registry/EVTX 候选文件，但部分解析器失败；下方 provenance 已列出具体原因。']} />
+          <WarningList warnings={[t('analysisPanels.systemInfo.parserFailures')]} />
         ) : null}
         {info.warnings.length > 1 ? <WarningList warnings={info.warnings.slice(0, 3)} /> : null}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <InfoCard label="计算机名" value={info.computerName} />
-          <InfoCard label="操作系统" value={info.osVersion} />
-          <InfoCard label="Build 号" value={info.buildNumber} />
-          <InfoCard label="注册用户" value={info.registeredOwner} />
-          <InfoCard label="时区" value={info.timezone} />
-          <InfoCard label="安装日期" value={info.installDate} />
-          <InfoCard label="最后关机时间" value={info.shutdownTime} />
+          <InfoCard label={t('analysisPanels.systemInfo.computerName')} value={info.computerName} />
+          <InfoCard label={t('linuxArtifacts.overview.os')} value={info.osVersion} />
+          <InfoCard label={t('analysisPanels.systemInfo.buildNumber')} value={info.buildNumber} />
+          <InfoCard label={t('analysisPanels.systemInfo.registeredOwner')} value={info.registeredOwner} />
+          <InfoCard label={t('analysisPanels.systemInfo.timezone')} value={info.timezone} />
+          <InfoCard label={t('analysis.registry.columns.installDate')} value={info.installDate} />
+          <InfoCard label={t('analysisPanels.systemInfo.lastShutdownTime')} value={info.shutdownTime} />
         </div>
       </section>
 
       <ProvenancePanel
-        title="解析来源"
+        title={t('analysisPanels.systemInfo.provenanceTitle')}
         provenance={info.provenance}
-        fallback="Registry/EVTX 解析来源暂不可用。"
+        fallback={t('analysisPanels.systemInfo.provenanceFallback')}
       />
 
       <FieldProvenancePanel fieldProvenance={info.fieldProvenance} />
@@ -65,7 +66,7 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
       <section>
         <h3 className="mb-3 flex items-center gap-2 text-[14px] font-light text-forensics-text">
           <Network size={16} />
-          网络适配器
+          {t('analysisPanels.systemInfo.networkAdapters')}
         </h3>
         {info.networkAdapters.length > 0 ? (
           <div className="space-y-2">
@@ -82,14 +83,14 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
             ))}
           </div>
         ) : (
-          <EmptyLine text="未解析到网络适配器。" />
+          <EmptyLine text={t('analysisPanels.systemInfo.networkAdaptersEmpty')} />
         )}
       </section>
 
       <section>
         <h3 className="mb-3 flex items-center gap-2 text-[14px] font-light text-forensics-text">
           <Clock size={16} />
-          开关机历史
+          {t('analysisPanels.systemInfo.bootHistory')}
         </h3>
         {info.bootHistory.length > 0 ? (
           <div className="space-y-1">
@@ -115,7 +116,7 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
             ))}
           </div>
         ) : (
-          <EmptyLine text="未解析到开关机历史。" />
+          <EmptyLine text={t('analysisPanels.systemInfo.bootHistoryEmpty')} />
         )}
       </section>
     </div>
@@ -181,11 +182,12 @@ export function AnalysisHeader({
 }
 
 export function AnalysisEmptyState() {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-1 items-center justify-center p-8">
       <BrandEmptyState
-        title="请先创建或打开案件"
-        description="数据源分析依赖当前案件中的文件目录和数据源记录。未选择案件时不会发起分析请求。"
+        title={t('analysisPanels.empty.noCaseTitle')}
+        description={t('analysisPanels.empty.noCaseDescription')}
         className="max-w-md"
       />
     </div>
@@ -199,6 +201,7 @@ export function AnalysisErrorBanner({
   message: string;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-4 flex items-center justify-between gap-3 rounded-none border border-forensics-error-border bg-forensics-error-bg p-3 text-[12px] text-forensics-error-text">
       <span>{message}</span>
@@ -208,7 +211,7 @@ export function AnalysisErrorBanner({
         onClick={onRetry}
         className="h-7 shrink-0 rounded-none border-forensics-error-border bg-forensics-surface px-3 text-[12px] text-forensics-error-text hover:bg-forensics-error-bg"
       >
-        重试
+        {t('viewer.error.retry')}
       </Button>
     </div>
   );

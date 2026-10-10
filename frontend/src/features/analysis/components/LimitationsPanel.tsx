@@ -1,4 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { KnownLimitation } from '@/types/models';
 
 function knownLimitationTone(status: KnownLimitation['status']) {
@@ -28,11 +29,13 @@ function knownLimitationLabel(status: KnownLimitation['status']) {
 }
 
 export function KnownLimitationsPanel({ items }: { items: KnownLimitation[] }) {
+  const { t } = useTranslation();
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <AlertTriangle size={16} />
-        已知限制
+        {t('v2Governance.limitations.title')}
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {items.map((item) => (

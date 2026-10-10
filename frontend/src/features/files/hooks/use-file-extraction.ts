@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import i18n from '@/i18n';
 import { extractFileToPath } from '@/lib/api/files';
 import { errorMessage } from '@/lib/errors';
 import { subscribeToEvent } from '@/lib/events/subscribers';
@@ -13,13 +14,13 @@ import type {
 function validateDestinationPath(value: string) {
   const path = value.trim();
   if (!path) {
-    return '请选择或填写提取目标路径。';
+    return i18n.t('fileBrowser.extraction.destinationRequired');
   }
   const windowsDrivePath = /^[A-Za-z]:[\\/]/.test(path);
   const windowsUncPath = /^\\\\[^\\/]+[\\/][^\\/]+/.test(path);
   const posixPath = path.startsWith('/');
   if (!windowsDrivePath && !windowsUncPath && !posixPath) {
-    return '目标路径必须是绝对路径。';
+    return i18n.t('fileBrowser.extraction.destinationAbsolute');
   }
   return undefined;
 }
@@ -100,7 +101,7 @@ export function useFileExtractionModel() {
         setDestinationPath(selectedPath);
       }
     } catch (error) {
-      setInteractionError(errorMessage(error, '无法打开目标路径选择器。'));
+      setInteractionError(errorMessage(error, i18n.t('fileBrowser.extraction.destinationPickerFailed')));
     }
   }, [file, setDestinationPath]);
 
@@ -146,7 +147,7 @@ export function useFileExtractionModel() {
     destinationPath,
     validationError,
     error: interactionError ?? (extractionError
-      ? errorMessage(extractionError, '文件提取失败。')
+      ? errorMessage(extractionError, i18n.t('fileBrowser.extraction.failed'))
       : undefined),
     progress,
     result,

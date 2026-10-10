@@ -128,8 +128,8 @@ export function DenseDataTable<T>({
   onRowClick,
   onRowDoubleClick,
   renderRowContextMenu,
-  emptyTitle = '暂无记录',
-  emptyDescription = '当前范围内没有可显示的数据。',
+  emptyTitle: emptyTitleProp,
+  emptyDescription: emptyDescriptionProp,
   sortKey,
   sortDirection,
   onSort,
@@ -139,18 +139,25 @@ export function DenseDataTable<T>({
   hasMore = false,
   loadingMore = false,
   loadMoreFailed = false,
-  loadMoreErrorText = '加载更多记录失败。',
-  retryLoadMoreLabel = '重试',
+  loadMoreErrorText: loadMoreErrorTextProp,
+  retryLoadMoreLabel: retryLoadMoreLabelProp,
   onRetryLoadMore,
   initialLoadFailed = false,
-  initialLoadErrorText = '记录加载失败。',
-  retryInitialLoadLabel = '重试',
+  initialLoadErrorText: initialLoadErrorTextProp,
+  retryInitialLoadLabel: retryInitialLoadLabelProp,
   onRetryInitialLoad,
   horizontalScroll = false,
   minColumnWidth = 140,
   filterable = false,
 }: DenseDataTableProps<T>) {
   const { t } = useTranslation();
+  // Defaults live in i18n so the shared primitive never carries hardcoded copy.
+  const emptyTitle = emptyTitleProp ?? t('denseTable.emptyTitle');
+  const emptyDescription = emptyDescriptionProp ?? t('denseTable.emptyDescription');
+  const loadMoreErrorText = loadMoreErrorTextProp ?? t('denseTable.loadMoreError');
+  const retryLoadMoreLabel = retryLoadMoreLabelProp ?? t('denseTable.retry');
+  const initialLoadErrorText = initialLoadErrorTextProp ?? t('denseTable.initialLoadError');
+  const retryInitialLoadLabel = retryInitialLoadLabelProp ?? t('denseTable.retry');
   const containerRef = useRef<HTMLDivElement>(null);
   const requestedRowCountRef = useRef<number | undefined>(undefined);
   const automaticRetryKeyRef = useRef<string | undefined>(undefined);
@@ -164,7 +171,13 @@ export function DenseDataTable<T>({
     resetKey: loadContextKey,
   });
   const visibleRows = filter.visibleRows;
-  const getItemKey = useCallback((index: number) => getRowKey(visibleRows[index]), [getRowKey, visibleRows]);
+  // Callers usually pass an inline arrow for getRowKey, which would give getItemKey a new
+  // identity every render; the virtualizer compares that dependency by identity, so every
+  // scroll frame rebuilt the measurement array for all loaded rows. Read through a ref and
+  // let only the visible row set invalidate the key function.
+  const getRowKeyRef = useRef(getRowKey);
+  getRowKeyRef.current = getRowKey;
+  const getItemKey = useCallback((index: number) => getRowKeyRef.current(visibleRows[index]), [visibleRows]);
   const rowVirtualizer = useVirtualizer({
     count: visibleRows.length,
     getScrollElement: () => containerRef.current,
@@ -433,7 +446,7 @@ export function DenseDataTable<T>({
                 colSpan={columns.length}
                 className="border-r-0 px-3 py-2 text-center text-forensics-muted"
               >
-                正在加载更多记录...
+                {t('denseTable.loadingMore')}
               </TableCell>
             </TableRow>
           ) : null}

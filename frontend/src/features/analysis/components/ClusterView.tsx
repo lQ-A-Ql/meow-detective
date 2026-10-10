@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type {
   CorrelationCluster,
 } from '@/types/models';
@@ -16,9 +17,10 @@ export function ClusterCard({
   cluster: CorrelationCluster;
   onJump: (route: string, targetId: string) => void;
 }) {
+  const { t } = useTranslation();
   const primaryJump =
     cluster.primaryFileId
-      ? { route: '/files', targetId: cluster.primaryFileId, label: '查看主文件' }
+      ? { route: '/files', targetId: cluster.primaryFileId, label: t('correlation.cluster.viewPrimaryFile') }
       : undefined;
 
   return (
@@ -35,8 +37,8 @@ export function ClusterCard({
       <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
         <Metric label="Artifact" value={cluster.artifactCount.toString()} />
         <Metric label="Timeline" value={cluster.timelineCount.toString()} />
-        <Metric label="节点" value={cluster.nodeIds.length.toString()} />
-        <Metric label="边" value={cluster.edgeIds.length.toString()} />
+        <Metric label={t('graph.stats.nodes')} value={cluster.nodeIds.length.toString()} />
+        <Metric label={t('graph.stats.edges')} value={cluster.edgeIds.length.toString()} />
       </div>
       <FamilyPills families={cluster.families} testId={`cluster-families-${cluster.id}`} />
       {cluster.edgeIds.length > 0 ? (

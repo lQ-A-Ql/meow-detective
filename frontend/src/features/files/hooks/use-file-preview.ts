@@ -3,6 +3,7 @@ import {
   useFileHandle, useFileViewer, useImagePreview, useImageMetadata, useMediaUrl,
   useTextPreview, useDocumentPreview,
 } from '@/features/files/hooks';
+import i18n from '@/i18n';
 import type { ApiErrorDto, FileEntryRow } from '@/types/models';
 import type { FilePreviewKind, PreviewViewerTab } from '@/components/preview/FilePreviewTabs';
 import { errorMessage, isApiErrorDto } from '@/lib/errors';
@@ -26,7 +27,7 @@ function normalizePreviewError(error: unknown): ApiErrorDto | null {
   if (isApiErrorDto(error)) return error;
   return {
     code: 'FILE_PREVIEW_FAILED',
-    message: errorMessage(error, '文件预览失败'),
+    message: errorMessage(error, i18n.t('viewer.error.title')),
     category: 'internal',
     recoverable: true,
   };

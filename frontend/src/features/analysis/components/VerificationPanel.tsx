@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Gauge, Target, Database } from 'lucide-react';
 import type {
   BenchmarkRequiredCheck,
@@ -14,16 +15,19 @@ function cardTone(result: VerificationChainStatus['result']) {
   return 'border-forensics-border bg-forensics-surface';
 }
 
-function resultLabel(result: VerificationChainStatus['result']) {
+function resultLabel(
+  result: VerificationChainStatus['result'],
+  t: ReturnType<typeof useTranslation>['t'],
+) {
   switch (result) {
     case 'passed':
-      return '通过';
+      return t('v2Governance.verification.resultPassed');
     case 'partial':
-      return '部分通过';
+      return t('v2Governance.verification.resultPartial');
     case 'pending':
-      return '待验证';
+      return t('v2Governance.verification.resultPending');
     case 'failed':
-      return '失败';
+      return t('infrastructure.states.failed');
     default:
       return result;
   }
@@ -60,11 +64,13 @@ function guaranteeLabel(value: VerificationChainStatus['guaranteeLevel']) {
 }
 
 export function VerificationDashboard({ snapshot }: { snapshot: import('@/types/models').V2GovernanceSnapshot }) {
+  const { t } = useTranslation();
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <Target size={16} />
-        可信验证
+        {t('v2Governance.verification.title')}
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {snapshot.verificationChains.map((chain) => (
@@ -75,14 +81,14 @@ export function VerificationDashboard({ snapshot }: { snapshot: import('@/types/
                 <div className="mt-1 font-mono text-[10px] text-forensics-muted">{chain.chain}</div>
               </div>
               <span className="rounded-none border border-forensics-border bg-forensics-surface px-2 py-0.5 text-[10px] font-mono text-forensics-text-tertiary">
-                {resultLabel(chain.result)}
+                {resultLabel(chain.result, t)}
               </span>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-              <Metric label="成熟度" value={maturityLabel(chain.maturity)} />
-              <Metric label="保证级别" value={guaranteeLabel(chain.guaranteeLevel)} />
-              <Metric label="样本层级" value={chain.fixtureTier} />
-              <Metric label="样本数" value={chain.verifiedSampleCount.toString()} />
+              <Metric label={t('v2Governance.verification.maturity')} value={maturityLabel(chain.maturity)} />
+              <Metric label={t('v2Governance.verification.guaranteeLevel')} value={guaranteeLabel(chain.guaranteeLevel)} />
+              <Metric label={t('v2Governance.verification.fixtureTier')} value={chain.fixtureTier} />
+              <Metric label={t('v2Governance.verification.sampleCount')} value={chain.verifiedSampleCount.toString()} />
             </div>
             <div className="mt-3 text-[11px] text-forensics-text-tertiary">
               expected JSON: <span className="font-mono">{chain.expectedJsonVersion}</span>
@@ -102,22 +108,24 @@ export function VerificationDashboard({ snapshot }: { snapshot: import('@/types/
 }
 
 export function BenchmarkPanel({ benchmark }: { benchmark: BenchmarkSummary }) {
+  const { t } = useTranslation();
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <Gauge size={16} />
-        Benchmark 基线
+        {t('v2Governance.benchmark.title')}
       </div>
       <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Metric label="宿主基线" value={benchmark.hostProfile} />
-          <Metric label="版本" value={benchmark.baselineVersion} />
-          <Metric label="最近校验" value={benchmark.lastVerifiedAt} />
+          <Metric label={t('v2Governance.benchmark.hostProfile')} value={benchmark.hostProfile} />
+          <Metric label={t('browser.columns.version')} value={benchmark.baselineVersion} />
+          <Metric label={t('v2Governance.benchmark.lastVerified')} value={benchmark.lastVerifiedAt} />
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Metric label="必需项已覆盖" value={benchmark.coveredRequiredCount.toString()} />
-          <Metric label="必需项缺失" value={benchmark.missingRequiredCount.toString()} />
-          <Metric label="超阈值项" value={benchmark.exceededRequiredCount.toString()} />
+          <Metric label={t('v2Governance.benchmark.requiredCovered')} value={benchmark.coveredRequiredCount.toString()} />
+          <Metric label={t('v2Governance.benchmark.requiredMissing')} value={benchmark.missingRequiredCount.toString()} />
+          <Metric label={t('v2Governance.benchmark.exceeded')} value={benchmark.exceededRequiredCount.toString()} />
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
           {benchmark.scenarios.map((scenario) => (
@@ -126,7 +134,9 @@ export function BenchmarkPanel({ benchmark }: { benchmark: BenchmarkSummary }) {
               <div className="mt-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">{scenario.datasetLevel}</div>
               <div className="mt-3 text-[22px] font-light text-forensics-text">{scenario.p95Ms}ms</div>
               <div className="mt-1 text-[11px] text-forensics-muted">
-                峰值内存 {scenario.memoryPeakMb ? `${scenario.memoryPeakMb}MB` : '-'}
+                {t('v2Governance.benchmark.memoryPeak', {
+                  value: scenario.memoryPeakMb ? `${scenario.memoryPeakMb}MB` : '-',
+                })}
               </div>
             </div>
           ))}
@@ -148,11 +158,13 @@ export function BenchmarkPanel({ benchmark }: { benchmark: BenchmarkSummary }) {
 }
 
 export function SupportMatrixPanel({ entries }: { entries: ParserSupportMatrixEntry[] }) {
+  const { t } = useTranslation();
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <Database size={16} />
-        支持矩阵明细
+        {t('v2Governance.supportMatrix.title')}
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {entries.map((entry) => (
@@ -220,8 +232,11 @@ function benchmarkCheckLabel(status: BenchmarkRequiredCheck['status']) {
 }
 
 function BenchmarkRequiredCheckRow({ check }: { check: BenchmarkRequiredCheck }) {
+  const { t } = useTranslation();
   const measured =
-    typeof check.measuredP95Ms === 'number' ? `${check.measuredP95Ms}ms` : '未采集';
+    typeof check.measuredP95Ms === 'number'
+      ? `${check.measuredP95Ms}ms`
+      : t('v2Governance.benchmark.notMeasured');
 
   return (
     <div className="rounded-none border border-forensics-border bg-forensics-surface px-3 py-2 text-[11px] text-forensics-text-tertiary">
@@ -235,8 +250,8 @@ function BenchmarkRequiredCheckRow({ check }: { check: BenchmarkRequiredCheck })
         </span>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
-        <Metric label="阈值 p95" value={`${check.thresholdP95Ms}ms`} />
-        <Metric label="实测 p95" value={measured} />
+        <Metric label={t('v2Governance.benchmark.thresholdP95')} value={`${check.thresholdP95Ms}ms`} />
+        <Metric label={t('v2Governance.benchmark.measuredP95')} value={measured} />
       </div>
     </div>
   );

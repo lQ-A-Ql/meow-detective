@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Download } from 'lucide-react';
 import {
   ContextMenu,
@@ -19,6 +20,7 @@ export function FileEntryContextMenu({
   children,
   onExtractFile,
 }: FileEntryContextMenuProps) {
+  const { t } = useTranslation();
   if (file.entryType !== 'file') {
     return children;
   }
@@ -26,10 +28,10 @@ export function FileEntryContextMenu({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent aria-label={`${file.name} 操作菜单`}>
+      <ContextMenuContent aria-label={t('fileBrowser.contextMenu.label', { name: file.name })}>
         <ContextMenuItem onSelect={() => onExtractFile(file)}>
           <Download />
-          提取文件
+          {t('fileBrowser.inspector.extract.button')}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

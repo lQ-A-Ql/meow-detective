@@ -1,56 +1,311 @@
 {
   "common": {
-    "dataSourceKinds": { "localDisk": "本地磁盘", "directory": "目录", "archive": "归档" }, "yes": "是", "no": "否", "unknown": "未知", "cancel": "取消",
-    "errors": { "unknownApi": "未知接口错误" },
-    "partition": { "display": "分区{{index}}（{{label}}）" },
-    "sort": { "name": "名称", "size": "大小", "modifiedAt": "修改时间", "extension": "扩展名" },
-    "fileTypes": { "directory": "目录", "file": "文件", "extension": "{{extension}} 文件" }
+    "dataSourceKinds": {
+      "localDisk": "本地磁盘",
+      "directory": "目录",
+      "archive": "归档"
+    },
+    "yes": "是",
+    "no": "否",
+    "unknown": "未知",
+    "cancel": "取消",
+    "errors": {
+      "unknownApi": "未知接口错误"
+    },
+    "partition": {
+      "display": "分区{{index}}（{{label}}）"
+    },
+    "sort": {
+      "name": "名称",
+      "size": "大小",
+      "modifiedAt": "修改时间",
+      "extension": "扩展名"
+    },
+    "fileTypes": {
+      "directory": "目录",
+      "file": "文件",
+      "extension": "{{extension}} 文件",
+      "executable": "可执行文件",
+      "dynamicLibrary": "动态链接库",
+      "text": "文本文件",
+      "pdfDocument": "PDF 文档",
+      "wordDocument": "Word 文档",
+      "archive": "压缩包"
+    }
   },
   "mcpUi": {
     "host": {
-      "enable": "启用本机 MCP 服务", "running": "运行中", "starting": "未启动", "stopped": "已停止",
-      "copyEndpoint": "复制连接地址", "copied": "已复制", "copyFailed": "复制失败，可选中地址复制。", "retry": "重试启动", "title": "内置只读工具"
+      "enable": "启用本机 MCP 服务",
+      "running": "运行中",
+      "starting": "未启动",
+      "stopped": "已停止",
+      "copyEndpoint": "复制连接地址",
+      "copied": "已复制",
+      "copyFailed": "复制失败，可选中地址复制。",
+      "retry": "重试启动",
+      "title": "内置只读工具"
     },
     "tools": {
-      "title": "可用 Tools", "enabled": "已启用 {{enabled}}/{{total}}", "enableAll": "全部启用", "disableAll": "全部禁用", "enable": "启用工具", "disable": "禁用工具", "allTools": "切换为全部工具",
-      "refresh": "刷新工具", "search": "搜索工具名称或描述", "loading": "加载中...", "noMatch": "没有匹配的工具", "empty": "暂无工具", "noDescription": "无描述", "testWithCurrent": "使用当前参数测试", "parameter": "参数", "json": "JSON", "test": "测试工具", "invalidJson": "参数必须是有效的 JSON。", "callFailed": "工具调用失败", "listLabel": "MCP 工具列表"
+      "title": "可用 Tools",
+      "enabled": "已启用 {{enabled}}/{{total}}",
+      "enableAll": "全部启用",
+      "disableAll": "全部禁用",
+      "enable": "启用工具",
+      "disable": "禁用工具",
+      "allTools": "切换为全部工具",
+      "refresh": "刷新工具",
+      "search": "搜索工具名称或描述",
+      "loading": "加载中...",
+      "noMatch": "没有匹配的工具",
+      "empty": "暂无工具",
+      "noDescription": "无描述",
+      "testWithCurrent": "使用当前参数测试",
+      "parameter": "参数",
+      "json": "JSON",
+      "test": "测试工具",
+      "invalidJson": "参数必须是有效的 JSON。",
+      "callFailed": "工具调用失败",
+      "listLabel": "MCP 工具列表"
     },
-    "resources": { "title": "暴露的 Resources", "refresh": "刷新", "loading": "加载中...", "empty": "暂无资源", "copy": "复制资源 URI", "copyNamed": "复制 {{name}} URI" },
-    "server": { "connected": "已连接", "error": "错误", "disconnected": "未连接", "connect": "连接", "disconnect": "断开", "delete": "删除", "resources": "R", "tools": "T", "prompts": "P", "deleteTitle": "删除 MCP 服务器", "deleteDescription": "确定删除“{{name}}”吗？这会移除保存的连接配置。" },
+    "resources": {
+      "title": "暴露的 Resources",
+      "refresh": "刷新",
+      "loading": "加载中...",
+      "empty": "暂无资源",
+      "copy": "复制资源 URI",
+      "copyNamed": "复制 {{name}} URI"
+    },
+    "server": {
+      "connected": "已连接",
+      "error": "错误",
+      "disconnected": "未连接",
+      "connect": "连接",
+      "disconnect": "断开",
+      "delete": "删除",
+      "resources": "R",
+      "tools": "T",
+      "prompts": "P",
+      "deleteTitle": "删除 MCP 服务器",
+      "deleteDescription": "确定删除“{{name}}”吗？这会移除保存的连接配置。"
+    },
     "dialog": {
-      "title": "添加 MCP 服务器", "name": "服务器名称", "namePlaceholder": "例如: Claude Desktop", "transport": "传输类型", "http": "HTTP/SSE", "stdio": "Stdio", "url": "SSE URL", "command": "命令", "commandPlaceholder": "python -m forensics_mcp", "arguments": "参数 (空格分隔)", "argumentsPlaceholder": "--port 3001 --verbose", "enabled": "启用", "autoConnect": "自动连接", "permissions": "访问权限", "resourceAccess": "资源访问", "promptAccess": "Prompt 访问", "toolAccess": "工具访问", "readOnly": "只读", "disabled": "禁用", "allowAll": "全部允许（可在工具列表禁用）", "allowList": "仅允许白名单", "allowListLabel": "工具白名单（逗号或空格分隔）", "allowListPlaceholder": "queryTimeline, searchFiles", "networkPolicy": "网络策略", "localhost": "仅本机", "privateLan": "允许局域网", "anyHost": "允许任意主机", "requiredName": "请输入服务器名称", "requiredUrl": "请输入 SSE URL", "requiredCommand": "请输入命令", "testSuccess": "连接成功", "testFailure": "连接失败", "testing": "测试中...", "test": "测试连接", "cancel": "取消", "saving": "保存中...", "add": "添加", "close": "关闭" }
+      "title": "添加 MCP 服务器",
+      "name": "服务器名称",
+      "namePlaceholder": "例如: Claude Desktop",
+      "transport": "传输类型",
+      "http": "HTTP/SSE",
+      "stdio": "Stdio",
+      "url": "SSE URL",
+      "command": "命令",
+      "commandPlaceholder": "python -m forensics_mcp",
+      "arguments": "参数 (空格分隔)",
+      "argumentsPlaceholder": "--port 3001 --verbose",
+      "enabled": "启用",
+      "autoConnect": "自动连接",
+      "permissions": "访问权限",
+      "resourceAccess": "资源访问",
+      "promptAccess": "Prompt 访问",
+      "toolAccess": "工具访问",
+      "readOnly": "只读",
+      "disabled": "禁用",
+      "allowAll": "全部允许（可在工具列表禁用）",
+      "allowList": "仅允许白名单",
+      "allowListLabel": "工具白名单（逗号或空格分隔）",
+      "allowListPlaceholder": "queryTimeline, searchFiles",
+      "networkPolicy": "网络策略",
+      "localhost": "仅本机",
+      "privateLan": "允许局域网",
+      "anyHost": "允许任意主机",
+      "requiredName": "请输入服务器名称",
+      "requiredUrl": "请输入 SSE URL",
+      "requiredCommand": "请输入命令",
+      "testSuccess": "连接成功",
+      "testFailure": "连接失败",
+      "testing": "测试中...",
+      "test": "测试连接",
+      "cancel": "取消",
+      "saving": "保存中...",
+      "add": "添加",
+      "close": "关闭"
+    }
   },
   "notebook": {
     "citation": {
-      "title": "引用选择器", "description": "搜索并选择图谱节点作为引用来源", "searchPlaceholder": "按名称、摘要或标签搜索...", "allTypes": "全部类型", "empty": "未找到匹配的节点", "selected": "已选 {{count}} 个节点", "cancel": "取消", "confirm": "确认 ({{count}})"
+      "title": "引用选择器",
+      "description": "搜索并选择图谱节点作为引用来源",
+      "searchPlaceholder": "按名称、摘要或标签搜索...",
+      "allTypes": "全部类型",
+      "empty": "未找到匹配的节点",
+      "selected": "已选 {{count}} 个节点",
+      "cancel": "取消",
+      "confirm": "确认 ({{count}})"
     },
     "entryForm": {
-      "replyTitle": "回复", "newTitle": "新建笔记", "titlePlaceholder": "笔记标题", "bodyPlaceholder": "使用 Markdown 格式记录分析笔记...", "type": "类型:", "tagsPlaceholder": "输入标签后回车添加...", "cancel": "取消", "save": "保存", "collapse": "折叠条目", "expand": "展开条目", "replies": "{{count}} 回复"
+      "replyTitle": "回复",
+      "newTitle": "新建笔记",
+      "titlePlaceholder": "笔记标题",
+      "bodyPlaceholder": "使用 Markdown 格式记录分析笔记...",
+      "type": "类型:",
+      "tagsPlaceholder": "输入标签后回车添加...",
+      "cancel": "取消",
+      "save": "保存",
+      "collapse": "折叠条目",
+      "expand": "展开条目",
+      "replies": "{{count}} 回复"
     }
   },
   "dashboard": {
-    "title": "取证总览", "subtitle": "图统计 / 数据源覆盖 / 痕迹关联 / 规则包状态", "refresh": "刷新", "loading": "正在加载取证总览快照...",
-    "query": { "loading": "正在加载...", "empty": "暂无数据。" },
-    "status": { "ready": "就绪", "covered": "已覆盖", "review": "待复核", "missing": "缺失", "unknown": "未知" },
-    "artifacts": { "title": "痕迹统计", "subtitle": "按痕迹家族汇总", "familyCount": "家族数量", "recordCount": "记录总量", "details": "家族明细" },
-    "batch": { "title": "批处理状态", "subtitle": "批量导入、批量提取、批量报告", "active": "进行中", "completed": "已完成", "failed": "失败", "queued": "排队中", "total": "总计", "empty": "暂无批处理作业。" },
-    "timeline": { "title": "时间线概览", "subtitle": "跨数据源事件总量与就绪状态", "total": "事件总量", "ready": "时间线就绪", "status": "时间线状态" },
-    "correlation": { "title": "关联统计", "subtitle": "关联分析快照", "nodes": "关联节点", "edges": "关联边", "clusters": "聚合簇", "leads": "线索数", "familyCoverage": "家族覆盖", "leadCount": "{{count}} 线索", "clusterCount": "{{count}} 簇" },
-    "sources": { "title": "数据源覆盖", "subtitle": "导入来源及分区", "count": "数据源数量", "partitions": "分区总数", "e01": "E01 源", "ewf": "EWF 格式", "raw": "RAW 源", "rawSubtitle": "原始镜像", "details": "源明细", "files": "{{count}} 文件", "partitionCount": "{{count}} 分区", "empty": "当前案件没有数据源。" },
-    "platforms": { "title": "平台覆盖", "subtitle": "痕迹家族按目标平台分布", "windows": "Windows", "linux": "Linux", "crossPlatform": "跨平台", "unknown": "未分类", "familyUnit": "个家族", "details": "家族明细" },
-    "rulePacks": { "title": "规则包状态", "subtitle": "规则版本、覆盖率、执行状态", "loaded": "已加载规则包", "totalRules": "规则总数", "definitionStatus": "定义状态", "executionStatus": "本案执行", "ruleCount": "{{count}} 规则", "empty": "规则包数据将在导入数据源后加载。" },
-    "graph": { "title": "图统计", "subtitle": "节点与边按类型分布", "nodes": "节点总数", "edges": "边总数", "density": "密度", "largestComponent": "最大联通分量", "notCalculated": "未计算", "nodeTypes": "节点类型数", "byNodeType": "按节点类型", "byEdgeType": "按边类型" }
+    "title": "取证总览",
+    "subtitle": "图统计 / 数据源覆盖 / 痕迹关联 / 规则包状态",
+    "refresh": "刷新",
+    "loading": "正在加载取证总览快照...",
+    "query": {
+      "loading": "正在加载...",
+      "empty": "暂无数据。"
+    },
+    "status": {
+      "ready": "就绪",
+      "covered": "已覆盖",
+      "review": "待复核",
+      "missing": "缺失",
+      "unknown": "未知"
+    },
+    "artifacts": {
+      "title": "痕迹统计",
+      "subtitle": "按痕迹家族汇总",
+      "familyCount": "家族数量",
+      "recordCount": "记录总量",
+      "details": "家族明细"
+    },
+    "batch": {
+      "title": "批处理状态",
+      "subtitle": "批量导入、批量提取、批量报告",
+      "active": "进行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "queued": "排队中",
+      "total": "总计",
+      "empty": "暂无批处理作业。"
+    },
+    "timeline": {
+      "title": "时间线概览",
+      "subtitle": "跨数据源事件总量与就绪状态",
+      "total": "事件总量",
+      "ready": "时间线就绪",
+      "status": "时间线状态"
+    },
+    "correlation": {
+      "title": "关联统计",
+      "subtitle": "关联分析快照",
+      "nodes": "关联节点",
+      "edges": "关联边",
+      "clusters": "聚合簇",
+      "leads": "线索数",
+      "familyCoverage": "家族覆盖",
+      "leadCount": "{{count}} 线索",
+      "clusterCount": "{{count}} 簇"
+    },
+    "sources": {
+      "title": "数据源覆盖",
+      "subtitle": "导入来源及分区",
+      "count": "数据源数量",
+      "partitions": "分区总数",
+      "e01": "E01 源",
+      "ewf": "EWF 格式",
+      "raw": "RAW 源",
+      "rawSubtitle": "原始镜像",
+      "details": "源明细",
+      "files": "{{count}} 文件",
+      "partitionCount": "{{count}} 分区",
+      "empty": "当前案件没有数据源。"
+    },
+    "platforms": {
+      "title": "平台覆盖",
+      "subtitle": "痕迹家族按目标平台分布",
+      "windows": "Windows",
+      "linux": "Linux",
+      "crossPlatform": "跨平台",
+      "unknown": "未分类",
+      "familyUnit": "个家族",
+      "details": "家族明细"
+    },
+    "rulePacks": {
+      "title": "规则包状态",
+      "subtitle": "规则版本、覆盖率、执行状态",
+      "loaded": "已加载规则包",
+      "totalRules": "规则总数",
+      "definitionStatus": "定义状态",
+      "executionStatus": "本案执行",
+      "ruleCount": "{{count}} 规则",
+      "empty": "规则包数据将在导入数据源后加载。"
+    },
+    "graph": {
+      "title": "图统计",
+      "subtitle": "节点与边按类型分布",
+      "nodes": "节点总数",
+      "edges": "边总数",
+      "density": "密度",
+      "largestComponent": "最大联通分量",
+      "notCalculated": "未计算",
+      "nodeTypes": "节点类型数",
+      "byNodeType": "按节点类型",
+      "byEdgeType": "按边类型"
+    }
   },
   "rulePacks": {
-    "title": "规则包管理", "subtitle": "加载、校验并查看规则包覆盖范围", "loading": "正在加载规则包...", "loadError": "无法加载规则包列表", "retry": "重试", "refresh": "刷新",
-    "summary": { "packs": "规则包", "rules": "规则总数", "coverage": "覆盖率" },
-    "load": { "title": "加载新规则包", "description": "选择规则包文件（.yaml / .yml / .json），Tauri 文件对话框将在后端接入后启用。", "placeholder": "C:/rules/my-rule-pack.yaml", "action": "加载" },
-    "status": { "loaded": "已加载", "validating": "校验中", "error": "错误" },
-    "pack": { "ruleCount": "规则数", "loadedAt": "加载时间", "moreWarnings": "...以及 {{count}} 条更多", "validate": "校验" },
-    "empty": { "title": "暂未加载任何规则包", "description": "使用上方输入框加载您的第一个规则包" },
-    "coverage": { "title": "覆盖范围摘要", "description": "所有已加载规则包的合并覆盖范围", "overall": "整体覆盖率", "covered": "已覆盖 ({{count}})", "uncovered": "未覆盖 ({{count}})" }
+    "title": "规则包管理",
+    "subtitle": "加载、校验并查看规则包覆盖范围",
+    "loading": "正在加载规则包...",
+    "loadError": "无法加载规则包列表",
+    "retry": "重试",
+    "refresh": "刷新",
+    "summary": {
+      "packs": "规则包",
+      "rules": "规则总数",
+      "coverage": "覆盖率"
+    },
+    "load": {
+      "title": "加载新规则包",
+      "description": "选择规则包文件（.yaml / .yml / .json），Tauri 文件对话框将在后端接入后启用。",
+      "placeholder": "C:/rules/my-rule-pack.yaml",
+      "action": "加载"
+    },
+    "status": {
+      "loaded": "已加载",
+      "validating": "校验中",
+      "error": "错误"
+    },
+    "pack": {
+      "ruleCount": "规则数",
+      "loadedAt": "加载时间",
+      "moreWarnings": "...以及 {{count}} 条更多",
+      "validate": "校验"
+    },
+    "empty": {
+      "title": "暂未加载任何规则包",
+      "description": "使用上方输入框加载您的第一个规则包"
+    },
+    "coverage": {
+      "title": "覆盖范围摘要",
+      "description": "所有已加载规则包的合并覆盖范围",
+      "overall": "整体覆盖率",
+      "covered": "已覆盖 ({{count}})",
+      "uncovered": "未覆盖 ({{count}})"
+    }
   },
-  "viewer": { "error": { "title": "文件预览失败", "copyDetails": "复制错误详情", "retryPreview": "重试预览", "retry": "重试" }, "hex": { "ariaLabel": "Hex 与 ASCII 字节预览", "empty": "选择文件后显示十六进制预览", "loadedRanges": "已加载区间" } },
+  "viewer": {
+    "error": {
+      "title": "文件预览失败",
+      "copyDetails": "复制错误详情",
+      "retryPreview": "重试预览",
+      "retry": "重试"
+    },
+    "hex": {
+      "ariaLabel": "Hex 与 ASCII 字节预览",
+      "empty": "选择文件后显示十六进制预览",
+      "loadedRanges": "已加载区间"
+    }
+  },
   "media": {
     "loading": "加载中...",
     "audio": "音频",
@@ -59,7 +314,22 @@
     "videoProgress": "视频播放进度",
     "volume": "音量",
     "image": "图片",
-    "controls": { "zoomIn": "放大", "zoomOut": "缩小", "rotate": "旋转", "fit": "适应窗口", "reset": "重置视图", "download": "下载", "skipBack": "快退 10 秒", "skipForward": "快进 10 秒", "play": "播放", "pause": "暂停", "mute": "静音", "unmute": "取消静音", "fullscreen": "全屏", "exitFullscreen": "退出全屏" },
+    "controls": {
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "rotate": "旋转",
+      "fit": "适应窗口",
+      "reset": "重置视图",
+      "download": "下载",
+      "skipBack": "快退 10 秒",
+      "skipForward": "快进 10 秒",
+      "play": "播放",
+      "pause": "暂停",
+      "mute": "静音",
+      "unmute": "取消静音",
+      "fullscreen": "全屏",
+      "exitFullscreen": "退出全屏"
+    },
     "errors": {
       "playback": "播放失败：{{message}}",
       "audioLoad": "音频加载失败",
@@ -70,10 +340,75 @@
       "videoDecode": "视频解码失败，格式可能不支持",
       "audioUnsupported": "音频格式不支持或文件损坏",
       "videoUnsupported": "视频格式不支持或文件损坏",
-      "imageInvalid": "图片源无效", "imageTimeout": "图片加载超时，请检查文件是否存在", "imageUnsupported": "图片格式不支持或文件损坏"
+      "imageInvalid": "图片源无效",
+      "imageTimeout": "图片加载超时，请检查文件是否存在",
+      "imageUnsupported": "图片格式不支持或文件损坏"
     }
   },
-  "browser": { "title": "浏览器记录", "unavailable": "浏览器记录暂不可用。", "stats": { "visits": "访问记录", "downloads": "下载记录", "cookies": "Cookie", "sessions": "会话标签", "passwords": "密码项", "extensions": "扩展", "browsers": "浏览器" }, "sections": { "visits": "访问历史", "downloads": "下载记录", "cookies": "Cookies", "sessions": "会话 / 标签页", "passwords": "保存的密码", "extensions": "Firefox 扩展" }, "columns": { "time": "时间", "profile": "Profile", "title": "标题", "count": "次数", "targetPath": "目标路径", "size": "大小", "domain": "域名", "name": "名称", "valuePreview": "值预览", "expiry": "过期时间", "secure": "安全标记", "httpOnly": "仅 HTTP", "decryptionStatus": "解密状态", "extensionName": "名称", "version": "版本", "active": "启用", "userDisabled": "用户禁用", "signedState": "签名状态", "permissions": "权限", "window": "窗口", "tab": "标签", "lastActive": "最后活跃", "website": "网站", "username": "用户名", "passwordPreview": "密码预览", "createdAt": "创建时间", "timesUsed": "使用次数" }, "empty": { "visits": "暂无浏览历史", "visitsDescription": "支持 Chrome、Edge History 与 Firefox places.sqlite。", "downloads": "暂无下载记录", "downloadsDescription": "发现下载记录后会显示 URL、目标路径与大小。", "cookies": "暂无 Cookie 记录", "cookiesDescription": "发现 cookies 数据库后会显示域名、名称与过期时间。", "sessions": "暂无会话记录", "sessionsDescription": "发现 Session/Session Restore 文件后会显示标签页 URL。", "passwords": "暂无密码记录", "passwordsDescription": "发现 login data / logins.json 后仅展示 URL、用户名等元数据。", "extensions": "暂无 Firefox 扩展", "extensionsDescription": "发现 extensions.json 后会显示扩展元数据。" } },
+  "browser": {
+    "title": "浏览器记录",
+    "unavailable": "浏览器记录暂不可用。",
+    "stats": {
+      "visits": "访问记录",
+      "downloads": "下载记录",
+      "cookies": "Cookie",
+      "sessions": "会话标签",
+      "passwords": "密码项",
+      "extensions": "扩展",
+      "browsers": "浏览器"
+    },
+    "sections": {
+      "visits": "访问历史",
+      "downloads": "下载记录",
+      "cookies": "Cookies",
+      "sessions": "会话 / 标签页",
+      "passwords": "保存的密码",
+      "extensions": "Firefox 扩展"
+    },
+    "columns": {
+      "time": "时间",
+      "profile": "Profile",
+      "title": "标题",
+      "count": "次数",
+      "targetPath": "目标路径",
+      "size": "大小",
+      "domain": "域名",
+      "name": "名称",
+      "valuePreview": "值预览",
+      "expiry": "过期时间",
+      "secure": "安全标记",
+      "httpOnly": "仅 HTTP",
+      "decryptionStatus": "解密状态",
+      "extensionName": "名称",
+      "version": "版本",
+      "active": "启用",
+      "userDisabled": "用户禁用",
+      "signedState": "签名状态",
+      "permissions": "权限",
+      "window": "窗口",
+      "tab": "标签",
+      "lastActive": "最后活跃",
+      "website": "网站",
+      "username": "用户名",
+      "passwordPreview": "密码预览",
+      "createdAt": "创建时间",
+      "timesUsed": "使用次数"
+    },
+    "empty": {
+      "visits": "暂无浏览历史",
+      "visitsDescription": "支持 Chrome、Edge History 与 Firefox places.sqlite。",
+      "downloads": "暂无下载记录",
+      "downloadsDescription": "发现下载记录后会显示 URL、目标路径与大小。",
+      "cookies": "暂无 Cookie 记录",
+      "cookiesDescription": "发现 cookies 数据库后会显示域名、名称与过期时间。",
+      "sessions": "暂无会话记录",
+      "sessionsDescription": "发现 Session/Session Restore 文件后会显示标签页 URL。",
+      "passwords": "暂无密码记录",
+      "passwordsDescription": "发现 login data / logins.json 后仅展示 URL、用户名等元数据。",
+      "extensions": "暂无 Firefox 扩展",
+      "extensionsDescription": "发现 extensions.json 后会显示扩展元数据。"
+    }
+  },
   "graph": {
     "title": "关系图谱",
     "subtitle": "案件级跨数据源实体与证据邻域",
@@ -87,30 +422,162 @@
     "loading": "加载图数据...",
     "canvasLabel": "关系图谱力导向图",
     "truncated": "当前图窗口已达到节点或关系预算，请缩小深度或关系类型。",
-    "empty": { "title": "暂无确定性的跨数据源实体关联。", "description": "完成至少两个数据源的痕迹与实体提取后，将在此处显示案件关系网络。" },
-    "nodeTypes": { "file": "文件", "artifact": "痕迹", "timelineEvent": "时间线", "entity": "实体", "lead": "线索", "notebookEntry": "笔记" },
-    "edgeTypes": { "contains": "包含", "references": "引用", "correlatesWith": "关联", "derivesFrom": "派生", "precedes": "先于", "cites": "引用", "annotates": "标注" },
-    "values": { "untitled": "无标签", "noSummary": "无摘要", "unknown": "未知" },
-    "actions": { "expandOne": "展开 1 层", "expandTwo": "展开 2 层", "close": "关闭" },
-    "details": { "type": "类型", "degree": "度", "confidence": "置信度", "source": "源", "target": "目标", "provenance": "来源追溯", "parser": "解析器", "rule": "规则", "version": "版本", "noProvenance": "无追溯记录" },
-    "controls": { "zoomIn": "放大", "zoomOut": "缩小", "fit": "适应视图", "reset": "重置布局" },
-    "stats": { "dataSources": "数据源", "crossSourceEntities": "跨源实体", "crossSourceRelations": "跨源关系", "nodes": "节点", "edges": "边", "density": "密度" },
-    "help": { "selection": "单击节点查看详情，双击节点展开邻域；单击边查看来源追溯。", "navigation": "拖拽节点调整位置，拖拽空白处平移，滚轮缩放。" }
+    "empty": {
+      "title": "暂无确定性的跨数据源实体关联。",
+      "description": "完成至少两个数据源的痕迹与实体提取后，将在此处显示案件关系网络。"
+    },
+    "nodeTypes": {
+      "file": "文件",
+      "artifact": "痕迹",
+      "timelineEvent": "时间线",
+      "entity": "实体",
+      "lead": "线索",
+      "notebookEntry": "笔记"
+    },
+    "edgeTypes": {
+      "contains": "包含",
+      "references": "引用",
+      "correlatesWith": "关联",
+      "derivesFrom": "派生",
+      "precedes": "先于",
+      "cites": "引用",
+      "annotates": "标注"
+    },
+    "values": {
+      "untitled": "无标签",
+      "noSummary": "无摘要",
+      "unknown": "未知"
+    },
+    "actions": {
+      "expandOne": "展开 1 层",
+      "expandTwo": "展开 2 层",
+      "close": "关闭"
+    },
+    "details": {
+      "type": "类型",
+      "degree": "度",
+      "confidence": "置信度",
+      "source": "源",
+      "target": "目标",
+      "provenance": "来源追溯",
+      "parser": "解析器",
+      "rule": "规则",
+      "version": "版本",
+      "noProvenance": "无追溯记录"
+    },
+    "controls": {
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "fit": "适应视图",
+      "reset": "重置布局"
+    },
+    "stats": {
+      "dataSources": "数据源",
+      "crossSourceEntities": "跨源实体",
+      "crossSourceRelations": "跨源关系",
+      "nodes": "节点",
+      "edges": "边",
+      "density": "密度"
+    },
+    "help": {
+      "selection": "单击节点查看详情，双击节点展开邻域；单击边查看来源追溯。",
+      "navigation": "拖拽节点调整位置，拖拽空白处平移，滚轮缩放。"
+    }
   },
   "artifacts": {
     "title": "痕迹家族控制",
     "meta": "{{family}} / 记录 {{shown}}/{{total}} 条",
-    "columns": { "familyPath": "{{family}} 路径", "targetPath": "目标路径", "createdAt": "创建时间", "arguments": "参数" },
+    "columns": {
+      "familyPath": "{{family}} 路径",
+      "targetPath": "目标路径",
+      "createdAt": "创建时间",
+      "arguments": "参数"
+    },
     "emptyTitle": "当前痕迹家族无记录",
     "emptyDescription": "请切换 family 或等待解析任务完成。",
-    "inspector": { "title": "痕迹属性", "none": "未选择痕迹", "targetPath": "目标路径", "attributes": "属性字段", "context": "来源上下文", "actions": "关联动作" },
-    "fields": { "driveType": "驱动器类型", "volumeSerial": "卷序列号", "machineId": "机器 ID" },
-    "actions": { "openSource": "在文件浏览中定位目标", "openTimeline": "查看关联时间线事件" }
+    "inspector": {
+      "title": "痕迹属性",
+      "none": "未选择痕迹",
+      "targetPath": "目标路径",
+      "attributes": "属性字段",
+      "context": "来源上下文",
+      "actions": "关联动作"
+    },
+    "fields": {
+      "driveType": "驱动器类型",
+      "volumeSerial": "卷序列号",
+      "machineId": "机器 ID"
+    },
+    "actions": {
+      "openSource": "在文件浏览中定位目标",
+      "openTimeline": "查看关联时间线事件"
+    }
   },
   "timeline": {
-    "title": "时间线控制带", "meta": "事件 {{shown}}/{{total}} 条 / 数据源 {{sources}} 个", "granularity": "粒度", "adaptive": "自适应", "start": "起始", "end": "结束", "invalidDate": "日期无效", "apply": "应用", "type": "类型", "all": "全部", "clear": "清除", "emptyTitle": "当前时间范围无事件", "emptyDescription": "请扩大时间范围或调整事件过滤条件。", "columns": { "timestamp": "时间戳", "source": "数据源", "type": "类型", "description": "描述" }, "jumpToSource": "跳转到来源对象", "inspector": { "title": "事件检查器", "current": "当前事件", "none": "未选择事件", "timestamp": "时间戳", "type": "事件类型", "activity": "源活动", "object": "来源对象", "context": "时间上下文", "actions": "关联动作" }
+    "title": "时间线控制带",
+    "meta": "事件 {{shown}}/{{total}} 条 / 数据源 {{sources}} 个",
+    "granularity": "粒度",
+    "adaptive": "自适应",
+    "start": "起始",
+    "end": "结束",
+    "invalidDate": "日期无效",
+    "apply": "应用",
+    "type": "类型",
+    "all": "全部",
+    "clear": "清除",
+    "emptyTitle": "当前时间范围无事件",
+    "emptyDescription": "请扩大时间范围或调整事件过滤条件。",
+    "columns": {
+      "timestamp": "时间戳",
+      "source": "数据源",
+      "type": "类型",
+      "description": "描述"
+    },
+    "jumpToSource": "跳转到来源对象",
+    "inspector": {
+      "title": "事件检查器",
+      "current": "当前事件",
+      "none": "未选择事件",
+      "timestamp": "时间戳",
+      "type": "事件类型",
+      "activity": "源活动",
+      "object": "来源对象",
+      "context": "时间上下文",
+      "actions": "关联动作"
+    },
+    "rangeTo": "至",
+    "histogram": {
+      "noRange": "无时间区间",
+      "barTitle": "{{range}}：{{count}} 条事件",
+      "selectRange": "筛选该时间区间，共 {{count}} 条事件"
+    }
   },
-  "reports": { "template": "选择模板", "runningSummary": "运行中 {{running}} / 已完成 {{completed}}", "scope": "导出范围", "scopeOptions": { "fileSystemMetadata": "包含文件系统元数据", "registry": "包含注册表项", "fullTimeline": "包含完整时间线", "rawFiles": "包含原始文件提取（会增加文件大小）" }, "format": "格式", "summaryTitle": "导出摘要", "summaryDescription": "当前模板将生成案件执行摘要、关键时间线与核心痕迹清单。", "expectedOutput": { "raw": "预计产物: 报告 + 原始文件批量导出清单 + SHA256SUMS", "report": "预计产物: 报告主体文件" }, "generating": "生成中...", "generate": "生成报告", "recent": "最近导出", "recordCount": "{{count}} 条记录" },
+  "reports": {
+    "template": "选择模板",
+    "runningSummary": "运行中 {{running}} / 已完成 {{completed}}",
+    "scope": "导出范围",
+    "scopeOptions": {
+      "fileSystemMetadata": "包含文件系统元数据",
+      "registry": "包含注册表项",
+      "fullTimeline": "包含完整时间线",
+      "rawFiles": "包含原始文件提取（会增加文件大小）"
+    },
+    "format": "格式",
+    "summaryTitle": "导出摘要",
+    "summaryDescription": "当前模板将生成案件执行摘要、关键时间线与核心痕迹清单。",
+    "expectedOutput": {
+      "raw": "预计产物: 报告 + 原始文件批量导出清单 + SHA256SUMS",
+      "report": "预计产物: 报告主体文件"
+    },
+    "generating": "生成中...",
+    "generate": "生成报告",
+    "recent": "最近导出",
+    "recordCount": "{{count}} 条记录",
+    "exportSuccess": "报告生成成功",
+    "exportFailed": "报告生成失败",
+    "generatedBy": "由 {{author}} 生成于 {{time}}",
+    "exportQueueProgress": "导出队列处理中，正在写入时间线与附件章节。"
+  },
   "fileBrowser": {
     "title": "文件浏览控制",
     "empty": {
@@ -189,7 +656,8 @@
       "releaseEmulation": "释放",
       "operationFailed": "镜像操作失败。",
       "close": "关闭",
-      "noSources": "当前案件没有可用的数据源。"
+      "noSources": "当前案件没有可用的数据源。",
+      "selectPartitionError": "请选择分区。"
     },
     "bitlockerImport": {
       "ariaLabel": "正在导入 BitLocker 解锁后的文件目录",
@@ -213,9 +681,41 @@
         "status": "对象状态",
         "actions": "操作"
       },
-      "imageMetadata": { "loading": "正在读取图片元数据…", "retry": "重试", "status": "状态", "format": "格式", "dimensions": "尺寸", "orientation": "方向", "make": "厂商", "model": "型号", "software": "软件", "dateTimeOriginal": "拍摄时间", "createDate": "创建时间", "modifyDate": "修改时间", "lensModel": "镜头", "latitude": "纬度", "longitude": "经度", "altitude": "海拔", "gpsDateTime": "GPS 时间", "gps": "GPS", "statuses": { "present": "已发现", "absent": "无 EXIF", "unsupported": "不支持", "corrupt": "结构损坏" } },
-      "hash": { "loading": "正在计算…" },
-      "ntfs": { "inode": "MFT inode", "recordOffset": "记录偏移", "attributes": "属性数", "run": "数据运行" },
+      "imageMetadata": {
+        "loading": "正在读取图片元数据…",
+        "retry": "重试",
+        "status": "状态",
+        "format": "格式",
+        "dimensions": "尺寸",
+        "orientation": "方向",
+        "make": "厂商",
+        "model": "型号",
+        "software": "软件",
+        "dateTimeOriginal": "拍摄时间",
+        "createDate": "创建时间",
+        "modifyDate": "修改时间",
+        "lensModel": "镜头",
+        "latitude": "纬度",
+        "longitude": "经度",
+        "altitude": "海拔",
+        "gpsDateTime": "GPS 时间",
+        "gps": "GPS",
+        "statuses": {
+          "present": "已发现",
+          "absent": "无 EXIF",
+          "unsupported": "不支持",
+          "corrupt": "结构损坏"
+        }
+      },
+      "hash": {
+        "loading": "正在计算…"
+      },
+      "ntfs": {
+        "inode": "MFT inode",
+        "recordOffset": "记录偏移",
+        "attributes": "属性数",
+        "run": "数据运行"
+      },
       "timestamp": {
         "modified": "M",
         "accessed": "A",
@@ -235,7 +735,37 @@
         "button": "提取文件"
       },
       "viewTimeline": "在时间线中查看",
-      "image": { "loading": "正在读取图片元数据…", "retry": "重试", "fields": { "format": "格式", "dimensions": "尺寸", "orientation": "方向", "make": "厂商", "model": "型号", "software": "软件", "dateTimeOriginal": "拍摄时间", "createDate": "创建时间", "modifyDate": "修改时间", "lensModel": "镜头", "latitude": "纬度", "longitude": "经度", "altitude": "海拔", "gpsDateTime": "GPS 时间" }, "status": { "present": "已发现", "absent": "无 EXIF", "unsupported": "不支持", "corrupt": "结构损坏" }, "statusDescription": { "absent": "未发现可解析的 EXIF 或媒体元数据。", "unsupported": "当前格式不支持图片元数据解析。", "corrupt": "图片元数据结构损坏，未返回字段。" } },
+      "image": {
+        "loading": "正在读取图片元数据…",
+        "retry": "重试",
+        "fields": {
+          "format": "格式",
+          "dimensions": "尺寸",
+          "orientation": "方向",
+          "make": "厂商",
+          "model": "型号",
+          "software": "软件",
+          "dateTimeOriginal": "拍摄时间",
+          "createDate": "创建时间",
+          "modifyDate": "修改时间",
+          "lensModel": "镜头",
+          "latitude": "纬度",
+          "longitude": "经度",
+          "altitude": "海拔",
+          "gpsDateTime": "GPS 时间"
+        },
+        "status": {
+          "present": "已发现",
+          "absent": "无 EXIF",
+          "unsupported": "不支持",
+          "corrupt": "结构损坏"
+        },
+        "statusDescription": {
+          "absent": "未发现可解析的 EXIF 或媒体元数据。",
+          "unsupported": "当前格式不支持图片元数据解析。",
+          "corrupt": "图片元数据结构损坏，未返回字段。"
+        }
+      },
       "bitlocker": {
         "title": "BitLocker 分区",
         "refresh": "重新检查 BitLocker 分区",
@@ -292,13 +822,86 @@
         "imageMetadata": {
           "loading": "正在读取图片元数据…",
           "status": "状态",
-          "states": { "present": "已发现", "absent": "无 EXIF", "unsupported": "不支持", "corrupt": "结构损坏" },
-          "fields": { "format": "格式", "width": "宽度", "height": "高度", "orientation": "方向", "make": "厂商", "model": "型号", "software": "软件", "dateTimeOriginal": "拍摄时间", "createDate": "创建时间", "modifyDate": "修改时间", "lensModel": "镜头", "latitude": "纬度", "longitude": "经度", "altitude": "海拔", "gpsDateTime": "GPS 时间" },
+          "states": {
+            "present": "已发现",
+            "absent": "无 EXIF",
+            "unsupported": "不支持",
+            "corrupt": "结构损坏"
+          },
+          "fields": {
+            "format": "格式",
+            "width": "宽度",
+            "height": "高度",
+            "orientation": "方向",
+            "make": "厂商",
+            "model": "型号",
+            "software": "软件",
+            "dateTimeOriginal": "拍摄时间",
+            "createDate": "创建时间",
+            "modifyDate": "修改时间",
+            "lensModel": "镜头",
+            "latitude": "纬度",
+            "longitude": "经度",
+            "altitude": "海拔",
+            "gpsDateTime": "GPS 时间"
+          },
           "absent": "未发现可解析的 EXIF 或媒体元数据。",
           "unsupported": "当前图片格式不支持元数据解析。",
           "corrupt": "图片元数据结构损坏，未返回字段。"
         }
       }
+    },
+    "list": {
+      "columnAttributes": "属性",
+      "previousPage": "上一页",
+      "nextPage": "下一页",
+      "emptyTitle": "当前目录为空",
+      "emptyTruncated": "当前仅加载前 {{limit}} 项，共 {{total}} 项。",
+      "emptyDescription": "所选路径下没有可展示的文件对象。"
+    },
+    "tree": {
+      "title": "目录树",
+      "resizeHandle": "拖拽调整宽度",
+      "loading": "正在加载目录树...",
+      "noMatches": "没有匹配的目录。",
+      "importPrompt": "导入数据源后显示目录树。",
+      "childrenTruncated": "当前目录子目录很多，仅加载前 {{limit}} 个；请用右侧列表或搜索继续定位。",
+      "childrenLoaded": "已加载 {{loaded}} / {{total}} 个子目录",
+      "loadMore": "加载更多子目录"
+    },
+    "extraction": {
+      "noFile": "未选择文件",
+      "browse": "浏览",
+      "noOverwriteHint": "已存在的目标文件不会被覆盖。",
+      "preparing": "正在准备证据读取...",
+      "copying": "已复制 {{copied}}，正在同步并发布目标文件...",
+      "progressLabel": "文件提取进度",
+      "extracting": "正在提取",
+      "start": "开始提取",
+      "failed": "文件提取失败。",
+      "destinationRequired": "请选择或填写提取目标路径。",
+      "destinationAbsolute": "目标路径必须是绝对路径。",
+      "destinationPickerFailed": "无法打开目标路径选择器。",
+      "completedTitle": "文件提取完成",
+      "extractedSize": "提取大小",
+      "sizeVerification": "大小校验",
+      "sizeVerified": "通过",
+      "sizeMismatch": "未通过",
+      "auditRecord": "审计记录",
+      "auditWritten": "已写入",
+      "auditWriteFailed": "写入失败",
+      "confirm": "确定"
+    },
+    "status": {
+      "hidden": "隐藏",
+      "system": "系统",
+      "showHidden": "显示隐藏文件"
+    },
+    "contextMenu": {
+      "label": "{{name}} 操作菜单"
+    },
+    "preview": {
+      "resizeHandle": "拖拽调整预览区高度"
     }
   },
   "importDataSource": {
@@ -427,7 +1030,12 @@
     "workspaceNavLabel": "工作区",
     "workspaceLabel": "工作区标题栏",
     "pageNavLabel": "页面导航",
-    "case": { "return": "返回案件入口", "noCase": "未打开案件" },
+    "case": {
+      "number": "案件 #{{number}}",
+      "noCase": "未选择案件",
+      "examiner": "检验人 {{examiner}}",
+      "updatedAt": "更新于 {{updatedAt}}"
+    },
     "links": {
       "home": {
         "label": "案件概览",
@@ -457,7 +1065,7 @@
         "label": "取证总览",
         "context": "图统计、数据源覆盖、痕迹关联与规则包状态"
       },
-  "search": {
+      "search": {
         "label": "全局搜索",
         "context": "关键字、结构化查询与命中详情"
       },
@@ -469,18 +1077,12 @@
         "label": "痕迹分析",
         "context": "Windows 痕迹家族与解析字段"
       },
-  "reports": {
+      "reports": {
         "label": "报告导出",
         "context": "模板、导出任务与报告产物"
       }
     },
     "currentPage": "当前页",
-    "case": {
-      "number": "案件 #{{number}}",
-      "noCase": "未选择案件",
-      "examiner": "检验人 {{examiner}}",
-      "updatedAt": "更新于 {{updatedAt}}"
-    },
     "search": {
       "placeholder": "输入全局检索语句或 IOC"
     },
@@ -489,8 +1091,106 @@
       "warnings": "{{count}}"
     }
   },
-  "recovery": { "title": "删除文件恢复", "subtitle": "NTFS MFT / EXT4 journal / XFS log", "targetPartition": "目标分区", "selectPartition": "选择 NTFS/EXT4/XFS 分区", "startScan": "开始扫描", "rescan": "重新扫描", "transactions": "{{count}} transactions", "candidates": "{{count}} candidates", "loading": "正在读取恢复扫描结果", "unscanned": "当前分区尚未执行删除恢复扫描", "noPartitions": "当前数据源没有可执行删除恢复的 NTFS/EXT4/XFS 分区", "verifiedRanges": "已验证内容区间", "selectRange": "选择区间", "read": "读取", "noVerifiedRange": "该候选没有可读取的已验证内容区间", "exportFull": "导出完整恢复文件", "exported": "已导出 {{bytes}}", "completeness": { "metadata_only": "仅元数据", "partial": "部分内容", "complete": "完整内容" }, "fields": { "completeness": "完整度", "declaredSize": "声明大小", "recoverable": "可恢复", "method": "恢复方法", "confidence": "置信度", "originalPath": "原始路径" }, "columns": { "partition": "分区", "inode": "Inode", "originalPath": "原始路径", "size": "大小", "completeness": "恢复状态", "confidence": "置信度" }, "hashSearch": { "label": "恢复文件哈希", "placeholder": "MD5 / SHA-1 / SHA-256", "clear": "清除哈希搜索", "invalid": "哈希必须是 32、40 或 64 位十六进制值", "submit": "按哈希查找", "matches": "{{count}} 项匹配" }, "empty": { "selectCandidate": "选择候选记录查看取证元数据", "noCandidates": "没有删除恢复候选", "noCandidatesDescription": "当前扫描未重建出可报告的删除记录。" }, "pagination": { "hashMatches": "哈希匹配 {{shown}} / {{total}}", "range": "显示 {{start}}-{{end}} / {{total}}", "previous": "上一组", "next": "下一组" } },
-  "search": { "title": "文件搜索", "inputPlaceholder": "输入文件名、目录名或路径", "inputLabel": "文件名搜索", "pathToggle": "路径", "allTypes": "全部类型", "file": "文件", "directory": "目录", "extensionPlaceholder": "扩展名", "extensionLabel": "扩展名筛选", "allSources": "全部数据源", "meta": { "loaded": "已载入 {{shown}}/{{total}} 项", "waiting": "输入文件名或路径开始搜索", "found": "找到 {{count}} 个结果", "idle": "等待输入", "took": "查询 {{ms}} ms" }, "coverage": { "incomplete": "索引覆盖不完整，需要重新分析以重建索引 {{indexed}}/{{expected}}", "complete": "索引覆盖 {{indexed}} 项 / {{sources}} 个数据源", "missingTitle": "未就绪数据源: {{sources}}" }, "truncated": "结果超过浏览上限，仅显示前 {{count}} 项窗口", "columns": { "name": "名称", "path": "路径", "size": "大小", "modifiedAt": "修改时间", "source": "数据源" }, "empty": { "noMatch": "没有匹配的文件", "noMatchDescription": "尝试修改文件名、路径或筛选条件。", "start": "输入文件名开始搜索", "startDescription": "搜索仅定位已导入数据源中的文件和目录。" } },
+  "recovery": {
+    "title": "删除文件恢复",
+    "subtitle": "NTFS MFT / EXT4 journal / XFS log",
+    "targetPartition": "目标分区",
+    "selectPartition": "选择 NTFS/EXT4/XFS 分区",
+    "startScan": "开始扫描",
+    "rescan": "重新扫描",
+    "transactions": "{{count}} transactions",
+    "candidates": "{{count}} candidates",
+    "loading": "正在读取恢复扫描结果",
+    "unscanned": "当前分区尚未执行删除恢复扫描",
+    "noPartitions": "当前数据源没有可执行删除恢复的 NTFS/EXT4/XFS 分区",
+    "verifiedRanges": "已验证内容区间",
+    "selectRange": "选择区间",
+    "read": "读取",
+    "noVerifiedRange": "该候选没有可读取的已验证内容区间",
+    "exportFull": "导出完整恢复文件",
+    "exported": "已导出 {{bytes}}",
+    "completeness": {
+      "metadata_only": "仅元数据",
+      "partial": "部分内容",
+      "complete": "完整内容"
+    },
+    "fields": {
+      "completeness": "完整度",
+      "declaredSize": "声明大小",
+      "recoverable": "可恢复",
+      "method": "恢复方法",
+      "confidence": "置信度",
+      "originalPath": "原始路径"
+    },
+    "columns": {
+      "partition": "分区",
+      "inode": "Inode",
+      "originalPath": "原始路径",
+      "size": "大小",
+      "completeness": "恢复状态",
+      "confidence": "置信度"
+    },
+    "hashSearch": {
+      "label": "恢复文件哈希",
+      "placeholder": "MD5 / SHA-1 / SHA-256",
+      "clear": "清除哈希搜索",
+      "invalid": "哈希必须是 32、40 或 64 位十六进制值",
+      "submit": "按哈希查找",
+      "matches": "{{count}} 项匹配"
+    },
+    "empty": {
+      "selectCandidate": "选择候选记录查看取证元数据",
+      "noCandidates": "没有删除恢复候选",
+      "noCandidatesDescription": "当前扫描未重建出可报告的删除记录。"
+    },
+    "pagination": {
+      "hashMatches": "哈希匹配 {{shown}} / {{total}}",
+      "range": "显示 {{start}}-{{end}} / {{total}}",
+      "previous": "上一组",
+      "next": "下一组"
+    },
+    "exportSuccess": "恢复文件已导出 ({{bytes}} bytes)",
+    "exportFailed": "恢复文件导出失败: {{message}}"
+  },
+  "search": {
+    "title": "文件搜索",
+    "inputPlaceholder": "输入文件名、目录名或路径",
+    "inputLabel": "文件名搜索",
+    "pathToggle": "路径",
+    "allTypes": "全部类型",
+    "file": "文件",
+    "directory": "目录",
+    "extensionPlaceholder": "扩展名",
+    "extensionLabel": "扩展名筛选",
+    "allSources": "全部数据源",
+    "meta": {
+      "loaded": "已载入 {{shown}}/{{total}} 项",
+      "waiting": "输入文件名或路径开始搜索",
+      "found": "找到 {{count}} 个结果",
+      "idle": "等待输入",
+      "took": "查询 {{ms}} ms"
+    },
+    "coverage": {
+      "incomplete": "索引覆盖不完整，需要重新分析以重建索引 {{indexed}}/{{expected}}",
+      "complete": "索引覆盖 {{indexed}} 项 / {{sources}} 个数据源",
+      "missingTitle": "未就绪数据源: {{sources}}"
+    },
+    "truncated": "结果超过浏览上限，仅显示前 {{count}} 项窗口",
+    "columns": {
+      "name": "名称",
+      "path": "路径",
+      "size": "大小",
+      "modifiedAt": "修改时间",
+      "source": "数据源"
+    },
+    "empty": {
+      "noMatch": "没有匹配的文件",
+      "noMatchDescription": "尝试修改文件名、路径或筛选条件。",
+      "start": "输入文件名开始搜索",
+      "startDescription": "搜索仅定位已导入数据源中的文件和目录。"
+    },
+    "clearQuery": "清除搜索"
+  },
   "infrastructure": {
     "eyebrow": "基础设施证据",
     "title": "Linux 集群取证",
@@ -498,15 +1198,85 @@
     "caseLabel": "当前案件",
     "noCase": "请先打开案件",
     "empty": "当前案件未发现基础设施对象",
-    "tabs": { "overview": "集群摘要", "topology": "主机网络", "workloads": "工作负载", "storage": "存储证据", "inventory": "对象清单" },
-    "metrics": { "hosts": "主机", "infrastructure": "基础设施服务", "storage": "存储对象", "workloads": "工作负载证据", "relations": "已确认关系", "hostLinks": "主机连接" },
-    "sections": { "layers": "三层结构", "relations": "对象关系", "inventory": "基础设施对象" },
-    "columns": { "name": "名称", "layer": "所属层", "type": "对象类型", "status": "状态", "confidence": "证据可信度" },
-    "domains": { "environment": "运行环境", "storage": "存储底座", "analysis": "分析证据" },
-    "domainDescriptions": { "environment": "物理主机、虚拟机、操作系统和编排环境", "storage": "Ceph、RBD、CephFS 等存储对象", "analysis": "从镜像中解析出的容器、服务和配置证据" },
-    "kinds": { "physical_host": "物理主机", "pve": "PVE 虚拟化底座", "virtual_machine": "虚拟机", "os_instance": "Linux 主机系统", "kubernetes": "Kubernetes 集群", "ceph": "Ceph 存储集群", "ceph_cluster": "Ceph 存储集群", "ceph_rbd": "RBD 虚拟块设备", "ceph_fs": "CephFS 文件系统", "virtual_disk": "虚拟磁盘", "static_pod_manifest": "静态 Pod 清单", "pod_log": "Pod 日志", "container_log": "容器日志", "runtime_metadata": "运行时元数据", "pod_volume": "Pod 卷", "kubelet_config": "kubelet 配置", "kubeconfig": "集群访问配置", "audit_log": "审计日志", "cni_config": "容器网络配置" },
-    "relations": { "hosts": "承载", "provides_storage": "提供存储", "boots": "启动", "runs": "运行", "manages": "管理", "consumes_storage": "使用存储", "derived_from": "派生自", "network_link": "网络连接" },
-    "states": { "ready": "已就绪", "complete": "完整", "verified": "已验证", "candidate": "候选", "unproven": "待证明", "indeterminate": "无法确定", "parsed": "已解析", "pending": "处理中", "failed": "失败" },
+    "tabs": {
+      "overview": "集群摘要",
+      "topology": "主机网络",
+      "workloads": "工作负载",
+      "storage": "存储证据",
+      "inventory": "对象清单"
+    },
+    "metrics": {
+      "hosts": "主机",
+      "infrastructure": "基础设施服务",
+      "storage": "存储对象",
+      "workloads": "工作负载证据",
+      "relations": "已确认关系",
+      "hostLinks": "主机连接"
+    },
+    "sections": {
+      "layers": "三层结构",
+      "relations": "对象关系",
+      "inventory": "基础设施对象"
+    },
+    "columns": {
+      "name": "名称",
+      "layer": "所属层",
+      "type": "对象类型",
+      "status": "状态",
+      "confidence": "证据可信度"
+    },
+    "domains": {
+      "environment": "运行环境",
+      "storage": "存储底座",
+      "analysis": "分析证据"
+    },
+    "domainDescriptions": {
+      "environment": "物理主机、虚拟机、操作系统和编排环境",
+      "storage": "Ceph、RBD、CephFS 等存储对象",
+      "analysis": "从镜像中解析出的容器、服务和配置证据"
+    },
+    "kinds": {
+      "physical_host": "物理主机",
+      "pve": "PVE 虚拟化底座",
+      "virtual_machine": "虚拟机",
+      "os_instance": "Linux 主机系统",
+      "kubernetes": "Kubernetes 集群",
+      "ceph": "Ceph 存储集群",
+      "ceph_cluster": "Ceph 存储集群",
+      "ceph_rbd": "RBD 虚拟块设备",
+      "ceph_fs": "CephFS 文件系统",
+      "virtual_disk": "虚拟磁盘",
+      "static_pod_manifest": "静态 Pod 清单",
+      "pod_log": "Pod 日志",
+      "container_log": "容器日志",
+      "runtime_metadata": "运行时元数据",
+      "pod_volume": "Pod 卷",
+      "kubelet_config": "kubelet 配置",
+      "kubeconfig": "集群访问配置",
+      "audit_log": "审计日志",
+      "cni_config": "容器网络配置"
+    },
+    "relations": {
+      "hosts": "承载",
+      "provides_storage": "提供存储",
+      "boots": "启动",
+      "runs": "运行",
+      "manages": "管理",
+      "consumes_storage": "使用存储",
+      "derived_from": "派生自",
+      "network_link": "网络连接"
+    },
+    "states": {
+      "ready": "已就绪",
+      "complete": "完整",
+      "verified": "已验证",
+      "candidate": "候选",
+      "unproven": "待证明",
+      "indeterminate": "无法确定",
+      "parsed": "已解析",
+      "pending": "处理中",
+      "failed": "失败"
+    },
     "layersDescription": "对象按其在基础设施中的职责分层，避免把虚拟化、操作系统、容器和存储混为一类。",
     "relationsDescription": "关系来自拓扑投影和证据来源；候选关系不会被标记为实时状态。",
     "inventoryDescription": "共 {{count}} 个对象，可按名称、类型或层级检索。",
@@ -515,14 +1285,71 @@
     "topologyHiddenEvidence": "拓扑图已折叠 {{count}} 个分析证据对象，完整列表请打开“对象清单”。",
     "searchPlaceholder": "搜索名称、类型或来源",
     "moreObjects": "还有 {{count}} 个对象",
-    "inspector": { "linkedRelations": "关联 {{count}} 条关系", "source": "来源数据源", "parser": "解析器" },
-    "actions": { "search": "搜索基础设施对象", "openFiles": "打开文件浏览", "copyId": "复制对象 ID", "close": "关闭详情" },
-    "clusterInfo": { "title": "集群基础信息", "description": "只展示镜像和已解析工件可支持的主机、平台与版本证据。", "types": "发现的平台", "hosts": "主机数量", "relations": "关系数量", "identity": "身份状态", "host": "主机", "hostname": "主机名证据", "version": "版本证据", "hostEvidence": "各主机操作系统与内核版本证据", "hostEvidenceDescription": "来自 /etc/hostname、os-release 和内核映像或模块目录；未解析字段不会被推测。" },
-    "workloads": { "title": "工作负载与服务证据", "description": "容器、Pod、运行时配置与日志作为离线证据展示，不宣称其为镜像采集时的实时状态。", "empty": "未发现可归类的容器或服务证据。" },
-    "kubernetesEvidence": { "title": "Kubernetes 网络与服务证据", "description": "从节点、Service、EndpointSlice、Ingress、NetworkPolicy 和 CNI 配置中读取的离线事实。", "empty": "未发现 Kubernetes 网络或服务证据。" },
-    "storage": { "title": "存储系统证据", "description": "Ceph、RBD、CephFS 和虚拟磁盘等存储对象及其已证实状态。", "empty": "未发现存储系统证据。" },
-    "networkTopology": { "hostNetwork": "主机网络拓扑", "hint": "节点按主机、基础设施服务和运行实例组织。", "canvasLabel": "Linux 集群主机网络拓扑" },
-    "networkFacts": { "title": "网络配置证据", "description": "来自主机配置文件和 Kubernetes 资源的地址、解析器、服务与集群链路。", "empty": "尚未发现网络配置证据。", "kinds": { "hostname_mapping": "主机名映射", "dns_server": "DNS 服务器", "interface_address": "接口地址", "gateway": "网关", "bridge_member": "网桥成员", "cluster_link": "集群链路", "platform_version": "平台版本", "cni_network": "CNI 网络", "kubernetes_version": "Kubernetes 版本", "kubernetes_node": "Kubernetes 节点", "kubernetes_service": "Kubernetes 服务", "kubernetes_endpoint_slice": "服务端点", "kubernetes_ingress": "入口路由", "kubernetes_network_policy": "网络策略" } },
+    "inspector": {
+      "linkedRelations": "关联 {{count}} 条关系",
+      "source": "来源数据源",
+      "parser": "解析器"
+    },
+    "actions": {
+      "search": "搜索基础设施对象",
+      "openFiles": "打开文件浏览",
+      "copyId": "复制对象 ID",
+      "close": "关闭详情"
+    },
+    "clusterInfo": {
+      "title": "集群基础信息",
+      "description": "只展示镜像和已解析工件可支持的主机、平台与版本证据。",
+      "types": "发现的平台",
+      "hosts": "主机数量",
+      "relations": "关系数量",
+      "identity": "身份状态",
+      "host": "主机",
+      "hostname": "主机名证据",
+      "version": "版本证据",
+      "hostEvidence": "各主机操作系统与内核版本证据",
+      "hostEvidenceDescription": "来自 /etc/hostname、os-release 和内核映像或模块目录；未解析字段不会被推测。"
+    },
+    "workloads": {
+      "title": "工作负载与服务证据",
+      "description": "容器、Pod、运行时配置与日志作为离线证据展示，不宣称其为镜像采集时的实时状态。",
+      "empty": "未发现可归类的容器或服务证据。"
+    },
+    "kubernetesEvidence": {
+      "title": "Kubernetes 网络与服务证据",
+      "description": "从节点、Service、EndpointSlice、Ingress、NetworkPolicy 和 CNI 配置中读取的离线事实。",
+      "empty": "未发现 Kubernetes 网络或服务证据。"
+    },
+    "storage": {
+      "title": "存储系统证据",
+      "description": "Ceph、RBD、CephFS 和虚拟磁盘等存储对象及其已证实状态。",
+      "empty": "未发现存储系统证据。"
+    },
+    "networkTopology": {
+      "hostNetwork": "主机网络拓扑",
+      "hint": "节点按主机、基础设施服务和运行实例组织。",
+      "canvasLabel": "Linux 集群主机网络拓扑"
+    },
+    "networkFacts": {
+      "title": "网络配置证据",
+      "description": "来自主机配置文件和 Kubernetes 资源的地址、解析器、服务与集群链路。",
+      "empty": "尚未发现网络配置证据。",
+      "kinds": {
+        "hostname_mapping": "主机名映射",
+        "dns_server": "DNS 服务器",
+        "interface_address": "接口地址",
+        "gateway": "网关",
+        "bridge_member": "网桥成员",
+        "cluster_link": "集群链路",
+        "platform_version": "平台版本",
+        "cni_network": "CNI 网络",
+        "kubernetes_version": "Kubernetes 版本",
+        "kubernetes_node": "Kubernetes 节点",
+        "kubernetes_service": "Kubernetes 服务",
+        "kubernetes_endpoint_slice": "服务端点",
+        "kubernetes_ingress": "入口路由",
+        "kubernetes_network_policy": "网络策略"
+      }
+    },
     "workspace": {
       "eyebrow": "Linux 证据集",
       "title": "集群证据工作台",
@@ -535,40 +1362,294 @@
       "loadFailed": "集群证据摘要读取失败",
       "reportReady": "可发布",
       "reportPartial": "provenance=partial",
-      "metrics": { "members": "成员", "ready": "已就绪", "files": "文件条目", "size": "证据大小", "provenance": "证据状态", "report": "报告门禁", "scopes": "拓扑范围", "derived": "派生源", "events": "事件" },
+      "metrics": {
+        "members": "成员",
+        "ready": "已就绪",
+        "files": "文件条目",
+        "size": "证据大小",
+        "provenance": "证据状态",
+        "report": "报告门禁",
+        "scopes": "拓扑范围",
+        "derived": "派生源",
+        "events": "事件"
+      },
       "loadedEvents": "已载入 {{count}}",
-      "status": { "complete": "完整", "partial": "部分", "failed": "失败", "pending": "处理中", "candidate": "候选", "proven": "已证明", "indeterminate": "无法确定", "unsupported": "不支持", "unknown": "未知" },
-      "navigation": { "label": "集群证据导航", "overview": "证据集总览", "members": "成员与节点", "topology": "拓扑与存储", "findings": "发现与证据", "provenance": "限制与 Provenance" },
-      "trust": { "title": "证据可信度链路", "description": "证据生命周期状态；部分状态会限制集群级结论和报告发布。", "stages": { "manifest": "清单", "hash": "源哈希", "sourceDb": "源数据库", "topology": "拓扑投影", "lineage": "派生血缘", "report": "报告" } },
-      "capabilities": { "title": "能力矩阵", "description": "能力等级与证据状态分开显示，避免把仅元数据误认为可浏览文件树。", "kind": "能力", "level": "可用等级", "status": "证据状态", "diagnostics": "限制", "noDiagnostic": "当前没有附加诊断", "kinds": { "linux_host": "Linux 主机文件系统", "pve": "PVE 配置", "ceph": "Ceph BlueStore", "rbd": "RBD 块设备", "cephfs": "CephFS 文件系统", "kubernetes": "Kubernetes 控制面" }, "levels": { "metadata-only": "仅元数据", "metadata-browseable": "可浏览元数据", "bounded-preview": "有界预览", "snapshot-aware": "快照感知", "proven": "已证明", "unsupported": "不支持" } },
-      "members": { "title": "成员证据", "description": "按清单成员展示导入、文件数量、主机身份、内核、地址和角色；选中行后打开右侧证据检查器。", "member": "成员", "kind": "来源类型", "import": "导入", "files": "文件条目", "size": "证据大小", "hostname": "主机名", "os": "操作系统 / 内核", "address": "地址", "role": "角色", "identity": "身份", "hash": "源哈希", "provenance": "来源记录", "source": "相对路径", "empty": "当前 Evidence Set 没有成员。" },
-      "topology": { "title": "证据拓扑", "description": "每个 E01/RAW 数据源只显示一次，下面展开 Host → OS → PVE/Ceph/Kubernetes 证据层。", "source": "数据源", "layers": "证据层级", "noSources": "没有可聚合的数据源。", "members": "成员", "completeness": "完整度", "hostname": "主机名", "os": "系统 / 内核", "address": "地址", "role": "角色", "roles": { "host": "物理主机", "os_root": "操作系统根", "control_plane": "控制平面 / master", "worker": "工作节点", "storage_node": "存储节点", "virtual_machine": "虚拟机", "unknown": "节点角色待证明" }, "edgeKinds": { "hosts": "承载", "runs": "运行", "provides_storage": "提供存储", "manages": "管理", "consumes_storage": "使用存储", "derived_from": "派生自" }, "edges": "关系", "noEdges": "没有已投影的范围关系。" },
-      "timeline": { "title": "时间线上下文", "description": "集群页面只显示摘要和最近事件，详细事件仍在唯一的主时间线中复核。", "open": "打开主时间线", "events": "事件", "members": "涉及成员", "uncertain": "时间不确定", "sequence": "原生序列", "native": "保留在事件检查器", "recent": "最近事件", "empty": "当前 Evidence Set 没有已投影事件" },
-      "workloads": { "title": "服务与容器证据", "description": "导入完成后自动从 Kubernetes 静态清单、systemd 和 Docker runtime metadata 汇总；这是离线证据，不代表实时运行状态。", "services": "服务 / 控制面组件", "containers": "容器" },
-      "findings": { "title": "发现与证据", "description": "当前页面展示跨成员证据的范围和限制；具体 Claim 通过 Artifact、FileEntry 或 Timeline 入口复核。", "openTimeline": "按 Evidence Set 打开时间线", "supported": "已支持范围", "candidate": "候选或部分范围", "limited": "限制诊断", "empty": "当前没有额外的集群级发现。" },
-      "provenance": { "title": "限制与 Provenance", "description": "报告发布前必须检查 hash、manifest、source DB、派生 lineage 和 phase ledger。", "reportState": "报告状态", "details": { "manifest": "manifest canonical digest 和递归扫描边界由后端记录。", "hash": "成员源 hash 异步回写 manifest；未完成时保持 partial。", "sourceDb": "每个成员通过独立 source DB 关联；缺失绑定时不升级完整度。", "topology": "Host/OS/PVE/Ceph scope 只有证据闭合后才会升级。", "lineage": "派生 RBD/CephFS 源必须能回溯到成员和源对象。", "report": "报告门禁在 provenance 不完整时明确显示 partial。" } },
-      "inspector": { "title": "成员证据检查器", "close": "关闭证据检查器", "source": "来源", "kind": "来源类型", "provenance": "Provenance" }
+      "status": {
+        "complete": "完整",
+        "partial": "部分",
+        "failed": "失败",
+        "pending": "处理中",
+        "candidate": "候选",
+        "proven": "已证明",
+        "indeterminate": "无法确定",
+        "unsupported": "不支持",
+        "unknown": "未知"
+      },
+      "navigation": {
+        "label": "集群证据导航",
+        "overview": "证据集总览",
+        "members": "成员与节点",
+        "topology": "拓扑与存储",
+        "findings": "发现与证据",
+        "provenance": "限制与 Provenance"
+      },
+      "trust": {
+        "title": "证据可信度链路",
+        "description": "证据生命周期状态；部分状态会限制集群级结论和报告发布。",
+        "stages": {
+          "manifest": "清单",
+          "hash": "源哈希",
+          "sourceDb": "源数据库",
+          "topology": "拓扑投影",
+          "lineage": "派生血缘",
+          "report": "报告"
+        }
+      },
+      "capabilities": {
+        "title": "能力矩阵",
+        "description": "能力等级与证据状态分开显示，避免把仅元数据误认为可浏览文件树。",
+        "kind": "能力",
+        "level": "可用等级",
+        "status": "证据状态",
+        "diagnostics": "限制",
+        "noDiagnostic": "当前没有附加诊断",
+        "kinds": {
+          "linux_host": "Linux 主机文件系统",
+          "pve": "PVE 配置",
+          "ceph": "Ceph BlueStore",
+          "rbd": "RBD 块设备",
+          "cephfs": "CephFS 文件系统",
+          "kubernetes": "Kubernetes 控制面"
+        },
+        "levels": {
+          "metadata-only": "仅元数据",
+          "metadata-browseable": "可浏览元数据",
+          "bounded-preview": "有界预览",
+          "snapshot-aware": "快照感知",
+          "proven": "已证明",
+          "unsupported": "不支持"
+        }
+      },
+      "members": {
+        "title": "成员证据",
+        "description": "按清单成员展示导入、文件数量、主机身份、内核、地址和角色；选中行后打开右侧证据检查器。",
+        "member": "成员",
+        "kind": "来源类型",
+        "import": "导入",
+        "files": "文件条目",
+        "size": "证据大小",
+        "hostname": "主机名",
+        "os": "操作系统 / 内核",
+        "address": "地址",
+        "role": "角色",
+        "identity": "身份",
+        "hash": "源哈希",
+        "provenance": "来源记录",
+        "source": "相对路径",
+        "empty": "当前 Evidence Set 没有成员。"
+      },
+      "topology": {
+        "title": "证据拓扑",
+        "description": "每个 E01/RAW 数据源只显示一次，下面展开 Host → OS → PVE/Ceph/Kubernetes 证据层。",
+        "source": "数据源",
+        "layers": "证据层级",
+        "noSources": "没有可聚合的数据源。",
+        "members": "成员",
+        "completeness": "完整度",
+        "hostname": "主机名",
+        "os": "系统 / 内核",
+        "address": "地址",
+        "role": "角色",
+        "roles": {
+          "host": "物理主机",
+          "os_root": "操作系统根",
+          "control_plane": "控制平面 / master",
+          "worker": "工作节点",
+          "storage_node": "存储节点",
+          "virtual_machine": "虚拟机",
+          "unknown": "节点角色待证明"
+        },
+        "edgeKinds": {
+          "hosts": "承载",
+          "runs": "运行",
+          "provides_storage": "提供存储",
+          "manages": "管理",
+          "consumes_storage": "使用存储",
+          "derived_from": "派生自"
+        },
+        "edges": "关系",
+        "noEdges": "没有已投影的范围关系。"
+      },
+      "timeline": {
+        "title": "时间线上下文",
+        "description": "集群页面只显示摘要和最近事件，详细事件仍在唯一的主时间线中复核。",
+        "open": "打开主时间线",
+        "events": "事件",
+        "members": "涉及成员",
+        "uncertain": "时间不确定",
+        "sequence": "原生序列",
+        "native": "保留在事件检查器",
+        "recent": "最近事件",
+        "empty": "当前 Evidence Set 没有已投影事件"
+      },
+      "workloads": {
+        "title": "服务与容器证据",
+        "description": "导入完成后自动从 Kubernetes 静态清单、systemd 和 Docker runtime metadata 汇总；这是离线证据，不代表实时运行状态。",
+        "services": "服务 / 控制面组件",
+        "containers": "容器"
+      },
+      "findings": {
+        "title": "发现与证据",
+        "description": "当前页面展示跨成员证据的范围和限制；具体 Claim 通过 Artifact、FileEntry 或 Timeline 入口复核。",
+        "openTimeline": "按 Evidence Set 打开时间线",
+        "supported": "已支持范围",
+        "candidate": "候选或部分范围",
+        "limited": "限制诊断",
+        "empty": "当前没有额外的集群级发现。"
+      },
+      "provenance": {
+        "title": "限制与 Provenance",
+        "description": "报告发布前必须检查 hash、manifest、source DB、派生 lineage 和 phase ledger。",
+        "reportState": "报告状态",
+        "details": {
+          "manifest": "manifest canonical digest 和递归扫描边界由后端记录。",
+          "hash": "成员源 hash 异步回写 manifest；未完成时保持 partial。",
+          "sourceDb": "每个成员通过独立 source DB 关联；缺失绑定时不升级完整度。",
+          "topology": "Host/OS/PVE/Ceph scope 只有证据闭合后才会升级。",
+          "lineage": "派生 RBD/CephFS 源必须能回溯到成员和源对象。",
+          "report": "报告门禁在 provenance 不完整时明确显示 partial。"
+        }
+      },
+      "inspector": {
+        "title": "成员证据检查器",
+        "close": "关闭证据检查器",
+        "source": "来源",
+        "kind": "来源类型",
+        "provenance": "Provenance"
+      }
     },
-    "values": { "unselected": "未选择对象", "unknown": "未知", "unavailable": "未提供", "notFound": "未发现" }
+    "values": {
+      "unselected": "未选择对象",
+      "unknown": "未知",
+      "unavailable": "未提供",
+      "notFound": "未发现"
+    },
+    "capabilitiesDiagnostics": {
+      "linuxHost": "未发现 Linux host scope evidence",
+      "pve": "未发现 PVE scope evidence",
+      "ceph": "未发现 Ceph scope evidence",
+      "rbd": "没有派生 RBD 数据源",
+      "cephfs": "没有派生 CephFS 数据源",
+      "kubernetes": "未发现 Kubernetes scope evidence"
+    }
   },
   "caseHome": {
     "count": "{{count}} 项",
-    "metrics": { "dataSources": "数据源", "indexedFiles": "已索引文件", "timelineEvents": "时间线事件", "artifacts": "提取痕迹" },
-    "actions": { "save": "保存", "cancel": "取消", "delete": "删除", "deleteCase": "删除案件", "deleteDataSource": "删除数据源" },
-    "recentTasks": { "title": "最近任务", "summary": "完成 {{completed}} / 部分 {{partial}} / 运行 {{running}}" },
-    "jobStates": { "partial": "部分完成", "warnings": "警告 {{count}}", "skipped": "跳过 {{count}}", "failed": "失败 {{count}}" },
-    "dataSources": { "title": "已有数据源", "sha256": "证据 SHA-256", "physicalDiskHash": "原始物理磁盘哈希", "physicalDiskHashHint": "直接读取原始物理磁盘扇区，不计算 E01 镜像文件。", "physicalDiskHashRunning": "正在读取原始物理磁盘…", "objects": "对象", "partitions": "分区结构", "empty": "导入数据源后，这里会展示当前案件中的全部证据源，并允许重命名。" },
-    "hash": { "waiting": "等待计算", "running": "后台计算中", "auto": "导入完成后自动计算", "completed": "已完成", "failed": "计算失败", "unavailable": "当前数据源不可计算" },
-    "processing": { "pending": "等待处理", "running": "处理中", "ready": "处理完成", "failed": "处理失败", "deferred": "部分延后", "phase": "阶段 {{ready}}/{{total}}", "deferredCount": "延后 {{count}}" },
-    "partitions": { "supported": "可浏览", "locked": "需要解锁", "unsupported": "暂不支持", "offsetLength": "偏移 {{offset}} / 长度 {{length}}" },
-    "recentObjects": { "title": "高价值对象", "count": "最近发现 {{count}} 项", "empty": "导入并完成初步解析后，这里会展示最近发现的高价值对象。" },
-    "workspace": { "caseNumber": "案件 #{{number}}", "active": "当前状态: 活跃", "dataSources": "数据源: {{count}}", "warnings": "告警: {{count}}", "partialJobs": "部分完成任务: {{count}}", "status": "状态", "activeValue": "活跃", "createdAt": "创建时间", "examiner": "检验人" },
-    "import": { "pathPlaceholder": "镜像路径或逻辑目录路径", "file": "文件", "directory": "目录", "submitting": "提交中...", "running": "后台导入中...", "action": "导入", "submitHint": "正在提交导入任务，后台进度会在任务列表中持续更新。", "progress": "后台导入进行中: {{name}} · {{progress}}% · {{detail}}", "canceling": "取消中...", "cancel": "取消导入", "failed": "导入失败: {{error}}", "backgroundFailed": "后台导入失败: {{detail}}" },
+    "metrics": {
+      "dataSources": "数据源",
+      "indexedFiles": "已索引文件",
+      "timelineEvents": "时间线事件",
+      "artifacts": "提取痕迹"
+    },
+    "actions": {
+      "save": "保存",
+      "cancel": "取消",
+      "delete": "删除",
+      "deleteCase": "删除案件",
+      "deleteDataSource": "删除数据源"
+    },
+    "recentTasks": {
+      "title": "最近任务",
+      "summary": "完成 {{completed}} / 部分 {{partial}} / 运行 {{running}}"
+    },
+    "jobStates": {
+      "partial": "部分完成",
+      "warnings": "警告 {{count}}",
+      "skipped": "跳过 {{count}}",
+      "failed": "失败 {{count}}"
+    },
+    "dataSources": {
+      "title": "已有数据源",
+      "sha256": "证据 SHA-256",
+      "physicalDiskHash": "原始物理磁盘哈希",
+      "physicalDiskHashHint": "直接读取原始物理磁盘扇区，不计算 E01 镜像文件。",
+      "physicalDiskHashRunning": "正在读取原始物理磁盘…",
+      "objects": "对象",
+      "partitions": "分区结构",
+      "empty": "导入数据源后，这里会展示当前案件中的全部证据源，并允许重命名。"
+    },
+    "hash": {
+      "waiting": "等待计算",
+      "running": "后台计算中",
+      "auto": "导入完成后自动计算",
+      "completed": "已完成",
+      "failed": "计算失败",
+      "unavailable": "当前数据源不可计算"
+    },
+    "processing": {
+      "pending": "等待处理",
+      "running": "处理中",
+      "ready": "处理完成",
+      "failed": "处理失败",
+      "deferred": "部分延后",
+      "phase": "阶段 {{ready}}/{{total}}",
+      "deferredCount": "延后 {{count}}"
+    },
+    "partitions": {
+      "supported": "可浏览",
+      "locked": "需要解锁",
+      "unsupported": "暂不支持",
+      "offsetLength": "偏移 {{offset}} / 长度 {{length}}"
+    },
+    "recentObjects": {
+      "title": "高价值对象",
+      "count": "最近发现 {{count}} 项",
+      "empty": "导入并完成初步解析后，这里会展示最近发现的高价值对象。"
+    },
+    "workspace": {
+      "caseNumber": "案件 #{{number}}",
+      "active": "当前状态: 活跃",
+      "dataSources": "数据源: {{count}}",
+      "warnings": "告警: {{count}}",
+      "partialJobs": "部分完成任务: {{count}}",
+      "status": "状态",
+      "activeValue": "活跃",
+      "createdAt": "创建时间",
+      "examiner": "检验人"
+    },
+    "import": {
+      "pathPlaceholder": "镜像路径或逻辑目录路径",
+      "file": "文件",
+      "directory": "目录",
+      "submitting": "提交中...",
+      "running": "后台导入中...",
+      "action": "导入",
+      "submitHint": "正在提交导入任务，后台进度会在任务列表中持续更新。",
+      "progress": "后台导入进行中: {{name}} · {{progress}}% · {{detail}}",
+      "canceling": "取消中...",
+      "cancel": "取消导入",
+      "failed": "导入失败: {{error}}",
+      "backgroundFailed": "后台导入失败: {{detail}}"
+    },
     "welcome": {
       "description": "当前没有活动案件。先创建或打开案件目录，接着导入逻辑目录、RAW/DD/IMG 或 E01 镜像，即可进入真实文件浏览链路。",
-      "create": { "title": "新建案件", "rootPlaceholder": "案件父目录", "namePlaceholder": "案件名称", "pending": "创建中...", "action": "创建案件" },
-      "open": { "title": "打开已有案件", "pathPlaceholder": "案件路径", "pending": "打开中...", "action": "打开案件" },
-      "recent": { "title": "最近打开案件", "empty": "这里会保留最近打开过的案件，便于重新进入分析现场。" }
+      "create": {
+        "title": "新建案件",
+        "rootPlaceholder": "案件父目录",
+        "namePlaceholder": "案件名称",
+        "pending": "创建中...",
+        "action": "创建案件"
+      },
+      "open": {
+        "title": "打开已有案件",
+        "pathPlaceholder": "案件路径",
+        "pending": "打开中...",
+        "action": "打开案件"
+      },
+      "recent": {
+        "title": "最近打开案件",
+        "empty": "这里会保留最近打开过的案件，便于重新进入分析现场。"
+      }
     },
     "confirm": {
       "deleteCaseTitle": "删除案件",
@@ -662,7 +1743,8 @@
         "artifacts": "Artifact Cache",
         "search": "Search Cache"
       }
-    }
+    },
+    "resizeHandle": "拖拽调整抽屉高度"
   },
   "gql": {
     "placeholder": "MATCH (n:File)-[e:References]->(m:Artifact)\nWHERE e.confidence > 0.7\nRETURN n, e, m\nLIMIT 50",
@@ -704,21 +1786,92 @@
     "registry": {
       "title": "注册表提取",
       "unavailable": "注册表提取结果暂不可用。",
-      "tabs": { "users": "用户账户", "activity": "用户活动", "network": "网络配置", "software": "软件列表", "usb": "USB 设备", "raw": "原始键值" },
-      "accountStates": { "enabled": "启用", "locked": "锁定", "disabled": "禁用" },
-      "values": { "never": "从未登录", "enabled": "启用", "disabled": "禁用", "entries": "条", "txlog": "事务日志已合并", "deleted": "已删 {{count}}", "keyValues": "键值数", "sourceHives": "来源 Hive" },
-      "network": { "adapters": "网络适配器（物理与虚拟）", "profiles": "网络配置文件与连接历史" },
+      "tabs": {
+        "users": "用户账户",
+        "activity": "用户活动",
+        "network": "网络配置",
+        "software": "软件列表",
+        "usb": "USB 设备",
+        "raw": "原始键值"
+      },
+      "accountStates": {
+        "enabled": "启用",
+        "locked": "锁定",
+        "disabled": "禁用"
+      },
+      "values": {
+        "never": "从未登录",
+        "enabled": "启用",
+        "disabled": "禁用",
+        "entries": "条",
+        "txlog": "事务日志已合并",
+        "deleted": "已删 {{count}}",
+        "keyValues": "键值数",
+        "sourceHives": "来源 Hive"
+      },
+      "network": {
+        "adapters": "网络适配器（物理与虚拟）",
+        "profiles": "网络配置文件与连接历史"
+      },
       "columns": {
-        "username": "用户名", "status": "状态", "groups": "组", "loginCount": "登录次数", "lastLogin": "最后登录", "profilePath": "Profile 路径", "passwordHash": "密码哈希 (LM:NT)", "passwordHint": "密码提示", "programPath": "程序路径", "executionCount": "执行次数", "lastExecution": "最后执行", "notes": "备注", "profileName": "配置文件名称", "managed": "托管", "firstNetwork": "首次网络", "gatewayMac": "网关 MAC", "dnsSuffix": "DNS 后缀", "createdAt": "创建时间", "lastConnected": "最后连接", "adapter": "适配器", "deviceDescription": "设备描述", "currentMac": "当前 MAC", "permanentMac": "物理 MAC", "ipAddresses": "IP 地址", "subnetMasks": "子网掩码", "gateways": "默认网关", "dhcpServer": "DHCP 服务器", "dnsServers": "DNS 服务器", "pnpInstance": "PnP 实例", "driverService": "驱动服务", "interfaceGuid": "接口 GUID", "softwareName": "软件名称", "version": "版本", "publisher": "发布商", "installDate": "安装日期", "size": "大小", "deviceName": "设备名称", "serialNumber": "序列号", "driveLetter": "盘符", "fileSystem": "文件系统", "capacity": "容量", "firstConnected": "首次连接"
+        "username": "用户名",
+        "status": "状态",
+        "groups": "组",
+        "loginCount": "登录次数",
+        "lastLogin": "最后登录",
+        "profilePath": "Profile 路径",
+        "passwordHash": "密码哈希 (LM:NT)",
+        "passwordHint": "密码提示",
+        "programPath": "程序路径",
+        "executionCount": "执行次数",
+        "lastExecution": "最后执行",
+        "notes": "备注",
+        "profileName": "配置文件名称",
+        "managed": "托管",
+        "firstNetwork": "首次网络",
+        "gatewayMac": "网关 MAC",
+        "dnsSuffix": "DNS 后缀",
+        "createdAt": "创建时间",
+        "lastConnected": "最后连接",
+        "adapter": "适配器",
+        "deviceDescription": "设备描述",
+        "currentMac": "当前 MAC",
+        "permanentMac": "物理 MAC",
+        "ipAddresses": "IP 地址",
+        "subnetMasks": "子网掩码",
+        "gateways": "默认网关",
+        "dhcpServer": "DHCP 服务器",
+        "dnsServers": "DNS 服务器",
+        "pnpInstance": "PnP 实例",
+        "driverService": "驱动服务",
+        "interfaceGuid": "接口 GUID",
+        "softwareName": "软件名称",
+        "version": "版本",
+        "publisher": "发布商",
+        "installDate": "安装日期",
+        "size": "大小",
+        "deviceName": "设备名称",
+        "serialNumber": "序列号",
+        "driveLetter": "盘符",
+        "fileSystem": "文件系统",
+        "capacity": "容量",
+        "firstConnected": "首次连接"
       },
       "empty": {
-        "usersTitle": "暂无用户账户数据", "usersDescription": "运行提取后将显示 SAM 账户信息。",
-        "activityTitle": "暂无 UserAssist 数据", "activityDescription": "从 NTUSER.DAT 提取程序执行记录。",
-        "adaptersTitle": "暂无物理网卡信息", "adaptersDescription": "从 SYSTEM hive 的 TCP/IP、Network、NetworkSetup2 和 Class 配置提取。",
-        "profilesTitle": "暂无网络配置文件", "profilesDescription": "从 SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList 提取。",
-        "softwareTitle": "暂无已安装软件数据", "softwareDescription": "从 SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall 提取。",
-        "usbTitle": "暂无 USB 设备历史", "usbDescription": "从 SYSTEM hive USBSTOR 提取连接记录。",
-        "rawTitle": "暂无原始键值数据", "rawDescription": "运行提取后会显示关键 hive 的 key/value 摘要。"
+        "usersTitle": "暂无用户账户数据",
+        "usersDescription": "运行提取后将显示 SAM 账户信息。",
+        "activityTitle": "暂无 UserAssist 数据",
+        "activityDescription": "从 NTUSER.DAT 提取程序执行记录。",
+        "adaptersTitle": "暂无物理网卡信息",
+        "adaptersDescription": "从 SYSTEM hive 的 TCP/IP、Network、NetworkSetup2 和 Class 配置提取。",
+        "profilesTitle": "暂无网络配置文件",
+        "profilesDescription": "从 SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList 提取。",
+        "softwareTitle": "暂无已安装软件数据",
+        "softwareDescription": "从 SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall 提取。",
+        "usbTitle": "暂无 USB 设备历史",
+        "usbDescription": "从 SYSTEM hive USBSTOR 提取连接记录。",
+        "rawTitle": "暂无原始键值数据",
+        "rawDescription": "运行提取后会显示关键 hive 的 key/value 摘要。"
       }
     },
     "platformViews": {
@@ -761,11 +1914,38 @@
       "empty": "当前数据源未发现 Kubernetes 集群证据。",
       "nodesTitle": "集群成员",
       "artifactsTitle": "集群证据",
-      "cards": { "cluster": "集群", "members": "成员就绪", "controlPlane": "控制面成员", "artifacts": "证据文件" },
-      "columns": { "source": "数据源", "node": "节点", "role": "角色", "artifacts": "证据数", "status": "状态", "kind": "类型", "path": "路径", "size": "大小" },
-      "roles": { "controlPlane": "控制面证据", "node": "节点" },
-      "values": { "unproven": "未证明" },
-      "status": { "candidateFound": "已发现", "notFound": "未发现", "parsed": "已解析", "partial": "部分解析", "failed": "失败", "notParsed": "未解析", "unavailable": "不可用" }
+      "cards": {
+        "cluster": "集群",
+        "members": "成员就绪",
+        "controlPlane": "控制面成员",
+        "artifacts": "证据文件"
+      },
+      "columns": {
+        "source": "数据源",
+        "node": "节点",
+        "role": "角色",
+        "artifacts": "证据数",
+        "status": "状态",
+        "kind": "类型",
+        "path": "路径",
+        "size": "大小"
+      },
+      "roles": {
+        "controlPlane": "控制面证据",
+        "node": "节点"
+      },
+      "values": {
+        "unproven": "未证明"
+      },
+      "status": {
+        "candidateFound": "已发现",
+        "notFound": "未发现",
+        "parsed": "已解析",
+        "partial": "部分解析",
+        "failed": "失败",
+        "notParsed": "未解析",
+        "unavailable": "不可用"
+      }
     },
     "header": {
       "title": "数据源分析",
@@ -1261,7 +2441,13 @@
     "filterAll": "全部",
     "filterSummary": "筛选 {{filtered}} / 已加载 {{loaded}}",
     "filterScopeNote": "仅覆盖已加载行",
-    "noMatch": "没有匹配当前筛选条件的已加载行。"
+    "noMatch": "没有匹配当前筛选条件的已加载行。",
+    "emptyTitle": "暂无记录",
+    "emptyDescription": "当前范围内没有可显示的数据。",
+    "loadMoreError": "加载更多记录失败。",
+    "initialLoadError": "记录加载失败。",
+    "retry": "重试",
+    "loadingMore": "正在加载更多记录..."
   },
   "errorBoundary": {
     "title": "应用发生错误",
@@ -1328,15 +2514,15 @@
     "noFavorites": "暂无收藏记录",
     "noMedia": "暂无可还原的媒体资源记录",
     "noSearchRecords": "暂无全文索引补充记录",
-      "mediaItem": "媒体附件",
-        "mediaNotRecovered": "本地证据未关联",
-        "localMediaLinkedEncrypted": "本地加密缓存已关联，图片密钥不可用",
-        "localMediaLinkedUnavailable": "本地媒体缓存已关联，但未能恢复图像",
-        "localMediaUnlinked": "本地证据未关联",
-        "externalMediaWarning": "外部网络候选图像，未验证（非本地证据）",
-        "externalMediaUnavailable": "外部候选图像不可用或被源站拒绝",
-      "externalMediaBlocked": "外部来源未获允许",
-      "mediaReference": "资源定位元数据",
+    "mediaItem": "媒体附件",
+    "mediaNotRecovered": "本地证据未关联",
+    "localMediaLinkedEncrypted": "本地加密缓存已关联，图片密钥不可用",
+    "localMediaLinkedUnavailable": "本地媒体缓存已关联，但未能恢复图像",
+    "localMediaUnlinked": "本地证据未关联",
+    "externalMediaWarning": "外部网络候选图像，未验证（非本地证据）",
+    "externalMediaUnavailable": "外部候选图像不可用或被源站拒绝",
+    "externalMediaBlocked": "外部来源未获允许",
+    "mediaReference": "资源定位元数据",
     "opaqueLocator": "查看 opaque 定位符",
     "likes": "点赞",
     "replyTo": "回复 {{name}}",
@@ -1349,5 +2535,312 @@
     "unknownSource": "未知来源",
     "noTextContent": "无可显示正文",
     "type": "类型 {{type}}"
+  },
+  "correlation": {
+    "workspace": {
+      "title": "关联分析工作台",
+      "refresh": "刷新关联",
+      "searchPlaceholder": "搜索线索标题、路径、信号",
+      "toggleAllAria": "显示全部线索",
+      "toggleHighConfidenceAria": "只看高置信线索",
+      "toggleReviewAria": "只看待复核线索",
+      "confidenceAll": "全部置信度",
+      "summaryCount": "显示 {{shown}} / {{total}} 条线索",
+      "summaryHighConfidence": "高置信 {{count}}",
+      "summaryReview": "待复核 {{count}}",
+      "generatedAt": "生成时间 {{time}}",
+      "leadsTitle": "线索总览",
+      "leadsEmpty": "当前筛选条件下没有可展示的关联线索。",
+      "clustersTitle": "证据聚合",
+      "clustersEmpty": "当前筛选条件下没有可展示的聚合 cluster。",
+      "detailEmpty": "当前暂无可展开的 lead 明细。",
+      "nodesTitle": "节点分布",
+      "boundariesTitle": "当前规则边界",
+      "boundarySourceObject": "当前已接入 source object、路径匹配、名称匹配与 Recycle Bin 原路径恢复。",
+      "boundaryNavigational": "线索用于 investigator 导航，不输出结论型判定。",
+      "boundaryReviewRequired": "名称类与时间线类命中仍需回跳原始事件或工件字段复核。"
+    },
+    "metrics": {
+      "ruleFamilies": "规则家族",
+      "coveredFamilies": "已覆盖家族",
+      "highConfidence": "高置信"
+    },
+    "lead": {
+      "detailTitle": "Lead 明细",
+      "metricPrimaryFile": "主文件",
+      "metricSupportingNodes": "支撑节点",
+      "metricMatchSignals": "匹配信号",
+      "metricSourceCategory": "来源类别",
+      "metricCaveatCount": "告警数",
+      "primaryFileNode": "主文件节点",
+      "noSupportingNodes": "当前没有额外的支撑节点。",
+      "relatedEdges": "相关边",
+      "noEdges": "当前 lead 尚未挂接可展示的关联边。",
+      "relatedClusters": "相关聚合",
+      "noRelatedClusters": "当前没有同主文件的聚合 cluster。",
+      "noProvenance": "当前没有可展示的 provenance。",
+      "coverageTitle": "规则家族覆盖",
+      "coverageDescription": "直接展示关联快照产出的家族覆盖、线索强度与命中信号。",
+      "hitsEmpty": "当前没有可展示的该家族命中信号。",
+      "warningSeparator": "；"
+    },
+    "cluster": {
+      "viewPrimaryFile": "查看主文件"
+    }
+  },
+  "v2Governance": {
+    "workbench": {
+      "title": "V2 治理工作台",
+      "subtitle": "可信验证 / 支持矩阵 / Benchmark / 安全治理 / 发布评分卡",
+      "loadingSnapshot": "正在加载 V2 治理快照...",
+      "loadingCorrelation": "正在加载关联分析快照...",
+      "snapshotUnavailable": "当前案件尚未返回治理快照。"
+    },
+    "scorecard": {
+      "title": "发布评分卡",
+      "overall": "总评",
+      "dimensionCorrelation": "关联分析",
+      "dimensionPerformance": "性能稳定性",
+      "runtimeSignals": "运行信号",
+      "evidenceSources": "证据源",
+      "hashed": "已哈希",
+      "pendingHash": "待哈希",
+      "reportCount": "报告数",
+      "correlationLeads": "关联 Lead",
+      "highConfidenceLeads": "高置信 Lead",
+      "reviewLeads": "待复核 Lead",
+      "correlationClusters": "关联 Cluster",
+      "highConfidenceFamilies": "高置信家族",
+      "runningJobs": "运行中任务",
+      "partialJobs": "部分完成任务",
+      "failedJobs": "失败任务",
+      "warningDataSources": "warning 证据源",
+      "snapshotStatus": "关联快照状态：{{status}}",
+      "snapshotGenerated": "已生成",
+      "snapshotNotGenerated": "未生成",
+      "familyEmpty": "当前没有可展示的该家族规则命中。",
+      "breakdownTitle": "评分拆解",
+      "noDeductions": "当前无扣分项",
+      "blockers": "阻断项",
+      "noBlockers": "当前无阻断项",
+      "residualRisks": "残余风险",
+      "noResidualRisks": "当前无残余风险"
+    },
+    "security": {
+      "title": "安全治理",
+      "exportOverwriteDefault": "导出默认覆盖",
+      "exportPathGuard": "导出路径防护",
+      "stdioWhitelist": "stdio 白名单",
+      "sseRestriction": "SSE 协议限制",
+      "sseNotTightened": "未收紧",
+      "embeddedCredentials": "嵌入凭据阻断",
+      "mediaHandleScope": "媒体句柄作用域",
+      "mediaNotScoped": "未约束",
+      "errorRedaction": "错误脱敏",
+      "auditLogRequired": "审计记录必填",
+      "auditEventCount": "审计事件数",
+      "sensitiveAuditEventCount": "敏感事件数",
+      "emptyAudit": "当前案件尚未写入安全相关审计记录。",
+      "toggleOn": "开启"
+    },
+    "taxonomy": {
+      "title": "错误分类与脱敏",
+      "redactionRule": "脱敏规则："
+    },
+    "releaseGate": {
+      "title": "发布门禁",
+      "evidence": "Evidence："
+    },
+    "overview": {
+      "gaChains": "GA 链路",
+      "betaChains": "Beta 链路",
+      "documentedLimits": "文档限制",
+      "factSources": "事实源",
+      "runningJobs": "运行任务",
+      "totalScore": "总评分"
+    },
+    "factSources": {
+      "title": "治理事实源"
+    },
+    "lastVerifiedAt": "最近校验：{{time}}",
+    "runtimeResults": {
+      "title": "最近一次治理运行结果"
+    },
+    "verification": {
+      "title": "可信验证",
+      "resultPassed": "通过",
+      "resultPartial": "部分通过",
+      "resultPending": "待验证",
+      "maturity": "成熟度",
+      "guaranteeLevel": "保证级别",
+      "fixtureTier": "样本层级",
+      "sampleCount": "样本数"
+    },
+    "benchmark": {
+      "title": "Benchmark 基线",
+      "hostProfile": "宿主基线",
+      "lastVerified": "最近校验",
+      "requiredCovered": "必需项已覆盖",
+      "requiredMissing": "必需项缺失",
+      "exceeded": "超阈值项",
+      "memoryPeak": "峰值内存 {{value}}",
+      "notMeasured": "未采集",
+      "thresholdP95": "阈值 p95",
+      "measuredP95": "实测 p95"
+    },
+    "supportMatrix": {
+      "title": "支持矩阵明细"
+    },
+    "limitations": {
+      "title": "已知限制"
+    }
+  },
+  "analysisProgress": {
+    "title": "数据源提取进度"
+  },
+  "analysisPanels": {
+    "status": {
+      "candidateFound": "已发现候选",
+      "parseFailed": "解析失败"
+    },
+    "progress": {
+      "idle": "等待"
+    },
+    "generatedAt": "生成时间：{{value}}",
+    "fieldProvenance": {
+      "title": "字段级来源",
+      "field": "字段",
+      "emptyTitle": "暂无字段级来源",
+      "emptyDescription": "字段级 Registry provenance 暂不可用。"
+    },
+    "systemInfo": {
+      "unavailable": "系统信息暂不可用。",
+      "parserFailures": "已发现 Registry/EVTX 候选文件，但部分解析器失败；下方 provenance 已列出具体原因。",
+      "computerName": "计算机名",
+      "buildNumber": "Build 号",
+      "registeredOwner": "注册用户",
+      "timezone": "时区",
+      "lastShutdownTime": "最后关机时间",
+      "provenanceTitle": "解析来源",
+      "provenanceFallback": "Registry/EVTX 解析来源暂不可用。",
+      "networkAdapters": "网络适配器",
+      "networkAdaptersEmpty": "未解析到网络适配器。",
+      "bootHistory": "开关机历史",
+      "bootHistoryEmpty": "未解析到开关机历史。"
+    },
+    "empty": {
+      "noCaseTitle": "请先创建或打开案件",
+      "noCaseDescription": "数据源分析依赖当前案件中的文件目录和数据源记录。未选择案件时不会发起分析请求。"
+    },
+    "classification": {
+      "unavailable": "证据分类摘要暂不可用。",
+      "title": "证据语义分类",
+      "description": "候选来自文件树 metadata；结构化提取会读取 Registry、浏览器记录与邮件候选并返回可审计来源。",
+      "running": "分类中...",
+      "run": "开始证据分类",
+      "statFamilies": "证据族",
+      "statCandidateFiles": "候选文件",
+      "statCandidateSize": "候选总大小",
+      "statParsedArtifacts": "已解析 Artifact",
+      "metricCandidateCount": "{{count}} 个",
+      "metricArtifactCount": "{{count}} 条",
+      "noData": "未发现证据语义分类数据。",
+      "noSources": "该证据族暂无代表来源文件。"
+    },
+    "report": {
+      "title": "生成分析报告",
+      "download": "下载 Markdown 报告"
+    },
+    "subcategory": {
+      "fileName": "文件名",
+      "magicType": "魔数类型",
+      "source": "判定",
+      "magic": "魔数",
+      "inferred": "推断",
+      "sampled": "抽样 {{count}} 个",
+      "emptyTitle": "暂无文件",
+      "emptyDescription": "该子分类当前没有可展示的抽样文件。"
+    },
+    "countWithSize": "{{count}} 个 · {{size}}",
+    "board": {
+      "unavailable": "文件分类数据暂不可用。",
+      "totalFiles": "文件总数",
+      "totalSize": "文件总大小",
+      "magicClassified": "魔数识别",
+      "metadataClassified": "元数据推断",
+      "groupCount": "分类族",
+      "empty": "未发现可分类文件。"
+    },
+    "email": {
+      "attachments": "附件",
+      "unavailable": "邮件提取结果暂不可用。",
+      "total": "邮件数",
+      "withAttachments": "含附件",
+      "emptyTitle": "暂无邮件信息",
+      "emptyDescription": "支持 EML/EMLX/MBOX/PST/OST 邮件解析：头字段、正文、附件、Cc/Bcc、Message-ID、References、容器路径与文件夹路径。",
+      "attachmentsTitle": "附件 ({{count}})",
+      "tabPlain": "纯文本",
+      "rawHeaders": "原始头字段 ({{count}})",
+      "noBody": "无正文内容",
+      "noHtml": "无 HTML 内容"
+    },
+    "bootLabels": {
+      "operatingSystemStarted": "操作系统启动完成",
+      "operatingSystemShutdown": "操作系统进入关闭阶段",
+      "eventLogStarted": "事件日志服务启动",
+      "eventLogStopped": "事件日志服务停止",
+      "unexpectedShutdown": "异常关机报告",
+      "plannedShutdown": "关机或重启发起"
+    },
+    "wechat": {
+      "unknownType": "未知类型"
+    }
+  },
+  "preview": {
+    "dialogTitle": "文件预览",
+    "tabs": {
+      "hex": "十六进制",
+      "text": "文本",
+      "preview": "预览",
+      "metadata": "元数据"
+    },
+    "hex": {
+      "fullMode": "完整 Hex 预览",
+      "chunkedMode": "分段只读浏览",
+      "loaded": "已加载",
+      "jump": "跳转",
+      "chunkedHint": "分段只读浏览，支持纵向滚动与 offset 跳转，不会一次性加载整个文件。",
+      "fullHint": "完整 Hex 预览，可直接纵向滚动浏览全部内容。"
+    },
+    "document": {
+      "loading": "加载文档预览...",
+      "truncated": "（内容已按预览上限截断）",
+      "empty": "未提取到可读文本内容",
+      "tableEmptyTitle": "空表格",
+      "tableEmptyDescription": "该段没有可展示的数据行。"
+    },
+    "image": {
+      "loading": "加载图片预览..."
+    },
+    "media": {
+      "loading": "加载{{type}}预览...",
+      "rangeBanner": "受控分块预览: 已读取 {{bytes}}，完整播放请提取文件后查看。",
+      "protocolBanner": "受控流式预览: evidence-media range 读取，不暴露宿主证据路径。",
+      "largeTitleProtocol": "大{{type}}使用受控流式预览",
+      "largeTitleChunked": "大{{type}}使用受控分块预览",
+      "largeDetailProtocol": "当前通过 evidence-media 受控协议提供按需 Range 读取；若播放器不支持该协议，可提取文件后在本机播放器查看。",
+      "largeDetailChunked": "当前只读取首个 {{bytes}} 片段进行安全预览；完整播放需要先使用右侧\"提取文件\"导出后在本机播放器查看。"
+    },
+    "selectMedia": "选择图片、视频或音频文件后显示预览",
+    "binaryText": "二进制文件，无法预览文本",
+    "selectText": "选择文本文件后显示预览"
+  },
+  "tree": {
+    "filterPlaceholder": "过滤目录...",
+    "clear": "清除"
+  },
+  "caseActions": {
+    "deleteCaseFailed": "删除案件失败: {{message}}",
+    "deleteDataSourceFailed": "删除数据源失败: {{message}}"
   }
 }

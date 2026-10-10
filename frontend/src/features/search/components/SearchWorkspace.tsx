@@ -45,7 +45,7 @@ return [
       <span className="flex min-w-0 items-center gap-2 text-forensics-text">
         {entryIcon(row.entryType)}
         <span className="truncate">{row.name || row.path}</span>
-        {row.deleted ? <span className="text-[10px] text-forensics-error-text">已删除</span> : null}
+        {row.deleted ? <span className="text-[10px] text-forensics-error-text">{t('wechatWorkspace.deleted')}</span> : null}
       </span>
     ),
   },
@@ -111,7 +111,7 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
               aria-label={t('search.inputLabel')}
             />
             {model.queryInput ? (
-              <Button type="button" variant="forensicsGhost" size="iconXs" onClick={model.clearQuery} title="清除搜索">
+              <Button type="button" variant="forensicsGhost" size="iconXs" onClick={model.clearQuery} title={t('search.clearQuery')}>
                 <X size={13} />
               </Button>
             ) : null}

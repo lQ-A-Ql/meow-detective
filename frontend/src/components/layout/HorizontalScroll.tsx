@@ -14,6 +14,41 @@ interface Metrics {
   scrollLeft: number;
 }
 
+/**
+ * Dense tables mount one of these per cell, so per-instance observers and window listeners
+ * scaled with rows x columns. Share a single ResizeObserver and a single window resize
+ * listener across every mounted instance instead.
+ */
+const resizeSubscribers = new Map<Element, () => void>();
+let sharedResizeObserver: ResizeObserver | undefined;
+let windowResizeAttached = false;
+
+function subscribeToResize(element: Element, callback: () => void): () => void {
+  resizeSubscribers.set(element, callback);
+  if (!sharedResizeObserver && typeof ResizeObserver !== 'undefined') {
+    sharedResizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        resizeSubscribers.get(entry.target)?.();
+      }
+    });
+  }
+  sharedResizeObserver?.observe(element);
+  if (!windowResizeAttached) {
+    window.addEventListener('resize', () => {
+      resizeSubscribers.forEach((notify) => notify());
+    });
+    windowResizeAttached = true;
+  }
+  return () => {
+    resizeSubscribers.delete(element);
+    sharedResizeObserver?.unobserve(element);
+    if (resizeSubscribers.size === 0) {
+      sharedResizeObserver?.disconnect();
+      sharedResizeObserver = undefined;
+    }
+  };
+}
+
 type HorizontalScrollVariant = 'default' | 'cell';
 
 interface HorizontalScrollProps extends ComponentPropsWithoutRef<'div'> {
@@ -69,18 +104,9 @@ export function HorizontalScroll({
     const el = innerRef.current;
     if (!el) return undefined;
 
-    el.addEventListener('scroll', scheduleUpdate, { passive: true });
-    const ro =
-      typeof ResizeObserver !== 'undefined'
-        ? new ResizeObserver(scheduleUpdate)
-        : null;
-    ro?.observe(el);
-    window.addEventListener('resize', scheduleUpdate);
-
+    const unsubscribe = subscribeToResize(el, scheduleUpdate);
     return () => {
-      el.removeEventListener('scroll', scheduleUpdate);
-      ro?.disconnect();
-      window.removeEventListener('resize', scheduleUpdate);
+      unsubscribe();
       if (frameRef.current != null) {
         cancelAnimationFrame(frameRef.current);
       }
@@ -98,6 +124,14 @@ export function HorizontalScroll({
       : 0;
   const showThumb =
     metrics.scrollWidth > metrics.clientWidth && trackWidth > 0;
+
+  // Only a cell that actually overflows needs its own scroll listener for the thumb.
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el || !showThumb) return undefined;
+    el.addEventListener('scroll', scheduleUpdate, { passive: true });
+    return () => el.removeEventListener('scroll', scheduleUpdate);
+  }, [scheduleUpdate, showThumb]);
 
   const handleThumbMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {

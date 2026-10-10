@@ -1,56 +1,311 @@
 {
   "common": {
-    "dataSourceKinds": { "localDisk": "Local disk", "directory": "Directory", "archive": "Archive" }, "yes": "Yes", "no": "No", "unknown": "Unknown", "cancel": "Cancel",
-    "errors": { "unknownApi": "Unknown API error" },
-    "partition": { "display": "Partition {{index}} ({{label}})" },
-    "sort": { "name": "Name", "size": "Size", "modifiedAt": "Modified", "extension": "Extension" },
-    "fileTypes": { "directory": "Directory", "file": "File", "extension": "{{extension}} file" }
+    "dataSourceKinds": {
+      "localDisk": "Local disk",
+      "directory": "Directory",
+      "archive": "Archive"
+    },
+    "yes": "Yes",
+    "no": "No",
+    "unknown": "Unknown",
+    "cancel": "Cancel",
+    "errors": {
+      "unknownApi": "Unknown API error"
+    },
+    "partition": {
+      "display": "Partition {{index}} ({{label}})"
+    },
+    "sort": {
+      "name": "Name",
+      "size": "Size",
+      "modifiedAt": "Modified",
+      "extension": "Extension"
+    },
+    "fileTypes": {
+      "directory": "Directory",
+      "file": "File",
+      "extension": "{{extension}} file",
+      "executable": "Executable",
+      "dynamicLibrary": "Dynamic link library",
+      "text": "Text file",
+      "pdfDocument": "PDF document",
+      "wordDocument": "Word document",
+      "archive": "Archive"
+    }
   },
   "mcpUi": {
     "host": {
-      "enable": "Enable local MCP service", "running": "Running", "starting": "Not started", "stopped": "Stopped",
-      "copyEndpoint": "Copy endpoint", "copied": "Copied", "copyFailed": "Copy failed; select the address manually.", "retry": "Retry start", "title": "Built-in read-only tools"
+      "enable": "Enable local MCP service",
+      "running": "Running",
+      "starting": "Not started",
+      "stopped": "Stopped",
+      "copyEndpoint": "Copy endpoint",
+      "copied": "Copied",
+      "copyFailed": "Copy failed; select the address manually.",
+      "retry": "Retry start",
+      "title": "Built-in read-only tools"
     },
     "tools": {
-      "title": "Available tools", "enabled": "Enabled {{enabled}}/{{total}}", "enableAll": "Enable all", "disableAll": "Disable all", "enable": "Enable tools", "disable": "Disable tool", "allTools": "Switch to all tools",
-      "refresh": "Refresh tools", "search": "Search tool name or description", "loading": "Loading...", "noMatch": "No matching tools", "empty": "No tools", "noDescription": "No description", "testWithCurrent": "Test with current arguments", "parameter": "Arguments", "json": "JSON", "test": "Test tool", "invalidJson": "Arguments must be valid JSON.", "callFailed": "Tool call failed", "listLabel": "MCP tool list"
+      "title": "Available tools",
+      "enabled": "Enabled {{enabled}}/{{total}}",
+      "enableAll": "Enable all",
+      "disableAll": "Disable all",
+      "enable": "Enable tools",
+      "disable": "Disable tool",
+      "allTools": "Switch to all tools",
+      "refresh": "Refresh tools",
+      "search": "Search tool name or description",
+      "loading": "Loading...",
+      "noMatch": "No matching tools",
+      "empty": "No tools",
+      "noDescription": "No description",
+      "testWithCurrent": "Test with current arguments",
+      "parameter": "Arguments",
+      "json": "JSON",
+      "test": "Test tool",
+      "invalidJson": "Arguments must be valid JSON.",
+      "callFailed": "Tool call failed",
+      "listLabel": "MCP tool list"
     },
-    "resources": { "title": "Exposed resources", "refresh": "Refresh", "loading": "Loading...", "empty": "No resources", "copy": "Copy resource URI", "copyNamed": "Copy {{name}} URI" },
-    "server": { "connected": "Connected", "error": "Error", "disconnected": "Disconnected", "connect": "Connect", "disconnect": "Disconnect", "delete": "Delete", "resources": "R", "tools": "T", "prompts": "P", "deleteTitle": "Delete MCP server", "deleteDescription": "Delete “{{name}}”? The saved connection configuration will be removed." },
+    "resources": {
+      "title": "Exposed resources",
+      "refresh": "Refresh",
+      "loading": "Loading...",
+      "empty": "No resources",
+      "copy": "Copy resource URI",
+      "copyNamed": "Copy {{name}} URI"
+    },
+    "server": {
+      "connected": "Connected",
+      "error": "Error",
+      "disconnected": "Disconnected",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "delete": "Delete",
+      "resources": "R",
+      "tools": "T",
+      "prompts": "P",
+      "deleteTitle": "Delete MCP server",
+      "deleteDescription": "Delete “{{name}}”? The saved connection configuration will be removed."
+    },
     "dialog": {
-      "title": "Add MCP server", "name": "Server name", "namePlaceholder": "Example: Claude Desktop", "transport": "Transport", "http": "HTTP/SSE", "stdio": "Stdio", "url": "SSE URL", "command": "Command", "commandPlaceholder": "python -m forensics_mcp", "arguments": "Arguments (space separated)", "argumentsPlaceholder": "--port 3001 --verbose", "enabled": "Enabled", "autoConnect": "Auto-connect", "permissions": "Access permissions", "resourceAccess": "Resource access", "promptAccess": "Prompt access", "toolAccess": "Tool access", "readOnly": "Read-only", "disabled": "Disabled", "allowAll": "Allow all (tools can be disabled below)", "allowList": "Allow list only", "allowListLabel": "Tool allow list (comma or space separated)", "allowListPlaceholder": "queryTimeline, searchFiles", "networkPolicy": "Network policy", "localhost": "Localhost only", "privateLan": "Allow private LAN", "anyHost": "Allow any host", "requiredName": "Enter a server name", "requiredUrl": "Enter an SSE URL", "requiredCommand": "Enter a command", "testSuccess": "Connection succeeded", "testFailure": "Connection failed", "testing": "Testing...", "test": "Test connection", "cancel": "Cancel", "saving": "Saving...", "add": "Add", "close": "Close" }
+      "title": "Add MCP server",
+      "name": "Server name",
+      "namePlaceholder": "Example: Claude Desktop",
+      "transport": "Transport",
+      "http": "HTTP/SSE",
+      "stdio": "Stdio",
+      "url": "SSE URL",
+      "command": "Command",
+      "commandPlaceholder": "python -m forensics_mcp",
+      "arguments": "Arguments (space separated)",
+      "argumentsPlaceholder": "--port 3001 --verbose",
+      "enabled": "Enabled",
+      "autoConnect": "Auto-connect",
+      "permissions": "Access permissions",
+      "resourceAccess": "Resource access",
+      "promptAccess": "Prompt access",
+      "toolAccess": "Tool access",
+      "readOnly": "Read-only",
+      "disabled": "Disabled",
+      "allowAll": "Allow all (tools can be disabled below)",
+      "allowList": "Allow list only",
+      "allowListLabel": "Tool allow list (comma or space separated)",
+      "allowListPlaceholder": "queryTimeline, searchFiles",
+      "networkPolicy": "Network policy",
+      "localhost": "Localhost only",
+      "privateLan": "Allow private LAN",
+      "anyHost": "Allow any host",
+      "requiredName": "Enter a server name",
+      "requiredUrl": "Enter an SSE URL",
+      "requiredCommand": "Enter a command",
+      "testSuccess": "Connection succeeded",
+      "testFailure": "Connection failed",
+      "testing": "Testing...",
+      "test": "Test connection",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "add": "Add",
+      "close": "Close"
+    }
   },
   "notebook": {
     "citation": {
-      "title": "Citation picker", "description": "Search and select graph nodes as citation sources", "searchPlaceholder": "Search by name, summary or tag...", "allTypes": "All types", "empty": "No matching nodes", "selected": "{{count}} nodes selected", "cancel": "Cancel", "confirm": "Confirm ({{count}})"
+      "title": "Citation picker",
+      "description": "Search and select graph nodes as citation sources",
+      "searchPlaceholder": "Search by name, summary or tag...",
+      "allTypes": "All types",
+      "empty": "No matching nodes",
+      "selected": "{{count}} nodes selected",
+      "cancel": "Cancel",
+      "confirm": "Confirm ({{count}})"
     },
     "entryForm": {
-      "replyTitle": "Reply", "newTitle": "New note", "titlePlaceholder": "Note title", "bodyPlaceholder": "Record analysis notes in Markdown...", "type": "Type:", "tagsPlaceholder": "Enter a tag and press Enter to add...", "cancel": "Cancel", "save": "Save", "collapse": "Collapse entry", "expand": "Expand entry", "replies": "{{count}} replies"
+      "replyTitle": "Reply",
+      "newTitle": "New note",
+      "titlePlaceholder": "Note title",
+      "bodyPlaceholder": "Record analysis notes in Markdown...",
+      "type": "Type:",
+      "tagsPlaceholder": "Enter a tag and press Enter to add...",
+      "cancel": "Cancel",
+      "save": "Save",
+      "collapse": "Collapse entry",
+      "expand": "Expand entry",
+      "replies": "{{count}} replies"
     }
   },
   "dashboard": {
-    "title": "Forensic overview", "subtitle": "Graph statistics / source coverage / artifact correlation / rule-pack status", "refresh": "Refresh", "loading": "Loading forensic overview...",
-    "query": { "loading": "Loading...", "empty": "No data." },
-    "status": { "ready": "Ready", "covered": "Covered", "review": "Needs review", "missing": "Missing", "unknown": "Unknown" },
-    "artifacts": { "title": "Artifact statistics", "subtitle": "Grouped by artifact family", "familyCount": "Families", "recordCount": "Records", "details": "Family details" },
-    "batch": { "title": "Batch status", "subtitle": "Batch imports, extraction and reports", "active": "Active", "completed": "Completed", "failed": "Failed", "queued": "Queued", "total": "Total", "empty": "No batch jobs." },
-    "timeline": { "title": "Timeline overview", "subtitle": "Cross-source event volume and readiness", "total": "Total events", "ready": "Timeline ready", "status": "Timeline status" },
-    "correlation": { "title": "Correlation statistics", "subtitle": "Correlation analysis snapshot", "nodes": "Related nodes", "edges": "Related edges", "clusters": "Clusters", "leads": "Leads", "familyCoverage": "Family coverage", "leadCount": "{{count}} leads", "clusterCount": "{{count}} clusters" },
-    "sources": { "title": "Data source coverage", "subtitle": "Imported sources and partitions", "count": "Data sources", "partitions": "Partitions", "e01": "E01 sources", "ewf": "EWF format", "raw": "RAW sources", "rawSubtitle": "Raw image", "details": "Source details", "files": "{{count}} files", "partitionCount": "{{count}} partitions", "empty": "This case has no data sources." },
-    "platforms": { "title": "Platform coverage", "subtitle": "Artifact families by target platform", "windows": "Windows", "linux": "Linux", "crossPlatform": "Cross-platform", "unknown": "Unclassified", "familyUnit": "families", "details": "Family details" },
-    "rulePacks": { "title": "Rule-pack status", "subtitle": "Rule versions, coverage and execution state", "loaded": "Loaded rule packs", "totalRules": "Total rules", "definitionStatus": "Definition status", "executionStatus": "Case execution", "ruleCount": "{{count}} rules", "empty": "Rule-pack data loads after evidence import." },
-    "graph": { "title": "Graph statistics", "subtitle": "Nodes and edges by type", "nodes": "Total nodes", "edges": "Total edges", "density": "Density", "largestComponent": "Largest component", "notCalculated": "Not calculated", "nodeTypes": "Node types", "byNodeType": "By node type", "byEdgeType": "By edge type" }
+    "title": "Forensic overview",
+    "subtitle": "Graph statistics / source coverage / artifact correlation / rule-pack status",
+    "refresh": "Refresh",
+    "loading": "Loading forensic overview...",
+    "query": {
+      "loading": "Loading...",
+      "empty": "No data."
+    },
+    "status": {
+      "ready": "Ready",
+      "covered": "Covered",
+      "review": "Needs review",
+      "missing": "Missing",
+      "unknown": "Unknown"
+    },
+    "artifacts": {
+      "title": "Artifact statistics",
+      "subtitle": "Grouped by artifact family",
+      "familyCount": "Families",
+      "recordCount": "Records",
+      "details": "Family details"
+    },
+    "batch": {
+      "title": "Batch status",
+      "subtitle": "Batch imports, extraction and reports",
+      "active": "Active",
+      "completed": "Completed",
+      "failed": "Failed",
+      "queued": "Queued",
+      "total": "Total",
+      "empty": "No batch jobs."
+    },
+    "timeline": {
+      "title": "Timeline overview",
+      "subtitle": "Cross-source event volume and readiness",
+      "total": "Total events",
+      "ready": "Timeline ready",
+      "status": "Timeline status"
+    },
+    "correlation": {
+      "title": "Correlation statistics",
+      "subtitle": "Correlation analysis snapshot",
+      "nodes": "Related nodes",
+      "edges": "Related edges",
+      "clusters": "Clusters",
+      "leads": "Leads",
+      "familyCoverage": "Family coverage",
+      "leadCount": "{{count}} leads",
+      "clusterCount": "{{count}} clusters"
+    },
+    "sources": {
+      "title": "Data source coverage",
+      "subtitle": "Imported sources and partitions",
+      "count": "Data sources",
+      "partitions": "Partitions",
+      "e01": "E01 sources",
+      "ewf": "EWF format",
+      "raw": "RAW sources",
+      "rawSubtitle": "Raw image",
+      "details": "Source details",
+      "files": "{{count}} files",
+      "partitionCount": "{{count}} partitions",
+      "empty": "This case has no data sources."
+    },
+    "platforms": {
+      "title": "Platform coverage",
+      "subtitle": "Artifact families by target platform",
+      "windows": "Windows",
+      "linux": "Linux",
+      "crossPlatform": "Cross-platform",
+      "unknown": "Unclassified",
+      "familyUnit": "families",
+      "details": "Family details"
+    },
+    "rulePacks": {
+      "title": "Rule-pack status",
+      "subtitle": "Rule versions, coverage and execution state",
+      "loaded": "Loaded rule packs",
+      "totalRules": "Total rules",
+      "definitionStatus": "Definition status",
+      "executionStatus": "Case execution",
+      "ruleCount": "{{count}} rules",
+      "empty": "Rule-pack data loads after evidence import."
+    },
+    "graph": {
+      "title": "Graph statistics",
+      "subtitle": "Nodes and edges by type",
+      "nodes": "Total nodes",
+      "edges": "Total edges",
+      "density": "Density",
+      "largestComponent": "Largest component",
+      "notCalculated": "Not calculated",
+      "nodeTypes": "Node types",
+      "byNodeType": "By node type",
+      "byEdgeType": "By edge type"
+    }
   },
   "rulePacks": {
-    "title": "Rule-pack management", "subtitle": "Load, validate and review rule-pack coverage", "loading": "Loading rule packs...", "loadError": "Unable to load rule-pack list", "retry": "Retry", "refresh": "Refresh",
-    "summary": { "packs": "Rule packs", "rules": "Total rules", "coverage": "Coverage" },
-    "load": { "title": "Load a rule pack", "description": "Choose a .yaml, .yml or .json rule-pack file. The Tauri file dialog will be enabled when the backend is connected.", "placeholder": "C:/rules/my-rule-pack.yaml", "action": "Load" },
-    "status": { "loaded": "Loaded", "validating": "Validating", "error": "Error" },
-    "pack": { "ruleCount": "Rules", "loadedAt": "Loaded", "moreWarnings": "...and {{count}} more", "validate": "Validate" },
-    "empty": { "title": "No rule packs loaded", "description": "Use the input above to load your first rule pack" },
-    "coverage": { "title": "Coverage summary", "description": "Combined coverage of all loaded rule packs", "overall": "Overall coverage", "covered": "Covered ({{count}})", "uncovered": "Uncovered ({{count}})" }
+    "title": "Rule-pack management",
+    "subtitle": "Load, validate and review rule-pack coverage",
+    "loading": "Loading rule packs...",
+    "loadError": "Unable to load rule-pack list",
+    "retry": "Retry",
+    "refresh": "Refresh",
+    "summary": {
+      "packs": "Rule packs",
+      "rules": "Total rules",
+      "coverage": "Coverage"
+    },
+    "load": {
+      "title": "Load a rule pack",
+      "description": "Choose a .yaml, .yml or .json rule-pack file. The Tauri file dialog will be enabled when the backend is connected.",
+      "placeholder": "C:/rules/my-rule-pack.yaml",
+      "action": "Load"
+    },
+    "status": {
+      "loaded": "Loaded",
+      "validating": "Validating",
+      "error": "Error"
+    },
+    "pack": {
+      "ruleCount": "Rules",
+      "loadedAt": "Loaded",
+      "moreWarnings": "...and {{count}} more",
+      "validate": "Validate"
+    },
+    "empty": {
+      "title": "No rule packs loaded",
+      "description": "Use the input above to load your first rule pack"
+    },
+    "coverage": {
+      "title": "Coverage summary",
+      "description": "Combined coverage of all loaded rule packs",
+      "overall": "Overall coverage",
+      "covered": "Covered ({{count}})",
+      "uncovered": "Uncovered ({{count}})"
+    }
   },
-  "viewer": { "error": { "title": "File preview failed", "copyDetails": "Copy error details", "retryPreview": "Retry preview", "retry": "Retry" }, "hex": { "ariaLabel": "Hex and ASCII byte preview", "empty": "Select a file to preview hexadecimal data", "loadedRanges": "Loaded ranges" } },
+  "viewer": {
+    "error": {
+      "title": "File preview failed",
+      "copyDetails": "Copy error details",
+      "retryPreview": "Retry preview",
+      "retry": "Retry"
+    },
+    "hex": {
+      "ariaLabel": "Hex and ASCII byte preview",
+      "empty": "Select a file to preview hexadecimal data",
+      "loadedRanges": "Loaded ranges"
+    }
+  },
   "media": {
     "loading": "Loading...",
     "audio": "Audio",
@@ -59,7 +314,22 @@
     "videoProgress": "Video playback progress",
     "volume": "Volume",
     "image": "Image",
-    "controls": { "zoomIn": "Zoom in", "zoomOut": "Zoom out", "rotate": "Rotate", "fit": "Fit window", "reset": "Reset view", "download": "Download", "skipBack": "Skip back 10 seconds", "skipForward": "Skip forward 10 seconds", "play": "Play", "pause": "Pause", "mute": "Mute", "unmute": "Unmute", "fullscreen": "Fullscreen", "exitFullscreen": "Exit fullscreen" },
+    "controls": {
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "rotate": "Rotate",
+      "fit": "Fit window",
+      "reset": "Reset view",
+      "download": "Download",
+      "skipBack": "Skip back 10 seconds",
+      "skipForward": "Skip forward 10 seconds",
+      "play": "Play",
+      "pause": "Pause",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "fullscreen": "Fullscreen",
+      "exitFullscreen": "Exit fullscreen"
+    },
     "errors": {
       "playback": "Playback failed: {{message}}",
       "audioLoad": "Audio failed to load",
@@ -70,10 +340,75 @@
       "videoDecode": "Video decoding failed; the format may be unsupported",
       "audioUnsupported": "Audio format is unsupported or the file is damaged",
       "videoUnsupported": "Video format is unsupported or the file is damaged",
-      "imageInvalid": "Invalid image source", "imageTimeout": "Image load timed out. Check that the file exists.", "imageUnsupported": "Image format is unsupported or the file is damaged"
+      "imageInvalid": "Invalid image source",
+      "imageTimeout": "Image load timed out. Check that the file exists.",
+      "imageUnsupported": "Image format is unsupported or the file is damaged"
     }
   },
-  "browser": { "title": "Browser records", "unavailable": "Browser records unavailable.", "stats": { "visits": "Visits", "downloads": "Downloads", "cookies": "Cookies", "sessions": "Sessions", "passwords": "Passwords", "extensions": "Extensions", "browsers": "Browsers" }, "sections": { "visits": "Visit history", "downloads": "Downloads", "cookies": "Cookies", "sessions": "Sessions / tabs", "passwords": "Saved passwords", "extensions": "Firefox extensions" }, "columns": { "time": "Time", "profile": "Profile", "title": "Title", "count": "Count", "targetPath": "Target path", "size": "Size", "domain": "Domain", "name": "Name", "valuePreview": "Value preview", "expiry": "Expiry", "secure": "Secure", "httpOnly": "HTTP only", "decryptionStatus": "Decryption status", "extensionName": "Name", "version": "Version", "active": "Active", "userDisabled": "User disabled", "signedState": "Signed state", "permissions": "Permissions", "window": "Window", "tab": "Tab", "lastActive": "Last active", "website": "Website", "username": "Username", "passwordPreview": "Password preview", "createdAt": "Created", "timesUsed": "Uses" }, "empty": { "visits": "No browsing history", "visitsDescription": "Chrome, Edge History and Firefox places.sqlite are supported.", "downloads": "No downloads", "downloadsDescription": "Download URL, target path and size appear when records are found.", "cookies": "No Cookie records", "cookiesDescription": "Domain, name and expiry appear when a cookies database is found.", "sessions": "No session records", "sessionsDescription": "Session/Session Restore files provide tab URLs when found.", "passwords": "No password records", "passwordsDescription": "login data / logins.json exposes metadata such as URL and username only.", "extensions": "No Firefox extensions", "extensionsDescription": "Extension metadata appears when extensions.json is found." } },
+  "browser": {
+    "title": "Browser records",
+    "unavailable": "Browser records unavailable.",
+    "stats": {
+      "visits": "Visits",
+      "downloads": "Downloads",
+      "cookies": "Cookies",
+      "sessions": "Sessions",
+      "passwords": "Passwords",
+      "extensions": "Extensions",
+      "browsers": "Browsers"
+    },
+    "sections": {
+      "visits": "Visit history",
+      "downloads": "Downloads",
+      "cookies": "Cookies",
+      "sessions": "Sessions / tabs",
+      "passwords": "Saved passwords",
+      "extensions": "Firefox extensions"
+    },
+    "columns": {
+      "time": "Time",
+      "profile": "Profile",
+      "title": "Title",
+      "count": "Count",
+      "targetPath": "Target path",
+      "size": "Size",
+      "domain": "Domain",
+      "name": "Name",
+      "valuePreview": "Value preview",
+      "expiry": "Expiry",
+      "secure": "Secure",
+      "httpOnly": "HTTP only",
+      "decryptionStatus": "Decryption status",
+      "extensionName": "Name",
+      "version": "Version",
+      "active": "Active",
+      "userDisabled": "User disabled",
+      "signedState": "Signed state",
+      "permissions": "Permissions",
+      "window": "Window",
+      "tab": "Tab",
+      "lastActive": "Last active",
+      "website": "Website",
+      "username": "Username",
+      "passwordPreview": "Password preview",
+      "createdAt": "Created",
+      "timesUsed": "Uses"
+    },
+    "empty": {
+      "visits": "No browsing history",
+      "visitsDescription": "Chrome, Edge History and Firefox places.sqlite are supported.",
+      "downloads": "No downloads",
+      "downloadsDescription": "Download URL, target path and size appear when records are found.",
+      "cookies": "No Cookie records",
+      "cookiesDescription": "Domain, name and expiry appear when a cookies database is found.",
+      "sessions": "No session records",
+      "sessionsDescription": "Session/Session Restore files provide tab URLs when found.",
+      "passwords": "No password records",
+      "passwordsDescription": "login data / logins.json exposes metadata such as URL and username only.",
+      "extensions": "No Firefox extensions",
+      "extensionsDescription": "Extension metadata appears when extensions.json is found."
+    }
+  },
   "graph": {
     "title": "Evidence graph",
     "subtitle": "Case-level cross-source entities and evidence neighborhoods",
@@ -87,30 +422,162 @@
     "loading": "Loading graph data...",
     "canvasLabel": "Evidence force-directed graph",
     "truncated": "The graph window reached its node or relation budget. Reduce depth or relation types.",
-    "empty": { "title": "No deterministic cross-source entity relations.", "description": "Extract traces and entities from at least two sources to build the case graph." },
-    "nodeTypes": { "file": "File", "artifact": "Artifact", "timelineEvent": "Timeline", "entity": "Entity", "lead": "Lead", "notebookEntry": "Notebook" },
-    "edgeTypes": { "contains": "Contains", "references": "References", "correlatesWith": "Correlates", "derivesFrom": "Derived from", "precedes": "Precedes", "cites": "Cites", "annotates": "Annotates" },
-    "values": { "untitled": "Untitled", "noSummary": "No summary", "unknown": "Unknown" },
-    "actions": { "expandOne": "Expand 1 level", "expandTwo": "Expand 2 levels", "close": "Close" },
-    "details": { "type": "Type", "degree": "Degree", "confidence": "Confidence", "source": "Source", "target": "Target", "provenance": "Provenance", "parser": "Parser", "rule": "Rule", "version": "Version", "noProvenance": "No provenance records" },
-    "controls": { "zoomIn": "Zoom in", "zoomOut": "Zoom out", "fit": "Fit view", "reset": "Reset layout" },
-    "stats": { "dataSources": "Data sources", "crossSourceEntities": "Cross-source entities", "crossSourceRelations": "Cross-source relations", "nodes": "Nodes", "edges": "Edges", "density": "Density" },
-    "help": { "selection": "Click a node for details, double-click to expand its neighborhood, or click an edge for provenance.", "navigation": "Drag nodes to reposition them, drag empty space to pan, and use the wheel to zoom." }
+    "empty": {
+      "title": "No deterministic cross-source entity relations.",
+      "description": "Extract traces and entities from at least two sources to build the case graph."
+    },
+    "nodeTypes": {
+      "file": "File",
+      "artifact": "Artifact",
+      "timelineEvent": "Timeline",
+      "entity": "Entity",
+      "lead": "Lead",
+      "notebookEntry": "Notebook"
+    },
+    "edgeTypes": {
+      "contains": "Contains",
+      "references": "References",
+      "correlatesWith": "Correlates",
+      "derivesFrom": "Derived from",
+      "precedes": "Precedes",
+      "cites": "Cites",
+      "annotates": "Annotates"
+    },
+    "values": {
+      "untitled": "Untitled",
+      "noSummary": "No summary",
+      "unknown": "Unknown"
+    },
+    "actions": {
+      "expandOne": "Expand 1 level",
+      "expandTwo": "Expand 2 levels",
+      "close": "Close"
+    },
+    "details": {
+      "type": "Type",
+      "degree": "Degree",
+      "confidence": "Confidence",
+      "source": "Source",
+      "target": "Target",
+      "provenance": "Provenance",
+      "parser": "Parser",
+      "rule": "Rule",
+      "version": "Version",
+      "noProvenance": "No provenance records"
+    },
+    "controls": {
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "fit": "Fit view",
+      "reset": "Reset layout"
+    },
+    "stats": {
+      "dataSources": "Data sources",
+      "crossSourceEntities": "Cross-source entities",
+      "crossSourceRelations": "Cross-source relations",
+      "nodes": "Nodes",
+      "edges": "Edges",
+      "density": "Density"
+    },
+    "help": {
+      "selection": "Click a node for details, double-click to expand its neighborhood, or click an edge for provenance.",
+      "navigation": "Drag nodes to reposition them, drag empty space to pan, and use the wheel to zoom."
+    }
   },
   "artifacts": {
     "title": "Artifact family control",
     "meta": "{{family}} / {{shown}} of {{total}} records",
-    "columns": { "familyPath": "{{family}} path", "targetPath": "Target path", "createdAt": "Created", "arguments": "Arguments" },
+    "columns": {
+      "familyPath": "{{family}} path",
+      "targetPath": "Target path",
+      "createdAt": "Created",
+      "arguments": "Arguments"
+    },
     "emptyTitle": "No records in this artifact family",
     "emptyDescription": "Switch family or wait for extraction to finish.",
-    "inspector": { "title": "Artifact properties", "none": "No artifact selected", "targetPath": "Target path", "attributes": "Attributes", "context": "Source context", "actions": "Related actions" },
-    "fields": { "driveType": "Drive type", "volumeSerial": "Volume serial", "machineId": "Machine ID" },
-    "actions": { "openSource": "Locate in file browser", "openTimeline": "View related timeline events" }
+    "inspector": {
+      "title": "Artifact properties",
+      "none": "No artifact selected",
+      "targetPath": "Target path",
+      "attributes": "Attributes",
+      "context": "Source context",
+      "actions": "Related actions"
+    },
+    "fields": {
+      "driveType": "Drive type",
+      "volumeSerial": "Volume serial",
+      "machineId": "Machine ID"
+    },
+    "actions": {
+      "openSource": "Locate in file browser",
+      "openTimeline": "View related timeline events"
+    }
   },
   "timeline": {
-    "title": "Timeline control strip", "meta": "{{shown}}/{{total}} events / {{sources}} sources", "granularity": "Granularity", "adaptive": "Adaptive", "start": "Start", "end": "End", "invalidDate": "Invalid date", "apply": "Apply", "type": "Type", "all": "All", "clear": "Clear", "emptyTitle": "No events in this range", "emptyDescription": "Expand the range or adjust event filters.", "columns": { "timestamp": "Timestamp", "source": "Source", "type": "Type", "description": "Description" }, "jumpToSource": "Jump to source object", "inspector": { "title": "Event inspector", "current": "Current event", "none": "No event selected", "timestamp": "Timestamp", "type": "Event type", "activity": "Activity", "object": "Source object", "context": "Time context", "actions": "Related actions" }
+    "title": "Timeline control strip",
+    "meta": "{{shown}}/{{total}} events / {{sources}} sources",
+    "granularity": "Granularity",
+    "adaptive": "Adaptive",
+    "start": "Start",
+    "end": "End",
+    "invalidDate": "Invalid date",
+    "apply": "Apply",
+    "type": "Type",
+    "all": "All",
+    "clear": "Clear",
+    "emptyTitle": "No events in this range",
+    "emptyDescription": "Expand the range or adjust event filters.",
+    "columns": {
+      "timestamp": "Timestamp",
+      "source": "Source",
+      "type": "Type",
+      "description": "Description"
+    },
+    "jumpToSource": "Jump to source object",
+    "inspector": {
+      "title": "Event inspector",
+      "current": "Current event",
+      "none": "No event selected",
+      "timestamp": "Timestamp",
+      "type": "Event type",
+      "activity": "Activity",
+      "object": "Source object",
+      "context": "Time context",
+      "actions": "Related actions"
+    },
+    "rangeTo": "to",
+    "histogram": {
+      "noRange": "No time range",
+      "barTitle": "{{range}}: {{count}} events",
+      "selectRange": "Filter this time range, {{count}} events total"
+    }
   },
-  "reports": { "template": "Select template", "runningSummary": "{{running}} running / {{completed}} completed", "scope": "Export scope", "scopeOptions": { "fileSystemMetadata": "Include filesystem metadata", "registry": "Include registry entries", "fullTimeline": "Include full timeline", "rawFiles": "Include raw file extraction (increases size)" }, "format": "Format", "summaryTitle": "Export summary", "summaryDescription": "The selected template will generate a case summary, key timeline and artifact inventory.", "expectedOutput": { "raw": "Expected output: report + raw file manifest + SHA256SUMS", "report": "Expected output: report file" }, "generating": "Generating...", "generate": "Generate report", "recent": "Recent exports", "recordCount": "{{count}} records" },
+  "reports": {
+    "template": "Select template",
+    "runningSummary": "{{running}} running / {{completed}} completed",
+    "scope": "Export scope",
+    "scopeOptions": {
+      "fileSystemMetadata": "Include filesystem metadata",
+      "registry": "Include registry entries",
+      "fullTimeline": "Include full timeline",
+      "rawFiles": "Include raw file extraction (increases size)"
+    },
+    "format": "Format",
+    "summaryTitle": "Export summary",
+    "summaryDescription": "The selected template will generate a case summary, key timeline and artifact inventory.",
+    "expectedOutput": {
+      "raw": "Expected output: report + raw file manifest + SHA256SUMS",
+      "report": "Expected output: report file"
+    },
+    "generating": "Generating...",
+    "generate": "Generate report",
+    "recent": "Recent exports",
+    "recordCount": "{{count}} records",
+    "exportSuccess": "Report generated successfully",
+    "exportFailed": "Report generation failed",
+    "generatedBy": "Generated by {{author}} at {{time}}",
+    "exportQueueProgress": "Export queue is running; writing the timeline and attachment sections."
+  },
   "fileBrowser": {
     "title": "File Browser Controls",
     "empty": {
@@ -189,7 +656,8 @@
       "releaseEmulation": "Release",
       "operationFailed": "Image operation failed.",
       "close": "Close",
-      "noSources": "No data sources are available in the current case."
+      "noSources": "No data sources are available in the current case.",
+      "selectPartitionError": "Select a partition."
     },
     "bitlockerImport": {
       "ariaLabel": "Importing the unlocked BitLocker file catalog",
@@ -213,9 +681,41 @@
         "status": "Object Status",
         "actions": "Actions"
       },
-      "imageMetadata": { "loading": "Reading image metadata…", "retry": "Retry", "status": "Status", "format": "Format", "dimensions": "Dimensions", "orientation": "Orientation", "make": "Make", "model": "Model", "software": "Software", "dateTimeOriginal": "Captured", "createDate": "Created", "modifyDate": "Modified", "lensModel": "Lens", "latitude": "Latitude", "longitude": "Longitude", "altitude": "Altitude", "gpsDateTime": "GPS time", "gps": "GPS", "statuses": { "present": "Present", "absent": "No EXIF", "unsupported": "Unsupported", "corrupt": "Corrupt" } },
-      "hash": { "loading": "Calculating…" },
-      "ntfs": { "inode": "MFT inode", "recordOffset": "Record offset", "attributes": "Attributes", "run": "Data run" },
+      "imageMetadata": {
+        "loading": "Reading image metadata…",
+        "retry": "Retry",
+        "status": "Status",
+        "format": "Format",
+        "dimensions": "Dimensions",
+        "orientation": "Orientation",
+        "make": "Make",
+        "model": "Model",
+        "software": "Software",
+        "dateTimeOriginal": "Captured",
+        "createDate": "Created",
+        "modifyDate": "Modified",
+        "lensModel": "Lens",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+        "altitude": "Altitude",
+        "gpsDateTime": "GPS time",
+        "gps": "GPS",
+        "statuses": {
+          "present": "Present",
+          "absent": "No EXIF",
+          "unsupported": "Unsupported",
+          "corrupt": "Corrupt"
+        }
+      },
+      "hash": {
+        "loading": "Calculating…"
+      },
+      "ntfs": {
+        "inode": "MFT inode",
+        "recordOffset": "Record offset",
+        "attributes": "Attributes",
+        "run": "Data run"
+      },
       "timestamp": {
         "modified": "M",
         "accessed": "A",
@@ -235,7 +735,37 @@
         "button": "Extract File"
       },
       "viewTimeline": "View in Timeline",
-      "image": { "loading": "Reading image metadata…", "retry": "Retry", "fields": { "format": "Format", "dimensions": "Dimensions", "orientation": "Orientation", "make": "Make", "model": "Model", "software": "Software", "dateTimeOriginal": "Captured", "createDate": "Created", "modifyDate": "Modified", "lensModel": "Lens", "latitude": "Latitude", "longitude": "Longitude", "altitude": "Altitude", "gpsDateTime": "GPS time" }, "status": { "present": "Present", "absent": "No EXIF", "unsupported": "Unsupported", "corrupt": "Corrupt" }, "statusDescription": { "absent": "No parseable EXIF or media metadata was found.", "unsupported": "This image format does not support metadata parsing.", "corrupt": "The image metadata structure is corrupt; no fields were returned." } },
+      "image": {
+        "loading": "Reading image metadata…",
+        "retry": "Retry",
+        "fields": {
+          "format": "Format",
+          "dimensions": "Dimensions",
+          "orientation": "Orientation",
+          "make": "Make",
+          "model": "Model",
+          "software": "Software",
+          "dateTimeOriginal": "Captured",
+          "createDate": "Created",
+          "modifyDate": "Modified",
+          "lensModel": "Lens",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "altitude": "Altitude",
+          "gpsDateTime": "GPS time"
+        },
+        "status": {
+          "present": "Present",
+          "absent": "No EXIF",
+          "unsupported": "Unsupported",
+          "corrupt": "Corrupt"
+        },
+        "statusDescription": {
+          "absent": "No parseable EXIF or media metadata was found.",
+          "unsupported": "This image format does not support metadata parsing.",
+          "corrupt": "The image metadata structure is corrupt; no fields were returned."
+        }
+      },
       "bitlocker": {
         "title": "BitLocker volume",
         "refresh": "Inspect BitLocker volume again",
@@ -292,13 +822,86 @@
         "imageMetadata": {
           "loading": "Reading image metadata…",
           "status": "Status",
-          "states": { "present": "Present", "absent": "No EXIF", "unsupported": "Unsupported", "corrupt": "Corrupt" },
-          "fields": { "format": "Format", "width": "Width", "height": "Height", "orientation": "Orientation", "make": "Make", "model": "Model", "software": "Software", "dateTimeOriginal": "Captured", "createDate": "Created", "modifyDate": "Modified", "lensModel": "Lens", "latitude": "Latitude", "longitude": "Longitude", "altitude": "Altitude", "gpsDateTime": "GPS time" },
+          "states": {
+            "present": "Present",
+            "absent": "No EXIF",
+            "unsupported": "Unsupported",
+            "corrupt": "Corrupt"
+          },
+          "fields": {
+            "format": "Format",
+            "width": "Width",
+            "height": "Height",
+            "orientation": "Orientation",
+            "make": "Make",
+            "model": "Model",
+            "software": "Software",
+            "dateTimeOriginal": "Captured",
+            "createDate": "Created",
+            "modifyDate": "Modified",
+            "lensModel": "Lens",
+            "latitude": "Latitude",
+            "longitude": "Longitude",
+            "altitude": "Altitude",
+            "gpsDateTime": "GPS time"
+          },
           "absent": "No readable EXIF or media metadata was found.",
           "unsupported": "This image format does not support metadata parsing.",
           "corrupt": "The image metadata structure is corrupt; no fields were returned."
         }
       }
+    },
+    "list": {
+      "columnAttributes": "Attributes",
+      "previousPage": "Previous page",
+      "nextPage": "Next page",
+      "emptyTitle": "This directory is empty",
+      "emptyTruncated": "Only the first {{limit}} of {{total}} items are loaded.",
+      "emptyDescription": "No file objects to display under the selected path."
+    },
+    "tree": {
+      "title": "Directory tree",
+      "resizeHandle": "Drag to resize width",
+      "loading": "Loading directory tree...",
+      "noMatches": "No matching directories.",
+      "importPrompt": "Import a data source to display the directory tree.",
+      "childrenTruncated": "This directory has many subdirectories; only the first {{limit}} are loaded. Use the list on the right or search to narrow down.",
+      "childrenLoaded": "Loaded {{loaded}} / {{total}} subdirectories",
+      "loadMore": "Load more subdirectories"
+    },
+    "extraction": {
+      "noFile": "No file selected",
+      "browse": "Browse",
+      "noOverwriteHint": "Existing target files will not be overwritten.",
+      "preparing": "Preparing evidence read...",
+      "copying": "Copied {{copied}}; syncing and publishing the target file...",
+      "progressLabel": "File extraction progress",
+      "extracting": "Extracting",
+      "start": "Start extraction",
+      "failed": "File extraction failed.",
+      "destinationRequired": "Select or enter an extraction destination path.",
+      "destinationAbsolute": "The destination path must be an absolute path.",
+      "destinationPickerFailed": "Unable to open the destination path picker.",
+      "completedTitle": "File extraction complete",
+      "extractedSize": "Extracted size",
+      "sizeVerification": "Size verification",
+      "sizeVerified": "Passed",
+      "sizeMismatch": "Failed",
+      "auditRecord": "Audit record",
+      "auditWritten": "Written",
+      "auditWriteFailed": "Write failed",
+      "confirm": "OK"
+    },
+    "status": {
+      "hidden": "Hidden",
+      "system": "System",
+      "showHidden": "Show hidden files"
+    },
+    "contextMenu": {
+      "label": "{{name}} actions menu"
+    },
+    "preview": {
+      "resizeHandle": "Drag to resize the preview height"
     }
   },
   "importDataSource": {
@@ -427,7 +1030,12 @@
     "workspaceNavLabel": "Workspace",
     "workspaceLabel": "Workspace title bar",
     "pageNavLabel": "Page navigation",
-    "case": { "return": "Back to case entry", "noCase": "No case open" },
+    "case": {
+      "number": "Case #{{number}}",
+      "noCase": "No case selected",
+      "examiner": "Examiner {{examiner}}",
+      "updatedAt": "Updated at {{updatedAt}}"
+    },
     "links": {
       "home": {
         "label": "Case Overview",
@@ -457,7 +1065,7 @@
         "label": "Forensics Overview",
         "context": "Graph stats, data source coverage, artifact correlation and rule pack status"
       },
-  "search": {
+      "search": {
         "label": "Global Search",
         "context": "Keywords, structured queries and hit details"
       },
@@ -469,18 +1077,12 @@
         "label": "Artifact Analysis",
         "context": "Windows artifact families and parsed fields"
       },
-  "reports": {
+      "reports": {
         "label": "Reports",
         "context": "Templates, export jobs and report artifacts"
       }
     },
     "currentPage": "Current Page",
-    "case": {
-      "number": "Case #{{number}}",
-      "noCase": "No case selected",
-      "examiner": "Examiner {{examiner}}",
-      "updatedAt": "Updated at {{updatedAt}}"
-    },
     "search": {
       "placeholder": "Enter global search query or IOC"
     },
@@ -489,8 +1091,106 @@
       "warnings": "{{count}}"
     }
   },
-  "recovery": { "title": "Deleted file recovery", "subtitle": "NTFS MFT / EXT4 journal / XFS log", "targetPartition": "Target partition", "selectPartition": "Select an NTFS/EXT4/XFS partition", "startScan": "Start scan", "rescan": "Rescan", "transactions": "{{count}} transactions", "candidates": "{{count}} candidates", "loading": "Reading recovery scan results", "unscanned": "This partition has not been scanned for deleted recovery", "noPartitions": "The current source has no NTFS/EXT4/XFS partitions eligible for deleted recovery", "verifiedRanges": "Verified content ranges", "selectRange": "Select range", "read": "Read", "noVerifiedRange": "This candidate has no readable verified content range", "exportFull": "Export complete recovery file", "exported": "Exported {{bytes}}", "completeness": { "metadata_only": "Metadata only", "partial": "Partial content", "complete": "Complete content" }, "fields": { "completeness": "Completeness", "declaredSize": "Declared size", "recoverable": "Recoverable", "method": "Recovery method", "confidence": "Confidence", "originalPath": "Original path" }, "columns": { "partition": "Partition", "inode": "Inode", "originalPath": "Original path", "size": "Size", "completeness": "Recovery status", "confidence": "Confidence" }, "hashSearch": { "label": "Recovered file hash", "placeholder": "MD5 / SHA-1 / SHA-256", "clear": "Clear hash search", "invalid": "Hash must be 32, 40 or 64 hexadecimal characters", "submit": "Find by hash", "matches": "{{count}} matches" }, "empty": { "selectCandidate": "Select a candidate to view forensic metadata", "noCandidates": "No deleted recovery candidates", "noCandidatesDescription": "The current scan did not reconstruct reportable deleted records." }, "pagination": { "hashMatches": "Hash matches {{shown}} / {{total}}", "range": "Showing {{start}}-{{end}} / {{total}}", "previous": "Previous", "next": "Next" } },
-  "search": { "title": "File search", "inputPlaceholder": "Enter a file, directory or path", "inputLabel": "File name search", "pathToggle": "Path", "allTypes": "All types", "file": "File", "directory": "Directory", "extensionPlaceholder": "Extension", "extensionLabel": "Extension filter", "allSources": "All sources", "meta": { "loaded": "Loaded {{shown}}/{{total}} items", "waiting": "Enter a file name or path to search", "found": "{{count}} results", "idle": "Waiting for input", "took": "Query {{ms}} ms" }, "coverage": { "incomplete": "Index coverage is incomplete; re-analysis required {{indexed}}/{{expected}}", "complete": "Index covers {{indexed}} entries / {{sources}} sources", "missingTitle": "Sources not ready: {{sources}}" }, "truncated": "Result window capped; showing {{count}} items", "columns": { "name": "Name", "path": "Path", "size": "Size", "modifiedAt": "Modified", "source": "Source" }, "empty": { "noMatch": "No matching files", "noMatchDescription": "Try changing the name, path or filters.", "start": "Enter a file name to search", "startDescription": "Search only covers files and directories from imported sources." } },
+  "recovery": {
+    "title": "Deleted file recovery",
+    "subtitle": "NTFS MFT / EXT4 journal / XFS log",
+    "targetPartition": "Target partition",
+    "selectPartition": "Select an NTFS/EXT4/XFS partition",
+    "startScan": "Start scan",
+    "rescan": "Rescan",
+    "transactions": "{{count}} transactions",
+    "candidates": "{{count}} candidates",
+    "loading": "Reading recovery scan results",
+    "unscanned": "This partition has not been scanned for deleted recovery",
+    "noPartitions": "The current source has no NTFS/EXT4/XFS partitions eligible for deleted recovery",
+    "verifiedRanges": "Verified content ranges",
+    "selectRange": "Select range",
+    "read": "Read",
+    "noVerifiedRange": "This candidate has no readable verified content range",
+    "exportFull": "Export complete recovery file",
+    "exported": "Exported {{bytes}}",
+    "completeness": {
+      "metadata_only": "Metadata only",
+      "partial": "Partial content",
+      "complete": "Complete content"
+    },
+    "fields": {
+      "completeness": "Completeness",
+      "declaredSize": "Declared size",
+      "recoverable": "Recoverable",
+      "method": "Recovery method",
+      "confidence": "Confidence",
+      "originalPath": "Original path"
+    },
+    "columns": {
+      "partition": "Partition",
+      "inode": "Inode",
+      "originalPath": "Original path",
+      "size": "Size",
+      "completeness": "Recovery status",
+      "confidence": "Confidence"
+    },
+    "hashSearch": {
+      "label": "Recovered file hash",
+      "placeholder": "MD5 / SHA-1 / SHA-256",
+      "clear": "Clear hash search",
+      "invalid": "Hash must be 32, 40 or 64 hexadecimal characters",
+      "submit": "Find by hash",
+      "matches": "{{count}} matches"
+    },
+    "empty": {
+      "selectCandidate": "Select a candidate to view forensic metadata",
+      "noCandidates": "No deleted recovery candidates",
+      "noCandidatesDescription": "The current scan did not reconstruct reportable deleted records."
+    },
+    "pagination": {
+      "hashMatches": "Hash matches {{shown}} / {{total}}",
+      "range": "Showing {{start}}-{{end}} / {{total}}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "exportSuccess": "Recovered file exported ({{bytes}} bytes)",
+    "exportFailed": "Failed to export recovered file: {{message}}"
+  },
+  "search": {
+    "title": "File search",
+    "inputPlaceholder": "Enter a file, directory or path",
+    "inputLabel": "File name search",
+    "pathToggle": "Path",
+    "allTypes": "All types",
+    "file": "File",
+    "directory": "Directory",
+    "extensionPlaceholder": "Extension",
+    "extensionLabel": "Extension filter",
+    "allSources": "All sources",
+    "meta": {
+      "loaded": "Loaded {{shown}}/{{total}} items",
+      "waiting": "Enter a file name or path to search",
+      "found": "{{count}} results",
+      "idle": "Waiting for input",
+      "took": "Query {{ms}} ms"
+    },
+    "coverage": {
+      "incomplete": "Index coverage is incomplete; re-analysis required {{indexed}}/{{expected}}",
+      "complete": "Index covers {{indexed}} entries / {{sources}} sources",
+      "missingTitle": "Sources not ready: {{sources}}"
+    },
+    "truncated": "Result window capped; showing {{count}} items",
+    "columns": {
+      "name": "Name",
+      "path": "Path",
+      "size": "Size",
+      "modifiedAt": "Modified",
+      "source": "Source"
+    },
+    "empty": {
+      "noMatch": "No matching files",
+      "noMatchDescription": "Try changing the name, path or filters.",
+      "start": "Enter a file name to search",
+      "startDescription": "Search only covers files and directories from imported sources."
+    },
+    "clearQuery": "Clear search"
+  },
   "infrastructure": {
     "eyebrow": "Infrastructure evidence",
     "title": "Linux Infrastructure Forensics",
@@ -498,15 +1198,85 @@
     "caseLabel": "Current case",
     "noCase": "Open a case first",
     "empty": "No infrastructure objects were found in this case",
-    "tabs": { "overview": "Cluster summary", "topology": "Host network", "workloads": "Workloads", "storage": "Storage evidence", "inventory": "Object inventory" },
-    "metrics": { "hosts": "Hosts", "infrastructure": "Infrastructure services", "storage": "Storage objects", "workloads": "Workload evidence", "relations": "Verified relations", "hostLinks": "Host links" },
-    "sections": { "layers": "Three-layer view", "relations": "Object relations", "inventory": "Infrastructure objects" },
-    "columns": { "name": "Name", "layer": "Layer", "type": "Object type", "status": "Status", "confidence": "Evidence confidence" },
-    "domains": { "environment": "Runtime environment", "storage": "Storage foundation", "analysis": "Analysis evidence" },
-    "domainDescriptions": { "environment": "Physical hosts, virtual machines, operating systems and orchestration", "storage": "Ceph, RBD, CephFS and related storage objects", "analysis": "Container, service and configuration evidence recovered from images" },
-    "kinds": { "physical_host": "Physical host", "pve": "PVE virtualization foundation", "virtual_machine": "Virtual machine", "os_instance": "Linux host system", "kubernetes": "Kubernetes cluster", "ceph": "Ceph storage cluster", "ceph_cluster": "Ceph storage cluster", "ceph_rbd": "RBD virtual block device", "ceph_fs": "CephFS filesystem", "virtual_disk": "Virtual disk", "static_pod_manifest": "Static Pod manifest", "pod_log": "Pod log", "container_log": "Container log", "runtime_metadata": "Runtime metadata", "pod_volume": "Pod volume", "kubelet_config": "kubelet configuration", "kubeconfig": "Cluster access configuration", "audit_log": "Audit log", "cni_config": "Container network configuration" },
-    "relations": { "hosts": "hosts", "provides_storage": "provides storage", "boots": "boots", "runs": "runs", "manages": "manages", "consumes_storage": "uses storage", "derived_from": "derived from", "network_link": "network link" },
-    "states": { "ready": "Ready", "complete": "Complete", "verified": "Verified", "candidate": "Candidate", "unproven": "Unproven", "indeterminate": "Indeterminate", "parsed": "Parsed", "pending": "Processing", "failed": "Failed" },
+    "tabs": {
+      "overview": "Cluster summary",
+      "topology": "Host network",
+      "workloads": "Workloads",
+      "storage": "Storage evidence",
+      "inventory": "Object inventory"
+    },
+    "metrics": {
+      "hosts": "Hosts",
+      "infrastructure": "Infrastructure services",
+      "storage": "Storage objects",
+      "workloads": "Workload evidence",
+      "relations": "Verified relations",
+      "hostLinks": "Host links"
+    },
+    "sections": {
+      "layers": "Three-layer view",
+      "relations": "Object relations",
+      "inventory": "Infrastructure objects"
+    },
+    "columns": {
+      "name": "Name",
+      "layer": "Layer",
+      "type": "Object type",
+      "status": "Status",
+      "confidence": "Evidence confidence"
+    },
+    "domains": {
+      "environment": "Runtime environment",
+      "storage": "Storage foundation",
+      "analysis": "Analysis evidence"
+    },
+    "domainDescriptions": {
+      "environment": "Physical hosts, virtual machines, operating systems and orchestration",
+      "storage": "Ceph, RBD, CephFS and related storage objects",
+      "analysis": "Container, service and configuration evidence recovered from images"
+    },
+    "kinds": {
+      "physical_host": "Physical host",
+      "pve": "PVE virtualization foundation",
+      "virtual_machine": "Virtual machine",
+      "os_instance": "Linux host system",
+      "kubernetes": "Kubernetes cluster",
+      "ceph": "Ceph storage cluster",
+      "ceph_cluster": "Ceph storage cluster",
+      "ceph_rbd": "RBD virtual block device",
+      "ceph_fs": "CephFS filesystem",
+      "virtual_disk": "Virtual disk",
+      "static_pod_manifest": "Static Pod manifest",
+      "pod_log": "Pod log",
+      "container_log": "Container log",
+      "runtime_metadata": "Runtime metadata",
+      "pod_volume": "Pod volume",
+      "kubelet_config": "kubelet configuration",
+      "kubeconfig": "Cluster access configuration",
+      "audit_log": "Audit log",
+      "cni_config": "Container network configuration"
+    },
+    "relations": {
+      "hosts": "hosts",
+      "provides_storage": "provides storage",
+      "boots": "boots",
+      "runs": "runs",
+      "manages": "manages",
+      "consumes_storage": "uses storage",
+      "derived_from": "derived from",
+      "network_link": "network link"
+    },
+    "states": {
+      "ready": "Ready",
+      "complete": "Complete",
+      "verified": "Verified",
+      "candidate": "Candidate",
+      "unproven": "Unproven",
+      "indeterminate": "Indeterminate",
+      "parsed": "Parsed",
+      "pending": "Processing",
+      "failed": "Failed"
+    },
     "layersDescription": "Objects are grouped by infrastructure responsibility so virtualization, operating systems, containers and storage stay distinct.",
     "relationsDescription": "Relations come from topology projection and evidence provenance; candidates are not live runtime state.",
     "inventoryDescription": "{{count}} objects. Search by name, type or layer.",
@@ -515,14 +1285,71 @@
     "topologyHiddenEvidence": "The topology view collapses {{count}} analysis evidence objects. Open Object inventory to view the complete list.",
     "searchPlaceholder": "Search name, type or source",
     "moreObjects": "{{count}} more objects",
-    "inspector": { "linkedRelations": "{{count}} linked relations", "source": "Evidence source", "parser": "Parser" },
-    "actions": { "search": "Search infrastructure objects", "openFiles": "Open file browser", "copyId": "Copy object ID", "close": "Close details" },
-    "clusterInfo": { "title": "Cluster basics", "description": "Only host, platform, and version evidence supported by images and parsed artifacts is shown.", "types": "Detected platforms", "hosts": "Hosts", "relations": "Relations", "identity": "Identity state", "host": "Host", "hostname": "Hostname evidence", "version": "Version evidence", "hostEvidence": "Per-host operating system and kernel version evidence", "hostEvidenceDescription": "Derived from /etc/hostname, os-release, and kernel images or module directories. Missing fields are not inferred." },
-    "workloads": { "title": "Workload and service evidence", "description": "Containers, Pods, runtime configuration, and logs are shown as offline evidence and not asserted as live state at acquisition time.", "empty": "No container or service evidence was classified." },
-    "kubernetesEvidence": { "title": "Kubernetes network and service evidence", "description": "Offline facts recovered from Node, Service, EndpointSlice, Ingress, NetworkPolicy, and CNI configuration.", "empty": "No Kubernetes network or service evidence was found." },
-    "storage": { "title": "Storage system evidence", "description": "Ceph, RBD, CephFS, virtual disks, and their evidence-backed state.", "empty": "No storage-system evidence was found." },
-    "networkTopology": { "hostNetwork": "Host network topology", "hint": "Nodes are organized as hosts, infrastructure services, and runtime instances.", "canvasLabel": "Linux cluster host network topology" },
-    "networkFacts": { "title": "Network configuration evidence", "description": "Addresses, resolvers, services, and cluster links recovered from host configuration and Kubernetes resources.", "empty": "No network configuration evidence was found.", "kinds": { "hostname_mapping": "Hostname mapping", "dns_server": "DNS server", "interface_address": "Interface address", "gateway": "Gateway", "bridge_member": "Bridge member", "cluster_link": "Cluster link", "platform_version": "Platform version", "cni_network": "CNI network", "kubernetes_version": "Kubernetes version", "kubernetes_node": "Kubernetes node", "kubernetes_service": "Kubernetes service", "kubernetes_endpoint_slice": "Service endpoint", "kubernetes_ingress": "Ingress route", "kubernetes_network_policy": "Network policy" } },
+    "inspector": {
+      "linkedRelations": "{{count}} linked relations",
+      "source": "Evidence source",
+      "parser": "Parser"
+    },
+    "actions": {
+      "search": "Search infrastructure objects",
+      "openFiles": "Open file browser",
+      "copyId": "Copy object ID",
+      "close": "Close details"
+    },
+    "clusterInfo": {
+      "title": "Cluster basics",
+      "description": "Only host, platform, and version evidence supported by images and parsed artifacts is shown.",
+      "types": "Detected platforms",
+      "hosts": "Hosts",
+      "relations": "Relations",
+      "identity": "Identity state",
+      "host": "Host",
+      "hostname": "Hostname evidence",
+      "version": "Version evidence",
+      "hostEvidence": "Per-host operating system and kernel version evidence",
+      "hostEvidenceDescription": "Derived from /etc/hostname, os-release, and kernel images or module directories. Missing fields are not inferred."
+    },
+    "workloads": {
+      "title": "Workload and service evidence",
+      "description": "Containers, Pods, runtime configuration, and logs are shown as offline evidence and not asserted as live state at acquisition time.",
+      "empty": "No container or service evidence was classified."
+    },
+    "kubernetesEvidence": {
+      "title": "Kubernetes network and service evidence",
+      "description": "Offline facts recovered from Node, Service, EndpointSlice, Ingress, NetworkPolicy, and CNI configuration.",
+      "empty": "No Kubernetes network or service evidence was found."
+    },
+    "storage": {
+      "title": "Storage system evidence",
+      "description": "Ceph, RBD, CephFS, virtual disks, and their evidence-backed state.",
+      "empty": "No storage-system evidence was found."
+    },
+    "networkTopology": {
+      "hostNetwork": "Host network topology",
+      "hint": "Nodes are organized as hosts, infrastructure services, and runtime instances.",
+      "canvasLabel": "Linux cluster host network topology"
+    },
+    "networkFacts": {
+      "title": "Network configuration evidence",
+      "description": "Addresses, resolvers, services, and cluster links recovered from host configuration and Kubernetes resources.",
+      "empty": "No network configuration evidence was found.",
+      "kinds": {
+        "hostname_mapping": "Hostname mapping",
+        "dns_server": "DNS server",
+        "interface_address": "Interface address",
+        "gateway": "Gateway",
+        "bridge_member": "Bridge member",
+        "cluster_link": "Cluster link",
+        "platform_version": "Platform version",
+        "cni_network": "CNI network",
+        "kubernetes_version": "Kubernetes version",
+        "kubernetes_node": "Kubernetes node",
+        "kubernetes_service": "Kubernetes service",
+        "kubernetes_endpoint_slice": "Service endpoint",
+        "kubernetes_ingress": "Ingress route",
+        "kubernetes_network_policy": "Network policy"
+      }
+    },
     "workspace": {
       "eyebrow": "Linux evidence set",
       "title": "Cluster evidence workspace",
@@ -535,40 +1362,294 @@
       "loadFailed": "Unable to load the cluster evidence summary",
       "reportReady": "Ready to publish",
       "reportPartial": "provenance=partial",
-      "metrics": { "members": "Members", "ready": "Ready", "files": "File entries", "size": "Evidence size", "provenance": "Evidence state", "report": "Report gate", "scopes": "Scopes", "derived": "Derived sources", "events": "Events" },
+      "metrics": {
+        "members": "Members",
+        "ready": "Ready",
+        "files": "File entries",
+        "size": "Evidence size",
+        "provenance": "Evidence state",
+        "report": "Report gate",
+        "scopes": "Scopes",
+        "derived": "Derived sources",
+        "events": "Events"
+      },
       "loadedEvents": "Loaded {{count}}",
-      "status": { "complete": "Complete", "partial": "Partial", "failed": "Failed", "pending": "Processing", "candidate": "Candidate", "proven": "Proven", "indeterminate": "Indeterminate", "unsupported": "Unsupported", "unknown": "Unknown" },
-      "navigation": { "label": "Cluster evidence navigation", "overview": "Evidence overview", "members": "Members and nodes", "topology": "Topology and storage", "findings": "Findings and evidence", "provenance": "Limitations and provenance" },
-      "trust": { "title": "Evidence Trust Bar", "description": "Evidence lifecycle state. Partial states constrain cluster conclusions and report publication.", "stages": { "manifest": "Manifest", "hash": "Source Hash", "sourceDb": "Source DB", "topology": "Topology", "lineage": "Derived Lineage", "report": "Report" } },
-      "capabilities": { "title": "Capability matrix", "description": "Capability level and evidence state stay separate so metadata-only never looks like a browsable filesystem.", "kind": "Capability", "level": "Available level", "status": "Evidence state", "diagnostics": "Limitations", "noDiagnostic": "No additional diagnostic", "kinds": { "linux_host": "Linux host filesystem", "pve": "PVE configuration", "ceph": "Ceph BlueStore", "rbd": "RBD", "cephfs": "CephFS", "kubernetes": "Kubernetes" }, "levels": { "metadata-only": "Metadata only", "metadata-browseable": "Metadata browseable", "bounded-preview": "Bounded preview", "snapshot-aware": "Snapshot aware", "proven": "Proven", "unsupported": "Unsupported" } },
-      "members": { "title": "Member evidence", "description": "Manifest members with import, file count, host identity, kernel, address and role. Select a row to open the evidence inspector.", "member": "Member", "kind": "Source kind", "import": "Import", "files": "File entries", "hostname": "Hostname", "os": "OS / kernel", "address": "Address", "role": "Role", "identity": "Identity", "hash": "Hash", "provenance": "Provenance", "source": "root-relative source", "empty": "This Evidence Set has no members." },
-      "topology": { "title": "Evidence topology", "description": "Each E01/RAW source appears once, with Host → OS → PVE/Ceph/Kubernetes evidence layers underneath.", "source": "Source", "layers": "Evidence layers", "noSources": "No sources can be grouped.", "members": "members", "completeness": "Completeness", "hostname": "Hostname", "os": "OS / kernel", "address": "Address", "role": "Role", "roles": { "host": "Physical host", "os_root": "OS root", "control_plane": "Control plane / master", "worker": "Worker node", "storage_node": "Storage node", "virtual_machine": "Virtual machine", "unknown": "Role unproven" }, "edgeKinds": { "hosts": "Hosts", "runs": "Runs", "provides_storage": "Provides storage", "manages": "Manages", "consumes_storage": "Consumes storage", "derived_from": "Derived from" }, "edges": "Relations", "noEdges": "No projected scope relations." },
-      "timeline": { "title": "Timeline context", "description": "The cluster page shows a summary; detailed events remain in the single main timeline.", "open": "Open main timeline", "events": "Events", "members": "Members", "uncertain": "Uncertain time", "sequence": "Native sequence", "native": "Shown in event inspector" },
-      "workloads": { "title": "Service and container evidence", "description": "Automatically summarized after import from Kubernetes static manifests, systemd and Docker runtime metadata. This is offline evidence, not live runtime state.", "services": "Services / control-plane components", "containers": "Containers" },
-      "findings": { "title": "Findings and evidence", "description": "This view summarizes cross-member support and limitations. Review each Claim through Artifact, FileEntry or Timeline links.", "openTimeline": "Open timeline for Evidence Set", "supported": "Supported scopes", "candidate": "Candidate or partial scopes", "limited": "Limitation diagnostics", "empty": "No additional cluster-level findings." },
-      "provenance": { "title": "Limitations and provenance", "description": "Hash, manifest, source DB, derived lineage and phase ledger must be checked before publication.", "reportState": "Report state", "details": { "manifest": "The backend records the canonical digest and recursive scan boundary.", "hash": "Member source hashes are written back asynchronously; incomplete work stays partial.", "sourceDb": "Each member is linked to an isolated source DB; missing bindings cannot become complete.", "topology": "Host/OS/PVE/Ceph scopes upgrade only after their evidence closes.", "lineage": "Derived RBD/CephFS sources must point back to members and source objects.", "report": "The report gate labels incomplete provenance as partial." } },
-      "inspector": { "title": "Member evidence inspector", "close": "Close evidence inspector", "source": "Source", "kind": "Source kind", "provenance": "Provenance" }
+      "status": {
+        "complete": "Complete",
+        "partial": "Partial",
+        "failed": "Failed",
+        "pending": "Processing",
+        "candidate": "Candidate",
+        "proven": "Proven",
+        "indeterminate": "Indeterminate",
+        "unsupported": "Unsupported",
+        "unknown": "Unknown"
+      },
+      "navigation": {
+        "label": "Cluster evidence navigation",
+        "overview": "Evidence overview",
+        "members": "Members and nodes",
+        "topology": "Topology and storage",
+        "findings": "Findings and evidence",
+        "provenance": "Limitations and provenance"
+      },
+      "trust": {
+        "title": "Evidence Trust Bar",
+        "description": "Evidence lifecycle state. Partial states constrain cluster conclusions and report publication.",
+        "stages": {
+          "manifest": "Manifest",
+          "hash": "Source Hash",
+          "sourceDb": "Source DB",
+          "topology": "Topology",
+          "lineage": "Derived Lineage",
+          "report": "Report"
+        }
+      },
+      "capabilities": {
+        "title": "Capability matrix",
+        "description": "Capability level and evidence state stay separate so metadata-only never looks like a browsable filesystem.",
+        "kind": "Capability",
+        "level": "Available level",
+        "status": "Evidence state",
+        "diagnostics": "Limitations",
+        "noDiagnostic": "No additional diagnostic",
+        "kinds": {
+          "linux_host": "Linux host filesystem",
+          "pve": "PVE configuration",
+          "ceph": "Ceph BlueStore",
+          "rbd": "RBD",
+          "cephfs": "CephFS",
+          "kubernetes": "Kubernetes"
+        },
+        "levels": {
+          "metadata-only": "Metadata only",
+          "metadata-browseable": "Metadata browseable",
+          "bounded-preview": "Bounded preview",
+          "snapshot-aware": "Snapshot aware",
+          "proven": "Proven",
+          "unsupported": "Unsupported"
+        }
+      },
+      "members": {
+        "title": "Member evidence",
+        "description": "Manifest members with import, file count, host identity, kernel, address and role. Select a row to open the evidence inspector.",
+        "member": "Member",
+        "kind": "Source kind",
+        "import": "Import",
+        "files": "File entries",
+        "hostname": "Hostname",
+        "os": "OS / kernel",
+        "address": "Address",
+        "role": "Role",
+        "identity": "Identity",
+        "hash": "Hash",
+        "provenance": "Provenance",
+        "source": "root-relative source",
+        "empty": "This Evidence Set has no members.",
+        "size": "Evidence size"
+      },
+      "topology": {
+        "title": "Evidence topology",
+        "description": "Each E01/RAW source appears once, with Host → OS → PVE/Ceph/Kubernetes evidence layers underneath.",
+        "source": "Source",
+        "layers": "Evidence layers",
+        "noSources": "No sources can be grouped.",
+        "members": "members",
+        "completeness": "Completeness",
+        "hostname": "Hostname",
+        "os": "OS / kernel",
+        "address": "Address",
+        "role": "Role",
+        "roles": {
+          "host": "Physical host",
+          "os_root": "OS root",
+          "control_plane": "Control plane / master",
+          "worker": "Worker node",
+          "storage_node": "Storage node",
+          "virtual_machine": "Virtual machine",
+          "unknown": "Role unproven"
+        },
+        "edgeKinds": {
+          "hosts": "Hosts",
+          "runs": "Runs",
+          "provides_storage": "Provides storage",
+          "manages": "Manages",
+          "consumes_storage": "Consumes storage",
+          "derived_from": "Derived from"
+        },
+        "edges": "Relations",
+        "noEdges": "No projected scope relations."
+      },
+      "timeline": {
+        "title": "Timeline context",
+        "description": "The cluster page shows a summary; detailed events remain in the single main timeline.",
+        "open": "Open main timeline",
+        "events": "Events",
+        "members": "Members",
+        "uncertain": "Uncertain time",
+        "sequence": "Native sequence",
+        "native": "Shown in event inspector",
+        "recent": "Recent events",
+        "empty": "No timeline events are linked to this evidence set yet"
+      },
+      "workloads": {
+        "title": "Service and container evidence",
+        "description": "Automatically summarized after import from Kubernetes static manifests, systemd and Docker runtime metadata. This is offline evidence, not live runtime state.",
+        "services": "Services / control-plane components",
+        "containers": "Containers"
+      },
+      "findings": {
+        "title": "Findings and evidence",
+        "description": "This view summarizes cross-member support and limitations. Review each Claim through Artifact, FileEntry or Timeline links.",
+        "openTimeline": "Open timeline for Evidence Set",
+        "supported": "Supported scopes",
+        "candidate": "Candidate or partial scopes",
+        "limited": "Limitation diagnostics",
+        "empty": "No additional cluster-level findings."
+      },
+      "provenance": {
+        "title": "Limitations and provenance",
+        "description": "Hash, manifest, source DB, derived lineage and phase ledger must be checked before publication.",
+        "reportState": "Report state",
+        "details": {
+          "manifest": "The backend records the canonical digest and recursive scan boundary.",
+          "hash": "Member source hashes are written back asynchronously; incomplete work stays partial.",
+          "sourceDb": "Each member is linked to an isolated source DB; missing bindings cannot become complete.",
+          "topology": "Host/OS/PVE/Ceph scopes upgrade only after their evidence closes.",
+          "lineage": "Derived RBD/CephFS sources must point back to members and source objects.",
+          "report": "The report gate labels incomplete provenance as partial."
+        }
+      },
+      "inspector": {
+        "title": "Member evidence inspector",
+        "close": "Close evidence inspector",
+        "source": "Source",
+        "kind": "Source kind",
+        "provenance": "Provenance"
+      }
     },
-    "values": { "unselected": "No object selected", "unknown": "Unknown", "unavailable": "Not provided", "notFound": "Not found" }
+    "values": {
+      "unselected": "No object selected",
+      "unknown": "Unknown",
+      "unavailable": "Not provided",
+      "notFound": "Not found"
+    },
+    "capabilitiesDiagnostics": {
+      "linuxHost": "No Linux host scope evidence found",
+      "pve": "No PVE scope evidence found",
+      "ceph": "No Ceph scope evidence found",
+      "rbd": "No derived RBD data source",
+      "cephfs": "No derived CephFS data source",
+      "kubernetes": "No Kubernetes scope evidence found"
+    }
   },
   "caseHome": {
     "count": "{{count}} items",
-    "metrics": { "dataSources": "Data sources", "indexedFiles": "Indexed files", "timelineEvents": "Timeline events", "artifacts": "Extracted artifacts" },
-    "actions": { "save": "Save", "cancel": "Cancel", "delete": "Delete", "deleteCase": "Delete case", "deleteDataSource": "Delete data source" },
-    "recentTasks": { "title": "Recent tasks", "summary": "Completed {{completed}} / Partial {{partial}} / Running {{running}}" },
-    "jobStates": { "partial": "Partial", "warnings": "Warnings {{count}}", "skipped": "Skipped {{count}}", "failed": "Failed {{count}}" },
-    "dataSources": { "title": "Data sources", "sha256": "Evidence SHA-256", "physicalDiskHash": "Original physical disk hash", "physicalDiskHashHint": "Reads original physical disk sectors directly; this does not hash an E01 image file.", "physicalDiskHashRunning": "Reading original physical disk…", "objects": "objects", "partitions": "Partition structure", "empty": "Imported evidence sources for this case will appear here and can be renamed." },
-    "hash": { "waiting": "Waiting to calculate", "running": "Calculating in background", "auto": "Calculated automatically after import", "completed": "Completed", "failed": "Calculation failed", "unavailable": "This data source cannot be calculated" },
-    "processing": { "pending": "Pending", "running": "Processing", "ready": "Completed", "failed": "Failed", "deferred": "Deferred", "phase": "Phase {{ready}}/{{total}}", "deferredCount": "Deferred {{count}}" },
-    "partitions": { "supported": "Browsable", "locked": "Unlock required", "unsupported": "Unsupported", "offsetLength": "Offset {{offset}} / Length {{length}}" },
-    "recentObjects": { "title": "High-value objects", "count": "{{count}} recently found", "empty": "High-value objects found during initial analysis will appear here." },
-    "workspace": { "caseNumber": "Case #{{number}}", "active": "Status: Active", "dataSources": "Data sources: {{count}}", "warnings": "Warnings: {{count}}", "partialJobs": "Partial jobs: {{count}}", "status": "Status", "activeValue": "Active", "createdAt": "Created", "examiner": "Examiner" },
-    "import": { "pathPlaceholder": "Image or logical directory path", "file": "File", "directory": "Directory", "submitting": "Submitting...", "running": "Import running...", "action": "Import", "submitHint": "Submitting the import task; background progress will continue in the task list.", "progress": "Import in progress: {{name}} · {{progress}}% · {{detail}}", "canceling": "Cancelling...", "cancel": "Cancel import", "failed": "Import failed: {{error}}", "backgroundFailed": "Background import failed: {{detail}}" },
+    "metrics": {
+      "dataSources": "Data sources",
+      "indexedFiles": "Indexed files",
+      "timelineEvents": "Timeline events",
+      "artifacts": "Extracted artifacts"
+    },
+    "actions": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "deleteCase": "Delete case",
+      "deleteDataSource": "Delete data source"
+    },
+    "recentTasks": {
+      "title": "Recent tasks",
+      "summary": "Completed {{completed}} / Partial {{partial}} / Running {{running}}"
+    },
+    "jobStates": {
+      "partial": "Partial",
+      "warnings": "Warnings {{count}}",
+      "skipped": "Skipped {{count}}",
+      "failed": "Failed {{count}}"
+    },
+    "dataSources": {
+      "title": "Data sources",
+      "sha256": "Evidence SHA-256",
+      "physicalDiskHash": "Original physical disk hash",
+      "physicalDiskHashHint": "Reads original physical disk sectors directly; this does not hash an E01 image file.",
+      "physicalDiskHashRunning": "Reading original physical disk…",
+      "objects": "objects",
+      "partitions": "Partition structure",
+      "empty": "Imported evidence sources for this case will appear here and can be renamed."
+    },
+    "hash": {
+      "waiting": "Waiting to calculate",
+      "running": "Calculating in background",
+      "auto": "Calculated automatically after import",
+      "completed": "Completed",
+      "failed": "Calculation failed",
+      "unavailable": "This data source cannot be calculated"
+    },
+    "processing": {
+      "pending": "Pending",
+      "running": "Processing",
+      "ready": "Completed",
+      "failed": "Failed",
+      "deferred": "Deferred",
+      "phase": "Phase {{ready}}/{{total}}",
+      "deferredCount": "Deferred {{count}}"
+    },
+    "partitions": {
+      "supported": "Browsable",
+      "locked": "Unlock required",
+      "unsupported": "Unsupported",
+      "offsetLength": "Offset {{offset}} / Length {{length}}"
+    },
+    "recentObjects": {
+      "title": "High-value objects",
+      "count": "{{count}} recently found",
+      "empty": "High-value objects found during initial analysis will appear here."
+    },
+    "workspace": {
+      "caseNumber": "Case #{{number}}",
+      "active": "Status: Active",
+      "dataSources": "Data sources: {{count}}",
+      "warnings": "Warnings: {{count}}",
+      "partialJobs": "Partial jobs: {{count}}",
+      "status": "Status",
+      "activeValue": "Active",
+      "createdAt": "Created",
+      "examiner": "Examiner"
+    },
+    "import": {
+      "pathPlaceholder": "Image or logical directory path",
+      "file": "File",
+      "directory": "Directory",
+      "submitting": "Submitting...",
+      "running": "Import running...",
+      "action": "Import",
+      "submitHint": "Submitting the import task; background progress will continue in the task list.",
+      "progress": "Import in progress: {{name}} · {{progress}}% · {{detail}}",
+      "canceling": "Cancelling...",
+      "cancel": "Cancel import",
+      "failed": "Import failed: {{error}}",
+      "backgroundFailed": "Background import failed: {{detail}}"
+    },
     "welcome": {
       "description": "No case is active. Create or open a case directory, then import a logical directory, RAW/DD/IMG or E01 image to enter the file-browsing workflow.",
-      "create": { "title": "Create case", "rootPlaceholder": "Case parent directory", "namePlaceholder": "Case name", "pending": "Creating...", "action": "Create case" },
-      "open": { "title": "Open existing case", "pathPlaceholder": "Case path", "pending": "Opening...", "action": "Open case" },
-      "recent": { "title": "Recently opened cases", "empty": "Recently opened cases are retained here for quick return to an investigation." }
+      "create": {
+        "title": "Create case",
+        "rootPlaceholder": "Case parent directory",
+        "namePlaceholder": "Case name",
+        "pending": "Creating...",
+        "action": "Create case"
+      },
+      "open": {
+        "title": "Open existing case",
+        "pathPlaceholder": "Case path",
+        "pending": "Opening...",
+        "action": "Open case"
+      },
+      "recent": {
+        "title": "Recently opened cases",
+        "empty": "Recently opened cases are retained here for quick return to an investigation."
+      }
     },
     "confirm": {
       "deleteCaseTitle": "Delete case",
@@ -662,7 +1743,8 @@
         "artifacts": "Artifact Cache",
         "search": "Search Cache"
       }
-    }
+    },
+    "resizeHandle": "Drag to resize the drawer height"
   },
   "gql": {
     "placeholder": "MATCH (n:File)-[e:References]->(m:Artifact)\nWHERE e.confidence > 0.7\nRETURN n, e, m\nLIMIT 50",
@@ -704,21 +1786,92 @@
     "registry": {
       "title": "Registry extraction",
       "unavailable": "Registry extraction results are unavailable.",
-      "tabs": { "users": "User accounts", "activity": "User activity", "network": "Network configuration", "software": "Installed software", "usb": "USB devices", "raw": "Raw values" },
-      "accountStates": { "enabled": "Enabled", "locked": "Locked", "disabled": "Disabled" },
-      "values": { "never": "Never logged in", "enabled": "Enabled", "disabled": "Disabled", "entries": "entries", "txlog": "transaction log merged", "deleted": "{{count}} deleted", "keyValues": "Key values", "sourceHives": "Source hives" },
-      "network": { "adapters": "Network adapters (physical and virtual)", "profiles": "Network profiles and connection history" },
+      "tabs": {
+        "users": "User accounts",
+        "activity": "User activity",
+        "network": "Network configuration",
+        "software": "Installed software",
+        "usb": "USB devices",
+        "raw": "Raw values"
+      },
+      "accountStates": {
+        "enabled": "Enabled",
+        "locked": "Locked",
+        "disabled": "Disabled"
+      },
+      "values": {
+        "never": "Never logged in",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "entries": "entries",
+        "txlog": "transaction log merged",
+        "deleted": "{{count}} deleted",
+        "keyValues": "Key values",
+        "sourceHives": "Source hives"
+      },
+      "network": {
+        "adapters": "Network adapters (physical and virtual)",
+        "profiles": "Network profiles and connection history"
+      },
       "columns": {
-        "username": "Username", "status": "Status", "groups": "Groups", "loginCount": "Login count", "lastLogin": "Last login", "profilePath": "Profile path", "passwordHash": "Password hash (LM:NT)", "passwordHint": "Password hint", "programPath": "Program path", "executionCount": "Execution count", "lastExecution": "Last execution", "notes": "Notes", "profileName": "Profile name", "managed": "Managed", "firstNetwork": "First network", "gatewayMac": "Gateway MAC", "dnsSuffix": "DNS suffix", "createdAt": "Created", "lastConnected": "Last connected", "adapter": "Adapter", "deviceDescription": "Device description", "currentMac": "Current MAC", "permanentMac": "Permanent MAC", "ipAddresses": "IP addresses", "subnetMasks": "Subnet masks", "gateways": "Default gateways", "dhcpServer": "DHCP server", "dnsServers": "DNS servers", "pnpInstance": "PnP instance", "driverService": "Driver service", "interfaceGuid": "Interface GUID", "softwareName": "Software name", "version": "Version", "publisher": "Publisher", "installDate": "Install date", "size": "Size", "deviceName": "Device name", "serialNumber": "Serial number", "driveLetter": "Drive letter", "fileSystem": "Filesystem", "capacity": "Capacity", "firstConnected": "First connected"
+        "username": "Username",
+        "status": "Status",
+        "groups": "Groups",
+        "loginCount": "Login count",
+        "lastLogin": "Last login",
+        "profilePath": "Profile path",
+        "passwordHash": "Password hash (LM:NT)",
+        "passwordHint": "Password hint",
+        "programPath": "Program path",
+        "executionCount": "Execution count",
+        "lastExecution": "Last execution",
+        "notes": "Notes",
+        "profileName": "Profile name",
+        "managed": "Managed",
+        "firstNetwork": "First network",
+        "gatewayMac": "Gateway MAC",
+        "dnsSuffix": "DNS suffix",
+        "createdAt": "Created",
+        "lastConnected": "Last connected",
+        "adapter": "Adapter",
+        "deviceDescription": "Device description",
+        "currentMac": "Current MAC",
+        "permanentMac": "Permanent MAC",
+        "ipAddresses": "IP addresses",
+        "subnetMasks": "Subnet masks",
+        "gateways": "Default gateways",
+        "dhcpServer": "DHCP server",
+        "dnsServers": "DNS servers",
+        "pnpInstance": "PnP instance",
+        "driverService": "Driver service",
+        "interfaceGuid": "Interface GUID",
+        "softwareName": "Software name",
+        "version": "Version",
+        "publisher": "Publisher",
+        "installDate": "Install date",
+        "size": "Size",
+        "deviceName": "Device name",
+        "serialNumber": "Serial number",
+        "driveLetter": "Drive letter",
+        "fileSystem": "Filesystem",
+        "capacity": "Capacity",
+        "firstConnected": "First connected"
       },
       "empty": {
-        "usersTitle": "No user account data", "usersDescription": "SAM account information appears after extraction.",
-        "activityTitle": "No UserAssist data", "activityDescription": "Program execution records are extracted from NTUSER.DAT.",
-        "adaptersTitle": "No physical network adapter data", "adaptersDescription": "Extracted from TCP/IP, Network, NetworkSetup2, and Class configuration in the SYSTEM hive.",
-        "profilesTitle": "No network profiles", "profilesDescription": "Extracted from SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList.",
-        "softwareTitle": "No installed software data", "softwareDescription": "Extracted from SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall.",
-        "usbTitle": "No USB device history", "usbDescription": "Connection history is extracted from SYSTEM hive USBSTOR.",
-        "rawTitle": "No raw registry values", "rawDescription": "A key/value summary of important hives appears after extraction."
+        "usersTitle": "No user account data",
+        "usersDescription": "SAM account information appears after extraction.",
+        "activityTitle": "No UserAssist data",
+        "activityDescription": "Program execution records are extracted from NTUSER.DAT.",
+        "adaptersTitle": "No physical network adapter data",
+        "adaptersDescription": "Extracted from TCP/IP, Network, NetworkSetup2, and Class configuration in the SYSTEM hive.",
+        "profilesTitle": "No network profiles",
+        "profilesDescription": "Extracted from SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList.",
+        "softwareTitle": "No installed software data",
+        "softwareDescription": "Extracted from SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall.",
+        "usbTitle": "No USB device history",
+        "usbDescription": "Connection history is extracted from SYSTEM hive USBSTOR.",
+        "rawTitle": "No raw registry values",
+        "rawDescription": "A key/value summary of important hives appears after extraction."
       }
     },
     "platformViews": {
@@ -761,11 +1914,38 @@
       "empty": "No Kubernetes cluster evidence was found for this data source.",
       "nodesTitle": "Cluster members",
       "artifactsTitle": "Cluster evidence",
-      "cards": { "cluster": "Cluster", "members": "Members ready", "controlPlane": "Control-plane members", "artifacts": "Evidence files" },
-      "columns": { "source": "Source", "node": "Node", "role": "Role", "artifacts": "Artifacts", "status": "Status", "kind": "Kind", "path": "Path", "size": "Size" },
-      "roles": { "controlPlane": "Control-plane evidence", "node": "Node" },
-      "values": { "unproven": "Unproven" },
-      "status": { "candidateFound": "Found", "notFound": "Not found", "parsed": "Parsed", "partial": "Partial", "failed": "Failed", "notParsed": "Not parsed", "unavailable": "Unavailable" }
+      "cards": {
+        "cluster": "Cluster",
+        "members": "Members ready",
+        "controlPlane": "Control-plane members",
+        "artifacts": "Evidence files"
+      },
+      "columns": {
+        "source": "Source",
+        "node": "Node",
+        "role": "Role",
+        "artifacts": "Artifacts",
+        "status": "Status",
+        "kind": "Kind",
+        "path": "Path",
+        "size": "Size"
+      },
+      "roles": {
+        "controlPlane": "Control-plane evidence",
+        "node": "Node"
+      },
+      "values": {
+        "unproven": "Unproven"
+      },
+      "status": {
+        "candidateFound": "Found",
+        "notFound": "Not found",
+        "parsed": "Parsed",
+        "partial": "Partial",
+        "failed": "Failed",
+        "notParsed": "Not parsed",
+        "unavailable": "Unavailable"
+      }
     },
     "header": {
       "title": "Data source analysis",
@@ -1261,7 +2441,13 @@
     "filterAll": "All",
     "filterSummary": "Filtered {{filtered}} / loaded {{loaded}}",
     "filterScopeNote": "covers loaded rows only",
-    "noMatch": "No loaded rows match the current filters."
+    "noMatch": "No loaded rows match the current filters.",
+    "emptyTitle": "No records",
+    "emptyDescription": "Nothing to display in the current scope.",
+    "loadMoreError": "Failed to load more records.",
+    "initialLoadError": "Failed to load records.",
+    "retry": "Retry",
+    "loadingMore": "Loading more records..."
   },
   "errorBoundary": {
     "title": "Application Error",
@@ -1328,15 +2514,15 @@
     "noFavorites": "No favorite records",
     "noMedia": "No recoverable media resource records",
     "noSearchRecords": "No supplemental full-text index records",
-      "mediaItem": "Media attachment",
-      "mediaNotRecovered": "Local evidence not linked",
-      "localMediaLinkedEncrypted": "Local encrypted cache linked; image key unavailable",
-      "localMediaLinkedUnavailable": "Local media cache linked, but image recovery failed",
-      "localMediaUnlinked": "Local evidence not linked",
-      "externalMediaWarning": "External network image candidate, unverified (not local evidence)",
-      "externalMediaUnavailable": "External image candidate unavailable or rejected by source server",
-      "externalMediaBlocked": "External source is not allowed",
-      "mediaReference": "Resource locator metadata",
+    "mediaItem": "Media attachment",
+    "mediaNotRecovered": "Local evidence not linked",
+    "localMediaLinkedEncrypted": "Local encrypted cache linked; image key unavailable",
+    "localMediaLinkedUnavailable": "Local media cache linked, but image recovery failed",
+    "localMediaUnlinked": "Local evidence not linked",
+    "externalMediaWarning": "External network image candidate, unverified (not local evidence)",
+    "externalMediaUnavailable": "External image candidate unavailable or rejected by source server",
+    "externalMediaBlocked": "External source is not allowed",
+    "mediaReference": "Resource locator metadata",
     "opaqueLocator": "View opaque locator",
     "likes": "Likes",
     "replyTo": "replied to {{name}}",
@@ -1349,5 +2535,312 @@
     "unknownSource": "Unknown source",
     "noTextContent": "No displayable text",
     "type": "Type {{type}}"
+  },
+  "correlation": {
+    "workspace": {
+      "title": "Correlation Workspace",
+      "refresh": "Refresh correlation",
+      "searchPlaceholder": "Search lead titles, paths, or signals",
+      "toggleAllAria": "Show all leads",
+      "toggleHighConfidenceAria": "Show only high-confidence leads",
+      "toggleReviewAria": "Show only leads needing review",
+      "confidenceAll": "All confidence levels",
+      "summaryCount": "Showing {{shown}} / {{total}} leads",
+      "summaryHighConfidence": "High confidence {{count}}",
+      "summaryReview": "Needs review {{count}}",
+      "generatedAt": "Generated at {{time}}",
+      "leadsTitle": "Lead Overview",
+      "leadsEmpty": "No correlation leads match the current filters.",
+      "clustersTitle": "Evidence Aggregation",
+      "clustersEmpty": "No aggregation clusters match the current filters.",
+      "detailEmpty": "No lead details available to expand.",
+      "nodesTitle": "Node Distribution",
+      "boundariesTitle": "Current Rule Boundaries",
+      "boundarySourceObject": "Currently covers source objects, path matching, name matching, and Recycle Bin original-path recovery.",
+      "boundaryNavigational": "Leads support investigator navigation and do not assert conclusions.",
+      "boundaryReviewRequired": "Name-based and timeline-based hits still require jumping back to the original event or artifact field for review."
+    },
+    "metrics": {
+      "ruleFamilies": "Rule families",
+      "coveredFamilies": "Covered families",
+      "highConfidence": "High confidence"
+    },
+    "lead": {
+      "detailTitle": "Lead Details",
+      "metricPrimaryFile": "Primary file",
+      "metricSupportingNodes": "Supporting nodes",
+      "metricMatchSignals": "Match signals",
+      "metricSourceCategory": "Source category",
+      "metricCaveatCount": "Caveats",
+      "primaryFileNode": "Primary file node",
+      "noSupportingNodes": "No additional supporting nodes.",
+      "relatedEdges": "Related edges",
+      "noEdges": "This lead has no related edges to display.",
+      "relatedClusters": "Related clusters",
+      "noRelatedClusters": "No clusters share this primary file.",
+      "noProvenance": "No provenance to display.",
+      "coverageTitle": "Rule Family Coverage",
+      "coverageDescription": "Shows the family coverage, lead strength, and match signals produced by the correlation snapshot.",
+      "hitsEmpty": "No hit signals from this family to display.",
+      "warningSeparator": "; "
+    },
+    "cluster": {
+      "viewPrimaryFile": "View primary file"
+    }
+  },
+  "v2Governance": {
+    "workbench": {
+      "title": "V2 Governance Workbench",
+      "subtitle": "Trusted Verification / Support Matrix / Benchmark / Security Governance / Release Scorecard",
+      "loadingSnapshot": "Loading the V2 governance snapshot...",
+      "loadingCorrelation": "Loading the correlation snapshot...",
+      "snapshotUnavailable": "This case has not returned a governance snapshot yet."
+    },
+    "scorecard": {
+      "title": "Release Scorecard",
+      "overall": "Overall",
+      "dimensionCorrelation": "Correlation Analysis",
+      "dimensionPerformance": "Performance Stability",
+      "runtimeSignals": "Runtime Signals",
+      "evidenceSources": "Evidence sources",
+      "hashed": "Hashed",
+      "pendingHash": "Pending hash",
+      "reportCount": "Reports",
+      "correlationLeads": "Correlation leads",
+      "highConfidenceLeads": "High-confidence leads",
+      "reviewLeads": "Leads needing review",
+      "correlationClusters": "Correlation clusters",
+      "highConfidenceFamilies": "High-confidence families",
+      "runningJobs": "Running jobs",
+      "partialJobs": "Partially completed jobs",
+      "failedJobs": "Failed jobs",
+      "warningDataSources": "warning evidence sources",
+      "snapshotStatus": "Correlation snapshot status: {{status}}",
+      "snapshotGenerated": "Generated",
+      "snapshotNotGenerated": "Not generated",
+      "familyEmpty": "No rule hits from this family to display.",
+      "breakdownTitle": "Score Breakdown",
+      "noDeductions": "No deductions",
+      "blockers": "Blockers",
+      "noBlockers": "No blockers",
+      "residualRisks": "Residual risks",
+      "noResidualRisks": "No residual risks"
+    },
+    "security": {
+      "title": "Security Governance",
+      "exportOverwriteDefault": "Export overwrite default",
+      "exportPathGuard": "Export path guard",
+      "stdioWhitelist": "stdio whitelist",
+      "sseRestriction": "SSE protocol restriction",
+      "sseNotTightened": "Not tightened",
+      "embeddedCredentials": "Embedded credential blocking",
+      "mediaHandleScope": "Media handle scope",
+      "mediaNotScoped": "Not scoped",
+      "errorRedaction": "Error redaction",
+      "auditLogRequired": "Audit log required",
+      "auditEventCount": "Audit events",
+      "sensitiveAuditEventCount": "Sensitive events",
+      "emptyAudit": "This case has no security-related audit records yet.",
+      "toggleOn": "On"
+    },
+    "taxonomy": {
+      "title": "Error Classification and Redaction",
+      "redactionRule": "Redaction rule: "
+    },
+    "releaseGate": {
+      "title": "Release Gates",
+      "evidence": "Evidence: "
+    },
+    "overview": {
+      "gaChains": "GA chains",
+      "betaChains": "Beta chains",
+      "documentedLimits": "Documented limits",
+      "factSources": "Fact sources",
+      "runningJobs": "Running jobs",
+      "totalScore": "Total score"
+    },
+    "factSources": {
+      "title": "Governance Fact Sources"
+    },
+    "lastVerifiedAt": "Last verified: {{time}}",
+    "runtimeResults": {
+      "title": "Latest Governance Run Results"
+    },
+    "verification": {
+      "title": "Trusted Verification",
+      "resultPassed": "Passed",
+      "resultPartial": "Partially passed",
+      "resultPending": "Pending verification",
+      "maturity": "Maturity",
+      "guaranteeLevel": "Guarantee level",
+      "fixtureTier": "Sample tier",
+      "sampleCount": "Sample count"
+    },
+    "benchmark": {
+      "title": "Benchmark Baseline",
+      "hostProfile": "Host profile",
+      "lastVerified": "Last verified",
+      "requiredCovered": "Required checks covered",
+      "requiredMissing": "Required checks missing",
+      "exceeded": "Over-threshold checks",
+      "memoryPeak": "Peak memory {{value}}",
+      "notMeasured": "Not measured",
+      "thresholdP95": "Threshold p95",
+      "measuredP95": "Measured p95"
+    },
+    "supportMatrix": {
+      "title": "Support Matrix Details"
+    },
+    "limitations": {
+      "title": "Known Limitations"
+    }
+  },
+  "analysisProgress": {
+    "title": "Data Source Extraction Progress"
+  },
+  "analysisPanels": {
+    "status": {
+      "candidateFound": "Candidate found",
+      "parseFailed": "Parse failed"
+    },
+    "progress": {
+      "idle": "Waiting"
+    },
+    "generatedAt": "Generated: {{value}}",
+    "fieldProvenance": {
+      "title": "Field-level provenance",
+      "field": "Field",
+      "emptyTitle": "No field-level provenance",
+      "emptyDescription": "Field-level Registry provenance is unavailable."
+    },
+    "systemInfo": {
+      "unavailable": "System information is unavailable.",
+      "parserFailures": "Registry/EVTX candidate files were found, but some parsers failed; the provenance below lists the specific reasons.",
+      "computerName": "Computer name",
+      "buildNumber": "Build number",
+      "registeredOwner": "Registered owner",
+      "timezone": "Time zone",
+      "lastShutdownTime": "Last shutdown time",
+      "provenanceTitle": "Parse provenance",
+      "provenanceFallback": "Registry/EVTX parse provenance is unavailable.",
+      "networkAdapters": "Network adapters",
+      "networkAdaptersEmpty": "No network adapters were parsed.",
+      "bootHistory": "Boot/shutdown history",
+      "bootHistoryEmpty": "No boot/shutdown history was parsed."
+    },
+    "empty": {
+      "noCaseTitle": "Create or open a case first",
+      "noCaseDescription": "Data source analysis depends on the file catalog and data source records of the current case. No analysis request is sent while no case is selected."
+    },
+    "classification": {
+      "unavailable": "The evidence classification summary is unavailable.",
+      "title": "Evidence semantic classification",
+      "description": "Candidates come from file-tree metadata; structured extraction reads Registry, browser history, and email candidates and returns auditable sources.",
+      "running": "Classifying...",
+      "run": "Start evidence classification",
+      "statFamilies": "Evidence families",
+      "statCandidateFiles": "Candidate files",
+      "statCandidateSize": "Total candidate size",
+      "statParsedArtifacts": "Parsed artifacts",
+      "metricCandidateCount": "{{count}}",
+      "metricArtifactCount": "{{count}}",
+      "noData": "No evidence semantic classification data was found.",
+      "noSources": "This evidence family has no representative source files."
+    },
+    "report": {
+      "title": "Generate analysis report",
+      "download": "Download Markdown report"
+    },
+    "subcategory": {
+      "fileName": "File name",
+      "magicType": "Magic type",
+      "source": "Basis",
+      "magic": "Magic",
+      "inferred": "Inferred",
+      "sampled": "sampled {{count}}",
+      "emptyTitle": "No files",
+      "emptyDescription": "This subcategory has no sample files to display right now."
+    },
+    "countWithSize": "{{count}} · {{size}}",
+    "board": {
+      "unavailable": "File classification data is unavailable.",
+      "totalFiles": "Total files",
+      "totalSize": "Total file size",
+      "magicClassified": "Magic identified",
+      "metadataClassified": "Metadata inferred",
+      "groupCount": "Category groups",
+      "empty": "No classifiable files were found."
+    },
+    "email": {
+      "attachments": "Attachments",
+      "unavailable": "Email extraction results are unavailable.",
+      "total": "Emails",
+      "withAttachments": "With attachments",
+      "emptyTitle": "No email messages",
+      "emptyDescription": "Supports EML/EMLX/MBOX/PST/OST email parsing: header fields, body, attachments, Cc/Bcc, Message-ID, References, container path, and folder path.",
+      "attachmentsTitle": "Attachments ({{count}})",
+      "tabPlain": "Plain text",
+      "rawHeaders": "Raw headers ({{count}})",
+      "noBody": "No body content",
+      "noHtml": "No HTML content"
+    },
+    "bootLabels": {
+      "operatingSystemStarted": "Operating system started",
+      "operatingSystemShutdown": "Operating system shutdown started",
+      "eventLogStarted": "Event Log service started",
+      "eventLogStopped": "Event Log service stopped",
+      "unexpectedShutdown": "Unexpected shutdown reported",
+      "plannedShutdown": "Shutdown or restart initiated"
+    },
+    "wechat": {
+      "unknownType": "Unknown type"
+    }
+  },
+  "preview": {
+    "dialogTitle": "File Preview",
+    "tabs": {
+      "hex": "Hex",
+      "text": "Text",
+      "preview": "Preview",
+      "metadata": "Metadata"
+    },
+    "hex": {
+      "fullMode": "Full hex preview",
+      "chunkedMode": "Paged read-only browsing",
+      "loaded": "Loaded",
+      "jump": "Jump",
+      "chunkedHint": "Paged read-only browsing with vertical scrolling and offset jumps; the whole file is never loaded at once.",
+      "fullHint": "Full hex preview; scroll vertically to browse the entire content."
+    },
+    "document": {
+      "loading": "Loading document preview...",
+      "truncated": "(Content truncated to the preview limit)",
+      "empty": "No readable text was extracted",
+      "tableEmptyTitle": "Empty table",
+      "tableEmptyDescription": "This section has no data rows to display."
+    },
+    "image": {
+      "loading": "Loading image preview..."
+    },
+    "media": {
+      "loading": "Loading {{type}} preview...",
+      "rangeBanner": "Controlled chunked preview: {{bytes}} read; extract the file to play it in full.",
+      "protocolBanner": "Controlled streaming preview: served through evidence-media range reads without exposing host evidence paths.",
+      "largeTitleProtocol": "Large {{type}} uses a controlled streaming preview",
+      "largeTitleChunked": "Large {{type}} uses a controlled chunked preview",
+      "largeDetailProtocol": "Content is served on demand through the controlled evidence-media protocol with range reads; if the player does not support the protocol, extract the file and open it in a local player.",
+      "largeDetailChunked": "Only the first {{bytes}} are read for a safe preview; extract the file with \"Extract File\" on the right and open it in a local player for full playback."
+    },
+    "selectMedia": "Select an image, video, or audio file to show a preview",
+    "binaryText": "Binary file; text preview is not available",
+    "selectText": "Select a text file to show a preview"
+  },
+  "tree": {
+    "filterPlaceholder": "Filter directories...",
+    "clear": "Clear"
+  },
+  "caseActions": {
+    "deleteCaseFailed": "Failed to delete case: {{message}}",
+    "deleteDataSourceFailed": "Failed to delete data source: {{message}}"
   }
 }

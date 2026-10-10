@@ -61,6 +61,10 @@ export const projectionQueryKeys = {
   analysis: ['analysis'] as const,
   jobWarnings: ['jobs', 'warnings'] as const,
   jobTrace: ['jobs', 'trace'] as const,
+  graph: ['graph'] as const,
+  linuxEvidenceSets: ['linux-evidence-sets'] as const,
+  linuxEvidenceSetSummary: ['linux-evidence-set-summary'] as const,
+  linuxEvidenceSetEvents: ['linux-evidence-set-events'] as const,
 } as const;
 
 type ProjectionKey = keyof typeof projectionQueryKeys;
@@ -75,6 +79,10 @@ const importProjectionKeys: ProjectionKey[] = [
   'artifacts',
   'search',
   'analysis',
+  'graph',
+  'linuxEvidenceSets',
+  'linuxEvidenceSetSummary',
+  'linuxEvidenceSetEvents',
 ];
 
 const postJobProjectionKeys: ProjectionKey[] = [

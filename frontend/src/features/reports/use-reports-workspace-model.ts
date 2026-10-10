@@ -14,6 +14,7 @@ import {
   type ReportExportFormat,
 } from '@/features/reports/hooks';
 import type { ExportScope } from '@/types/models';
+import i18n from '@/i18n';
 
 const REPORT_EXPORT_FORMATS: readonly ReportExportFormat[] = ['html', 'csv', 'json'];
 
@@ -61,10 +62,10 @@ export function useReportsWorkspaceModel() {
       { format: selectedFormat, scope: exportScope },
       {
         onSuccess: (outputPath) => {
-          toast.success('报告生成成功', { description: outputPath });
+          toast.success(i18n.t('reports.exportSuccess'), { description: outputPath });
         },
         onError: (error: Error) => {
-          toast.error('报告生成失败', { description: error.message });
+          toast.error(i18n.t('reports.exportFailed'), { description: error.message });
         },
       },
     );

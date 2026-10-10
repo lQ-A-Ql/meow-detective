@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, BarChart3, CheckCircle2, Database } from 'lucide-react';
 import type {
   ReleaseScorecard,
@@ -38,15 +39,17 @@ export function ReleaseScorecardPanel({
   scorecard: ReleaseScorecard;
   runtimeSummary: V2GovernanceSnapshot['runtimeSignals'];
 }) {
+  const { t } = useTranslation();
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <BarChart3 size={16} />
-        发布评分卡
+        {t('v2Governance.scorecard.title')}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
         <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
-          <div className="text-[11px] uppercase tracking-wider text-forensics-muted-light">总评</div>
+          <div className="text-[11px] uppercase tracking-wider text-forensics-muted-light">{t('v2Governance.scorecard.overall')}</div>
           <div className="mt-2 flex items-end gap-3">
             <div className="text-[40px] font-light text-forensics-text">{scorecard.totalScore}</div>
             <div className="mb-1 rounded-none border border-forensics-border px-2 py-0.5 font-mono text-[12px] text-forensics-text-tertiary">
@@ -54,10 +57,10 @@ export function ReleaseScorecardPanel({
             </div>
           </div>
           <div className="mt-4 space-y-2">
-            <Metric label="可信验证" value={scorecard.verificationScore.toString()} />
-            <Metric label="关联分析" value={scorecard.correlationScore.toString()} />
-            <Metric label="性能稳定性" value={scorecard.performanceScore.toString()} />
-            <Metric label="安全治理" value={scorecard.securityScore.toString()} />
+            <Metric label={t('v2Governance.verification.title')} value={scorecard.verificationScore.toString()} />
+            <Metric label={t('v2Governance.scorecard.dimensionCorrelation')} value={scorecard.correlationScore.toString()} />
+            <Metric label={t('v2Governance.scorecard.dimensionPerformance')} value={scorecard.performanceScore.toString()} />
+            <Metric label={t('v2Governance.security.title')} value={scorecard.securityScore.toString()} />
           </div>
         </div>
 
@@ -65,27 +68,31 @@ export function ReleaseScorecardPanel({
           <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
             <div className="mb-3 flex items-center gap-2 text-[12px] font-light text-forensics-text">
               <Database size={14} />
-              运行信号
+              {t('v2Governance.scorecard.runtimeSignals')}
             </div>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Metric label="证据源" value={runtimeSummary.dataSourceCount.toString()} />
-              <Metric label="已哈希" value={runtimeSummary.hashedDataSourceCount.toString()} />
-              <Metric label="待哈希" value={runtimeSummary.pendingHashDataSourceCount.toString()} />
-              <Metric label="报告数" value={runtimeSummary.reportCount.toString()} />
-              <Metric label="关联 Lead" value={runtimeSummary.correlationLeadCount.toString()} />
-              <Metric label="高置信 Lead" value={runtimeSummary.correlationHighConfidenceLeadCount.toString()} />
-              <Metric label="待复核 Lead" value={runtimeSummary.correlationReviewLeadCount.toString()} />
-              <Metric label="关联 Cluster" value={runtimeSummary.correlationClusterCount.toString()} />
-              <Metric label="规则家族" value={runtimeSummary.correlationRuleFamilyCount.toString()} />
-              <Metric label="已覆盖家族" value={runtimeSummary.correlationCoveredFamilyCount.toString()} />
-              <Metric label="高置信家族" value={runtimeSummary.correlationHighConfidenceFamilyCount.toString()} />
-              <Metric label="运行中任务" value={runtimeSummary.runningJobCount.toString()} />
-              <Metric label="部分完成任务" value={runtimeSummary.partialJobCount.toString()} />
-              <Metric label="失败任务" value={runtimeSummary.failedJobCount.toString()} />
-              <Metric label="warning 证据源" value={runtimeSummary.warningDataSourceCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.evidenceSources')} value={runtimeSummary.dataSourceCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.hashed')} value={runtimeSummary.hashedDataSourceCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.pendingHash')} value={runtimeSummary.pendingHashDataSourceCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.reportCount')} value={runtimeSummary.reportCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.correlationLeads')} value={runtimeSummary.correlationLeadCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.highConfidenceLeads')} value={runtimeSummary.correlationHighConfidenceLeadCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.reviewLeads')} value={runtimeSummary.correlationReviewLeadCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.correlationClusters')} value={runtimeSummary.correlationClusterCount.toString()} />
+              <Metric label={t('correlation.metrics.ruleFamilies')} value={runtimeSummary.correlationRuleFamilyCount.toString()} />
+              <Metric label={t('correlation.metrics.coveredFamilies')} value={runtimeSummary.correlationCoveredFamilyCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.highConfidenceFamilies')} value={runtimeSummary.correlationHighConfidenceFamilyCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.runningJobs')} value={runtimeSummary.runningJobCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.partialJobs')} value={runtimeSummary.partialJobCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.failedJobs')} value={runtimeSummary.failedJobCount.toString()} />
+              <Metric label={t('v2Governance.scorecard.warningDataSources')} value={runtimeSummary.warningDataSourceCount.toString()} />
             </div>
             <div className="mt-3 rounded-none border border-forensics-border-light bg-forensics-surface px-3 py-2 text-[11px] text-forensics-text-tertiary">
-              关联快照状态：{runtimeSummary.correlationSnapshotAvailable ? '已生成' : '未生成'}
+              {t('v2Governance.scorecard.snapshotStatus', {
+                status: runtimeSummary.correlationSnapshotAvailable
+                  ? t('v2Governance.scorecard.snapshotGenerated')
+                  : t('v2Governance.scorecard.snapshotNotGenerated'),
+              })}
             </div>
             <div className="mt-4 rounded-none border border-forensics-border-light bg-forensics-surface p-3">
               <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">Correlation Family Coverage</div>
@@ -100,8 +107,8 @@ export function ReleaseScorecardPanel({
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
                       <Metric label="Lead" value={item.leadCount.toString()} />
-                      <Metric label="高置信" value={item.highConfidenceLeadCount.toString()} />
-                      <Metric label="待复核" value={item.reviewLeadCount.toString()} />
+                      <Metric label={t('correlation.metrics.highConfidence')} value={item.highConfidenceLeadCount.toString()} />
+                      <Metric label={t('dashboard.status.review')} value={item.reviewLeadCount.toString()} />
                       <Metric label="Cluster" value={item.clusterCount.toString()} />
                     </div>
                     {item.sampleSignals.length > 0 ? (
@@ -111,7 +118,7 @@ export function ReleaseScorecardPanel({
                         ))}
                       </div>
                     ) : (
-                      <div className="mt-2 text-[11px] text-forensics-muted">当前没有可展示的该家族规则命中。</div>
+                      <div className="mt-2 text-[11px] text-forensics-muted">{t('v2Governance.scorecard.familyEmpty')}</div>
                     )}
                   </div>
                 ))}
@@ -120,7 +127,7 @@ export function ReleaseScorecardPanel({
           </div>
 
           <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
-            <div className="mb-3 text-[12px] font-light text-forensics-text">评分拆解</div>
+            <div className="mb-3 text-[12px] font-light text-forensics-text">{t('v2Governance.scorecard.breakdownTitle')}</div>
             <div className="space-y-3">
               {scorecard.breakdown.map((entry) => (
                 <div key={entry.dimension} className="rounded-none border border-forensics-border-light bg-forensics-surface p-3">
@@ -137,7 +144,7 @@ export function ReleaseScorecardPanel({
                       ))}
                     </div>
                   ) : (
-                    <div className="mt-2 text-[11px] text-forensics-muted">当前无扣分项</div>
+                    <div className="mt-2 text-[11px] text-forensics-muted">{t('v2Governance.scorecard.noDeductions')}</div>
                   )}
                 </div>
               ))}
@@ -147,15 +154,15 @@ export function ReleaseScorecardPanel({
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <MessageBlock
               icon={<AlertTriangle size={14} className="text-forensics-warning-text" />}
-              title="阻断项"
+              title={t('v2Governance.scorecard.blockers')}
               items={scorecard.blockers}
-              empty="当前无阻断项"
+              empty={t('v2Governance.scorecard.noBlockers')}
             />
             <MessageBlock
               icon={<CheckCircle2 size={14} className="text-forensics-success-text" />}
-              title="残余风险"
+              title={t('v2Governance.scorecard.residualRisks')}
               items={scorecard.residualRisks}
-              empty="当前无残余风险"
+              empty={t('v2Governance.scorecard.noResidualRisks')}
             />
           </div>
         </div>

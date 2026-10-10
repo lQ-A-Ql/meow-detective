@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import i18n from '@/i18n';
 import {
   forgetPersistedBitLockerKey,
   cancelBitLockerDictionaryAttack,
@@ -58,7 +59,7 @@ function safeErrorMessage(error: unknown): string {
   if (isApiErrorDto(error)) {
     return error.message;
   }
-  return 'BitLocker 操作失败，请查看错误抽屉中的详细信息。';
+  return i18n.t('fileBrowser.inspector.bitlocker.error');
 }
 
 const CATALOG_QUERY_KEYS = [

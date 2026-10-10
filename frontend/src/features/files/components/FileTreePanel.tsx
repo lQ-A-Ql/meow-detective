@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, type Ref } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { TreeConnector } from '@/components/tree/TreeConnector';
@@ -115,6 +116,7 @@ export function FileTreePanel({
   dataSources,
   FILE_BROWSER_PAGE_LIMIT,
 }: FileTreePanelProps) {
+  const { t } = useTranslation();
   const sourceMap = useMemo(() => new Map((dataSources ?? []).map((source) => [source.id, source])), [dataSources]);
   const virtualNodes = useMemo(() => filteredTreeNodes.map((node) => ({
     ...node,
@@ -150,24 +152,26 @@ export function FileTreePanel({
           isResizing ? 'bg-forensics-info-bg' : 'hover:bg-forensics-info-bg'
         }`}
         onMouseDown={onResizeStart}
-        title="拖拽调整宽度"
+        title={t('fileBrowser.tree.resizeHandle')}
       />
       <div className="h-7 shrink-0 border-b border-forensics-border flex items-center px-3 text-[10px] font-light text-forensics-text-tertiary uppercase tracking-wider bg-forensics-panel-strong">
-        目录树
+        {t('fileBrowser.tree.title')}
       </div>
       <TreeSearch onFilter={setFilterQuery} />
       <div className="flex min-h-0 flex-1 flex-col">
         {treeLoading ? (
-          <div className="px-3 py-2 text-forensics-muted-light">正在加载目录树...</div>
+          <div className="px-3 py-2 text-forensics-muted-light">{t('fileBrowser.tree.loading')}</div>
         ) : null}
         {filteredTreeNodes.length === 0 && !treeLoading ? (
           <div className="px-3 py-4 text-forensics-muted-light">
-            {filterQuery ? '没有匹配的目录。' : '导入数据源后显示目录树。'}
+            {filterQuery ? t('fileBrowser.tree.noMatches') : t('fileBrowser.tree.importPrompt')}
           </div>
         ) : null}
         {activeChildrenPage?.truncated ? (
           <div className="mx-2 mb-1 rounded-none border border-forensics-warning-border bg-forensics-warning-bg px-2 py-1 text-[10px] leading-4 text-forensics-warning-text">
-            当前目录子目录很多，仅加载前 {activeChildrenPage.limit ?? FILE_BROWSER_PAGE_LIMIT} 个；请用右侧列表或搜索继续定位。
+            {t('fileBrowser.tree.childrenTruncated', {
+              limit: activeChildrenPage.limit ?? FILE_BROWSER_PAGE_LIMIT,
+            })}
           </div>
         ) : null}
         {filteredTreeNodes.length > 0 ? <VirtualFileTree
@@ -184,7 +188,10 @@ export function FileTreePanel({
           <div className="px-2 py-2">
             <div className="flex items-center justify-between rounded-none border border-forensics-border bg-forensics-surface px-2 py-1.5 text-[10px] text-forensics-muted">
               <span>
-                已加载 {activeTreeChildrenLoaded} / {activeChildrenPage?.totalCount ?? activeTreeChildrenLoaded} 个子目录
+                {t('fileBrowser.tree.childrenLoaded', {
+                  loaded: activeTreeChildrenLoaded,
+                  total: activeChildrenPage?.totalCount ?? activeTreeChildrenLoaded,
+                })}
               </span>
               <Button
                 type="button"
@@ -194,7 +201,7 @@ export function FileTreePanel({
                 onClick={loadMoreActiveTreeChildren}
                 data-testid="load-more-tree-children"
               >
-                加载更多子目录
+                {t('fileBrowser.tree.loadMore')}
               </Button>
             </div>
           </div>

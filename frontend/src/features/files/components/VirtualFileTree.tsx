@@ -135,12 +135,16 @@ export function VirtualFileTree({
                 className="h-full max-w-full"
                 style={{ paddingLeft: `${8 + node.depth * 16}px` }}
               >
-                {/* 层级连接线 */}
+                {/*
+                 * 层级连接线
+                 */}
                 {node.depth > 0 && (
                   <TreeConnector depth={node.depth} isLast={isLast} />
                 )}
 
-                {/* 展开/折叠箭头 */}
+                {/*
+                 * 展开/折叠箭头
+                 */}
                 {node.hasChildren ? (
                   node.expanded ? (
                     <ChevronDown size={12} className="text-forensics-muted-light shrink-0" />
@@ -151,7 +155,9 @@ export function VirtualFileTree({
                   <span className="w-3 shrink-0" />
                 )}
 
-                {/* 文件类型图标 */}
+                {/*
+                 * 文件类型图标
+                 */}
                 <FileIconWithStatusOverlay
                   name={node.name}
                   entryType={node.entryType}
@@ -163,10 +169,14 @@ export function VirtualFileTree({
                   size={12}
                 />
 
-                {/* 文件名 */}
+                {/*
+                 * 文件名
+                 */}
                 <span className="min-w-0 flex-1 truncate">{node.name}</span>
 
-                {/* 状态标签 */}
+                {/*
+                 * 状态标签
+                 */}
                 {node.status && node.status !== 'ready' ? (
                   <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-forensics-muted-light">
                     {node.status}

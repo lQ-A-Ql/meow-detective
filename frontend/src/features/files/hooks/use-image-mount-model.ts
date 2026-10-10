@@ -133,13 +133,13 @@ export function useImageMountModel() {
   const mountMutation = useMutation({
     mutationFn: () => {
       if (!selectedSourceId) {
-        throw new Error('请选择数据源。');
+        throw new Error(t('fileBrowser.mount.selectSourceError'));
       }
       if (mountMode === 'physicalDisk') {
         return mountPhysicalImage({ dataSourceId: selectedSourceId });
       }
       if (!selectedPartitionIndex) {
-        throw new Error('请选择分区。');
+        throw new Error(t('fileBrowser.mount.selectPartitionError'));
       }
       return mountImage({
         dataSourceId: selectedSourceId,

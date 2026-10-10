@@ -177,6 +177,13 @@ export function useFileHandle(fileId?: string, enabled = true) {
   return query;
 }
 
+/**
+ * Chunks retained per open hex viewer. Each entry keeps 64 KiB of raw bytes plus its
+ * formatted lines, and the hook's state survives preview-tab switches, so the map needs an
+ * explicit bound (chunks furthest from the viewed offset are evicted first).
+ */
+const MAX_RETAINED_HEX_CHUNKS = 8;
+
 export function useFileViewer(fileId?: string, enabled = true) {
   const preview = useMemo(() => getPreviewSettings(), []);
   const owner = usePreviewHandleOwner(`${fileId ?? ''}:viewer`);
@@ -288,7 +295,21 @@ export function useFileViewer(fileId?: string, enabled = true) {
       if (loadedFileIdRef.current !== requestedFileId) {
         return;
       }
-      setLoadedChunks((current) => ({ ...current, [alignedOffset]: range }));
+      setLoadedChunks((current) => {
+        const next = { ...current, [alignedOffset]: range };
+        const offsets = Object.keys(next).map(Number);
+        if (offsets.length <= MAX_RETAINED_HEX_CHUNKS) {
+          return next;
+        }
+        const retained = new Set(
+          offsets
+            .sort((a, b) => Math.abs(a - alignedOffset) - Math.abs(b - alignedOffset))
+            .slice(0, MAX_RETAINED_HEX_CHUNKS),
+        );
+        return Object.fromEntries(
+          offsets.filter((offset) => retained.has(offset)).map((offset) => [offset, next[offset]]),
+        ) as Record<number, ViewerRangeResponse>;
+      });
       setLoadedRanges((current) =>
         mergeLoadedRanges(current, { start: alignedOffset, end: alignedOffset + length }),
       );

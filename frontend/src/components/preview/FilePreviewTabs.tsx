@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -71,15 +72,16 @@ function LargeMediaFallback({
   totalBytes,
   protocol,
 }: {
-  mediaType: '视频' | '音频';
+  mediaType: 'video' | 'audio';
   previewBytes?: number;
   totalBytes?: number;
   protocol?: boolean;
 }) {
-  const title = protocol ? `大${mediaType}使用受控流式预览` : `大${mediaType}使用受控分块预览`;
-  const detail = protocol
-    ? '当前通过 evidence-media 受控协议提供按需 Range 读取；若播放器不支持该协议，可提取文件后在本机播放器查看。'
-    : `当前只读取首个 ${formatBytes(previewBytes)} 片段进行安全预览；完整播放需要先使用右侧"提取文件"导出后在本机播放器查看。`;
+  const { t } = useTranslation();
+  const titleKey = protocol ? 'preview.media.largeTitleProtocol' : 'preview.media.largeTitleChunked';
+  const detailKey = protocol ? 'preview.media.largeDetailProtocol' : 'preview.media.largeDetailChunked';
+  const title = t(titleKey, { type: mediaType === 'video' ? t('media.video') : t('media.audio') });
+  const detail = t(detailKey, protocol ? { bytes: formatBytes(previewBytes) } : undefined);
   return (
     <div className="flex h-full items-center justify-center px-6 text-center text-forensics-text-tertiary">
       <div className="max-w-md space-y-2">
@@ -103,6 +105,7 @@ function HexPreviewContent({
   FilePreviewTabsProps,
   'viewer' | 'onHexJumpInputChange' | 'onHexJump' | 'onLoadNextHexRange' | 'onLoadPreviousHexRange'
 >) {
+  const { t } = useTranslation();
   const [inspectorExpanded, setInspectorExpanded] = useState(false);
   const handleNeedMoreRange = useCallback(
     (direction: 'previous' | 'next') => {
@@ -120,7 +123,7 @@ function HexPreviewContent({
   }, [viewer?.handle.handleId]);
 
   if (!viewer || (viewer.rawBytes.length === 0 && viewer.lines.length === 0)) {
-    return <div className="text-forensics-muted">选择文件后显示十六进制预览。</div>;
+    return <div className="text-forensics-muted">{t('viewer.hex.empty')}</div>;
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -148,10 +151,10 @@ function HexPreviewContent({
         >
           <div className="flex min-w-0 items-center gap-3">
             <span className="font-light text-forensics-text">
-              {viewer.mode === 'full' ? '完整 Hex 预览' : '分段只读浏览'}
+              {viewer.mode === 'full' ? t('preview.hex.fullMode') : t('preview.hex.chunkedMode')}
             </span>
             <span>
-              已加载{' '}
+              {t('preview.hex.loaded')}{' '}
               {formatBytes(
                 viewer.loadedRanges.reduce((total, range) => total + (range.end - range.start), 0),
               )}{' '}
@@ -180,13 +183,13 @@ function HexPreviewContent({
                   void onHexJump();
                 }}
               >
-                跳转
+                {t('preview.hex.jump')}
               </Button>
             </div>
             <div className="mt-2">
               {viewer.mode === 'chunked'
-                ? '分段只读浏览，支持纵向滚动与 offset 跳转，不会一次性加载整个文件。'
-                : '完整 Hex 预览，可直接纵向滚动浏览全部内容。'}
+                ? t('preview.hex.chunkedHint')
+                : t('preview.hex.fullHint')}
             </div>
           </div>
         ) : null}
@@ -196,6 +199,7 @@ function HexPreviewContent({
 }
 
 function DocumentSectionBody({ section }: { section: DocumentSection }) {
+  const { t } = useTranslation();
   const table = useMemo(() => {
     if (!section.table) return undefined;
     const columns: DenseColumn<{ key: string; cells: string[] }>[] = section.table.columns.map(
@@ -222,8 +226,8 @@ function DocumentSectionBody({ section }: { section: DocumentSection }) {
           getRowKey={(row) => row.key}
           horizontalScroll
           minColumnWidth={140}
-          emptyTitle="空表格"
-          emptyDescription="该段没有可展示的数据行。"
+          emptyTitle={t('preview.document.tableEmptyTitle')}
+          emptyDescription={t('preview.document.tableEmptyDescription')}
         />
       </DenseDataTableFrame>
     );
@@ -240,6 +244,7 @@ function DocumentPreviewContent({
 }: {
   documentPreview: DocumentPreviewResponse;
 }) {
+  const { t } = useTranslation();
   return (
     <ScrollArea className="h-full" viewportClassName="px-3 py-2">
       <div className="relative isolate min-h-full">
@@ -253,7 +258,7 @@ function DocumentPreviewContent({
               {documentPreview.kind}
             </span>
             <span>{documentPreview.summary}</span>
-            {documentPreview.truncated ? <span>（内容已按预览上限截断）</span> : null}
+            {documentPreview.truncated ? <span>{t('preview.document.truncated')}</span> : null}
           </div>
           {documentPreview.warnings?.length ? (
             <div className="mb-2 text-[10px] text-forensics-warning-text">
@@ -264,7 +269,7 @@ function DocumentPreviewContent({
           ) : null}
           {documentPreview.sections.length === 0 ? (
             <div className="flex h-32 items-center justify-center text-forensics-muted-light">
-              未提取到可读文本内容
+              {t('preview.document.empty')}
             </div>
           ) : (
             documentPreview.sections.map((section, index) => (
@@ -291,7 +296,8 @@ function MediaPreviewContent({
   mediaUrl: MediaPreview | null | undefined;
   fileName?: string;
 }) {
-  const label = mediaType === 'video' ? '视频' : '音频';
+  const { t } = useTranslation();
+  const label = mediaType === 'video' ? t('media.video') : t('media.audio');
   const Viewer = mediaType === 'video' ? VideoViewer : AudioViewer;
   if (mediaUrl?.url) {
     const player = <Viewer src={mediaUrl.url} mimeType={mediaUrl.mimeType} fileName={fileName} />;
@@ -300,7 +306,7 @@ function MediaPreviewContent({
         <div className="flex h-full flex-col">
           <div className="min-h-0 flex-1">{player}</div>
           <div className="border-t border-forensics-border bg-forensics-panel px-3 py-1 text-[10px] text-forensics-muted">
-            受控分块预览: 已读取 {formatBytes(mediaUrl.previewBytes)}，完整播放请提取文件后查看。
+            {t('preview.media.rangeBanner', { bytes: formatBytes(mediaUrl.previewBytes) })}
           </div>
         </div>
       );
@@ -310,7 +316,7 @@ function MediaPreviewContent({
         <div className="flex h-full flex-col">
           <div className="min-h-0 flex-1">{player}</div>
           <div className="border-t border-forensics-border bg-forensics-panel px-3 py-1 text-[10px] text-forensics-muted">
-            受控流式预览: evidence-media range 读取，不暴露宿主证据路径。
+            {t('preview.media.protocolBanner')}
           </div>
         </div>
       );
@@ -320,7 +326,7 @@ function MediaPreviewContent({
   if (mediaUrl?.canReadRanges || mediaUrl?.handleId) {
     return (
       <LargeMediaFallback
-        mediaType={label}
+        mediaType={mediaType}
         previewBytes={mediaUrl.previewBytes}
         totalBytes={mediaUrl.size}
         protocol={mediaUrl.previewMode === 'protocol'}
@@ -329,7 +335,7 @@ function MediaPreviewContent({
   }
   return (
     <div className="flex h-full items-center justify-center text-forensics-muted-light">
-      加载{label}预览...
+      {t('preview.media.loading', { type: label })}
     </div>
   );
 }
@@ -344,6 +350,7 @@ function KindPreviewContent({
   FilePreviewTabsProps,
   'previewKind' | 'imagePreview' | 'mediaUrl' | 'documentPreview' | 'selectedFile'
 >) {
+  const { t } = useTranslation();
   if (previewKind === 'image') {
     if (imagePreview?.dataUrl) {
       return (
@@ -356,7 +363,7 @@ function KindPreviewContent({
     }
     return (
       <div className="flex h-full items-center justify-center text-forensics-muted-light">
-        加载图片预览...
+        {t('preview.image.loading')}
       </div>
     );
   }
@@ -366,7 +373,7 @@ function KindPreviewContent({
     }
     return (
       <div className="flex h-full items-center justify-center text-forensics-muted-light">
-        加载文档预览...
+        {t('preview.document.loading')}
       </div>
     );
   }
@@ -381,16 +388,13 @@ function KindPreviewContent({
   }
   return (
     <div className="flex h-full items-center justify-center text-forensics-muted-light">
-      选择图片、视频或音频文件后显示预览
+      {t('preview.selectMedia')}
     </div>
   );
 }
 
-/**
- * Shared viewer-tab preview surface (hex / text / kind preview / metadata).
- * Used by the file-browser bottom panel and the classification preview dialog
- * so both stay on the same public primitives.
- */
+/** Shared viewer-tab preview surface (hex / text / kind preview / metadata) for the
+ * file-browser bottom panel and the classification preview dialog. */
 export function FilePreviewTabs({
   viewerTab,
   setViewerTab,
@@ -410,6 +414,7 @@ export function FilePreviewTabs({
   previewError,
   onRetryPreview,
 }: FilePreviewTabsProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex h-full min-h-0 flex-col bg-forensics-surface">
       {previewError ? <ViewerError error={previewError} onRetry={onRetryPreview} /> : null}
@@ -429,7 +434,7 @@ export function FilePreviewTabs({
           tabs={[
             {
               value: 'hex',
-              label: '十六进制',
+              label: t('preview.tabs.hex'),
               contentClassName: 'min-h-0 flex-1 overflow-hidden p-0 text-[11px]',
               content: (
                 <HexPreviewContent
@@ -443,7 +448,7 @@ export function FilePreviewTabs({
             },
             {
               value: 'text',
-              label: '文本',
+              label: t('preview.tabs.text'),
               content:
                 textPreview && !textPreview.isBinary ? (
                   <TextViewer
@@ -454,13 +459,13 @@ export function FilePreviewTabs({
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center text-forensics-muted-light">
-                    {textPreview?.isBinary ? '二进制文件，无法预览文本' : '选择文本文件后显示预览'}
+                    {textPreview?.isBinary ? t('preview.binaryText') : t('preview.selectText')}
                   </div>
                 ),
             },
             {
               value: 'preview',
-              label: '预览',
+              label: t('preview.tabs.preview'),
               content: (
                 <KindPreviewContent
                   previewKind={previewKind}
@@ -473,7 +478,7 @@ export function FilePreviewTabs({
             },
             {
               value: 'metadata',
-              label: '元数据',
+              label: t('preview.tabs.metadata'),
               content: (
                 <div className="space-y-2 font-mono text-[11px] text-forensics-text-secondary">
                   <div>handle_id: {fileHandle?.handleId ?? viewer?.handle.handleId ?? '-'}</div>

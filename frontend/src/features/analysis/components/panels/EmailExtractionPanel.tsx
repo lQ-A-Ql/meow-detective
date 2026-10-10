@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   EmailAttachment,
   EmailExtractionSummary,
@@ -23,12 +24,16 @@ import {
   Paperclip,
 } from 'lucide-react';
 
-// Module-level columns: stable reference keeps DenseDataTable row memoization
-// intact across selection/renders.
-const columns: DenseColumn<EmailMessage>[] = [
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+// Column titles are translated, so the array is built from `t` and memoized in
+// the panel; the stable reference keeps DenseDataTable row memoization intact
+// across selection/renders.
+function emailColumns(t: Translate): DenseColumn<EmailMessage>[] {
+  return [
   {
     key: 'sentAt',
-    title: '时间',
+    title: t('linuxArtifacts.columns.timestamp'),
     className: 'w-[150px]',
     render: (row) => row.sentAt ?? '-',
   },
@@ -64,7 +69,7 @@ const columns: DenseColumn<EmailMessage>[] = [
   },
   {
     key: 'attachmentCount',
-    title: '附件',
+    title: t('analysisPanels.email.attachments'),
     className: 'w-[100px]',
     render: (row) =>
       row.attachmentCount > 0 ? (
@@ -88,13 +93,16 @@ const columns: DenseColumn<EmailMessage>[] = [
     className: 'min-w-[140px]',
     render: (row) => row.containerPath || '-',
   },
-];
+  ];
+}
 
 export function EmailExtractionPanel({
   summary,
 }: {
   summary?: EmailExtractionSummary;
 }) {
+  const { t } = useTranslation();
+  const columns = useMemo(() => emailColumns(t), [t]);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [showHeaders, setShowHeaders] = useState(false);
 
@@ -103,7 +111,7 @@ export function EmailExtractionPanel({
     total: 0,
     messages: [],
     generatedAt: '',
-    warnings: ['邮件提取结果暂不可用。'],
+    warnings: [t('analysisPanels.email.unavailable')],
   };
 
   const selectedMessage = info.messages.find(
@@ -119,15 +127,15 @@ export function EmailExtractionPanel({
 
   return (
     <ExtractionTableSection
-      title="邮件信息"
+      title={t('analysis.tabs.email')}
       status={info.status}
       generatedAt={info.generatedAt}
       warnings={info.warnings}
       stats={[
-        ['邮件数', info.total.toString()],
-        ['当前页', info.messages.length.toString()],
+        [t('analysisPanels.email.total'), info.total.toString()],
+        [t('topBar.currentPage'), info.messages.length.toString()],
         [
-          '含附件',
+          t('analysisPanels.email.withAttachments'),
           info.messages.filter((item) => item.attachmentCount > 0).length.toString(),
         ],
       ]}
@@ -139,8 +147,8 @@ export function EmailExtractionPanel({
           getRowKey={(row) => row.artifactId}
           selectedRowKey={selectedArtifactId ?? undefined}
           onRowClick={handleRowClick}
-          emptyTitle="暂无邮件信息"
-          emptyDescription="支持 EML/EMLX/MBOX/PST/OST 邮件解析：头字段、正文、附件、Cc/Bcc、Message-ID、References、容器路径与文件夹路径。"
+          emptyTitle={t('analysisPanels.email.emptyTitle')}
+          emptyDescription={t('analysisPanels.email.emptyDescription')}
         />
       </DenseDataTableFrame>
       {selectedMessage ? (
@@ -163,6 +171,7 @@ function EmailDetailCard({
   showHeaders: boolean;
   onToggleHeaders: () => void;
 }) {
+  const { t } = useTranslation();
   const hasHtml = Boolean(message.bodyHtml);
   const hasPlain = Boolean(message.bodyPlain);
   const defaultTab = hasPlain ? 'plain' : hasHtml ? 'html' : 'preview';
@@ -201,7 +210,7 @@ function EmailDetailCard({
               <KeyValueField layout="inline" label="Message Class" value={message.messageClass} />
             ) : null}
             {message.isDeleted ? (
-              <KeyValueField layout="inline" label="Deleted" value="是" />
+              <KeyValueField layout="inline" label="Deleted" value={t('common.yes')} />
             ) : null}
             {message.messageId ? (
               <KeyValueField layout="inline" label="Message-ID" value={message.messageId} mono />
@@ -229,7 +238,7 @@ function EmailDetailCard({
       {message.attachmentDetails.length > 0 ? (
         <div className="border-b border-forensics-border p-3">
           <div className="mb-2 text-[11px] font-light text-forensics-text">
-            附件 ({message.attachmentDetails.length})
+            {t('analysisPanels.email.attachmentsTitle', { count: message.attachmentDetails.length })}
           </div>
           <div className="flex flex-wrap gap-2">
             {message.attachmentDetails.map((att) => (
@@ -244,8 +253,8 @@ function EmailDetailCard({
           defaultValue={defaultTab}
           variant="compact"
           tabs={[
-            { value: 'preview', label: '预览' },
-            ...(hasPlain ? [{ value: 'plain', label: '纯文本' }] : []),
+            { value: 'preview', label: t('settings.sections.preview.title') },
+            ...(hasPlain ? [{ value: 'plain', label: t('analysisPanels.email.tabPlain') }] : []),
             ...(hasHtml ? [{ value: 'html', label: 'HTML' }] : []),
           ]}
         >
@@ -278,7 +287,7 @@ function EmailDetailCard({
             ) : (
               <ChevronDown className="size-3" />
             )}
-            原始头字段 ({message.headers.length})
+            {t('analysisPanels.email.rawHeaders', { count: message.headers.length })}
           </Button>
           {showHeaders ? <HeaderList headers={message.headers} /> : null}
         </div>
@@ -303,18 +312,20 @@ function AttachmentBadge({ attachment }: { attachment: EmailAttachment }) {
 }
 
 function BodyPreview({ text }: { text?: string }) {
+  const { t } = useTranslation();
   return (
     <ScrollArea className="max-h-[240px] rounded-none border border-forensics-border bg-forensics-surface" viewportClassName="p-3 text-[12px] leading-relaxed text-forensics-text-secondary">
-      {text?.trim() ? text : <span className="text-forensics-muted-lighter">无正文内容</span>}
+      {text?.trim() ? text : <span className="text-forensics-muted-lighter">{t('analysisPanels.email.noBody')}</span>}
     </ScrollArea>
   );
 }
 
 function HtmlPreview({ html }: { html?: string }) {
+  const { t } = useTranslation();
   if (!html) {
     return (
       <div className="rounded-none border border-forensics-border bg-forensics-surface p-3 text-[12px] text-forensics-muted-lighter">
-        无 HTML 内容
+        {t('analysisPanels.email.noHtml')}
       </div>
     );
   }

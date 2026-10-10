@@ -11,6 +11,7 @@ import {
 } from '@/lib/api/files';
 import { errorMessage, isApiErrorDto } from '@/lib/errors';
 import { saveDialog } from '@/lib/platform/dialog';
+import i18n from '@/i18n';
 import type {
   DataSourcePartition,
   DataSourceSummary,
@@ -216,10 +217,10 @@ export function useDeletedRecoveryModel(
     },
     onSuccess: (outcome) => {
       if (outcome && outcome.dataSourceId === sourceIdRef.current) {
-        toast.success(`恢复文件已导出 (${outcome.result.bytesWritten} bytes)`);
+        toast.success(i18n.t('recovery.exportSuccess', { bytes: outcome.result.bytesWritten }));
       }
     },
-    onError: (error) => toast.error(`恢复文件导出失败: ${errorMessage(error)}`),
+    onError: (error) => toast.error(i18n.t('recovery.exportFailed', { message: errorMessage(error) })),
   });
 
   const resetScanMutation = scanMutation.reset;

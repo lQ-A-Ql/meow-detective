@@ -1,3 +1,4 @@
+import i18n from '@/i18n';
 import type { PluginArtifactEntry } from '@/types/models';
 import type {
   WeChatContact,
@@ -140,7 +141,7 @@ export function mapWeChatMessages(entries: readonly PluginArtifactEntry[]): WeCh
       serverId: numberAttr(entry, 'serverId'),
       talkerTable: textAttr(entry, 'talkerTable'),
       localType: numberAttr(entry, 'localType'),
-      typeLabel: textAttr(entry, 'localTypeLabel') ?? '未知类型',
+      typeLabel: textAttr(entry, 'localTypeLabel') ?? i18n.t('analysisPanels.wechat.unknownType'),
       contentText: textAttr(entry, 'contentText'),
       contentTruncated: booleanAttr(entry, 'contentTruncated') ?? false,
       mediaKind: textAttr(entry, 'mediaKind'),

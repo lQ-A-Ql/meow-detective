@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CheckCircle2, Database, Shield } from 'lucide-react';
 import { MetricCard } from '@/components/data-display';
 import type {
@@ -78,24 +79,27 @@ function releaseGateLabel(status: ReleaseGateEntry['status']) {
 // ── Remaining panel components ──
 
 export function SecurityAuditPanel({ security }: { security: SecurityAuditSummary }) {
+  const { t } = useTranslation();
+  const on = t('v2Governance.security.toggleOn');
+  const off = t('emulationPage.launch.networkModes.off');
   const rows = [
-    ['导出默认覆盖', security.exportOverwriteDefault ? '开启' : '关闭'],
-    ['导出路径防护', security.exportPathGuardEnabled ? '开启' : '关闭'],
-    ['stdio 白名单', security.stdioCommandWhitelistEnforced ? '开启' : '关闭'],
-    ['SSE 协议限制', security.sseHttpsOnly ? 'http/https only' : '未收紧'],
-    ['嵌入凭据阻断', security.embeddedCredentialsBlocked ? '开启' : '关闭'],
-    ['媒体句柄作用域', security.mediaHandleScoped ? 'case scoped' : '未约束'],
-    ['错误脱敏', security.errorRedactionEnabled ? '开启' : '关闭'],
-    ['审计记录必填', security.auditLogRequired ? '开启' : '关闭'],
-    ['审计事件数', security.auditEventCount.toString()],
-    ['敏感事件数', security.sensitiveAuditEventCount.toString()],
+    [t('v2Governance.security.exportOverwriteDefault'), security.exportOverwriteDefault ? on : off],
+    [t('v2Governance.security.exportPathGuard'), security.exportPathGuardEnabled ? on : off],
+    [t('v2Governance.security.stdioWhitelist'), security.stdioCommandWhitelistEnforced ? on : off],
+    [t('v2Governance.security.sseRestriction'), security.sseHttpsOnly ? 'http/https only' : t('v2Governance.security.sseNotTightened')],
+    [t('v2Governance.security.embeddedCredentials'), security.embeddedCredentialsBlocked ? on : off],
+    [t('v2Governance.security.mediaHandleScope'), security.mediaHandleScoped ? 'case scoped' : t('v2Governance.security.mediaNotScoped')],
+    [t('v2Governance.security.errorRedaction'), security.errorRedactionEnabled ? on : off],
+    [t('v2Governance.security.auditLogRequired'), security.auditLogRequired ? on : off],
+    [t('v2Governance.security.auditEventCount'), security.auditEventCount.toString()],
+    [t('v2Governance.security.sensitiveAuditEventCount'), security.sensitiveAuditEventCount.toString()],
   ];
 
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <Shield size={16} />
-        安全治理
+        {t('v2Governance.security.title')}
       </div>
       <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -112,7 +116,7 @@ export function SecurityAuditPanel({ security }: { security: SecurityAuditSummar
               ))}
             </div>
           ) : (
-            <div className="text-[11px] text-forensics-muted">当前案件尚未写入安全相关审计记录。</div>
+            <div className="text-[11px] text-forensics-muted">{t('v2Governance.security.emptyAudit')}</div>
           )}
         </div>
         {security.notes.length > 0 ? (
@@ -128,11 +132,13 @@ export function SecurityAuditPanel({ security }: { security: SecurityAuditSummar
 }
 
 export function ErrorTaxonomyPanel({ entries }: { entries: ErrorTaxonomyEntry[] }) {
+  const { t } = useTranslation();
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <AlertTriangle size={16} />
-        错误分类与脱敏
+        {t('v2Governance.taxonomy.title')}
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {entries.map((entry) => (
@@ -147,7 +153,7 @@ export function ErrorTaxonomyPanel({ entries }: { entries: ErrorTaxonomyEntry[] 
               </span>
             </div>
             <div className="mt-3 text-[11px] text-forensics-text-tertiary">
-              <span className="font-light text-forensics-text">脱敏规则：</span>
+              <span className="font-light text-forensics-text">{t('v2Governance.taxonomy.redactionRule')}</span>
               {entry.redactionRule}
             </div>
             <div className="mt-3">
@@ -175,11 +181,13 @@ export function ErrorTaxonomyPanel({ entries }: { entries: ErrorTaxonomyEntry[] 
 }
 
 export function ReleaseGatePanel({ entries }: { entries: ReleaseGateEntry[] }) {
+  const { t } = useTranslation();
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <CheckCircle2 size={16} />
-        发布门禁
+        {t('v2Governance.releaseGate.title')}
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {entries.map((entry) => (
@@ -194,7 +202,7 @@ export function ReleaseGatePanel({ entries }: { entries: ReleaseGateEntry[] }) {
               </span>
             </div>
             <div className="mt-3 text-[11px]">
-              <span className="font-light">Evidence：</span>
+              <span className="font-light">{t('v2Governance.releaseGate.evidence')}</span>
               {entry.evidence}
             </div>
             <div className="mt-2 text-[11px] opacity-90">{entry.detail}</div>
@@ -206,25 +214,29 @@ export function ReleaseGatePanel({ entries }: { entries: ReleaseGateEntry[] }) {
 }
 
 export function GovernanceOverviewStrip({ snapshot }: { snapshot: V2GovernanceSnapshot }) {
+  const { t } = useTranslation();
+
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-      <OverviewCard label="GA 链路" value={snapshot.supportMatrix.gaCount.toString()} />
-      <OverviewCard label="Beta 链路" value={snapshot.supportMatrix.betaCount.toString()} />
-      <OverviewCard label="文档限制" value={snapshot.supportMatrix.documentedLimitCount.toString()} />
-      <OverviewCard label="事实源" value={snapshot.factSources.length.toString()} />
-      <OverviewCard label="运行任务" value={snapshot.runtimeSignals.runningJobCount.toString()} />
-      <OverviewCard label="部分完成" value={snapshot.runtimeSignals.partialJobCount.toString()} />
-      <OverviewCard label="总评分" value={snapshot.releaseScorecard.totalScore.toString()} />
+      <OverviewCard label={t('v2Governance.overview.gaChains')} value={snapshot.supportMatrix.gaCount.toString()} />
+      <OverviewCard label={t('v2Governance.overview.betaChains')} value={snapshot.supportMatrix.betaCount.toString()} />
+      <OverviewCard label={t('v2Governance.overview.documentedLimits')} value={snapshot.supportMatrix.documentedLimitCount.toString()} />
+      <OverviewCard label={t('v2Governance.overview.factSources')} value={snapshot.factSources.length.toString()} />
+      <OverviewCard label={t('v2Governance.overview.runningJobs')} value={snapshot.runtimeSignals.runningJobCount.toString()} />
+      <OverviewCard label={t('caseHome.jobStates.partial')} value={snapshot.runtimeSignals.partialJobCount.toString()} />
+      <OverviewCard label={t('v2Governance.overview.totalScore')} value={snapshot.releaseScorecard.totalScore.toString()} />
     </div>
   );
 }
 
 export function GovernanceFactSourcesPanel({ snapshot }: { snapshot: V2GovernanceSnapshot }) {
+  const { t } = useTranslation();
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <Database size={16} />
-        治理事实源
+        {t('v2Governance.factSources.title')}
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {snapshot.factSources.map((source) => (
@@ -238,7 +250,9 @@ export function GovernanceFactSourcesPanel({ snapshot }: { snapshot: V2Governanc
                 {source.factKind}
               </span>
             </div>
-            <div className="mt-3 text-[11px] text-forensics-muted">最近校验：{source.lastVerifiedAt}</div>
+            <div className="mt-3 text-[11px] text-forensics-muted">
+              {t('v2Governance.lastVerifiedAt', { time: source.lastVerifiedAt })}
+            </div>
             <div className="mt-3">
               <div className="text-[10px] uppercase tracking-wider text-forensics-muted-light">Derived Outputs</div>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -257,14 +271,18 @@ export function GovernanceFactSourcesPanel({ snapshot }: { snapshot: V2Governanc
 }
 
 export function GovernanceRuntimeResultsPanel({ snapshot }: { snapshot: V2GovernanceSnapshot }) {
+  const { t } = useTranslation();
+
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2 text-[14px] font-light text-forensics-text">
         <CheckCircle2 size={16} />
-        最近一次治理运行结果
+        {t('v2Governance.runtimeResults.title')}
       </div>
       <div className="rounded-none border border-forensics-border bg-forensics-surface p-4">
-        <div className="mb-4 text-[11px] text-forensics-muted">最近校验：{snapshot.runtimeResults.checkedAt}</div>
+        <div className="mb-4 text-[11px] text-forensics-muted">
+          {t('v2Governance.lastVerifiedAt', { time: snapshot.runtimeResults.checkedAt })}
+        </div>
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {snapshot.runtimeResults.checks.map((check) => (
             <div key={check.checkId} className={`rounded-none border p-4 ${releaseGateTone(check.status)}`}>
@@ -278,7 +296,7 @@ export function GovernanceRuntimeResultsPanel({ snapshot }: { snapshot: V2Govern
                 </span>
               </div>
               <div className="mt-3 text-[11px]">
-                <span className="font-light">Evidence：</span>
+                <span className="font-light">{t('v2Governance.releaseGate.evidence')}</span>
                 {check.evidence}
               </div>
               <div className="mt-2 text-[11px] opacity-90">{check.detail}</div>
@@ -301,7 +319,7 @@ export function GovernanceRuntimeResultsPanel({ snapshot }: { snapshot: V2Govern
                           </span>
                         </div>
                         <div className="mt-2">
-                          <span className="font-light">Evidence：</span>
+                          <span className="font-light">{t('v2Governance.releaseGate.evidence')}</span>
                           {subCheck.evidence}
                         </div>
                         <div className="mt-1 opacity-90">{subCheck.detail}</div>

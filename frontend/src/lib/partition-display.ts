@@ -18,7 +18,7 @@ function normalizePartitionLabel(value?: string) {
     return undefined;
   }
   const upper = text.toUpperCase();
-  if (upper.includes('RECOVERY') || text.includes('恢复')) {
+  if (upper.includes('RECOVERY') || text.includes('\u6062\u590d')) {
     return 'RECOVERY';
   }
   if (upper.includes('BITLOCKER')) {
