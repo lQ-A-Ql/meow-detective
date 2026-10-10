@@ -1,4 +1,5 @@
 import { Clock, Monitor, Network, RefreshCw, Shield } from 'lucide-react';
+import { ContextBar } from '@/components/layout/ContextBar';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { BrandEmptyState } from '@/components/brand';
@@ -140,7 +141,7 @@ export function AnalysisHeader({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 px-4 pt-2">
+    <ContextBar align="end">
       <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -164,7 +165,7 @@ export function AnalysisHeader({
           </Button>
         </div>
       </div>
-    </div>
+    </ContextBar>
   );
 }
 

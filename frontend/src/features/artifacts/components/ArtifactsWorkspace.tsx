@@ -6,7 +6,7 @@ import {
   InspectorSection,
   InspectorValue,
 } from '@/components/layout/InspectorPane';
-import { PageSubbar } from '@/components/layout/PageSubbar';
+import { ContextBar } from '@/components/layout/ContextBar';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { KeyValueField } from '@/components/data-display';
@@ -32,22 +32,22 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
-      <PageSubbar>
-        <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto px-2">
+      <ContextBar>
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {model.families.map(({ family, count }) => (
             <Button type="button" key={family} variant={model.selectedArtifactFamily === family ? 'forensicsSurface' : 'forensicsGhost'} size="xs" onClick={() => model.selectArtifactFamily(family)} className="shrink-0 whitespace-nowrap font-mono">
               {family} <span className="text-forensics-muted-lighter">{count}</span>
             </Button>
           ))}
         </div>
-      </PageSubbar>
+      </ContextBar>
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-forensics-border">
           <DenseDataTableFrame layout="fill" variant="plain">
             <DenseDataTable<ArtifactRow> rows={model.tableRows} getRowKey={(row) => row.id} selectedRowKey={model.selectedArtifact?.id} onRowClick={model.onArtifactRowClick} emptyTitle={t('artifacts.emptyTitle')} emptyDescription={t('artifacts.emptyDescription')} columns={columns} loadContextKey={model.loadContextKey} loadStateKey={model.loadStateKey} onReachEnd={model.loadNextPage} onRetryLoadMore={model.retry} hasMore={model.hasMore} loadingMore={model.loadingMore} loadMoreFailed={model.loadMoreFailed} initialLoadFailed={model.initialLoadFailed} onRetryInitialLoad={model.retry} />
           </DenseDataTableFrame>
         </div>
-        <InspectorPane title={t('artifacts.inspector.title')} subtitle={model.selectedArtifact ? `${model.selectedArtifact.artifactType} / ${model.selectedArtifact.id}` : t('artifacts.inspector.none')} widthClassName="w-80">
+        <InspectorPane kind={t('inspectorKind.artifact')} title={t('artifacts.inspector.title')} subtitle={model.selectedArtifact ? `${model.selectedArtifact.artifactType} / ${model.selectedArtifact.id}` : t('artifacts.inspector.none')} widthClassName="w-80">
           <div className="space-y-5">
             <InspectorSection title={t('artifacts.inspector.targetPath')}><InspectorValue value={String(model.selectedArtifact?.attrs.targetPath ?? '-')} mono strong /></InspectorSection>
             <InspectorSection title={t('artifacts.inspector.attributes')}><div className="space-y-2 font-mono text-[10px]"><KeyValueField label={t('artifacts.fields.driveType')} value={String(model.selectedArtifact?.attrs.driveType ?? '-')} /><KeyValueField label={t('artifacts.fields.volumeSerial')} value={String(model.selectedArtifact?.attrs.volumeSerial ?? '-')} /><KeyValueField label={t('artifacts.fields.machineId')} value={String(model.selectedArtifact?.attrs.machineId ?? '-')} /></div></InspectorSection>

@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react';
+import { ContextBar } from '@/components/layout/ContextBar';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
@@ -23,9 +24,9 @@ export function V3DashboardWorkspace({ model }: V3DashboardWorkspaceProps) {
   const { t } = useTranslation();
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-surface">
-      <div className="flex shrink-0 items-center justify-end border-b border-forensics-border bg-forensics-panel px-6 py-2">
-        <Button type="button" variant="outline" onClick={model.refresh} disabled={!model.hasCase || model.loading} className="h-8 rounded-none border-forensics-350 bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"><RefreshCw size={13} /> {t('dashboard.refresh')}</Button>
-      </div>
+      <ContextBar align="end">
+        <Button type="button" variant="outline" onClick={model.refresh} disabled={!model.hasCase || model.loading} className="h-8 rounded-none border-forensics-border bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"><RefreshCw size={13} /> {t('dashboard.refresh')}</Button>
+      </ContextBar>
       {!model.hasCase && model.currentCaseIsSuccess ? <AnalysisEmptyState /> : model.loading ? <AnalysisLoadingPanel text={t('dashboard.loading')} /> : (
         <ScrollArea className="min-h-0 flex-1" viewportClassName="space-y-6 p-6">
           {model.error ? <AnalysisErrorBanner message={errorMessage(model.error)} onRetry={model.refresh} /> : null}

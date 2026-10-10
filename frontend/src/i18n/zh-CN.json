@@ -31,7 +31,9 @@
       "pdfDocument": "PDF 文档",
       "wordDocument": "Word 文档",
       "archive": "压缩包"
-    }
+    },
+    "emptyGoToImport": "前往导入数据源",
+    "emptyGoToAnalysis": "前往数据源分析"
   },
   "mcpUi": {
     "host": {
@@ -1420,7 +1422,8 @@
       "rbd": "没有派生 RBD 数据源",
       "cephfs": "没有派生 CephFS 数据源",
       "kubernetes": "未发现 Kubernetes scope evidence"
-    }
+    },
+    "emptyHint": "基础设施对象来自已导入数据源的平台分析结果。"
   },
   "caseHome": {
     "count": "{{count}} 项",
@@ -2828,5 +2831,10 @@
       }
     },
     "jobsRunning": "{{count}} 运行中"
+  },
+  "inspectorKind": {
+    "file": "文件对象",
+    "timelineEvent": "时间线事件",
+    "artifact": "痕迹对象"
   }
 }

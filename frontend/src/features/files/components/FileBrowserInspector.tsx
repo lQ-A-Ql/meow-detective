@@ -61,6 +61,7 @@ export function FileBrowserInspector({
   return (
     <InspectorPane
       className="hidden lg:flex"
+      kind={t('inspectorKind.file')}
       widthClassName="w-80"
     >
       <div className="space-y-5">

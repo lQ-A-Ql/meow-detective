@@ -79,7 +79,16 @@ function EvidenceWorkloadSummary({ members, t }: { members: NonNullable<ReturnTy
 function LegacyInfrastructurePage({ model, caseName, navigate, t }: { model: ReturnType<typeof useLinuxClusterWorkspaceModel>['infrastructure']; caseName: string; navigate: NavigateFunction; t: TFunction }) {
   const { graph, nodes, edges, visibleNodes, nodeNames, networkTopology, networkFacts, hostFacts, query, selected, selectedId, setQuery, setSelectedId } = model;
   if (graph.isLoading) return <EmptyState className="flex flex-1 items-center justify-center">{t('common.loading')}</EmptyState>;
-  if (!graph.data || nodes.length === 0) return <EmptyState className="flex flex-1 items-center justify-center">{t('infrastructure.empty')}</EmptyState>;
+  if (!graph.data || nodes.length === 0) return (
+    <EmptyState className="flex flex-1 flex-col items-center justify-center"
+      title={t('infrastructure.empty')}
+      description={t('infrastructure.emptyHint')}
+      action={<>
+        <Button type="button" variant="outline" size="sm" onClick={() => navigate('/analysis')}>{t('common.emptyGoToAnalysis')}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => navigate('/')}>{t('common.emptyGoToImport')}</Button>
+      </>}
+    />
+  );
   const workloads = nodes.filter((node) => node.domain === 'analysis');
   const storage = nodes.filter((node) => node.domain === 'storage');
   return <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-forensics-panel"><InfrastructureHeader caseName={caseName} nodes={nodes} relationCount={edges.length} networkLinkCount={networkTopology.edges.length} t={t} /><Tabs defaultValue="overview" className="min-h-0 flex-1 overflow-hidden px-5 py-4 lg:px-7"><TabsList><TabsTrigger value="overview"><CircleDot size={14} />{t('infrastructure.tabs.overview')}</TabsTrigger><TabsTrigger value="topology"><GitBranch size={14} />{t('infrastructure.tabs.topology')}</TabsTrigger><TabsTrigger value="workloads">{t('infrastructure.tabs.workloads')}</TabsTrigger><TabsTrigger value="storage">{t('infrastructure.tabs.storage')}</TabsTrigger><TabsTrigger value="inventory"><HardDrive size={14} />{t('infrastructure.tabs.inventory')}</TabsTrigger></TabsList><TabsContent value="overview"><ClusterOverviewPanel nodes={nodes} edges={edges} hostFacts={hostFacts} networkFacts={networkFacts} t={t} /></TabsContent><TabsContent value="topology"><NetworkTopologyPanel nodes={networkTopology.nodes} edges={networkTopology.edges} networkFacts={networkFacts} nodeNames={nodeNames} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent><TabsContent value="workloads"><WorkloadEvidencePanel nodes={workloads} selectedId={selectedId} onSelect={setSelectedId} networkFacts={networkFacts} t={t} /></TabsContent><TabsContent value="storage"><StorageEvidencePanel nodes={storage} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent><TabsContent value="inventory"><InfrastructureInventoryPanel nodes={visibleNodes} selectedId={selectedId} onSelect={setSelectedId} t={t} /></TabsContent></Tabs>{selected ? <InfrastructureInspector node={selected} edges={edges} onOpenFiles={() => navigate('/files')} onClose={() => setSelectedId(undefined)} t={t} /> : null}<Input aria-label={t('infrastructure.actions.search')} value={query} onChange={(event) => setQuery(event.target.value)} className="sr-only" /></main>;

@@ -14,7 +14,7 @@ import {
   InspectorSection,
   InspectorValue,
 } from '@/components/layout/InspectorPane';
-import { PageSubbar } from '@/components/layout/PageSubbar';
+import { ContextBar } from '@/components/layout/ContextBar';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { TimelineHistogram } from '@/features/timeline/components/TimelineHistogram';
@@ -36,8 +36,8 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
   ];
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
-      <PageSubbar>
-        <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 overflow-x-auto px-4 py-1">
+      <ContextBar>
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3 overflow-x-auto">
           <div className="flex items-center gap-4 whitespace-nowrap">
             <div className="flex items-center gap-2 font-mono text-[11px] text-forensics-muted">
               <Clock size={12} className="text-forensics-muted-light" />
@@ -77,7 +77,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             <Button type="button" variant="forensicsGhost" size="iconSm" onClick={model.zoomIn} disabled={!model.canZoomIn} aria-label={t('graph.controls.zoomIn')}><ZoomIn size={14} /></Button>
           </div>
         </div>
-      </PageSubbar>
+      </ContextBar>
 
       <div className="flex min-h-24 shrink-0 flex-col border-b border-forensics-border bg-forensics-panel p-2">
         <TimelineHistogram bars={model.bars} onSelectRange={model.selectTimeBucket} />
@@ -114,7 +114,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             />
           </DenseDataTableFrame>
         </div>
-        <InspectorPane title={t('timeline.inspector.title')} subtitle={model.selectedEvent ? `${t('timeline.inspector.current')} ${model.selectedEvent.id}` : t('timeline.inspector.none')} widthClassName="w-80">
+        <InspectorPane kind={t('inspectorKind.timelineEvent')} title={t('timeline.inspector.title')} subtitle={model.selectedEvent ? `${t('timeline.inspector.current')} ${model.selectedEvent.id}` : t('timeline.inspector.none')} widthClassName="w-80">
           <div className="space-y-5">
             <InspectorSection title={t('timeline.inspector.timestamp')}><InspectorValue value={model.selectedEvent?.ts ?? '-'} mono strong /></InspectorSection>
             <InspectorSection title={t('timeline.inspector.type')}><InspectorValue value={model.selectedEvent?.eventType ?? '-'} /></InspectorSection>

@@ -3,6 +3,7 @@ import {
   Power,
   RefreshCw,
 } from 'lucide-react';
+import { ContextBar } from '@/components/layout/ContextBar';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -153,7 +154,7 @@ export function EmulationWorkspace({ model }: EmulationWorkspaceProps) {
   const { t } = useTranslation();
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-surface">
-      <header className="flex shrink-0 items-center justify-end gap-4 border-b border-forensics-border bg-forensics-panel px-6 py-2">
+      <ContextBar align="end">
         <Button
           type="button"
           variant="forensicsGhost"
@@ -165,7 +166,7 @@ export function EmulationWorkspace({ model }: EmulationWorkspaceProps) {
         >
           <RefreshCw className={model.refreshing ? 'animate-spin' : undefined} />
         </Button>
-      </header>
+      </ContextBar>
 
       {!model.hasCase && model.caseLoaded ? (
         <div className="flex flex-1 items-center justify-center p-6 text-[12px] text-forensics-muted">

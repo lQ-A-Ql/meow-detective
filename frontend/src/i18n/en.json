@@ -31,7 +31,9 @@
       "pdfDocument": "PDF document",
       "wordDocument": "Word document",
       "archive": "Archive"
-    }
+    },
+    "emptyGoToImport": "Go to data import",
+    "emptyGoToAnalysis": "Go to data analysis"
   },
   "mcpUi": {
     "host": {
@@ -1420,7 +1422,8 @@
       "rbd": "No derived RBD data source",
       "cephfs": "No derived CephFS data source",
       "kubernetes": "No Kubernetes scope evidence found"
-    }
+    },
+    "emptyHint": "Infrastructure objects come from platform analysis of an imported data source."
   },
   "caseHome": {
     "count": "{{count}} items",
@@ -2828,5 +2831,10 @@
       }
     },
     "jobsRunning": "{{count}} running"
+  },
+  "inspectorKind": {
+    "file": "File object",
+    "timelineEvent": "Timeline event",
+    "artifact": "Artifact"
   }
 }

@@ -2,42 +2,44 @@
 
 :root {
   --font-size: 16px;
-  --background: #ffffff;
-  --foreground: #181818;
-  --card: #ffffff;
-  --card-foreground: #181818;
-  --popover: #ffffff;
-  --popover-foreground: #181818;
-  --primary: #d92d3a;
+  /* Canvas: cool archival base behind panels. */
+  --background: #f5f7fa;
+  --foreground: #17212b;
+  --card: #fcfdfe;
+  --card-foreground: #17212b;
+  --popover: #fcfdfe;
+  --popover-foreground: #17212b;
+  /* Navigation focus / links / current analytical context. */
+  --primary: #278fa6;
   --primary-foreground: #ffffff;
-  --secondary: #f5f5f5;
-  --secondary-foreground: #181818;
-  --muted: #f5f5f5;
-  --muted-foreground: #666666;
-  --accent: #fff0f1;
-  --accent-foreground: #9f1d27;
-  --destructive: #b4232a;
+  --secondary: #eef2f5;
+  --secondary-foreground: #17212b;
+  --muted: #eef2f5;
+  --muted-foreground: #65717e;
+  --accent: #eef2f5;
+  --accent-foreground: #17212b;
+  --destructive: #b53d4b;
   --destructive-foreground: #ffffff;
   --input: transparent;
   --input-background: #ffffff;
-  --switch-background: #bdbdbd;
+  --switch-background: #9eabb7;
   --font-weight-medium: 300;
   --font-weight-normal: 300;
-  --ring: #c62832;
-  --chart-1: #c62832;
-  --chart-2: #e2555d;
-  --chart-3: #ef8b91;
-  --chart-4: #f6b5b9;
-  --chart-5: #fbe1e3;
+  --ring: #278fa6;
+  --chart-1: #278fa6;
+  --chart-2: #c83e58;
+  --chart-3: #a96d18;
+  --chart-4: #287a58;
+  --chart-5: #65717e;
   --radius: 0;
-  --sidebar: #fafafa;
-  --sidebar-foreground: #181818;
-  --sidebar-primary: #c62832;
+  --sidebar: #fcfdfe;
+  --sidebar-foreground: #17212b;
+  --sidebar-primary: #278fa6;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #efefef;
-  --sidebar-accent-foreground: #181818;
-  --sidebar-border: #d8d8d8;
-  --sidebar-ring: #3d3d3d;
+  --sidebar-accent: #eef2f5;
+  --sidebar-accent-foreground: #17212b;
+  --sidebar-border: #d7dee5;
+  --sidebar-ring: #278fa6;
 
   /* Red accent scale shared by existing utility classes. */
   --forensics-sakura-50: #ffffff;
@@ -46,9 +48,9 @@
   --forensics-sakura-200: #f5f5f5;
   --forensics-sakura-250: #eeeeee;
   --forensics-sakura-300: #e0e0e0;
-  --forensics-sakura-400: #e87982;
-  --forensics-sakura-500: #d92d3a;
-  --forensics-sakura-600: #a51f2b;
+  --forensics-sakura-400: #e0708a;
+  --forensics-sakura-500: #c83e58;
+  --forensics-sakura-600: #a32e45;
 
   --forensics-50: #ffffff;
   --forensics-100: #fafafa;
@@ -67,23 +69,23 @@
   --forensics-850: #242424;
   --forensics-900: #181818;
 
-  --forensics-panel: #ffffff;
-  --forensics-panel-strong: #ffffff;
-  --forensics-surface: #ffffff;
+  --forensics-panel: #fcfdfe;
+  --forensics-panel-strong: #eef2f5;
+  --forensics-surface: #fcfdfe;
   --forensics-input-bg: #ffffff;
-  --forensics-highlight: #f5f5f5;
-  --forensics-selection-bg: #e6e6e6;
-  --forensics-selection-text: #181818;
-  --forensics-hover: #f5f5f5;
-  --forensics-border: #e0e0e0;
-  --forensics-border-light: #eeeeee;
-  --forensics-border-strong: #c8c8c8;
-  --forensics-text: #181818;
-  --forensics-text-secondary: #343434;
-  --forensics-text-tertiary: #4e4e4e;
-  --forensics-muted: #666666;
-  --forensics-muted-light: #808080;
-  --forensics-muted-lighter: #989898;
+  --forensics-highlight: #eef2f5;
+  --forensics-selection-bg: #dce7ec;
+  --forensics-selection-text: #17212b;
+  --forensics-hover: #eef2f5;
+  --forensics-border: #d7dee5;
+  --forensics-border-light: #e4e9ee;
+  --forensics-border-strong: #9eabb7;
+  --forensics-text: #17212b;
+  --forensics-text-secondary: #3a4653;
+  --forensics-text-tertiary: #4e5a66;
+  --forensics-muted: #65717e;
+  --forensics-muted-light: #8b97a3;
+  --forensics-muted-lighter: #a6b1bb;
 
   /* Horizontal scrollbar point-light tokens */
   --scrollbar-line: var(--forensics-400);
@@ -104,45 +106,45 @@
   --forensics-gql-border-error: #bdbdbd;
 
   /* Forensics status / action tokens */
-  --forensics-primary-blue: #d92d3a;
-  --forensics-success: #b4232a;
-  --forensics-surface-muted: #fafafa;
-  --forensics-text-soft: #4e4e4e;
-  --forensics-hover-muted: #eeeeee;
+  /* Legacy name kept for the utility classes; now the investigation accent. */
+  --forensics-primary-blue: #278fa6;
+  --forensics-success: #287a58;
+  --forensics-surface-muted: #f2f5f8;
+  --forensics-text-soft: #4e5a66;
+  --forensics-hover-muted: #e4e9ee;
 
   /* Forensics warning tokens */
-  --forensics-warning: #c62832;
-  --forensics-warning-bg: #fafafa;
-  --forensics-warning-border: #e6aeb2;
-  --forensics-warning-text: #9f1d27;
-  --forensics-warning-text-strong: #7e1820;
+  --forensics-warning: #a96d18;
+  --forensics-warning-bg: #fdf6e9;
+  --forensics-warning-border: #e4c48a;
+  --forensics-warning-text: #7a4e10;
+  --forensics-warning-text-strong: #5f3c0b;
 
   /* Forensics success tokens */
-  --forensics-success: #3d3d3d;
-  --forensics-success-bg: #eeeeee;
-  --forensics-success-border: #bdbdbd;
-  --forensics-success-text: #303030;
+  --forensics-success-bg: #eef7f2;
+  --forensics-success-border: #9ec7b3;
+  --forensics-success-text: #287a58;
 
   /* Forensics error/info status-badge tokens */
-  --forensics-error-bg: #ededed;
-  --forensics-error-border: #b8b8b8;
-  --forensics-error-text: #303030;
-  --forensics-info-bg: #f1f1f1;
-  --forensics-info-border: #c4c4c4;
-  --forensics-info-text: #444444;
+  --forensics-error-bg: #fbeeef;
+  --forensics-error-border: #dfa5ad;
+  --forensics-error-text: #b53d4b;
+  --forensics-info-bg: #eaf4f7;
+  --forensics-info-border: #9dc4cf;
+  --forensics-info-text: #1f6f83;
 
   /* Forensics coverage-badge tokens */
-  --forensics-badge-covered-bg: #efefef;
-  --forensics-badge-covered-text: #353535;
-  --forensics-badge-review-bg: #e5e5e5;
-  --forensics-badge-review-text: #4a4a4a;
+  --forensics-badge-covered-bg: #eef7f2;
+  --forensics-badge-covered-text: #287a58;
+  --forensics-badge-review-bg: #fdf6e9;
+  --forensics-badge-review-text: #7a4e10;
 
   /* Shared canvas visualization tokens. */
-  --forensics-viz-text: #1f2933;
-  --forensics-viz-muted: #68747c;
-  --forensics-viz-border: #c8ced1;
-  --forensics-viz-canvas: #fbfcfc;
-  --forensics-viz-lane: #f4f6f7;
+  --forensics-viz-text: #17212b;
+  --forensics-viz-muted: #65717e;
+  --forensics-viz-border: #d7dee5;
+  --forensics-viz-canvas: #fcfdfe;
+  --forensics-viz-lane: #f2f5f8;
   --forensics-viz-selected: #2d6cdf;
   --forensics-viz-edge: #9ca8ad;
   --forensics-viz-environment: #dcecff;
