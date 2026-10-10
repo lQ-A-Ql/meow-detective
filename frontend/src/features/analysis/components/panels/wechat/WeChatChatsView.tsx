@@ -1,6 +1,7 @@
 import { Image, Link, MessageSquare, Mic, Search, Smile, Video } from 'lucide-react';
+import { ListRow } from '@/components/lists/ListRow';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/app/components/ui/button';
+
 import { Input } from '@/app/components/ui/input';
 import { InlineMedia } from '@/app/components/ui/inline-media';
 import { ExternalMediaPreview } from '@/app/components/ui/external-media-preview';
@@ -275,15 +276,15 @@ export function WeChatChatsView({
         <ScrollArea className="min-h-0 flex-1">
           <div className="py-1">
             {conversations.map((conversation) => (
-              <Button
+              <ListRow
                 key={conversation.talker}
-                variant="treeControl"
-                size="menuItem"
-                data-active={conversation.talker === selectedConversation?.talker}
-                className="h-14 w-full justify-start px-3"
-                onClick={() => onSelectConversation(conversation.talker)}
-              >
-                <WeChatIdentity name={conversation.displayName} />
+                selected={conversation.talker === selectedConversation?.talker}
+                wrapLabel
+                onActivate={() => onSelectConversation(conversation.talker)}
+                className="h-14 items-start gap-3 px-3 py-2"
+                ariaLabel={conversation.displayName}
+                icon={<WeChatIdentity name={conversation.displayName} />}
+                label={<>
                 <span className="min-w-0 flex-1 text-left">
                   <span className="flex items-center justify-between gap-2">
                     <span className="truncate text-[12px] text-forensics-text">{conversation.displayName}</span>
@@ -301,8 +302,9 @@ export function WeChatChatsView({
                       </span>
                     ) : null}
                   </span>
-                </span>
-              </Button>
+                  </span>
+                </>}
+              />
             ))}
             {conversations.length === 0 ? (
               <div className="px-3 py-6 text-center text-[11px] text-forensics-muted">

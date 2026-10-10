@@ -12,6 +12,8 @@ export function ListRow({
   disabled = false,
   icon,
   label,
+  /** Multi-line rows (message previews) opt out of the single-line truncation. */
+  wrapLabel = false,
   meta,
   onActivate,
   ariaLabel,
@@ -23,6 +25,7 @@ export function ListRow({
   selected?: boolean;
   disabled?: boolean;
   icon?: ReactNode;
+  wrapLabel?: boolean;
   label: ReactNode;
   meta?: ReactNode;
   onActivate?: () => void;
@@ -53,7 +56,7 @@ export function ListRow({
       style={style}
     >
       {icon}
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className={cn('min-w-0 flex-1', !wrapLabel && 'truncate')}>{label}</span>
       {meta}
     </Button>
   );

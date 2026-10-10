@@ -1,4 +1,4 @@
-import { ChevronRight, Clock, ZoomIn, ZoomOut } from 'lucide-react';
+import { Clock, ZoomIn, ZoomOut } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
@@ -126,7 +126,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             <InspectorSection title={t('timeline.inspector.activity')}><InspectorValue value={model.selectedEvent?.description ?? '-'} /></InspectorSection>
             <InspectorSection title={t('timeline.inspector.object')}><InspectorValue value={model.selectedEvent?.title ?? '-'} mono /></InspectorSection>
             <InspectorSection title={t('timeline.inspector.context')}><div className="space-y-1 font-mono text-[10px] text-forensics-muted"><div className="max-w-full truncate">source: {model.selectedEvent?.dataSourceId ?? '-'}</div><div className="max-w-full truncate">window: {model.selectedEvent?.ts ?? '-'} +/- 10m</div></div></InspectorSection>
-            <InspectorSection title={t('timeline.inspector.actions')}><Button type="button" variant="forensicsSurface" size="xs" onClick={() => model.jumpToSource(model.selectedEvent)} disabled={!model.selectedEvent} className="w-full justify-between font-mono text-forensics-text-tertiary"><span className="font-light">{t('timeline.jumpToSource')}</span><ChevronRight size={12} className="text-forensics-muted-light" /></Button></InspectorSection>
+            <InspectorSection title={t('timeline.inspector.actions')}><Tooltip content={t('timeline.jumpToSource')}><Button type="button" variant="forensicsSurface" size="xs" onClick={() => model.jumpToSource(model.selectedEvent)} disabled={!model.selectedEvent} aria-label={t('timeline.jumpToSource')}><ActionIcon name="chevron-right" /></Button></Tooltip></InspectorSection>
           </div>
         </InspectorPane>
       </div>

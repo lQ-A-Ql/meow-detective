@@ -146,7 +146,7 @@ describe('AnalysisSourceSidebar plugin group', () => {
     });
 
     expect(screen.getByText('手机信息')).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: 'Android-Data / 已安装包' }));
+    fireEvent.click(screen.getByRole('treeitem', { name: 'Android-Data / 已安装包' }));
     expect(props.onAndroidTabChange).toHaveBeenCalledWith('packages');
   });
 });
