@@ -76,11 +76,11 @@ export function CommandPalette({ commands }: { commands: CommandPaletteItem[] })
           {filtered.length === 0 ? (
             <div className="px-4 py-6 text-center text-[12px] text-forensics-muted">{t('commandPalette.empty')}</div>
           ) : filtered.map((command, index) => (
-            <Button
+            <div
               key={command.id}
-              type="button"
-              variant="forensicsGhost"
-              size="sm"
+             
+             
+             
               role="option"
               aria-selected={index === activeIndex}
               onMouseEnter={() => setActive(index)}
@@ -92,7 +92,7 @@ export function CommandPalette({ commands }: { commands: CommandPaletteItem[] })
             >
               <span>{command.label}</span>
               <span className="text-[10px] uppercase tracking-wide text-forensics-muted-light">{command.group}</span>
-            </Button>
+            </div>
           ))}
         </div>
         <div className="border-t border-forensics-border px-4 py-2 text-[10px] text-forensics-muted-light">{t('commandPalette.hint')}</div>

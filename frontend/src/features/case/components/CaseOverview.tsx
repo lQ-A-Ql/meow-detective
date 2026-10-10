@@ -1,4 +1,5 @@
-import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, Hash, PencilLine, Trash2, XCircle } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, Hash, PencilLine, Trash2, XCircle, Save, X } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -188,15 +189,13 @@ export function DataSourcesPanel({
                           inputSize="compact"
                           className="flex-1"
                         />
-                        <Button
+                        <Tooltip content={t('caseHome.actions.save')}><Button aria-label={t('caseHome.actions.save')}
                           type="button"
                           variant="forensicsOutline"
                           size="compact"
                           onClick={() => onRename(source.id, editingDataSourceName.trim())}
-                        >
-                          {t('caseHome.actions.save')}
-                        </Button>
-                        <Button
+                        ><Save size={15} /></Button></Tooltip>
+                        <Tooltip content={t('caseHome.actions.cancel')}><Button aria-label={t('caseHome.actions.cancel')}
                           type="button"
                           variant="forensicsGhost"
                           size="compact"
@@ -204,9 +203,7 @@ export function DataSourcesPanel({
                             setEditingDataSourceId(undefined);
                             setEditingDataSourceName('');
                           }}
-                        >
-                          {t('caseHome.actions.cancel')}
-                        </Button>
+                        ><X size={15} /></Button></Tooltip>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
@@ -279,7 +276,7 @@ export function DataSourcesPanel({
                         <div className="mt-1 text-[10px] text-forensics-muted">{t('caseHome.dataSources.physicalDiskHashHint')}</div>
                         <div className="mt-2 grid grid-cols-2 gap-1">
                           {(['md5', 'sha1', 'sha256', 'sm3'] as DigestAlgorithm[]).map((algorithm) => (
-                            <Button key={algorithm} type="button" size="xs" variant="forensicsOutline" disabled={logicalDiskDigestLoading} onClick={() => onCalculateLogicalDiskDigest?.(source.id, algorithm)}>
+                            <Button aria-label={algorithm.toUpperCase()} key={algorithm} type="button" size="xs" variant="forensicsOutline" disabled={logicalDiskDigestLoading} onClick={() => onCalculateLogicalDiskDigest?.(source.id, algorithm)}>
                               {algorithm.toUpperCase()}
                             </Button>
                           ))}

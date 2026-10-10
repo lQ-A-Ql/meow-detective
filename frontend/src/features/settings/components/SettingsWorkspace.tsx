@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next';
+import { Tooltip } from '@/app/components/ui/tooltip';
+import { Save } from 'lucide-react';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Button } from '@/app/components/ui/button';
 import { ActionBar } from '@/components/layout/ActionBar';
@@ -54,9 +56,7 @@ export function SettingsWorkspace({ model }: SettingsWorkspaceProps) {
         </ScrollArea>
       </div>
       <ActionBar note={settingsMessage}>
-        <Button type="button" variant="outline" size="sm" onClick={() => void saveSettings()} disabled={savingSettings}>
-          {t('settings.actions.save')}
-        </Button>
+        <Tooltip content={t('settings.actions.save')}><Button aria-label={t('settings.actions.save')} type="button" variant="outline" size="sm" onClick={() => void saveSettings()} disabled={savingSettings}><Save size={15} /></Button></Tooltip>
       </ActionBar>
     </div>
   );

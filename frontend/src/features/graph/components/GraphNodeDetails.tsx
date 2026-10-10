@@ -1,4 +1,6 @@
 import { Button } from '@/app/components/ui/button';
+import { Tooltip } from '@/app/components/ui/tooltip';
+import { ChevronDown, X } from 'lucide-react';
 import { NODE_TYPE_KEYS } from '@/features/graph/logic/graph-utils';
 import { useTranslation } from 'react-i18next';
 import type { GraphEdge, GraphNode, NodeType } from '@/types/models';
@@ -29,9 +31,9 @@ export function GraphNodeDetails({ node, edges, onExpand, onClose }: GraphNodeDe
       <div className="break-all rounded-none bg-transparent p-2 font-mono text-[10px] text-forensics-text-secondary">{node.id}</div>
       <div className="break-words rounded-none bg-transparent p-2 text-forensics-text-secondary">{node.summary || t('graph.values.noSummary')}</div>
       <div className="flex flex-wrap gap-1.5">
-        <Button type="button" size="sm" variant="outline" onClick={() => onExpand(1)} className="h-6 text-[10px]">{t('graph.actions.expandOne')}</Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => onExpand(2)} className="h-6 text-[10px]">{t('graph.actions.expandTwo')}</Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onClose} className="h-6 text-[10px]">{t('graph.actions.close')}</Button>
+        <Tooltip content={t('graph.actions.expandOne')}><Button aria-label={t('graph.actions.expandOne')} type="button" size="sm" variant="outline" onClick={() => onExpand(1)} className="text-[10px]"><ChevronDown size={15} /></Button></Tooltip>
+        <Tooltip content={t('graph.actions.expandTwo')}><Button aria-label={t('graph.actions.expandTwo')} type="button" size="sm" variant="outline" onClick={() => onExpand(2)} className="text-[10px]"><ChevronDown size={15} /></Button></Tooltip>
+        <Tooltip content={t('graph.actions.close')}><Button aria-label={t('graph.actions.close')} type="button" size="sm" variant="ghost" onClick={onClose} className="text-[10px]"><X size={15} /></Button></Tooltip>
       </div>
     </div>
   );

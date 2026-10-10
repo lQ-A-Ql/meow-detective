@@ -1,4 +1,5 @@
-import { AlertTriangle, CircleCheck } from 'lucide-react';
+import { AlertTriangle, CircleCheck, CircleDot } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -68,9 +69,7 @@ export function FileExtractionResultDialog({ model }: FileExtractionResultDialog
         ) : null}
 
         <DialogFooter>
-          <Button type="button" variant="forensicsPrimary" onClick={() => model.setResultOpen(false)}>
-            {t('fileBrowser.extraction.confirm')}
-          </Button>
+          <Tooltip content={t('fileBrowser.extraction.confirm')}><Button aria-label={t('fileBrowser.extraction.confirm')} type="button" variant="forensicsPrimary" onClick={() => model.setResultOpen(false)}><CircleDot size={15} /></Button></Tooltip>
         </DialogFooter>
       </DialogContent>
     </Dialog>

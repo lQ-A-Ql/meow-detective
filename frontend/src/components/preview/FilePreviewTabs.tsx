@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, CircleDot } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
@@ -175,16 +176,14 @@ function HexPreviewContent({
                 className="w-32"
                 placeholder="0x0"
               />
-              <Button
+              <Tooltip content={t('preview.hex.jump')}><Button aria-label={t('preview.hex.jump')}
                 type="button"
                 variant="forensicsOutline"
                 size="compact"
                 onClick={() => {
                   void onHexJump();
                 }}
-              >
-                {t('preview.hex.jump')}
-              </Button>
+              ><CircleDot size={15} /></Button></Tooltip>
             </div>
             <div className="mt-2">
               {viewer.mode === 'chunked'

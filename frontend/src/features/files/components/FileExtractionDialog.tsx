@@ -1,4 +1,5 @@
-import { FolderOpen, LoaderCircle } from 'lucide-react';
+import { FolderOpen, LoaderCircle, X } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -60,16 +61,13 @@ export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
                 disabled={model.isExtracting}
                 autoComplete="off"
               />
-              <Button
+              <Tooltip content={t('fileBrowser.extraction.browse')}><Button aria-label={t('fileBrowser.extraction.browse')}
                 type="button"
                 variant="forensicsOutline"
                 size="sm"
                 onClick={() => void model.browseDestination()}
                 disabled={model.isExtracting}
-              >
-                <FolderOpen />
-                {t('fileBrowser.extraction.browse')}
-              </Button>
+              ><FolderOpen size={15} /></Button></Tooltip>
             </FieldRow>
             <FieldHint>{t('fileBrowser.extraction.noOverwriteHint')}</FieldHint>
             {model.validationError ? <FieldError>{model.validationError}</FieldError> : null}
@@ -94,20 +92,13 @@ export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
           {model.error ? <FieldError role="alert">{model.error}</FieldError> : null}
 
           <DialogFooter>
-            <Button
+            <Tooltip content={t('common.cancel')}><Button aria-label={t('common.cancel')}
               type="button"
               variant="forensicsGhost"
               onClick={() => model.setFormOpen(false)}
               disabled={model.isExtracting}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit" variant="forensicsPrimary" disabled={model.isExtracting}>
-              {model.isExtracting ? <LoaderCircle className="animate-spin" /> : null}
-              {model.isExtracting
-                ? t('fileBrowser.extraction.extracting')
-                : t('fileBrowser.extraction.start')}
-            </Button>
+            ><X size={15} /></Button></Tooltip>
+            <Tooltip content={t('fileBrowser.extraction.start')}><Button aria-label={t('fileBrowser.extraction.start')} type="submit" variant="forensicsPrimary" disabled={model.isExtracting}><LoaderCircle size={15} /></Button></Tooltip>
           </DialogFooter>
         </form>
       </DialogContent>

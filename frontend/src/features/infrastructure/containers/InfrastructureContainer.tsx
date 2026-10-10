@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { AssetSlot } from '@/app/components/AssetSlot';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { CircleDot, GitBranch, HardDrive } from 'lucide-react';
+import { CircleDot, GitBranch, HardDrive, History, Upload } from 'lucide-react';
 import { useNavigate, type NavigateFunction } from 'react-router';
 import { EmptyState } from '@/components/data-display';
 import { StatusBadge } from '@/components/status/StatusBadge';
@@ -67,7 +68,7 @@ export function InfrastructureContainer() {
 
 function FindingsPanel({ summary, onOpenTimeline, t }: { summary: NonNullable<ReturnType<typeof useLinuxClusterWorkspaceModel>['summary']['data']>; onOpenTimeline: () => void; t: TFunction }) {
   const diagnostics = useMemo(() => summary.diagnostics.slice(0, 5), [summary.diagnostics]);
-  return <section className="bg-transparent p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-serif text-[15px] font-light text-forensics-text">{t('infrastructure.workspace.findings.title')}</h2><p className="mt-1 text-[11px] leading-5 text-forensics-muted">{t('infrastructure.workspace.findings.description')}</p></div><Button type="button" variant="forensicsOutline" size="sm" onClick={onOpenTimeline}>{t('infrastructure.workspace.findings.openTimeline')}</Button></div><div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="border border-forensics-border p-3"><div className="text-[10px] text-forensics-muted">{t('infrastructure.workspace.findings.supported')}</div><div className="mt-1 text-xl font-light text-forensics-text">{summary.scopes.filter((scope) => scope.identityState === 'proven' || scope.status === 'complete').length}</div></div><div className="border border-forensics-border p-3"><div className="text-[10px] text-forensics-muted">{t('infrastructure.workspace.findings.candidate')}</div><div className="mt-1 text-xl font-light text-forensics-text">{summary.scopes.filter((scope) => scope.identityState === 'candidate' || scope.status === 'partial').length}</div></div><div className="border border-forensics-border p-3"><div className="text-[10px] text-forensics-muted">{t('infrastructure.workspace.findings.limited')}</div><div className="mt-1 text-xl font-light text-forensics-text">{diagnostics.length}</div></div></div>{diagnostics.length ? <div className="mt-4 space-y-2 text-xs text-forensics-muted">{diagnostics.map((diagnostic) => <div key={diagnostic} className="border-l-2 border-forensics-border-strong pl-3">{diagnostic}</div>)}</div> : <div className="mt-4 text-xs text-forensics-muted">{t('infrastructure.workspace.findings.empty')}</div>}</section>;
+  return <section className="bg-transparent p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-serif text-[15px] font-light text-forensics-text">{t('infrastructure.workspace.findings.title')}</h2><p className="mt-1 text-[11px] leading-5 text-forensics-muted">{t('infrastructure.workspace.findings.description')}</p></div><Tooltip content={t('infrastructure.workspace.findings.openTimeline')}><Button aria-label={t('infrastructure.workspace.findings.openTimeline')} type="button" variant="forensicsOutline" size="sm" onClick={onOpenTimeline}><History size={15} /></Button></Tooltip></div><div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="border border-forensics-border p-3"><div className="text-[10px] text-forensics-muted">{t('infrastructure.workspace.findings.supported')}</div><div className="mt-1 text-xl font-light text-forensics-text">{summary.scopes.filter((scope) => scope.identityState === 'proven' || scope.status === 'complete').length}</div></div><div className="border border-forensics-border p-3"><div className="text-[10px] text-forensics-muted">{t('infrastructure.workspace.findings.candidate')}</div><div className="mt-1 text-xl font-light text-forensics-text">{summary.scopes.filter((scope) => scope.identityState === 'candidate' || scope.status === 'partial').length}</div></div><div className="border border-forensics-border p-3"><div className="text-[10px] text-forensics-muted">{t('infrastructure.workspace.findings.limited')}</div><div className="mt-1 text-xl font-light text-forensics-text">{diagnostics.length}</div></div></div>{diagnostics.length ? <div className="mt-4 space-y-2 text-xs text-forensics-muted">{diagnostics.map((diagnostic) => <div key={diagnostic} className="border-l-2 border-forensics-border-strong pl-3">{diagnostic}</div>)}</div> : <div className="mt-4 text-xs text-forensics-muted">{t('infrastructure.workspace.findings.empty')}</div>}</section>;
 }
 
 function EvidenceWorkloadSummary({ members, t }: { members: NonNullable<ReturnType<typeof useLinuxClusterWorkspaceModel>['summary']['data']>['members']; t: TFunction }) {
@@ -85,8 +86,8 @@ function LegacyInfrastructurePage({ model, caseName, navigate, t }: { model: Ret
       title={<><AssetSlot role="evidence-motif" className="mx-auto mb-2 size-12" />{t('infrastructure.empty')}</>}
       description={t('infrastructure.emptyHint')}
       action={<>
-        <Button type="button" variant="outline" size="sm" onClick={() => navigate('/analysis')}>{t('common.emptyGoToAnalysis')}</Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => navigate('/')}>{t('common.emptyGoToImport')}</Button>
+        <Tooltip content={t('common.emptyGoToAnalysis')}><Button aria-label={t('common.emptyGoToAnalysis')} type="button" variant="outline" size="sm" onClick={() => navigate('/analysis')}><CircleDot size={15} /></Button></Tooltip>
+        <Tooltip content={t('common.emptyGoToImport')}><Button aria-label={t('common.emptyGoToImport')} type="button" variant="outline" size="sm" onClick={() => navigate('/')}><Upload size={15} /></Button></Tooltip>
       </>}
     />
   );

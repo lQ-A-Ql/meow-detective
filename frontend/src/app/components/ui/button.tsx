@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./utils";
 
 const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-none bg-transparent text-sm font-light transition-colors duration-500 active:opacity-80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 focus:outline-none focus-visible:border-forensics-primary-blue focus-visible:ring-1 focus-visible:ring-forensics-primary-blue/20 aria-invalid:border-destructive",
+  "inline-flex cursor-pointer items-center justify-center rounded-full bg-transparent transition-colors duration-200 active:opacity-80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forensics-red aria-invalid:border-destructive",
   {
     variants: {
       variant: {
@@ -44,23 +44,24 @@ const buttonVariants = cva(
           "rounded-none text-left font-mono hover:bg-forensics-highlight",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        sm: "h-8 gap-1.5 px-3 has-[>svg]:px-2.5",
-        lg: "h-10 px-6 has-[>svg]:px-4",
-        icon: "size-9",
-        xs: "h-7 gap-1.5 px-2 py-1 text-[11px] has-[>svg]:px-1.5",
-        compact:
-          "h-6 gap-1 px-2 py-0.5 text-[11px] has-[>svg]:px-1.5",
-        iconXs: "size-5",
-        iconSm: "size-6",
-        viewerIcon: "size-7",
+        // One circle size for every control: 28px. iconXs stays for the media control bar.
+        default: "size-7",
+        sm: "size-7",
+        xs: "size-7",
+        compact: "size-7",
+        lg: "size-7",
+        inline: "size-7",
+        icon: "size-7",
+        iconMd: "size-7",
         mediaIcon: "size-7",
-        mediaPrimary: "size-14",
-        treeRow: "h-6 min-w-0 w-full justify-start gap-1 overflow-hidden px-2 py-1 text-[11px]",
-        menuItem: "h-auto w-full justify-start gap-2 rounded-none px-3 py-1.5 text-[12px]",
-        autocompleteItem: "h-auto w-full justify-start gap-2 rounded-none px-3 py-1.5 text-[12px]",
+        mediaPrimary: "size-7",
+        treeRow: "size-7",
+        menuItem: "size-7",
+        autocompleteItem: "size-7",
         canvasIcon: "size-7",
-        inline: "h-auto p-0",
+        iconSm: "size-7",
+        iconXs: "size-6",
+        viewerIcon: "size-6",
       },
     },
     defaultVariants: {

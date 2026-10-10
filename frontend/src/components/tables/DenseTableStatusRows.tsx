@@ -3,6 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { TableCell, TableRow } from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
 
@@ -43,14 +44,12 @@ export function DenseTableStatusRows({
           <div className="flex items-center justify-center gap-2 text-forensics-error-text">
             <span>{initialLoadErrorText}</span>
             {onRetryInitialLoad ? (
-              <Button
+              <Button aria-label={retryInitialLoadLabel}
                 type="button"
                 variant="forensicsOutline"
                 size="compact"
                 onClick={onRetryInitialLoad}
-              >
-                {retryInitialLoadLabel}
-              </Button>
+              ><RefreshCw size={15} /></Button>
             ) : null}
           </div>
         </TableCell>

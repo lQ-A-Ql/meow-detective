@@ -1,4 +1,5 @@
-import { AlertTriangle, File, Folder, Search, X } from 'lucide-react';
+import { AlertTriangle, File, Folder, Search, X, CircleDot } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -112,14 +113,12 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
               </Button>
             ) : null}
           </div>
-          <Button
+          <Tooltip content={t('search.pathToggle')}><Button aria-label={t('search.pathToggle')}
             type="button"
             variant={model.options.matchPath ? 'forensicsPrimary' : 'forensicsOutline'}
             size="compact"
             onClick={() => model.setOption('matchPath', !model.options.matchPath)}
-          >
-            {t('search.pathToggle')}
-          </Button>
+          ><CircleDot size={15} /></Button></Tooltip>
           <Select value={model.options.entryType} onValueChange={(value) => model.setOption('entryType', value as SearchWorkspaceModel['options']['entryType'])}>
             <SelectTrigger size="xs" variant="forensics" className="w-24"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -169,9 +168,7 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           emptyTitle={model.activeQuery ? t('search.empty.noMatch') : t('search.empty.start')}
           emptyDescription={model.activeQuery ? t('search.empty.noMatchDescription') : t('search.empty.startDescription')}
             emptyAction={model.activeQuery ? (
-              <Button type="button" variant="outline" size="sm" onClick={model.clearQuery}>
-                {t('search.clear')}
-              </Button>
+              <Tooltip content={t('search.clear')}><Button aria-label={t('search.clear')} type="button" variant="outline" size="sm" onClick={model.clearQuery}><X size={15} /></Button></Tooltip>
             ) : undefined}
           sortKey={model.sortKey}
           sortDirection={model.sortDirection}

@@ -18,20 +18,27 @@ type IconButtonSize = 'iconXs' | 'iconSm' | 'icon';
  */
 export function IconButton({
   label,
+  // data-testid stays opt-in so the control keeps a single, name-based query surface.
+
   children,
   onClick,
   disabled = false,
+  pressed,
   variant = 'forensicsGhost',
   size = 'iconSm',
   className,
+  testId,
 }: {
   label: string;
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
+  /** Renders the toggle state for controls that switch something on or off. */
+  pressed?: boolean;
   variant?: IconButtonVariant;
   size?: IconButtonSize;
   className?: string;
+  testId?: string;
 }) {
   return (
     <Tooltip content={label}>
@@ -42,6 +49,8 @@ export function IconButton({
         aria-label={label}
         onClick={onClick}
         disabled={disabled}
+        aria-pressed={pressed}
+        data-testid={testId}
         className={cn('rounded-full', className)}
       >
         {children}

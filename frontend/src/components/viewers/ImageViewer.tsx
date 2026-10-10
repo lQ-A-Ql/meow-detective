@@ -10,14 +10,8 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import {
-  ZoomIn,
-  ZoomOut,
-  RotateCw,
-  Maximize,
-  Download,
-  Image,
-} from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
+import { ZoomIn, ZoomOut, RotateCw, Maximize, Download, Image, X } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { useTranslation } from 'react-i18next';
 
@@ -210,16 +204,14 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
         </Button>
 
         {/* 重置 */}
-        <Button
+        <Tooltip content={t('media.controls.reset')}><Button aria-label={t('media.controls.reset')}
           type="button"
           variant="viewerControl"
           size="xs"
           onClick={resetView}
-          className="h-6 text-[10px]"
+          className="text-[10px]"
           title={t('media.controls.reset')}
-        >
-          {t('media.controls.reset')}
-        </Button>
+        ><X size={15} /></Button></Tooltip>
 
         <div className="flex-1" />
 

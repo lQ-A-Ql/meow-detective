@@ -1,4 +1,5 @@
 import { memo, useCallback } from 'react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { AlertCircle, Copy, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { useTranslation } from 'react-i18next';
@@ -47,27 +48,21 @@ export const ViewerError = memo(function ViewerError({ error, onRetry }: ViewerE
         )}
 
         <div className="flex items-center justify-center gap-2">
-          <Button
+          <Tooltip content={t('viewer.error.copyDetails')}><Button
             type="button"
             variant="forensicsOutline"
             size="xs"
             onClick={handleCopy}
             aria-label={t('viewer.error.copyDetails')}
-          >
-            <Copy size={14} />
-            {t('viewer.error.copyDetails')}
-          </Button>
+          ><Copy size={15} /></Button></Tooltip>
           {error.recoverable && onRetry && (
-            <Button
+            <Tooltip content={t('viewer.error.retry')}><Button
               type="button"
               variant="forensicsPrimary"
               size="xs"
               onClick={onRetry}
               aria-label={t('viewer.error.retryPreview')}
-            >
-              <RefreshCw size={14} />
-              {t('viewer.error.retry')}
-            </Button>
+            ><RefreshCw size={15} /></Button></Tooltip>
           )}
         </div>
       </div>

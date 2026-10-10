@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { FolderOpen, Loader2, Play, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
@@ -70,16 +71,13 @@ function RecoveryResult({
       <NameList label={t('pluginModule.actions.unmatched')} names={result.unmatchedDbNames} />
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className="text-forensics-muted">{t('pluginModule.actions.rerunHint')}</span>
-        <Button
+        <Tooltip content={t('pluginModule.actions.rerun')}><Button aria-label={t('pluginModule.actions.rerun')}
           type="button"
           variant="forensicsOutline"
           size="xs"
           disabled={rerunPending}
           onClick={onRerun}
-        >
-          {rerunPending ? <Loader2 className="animate-spin" size={12} /> : <RefreshCw size={12} />}
-          {t('pluginModule.actions.rerun')}
-        </Button>
+        ><Loader2 size={15} /></Button></Tooltip>
         {rerunDone && !rerunPending ? (
           <span className="text-forensics-success-text">{t('pluginModule.actions.rerunDone')}</span>
         ) : null}
@@ -161,7 +159,7 @@ function PluginActionCard({
               setInputError('');
             }}
           />
-          <Button
+          <Tooltip content={t('pluginModule.actions.selectFile')}><Button aria-label={t('pluginModule.actions.selectFile')}
             type="button"
             variant="forensicsOutline"
             size="xs"
@@ -169,14 +167,11 @@ function PluginActionCard({
             onClick={() => {
               void handlePickFile();
             }}
-          >
-            <FolderOpen size={12} />
-            {t('pluginModule.actions.selectFile')}
-          </Button>
+          ><FolderOpen size={15} /></Button></Tooltip>
         </div>
       ) : null}
       <div className="mt-2 flex items-center gap-2">
-        <Button
+        <Tooltip content={t('pluginModule.actions.run')}><Button aria-label={t('pluginModule.actions.run')}
           type="button"
           variant="forensicsPrimary"
           size="xs"
@@ -184,10 +179,7 @@ function PluginActionCard({
           onClick={() => {
             void handleRun();
           }}
-        >
-          {running ? <Loader2 className="animate-spin" size={12} /> : <Play size={12} />}
-          {running ? t('pluginModule.actions.running') : t('pluginModule.actions.run')}
-        </Button>
+        ><Loader2 size={15} /></Button></Tooltip>
         {!supported ? (
           <span className="text-[11px] text-forensics-muted">
             {t('pluginModule.actions.unsupported')}

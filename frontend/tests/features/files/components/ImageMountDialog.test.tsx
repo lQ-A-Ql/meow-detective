@@ -80,7 +80,7 @@ describe('ImageMountDialog', () => {
     const submit = vi.fn().mockResolvedValue(undefined);
     render(<ImageMountDialog model={createModel({ submit })} />);
 
-    fireEvent.click(screen.getByRole('button', { name: '挂载' }));
+    fireEvent.click(screen.getByRole('button', { name: /启动仿真|开始仿真|挂载/ }));
 
     expect(submit).toHaveBeenCalledTimes(1);
   });

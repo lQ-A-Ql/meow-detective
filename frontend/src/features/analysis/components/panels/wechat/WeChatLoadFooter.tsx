@@ -1,4 +1,5 @@
 import { AlertCircle, LoaderCircle, RefreshCw } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import type { WeChatLoadState } from '@/features/analysis/wechat/types';
@@ -12,10 +13,7 @@ export function WeChatLoadFooter({ state }: { state: WeChatLoadState }) {
         {t('wechatWorkspace.loaded', { loaded: state.loaded, total: state.total })}
       </span>
       {state.failed ? (
-        <Button variant="forensicsGhost" size="xs" onClick={state.retry}>
-          <AlertCircle />
-          {t('wechatWorkspace.retry')}
-        </Button>
+        <Tooltip content={t('wechatWorkspace.retry')}><Button aria-label={t('wechatWorkspace.retry')} variant="forensicsGhost" size="xs" onClick={state.retry}><AlertCircle size={15} /></Button></Tooltip>
       ) : state.hasMore ? (
         <Button
           variant="forensicsGhost"

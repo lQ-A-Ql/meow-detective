@@ -1,3 +1,4 @@
+import { RefreshCw } from 'lucide-react';
 /**
  * DenseDataTable - 密集数据表格组件 (性能优化版)
  *
@@ -517,14 +518,12 @@ export function DenseDataTable<T>({
               >
                 <div className="flex items-center justify-center gap-2">
                   <span>{loadMoreErrorText}</span>
-                  <Button
+                  <Button aria-label={retryLoadMoreLabel}
                     type="button"
                     variant="forensicsOutline"
                     size="compact"
                     onClick={retryMore}
-                  >
-                    {retryLoadMoreLabel}
-                  </Button>
+                  ><RefreshCw size={15} /></Button>
                 </div>
               </TableCell>
             </TableRow>

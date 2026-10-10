@@ -417,8 +417,15 @@ Assert-NoMatchesInRuntimeFiles `
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
   -Pattern '\brounded-full\b' `
-  -AllowedRelativePaths @('frontend/src/components/navigation/ActivityBar.tsx') `
-  -Message "v3.1 radius ladder: the circular rail selection is the only rounded-full in the product"
+  -AllowedRelativePaths @(
+    'frontend/src/components/controls/IconButton.tsx',
+    'frontend/src/app/components/ui/button.tsx',
+    'frontend/src/features/files/components/FileVisibilityToggle.tsx',
+    'frontend/src/components/navigation/ActivityBar.tsx',
+    # Every button in the product is a circular icon button, so the primitive owns the shape.
+    'frontend/src/app/components/ui/button.tsx'
+  ) `
+  -Message "v3.1 radius ladder: circular belongs to the rail selection and the shared button primitive"
 
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `

@@ -1,4 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Tooltip } from '@/app/components/ui/tooltip';
+import { RefreshCw, Undo2 } from 'lucide-react';
 import { withTranslation, type WithTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 
@@ -50,22 +52,18 @@ class ErrorBoundaryBase extends Component<Props, State> {
               {this.state.error?.message ?? t('errorBoundary.unknownError')}
             </div>
             <div className="flex gap-3 justify-center">
-              <Button
+              <Tooltip content={t('errorBoundary.reload')}><Button aria-label={t('errorBoundary.reload')}
                 type="button"
                 variant="forensicsSurface"
                 size="sm"
                 onClick={this.handleReload}
-              >
-                {t('errorBoundary.reload')}
-              </Button>
-              <Button
+              ><RefreshCw size={15} /></Button></Tooltip>
+              <Tooltip content={t('errorBoundary.recover')}><Button aria-label={t('errorBoundary.recover')}
                 type="button"
                 variant="forensicsLink"
                 size="sm"
                 onClick={this.handleReset}
-              >
-                {t('errorBoundary.recover')}
-              </Button>
+              ><Undo2 size={15} /></Button></Tooltip>
             </div>
           </div>
         </div>

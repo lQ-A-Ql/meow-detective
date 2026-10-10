@@ -1,14 +1,5 @@
-import {
-  CircleCheck,
-  Disc3,
-  FolderOpen,
-  HardDrive,
-  LoaderCircle,
-  LogOut,
-  Play,
-  ShieldCheck,
-  TriangleAlert,
-} from 'lucide-react';
+import { CircleCheck, Disc3, FolderOpen, HardDrive, LoaderCircle, LogOut, Play, ShieldCheck, TriangleAlert, X } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -249,16 +240,13 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
                   })}
                 </span>
               </div>
-              <Button
+              <Tooltip content={t('fileBrowser.mount.unmount')}><Button aria-label={t('fileBrowser.mount.unmount')}
                 type="button"
                 variant="forensicsOutline"
                 size="xs"
                 onClick={() => void model.unmount(selectedMount.target.mountId)}
                 disabled={model.isSubmitting}
-              >
-                {model.isUnmounting ? <LoaderCircle className="animate-spin" /> : <LogOut />}
-                {t('fileBrowser.mount.unmount')}
-              </Button>
+              ><LoaderCircle size={15} /></Button></Tooltip>
             </div>
           ) : null}
 
@@ -270,16 +258,13 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
                   {t('fileBrowser.mount.activeEmulation', { state: selectedEmulation.state })}
                 </span>
               </div>
-              <Button
+              <Tooltip content={t('fileBrowser.mount.releaseEmulation')}><Button aria-label={t('fileBrowser.mount.releaseEmulation')}
                 type="button"
                 variant="forensicsOutline"
                 size="xs"
                 onClick={() => void model.releaseEmulation(selectedEmulation.sessionId)}
                 disabled={model.isSubmitting}
-              >
-                {model.isReleasingEmulation ? <LoaderCircle className="animate-spin" /> : <LogOut />}
-                {t('fileBrowser.mount.releaseEmulation')}
-              </Button>
+              ><LoaderCircle size={15} /></Button></Tooltip>
             </div>
           ) : null}
 
@@ -297,26 +282,13 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
           ) : null}
 
           <DialogFooter>
-            <Button
+            <Tooltip content={t('fileBrowser.mount.close')}><Button aria-label={t('fileBrowser.mount.close')}
               type="button"
               variant="forensicsGhost"
               onClick={() => model.setDialogOpen(false)}
               disabled={model.isSubmitting}
-            >
-              {t('fileBrowser.mount.close')}
-            </Button>
-            <Button type="submit" variant="forensicsPrimary" disabled={!canSubmit}>
-              {model.isMounting || model.isEmulating
-                ? <LoaderCircle className="animate-spin" />
-                : isEmulation ? <Play /> : <ShieldCheck />}
-              {isEmulation
-                ? model.isEmulating
-                  ? t('fileBrowser.mount.startingEmulation')
-                  : t('fileBrowser.mount.startEmulation')
-                : model.isMounting
-                  ? t('fileBrowser.mount.mounting')
-                  : t('fileBrowser.mount.mount')}
-            </Button>
+            ><X size={15} /></Button></Tooltip>
+            <Tooltip content={t('fileBrowser.mount.startEmulation')}><Button aria-label={t('fileBrowser.mount.startEmulation')} type="submit" variant="forensicsPrimary" disabled={!canSubmit}><LoaderCircle size={15} /></Button></Tooltip>
           </DialogFooter>
         </form>
       </DialogContent>

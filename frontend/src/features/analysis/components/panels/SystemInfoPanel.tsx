@@ -1,4 +1,5 @@
-import { Clock, Monitor, Network, RefreshCw, Shield } from 'lucide-react';
+import { Clock, Monitor, Network, RefreshCw, Shield, CircleDot } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { ContextBar } from '@/components/layout/ContextBar';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -144,25 +145,19 @@ export function AnalysisHeader({
     <ContextBar align="end">
       <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Button
+          <Tooltip content={t('analysis.header.refresh')}><Button aria-label={t('analysis.header.refresh')}
             type="button"
             variant="outline"
             onClick={onRefresh}
             disabled={!hasCase || loading || !selectedDataSourceId}
-            className="h-7 rounded-ctl border border-forensics-line-2 bg-transparent px-3 text-[12px] hover:bg-forensics-hover"
-          >
-            <RefreshCw size={14} className={loading ? 'opacity-70' : ''} />
-            {t('analysis.header.refresh')}
-          </Button>
-          <Button
+            className="rounded-ctl border border-forensics-line-2 bg-transparent text-[12px] hover:bg-forensics-hover"
+          ><RefreshCw size={15} /></Button></Tooltip>
+          <Tooltip content={t('analysis.header.run')}><Button aria-label={t('analysis.header.run')}
             type="button"
             onClick={onRunExtraction}
             disabled={!hasCase || extractionPending || !selectedDataSourceId}
-            className="h-7 rounded-ctl border border-forensics-red-ink bg-forensics-red-ink px-3 text-[12px] text-white hover:opacity-90"
-          >
-            {extractionPending ? <RefreshCw size={14} className="opacity-70" /> : <Shield size={14} />}
-            {extractionPending ? t('analysis.header.running') : t('analysis.header.run')}
-          </Button>
+            className="rounded-ctl border border-forensics-red-ink bg-forensics-red-ink text-[12px] text-white hover:opacity-90"
+          ><RefreshCw size={15} /></Button></Tooltip>
         </div>
       </div>
     </ContextBar>
@@ -193,14 +188,12 @@ export function AnalysisErrorBanner({
   return (
     <div className="mb-4 flex items-center justify-between gap-3 rounded-none border border-forensics-error-border bg-forensics-error-bg p-3 text-[12px] text-forensics-error-text">
       <span>{message}</span>
-      <Button
+      <Tooltip content={t('viewer.error.retry')}><Button aria-label={t('viewer.error.retry')}
         type="button"
         variant="outline"
         onClick={onRetry}
-        className="h-7 shrink-0 rounded-none border-forensics-error-border bg-forensics-surface px-3 text-[12px] text-forensics-error-text hover:bg-forensics-error-bg"
-      >
-        {t('viewer.error.retry')}
-      </Button>
+        className="shrink-0 rounded-none border-forensics-error-border bg-forensics-surface text-[12px] text-forensics-error-text hover:bg-forensics-error-bg"
+      ><CircleDot size={15} /></Button></Tooltip>
     </div>
   );
 }

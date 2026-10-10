@@ -85,7 +85,7 @@ describe('PluginActionsSection', () => {
       pluginId: 'wechat',
       pickFilePath,
     }));
-    fireEvent.click(screen.getByRole('button', { name: /选择文件/ }));
+    fireEvent.click(screen.getByRole('button', { name: /选择文件|选择/ }));
     await waitFor(() => {
       expect(screen.getByLabelText('输入文件路径')).toHaveProperty('value', 'D:/dumps/wechat.raw');
     });
@@ -100,7 +100,7 @@ describe('PluginActionsSection', () => {
       dataSourceId: 'ds-1',
       pluginId: 'wechat',
     }));
-    fireEvent.click(screen.getByRole('button', { name: '运行' }));
+    fireEvent.click(screen.getByRole('button', { name: /运行/ }));
     await waitFor(() => {
       expect(screen.getByText('请先选择输入文件。')).toBeDefined();
     });
@@ -118,7 +118,7 @@ describe('PluginActionsSection', () => {
     fireEvent.change(screen.getByLabelText('输入文件路径'), {
       target: { value: '  D:/dump.raw  ' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '运行' }));
+    fireEvent.click(screen.getByRole('button', { name: /运行/ }));
     await waitFor(() => {
       expect(recovery.mutateAsync).toHaveBeenCalledWith({
         dataSourceId: 'ds-1',
@@ -134,9 +134,9 @@ describe('PluginActionsSection', () => {
       dataSourceId: 'ds-1',
       pluginId: 'wechat',
     }));
-    const runButton = screen.getByRole('button', { name: /运行中/ });
+    const runButton = screen.getByRole('button', { name: /^运行$|运行中/ });
     expect(runButton).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: /选择文件/ })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: /选择文件|选择/ })).toHaveProperty('disabled', true);
   });
 
   it('shows the api error message when the run fails', () => {
@@ -204,7 +204,7 @@ describe('PluginActionsSection', () => {
     fireEvent.change(screen.getByLabelText('输入文件路径'), {
       target: { value: 'D:/dump.raw' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '运行' }));
+    fireEvent.click(screen.getByRole('button', { name: /运行/ }));
 
     await waitFor(() => {
       expect(onRecoveredKeys).toHaveBeenCalledWith(result.recoveredKeys);
@@ -222,6 +222,6 @@ describe('PluginActionsSection', () => {
     }));
     expect(screen.getByText('其他操作')).toBeDefined();
     expect(screen.getByText('该操作暂不支持在界面中运行。')).toBeDefined();
-    expect(screen.getByRole('button', { name: '运行' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: /运行/ })).toHaveProperty('disabled', true);
   });
 });

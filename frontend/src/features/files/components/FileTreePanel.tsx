@@ -1,6 +1,7 @@
 import { memo, useCallback, useMemo, type Ref } from 'react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { TreeSearch } from '@/components/tree/TreeSearch';
@@ -190,16 +191,14 @@ export function FileTreePanel({
                   total: activeChildrenPage?.totalCount ?? activeTreeChildrenLoaded,
                 })}
               </span>
-              <Button
+              <Tooltip content={t('fileBrowser.tree.loadMore')}><Button aria-label={t('fileBrowser.tree.loadMore')}
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-6 px-2 text-[10px]"
+                className="text-[10px]"
                 onClick={loadMoreActiveTreeChildren}
                 data-testid="load-more-tree-children"
-              >
-                {t('fileBrowser.tree.loadMore')}
-              </Button>
+              ><RefreshCw size={15} /></Button></Tooltip>
             </div>
           </div>
         ) : null}

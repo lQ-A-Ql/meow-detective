@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { ChevronDown, ChevronUp, Terminal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -46,10 +47,17 @@ export function BottomDrawer({ model, analysisProgress }: BottomDrawerProps) {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button type="button" variant="forensicsSurface" size="compact" onClick={model.toggleDrawer} className="gap-1">
-            <span>{model.drawerOpen ? t('bottomDrawer.toggle.collapse') : t('bottomDrawer.toggle.expand')}</span>
-            {model.drawerOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-          </Button>
+          <Tooltip content={model.drawerOpen ? t('bottomDrawer.toggle.collapse') : t('bottomDrawer.toggle.expand')}>
+            <Button
+              type="button"
+              variant="forensicsSurface"
+              size="iconSm"
+              onClick={model.toggleDrawer}
+              aria-label={model.drawerOpen ? t('bottomDrawer.toggle.collapse') : t('bottomDrawer.toggle.expand')}
+            >
+              {model.drawerOpen ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+            </Button>
+          </Tooltip>
           <div className="hidden min-w-0 max-w-72 border-l border-forensics-divider pl-3 2xl:flex">
             <span className="shrink-0">{t('bottomDrawer.status.recent')} </span>
             <span className="truncate text-forensics-text">{model.recentScope}</span>

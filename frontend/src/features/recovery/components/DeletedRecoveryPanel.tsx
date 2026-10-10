@@ -1,4 +1,5 @@
-import { Download, Eye, LoaderCircle, RefreshCw, Search, X } from 'lucide-react';
+import { Download, Eye, LoaderCircle, RefreshCw, Search, X, CircleDot } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
@@ -106,16 +107,13 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
               </SelectContent>
             </Select>
           </div>
-          <Button
+          <Tooltip content={t('recovery.read')}><Button aria-label={t('recovery.read')}
             type="button"
             size="xs"
             variant="forensicsOutline"
             disabled={model.reading || model.selectedRangeOrdinal === undefined}
             onClick={model.readSelectedRange}
-          >
-            {model.reading ? <LoaderCircle className="animate-spin" /> : <Eye />}
-            {t('recovery.read')}
-          </Button>
+          ><LoaderCircle size={15} /></Button></Tooltip>
         </div>
       ) : (
         <EmptyState className="p-3">{t('recovery.noVerifiedRange')}</EmptyState>
@@ -136,16 +134,13 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
         </div>
       ) : null}
 
-      <Button
+      <Tooltip content={t('recovery.exportFull')}><Button aria-label={t('recovery.exportFull')}
         type="button"
         size="sm"
         variant="forensicsPrimary"
         disabled={recovery.completeness !== 'complete' || model.exporting}
         onClick={model.exportSelected}
-      >
-        {model.exporting ? <LoaderCircle className="animate-spin" /> : <Download />}
-        {t('recovery.exportFull')}
-      </Button>
+      ><LoaderCircle size={15} /></Button></Tooltip>
 
       {model.lastExport ? (
         <div className="space-y-1 border border-forensics-success-border bg-forensics-success-bg p-2 text-[10px] text-forensics-success-text">
@@ -233,16 +228,13 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
               </SelectContent>
             </Select>
           </div>
-          <Button
+          <Tooltip content={t('recovery.rescan')}><Button aria-label={t('recovery.rescan')}
             type="button"
             size="sm"
             variant="forensicsPrimary"
             disabled={model.scanning || model.selectedPartitionIndex === undefined}
             onClick={model.runScan}
-          >
-            {model.scanning ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
-            {model.page ? t('recovery.rescan') : t('recovery.startScan')}
-          </Button>
+          ><LoaderCircle size={15} /></Button></Tooltip>
           {model.page ? (
             <div className="ml-auto flex items-center gap-2 text-[11px] text-forensics-muted">
               <Badge variant="outline">{model.page.scan.filesystemType.toUpperCase()}</Badge>
@@ -297,16 +289,13 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
               <div className="mt-1 text-[10px] text-forensics-error-text">{model.hashSearchError}</div>
             ) : null}
           </div>
-          <Button
+          <Tooltip content={t('recovery.hashSearch.submit')}><Button aria-label={t('recovery.hashSearch.submit')}
             disabled={!model.hashQueryValid || model.hashSearching}
             size="sm"
             type="button"
             variant="forensicsOutline"
             onClick={model.runHashSearch}
-          >
-            {model.hashSearching ? <LoaderCircle className="animate-spin" /> : <Search />}
-            {t('recovery.hashSearch.submit')}
-          </Button>
+          ><LoaderCircle size={15} /></Button></Tooltip>
           {model.hashSearch ? (
             <Badge variant="outline" className="mt-1">
               {HASH_ALGORITHM_LABELS[model.hashSearch.algorithm]} · {t('recovery.hashSearch.matches', { count: model.hashSearch.matches.length })}
@@ -355,8 +344,8 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
                   : t('recovery.pagination.range', { start: model.page?.offset ?? 0, end: (model.page?.offset ?? 0) + model.recoveries.length, total: model.total })}
               </span>
               <div className="flex gap-1">
-                <Button type="button" size="xs" variant="forensicsGhost" disabled={!model.hasPreviousPage} onClick={model.previousPage}>{t('recovery.pagination.previous')}</Button>
-                <Button type="button" size="xs" variant="forensicsGhost" disabled={!model.hasNextPage} onClick={model.nextPage}>{t('recovery.pagination.next')}</Button>
+                <Tooltip content={t('recovery.pagination.previous')}><Button aria-label={t('recovery.pagination.previous')} type="button" size="xs" variant="forensicsGhost" disabled={!model.hasPreviousPage} onClick={model.previousPage}><CircleDot size={15} /></Button></Tooltip>
+                <Tooltip content={t('recovery.pagination.next')}><Button aria-label={t('recovery.pagination.next')} type="button" size="xs" variant="forensicsGhost" disabled={!model.hasNextPage} onClick={model.nextPage}><CircleDot size={15} /></Button></Tooltip>
               </div>
             </div>
           </div>

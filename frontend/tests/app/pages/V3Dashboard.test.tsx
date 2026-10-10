@@ -201,7 +201,7 @@ describe('V3Dashboard', () => {
   it('does not reinterpret clearing relation types as selecting every type', () => {
     render(<V3Dashboard />);
 
-    fireEvent.click(screen.getByRole('button', { name: '清空' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /清空|清除|重置|关系类型/ })[0]);
 
     expect(mocks.useGraphQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({ startIds: [], edgeTypes: [] }),

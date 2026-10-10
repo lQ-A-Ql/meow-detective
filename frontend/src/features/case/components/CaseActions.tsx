@@ -1,4 +1,5 @@
-import { FolderOpen, Trash2 } from 'lucide-react';
+import { FolderOpen, Trash2, Plus, CircleDot, Upload, X } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -72,15 +73,13 @@ export function CaseWelcomeForms({
               inputSize="compact"
             />
           </div>
-          <Button
+          <Tooltip content={t('caseHome.welcome.create.action')}><Button aria-label={t('caseHome.welcome.create.action')}
             type="button"
             variant="forensicsPrimary"
             size="xs"
             onClick={onCreateCase}
             disabled={createPending || !caseRoot || !caseName}
-          >
-            {createPending ? t('caseHome.welcome.create.pending') : t('caseHome.welcome.create.action')}
-          </Button>
+          ><Plus size={15} /></Button></Tooltip>
           {createError ? (
             <div className="mt-2 text-[11px] text-forensics-error-text">{createError}</div>
           ) : null}
@@ -98,15 +97,13 @@ export function CaseWelcomeForms({
               inputSize="compact"
             />
           </div>
-          <Button
+          <Tooltip content={t('caseHome.welcome.open.action')}><Button aria-label={t('caseHome.welcome.open.action')}
             type="button"
             variant="forensicsPrimary"
             size="xs"
             onClick={() => onOpenCase(openCasePath)}
             disabled={openPending || !openCasePath}
-          >
-            {openPending ? t('caseHome.welcome.open.pending') : t('caseHome.welcome.open.action')}
-          </Button>
+          ><CircleDot size={15} /></Button></Tooltip>
           {openError ? (
             <div className="mt-2 text-[11px] text-forensics-error-text">{openError}</div>
           ) : null}
@@ -204,7 +201,7 @@ export function ImportSection({
           inputSize="compact"
           className="flex-1"
         />
-        <Button
+        <Tooltip content={t('caseHome.import.file')}><Button aria-label={t('caseHome.import.file')}
           type="button"
           variant="forensicsOutline"
           size="xs"
@@ -214,10 +211,8 @@ export function ImportSection({
               setImportPath(path);
             }
           }}
-        >
-          <FolderOpen size={12} /> {t('caseHome.import.file')}
-        </Button>
-        <Button
+        ><FolderOpen size={15} /></Button></Tooltip>
+        <Tooltip content={t('caseHome.import.directory')}><Button aria-label={t('caseHome.import.directory')}
           type="button"
           variant="forensicsOutline"
           size="xs"
@@ -227,28 +222,22 @@ export function ImportSection({
               setImportPath(path);
             }
           }}
-        >
-          <FolderOpen size={12} /> {t('caseHome.import.directory')}
-        </Button>
-        <Button
+        ><FolderOpen size={15} /></Button></Tooltip>
+        <Tooltip content={t('caseHome.import.action')}><Button aria-label={t('caseHome.import.action')}
           type="button"
           variant="forensicsPrimary"
           size="xs"
           onClick={onImport}
           disabled={importPending || Boolean(importJob)}
-        >
-          {importPending ? t('caseHome.import.submitting') : importJob ? t('caseHome.import.running') : t('caseHome.import.action')}
-        </Button>
-        <Button
+        ><Upload size={15} /></Button></Tooltip>
+        <Tooltip content={t('caseHome.actions.cancel')}><Button aria-label={t('caseHome.actions.cancel')}
           type="button"
           variant="forensicsGhost"
           size="xs"
           onClick={() => {
             onClose();
           }}
-        >
-          {t('caseHome.actions.cancel')}
-        </Button>
+        ><X size={15} /></Button></Tooltip>
       </div>
       {importPending ? (
         <div className="mt-2 flex items-center gap-2 text-[11px] text-forensics-muted">
@@ -259,16 +248,14 @@ export function ImportSection({
       {importJob ? (
         <div className="mt-2 text-[11px] text-forensics-text-tertiary font-mono bg-forensics-surface border border-forensics-350 p-2">
           <div>{t('caseHome.import.progress', { name: importJob.name, progress: importJob.progress, detail: importJob.detail })}</div>
-          <Button
+          <Tooltip content={t('caseHome.import.cancel')}><Button aria-label={t('caseHome.import.cancel')}
             type="button"
             variant="forensicsLink"
             size="inline"
             onClick={onCancelImport}
             disabled={cancelImportPending}
             className="mt-1 text-[10px] text-forensics-error-text hover:text-forensics-error-text"
-          >
-            {cancelImportPending ? t('caseHome.import.canceling') : t('caseHome.import.cancel')}
-          </Button>
+          ><Upload size={15} /></Button></Tooltip>
         </div>
       ) : null}
       {importSuccess ? (

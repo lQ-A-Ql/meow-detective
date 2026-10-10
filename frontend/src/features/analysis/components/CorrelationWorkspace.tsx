@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useEffect, useMemo, useState } from 'react';
 import { GitBranch, Link2, ListFilter, Network, Search, TimerReset } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
@@ -217,16 +218,13 @@ export function CorrelationWorkspace({
           {t('correlation.workspace.title')}
         </div>
         {onRefresh ? (
-          <Button
+          <Tooltip content={t('correlation.workspace.refresh')}><Button aria-label={t('correlation.workspace.refresh')}
             type="button"
             variant="outline"
             size="sm"
             onClick={onRefresh}
-            className="h-8 rounded-none border-forensics-border bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"
-          >
-            <TimerReset size={14} className={refreshing ? 'opacity-70' : ''} />
-            {t('correlation.workspace.refresh')}
-          </Button>
+            className="rounded-none border-forensics-border bg-forensics-surface text-[12px] hover:bg-forensics-panel-strong"
+          ><TimerReset size={15} /></Button></Tooltip>
         ) : null}
       </div>
 

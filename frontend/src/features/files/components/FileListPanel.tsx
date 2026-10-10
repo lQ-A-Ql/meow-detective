@@ -1,4 +1,5 @@
 import { ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import type { ReactNode } from 'react';
 import { useCallback, useMemo, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -182,17 +183,14 @@ export function FileListPanel({
   return (
     <div className="flex-1 flex flex-col border-b border-forensics-divider bg-forensics-surface min-h-0">
       <div className="shrink-0 flex items-center gap-2 border-b border-forensics-divider bg-forensics-panel px-3 py-1.5">
-        <Button
+        <Tooltip content={t('fileBrowser.parentDirectory')}><Button aria-label={t('fileBrowser.parentDirectory')}
           type="button"
           variant="outline"
           size="sm"
-          className="h-7 gap-1 px-2 text-[11px]"
+          className="text-[11px]"
           disabled={!parentDirectory}
           onClick={goToParentDirectory}
-        >
-          <ArrowUp size={12} />
-          {t('fileBrowser.parentDirectory')}
-        </Button>
+        ><ArrowUp size={15} /></Button></Tooltip>
         {visibilityToggle}
         {mountControl}
         {canGoToPreviousRows || canGoToNextRows ? (
@@ -231,9 +229,7 @@ export function FileListPanel({
         renderRowContextMenu={renderRowContextMenu}
         emptyTitle={t('fileBrowser.list.emptyTitle')}
         emptyAction={parentDirectory ? (
-          <Button type="button" variant="outline" size="sm" onClick={goToParentDirectory}>
-            {t('fileBrowser.parentDirectory')}
-          </Button>
+          <Tooltip content={t('fileBrowser.parentDirectory')}><Button aria-label={t('fileBrowser.parentDirectory')} type="button" variant="outline" size="sm" onClick={goToParentDirectory}><ArrowUp size={15} /></Button></Tooltip>
         ) : undefined}
         emptyDescription={
           rowsPage?.truncated

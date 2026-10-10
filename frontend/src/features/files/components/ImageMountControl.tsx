@@ -1,4 +1,5 @@
 import { HardDriveDownload } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -18,20 +19,18 @@ export function ImageMountControl({ model }: ImageMountControlProps) {
 
   return (
     <>
-      <Button
+      <Tooltip content={t('fileBrowser.mount.open')}><Button
         type="button"
         variant="forensicsOutline"
-        size="xs"
-        className="shrink-0 gap-1.5"
+        size="iconSm"
         onClick={model.openDialog}
         aria-label={t('fileBrowser.mount.open')}
       >
-        <HardDriveDownload size={13} />
-        <span>{t('fileBrowser.mount.open')}</span>
+        <HardDriveDownload size={15} />
         {activeMountCount + activeEmulationCount > 0 ? (
           <Badge variant="secondary">{activeMountCount + activeEmulationCount}</Badge>
         ) : null}
-      </Button>
+      </Button></Tooltip>
       <ImageMountDialog model={model} />
     </>
   );

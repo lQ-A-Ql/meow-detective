@@ -160,7 +160,7 @@ describe('CaseHome page', () => {
     expect(screen.getByText('新建案件')).toBeDefined();
     expect(screen.getByPlaceholderText('案件父目录')).toBeDefined();
     expect(screen.getByPlaceholderText('案件名称')).toBeDefined();
-    expect(screen.getByText('创建案件')).toBeDefined();
+    expect(screen.getByRole('button', { name: /创建案件|创建中/ })).toBeDefined();
   });
 
   it('shows open case form', async () => {
@@ -168,7 +168,7 @@ describe('CaseHome page', () => {
 
     expect(screen.getByText('打开已有案件')).toBeDefined();
     expect(screen.getByPlaceholderText('案件路径')).toBeDefined();
-    expect(screen.getByText('打开案件')).toBeDefined();
+    expect(screen.getByRole('button', { name: /打开案件|打开中/ })).toBeDefined();
   });
 
   it('shows recent cases section', async () => {

@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next';
+import { Tooltip } from '@/app/components/ui/tooltip';
+import { CircleDot } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
 import type { ApiErrorDto, ImageMetadata } from '@/types/models';
@@ -31,7 +33,7 @@ export function ImageMetadataInspector({ metadata, loading, error, onRetry }: Im
       {!loading && error ? (
         <div className="space-y-2">
           <div className="text-[11px] text-forensics-error-text">{error.message}</div>
-          {onRetry ? <Button type="button" size="xs" variant="forensicsOutline" onClick={onRetry}>{t('fileBrowser.inspector.imageMetadata.retry')}</Button> : null}
+          {onRetry ? <Tooltip content={t('fileBrowser.inspector.imageMetadata.retry')}><Button aria-label={t('fileBrowser.inspector.imageMetadata.retry')} type="button" size="xs" variant="forensicsOutline" onClick={onRetry}><CircleDot size={15} /></Button></Tooltip> : null}
         </div>
       ) : null}
       {!loading && !error && metadata ? (

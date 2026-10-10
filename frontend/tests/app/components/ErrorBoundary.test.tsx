@@ -43,8 +43,8 @@ describe('ErrorBoundary', () => {
 
       expect(screen.getByText('应用发生错误')).toBeDefined();
       expect(screen.getByText('Test error')).toBeDefined();
-      expect(screen.getByText('重新加载')).toBeDefined();
-      expect(screen.getByText('尝试恢复')).toBeDefined();
+      expect(screen.getByRole('button', { name: '重新加载' })).toBeDefined();
+      expect(screen.getByRole('button', { name: '尝试恢复' })).toBeDefined();
     } finally {
       restoreWindowError();
       consoleSpy.mockRestore();

@@ -1,4 +1,6 @@
 import { Button } from '@/app/components/ui/button';
+import { Tooltip } from '@/app/components/ui/tooltip';
+import { Play } from 'lucide-react';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import type { McpHostStatus } from '@/types/models';
 import type { TFunction } from 'i18next';
@@ -12,7 +14,7 @@ export function McpHostToolsPanelView({ t, status, loading, copied, copyError, o
     <span className="text-[10px] text-forensics-muted" role="status">{t(status?.running ? 'mcpUi.host.running' : settings?.enabled ? 'mcpUi.host.starting' : 'mcpUi.host.stopped')}</span>
     <code className="min-w-0 break-all text-[10px] text-forensics-muted">{status?.endpoint}</code>
     <Button type="button" variant="forensicsGhost" size="compact" disabled={!status} onClick={onCopy}>{t(copied ? 'mcpUi.host.copied' : 'mcpUi.host.copyEndpoint')}</Button>
-    {status && settings?.enabled && !status.running ? <Button type="button" variant="forensicsOutline" size="compact" disabled={loading} onClick={onRetry}>{t('mcpUi.host.retry')}</Button> : null}
+    {status && settings?.enabled && !status.running ? <Tooltip content={t('mcpUi.host.retry')}><Button aria-label={t('mcpUi.host.retry')} type="button" variant="forensicsOutline" size="compact" disabled={loading} onClick={onRetry}><Play size={15} /></Button></Tooltip> : null}
     {copyError ? <span role="alert" className="text-[10px] text-forensics-error-text">{t('mcpUi.host.copyFailed')}</span> : null}
   </div>{toolList}</div>;
 }

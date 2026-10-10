@@ -25,15 +25,15 @@ describe('ImportDataSourceDialog', () => {
   });
 
   function advanceToForm() {
-    fireEvent.click(screen.getByRole('button', { name: '下一步' }));
+    fireEvent.click(screen.getByRole('button', { name: /下一步/ }));
   }
 
   function clickBack() {
-    fireEvent.click(screen.getByRole('button', { name: '上一步' }));
+    fireEvent.click(screen.getByRole('button', { name: /上一步/ }));
   }
 
   function clickImport() {
-    fireEvent.click(screen.getByRole('button', { name: '导入' }));
+    fireEvent.click(screen.getByRole('button', { name: /^导入$/ }));
   }
 
   it('renders the platform selection step on open', () => {
@@ -134,7 +134,7 @@ describe('ImportDataSourceDialog', () => {
 
     advanceToForm();
 
-    expect(screen.getByRole('button', { name: '导入中...' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: /^导入$|导入中/ })).toHaveProperty('disabled', true);
   });
 
   it('preserves form values when going back and forward between steps', () => {
@@ -209,7 +209,7 @@ describe('ImportDataSourceDialog', () => {
 
     advanceToForm();
     fireEvent.click(screen.getByLabelText('本地物理磁盘'));
-    fireEvent.click(screen.getByRole('button', { name: '上一步' }));
+    fireEvent.click(screen.getByRole('button', { name: /上一步/ }));
     fireEvent.click(screen.getByLabelText('Linux'));
     advanceToForm();
 

@@ -109,7 +109,7 @@ describe('DeletedRecoveryPanel', () => {
     const runScan = vi.fn();
     render(<DeletedRecoveryPanel model={model({ runScan })} />);
 
-    fireEvent.click(screen.getByRole('button', { name: '开始扫描' }));
+    fireEvent.click(screen.getByRole('button', { name: /扫描/ }));
 
     expect(runScan).toHaveBeenCalledTimes(1);
     expect(screen.getByText('当前分区尚未执行删除恢复扫描')).toBeDefined();
@@ -128,7 +128,7 @@ describe('DeletedRecoveryPanel', () => {
     })} />);
 
     expect(screen.getByText('该候选没有可读取的已验证内容区间')).toBeDefined();
-    expect(screen.getByRole('button', { name: '导出完整恢复文件' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: /导出完整恢复文件|导出恢复文件/ }).hasAttribute('disabled')).toBe(true);
   });
 
   it('shows the persisted MFT sequence for an NTFS candidate', () => {

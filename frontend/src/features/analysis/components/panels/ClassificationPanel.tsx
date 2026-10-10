@@ -1,4 +1,5 @@
 import { Download, FileText, RefreshCw, Shield } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import type { EvidenceClassificationSummary } from '@/types/models';
@@ -47,15 +48,12 @@ export function EvidenceClassificationPanel({
             {t('analysisPanels.classification.description')}
           </div>
         </div>
-        <Button
+        <Tooltip content={t('analysisPanels.classification.run')}><Button aria-label={t('analysisPanels.classification.run')}
           type="button"
           onClick={onRun}
           disabled={pending}
-          className="h-8 rounded-none border border-forensics-text bg-forensics-text px-4 text-[12px] text-white hover:bg-forensics-text-secondary"
-        >
-          {pending ? <RefreshCw size={14} className="opacity-70" /> : <Shield size={14} />}
-          {pending ? t('analysisPanels.classification.running') : t('analysisPanels.classification.run')}
-        </Button>
+          className="rounded-none border border-forensics-text bg-forensics-text text-[12px] text-white hover:bg-forensics-text-secondary"
+        ><RefreshCw size={15} /></Button></Tooltip>
       </div>
 
       <SummaryStrip
@@ -139,15 +137,12 @@ export function AnalysisReportPanel({
     <div className="flex h-64 flex-col items-center justify-center gap-4">
       <FileText size={48} className="text-forensics-muted-lighter" />
       <div className="text-[14px] text-forensics-muted">{t('analysisPanels.report.title')}</div>
-      <Button
+      <Tooltip content={t('analysisPanels.report.download')}><Button aria-label={t('analysisPanels.report.download')}
         type="button"
         onClick={onDownload}
         disabled={pending}
-        className="h-9 rounded-none bg-forensics-text px-6 text-[12px] text-white hover:bg-forensics-text-secondary"
-      >
-        {pending ? <RefreshCw size={14} className="opacity-70" /> : <Download size={14} />}
-        {t('analysisPanels.report.download')}
-      </Button>
+        className="rounded-none bg-forensics-text text-[12px] text-white hover:bg-forensics-text-secondary"
+      ><RefreshCw size={15} /></Button></Tooltip>
     </div>
   );
 }

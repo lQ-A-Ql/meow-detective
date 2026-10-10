@@ -1,4 +1,5 @@
-import { Pause, Play, RefreshCw } from 'lucide-react';
+import { Pause, Play, RefreshCw, CircleDot } from 'lucide-react';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/app/components/ui/button';
@@ -43,39 +44,32 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
               </SelectContent>
             </Select>
           </div>
-          <Button
+          <Tooltip content={t('graph.pause')}><Button aria-label={t('graph.pause')}
             type="button"
             variant="outline"
             onClick={model.toggleRunning}
             disabled={!model.hasNodes}
-            className="h-7 rounded-none border-forensics-border bg-forensics-surface px-2 text-[11px] hover:bg-forensics-panel-strong"
-          >
-            {model.running ? <Pause size={12} className="mr-1" /> : <Play size={12} className="mr-1" />}
-            {model.running ? t('graph.pause') : t('graph.resume')}
-          </Button>
-          <Button
+            className="rounded-none border-forensics-border bg-forensics-surface text-[11px] hover:bg-forensics-panel-strong"
+          ><Pause size={15} /></Button></Tooltip>
+          <Tooltip content={t('graph.refresh')}><Button aria-label={t('graph.refresh')}
             type="button"
             variant="outline"
             onClick={model.refresh}
             disabled={model.isLoadingGraph}
-            className="h-7 rounded-none border-forensics-border bg-forensics-surface px-2 text-[11px] hover:bg-forensics-panel-strong"
-          >
-            <RefreshCw size={12} className="mr-1 opacity-70" />{t('graph.refresh')}
-          </Button>
+            className="rounded-none border-forensics-border bg-forensics-surface text-[11px] hover:bg-forensics-panel-strong"
+          ><RefreshCw size={15} /></Button></Tooltip>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="text-[11px] text-forensics-muted">{t('graph.edgeTypeLabel')}</span>
-        <Button
+        <Tooltip content={t('graph.selectAll') + ' / ' + t('graph.clearAll')}><Button aria-label={t('graph.selectAll') + ' / ' + t('graph.clearAll')}
           type="button"
           variant="forensicsGhost"
           size="compact"
           onClick={() => model.selectAllEdgeTypes(model.selectedEdgeTypes.length < ALL_EDGE_TYPES.length)}
           className="text-[10px]"
-        >
-          {model.selectedEdgeTypes.length < ALL_EDGE_TYPES.length ? t('graph.selectAll') : t('graph.clearAll')}
-        </Button>
+        ><CircleDot size={15} /></Button></Tooltip>
         {ALL_EDGE_TYPES.map((type) => (
           <label key={type} className="flex cursor-pointer items-center gap-1 rounded-none bg-transparent px-2 py-1 text-[10px] hover:bg-forensics-panel-strong">
             <Checkbox

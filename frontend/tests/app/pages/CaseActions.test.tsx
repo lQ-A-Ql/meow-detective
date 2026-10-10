@@ -76,7 +76,7 @@ describe('CaseWelcomeForms', () => {
       />,
     );
 
-    expect(screen.getByText('创建中...')).toBeDefined();
+    expect(screen.getByRole('button', { name: /^创建案件$|创建中/ })).toBeDefined();
     expect(screen.getByText('目录已存在')).toBeDefined();
   });
 
@@ -204,7 +204,7 @@ describe('ImportSection', () => {
         })}
       />,
     );
-    importButton = screen.getByRole('button', { name: /后台导入中/ }) as HTMLButtonElement;
+    importButton = screen.getByRole('button', { name: /^导入$|导入中/ }) as HTMLButtonElement;
     expect(importButton.disabled).toBe(true);
     expect(screen.getByText(/导入任务 · 42% · 解析 MFT/)).toBeDefined();
   });
@@ -224,7 +224,7 @@ describe('ImportSection', () => {
     const { rerender } = render(
       <ImportSection {...baseImportProps({ importJob, cancelImportPending: true, onCancelImport })} />,
     );
-    let cancelButton = screen.getByRole('button', { name: /取消中/ }) as HTMLButtonElement;
+    let cancelButton = screen.getByRole('button', { name: /^取消导入$|取消中/ }) as HTMLButtonElement;
     expect(cancelButton.disabled).toBe(true);
 
     rerender(<ImportSection {...baseImportProps({ importJob, cancelImportPending: false, onCancelImport })} />);

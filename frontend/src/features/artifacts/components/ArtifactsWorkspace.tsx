@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { Tooltip } from '@/app/components/ui/tooltip';
+import { X, CircleDot, History } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -35,16 +37,16 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
       <ContextBar>
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {model.families.map(({ family, count }) => (
-            <Button type="button" key={family} variant={model.selectedArtifactFamily === family ? 'forensicsSurface' : 'forensicsGhost'} size="xs" onClick={() => model.selectArtifactFamily(family)} className="shrink-0 whitespace-nowrap font-mono">
+            <div key={family} role="button" tabIndex={0} onClick={() => model.selectArtifactFamily(family)} className="shrink-0 whitespace-nowrap font-mono">
               {family} <span className="text-forensics-muted-lighter">{count}</span>
-            </Button>
+            </div>
           ))}
         </div>
       </ContextBar>
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-forensics-border">
           <DenseDataTableFrame layout="fill" variant="plain">
-            <DenseDataTable<ArtifactRow> rows={model.tableRows} getRowKey={(row) => row.id} selectedRowKey={model.selectedArtifact?.id} onRowClick={model.onArtifactRowClick} emptyTitle={t('artifacts.emptyTitle')} emptyDescription={t('artifacts.emptyDescription')} columns={columns} loadContextKey={model.loadContextKey} loadStateKey={model.loadStateKey} onReachEnd={model.loadNextPage} onRetryLoadMore={model.retry} hasMore={model.hasMore} loadingMore={model.loadingMore} loadMoreFailed={model.loadMoreFailed} initialLoadFailed={model.initialLoadFailed} onRetryInitialLoad={model.retry} emptyAction={model.selectedArtifactFamily ? (<Button type="button" variant="outline" size="sm" onClick={() => model.selectArtifactFamily('')}>{t('artifacts.clearFamily')}</Button>) : undefined} />
+            <DenseDataTable<ArtifactRow> rows={model.tableRows} getRowKey={(row) => row.id} selectedRowKey={model.selectedArtifact?.id} onRowClick={model.onArtifactRowClick} emptyTitle={t('artifacts.emptyTitle')} emptyDescription={t('artifacts.emptyDescription')} columns={columns} loadContextKey={model.loadContextKey} loadStateKey={model.loadStateKey} onReachEnd={model.loadNextPage} onRetryLoadMore={model.retry} hasMore={model.hasMore} loadingMore={model.loadingMore} loadMoreFailed={model.loadMoreFailed} initialLoadFailed={model.initialLoadFailed} onRetryInitialLoad={model.retry} emptyAction={model.selectedArtifactFamily ? (<Tooltip content={t('artifacts.clearFamily')}><Button aria-label={t('artifacts.clearFamily')} type="button" variant="outline" size="sm" onClick={() => model.selectArtifactFamily('')}><X size={15} /></Button></Tooltip>) : undefined} />
           </DenseDataTableFrame>
         </div>
         <InspectorPane kind={t('inspectorKind.artifact')} title={t('artifacts.inspector.title')} subtitle={model.selectedArtifact ? `${model.selectedArtifact.artifactType} / ${model.selectedArtifact.id}` : t('artifacts.inspector.none')} widthClassName="w-80">
@@ -52,7 +54,7 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
             <InspectorSection title={t('artifacts.inspector.targetPath')}><InspectorValue value={String(model.selectedArtifact?.attrs.targetPath ?? '-')} mono strong /></InspectorSection>
             <InspectorSection title={t('artifacts.inspector.attributes')}><div className="space-y-2 font-mono text-[10px]"><KeyValueField label={t('artifacts.fields.driveType')} value={String(model.selectedArtifact?.attrs.driveType ?? '-')} /><KeyValueField label={t('artifacts.fields.volumeSerial')} value={String(model.selectedArtifact?.attrs.volumeSerial ?? '-')} /><KeyValueField label={t('artifacts.fields.machineId')} value={String(model.selectedArtifact?.attrs.machineId ?? '-')} /></div></InspectorSection>
             <InspectorSection title={t('artifacts.inspector.context')}><InspectorValue value={model.selectedArtifact?.title ?? '-'} mono /></InspectorSection>
-            <InspectorSection title={t('artifacts.inspector.actions')}><div className="space-y-2"><Button type="button" variant="forensicsSurface" size="xs" onClick={() => model.openArtifactSource(model.selectedArtifact)} disabled={!model.selectedArtifact?.sourceObjectId} className="w-full font-light">{t('artifacts.actions.openSource')}</Button><Button type="button" variant="forensicsLink" size="xs" onClick={() => model.openArtifactTimeline(model.selectedArtifact)} disabled={!model.selectedArtifact} className="w-full">{t('artifacts.actions.openTimeline')}</Button></div></InspectorSection>
+            <InspectorSection title={t('artifacts.inspector.actions')}><div className="space-y-2"><Tooltip content={t('artifacts.actions.openSource')}><Button aria-label={t('artifacts.actions.openSource')} type="button" variant="forensicsSurface" size="xs" onClick={() => model.openArtifactSource(model.selectedArtifact)} disabled={!model.selectedArtifact?.sourceObjectId} className="font-light"><CircleDot size={15} /></Button></Tooltip><Tooltip content={t('artifacts.actions.openTimeline')}><Button aria-label={t('artifacts.actions.openTimeline')} type="button" variant="forensicsLink" size="xs" onClick={() => model.openArtifactTimeline(model.selectedArtifact)} disabled={!model.selectedArtifact} ><History size={15} /></Button></Tooltip></div></InspectorSection>
           </div>
         </InspectorPane>
       </div>
