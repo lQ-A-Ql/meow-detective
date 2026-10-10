@@ -25,7 +25,7 @@ export function BottomDrawer({ model, analysisProgress }: BottomDrawerProps) {
   return (
     <div
       className={`z-10 min-w-0 shrink-0 overflow-hidden bg-forensics-base transition-[height] duration-150 ${
-        model.drawerOpen ? 'flex flex-col border-t border-forensics-line-2' : 'h-8 overflow-hidden'
+        model.drawerOpen ? 'flex flex-col' : 'h-8 overflow-hidden'
       }`}
       style={model.drawerOpen ? { height: `${height}px` } : undefined}
     >

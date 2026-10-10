@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
+import { ActionBar } from '@/components/layout/ActionBar';
 import type { ReportsWorkspaceModel } from '@/features/reports/use-reports-workspace-model';
 
 interface ReportsWorkspaceProps {
@@ -41,12 +42,15 @@ export function ReportsWorkspace({ model }: ReportsWorkspaceProps) {
           <div><div className="mb-3 text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('reports.format')}</div><Select value={model.selectedFormat} onValueChange={model.selectFormat}><SelectTrigger variant="mono" size="sm" className="w-64"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="html">HTML</SelectItem><SelectItem value="csv">CSV</SelectItem><SelectItem value="json">JSON</SelectItem></SelectContent></Select></div>
           <div className="space-y-1 bg-transparent p-3 text-[11px] text-forensics-text-tertiary"><div className="font-light text-forensics-text">{t('reports.summaryTitle')}</div><div>{t('reports.summaryDescription')}</div><div className="font-mono text-forensics-muted-light">{model.exportScope.rawFileExtraction ? t('reports.expectedOutput.raw') : t('reports.expectedOutput.report')}</div></div>
           {model.evidenceHashLabel ? <div className="space-y-1 border border-forensics-warning-border bg-forensics-warning-bg p-3 text-[11px] text-forensics-warning-text"><div className="font-light text-forensics-text">Evidence Hash: {model.evidenceHashLabel}</div><div>{model.evidenceHashCaveat}</div></div> : null}
-          <div className="mt-4"><Button type="button" variant="forensicsPrimary" size="sm" onClick={model.runExport} disabled={model.exportPending} className="px-6 font-light uppercase tracking-wider"><Download size={14} /> {model.exportPending ? t('reports.generating') : t('reports.generate')}</Button></div>
+
         </div>
         <div className="flex min-h-0 w-96 max-w-[40%] shrink-0 flex-col bg-forensics-panel"><div className="flex h-7 shrink-0 items-center justify-between border-b border-forensics-divider bg-forensics-panel-strong px-4 text-[10px] font-light uppercase tracking-wider text-forensics-text-tertiary"><span>{t('reports.recent')}</span><span className="font-mono text-forensics-muted-light">{t('reports.recordCount', { count: model.history?.length ?? 0 })}</span></div>
           <ScrollArea className="min-h-0 flex-1" viewportClassName="space-y-4 p-4">{model.history?.map((item) => <div key={item.id} className="bg-transparent p-3"><div className="mb-2 flex items-center justify-between gap-4"><div className="flex min-w-0 items-center gap-1.5 truncate text-[12px] font-light text-forensics-text">{item.status === 'running' ? <CircleDashed size={12} className="shrink-0 text-forensics-muted-light opacity-70" /> : <FileText size={12} className="shrink-0" />}<span className="truncate">{item.fileName}</span></div><div className="shrink-0 font-mono text-[10px] text-forensics-muted-light">{item.status === 'running' ? t('caseHome.processing.running') : t('dashboard.batch.completed')}</div></div><div className="mb-3 text-[11px] text-forensics-muted">{t('reports.generatedBy', { author: item.createdBy, time: item.createdAt })}</div>{item.status === 'running' ? <div className="space-y-2"><div className="h-1 w-full overflow-hidden bg-transparent-strong"><div className="h-full bg-forensics-text" style={{ width: `${item.progress ?? 0}%` }} /></div><div className="font-mono text-[10px] text-forensics-muted-light">{t('reports.exportQueueProgress')}</div></div> : <Button type="button" variant="forensicsOutline" size="compact" className="w-full text-[10px] font-light uppercase tracking-wider">{t('media.controls.download')}</Button>}</div>)}</ScrollArea>
         </div>
       </div>
+      <ActionBar>
+        <Button type="button" variant="forensicsPrimary" size="sm" onClick={model.runExport} disabled={model.exportPending} className="px-6 font-light uppercase tracking-wider"><Download size={14} /> {model.exportPending ? t('reports.generating') : t('reports.generate')}</Button>
+      </ActionBar>
     </div>
   );
 }

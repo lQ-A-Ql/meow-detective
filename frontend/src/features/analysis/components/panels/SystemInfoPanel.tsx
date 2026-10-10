@@ -149,7 +149,7 @@ export function AnalysisHeader({
             variant="outline"
             onClick={onRefresh}
             disabled={!hasCase || loading || !selectedDataSourceId}
-            className="h-8 rounded-none border-forensics-border bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"
+            className="h-7 rounded-ctl border border-forensics-line-2 bg-transparent px-3 text-[12px] hover:bg-forensics-hover"
           >
             <RefreshCw size={14} className={loading ? 'opacity-70' : ''} />
             {t('analysis.header.refresh')}
@@ -158,7 +158,7 @@ export function AnalysisHeader({
             type="button"
             onClick={onRunExtraction}
             disabled={!hasCase || extractionPending || !selectedDataSourceId}
-            className="h-8 rounded-none border border-forensics-text bg-forensics-text px-3 text-[12px] text-white hover:bg-forensics-text-secondary"
+            className="h-7 rounded-ctl border border-forensics-red-ink bg-forensics-red-ink px-3 text-[12px] text-white hover:opacity-90"
           >
             {extractionPending ? <RefreshCw size={14} className="opacity-70" /> : <Shield size={14} />}
             {extractionPending ? t('analysis.header.running') : t('analysis.header.run')}

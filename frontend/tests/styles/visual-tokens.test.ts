@@ -35,7 +35,7 @@ describe('v3.1 visual tokens', () => {
     expect(token('forensics-red-ink')).toBe('#c8102e');
     expect(token('forensics-red-deep')).toBe('#7a1622');
     expect(token('forensics-red-tint')).toBe('#fff2f2');
-    expect(token('forensics-rail-active')).toBe('rgba(255, 0, 0, 0.8)');
+    expect(token('forensics-rail-active')).toBe('rgba(255, 0, 0, 0.9)');
   });
 
   it('keeps exactly one gold usage: the 40% section divider', () => {
