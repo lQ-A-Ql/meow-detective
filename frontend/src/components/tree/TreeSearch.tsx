@@ -9,7 +9,9 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, X } from 'lucide-react';
+import { Search } from 'lucide-react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 
@@ -45,7 +47,7 @@ export function TreeSearch({
   }, [onFilter]);
 
   return (
-    <div className="px-2 py-1.5 border-b border-forensics-border bg-forensics-panel">
+    <div className="border-b border-forensics-divider px-2 py-1.5">
       <div className="relative">
         <Search
           size={12}
@@ -56,23 +58,23 @@ export function TreeSearch({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={placeholder ?? t('tree.filterPlaceholder')}
-          variant="mono"
+          variant="search"
           inputSize="compact"
-          className="pl-7 pr-6"
+          className="h-6 py-0 pl-7 pr-6 text-[12px] leading-6"
         />
-        {query && (
-          <Button
-            type="button"
-            variant="viewerControl"
-            size="iconXs"
-            onClick={handleClear}
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-forensics-muted-lighter"
-            title={t('tree.clear')}
-            aria-label={t('tree.clear')}
-          >
-            <X size={10} className="text-forensics-muted-lighter" />
-          </Button>
-        )}
+        {query ? (
+          <Tooltip content={t('tree.clear')}>
+            <Button
+              type="button"
+              variant="forensicsGhost"
+              onClick={handleClear}
+              className="absolute right-1 top-1/2 -translate-y-1/2 text-forensics-ink-3"
+              aria-label={t('tree.clear')}
+            >
+              <ActionIcon name="close" className="size-[11px]" />
+            </Button>
+          </Tooltip>
+        ) : null}
       </div>
     </div>
   );
