@@ -3,7 +3,6 @@ import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Button } from '@/app/components/ui/button';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
-import { digestIconName } from '@/lib/digest-icon';
 import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
 
 const ALGORITHMS: DigestAlgorithm[] = ['md5', 'sha1', 'sha256', 'sm3'];
@@ -21,11 +20,10 @@ export function FileDigestInspector({ digest, loading, error, onCalculate }: { d
           {ALGORITHMS.map((algorithm) => (
             <div
               key={algorithm}
-              className="flex min-w-0 items-center justify-between gap-1.5 border border-forensics-line bg-forensics-paper px-2 py-1"
+              className="flex min-w-0 items-center gap-2 px-1 py-1"
             >
-              <span className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-forensics-ink-2">
-                <ActionIcon name={digestIconName(algorithm)} className="size-[13px]" />
-                <span className="truncate">{algorithm.toUpperCase()}</span>
+              <span className="min-w-0 truncate font-mono text-[13px] text-forensics-ink">
+                {algorithm.toUpperCase()}
               </span>
               <Tooltip content={t('fileBrowser.inspector.hash.run', { algorithm: algorithm.toUpperCase() })}>
                 <Button
