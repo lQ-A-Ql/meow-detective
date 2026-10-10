@@ -28,7 +28,8 @@ export function ConfirmationDialog({
   onOpenChange,
   title,
   description,
-
+  cancelLabel,
+  confirmLabel,
   onConfirm,
   pending = false,
   destructive = false,
@@ -41,8 +42,14 @@ export function ConfirmationDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button type="button" variant="forensicsOutline" onClick={() => onOpenChange(false)} disabled={pending}>
-            cancel-icon-slot
+          <Button
+            type="button"
+            variant="forensicsOutline"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+            aria-label={cancelLabel}
+          >
+            <X size={15} />
           </Button>
           <Button type="button" variant={destructive ? 'destructive' : 'forensicsPrimary'} onClick={onConfirm} disabled={pending} aria-label={confirmLabel}><Check size={15} /></Button>
         </DialogFooter>
