@@ -133,7 +133,7 @@ export function EmailExtractionPanel({
       warnings={info.warnings}
       stats={[
         [t('analysisPanels.email.total'), info.total.toString()],
-        [t('topBar.currentPage'), info.messages.length.toString()],
+        [t('analysisPanels.email.messageCount'), info.messages.length.toString()],
         [
           t('analysisPanels.email.withAttachments'),
           info.messages.filter((item) => item.attachmentCount > 0).length.toString(),

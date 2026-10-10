@@ -1,0 +1,22 @@
+import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
+import { Button } from '@/app/components/ui/button';
+
+/** Navigation affordances shared by empty states, so no view hand-rolls its own. */
+export function ImportDataAction() {
+  const { t } = useTranslation();
+  return (
+    <Button asChild variant="outline" size="sm">
+      <Link to="/">{t('common.emptyGoToImport')}</Link>
+    </Button>
+  );
+}
+
+export function RunAnalysisAction({ onClick, disabled = false }: { onClick: () => void; disabled?: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <Button type="button" variant="outline" size="sm" onClick={onClick} disabled={disabled}>
+      {t('analysis.header.run')}
+    </Button>
+  );
+}

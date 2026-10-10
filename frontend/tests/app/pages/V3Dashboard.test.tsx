@@ -247,7 +247,10 @@ describe('V3Dashboard', () => {
     render(<V3Dashboard />);
 
     expect(screen.getAllByText('Windows').length).toBeGreaterThan(0);
-    expect(screen.getByText('未分类')).toBeDefined();
+    // Platform "未分类" is zero in this snapshot, so the shared grid folds it and says how many
+    // zero metrics it hid instead of rendering a dead tile.
+    expect(screen.queryByText('未分类')).toBeNull();
+    expect(screen.getAllByText(/其余 .* 项均为 0/).length).toBeGreaterThan(0);
   });
 
   it('separates rule definition and case execution state', () => {

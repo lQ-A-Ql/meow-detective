@@ -31,6 +31,7 @@ import {
   TableRow,
 } from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
+import { toast } from '@/app/components/ui/toast';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { DenseDataTableRow } from './DenseDataTableRow';
 import { DENSE_TABLE_ROW_HEIGHT } from './dense-table-metrics';
@@ -362,8 +363,9 @@ export function DenseDataTable<T>({
     const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
     if (!line || !clipboard?.writeText) return false;
     void clipboard.writeText(line);
+    toast(t('denseTable.copied'));
     return true;
-  }, [columns]);
+  }, [columns, t]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     const lastIndex = visibleRows.length - 1;

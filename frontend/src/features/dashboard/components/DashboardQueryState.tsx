@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react';
+import { EmptyState } from '@/components/data-display';
 import { useTranslation } from 'react-i18next';
 import { errorMessage } from '@/lib/errors';
 
 interface DashboardQueryStateProps {
+  /** Next step shown when the section has nothing to display yet. */
+  emptyAction?: ReactNode;
   isLoading?: boolean;
   isError?: boolean;
   error?: unknown;
@@ -12,6 +15,7 @@ interface DashboardQueryStateProps {
 }
 
 export function DashboardQueryState({
+  emptyAction,
   isLoading = false,
   isError = false,
   error,
@@ -28,7 +32,7 @@ export function DashboardQueryState({
     return <div className="mt-3 rounded-none border border-forensics-error-border bg-forensics-error-bg p-4 text-[12px] text-forensics-error-text">{errorMessage(error)}</div>;
   }
   if (!hasData) {
-    return <div className="mt-3 rounded-none border border-dashed border-forensics-border-strong bg-forensics-panel p-6 text-center text-[12px] text-forensics-muted-lighter">{resolvedEmptyMessage}</div>;
+    return <EmptyState className="mt-3" title={resolvedEmptyMessage} action={emptyAction} />;
   }
   return <>{children}</>;
 }

@@ -168,6 +168,11 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           onRowClick={model.onHitRowClick}
           emptyTitle={model.activeQuery ? t('search.empty.noMatch') : t('search.empty.start')}
           emptyDescription={model.activeQuery ? t('search.empty.noMatchDescription') : t('search.empty.startDescription')}
+            emptyAction={model.activeQuery ? (
+              <Button type="button" variant="outline" size="sm" onClick={model.clearQuery}>
+                {t('search.clear')}
+              </Button>
+            ) : undefined}
           sortKey={model.sortKey}
           sortDirection={model.sortDirection}
           onSort={model.toggleSort}

@@ -1,7 +1,8 @@
 import { Activity, BarChart3, Shield } from 'lucide-react';
+import { ImportDataAction } from '@/components/layout/EmptyStateActions';
 import { useTranslation } from 'react-i18next';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { MetricCard } from '@/components/data-display';
+import { StatGrid, EmptyState, MetricCard } from '@/components/data-display';
 import type { RulePackStatus } from '@/types/models';
 
 export function RulePackStatusSection({ data, isLoading, isError, error }: { data: RulePackStatus | undefined; isLoading?: boolean; isError?: boolean; error?: unknown }) {
@@ -11,12 +12,12 @@ export function RulePackStatusSection({ data, isLoading, isError, error }: { dat
       <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={data !== undefined}>
       {data ? (
         <>
-          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <StatGrid collapseZeros hiddenNote={(hidden) => t('dashboard.metricsHidden', { count: hidden })} className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
             <MetricCard label={t('dashboard.rulePacks.loaded')} value={data.loadedPacks.length} icon={Shield} size="lg" />
             <MetricCard label={t('dashboard.rulePacks.totalRules')} value={data.totalRuleCount} icon={BarChart3} size="lg" />
             <MetricCard label={t('dashboard.rulePacks.definitionStatus')} value={data.loadStatus} icon={Activity} size="lg" />
             <MetricCard label={t('dashboard.rulePacks.executionStatus')} value={data.executionStatus} icon={Activity} size="lg" />
-          </div>
+          </StatGrid>
           {data.loadedPacks.length > 0 && (
             <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">
               <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.rulePacks.loaded')}</div>
@@ -37,7 +38,7 @@ export function RulePackStatusSection({ data, isLoading, isError, error }: { dat
             </div>
           )}
         </>
-      ) : <div className="mt-3 rounded-none border border-dashed border-forensics-border-strong bg-forensics-panel p-6 text-center text-[12px] text-forensics-muted-lighter">{t('dashboard.rulePacks.empty')}</div>}
+      ) : <EmptyState className="mt-3" title={t('dashboard.rulePacks.empty')} action={<ImportDataAction />} />}
       </DashboardQueryState>
     </section>
   );

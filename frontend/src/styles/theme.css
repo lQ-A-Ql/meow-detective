@@ -32,6 +32,8 @@
   --chart-4: #287a58;
   --chart-5: #65717e;
   --radius: 0;
+  /* Data-grid row height; the density preference only changes this variable. */
+  --dense-row-height: 31px;
   --sidebar: #fcfdfe;
   --sidebar-foreground: #17212b;
   --sidebar-primary: #278fa6;
@@ -443,4 +445,9 @@
       color-mix(in oklab, var(--forensics-border-strong) 22%, transparent) 6px 7px
     );
   }
+}
+
+/* Comfortable density: a single variable change, so no component hardcodes a second height. */
+:root[data-density='comfortable'] {
+  --dense-row-height: 36px;
 }

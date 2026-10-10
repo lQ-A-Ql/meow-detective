@@ -100,6 +100,11 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             selectedRowKey={model.selectedEvent?.id}
             onRowClick={model.onEventRowClick}
             emptyTitle={t('timeline.emptyTitle')}
+            emptyAction={(
+              <Button type="button" variant="outline" size="sm" onClick={model.clearFilters}>
+                {t('timeline.clear')}
+              </Button>
+            )}
             emptyDescription={t('timeline.emptyDescription')}
             columns={columns}
             loadContextKey={model.loadContextKey}

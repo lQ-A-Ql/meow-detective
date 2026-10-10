@@ -34,7 +34,7 @@ function DenseDataTableRowBase<T>({
   const tableRow = (
     <TableRow
       data-state={selected ? 'selected' : undefined}
-      className={`h-[31px] cursor-pointer border-b ${
+      className={`h-[var(--dense-row-height)] cursor-pointer border-b ${
         selected
           ? 'bg-forensics-sakura-150 text-forensics-text'
           : 'text-forensics-text-secondary hover:bg-forensics-hover'
@@ -45,7 +45,7 @@ function DenseDataTableRowBase<T>({
       {columns.map((column, index) => (
         <TableCell
           key={column.key}
-          className={`h-[31px] px-2 py-1.5 align-middle ${
+          className={`h-[var(--dense-row-height)] px-2 py-1.5 align-middle ${
             index < columns.length - 1
               ? 'border-r border-forensics-border-light'
               : ''

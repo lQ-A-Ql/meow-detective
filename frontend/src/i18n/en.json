@@ -33,7 +33,8 @@
       "archive": "Archive"
     },
     "emptyGoToImport": "Go to data import",
-    "emptyGoToAnalysis": "Go to data analysis"
+    "emptyGoToAnalysis": "Go to data analysis",
+    "loading": "Loading…"
   },
   "mcpUi": {
     "host": {
@@ -640,7 +641,9 @@
       "operationFailed": "Image operation failed.",
       "close": "Close",
       "noSources": "No data sources are available in the current case.",
-      "selectPartitionError": "Select a partition."
+      "selectPartitionError": "Select a partition.",
+      "directBootTitle": "Confirm direct system boot",
+      "directBootAction": "Boot anyway"
     },
     "bitlockerImport": {
       "ariaLabel": "Importing the unlocked BitLocker file catalog",
@@ -884,7 +887,11 @@
       "label": "{{name}} actions menu"
     },
     "preview": {
-      "resizeHandle": "Drag to resize the preview height"
+      "resizeHandle": "Drag to resize the preview height",
+      "imageMetadata": {
+        "loading": "Reading image metadata…",
+        "status": "Status"
+      }
     }
   },
   "importDataSource": {
@@ -1114,7 +1121,8 @@
       "start": "Enter a file name to search",
       "startDescription": "Search only covers files and directories from imported sources."
     },
-    "clearQuery": "Clear search"
+    "clearQuery": "Clear search",
+    "clear": "Clear filters"
   },
   "infrastructure": {
     "caseLabel": "Current case",
@@ -2088,7 +2096,9 @@
     "status": {
       "search": "Search: \"{{query}}\"",
       "ready": "Ready"
-    }
+    },
+    "nextPage": "Next page",
+    "previousPage": "Previous page"
   },
   "eventLog": {
     "title": "Event Log Analysis",
@@ -2242,7 +2252,8 @@
       "threadId": "Thread ID",
       "username": "Username",
       "locked": "Locked",
-      "hasPassword": "Has Password"
+      "hasPassword": "Has Password",
+      "statusCode": "Status code"
     },
     "values": {
       "yes": "Yes",
@@ -2338,7 +2349,8 @@
     "initialLoadError": "Failed to load records.",
     "retry": "Retry",
     "loadingMore": "Loading more records...",
-    "gridLabel": "Data grid: ↑↓ select row · Enter open · Ctrl+C copy row"
+    "gridLabel": "Data grid: ↑↓ select row · Enter open · Ctrl+C copy row",
+    "copied": "Copied to clipboard"
   },
   "errorBoundary": {
     "title": "Application Error",
@@ -2680,7 +2692,8 @@
         "cc": "Cc",
         "bcc": "Bcc",
         "subject": "Subject"
-      }
+      },
+      "messageCount": "Message count"
     },
     "bootLabels": {
       "operatingSystemStarted": "Operating system started",
@@ -2845,7 +2858,11 @@
         "context": "Templates, export jobs and report artifacts"
       }
     },
-    "jobsRunning": "{{count}} running"
+    "jobsRunning": "{{count}} running",
+    "density": {
+      "compact": "Switch to compact density",
+      "comfortable": "Switch to comfortable density"
+    }
   },
   "inspectorKind": {
     "file": "File object",

@@ -1,7 +1,8 @@
 import { GitBranch, Layers } from 'lucide-react';
+import { ImportDataAction } from '@/components/layout/EmptyStateActions';
 import { useTranslation } from 'react-i18next';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { MetricCard } from '@/components/data-display';
+import { StatGrid, EmptyState, MetricCard } from '@/components/data-display';
 import type { DataSourceSummary } from '@/types/models';
 
 export function DataSourceCoverageSection({
@@ -19,12 +20,12 @@ export function DataSourceCoverageSection({
   return (
     <section>
       <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={dataSources !== undefined}>
-      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <StatGrid collapseZeros hiddenNote={(hidden) => t('dashboard.metricsHidden', { count: hidden })} className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
         <MetricCard label={t('dashboard.sources.count')} value={dataSources?.length ?? 0} icon={Layers} size="lg" />
         <MetricCard label={t('dashboard.sources.partitions')} value={dataSources?.reduce((sum, ds) => sum + (ds.partitions?.length ?? 0), 0) ?? 0} icon={GitBranch} size="lg" />
         <MetricCard label={t('dashboard.sources.e01')} value={dataSources?.filter((ds) => ds.kind === 'e01').length ?? 0} subtitle={t('dashboard.sources.ewf')} size="lg" />
         <MetricCard label={t('dashboard.sources.raw')} value={dataSources?.filter((ds) => ds.kind === 'raw').length ?? 0} subtitle={t('dashboard.sources.rawSubtitle')} size="lg" />
-      </div>
+      </StatGrid>
       {dataSources && dataSources.length > 0 ? (
         <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">
           <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.sources.details')}</div>
@@ -47,7 +48,7 @@ export function DataSourceCoverageSection({
             ))}
           </div>
         </div>
-      ) : <div className="mt-3 rounded-none border border-dashed border-forensics-border-strong bg-forensics-panel p-6 text-center text-[12px] text-forensics-muted-lighter">{t('dashboard.sources.empty')}</div>}
+      ) : <EmptyState className="mt-3" title={t('dashboard.sources.empty')} action={<ImportDataAction />} />}
       </DashboardQueryState>
     </section>
   );

@@ -1,7 +1,7 @@
 import { Activity, GitBranch, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
-import { MetricCard } from '@/components/data-display';
+import { StatGrid, MetricCard } from '@/components/data-display';
 import type { CorrelationOverview } from '@/types/models';
 
 export function CorrelationStatsSection({ data, isLoading, isError, error }: { data: CorrelationOverview | undefined; isLoading?: boolean; isError?: boolean; error?: unknown }) {
@@ -9,12 +9,12 @@ export function CorrelationStatsSection({ data, isLoading, isError, error }: { d
   return (
     <section>
       <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={data !== undefined}>
-      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <StatGrid collapseZeros hiddenNote={(hidden) => t('dashboard.metricsHidden', { count: hidden })} className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
         <MetricCard label={t('dashboard.correlation.nodes')} value={data?.nodeCount ?? 0} icon={GitBranch} size="lg" />
         <MetricCard label={t('dashboard.correlation.edges')} value={data?.edgeCount ?? 0} icon={Activity} size="lg" />
         <MetricCard label={t('dashboard.correlation.clusters')} value={data?.clusterCount ?? 0} icon={Shield} size="lg" />
         <MetricCard label={t('dashboard.correlation.leads')} value={data?.leadCount ?? 0} icon={Shield} size="lg" />
-      </div>
+      </StatGrid>
       {data?.familyCoverage && data.familyCoverage.length > 0 ? (
         <div className="mt-3 rounded-none border border-forensics-border bg-forensics-surface p-4">
           <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.correlation.familyCoverage')}</div>

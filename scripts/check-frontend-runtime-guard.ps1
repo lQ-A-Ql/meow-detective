@@ -392,6 +392,23 @@ Assert-NoMatchesInRuntimeFiles `
   -Message "Hover hints must use the shared app/components/ui/tooltip primitive instead of hand-rolled tooltip markup"
 
 Assert-NoMatchesInRuntimeFiles `
+  -Files $pageRuntimeFiles `
+  -Pattern '<h[1-3][\s>]' `
+  -Message "Route shells must not render headings; workbench pages own no title (see docs/frontend-redesign-plan.md)"
+
+Assert-NoMatchesInRuntimeFiles `
+  -Files $runtimeFiles `
+  -Pattern '<table[\s>]' `
+  -AllowedRelativePaths @('frontend/src/app/components/ui/table.tsx') `
+  -Message "Tables must be rendered through the shared app/components/ui/table primitive"
+
+Assert-NoMatchesInRuntimeFiles `
+  -Files $runtimeFiles `
+  -Pattern '@/assets/anime/' `
+  -AllowedRelativePaths @('frontend/src/app/components/AssetSlot.tsx') `
+  -Message "Supplied artwork must be mounted through app/components/AssetSlot.tsx"
+
+Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
   -Pattern "from\s+['""]@/lib/api/(?!client['""]|mcp['""])[^'""]+['""]" `
   -AllowedRelativePaths ($featureAdapterRelativePaths + $apiModuleRelativePaths) `
@@ -504,7 +521,9 @@ Assert-NoMatchesInRuntimeFiles `
     'frontend/src/features/cache-invalidation.ts',
     'frontend/src/features/search/use-search-workspace-model.ts',
     'frontend/src/components/tables/useDenseTableFilter.ts',
-    'frontend/src/features/mcp/use-mcp-clipboard.ts'
+    'frontend/src/features/mcp/use-mcp-clipboard.ts',
+    # Auto-dismisses a transient confirmation; it never fabricates progress or data.
+    'frontend/src/app/components/ui/toast.tsx'
   ) `
   -Message "Frontend runtime code must not fake business latency with setTimeout"
 

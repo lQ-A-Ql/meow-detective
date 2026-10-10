@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { cn } from '@/app/components/ui/utils';
+import { Rows3 } from 'lucide-react';
 import { SidebarIcon, type SidebarIconName } from './SidebarIcon';
 import type { NavigationLink, NavigationModel } from '@/features/shell/use-navigation-model';
 
@@ -48,8 +49,17 @@ function RailItem({ link, model }: { link: NavigationLink; model: NavigationMode
   );
 }
 
-export function ActivityBar({ model }: { model: NavigationModel }) {
+export function ActivityBar({
+  model,
+  density,
+  onToggleDensity,
+}: {
+  model: NavigationModel;
+  density: 'compact' | 'comfortable';
+  onToggleDensity: () => void;
+}) {
   const { t } = useTranslation();
+  const densityLabel = density === 'compact' ? t('navigation.density.comfortable') : t('navigation.density.compact');
   const jobsLabel = t('navigation.jobsRunning', { count: model.runningCount });
   return (
     <aside className="relative z-20 flex w-14 shrink-0 flex-col items-center border-r border-forensics-border bg-white" aria-label={t('navigation.appNavLabel')}>
@@ -68,6 +78,18 @@ export function ActivityBar({ model }: { model: NavigationModel }) {
           >
             <SidebarIcon name="jobs" className="size-[21px]" />
             {model.runningCount > 0 ? <span className="absolute right-2 top-1.5 min-w-3 rounded-full bg-forensics-primary-blue px-1 text-center text-[9px] leading-3 text-white">{model.runningCount}</span> : null}
+          </Button>
+        </Tooltip>
+        <Tooltip content={densityLabel}>
+          <Button
+            type="button"
+            variant="forensicsGhost"
+            size="iconSm"
+            aria-label={densityLabel}
+            onClick={onToggleDensity}
+            className={railItemClass}
+          >
+            <Rows3 size={18} />
           </Button>
         </Tooltip>
         <Tooltip content={t('settings.title')}>

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { RunAnalysisAction } from '@/components/layout/EmptyStateActions';
 import { AppWindow } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
 import { Badge } from '@/app/components/ui/badge';
@@ -24,6 +25,8 @@ import type {
 import type { AndroidAnalysisTabKey } from '@/features/analysis/types';
 
 interface AndroidAnalysisViewProps {
+  /** Runs platform analysis when the device has no packages yet. */
+  onRunAnalysis?: () => void;
   deviceInfo?: AndroidDeviceInfo;
   packageSummary?: AndroidPackageSummary;
   activePanel: AndroidAnalysisTabKey;
@@ -41,6 +44,7 @@ const getPackageKey = (item: AndroidPackageSummary['packages'][number]) => JSON.
 const renderPackage = (item: AndroidPackageSummary['packages'][number]) => <AndroidPackageCard item={item} />;
 
 export function AndroidAnalysisView({
+  onRunAnalysis,
   deviceInfo,
   packageSummary,
   activePanel,
@@ -81,6 +85,7 @@ export function AndroidAnalysisView({
                 hasMore={hasMore}
                 loadingMore={loadingMore}
                 onLoadMore={onLoadMore}
+                onRunAnalysis={onRunAnalysis}
               />
             )}
           </>
@@ -136,11 +141,13 @@ function AndroidPackagesPanel({
   hasMore,
   loadingMore,
   onLoadMore,
+  onRunAnalysis,
 }: {
   summary?: AndroidPackageSummary;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
+  onRunAnalysis?: () => void;
 }) {
   const { t } = useTranslation();
   const packages = summary?.packages ?? [];
@@ -148,7 +155,7 @@ function AndroidPackagesPanel({
   return (
     <div className="space-y-5">
       {packages.length === 0 ? (
-        <EmptyState>{t('analysis.android.noPackages')}</EmptyState>
+        <EmptyState title={t('analysis.android.noPackages')} action={onRunAnalysis ? <RunAnalysisAction onClick={onRunAnalysis} /> : undefined} />
       ) : (
         <VirtualGrid items={packages} getItemKey={getPackageKey} renderItem={renderPackage} />
       )}

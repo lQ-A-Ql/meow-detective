@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { BottomDrawerContainer } from '@/features/jobs/containers/BottomDrawerContainer';
 import { ActivityBarContainer } from '@/features/shell/containers/ActivityBarContainer';
 import { CommandPalette, type CommandPaletteItem } from '@/app/components/CommandPalette';
+import { Toaster } from '@/app/components/ui/toast';
 import { useNavigationModel } from '@/features/shell/use-navigation-model';
 import { useTranslation } from 'react-i18next';
 
@@ -29,6 +30,7 @@ export function AppShell({ children }: PropsWithChildren) {
       </div>
       <BottomDrawerContainer />
       <CommandPalette commands={commands} />
+      <Toaster />
     </div>
   );
 }
