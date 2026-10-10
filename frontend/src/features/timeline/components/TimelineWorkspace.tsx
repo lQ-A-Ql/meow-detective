@@ -36,7 +36,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
   ];
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
-      <PageSubbar title={t('timeline.title')} meta={t('timeline.meta', { shown: model.events.length, total: model.totalEvents, sources: model.sourceCount })}>
+      <PageSubbar>
         <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 overflow-x-auto px-4 py-1">
           <div className="flex items-center gap-4 whitespace-nowrap">
             <div className="flex items-center gap-2 font-mono text-[11px] text-forensics-muted">

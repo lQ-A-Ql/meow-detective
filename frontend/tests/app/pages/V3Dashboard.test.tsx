@@ -161,7 +161,7 @@ describe('V3Dashboard', () => {
 
   it('renders without crashing', () => {
     render(<V3Dashboard />);
-    expect(screen.getByText('取证总览')).toBeDefined();
+    expect(screen.getAllByRole('button', { name: /刷新/ }).length).toBeGreaterThan(0);
   });
 
   it('shows graph stats section', () => {

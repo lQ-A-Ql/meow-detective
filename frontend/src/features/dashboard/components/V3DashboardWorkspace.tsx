@@ -23,11 +23,8 @@ export function V3DashboardWorkspace({ model }: V3DashboardWorkspaceProps) {
   const { t } = useTranslation();
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-surface">
-      <div className="shrink-0 border-b border-forensics-border bg-forensics-panel p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div><div className="font-serif text-xl tracking-tight text-forensics-text">{t('dashboard.title')}</div><div className="mt-1 font-mono text-[11px] text-forensics-muted">{t('dashboard.subtitle')}</div></div>
-          <Button type="button" variant="outline" onClick={model.refresh} disabled={!model.hasCase || model.loading} className="h-8 rounded-none border-forensics-350 bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"><RefreshCw size={14} className={model.graph.isFetching || model.overview.isFetching ? 'opacity-70' : ''} />{t('dashboard.refresh')}</Button>
-        </div>
+      <div className="flex shrink-0 items-center justify-end border-b border-forensics-border bg-forensics-panel px-6 py-2">
+        <Button type="button" variant="outline" onClick={model.refresh} disabled={!model.hasCase || model.loading} className="h-8 rounded-none border-forensics-350 bg-forensics-surface px-3 text-[12px] hover:bg-forensics-panel-strong"><RefreshCw size={13} /> {t('dashboard.refresh')}</Button>
       </div>
       {!model.hasCase && model.currentCaseIsSuccess ? <AnalysisEmptyState /> : model.loading ? <AnalysisLoadingPanel text={t('dashboard.loading')} /> : (
         <ScrollArea className="min-h-0 flex-1" viewportClassName="space-y-6 p-6">

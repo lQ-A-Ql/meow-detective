@@ -22,12 +22,7 @@ export function InfrastructureHeader({
   const infrastructure = nodes.filter((node) => ['pve', 'kubernetes', 'ceph', 'ceph_cluster'].includes(node.kind)).length;
   return (
     <header className="shrink-0 border-b border-forensics-border bg-forensics-surface px-5 py-4 lg:px-7">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-forensics-muted">{t('infrastructure.eyebrow')}</div>
-          <h1 className="mt-1 text-xl font-light text-forensics-text">{t('infrastructure.title')}</h1>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-forensics-muted">{t('infrastructure.subtitle')}</p>
-        </div>
+      <div className="flex flex-wrap items-start justify-end gap-4">
         <div className="max-w-full border-l border-forensics-border pl-3 text-right text-xs text-forensics-text">
           <div className="text-[10px] uppercase tracking-wide text-forensics-muted">{t('infrastructure.caseLabel')}</div>
           <div className="mt-1 max-w-64 truncate">{caseName}</div>

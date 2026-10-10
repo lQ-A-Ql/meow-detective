@@ -2,7 +2,7 @@ import { PropsWithChildren, ReactNode } from 'react';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 
 interface InspectorPaneProps extends PropsWithChildren {
-  title: ReactNode;
+  title?: ReactNode;
   widthClassName?: string;
   subtitle?: ReactNode;
   className?: string;
@@ -11,10 +11,12 @@ interface InspectorPaneProps extends PropsWithChildren {
 export function InspectorPane({ title, widthClassName = 'w-72', subtitle, className, children }: InspectorPaneProps) {
   return (
     <aside className={`${widthClassName} shrink-0 border-l border-forensics-border bg-forensics-panel flex flex-col ${className ?? ''}`}>
-      <div className="shrink-0 border-b border-forensics-border bg-forensics-panel-strong px-5 py-3">
-        <div className="font-serif text-[11px] font-light tracking-wide text-forensics-text-tertiary">{title}</div>
-        {subtitle ? <div className="mt-1 text-[10px] font-mono text-forensics-muted-light truncate">{subtitle}</div> : null}
-      </div>
+      {title || subtitle ? (
+        <div className="shrink-0 border-b border-forensics-border bg-forensics-panel-strong px-5 py-3">
+          <div className="font-serif text-[11px] font-light tracking-wide text-forensics-text-tertiary">{title}</div>
+          {subtitle ? <div className="mt-1 text-[10px] font-mono text-forensics-muted-light truncate">{subtitle}</div> : null}
+        </div>
+      ) : null}
       <ScrollArea className="min-h-0 flex-1" viewportClassName="p-5">{children}</ScrollArea>
     </aside>
   );

@@ -140,7 +140,7 @@ describe('Artifacts page', () => {
     expect(screen.getAllByText(/LNK/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Prefetch/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/JumpList/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/痕迹家族控制/)).toBeDefined();
+    expect(screen.getByRole('button', { name: /LNK/ })).toBeDefined();
   });
 
   it('shows artifact table rows', () => {
@@ -156,7 +156,6 @@ describe('Artifacts page', () => {
     ).toBeGreaterThan(0);
     expect(screen.getAllByText('D:\\Documents\\classified.pdf').length).toBeGreaterThan(0);
     expect(screen.getAllByText('E:\\Work\\report.xlsx').length).toBeGreaterThan(0);
-    expect(screen.getByText(/记录 2\/2 条/)).toBeDefined();
   });
 
   it('hydrates a selected artifact from by-id query when family list does not contain it', () => {

@@ -61,12 +61,6 @@ export function FileBrowserInspector({
   return (
     <InspectorPane
       className="hidden lg:flex"
-      title={t('fileBrowser.inspector.title')}
-      subtitle={
-        selectedFile
-          ? t('fileBrowser.inspector.selected', { name: selectedFile.name })
-          : t('fileBrowser.inspector.noSelection')
-      }
       widthClassName="w-80"
     >
       <div className="space-y-5">

@@ -380,7 +380,7 @@ describe('V2Workbench', () => {
   it('renders governance snapshot sections', () => {
     render(<V2Workbench />);
 
-    expect(screen.getByText('V2 治理工作台')).toBeDefined();
+    expect(screen.getByRole('button', { name: /刷新/ })).toBeDefined();
     expect(screen.getByText('治理事实源')).toBeDefined();
     expect(screen.getByText('testdata/governance/v2-verification-catalog.json')).toBeDefined();
     expect(screen.getByText('最近一次治理运行结果')).toBeDefined();

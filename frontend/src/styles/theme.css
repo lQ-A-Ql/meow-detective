@@ -41,11 +41,11 @@
 
   /* Red accent scale shared by existing utility classes. */
   --forensics-sakura-50: #ffffff;
-  --forensics-sakura-100: #fff7f7;
-  --forensics-sakura-150: #fff0f1;
-  --forensics-sakura-200: #ffe5e7;
-  --forensics-sakura-250: #ffd8db;
-  --forensics-sakura-300: #f8b7bc;
+  --forensics-sakura-100: #ffffff;
+  --forensics-sakura-150: #fafafa;
+  --forensics-sakura-200: #f5f5f5;
+  --forensics-sakura-250: #eeeeee;
+  --forensics-sakura-300: #e0e0e0;
   --forensics-sakura-400: #e87982;
   --forensics-sakura-500: #d92d3a;
   --forensics-sakura-600: #a51f2b;
@@ -67,17 +67,17 @@
   --forensics-850: #242424;
   --forensics-900: #181818;
 
-  --forensics-panel: #fffafa;
-  --forensics-panel-strong: #fff3f4;
+  --forensics-panel: #ffffff;
+  --forensics-panel-strong: #ffffff;
   --forensics-surface: #ffffff;
   --forensics-input-bg: #ffffff;
-  --forensics-highlight: #ffe5e7;
-  --forensics-selection-bg: #ffcdd2;
-  --forensics-selection-text: #7e1820;
-  --forensics-hover: #fff0f1;
-  --forensics-border: #e9c6c9;
-  --forensics-border-light: #f4dfe1;
-  --forensics-border-strong: #d99ba0;
+  --forensics-highlight: #f5f5f5;
+  --forensics-selection-bg: #e6e6e6;
+  --forensics-selection-text: #181818;
+  --forensics-hover: #f5f5f5;
+  --forensics-border: #e0e0e0;
+  --forensics-border-light: #eeeeee;
+  --forensics-border-strong: #c8c8c8;
   --forensics-text: #181818;
   --forensics-text-secondary: #343434;
   --forensics-text-tertiary: #4e4e4e;
@@ -106,13 +106,13 @@
   /* Forensics status / action tokens */
   --forensics-primary-blue: #d92d3a;
   --forensics-success: #b4232a;
-  --forensics-surface-muted: #fff3f4;
-  --forensics-text-soft: #6f3438;
-  --forensics-hover-muted: #ffe5e7;
+  --forensics-surface-muted: #fafafa;
+  --forensics-text-soft: #4e4e4e;
+  --forensics-hover-muted: #eeeeee;
 
   /* Forensics warning tokens */
   --forensics-warning: #c62832;
-  --forensics-warning-bg: #fff0f1;
+  --forensics-warning-bg: #fafafa;
   --forensics-warning-border: #e6aeb2;
   --forensics-warning-text: #9f1d27;
   --forensics-warning-text-strong: #7e1820;

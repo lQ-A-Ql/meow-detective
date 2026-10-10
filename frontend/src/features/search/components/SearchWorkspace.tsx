@@ -87,13 +87,9 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
   const searchColumns = searchFileColumns(t);
   const selectedSource = model.options.dataSourceIds[0] ?? '__all__';
   const coverage = model.coverage;
-  const resultMeta = model.activeQuery
-    ? t('search.meta.loaded', { shown: model.searchHits.length, total: model.totalHits })
-    : t('search.meta.waiting');
-
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-forensics-surface">
-      <PageSubbar title={t('search.title')} meta={resultMeta}>
+      <PageSubbar>
         <div className="flex min-w-0 flex-1 items-center gap-2 p-3">
           <div className="flex min-w-0 flex-1 items-center border border-forensics-border-strong bg-forensics-surface px-3 py-1.5 focus-within:border-forensics-sakura-500">
             <Search size={14} className="mr-2 shrink-0 text-forensics-muted" />

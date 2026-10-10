@@ -82,7 +82,6 @@ describe('EmulationWorkspace', () => {
     const start = vi.fn().mockResolvedValue(undefined);
     render(<EmulationWorkspace model={createModel({ start })} />);
 
-    expect(screen.getByText('镜像仿真')).toBeInTheDocument();
     expect(screen.getByText('原系统（需确认）')).toBeInTheDocument();
     expect(screen.getByText('COW 证据隔离')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '启动仿真' }));

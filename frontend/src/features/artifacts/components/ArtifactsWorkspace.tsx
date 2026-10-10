@@ -32,7 +32,7 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
-      <PageSubbar title={t('artifacts.title')} meta={t('artifacts.meta', { family: model.selectedArtifactFamily, shown: model.tableRows.length, total: model.totalRows })}>
+      <PageSubbar>
         <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto px-2">
           {model.families.map(({ family, count }) => (
             <Button type="button" key={family} variant={model.selectedArtifactFamily === family ? 'forensicsSurface' : 'forensicsGhost'} size="xs" onClick={() => model.selectArtifactFamily(family)} className="shrink-0 whitespace-nowrap font-mono">

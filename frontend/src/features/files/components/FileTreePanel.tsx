@@ -154,9 +154,6 @@ export function FileTreePanel({
         onMouseDown={onResizeStart}
         title={t('fileBrowser.tree.resizeHandle')}
       />
-      <div className="h-7 shrink-0 border-b border-forensics-border flex items-center px-3 text-[10px] font-light text-forensics-text-tertiary uppercase tracking-wider bg-forensics-panel-strong">
-        {t('fileBrowser.tree.title')}
-      </div>
       <TreeSearch onFilter={setFilterQuery} />
       <div className="flex min-h-0 flex-1 flex-col">
         {treeLoading ? (

@@ -1,19 +1,9 @@
-import { PropsWithChildren, ReactNode } from 'react';
+import { PropsWithChildren } from 'react';
 
-interface PageSubbarProps extends PropsWithChildren {
-  title?: ReactNode;
-  meta?: ReactNode;
-}
-
-export function PageSubbar({ title, meta, children }: PageSubbarProps) {
+/** Page-level control strip. Page titles live nowhere in the shell, so only controls remain. */
+export function PageSubbar({ children }: PropsWithChildren) {
   return (
     <div className="shrink-0 border-b border-forensics-border bg-forensics-panel">
-      {title || meta ? (
-        <div className="flex min-h-9 items-center justify-between gap-4 border-b border-forensics-border-light px-6 py-2 text-[10px] tracking-wide text-forensics-muted">
-          <div className="min-w-0 truncate font-light text-forensics-text-tertiary">{title}</div>
-          <div className="min-w-0 truncate font-mono text-forensics-muted-light">{meta}</div>
-        </div>
-      ) : null}
       {children}
     </div>
   );

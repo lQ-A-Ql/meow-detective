@@ -119,7 +119,6 @@ describe('Timeline page', () => {
 
     expect(screen.getByText('当前时间范围无事件')).toBeDefined();
     expect(screen.getByText('请扩大时间范围或调整事件过滤条件。')).toBeDefined();
-    expect(screen.getByText(/事件 0\/0 条/)).toBeDefined();
   });
 
   it('renders event list when data is available', () => {
@@ -145,8 +144,6 @@ describe('Timeline page', () => {
     expect(screen.getAllByText('Registry key modified').length).toBeGreaterThan(0);
     expect(screen.getAllByText('FileAccess').length).toBeGreaterThan(0);
     expect(screen.getAllByText('RegistryModified').length).toBeGreaterThan(0);
-    expect(screen.getByText(/事件 2\/2 条/)).toBeDefined();
-    expect(screen.getByText(/数据源 2 个/)).toBeDefined();
   });
 
   it('keeps the event table inside a bounded vertical flex viewport', () => {

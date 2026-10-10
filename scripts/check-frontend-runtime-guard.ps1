@@ -333,8 +333,6 @@ $sharedTableRelativePaths = @(Get-ChildItem -LiteralPath (Join-Path $frontendSrc
 
 $sharedComponentAdapterAllowedPaths = @(
   'frontend/src/components/layout/AppShell.tsx',
-  'frontend/src/components/layout/BottomDrawer.tsx',
-  'frontend/src/components/layout/TopBar.tsx',
   'frontend/src/lib/api/client.ts',
   'frontend/src/lib/events/tauri-bridge.ts',
   'frontend/src/lib/platform/dialog.ts'
@@ -386,6 +384,12 @@ Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
   -Pattern '(?i)\bmock\b|\bdemo\b|示例|演示' `
   -Message "Frontend production source must not contain mock/demo/example presentation residue"
+
+Assert-NoMatchesInRuntimeFiles `
+  -Files $runtimeFiles `
+  -Pattern 'role=(?:"tooltip"|''tooltip'')' `
+  -AllowedRelativePaths @('frontend/src/app/components/ui/tooltip.tsx') `
+  -Message "Hover hints must use the shared app/components/ui/tooltip primitive instead of hand-rolled tooltip markup"
 
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `

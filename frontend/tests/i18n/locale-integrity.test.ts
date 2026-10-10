@@ -4,8 +4,8 @@ import path from 'node:path';
 
 /**
  * The locale files are hand-edited next to the code, and JSON.parse silently hides duplicate
- * keys (last one wins). A duplicated `topBar.case` object once shadowed `case.return`, so the
- * UI rendered the raw key `topBar.case.return`. These checks keep that class of bug out.
+ * keys (last one wins). A duplicated object once shadowed a sibling key, so the UI rendered the
+ * raw key name instead of its copy. These checks keep that class of bug out.
  */
 
 const localeDir = path.resolve(process.cwd(), 'src', 'i18n');
@@ -89,9 +89,11 @@ describe('locale integrity', () => {
     expect({ onlyZh, onlyEn }).toEqual({ onlyZh: [], onlyEn: [] });
   });
 
-  it('keeps the keys the top bar relies on', () => {
+  it('keeps the navigation copy the activity rail relies on', () => {
     const zh = JSON.parse(readLocale('zh-CN'));
-    expect(zh.topBar.case.return).toBeTypeOf('string');
-    expect(zh.topBar.case.noCase).toBeTypeOf('string');
+    expect(zh.navigation.appNavLabel).toBeTypeOf('string');
+    expect(zh.navigation.workspaceNavLabel).toBeTypeOf('string');
+    expect(zh.navigation.jobsRunning).toBeTypeOf('string');
+    expect(Object.keys(zh.navigation.links).length).toBeGreaterThan(0);
   });
 });

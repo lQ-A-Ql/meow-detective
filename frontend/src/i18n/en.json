@@ -155,8 +155,6 @@
     }
   },
   "dashboard": {
-    "title": "Forensic overview",
-    "subtitle": "Graph statistics / source coverage / artifact correlation / rule-pack status",
     "refresh": "Refresh",
     "loading": "Loading forensic overview...",
     "query": {
@@ -491,8 +489,6 @@
     }
   },
   "artifacts": {
-    "title": "Artifact family control",
-    "meta": "{{family}} / {{shown}} of {{total}} records",
     "columns": {
       "familyPath": "{{family}} path",
       "targetPath": "Target path",
@@ -520,8 +516,6 @@
     }
   },
   "timeline": {
-    "title": "Timeline control strip",
-    "meta": "{{shown}}/{{total}} events / {{sources}} sources",
     "granularity": "Granularity",
     "adaptive": "Adaptive",
     "start": "Start",
@@ -590,10 +584,7 @@
       "title": "File browser inactive",
       "description": "Create or open a case on the case overview page, then import an image or logical directory to browse the directory tree and file contents here."
     },
-    "subbar": {
-      "title": "File Browser Controls",
-      "meta": "Current directory {{directoryCount}} items / executable objects {{executableCount}} items"
-    },
+    "subbar": {},
     "breadcrumb": {
       "noData": "No data source"
     },
@@ -962,7 +953,6 @@
   },
   "settings": {
     "title": "Settings",
-    "subtitle": "Application configuration and data directories",
     "save": "Save Settings",
     "saving": "Saving...",
     "saved": "Settings saved.",
@@ -1031,73 +1021,6 @@
   "sidebar": {
     "toggleSidebar": "Toggle sidebar"
   },
-  "topBar": {
-    "appNavLabel": "Application navigation",
-    "workspaceNavLabel": "Workspace",
-    "workspaceLabel": "Workspace title bar",
-    "pageNavLabel": "Page navigation",
-    "case": {
-      "return": "Back to case entry",
-      "number": "Case #{{number}}",
-      "noCase": "No case selected",
-      "examiner": "Examiner {{examiner}}",
-      "updatedAt": "Updated at {{updatedAt}}"
-    },
-    "links": {
-      "home": {
-        "label": "Case Overview",
-        "context": "Case status, metrics and recent objects"
-      },
-      "files": {
-        "label": "File Browser",
-        "context": "Directory tree, file table and forensics viewer"
-      },
-      "emulation": {
-        "label": "Image Emulation",
-        "context": "Boot media, COW sessions and runtime state"
-      },
-      "analysis": {
-        "label": "Data Source Analysis",
-        "context": "System info, file classification and analysis reports"
-      },
-      "infrastructure": {
-        "label": "Infrastructure",
-        "context": "Linux clusters, nodes, workloads and storage relationships"
-      },
-      "v2": {
-        "label": "V2 Governance",
-        "context": "Trusted verification, benchmark, security governance and release scorecard"
-      },
-      "v3": {
-        "label": "Forensics Overview",
-        "context": "Graph stats, data source coverage, artifact correlation and rule pack status"
-      },
-      "search": {
-        "label": "Global Search",
-        "context": "Keywords, structured queries and hit details"
-      },
-      "timeline": {
-        "label": "Timeline",
-        "context": "Event aggregation, filtering and chronological review"
-      },
-      "artifacts": {
-        "label": "Artifact Analysis",
-        "context": "Windows artifact families and parsed fields"
-      },
-      "reports": {
-        "label": "Reports",
-        "context": "Templates, export jobs and report artifacts"
-      }
-    },
-    "currentPage": "Current Page",
-    "search": {
-      "placeholder": "Enter global search query or IOC"
-    },
-    "jobs": {
-      "running": "{{count}} running",
-      "warnings": "{{count}}"
-    }
-  },
   "recovery": {
     "title": "Deleted file recovery",
     "subtitle": "NTFS MFT / EXT4 journal / XFS log",
@@ -1160,7 +1083,6 @@
     "exportFailed": "Failed to export recovered file: {{message}}"
   },
   "search": {
-    "title": "File search",
     "inputPlaceholder": "Enter a file, directory or path",
     "inputLabel": "File name search",
     "pathToggle": "Path",
@@ -1199,9 +1121,6 @@
     "clearQuery": "Clear search"
   },
   "infrastructure": {
-    "eyebrow": "Infrastructure evidence",
-    "title": "Linux Infrastructure Forensics",
-    "subtitle": "Read the cluster by runtime environment, storage foundation and analysis evidence",
     "caseLabel": "Current case",
     "noCase": "Open a case first",
     "empty": "No infrastructure objects were found in this case",
@@ -1961,10 +1880,6 @@
       }
     },
     "header": {
-      "title": "Data source analysis",
-      "capabilities": "Evidence classification · System information · Application data",
-      "sourceBound": "Analysis results are bound to the current data source and run independently by platform.",
-      "selectSource": "Select a source from the data-source tree before refreshing or running analysis.",
       "refresh": "Refresh",
       "run": "Run analysis",
       "running": "Analyzing..."
@@ -2051,8 +1966,6 @@
     }
   },
   "emulationPage": {
-    "title": "Image Emulation",
-    "noCase": "No case selected",
     "emptyCase": "Open a case to manage image emulation sessions.",
     "loading": "Loading emulation state...",
     "metrics": {
@@ -2603,7 +2516,6 @@
   },
   "v2Governance": {
     "workbench": {
-      "title": "V2 Governance Workbench",
       "subtitle": "Trusted Verification / Support Matrix / Benchmark / Security Governance / Release Scorecard",
       "loadingSnapshot": "Loading the V2 governance snapshot...",
       "loadingCorrelation": "Loading the correlation snapshot...",
@@ -2917,5 +2829,56 @@
         "deferred": "Deferred"
       }
     }
+  },
+  "navigation": {
+    "appNavLabel": "Application navigation",
+    "workspaceNavLabel": "Workspace",
+    "links": {
+      "home": {
+        "label": "Case Overview",
+        "context": "Case status, metrics and recent objects"
+      },
+      "files": {
+        "label": "File Browser",
+        "context": "Directory tree, file table and forensics viewer"
+      },
+      "emulation": {
+        "label": "Image Emulation",
+        "context": "Boot media, COW sessions and runtime state"
+      },
+      "analysis": {
+        "label": "Data Source Analysis",
+        "context": "System info, file classification and analysis reports"
+      },
+      "infrastructure": {
+        "label": "Infrastructure",
+        "context": "Linux clusters, nodes, workloads and storage relationships"
+      },
+      "v2": {
+        "label": "V2 Governance",
+        "context": "Trusted verification, benchmark, security governance and release scorecard"
+      },
+      "v3": {
+        "label": "Forensics Overview",
+        "context": "Graph stats, data source coverage, artifact correlation and rule pack status"
+      },
+      "search": {
+        "label": "Global Search",
+        "context": "Keywords, structured queries and hit details"
+      },
+      "timeline": {
+        "label": "Timeline",
+        "context": "Event aggregation, filtering and chronological review"
+      },
+      "artifacts": {
+        "label": "Artifact Analysis",
+        "context": "Windows artifact families and parsed fields"
+      },
+      "reports": {
+        "label": "Reports",
+        "context": "Templates, export jobs and report artifacts"
+      }
+    },
+    "jobsRunning": "{{count}} running"
   }
 }

@@ -153,13 +153,7 @@ export function EmulationWorkspace({ model }: EmulationWorkspaceProps) {
   const { t } = useTranslation();
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-surface">
-      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-forensics-border bg-forensics-panel px-6 py-4">
-        <div className="min-w-0">
-          <h1 className="truncate text-xl text-forensics-text">{t('emulationPage.title')}</h1>
-          <div className="mt-1 truncate font-mono text-[10px] text-forensics-muted">
-            {model.caseName ?? t('emulationPage.noCase')}
-          </div>
-        </div>
+      <header className="flex shrink-0 items-center justify-end gap-4 border-b border-forensics-border bg-forensics-panel px-6 py-2">
         <Button
           type="button"
           variant="forensicsGhost"

@@ -86,8 +86,7 @@ describe('Settings page', () => {
 
   it('renders without crashing', async () => {
     render(<Settings />);
-    expect(await screen.findByText('设置')).toBeTruthy();
-    expect(screen.getByText('应用配置与数据目录')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '保存设置' })).toBeTruthy();
   });
 
   it('loads persisted backend settings', async () => {

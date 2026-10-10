@@ -141,20 +141,7 @@ export function AnalysisHeader({
   const { t } = useTranslation();
   return (
     <div className="shrink-0 border-b border-forensics-border bg-forensics-panel px-6 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <div className="font-serif text-lg tracking-wide text-forensics-text">{t('analysis.header.title')}</div>
-            <div className="font-mono text-[10px] text-forensics-muted">
-              {t('analysis.header.capabilities')}
-            </div>
-            <div className="text-[10px] leading-4 text-forensics-muted-lighter">
-              {selectedDataSourceId
-                ? t('analysis.header.sourceBound')
-                : t('analysis.header.selectSource')}
-            </div>
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"

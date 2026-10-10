@@ -171,7 +171,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     enabled: Boolean(selectedSourceId),
     retry: false,
   });
-  const bypassIsLinux = preflightQuery.data?.installs.find(
+  const bypassIsLinux = (preflightQuery.data?.installs ?? []).find(
     (install) => install.partitionIndex === bypassPartition,
   )?.platform === 'linux';
   const bypassAccountsQuery = useQuery({

@@ -1,4 +1,5 @@
 import { ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useCallback, useMemo, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -62,6 +63,9 @@ export interface FileListPanelProps {
   setExpandedDirectoryIds: (updater: (prev: string[]) => string[]) => void;
   parentDirectory?: { id: string; name: string };
   goToParentDirectory?: () => void;
+  /** Controls rendered in the list toolbar, next to the parent-directory button. */
+  visibilityToggle?: ReactNode;
+  mountControl?: ReactNode;
   rowsPage: { offset: number; limit: number; totalCount: number; rows: FileEntryRow[]; truncated: boolean } | undefined;
   canGoToPreviousRows: boolean;
   canGoToNextRows: boolean;
@@ -81,6 +85,8 @@ export function FileListPanel({
   setExpandedDirectoryIds,
   parentDirectory,
   goToParentDirectory,
+  visibilityToggle,
+  mountControl,
   rowsPage,
   canGoToPreviousRows,
   canGoToNextRows,
@@ -187,6 +193,8 @@ export function FileListPanel({
           <ArrowUp size={12} />
           {t('fileBrowser.parentDirectory')}
         </Button>
+        {visibilityToggle}
+        {mountControl}
         {canGoToPreviousRows || canGoToNextRows ? (
           <div className="ml-auto flex items-center gap-1">
             <Button

@@ -230,7 +230,7 @@ describe('AnalysisPanels sub-components', () => {
           onRunExtraction: () => {},
         }),
       );
-      expect(screen.getByText('数据源分析')).toBeDefined();
+      expect(screen.getByRole('button', { name: /运行分析/ })).toBeDefined();
       expect(screen.queryByRole('button', { name: /加载演示案件/ })).toBeNull();
       expect(screen.getByRole('button', { name: /刷新/ })).toBeDefined();
       expect(screen.getByRole('button', { name: /运行分析/ })).toBeDefined();
@@ -246,8 +246,7 @@ describe('AnalysisPanels sub-components', () => {
           onRunExtraction: () => {},
         }),
       );
-      expect(screen.getByText(/左侧数据源树选择一个来源/)).toBeDefined();
-      expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(true);
+        expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(true);
       expect(screen.getByRole('button', { name: /运行分析/ }).hasAttribute('disabled')).toBe(true);
     });
 
@@ -262,8 +261,7 @@ describe('AnalysisPanels sub-components', () => {
           selectedDataSourceId: 'ds-1',
         }),
       );
-      expect(screen.getByText(/分析结果绑定当前数据源/)).toBeDefined();
-      expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(false);
+        expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(false);
       expect(screen.getByRole('button', { name: /运行分析/ }).hasAttribute('disabled')).toBe(false);
     });
   });

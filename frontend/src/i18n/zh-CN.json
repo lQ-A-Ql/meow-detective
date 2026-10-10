@@ -155,8 +155,6 @@
     }
   },
   "dashboard": {
-    "title": "取证总览",
-    "subtitle": "图统计 / 数据源覆盖 / 痕迹关联 / 规则包状态",
     "refresh": "刷新",
     "loading": "正在加载取证总览快照...",
     "query": {
@@ -491,8 +489,6 @@
     }
   },
   "artifacts": {
-    "title": "痕迹家族控制",
-    "meta": "{{family}} / 记录 {{shown}}/{{total}} 条",
     "columns": {
       "familyPath": "{{family}} 路径",
       "targetPath": "目标路径",
@@ -520,8 +516,6 @@
     }
   },
   "timeline": {
-    "title": "时间线控制带",
-    "meta": "事件 {{shown}}/{{total}} 条 / 数据源 {{sources}} 个",
     "granularity": "粒度",
     "adaptive": "自适应",
     "start": "起始",
@@ -590,10 +584,7 @@
       "title": "文件浏览待激活",
       "description": "先在案件概览页创建或打开案件，再导入镜像或逻辑目录，即可在这里浏览目录树和文件内容。"
     },
-    "subbar": {
-      "title": "文件浏览控制",
-      "meta": "当前目录 {{directoryCount}} 项 / 可执行对象 {{executableCount}} 项"
-    },
+    "subbar": {},
     "breadcrumb": {
       "noData": "无数据源"
     },
@@ -962,7 +953,6 @@
   },
   "settings": {
     "title": "设置",
-    "subtitle": "应用配置与数据目录",
     "save": "保存设置",
     "saving": "保存中...",
     "saved": "设置已保存。",
@@ -1031,73 +1021,6 @@
   "sidebar": {
     "toggleSidebar": "切换侧边栏"
   },
-  "topBar": {
-    "appNavLabel": "应用导航",
-    "workspaceNavLabel": "工作区",
-    "workspaceLabel": "工作区标题栏",
-    "pageNavLabel": "页面导航",
-    "case": {
-      "return": "返回案件入口",
-      "number": "案件 #{{number}}",
-      "noCase": "未选择案件",
-      "examiner": "检验人 {{examiner}}",
-      "updatedAt": "更新于 {{updatedAt}}"
-    },
-    "links": {
-      "home": {
-        "label": "案件概览",
-        "context": "案件状态、指标与近期对象"
-      },
-      "files": {
-        "label": "文件浏览",
-        "context": "目录树、文件表与取证查看器"
-      },
-      "emulation": {
-        "label": "镜像仿真",
-        "context": "启动介质、COW 会话与运行状态"
-      },
-      "analysis": {
-        "label": "数据源分析",
-        "context": "系统信息、文件分类与分析报告"
-      },
-      "infrastructure": {
-        "label": "基础设施取证",
-        "context": "Linux 集群、节点、工作负载与存储关系"
-      },
-      "v2": {
-        "label": "V2 治理",
-        "context": "可信验证、Benchmark、安全治理与发布评分"
-      },
-      "v3": {
-        "label": "取证总览",
-        "context": "图统计、数据源覆盖、痕迹关联与规则包状态"
-      },
-      "search": {
-        "label": "全局搜索",
-        "context": "关键字、结构化查询与命中详情"
-      },
-      "timeline": {
-        "label": "时间线",
-        "context": "事件聚合、筛选与时序检视"
-      },
-      "artifacts": {
-        "label": "痕迹分析",
-        "context": "Windows 痕迹家族与解析字段"
-      },
-      "reports": {
-        "label": "报告导出",
-        "context": "模板、导出任务与报告产物"
-      }
-    },
-    "currentPage": "当前页",
-    "search": {
-      "placeholder": "输入全局检索语句或 IOC"
-    },
-    "jobs": {
-      "running": "{{count}} 运行中",
-      "warnings": "{{count}}"
-    }
-  },
   "recovery": {
     "title": "删除文件恢复",
     "subtitle": "NTFS MFT / EXT4 journal / XFS log",
@@ -1160,7 +1083,6 @@
     "exportFailed": "恢复文件导出失败: {{message}}"
   },
   "search": {
-    "title": "文件搜索",
     "inputPlaceholder": "输入文件名、目录名或路径",
     "inputLabel": "文件名搜索",
     "pathToggle": "路径",
@@ -1199,9 +1121,6 @@
     "clearQuery": "清除搜索"
   },
   "infrastructure": {
-    "eyebrow": "基础设施证据",
-    "title": "Linux 集群取证",
-    "subtitle": "按运行环境、存储底座和分析证据查看集群结构",
     "caseLabel": "当前案件",
     "noCase": "请先打开案件",
     "empty": "当前案件未发现基础设施对象",
@@ -1961,10 +1880,6 @@
       }
     },
     "header": {
-      "title": "数据源分析",
-      "capabilities": "证据分类 · 系统信息 · 应用数据",
-      "sourceBound": "分析结果绑定当前数据源，并按平台独立执行。",
-      "selectSource": "请从左侧数据源树选择一个来源后再刷新或运行提取。",
       "refresh": "刷新",
       "run": "运行分析",
       "running": "分析中..."
@@ -2051,8 +1966,6 @@
     }
   },
   "emulationPage": {
-    "title": "镜像仿真",
-    "noCase": "未选择案件",
     "emptyCase": "打开案件后可管理镜像仿真会话。",
     "loading": "正在读取仿真状态...",
     "metrics": {
@@ -2603,7 +2516,6 @@
   },
   "v2Governance": {
     "workbench": {
-      "title": "V2 治理工作台",
       "subtitle": "可信验证 / 支持矩阵 / Benchmark / 安全治理 / 发布评分卡",
       "loadingSnapshot": "正在加载 V2 治理快照...",
       "loadingCorrelation": "正在加载关联分析快照...",
@@ -2917,5 +2829,56 @@
         "deferred": "延迟"
       }
     }
+  },
+  "navigation": {
+    "appNavLabel": "应用导航",
+    "workspaceNavLabel": "工作区",
+    "links": {
+      "home": {
+        "label": "案件概览",
+        "context": "案件状态、指标与近期对象"
+      },
+      "files": {
+        "label": "文件浏览",
+        "context": "目录树、文件表与取证查看器"
+      },
+      "emulation": {
+        "label": "镜像仿真",
+        "context": "启动介质、COW 会话与运行状态"
+      },
+      "analysis": {
+        "label": "数据源分析",
+        "context": "系统信息、文件分类与分析报告"
+      },
+      "infrastructure": {
+        "label": "基础设施取证",
+        "context": "Linux 集群、节点、工作负载与存储关系"
+      },
+      "v2": {
+        "label": "V2 治理",
+        "context": "可信验证、Benchmark、安全治理与发布评分"
+      },
+      "v3": {
+        "label": "取证总览",
+        "context": "图统计、数据源覆盖、痕迹关联与规则包状态"
+      },
+      "search": {
+        "label": "全局搜索",
+        "context": "关键字、结构化查询与命中详情"
+      },
+      "timeline": {
+        "label": "时间线",
+        "context": "事件聚合、筛选与时序检视"
+      },
+      "artifacts": {
+        "label": "痕迹分析",
+        "context": "Windows 痕迹家族与解析字段"
+      },
+      "reports": {
+        "label": "报告导出",
+        "context": "模板、导出任务与报告产物"
+      }
+    },
+    "jobsRunning": "{{count}} 运行中"
   }
 }

@@ -1,7 +1,7 @@
 import { ActivityBar } from '@/components/navigation/ActivityBar';
-import { useTopBarModel } from '@/features/shell/use-top-bar-model';
+import { useNavigationModel } from '@/features/shell/use-navigation-model';
 
 export function ActivityBarContainer() {
-  const model = useTopBarModel();
+  const model = useNavigationModel();
   return <ActivityBar model={model} />;
 }
