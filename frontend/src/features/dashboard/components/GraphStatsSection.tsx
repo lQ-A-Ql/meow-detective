@@ -1,14 +1,13 @@
 import { Activity, BarChart3, GitBranch, Layers, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { GraphVisualizationContainer } from '@/features/graph/containers/GraphVisualizationContainer';
-import { MetricCard, SectionHeader } from '@/components/data-display';
+import { MetricCard } from '@/components/data-display';
 import type { GraphSnapshot } from '@/types/models';
 
 export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined }) {
   const { t } = useTranslation();
   return (
     <section>
-      <SectionHeader icon={GitBranch} title={t('dashboard.graph.title')} subtitle={t('dashboard.graph.subtitle')} />
       <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         {data ? (
           <>

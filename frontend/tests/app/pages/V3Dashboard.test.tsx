@@ -167,7 +167,7 @@ describe('V3Dashboard', () => {
   it('shows graph stats section', () => {
     render(<V3Dashboard />);
 
-    expect(screen.getByText('图统计')).toBeDefined();
+    expect(screen.getByText('节点总数')).toBeDefined();
     // Stat cards and the embedded graph mini panel share the same snapshot values
     expect(screen.getAllByText('392').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('0.0026').length).toBeGreaterThanOrEqual(1);

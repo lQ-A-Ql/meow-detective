@@ -238,8 +238,6 @@
       "empty": "Rule-pack data loads after evidence import."
     },
     "graph": {
-      "title": "Graph statistics",
-      "subtitle": "Nodes and edges by type",
       "nodes": "Total nodes",
       "edges": "Total edges",
       "density": "Density",
