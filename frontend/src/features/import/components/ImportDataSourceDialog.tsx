@@ -220,7 +220,7 @@ export function ImportDataSourceDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-[164px_1fr]">
+        <div className="grid min-h-[320px] grid-cols-[176px_1fr]">
           <StepRail
             ariaLabel={t('importDataSource.stepperLabel')}
             currentId={step}
@@ -228,7 +228,7 @@ export function ImportDataSourceDialog({
             steps={STEP_ORDER.map((entry) => ({ id: entry, label: t(STEP_LABEL[entry]) }))}
           />
 
-          <div className="min-h-[268px] p-5">
+          <div className="min-w-0 p-5">
             {step === 'platform' ? (
               <ToggleGroup
                 type="single"
