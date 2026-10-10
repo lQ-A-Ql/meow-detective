@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Check } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { Button } from './button';
 import {
   Dialog,
@@ -42,9 +42,9 @@ export function ConfirmationDialog({
         </DialogHeader>
         <DialogFooter>
           <Button type="button" variant="forensicsOutline" onClick={() => onOpenChange(false)} disabled={pending}>
-            CANCEL_SLOT
+            cancel-icon-slot
           </Button>
-          <Button type="button" variant={destructive ? 'destructive' : 'forensicsPrimary'} onClick={onConfirm} disabled={pending}><Check size={15} /></Button>
+          <Button type="button" variant={destructive ? 'destructive' : 'forensicsPrimary'} onClick={onConfirm} disabled={pending} aria-label={confirmLabel}><Check size={15} /></Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
