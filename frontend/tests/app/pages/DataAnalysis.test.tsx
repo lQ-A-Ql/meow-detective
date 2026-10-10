@@ -996,7 +996,7 @@ describe('DataAnalysis page', () => {
       await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
 
       const linuxSelector = screen.getByLabelText('Linux Server');
-      expect((linuxSelector as HTMLButtonElement).disabled).toBe(true);
+      expect(linuxSelector).toBeDisabled();
       fireEvent.click(linuxSelector);
       expect(useAnalysisStore.getState().selectedDataSourceId).toBe('ds-win');
       expect(screen.queryByText('Linux 痕迹分析')).toBeNull();

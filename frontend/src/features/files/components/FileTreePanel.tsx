@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, type Ref } from 'react';
+import { TreeRow } from '@/components/tree/TreeRow';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
@@ -58,27 +59,16 @@ const TreeNodeRow = memo(function TreeNodeRow({
 }: TreeNodeRowProps) {
   const handleClick = useCallback(() => onToggle(node), [onToggle, node]);
   return (
-    <Button
-      type="button"
-      variant="treeControl"
-      size="treeRow"
-      onClick={handleClick}
-      data-active={active ? 'true' : undefined}
-      className="relative max-w-full"
-    >
-      {node.depth > 0 && (
-        <TreeConnector depth={node.depth} isLast={isLast} />
-      )}
-      {node.hasChildren ? (
-        expanded ? (
-          <ChevronDown size={12} className="text-forensics-muted-light shrink-0" />
-        ) : (
-          <ChevronRight size={12} className="text-forensics-muted-lighter shrink-0" />
-        )
-      ) : (
-        <span className="w-3 shrink-0" />
-      )}
-      <FileIconWithStatusOverlay
+    <TreeRow
+      depth={node.depth}
+      active={active}
+      expanded={expanded}
+      hasChildren={node.hasChildren}
+      onActivate={handleClick}
+      onToggle={() => onToggle(node)}
+      toggleLabel={displayNodeName(node.name, node.depth, node.dataSourceId)}
+      connector={node.depth > 0 ? <TreeConnector depth={node.depth} isLast={isLast} /> : null}
+      icon={<FileIconWithStatusOverlay
         name={node.name}
         entryType={node.entryType}
         status={node.status}
@@ -87,14 +77,16 @@ const TreeNodeRow = memo(function TreeNodeRow({
         hidden={node.hidden}
         system={node.system}
         size={12}
-      />
-      <span className="min-w-0 flex-1 truncate">{displayNodeName(node.name, node.depth, node.dataSourceId)}</span>
-      {node.status && node.status !== 'ready' ? (
-        <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-forensics-muted-light">
-          {node.status}
-        </span>
-      ) : null}
-    </Button>
+      />}
+      label={displayNodeName(node.name, node.depth, node.dataSourceId)}
+      meta={
+        node.status && node.status !== 'ready' ? (
+          <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-forensics-ink-3">
+            {node.status}
+          </span>
+        ) : null
+      }
+    />
   );
 });
 

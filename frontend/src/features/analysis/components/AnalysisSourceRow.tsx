@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight, Puzzle } from 'lucide-react';
+import { TreeRow } from '@/components/tree/TreeRow';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { cn } from '@/app/components/ui/utils';
@@ -19,17 +20,22 @@ export function AnalysisSourceRow({ row, model, onSelectOrToggle }: Props) {
   if (row.kind === 'source') {
     const SourceIcon = sourceKindIconLarge(source.kind);
     return (
-      <Button type="button" variant="forensicsGhost" size="inline" disabled={model.disabled}
-        aria-label={source.name} aria-current={selected ? 'true' : undefined} aria-expanded={row.expanded}
-        title={t(row.expanded ? 'analysis.sidebar.collapseSource' : 'analysis.sidebar.expandSource')}
-        onClick={() => onSelectOrToggle(source.id, selected, row.expanded)}
-        className={cn('h-8 w-full min-w-0 justify-start gap-2 border border-transparent px-2 text-left text-[12px] hover:border-forensics-border',
-          selected && 'border-forensics-border bg-forensics-surface text-forensics-text')}>
-        {row.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <SourceIcon size={14} className="shrink-0 text-forensics-muted-light" />
-        <span className="min-w-0 flex-1 truncate" title={source.name}>{source.name}</span>
-        {source.fileCount !== undefined ? <span className="font-mono text-[10px] text-forensics-muted-light">{source.fileCount}</span> : null}
-      </Button>
+      <TreeRow
+        depth={0}
+        expanded={row.expanded}
+        hasChildren
+        selected={selected}
+        active={selected}
+        ariaLabel={source.name}
+        disabled={model.disabled}
+        onActivate={() => onSelectOrToggle(source.id, selected, row.expanded)}
+        onToggle={() => onSelectOrToggle(source.id, selected, row.expanded)}
+        toggleLabel={t(row.expanded ? 'analysis.sidebar.collapseSource' : 'analysis.sidebar.expandSource')}
+        icon={<SourceIcon size={14} className="shrink-0 text-forensics-ink-3" />}
+        label={source.name}
+        meta={source.fileCount !== undefined ? <span className="font-mono text-[10px] text-forensics-ink-3">{source.fileCount}</span> : null}
+        className="h-8"
+      />
     );
   }
   if (row.kind === 'platform' || row.kind === 'pluginGroup') {
