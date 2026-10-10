@@ -11,6 +11,8 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
+  type KeyboardEvent,
   type ReactElement,
   type ReactNode,
 } from 'react';
@@ -62,6 +64,8 @@ interface DenseDataTableProps<T> {
   renderRowContextMenu?: (row: T, trigger: ReactElement) => ReactElement;
   emptyTitle?: string;
   emptyDescription?: string;
+  /** Optional next step rendered inside the empty state. */
+  emptyAction?: ReactNode;
   /** 当前排序键 */
   sortKey?: string;
   /** 排序方向 */
@@ -130,6 +134,7 @@ export function DenseDataTable<T>({
   renderRowContextMenu,
   emptyTitle: emptyTitleProp,
   emptyDescription: emptyDescriptionProp,
+  emptyAction,
   sortKey,
   sortDirection,
   onSort,
@@ -159,6 +164,7 @@ export function DenseDataTable<T>({
   const initialLoadErrorText = initialLoadErrorTextProp ?? t('denseTable.initialLoadError');
   const retryInitialLoadLabel = retryInitialLoadLabelProp ?? t('denseTable.retry');
   const containerRef = useRef<HTMLDivElement>(null);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
   const requestedRowCountRef = useRef<number | undefined>(undefined);
   const automaticRetryKeyRef = useRef<string | undefined>(undefined);
   const automaticRetryTimerRef = useRef<number | undefined>(undefined);
@@ -348,12 +354,61 @@ export function DenseDataTable<T>({
       }
     : undefined;
 
+  useEffect(() => { setFocusedIndex(-1); }, [loadContextKey]);
+
+  /** Focused-row copy: only columns that expose a text extractor contribute a cell. */
+  const copyFocusedRow = useCallback((row: T) => {
+    const line = columns.filter((column) => column.text).map((column) => column.text?.(row) ?? '').join('\t');
+    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+    if (!line || !clipboard?.writeText) return false;
+    void clipboard.writeText(line);
+    return true;
+  }, [columns]);
+
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    const lastIndex = visibleRows.length - 1;
+    if (lastIndex < 0) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      setFocusedIndex((current) => {
+        if (event.key === 'Home') return 0;
+        if (event.key === 'End') return lastIndex;
+        const step = event.key === 'ArrowDown' ? 1 : -1;
+        const base = current < 0 ? (step > 0 ? -1 : lastIndex + 1) : current;
+        return Math.min(Math.max(base + step, 0), lastIndex);
+      });
+      return;
+    }
+    if (focusedIndex < 0) return;
+    const row = visibleRows[focusedIndex];
+    if (!row) return;
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      onRowClick?.(row);
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c' && copyFocusedRow(row)) {
+      event.preventDefault();
+    }
+  }, [copyFocusedRow, focusedIndex, onRowClick, visibleRows]);
+
+  useEffect(() => {
+    if (focusedIndex < 0) return;
+    rowVirtualizer.scrollToIndex(focusedIndex, { align: 'auto' });
+  }, [focusedIndex, rowVirtualizer]);
+
   const table = (
     <ScrollArea
       className="min-h-0 flex-1 overflow-hidden bg-transparent font-mono text-[11px]"
       viewportRef={containerRef}
       viewportClassName={horizontalScroll ? 'overflow-x-auto' : 'overflow-x-hidden'}
-      viewportProps={{ onScroll: handleScroll, style: { contain: 'strict' } }}
+      viewportProps={{
+        onScroll: handleScroll,
+        onKeyDown: handleKeyDown,
+        tabIndex: 0,
+        'aria-label': t('denseTable.gridLabel'),
+        style: { contain: 'strict' },
+      }}
       showHorizontalScrollbar={horizontalScroll}
     >
       <Table
@@ -403,6 +458,7 @@ export function DenseDataTable<T>({
             onRetryInitialLoad={onRetryInitialLoad}
             emptyTitle={emptyTitle}
             emptyDescription={emptyDescription}
+            emptyAction={emptyAction}
             noMatchText={t('denseTable.noMatch')}
           />
           {visibleRows.length > 0 && topSpacerHeight > 0 ? (
@@ -425,6 +481,7 @@ export function DenseDataTable<T>({
                 row={row}
                 columns={columns}
                 selected={selected}
+                focused={virtualRow.index === focusedIndex}
                 onRowClick={onRowClick}
                 onRowDoubleClick={onRowDoubleClick}
                 renderRowContextMenu={renderRowContextMenu}

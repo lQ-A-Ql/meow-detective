@@ -704,3 +704,53 @@ describe('DenseDataTable filterable toolbar', () => {
     expect(onReachEnd).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('DenseDataTable keyboard and copy contract', () => {
+  const textColumns: DenseColumn<Row>[] = [
+    { key: 'name', title: 'Name', text: (row) => row.name, render: (row) => row.name },
+  ];
+
+  it('moves the keyboard cursor and opens the focused row with Enter', () => {
+    const onRowClick = vi.fn();
+    const { container } = render(
+      <DenseDataTable columns={textColumns} rows={[{ id: 'a', name: 'alpha' }, { id: 'b', name: 'beta' }]} getRowKey={(row) => row.id} onRowClick={onRowClick} />,
+    );
+    const viewport = getScrollViewport(container);
+
+    fireEvent.keyDown(viewport, { key: 'ArrowDown' });
+    fireEvent.keyDown(viewport, { key: 'Enter' });
+    expect(onRowClick).toHaveBeenCalledWith({ id: 'a', name: 'alpha' });
+
+    fireEvent.keyDown(viewport, { key: 'ArrowDown' });
+    fireEvent.keyDown(viewport, { key: 'Enter' });
+    expect(onRowClick).toHaveBeenLastCalledWith({ id: 'b', name: 'beta' });
+  });
+
+  it('copies the focused row as tab separated values', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    const { container } = render(
+      <DenseDataTable columns={textColumns} rows={[{ id: 'a', name: 'alpha' }, { id: 'b', name: 'beta' }]} getRowKey={(row) => row.id} />,
+    );
+    const viewport = getScrollViewport(container);
+
+    fireEvent.keyDown(viewport, { key: 'ArrowDown' });
+    fireEvent.keyDown(viewport, { key: 'c', ctrlKey: true });
+
+    expect(writeText).toHaveBeenCalledWith('alpha');
+  });
+
+  it('renders the empty state action so an empty table still offers a next step', () => {
+    render(
+      <DenseDataTable
+        columns={textColumns}
+        rows={[]}
+        getRowKey={(row) => row.id}
+        emptyTitle="Nothing here"
+        emptyAction={<button type="button">Next step</button>}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Next step' })).toBeDefined();
+  });
+});

@@ -497,7 +497,8 @@
     "actions": {
       "openSource": "Locate in file browser",
       "openTimeline": "View related timeline events"
-    }
+    },
+    "clearFamily": "Clear family filter"
   },
   "timeline": {
     "granularity": "Granularity",
@@ -2323,7 +2324,8 @@
     "loadMoreError": "Failed to load more records.",
     "initialLoadError": "Failed to load records.",
     "retry": "Retry",
-    "loadingMore": "Loading more records..."
+    "loadingMore": "Loading more records...",
+    "gridLabel": "Data grid: ↑↓ select row · Enter open · Ctrl+C copy row"
   },
   "errorBoundary": {
     "title": "Application Error",

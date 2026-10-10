@@ -497,7 +497,8 @@
     "actions": {
       "openSource": "在文件浏览中定位目标",
       "openTimeline": "查看关联时间线事件"
-    }
+    },
+    "clearFamily": "清除家族筛选"
   },
   "timeline": {
     "granularity": "粒度",
@@ -2323,7 +2324,8 @@
     "loadMoreError": "加载更多记录失败。",
     "initialLoadError": "记录加载失败。",
     "retry": "重试",
-    "loadingMore": "正在加载更多记录..."
+    "loadingMore": "正在加载更多记录...",
+    "gridLabel": "数据表格：↑↓ 选择行 · Enter 打开 · Ctrl+C 复制行"
   },
   "errorBoundary": {
     "title": "应用发生错误",

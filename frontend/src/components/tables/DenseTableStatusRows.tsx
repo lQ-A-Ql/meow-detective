@@ -2,6 +2,7 @@
  * DenseTableStatusRows - DenseDataTable 表体内的状态行（错误/空态/筛选无命中）。
  */
 
+import type { ReactNode } from 'react';
 import { TableCell, TableRow } from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
 
@@ -17,6 +18,8 @@ interface DenseTableStatusRowsProps {
   onRetryInitialLoad?: () => void;
   emptyTitle: string;
   emptyDescription: string;
+  /** Optional next step; an empty table that offers no action is a defect. */
+  emptyAction?: ReactNode;
   noMatchText: string;
 }
 
@@ -30,6 +33,7 @@ export function DenseTableStatusRows({
   onRetryInitialLoad,
   emptyTitle,
   emptyDescription,
+  emptyAction,
   noMatchText,
 }: DenseTableStatusRowsProps) {
   if (loadedCount === 0 && initialLoadFailed) {
@@ -64,6 +68,9 @@ export function DenseTableStatusRows({
             <div className="text-[11px] text-forensics-muted">
               {emptyDescription}
             </div>
+            {emptyAction ? (
+              <div className="mt-3 flex justify-center gap-2">{emptyAction}</div>
+            ) : null}
           </div>
         </TableCell>
       </TableRow>

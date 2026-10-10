@@ -7,6 +7,8 @@ export interface DenseDataTableRowProps<T> {
   row: T;
   columns: DenseColumn<T>[];
   selected: boolean;
+  /** Keyboard cursor; distinct from the committed selection. */
+  focused?: boolean;
   onRowClick?: (row: T) => void;
   onRowDoubleClick?: (row: T) => void;
   renderRowContextMenu?: (row: T, trigger: ReactElement) => ReactElement;
@@ -16,6 +18,7 @@ function DenseDataTableRowBase<T>({
   row,
   columns,
   selected,
+  focused = false,
   onRowClick,
   onRowDoubleClick,
   renderRowContextMenu,
@@ -35,7 +38,7 @@ function DenseDataTableRowBase<T>({
         selected
           ? 'bg-forensics-sakura-150 text-forensics-text'
           : 'text-forensics-text-secondary hover:bg-forensics-hover'
-      }`}
+      } ${focused ? 'ring-1 ring-inset ring-forensics-primary-blue' : ''}`}
       onClick={handleRowClick}
       onDoubleClick={() => onRowDoubleClick?.(row)}
     >

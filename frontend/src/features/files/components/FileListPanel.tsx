@@ -230,6 +230,11 @@ export function FileListPanel({
         onRowClick={handleRowClick}
         renderRowContextMenu={renderRowContextMenu}
         emptyTitle={t('fileBrowser.list.emptyTitle')}
+        emptyAction={parentDirectory ? (
+          <Button type="button" variant="outline" size="sm" onClick={goToParentDirectory}>
+            {t('fileBrowser.parentDirectory')}
+          </Button>
+        ) : undefined}
         emptyDescription={
           rowsPage?.truncated
             ? t('fileBrowser.list.emptyTruncated', { limit: rowsPage.limit, total: rowsPage.totalCount })
