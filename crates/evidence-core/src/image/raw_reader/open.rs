@@ -1,6 +1,6 @@
 use super::formats::{
-    clone_backend, open_dynamic_vhd, open_qcow2, open_vhdx, read_vhd_footer, read_vhd_parent_name,
-    resolve_vhd_parent_path,
+    clone_backend, open_dynamic_vhd, open_qcow2, open_vhdx, read_qcow_backing_path,
+    read_vhd_footer, read_vhd_parent_name, read_vhdx_parent_path, resolve_vhd_parent_path,
 };
 use super::*;
 use std::fs::File;
@@ -8,159 +8,25 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
 const VMDK_SECTOR_SIZE: u64 = 512;
 const MAX_DESCRIPTOR_BYTES: u64 = 1024 * 1024;
+const MAX_CHAIN_DEPTH: usize = 16;
 impl RawImageReader {
     /// Opens a raw image or a supported monolithic-flat VMDK descriptor.
     pub fn open(path: &Path) -> io::Result<Self> {
+        Self::open_with_depth(path, 0)
+    }
+
+    fn open_with_depth(path: &Path, depth: usize) -> io::Result<Self> {
+        if depth > MAX_CHAIN_DEPTH {
+            return Err(invalid_data("virtual disk parent chain is too deep"));
+        }
         reject_split_raw_member(path)?;
         if let Some(vhd) = read_vhd_footer(path)? {
-            let file = File::open(path)?;
-            let physical_len = file.metadata()?.len();
-            if vhd.disk_type == 3 {
-                let backend = open_dynamic_vhd(file, &vhd, None)?;
-                return Ok(Self {
-                    backend,
-                    info: ReaderInfo {
-                        path: path.to_path_buf(),
-                        size: vhd.virtual_size,
-                        kind: "vhd-dynamic".into(),
-                    },
-                    cursor: 0,
-                    backing_paths: vec![path.to_path_buf()],
-                });
-            }
-            if vhd.disk_type == 4 {
-                let parent_name = read_vhd_parent_name(path)?;
-                let parent_path = resolve_vhd_parent_path(path, &parent_name)?;
-                let parent_reader = Self::open(&parent_path)?;
-                if parent_reader.len() < vhd.virtual_size {
-                    return Err(invalid_data("VHD parent is smaller than child"));
-                }
-                let backend = open_dynamic_vhd(file, &vhd, Some(Box::new(parent_reader.backend)))?;
-                return Ok(Self {
-                    backend,
-                    info: ReaderInfo {
-                        path: path.to_path_buf(),
-                        size: vhd.virtual_size,
-                        kind: "vhd-differencing".into(),
-                    },
-                    cursor: 0,
-                    backing_paths: vec![path.to_path_buf(), parent_path],
-                });
-            }
-            if vhd.disk_type == 3 {
-                return Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "dynamic and differencing VHD images are not supported for read-only import",
-                ));
-            }
-            if vhd.disk_type != 2 {
-                return Err(invalid_data("VHD footer has an unsupported disk type"));
-            }
-            // A fixed VHD stores the footer after the virtual disk bytes.  Do
-            // not compare against the complete host file length: accepting
-            // `virtual_size == physical_len` would expose the footer as disk
-            // data and would allow truncated images to pass validation.
-            let data_len = physical_len
-                .checked_sub(512)
-                .ok_or_else(|| invalid_data("fixed VHD is missing its footer"))?;
-            if vhd.virtual_size == 0 || data_len < vhd.virtual_size {
-                return Err(invalid_data("fixed VHD is truncated"));
-            }
-            return Ok(Self {
-                backend: Backend::Flat {
-                    file,
-                    base_offset: 0,
-                },
-                info: ReaderInfo {
-                    path: path.to_path_buf(),
-                    size: vhd.virtual_size,
-                    kind: "vhd-fixed".to_string(),
-                },
-                cursor: 0,
-                backing_paths: vec![path.to_path_buf()],
-            });
+            return open_vhd_source(path, vhd, depth);
         }
-        if let Some((backend, virtual_size)) = open_qcow2(path)? {
-            return Ok(Self {
-                backend,
-                info: ReaderInfo {
-                    path: path.to_path_buf(),
-                    size: virtual_size,
-                    kind: "qcow2".into(),
-                },
-                cursor: 0,
-                backing_paths: vec![path.to_path_buf()],
-            });
+        if let Some(reader) = open_virtual_source(path, depth)? {
+            return Ok(reader);
         }
-        if let Some((backend, virtual_size)) = open_vhdx(path)? {
-            return Ok(Self {
-                backend,
-                info: ReaderInfo {
-                    path: path.to_path_buf(),
-                    size: virtual_size,
-                    kind: "vhdx".into(),
-                },
-                cursor: 0,
-                backing_paths: vec![path.to_path_buf()],
-            });
-        }
-        let descriptor = read_vmdk_descriptor(path)?;
-        let (backend, logical_len, kind, backing_paths) = match descriptor {
-            Some((extent, sector_count)) => {
-                let file = File::open(&extent)?;
-                let extent_len = file.metadata()?.len();
-                let logical_len = sector_count
-                    .checked_mul(VMDK_SECTOR_SIZE)
-                    .ok_or_else(|| invalid_data("VMDK logical size overflows u64"))?;
-                if logical_len == 0 {
-                    return Err(invalid_data("VMDK extent has zero logical sectors"));
-                }
-                if extent_len < logical_len {
-                    return Err(invalid_data(format!(
-                        "VMDK FLAT extent is truncated: expected at least {logical_len} bytes, found {extent_len}"
-                    )));
-                }
-                (
-                    Backend::Flat {
-                        file,
-                        base_offset: 0,
-                    },
-                    logical_len,
-                    "vmdk",
-                    vec![path.to_path_buf(), extent],
-                )
-            }
-            None => {
-                let file = File::open(path)?;
-                let metadata = file.metadata()?;
-                if metadata.is_dir() {
-                    return Err(invalid_data(format!(
-                        "cannot open directory as raw image: {}",
-                        path.display()
-                    )));
-                }
-                (
-                    Backend::Flat {
-                        file,
-                        base_offset: 0,
-                    },
-                    metadata.len(),
-                    "raw",
-                    vec![path.to_path_buf()],
-                )
-            }
-        };
-
-        Ok(Self {
-            backend,
-            info: ReaderInfo {
-                path: path.to_path_buf(),
-                size: logical_len,
-                kind: kind.to_string(),
-            },
-            cursor: 0,
-            backing_paths,
-        })
+        open_raw_or_vmdk(path)
     }
 
     pub fn path(&self) -> &Path {
@@ -175,12 +41,10 @@ impl RawImageReader {
         self.info.size == 0
     }
 
-    /// Files whose bytes define this image, in stable manifest order.
     pub fn backing_paths(&self) -> &[PathBuf] {
         &self.backing_paths
     }
 
-    /// Creates an independent handle with its own logical cursor.
     pub fn try_clone(&self) -> io::Result<Self> {
         Ok(Self {
             backend: clone_backend(&self.backend)?,
@@ -191,6 +55,176 @@ impl RawImageReader {
     }
 }
 
+fn open_vhd_source(
+    path: &Path,
+    vhd: super::formats::VhdFooter,
+    depth: usize,
+) -> io::Result<RawImageReader> {
+    let file = File::open(path)?;
+    let physical_len = file.metadata()?.len();
+    if vhd.disk_type == 3 {
+        return Ok(RawImageReader {
+            backend: open_dynamic_vhd(file, &vhd, None)?,
+            info: ReaderInfo {
+                path: path.to_path_buf(),
+                size: vhd.virtual_size,
+                kind: "vhd-dynamic".into(),
+            },
+            cursor: 0,
+            backing_paths: vec![path.to_path_buf()],
+        });
+    }
+    if vhd.disk_type == 4 {
+        let parent_name = read_vhd_parent_name(path)?;
+        let parent_path = resolve_vhd_parent_path(path, &parent_name)?;
+        let parent_reader = RawImageReader::open_with_depth(&parent_path, depth + 1)?;
+        if parent_reader.len() < vhd.virtual_size {
+            return Err(invalid_data("VHD parent is smaller than child"));
+        }
+        let parent_paths = parent_reader.backing_paths.clone();
+        return Ok(RawImageReader {
+            backend: open_dynamic_vhd(file, &vhd, Some(Box::new(parent_reader.backend)))?,
+            info: ReaderInfo {
+                path: path.to_path_buf(),
+                size: vhd.virtual_size,
+                kind: "vhd-differencing".into(),
+            },
+            cursor: 0,
+            backing_paths: std::iter::once(path.to_path_buf())
+                .chain(parent_paths)
+                .collect(),
+        });
+    }
+    if vhd.disk_type != 2 {
+        return Err(invalid_data("VHD footer has an unsupported disk type"));
+    }
+    let data_len = physical_len
+        .checked_sub(512)
+        .ok_or_else(|| invalid_data("fixed VHD is missing its footer"))?;
+    if vhd.virtual_size == 0 || data_len < vhd.virtual_size {
+        return Err(invalid_data("fixed VHD is truncated"));
+    }
+    Ok(RawImageReader {
+        backend: Backend::Flat {
+            file,
+            base_offset: 0,
+        },
+        info: ReaderInfo {
+            path: path.to_path_buf(),
+            size: vhd.virtual_size,
+            kind: "vhd-fixed".to_string(),
+        },
+        cursor: 0,
+        backing_paths: vec![path.to_path_buf()],
+    })
+}
+
+fn open_virtual_source(path: &Path, depth: usize) -> io::Result<Option<RawImageReader>> {
+    let (qcow_parent, qcow_parent_paths) = match read_qcow_backing_path(path)? {
+        Some(parent_path) => {
+            let parent_reader = RawImageReader::open_with_depth(&parent_path, depth + 1)?;
+            let parent_paths = parent_reader.backing_paths.clone();
+            (Some(Box::new(parent_reader.backend)), parent_paths)
+        }
+        None => (None, Vec::new()),
+    };
+    if let Some((backend, virtual_size)) = open_qcow2(path, qcow_parent)? {
+        return Ok(Some(RawImageReader {
+            backend,
+            info: ReaderInfo {
+                path: path.to_path_buf(),
+                size: virtual_size,
+                kind: "qcow2".into(),
+            },
+            cursor: 0,
+            backing_paths: std::iter::once(path.to_path_buf())
+                .chain(qcow_parent_paths)
+                .collect(),
+        }));
+    }
+    let (vhdx_parent, vhdx_parent_paths) = match read_vhdx_parent_path(path)? {
+        Some(parent_path) => {
+            let parent_reader = RawImageReader::open_with_depth(&parent_path, depth + 1)?;
+            let parent_paths = parent_reader.backing_paths.clone();
+            (Some(Box::new(parent_reader.backend)), parent_paths)
+        }
+        None => (None, Vec::new()),
+    };
+    if let Some((backend, virtual_size)) = open_vhdx(path, vhdx_parent)? {
+        return Ok(Some(RawImageReader {
+            backend,
+            info: ReaderInfo {
+                path: path.to_path_buf(),
+                size: virtual_size,
+                kind: "vhdx".into(),
+            },
+            cursor: 0,
+            backing_paths: std::iter::once(path.to_path_buf())
+                .chain(vhdx_parent_paths)
+                .collect(),
+        }));
+    }
+    Ok(None)
+}
+
+fn open_raw_or_vmdk(path: &Path) -> io::Result<RawImageReader> {
+    let descriptor = read_vmdk_descriptor(path)?;
+    let (backend, logical_len, kind, backing_paths) = match descriptor {
+        Some((extent, sector_count)) => {
+            let file = File::open(&extent)?;
+            let extent_len = file.metadata()?.len();
+            let logical_len = sector_count
+                .checked_mul(VMDK_SECTOR_SIZE)
+                .ok_or_else(|| invalid_data("VMDK logical size overflows u64"))?;
+            if logical_len == 0 {
+                return Err(invalid_data("VMDK extent has zero logical sectors"));
+            }
+            if extent_len < logical_len {
+                return Err(invalid_data(format!(
+                    "VMDK FLAT extent is truncated: expected at least {logical_len} bytes, found {extent_len}"
+                )));
+            }
+            (
+                Backend::Flat {
+                    file,
+                    base_offset: 0,
+                },
+                logical_len,
+                "vmdk",
+                vec![path.to_path_buf(), extent],
+            )
+        }
+        None => {
+            let file = File::open(path)?;
+            let metadata = file.metadata()?;
+            if metadata.is_dir() {
+                return Err(invalid_data(format!(
+                    "cannot open directory as raw image: {}",
+                    path.display()
+                )));
+            }
+            (
+                Backend::Flat {
+                    file,
+                    base_offset: 0,
+                },
+                metadata.len(),
+                "raw",
+                vec![path.to_path_buf()],
+            )
+        }
+    };
+    Ok(RawImageReader {
+        backend,
+        info: ReaderInfo {
+            path: path.to_path_buf(),
+            size: logical_len,
+            kind: kind.to_string(),
+        },
+        cursor: 0,
+        backing_paths,
+    })
+}
 fn reject_split_raw_member(path: &Path) -> io::Result<()> {
     let extension = path
         .extension()

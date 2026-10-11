@@ -167,6 +167,38 @@ fn hash_evidence_honors_cancellation_before_reading() {
 }
 
 #[test]
+fn hash_evidence_directory_is_deterministic_and_includes_file_content() {
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::create_dir(directory.path().join("nested")).unwrap();
+    std::fs::write(directory.path().join("z.txt"), b"z").unwrap();
+    std::fs::write(directory.path().join("nested").join("a.txt"), b"a").unwrap();
+    let cancelled = AtomicBool::new(false);
+    let first = HashService::hash_evidence_with_algorithm(
+        directory.path(),
+        &domain::DataSourceKind::LogicalDirectory,
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        &cancelled,
+        &|_, _| {},
+    )
+    .unwrap();
+    std::fs::rename(
+        directory.path().join("z.txt"),
+        directory.path().join("renamed.txt"),
+    )
+    .unwrap();
+    let second = HashService::hash_evidence_with_algorithm(
+        directory.path(),
+        &domain::DataSourceKind::LogicalDirectory,
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        &cancelled,
+        &|_, _| {},
+    )
+    .unwrap();
+    assert_ne!(first.digest, second.digest);
+    assert_eq!(first.bytes_processed, 2);
+}
+
+#[test]
 fn hash_jobs_include_logical_archives_and_android_sparse_sources() {
     let kinds = [
         domain::DataSourceKind::LogicalArchive,

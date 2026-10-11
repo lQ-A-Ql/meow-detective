@@ -106,6 +106,9 @@ impl HashService {
                 .map_err(|error| io_error("discover raw image backing files", error))?,
             DataSourceKind::AndroidSparse => vec![path.to_path_buf()],
             DataSourceKind::LogicalArchive => vec![path.to_path_buf()],
+            DataSourceKind::LogicalDirectory | DataSourceKind::CephRbd | DataSourceKind::CephFs => {
+                return hash_directory_evidence(path, algorithm, cancelled, progress)
+            }
             _ => return Err(EvidenceHashError::Unsupported),
         };
         let total_bytes = segments
@@ -174,6 +177,54 @@ impl HashService {
             },
         })
     }
+
+    /// Hashes the logical byte stream exposed by a source reader.  This is
+    /// intentionally separate from `hash_evidence_with_algorithm`, whose
+    /// container-set result covers the physical files that make up an image
+    /// (for example a QCOW backing chain or VMDK descriptor plus extent).
+    pub fn hash_logical_evidence(
+        path: &Path,
+        kind: &DataSourceKind,
+        algorithm: hashing::HashAlgorithm,
+        cancelled: &AtomicBool,
+        progress: &(dyn Fn(u64, u64) + Sync),
+    ) -> Result<EvidenceHashResult, EvidenceHashError> {
+        if *kind == DataSourceKind::LocalDisk {
+            return hash_local_disk(path, algorithm, cancelled, progress);
+        }
+        let mut reader: Box<dyn evidence_core::EvidenceReader> = match kind {
+            DataSourceKind::Raw => Box::new(
+                evidence_core::RawImageReader::open(path)
+                    .map_err(|error| io_error("open logical raw image", error))?,
+            ),
+            DataSourceKind::AndroidSparse => Box::new(
+                image_android::AndroidSparseReader::open(path).map_err(|error| {
+                    io_error("open logical Android image", io::Error::other(error))
+                })?,
+            ),
+            _ => return Err(EvidenceHashError::Unsupported),
+        };
+        let total_bytes = reader.info().size;
+        let digest = hashing::digest_reader_with_cancel(
+            reader.as_mut(),
+            algorithm,
+            || cancelled.load(Ordering::Acquire),
+            |processed| progress(processed.min(total_bytes), total_bytes),
+        )
+        .map_err(|error| io_error("read logical evidence", error))?
+        .ok_or(EvidenceHashError::Cancelled)?;
+        Ok(EvidenceHashResult {
+            digest,
+            bytes_processed: total_bytes,
+            acceleration: if algorithm == hashing::HashAlgorithm::Sha256 {
+                HashService::sha256_acceleration()
+            } else {
+                "portable"
+            },
+            parallel_segments: 1,
+            worker_threads: 1,
+        })
+    }
 }
 
 fn hash_local_disk(
@@ -204,6 +255,124 @@ fn hash_local_disk(
         parallel_segments: 1,
         worker_threads: 1,
     })
+}
+
+fn hash_directory_evidence(
+    root: &Path,
+    algorithm: hashing::HashAlgorithm,
+    cancelled: &AtomicBool,
+    progress: &(dyn Fn(u64, u64) + Sync),
+) -> Result<EvidenceHashResult, EvidenceHashError> {
+    let mut entries = Vec::new();
+    collect_directory_entries(root, root, &mut entries)?;
+    entries.sort_by(|left, right| left.0.cmp(&right.0));
+    let total_bytes =
+        entries
+            .iter()
+            .filter_map(|entry| entry.2)
+            .try_fold(0u64, |total, length| {
+                total.checked_add(length).ok_or(EvidenceHashError::Io {
+                    operation: "sum directory evidence length",
+                    kind: io::ErrorKind::InvalidData,
+                })
+            })?;
+    let mut processed = 0u64;
+    let mut manifest = String::new();
+    for (relative, kind, length, path) in &entries {
+        if cancelled.load(Ordering::Acquire) {
+            return Err(EvidenceHashError::Cancelled);
+        }
+        match (*kind, *length) {
+            ('f', Some(length)) => {
+                let mut file = std::fs::File::open(path)
+                    .map_err(|error| io_error("open directory evidence file", error))?;
+                let digest = hashing::digest_reader_with_cancel(
+                    &mut file,
+                    algorithm,
+                    || cancelled.load(Ordering::Acquire),
+                    |local| {
+                        let completed = processed.saturating_add(local).min(total_bytes);
+                        (progress)(completed, total_bytes);
+                    },
+                )
+                .map_err(|error| io_error("read directory evidence file", error))?
+                .ok_or(EvidenceHashError::Cancelled)?;
+                processed = processed.saturating_add(length);
+                use std::fmt::Write;
+                let _ = writeln!(manifest, "f\t{relative}\t{length}\t{digest}");
+            }
+            ('d', _) => {
+                use std::fmt::Write;
+                let _ = writeln!(manifest, "d\t{relative}");
+            }
+            ('s', _) => {
+                use std::fmt::Write;
+                let _ = writeln!(manifest, "s\t{relative}");
+            }
+            _ => {
+                return Err(EvidenceHashError::Io {
+                    operation: "classify directory evidence entry",
+                    kind: io::ErrorKind::InvalidData,
+                })
+            }
+        }
+    }
+    if cancelled.load(Ordering::Acquire) {
+        return Err(EvidenceHashError::Cancelled);
+    }
+    (progress)(total_bytes, total_bytes);
+    Ok(EvidenceHashResult {
+        digest: hashing::digest_bytes(manifest.as_bytes(), algorithm),
+        bytes_processed: total_bytes,
+        acceleration: if algorithm == hashing::HashAlgorithm::Sha256 {
+            HashService::sha256_acceleration()
+        } else {
+            "portable"
+        },
+        parallel_segments: entries.len().max(1),
+        worker_threads: 1,
+    })
+}
+
+fn collect_directory_entries(
+    root: &Path,
+    current: &Path,
+    entries: &mut Vec<(String, char, Option<u64>, std::path::PathBuf)>,
+) -> Result<(), EvidenceHashError> {
+    let read_dir =
+        std::fs::read_dir(current).map_err(|error| io_error("read directory evidence", error))?;
+    for item in read_dir {
+        let item = item.map_err(|error| io_error("enumerate directory evidence", error))?;
+        let path = item.path();
+        let relative = path
+            .strip_prefix(root)
+            .map_err(|_| EvidenceHashError::Io {
+                operation: "normalize directory evidence path",
+                kind: io::ErrorKind::InvalidData,
+            })?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let metadata = std::fs::symlink_metadata(&path)
+            .map_err(|error| io_error("inspect directory evidence entry", error))?;
+        let file_type = metadata.file_type();
+        let kind = if file_type.is_symlink() {
+            's'
+        } else if file_type.is_dir() {
+            collect_directory_entries(root, &path, entries)?;
+            'd'
+        } else if file_type.is_file() {
+            'f'
+        } else {
+            's'
+        };
+        entries.push((
+            relative,
+            kind,
+            (kind == 'f').then_some(metadata.len()),
+            path,
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug)]

@@ -22,7 +22,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 - 支持 E01、单文件 RAW/dd/img、ISO9660/Joliet、受限 monolithic-flat VMDK、逻辑目录及 Linux 集群目录作为数据源入口；Windows 主机物理磁盘可通过 `\\.\PhysicalDriveN` 以只读方式导入。
 - 镜像格式先进入统一的只读 reader，再进行分区探测和文件系统解析：E01/EWF 使用 E01 reader；RAW/dd/img 使用原始字节 reader；主机物理磁盘使用 LocalDiskReader；ISO 使用 ISO9660/Joliet reader；flat VMDK 使用 descriptor 声明的 extent 作为逻辑字节源。适配器不会修改原始文件，也不会把不支持的容器猜测成 RAW。
 - 文件选择器接受 `.e01`/`.ewf`、`.dd`/`.raw`/`.img`、`.iso` 和 `.vmdk`；扩展名只用于选择入口，最终是否可读仍由 magic、descriptor、PVD 和长度校验决定。
-- VMDK 目前仅接受 UTF-8、`createType="monolithicFlat"`、单个零偏移 `FLAT` extent；descriptor 与 extent 的逻辑长度、截断、溢出和路径边界都会校验。`.001/.002/...` 分卷集合、sparse/streamOptimized VMDK 明确拒绝。VHD fixed/dynamic/differencing、VHDX 和无压缩 QCOW/QCOW2 提供只读读取；压缩 QCOW2 和 VHDX parent chain 仍 fail-closed。
+- VMDK 目前仅接受 UTF-8、`createType="monolithicFlat"`、单个零偏移 `FLAT` extent；descriptor 与 extent 的逻辑长度、截断、溢出和路径边界都会校验。`.001/.002/...` 分卷集合、sparse/streamOptimized VMDK 明确拒绝。VHD fixed/dynamic/differencing、带相对父链的 VHDX，以及无压缩 QCOW/QCOW2 backing chain 提供只读读取；压缩 QCOW2 cluster 和损坏的虚拟磁盘元数据 fail-closed。
 - ISO 适配器优先使用 Joliet 名称，目录和文件 extent 均受卷边界限制；ISO 可直接导入，也可嵌套在 E01 或受支持的 flat VMDK 字节流中。UDF、Rock Ridge、交错或 multi-extent 记录不在当前承诺范围。
 - 自动识别 MBR/GPT、常见分区与文件系统；支持 NTFS、FAT、exFAT、ext4、XFS、Btrfs 以及 Linux LVM 直接逻辑卷映射。
 - 文件树、目录分页、筛选、自然排序、文件属性与数据源分区信息均由后端统一提供。

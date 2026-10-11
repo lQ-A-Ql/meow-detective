@@ -134,17 +134,21 @@ pub fn classify_data_source_path(source_path: &Path) -> Result<DataSourceKind> {
     if has_e01_magic(source_path)? || has_e01_name(source_path) {
         Ok(DataSourceKind::E01)
     } else if has_vhd_magic(source_path)? {
+        // All VHD footer variants are opened through the read-only virtual
+        // disk reader.  The reader validates the dynamic BAT or parent chain
+        // before the source is persisted, so classification must not reject
+        // a valid dynamic/differencing image up front.
         let probe = evidence_core::probe(source_path)
             .map_err(|error| DataSourceError::Evidence(error.to_string()))?;
         if probe
             .candidates
             .iter()
-            .any(|candidate| candidate == "vhd-fixed")
+            .any(|candidate| candidate.starts_with("vhd-"))
         {
             Ok(DataSourceKind::Raw)
         } else {
             Err(DataSourceError::Evidence(
-                "dynamic or differencing VHD is recognized but unsupported".to_string(),
+                "VHD footer was not recognized".to_string(),
             ))
         }
     } else if has_qcow2_magic(source_path)? || has_vhdx_magic(source_path)? {

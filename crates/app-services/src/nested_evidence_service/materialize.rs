@@ -108,6 +108,32 @@ fn materialize_inner(
     validate_fixed_vhd_footer(&footer, size)?;
 
     let derived_id = DataSourceId(format!("nested-{}", uuid::Uuid::new_v4()));
+    let (output_path, temp_path) = prepare_output_paths(case_root, &derived_id)?;
+    let write_result = copy_entry(&mut reader, &entry.id, size, &temp_path, &output_path);
+    if write_result.is_err() {
+        let _ = fs::remove_file(&temp_path);
+        return write_result.map(|_| unreachable!());
+    }
+    let registration = register_materialized_vhd(
+        case_conn,
+        case_id,
+        &parent,
+        &entry.path,
+        &derived_id,
+        &output_path,
+        size,
+    );
+    if let Err(error) = registration {
+        let _ = fs::remove_file(&output_path);
+        return Err(MaterializeError::Database(error));
+    }
+    Ok(materialized_result(parent, entry.path, derived_id, size))
+}
+
+fn prepare_output_paths(
+    case_root: &Path,
+    derived_id: &DataSourceId,
+) -> Result<(std::path::PathBuf, std::path::PathBuf), MaterializeError> {
     let output_dir = case_root.join("derived").join("nested-evidence");
     fs::create_dir_all(&output_dir)?;
     let canonical_root = case_root.canonicalize()?;
@@ -122,65 +148,66 @@ fn materialize_inner(
     if output_path.exists() || temp_path.exists() {
         return Err(MaterializeError::Conflict);
     }
-    let write_result = copy_entry(&mut reader, &entry.id, size, &temp_path, &output_path);
-    if write_result.is_err() {
-        let _ = fs::remove_file(&temp_path);
-        return write_result.map(|_| unreachable!());
-    }
+    Ok((output_path, temp_path))
+}
+
+fn register_materialized_vhd(
+    case_conn: &Connection,
+    case_id: &CaseId,
+    parent: &DataSourceId,
+    nested_file_path: &str,
+    derived_id: &DataSourceId,
+    output_path: &Path,
+    size: u64,
+) -> Result<(), persistence_sqlite::DbError> {
     let derived = DataSource {
         id: derived_id.clone(),
-        name: format!("Nested VHD: {}", entry.path),
+        name: format!("Nested VHD: {nested_file_path}"),
         kind: DataSourceKind::Raw,
-        source_path: output_path.clone(),
+        source_path: output_path.to_path_buf(),
         imported_at: chrono::Utc::now(),
         provenance: DataSourceProvenance {
             source_hash_sha256: None,
             hash_status: DataSourceHashStatus::Pending,
-            canonical_source_path: Some(output_path.clone()),
+            canonical_source_path: Some(output_path.to_path_buf()),
             evidence_size: Some(size),
             reader_kind: Some("vhd-fixed".into()),
             provenance_status: DataSourceProvenanceStatus::Recorded,
             warnings: vec!["derived source pending import pipeline".into()],
         },
     };
-    // Register the source before publishing lineage.  Both writes are
-    // idempotent at the database layer only when performed as one transaction;
-    // callers retrying after a crash must never observe a lineage pointing to
-    // a missing data source.
     let lineage = NestedEvidenceLineage {
-        parent_data_source_id: parent,
-        nested_file_path: entry.path,
+        parent_data_source_id: parent.clone(),
+        nested_file_path: nested_file_path.to_string(),
         derived_data_source_id: Some(derived_id.clone()),
         offset: 0,
         length: size,
         probe_kind: "vhd-fixed".into(),
     };
-    let registration = (|| -> Result<(), persistence_sqlite::DbError> {
-        let transaction = case_conn
-            .unchecked_transaction()
-            .map_err(persistence_sqlite::DbError::from)?;
-        DataSourceRepo::new(&transaction).insert_with_storage(
-            case_id,
-            &derived,
-            &DataSourceStorage::source_db(
-                &derived_id.0,
-                Some("windows"),
-                Some("nested_vhd".into()),
-            ),
-        )?;
-        NestedEvidenceRepo::new(&transaction).upsert(&lineage)?;
-        transaction
-            .commit()
-            .map_err(persistence_sqlite::DbError::from)
-    })();
-    if let Err(error) = registration {
-        let _ = fs::remove_file(&output_path);
-        return Err(MaterializeError::Database(error));
-    }
-    Ok(NestedEvidenceMaterializedDto {
+    let transaction = case_conn
+        .unchecked_transaction()
+        .map_err(persistence_sqlite::DbError::from)?;
+    DataSourceRepo::new(&transaction).insert_with_storage(
+        case_id,
+        &derived,
+        &DataSourceStorage::source_db(&derived_id.0, Some("windows"), Some("nested_vhd".into())),
+    )?;
+    NestedEvidenceRepo::new(&transaction).upsert(&lineage)?;
+    transaction
+        .commit()
+        .map_err(persistence_sqlite::DbError::from)
+}
+
+fn materialized_result(
+    parent: DataSourceId,
+    nested_file_path: String,
+    derived_id: DataSourceId,
+    size: u64,
+) -> NestedEvidenceMaterializedDto {
+    NestedEvidenceMaterializedDto {
         lineage: NestedEvidenceLineageDto {
-            parent_data_source_id: lineage.parent_data_source_id.0,
-            nested_file_path: lineage.nested_file_path,
+            parent_data_source_id: parent.0,
+            nested_file_path,
             derived_data_source_id: Some(derived_id.0.clone()),
             offset: 0,
             length: size,
@@ -188,7 +215,7 @@ fn materialize_inner(
         },
         derived_data_source_id: derived_id.0,
         import_state: "pending".into(),
-    })
+    }
 }
 
 fn validate_fixed_vhd_footer(footer: &[u8], size: u64) -> Result<(), MaterializeError> {

@@ -112,136 +112,209 @@ pub fn calculate_evidence_digest_with_cancel(
     let algorithm = map_algorithm(algorithm);
     match scope {
         DigestScopeDto::ContainerFile => {
-            let source = load_source(case_conn, case_id, target.data_source_id)?;
-            let digest = HashService::digest_file(Path::new(&source.source_path), algorithm)
-                .map_err(|error| {
-                    DigestServiceError::Hash(EvidenceHashError::Io {
-                        operation: "read container file",
-                        kind: error.kind(),
-                    })
-                })?;
-            let byte_length = std::fs::metadata(&source.source_path)
-                .map_err(|error| {
-                    DigestServiceError::Hash(EvidenceHashError::Io {
-                        operation: "inspect container file",
-                        kind: error.kind(),
-                    })
-                })?
-                .len();
-            Ok(completed(scope, algorithm, digest, byte_length))
+            digest_container_file(case_conn, case_id, target.data_source_id, algorithm)
         }
-        DigestScopeDto::ContainerSet => {
-            let source = load_source(case_conn, case_id, target.data_source_id)?;
-            let result = HashService::hash_evidence_with_algorithm(
-                Path::new(&source.source_path),
-                &source.kind,
-                algorithm,
-                execution.cancelled,
-                execution.progress,
-            )
-            .map_err(DigestServiceError::Hash)?;
-            Ok(completed(
-                scope,
-                algorithm,
-                result.digest,
-                result.bytes_processed,
-            ))
-        }
+        DigestScopeDto::ContainerSet => digest_container_set(
+            case_conn,
+            case_id,
+            target.data_source_id,
+            algorithm,
+            execution,
+        ),
         DigestScopeDto::File => {
             let file_id = target.file_id.ok_or(DigestServiceError::InvalidInput)?;
             digest_file(case_conn, case_root, case_id, file_id, algorithm, execution)
         }
-        DigestScopeDto::LogicalDisk => {
-            let source = load_source(case_conn, case_id, target.data_source_id)?;
-            if source.kind != DataSourceKind::LocalDisk {
-                return Err(DigestServiceError::Unsupported);
-            }
-            let result = HashService::hash_evidence_with_algorithm(
-                Path::new(&source.source_path),
-                &DataSourceKind::LocalDisk,
-                algorithm,
-                execution.cancelled,
-                execution.progress,
-            )
-            .map_err(DigestServiceError::Hash)?;
-            Ok(completed(
-                DigestScopeDto::LogicalDisk,
-                algorithm,
-                result.digest,
-                result.bytes_processed,
-            ))
-        }
-        DigestScopeDto::Partition => {
-            let source_id = target
-                .data_source_id
-                .ok_or(DigestServiceError::InvalidInput)?;
-            let index = target
-                .partition_index
-                .ok_or(DigestServiceError::InvalidInput)? as usize;
-            let source = load_source(case_conn, case_id, Some(source_id))?;
-            let partition =
-                persistence_sqlite::repositories::partition_repo::PartitionRepo::new(case_conn)
-                    .find_by_data_source_and_index(source_id, index)?
-                    .ok_or(DigestServiceError::NotFound)?;
-            let reader =
-                crate::datasource_service::open_evidence_reader(&source.source_path, &source.kind)
-                    .map_err(|error| {
-                        DigestServiceError::Hash(EvidenceHashError::Io {
-                            operation: "open partition reader",
-                            kind: error.kind(),
-                        })
-                    })?;
-            let mut window = evidence_core::PartitionWindowReader::new(
-                reader,
-                partition.offset,
-                Some(partition.length),
-            )
+        DigestScopeDto::LogicalDisk => digest_logical_disk(
+            case_conn,
+            case_id,
+            target.data_source_id,
+            algorithm,
+            execution,
+        ),
+        DigestScopeDto::Partition => digest_partition(
+            case_conn,
+            case_id,
+            target.data_source_id,
+            target.partition_index,
+            algorithm,
+            execution,
+        ),
+        DigestScopeDto::DerivedEvidence => digest_derived(
+            case_conn,
+            case_id,
+            target.data_source_id,
+            algorithm,
+            execution,
+        ),
+    }
+}
+
+fn digest_container_file(
+    case_conn: &Connection,
+    case_id: &CaseId,
+    data_source_id: Option<&str>,
+    algorithm: infrastructure::hashing::HashAlgorithm,
+) -> Result<EvidenceDigestDto, DigestServiceError> {
+    let source = load_source(case_conn, case_id, data_source_id)?;
+    let digest =
+        HashService::digest_file(Path::new(&source.source_path), algorithm).map_err(|error| {
+            DigestServiceError::Hash(EvidenceHashError::Io {
+                operation: "read container file",
+                kind: error.kind(),
+            })
+        })?;
+    let byte_length = std::fs::metadata(&source.source_path)
+        .map_err(|error| {
+            DigestServiceError::Hash(EvidenceHashError::Io {
+                operation: "inspect container file",
+                kind: error.kind(),
+            })
+        })?
+        .len();
+    Ok(completed(
+        DigestScopeDto::ContainerFile,
+        algorithm,
+        digest,
+        byte_length,
+    ))
+}
+
+fn digest_container_set(
+    case_conn: &Connection,
+    case_id: &CaseId,
+    data_source_id: Option<&str>,
+    algorithm: infrastructure::hashing::HashAlgorithm,
+    execution: DigestExecution<'_>,
+) -> Result<EvidenceDigestDto, DigestServiceError> {
+    let source = load_source(case_conn, case_id, data_source_id)?;
+    let result = HashService::hash_evidence_with_algorithm(
+        Path::new(&source.source_path),
+        &source.kind,
+        algorithm,
+        execution.cancelled,
+        execution.progress,
+    )
+    .map_err(DigestServiceError::Hash)?;
+    Ok(completed(
+        DigestScopeDto::ContainerSet,
+        algorithm,
+        result.digest,
+        result.bytes_processed,
+    ))
+}
+
+fn digest_logical_disk(
+    case_conn: &Connection,
+    case_id: &CaseId,
+    data_source_id: Option<&str>,
+    algorithm: infrastructure::hashing::HashAlgorithm,
+    execution: DigestExecution<'_>,
+) -> Result<EvidenceDigestDto, DigestServiceError> {
+    let source = load_source(case_conn, case_id, data_source_id)?;
+    if source.kind == DataSourceKind::E01 {
+        return Err(DigestServiceError::Unsupported);
+    }
+    let result = HashService::hash_logical_evidence(
+        Path::new(&source.source_path),
+        &source.kind,
+        algorithm,
+        execution.cancelled,
+        execution.progress,
+    )
+    .map_err(DigestServiceError::Hash)?;
+    Ok(completed(
+        DigestScopeDto::LogicalDisk,
+        algorithm,
+        result.digest,
+        result.bytes_processed,
+    ))
+}
+
+fn digest_partition(
+    case_conn: &Connection,
+    case_id: &CaseId,
+    data_source_id: Option<&str>,
+    partition_index: Option<u32>,
+    algorithm: infrastructure::hashing::HashAlgorithm,
+    execution: DigestExecution<'_>,
+) -> Result<EvidenceDigestDto, DigestServiceError> {
+    let source_id = data_source_id.ok_or(DigestServiceError::InvalidInput)?;
+    let index = partition_index.ok_or(DigestServiceError::InvalidInput)? as usize;
+    let source = load_source(case_conn, case_id, Some(source_id))?;
+    let partition = persistence_sqlite::repositories::partition_repo::PartitionRepo::new(case_conn)
+        .find_by_data_source_and_index(source_id, index)?
+        .ok_or(DigestServiceError::NotFound)?;
+    let reader = crate::datasource_service::open_evidence_reader(&source.source_path, &source.kind)
+        .map_err(|error| {
+            DigestServiceError::Hash(EvidenceHashError::Io {
+                operation: "open partition reader",
+                kind: error.kind(),
+            })
+        })?;
+    let mut window =
+        evidence_core::PartitionWindowReader::new(reader, partition.offset, Some(partition.length))
             .map_err(|error| {
                 DigestServiceError::Hash(EvidenceHashError::Io {
                     operation: "open partition window",
                     kind: error.kind(),
                 })
             })?;
-            let digest = HashService::digest_reader(
-                &mut window,
-                algorithm,
-                || execution.cancelled.load(Ordering::Acquire),
-                |amount| (execution.progress)(amount, partition.length),
-            )
-            .map_err(|error| {
-                DigestServiceError::Hash(EvidenceHashError::Io {
-                    operation: "read partition",
-                    kind: error.kind(),
-                })
-            })?
-            .ok_or(DigestServiceError::Hash(EvidenceHashError::Cancelled))?;
-            Ok(completed(
-                DigestScopeDto::Partition,
-                algorithm,
-                digest,
-                partition.length,
-            ))
-        }
-        DigestScopeDto::DerivedEvidence => {
-            let source = load_source(case_conn, case_id, target.data_source_id)?;
-            let result = HashService::hash_evidence_with_algorithm(
+    let digest = HashService::digest_reader(
+        &mut window,
+        algorithm,
+        || execution.cancelled.load(Ordering::Acquire),
+        |amount| (execution.progress)(amount, partition.length),
+    )
+    .map_err(|error| {
+        DigestServiceError::Hash(EvidenceHashError::Io {
+            operation: "read partition",
+            kind: error.kind(),
+        })
+    })?
+    .ok_or(DigestServiceError::Hash(EvidenceHashError::Cancelled))?;
+    Ok(completed(
+        DigestScopeDto::Partition,
+        algorithm,
+        digest,
+        partition.length,
+    ))
+}
+
+fn digest_derived(
+    case_conn: &Connection,
+    case_id: &CaseId,
+    data_source_id: Option<&str>,
+    algorithm: infrastructure::hashing::HashAlgorithm,
+    execution: DigestExecution<'_>,
+) -> Result<EvidenceDigestDto, DigestServiceError> {
+    let source = load_source(case_conn, case_id, data_source_id)?;
+    let result = match &source.kind {
+        DataSourceKind::Raw | DataSourceKind::AndroidSparse | DataSourceKind::LocalDisk => {
+            HashService::hash_logical_evidence(
                 Path::new(&source.source_path),
                 &source.kind,
                 algorithm,
                 execution.cancelled,
                 execution.progress,
             )
-            .map_err(DigestServiceError::Hash)?;
-            Ok(completed(
-                DigestScopeDto::DerivedEvidence,
-                algorithm,
-                result.digest,
-                result.bytes_processed,
-            ))
         }
+        _ => HashService::hash_evidence_with_algorithm(
+            Path::new(&source.source_path),
+            &source.kind,
+            algorithm,
+            execution.cancelled,
+            execution.progress,
+        ),
     }
+    .map_err(DigestServiceError::Hash)?;
+    Ok(completed(
+        DigestScopeDto::DerivedEvidence,
+        algorithm,
+        result.digest,
+        result.bytes_processed,
+    ))
 }
-
 fn digest_file(
     case_conn: &Connection,
     case_root: &Path,

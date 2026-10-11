@@ -282,7 +282,7 @@ FirefoxExtension {
 
 ### 7.1 VHD/Nested Evidence
 
-第一阶段支持 Fixed/Dynamic/Differencing VHD、VHDX 和无压缩 QCOW/QCOW2 只读读取；压缩 QCOW2 与 VHDX parent chain fail-closed。
+第一阶段支持 Fixed/Dynamic/Differencing VHD、带相对父链的 VHDX 和无压缩 QCOW/QCOW2 backing chain 只读读取；压缩 QCOW2 cluster 仍 fail-closed。
 
 ```text
 Parent Data Source
@@ -461,15 +461,15 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
 - 媒体协议门禁入口同步；
 - MCP 查询、数据源摘要、案件创建/删除用例拆分；
   - NTFS WOF XPRESS/LZX 按块读取和真实 E01 验证。
-  - Stage 1：多算法 Hash Scope（不支持 scope 明确 fail-closed）、NTFS Technical Inspector、全文索引 content sniffing。
+  - Stage 1：多算法 Hash Scope 的六类范围均已接入；不适用的源类型仍以 typed error fail-closed，NTFS Technical Inspector、全文索引 content sniffing。
   - Stage 2：EXIF/GPS、Structured systemd、Git/GitLab 元数据与有界 gzip、Firefox Extensions。
   - Stage 3：Fixed/Dynamic/Differencing VHD、VHDX 和无压缩 QCOW/QCOW2 只读读取、Registry Browser source-bound 查询。
   - Stage 3 闭环：从父源 FileEntry 校验并物化 Fixed VHD，派生源与 lineage 使用事务写入，输出采用临时文件和原子改名。
 
   当前限制：
 
-  - Hash Scope 的 LogicalDisk、Partition、DerivedEvidence 当前返回 typed Unsupported，避免伪造 digest。
-  - 压缩 QCOW2 和 VHDX parent chain 仍 fail-closed；支持范围内的虚拟磁盘都通过只读 block reader 读取。
+  - LogicalDisk 对 LocalDisk、Raw、AndroidSparse 使用逻辑字节流；Partition、File、DerivedEvidence 和容器范围均保留明确的输入边界，E01 不冒充原磁盘哈希。
+  - VHDX parent chain、Dynamic/Differencing VHD、QCOW v1/v2/v3 无压缩 backing chain 均通过只读 block reader；压缩 QCOW2 cluster 仍 fail-closed，避免把压缩数据误当零块。
   - Registry Browser 提供 Base hive 只读树和值查询；检测到 LOG1/LOG2 时返回明确提示，浏览器查询不会伪造合并状态。
   - Hash、嵌套证据物化目前在 Tauri blocking worker 执行；后续可统一接入 TaskManager 的可恢复任务句柄。
 

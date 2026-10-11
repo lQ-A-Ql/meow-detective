@@ -105,3 +105,32 @@ fn logical_disk_scope_uses_physical_reader_for_local_disk() {
         ))
     ));
 }
+
+#[test]
+fn logical_disk_scope_hashes_the_virtual_bytes_of_raw_images() {
+    let directory = tempfile::tempdir().expect("directory");
+    let path = directory.path().join("disk.raw");
+    std::fs::write(&path, b"logical disk bytes").expect("image");
+    let (connection, case_id) = case_with_source(DataSourceKind::Raw, path.to_str().unwrap());
+    let result = calculate_evidence_digest(
+        &connection,
+        Path::new("."),
+        &case_id,
+        DigestScopeDto::LogicalDisk,
+        DigestAlgorithmDto::Sha256,
+        DigestTarget {
+            data_source_id: Some("source-1"),
+            file_id: None,
+            partition_index: None,
+        },
+    )
+    .expect("raw logical digest");
+    assert_eq!(
+        result.value,
+        infrastructure::hashing::digest_bytes(
+            b"logical disk bytes",
+            infrastructure::hashing::HashAlgorithm::Sha256
+        )
+    );
+    assert_eq!(result.byte_length, 18);
+}
