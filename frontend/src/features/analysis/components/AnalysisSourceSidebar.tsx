@@ -27,8 +27,8 @@ export function AnalysisSourceSidebar(props: AnalysisSourceSidebarProps) {
   }, [props.onSelectDataSource]);
   return (
     <aside className="flex min-h-0 w-64 shrink-0 flex-col border-r border-forensics-divider bg-forensics-panel" aria-label={t('analysis.sidebar.treeLabel')}>
-      <VirtualList items={rows} getItemKey={getRowKey} estimateSize={30} className="flex-1"
-        viewportClassName="p-2" ariaLabel={t('analysis.sidebar.treeLabel')}
+      <VirtualList items={rows} getItemKey={getRowKey} estimateSize={26} className="flex-1"
+        viewportClassName="p-1" ariaLabel={t('analysis.sidebar.treeLabel')}
         renderItem={(row) => <AnalysisSourceRow row={row} model={props} onSelectOrToggle={selectOrToggle} />} />
     </aside>
   );

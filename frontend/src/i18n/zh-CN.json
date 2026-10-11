@@ -533,7 +533,9 @@
       "actions": "关联动作"
     },
     "rangeTo": "至",
+    "rangeSelector": { "label": "拖动时间轴选择区间", "start": "拖动起始时间", "end": "拖动结束时间" },
     "histogram": {
+      "label": "事件密度图",
       "noRange": "无时间区间",
       "barTitle": "{{range}}：{{count}} 条事件",
       "selectRange": "筛选该时间区间，共 {{count}} 条事件"
@@ -1557,6 +1559,9 @@
       "action": "导入",
       "submitHint": "正在提交导入任务，后台进度会在任务列表中持续更新。",
       "progress": "后台导入进行中: {{name}} · {{progress}}% · {{detail}}",
+      "progressLabel": "导入进度",
+      "idle": "暂无进行中的导入",
+      "idleHint": "点击上方导入按钮添加新的证据源。",
       "canceling": "取消中...",
       "cancel": "取消导入",
       "failed": "导入失败: {{error}}",
@@ -1965,6 +1970,10 @@
     }
   },
   "emulationPage": {
+    "title": "镜像仿真",
+    "statusTitle": "虚拟机状态",
+    "activeSummary": "当前活跃虚拟机 {{count}} 台",
+    "settings": { "title": "仿真设置", "description": "配置启动介质、客体资源和系统绕密选项。" },
     "emptyCase": "打开案件后可管理镜像仿真会话。",
     "loading": "正在读取仿真状态...",
     "metrics": {
@@ -2098,6 +2107,7 @@
       "filesystemMounted": "客体已进入用户空间"
     },
     "actions": {
+      "settings": "仿真设置",
       "refresh": "刷新仿真状态",
       "chooseIso": "选择启动/救援 ISO",
       "clearIso": "清除启动/救援 ISO",

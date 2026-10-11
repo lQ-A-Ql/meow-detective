@@ -4,8 +4,9 @@ import { cn } from '@/app/components/ui/utils';
 export function PanelFrame({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <section
+      data-slot="panel-frame"
       className={cn(
-        'min-w-0 border-b border-forensics-divider bg-transparent p-4 last:border-b-0',
+        'm-1 min-w-0 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-4 shadow-[0_2px_8px_rgba(32,27,28,0.04)]',
         className,
       )}
     >

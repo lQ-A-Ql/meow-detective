@@ -72,7 +72,7 @@ export function CommandPalette({ commands }: { commands: CommandPaletteItem[] })
           aria-label={t('commandPalette.placeholder')}
           className="h-11 w-full rounded-none border-0 border-b border-forensics-border bg-transparent px-4 text-[13px] text-forensics-text"
         />
-        <div role="listbox" aria-label={t('commandPalette.label')} className="max-h-80 overflow-y-auto py-1">
+        <div role="listbox" aria-label={t('commandPalette.label')} className="max-h-80 overflow-y-auto scrollbar-none py-1">
           {filtered.length === 0 ? (
             <div className="px-4 py-6 text-center text-[12px] text-forensics-muted">{t('commandPalette.empty')}</div>
           ) : filtered.map((command, index) => (

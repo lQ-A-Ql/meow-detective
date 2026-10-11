@@ -32,31 +32,31 @@ export function SettingsWorkspace({ model }: SettingsWorkspaceProps) {
   ];
 
   return (
-    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-surface">
+    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-base">
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <AnchorNav items={anchors} label={t('settings.anchors.label')} className="hidden w-52 border-r border-forensics-divider px-2 py-4 xl:block" />
-        <ScrollArea className="min-h-0 flex-1" viewportClassName="mx-auto w-full max-w-5xl space-y-8 p-6">
-    <section id="settings-storage" className="scroll-mt-4">
+        <AnchorNav items={anchors} label={t('settings.anchors.label')} className="hidden w-52 px-3 py-5 xl:block" />
+        <ScrollArea className="min-h-0 flex-1" viewportClassName="mx-auto w-full max-w-5xl space-y-4 p-5">
+    <section id="settings-storage" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
             <StoragePathsSection caseRoot={settings.caseRoot} imageSearchPaths={settings.imageSearchPaths} setSettings={setSettings} />
     </section>
-    <section id="settings-performance" className="scroll-mt-4">
+    <section id="settings-performance" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
             <ImportPerformanceSection maxImportWorkers={settings.maxImportWorkers} maxAnalysisWorkers={settings.maxAnalysisWorkers} importAnalysisMode={settings.importAnalysisMode} setSettings={setSettings} />
     </section>
-    <section id="settings-preview" className="scroll-mt-4">
+    <section id="settings-preview" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
             <PreviewSection hexChunkBytes={settings.hexChunkBytes} maxViewerRangeLength={settings.maxViewerRangeLength} maxInlineImagePreviewBytes={settings.maxInlineImagePreviewBytes} maxInlineMediaPreviewBytes={settings.maxInlineMediaPreviewBytes} setSettings={setSettings} />
     </section>
-    <section id="settings-ui" className="scroll-mt-4">
+    <section id="settings-ui" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
             <UiDebugSection devEventTrace={settings.devEventTrace} setSettings={setSettings} />
     </section>
-    <section id="settings-mcp" className="scroll-mt-4">
+    <section id="settings-mcp" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
             <McpSectionContainer />
     </section>
-    <section id="settings-system" className="scroll-mt-4">
+    <section id="settings-system" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
             <SystemInfoSection />
     </section>
         </ScrollArea>
       </div>
-      <ActionBar note={settingsMessage}>
+      <ActionBar note={settingsMessage} className="mx-4 mb-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
         <Tooltip content={t('settings.actions.save')}><Button aria-label={t('settings.actions.save')} type="button" variant="outline" size="sm" onClick={() => void saveSettings()} disabled={savingSettings}><ActionIcon name="save" /></Button></Tooltip>
       </ActionBar>
     </div>

@@ -3,14 +3,14 @@
 :root {
   --font-size: 16px;
   /* Canvas: cool archival base behind panels. */
-  --background: #f2f1ee;
+  --background: #f3f5f7;
   --foreground: #131211;
   --card: #ffffff;
   --card-foreground: #131211;
   --popover: #ffffff;
   --popover-foreground: #131211;
   /* Navigation focus / links / current analytical context. */
-  --primary: #c8102e;
+  --primary: #181818;
   --primary-foreground: #ffffff;
   --secondary: #f1efec;
   --secondary-foreground: #131211;
@@ -25,10 +25,10 @@
   --switch-background: #cfc8c0;
   --font-weight-medium: 300;
   --font-weight-normal: 300;
-  --ring: #ff0000;
-  --chart-1: #c8102e;
-  --chart-2: #7a1622;
-  --chart-3: rgba(255, 0, 0, 0.55);
+  --ring: #181818;
+  --chart-1: #181818;
+  --chart-2: #4d4d4d;
+  --chart-3: #ef8b91;
   --chart-4: #3b3835;
   --chart-5: #6b6661;
   --radius: 6px;
@@ -36,23 +36,23 @@
   --dense-row-height: 26px;
   --sidebar: #f2f1ee;
   --sidebar-foreground: #131211;
-  --sidebar-primary: #c8102e;
+  --sidebar-primary: #181818;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f1efec;
   --sidebar-accent-foreground: #131211;
   --sidebar-border: #e7e3de;
-  --sidebar-ring: #ff0000;
+  --sidebar-ring: #181818;
 
   /* Red accent scale shared by existing utility classes. */
   --forensics-sakura-50: #ffffff;
-  --forensics-sakura-100: #fff2f2;
-  --forensics-sakura-150: #fff2f2;
+  --forensics-sakura-100: #f4f4f4;
+  --forensics-sakura-150: #f4f4f4;
   --forensics-sakura-200: #f1efec;
   --forensics-sakura-250: #e7e3de;
   --forensics-sakura-300: #cfc8c0;
-  --forensics-sakura-400: #ff0000;
-  --forensics-sakura-500: #ff0000;
-  --forensics-sakura-600: #c8102e;
+  --forensics-sakura-400: #9b9b9b;
+  --forensics-sakura-500: #4d4d4d;
+  --forensics-sakura-600: #181818;
 
   --forensics-50: #ffffff;
   --forensics-100: #fcfcfb;
@@ -71,8 +71,8 @@
   --forensics-850: #1a1817;
   --forensics-900: #131211;
 
-  --forensics-panel: #ffffff;
-  --forensics-panel-strong: #fcfcfb;
+  --forensics-panel: #fffefd;
+  --forensics-panel-strong: #faf9f7;
   --forensics-surface: #ffffff;
   --forensics-input-bg: #ffffff;
   --forensics-highlight: #f1efec;
@@ -109,7 +109,7 @@
 
   /* Forensics status / action tokens */
   /* Legacy name kept for the utility classes; now the investigation accent. */
-  --forensics-primary-blue: #c8102e;
+  --forensics-primary-blue: #181818;
   --forensics-success: #2f6b4f;
   --forensics-surface-muted: #fcfcfb;
   --forensics-text-soft: #3b3835;
@@ -147,7 +147,7 @@
   --forensics-viz-border: #e7e3de;
   --forensics-viz-canvas: #ffffff;
   --forensics-viz-lane: #fcfcfb;
-  --forensics-viz-selected: #c8102e;
+  --forensics-viz-selected: #181818;
   --forensics-viz-edge: #a79f97;
   --forensics-viz-environment: #f1efec;
   --forensics-viz-storage: #efece8;
@@ -157,7 +157,7 @@
   --forensics-graph-node-artifact: #c8102e;
   --forensics-graph-node-timeline-event: #7a1622;
   --forensics-graph-node-entity: #6b6661;
-  --forensics-graph-node-lead: #ff0000;
+  --forensics-graph-node-lead: #d92d3a;
   --forensics-graph-node-notebook-entry: #a79f97;
   --forensics-graph-edge-contains: #cfc8c0;
   --forensics-graph-edge-references: #a79f97;
@@ -189,21 +189,21 @@
   --forensics-file-icon-dark: #131211;
   --forensics-file-icon-default: #928c86;
   /* ---- v3.1 Archive Sheet tokens ---- */
-  --forensics-paper: #ffffff;
-  --forensics-base: #f2f1ee;
+  --forensics-paper: #fffefd;
+  --forensics-base: #f3f5f7;
   --forensics-soft: #fcfcfb;
   --forensics-ink: #131211;
   --forensics-ink-2: #3b3835;
   --forensics-ink-3: #6b6661;
-  --forensics-line: #e7e3de;
-  --forensics-line-2: #cfc8c0;
+  --forensics-line: #ebe7e3;
+  --forensics-line-2: #d8d1ca;
   /* 唯一金线：工作区区块之间 1px 40% */
   --forensics-divider: rgba(168, 128, 42, 0.4);
-  --forensics-red: #ff0000;
-  --forensics-red-ink: #c8102e;
-  --forensics-red-deep: #7a1622;
-  --forensics-red-tint: #fff2f2;
-  --forensics-rail-active: rgba(255, 0, 0, 0.1);
+  --forensics-red: #181818;
+  --forensics-red-ink: #181818;
+  --forensics-red-deep: #000000;
+  --forensics-red-tint: #f1f1f1;
+  --forensics-rail-active: rgba(24, 24, 24, 0.1);
   --forensics-ok: #2f6b4f;
   --forensics-r-shell: 20px;
   --forensics-r-ctl: 6px;

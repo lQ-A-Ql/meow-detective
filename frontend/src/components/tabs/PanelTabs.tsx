@@ -35,7 +35,7 @@ export function PanelTabs<T extends string = string>({
       <TabsList
         className={cn(
           isUnderline
-            ? 'h-auto justify-start overflow-x-auto rounded-none border-b border-forensics-border bg-forensics-panel p-0'
+            ? 'h-auto justify-start overflow-x-auto scrollbar-none rounded-none border-b border-forensics-border bg-forensics-panel p-0'
             : 'mb-3 h-auto flex-wrap justify-start rounded-none bg-transparent p-0',
           isCompact && 'mb-2 h-7 rounded-none bg-forensics-panel-strong p-0',
           listClassName,

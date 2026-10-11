@@ -533,7 +533,9 @@
       "actions": "Related actions"
     },
     "rangeTo": "to",
+    "rangeSelector": { "label": "Drag the timeline to select a range", "start": "Drag range start", "end": "Drag range end" },
     "histogram": {
+      "label": "Event density plot",
       "noRange": "No time range",
       "barTitle": "{{range}}: {{count}} events",
       "selectRange": "Filter this time range, {{count}} events total"
@@ -1557,6 +1559,9 @@
       "action": "Import",
       "submitHint": "Submitting the import task; background progress will continue in the task list.",
       "progress": "Import in progress: {{name}} · {{progress}}% · {{detail}}",
+      "progressLabel": "Import progress",
+      "idle": "No import is running",
+      "idleHint": "Use the import button above to add an evidence source.",
       "canceling": "Cancelling...",
       "cancel": "Cancel import",
       "failed": "Import failed: {{error}}",
@@ -1965,6 +1970,10 @@
     }
   },
   "emulationPage": {
+    "title": "Image emulation",
+    "statusTitle": "Virtual machine status",
+    "activeSummary": "{{count}} active virtual machines",
+    "settings": { "title": "Emulation settings", "description": "Configure boot media, guest resources and offline system options." },
     "emptyCase": "Open a case to manage image emulation sessions.",
     "loading": "Loading emulation state...",
     "metrics": {
@@ -2098,6 +2107,7 @@
       "filesystemMounted": "Guest reached user space"
     },
     "actions": {
+      "settings": "Emulation settings",
       "refresh": "Refresh emulation state",
       "chooseIso": "Choose boot / rescue ISO",
       "clearIso": "Clear boot / rescue ISO",

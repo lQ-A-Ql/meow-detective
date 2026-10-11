@@ -404,7 +404,7 @@ export function DenseDataTable<T>({
     <ScrollArea
       className="min-h-0 flex-1 overflow-hidden bg-transparent font-mono text-[11px]"
       viewportRef={containerRef}
-      viewportClassName={horizontalScroll ? 'overflow-x-auto' : 'overflow-x-hidden'}
+      viewportClassName={horizontalScroll ? 'overflow-x-auto scrollbar-none' : 'overflow-x-hidden'}
       viewportProps={{
         onScroll: handleScroll,
         onKeyDown: handleKeyDown,

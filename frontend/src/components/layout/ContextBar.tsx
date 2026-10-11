@@ -20,7 +20,7 @@ export function ContextBar({
   return (
     <div
       className={cn(
-        'flex h-11 shrink-0 items-center gap-3 overflow-hidden border-b border-forensics-border bg-forensics-panel-strong px-4',
+        'mx-1 mt-1 flex h-10 shrink-0 items-center gap-3 overflow-hidden rounded-ctl border border-forensics-line/70 bg-forensics-paper px-3 shadow-[0_1px_5px_rgba(32,27,28,0.03)]',
         justify,
         className,
       )}

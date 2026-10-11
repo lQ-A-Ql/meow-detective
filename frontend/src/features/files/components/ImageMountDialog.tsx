@@ -50,7 +50,7 @@ export function ImageMountDialog({ model }: ImageMountDialogProps) {
   return (
     <>
     <Dialog open={model.dialogOpen} onOpenChange={model.setDialogOpen}>
-      <DialogContent className="max-h-[min(720px,calc(100vh-2rem))] overflow-y-auto p-0 sm:max-w-2xl">
+      <DialogContent className="max-h-[min(720px,calc(100vh-2rem))] overflow-y-auto scrollbar-none p-0 sm:max-w-2xl">
         <div className="border-b border-forensics-divider bg-forensics-panel-strong px-5 py-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[16px]">

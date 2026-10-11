@@ -26,7 +26,7 @@ export function WeChatWorkspace({ model }: { model: WeChatWorkspaceModel }) {
       onValueChange={(value) => model.setActiveView(value as WeChatWorkspaceView)}
       className="gap-3"
     >
-      <TabsList className="w-full justify-start overflow-x-auto">
+      <TabsList className="w-full justify-start overflow-x-auto scrollbar-none">
         <TabsTrigger value="chats">
           <MessageCircle />
           {t('wechatWorkspace.tabs.chats')}

@@ -208,7 +208,7 @@ describe('CaseHome page', () => {
     expect(screen.getByText(/2026-001/)).toBeDefined();
   });
 
-  it('shows metric blocks when case is open', async () => {
+  it('shows the centered case header and simplified workspace when case is open', async () => {
     mocks.currentCase.mockReturnValue(mockQueryState({
       data: {
         id: 'case-001',
@@ -235,10 +235,11 @@ describe('CaseHome page', () => {
 
     await renderPageAsync();
 
-    expect(screen.getAllByText('数据源').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('已索引文件').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('时间线事件').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('提取痕迹').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: 'Test Case' })).toBeDefined();
+    expect(screen.getByRole('region', { name: '已有数据源' })).toBeDefined();
+    expect(screen.queryByText('已索引文件')).toBeNull();
+    expect(screen.queryByText('时间线事件')).toBeNull();
+    expect(screen.queryByText('提取痕迹')).toBeNull();
   });
 
   it('shows data sources panel when case is open', async () => {
@@ -263,7 +264,7 @@ describe('CaseHome page', () => {
 
     await renderPageAsync();
 
-    expect(screen.getByText('已有数据源')).toBeDefined();
+    expect(screen.getByRole('region', { name: '已有数据源' })).toBeDefined();
   });
 
   it('closes the import dialog after the import command is accepted', async () => {
@@ -375,7 +376,7 @@ describe('CaseHome page', () => {
     expect(screen.getByText('分区3（RECOVERY）')).toBeDefined();
   });
 
-  it('shows high value objects panel when case is open', async () => {
+  it('does not render the removed high value objects panel', async () => {
     mocks.currentCase.mockReturnValue(mockQueryState({
       data: {
         id: 'case-001',
@@ -397,7 +398,7 @@ describe('CaseHome page', () => {
 
     await renderPageAsync();
 
-    expect(screen.getByText('高价值对象')).toBeDefined();
+    expect(screen.queryByText('高价值对象')).toBeNull();
   });
 
   it('shows running job progress when jobs are running', async () => {

@@ -1,10 +1,12 @@
 import { errorMessage } from '@/lib/errors';
+import { useTranslation } from 'react-i18next';
 import { AnalysisEmptyState, AnalysisHeader } from '@/features/analysis/components/AnalysisPanels';
 import { AnalysisSourceSidebar } from '@/features/analysis/components/AnalysisSourceSidebar';
 import { AndroidAnalysisView } from '@/features/analysis/components/AndroidAnalysisView';
 import { LinuxAnalysisView } from '@/features/analysis/components/LinuxAnalysisView';
 import { WindowsAnalysisView } from '@/features/analysis/components/WindowsAnalysisView';
 import type { AnalysisWorkspaceModel } from '@/features/analysis/use-analysis-workspace-model';
+import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 
 interface AnalysisWorkspaceProps {
   model: AnalysisWorkspaceModel;
@@ -12,9 +14,11 @@ interface AnalysisWorkspaceProps {
 
 /** Pure analysis presentation surface. Runtime orchestration belongs to the feature model. */
 export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
+  const { t } = useTranslation();
   return (
-    <div className="flex h-full w-full flex-1 overflow-hidden bg-forensics-surface">
+    <div className="flex h-full w-full flex-1 gap-[2px] overflow-hidden bg-forensics-base p-[2px]">
       {model.hasCase ? (
+        <WorkspaceCard className="flex w-52 shrink-0" aria-label={t('analysis.sidebar.treeLabel')}>
         <AnalysisSourceSidebar
           dataSources={model.readyDataSources}
           selectedDataSourceId={model.selectedDataSourceId}
@@ -32,8 +36,9 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
           activePluginId={model.activePluginId}
           onSelectPluginModule={model.selectPluginModule}
         />
+        </WorkspaceCard>
       ) : null}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <WorkspaceCard className="flex flex-1 flex-col" aria-label={t('analysis.sidebar.treeLabel')}>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <AnalysisHeader
           loading={model.loading}
@@ -114,8 +119,8 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
             onLoadMore={model.loadMoreAndroidPackages}
           />
         ) : null}
-      </div>
         </div>
+      </WorkspaceCard>
     </div>
   );
 }

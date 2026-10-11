@@ -31,15 +31,15 @@ export function AnalysisSourceRow({ row, model, onSelectOrToggle }: Props) {
         onActivate={() => onSelectOrToggle(source.id, selected, row.expanded)}
         onToggle={() => onSelectOrToggle(source.id, selected, row.expanded)}
         toggleLabel={t(row.expanded ? 'analysis.sidebar.collapseSource' : 'analysis.sidebar.expandSource')}
-        icon={<SourceIcon size={14} className="shrink-0 text-forensics-ink-3" />}
+        icon={<SourceIcon size={12} className="shrink-0 text-forensics-ink-3" />}
         label={source.name}
-        meta={source.fileCount !== undefined ? <span className="font-mono text-[10px] text-forensics-ink-3">{source.fileCount}</span> : null}
-        className="h-8"
+        meta={source.fileCount !== undefined ? <span className="font-mono text-[9px] text-forensics-ink-3">{source.fileCount}</span> : null}
+        className="h-7 text-[11px]"
       />
     );
   }
   if (row.kind === 'platform' || row.kind === 'pluginGroup') {
-    return <div className="ml-4 border-l border-forensics-border-light py-1 pl-3 text-[10px] text-forensics-muted-light">
+    return <div className="ml-3 border-l border-forensics-border-light py-0.5 pl-2 text-[9px] text-forensics-muted-light">
       {row.kind === 'platform' ? dataSourcePlatformLabel(source) : t('pluginModule.groupTitle')}
     </div>;
   }
@@ -48,7 +48,7 @@ export function AnalysisSourceRow({ row, model, onSelectOrToggle }: Props) {
     const active = model.activePluginId === module.pluginId &&
       (source.platform === 'windows' ? model.activeWindowsTab === 'plugin' : model.activeLinuxTab === 'plugin');
     return (
-      <div className="ml-4 border-l border-forensics-border-light pl-1">
+      <div className="ml-3 border-l border-forensics-border-light pl-1">
         <TreeRow
           depth={1}
           active={active}
@@ -56,14 +56,14 @@ export function AnalysisSourceRow({ row, model, onSelectOrToggle }: Props) {
           disabled={model.disabled}
           ariaLabel={`${source.name} / ${module.displayName}`}
           connector={<TreeConnector depth={1} isLast={row.isLast} />}
-          icon={<Puzzle size={12} className="shrink-0" />}
+          icon={<Puzzle size={11} className="shrink-0" />}
           label={module.displayName}
           meta={<span className="font-mono text-[10px] text-forensics-ink-3">({module.totalCount})</span>}
           onActivate={() => {
             if (!selected) model.onSelectDataSource(source.id);
             model.onSelectPluginModule?.(module.pluginId);
           }}
-          className="h-7 text-[11px]"
+          className="h-6 text-[10px]"
         />
       </div>
     );
@@ -80,7 +80,7 @@ export function AnalysisSourceRow({ row, model, onSelectOrToggle }: Props) {
   const count = summaryCount ?? (progress && progress.status !== 'idle' ? progress.artifactCount : undefined);
   const label = t(node.labelKey);
   return (
-    <div className="ml-4 border-l border-forensics-border-light pl-1">
+    <div className="ml-3 border-l border-forensics-border-light pl-1">
       <TreeRow
         depth={1}
         active={active}
@@ -88,7 +88,7 @@ export function AnalysisSourceRow({ row, model, onSelectOrToggle }: Props) {
         disabled={model.disabled}
         ariaLabel={`${source.name} / ${label}`}
         connector={<TreeConnector depth={1} isLast={row.isLast} />}
-        icon={<Icon size={12} className="shrink-0" />}
+        icon={<Icon size={11} className="shrink-0" />}
         label={count === undefined ? label : `${label}(${count})`}
         onActivate={() => {
           if (!selected) model.onSelectDataSource(source.id);
@@ -96,7 +96,7 @@ export function AnalysisSourceRow({ row, model, onSelectOrToggle }: Props) {
           if (source.platform === 'linux' && node.linuxTab) model.onLinuxTabChange(node.linuxTab);
           if (source.platform === 'android' && node.androidTab) model.onAndroidTabChange(node.androidTab);
         }}
-        className="h-7 text-[11px]"
+        className="h-6 text-[10px]"
       />
     </div>
   );

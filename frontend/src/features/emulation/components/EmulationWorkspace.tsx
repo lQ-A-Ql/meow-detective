@@ -1,12 +1,15 @@
 import {
   LoaderCircle,
   Power,
-  RefreshCw,
 } from 'lucide-react';
-import { ContextBar } from '@/components/layout/ContextBar';
+import { useState } from 'react';
+import { ActionIcon } from '@/components/controls/ActionIcon';
+import { SidebarIcon } from '@/components/navigation/SidebarIcon';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { LinuxLaunchPanel } from '@/features/emulation/components/LinuxLaunchPanel';
 import { WindowsLaunchPanel } from '@/features/emulation/components/WindowsLaunchPanel';
@@ -16,6 +19,7 @@ import type {
 } from '@/features/emulation/use-emulation-workspace-model';
 import { formatBytes } from '@/lib/format-bytes';
 import type { EmulationState } from '@/types/models';
+import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 
 interface EmulationWorkspaceProps {
   model: EmulationWorkspaceModel;
@@ -85,89 +89,17 @@ function SessionRow({
   );
 }
 
-function MetricsBand({ model }: EmulationWorkspaceProps) {
-  const { t } = useTranslation();
-  const metrics = [
-    ['sources', model.metrics.sourceCount],
-    ['active', model.metrics.activeCount],
-    ['running', model.metrics.runningCount],
-    ['failed', model.metrics.failedCount],
-  ] as const;
-  return (
-    <div className="grid grid-cols-2 border-b border-forensics-divider bg-forensics-panel md:grid-cols-4">
-      {metrics.map(([key, value]) => (
-        <div key={key} className="min-w-0 border-r border-forensics-divider px-5 py-3 last:border-r-0 even:border-r-0 md:even:border-r md:last:border-r-0">
-          <div className="font-mono text-lg text-forensics-text">{value}</div>
-          <div className="mt-0.5 truncate text-[10px] uppercase text-forensics-muted">
-            {t(`emulationPage.metrics.${key}`)}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function LaunchPanel({ model }: EmulationWorkspaceProps) {
   return model.selectedSource?.platform === 'LINUX'
     ? <LinuxLaunchPanel model={model} />
     : <WindowsLaunchPanel model={model} />;
 }
 
-function SessionsPanel({ model }: EmulationWorkspaceProps) {
-  const { t } = useTranslation();
-  return (
-    <section className="min-w-0 p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-[14px] text-forensics-text">{t('emulationPage.sessions.title')}</h2>
-          <div className="mt-1 text-[10px] text-forensics-muted">{t('emulationPage.sessions.count', { count: model.sessions.length })}</div>
-        </div>
-      </div>
-      {model.sessions.length === 0 ? (
-        <div className="flex min-h-48 items-center justify-center border-y border-forensics-border text-[11px] text-forensics-muted">
-          {t('emulationPage.sessions.empty')}
-        </div>
-      ) : (
-        <div className="overflow-x-auto border border-forensics-border">
-          <div className="grid min-w-[760px] grid-cols-[minmax(180px,1.4fr)_140px_120px_minmax(180px,1fr)_52px] border-b border-forensics-divider bg-forensics-panel px-4 py-2 text-[10px] uppercase text-forensics-muted">
-            <span>{t('emulationPage.sessions.columns.source')}</span>
-            <span>{t('emulationPage.sessions.columns.state')}</span>
-            <span>{t('emulationPage.sessions.columns.size')}</span>
-            <span>{t('emulationPage.sessions.columns.control')}</span>
-            <span className="sr-only">{t('emulationPage.sessions.columns.action')}</span>
-          </div>
-          {model.sessions.map((session) => (
-            <SessionRow
-              key={session.sessionId}
-              session={session}
-              releasing={model.releasingSessionId === session.sessionId}
-              onRelease={model.release}
-            />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 export function EmulationWorkspace({ model }: EmulationWorkspaceProps) {
   const { t } = useTranslation();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   return (
-    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-surface">
-      <ContextBar align="end">
-        <Button
-          type="button"
-          variant="forensicsGhost"
-          size="iconSm"
-          onClick={() => void model.refresh()}
-          disabled={!model.hasCase || model.refreshing}
-          title={t('emulationPage.actions.refresh')}
-          aria-label={t('emulationPage.actions.refresh')}
-        >
-          <RefreshCw className={model.refreshing ? 'animate-spin' : undefined} />
-        </Button>
-      </ContextBar>
-
+    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-base">
       {!model.hasCase && model.caseLoaded ? (
         <div className="flex flex-1 items-center justify-center p-6 text-[12px] text-forensics-muted">
           {t('emulationPage.emptyCase')}
@@ -178,14 +110,59 @@ export function EmulationWorkspace({ model }: EmulationWorkspaceProps) {
           {t('emulationPage.loading')}
         </div>
       ) : (
-        <ScrollArea className="min-h-0 flex-1" viewportClassName="min-h-full">
-          <MetricsBand model={model} />
-          <div className="grid min-h-0 grid-cols-1 xl:grid-cols-[380px_minmax(0,1fr)]">
-            <LaunchPanel model={model} />
-            <SessionsPanel model={model} />
-          </div>
+        <ScrollArea className="min-h-0 flex-1" viewportClassName="workspace-scroll-viewport h-full min-h-0 overflow-y-auto scrollbar-none p-[2px]">
+          <WorkspaceCard className="flex h-full min-h-full flex-1 flex-col p-4">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forensics-ink-3">{t('emulationPage.statusTitle')}</div>
+                <h1 className="mt-1 text-xl font-semibold text-forensics-ink">{model.caseName ?? t('emulationPage.title')}</h1>
+                <div className="mt-1 text-[11px] text-forensics-muted">{t('emulationPage.activeSummary', { count: model.metrics.activeCount })}</div>
+              </div>
+              <div className="flex items-center gap-1">
+                <Tooltip content={t('emulationPage.actions.settings')}>
+                  <Button type="button" variant="forensicsGhost" size="iconSm" aria-label={t('emulationPage.actions.settings')} onClick={() => setSettingsOpen(true)} disabled={!model.hasCase}>
+                    <SidebarIcon name="settings" className="size-4" />
+                  </Button>
+                </Tooltip>
+                <Tooltip content={t('emulationPage.actions.refresh')}>
+                  <Button type="button" variant="forensicsGhost" size="iconSm" aria-label={t('emulationPage.actions.refresh')} onClick={() => void model.refresh()} disabled={!model.hasCase || model.refreshing}>
+                    <ActionIcon name="refresh" className={model.refreshing ? 'size-4 animate-spin' : 'size-4'} />
+                  </Button>
+                </Tooltip>
+              </div>
+            </div>
+            {model.sessions.filter((session) => session.active).length === 0 ? (
+              <div className="flex min-h-24 items-center justify-center rounded-ctl bg-forensics-panel-strong px-4 py-8 text-[12px] text-forensics-muted">
+                {t('emulationPage.sessions.empty')}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {model.sessions.filter((session) => session.active).map((session) => (
+                  <div key={session.sessionId} className="rounded-ctl border border-forensics-line/70 bg-forensics-panel-strong p-4">
+                    <SessionRow session={session} releasing={model.releasingSessionId === session.sessionId} onRelease={model.release} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </WorkspaceCard>
         </ScrollArea>
       )}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-h-[min(860px,calc(100vh-2rem))] max-w-6xl overflow-y-auto scrollbar-none p-0">
+          <DialogHeader className="border-b border-forensics-line bg-forensics-panel-strong px-6 py-5">
+            <DialogTitle>{t('emulationPage.settings.title')}</DialogTitle>
+            <DialogDescription>{t('emulationPage.settings.description')}</DialogDescription>
+          </DialogHeader>
+          <div className="p-5"><LaunchPanel model={model} /></div>
+          <DialogFooter className="border-t border-forensics-line bg-forensics-panel-strong px-6 py-4">
+            <Tooltip content={t('common.cancel')}>
+              <Button type="button" variant="forensicsGhost" size="iconSm" aria-label={t('common.cancel')} onClick={() => setSettingsOpen(false)}>
+                <ActionIcon name="close" />
+              </Button>
+            </Tooltip>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

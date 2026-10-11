@@ -67,7 +67,7 @@ export function ActivityBar({
   const jobsLabel = t('navigation.jobsRunning', { count: model.runningCount });
   return (
     <aside className="relative z-20 flex w-12 shrink-0 flex-col items-center bg-forensics-base" aria-label={t('navigation.appNavLabel')}>
-      <nav className="flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1 pb-3 pt-4" aria-label={t('navigation.workspaceNavLabel')}>
+      <nav className="flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto scrollbar-none px-1 pb-3 pt-4" aria-label={t('navigation.workspaceNavLabel')}>
         {model.links.map((link) => <RailItem key={link.to} link={link} model={model} />)}
       </nav>
       <div className="mt-2 flex w-full flex-col items-center gap-1.5 px-1 pb-3 pt-3">

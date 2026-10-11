@@ -11,7 +11,7 @@ const CanvasSurface = React.forwardRef<HTMLCanvasElement, CanvasSurfaceProps>(fu
   ref,
 ) {
   return (
-    <div data-slot="canvas-surface" className={cn('relative w-full overflow-auto', containerClassName)}>
+    <div data-slot="canvas-surface" className={cn('relative w-full overflow-auto scrollbar-none', containerClassName)}>
       <canvas ref={ref} data-slot="canvas" className={cn('block', className)} {...props} />
     </div>
   );

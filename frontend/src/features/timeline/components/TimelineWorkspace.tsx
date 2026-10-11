@@ -20,8 +20,10 @@ import { ContextBar } from '@/components/layout/ContextBar';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { TimelineHistogram } from '@/features/timeline/components/TimelineHistogram';
+import { TimelineRangeSelector } from '@/features/timeline/components/TimelineRangeSelector';
 import type { TimelineWorkspaceModel } from '@/features/timeline/use-timeline-workspace-model';
 import type { TimelineEvent } from '@/types/models';
+import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 
 interface TimelineWorkspaceProps {
   model: TimelineWorkspaceModel;
@@ -37,9 +39,10 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
     { key: 'title', title: t('timeline.columns.description'), className: 'text-forensics-text-secondary', render: (row) => row.title },
   ];
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
+    <div className="flex h-full min-w-0 flex-1 bg-forensics-base p-[2px]">
+      <WorkspaceCard className="flex flex-1 flex-col">
       <ContextBar>
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-3 overflow-x-auto">
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3 overflow-x-auto scrollbar-none">
           <div className="flex items-center gap-4 whitespace-nowrap">
             <div className="flex items-center gap-2 font-mono text-[11px] text-forensics-muted">
               <Clock size={12} className="text-forensics-muted-light" />
@@ -81,13 +84,18 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
         </div>
       </ContextBar>
 
-      <div className="flex min-h-24 shrink-0 flex-col border-b border-forensics-divider bg-forensics-panel p-2">
+      <div className="mx-3 my-3 flex h-32 shrink-0 flex-col rounded-ctl border border-forensics-line/70 bg-forensics-paper p-2 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
         <TimelineHistogram bars={model.bars} onSelectRange={model.selectTimeBucket} />
-        <div className="mt-1 flex justify-between px-2 pt-1 font-mono text-[9px] text-forensics-muted-light">
-          <span>{model.timeRange.start}</span>
-          <span className="font-light text-forensics-text-secondary">{model.middleTimestamp}</span>
-          <span>{model.timeRange.end}</span>
-        </div>
+        <TimelineRangeSelector
+          domainStart={model.timelineStartTs}
+          domainEnd={model.timelineEndTs}
+          selectedStart={model.selectedTimeStart}
+          selectedEnd={model.selectedTimeEnd}
+          onChange={model.selectTimeRange}
+          startLabel={t('timeline.rangeSelector.start')}
+          endLabel={t('timeline.rangeSelector.end')}
+          rangeLabel={t('timeline.rangeSelector.label')}
+        />
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -130,6 +138,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
           </div>
         </InspectorPane>
       </div>
+      </WorkspaceCard>
     </div>
   );
 }

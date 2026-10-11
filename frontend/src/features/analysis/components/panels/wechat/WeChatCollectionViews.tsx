@@ -179,7 +179,7 @@ export function WeChatMomentsView({
                         {media.url || media.thumbUrl || media.urlLocator || media.thumbLocator ? (
                           <details className="mt-1 text-[9px] opacity-70">
                             <summary>{t('wechatWorkspace.mediaReference')}</summary>
-                            <code className="mt-1 block max-h-16 overflow-auto break-all">
+                            <code className="mt-1 block max-h-16 overflow-auto scrollbar-none break-all">
                               {media.url ?? media.thumbUrl ?? media.urlLocator ?? media.thumbLocator}
                             </code>
                           </details>
@@ -249,7 +249,7 @@ export function WeChatSupplementalView({
                     {media.sha256 ? ` · ${media.sha256}` : ''}
                   </div>
                 ) : (
-                  <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono text-[9px] text-forensics-text-tertiary">
+                  <pre className="mt-2 max-h-32 overflow-auto scrollbar-none whitespace-pre-wrap break-all font-mono text-[9px] text-forensics-text-tertiary">
                     {JSON.stringify(record.values, null, 2)}
                   </pre>
                 )}

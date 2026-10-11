@@ -15,6 +15,7 @@ import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { KeyValueField } from '@/components/data-display';
 import type { ArtifactsWorkspaceModel } from '@/features/artifacts/use-artifacts-workspace-model';
 import type { ArtifactRow } from '@/types/models';
+import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 
 interface ArtifactsWorkspaceProps {
   model: ArtifactsWorkspaceModel;
@@ -34,9 +35,10 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
   );
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col bg-forensics-surface">
+    <div className="flex h-full min-w-0 flex-1 bg-forensics-base p-[2px]">
+      <WorkspaceCard className="flex flex-1 flex-col">
       <ContextBar>
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none">
           {model.families.map(({ family, count }) => (
             <div key={family} role="button" tabIndex={0} onClick={() => model.selectArtifactFamily(family)} className="shrink-0 whitespace-nowrap font-mono">
               {family} <span className="text-forensics-muted-lighter">{count}</span>
@@ -59,6 +61,7 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
           </div>
         </InspectorPane>
       </div>
+      </WorkspaceCard>
     </div>
   );
 }

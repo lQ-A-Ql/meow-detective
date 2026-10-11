@@ -20,3 +20,21 @@
   width: 0;
   height: 0;
 }
+
+/* Workspace scroll surfaces must stretch their content card to the viewport. */
+.workspace-scroll-viewport > div {
+  display: flex !important;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+/* Infrastructure has one page card; its tab panels stay flat inside it. */
+.infrastructure-workspace [data-slot='panel-frame'] {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  transform: none !important;
+  transition: none !important;
+  background: transparent;
+}

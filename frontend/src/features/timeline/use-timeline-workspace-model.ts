@@ -178,6 +178,16 @@ export function useTimelineWorkspaceModel() {
     },
     [setSelectedTimelineId],
   );
+  const selectTimeRange = useCallback((start: string, end: string) => {
+    const nextStart = toDateTimeLocal(start);
+    const nextEnd = toDateTimeLocal(end);
+    if (!nextStart || !nextEnd) return;
+    setSelectedTimelineId(undefined);
+    setDraftTimeStart(nextStart);
+    setDraftTimeEnd(nextEnd);
+    setTimeStart(nextStart);
+    setTimeEnd(nextEnd);
+  }, [setSelectedTimelineId]);
   const loadNextPage = useCallback(() => {
     void fetchNextPage();
   }, [fetchNextPage]);
@@ -211,6 +221,11 @@ export function useTimelineWorkspaceModel() {
     setDraftTimeStart,
     selectEventType,
     selectTimeBucket,
+    selectTimeRange,
+    timelineStartTs: facetsQuery.data?.startTs,
+    timelineEndTs: facetsQuery.data?.endTs,
+    selectedTimeStart: normalizedTimeStart,
+    selectedTimeEnd: normalizedTimeEnd,
     sourceCount,
     middleTimestamp: facetsQuery.data?.histogram?.length
       ? formatTimestamp(facetsQuery.data.histogram[Math.floor(facetsQuery.data.histogram.length / 2)].startTs)

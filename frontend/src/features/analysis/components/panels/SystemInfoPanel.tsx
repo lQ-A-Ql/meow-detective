@@ -151,13 +151,13 @@ export function AnalysisHeader({
             variant="outline"
             onClick={onRefresh}
             disabled={!hasCase || loading || !selectedDataSourceId}
-            className="rounded-ctl border border-forensics-line-2 bg-transparent text-[12px] hover:bg-forensics-hover"
+            className="border-0 bg-transparent text-[12px] hover:bg-forensics-hover"
           ><ActionIcon name="refresh" /></Button></Tooltip>
           <Tooltip content={t('analysis.header.run')}><Button aria-label={t('analysis.header.run')}
             type="button"
             onClick={onRunExtraction}
             disabled={!hasCase || extractionPending || !selectedDataSourceId}
-            className="rounded-ctl border border-forensics-red-ink bg-forensics-red-ink text-[12px] text-white hover:opacity-90"
+            className="border-0 bg-forensics-ink text-[12px] text-white hover:bg-forensics-ink-2"
           ><ActionIcon name="play" /></Button></Tooltip>
         </div>
       </div>

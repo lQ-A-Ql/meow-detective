@@ -80,8 +80,8 @@ export function RecentTasksPanel({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex min-h-0 w-1/2 flex-col border-r border-forensics-divider">
-      <div className="flex h-8 shrink-0 items-center justify-between border-b border-forensics-divider px-4 text-[10px] uppercase tracking-[0.08em] text-forensics-ink-3">
+    <div className="flex min-h-0 w-full flex-col border-r border-forensics-divider">
+      <div className="flex h-10 shrink-0 items-center justify-between px-4 text-[10px] uppercase tracking-[0.08em] text-forensics-ink-3">
         <span>{t('caseHome.recentTasks.title')}</span>
         <span className="font-mono text-[10px] text-forensics-muted-light">
           {t('caseHome.recentTasks.summary', { completed: completedJobs.length, partial: partialJobCount, running: runningJob ? 1 : 0 })}
@@ -145,6 +145,7 @@ export interface DataSourcesPanelProps {
   logicalDiskDigestLoading?: boolean;
   logicalDiskDigestError?: string;
   onCalculateLogicalDiskDigest?: (dataSourceId: string, algorithm: DigestAlgorithm) => void;
+  showHeader?: boolean;
 }
 
 export function DataSourcesPanel({
@@ -161,15 +162,16 @@ export function DataSourcesPanel({
   logicalDiskDigestLoading = false,
   logicalDiskDigestError,
   onCalculateLogicalDiskDigest,
+  showHeader = true,
 }: DataSourcesPanelProps) {
   const { t } = useTranslation();
   return (
     <>
-      <div className="flex h-8 shrink-0 items-center justify-between border-b border-forensics-divider px-4 text-[10px] uppercase tracking-[0.08em] text-forensics-ink-3">
+      {showHeader ? <div className="flex h-10 shrink-0 items-center justify-between px-4 text-[10px] uppercase tracking-[0.08em] text-forensics-ink-3">
         <span>{t('caseHome.dataSources.title')}</span>
         <span className="font-mono text-[10px] text-forensics-muted-light">{t('caseHome.count', { count: dataSources?.length ?? 0 })}</span>
-      </div>
-      <ScrollArea className="max-h-64 border-b border-forensics-divider">
+      </div> : null}
+      <ScrollArea className="max-h-64 px-3 pb-3">
         {dataSources?.length ? (
           dataSources.map((source) => {
             const isEditing = editingDataSourceId === source.id;
@@ -177,7 +179,7 @@ export function DataSourcesPanel({
             const hashJob = hashJobs.find((job) => job.dataSourceId === source.id);
             const hashStatus = source.hashStatus?.toLowerCase();
             return (
-              <div key={source.id} className="border-b border-forensics-line px-4 py-3 last:border-b-0">
+              <div key={source.id} className="mb-2 rounded-ctl border border-forensics-line/70 bg-forensics-panel-strong px-4 py-3 shadow-[0_1px_3px_rgba(32,27,28,0.04)] last:mb-0">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     {isEditing ? (
@@ -318,10 +320,10 @@ export function DataSourcesPanel({
                           {source.partitions?.map((partition: DataSourcePartition) => {
                             const statusTone =
                               partition.status === 'supported'
-                                ? 'border-forensics-success-border bg-forensics-success-bg text-forensics-success-text'
+                                ? 'bg-forensics-success-bg text-forensics-success-text'
                                 : partition.status === 'locked'
-                                  ? 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text'
-                                  : 'border-forensics-border bg-forensics-panel text-forensics-muted';
+                                  ? 'bg-forensics-warning-bg text-forensics-warning-text'
+                                  : 'bg-transparent text-forensics-muted';
                             const statusLabel =
                               partition.status === 'supported'
                                 ? t('caseHome.partitions.supported')
@@ -330,7 +332,7 @@ export function DataSourcesPanel({
                                   : t('caseHome.partitions.unsupported');
 
                             return (
-                              <div key={`${source.id}-${partition.index}`} className={`border px-3 py-2 text-[11px] ${statusTone}`}>
+                              <div key={`${source.id}-${partition.index}`} className={`border-l-2 border-forensics-line-2 px-3 py-2 text-[11px] ${statusTone}`}>
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
                                     <div className="text-forensics-text font-light">

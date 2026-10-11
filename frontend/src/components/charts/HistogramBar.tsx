@@ -31,7 +31,7 @@ export function HistogramBar({
     >
       <span
         aria-hidden="true"
-        className={`min-h-px w-full transition-colors ${filled ? 'bg-forensics-ink' : 'bg-forensics-line'}`}
+        className={`absolute bottom-0 left-0 min-h-px w-full transition-colors ${filled ? 'bg-forensics-red-ink' : 'bg-forensics-line'}`}
         style={{ height: `${heightPercent}%` }}
       />
     </Button>

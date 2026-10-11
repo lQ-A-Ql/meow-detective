@@ -48,7 +48,7 @@ export function MemberEvidenceTable({ members, sourceMetadata, scopes, hostFacts
   });
   return (
     <PanelFrame className="overflow-hidden bg-forensics-surface p-0">
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto scrollbar-none">
         <SummaryTable columns={columns} rows={rows} minWidthClass="min-w-[1060px]" />
       </div>
       {members.length === 0 ? <EmptyState>{t('infrastructure.workspace.members.empty')}</EmptyState> : null}

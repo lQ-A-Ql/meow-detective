@@ -148,7 +148,7 @@ function MessageBody({ message }: { message: WeChatMessage }) {
         {opaqueLocator ? (
           <details className="mt-1 text-[9px] opacity-70">
             <summary>{t('wechatWorkspace.opaqueLocator')}</summary>
-            <code className="mt-1 block max-h-16 overflow-auto break-all">{opaqueLocator}</code>
+            <code className="mt-1 block max-h-16 overflow-auto scrollbar-none break-all">{opaqueLocator}</code>
           </details>
         ) : null}
       </div>
