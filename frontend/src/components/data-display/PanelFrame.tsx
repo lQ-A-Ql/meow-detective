@@ -6,7 +6,7 @@ export function PanelFrame({ children, className }: { children: ReactNode; class
     <section
       data-slot="panel-frame"
       className={cn(
-        'm-1 min-w-0 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-4 shadow-[0_2px_8px_rgba(32,27,28,0.04)]',
+        'min-w-0 bg-transparent p-4',
         className,
       )}
     >

@@ -1,4 +1,4 @@
-import { sidebarIconAssets } from '@/assets/icons/sidebar';
+import { sidebarIconAssets, sidebarSelectedIconAssets } from '@/assets/icons/sidebar';
 
 export type SidebarIconName =
   | 'home'
@@ -23,11 +23,15 @@ export type SidebarIconName =
  * unquoted CSS <url> token cannot contain "?", so the browser would drop the whole
  * mask-image declaration and the span would paint its background as a solid block.
  */
-export function SidebarIcon({ name, className = '' }: { name: SidebarIconName; className?: string }) {
-  const mask = `url("${sidebarIconAssets[name]}")`;
+export function SidebarIcon({ name, selected = false, className = '' }: { name: SidebarIconName; selected?: boolean; className?: string }) {
+  const selectedAsset = selected ? sidebarSelectedIconAssets[name] : undefined;
+  const mask = `url("${selectedAsset ?? sidebarIconAssets[name]}")`;
   return (
     <span
       aria-hidden="true"
+      data-slot="sidebar-icon"
+      data-icon={name}
+      data-inverse={selectedAsset ? 'true' : undefined}
       className={`inline-block shrink-0 bg-current ${className}`}
       style={{
         maskImage: mask,

@@ -1,9 +1,12 @@
 import { useEffect } from 'react';
 import { McpToolList } from '@/features/mcp/components/McpToolList';
 import { useMcpStore } from '@/stores/mcp-store';
+import type { McpTool } from '@/lib/api/mcp';
+
+const emptyTools: McpTool[] = [];
 
 export function McpToolListContainer({ serverId }: { serverId: string }) {
-  const tools = useMcpStore((state) => state.toolsByServer[serverId] ?? []);
+  const tools = useMcpStore((state) => state.toolsByServer[serverId] ?? emptyTools);
   const server = useMcpStore((state) => state.servers.find((item) => item.id === serverId));
   const loading = useMcpStore((state) => state.toolLoadingByServer[serverId] ?? false);
   const error = useMcpStore((state) => state.toolErrorsByServer[serverId] ?? null);

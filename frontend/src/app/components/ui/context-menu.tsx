@@ -22,7 +22,7 @@ function ContextMenuContent({
       <ContextMenuPrimitive.Content
         data-slot="context-menu-content"
         className={cn(
-          "bg-popover text-popover-foreground z-50 min-w-44 overflow-hidden rounded-none border border-forensics-border p-1 shadow-sm",
+          "ui-overlay-surface ui-overlay-motion text-popover-foreground z-50 min-w-44 overflow-hidden rounded-ctl border border-forensics-border p-1",
           className,
         )}
         {...props}
@@ -41,7 +41,7 @@ function ContextMenuItem({
       data-slot="context-menu-item"
       data-inset={inset}
       className={cn(
-        "focus:bg-forensics-hover focus:text-forensics-text relative flex cursor-default select-none items-center gap-2 rounded-none px-2 py-1.5 text-[12px] outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset=true]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "ui-control-motion focus:bg-forensics-hover focus:text-forensics-text relative flex cursor-default select-none items-center gap-2 rounded-badge px-2 py-1.5 text-[12px] outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[inset=true]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
         className,
       )}
       {...props}

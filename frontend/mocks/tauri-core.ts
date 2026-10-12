@@ -1,4 +1,6 @@
 import caseHome from './case-home.json';
+import * as caseSession from './case-session';
+import { handlesMcpCommand, invokeMcpCommand } from './mcp';
 import importDialog from './import-dialog.json';
 import tree from './tree.json';
 import timelineData from './data.json';
@@ -33,23 +35,6 @@ const settings = {
   maxViewerRangeLength: 1048576,
   maxInlineImagePreviewBytes: 8388608,
   maxInlineMediaPreviewBytes: 16777216,
-};
-
-const mcpConfig = {
-  servers: [
-    {
-      id: 'mcp-local-forensics', name: '本地取证工具', transport_type: 'stdio', command: 'meow-mcp-local',
-      args: ['--case', 'case-mock-001'], enabled: true, auto_connect: true,
-      permissions: { resource_access: 'readOnly', tool_access: 'enabled', prompt_access: 'readOnly', network_policy: 'localhostOnly', allowed_tools: [], denied_tools: [], allowed_commands: [] },
-    },
-    {
-      id: 'mcp-threat-intel', name: '威胁情报查询', transport_type: 'sse', url: 'http://127.0.0.1:3010/sse',
-      enabled: false, auto_connect: false,
-      permissions: { resource_access: 'readOnly', tool_access: 'disabled', prompt_access: 'readOnly', network_policy: 'localhostOnly', allowed_tools: [], denied_tools: [], allowed_commands: [] },
-    },
-  ],
-  resources: {},
-  tools: {},
 };
 
 const fileTree = [
@@ -153,8 +138,9 @@ function tolerantMockValue(): unknown {
 /** Browser-only Tauri command replacement. It is aliased by Vite only in mock mode. */
 export async function invoke<T>(command: string, payload?: MockCommandPayload): Promise<T> {
   await Promise.resolve();
+  if (handlesMcpCommand(command)) return invokeMcpCommand(command, payload) as T;
   switch (command) {
-    case 'get_current_case': return caseHome.currentCase as T;
+    case 'get_current_case': return caseSession.currentCase() as T;
     case 'get_case_metrics': return caseHome.metrics as T;
     case 'get_recent_objects': return recentObjects as T;
     case 'get_recent_cases': return caseHome.recentCases as T;
@@ -194,9 +180,9 @@ export async function invoke<T>(command: string, payload?: MockCommandPayload): 
       { username: 'ubuntu', hasPassword: true, locked: false },
     ] as T;
     case 'save_app_settings': return (payload?.settings ?? settings) as T;
-    case 'create_case':
-    case 'open_case':
-    case 'close_case': return caseHome.currentCase as T;
+    case 'create_case': return caseSession.createCase((payload?.request ?? {}) as Record<string, unknown>) as T;
+    case 'open_case': return caseSession.openCase((payload?.request ?? {}) as Record<string, unknown>) as T;
+    case 'close_case': return caseSession.closeCase() as T;
     case 'import_data_source': return { jobId: 'job-mock-import' } as T;
     case 'calculate_evidence_digest': return { algorithm: 'sha256', value: 'mock-digest-7a9c2d', byteLength: 512000000000 } as T;
     case 'search_files_request': {
@@ -242,7 +228,6 @@ export async function invoke<T>(command: string, payload?: MockCommandPayload): 
     case 'get_infrastructure_graph': return platformData.infrastructureGraph as T;
     case 'get_report_templates': return platformData.reportTemplates as T;
     case 'get_report_history': return platformData.reportHistory as T;
-    case 'get_mcp_config': return mcpConfig as T;
     case 'open_file_handle_request': {
       const request = (payload?.request ?? payload) as { fileId?: string } | undefined;
       const file = (tree.files as { id: string; name: string; size?: number }[]).find((entry) => entry.id === request?.fileId);

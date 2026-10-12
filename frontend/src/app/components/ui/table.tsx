@@ -65,7 +65,7 @@ const TableRow = React.forwardRef<HTMLTableRowElement, React.ComponentProps<"tr"
       ref={ref}
       data-slot="table-row"
       className={cn(
-        "hover:bg-forensics-hover data-[state=selected]:bg-forensics-sakura-150 border-b border-forensics-border-light transition-colors",
+        "ui-control-motion hover:bg-forensics-hover data-[state=selected]:bg-forensics-highlight border-b border-forensics-border-light",
         className,
       )}
       {...props}

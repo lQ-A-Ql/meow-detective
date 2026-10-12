@@ -19,7 +19,7 @@ const model: NavigationModel = {
 function renderBar() {
   return render(
     <MemoryRouter>
-      <ActivityBar model={model} density="compact" onToggleDensity={vi.fn()} />
+      <ActivityBar model={model} />
     </MemoryRouter>,
   );
 }

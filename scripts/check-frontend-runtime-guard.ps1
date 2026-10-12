@@ -450,10 +450,12 @@ Assert-NoMatchesInRuntimeFiles `
     'frontend/src/app/components/ui/button.tsx',
     'frontend/src/features/files/components/FileVisibilityToggle.tsx',
     'frontend/src/components/navigation/ActivityBar.tsx',
-    # Every button in the product is a circular icon button, so the primitive owns the shape.
-    'frontend/src/app/components/ui/button.tsx'
+    # Rounded tracks, slider thumbs and status dots are owned by their canonical primitives.
+    'frontend/src/app/components/ui/progress.tsx',
+    'frontend/src/app/components/ui/slider.tsx',
+    'frontend/src/components/status/StatusBadge.tsx'
   ) `
-  -Message "v3.1 radius ladder: circular belongs to the rail selection and the shared button primitive"
+  -Message "Circular shapes belong to the shared action, progress, slider and status primitives or rail selection"
 
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
@@ -545,7 +547,7 @@ Assert-NoMatchesInRuntimeFiles `
 
 Assert-NoRuntimeImportsMatching `
   -Files $featureComponentRuntimeFiles `
-  -ModulePattern '^(?:@/features/[^/]+/(?:hooks(?:/.*)?|use-[^/]+-model)|(?:\.\.?/)+(?:[^/]+/)*(?:hooks(?:/.*)?|use-[^/]+-model))$' `
+  -ModulePattern '^(?:@/features/[^/]+/(?:hooks(?:/.*)?|use-[^/]+)|(?:\.\.?/)+(?:[^/]+/)*(?:hooks(?:/.*)?|use-[^/]+))$' `
   -Message "Feature components must not execute feature hooks or page models; containers own runtime orchestration and components may use type-only contracts"
 
 Assert-NoRuntimeImportsMatching `
@@ -607,7 +609,7 @@ $styleExemptRuntimeFiles = @($runtimeFiles | Where-Object {
 
 Assert-NoMatchesInRuntimeFiles `
   -Files $styleExemptRuntimeFiles `
-  -Pattern '#[0-9a-fA-F]{3,8}\b|\b(?:rgb|hsl)a?\s*\(' `
+  -Pattern '#[0-9a-fA-F]{3,8}\b|(?:^|[^A-Za-z0-9]|_)(?:rgb|hsl)a?\s*\(' `
   -Message "UI colours must come from the central theme tokens (frontend/src/styles/theme.css), not literal colour values in source"
 
 Assert-NoMatchesInRuntimeFiles `
@@ -618,7 +620,7 @@ Assert-NoMatchesInRuntimeFiles `
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
   -Pattern '<svg\b' `
-  -AllowedRelativePaths @('frontend/src/features/graph/visualization/ForceGraph.tsx') `
+  -AllowedRelativePaths @('frontend/src/features/graph/visualization/ForceGraph.tsx', 'frontend/src/components/typography/ArtisticTitle.tsx') `
   -Message "SVG assets must live under frontend/src/assets; inline SVG is only allowed for reviewed data-driven canvases"
 
 # Hardcoded-copy baseline: these files still carry user-facing text outside i18n. The list

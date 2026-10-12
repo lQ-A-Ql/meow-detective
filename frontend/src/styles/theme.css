@@ -4,90 +4,92 @@
   --font-size: 16px;
   /* Canvas: cool archival base behind panels. */
   --background: #f3f5f7;
-  --foreground: #131211;
+  --foreground: #000000;
   --card: #ffffff;
-  --card-foreground: #131211;
+  --card-foreground: #000000;
   --popover: #ffffff;
-  --popover-foreground: #131211;
+  --popover-foreground: #000000;
   /* Navigation focus / links / current analytical context. */
-  --primary: #181818;
+  --primary: #000000;
   --primary-foreground: #ffffff;
-  --secondary: #f1efec;
-  --secondary-foreground: #131211;
-  --muted: #f4f2f0;
-  --muted-foreground: #6b6661;
-  --accent: #f1efec;
-  --accent-foreground: #131211;
+  --secondary: #eef1f4;
+  --secondary-foreground: #000000;
+  --muted: #f3f5f7;
+  --muted-foreground: #6b7280;
+  --accent: #eef1f4;
+  --accent-foreground: #000000;
   --destructive: #7a1622;
   --destructive-foreground: #ffffff;
+  --border: #e5e7eb;
+  --ui-overlay-shadow: 0 12px 40px rgba(17, 24, 39, 0.12), 0 2px 6px rgba(17, 24, 39, 0.04);
   --input: transparent;
   --input-background: #ffffff;
-  --switch-background: #cfc8c0;
+  --switch-background: #c5cbd3;
   --font-weight-medium: 300;
   --font-weight-normal: 300;
-  --ring: #181818;
-  --chart-1: #181818;
+  --ring: #000000;
+  --chart-1: #000000;
   --chart-2: #4d4d4d;
-  --chart-3: #ef8b91;
-  --chart-4: #3b3835;
-  --chart-5: #6b6661;
+  --chart-3: #9ca3af;
+  --chart-4: #374151;
+  --chart-5: #6b7280;
   --radius: 6px;
-  /* Data-grid row height; the density preference only changes this variable. */
+  /* Compact workbench row height. */
   --dense-row-height: 26px;
-  --sidebar: #f2f1ee;
-  --sidebar-foreground: #131211;
-  --sidebar-primary: #181818;
+  --sidebar: #f3f5f7;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #000000;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f1efec;
-  --sidebar-accent-foreground: #131211;
-  --sidebar-border: #e7e3de;
-  --sidebar-ring: #181818;
+  --sidebar-accent: #eef1f4;
+  --sidebar-accent-foreground: #000000;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #000000;
 
-  /* Red accent scale shared by existing utility classes. */
+  /* Compatibility aliases for the monochrome control palette. */
   --forensics-sakura-50: #ffffff;
   --forensics-sakura-100: #f4f4f4;
   --forensics-sakura-150: #f4f4f4;
-  --forensics-sakura-200: #f1efec;
-  --forensics-sakura-250: #e7e3de;
-  --forensics-sakura-300: #cfc8c0;
+  --forensics-sakura-200: #eef1f4;
+  --forensics-sakura-250: #e5e7eb;
+  --forensics-sakura-300: #c5cbd3;
   --forensics-sakura-400: #9b9b9b;
   --forensics-sakura-500: #4d4d4d;
-  --forensics-sakura-600: #181818;
+  --forensics-sakura-600: #000000;
 
   --forensics-50: #ffffff;
-  --forensics-100: #fcfcfb;
-  --forensics-150: #f7f7f5;
-  --forensics-200: #f1efec;
-  --forensics-250: #e7e3de;
-  --forensics-300: #cfc8c0;
-  --forensics-350: #c2bab1;
-  --forensics-400: #a79f97;
-  --forensics-500: #928c86;
-  --forensics-550: #7f7972;
-  --forensics-600: #6b6661;
-  --forensics-700: #3b3835;
-  --forensics-750: #2c2a28;
-  --forensics-800: #221f1d;
-  --forensics-850: #1a1817;
-  --forensics-900: #131211;
+  --forensics-100: #f8fafc;
+  --forensics-150: #f3f5f7;
+  --forensics-200: #eef1f4;
+  --forensics-250: #e5e7eb;
+  --forensics-300: #c5cbd3;
+  --forensics-350: #b5bdc8;
+  --forensics-400: #9ca3af;
+  --forensics-500: #7b8491;
+  --forensics-550: #737d8b;
+  --forensics-600: #6b7280;
+  --forensics-700: #374151;
+  --forensics-750: #293342;
+  --forensics-800: #1f2937;
+  --forensics-850: #111827;
+  --forensics-900: #000000;
 
-  --forensics-panel: #fffefd;
-  --forensics-panel-strong: #faf9f7;
+  --forensics-panel: #ffffff;
+  --forensics-panel-strong: #f8fafc;
   --forensics-surface: #ffffff;
   --forensics-input-bg: #ffffff;
-  --forensics-highlight: #f1efec;
+  --forensics-highlight: #eef1f4;
   --forensics-selection-bg: #fff2f2;
-  --forensics-selection-text: #131211;
-  --forensics-hover: #f1efec;
-  --forensics-border: #e7e3de;
-  --forensics-border-light: #efece8;
-  --forensics-border-strong: #cfc8c0;
-  --forensics-text: #131211;
-  --forensics-text-secondary: #3b3835;
-  --forensics-text-tertiary: #6b6661;
-  --forensics-muted: #6b6661;
-  --forensics-muted-light: #928c86;
-  --forensics-muted-lighter: #a79f97;
+  --forensics-selection-text: #000000;
+  --forensics-hover: #eef1f4;
+  --forensics-border: #e5e7eb;
+  --forensics-border-light: #eef1f4;
+  --forensics-border-strong: #c5cbd3;
+  --forensics-text: #000000;
+  --forensics-text-secondary: #374151;
+  --forensics-text-tertiary: #6b7280;
+  --forensics-muted: #6b7280;
+  --forensics-muted-light: #7b8491;
+  --forensics-muted-lighter: #9ca3af;
 
   /* Horizontal scrollbar point-light tokens */
   --scrollbar-line: var(--forensics-400);
@@ -98,29 +100,29 @@
   --motion-spinner-duration: 1s;
 
   /* Forensics GQL syntax tokens */
-  --forensics-gql-keyword: #3b3835;
-  --forensics-gql-type: #6b6661;
-  --forensics-gql-variable: #928c86;
+  --forensics-gql-keyword: #374151;
+  --forensics-gql-type: #6b7280;
+  --forensics-gql-variable: #7b8491;
   --forensics-gql-string: #7a1622;
-  --forensics-gql-base: #131211;
-  --forensics-gql-muted: #a79f97;
+  --forensics-gql-base: #000000;
+  --forensics-gql-muted: #9ca3af;
   --forensics-gql-bg-error: #fff2f2;
   --forensics-gql-border-error: #e0a8b0;
 
   /* Forensics status / action tokens */
   /* Legacy name kept for the utility classes; now the investigation accent. */
-  --forensics-primary-blue: #181818;
+  --forensics-primary-blue: #000000;
   --forensics-success: #2f6b4f;
-  --forensics-surface-muted: #fcfcfb;
-  --forensics-text-soft: #3b3835;
-  --forensics-hover-muted: #efece8;
+  --forensics-surface-muted: #f8fafc;
+  --forensics-text-soft: #374151;
+  --forensics-hover-muted: #eef1f4;
 
   /* Forensics warning tokens */
-  --forensics-warning: #6b6661;
-  --forensics-warning-bg: #fcfcfb;
-  --forensics-warning-border: #cfc8c0;
-  --forensics-warning-text: #3b3835;
-  --forensics-warning-text-strong: #131211;
+  --forensics-warning: #6b7280;
+  --forensics-warning-bg: #f8fafc;
+  --forensics-warning-border: #c5cbd3;
+  --forensics-warning-text: #374151;
+  --forensics-warning-text-strong: #000000;
 
   /* Forensics success tokens */
   --forensics-success-bg: #f2f7f4;
@@ -131,79 +133,80 @@
   --forensics-error-bg: #fff2f2;
   --forensics-error-border: #e0a8b0;
   --forensics-error-text: #7a1622;
-  --forensics-info-bg: #fcfcfb;
-  --forensics-info-border: #cfc8c0;
-  --forensics-info-text: #3b3835;
+  --forensics-info-bg: #f8fafc;
+  --forensics-info-border: #c5cbd3;
+  --forensics-info-text: #374151;
 
   /* Forensics coverage-badge tokens */
   --forensics-badge-covered-bg: #f2f7f4;
   --forensics-badge-covered-text: #2f6b4f;
-  --forensics-badge-review-bg: #fcfcfb;
-  --forensics-badge-review-text: #3b3835;
+  --forensics-badge-review-bg: #f8fafc;
+  --forensics-badge-review-text: #374151;
 
   /* Shared canvas visualization tokens. */
-  --forensics-viz-text: #131211;
-  --forensics-viz-muted: #6b6661;
-  --forensics-viz-border: #e7e3de;
+  --forensics-viz-text: #000000;
+  --forensics-viz-muted: #6b7280;
+  --forensics-viz-border: #e5e7eb;
   --forensics-viz-canvas: #ffffff;
-  --forensics-viz-lane: #fcfcfb;
-  --forensics-viz-selected: #181818;
-  --forensics-viz-edge: #a79f97;
-  --forensics-viz-environment: #f1efec;
-  --forensics-viz-storage: #efece8;
-  --forensics-viz-analysis: #f4f2f0;
+  --forensics-viz-lane: #f8fafc;
+  --forensics-viz-selected: #000000;
+  --forensics-viz-edge: #9ca3af;
+  --forensics-viz-environment: #eef1f4;
+  --forensics-viz-storage: #eef1f4;
+  --forensics-viz-analysis: #f3f5f7;
   --forensics-viz-font-family: 'Maple Mono NF CN', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --forensics-graph-node-file: #3b3835;
+  --forensics-graph-node-file: #374151;
   --forensics-graph-node-artifact: #c8102e;
   --forensics-graph-node-timeline-event: #7a1622;
-  --forensics-graph-node-entity: #6b6661;
+  --forensics-graph-node-entity: #6b7280;
   --forensics-graph-node-lead: #d92d3a;
-  --forensics-graph-node-notebook-entry: #a79f97;
-  --forensics-graph-edge-contains: #cfc8c0;
-  --forensics-graph-edge-references: #a79f97;
+  --forensics-graph-node-notebook-entry: #9ca3af;
+  --forensics-graph-edge-contains: #c5cbd3;
+  --forensics-graph-edge-references: #9ca3af;
   --forensics-graph-edge-correlates: #c8102e;
   --forensics-graph-edge-derives: #7a1622;
-  --forensics-graph-edge-precedes: #928c86;
-  --forensics-graph-edge-cites: #6b6661;
-  --forensics-graph-edge-annotates: #3b3835;
-  --forensics-graph-node-fallback: #6b6661;
-  --forensics-graph-edge-fallback: #a79f97;
+  --forensics-graph-edge-precedes: #7b8491;
+  --forensics-graph-edge-cites: #6b7280;
+  --forensics-graph-edge-annotates: #374151;
+  --forensics-graph-node-fallback: #6b7280;
+  --forensics-graph-edge-fallback: #9ca3af;
   --forensics-file-icon-red: #c8102e;
   --forensics-file-icon-green: #2f6b4f;
-  --forensics-file-icon-blue: #3b3835;
+  --forensics-file-icon-blue: #374151;
   --forensics-file-icon-emerald: #2f6b4f;
-  --forensics-file-icon-yellow: #a79f97;
+  --forensics-file-icon-yellow: #9ca3af;
   --forensics-file-icon-orange: #7a1622;
-  --forensics-file-icon-cyan: #6b6661;
-  --forensics-file-icon-neutral: #6b6661;
-  --forensics-file-icon-cobalt: #3b3835;
-  --forensics-file-icon-muted: #928c86;
-  --forensics-file-icon-ocean: #3b3835;
+  --forensics-file-icon-cyan: #6b7280;
+  --forensics-file-icon-neutral: #6b7280;
+  --forensics-file-icon-cobalt: #374151;
+  --forensics-file-icon-muted: #7b8491;
+  --forensics-file-icon-ocean: #374151;
   --forensics-file-icon-amber: #7a1622;
-  --forensics-file-icon-violet: #6b6661;
-  --forensics-file-icon-purple: #6b6661;
+  --forensics-file-icon-violet: #6b7280;
+  --forensics-file-icon-purple: #6b7280;
   --forensics-file-icon-teal: #2f6b4f;
-  --forensics-file-icon-slate: #3b3835;
-  --forensics-file-icon-soft: #a79f97;
-  --forensics-file-icon-faint: #cfc8c0;
-  --forensics-file-icon-dark: #131211;
-  --forensics-file-icon-default: #928c86;
+  --forensics-file-icon-slate: #374151;
+  --forensics-file-icon-soft: #9ca3af;
+  --forensics-file-icon-faint: #c5cbd3;
+  --forensics-file-icon-dark: #000000;
+  --forensics-file-icon-default: #7b8491;
   /* ---- v3.1 Archive Sheet tokens ---- */
-  --forensics-paper: #fffefd;
+  --forensics-paper: #ffffff;
   --forensics-base: #f3f5f7;
-  --forensics-soft: #fcfcfb;
-  --forensics-ink: #131211;
-  --forensics-ink-2: #3b3835;
-  --forensics-ink-3: #6b6661;
-  --forensics-line: #ebe7e3;
-  --forensics-line-2: #d8d1ca;
-  /* 唯一金线：工作区区块之间 1px 40% */
-  --forensics-divider: rgba(168, 128, 42, 0.4);
-  --forensics-red: #181818;
-  --forensics-red-ink: #181818;
+  --forensics-soft: #f8fafc;
+  --forensics-ink: #000000;
+  --forensics-ink-2: #374151;
+  --forensics-ink-3: #6b7280;
+  --forensics-line: #e5e7eb;
+  --forensics-line-2: #c5cbd3;
+  /* Quiet structural divider shared by existing layouts. */
+  --forensics-divider: rgba(0, 0, 0, 0.08);
+  --forensics-red: #000000;
+  --forensics-red-ink: #000000;
   --forensics-red-deep: #000000;
-  --forensics-red-tint: #f1f1f1;
-  --forensics-rail-active: rgba(24, 24, 24, 0.1);
+  --forensics-red-tint: #eef1f4;
+  --forensics-rail-active: #ffffff;
+  --forensics-watermark-opacity: 0.3;
   --forensics-ok: #2f6b4f;
   --forensics-r-shell: 20px;
   --forensics-r-ctl: 6px;
@@ -214,6 +217,8 @@
 }
 
 @theme inline {
+  --shadow-workspace: 0 2px 8px rgba(17, 24, 39, 0.04);
+  --shadow-context: 0 1px 5px rgba(17, 24, 39, 0.03);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -486,11 +491,6 @@
       color-mix(in oklab, var(--forensics-border-strong) 22%, transparent) 6px 7px
     );
   }
-}
-
-/* Comfortable density: a single variable change, so no component hardcodes a second height. */
-:root[data-density='comfortable'] {
-  --dense-row-height: 36px;
 }
 
 /* ── 动效：持续闪动光标（组件只引用类名，动画集中在此） ── */

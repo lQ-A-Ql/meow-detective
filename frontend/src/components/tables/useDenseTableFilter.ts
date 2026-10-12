@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import type { DenseColumn } from './DenseDataTable';
+import type { DenseColumn } from './dense-table-types';
 
 const KEYWORD_DEBOUNCE_MS = 200;
 

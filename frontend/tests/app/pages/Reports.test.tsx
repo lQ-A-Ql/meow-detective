@@ -84,7 +84,7 @@ describe('Reports hash caveat visibility', () => {
 
     renderReports();
 
-    expect(screen.getByText('Evidence Hash: pending')).toBeDefined();
+    expect(screen.getByText('证据哈希: pending')).toBeDefined();
     expect(screen.getByText('hash caveat pending')).toBeDefined();
     expect(screen.queryByText('D:/private/evidence.raw')).toBeNull();
   });

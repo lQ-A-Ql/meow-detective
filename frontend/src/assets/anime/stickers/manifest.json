@@ -1,0 +1,316 @@
+{
+  "source": "黑白猫耳少女动漫插画贴纸集.png",
+  "sourceSize": [
+    1278,
+    1230
+  ],
+  "order": "row-major",
+  "webpQuality": 90,
+  "preservesAlpha": true,
+  "items": [
+    {
+      "id": "flower-portrait",
+      "file": "01-flower-portrait.webp",
+      "cell": [
+        0,
+        0,
+        350,
+        347
+      ],
+      "crop": [
+        17,
+        4,
+        298,
+        347
+      ],
+      "width": 281,
+      "height": 343,
+      "bytes": 34992
+    },
+    {
+      "id": "quiet-investigator",
+      "file": "02-quiet-investigator.webp",
+      "cell": [
+        350,
+        0,
+        650,
+        347
+      ],
+      "crop": [
+        375,
+        11,
+        621,
+        334
+      ],
+      "width": 246,
+      "height": 323,
+      "bytes": 32956
+    },
+    {
+      "id": "turning-portrait",
+      "file": "03-turning-portrait.webp",
+      "cell": [
+        650,
+        0,
+        977,
+        347
+      ],
+      "crop": [
+        666,
+        27,
+        938,
+        347
+      ],
+      "width": 272,
+      "height": 320,
+      "bytes": 29912
+    },
+    {
+      "id": "detective-portrait",
+      "file": "04-detective-portrait.webp",
+      "cell": [
+        977,
+        0,
+        1278,
+        347
+      ],
+      "crop": [
+        1007,
+        48,
+        1263,
+        336
+      ],
+      "width": 256,
+      "height": 288,
+      "bytes": 27700
+    },
+    {
+      "id": "reclining-portrait",
+      "file": "05-reclining-portrait.webp",
+      "cell": [
+        0,
+        347,
+        350,
+        702
+      ],
+      "crop": [
+        12,
+        378,
+        349,
+        679
+      ],
+      "width": 337,
+      "height": 301,
+      "bytes": 31932
+    },
+    {
+      "id": "thoughtful-portrait",
+      "file": "06-thoughtful-portrait.webp",
+      "cell": [
+        350,
+        347,
+        650,
+        702
+      ],
+      "crop": [
+        372,
+        396,
+        627,
+        685
+      ],
+      "width": 255,
+      "height": 289,
+      "bytes": 28696
+    },
+    {
+      "id": "umbrella-portrait",
+      "file": "07-umbrella-portrait.webp",
+      "cell": [
+        650,
+        347,
+        977,
+        702
+      ],
+      "crop": [
+        669,
+        383,
+        971,
+        669
+      ],
+      "width": 302,
+      "height": 286,
+      "bytes": 38606
+    },
+    {
+      "id": "cloud-portrait",
+      "file": "08-cloud-portrait.webp",
+      "cell": [
+        977,
+        347,
+        1278,
+        702
+      ],
+      "crop": [
+        997,
+        387,
+        1278,
+        693
+      ],
+      "width": 281,
+      "height": 306,
+      "bytes": 38176
+    },
+    {
+      "id": "resting-cat",
+      "file": "09-resting-cat.webp",
+      "cell": [
+        0,
+        702,
+        350,
+        955
+      ],
+      "crop": [
+        12,
+        703,
+        300,
+        946
+      ],
+      "width": 288,
+      "height": 243,
+      "bytes": 20482
+    },
+    {
+      "id": "hooded-portrait",
+      "file": "10-hooded-portrait.webp",
+      "cell": [
+        350,
+        702,
+        650,
+        955
+      ],
+      "crop": [
+        359,
+        718,
+        637,
+        928
+      ],
+      "width": 278,
+      "height": 210,
+      "bytes": 20370
+    },
+    {
+      "id": "floral-portrait",
+      "file": "11-floral-portrait.webp",
+      "cell": [
+        650,
+        702,
+        977,
+        955
+      ],
+      "crop": [
+        662,
+        715,
+        953,
+        939
+      ],
+      "width": 291,
+      "height": 224,
+      "bytes": 28954
+    },
+    {
+      "id": "headphones-portrait",
+      "file": "12-headphones-portrait.webp",
+      "cell": [
+        977,
+        702,
+        1278,
+        955
+      ],
+      "crop": [
+        991,
+        714,
+        1270,
+        936
+      ],
+      "width": 279,
+      "height": 222,
+      "bytes": 25080
+    },
+    {
+      "id": "reading-portrait",
+      "file": "13-reading-portrait.webp",
+      "cell": [
+        0,
+        955,
+        350,
+        1230
+      ],
+      "crop": [
+        18,
+        973,
+        312,
+        1213
+      ],
+      "width": 294,
+      "height": 240,
+      "bytes": 24582
+    },
+    {
+      "id": "mask-portrait",
+      "file": "14-mask-portrait.webp",
+      "cell": [
+        350,
+        955,
+        650,
+        1230
+      ],
+      "crop": [
+        365,
+        972,
+        598,
+        1215
+      ],
+      "width": 233,
+      "height": 243,
+      "bytes": 24550
+    },
+    {
+      "id": "bouquet-portrait",
+      "file": "15-bouquet-portrait.webp",
+      "cell": [
+        650,
+        955,
+        977,
+        1230
+      ],
+      "crop": [
+        662,
+        967,
+        967,
+        1220
+      ],
+      "width": 305,
+      "height": 253,
+      "bytes": 31380
+    },
+    {
+      "id": "profile-portrait",
+      "file": "16-profile-portrait.webp",
+      "cell": [
+        977,
+        955,
+        1278,
+        1230
+      ],
+      "crop": [
+        994,
+        976,
+        1260,
+        1211
+      ],
+      "width": 266,
+      "height": 235,
+      "bytes": 30212
+    }
+  ]
+}

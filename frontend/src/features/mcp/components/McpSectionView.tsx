@@ -1,11 +1,11 @@
 import { Button } from '@/app/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { ActionIcon } from '@/components/controls/ActionIcon';
-import { Tooltip } from '@/app/components/ui/tooltip';
+import { IconButton } from '@/components/controls/IconButton';
 import type { TFunction } from 'i18next';
-import { createElement, type ReactNode } from 'react';
-import { mcpIcons } from '../mcp-icons';
-import type { ComponentType } from 'react';
+import { createElement, type ReactNode, type ComponentType } from 'react';
 import type { McpServerItemData } from './McpServerItemView';
+
 type McpServerRowProps = {
   server: McpServerItemData;
   isSelected: boolean;
@@ -15,4 +15,69 @@ type McpServerRowProps = {
   onSelect: () => void;
 };
 type Row = McpServerItemData & { component: ComponentType<McpServerRowProps> };
-export function McpSectionView({ t, expanded, loading, onToggle, onAdd, servers, selectedServerId, onSelect, onConnect, onDisconnect, onRemove, hostToolList, resourceList, toolList, error, dialog }: { t: TFunction; expanded: boolean; loading: boolean; onToggle: () => void; onAdd: () => void; servers: Row[]; selectedServerId: string | null; onSelect: (id: string) => void; onConnect: (id: string) => void; onDisconnect: (id: string) => void; onRemove: (id: string) => void; hostToolList?: ReactNode; resourceList?: ReactNode; toolList?: ReactNode; error: string | null; dialog?: ReactNode }) { const { Bot, ChevronDown, ChevronRight } = mcpIcons; return <section><Button type="button" variant="forensicsGhost" shape="row" aria-expanded={expanded} onClick={onToggle} className="mb-3 h-auto gap-2 text-left"><Bot size={14} /><span>{t('settings.sections.mcp.title')}</span>{expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{loading ? <span className="text-[10px]">{t('settings.sections.mcp.loading')}</span> : null}</Button>{expanded ? <div className="space-y-4">{hostToolList}<div className="bg-forensics-input-bg border border-forensics-border p-3"><div className="text-[11px] mb-2">{t('settings.sections.mcp.connectionTitle')}</div>{servers.length === 0 ? <div className="text-[11px] py-2">{t('settings.sections.mcp.noServers')}</div> : servers.map((server) => <div key={server.id}>{createElement(server.component, { server, isSelected: server.id === selectedServerId, onConnect: () => onConnect(server.id), onDisconnect: () => onDisconnect(server.id), onRemove: () => onRemove(server.id), onSelect: () => onSelect(server.id) })}</div>)}<Tooltip content={t('settings.sections.mcp.addServer')}><Button aria-label={t('settings.sections.mcp.addServer')} type="button" variant="forensicsGhost" size="xs" onClick={onAdd}><ActionIcon name="plus" /></Button></Tooltip></div>{selectedServerId ? <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{resourceList}{toolList}</div> : null}<div className="text-[11px]">{t('settings.sections.mcp.connectionStatus', { count: servers.filter((server) => server.connected).length })}</div>{error ? <div className="p-3 text-[12px] bg-forensics-error-bg text-forensics-error-text">{error}</div> : null}</div> : null}{dialog}</section>; }
+interface Props {
+  t: TFunction;
+  expanded: boolean;
+  loading: boolean;
+  onToggle: () => void;
+  onAdd: () => void;
+  servers: Row[];
+  selectedServerId: string | null;
+  onSelect: (id: string) => void;
+  onConnect: (id: string) => void;
+  onDisconnect: (id: string) => void;
+  onRemove: (id: string) => void;
+  hostToolList?: ReactNode;
+  resourceList?: ReactNode;
+  toolList?: ReactNode;
+  error: string | null;
+  dialog?: ReactNode;
+}
+
+export function McpSectionView({ t, expanded, loading, onToggle, onAdd, servers, selectedServerId, onSelect, onConnect,
+  onDisconnect, onRemove, hostToolList, resourceList, toolList, error, dialog }: Props) {
+  return (
+    <section className="max-w-4xl space-y-5">
+      <Button type="button" variant="forensicsGhost" shape="row" aria-expanded={expanded} onClick={onToggle}
+        className="h-7 gap-2 px-0 text-[14px] text-forensics-ink">
+        <ActionIcon name={expanded ? 'chevron-down' : 'chevron-right'} className="size-3" />
+        {t('settings.sections.mcp.title')}
+        {loading ? <span className="text-[11px] text-forensics-muted">{t('settings.sections.mcp.loading')}</span> : null}
+      </Button>
+      {expanded ? (
+        <div className="space-y-6">
+          {hostToolList}
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <h3 className="text-[12px] text-forensics-ink">{t('settings.sections.mcp.connectionTitle')}</h3>
+              <span className="text-[11px] text-forensics-muted">
+                {t('settings.sections.mcp.connectionStatus', { count: servers.filter((server) => server.connected).length })}
+              </span>
+              <IconButton label={t('settings.sections.mcp.addServer')} onClick={onAdd} className="ml-auto">
+                <ActionIcon name="plus" />
+              </IconButton>
+            </div>
+            {servers.length === 0 ? (
+              <div className="py-3 text-[12px] text-forensics-muted">{t('settings.sections.mcp.noServers')}</div>
+            ) : servers.map((server) => <div key={server.id}>{createElement(server.component, {
+              server, isSelected: server.id === selectedServerId, onConnect: () => onConnect(server.id),
+              onDisconnect: () => onDisconnect(server.id), onRemove: () => onRemove(server.id), onSelect: () => onSelect(server.id),
+            })}</div>)}
+          </div>
+          {selectedServerId ? (
+            <Tabs key={selectedServerId} defaultValue="resources" className="min-w-0 gap-3">
+              <TabsList aria-label={t('settings.sections.mcp.connectionTitle')}>
+                <TabsTrigger value="resources">{t('mcpUi.resources.title')}</TabsTrigger>
+                <TabsTrigger value="tools">{t('mcpUi.tools.title')}</TabsTrigger>
+              </TabsList>
+              <TabsContent value="resources">{resourceList}</TabsContent>
+              <TabsContent value="tools">{toolList}</TabsContent>
+            </Tabs>
+          ) : null}
+          {error ? <div role="alert" className="text-[12px] text-forensics-error-text">{error}</div> : null}
+        </div>
+      ) : null}
+      {dialog}
+    </section>
+  );
+}

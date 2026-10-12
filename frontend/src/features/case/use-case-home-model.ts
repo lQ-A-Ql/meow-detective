@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  useCaseMetrics,
   useCreateCase,
   useCurrentCase,
   useDataSources,
@@ -10,35 +9,32 @@ import {
   useDeleteDataSource,
   useOpenCase,
   useRecentCases,
-  useRecentObjects,
   useRemoveCaseFromList,
   useRenameDataSource,
 } from '@/features/case/hooks';
 import { useImportDataSource } from '@/features/files/hooks';
 import { calculateEvidenceDigest } from '@/lib/api/digest';
 import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
-import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
+import { useJobsSnapshot } from '@/features/jobs/hooks';
 import { useAppSettings } from '@/features/settings/hooks';
 import { useImportDataSourceDialogModel } from '@/features/import/use-import-data-source-dialog-model';
+import { errorMessage } from '@/lib/errors';
 import { readLocalSettings } from '@/lib/settings';
 import type { ImportDataSourceRequest } from '@/types/models';
 import type { DataSourceSummary, RecentCase } from '@/types/models';
 import type { EvidenceHashJobView } from './types';
 
 function mutationError(error: unknown): string | null {
-  return error instanceof Error ? error.message : null;
+  return error == null ? null : errorMessage(error);
 }
 
 /** Owns Case Home queries, mutations, persisted UI state, and operation callbacks. */
 export function useCaseHomeModel() {
   const { t } = useTranslation();
   const currentCaseQuery = useCurrentCase();
-  const caseMetricsQuery = useCaseMetrics();
   const dataSourcesQuery = useDataSources();
   const recentCasesQuery = useRecentCases();
-  const recentObjectsQuery = useRecentObjects();
   const jobsQuery = useJobsSnapshot();
-  const warningsQuery = useWarnings();
   const appSettingsQuery = useAppSettings();
   const importMutation = useImportDataSource();
   const logicalDiskDigestMutation = useMutation<EvidenceDigest, unknown, { dataSourceId: string; algorithm: DigestAlgorithm }>({
@@ -54,7 +50,7 @@ export function useCaseHomeModel() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [caseRoot, setCaseRoot] = useState(() => readLocalSettings().caseRoot);
   const [caseName, setCaseName] = useState('');
-  const [openCasePath, setOpenCasePath] = useState('C:\\Cases\\case-001');
+  const [openCasePath, setOpenCasePath] = useState('');
   const [editingDataSourceId, setEditingDataSourceId] = useState<string | undefined>();
   const [editingDataSourceName, setEditingDataSourceName] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<
@@ -79,8 +75,6 @@ export function useCaseHomeModel() {
     }
     return views;
   }, [jobs]);
-  const completedJobs = useMemo(() => jobs?.filter((job) => job.status === 'completed') ?? [], [jobs]);
-  const partialJobCount = useMemo(() => jobs?.filter((job) => job.partial).length ?? 0, [jobs]);
   const recentCases = useMemo(() => recentCasesQuery.data ?? [], [recentCasesQuery.data]);
 
   useEffect(() => {
@@ -139,11 +133,10 @@ export function useCaseHomeModel() {
   return {
     caseName,
     caseRoot,
-    completedJobs,
     logicalDiskDigest: logicalDiskDigestMutation.data,
     logicalDiskDigestSourceId: logicalDiskDigestMutation.variables?.dataSourceId,
     logicalDiskDigestLoading: logicalDiskDigestMutation.isPending,
-    logicalDiskDigestError: logicalDiskDigestMutation.error,
+    logicalDiskDigestErrorText: logicalDiskDigestMutation.error == null ? undefined : errorMessage(logicalDiskDigestMutation.error),
     calculateLogicalDiskDigest,
     createCase,
     createCaseError: mutationError(createCaseMutation.error),
@@ -164,16 +157,13 @@ export function useCaseHomeModel() {
     pickImportSourcePath: importDialog.pickSourcePath,
     listLocalDisks: importDialog.listLocalDisks,
     importButtonLabel: t('importDataSource.openButton'),
-    metrics: caseMetricsQuery.data,
     openCase,
     openCaseError: mutationError(openCaseMutation.error),
     openCasePath,
     openCasePending: openCaseMutation.isPending,
-    partialJobCount,
     recentCases,
     requestDeleteCase,
     requestDeleteDataSource,
-    recentObjects: recentObjectsQuery.data,
     renameDataSource,
     runningJob: runningJobs[0],
     setCaseName,
@@ -183,7 +173,6 @@ export function useCaseHomeModel() {
     setImportDialogOpen,
     setOpenCasePath,
     updateCaseRoot,
-    warnings: warningsQuery.data,
   };
 }
 

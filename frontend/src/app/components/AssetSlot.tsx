@@ -1,16 +1,18 @@
 import manifest from '@/assets/anime/manifest.json';
+import { watermarkArtwork, type WatermarkArtwork } from '@/assets/anime/watermarks';
 import { cn } from '@/app/components/ui/utils';
 
-export type AssetRole = 'brand-mark' | 'archive-scene' | 'investigator-portrait' | 'evidence-motif' | 'texture';
+export type AssetRole = 'brand-mark' | 'archive-scene' | 'investigator-portrait' | 'evidence-motif' | 'texture' | WatermarkArtwork;
+export type { WatermarkArtwork };
 
-const slots = manifest.slots as Record<string, string | null>;
+const slots: Partial<Record<AssetRole, string | null>> = { ...manifest.slots, ...watermarkArtwork };
 
 /**
  * The only way decoration enters the workbench. Supplied art never covers evidence: it is
  * inert, it is capped in contrast, and a missing file degrades to a quiet hatch instead of a
  * broken image.
  */
-export function AssetSlot({ role, className, opacity = 0.08 }: { role: AssetRole; className?: string; opacity?: number }) {
+export function AssetSlot({ role, className, opacity }: { role: AssetRole; className?: string; opacity?: number }) {
   const source = slots[role];
   if (!source) {
     return (
@@ -23,12 +25,14 @@ export function AssetSlot({ role, className, opacity = 0.08 }: { role: AssetRole
   return (
     <img
       src={source}
+      data-artwork={role}
       alt=""
       aria-hidden="true"
       loading="lazy"
       decoding="async"
-      style={{ opacity }}
-      className={cn('pointer-events-none select-none object-contain', className)}
+      draggable="false"
+      style={opacity === undefined ? undefined : { opacity }}
+      className={cn('asset-slot pointer-events-none select-none object-contain', className)}
     />
   );
 }

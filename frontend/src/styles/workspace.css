@@ -1,0 +1,15 @@
+:root {
+  --workspace-gap: 2px;
+  --workspace-inset: 2px;
+  --workspace-content-inset: 16px;
+}
+
+.workspace-frame {
+  gap: var(--workspace-gap);
+  padding: var(--workspace-inset);
+  background-color: var(--forensics-base);
+}
+
+.workspace-content {
+  padding: var(--workspace-content-inset);
+}

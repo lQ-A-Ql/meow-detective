@@ -34,7 +34,7 @@ export function FileBrowserWorkspace({ model, mountModel }: FileBrowserWorkspace
 
   return (
     <div className="relative flex h-full w-full min-w-0 flex-1 flex-col bg-forensics-surface">
-      <InteractionLock className="flex min-h-0 flex-1 gap-[2px] overflow-hidden bg-forensics-base p-[2px]" locked={model.bitLocker.importing}>
+      <InteractionLock className="workspace-frame flex min-h-0 flex-1 overflow-hidden" locked={model.bitLocker.importing}>
         <WorkspaceCard className="shrink-0" style={{ width: `${model.treeWidth}px` }} aria-label={t('fileBrowser.tree.title')}>
           <FileTreePanel filteredTreeNodes={model.filteredTreeNodes} treeLoading={model.treeLoading} activeDirectoryId={model.activeDirectoryId} expandedIds={model.expandedIdSet} activeChildrenPage={model.activeChildrenPage} activeTreeChildrenLoaded={model.activeTreeChildrenLoaded} canLoadMoreTreeChildren={model.canLoadMoreTreeChildren} loadMoreActiveTreeChildren={model.loadMoreActiveTreeChildren} toggleDirectory={model.toggleDirectory} displayNodeName={model.displayNodeName} filterQuery={model.filterQuery} setFilterQuery={model.setFilterQuery} treeWidth={model.treeWidth} dataSources={model.dataSources} isResizing={model.isResizing} onResizeStart={model.onResizeStart} treeContainerRef={model.treeContainerRef} FILE_BROWSER_PAGE_LIMIT={model.FILE_BROWSER_PAGE_LIMIT} />
         </WorkspaceCard>

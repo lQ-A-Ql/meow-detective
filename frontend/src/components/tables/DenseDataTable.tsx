@@ -12,10 +12,6 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactElement,
-  type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -32,71 +28,17 @@ import {
   TableRow,
 } from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
-import { toast } from '@/app/components/ui/toast';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { DenseDataTableRow } from './DenseDataTableRow';
 import { DENSE_TABLE_ROW_HEIGHT } from './dense-table-metrics';
 import { SortIndicator } from './SortIndicator';
 import { DenseTableFilterBar } from './DenseTableFilterBar';
 import { DenseTableStatusRows } from './DenseTableStatusRows';
+import { useDenseTableKeyboard } from './useDenseTableKeyboard';
 import { useDenseTableFilter } from './useDenseTableFilter';
 
-export interface DenseColumn<T> {
-  key: string;
-  title: ReactNode;
-  className?: string;
-  /** 是否可排序 */
-  sortable?: boolean;
-  /** 排序键 (用于回调) */
-  sortKey?: string;
-  /** 搜索/列筛选用的文本提取；不提供则该列不参与匹配。 */
-  text?: (row: T) => string;
-  /** 该列出现在工具条的列筛选下拉中（需要同时提供 text）。 */
-  filterable?: boolean;
-  render: (row: T) => ReactNode;
-}
-
-interface DenseDataTableProps<T> {
-  columns: DenseColumn<T>[];
-  rows: T[];
-  getRowKey: (row: T) => string;
-  selectedRowKey?: string;
-  onRowClick?: (row: T) => void;
-  onRowDoubleClick?: (row: T) => void;
-  renderRowContextMenu?: (row: T, trigger: ReactElement) => ReactElement;
-  emptyTitle?: string;
-  emptyDescription?: string;
-  /** Optional next step rendered inside the empty state. */
-  emptyAction?: ReactNode;
-  /** 当前排序键 */
-  sortKey?: string;
-  /** 排序方向 */
-  sortDirection?: 'asc' | 'desc';
-  /** 排序回调 */
-  onSort?: (key: string) => void;
-  /** 接近当前数据末尾时请求下一段。 */
-  onReachEnd?: () => void;
-  /** 逻辑数据上下文变化时重置滚动位置与续载去重状态。 */
-  loadContextKey?: string;
-  /** 查询缓存完成一次更新时变化，用于解除被取消请求留下的续载锁。 */
-  loadStateKey?: string | number;
-  hasMore?: boolean;
-  loadingMore?: boolean;
-  loadMoreFailed?: boolean;
-  loadMoreErrorText?: string;
-  retryLoadMoreLabel?: string;
-  /** 续载失败后的恢复动作；游标分页通常应重建查询链，而非重放旧游标。 */
-  onRetryLoadMore?: () => unknown;
-  initialLoadFailed?: boolean;
-  initialLoadErrorText?: string;
-  retryInitialLoadLabel?: string;
-  onRetryInitialLoad?: () => void;
-  /** 为动态多列表格保留最小列宽，并允许整个表格横向滚动。 */
-  horizontalScroll?: boolean;
-  minColumnWidth?: number;
-  /** 开启客户端搜索/列筛选工具条；过滤只作用于当前已加载行。 */
-  filterable?: boolean;
-}
+import type { DenseDataTableProps } from './dense-table-types';
+export type { DenseColumn } from './dense-table-types';
 
 const OVERSCAN_ROWS = 8;
 const DEFAULT_CONTAINER_HEIGHT = 600;
@@ -166,7 +108,6 @@ export function DenseDataTable<T>({
   const initialLoadErrorText = initialLoadErrorTextProp ?? t('denseTable.initialLoadError');
   const retryInitialLoadLabel = retryInitialLoadLabelProp ?? t('denseTable.retry');
   const containerRef = useRef<HTMLDivElement>(null);
-  const [focusedIndex, setFocusedIndex] = useState(-1);
   const requestedRowCountRef = useRef<number | undefined>(undefined);
   const automaticRetryKeyRef = useRef<string | undefined>(undefined);
   const automaticRetryTimerRef = useRef<number | undefined>(undefined);
@@ -356,49 +297,7 @@ export function DenseDataTable<T>({
       }
     : undefined;
 
-  useEffect(() => { setFocusedIndex(-1); }, [loadContextKey]);
-
-  /** Focused-row copy: only columns that expose a text extractor contribute a cell. */
-  const copyFocusedRow = useCallback((row: T) => {
-    const line = columns.filter((column) => column.text).map((column) => column.text?.(row) ?? '').join('\t');
-    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
-    if (!line || !clipboard?.writeText) return false;
-    void clipboard.writeText(line);
-    toast(t('denseTable.copied'));
-    return true;
-  }, [columns, t]);
-
-  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
-    const lastIndex = visibleRows.length - 1;
-    if (lastIndex < 0) return;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
-      event.preventDefault();
-      setFocusedIndex((current) => {
-        if (event.key === 'Home') return 0;
-        if (event.key === 'End') return lastIndex;
-        const step = event.key === 'ArrowDown' ? 1 : -1;
-        const base = current < 0 ? (step > 0 ? -1 : lastIndex + 1) : current;
-        return Math.min(Math.max(base + step, 0), lastIndex);
-      });
-      return;
-    }
-    if (focusedIndex < 0) return;
-    const row = visibleRows[focusedIndex];
-    if (!row) return;
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      onRowClick?.(row);
-      return;
-    }
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c' && copyFocusedRow(row)) {
-      event.preventDefault();
-    }
-  }, [copyFocusedRow, focusedIndex, onRowClick, visibleRows]);
-
-  useEffect(() => {
-    if (focusedIndex < 0) return;
-    rowVirtualizer.scrollToIndex(focusedIndex, { align: 'auto' });
-  }, [focusedIndex, rowVirtualizer]);
+  const { focusedIndex, handleKeyDown } = useDenseTableKeyboard({ columns, visibleRows, onRowClick, loadContextKey, scrollToIndex: rowVirtualizer.scrollToIndex });
 
   const table = (
     <ScrollArea
@@ -427,7 +326,7 @@ export function DenseDataTable<T>({
             {columns.map((column) => (
               <TableHead
                 key={column.key}
-                className={`group h-7 overflow-hidden border-r border-forensics-border px-2 text-[11px] font-light tracking-wide text-forensics-text-tertiary last:border-r-0 ${
+                className={`group h-7 overflow-hidden px-2 text-[11px] font-light text-forensics-text-tertiary ${
                   column.sortable ? 'cursor-pointer select-none hover:bg-forensics-hover' : ''
                 } ${column.className ?? ''}`}
                 onClick={() => column.sortable && handleSort(column.sortKey ?? column.key)}

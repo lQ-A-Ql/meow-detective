@@ -1,0 +1,66 @@
+@layer components {
+  .asset-slot { opacity: 0.08; }
+  .brand-watermark { opacity: var(--forensics-watermark-opacity); }
+}
+
+.watermark-home {
+  position: absolute;
+  top: 20px;
+  right: 28px;
+  width: 150px;
+  max-height: 160px;
+  display: none;
+}
+
+.watermark-emulation {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  width: clamp(160px, 22vw, 280px);
+  max-height: 30%;
+}
+
+.watermark-search {
+  position: absolute;
+  right: 28px;
+  bottom: 28px;
+  z-index: 1;
+  width: clamp(160px, 20vw, 220px);
+  max-height: 35%;
+}
+
+.watermark-report {
+  position: absolute;
+  right: 24px;
+  bottom: 88px;
+  width: 220px;
+  max-height: 30%;
+  display: none;
+}
+
+.watermark-settings {
+  position: absolute;
+  right: 24px;
+  bottom: 88px;
+  width: 224px;
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .watermark-home,
+  .watermark-report { display: block; }
+  .watermark-report-content {
+    padding-right: calc(var(--workspace-content-inset) + 240px);
+  }
+}
+
+@media (min-width: 1440px) {
+  .watermark-settings { display: block; }
+}
+
+@media (max-height: 600px) {
+  .watermark-home { width: 110px; max-height: 130px; }
+  .watermark-report,
+  .watermark-settings { display: none; }
+  .watermark-report-content { padding-right: var(--workspace-content-inset); }
+}

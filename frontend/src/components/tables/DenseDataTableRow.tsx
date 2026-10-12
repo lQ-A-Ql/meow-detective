@@ -1,7 +1,7 @@
 import { memo, type ReactElement } from 'react';
 import { TableCell, TableRow } from '@/app/components/ui/table';
 import { HorizontalScroll } from '@/components/layout/HorizontalScroll';
-import type { DenseColumn } from './DenseDataTable';
+import type { DenseColumn } from './dense-table-types';
 
 export interface DenseDataTableRowProps<T> {
   row: T;
@@ -42,14 +42,10 @@ function DenseDataTableRowBase<T>({
       onClick={handleRowClick}
       onDoubleClick={() => onRowDoubleClick?.(row)}
     >
-      {columns.map((column, index) => (
+      {columns.map((column) => (
         <TableCell
           key={column.key}
-          className={`h-[var(--dense-row-height)] px-2 py-1.5 align-middle ${
-            index < columns.length - 1
-              ? 'border-r border-forensics-border-light'
-              : ''
-          } ${column.className ?? ''}`}
+          className={`h-[var(--dense-row-height)] px-2 py-1 align-middle ${column.className ?? ''}`}
         >
           <HorizontalScroll
             variant="cell"

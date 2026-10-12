@@ -109,7 +109,7 @@ export function GraphVisualizationSection({ model }: { model: GraphVisualization
           )}
           {model.isLoadingGraph ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-forensics-surface/60">
-              <div className="flex items-center gap-2 rounded-none bg-transparent px-3 py-2 text-[11px] shadow-sm">
+              <div className="flex items-center gap-2 rounded-none bg-transparent px-3 py-2 text-[11px]">
                 <RefreshCw size={12} className="opacity-70" />{t('graph.loading')}
               </div>
             </div>

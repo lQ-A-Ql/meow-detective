@@ -1,26 +1,116 @@
-import { Button } from '@/app/components/ui/button';
-import { ActionIcon } from '@/components/controls/ActionIcon';
-import { Tooltip } from '@/app/components/ui/tooltip';
-
 import { Checkbox } from '@/app/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { Field, FieldLabel } from '@/app/components/ui/field';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import { ActionIcon } from '@/components/controls/ActionIcon';
+import { IconButton } from '@/components/controls/IconButton';
 import type { TFunction } from 'i18next';
 import type { McpServerDialogProps } from '../model/mcp-server-dialog';
 import type { ReturnTypeModel } from '../containers/McpServerDialogController';
 
 export function McpServerDialogView({ t, model, props }: { t: TFunction; model: ReturnTypeModel; props: McpServerDialogProps }) {
   const set = model.updatePermission;
-  return <Dialog open onOpenChange={(open) => { if (!open) props.onClose(); }}><DialogContent className="isolate overflow-hidden sm:max-w-md"><ScrollArea className="max-h-[90vh]"><DialogHeader><DialogTitle>{t('mcpUi.dialog.title')}</DialogTitle><DialogDescription>{t('mcpUi.dialog.transport')}</DialogDescription></DialogHeader><div className="space-y-4 p-1">
-    <Field><FieldLabel>{t('mcpUi.dialog.name')} *</FieldLabel><Input value={model.name} onChange={(event) => model.setName(event.target.value)} placeholder={t('mcpUi.dialog.namePlaceholder')} variant="forensics" inputSize="compact" /></Field>
-    <Field><FieldLabel>{t('mcpUi.dialog.transport')}</FieldLabel><Select value={model.transportType} onValueChange={(value) => model.setTransportType(value as 'sse' | 'stdio')}><SelectTrigger variant="forensics" size="sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="sse">{t('mcpUi.dialog.http')}</SelectItem><SelectItem value="stdio">{t('mcpUi.dialog.stdio')}</SelectItem></SelectContent></Select></Field>
-    {model.transportType === 'sse' ? <Field><FieldLabel>{t('mcpUi.dialog.url')} *</FieldLabel><Input value={model.url} onChange={(event) => model.setUrl(event.target.value)} placeholder="http://localhost:3001" variant="path" inputSize="compact" /></Field> : <><Field><FieldLabel>{t('mcpUi.dialog.command')} *</FieldLabel><Input value={model.command} onChange={(event) => model.setCommand(event.target.value)} placeholder={t('mcpUi.dialog.commandPlaceholder')} variant="mono" inputSize="compact" /></Field><Field><FieldLabel>{t('mcpUi.dialog.arguments')}</FieldLabel><Input value={model.argsStr} onChange={(event) => model.setArgsStr(event.target.value)} placeholder={t('mcpUi.dialog.argumentsPlaceholder')} variant="mono" inputSize="compact" /></Field></>}
-    <div className="flex gap-4"><label className="flex items-center gap-2"><Checkbox checked={model.enabled} onCheckedChange={(value) => model.setEnabled(value === true)} variant="forensics" />{t('mcpUi.dialog.enabled')}</label><label className="flex items-center gap-2"><Checkbox checked={model.autoConnect} onCheckedChange={(value) => model.setAutoConnect(value === true)} variant="forensics" />{t('mcpUi.dialog.autoConnect')}</label></div>
-    <div className="space-y-3 bg-transparent p-3"><div className="text-[11px] text-forensics-muted">{t('mcpUi.dialog.permissions')}</div><PermissionSelect t={t} label="mcpUi.dialog.resourceAccess" value={model.permissions.resourceAccess} options={[['readOnly','mcpUi.dialog.readOnly'],['disabled','mcpUi.dialog.disabled']]} onChange={(value) => set('resourceAccess', value as 'readOnly' | 'disabled')} /><PermissionSelect t={t} label="mcpUi.dialog.promptAccess" value={model.permissions.promptAccess} options={[['readOnly','mcpUi.dialog.readOnly'],['disabled','mcpUi.dialog.disabled']]} onChange={(value) => set('promptAccess', value as 'readOnly' | 'disabled')} /><PermissionSelect t={t} label="mcpUi.dialog.toolAccess" value={model.permissions.toolAccess} options={[['allowAll','mcpUi.dialog.allowAll'],['disabled','mcpUi.dialog.disabled'],['allowList','mcpUi.dialog.allowList']]} onChange={(value) => set('toolAccess', value as 'allowAll' | 'disabled' | 'allowList')} />{model.permissions.toolAccess === 'allowList' ? <Field><FieldLabel>{t('mcpUi.dialog.allowListLabel')}</FieldLabel><Input value={model.permissions.allowedTools.join(', ')} onChange={(event) => set('allowedTools', event.target.value.split(/[\s,]+/).filter(Boolean))} placeholder={t('mcpUi.dialog.allowListPlaceholder')} variant="mono" inputSize="compact" /></Field> : null}<PermissionSelect t={t} label="mcpUi.dialog.networkPolicy" value={model.permissions.networkPolicy} options={[['localhostOnly','mcpUi.dialog.localhost'],['privateLanAllowed','mcpUi.dialog.privateLan'],['anyHost','mcpUi.dialog.anyHost']]} onChange={(value) => set('networkPolicy', value as 'localhostOnly' | 'privateLanAllowed' | 'anyHost')} /></div>
-    {model.testResult ? <div className="border border-forensics-border p-3 text-[12px]">{t(model.testResult.success ? 'mcpUi.dialog.testSuccess' : 'mcpUi.dialog.testFailure')}{model.testResult.error ? <div className="mt-1 text-[11px] text-forensics-error-text">{model.testResult.error}</div> : null}</div> : null}{model.error ? <div className="border border-forensics-error-border bg-forensics-error-bg p-3 text-[12px] text-forensics-error-text">{t(model.error)}</div> : null}
-  </div><DialogFooter><Button type="button" variant="forensicsOutline" size="sm" onClick={() => void model.test()} disabled={model.testing}>{t(model.testing ? 'mcpUi.dialog.testing' : 'mcpUi.dialog.test')}</Button><Tooltip content={t('mcpUi.dialog.cancel')}><Button aria-label={t('mcpUi.dialog.cancel')} type="button" variant="forensicsOutline" size="sm" onClick={props.onClose}><ActionIcon name="close" /></Button></Tooltip><Button type="button" variant="forensicsPrimary" size="sm" onClick={() => void model.save(props.onAdd, props.onClose)} disabled={model.saving}>{t(model.saving ? 'mcpUi.dialog.saving' : 'mcpUi.dialog.add')}</Button></DialogFooter></ScrollArea></DialogContent></Dialog>;
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) props.onClose(); }}>
+      <DialogContent aria-describedby={undefined} className="flex max-h-[min(760px,calc(100dvh-48px))] min-h-0 flex-col sm:max-w-[540px]">
+        <DialogHeader><DialogTitle>{t('mcpUi.dialog.title')}</DialogTitle></DialogHeader>
+        <ScrollArea className="min-h-0 flex-1" viewportClassName="pr-2">
+          <div className="space-y-5">
+            <Field>
+              <FieldLabel htmlFor="mcp-server-name">{t('mcpUi.dialog.name')} *</FieldLabel>
+              <Input id="mcp-server-name" value={model.name} onChange={(event) => model.setName(event.target.value)}
+                placeholder={t('mcpUi.dialog.namePlaceholder')} required />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="mcp-server-transport">{t('mcpUi.dialog.transport')}</FieldLabel>
+              <Select value={model.transportType} onValueChange={(value) => model.setTransportType(value as 'sse' | 'stdio')}>
+                <SelectTrigger id="mcp-server-transport"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sse">{t('mcpUi.dialog.http')}</SelectItem>
+                  <SelectItem value="stdio">{t('mcpUi.dialog.stdio')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            {model.transportType === 'sse' ? <Field>
+              <FieldLabel htmlFor="mcp-server-url">{t('mcpUi.dialog.url')} *</FieldLabel>
+              <Input id="mcp-server-url" value={model.url} onChange={(event) => model.setUrl(event.target.value)}
+                placeholder={t('mcpUi.dialog.urlPlaceholder')} variant="path" required />
+            </Field> : <>
+              <Field>
+                <FieldLabel htmlFor="mcp-server-command">{t('mcpUi.dialog.command')} *</FieldLabel>
+                <Input id="mcp-server-command" value={model.command} onChange={(event) => model.setCommand(event.target.value)}
+                  placeholder={t('mcpUi.dialog.commandPlaceholder')} variant="mono" required />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="mcp-server-arguments">{t('mcpUi.dialog.arguments')}</FieldLabel>
+                <Input id="mcp-server-arguments" value={model.argsStr} onChange={(event) => model.setArgsStr(event.target.value)}
+                  placeholder={t('mcpUi.dialog.argumentsPlaceholder')} variant="mono" />
+              </Field>
+            </>}
+            <div className="flex flex-wrap gap-5 text-[12px]">
+              <label className="flex items-center gap-2 text-[12px]">
+                <Checkbox checked={model.enabled} onCheckedChange={(value) => model.setEnabled(value === true)} />
+                {t('mcpUi.dialog.enabled')}
+              </label>
+              <label className="flex items-center gap-2 text-[12px]">
+                <Checkbox checked={model.autoConnect} onCheckedChange={(value) => model.setAutoConnect(value === true)} />
+                {t('mcpUi.dialog.autoConnect')}
+              </label>
+            </div>
+            <div className="space-y-4 pt-2">
+              <h3 className="text-[12px] text-forensics-ink">{t('mcpUi.dialog.permissions')}</h3>
+              <PermissionSelect t={t} label="mcpUi.dialog.resourceAccess" value={model.permissions.resourceAccess}
+                options={[['readOnly', 'mcpUi.dialog.readOnly'], ['disabled', 'mcpUi.dialog.disabled']]}
+                onChange={(value) => set('resourceAccess', value as 'readOnly' | 'disabled')} />
+              <PermissionSelect t={t} label="mcpUi.dialog.promptAccess" value={model.permissions.promptAccess}
+                options={[['readOnly', 'mcpUi.dialog.readOnly'], ['disabled', 'mcpUi.dialog.disabled']]}
+                onChange={(value) => set('promptAccess', value as 'readOnly' | 'disabled')} />
+              <PermissionSelect t={t} label="mcpUi.dialog.toolAccess" value={model.permissions.toolAccess}
+                options={[['allowAll', 'mcpUi.dialog.allowAll'], ['disabled', 'mcpUi.dialog.disabled'], ['allowList', 'mcpUi.dialog.allowList']]}
+                onChange={(value) => set('toolAccess', value as 'allowAll' | 'disabled' | 'allowList')} />
+              {model.permissions.toolAccess === 'allowList' ? <Field>
+                <FieldLabel htmlFor="mcp-server-allow-list">{t('mcpUi.dialog.allowListLabel')}</FieldLabel>
+                <Input id="mcp-server-allow-list" value={model.permissions.allowedTools.join(', ')}
+                  onChange={(event) => set('allowedTools', event.target.value.split(/[\s,]+/).filter(Boolean))}
+                  placeholder={t('mcpUi.dialog.allowListPlaceholder')} variant="mono" />
+              </Field> : null}
+              <PermissionSelect t={t} label="mcpUi.dialog.networkPolicy" value={model.permissions.networkPolicy}
+                options={[['localhostOnly', 'mcpUi.dialog.localhost'], ['privateLanAllowed', 'mcpUi.dialog.privateLan'], ['anyHost', 'mcpUi.dialog.anyHost']]}
+                onChange={(value) => set('networkPolicy', value as 'localhostOnly' | 'privateLanAllowed' | 'anyHost')} />
+            </div>
+            {model.testResult ? <div role="status" className="text-[12px] text-forensics-muted">
+              {t(model.testResult.success ? 'mcpUi.dialog.testSuccess' : 'mcpUi.dialog.testFailure')}
+              {model.testResult.error ? <div className="mt-1 text-[11px] text-forensics-error-text">{model.testResult.error}</div> : null}
+            </div> : null}
+            {model.error ? <div role="alert" className="text-[12px] text-forensics-error-text">{t(model.error)}</div> : null}
+          </div>
+        </ScrollArea>
+        <DialogFooter>
+          <IconButton label={t(model.testing ? 'mcpUi.dialog.testing' : 'mcpUi.dialog.test')}
+            onClick={() => void model.test()} disabled={model.testing}>
+            <ActionIcon name="plug" />
+          </IconButton>
+          <IconButton label={t('mcpUi.dialog.cancel')} onClick={props.onClose}><ActionIcon name="close" /></IconButton>
+          <IconButton label={t(model.saving ? 'mcpUi.dialog.saving' : 'mcpUi.dialog.add')} variant="solid"
+            onClick={() => void model.save(props.onAdd, props.onClose)} disabled={model.saving}>
+            <ActionIcon name="plus" />
+          </IconButton>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
-function PermissionSelect({ t, label, value, options, onChange }: { t: TFunction; label: string; value: string; options: [string, string][]; onChange: (value: string) => void }) { return <label className="flex items-center justify-between gap-3 text-[11px] text-forensics-muted"><span>{t(label)}</span><Select value={value} onValueChange={onChange}><SelectTrigger variant="forensics" size="xs"><SelectValue /></SelectTrigger><SelectContent>{options.map(([option, key]) => <SelectItem key={option} value={option}>{t(key)}</SelectItem>)}</SelectContent></Select></label>; }
+
+function PermissionSelect({ t, label, value, options, onChange }: {
+  t: TFunction; label: string; value: string; options: [string, string][]; onChange: (value: string) => void;
+}) {
+  return <Field layout="row">
+    <FieldLabel htmlFor={label}>{t(label)}</FieldLabel>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger id={label} size="sm"><SelectValue /></SelectTrigger>
+      <SelectContent>{options.map(([option, key]) => <SelectItem key={option} value={option}>{t(key)}</SelectItem>)}</SelectContent>
+    </Select>
+  </Field>;
+}

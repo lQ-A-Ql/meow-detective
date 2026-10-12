@@ -7,9 +7,9 @@ export function SystemInfoSection() {
   return (
     <section>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-[13px] font-light text-forensics-text-secondary">{t('settings.sections.systemInfo.title')}</span>
+        <h2 className="text-[14px] text-forensics-ink">{t('settings.sections.systemInfo.title')}</h2>
       </div>
-      <div className="space-y-2 text-[12px] font-mono text-forensics-muted">
+      <div className="max-w-4xl space-y-3 text-[12px] font-mono text-forensics-muted">
         <div className="flex justify-between border-b border-forensics-border-light pb-1">
           <span>{t('settings.sections.systemInfo.version')}</span>
           <span>{BRAND_DISPLAY_NAME} 0.1.0</span>

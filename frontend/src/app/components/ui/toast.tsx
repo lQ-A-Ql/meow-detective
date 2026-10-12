@@ -28,7 +28,7 @@ export function Toaster() {
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed bottom-12 left-1/2 z-50 -translate-x-1/2 border border-forensics-border-strong bg-forensics-surface px-3 py-1.5 text-[11px] text-forensics-text shadow-sm"
+      className="ui-overlay-surface pointer-events-none fixed bottom-12 left-1/2 z-50 -translate-x-1/2 rounded-ctl border border-forensics-border px-3 py-2 text-[11px] text-forensics-ink"
     >
       {message}
     </div>

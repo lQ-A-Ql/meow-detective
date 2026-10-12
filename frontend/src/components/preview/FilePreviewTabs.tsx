@@ -450,6 +450,7 @@ export function FilePreviewTabs({
               content:
                 textPreview && !textPreview.isBinary ? (
                   <TextViewer
+                    documentKey={selectedFile?.id}
                     content={textPreview.content}
                     encoding={textPreview.encoding}
                     extension={selectedFile?.ext}

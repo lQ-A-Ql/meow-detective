@@ -2,17 +2,14 @@ import {
   LoaderCircle,
   Power,
 } from 'lucide-react';
-import { useState } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { SidebarIcon } from '@/components/navigation/SidebarIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { LinuxLaunchPanel } from '@/features/emulation/components/LinuxLaunchPanel';
-import { WindowsLaunchPanel } from '@/features/emulation/components/WindowsLaunchPanel';
+import { EmulationSettingsDialog } from './EmulationSettingsDialog';
 import type {
   EmulationSessionView,
   EmulationWorkspaceModel,
@@ -20,9 +17,12 @@ import type {
 import { formatBytes } from '@/lib/format-bytes';
 import type { EmulationState } from '@/types/models';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
+import { BrandWatermark } from '@/components/brand';
 
 interface EmulationWorkspaceProps {
   model: EmulationWorkspaceModel;
+  settingsOpen: boolean;
+  onSettingsOpenChange: (open: boolean) => void;
 }
 
 function stateVariant(state: EmulationState): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -89,15 +89,8 @@ function SessionRow({
   );
 }
 
-function LaunchPanel({ model }: EmulationWorkspaceProps) {
-  return model.selectedSource?.platform === 'LINUX'
-    ? <LinuxLaunchPanel model={model} />
-    : <WindowsLaunchPanel model={model} />;
-}
-
-export function EmulationWorkspace({ model }: EmulationWorkspaceProps) {
+export function EmulationWorkspace({ model, settingsOpen, onSettingsOpenChange }: EmulationWorkspaceProps) {
   const { t } = useTranslation();
-  const [settingsOpen, setSettingsOpen] = useState(false);
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-base">
       {!model.hasCase && model.caseLoaded ? (
@@ -110,8 +103,8 @@ export function EmulationWorkspace({ model }: EmulationWorkspaceProps) {
           {t('emulationPage.loading')}
         </div>
       ) : (
-        <ScrollArea className="min-h-0 flex-1" viewportClassName="workspace-scroll-viewport h-full min-h-0 overflow-y-auto scrollbar-none p-[2px]">
-          <WorkspaceCard className="flex h-full min-h-full flex-1 flex-col p-4">
+        <ScrollArea className="min-h-0 flex-1" viewportClassName="workspace-scroll-viewport h-full min-h-0 overflow-y-auto scrollbar-none workspace-frame">
+          <WorkspaceCard className="workspace-content relative isolate flex h-full min-h-full flex-1 flex-col">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forensics-ink-3">{t('emulationPage.statusTitle')}</div>
@@ -120,7 +113,7 @@ export function EmulationWorkspace({ model }: EmulationWorkspaceProps) {
               </div>
               <div className="flex items-center gap-1">
                 <Tooltip content={t('emulationPage.actions.settings')}>
-                  <Button type="button" variant="forensicsGhost" size="iconSm" aria-label={t('emulationPage.actions.settings')} onClick={() => setSettingsOpen(true)} disabled={!model.hasCase}>
+                  <Button type="button" variant="forensicsGhost" size="iconSm" aria-label={t('emulationPage.actions.settings')} onClick={() => onSettingsOpenChange(true)} disabled={!model.hasCase}>
                     <SidebarIcon name="settings" className="size-4" />
                   </Button>
                 </Tooltip>
@@ -138,31 +131,17 @@ export function EmulationWorkspace({ model }: EmulationWorkspaceProps) {
             ) : (
               <div className="space-y-2">
                 {model.sessions.filter((session) => session.active).map((session) => (
-                  <div key={session.sessionId} className="rounded-ctl border border-forensics-line/70 bg-forensics-panel-strong p-4">
+                  <div key={session.sessionId} className="border-b border-forensics-line last:border-b-0">
                     <SessionRow session={session} releasing={model.releasingSessionId === session.sessionId} onRelease={model.release} />
                   </div>
                 ))}
               </div>
             )}
+            {model.metrics.activeCount === 0 ? <BrandWatermark motif="resting-cat" className="watermark-emulation" /> : null}
           </WorkspaceCard>
         </ScrollArea>
       )}
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="max-h-[min(860px,calc(100vh-2rem))] max-w-6xl overflow-y-auto scrollbar-none p-0">
-          <DialogHeader className="border-b border-forensics-line bg-forensics-panel-strong px-6 py-5">
-            <DialogTitle>{t('emulationPage.settings.title')}</DialogTitle>
-            <DialogDescription>{t('emulationPage.settings.description')}</DialogDescription>
-          </DialogHeader>
-          <div className="p-5"><LaunchPanel model={model} /></div>
-          <DialogFooter className="border-t border-forensics-line bg-forensics-panel-strong px-6 py-4">
-            <Tooltip content={t('common.cancel')}>
-              <Button type="button" variant="forensicsGhost" size="iconSm" aria-label={t('common.cancel')} onClick={() => setSettingsOpen(false)}>
-                <ActionIcon name="close" />
-              </Button>
-            </Tooltip>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EmulationSettingsDialog model={model} open={settingsOpen} onOpenChange={onSettingsOpenChange} />
     </div>
   );
 }

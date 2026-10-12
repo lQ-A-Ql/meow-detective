@@ -252,6 +252,16 @@ describe('ImportDataSourceDialog', () => {
     });
   });
 
+  it('shows a disk enumeration error instead of treating it as an empty list', async () => {
+    const listLocalDisks = vi.fn().mockRejectedValue({ code: 'IO', message: '磁盘列表读取失败', category: 'io' });
+    render(createElement(ImportDataSourceDialog, { ...baseProps, listLocalDisks }));
+    advanceToSource();
+    fireEvent.click(screen.getByLabelText('本地物理磁盘'));
+    advanceToConfig();
+    expect(await screen.findByText('磁盘列表读取失败')).toBeDefined();
+    expect(baseProps.onImport).not.toHaveBeenCalled();
+  });
+
   it('resets a Windows-only mode when switching to Linux', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 

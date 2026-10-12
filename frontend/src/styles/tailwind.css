@@ -27,14 +27,3 @@
   min-height: 100%;
   flex-direction: column;
 }
-
-/* Infrastructure has one page card; its tab panels stay flat inside it. */
-.infrastructure-workspace [data-slot='panel-frame'] {
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  transform: none !important;
-  transition: none !important;
-  background: transparent;
-}

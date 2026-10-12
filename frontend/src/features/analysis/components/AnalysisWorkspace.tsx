@@ -6,6 +6,7 @@ import { AndroidAnalysisView } from '@/features/analysis/components/AndroidAnaly
 import { LinuxAnalysisView } from '@/features/analysis/components/LinuxAnalysisView';
 import { WindowsAnalysisView } from '@/features/analysis/components/WindowsAnalysisView';
 import type { AnalysisWorkspaceModel } from '@/features/analysis/use-analysis-workspace-model';
+import { WorkspaceFrame } from '@/components/layout/WorkspaceFrame';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 
 interface AnalysisWorkspaceProps {
@@ -16,7 +17,7 @@ interface AnalysisWorkspaceProps {
 export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
   const { t } = useTranslation();
   return (
-    <div className="flex h-full w-full flex-1 gap-[2px] overflow-hidden bg-forensics-base p-[2px]">
+    <WorkspaceFrame>
       {model.hasCase ? (
         <WorkspaceCard className="flex w-52 shrink-0" aria-label={t('analysis.sidebar.treeLabel')}>
         <AnalysisSourceSidebar
@@ -121,6 +122,6 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
         ) : null}
         </div>
       </WorkspaceCard>
-    </div>
+    </WorkspaceFrame>
   );
 }

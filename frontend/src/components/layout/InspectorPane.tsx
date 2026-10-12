@@ -14,9 +14,9 @@ interface InspectorPaneProps extends PropsWithChildren {
 
 export function InspectorPane({ title, widthClassName = 'w-72', subtitle, kind, actions, className, children }: InspectorPaneProps) {
   return (
-    <aside className={`${widthClassName} shrink-0 border-l border-forensics-border bg-forensics-panel flex flex-col ${className ?? ''}`}>
+    <aside className={`${widthClassName} shrink-0 bg-transparent flex flex-col ${className ?? ''}`}>
       {title || subtitle ? (
-        <div className="shrink-0 border-b border-forensics-border bg-forensics-panel-strong px-5 py-3">
+        <div className="workspace-content shrink-0 bg-transparent">
           <div className="flex items-center gap-2">
             {kind ? <span className="border border-forensics-border-strong px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-forensics-muted">{kind}</span> : null}
             <div className="font-serif text-[11px] font-light tracking-wide text-forensics-text-tertiary">{title}</div>
@@ -24,16 +24,16 @@ export function InspectorPane({ title, widthClassName = 'w-72', subtitle, kind, 
           {subtitle ? <div className="mt-1 text-[10px] font-mono text-forensics-muted-light truncate">{subtitle}</div> : null}
         </div>
       ) : null}
-      <ScrollArea className="min-h-0 flex-1" viewportClassName="p-5">{children}</ScrollArea>
-      {actions ? <div className="shrink-0 border-t border-forensics-border bg-forensics-panel-strong p-3">{actions}</div> : null}
+      <ScrollArea className="min-h-0 flex-1" viewportClassName="workspace-content">{children}</ScrollArea>
+      {actions ? <div className="workspace-content shrink-0">{actions}</div> : null}
     </aside>
   );
 }
 
 export function InspectorSection({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
-    <section className="space-y-2 border-t border-forensics-border pt-4 first:border-t-0 first:pt-0">
-      <div className="font-serif text-[10px] tracking-wide text-forensics-muted-light">{title}</div>
+    <section className="space-y-2 pt-4 first:pt-0">
+      <div className="text-[11px] text-forensics-muted">{title}</div>
       <div>{children}</div>
     </section>
   );
@@ -43,7 +43,7 @@ export function InspectorValue({ value, mono, strong }: { value: ReactNode; mono
   return (
     <div
       className={[
-        'break-all border border-forensics-border-strong bg-transparent p-2 text-[11px]',
+        'break-all bg-transparent py-1 text-[12px]',
         mono ? 'font-mono' : 'font-sans',
         strong ? 'font-light text-forensics-text' : 'text-forensics-text-secondary',
       ].join(' ')}

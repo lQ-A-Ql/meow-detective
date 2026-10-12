@@ -1,0 +1,39 @@
+:root {
+  --motion-control-duration: 160ms;
+  --motion-overlay-duration: 200ms;
+  --motion-control-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.ui-control-motion {
+  transition-property: color, background-color, border-color, opacity, box-shadow;
+  transition-duration: var(--motion-control-duration);
+  transition-timing-function: var(--motion-control-ease);
+}
+
+.ui-tab::after {
+  transition: transform var(--motion-control-duration) var(--motion-control-ease);
+}
+
+.ui-overlay-motion[data-state='open'] {
+  animation: ui-overlay-in var(--motion-overlay-duration) var(--motion-control-ease);
+}
+
+.ui-overlay-motion[data-state='closed'] {
+  animation: ui-overlay-out var(--motion-control-duration) var(--motion-control-ease);
+}
+
+@keyframes ui-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ui-overlay-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-control-motion,
+  .ui-tab::after { transition: none; }
+  .ui-overlay-motion { animation: none !important; }
+}

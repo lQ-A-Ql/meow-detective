@@ -9,9 +9,8 @@ import { cn } from "./utils";
 
 const checkboxVariants = cva(
   [
-    "peer shrink-0 rounded-none border bg-transparent transition-colors outline-none",
+    "ui-control-motion ui-focus peer shrink-0 cursor-pointer rounded-badge border border-forensics-border-strong bg-transparent outline-none",
     "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary",
-    "focus-visible:border-ring focus-visible:ring-ring/20 focus-visible:ring-1",
     "aria-invalid:ring-destructive/20 aria-invalid:border-destructive",
     "disabled:cursor-not-allowed disabled:opacity-50",
   ].join(" "),
@@ -20,7 +19,7 @@ const checkboxVariants = cva(
       variant: {
         default: "",
         forensics:
-          "border-forensics-border-strong data-[state=checked]:border-forensics-primary-blue data-[state=checked]:bg-forensics-primary-blue focus-visible:border-forensics-primary-blue focus-visible:ring-forensics-primary-blue/20",
+          "data-[state=checked]:border-forensics-ink data-[state=checked]:bg-forensics-ink",
       },
       checkboxSize: {
         default: "size-4",
@@ -34,15 +33,18 @@ const checkboxVariants = cva(
   },
 );
 
-function Checkbox({
+const Checkbox = React.forwardRef<
+  React.ElementRef<typeof CheckboxPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root> & VariantProps<typeof checkboxVariants>
+>(function Checkbox({
   className,
   variant,
   checkboxSize,
   ...props
-}: React.ComponentProps<typeof CheckboxPrimitive.Root> &
-  VariantProps<typeof checkboxVariants>) {
+}, ref) {
   return (
     <CheckboxPrimitive.Root
+      ref={ref}
       data-slot="checkbox"
       className={cn(checkboxVariants({ variant, checkboxSize, className }))}
       {...props}
@@ -55,6 +57,6 @@ function Checkbox({
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   );
-}
+});
 
 export { Checkbox, checkboxVariants };

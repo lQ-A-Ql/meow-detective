@@ -23,6 +23,7 @@ import { TimelineHistogram } from '@/features/timeline/components/TimelineHistog
 import { TimelineRangeSelector } from '@/features/timeline/components/TimelineRangeSelector';
 import type { TimelineWorkspaceModel } from '@/features/timeline/use-timeline-workspace-model';
 import type { TimelineEvent } from '@/types/models';
+import { WorkspaceFrame } from '@/components/layout/WorkspaceFrame';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 
 interface TimelineWorkspaceProps {
@@ -39,7 +40,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
     { key: 'title', title: t('timeline.columns.description'), className: 'text-forensics-text-secondary', render: (row) => row.title },
   ];
   return (
-    <div className="flex h-full min-w-0 flex-1 bg-forensics-base p-[2px]">
+    <WorkspaceFrame>
       <WorkspaceCard className="flex flex-1 flex-col">
       <ContextBar>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 overflow-x-auto scrollbar-none">
@@ -84,7 +85,7 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
         </div>
       </ContextBar>
 
-      <div className="mx-3 my-3 flex h-32 shrink-0 flex-col rounded-ctl border border-forensics-line/70 bg-forensics-paper p-2 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
+      <div className="flex h-32 shrink-0 flex-col p-4">
         <TimelineHistogram bars={model.bars} onSelectRange={model.selectTimeBucket} />
         <TimelineRangeSelector
           domainStart={model.timelineStartTs}
@@ -139,6 +140,6 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
         </InspectorPane>
       </div>
       </WorkspaceCard>
-    </div>
+    </WorkspaceFrame>
   );
 }

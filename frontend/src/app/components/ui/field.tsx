@@ -2,11 +2,11 @@ import * as React from "react";
 
 import { cn } from "./utils";
 
-function Field({ className, ...props }: React.ComponentProps<"div">) {
+function Field({ className, layout = 'stack', ...props }: React.ComponentProps<"div"> & { layout?: 'stack' | 'row' }) {
   return (
     <div
       data-slot="field"
-      className={cn("space-y-1.5", className)}
+      className={cn(layout === 'row' ? 'ui-form-row' : 'space-y-1.5', className)}
       {...props}
     />
   );

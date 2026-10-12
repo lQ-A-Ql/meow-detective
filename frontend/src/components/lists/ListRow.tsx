@@ -49,6 +49,7 @@ export function ListRow({
       onClick={onActivate}
       className={cn(
         'flex w-full min-w-0 items-center gap-2 px-2 text-left text-[12px] text-forensics-ink-2 hover:bg-forensics-hover',
+        wrapLabel && 'h-auto min-h-10 py-2',
         'data-[selected=true]:bg-forensics-red-tint data-[selected=true]:text-forensics-red-ink',
         disabled && 'pointer-events-none opacity-50',
         className,

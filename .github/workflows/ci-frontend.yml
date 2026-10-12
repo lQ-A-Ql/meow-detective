@@ -5,6 +5,9 @@ on:
     branches: [master]
     paths:
       - 'frontend/**'
+      - 'scripts/check-frontend-*.ps1'
+      - 'scripts/lib/FrontendArchitectureGuard.mjs'
+      - 'scripts/lib/frontend-source-policy.mjs'
       - '.github/workflows/ci-frontend.yml'
   pull_request:
     branches: [master]
@@ -28,7 +31,11 @@ jobs:
         run: pnpm --dir frontend lint
       - name: Frontend architecture guard (layering, UI primitives, centralised assets)
         shell: pwsh
-        run: ./scripts/check-frontend-runtime-guard.ps1
+        run: |
+          ./scripts/check-frontend-architecture.ps1 -SelfTest
+          ./scripts/check-frontend-architecture.ps1
+          ./scripts/check-frontend-ui-boundary.ps1
+          ./scripts/check-frontend-runtime-guard.ps1
       - name: IPC contract guards (DTO mirror, event topics)
         shell: pwsh
         run: |

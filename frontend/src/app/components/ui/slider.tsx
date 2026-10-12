@@ -17,16 +17,15 @@ const Slider = React.forwardRef<
     )}
     {...props}
   >
-    <SliderPrimitive.Track className="relative h-1 w-full grow overflow-hidden rounded-none bg-forensics-border">
+    <SliderPrimitive.Track className="relative h-0.5 w-full grow overflow-hidden rounded-full bg-forensics-border">
       <SliderPrimitive.Range className="absolute h-full bg-forensics-primary-blue" />
     </SliderPrimitive.Track>
     <SliderPrimitive.Thumb
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledBy}
       className={cn(
-        "block size-3.5 rounded-none border border-forensics-border-strong bg-forensics-surface transition-colors",
+        "ui-control-motion ui-focus block size-3.5 cursor-grab rounded-full border border-forensics-ink bg-forensics-surface active:cursor-grabbing",
         "hover:border-forensics-primary-blue",
-        "focus-visible:border-forensics-primary-blue focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-forensics-primary-blue/20",
         "disabled:pointer-events-none disabled:opacity-50",
       )}
     />

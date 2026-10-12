@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./utils";
 
 const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center bg-transparent transition-colors duration-200 active:opacity-80 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forensics-red aria-invalid:border-destructive",
+  "ui-control-motion ui-focus inline-flex cursor-pointer items-center justify-center border-0 bg-transparent active:opacity-80 disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none aria-invalid:text-destructive",
   {
     variants: {
       /** circle = action button; row = full-width content row owned by tree/list primitives. */
@@ -18,21 +18,22 @@ const buttonVariants = cva(
         bar: "h-full w-full cursor-crosshair items-end rounded-none p-0",
       },
       variant: {
-        default: "border border-forensics-primary-blue text-forensics-primary-blue hover:bg-forensics-hover",
+        solid: "bg-forensics-ink text-forensics-paper hover:bg-forensics-ink-2",
+        default: "bg-forensics-ink text-forensics-paper hover:bg-forensics-ink-2",
         destructive:
-          "border border-destructive text-destructive hover:bg-forensics-error-bg focus-visible:ring-destructive/20",
+          "text-destructive hover:bg-forensics-error-bg",
         outline:
-          "border border-forensics-border-strong text-foreground hover:border-forensics-sakura-500 hover:bg-forensics-hover",
+          "text-forensics-ink hover:bg-forensics-hover",
         secondary:
-          "border border-forensics-border text-secondary-foreground hover:bg-forensics-hover",
+          "bg-forensics-soft text-forensics-ink hover:bg-forensics-hover",
         ghost: "text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text",
         link: "text-primary underline-offset-4 hover:underline",
         forensicsPrimary:
-          "border border-forensics-primary-blue text-forensics-primary-blue hover:bg-forensics-hover",
+          "bg-forensics-ink text-forensics-paper hover:bg-forensics-ink-2",
         forensicsOutline:
-          "border border-forensics-border-strong text-forensics-text hover:border-forensics-sakura-500 hover:bg-forensics-hover",
+          "text-forensics-ink hover:bg-forensics-hover",
         forensicsSurface:
-          "border border-forensics-border text-forensics-text hover:border-forensics-sakura-500 hover:bg-forensics-hover",
+          "text-forensics-ink hover:bg-forensics-hover",
         forensicsGhost:
           "text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text",
         forensicsDangerGhost:
@@ -44,11 +45,11 @@ const buttonVariants = cva(
         mediaControl:
           "text-forensics-150 hover:bg-forensics-surface/10 hover:text-white",
         mediaPrimaryControl:
-          "border border-forensics-150 text-forensics-150 hover:bg-forensics-surface/10",
+          "text-forensics-150 hover:bg-forensics-surface/10",
         treeControl:
           "text-left text-forensics-text-tertiary hover:bg-forensics-hover data-[active=true]:bg-forensics-sakura-250 data-[active=true]:font-light data-[active=true]:text-forensics-text",
         canvasControl:
-          "pointer-events-auto border border-forensics-border text-forensics-muted hover:border-forensics-sakura-500 hover:bg-forensics-hover hover:text-forensics-text",
+          "pointer-events-auto bg-forensics-paper text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text",
         autocompleteOption:
           "rounded-none text-left font-mono hover:bg-forensics-highlight",
       },
@@ -74,6 +75,9 @@ const buttonVariants = cva(
         viewerIcon: "size-6",
       },
     },
+    compoundVariants: [
+      { shape: 'circle', variant: ['default', 'solid', 'forensicsPrimary'], className: 'size-8' },
+    ],
     defaultVariants: {
       shape: "circle",
       variant: "default",
@@ -95,6 +99,7 @@ const Button = React.forwardRef<
     <Comp
       ref={ref}
       data-slot="button"
+      data-shape={shape ?? 'circle'}
       className={cn(buttonVariants({ variant, size, shape, className }))}
       {...props}
     />

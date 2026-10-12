@@ -47,11 +47,7 @@ export function useImportDataSourceDialogModel() {
   }, []);
 
   const getLocalDisks = useCallback(async () => {
-    try {
-      return await listLocalDisks();
-    } catch {
-      return [];
-    }
+    return listLocalDisks();
   }, []);
 
   return {

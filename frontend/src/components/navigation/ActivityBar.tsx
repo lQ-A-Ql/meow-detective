@@ -3,7 +3,6 @@ import { NavLink, useLocation } from 'react-router';
 import { Button } from '@/app/components/ui/button';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { cn } from '@/app/components/ui/utils';
-import { Rows3 } from 'lucide-react';
 import { SidebarIcon, type SidebarIconName } from './SidebarIcon';
 import type { NavigationLink, NavigationModel } from '@/features/shell/use-navigation-model';
 
@@ -46,7 +45,7 @@ function RailItem({ link, model }: { link: NavigationLink; model: NavigationMode
         className={cn(railItemClass, 'focus-visible:outline-none', isActive && 'text-forensics-red-ink')}
       >
         <span className={cn(railDiscClass, isActive && railActiveDiscClass)}>
-          <SidebarIcon name={iconByPage[link.page]} className="size-[21px]" />
+          <SidebarIcon name={iconByPage[link.page]} selected={isActive} className="size-[21px]" />
         </span>
       </NavLink>
     </Tooltip>
@@ -55,15 +54,12 @@ function RailItem({ link, model }: { link: NavigationLink; model: NavigationMode
 
 export function ActivityBar({
   model,
-  density,
-  onToggleDensity,
 }: {
   model: NavigationModel;
-  density: 'compact' | 'comfortable';
-  onToggleDensity: () => void;
 }) {
   const { t } = useTranslation();
-  const densityLabel = density === 'compact' ? t('navigation.density.comfortable') : t('navigation.density.compact');
+  const { pathname } = useLocation();
+  const isSettings = pathname.startsWith('/settings');
   const jobsLabel = t('navigation.jobsRunning', { count: model.runningCount });
   return (
     <aside className="relative z-20 flex w-12 shrink-0 flex-col items-center bg-forensics-base" aria-label={t('navigation.appNavLabel')}>
@@ -86,30 +82,19 @@ export function ActivityBar({
             {model.runningCount > 0 ? <span className="absolute right-2 top-1.5 min-w-3 rounded-full bg-forensics-primary-blue px-1 text-center text-[9px] leading-3 text-white">{model.runningCount}</span> : null}
           </Button>
         </Tooltip>
-        <Tooltip content={densityLabel}>
-          <Button
-            type="button"
-            variant="forensicsGhost"
-            size="iconSm"
-            aria-label={densityLabel}
-            onClick={onToggleDensity}
-            className={railItemClass}
-          >
-            <span className={railDiscClass}>
-              <Rows3 size={18} />
-            </span>
-          </Button>
-        </Tooltip>
         <Tooltip content={t('settings.title')}>
           <Button
             type="button"
             variant="forensicsGhost"
             size="iconSm"
             aria-label={t('settings.title')}
+            aria-current={isSettings ? 'page' : undefined}
             onClick={model.openSettings}
             className={railItemClass}
           >
-            <SidebarIcon name="settings" className="size-[21px]" />
+            <span className={cn(railDiscClass, isSettings && railActiveDiscClass)}>
+              <SidebarIcon name="settings" selected={isSettings} className="size-[21px]" />
+            </span>
           </Button>
         </Tooltip>
       </div>

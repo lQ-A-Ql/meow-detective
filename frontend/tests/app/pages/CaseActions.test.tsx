@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi, afterEach } from 'vitest';
-import { CaseWelcomeForms, ImportSection } from '@/features/case/components/CaseActions';
-import type { CaseWelcomeFormsProps, ImportSectionProps } from '@/features/case/components/CaseActions';
+import { describe, expect, it, vi } from 'vitest';
+import { CaseWelcomeForms } from '@/features/case/components/CaseActions';
+import type { CaseWelcomeFormsProps } from '@/features/case/components/CaseActions';
 
 function baseWelcomeProps(overrides: Partial<CaseWelcomeFormsProps> = {}): CaseWelcomeFormsProps {
   return {
@@ -19,25 +19,6 @@ function baseWelcomeProps(overrides: Partial<CaseWelcomeFormsProps> = {}): CaseW
     openError: null,
     recentCases: [],
     onRequestDeleteCase: vi.fn(),
-    ...overrides,
-  };
-}
-
-function baseImportProps(overrides: Partial<ImportSectionProps> = {}): ImportSectionProps {
-  return {
-    importPath: '',
-    setImportPath: vi.fn(),
-    onImport: vi.fn(),
-    importPending: false,
-    importSuccess: null,
-    importError: null,
-    importJob: undefined,
-    cancelImportPending: false,
-    onCancelImport: vi.fn(),
-    failedImportJob: undefined,
-    onClose: vi.fn(),
-    onBrowseFile: vi.fn().mockResolvedValue(undefined),
-    onBrowseDirectory: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -83,6 +64,7 @@ describe('CaseWelcomeForms', () => {
   it('disables open button when path is empty and calls onOpenCase with the path otherwise', () => {
     const onOpenCase = vi.fn();
     const { rerender } = render(<CaseWelcomeForms {...baseWelcomeProps({ openCasePath: '' })} />);
+    fireEvent.mouseDown(screen.getByRole('tab', { name: '打开已有案件' }), { button: 0, ctrlKey: false });
 
     let openButton = screen.getByRole('button', { name: '打开案件' }) as HTMLButtonElement;
     expect(openButton.disabled).toBe(true);
@@ -96,12 +78,16 @@ describe('CaseWelcomeForms', () => {
 
   it('shows open error message', () => {
     render(<CaseWelcomeForms {...baseWelcomeProps({ openError: '路径无效' })} />);
+    fireEvent.mouseDown(screen.getByRole('tab', { name: '打开已有案件' }), { button: 0, ctrlKey: false });
     expect(screen.getByText('路径无效')).toBeDefined();
   });
 
-  it('renders empty-state message when there are no recent cases', () => {
+  it('keeps the landing page free of explanatory copy and empty history', () => {
     render(<CaseWelcomeForms {...baseWelcomeProps({ recentCases: [] })} />);
-    expect(screen.getByText('这里会保留最近打开过的案件，便于重新进入分析现场。')).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Meow~Detective' })).toBeDefined();
+    expect(screen.queryByText(/当前没有活动案件/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/这里会保留最近打开过的案件/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '最近打开案件' })).not.toBeInTheDocument();
   });
 
   it('renders recent cases and opens one on click', () => {
@@ -117,9 +103,13 @@ describe('CaseWelcomeForms', () => {
       />,
     );
 
+    expect(screen.queryByText('Case One')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '最近打开案件' }));
+    expect(screen.getByRole('dialog')).toBeDefined();
     expect(screen.getByText('Case One')).toBeDefined();
     fireEvent.click(screen.getByText('Case One'));
     expect(onOpenCase).toHaveBeenCalledWith('C:\\cases\\case-1');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('requests deletion of a recent case without opening it', () => {
@@ -138,6 +128,7 @@ describe('CaseWelcomeForms', () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole('button', { name: '最近打开案件' }));
     fireEvent.click(screen.getByTitle('删除案件'));
     expect(onRequestDeleteCase).toHaveBeenCalledWith({
       caseRoot: 'C:\\cases\\case-1',
@@ -145,116 +136,6 @@ describe('CaseWelcomeForms', () => {
       openedAt: '2026-06-01',
     });
     expect(onOpenCase).not.toHaveBeenCalled();
-  });
-});
-
-describe('ImportSection', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('updates the import path from the text input', () => {
-    const setImportPath = vi.fn();
-    render(<ImportSection {...baseImportProps({ setImportPath })} />);
-
-    fireEvent.change(screen.getByPlaceholderText('镜像路径或逻辑目录路径'), {
-      target: { value: 'D:\\evidence\\case.e01' },
-    });
-    expect(setImportPath).toHaveBeenCalledWith('D:\\evidence\\case.e01');
-  });
-
-  it('sets the import path from the file dialog result', async () => {
-    const setImportPath = vi.fn();
-    const onBrowseFile = vi.fn().mockResolvedValue('D:\\evidence\\case.e01');
-    render(<ImportSection {...baseImportProps({ setImportPath, onBrowseFile })} />);
-
-    fireEvent.click(screen.getByRole('button', { name: /文件/ }));
-    await vi.waitFor(() => expect(setImportPath).toHaveBeenCalledWith('D:\\evidence\\case.e01'));
-    expect(onBrowseFile).toHaveBeenCalledTimes(1);
-  });
-
-  it('sets the import path from the directory dialog result', async () => {
-    const setImportPath = vi.fn();
-    const onBrowseDirectory = vi.fn().mockResolvedValue('D:\\evidence\\logical');
-    render(<ImportSection {...baseImportProps({ setImportPath, onBrowseDirectory })} />);
-
-    fireEvent.click(screen.getByRole('button', { name: /目录/ }));
-    await vi.waitFor(() => expect(setImportPath).toHaveBeenCalledWith('D:\\evidence\\logical'));
-    expect(onBrowseDirectory).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not update the import path when browsing returns no selection', async () => {
-    const setImportPath = vi.fn();
-    render(<ImportSection {...baseImportProps({ setImportPath })} />);
-
-    fireEvent.click(screen.getByRole('button', { name: /文件/ }));
-    await vi.waitFor(() => expect(setImportPath).not.toHaveBeenCalled());
-    expect(setImportPath).not.toHaveBeenCalled();
-  });
-
-  it('disables the import button while pending or while a background job is active', () => {
-    const { rerender } = render(<ImportSection {...baseImportProps({ importPending: true })} />);
-    let importButton = screen.getByRole('button', { name: /提交中|导入/ }) as HTMLButtonElement;
-    expect(importButton.disabled).toBe(true);
-
-    rerender(
-      <ImportSection
-        {...baseImportProps({
-          importJob: { id: 'job-1', name: '导入任务', progress: 42, detail: '解析 MFT' } as never,
-        })}
-      />,
-    );
-    importButton = screen.getByRole('button', { name: /^导入$|导入中/ }) as HTMLButtonElement;
-    expect(importButton.disabled).toBe(true);
-    expect(screen.getByText(/导入任务 · 42% · 解析 MFT/)).toBeDefined();
-  });
-
-  it('invokes onImport when enabled', () => {
-    const onImport = vi.fn();
-    render(<ImportSection {...baseImportProps({ importPath: 'D:\\evidence\\case.e01', onImport })} />);
-
-    fireEvent.click(screen.getByRole('button', { name: '导入' }));
-    expect(onImport).toHaveBeenCalledTimes(1);
-  });
-
-  it('disables cancel while cancelling and invokes onCancelImport otherwise', () => {
-    const onCancelImport = vi.fn();
-    const importJob = { id: 'job-1', name: '导入任务', progress: 10, detail: '' } as never;
-
-    const { rerender } = render(
-      <ImportSection {...baseImportProps({ importJob, cancelImportPending: true, onCancelImport })} />,
-    );
-    let cancelButton = screen.getByRole('button', { name: /^取消导入$|取消中/ }) as HTMLButtonElement;
-    expect(cancelButton.disabled).toBe(true);
-
-    rerender(<ImportSection {...baseImportProps({ importJob, cancelImportPending: false, onCancelImport })} />);
-    cancelButton = screen.getByRole('button', { name: '取消导入' }) as HTMLButtonElement;
-    expect(cancelButton.disabled).toBe(false);
-    fireEvent.click(cancelButton);
-    expect(onCancelImport).toHaveBeenCalledTimes(1);
-  });
-
-  it('invokes onClose when the close button is clicked', () => {
-    const onClose = vi.fn();
-    render(<ImportSection {...baseImportProps({ onClose })} />);
-
-    fireEvent.click(screen.getByRole('button', { name: '取消' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('renders import success, error, and failed job messages', () => {
-    render(
-      <ImportSection
-        {...baseImportProps({
-          importSuccess: '导入完成',
-          importError: '磁盘空间不足',
-          failedImportJob: { id: 'job-2', name: '导入任务', progress: 0, detail: '解析失败' } as never,
-        })}
-      />,
-    );
-
-    expect(screen.getByText('导入完成')).toBeDefined();
-    expect(screen.getByText(/导入失败: 磁盘空间不足/)).toBeDefined();
-    expect(screen.getByText(/后台导入失败: 解析失败/)).toBeDefined();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

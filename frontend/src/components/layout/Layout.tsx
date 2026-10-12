@@ -1,10 +1,10 @@
 import { Outlet } from "react-router";
-import { AppShell } from "@/components/layout/AppShell";
+import { ShellContainer } from "@/features/shell/containers/ShellContainer";
 
 export function Layout() {
   return (
-    <AppShell>
+    <ShellContainer>
       <Outlet />
-    </AppShell>
+    </ShellContainer>
   );
 }

@@ -30,7 +30,7 @@ export function Tooltip({
             side={side}
             sideOffset={sideOffset}
             className={cn(
-              'z-50 whitespace-nowrap border border-forensics-border-strong bg-white px-2.5 py-1.5 text-[11px] text-forensics-text shadow-sm',
+              'ui-overlay-surface ui-overlay-motion z-50 max-w-[min(360px,90vw)] rounded-ctl border border-forensics-border px-2.5 py-1.5 text-[11px] text-forensics-ink',
               className,
             )}
           >

@@ -49,6 +49,10 @@ vi.mock('@/features/mcp/components/McpToolList', () => ({
   McpToolList: () => <div data-testid="mcp-tool-list" />,
 }));
 
+vi.mock('@/features/mcp/containers/McpHostToolsPanelContainer', () => ({
+  McpHostToolsPanelContainer: () => <div data-testid="mcp-host-panel" />,
+}));
+
 function createLocalStorageMock() {
   const store = new Map<string, string>();
   return {

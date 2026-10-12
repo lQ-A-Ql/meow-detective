@@ -1,0 +1,28 @@
+@keyframes ink-write {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes ink-fill {
+  to { fill: currentColor; stroke-width: 0; }
+}
+
+.artistic-title__wordmark use {
+  fill: transparent;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: ink-write 420ms cubic-bezier(.65, 0, .35, 1) calc(var(--stroke-index) * 75ms) forwards,
+    ink-fill 240ms ease-out calc(var(--stroke-index) * 75ms + 340ms) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artistic-title__wordmark use {
+    animation: none;
+    stroke-dashoffset: 0;
+    fill: currentColor;
+    stroke-width: 0;
+  }
+}

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { Check, X } from 'lucide-react';
-import { Button } from './button';
+import { ActionIcon } from '@/components/controls/ActionIcon';
+import { IconButton } from '@/components/controls/IconButton';
 import {
   Dialog,
   DialogContent,
@@ -42,16 +42,15 @@ export function ConfirmationDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button
-            type="button"
+          <IconButton
             variant="forensicsOutline"
             onClick={() => onOpenChange(false)}
             disabled={pending}
-            aria-label={cancelLabel}
+            label={cancelLabel}
           >
-            <X size={15} />
-          </Button>
-          <Button type="button" variant={destructive ? 'destructive' : 'forensicsPrimary'} onClick={onConfirm} disabled={pending} aria-label={confirmLabel}><Check size={15} /></Button>
+            <ActionIcon name="close" />
+          </IconButton>
+          <IconButton variant={destructive ? 'destructive' : 'solid'} onClick={onConfirm} disabled={pending} label={confirmLabel}><ActionIcon name="check" /></IconButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

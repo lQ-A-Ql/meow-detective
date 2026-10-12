@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render as renderBase, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { EmulationWorkspace } from '@/features/emulation/components/EmulationWorkspace';
+import { EmulationWorkspaceController as EmulationWorkspace } from '@/features/emulation/containers/EmulationWorkspaceController';
 import type { EmulationWorkspaceModel } from '@/features/emulation/use-emulation-workspace-model';
 
 function createModel(overrides: Partial<EmulationWorkspaceModel> = {}): EmulationWorkspaceModel {
@@ -77,6 +77,12 @@ function createModel(overrides: Partial<EmulationWorkspaceModel> = {}): Emulatio
   };
 }
 
+function render(ui: Parameters<typeof renderBase>[0]) {
+  const result = renderBase(ui);
+  fireEvent.click(screen.getByRole('button', { name: '仿真设置' }));
+  return result;
+}
+
 describe('EmulationWorkspace', () => {
   it('renders direct-system boot and delegates launch to the workspace model', () => {
     const start = vi.fn().mockResolvedValue(undefined);
@@ -103,7 +109,7 @@ describe('EmulationWorkspace', () => {
   });
 
   it('renders session state and releases the selected session by id', () => {    const release = vi.fn().mockResolvedValue(undefined);
-    render(<EmulationWorkspace model={createModel({
+    renderBase(<EmulationWorkspace model={createModel({
       sessions: [{
         sessionId: 'emulation-session-1',
         dataSourceId: 'source-1',
@@ -120,7 +126,7 @@ describe('EmulationWorkspace', () => {
       release,
     })} />);
 
-    expect(screen.getAllByText('运行中')).toHaveLength(2);
+    expect(screen.getAllByText('运行中')).toHaveLength(1);
     expect(screen.getByText('客体已进入用户空间')).toBeInTheDocument();
     expect(screen.getByText('200.00 GB')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '释放 早起王的PC镜像 的仿真会话' }));
@@ -193,8 +199,8 @@ describe('EmulationWorkspace', () => {
       setResourceValue,
     })} />);
 
-    expect(screen.getByText('CPU 核心数: 4')).toBeInTheDocument();
-    expect(screen.getByText('内存 (MiB): 8192')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'CPU 核心数' })).toHaveTextContent('4');
+    expect(screen.getByRole('status', { name: '内存 (MiB)' })).toHaveTextContent('8192');
     const cores = screen.getByRole('slider', { name: 'CPU 核心数' });
     expect(cores).toHaveAttribute('aria-valuenow', '4');
     fireEvent.keyDown(cores, { key: 'ArrowRight' });

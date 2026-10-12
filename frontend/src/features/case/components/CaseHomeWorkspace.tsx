@@ -1,13 +1,16 @@
+import { WorkspaceFrame } from '@/components/layout/WorkspaceFrame';
+import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 import { Progress } from '@/app/components/ui/progress';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { Button } from '@/app/components/ui/button';
 import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 import { useTranslation } from 'react-i18next';
-import { CaseWelcomeForms } from '@/features/case/components/CaseActions';
+import { CaseWelcomeContainer } from '@/features/case/containers/CaseWelcomeContainer';
 import { DataSourcesPanel } from '@/features/case/components/CaseOverview';
 import type { CaseHomeModel } from '@/features/case/use-case-home-model';
 import { ImportDataSourceDialog } from '@/features/import/components/ImportDataSourceDialog';
+import { BrandWatermark } from '@/components/brand';
 
 interface CaseHomeWorkspaceProps {
   model: CaseHomeModel;
@@ -30,14 +33,15 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
   );
 
   if (!model.currentCase) {
-    return <>{confirmation}<CaseWelcomeForms caseRoot={model.caseRoot} setCaseRoot={model.updateCaseRoot} caseName={model.caseName} setCaseName={model.setCaseName} onCreateCase={model.createCase} createPending={model.createCasePending} createError={model.createCaseError} openCasePath={model.openCasePath} setOpenCasePath={model.setOpenCasePath} onOpenCase={model.openCase} openPending={model.openCasePending} openError={model.openCaseError} recentCases={model.recentCases} onRequestDeleteCase={model.requestDeleteCase} /></>;
+    return <>{confirmation}<CaseWelcomeContainer caseRoot={model.caseRoot} setCaseRoot={model.updateCaseRoot} caseName={model.caseName} setCaseName={model.setCaseName} onCreateCase={model.createCase} createPending={model.createCasePending} createError={model.createCaseError} openCasePath={model.openCasePath} setOpenCasePath={model.setOpenCasePath} onOpenCase={model.openCase} openPending={model.openCasePending} openError={model.openCaseError} recentCases={model.recentCases} onRequestDeleteCase={model.requestDeleteCase} /></>;
   }
 
   return (
     <>
       {confirmation}
-      <div className="flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden bg-forensics-paper">
-        <section className="shrink-0 px-5 pb-6 pt-10 text-center lg:pt-12" aria-labelledby="case-home-title">
+      <WorkspaceFrame><WorkspaceCard className="flex min-h-0 flex-1 flex-col">
+        <section className="relative isolate shrink-0 px-5 pb-6 pt-10 text-center lg:pt-12" aria-labelledby="case-home-title">
+          <BrandWatermark motif="profile-portrait" className="watermark-home" />
           <div className="mx-auto max-w-3xl">
             <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forensics-red-ink">{t('caseHome.workspace.active')}</div>
             <h1 id="case-home-title" className="mt-2 truncate text-2xl font-semibold tracking-tight text-forensics-ink lg:text-3xl">{model.currentCase.name}</h1>
@@ -60,8 +64,8 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
 
         <section className="min-h-0 flex-1 overflow-hidden px-4 py-4 lg:px-8" aria-label={t('caseHome.dataSources.title')}>
           <div className="flex h-full min-h-0 flex-col overflow-hidden bg-forensics-paper">
-            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-none">
-              <DataSourcesPanel dataSources={model.dataSources} showHeader={false} hashJobs={model.evidenceHashJobs} editingDataSourceId={model.editingDataSourceId} editingDataSourceName={model.editingDataSourceName} setEditingDataSourceId={model.setEditingDataSourceId} setEditingDataSourceName={model.setEditingDataSourceName} onRename={model.renameDataSource} onRequestDelete={model.requestDeleteDataSource} logicalDiskDigest={model.logicalDiskDigest} logicalDiskDigestSourceId={model.logicalDiskDigestSourceId} logicalDiskDigestLoading={model.logicalDiskDigestLoading} logicalDiskDigestError={model.logicalDiskDigestError instanceof Error ? model.logicalDiskDigestError.message : undefined} onCalculateLogicalDiskDigest={model.calculateLogicalDiskDigest} />
+            <div className="flex min-h-0 flex-1 flex-col">
+              <DataSourcesPanel dataSources={model.dataSources} showHeader={false} hashJobs={model.evidenceHashJobs} editingDataSourceId={model.editingDataSourceId} editingDataSourceName={model.editingDataSourceName} setEditingDataSourceId={model.setEditingDataSourceId} setEditingDataSourceName={model.setEditingDataSourceName} onRename={model.renameDataSource} onRequestDelete={model.requestDeleteDataSource} logicalDiskDigest={model.logicalDiskDigest} logicalDiskDigestSourceId={model.logicalDiskDigestSourceId} logicalDiskDigestLoading={model.logicalDiskDigestLoading} logicalDiskDigestError={model.logicalDiskDigestErrorText} onCalculateLogicalDiskDigest={model.calculateLogicalDiskDigest} />
             </div>
           </div>
         </section>
@@ -74,7 +78,7 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
           <Progress value={model.runningJob?.progress ?? 0} className="mt-2 h-2" aria-label={t('caseHome.import.progressLabel')} />
           <div className="mt-1 truncate text-[10px] text-forensics-ink-3">{model.runningJob?.detail ?? t('caseHome.import.idleHint')}</div>
         </footer>
-      </div>
+      </WorkspaceCard></WorkspaceFrame>
     </>
   );
 }

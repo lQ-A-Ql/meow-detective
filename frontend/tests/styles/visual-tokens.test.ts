@@ -3,8 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /**
- * The v3.1 sheet is a contract, not a taste: these assertions pin the palette, the radius
- * ladder, the single gold usage and the contrast of every token that carries text.
+ * Shared palette, radius ladder and readable text remain stable across every primitive.
  */
 const themeCss = fs.readFileSync(path.resolve(process.cwd(), 'src/styles/theme.css'), 'utf8');
 
@@ -28,18 +27,18 @@ function contrast(foreground: string, background: string): number {
 }
 
 describe('v3.1 visual tokens', () => {
-  it('keeps the white + red palette', () => {
+  it('keeps the paper + cool gray + black palette', () => {
     expect(token('forensics-paper')).toBe('#ffffff');
-    expect(token('forensics-base')).toBe('#f2f1ee');
-    expect(token('forensics-red')).toBe('#ff0000');
-    expect(token('forensics-red-ink')).toBe('#c8102e');
-    expect(token('forensics-red-deep')).toBe('#7a1622');
-    expect(token('forensics-red-tint')).toBe('#fff2f2');
-    expect(token('forensics-rail-active')).toBe('rgba(255, 0, 0, 0.1)');
+    expect(token('forensics-base')).toBe('#f3f5f7');
+    expect(token('forensics-red')).toBe('#000000');
+    expect(token('forensics-red-ink')).toBe('#000000');
+    expect(token('forensics-red-deep')).toBe('#000000');
+    expect(token('forensics-red-tint')).toBe('#eef1f4');
+    expect(token('forensics-rail-active')).toBe('#ffffff');
   });
 
-  it('keeps exactly one gold usage: the 40% section divider', () => {
-    expect(token('forensics-divider')).toBe('rgba(168, 128, 42, 0.4)');
+  it('keeps structural dividers neutral', () => {
+    expect(token('forensics-divider')).toBe('rgba(0, 0, 0, 0.08)');
     const goldValues = themeCss
       .split('\n')
       .filter((line) => !line.includes('--forensics-divider'))
@@ -67,7 +66,7 @@ describe('v3.1 visual tokens', () => {
     expect(contrast(token('forensics-ink-3'), paper)).toBeGreaterThan(4.5);
     expect(contrast(token('forensics-red-ink'), paper)).toBeGreaterThan(4.5);
     expect(contrast(token('forensics-red-deep'), paper)).toBeGreaterThan(7);
-    // pure red is an indicator colour: it only has to clear the 3:1 graphics threshold
+    // The main action also clears the 3:1 graphics threshold.
     expect(contrast(token('forensics-red'), paper)).toBeGreaterThan(3);
   });
 });

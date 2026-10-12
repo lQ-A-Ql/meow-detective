@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '@/components/controls/ActionIcon';
-import { Tooltip } from '@/app/components/ui/tooltip';
+import { IconButton } from '@/components/controls/IconButton';
 
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { Button } from '@/app/components/ui/button';
+import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
+import { WorkspaceFrame } from '@/components/layout/WorkspaceFrame';
 import { ActionBar } from '@/components/layout/ActionBar';
 import { AnchorNav } from '@/components/layout/AnchorNav';
 import { McpSectionContainer } from '@/features/mcp/containers/McpSectionContainer';
@@ -13,6 +14,7 @@ import { StoragePathsSection } from '@/features/settings/components/StoragePaths
 import { SystemInfoSection } from '@/features/settings/components/SystemInfoSection';
 import { UiDebugSection } from '@/features/settings/components/UiDebugSection';
 import type { useSettingsPageModel } from '@/features/settings/use-settings-page-model';
+import { BrandWatermark } from '@/components/brand';
 
 interface SettingsWorkspaceProps {
   model: ReturnType<typeof useSettingsPageModel>;
@@ -32,33 +34,36 @@ export function SettingsWorkspace({ model }: SettingsWorkspaceProps) {
   ];
 
   return (
-    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-forensics-base">
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <AnchorNav items={anchors} label={t('settings.anchors.label')} className="hidden w-52 px-3 py-5 xl:block" />
-        <ScrollArea className="min-h-0 flex-1" viewportClassName="mx-auto w-full max-w-5xl space-y-4 p-5">
-    <section id="settings-storage" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
+    <WorkspaceFrame>
+      <WorkspaceCard className="hidden w-52 shrink-0 xl:block">
+        <AnchorNav items={anchors} label={t('settings.anchors.label')} className="workspace-content" />
+      </WorkspaceCard>
+      <WorkspaceCard className="relative isolate flex min-h-0 flex-1 flex-col">
+        <ScrollArea className="min-h-0 flex-1" viewportClassName="workspace-content space-y-8">
+    <section id="settings-storage" className="scroll-mt-4">
             <StoragePathsSection caseRoot={settings.caseRoot} imageSearchPaths={settings.imageSearchPaths} setSettings={setSettings} />
     </section>
-    <section id="settings-performance" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
+    <section id="settings-performance" className="scroll-mt-4">
             <ImportPerformanceSection maxImportWorkers={settings.maxImportWorkers} maxAnalysisWorkers={settings.maxAnalysisWorkers} importAnalysisMode={settings.importAnalysisMode} setSettings={setSettings} />
     </section>
-    <section id="settings-preview" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
+    <section id="settings-preview" className="scroll-mt-4">
             <PreviewSection hexChunkBytes={settings.hexChunkBytes} maxViewerRangeLength={settings.maxViewerRangeLength} maxInlineImagePreviewBytes={settings.maxInlineImagePreviewBytes} maxInlineMediaPreviewBytes={settings.maxInlineMediaPreviewBytes} setSettings={setSettings} />
     </section>
-    <section id="settings-ui" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
+    <section id="settings-ui" className="scroll-mt-4">
             <UiDebugSection devEventTrace={settings.devEventTrace} setSettings={setSettings} />
     </section>
-    <section id="settings-mcp" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
+    <section id="settings-mcp" className="scroll-mt-4">
             <McpSectionContainer />
     </section>
-    <section id="settings-system" className="scroll-mt-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper p-5 shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
+    <section id="settings-system" className="scroll-mt-4">
             <SystemInfoSection />
     </section>
         </ScrollArea>
-      </div>
-      <ActionBar note={settingsMessage} className="mx-4 mb-4 rounded-ctl border border-forensics-line/70 bg-forensics-paper shadow-[0_2px_10px_rgba(32,27,28,0.04)]">
-        <Tooltip content={t('settings.actions.save')}><Button aria-label={t('settings.actions.save')} type="button" variant="outline" size="sm" onClick={() => void saveSettings()} disabled={savingSettings}><ActionIcon name="save" /></Button></Tooltip>
+      <ActionBar note={settingsMessage}>
+        <IconButton label={t('settings.actions.save')} variant="solid" onClick={() => void saveSettings()} disabled={savingSettings}><ActionIcon name="save" /></IconButton>
       </ActionBar>
-    </div>
+      <BrandWatermark motif="headphones-portrait" className="watermark-settings" />
+      </WorkspaceCard>
+    </WorkspaceFrame>
   );
 }

@@ -1,5 +1,6 @@
 {
   "common": {
+    "close": "Close",
     "dataSourceKinds": {
       "localDisk": "Local disk",
       "directory": "Directory",
@@ -99,6 +100,7 @@
       "http": "HTTP/SSE",
       "stdio": "Stdio",
       "url": "SSE URL",
+      "urlPlaceholder": "http://localhost:3001",
       "command": "Command",
       "commandPlaceholder": "python -m forensics_mcp",
       "arguments": "Arguments (space separated)",
@@ -542,6 +544,7 @@
     }
   },
   "reports": {
+    "evidenceHash": "Evidence hash",
     "template": "Select template",
     "runningSummary": "{{running}} running / {{completed}} completed",
     "scope": "Export scope",
@@ -841,6 +844,7 @@
       }
     },
     "list": {
+      "title": "File list and preview",
       "columnAttributes": "Attributes",
       "previousPage": "Previous page",
       "nextPage": "Next page",
@@ -898,6 +902,7 @@
     }
   },
   "importDataSource": {
+    "platforms": { "windowsSubtitle": "NTFS / Registry / EVTX", "linuxSubtitle": "XFS / LVM / systemd", "androidSubtitle": "Sparse / ext4 / F2FS / EROFS" },
     "openButton": "Import Data Source",
     "title": "Import Data Source",
     "steps": {
@@ -1568,6 +1573,7 @@
       "backgroundFailed": "Background import failed: {{detail}}"
     },
     "welcome": {
+      "entryLabel": "Case entry",
       "description": "No case is active. Create or open a case directory, then import a logical directory, RAW/DD/IMG or E01 image to enter the file-browsing workflow.",
       "create": {
         "title": "Create case",
@@ -2130,6 +2136,16 @@
     "truncated": "Truncated",
     "largeContentMode": "Large content: rows {{start}}-{{end}}, rendering {{rendered}} visible rows",
     "searchPlaceholder": "Search...",
+    "searchLabel": "Search text",
+    "matchesLabel": "Search matches",
+    "matches": "Match {{current}}/{{total}}",
+    "previousMatch": "Previous match",
+    "nextMatch": "Next match",
+    "clearSearch": "Clear text search",
+    "pageLabel": "Page {{current}}/{{total}}",
+    "position": "Line {{line}} · Column {{column}}",
+    "noMatches": "No matches",
+    "previewScope": "Search scope: loaded preview only; the full file is not loaded",
     "status": {
       "search": "Search: \"{{query}}\"",
       "ready": "Ready"
@@ -2895,11 +2911,7 @@
         "context": "Templates, export jobs and report artifacts"
       }
     },
-    "jobsRunning": "{{count}} running",
-    "density": {
-      "compact": "Switch to compact density",
-      "comfortable": "Switch to comfortable density"
-    }
+    "jobsRunning": "{{count}} running"
   },
   "inspectorKind": {
     "file": "File object",

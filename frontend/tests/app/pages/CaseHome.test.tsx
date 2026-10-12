@@ -150,8 +150,21 @@ describe('CaseHome page', () => {
   it('renders welcome screen when no case is open', async () => {
     await renderPageAsync();
 
-    expect(screen.getByText('Meow~Detective')).toBeDefined();
-    expect(screen.getByText(/当前没有活动案件/)).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Meow~Detective' })).toBeDefined();
+    expect(screen.queryByText(/当前没有活动案件/)).toBeNull();
+  });
+
+  it('shows a structured backend error for creating a case', async () => {
+    mocks.createCase.mockReturnValue(mockMutationState({ error: { code: 'CONFLICT', message: '案件目录已存在', category: 'validation', recoverable: true } }));
+    await renderPageAsync();
+    expect(screen.getByRole('alert')).toHaveTextContent('案件目录已存在');
+  });
+
+  it('shows a structured backend error for opening a case', async () => {
+    mocks.openCase.mockReturnValue(mockMutationState({ error: { code: 'NOT_FOUND', message: '案件数据库不存在', category: 'io', recoverable: true } }));
+    await renderPageAsync();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: '打开已有案件' }), { button: 0, ctrlKey: false });
+    expect(screen.getByRole('alert')).toHaveTextContent('案件数据库不存在');
   });
 
   it('shows create case form', async () => {
@@ -167,14 +180,15 @@ describe('CaseHome page', () => {
     await renderPageAsync();
 
     expect(screen.getByText('打开已有案件')).toBeDefined();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: '打开已有案件' }), { button: 0, ctrlKey: false });
     expect(screen.getByPlaceholderText('案件路径')).toBeDefined();
     expect(screen.getByRole('button', { name: /打开案件|打开中/ })).toBeDefined();
   });
 
-  it('shows recent cases section', async () => {
+  it('does not add a recent cases section to the landing page', async () => {
     await renderPageAsync();
-
-    expect(screen.getByText('最近打开案件')).toBeDefined();
+    expect(screen.queryByText('最近打开案件')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('renders case dashboard when case is open', async () => {

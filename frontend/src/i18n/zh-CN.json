@@ -1,5 +1,6 @@
 {
   "common": {
+    "close": "关闭",
     "dataSourceKinds": {
       "localDisk": "本地磁盘",
       "directory": "目录",
@@ -99,6 +100,7 @@
       "http": "HTTP/SSE",
       "stdio": "Stdio",
       "url": "SSE URL",
+      "urlPlaceholder": "http://localhost:3001",
       "command": "命令",
       "commandPlaceholder": "python -m forensics_mcp",
       "arguments": "参数 (空格分隔)",
@@ -542,6 +544,7 @@
     }
   },
   "reports": {
+    "evidenceHash": "证据哈希",
     "template": "选择模板",
     "runningSummary": "运行中 {{running}} / 已完成 {{completed}}",
     "scope": "导出范围",
@@ -841,6 +844,7 @@
       }
     },
     "list": {
+      "title": "文件列表与预览",
       "columnAttributes": "属性",
       "previousPage": "上一页",
       "nextPage": "下一页",
@@ -898,6 +902,7 @@
     }
   },
   "importDataSource": {
+    "platforms": { "windowsSubtitle": "NTFS / Registry / EVTX", "linuxSubtitle": "XFS / LVM / systemd", "androidSubtitle": "Sparse / ext4 / F2FS / EROFS" },
     "openButton": "导入数据源",
     "title": "导入数据源",
     "steps": {
@@ -1568,6 +1573,7 @@
       "backgroundFailed": "后台导入失败: {{detail}}"
     },
     "welcome": {
+      "entryLabel": "案件入口",
       "description": "当前没有活动案件。先创建或打开案件目录，接着导入逻辑目录、RAW/DD/IMG 或 E01 镜像，即可进入真实文件浏览链路。",
       "create": {
         "title": "新建案件",
@@ -2130,6 +2136,16 @@
     "truncated": "已截断",
     "largeContentMode": "大内容模式: 当前页 {{start}}-{{end}} 行，仅渲染可见附近的 {{rendered}} 行",
     "searchPlaceholder": "搜索...",
+    "searchLabel": "搜索文本",
+    "matchesLabel": "搜索命中",
+    "matches": "命中 {{current}}/{{total}}",
+    "previousMatch": "上一处命中",
+    "nextMatch": "下一处命中",
+    "clearSearch": "清除文本搜索",
+    "pageLabel": "第 {{current}}/{{total}} 页",
+    "position": "第 {{line}} 行 · 第 {{column}} 列",
+    "noMatches": "未找到匹配",
+    "previewScope": "搜索范围：当前已载入预览，原文件内容尚未全部载入",
     "status": {
       "search": "搜索: \"{{query}}\"",
       "ready": "就绪"
@@ -2895,11 +2911,7 @@
         "context": "模板、导出任务与报告产物"
       }
     },
-    "jobsRunning": "{{count}} 运行中",
-    "density": {
-      "compact": "切换为紧凑密度",
-      "comfortable": "切换为舒适密度"
-    }
+    "jobsRunning": "{{count}} 运行中"
   },
   "inspectorKind": {
     "file": "文件对象",

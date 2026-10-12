@@ -18,7 +18,9 @@ import { SearchFilePreviewDialog } from '@/features/search/components/SearchFile
 import type { SearchWorkspaceModel } from '@/features/search/use-search-workspace-model';
 import { formatBytes } from '@/lib/format-bytes';
 import type { SearchFileHit } from '@/types/search';
+import { WorkspaceFrame } from '@/components/layout/WorkspaceFrame';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
+import { BrandWatermark } from '@/components/brand';
 
 interface SearchWorkspaceProps {
   model: SearchWorkspaceModel;
@@ -91,8 +93,8 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
   const selectedSource = model.options.dataSourceIds[0] ?? '__all__';
   const coverage = model.coverage;
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 bg-forensics-base p-[2px]">
-      <WorkspaceCard className="flex flex-1 flex-col">
+    <WorkspaceFrame>
+      <WorkspaceCard className="relative isolate flex flex-1 flex-col">
       <ContextBar>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5">
@@ -193,8 +195,9 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           />
         </DenseDataTableFrame>
       </div>
+        {!model.activeQuery ? <BrandWatermark motif="detective-portrait" className="watermark-search" /> : null}
       </WorkspaceCard>
       <SearchFilePreviewDialog model={model.preview} />
-    </div>
+    </WorkspaceFrame>
   );
 }

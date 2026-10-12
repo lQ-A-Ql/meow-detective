@@ -1,10 +1,10 @@
-import { CircleAlert, Disc3, FolderOpen, HardDrive, ShieldCheck, X } from 'lucide-react';
+
 import { ActionIcon } from '@/components/controls/ActionIcon';
-import { Tooltip } from '@/app/components/ui/tooltip';
+import { IconButton } from '@/components/controls/IconButton';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
-import { Button } from '@/app/components/ui/button';
+
 import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { Field, FieldHint, FieldLabel } from '@/app/components/ui/field';
@@ -19,19 +19,27 @@ interface LaunchPanelProps {
   model: EmulationWorkspaceModel;
 }
 
-export function LaunchPanelShell({ children }: { children: ReactNode }) {
+export function LaunchPanelShell({ model, recoveryHint, inspection, maintenance }: LaunchPanelProps & {
+  recoveryHint?: string; inspection?: ReactNode; maintenance?: ReactNode;
+}) {
   const { t } = useTranslation();
   return (
-    <section className="border-b border-forensics-divider p-5 xl:border-b-0 xl:border-r">
-      <div className="mb-5 flex items-center gap-2">
-        <Disc3 className="size-4 text-forensics-primary-blue" />
-        <h2 className="text-[14px] text-forensics-text">{t('emulationPage.launch.title')}</h2>
-      </div>
-      <div className="space-y-5">{children}</div>
-    </section>
+    <div className="grid min-w-0 gap-8 pb-2 md:grid-cols-2">
+      <section className="min-w-0 space-y-5">
+        <h2 className="text-[14px] text-forensics-ink">{t('emulationPage.launch.title')}</h2>
+        <SourceSelectField model={model} />
+        <SourceInfoList model={model} />
+        <RecoveryIsoField model={model} hint={recoveryHint} />
+        <BootRouteRow model={model} />
+        {inspection}
+      </section>
+      <section className="min-w-0 space-y-6">
+        <OptionsFieldset model={model} />
+        {maintenance}
+      </section>
+    </div>
   );
 }
-
 export function SourceSelectField({ model }: LaunchPanelProps) {
   const { t } = useTranslation();
   return (
@@ -61,50 +69,28 @@ export function RecoveryIsoField({ model, hint }: LaunchPanelProps & { hint?: st
   return (
     <Field>
       <FieldLabel htmlFor="emulation-pe-iso">{t('emulationPage.launch.recoveryIso')}</FieldLabel>
-      <div className="flex min-w-0 gap-2">
-        <Input
-          id="emulation-pe-iso"
-          value={model.recoveryIsoPath}
-          readOnly
-          placeholder={t('emulationPage.launch.recoveryPlaceholder')}
-          className="min-w-0 font-mono text-[11px]"
-        />
-        {model.recoveryIsoPath ? (
-          <Button
-            type="button"
-            variant="forensicsGhost"
-            size="icon"
-            onClick={model.clearRecoveryIso}
-            title={t('emulationPage.actions.clearIso')}
-            aria-label={t('emulationPage.actions.clearIso')}
-          >
-            <X />
-          </Button>
-        ) : null}
-        <Button
-          type="button"
-          variant="forensicsOutline"
-          size="icon"
-          onClick={() => void model.pickRecoveryIso()}
-          title={t('emulationPage.actions.chooseIso')}
-          aria-label={t('emulationPage.actions.chooseIso')}
-        >
-          <FolderOpen />
-        </Button>
+      <div className="flex min-w-0 items-center gap-2">
+        <Input id="emulation-pe-iso" value={model.recoveryIsoPath} readOnly
+          placeholder={t('emulationPage.launch.recoveryPlaceholder')} variant="path" />
+        {model.recoveryIsoPath ? <IconButton label={t('emulationPage.actions.clearIso')} onClick={model.clearRecoveryIso}>
+          <ActionIcon name="close" />
+        </IconButton> : null}
+        <IconButton label={t('emulationPage.actions.chooseIso')} onClick={() => void model.pickRecoveryIso()}>
+          <ActionIcon name="folder-open" />
+        </IconButton>
       </div>
       {hint ? <FieldHint>{hint}</FieldHint> : null}
     </Field>
   );
 }
-
 export function BootRouteRow({ model }: LaunchPanelProps) {
   const { t } = useTranslation();
   return (
-    <div className="border-y border-forensics-border py-3">
+    <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <span className="text-[11px] text-forensics-muted">{t('emulationPage.launch.bootRoute')}</span>
         <Badge variant={model.bootRoute === 'recoveryMedia' ? 'default' : 'secondary'}>
-          {model.bootRoute === 'recoveryMedia' ? <Disc3 /> : <HardDrive />}
+          <ActionIcon name={model.bootRoute === 'recoveryMedia' ? 'volume' : 'hard-drive'} />
           {t(`emulationPage.bootRoutes.${model.bootRoute}`)}
         </Badge>
       </div>
@@ -122,82 +108,55 @@ export function BootRouteRow({ model }: LaunchPanelProps) {
 export function OptionsFieldset({ model }: LaunchPanelProps) {
   const { t } = useTranslation();
   return (
-    <fieldset className="space-y-2 border-y border-forensics-border py-3">
-      <legend className="text-[11px] text-forensics-muted">{t('emulationPage.launch.options')}</legend>
-      <div className="grid grid-cols-2 gap-2">
-        <Field>
-          <FieldLabel htmlFor="emulation-cores">
-            {t('emulationPage.launch.optionCores')}: {model.options.processorCount}
-          </FieldLabel>
-          <Slider
-            id="emulation-cores"
-            min={1}
-            max={64}
-            step={1}
-            value={[model.options.processorCount]}
-            onValueChange={([value]) => {
-              if (value !== undefined) model.setResourceValue('processorCount', value);
-            }}
-            aria-label={t('emulationPage.launch.optionCores')}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="emulation-memory">
-            {t('emulationPage.launch.optionMemory')}: {model.options.memoryMib}
-          </FieldLabel>
-          <Slider
-            id="emulation-memory"
-            min={512}
-            max={65536}
-            step={512}
-            value={[Math.min(65536, Math.max(512, model.options.memoryMib))]}
-            onValueChange={([value]) => {
-              if (value !== undefined) model.setResourceValue('memoryMib', value);
-            }}
-            aria-label={t('emulationPage.launch.optionMemory')}
-          />
-        </Field>
-      </div>
+    <fieldset className="min-w-0 space-y-5">
+      <legend className="mb-5 text-[14px] text-forensics-ink">{t('emulationPage.launch.options')}</legend>
+      <Field>
+        <div className="flex items-center justify-between gap-3">
+          <FieldLabel htmlFor="emulation-cores">{t('emulationPage.launch.optionCores')}</FieldLabel>
+          <output htmlFor="emulation-cores" aria-label={t('emulationPage.launch.optionCores')} className="font-mono text-[12px] text-forensics-ink">{model.options.processorCount}</output>
+        </div>
+        <Slider id="emulation-cores" className="h-6" min={1} max={64} step={1} value={[model.options.processorCount]}
+          onValueChange={([value]) => { if (value !== undefined) model.setResourceValue('processorCount', value); }}
+          aria-label={t('emulationPage.launch.optionCores')} />
+      </Field>
+      <Field>
+        <div className="flex items-center justify-between gap-3">
+          <FieldLabel htmlFor="emulation-memory">{t('emulationPage.launch.optionMemory')}</FieldLabel>
+          <output htmlFor="emulation-memory" aria-label={t('emulationPage.launch.optionMemory')} className="font-mono text-[12px] text-forensics-ink">{model.options.memoryMib}</output>
+        </div>
+        <Slider id="emulation-memory" className="h-6" min={512} max={65536} step={512}
+          value={[Math.min(65536, Math.max(512, model.options.memoryMib))]}
+          onValueChange={([value]) => { if (value !== undefined) model.setResourceValue('memoryMib', value); }}
+          aria-label={t('emulationPage.launch.optionMemory')} />
+      </Field>
       <Field>
         <FieldLabel htmlFor="emulation-network-mode">{t('emulationPage.launch.optionNetworkMode')}</FieldLabel>
-        <Select
-          value={model.options.networkMode}
-          onValueChange={(value) => model.selectNetworkMode(value as EmulationNetworkMode)}
-        >
-          <SelectTrigger id="emulation-network-mode" variant="forensics" aria-label={t('emulationPage.launch.optionNetworkMode')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(['off', 'hostOnly', 'nat', 'bridged'] as const).map((mode) => (
-              <SelectItem key={mode} value={mode}>
-                {t(`emulationPage.launch.networkModes.${mode}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
+        <Select value={model.options.networkMode} onValueChange={(value) => model.selectNetworkMode(value as EmulationNetworkMode)}>
+          <SelectTrigger id="emulation-network-mode" aria-label={t('emulationPage.launch.optionNetworkMode')}><SelectValue /></SelectTrigger>
+          <SelectContent>{(['off', 'hostOnly', 'nat', 'bridged'] as const).map((mode) => (
+            <SelectItem key={mode} value={mode}>{t(`emulationPage.launch.networkModes.${mode}`)}</SelectItem>
+          ))}</SelectContent>
         </Select>
       </Field>
-      {([
-        ['clipboard', 'emulationPage.launch.optionClipboard'],
-        ['timeSync', 'emulationPage.launch.optionTimeSync'],
-      ] as const).map(([key, labelKey]) => (
-        <label key={key} className="flex items-center gap-2 text-[12px] text-forensics-text-secondary">
-          <Checkbox
-            checked={model.options[key]}
-            onCheckedChange={() => model.toggleOption(key)}
-            aria-label={t(labelKey)}
-          />
-          {t(labelKey)}
-        </label>
-      ))}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {([
+          ['clipboard', 'emulationPage.launch.optionClipboard'],
+          ['timeSync', 'emulationPage.launch.optionTimeSync'],
+        ] as const).map(([key, labelKey]) => (
+          <label key={key} className="flex items-center gap-2 text-[12px] text-forensics-text-secondary">
+            <Checkbox checked={model.options[key]} onCheckedChange={() => model.toggleOption(key)} aria-label={t(labelKey)} />
+            {t(labelKey)}
+          </label>
+        ))}
+      </div>
     </fieldset>
   );
 }
-
 export function SourceInfoList({ model }: LaunchPanelProps) {
   const { t } = useTranslation();
   if (!model.selectedSource) return null;
   return (
-    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-forensics-border py-3 text-[11px]">
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[11px] sm:grid-cols-4 md:grid-cols-2 lg:grid-cols-4">
       <div className="min-w-0">
         <dt className="text-forensics-muted">{t('emulationPage.source.kind')}</dt>
         <dd className="mt-1 font-mono text-forensics-text">{model.selectedSource.kind}</dd>
@@ -225,44 +184,37 @@ export function SourceInfoList({ model }: LaunchPanelProps) {
 export function ProtectionNote() {
   const { t } = useTranslation();
   return (
-    <div className="border border-forensics-sakura-300 bg-forensics-sakura-100/20 p-3">
-      <div className="flex items-center gap-2 text-[11px] text-forensics-text">
-        <ShieldCheck className="size-4 text-forensics-primary-blue" />
-        {t('emulationPage.protection.title')}
-      </div>
-      <div className="mt-1 text-[11px] leading-5 text-forensics-muted">
-        {t('emulationPage.protection.detail')}
+    <div className="flex min-w-0 items-start gap-2">
+      <ActionIcon name="shield-check" className="mt-0.5 size-4 text-forensics-ink" />
+      <div className="min-w-0">
+        <div className="text-[11px] text-forensics-ink">{t('emulationPage.protection.title')}</div>
+        <div className="text-[11px] leading-5 text-forensics-muted">{t('emulationPage.protection.detail')}</div>
       </div>
     </div>
   );
 }
-
 export function ErrorNote({ model }: LaunchPanelProps) {
   if (!model.error) return null;
   return (
-    <div className="flex items-start gap-2 border border-forensics-error-border bg-forensics-error-bg p-3 text-[11px] text-forensics-error-text">
-      <CircleAlert className="mt-0.5 size-4 shrink-0" />
+    <div role="alert" className="mt-4 flex items-start gap-2 text-[11px] text-forensics-error-text">
+      <ActionIcon name="warning" className="mt-0.5 size-4" />
       <span className="min-w-0 break-words">{model.error}</span>
     </div>
   );
 }
-
 export function StartButton({ model }: LaunchPanelProps) {
   const { t } = useTranslation();
   return (
     <>
-      <Tooltip content={t('emulationPage.actions.start')}><Button aria-label={t('emulationPage.actions.start')} type="button" variant="forensicsPrimary"  onClick={() => void model.start()} disabled={!model.canStart}><ActionIcon name="play" /></Button></Tooltip>
-      <ConfirmationDialog
-        open={model.directBootConfirmationOpen}
+      <IconButton label={t(model.starting ? 'emulationPage.actions.starting' : 'emulationPage.actions.start')}
+        variant="solid" onClick={() => void model.start()} disabled={!model.canStart}>
+        <ActionIcon name={model.starting ? 'refresh' : 'play'} className={model.starting ? 'size-[15px] animate-spin' : 'size-[15px]'} />
+      </IconButton>
+      <ConfirmationDialog open={model.directBootConfirmationOpen}
         onOpenChange={(open) => { if (!open) model.cancelDirectBoot(); }}
-        title={t('emulationPage.boot.directBootTitle')}
-        description={t('emulationPage.boot.directBootConfirm')}
-        cancelLabel={t('common.cancel')}
-        confirmLabel={t('emulationPage.boot.directBootAction')}
-        onConfirm={() => void model.confirmDirectBoot()}
-        pending={model.starting}
-        destructive
-      />
+        title={t('emulationPage.boot.directBootTitle')} description={t('emulationPage.boot.directBootConfirm')}
+        cancelLabel={t('common.cancel')} confirmLabel={t('emulationPage.boot.directBootAction')}
+        onConfirm={() => void model.confirmDirectBoot()} pending={model.starting} destructive />
     </>
   );
 }

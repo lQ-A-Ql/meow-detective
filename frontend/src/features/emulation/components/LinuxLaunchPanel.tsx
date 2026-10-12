@@ -1,19 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Checkbox } from '@/app/components/ui/checkbox';
+import { Field, FieldLabel } from '@/app/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import type { EmulationWorkspaceModel } from '@/features/emulation/use-emulation-workspace-model';
-import {
-  BootRouteRow,
-  ErrorNote,
-  LaunchPanelShell,
-  OptionsFieldset,
-  ProtectionNote,
-  RecoveryIsoField,
-  SourceInfoList,
-  SourceSelectField,
-  StartButton,
-} from './launch-shared';
+import { LaunchPanelShell } from './launch-shared';
 
 interface LinuxLaunchPanelProps {
   model: EmulationWorkspaceModel;
@@ -24,45 +15,51 @@ function LinuxBypassFieldset({ model }: LinuxLaunchPanelProps) {
   const linuxInstalls = (model.preflight?.installs ?? []).filter((install) => install.platform === 'linux');
   if (linuxInstalls.length === 0) return null;
   return (
-    <fieldset className="space-y-2 border-b border-forensics-divider py-3">
-      <legend className="text-[11px] text-forensics-muted">{t('emulationPage.bypass.titleLinux')}</legend>
-      <Select
-        value={model.bypassPartition === undefined ? 'none' : String(model.bypassPartition)}
-        onValueChange={(value) => model.selectBypassPartition(value === 'none' ? undefined : Number(value))}
-      >
-        <SelectTrigger variant="forensics" aria-label={t('emulationPage.bypass.partition')}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">{t('emulationPage.bypass.none')}</SelectItem>
-          {linuxInstalls.map((install) => (
-            <SelectItem key={install.partitionIndex} value={String(install.partitionIndex)}>
-              [P{install.partitionIndex}]
-              {` · ${t('emulationPage.preflight.linuxInstall')}`}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {model.bypassPartition !== undefined ? (
+    <fieldset className="min-w-0 space-y-3">
+      <legend className="mb-3 text-[12px] text-forensics-ink">{t('emulationPage.bypass.titleLinux')}</legend>
+      <Field>
+        <FieldLabel htmlFor="emulation-linux-partition">{t('emulationPage.bypass.partition')}</FieldLabel>
         <Select
-          value={model.linuxUsername === undefined ? 'none' : model.linuxUsername}
-          onValueChange={(value) => model.selectLinuxUsername(value === 'none' ? undefined : value)}
-          disabled={model.linuxAccountsLoading}
+          value={model.bypassPartition === undefined ? 'none' : String(model.bypassPartition)}
+          onValueChange={(value) => model.selectBypassPartition(value === 'none' ? undefined : Number(value))}
         >
-          <SelectTrigger variant="forensics" aria-label={t('emulationPage.bypass.account')}>
+          <SelectTrigger id="emulation-linux-partition" variant="forensics" aria-label={t('emulationPage.bypass.partition')}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">{t('emulationPage.bypass.none')}</SelectItem>
-            {model.linuxAccounts.map((account) => (
-              <SelectItem key={account.username} value={account.username}>
-                {account.username}
-                {account.locked ? ` · ${t('emulationPage.bypass.disabled')}` : ''}
-                {account.hasPassword ? '' : ` · ${t('emulationPage.bypass.noPassword')}`}
+            {linuxInstalls.map((install) => (
+              <SelectItem key={install.partitionIndex} value={String(install.partitionIndex)}>
+                [P{install.partitionIndex}]
+                {` · ${t('emulationPage.preflight.linuxInstall')}`}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+      </Field>
+      {model.bypassPartition !== undefined ? (
+        <Field>
+          <FieldLabel htmlFor="emulation-linux-account">{t('emulationPage.bypass.account')}</FieldLabel>
+          <Select
+            value={model.linuxUsername === undefined ? 'none' : model.linuxUsername}
+            onValueChange={(value) => model.selectLinuxUsername(value === 'none' ? undefined : value)}
+            disabled={model.linuxAccountsLoading}
+          >
+            <SelectTrigger id="emulation-linux-account" variant="forensics" aria-label={t('emulationPage.bypass.account')}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">{t('emulationPage.bypass.none')}</SelectItem>
+              {model.linuxAccounts.map((account) => (
+                <SelectItem key={account.username} value={account.username}>
+                  {account.username}
+                  {account.locked ? ` · ${t('emulationPage.bypass.disabled')}` : ''}
+                  {account.hasPassword ? '' : ` · ${t('emulationPage.bypass.noPassword')}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
       ) : null}
       {model.linuxUsername ? (
         <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
@@ -107,10 +104,10 @@ function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
   const hasUnverifiedExt4Journal = model.preflight.installs
     .some((install) => (install.bootRiskNotes ?? []).includes('ext4-journal-unverified'));
   return (
-    <div className="space-y-1.5 border-y border-forensics-border py-3">
+    <div className="space-y-3">
       <div className="text-[11px] text-forensics-muted">{t('emulationPage.preflight.title')}</div>
       {model.preflight.installs.map((install) => (
-        <div key={install.partitionIndex} className="flex items-center gap-2 text-[11px]">
+        <div key={install.partitionIndex} className="flex flex-wrap items-center gap-2 text-[11px]">
           <span className="font-mono text-forensics-text">[P{install.partitionIndex}]</span>
           <Badge variant="outline">{t('emulationPage.preflight.linuxInstall')}</Badge>
           {install.osReleasePrettyName ? (
@@ -189,7 +186,7 @@ function EfiFallbackRow({ model }: LinuxLaunchPanelProps) {
   const { t } = useTranslation();
   if (!model.needsEfiFallback) return null;
   return (
-    <div className="border-b border-forensics-divider py-3">
+    <div className="space-y-2">
       <label className="flex items-center gap-2 text-[12px] text-forensics-text-secondary">
         <Checkbox
           checked={model.installEfiFallback}
@@ -209,7 +206,7 @@ function FsRepairRow({ model }: LinuxLaunchPanelProps) {
   const { t } = useTranslation();
   if (!model.needsFsRepair) return null;
   return (
-    <div className="border-b border-forensics-divider py-3">
+    <div className="space-y-2">
       <label className="flex items-center gap-2 text-[12px] text-forensics-text-secondary">
         <Checkbox
           checked={model.repairFilesystems}
@@ -228,19 +225,12 @@ function FsRepairRow({ model }: LinuxLaunchPanelProps) {
 export function LinuxLaunchPanel({ model }: LinuxLaunchPanelProps) {
   const { t } = useTranslation();
   return (
-    <LaunchPanelShell>
-      <SourceSelectField model={model} />
-      <RecoveryIsoField model={model} hint={t('emulationPage.launch.liveIsoHint')} />
-      <BootRouteRow model={model} />
-      <OptionsFieldset model={model} />
-      <LinuxBypassFieldset model={model} />
-      <SourceInfoList model={model} />
-      <LinuxPreflightList model={model} />
-      <FsRepairRow model={model} />
-      <EfiFallbackRow model={model} />
-      <ProtectionNote />
-      <ErrorNote model={model} />
-      <StartButton model={model} />
-    </LaunchPanelShell>
+    <LaunchPanelShell model={model} recoveryHint={t('emulationPage.launch.liveIsoHint')}
+      inspection={<LinuxPreflightList model={model} />}
+      maintenance={<>
+        <LinuxBypassFieldset model={model} />
+        <FsRepairRow model={model} />
+        <EfiFallbackRow model={model} />
+      </>} />
   );
 }

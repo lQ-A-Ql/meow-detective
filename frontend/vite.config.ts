@@ -35,7 +35,10 @@ export default defineConfig(({ mode, command }) => {
       alias: {
         '@': path.resolve(__dirname, './src'),
         ...(mockEnabled
-          ? { '@tauri-apps/api/core': path.resolve(__dirname, './mocks/tauri-core.ts') }
+          ? {
+              '@tauri-apps/api/core': path.resolve(__dirname, './mocks/tauri-core.ts'),
+              '@tauri-apps/api/event': path.resolve(__dirname, './mocks/tauri-event.ts'),
+            }
           : {}),
       },
     },

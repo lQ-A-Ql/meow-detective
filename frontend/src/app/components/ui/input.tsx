@@ -6,29 +6,30 @@ import { cn } from "./utils";
 const inputVariants = cva(
   [
     "file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground",
-    "border-input flex w-full min-w-0 rounded-none border bg-transparent transition-colors duration-500 focus:outline-none",
+    "ui-line-field ui-control-motion flex w-full min-w-0 rounded-none bg-transparent focus:outline-none",
     "file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-light",
     "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
-    "focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/20",
-    "aria-invalid:ring-destructive/20 aria-invalid:border-destructive",
+    "aria-invalid:text-destructive",
   ].join(" "),
   {
     variants: {
       variant: {
+        line: "",
         default: "",
         forensics:
-          "border-forensics-border-strong text-forensics-text focus-visible:border-forensics-sakura-500 focus-visible:ring-1 focus-visible:ring-forensics-sakura-400/20",
-        mono: "border-forensics-border-strong font-mono text-forensics-text focus-visible:border-forensics-sakura-500 focus-visible:ring-1 focus-visible:ring-forensics-sakura-400/20",
-        path: "border-forensics-border-strong font-mono text-forensics-text focus-visible:border-forensics-sakura-500 focus-visible:ring-1 focus-visible:ring-forensics-sakura-400/20",
+          "text-forensics-text",
+        mono: "font-mono",
+        path: "font-mono",
         search:
           "border-0 bg-transparent px-0 shadow-none focus-visible:border-transparent focus-visible:ring-0",
         numeric:
-          "border-forensics-border-strong font-mono text-right text-forensics-text focus-visible:border-forensics-sakura-500 focus-visible:ring-1 focus-visible:ring-forensics-sakura-400/20",
+          "font-mono text-right",
       },
       inputSize: {
-        default: "h-9 px-3 py-1 text-base md:text-sm",
-        compact: "h-7 px-2 py-0.5 text-[11px]",
-        inline: "h-6 px-1.5 py-0.5 text-[11px]",
+        line: "h-9 px-0 py-1 text-[12px]",
+        default: "h-9 px-0 py-1 text-[12px]",
+        compact: "h-7 px-0 py-0.5 text-[11px]",
+        inline: "h-6 px-0 py-0.5 text-[11px]",
       },
     },
     defaultVariants: {
@@ -49,7 +50,7 @@ function Input({
     <input
       type={type}
       data-slot="input"
-      className={cn(inputVariants({ variant, inputSize, className }))}
+      className={cn(inputVariants({ variant, inputSize: inputSize ?? (variant === 'line' ? 'line' : undefined), className }))}
       {...props}
     />
   );

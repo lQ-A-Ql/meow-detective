@@ -1,100 +1,27 @@
 import { useTranslation } from 'react-i18next';
-import { FieldHint } from '@/app/components/ui/field';
+import { Field, FieldHint, FieldLabel } from '@/app/components/ui/field';
 import { Input } from '@/app/components/ui/input';
 import type { LocalSettings } from '@/lib/settings';
 
-interface PreviewSectionProps {
-  hexChunkBytes: string;
-  maxViewerRangeLength: string;
-  maxInlineImagePreviewBytes: string;
-  maxInlineMediaPreviewBytes: string;
+type PreviewKey = 'hexChunkBytes' | 'maxViewerRangeLength' | 'maxInlineImagePreviewBytes' | 'maxInlineMediaPreviewBytes';
+interface Props extends Pick<LocalSettings, PreviewKey> {
   setSettings: React.Dispatch<React.SetStateAction<LocalSettings>>;
 }
 
-export function PreviewSection({
-  hexChunkBytes,
-  maxViewerRangeLength,
-  maxInlineImagePreviewBytes,
-  maxInlineMediaPreviewBytes,
-  setSettings,
-}: PreviewSectionProps) {
+export function PreviewSection(props: Props) {
   const { t } = useTranslation();
-
+  const fields: PreviewKey[] = ['hexChunkBytes', 'maxViewerRangeLength', 'maxInlineImagePreviewBytes', 'maxInlineMediaPreviewBytes'];
   return (
-    <section>
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-[13px] font-light text-forensics-text-secondary">{t('settings.sections.preview.title')}</span>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        <label className="block border border-forensics-border bg-forensics-input-bg p-3">
-          <span className="block text-[11px] font-light text-forensics-text-tertiary">{t('settings.sections.preview.hexChunkBytes')}</span>
-          <Input
-            value={hexChunkBytes}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                hexChunkBytes: event.target.value,
-              }))
-            }
-            inputMode="numeric"
-            variant="numeric"
-            inputSize="compact"
-            className="mt-2"
-          />
-          <FieldHint className="mt-1 text-[10px] text-forensics-muted-lighter">{t('settings.sections.preview.hexChunkBytesHint')}</FieldHint>
-        </label>
-        <label className="block border border-forensics-border bg-forensics-input-bg p-3">
-          <span className="block text-[11px] font-light text-forensics-text-tertiary">{t('settings.sections.preview.maxViewerRangeLength')}</span>
-          <Input
-            value={maxViewerRangeLength}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                maxViewerRangeLength: event.target.value,
-              }))
-            }
-            inputMode="numeric"
-            variant="numeric"
-            inputSize="compact"
-            className="mt-2"
-          />
-          <FieldHint className="mt-1 text-[10px] text-forensics-muted-lighter">{t('settings.sections.preview.maxViewerRangeLengthHint')}</FieldHint>
-        </label>
-        <label className="block border border-forensics-border bg-forensics-input-bg p-3">
-          <span className="block text-[11px] font-light text-forensics-text-tertiary">{t('settings.sections.preview.maxInlineImagePreviewBytes')}</span>
-          <Input
-            value={maxInlineImagePreviewBytes}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                maxInlineImagePreviewBytes: event.target.value,
-              }))
-            }
-            inputMode="numeric"
-            variant="numeric"
-            inputSize="compact"
-            className="mt-2"
-          />
-          <FieldHint className="mt-1 text-[10px] text-forensics-muted-lighter">{t('settings.sections.preview.maxInlineImagePreviewBytesHint')}</FieldHint>
-        </label>
-        <label className="block border border-forensics-border bg-forensics-input-bg p-3">
-          <span className="block text-[11px] font-light text-forensics-text-tertiary">{t('settings.sections.preview.maxInlineMediaPreviewBytes')}</span>
-          <Input
-            value={maxInlineMediaPreviewBytes}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                maxInlineMediaPreviewBytes: event.target.value,
-              }))
-            }
-            inputMode="numeric"
-            variant="numeric"
-            inputSize="compact"
-            className="mt-2"
-          />
-          <FieldHint className="mt-1 text-[10px] text-forensics-muted-lighter">{t('settings.sections.preview.maxInlineMediaPreviewBytesHint')}</FieldHint>
-        </label>
-      </div>
-    </section>
+    <div className="max-w-4xl space-y-5">
+      <h2 className="mb-5 text-[14px] text-forensics-ink">{t('settings.sections.preview.title')}</h2>
+      {fields.map((key) => (
+        <Field key={key} layout="row">
+          <FieldLabel htmlFor={`settings-preview-${key}`}>{t(`settings.sections.preview.${key}`)}</FieldLabel>
+          <Input id={`settings-preview-${key}`} value={props[key]} inputMode="numeric" variant="numeric"
+            onChange={(event) => props.setSettings((current) => ({ ...current, [key]: event.target.value }))} />
+          <FieldHint>{t(`settings.sections.preview.${key}Hint`)}</FieldHint>
+        </Field>
+      ))}
+    </div>
   );
 }

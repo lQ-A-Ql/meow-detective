@@ -15,6 +15,7 @@ import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { KeyValueField } from '@/components/data-display';
 import type { ArtifactsWorkspaceModel } from '@/features/artifacts/use-artifacts-workspace-model';
 import type { ArtifactRow } from '@/types/models';
+import { WorkspaceFrame } from '@/components/layout/WorkspaceFrame';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 
 interface ArtifactsWorkspaceProps {
@@ -35,7 +36,7 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
   );
 
   return (
-    <div className="flex h-full min-w-0 flex-1 bg-forensics-base p-[2px]">
+    <WorkspaceFrame>
       <WorkspaceCard className="flex flex-1 flex-col">
       <ContextBar>
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none">
@@ -62,6 +63,6 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
         </InspectorPane>
       </div>
       </WorkspaceCard>
-    </div>
+    </WorkspaceFrame>
   );
 }

@@ -18,7 +18,7 @@ function Progress({
       data-slot="progress"
       value={resolvedValue}
       className={cn(
-        "bg-forensics-border-light relative h-1.5 w-full overflow-hidden rounded-none",
+        "bg-forensics-border-light relative h-1 w-full overflow-hidden rounded-full",
         className,
       )}
       {...props}
@@ -26,7 +26,7 @@ function Progress({
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
         className={cn(
-          "bg-primary h-full w-full flex-1 transition-opacity duration-1000",
+          "bg-forensics-ink h-full w-full flex-1",
           indeterminate && "animate-pulse",
         )}
         style={indeterminate ? undefined : { transform: `translateX(-${100 - (value || 0)}%)` }}

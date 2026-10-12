@@ -1,20 +1,111 @@
-import { Button } from '@/app/components/ui/button';
-import { ListRow } from '@/components/lists/ListRow';
-import { ActionIcon } from '@/components/controls/ActionIcon';
-import { Tooltip } from '@/app/components/ui/tooltip';
-
+import { Checkbox } from '@/app/components/ui/checkbox';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
+import { ListRow } from '@/components/lists/ListRow';
+import { ActionIcon } from '@/components/controls/ActionIcon';
+import { IconButton } from '@/components/controls/IconButton';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { VirtualList } from '@/components/lists/VirtualList';
 import type { TFunction } from 'i18next';
 import type { McpToolListProps } from '../model/mcp-tool-list';
 import { formatMcpArguments, formatMcpResult, type McpToolResult } from '../tool-format';
-import { mcpIcons } from '../mcp-icons';
 
-interface ViewProps extends McpToolListProps { t: TFunction; query: string; onQuery: (value: string) => void; filteredTools: McpToolListProps['tools']; selectedTool?: McpToolListProps['tools'][number]; argumentsText: string; onArguments: (value: string) => void; argumentError?: string; testingTool?: string; testResult?: McpToolResult; disabledCount: number; isToolDisabled: (name: string) => boolean; selectTool: (tool: McpToolListProps['tools'][number]) => void; runTool: (tool: McpToolListProps['tools'][number]) => void }
+interface ViewProps extends McpToolListProps {
+  t: TFunction;
+  query: string;
+  onQuery: (value: string) => void;
+  filteredTools: McpToolListProps['tools'];
+  selectedTool?: McpToolListProps['tools'][number];
+  argumentsText: string;
+  onArguments: (value: string) => void;
+  argumentError?: string;
+  testingTool?: string;
+  testResult?: McpToolResult;
+  disabledCount: number;
+  isToolDisabled: (name: string) => boolean;
+  selectTool: (tool: McpToolListProps['tools'][number]) => void;
+  runTool: (tool: McpToolListProps['tools'][number]) => void;
+}
+
 export function McpToolListView(p: ViewProps) {
-  const { t, tools, loading, error, onRefresh, filteredTools, selectedTool, argumentsText, onArguments, argumentError, testingTool, testResult, disabledCount, isToolDisabled, selectTool, runTool, toolAccess = 'allowAll', onToggleTool, onToggleAll, onEnableAll } = p;
-  const { CheckCircle, Loader2, Play, RefreshCw, Search, Wrench, XCircle } = mcpIcons;
-  return <div className="min-w-0 bg-transparent p-3"><div className="mb-2 flex items-center justify-between gap-2"><div className="text-[11px] font-light text-forensics-muted">{p.title ?? t('mcpUi.tools.title')} ({tools.length})</div><span className="text-[10px] text-forensics-muted">{t('mcpUi.tools.enabled', { enabled: Math.max(0, tools.length - disabledCount), total: tools.length })}</span>{toolAccess === 'allowAll' && onToggleAll && tools.length > 0 ? <><Tooltip content={t('mcpUi.tools.enableAll')}><Button aria-label={t('mcpUi.tools.enableAll')} type="button" variant="forensicsGhost" size="compact" disabled={loading} onClick={() => onToggleAll(false)}><ActionIcon name="list" /></Button></Tooltip><Tooltip content={t('mcpUi.tools.disableAll')}><Button aria-label={t('mcpUi.tools.disableAll')} type="button" variant="forensicsGhost" size="compact" disabled={loading} onClick={() => onToggleAll(true)}><ActionIcon name="list" /></Button></Tooltip></> : null}{toolAccess !== 'allowAll' && onEnableAll ? <Button type="button" variant="forensicsOutline" size="compact" onClick={onEnableAll}>{t(toolAccess === 'disabled' ? 'mcpUi.tools.enable' : 'mcpUi.tools.allTools')}</Button> : null}<Button type="button" variant="forensicsGhost" size="iconSm" onClick={onRefresh} disabled={loading} title={t('mcpUi.tools.refresh')}>{loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}</Button></div>{error ? <div className="mb-2 border border-forensics-error-border bg-forensics-error-bg p-2 text-[10px] text-forensics-error-text">{error}</div> : null}{tools.length > 0 ? <div className="relative mb-2"><Search size={12} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-forensics-muted" /><Input value={p.query} onChange={(event) => p.onQuery(event.target.value)} placeholder={t('mcpUi.tools.search')} variant="forensics" inputSize="compact" className="pl-7" /></div> : null}{filteredTools.length === 0 ? <div className="py-2 text-[11px] text-forensics-muted">{loading ? t('mcpUi.tools.loading') : tools.length ? t('mcpUi.tools.noMatch') : t('mcpUi.tools.empty')}</div> : <VirtualList items={filteredTools} getItemKey={(tool) => tool.name} estimateSize={58} style={{ height: 'min(32vh, 260px)' }} ariaLabel={t('mcpUi.tools.listLabel')} renderItem={(tool) => <div className={`flex w-full items-start gap-2 border-b border-forensics-border-light p-2 text-left ${selectedTool?.name === tool.name ? 'bg-forensics-surface' : ''}`}><Wrench size={12} className="mt-0.5 shrink-0 text-forensics-success-text" /><ListRow key={tool.name} selected={selectedTool?.name === tool.name} wrapLabel onActivate={() => selectTool(tool)} ariaLabel={tool.name} className="min-w-0 px-2 py-1.5" label={<><span className="block truncate text-[11px] text-forensics-ink-2">{tool.name}</span><span className="block truncate text-[10px] text-forensics-ink-3" title={tool.description}>{tool.description || t('mcpUi.tools.noDescription')}</span></>} /><Button type="button" variant="forensicsGhost" size="compact" onClick={() => void runTool(tool)} disabled={Boolean(testingTool) || loading || isToolDisabled(tool.name)} title={t('mcpUi.tools.testWithCurrent')}>{testingTool === tool.name ? <Loader2 size={10} /> : <Play size={10} />}</Button>{onToggleTool ? <Tooltip content={t('mcpUi.tools.enable')}><Button aria-label={t('mcpUi.tools.enable')} type="button" variant="forensicsGhost" size="compact" disabled={loading} aria-pressed={isToolDisabled(tool.name)} onClick={() => onToggleTool(tool.name, !isToolDisabled(tool.name))} title={t(isToolDisabled(tool.name) ? 'mcpUi.tools.enable' : 'mcpUi.tools.disable')}><ActionIcon name="list" /></Button></Tooltip> : null}</div>} />}{selectedTool ? <div className="mt-3 border-t border-forensics-line pt-3"><div className="mb-1 flex items-center justify-between gap-2"><div className="truncate text-[11px] text-forensics-text">{selectedTool.name} {t('mcpUi.tools.parameter')}</div><span className="text-[10px] text-forensics-muted">{t('mcpUi.tools.json')}</span></div><Textarea value={argumentsText || formatMcpArguments(selectedTool.inputSchema)} onChange={(event) => onArguments(event.target.value)} variant="mono" textareaSize="compact" rows={5} spellCheck={false} aria-label={`${selectedTool.name} ${t('mcpUi.tools.parameter')}`} />{argumentError ? <div className="mt-1 text-[10px] text-forensics-error-text">{t(argumentError)}</div> : null}<Tooltip content={t('mcpUi.tools.test')}><Button aria-label={t('mcpUi.tools.test')} type="button" variant="forensicsOutline" size="compact" onClick={() => void runTool(selectedTool)} disabled={Boolean(testingTool) || loading || isToolDisabled(selectedTool.name)} className="mt-2"><ActionIcon name="refresh" /></Button></Tooltip></div> : null}{testResult ? <div className={`mt-3 rounded-none p-2 text-[11px] ${testResult.success ? 'border border-forensics-success-border bg-forensics-success-bg' : 'border border-forensics-error-border bg-forensics-error-bg'}`}><div className="mb-1 flex items-center gap-1">{testResult.success ? <CheckCircle size={12} /> : <XCircle size={12} />}<span>{testResult.toolName}</span></div>{testResult.error ? <div className="text-[10px] text-forensics-error-text">{testResult.error}</div> : null}{testResult.data !== undefined ? <ScrollArea className="mt-1 max-h-28" showHorizontalScrollbar><pre className="p-1 text-[10px] text-forensics-muted">{formatMcpResult(testResult.data)}</pre></ScrollArea> : null}</div> : null}</div>;
+  const { t, tools, loading, error, onRefresh, filteredTools, selectedTool, argumentsText, onArguments, argumentError,
+    testingTool, testResult, disabledCount, isToolDisabled, selectTool, runTool, toolAccess = 'allowAll',
+    onToggleTool, onToggleAll, onEnableAll } = p;
+  return (
+    <div className="min-w-0 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="mr-auto text-[12px] text-forensics-ink">
+          {p.title ?? t('mcpUi.tools.title')} <span className="text-forensics-muted">({tools.length})</span>
+        </h3>
+        <span className="text-[11px] text-forensics-muted">
+          {t('mcpUi.tools.enabled', { enabled: Math.max(0, tools.length - disabledCount), total: tools.length })}
+        </span>
+        {toolAccess === 'allowAll' && onToggleAll && tools.length > 0 ? <>
+          <IconButton label={t('mcpUi.tools.enableAll')} disabled={loading} onClick={() => onToggleAll(false)}><ActionIcon name="check" /></IconButton>
+          <IconButton label={t('mcpUi.tools.disableAll')} disabled={loading} onClick={() => onToggleAll(true)}><ActionIcon name="pause" /></IconButton>
+        </> : null}
+        {toolAccess !== 'allowAll' && onEnableAll ? (
+          <IconButton label={t(toolAccess === 'disabled' ? 'mcpUi.tools.enable' : 'mcpUi.tools.allTools')} onClick={onEnableAll}>
+            <ActionIcon name="play" />
+          </IconButton>
+        ) : null}
+        <IconButton label={t('mcpUi.tools.refresh')} onClick={onRefresh} disabled={loading}>
+          <ActionIcon name="refresh" className={loading ? 'size-[15px] animate-spin' : 'size-[15px]'} />
+        </IconButton>
+      </div>
+      {error ? <div role="alert" className="text-[11px] text-forensics-error-text">{error}</div> : null}
+      {tools.length > 0 ? <div className="relative">
+        <ActionIcon name="search" className="pointer-events-none absolute left-0 top-1/2 size-3 -translate-y-1/2 text-forensics-muted" />
+        <Input value={p.query} onChange={(event) => p.onQuery(event.target.value)} placeholder={t('mcpUi.tools.search')}
+          aria-label={t('mcpUi.tools.search')} inputSize="compact" className="pl-6" />
+      </div> : null}
+      {filteredTools.length === 0 ? (
+        <div className="py-3 text-[12px] text-forensics-muted">{loading ? t('mcpUi.tools.loading') : tools.length ? t('mcpUi.tools.noMatch') : t('mcpUi.tools.empty')}</div>
+      ) : <VirtualList items={filteredTools} getItemKey={(tool) => tool.name} estimateSize={58}
+        style={{ height: 'min(32vh, 260px)' }} ariaLabel={t('mcpUi.tools.listLabel')}
+        renderItem={(tool) => <div className="flex w-full min-w-0 items-center gap-2 py-1">
+          <ListRow selected={selectedTool?.name === tool.name} wrapLabel onActivate={() => selectTool(tool)}
+            ariaLabel={tool.name} className="min-w-0 flex-1"
+            label={<>
+              <span className="block truncate text-[12px] text-forensics-ink">{tool.name}</span>
+              <span className="block truncate text-[11px] text-forensics-muted" title={tool.description}>
+                {tool.description || t('mcpUi.tools.noDescription')}
+              </span>
+            </>} />
+          <IconButton label={t('mcpUi.tools.testWithCurrent')} onClick={() => void runTool(tool)}
+            disabled={Boolean(testingTool) || loading || isToolDisabled(tool.name)}>
+            <ActionIcon name="play" />
+          </IconButton>
+          {onToggleTool ? <Tooltip content={t(isToolDisabled(tool.name) ? 'mcpUi.tools.enable' : 'mcpUi.tools.disable')}>
+            <Checkbox aria-label={`${t('mcpUi.tools.enable')} ${tool.name}`} checked={!isToolDisabled(tool.name)} disabled={loading}
+              onCheckedChange={(checked) => onToggleTool(tool.name, checked !== true)} />
+          </Tooltip> : null}
+        </div>} />}
+      {selectedTool ? <div className="space-y-2 pt-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="truncate text-[12px] text-forensics-ink">{selectedTool.name} {t('mcpUi.tools.parameter')}</div>
+          <span className="text-[11px] text-forensics-muted">{t('mcpUi.tools.json')}</span>
+        </div>
+        <Textarea value={argumentsText || formatMcpArguments(selectedTool.inputSchema)} onChange={(event) => onArguments(event.target.value)}
+          variant="mono" textareaSize="compact" rows={5} spellCheck={false}
+          aria-label={`${selectedTool.name} ${t('mcpUi.tools.parameter')}`} aria-invalid={Boolean(argumentError)} />
+        {argumentError ? <div role="alert" className="text-[11px] text-forensics-error-text">{t(argumentError)}</div> : null}
+        <div className="flex justify-end">
+          <IconButton label={t('mcpUi.tools.test')} variant="solid" onClick={() => void runTool(selectedTool)}
+            disabled={Boolean(testingTool) || loading || isToolDisabled(selectedTool.name)}><ActionIcon name="play" /></IconButton>
+        </div>
+      </div> : null}
+      {testResult ? <div role="status" className="space-y-2 py-2 text-[11px]">
+        <div className={`flex items-center gap-2 ${testResult.success ? 'text-forensics-success-text' : 'text-forensics-error-text'}`}>
+          <ActionIcon name={testResult.success ? 'check' : 'warning'} className="size-3" />
+          <span>{testResult.toolName}</span>
+        </div>
+        {testResult.error ? <div className="text-forensics-error-text">{testResult.error}</div> : null}
+        {testResult.data !== undefined ? <ScrollArea className="max-h-28" showHorizontalScrollbar>
+          <pre className="text-[11px] text-forensics-muted">{formatMcpResult(testResult.data)}</pre>
+        </ScrollArea> : null}
+      </div> : null}
+    </div>
+  );
 }

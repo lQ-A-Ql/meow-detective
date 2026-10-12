@@ -9,8 +9,9 @@ export function WorkspaceCard({
 }: HTMLAttributes<HTMLElement> & { children: ReactNode }) {
   return (
     <section
+      data-slot="workspace-card"
       className={cn(
-        'min-w-0 overflow-hidden rounded-none rounded-bl-shell border border-forensics-line/70 bg-forensics-paper shadow-[0_2px_8px_rgba(32,27,28,0.04)]',
+        'min-w-0 overflow-hidden rounded-none rounded-bl-shell border border-forensics-line/70 bg-forensics-paper shadow-workspace',
         className,
       )}
       {...props}

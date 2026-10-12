@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { XIcon } from "lucide-react";
+import { useTranslation } from 'react-i18next';
+import { ActionIcon } from '@/components/controls/ActionIcon';
+import { IconButton } from '@/components/controls/IconButton';
 
 import { cn } from "./utils";
 
@@ -39,7 +41,7 @@ const DialogOverlay = React.forwardRef<
       ref={ref}
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-forensics-text/40 transition-opacity duration-1000",
+        "ui-overlay-motion fixed inset-0 z-50 bg-forensics-ink/20",
         className,
       )}
       {...props}
@@ -52,21 +54,23 @@ function DialogContent({
   children,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
+  const { t } = useTranslation();
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
       data-slot="dialog-content"
       className={cn(
-          "border-forensics-border bg-background fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-shell border p-6 shadow-sm transition-opacity duration-1000 sm:max-w-lg",
+          "ui-overlay-surface ui-overlay-motion fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-5 rounded-shell p-6 sm:max-w-lg",
           className,
         )}
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-none opacity-70 transition-opacity duration-500 hover:opacity-100 focus:ring-1 focus:outline-none disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-          <XIcon />
-          <span className="sr-only">Close</span>
+        <DialogPrimitive.Close asChild>
+          <IconButton label={t('common.close')} className="absolute top-4 right-4">
+            <ActionIcon name="close" />
+          </IconButton>
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
     </DialogPortal>
@@ -77,7 +81,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
+      className={cn("flex flex-col gap-2 pr-8 text-left", className)}
       {...props}
     />
   );
@@ -103,7 +107,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("font-serif text-lg leading-none font-light tracking-wide", className)}
+      className={cn("text-[16px] leading-6 font-light text-forensics-ink", className)}
       {...props}
     />
   );
@@ -116,7 +120,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("text-forensics-muted text-[12px] leading-5", className)}
       {...props}
     />
   );

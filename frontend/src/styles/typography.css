@@ -1,0 +1,19 @@
+.artistic-title {
+  margin: 0;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  line-height: 0;
+  color: var(--forensics-red-deep);
+}
+
+.artistic-title__wordmark {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artistic-title__wordmark { animation: none; }
+}

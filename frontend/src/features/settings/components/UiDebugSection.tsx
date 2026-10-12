@@ -16,10 +16,10 @@ export function UiDebugSection({
   return (
     <section>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-[13px] font-light text-forensics-text-secondary">{t('settings.sections.uiDebug.title')}</span>
+        <h2 className="text-[14px] text-forensics-ink">{t('settings.sections.uiDebug.title')}</h2>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-[12px]">
-        <label className="flex items-center gap-2 border border-forensics-border bg-forensics-input-bg px-3 py-2">
+        <label className="flex items-center gap-2 py-2 text-[12px]">
           <Checkbox
             variant="forensics"
             checked={devEventTrace}

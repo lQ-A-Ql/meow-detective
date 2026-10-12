@@ -1,7 +1,67 @@
-import { Button } from '@/app/components/ui/button';
 import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
+import { IconButton } from '@/components/controls/IconButton';
+import { ActionIcon } from '@/components/controls/ActionIcon';
+import { ListRow } from '@/components/lists/ListRow';
+import { StatusBadge } from '@/components/status/StatusBadge';
 import type { TFunction } from 'i18next';
-import { mcpIcons } from '../mcp-icons';
-export interface McpServerItemData { id: string; name: string; transportType: 'sse' | 'stdio'; url?: string; command?: string; enabled: boolean; connected: boolean; hasResources: boolean; hasTools: boolean; hasPrompts: boolean; lastError?: string }
-interface Props { server: McpServerItemData; isSelected: boolean; loading: boolean; confirmRemove: boolean; t: TFunction; onConnect: () => void; onRemove: () => void; onSelect: () => void; onConfirmChange: (open: boolean) => void }
-export function McpServerItemView({ server, isSelected, loading, confirmRemove, t, onConnect, onRemove, onSelect, onConfirmChange }: Props) { const { Loader2, Trash2, Wifi, WifiOff } = mcpIcons; const status = server.connected ? 'mcpUi.server.connected' : server.lastError ? 'mcpUi.server.error' : 'mcpUi.server.disconnected'; return <><div className={`flex items-center gap-3 rounded-none border p-2 ${isSelected ? 'bg-forensics-info-bg border-forensics-info-border' : 'hover:bg-forensics-panel border-transparent'}`}><div className="h-2 w-2 shrink-0 rounded-none bg-forensics-panel" aria-label={t(status)} title={t(status)} /><Button type="button" variant="forensicsGhost" size="inline" onClick={onSelect} aria-current={isSelected ? 'true' : undefined} className="min-w-0 flex-1 justify-start px-0 text-left"><span className="min-w-0"><span className="block truncate text-[12px] text-forensics-muted">{server.name}</span><span className="block truncate text-[10px] text-forensics-muted">{server.transportType === 'sse' ? server.url : server.command}</span></span></Button><div className="flex gap-1">{server.hasResources ? <span className="px-1 py-0.5 text-[9px] bg-forensics-info-bg">{t('mcpUi.server.resources')}</span> : null}{server.hasTools ? <span className="px-1 py-0.5 text-[9px] bg-forensics-success-bg">{t('mcpUi.server.tools')}</span> : null}{server.hasPrompts ? <span className="px-1 py-0.5 text-[9px] bg-forensics-info-bg">{t('mcpUi.server.prompts')}</span> : null}</div><span className="text-[10px] text-forensics-muted w-12 text-center">{t(status)}</span><div className="flex gap-1"><Button type="button" variant="forensicsGhost" size="iconSm" onClick={onConnect} disabled={loading} title={t(server.connected ? 'mcpUi.server.disconnect' : 'mcpUi.server.connect')}>{loading ? <Loader2 size={14} /> : server.connected ? <WifiOff size={14} /> : <Wifi size={14} />}</Button><Button type="button" variant="forensicsDangerGhost" size="iconSm" onClick={() => onConfirmChange(true)} title={t('mcpUi.server.delete')}><Trash2 size={14} /></Button></div></div><ConfirmationDialog open={confirmRemove} onOpenChange={onConfirmChange} title={t('mcpUi.server.deleteTitle')} description={t('mcpUi.server.deleteDescription', { name: server.name })} cancelLabel={t('common.cancel')} confirmLabel={t('mcpUi.server.delete')} destructive onConfirm={onRemove} /></>; }
+
+export interface McpServerItemData {
+  id: string;
+  name: string;
+  transportType: 'sse' | 'stdio';
+  url?: string;
+  command?: string;
+  enabled: boolean;
+  connected: boolean;
+  hasResources: boolean;
+  hasTools: boolean;
+  hasPrompts: boolean;
+  lastError?: string;
+}
+interface Props {
+  server: McpServerItemData;
+  isSelected: boolean;
+  loading: boolean;
+  confirmRemove: boolean;
+  t: TFunction;
+  onConnect: () => void;
+  onRemove: () => void;
+  onSelect: () => void;
+  onConfirmChange: (open: boolean) => void;
+}
+
+export function McpServerItemView({ server, isSelected, loading, confirmRemove, t, onConnect, onRemove, onSelect, onConfirmChange }: Props) {
+  const status = server.connected ? 'mcpUi.server.connected' : server.lastError ? 'mcpUi.server.error' : 'mcpUi.server.disconnected';
+  return (
+    <>
+      <div className="flex min-w-0 items-center gap-2 py-1">
+        <ListRow selected={isSelected} wrapLabel ariaCurrent={isSelected} onActivate={onSelect} ariaLabel={server.name}
+          className="min-w-0 flex-1" icon={<ActionIcon name="plug" />}
+          label={<>
+            <span className="block truncate text-[12px] text-forensics-ink">{server.name}</span>
+            <span className="block truncate font-mono text-[11px] text-forensics-muted" title={server.transportType === 'sse' ? server.url : server.command}>
+              {server.transportType === 'sse' ? server.url : server.command}
+            </span>
+          </>}
+          meta={<span className="hidden shrink-0 text-[10px] text-forensics-muted sm:inline">
+            {[
+              server.hasResources ? t('mcpUi.server.resources') : null,
+              server.hasTools ? t('mcpUi.server.tools') : null,
+              server.hasPrompts ? t('mcpUi.server.prompts') : null,
+            ].filter(Boolean).join(' · ')}
+          </span>} />
+        <StatusBadge label={t(status)} tone={server.connected ? 'success' : server.lastError ? 'error' : 'neutral'} />
+        <IconButton label={t(server.connected ? 'mcpUi.server.disconnect' : 'mcpUi.server.connect')}
+          onClick={onConnect} disabled={loading} pressed={server.connected}>
+          <ActionIcon name={server.connected ? 'pause' : 'play'} />
+        </IconButton>
+        <IconButton label={t('mcpUi.server.delete')} variant="forensicsDangerGhost" onClick={() => onConfirmChange(true)}>
+          <ActionIcon name="trash" />
+        </IconButton>
+      </div>
+      <ConfirmationDialog open={confirmRemove} onOpenChange={onConfirmChange}
+        title={t('mcpUi.server.deleteTitle')} description={t('mcpUi.server.deleteDescription', { name: server.name })}
+        cancelLabel={t('common.cancel')} confirmLabel={t('mcpUi.server.delete')} destructive onConfirm={onRemove} />
+    </>
+  );
+}

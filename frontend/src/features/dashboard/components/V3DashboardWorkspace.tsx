@@ -15,6 +15,7 @@ import { RulePackStatusSection } from '@/features/dashboard/components/RulePackS
 import { TimelineOverviewSection } from '@/features/dashboard/components/TimelineOverviewSection';
 import { errorMessage } from '@/lib/errors';
 import type { V3DashboardModel } from '@/features/dashboard/use-v3-dashboard-model';
+import { WorkspaceFrame } from '@/components/layout/WorkspaceFrame';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 
 interface V3DashboardWorkspaceProps {
@@ -24,7 +25,7 @@ interface V3DashboardWorkspaceProps {
 export function V3DashboardWorkspace({ model }: V3DashboardWorkspaceProps) {
   const { t } = useTranslation();
   return (
-    <div className="flex h-full w-full flex-1 overflow-hidden bg-forensics-base p-[2px]">
+    <WorkspaceFrame>
       <WorkspaceCard className="flex flex-1 flex-col">
       <header className="flex shrink-0 items-center justify-between bg-forensics-paper px-5 py-4">
         <div>
@@ -49,6 +50,6 @@ export function V3DashboardWorkspace({ model }: V3DashboardWorkspaceProps) {
         </ScrollArea>
       )}
       </WorkspaceCard>
-    </div>
+    </WorkspaceFrame>
   );
 }
