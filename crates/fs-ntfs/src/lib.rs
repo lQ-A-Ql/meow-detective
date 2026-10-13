@@ -36,8 +36,7 @@ pub use utils::parse_mft_data_real_size;
 pub use write_map::NtfsFileExtent;
 
 pub(crate) use evidence_core::filesystem::{
-    file_not_found, fs_out_of_memory, invalid_fs_data, truncate_data_to_declared_size,
-    unexpected_fs_eof,
+    file_not_found, fs_out_of_memory, invalid_fs_data, unexpected_fs_eof,
 };
 
 pub(crate) const ATTR_TYPE_ATTRIBUTE_LIST: u32 = 0x20;

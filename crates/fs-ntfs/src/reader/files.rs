@@ -2,13 +2,10 @@ use std::io;
 
 use crate::attribute::{
     data_extent_logical_len, data_extent_logical_start, data_extents_declared_size,
-    data_extents_logical_size, DataAttributeExtent,
+    data_extents_initialized_size, DataAttributeExtent,
 };
-use crate::data_runs::data_runs_logical_size;
 use crate::utils::validate_file_record;
-use crate::{
-    fs_out_of_memory, invalid_fs_data, truncate_data_to_declared_size, MAX_BUFFERED_FILE_BYTES,
-};
+use crate::{fs_out_of_memory, invalid_fs_data, MAX_BUFFERED_FILE_BYTES};
 
 impl crate::NtfsReader {
     /// Read the unnamed `$DATA` attribute of a file by MFT inode.
@@ -52,8 +49,9 @@ impl crate::NtfsReader {
         &self,
         extents: &[DataAttributeExtent],
     ) -> io::Result<Vec<u8>> {
-        let data_length = data_extents_logical_size(extents, self.cluster_size)?;
-        if data_length as usize > MAX_BUFFERED_FILE_BYTES {
+        let data_length = data_extents_declared_size(extents, self.cluster_size)?;
+        let initialized_size = data_extents_initialized_size(extents, self.cluster_size)?;
+        if data_length > MAX_BUFFERED_FILE_BYTES as u64 {
             return Err(invalid_fs_data(format!(
                 "data run buffer exceeds {} byte limit (would be {} bytes)",
                 MAX_BUFFERED_FILE_BYTES, data_length
@@ -63,7 +61,12 @@ impl crate::NtfsReader {
         let mut output = vec![0u8; data_length as usize];
         for extent in extents {
             let extent_start = data_extent_logical_start(extent, self.cluster_size)?;
-            let extent_bytes = self.read_data_extent_to_vec(extent)?;
+            if extent_start >= initialized_size {
+                continue;
+            }
+            let length = data_extent_logical_len(extent, self.cluster_size)?
+                .min(initialized_size - extent_start) as usize;
+            let extent_bytes = self.read_data_extent_to_vec(extent, length)?;
             let start = usize::try_from(extent_start)
                 .map_err(|_| invalid_fs_data("data extent offset too large"))?;
             if start >= output.len() {
@@ -73,10 +76,7 @@ impl crate::NtfsReader {
             output[start..end].copy_from_slice(&extent_bytes[..end - start]);
         }
 
-        Ok(truncate_data_to_declared_size(
-            output,
-            data_extents_declared_size(extents, self.cluster_size)?,
-        ))
+        Ok(output)
     }
 
     /// Return the declared length of an inode's unnamed `$DATA` stream.
@@ -88,11 +88,14 @@ impl crate::NtfsReader {
         data_extents_declared_size(&extents, self.cluster_size).map(Some)
     }
 
-    fn read_data_extent_to_vec(&self, extent: &DataAttributeExtent) -> io::Result<Vec<u8>> {
+    fn read_data_extent_to_vec(
+        &self,
+        extent: &DataAttributeExtent,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
         match extent {
-            DataAttributeExtent::Resident { data } => Ok(data.clone()),
+            DataAttributeExtent::Resident { data } => Ok(data[..length].to_vec()),
             DataAttributeExtent::NonResident {
-                allocated_size,
                 real_size,
                 attr_flags,
                 compression_unit_exp,
@@ -100,21 +103,16 @@ impl crate::NtfsReader {
                 ..
             } => {
                 if *attr_flags & 0x0001 != 0 {
-                    let decoded = self.read_compressed_data_runs_to_vec(
+                    let mut decoded = self.read_compressed_data_runs_to_vec(
                         runs,
                         *compression_unit_exp,
                         *real_size,
                     )?;
-                    return Ok(truncate_data_to_declared_size(decoded, *real_size));
+                    decoded.truncate(length);
+                    return Ok(decoded);
                 }
 
-                let allocated = data_runs_logical_size(runs, self.cluster_size)?;
-                let allocated = if *allocated_size > 0 {
-                    (*allocated_size).min(allocated)
-                } else {
-                    allocated
-                };
-                self.read_data_runs_to_vec(runs, true, allocated)
+                self.read_data_runs_range(runs, 0, length)
             }
         }
     }
@@ -136,9 +134,14 @@ impl crate::NtfsReader {
         let bounded_length = usize::try_from(bounded_length)
             .map_err(|_| fs_out_of_memory("requested range length is too large"))?;
         let mut output = vec![0u8; bounded_length];
+        let initialized_size = data_extents_initialized_size(extents, self.cluster_size)?;
+        if offset >= initialized_size {
+            return Ok(output);
+        }
         let request_end = offset
             .checked_add(bounded_length as u64)
-            .ok_or_else(|| invalid_fs_data("requested range offset overflow"))?;
+            .ok_or_else(|| invalid_fs_data("requested range offset overflow"))?
+            .min(initialized_size);
 
         for extent in extents {
             let extent_start = data_extent_logical_start(extent, self.cluster_size)?;

@@ -169,6 +169,7 @@ fn write_large_ntfs_raw_fixture(
     rec6[data_attr + 0x28..data_attr + 0x30]
         .copy_from_slice(&((sparse_prefix_clusters + 1) * CLUSTER_SIZE as u64).to_le_bytes());
     rec6[data_attr + 0x30..data_attr + 0x38].copy_from_slice(&logical_size.to_le_bytes());
+    rec6[data_attr + 0x38..data_attr + 0x40].copy_from_slice(&logical_size.to_le_bytes());
 
     let run = data_attr + 0x40;
     rec6[run] = 0x03;

@@ -14,6 +14,8 @@ pub enum DataAttributeExtent {
         highest_vcn: u64,
         allocated_size: u64,
         real_size: u64,
+        /// Stream-wide valid data length; only the VCN-zero extent is authoritative.
+        initialized_size: u64,
         attr_flags: u16,
         compression_unit_exp: u16,
         runs: Vec<crate::DataRun>,
@@ -80,7 +82,7 @@ pub(crate) fn parse_data_attribute_extent(
     attr_len: usize,
 ) -> io::Result<Option<DataAttributeExtent>> {
     if pos_is_nonresident(record, attr_pos) {
-        if attr_pos + 0x40 > record.len() {
+        if attr_len < 0x40 || attr_pos + 0x40 > record.len() {
             return Ok(None);
         }
         let run_off =
@@ -113,6 +115,14 @@ pub(crate) fn parse_data_attribute_extent(
                 .try_into()
                 .unwrap_or([0; 8]),
         );
+        let initialized_size = u64::from_le_bytes(
+            record[attr_pos + 0x38..attr_pos + 0x40]
+                .try_into()
+                .unwrap_or([0; 8]),
+        );
+        if lowest_vcn == 0 && initialized_size > real_size {
+            return Err(invalid_fs_data("NTFS initialized size exceeds stream size"));
+        }
         let attr_flags = u16::from_le_bytes(
             record[attr_pos + 0x0c..attr_pos + 0x0e]
                 .try_into()
@@ -125,6 +135,7 @@ pub(crate) fn parse_data_attribute_extent(
             highest_vcn,
             allocated_size,
             real_size,
+            initialized_size,
             attr_flags,
             compression_unit_exp,
             runs,
@@ -231,13 +242,15 @@ pub(crate) fn data_extents_declared_size(
     extents: &[DataAttributeExtent],
     cluster_size: u64,
 ) -> io::Result<u64> {
-    let mut declared = 0u64;
+    let mut declared: Option<u64> = None;
     for extent in extents {
         match extent {
             DataAttributeExtent::Resident { data } => {
-                declared = declared.max(
-                    u64::try_from(data.len())
-                        .map_err(|_| invalid_fs_data("resident data length overflow"))?,
+                declared = Some(
+                    declared.unwrap_or(0).max(
+                        u64::try_from(data.len())
+                            .map_err(|_| invalid_fs_data("resident data length overflow"))?,
+                    ),
                 );
             }
             DataAttributeExtent::NonResident {
@@ -246,17 +259,46 @@ pub(crate) fn data_extents_declared_size(
                 ..
             } => {
                 if *lowest_vcn == 0 {
-                    declared = declared.max(*real_size);
+                    declared = Some(declared.unwrap_or(0).max(*real_size));
                 }
             }
         }
     }
 
-    if declared == 0 {
-        data_extents_logical_size(extents, cluster_size)
-    } else {
-        Ok(declared)
+    match declared {
+        Some(size) => Ok(size),
+        None => data_extents_logical_size(extents, cluster_size),
     }
+}
+
+/// Read the valid-data boundary from the first extent, never from continuation headers.
+pub(crate) fn data_extents_initialized_size(
+    extents: &[DataAttributeExtent],
+    cluster_size: u64,
+) -> io::Result<u64> {
+    for extent in extents {
+        match extent {
+            DataAttributeExtent::Resident { data } => return Ok(data.len() as u64),
+            DataAttributeExtent::NonResident {
+                lowest_vcn: 0,
+                real_size,
+                initialized_size,
+                ..
+            } => {
+                if initialized_size > real_size {
+                    return Err(invalid_fs_data("NTFS initialized size exceeds stream size"));
+                }
+                if *initialized_size > data_extents_logical_size(extents, cluster_size)? {
+                    return Err(invalid_fs_data(
+                        "NTFS initialized data exceeds mapped extents",
+                    ));
+                }
+                return Ok(*initialized_size);
+            }
+            _ => {}
+        }
+    }
+    Err(invalid_fs_data("NTFS stream has no initial data extent"))
 }
 
 pub(crate) fn data_extent_logical_start(
@@ -283,11 +325,13 @@ pub(crate) fn data_extent_logical_len(
             allocated_size,
             real_size,
             lowest_vcn,
+            attr_flags,
             runs,
             ..
         } => {
             let allocated = data_runs_logical_size(runs, cluster_size)?;
-            let allocated = if *allocated_size > 0 {
+            let allocated = if *lowest_vcn == 0 && *allocated_size > 0 && *attr_flags & 0x0001 == 0
+            {
                 (*allocated_size).min(allocated)
             } else {
                 allocated

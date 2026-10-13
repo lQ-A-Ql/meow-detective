@@ -487,6 +487,7 @@ fn build_index_alloc_fixture() -> Vec<u8> {
     rec5[idxa + 0x28..idxa + 0x30].copy_from_slice(&1536u64.to_le_bytes());
     // real_size = 1536
     rec5[idxa + 0x30..idxa + 0x38].copy_from_slice(&1536u64.to_le_bytes());
+    rec5[idxa + 0x38..idxa + 0x40].copy_from_slice(&1536u64.to_le_bytes());
 
     // Data run at idxa + 0x40:
     //   header: 0x31 → size=1 byte, offset=3 bytes
@@ -593,6 +594,7 @@ fn data_run_parse_zero_length_runs_skipped() {
     rec5[idxa + 0x20..idxa + 0x22].copy_from_slice(&0x40u16.to_le_bytes());
     rec5[idxa + 0x28..idxa + 0x30].copy_from_slice(&512u64.to_le_bytes());
     rec5[idxa + 0x30..idxa + 0x38].copy_from_slice(&512u64.to_le_bytes());
+    rec5[idxa + 0x38..idxa + 0x40].copy_from_slice(&512u64.to_le_bytes());
     // Data runs: sparse run (length=0, skip), then real run
     let run = idxa + 0x40;
     rec5[run] = 0x11; // size=1, offset=1 → sparse marker
@@ -747,6 +749,7 @@ fn build_nonresident_data_fixture() -> Vec<u8> {
     rec6[idxa + 0x20..idxa + 0x22].copy_from_slice(&0x40u16.to_le_bytes());
     rec6[idxa + 0x28..idxa + 0x30].copy_from_slice(&(cluster_size as u64).to_le_bytes());
     rec6[idxa + 0x30..idxa + 0x38].copy_from_slice(&(file_content.len() as u64).to_le_bytes());
+    rec6[idxa + 0x38..idxa + 0x40].copy_from_slice(&(file_content.len() as u64).to_le_bytes());
     // Data run: 1 cluster at LCN 32
     let run = idxa + 0x40;
     rec6[run] = 0x31; // size=1, offset=3
@@ -837,6 +840,8 @@ fn build_attribute_list_external_data_fixture() -> Vec<u8> {
     rec7[data_attr + 0x28..data_attr + 0x30].copy_from_slice(&(cluster_size as u64).to_le_bytes());
     rec7[data_attr + 0x30..data_attr + 0x38]
         .copy_from_slice(&(file_content.len() as u64).to_le_bytes());
+    rec7[data_attr + 0x38..data_attr + 0x40]
+        .copy_from_slice(&(file_content.len() as u64).to_le_bytes());
     let run = data_attr + 0x40;
     rec7[run] = 0x31;
     rec7[run + 1] = 1;
@@ -922,6 +927,8 @@ fn build_external_index_allocation_fixture() -> Vec<u8> {
     extension[allocation + 0x28..allocation + 0x30]
         .copy_from_slice(&(index_record.len() as u64).to_le_bytes());
     extension[allocation + 0x30..allocation + 0x38]
+        .copy_from_slice(&(index_record.len() as u64).to_le_bytes());
+    extension[allocation + 0x38..allocation + 0x40]
         .copy_from_slice(&(index_record.len() as u64).to_le_bytes());
     for (index, ch) in "$I30".encode_utf16().enumerate() {
         extension[allocation + 0x40 + index * 2..allocation + 0x42 + index * 2]

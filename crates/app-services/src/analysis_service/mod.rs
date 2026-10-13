@@ -59,7 +59,8 @@ pub const MAX_SAMPLE_SIZE: u32 = 5000;
 pub const MAGIC_HEADER_LIMIT: usize = 8 * 1024;
 pub const MAX_REGISTRY_ANALYSIS_BYTES: usize = 256 * 1024 * 1024;
 pub const MAX_ANALYSIS_SOURCE_BYTES: usize = 128 * 1024 * 1024;
-pub(crate) const ANALYSIS_EXTRACTOR_VERSION: &str = "1.3.0";
+// NTFS valid-data semantics changed: re-read candidates instead of replaying old warnings.
+pub(crate) const ANALYSIS_EXTRACTOR_VERSION: &str = "1.3.1";
 
 #[cfg(test)]
 #[path = "../../tests/unit/analysis_service/mod.rs"]

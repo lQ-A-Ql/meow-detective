@@ -7,6 +7,7 @@ fn extent(lowest_vcn: u64, highest_vcn: u64, clusters: u64) -> DataAttributeExte
         highest_vcn,
         allocated_size: clusters * 4096,
         real_size: clusters * 4096,
+        initialized_size: clusters * 4096,
         attr_flags: 0,
         compression_unit_exp: 0,
         runs: vec![DataRun {

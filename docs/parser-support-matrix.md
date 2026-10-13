@@ -70,6 +70,19 @@ VMDK 是会话 COW overlay 的宿主材料，与“把用户选择的 VMDK 作�
 
 任何拒绝都发生在文件系统枚举之前，避免产生看似完整但实际不完整的 catalog。
 
+### 2.2 NTFS 文件逻辑读取边界
+
+非驻留属性的 `real_size` 决定逻辑 EOF，首个 VCN-zero extent 的
+`initialized_size` 决定有效数据边界；后续 extent 的长度字段不覆盖首段。
+整文件、范围及普通流式读取在 `[initialized_size, real_size)` 返回零，
+保持文件长度；ADS 与压缩文件的整文件读取遵守同一边界。有效长度为零
+仍是合法元数据，超过文件长度或已映射逻辑范围的有效长度返回完整性错误。
+原始 `EvidenceReader` 与物理数据运行保留证据字节，不因逻辑补零修改来源。
+默认回归入口为 `cargo test -p fs-ntfs --test initialized_data`；私有 EVTX/E01
+对照通过 `FORENSICS_E01_FIXTURE` 显式运行 `evtx_chunk_diagnostic` ignored test。
+这一修复不改变解析器支持等级，也不按 EVTX 文件头块数截断日志。
+内置分析版本更新为 `1.3.1`，重新分析时不复用 `1.3.0` 的检查点和旧告警。
+
 ## 3. 数据源分析补充链路 — Browser Medium Fixtures: `testdata/fixtures/public-medium/browser/`
 
 | 链路 | 平台 | 当前等级 | 已验证样本 | 字段承诺 | Medium Fixture | 备注 |

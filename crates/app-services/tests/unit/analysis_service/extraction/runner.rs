@@ -894,6 +894,78 @@ fn seekable_evtx_insert_failure_rolls_back_output_replacement() {
     assert_eq!(event_id, "old-evtx-event");
 }
 
+#[test]
+fn seekable_evtx_reparses_checkpoint_from_before_ntfs_valid_data_fix() {
+    let connection = source_connection();
+    let bytes = std::fs::read(testing::fixtures::tiny_system_evtx()).unwrap();
+    insert_event_log_candidate(&connection, bytes.len() as u64);
+    let cancel = AtomicBool::new(false);
+    let mut ignore_progress = |_update: super::ExtractionProgressUpdate| {};
+    let first = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["EventLogs"],
+        &cancel,
+        &mut ignore_progress,
+        |_, _| {
+            Ok::<CandidateSource, String>(CandidateSource::Seekable(Box::new(
+                std::io::Cursor::new(bytes.clone()),
+            )))
+        },
+    )
+    .unwrap();
+    let repository =
+        persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo::new(&connection);
+    let mut previous = repository
+        .list_complete_for_version(crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION)
+        .unwrap()
+        .pop()
+        .expect("complete EVTX checkpoint");
+    connection
+        .execute(
+            "DELETE FROM source_meta WHERE key LIKE 'analysis_candidate_scan:complete:%'",
+            [],
+        )
+        .unwrap();
+    previous.extractor_version = "1.3.0".to_string();
+    previous.warnings = vec!["[EVTX-CHUNK] System.evtx: uninitialized allocation tail".to_string()];
+    repository
+        .insert_all_checkpoint_batch(&[], &[], &[previous])
+        .unwrap();
+    let mut provider_calls = 0;
+    let second = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["EventLogs"],
+        &cancel,
+        &mut ignore_progress,
+        |_, _| {
+            provider_calls += 1;
+            Ok::<CandidateSource, String>(CandidateSource::Seekable(Box::new(
+                std::io::Cursor::new(bytes.clone()),
+            )))
+        },
+    )
+    .unwrap();
+    assert_eq!(provider_calls, 1);
+    assert_eq!(second.dto.checkpoint_hit_count, 0);
+    assert!(second.dto.warnings.is_empty());
+    assert_eq!(second.dto.artifact_count, first.dto.artifact_count);
+    assert_eq!(
+        second.dto.timeline_event_count,
+        first.dto.timeline_event_count
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row
+                .get::<_, u64>(0))
+            .unwrap(),
+        first.dto.artifact_count
+    );
+}
+
 fn insert_event_log_candidate(connection: &Connection, size: u64) {
     connection
         .execute(
