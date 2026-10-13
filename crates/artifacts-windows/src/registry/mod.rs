@@ -1,3 +1,4 @@
+pub mod browser;
 pub mod error;
 pub mod hash_decrypt;
 pub(crate) mod hash_encrypt;
