@@ -162,9 +162,7 @@ pub use recovery::{
     RecoveryProvenanceRangeDto, RecoveryScanStateDto,
 };
 pub use registry::RegistryRunKeyDto;
-pub use registry_browser::{
-    RegistryBrowserKeyDto, RegistryBrowserValueDto, RegistryOverlaySourceDto,
-};
+pub use registry_browser::*;
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use rule_pack::{RulePackCoverageDto, RulePackSummaryDto, RulePackValidationResultDto};
 pub use search::{

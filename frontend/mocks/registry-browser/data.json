@@ -1,0 +1,38 @@
+{
+  "caseId": "synthetic-registry-case",
+  "dataSourceId": "synthetic-registry-source",
+  "hives": [
+    {"fileId":"ds:synthetic-registry-source:hive:software","dataSourceId":"synthetic-registry-source","name":"SOFTWARE","evidencePath":"[P1]/Windows/System32/config/SOFTWARE","byteLength":73400320,"readState":"readable","partitionIndex":1},
+    {"fileId":"ds:synthetic-registry-source:hive:system","dataSourceId":"synthetic-registry-source","name":"SYSTEM","evidencePath":"[P1]/Windows/System32/config/SYSTEM","byteLength":12582912,"readState":"readable","partitionIndex":1},
+    {"fileId":"ds:synthetic-registry-source:hive:user-a","dataSourceId":"synthetic-registry-source","name":"NTUSER.DAT","evidencePath":"[P1]/Users/Synthetic-A/NTUSER.DAT","byteLength":262144,"readState":"readable","partitionIndex":1,"profileLabel":"Synthetic-A"},
+    {"fileId":"ds:synthetic-registry-source:hive:user-b","dataSourceId":"synthetic-registry-source","name":"NTUSER.DAT","evidencePath":"[P1]/Users/Synthetic-B/NTUSER.DAT","byteLength":262144,"readState":"readable","partitionIndex":1,"profileLabel":"Synthetic-B"},
+    {"fileId":"ds:synthetic-registry-source:hive:locked","dataSourceId":"synthetic-registry-source","name":"SECURITY","evidencePath":"[P2]/Windows/System32/config/SECURITY","byteLength":65536,"readState":"locked","partitionIndex":2}
+  ],
+  "roots":{"software":"software-root","system":"system-root","user-a":"user-a-root","user-b":"user-b-root"},
+  "keys":[
+    {"hive":"software","keyId":"software-root","path":"","name":"SOFTWARE","cellOffset":32,"subkeyCount":4,"valueCount":0,"readState":"readable","lastWriteFiletime":"133700000000000001","children":["microsoft","empty","broken","partial"]},
+    {"hive":"software","keyId":"microsoft","path":"Microsoft","name":"Microsoft","cellOffset":256,"subkeyCount":1,"valueCount":0,"readState":"readable","children":["windows"]},
+    {"hive":"software","keyId":"windows","path":"Microsoft\\Windows","name":"Windows","cellOffset":512,"subkeyCount":1,"valueCount":0,"readState":"readable","children":["current-version"]},
+    {"hive":"software","keyId":"current-version","path":"Microsoft\\Windows\\CurrentVersion","name":"CurrentVersion","cellOffset":768,"subkeyCount":0,"valueCount":7,"readState":"readable","lastWriteFiletime":"133700000000000001","children":[]},
+    {"hive":"software","keyId":"empty","path":"EmptyKey","name":"EmptyKey","cellOffset":1024,"subkeyCount":0,"valueCount":0,"readState":"readable","children":[]},
+    {"hive":"software","keyId":"broken","path":"DamagedBranch","name":"DamagedBranch","cellOffset":1280,"subkeyCount":0,"valueCount":2,"readState":"corrupt","children":[]},
+    {"hive":"software","keyId":"partial","path":"PartialValues","name":"PartialValues","cellOffset":1536,"subkeyCount":0,"valueCount":2,"readState":"readable","children":[]},
+    {"hive":"system","keyId":"system-root","path":"","name":"SYSTEM","cellOffset":32,"subkeyCount":1,"valueCount":0,"readState":"readable","children":["select"]},
+    {"hive":"system","keyId":"select","path":"Select","name":"Select","cellOffset":256,"subkeyCount":0,"valueCount":1,"readState":"readable","children":[]},
+    {"hive":"user-a","keyId":"user-a-root","path":"","name":"NTUSER.DAT","cellOffset":32,"subkeyCount":0,"valueCount":1,"readState":"readable","children":[]},
+    {"hive":"user-b","keyId":"user-b-root","path":"","name":"NTUSER.DAT","cellOffset":32,"subkeyCount":0,"valueCount":1,"readState":"readable","children":[]}
+  ],
+  "values":[
+    {"keyId":"current-version","valueId":"default-empty","name":"","typeCode":1,"typeName":"REG_SZ","byteLength":2,"preview":"","cellOffset":2048,"readState":"readable","payload":{"kind":"utf16","text":""}},
+    {"keyId":"current-version","valueId":"product","name":"ProductName","typeCode":1,"typeName":"REG_SZ","byteLength":16,"preview":"Meow OS","cellOffset":2304,"readState":"readable","payload":{"kind":"utf16","text":"Meow OS"}},
+    {"keyId":"current-version","valueId":"environment","name":"InstallRoot","typeCode":2,"typeName":"REG_EXPAND_SZ","byteLength":36,"preview":"%SystemRoot%\\Meow","cellOffset":2560,"readState":"readable","payload":{"kind":"utf16","text":"%SystemRoot%\\Meow"}},
+    {"keyId":"current-version","valueId":"qword","name":"Sequence","typeCode":11,"typeName":"REG_QWORD","byteLength":8,"preview":"18446744073709551615","cellOffset":2816,"readState":"readable","payload":{"kind":"hex","hex":"ffffffffffffffff","text":"18446744073709551615"}},
+    {"keyId":"current-version","valueId":"large","name":"LargePayload","typeCode":3,"typeName":"REG_BINARY","byteLength":131072,"preview":"","cellOffset":3072,"readState":"deferred","payload":{"kind":"pattern"}},
+    {"keyId":"current-version","valueId":"zero","name":"ZeroLength","typeCode":3,"typeName":"REG_BINARY","byteLength":0,"preview":"","cellOffset":3328,"readState":"readable","payload":{"kind":"hex","hex":""}},
+    {"keyId":"current-version","valueId":"unicode","name":"LocalizedText","typeCode":1,"typeName":"REG_SZ","byteLength":10,"preview":"示例🕵","cellOffset":3456,"readState":"readable","payload":{"kind":"utf16","text":"示例🕵"}},
+    {"keyId":"partial","valueId":"unknown","name":"UnknownType","typeCode":99,"typeName":"REG_UNKNOWN_99","byteLength":4,"preview":"","cellOffset":3584,"readState":"unsupported","payload":{"kind":"hex","hex":"deadbeef"}},
+    {"keyId":"select","valueId":"current-control-set","name":"Current","typeCode":4,"typeName":"REG_DWORD","byteLength":4,"preview":"1","cellOffset":512,"readState":"readable","payload":{"kind":"hex","hex":"01000000","text":"1"}},
+    {"keyId":"user-a-root","valueId":"user-a-profile","name":"ProfileLabel","typeCode":1,"typeName":"REG_SZ","byteLength":24,"preview":"Synthetic-A","cellOffset":256,"readState":"readable","payload":{"kind":"utf16","text":"Synthetic-A"}},
+    {"keyId":"user-b-root","valueId":"user-b-profile","name":"ProfileLabel","typeCode":1,"typeName":"REG_SZ","byteLength":24,"preview":"Synthetic-B","cellOffset":256,"readState":"readable","payload":{"kind":"utf16","text":"Synthetic-B"}}
+  ]
+}

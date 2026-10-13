@@ -1,0 +1,5 @@
+html, body, #root { height: 100%; margin: 0; }
+.registry-preview { display: flex; height: 100%; flex-direction: column; padding: 20px; background: var(--forensics-surface-muted); }
+.registry-preview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 11px; padding: 0 4px 12px; color: var(--forensics-ink-3); }
+.registry-preview-toolbar [data-slot=select-trigger] { max-width: 210px; }
+.registry-preview .registry-browser { border: 1px solid var(--forensics-divider); }

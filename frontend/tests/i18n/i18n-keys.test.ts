@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { i18nTranslations } from '@/i18n/resources';
 
 /**
  * A literal `t('some.key')` that does not exist in the locale files renders the key itself,
@@ -8,7 +9,6 @@ import path from 'node:path';
  * because they cannot be checked statically.
  */
 const srcRoot = path.resolve(process.cwd(), 'src');
-const i18nRoot = path.join(srcRoot, 'i18n');
 
 function sourceFiles(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -32,8 +32,8 @@ function resolveKey(locale: Record<string, unknown>, key: string): boolean {
   ), locale) !== undefined;
 }
 
-function missingFor(localeName: string, keys: Set<string>): string[] {
-  const locale = JSON.parse(fs.readFileSync(path.join(i18nRoot, localeName + '.json'), 'utf8'));
+function missingFor(localeName: keyof typeof i18nTranslations, keys: Set<string>): string[] {
+  const locale = i18nTranslations[localeName];
   return [...keys].filter((key) => !resolveKey(locale, key)).sort();
 }
 

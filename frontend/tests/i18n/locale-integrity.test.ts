@@ -77,7 +77,7 @@ function leafKeys(node: unknown, prefix = ''): string[] {
 
 describe('locale integrity', () => {
   it('has no duplicate keys inside any locale object', () => {
-    for (const locale of locales) {
+    for (const locale of [...locales, 'registry-browser/zh-CN', 'registry-browser/en']) {
       expect({ locale, duplicates: duplicateKeys(readLocale(locale)) }).toEqual({ locale, duplicates: [] });
     }
   });
@@ -95,5 +95,11 @@ describe('locale integrity', () => {
     expect(zh.navigation.workspaceNavLabel).toBeTypeOf('string');
     expect(zh.navigation.jobsRunning).toBeTypeOf('string');
     expect(Object.keys(zh.navigation.links).length).toBeGreaterThan(0);
+  });
+
+  it('keeps modular registry browser copy identical across languages', () => {
+    const zh = leafKeys(JSON.parse(readLocale('registry-browser/zh-CN'))).sort();
+    const en = leafKeys(JSON.parse(readLocale('registry-browser/en'))).sort();
+    expect(zh).toEqual(en);
   });
 });

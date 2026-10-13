@@ -10,6 +10,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "typecheck:mock": "tsc --noEmit -p tsconfig.mock.json",
     "lint": "eslint src/ tests/",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

@@ -7,6 +7,9 @@
 @import './case-welcome.css';
 @import './watermarks.css';
 @import './text-search.css';
+@import './tree.css';
+@import './resizable.css';
+@import './registry-browser.css';
 @import './motion/welcome.css';
 @import './motion/ink-wordmark.css';
 @import './motion/controls.css';

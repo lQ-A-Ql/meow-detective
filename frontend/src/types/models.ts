@@ -7,6 +7,7 @@ export * from './case';
 export * from './dataSource';
 export * from './analysis';
 export * from './analysisRegistry';
+export * from './registryBrowser';
 export * from './analysisBrowser';
 export * from './analysisEmail';
 export * from './eventLog';

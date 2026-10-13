@@ -1,5 +1,19 @@
 use serde::{Deserialize, Serialize};
 
+mod hives;
+mod keys;
+mod range;
+mod session;
+mod shared;
+mod values;
+
+pub use hives::*;
+pub use keys::*;
+pub use range::*;
+pub use session::*;
+pub use shared::*;
+pub use values::*;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistryBrowserValueDto {
