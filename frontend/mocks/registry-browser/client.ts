@@ -2,6 +2,8 @@ import type { RegistryBrowserClient } from '@/lib/api/registry-browser';
 import type { RegistryHiveDescriptor, RegistryKeyMetadata, RegistryValueMetadata } from '@/types/registryBrowser';
 import { REGISTRY_BROWSER_LAYOUT } from '@/design/registry-browser';
 import fixture from './data.json';
+import recoveryContract from './recovery-contract.json';
+import type { RegistryRecovery, RegistryHiveView } from '@/types/registryBrowser';
 
 export type RegistryPreviewScenario = 'standard' | 'emptySource' | 'failedSource';
 type MockKey = RegistryKeyMetadata & { hive: string; children: string[] };
@@ -36,7 +38,7 @@ function payloadRange(value: MockValue, offset: number, length: number) {
 }
 
 export function createRegistryBrowserMock(scenario: RegistryPreviewScenario = 'standard', delayMs = 0): RegistryBrowserClient {
-  const sessions = new Map<string, { fileId: string; hive: string }>();
+  const sessions = new Map<string, { fileId: string; hive: string; view: RegistryHiveView }>();
   let sequence = 0;
   const pause = () => new Promise<void>((resolve) => setTimeout(resolve, delayMs));
   const owned = (sessionId: string, keyId: string) => {
@@ -56,16 +58,17 @@ export function createRegistryBrowserMock(scenario: RegistryPreviewScenario = 's
     async openHive(request) {
       await pause();
       const hive = hives.find((item) => item.fileId === request.fileId);
-      if (!hive || request.view !== 'base') throw failure('invalidRequest');
+      if (!hive || !['base', 'recovered'].includes(request.view)) throw failure('invalidRequest');
       if (hive.readState === 'locked') throw failure('lockedHive');
       const name = hive.fileId.split(':').slice(-1)[0];
       const root = keys.find((key) => key.keyId === roots[name])!;
       const sessionId = `synthetic-session-${++sequence}`;
-      sessions.set(sessionId, { fileId: hive.fileId, hive: name });
+      sessions.set(sessionId, { fileId: hive.fileId, hive: name, view: request.view });
       return { sessionId, source: { caseId: fixture.caseId, dataSourceId: hive.dataSourceId, fileId: hive.fileId,
-        sourceRevision: 'synthetic-v1', view: 'base' }, hive, rootKey: metadata(root) as RegistryKeyMetadata,
-        expiresAt: '2099-01-01T00:00:00Z', diagnostics: hive.name === 'SOFTWARE'
-          ? [{ code: 'transactionLogsNotMerged', recoverable: false, itemId: hive.fileId }] : [] };
+        sourceRevision: 'synthetic-v1', view: request.view }, hive, rootKey: metadata(root) as RegistryKeyMetadata,
+        expiresAt: '2099-01-01T00:00:00Z', diagnostics: hive.name === 'SOFTWARE' && request.view === 'base'
+          ? [{ code: 'transactionLogsNotMerged', recoverable: false, itemId: hive.fileId }] : [],
+        recovery: request.view === 'recovered' ? { ...recoveryContract, status: hive.name === 'SOFTWARE' ? 'recovered' : 'notNeeded' } as RegistryRecovery : undefined };
     },
     async resolveKey(request) {
       await pause();

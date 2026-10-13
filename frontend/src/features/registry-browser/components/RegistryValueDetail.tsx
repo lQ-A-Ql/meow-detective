@@ -14,7 +14,7 @@ export function RegistryValueDetail({ model }: { model: RegistryBrowserModel }) 
       <IconButton label={t('registryBrowser.copyValue')} disabled={range?.decodedText === undefined} onClick={model.copyValue}><ActionIcon name="copy" /></IconButton></div>
     {!model.selectedValue ? <p className="registry-browser-message">{t('registryBrowser.selectValue')}</p> : <>
       <PanelTabs value={model.detailTab} onValueChange={(value) => model.setDetailTab(value as RegistryDetailTab)}
-        tabs={['decoded', 'hex', 'provenance'].map((value) => ({ value, label: t(`registryBrowser.${value}`) }))} variant="underline" className="min-h-0 flex-1">
+        tabs={['decoded', 'hex', 'provenance'].map((value) => ({ value, label: t(value === 'hex' && model.view === 'recovered' ? 'registryBrowser.recoveredBytes' : `registryBrowser.${value}`) }))} variant="underline" className="min-h-0 flex-1">
         <TabsContent value="decoded" className="registry-browser-detail-content">
           <ScrollArea className="min-h-0 flex-1"><div className="registry-browser-data">
             {model.range.isPending ? <p>{t('registryBrowser.loading')}</p> : null}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RegistryBrowserClient } from '@/lib/api/registry-browser';
-import type { RegistryHiveSession } from '@/types/registryBrowser';
+import type { RegistryHiveSession, RegistryHiveView } from '@/types/registryBrowser';
 import type { RegistryBrowserContext } from '../types';
 
 export function useRegistrySession(client: RegistryBrowserClient, context: RegistryBrowserContext) {
@@ -12,15 +12,15 @@ export function useRegistrySession(client: RegistryBrowserClient, context: Regis
   const activeSession = useRef<string>();
   const release = useCallback((id?: string) => { if (id) void client.closeHive({ sessionId: id }).catch(() => undefined); }, [client]);
   useEffect(() => () => { generation.current += 1; release(activeSession.current); }, [release]);
-  const openHive = useCallback(async (fileId: string, expectedRevision = context.sourceRevision) => {
+  const openHive = useCallback(async (fileId: string, expectedRevision = context.sourceRevision, view: RegistryHiveView = 'base') => {
     const token = ++generation.current;
     release(activeSession.current); activeSession.current = undefined;
     setSession(undefined); setError(undefined); setOpening(true); setRequestedFileId(fileId);
     try {
-      const opened = await client.openHive({ fileId, view: 'base' });
+      const opened = await client.openHive({ fileId, view });
       if (generation.current !== token) { release(opened.sessionId); return undefined; }
       if (opened.source.caseId !== context.caseId || opened.source.dataSourceId !== context.dataSourceId
-        || opened.source.fileId !== fileId || opened.source.sourceRevision !== expectedRevision) {
+        || opened.source.fileId !== fileId || opened.source.sourceRevision !== expectedRevision || opened.source.view !== view) {
         release(opened.sessionId); throw Object.assign(new Error('sourceMismatch'), { code: 'expiredSession' });
       }
       activeSession.current = opened.sessionId; setSession(opened); return opened;

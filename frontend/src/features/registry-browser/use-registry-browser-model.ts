@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RegistryBrowserClient } from '@/lib/api/registry-browser';
-import type { RegistryKeyMetadata } from '@/types/registryBrowser';
+import type { RegistryKeyMetadata, RegistryHiveView } from '@/types/registryBrowser';
 import { REGISTRY_BROWSER_LAYOUT } from '@/design/registry-browser';
 import { useRegistryHives } from './hooks/use-registry-hives';
 import { useRegistrySession } from './hooks/use-registry-session';
@@ -14,12 +14,15 @@ import { useRegistryTreeViewport } from './hooks/use-registry-tree-viewport';
 import { useRegistrySessionCache } from './hooks/use-registry-session-cache';
 import { registryBrowserErrorCode } from './errors';
 import { registryFiletimeUtc, registryValueRows } from './value-model';
+import { recoveryFailureDetails } from './recovery-model';
 import type { RegistryBrowserContext, RegistryDetailTab, RegistryTreeNode } from './types';
 
 export function useRegistryBrowserModel(client: RegistryBrowserClient, context: RegistryBrowserContext, initialKeyPath = '') {
   const { t } = useTranslation();
   const instanceId = useId();
   const hives = useRegistryHives(client, context);
+  const [view, setView] = useState<RegistryHiveView>('base');
+  const pendingViewPath = useRef<{ view: RegistryHiveView; fileId: string; path: string }>();
   const hive = useRegistrySession(client, { ...context, sourceRevision: hives.data?.sourceRevision ?? context.sourceRevision });
   const session = hive.session;
   useRegistrySessionCache(session?.sessionId);
@@ -53,12 +56,13 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     setSelection({ sessionId: session.sessionId, key }); setPathInput(key.path);
     setPathError(undefined); setValueSelection(undefined); setOffset(0); setCopyStatus(undefined);
   }, [session]);
-  const openHive = useCallback(async (fileId: string, revision?: string) => {
+  const openHive = useCallback(async (fileId: string, revision?: string, requestedView = view) => {
+    if (pendingViewPath.current && (pendingViewPath.current.fileId !== fileId || pendingViewPath.current.view !== requestedView)) pendingViewPath.current = undefined;
     navigationEpoch.current += 1;
     setLocating(false); setCopyStatus(undefined);
     setSelection(undefined); setValueSelection(undefined); setOffset(0); setPathInput(''); setPathError(undefined);
-    return hive.openHive(fileId, revision);
-  }, [hive.openHive]);
+    return hive.openHive(fileId, revision, requestedView);
+  }, [hive.openHive, view]);
   const activate = (node: RegistryTreeNode) => {
     if (node.key && session?.hive.fileId === node.hive.fileId) selectKey(node.key);
     else void openHive(node.hive.fileId);
@@ -106,6 +110,13 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   }, [hives.data, openHive]);
   const initialPathDone = useRef(false);
   useEffect(() => {
+    const pending = pendingViewPath.current;
+    if (session && pending?.view === session.source.view && pending.fileId === session.hive.fileId) {
+      pendingViewPath.current = undefined;
+      if (pending.path) void locate(pending.path);
+    }
+  }, [session?.sessionId]);
+  useEffect(() => {
     if (session && initialKeyPath && !initialPathDone.current) {
       initialPathDone.current = true; void locate(initialKeyPath);
     }
@@ -121,6 +132,9 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   const selectedValueLabel = selectedValue
     ? registryValueRows([selectedValue], t)[0].displayName : t('registryBrowser.detailsTitle');
   const provenance = [
+    [t('registryBrowser.viewLabel'), t(view === 'base' ? 'registryBrowser.baseView' : 'registryBrowser.recoveredView')],
+    [t('registryBrowser.baseHash'), session?.recovery?.baseSha256],
+    [t('registryBrowser.snapshotHash'), session?.recovery?.resultSha256],
     [t('registryBrowser.fileId'), session?.source.fileId],
     [t('registryBrowser.sourcePath'), session?.hive.evidencePath],
     [t('registryBrowser.keyPath'), selectedKey?.path || '\\'],
@@ -157,6 +171,15 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     copyPath: () => void copy([session?.hive.name, selectedKey?.path].filter(Boolean).join('\\')),
     copyValue: () => void copy(range.data?.decodedText ?? ''), copyStatus,
     keyTime,
+    view,
+    recovery: session?.recovery ?? recoveryFailureDetails(hive.error),
+    switchView: (next: RegistryHiveView) => {
+      if (next === view) return;
+      const fileId = session?.hive.fileId ?? hive.requestedFileId;
+      pendingViewPath.current = fileId ? { view: next, fileId, path: selectedKey?.path ?? '' } : undefined;
+      setView(next);
+      if (fileId) void openHive(fileId, undefined, next);
+    },
   };
 }
 

@@ -70,7 +70,8 @@
     "expiredSession": "浏览会话已失效，请重新打开配置单元",
     "invalidRequest": "请求超出浏览边界",
     "unsupportedHive": "此配置单元格式不受支持",
-    "browserBusy": "浏览内存已达到上限，请重新打开配置单元"
+    "browserBusy": "浏览内存已达到上限，请重新打开配置单元",
+    "recoveryFailed": "日志恢复未能完成；可切回基础 Hive 检查原始数据。"
   },
   "diagnostics": {
     "transactionLogsNotMerged": "检测到同名事务日志；当前浏览基础 Hive，未合并 LOG1/LOG2。",
@@ -81,5 +82,46 @@
     "transactionLogsAvailable": "检测到同名事务日志；当前浏览基础 Hive，未合并 LOG1/LOG2。"
   },
   "partialRange": "当前窗口仅包含此值的部分内容。",
-  "unreadableValue": "值数据无法读取"
+  "unreadableValue": "值数据无法读取",
+  "snapshotHash": "当前快照 SHA-256",
+  "recoveredView": "LOG1/LOG2 恢复视图",
+  "sequenceSummary": "基础序列 {{primary}} / {{secondary}} · 快照序列 {{result}}",
+  "recoveryStatuses": {
+    "failed": "日志恢复失败；未展示派生数据",
+    "recovered": "已按验证通过的日志序列恢复",
+    "partial": "仅恢复到可验证序列；存在未应用日志或缺失",
+    "notNeeded": "Hive 已一致，无需恢复；保留基础字节"
+  },
+  "viewLabel": "浏览视图",
+  "logStatuses": {
+    "missing": "未发现",
+    "invalid": "校验失败",
+    "notSelected": "未选择",
+    "locked": "已锁定或加密",
+    "applied": "已应用",
+    "tooLarge": "超出读取预算",
+    "notNeeded": "无需应用",
+    "stale": "旧日志",
+    "duplicate": "重复记录",
+    "ambiguous": "同名日志存在歧义",
+    "unavailable": "无法读取"
+  },
+  "replayCounts": "已应用 {{entries}} 条日志记录 / {{pages}} 个脏页",
+  "baseHash": "基础 Hive SHA-256",
+  "replayDiagnostics": {
+    "invalidRecoveredHive": "恢复结果未通过 Hive 结构校验",
+    "logUnavailable": "日志无法读取",
+    "invalidBaseBlock": "基础头部无效",
+    "conflictingLogs": "同一序列存在冲突日志",
+    "unsupportedLog": "日志格式不受支持",
+    "logChecksumMismatch": "日志头校验失败",
+    "logBoundsExceeded": "脏页范围或内存超界",
+    "logSequenceGap": "日志序列不连续，后续记录未应用",
+    "noApplicableLog": "没有可用于恢复的有效日志",
+    "logHashMismatch": "日志记录哈希校验失败",
+    "truncatedLog": "日志内容截断",
+    "logIdentityMismatch": "日志与配置单元身份不符"
+  },
+  "recoveredBytes": "恢复视图字节",
+  "recoveryTitle": "日志恢复与来源"
 }

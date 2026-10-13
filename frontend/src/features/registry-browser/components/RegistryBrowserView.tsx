@@ -9,19 +9,29 @@ import type { RegistryBrowserModel } from '../use-registry-browser-model';
 import { RegistryKeyTree } from './RegistryKeyTree';
 import { RegistryValuesPane } from './RegistryValuesPane';
 import { RegistryValueDetail } from './RegistryValueDetail';
+import { RegistryRecoverySummary } from './RegistryRecoverySummary';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import type { RegistryHiveView } from '@/types/registryBrowser';
 
 export function RegistryBrowserView({ model }: { model: RegistryBrowserModel }) {
   const { t } = model;
   return <section className="registry-browser" aria-label={t('registryBrowser.title')}>
     <header className="registry-browser-header">
       <div><h1>{t('registryBrowser.title')}</h1><p>{t('registryBrowser.rawTab')}</p></div>
-      <div className="registry-browser-badges"><span>{t('registryBrowser.baseView')}</span><span><ActionIcon name="lock" />{t('registryBrowser.readOnly')}</span></div>
+      <div className="registry-browser-badges">
+        <Select value={model.view} disabled={model.opening} onValueChange={(view) => model.switchView(view as RegistryHiveView)}>
+          <SelectTrigger aria-label={t('registryBrowser.viewLabel')}><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value="base">{t('registryBrowser.baseView')}</SelectItem><SelectItem value="recovered">{t('registryBrowser.recoveredView')}</SelectItem></SelectContent>
+        </Select>
+        <span><ActionIcon name="lock" />{t('registryBrowser.readOnly')}</span>
+      </div>
     </header>
     <div className="registry-browser-source">
       <span>{model.session?.hive.profileLabel ?? model.session?.hive.name ?? model.context.dataSourceId}</span>
       <code>{model.session?.hive.evidencePath}</code>
       {model.session?.diagnostics.map((item) => <span key={item.code}>{t(`registryBrowser.diagnostics.${item.code}`)}</span>)}
     </div>
+    <RegistryRecoverySummary model={model} />
     <form className="registry-browser-address" onSubmit={(event) => { event.preventDefault(); void model.locate(model.pathInput); }}>
       <Label htmlFor={`${model.instanceId}-path`}>{t('registryBrowser.path')}</Label>
       <Input id={`${model.instanceId}-path`} value={model.pathInput} disabled={!model.session}

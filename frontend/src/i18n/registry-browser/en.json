@@ -70,7 +70,8 @@
     "expiredSession": "The browsing session expired; reopen the hive",
     "invalidRequest": "Request exceeds browser limits",
     "unsupportedHive": "This hive format is unsupported",
-    "browserBusy": "Browser capacity reached; reopen the hive"
+    "browserBusy": "Browser capacity reached; reopen the hive",
+    "recoveryFailed": "Log recovery could not be completed. Switch to the base hive to inspect original data."
   },
   "diagnostics": {
     "transactionLogsNotMerged": "Matching transaction logs detected; this base view does not merge LOG1/LOG2.",
@@ -81,5 +82,46 @@
     "transactionLogsAvailable": "Matching transaction logs detected; this base view does not merge LOG1/LOG2."
   },
   "partialRange": "This window contains only part of the value.",
-  "unreadableValue": "Value data could not be read"
+  "unreadableValue": "Value data could not be read",
+  "snapshotHash": "Snapshot SHA-256",
+  "recoveredView": "LOG1/LOG2 recovery",
+  "sequenceSummary": "Base sequence {{primary}} / {{secondary}} · Snapshot {{result}}",
+  "recoveryStatuses": {
+    "failed": "Log recovery failed; no derived data displayed",
+    "recovered": "Recovered using verified log sequences",
+    "partial": "Verified prefix only; some logs remain unapplied",
+    "notNeeded": "Hive is consistent; base bytes retained"
+  },
+  "viewLabel": "Hive view",
+  "logStatuses": {
+    "missing": "Missing",
+    "invalid": "Invalid",
+    "notSelected": "Not selected",
+    "locked": "Locked or encrypted",
+    "applied": "Applied",
+    "tooLarge": "Over the read budget",
+    "notNeeded": "Not needed",
+    "stale": "Stale",
+    "duplicate": "Duplicate",
+    "ambiguous": "Ambiguous sibling logs",
+    "unavailable": "Unreadable"
+  },
+  "replayCounts": "Applied {{entries}} records / {{pages}} dirty pages",
+  "baseHash": "Base hive SHA-256",
+  "replayDiagnostics": {
+    "invalidRecoveredHive": "Recovered hive failed structural validation",
+    "logUnavailable": "Log is unreadable",
+    "invalidBaseBlock": "Invalid base block",
+    "conflictingLogs": "Conflicting records at the same sequence",
+    "unsupportedLog": "Unsupported log format",
+    "logChecksumMismatch": "Invalid log header checksum",
+    "logBoundsExceeded": "Dirty pages or memory exceed bounds",
+    "logSequenceGap": "Sequence gap; later entries not applied",
+    "noApplicableLog": "No eligible verified log",
+    "logHashMismatch": "Invalid entry hash",
+    "truncatedLog": "Truncated log",
+    "logIdentityMismatch": "Log does not match this hive"
+  },
+  "recoveredBytes": "Recovered view bytes",
+  "recoveryTitle": "Log replay and provenance"
 }
