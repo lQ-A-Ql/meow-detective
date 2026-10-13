@@ -30,7 +30,7 @@ describe('RegistryExtractionPanel', () => {
   it('switches tabs when tab buttons are clicked', () => {
     render(createElement(RegistryExtractionPanel, {}));
     fireEvent.mouseDown(screen.getByRole('tab', { name: '原始键值' }), { button: 0 });
-    expect(screen.getByText('暂无原始键值数据')).toBeDefined();
+    expect(screen.getByText('来源暂不可读')).toBeDefined();
   });
 
   it('renders SAM user data when provided', () => {

@@ -5,6 +5,15 @@
  * this file. Do not use bare string literals in API modules.
  */
 export const COMMANDS = {
+  registryBrowser: {
+    LIST_HIVES: 'list_registry_hives',
+    OPEN_HIVE: 'open_registry_hive',
+    RESOLVE_KEY: 'resolve_registry_key',
+    LIST_SUBKEYS: 'list_registry_subkeys',
+    LIST_VALUES: 'list_registry_values',
+    READ_VALUE_RANGE: 'read_registry_value_range',
+    CLOSE_HIVE: 'close_registry_hive',
+  },
   case: {
     GET_CURRENT_CASE: 'get_current_case',
     GET_CASE_METRICS: 'get_case_metrics',

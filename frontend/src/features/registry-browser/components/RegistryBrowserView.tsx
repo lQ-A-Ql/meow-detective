@@ -1,4 +1,5 @@
 import { Label } from '@/app/components/ui/label';
+import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/app/components/ui/resizable';
 import { ActionIcon } from '@/components/controls/ActionIcon';
@@ -29,17 +30,18 @@ export function RegistryBrowserView({ model }: { model: RegistryBrowserModel }) 
       <IconButton label={t('registryBrowser.copyPath')} disabled={!model.selectedKey} onClick={model.copyPath}><ActionIcon name="copy" /></IconButton>
     </form>
     {model.pathError ? <p className="registry-browser-error" role="alert">{model.pathError}</p> : null}
-    {model.hiveError ? <p className="registry-browser-error" role="alert">{model.hiveError}</p> : null}
+    {model.hiveError ? <div className="registry-browser-error" role="alert">{model.hiveError}
+      <Button shape="row" onClick={() => void model.retryHive()}>{t('registryBrowser.retry')}</Button></div> : null}
     <ResizableGroup direction="horizontal">
       <ResizablePanel defaultSize={layout.treeDefaultPercent} minSize={layout.treeMinPercent} maxSize={layout.treeMaxPercent}>
         <RegistryKeyTree model={model} />
       </ResizablePanel>
       <ResizableHandle aria-label={t('registryBrowser.resizeTree')} />
-      <ResizablePanel minSize={40}>
+      <ResizablePanel defaultSize={100 - layout.treeDefaultPercent} minSize={40}>
         <ResizableGroup direction="vertical">
           <ResizablePanel defaultSize={layout.valuesDefaultPercent} minSize={25}><RegistryValuesPane model={model} /></ResizablePanel>
           <ResizableHandle aria-label={t('registryBrowser.resizeDetails')} />
-          <ResizablePanel minSize={layout.detailsMinPercent}><RegistryValueDetail model={model} /></ResizablePanel>
+          <ResizablePanel defaultSize={100 - layout.valuesDefaultPercent} minSize={layout.detailsMinPercent}><RegistryValueDetail model={model} /></ResizablePanel>
         </ResizableGroup>
       </ResizablePanel>
     </ResizableGroup>

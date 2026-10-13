@@ -28,6 +28,7 @@ export function useRegistryTree(client: RegistryBrowserClient, session?: Registr
       if (activeSession.current !== sessionId) return;
       setPages((state) => ({ ...state, [key.keyId]: { page, keys: cursor
         ? [...(state[key.keyId]?.keys ?? []), ...page.keys] : page.keys } }));
+      return page;
     } catch (error) {
       if (activeSession.current === sessionId) setErrors((state) => ({ ...state, [key.keyId]: registryBrowserErrorCode(error) }));
     } finally {

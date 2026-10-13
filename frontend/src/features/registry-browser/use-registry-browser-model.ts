@@ -9,7 +9,9 @@ import { useRegistryTree } from './hooks/use-registry-tree';
 import { useRegistryValues } from './hooks/use-registry-values';
 import { useRegistryValueRange } from './hooks/use-registry-range';
 import { useRegistryTreeKeyboard } from './hooks/use-registry-tree-keyboard';
-import { filterRegistryTree, registryTreeNodes } from './tree-model';
+import { filterRegistryTree, flattenRegistryTree, registryTreeNodes } from './tree-model';
+import { useRegistryTreeViewport } from './hooks/use-registry-tree-viewport';
+import { useRegistrySessionCache } from './hooks/use-registry-session-cache';
 import { registryBrowserErrorCode } from './errors';
 import { registryFiletimeUtc, registryValueRows } from './value-model';
 import type { RegistryBrowserContext, RegistryDetailTab, RegistryTreeNode } from './types';
@@ -18,8 +20,9 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   const { t } = useTranslation();
   const instanceId = useId();
   const hives = useRegistryHives(client, context);
-  const hive = useRegistrySession(client, context);
+  const hive = useRegistrySession(client, { ...context, sourceRevision: hives.data?.sourceRevision ?? context.sourceRevision });
   const session = hive.session;
+  useRegistrySessionCache(session?.sessionId);
   const tree = useRegistryTree(client, session);
   const [selection, setSelection] = useState<{ sessionId: string; key: RegistryKeyMetadata }>();
   const selectedKey = selection?.sessionId === session?.sessionId ? selection?.key : session?.rootKey;
@@ -30,6 +33,9 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     ? rawValues.find((value) => value.valueId === valueSelection.valueId) : undefined;
   const [offset, setOffset] = useState(0);
   const range = useRegistryValueRange(client, session, selectedKey, selectedValue, offset);
+  const expired = registryBrowserErrorCode(values.error) === 'expiredSession'
+    || registryBrowserErrorCode(range.error) === 'expiredSession' || Object.values(tree.errors).includes('expiredSession');
+  useEffect(() => { if (expired) hive.expire(); }, [expired, hive.expire]);
   const [detailTab, setDetailTab] = useState<RegistryDetailTab>('decoded');
   const [filter, setFilter] = useState('');
   const [pathInput, setPathInput] = useState('');
@@ -47,11 +53,11 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     setSelection({ sessionId: session.sessionId, key }); setPathInput(key.path);
     setPathError(undefined); setValueSelection(undefined); setOffset(0); setCopyStatus(undefined);
   }, [session]);
-  const openHive = useCallback(async (fileId: string) => {
+  const openHive = useCallback(async (fileId: string, revision?: string) => {
     navigationEpoch.current += 1;
     setLocating(false); setCopyStatus(undefined);
     setSelection(undefined); setValueSelection(undefined); setOffset(0); setPathInput(''); setPathError(undefined);
-    return hive.openHive(fileId);
+    return hive.openHive(fileId, revision);
   }, [hive.openHive]);
   const activate = (node: RegistryTreeNode) => {
     if (node.key && session?.hive.fileId === node.hive.fileId) selectKey(node.key);
@@ -64,6 +70,7 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   const nodes = filterRegistryTree(registryTreeNodes(hives.data?.hives ?? [], session, tree.pages,
     tree.expanded, tree.loading, tree.errors, instanceId), filter);
   const keyboard = useRegistryTreeKeyboard(nodes, activate, toggle);
+  const viewport = useRegistryTreeViewport(flattenRegistryTree(nodes), keyboard);
   const locate = useCallback(async (path: string) => {
     if (!session) return;
     const token = ++navigationEpoch.current;
@@ -76,7 +83,13 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
         const parent = depth === 0 ? session.rootKey
           : await client.resolveKey({ sessionId, keyPath: parts.slice(0, depth).join('\\') });
         if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
-        await tree.load(parent); tree.expand(parent);
+        const childPath = parts.slice(0, depth + 1).join('\\').toLowerCase();
+        let page = await tree.load(parent);
+        while (page?.nextCursor && !page.keys.some((child) => child.path.toLowerCase() === childPath)) {
+          if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
+          page = await tree.load(parent, page.nextCursor);
+        }
+        tree.expand(parent);
       }
       if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
       setSelection({ sessionId, key }); setPathInput(key.path); setValueSelection(undefined); setOffset(0);
@@ -121,7 +134,7 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   }) : t('registryBrowser.previewOnly');
   return {
     t, instanceId, context, hives, session, selectedKey, selectedValue, range, values,
-    nodes, keyboard, activate, toggle, openHive, selectKey, filter, setFilter,
+    nodes, keyboard, viewport, activate, toggle, openHive, selectKey, filter, setFilter,
     pathInput, setPathInput, locate, locating, detailTab, setDetailTab, offset, provenance, rangeSummary, selectedValueLabel,
     previousRange: () => setOffset((value) => Math.max(0, value - REGISTRY_BROWSER_LAYOUT.valueRangeBytes)),
     nextRange: () => setOffset((value) => value + REGISTRY_BROWSER_LAYOUT.valueRangeBytes),
@@ -135,7 +148,11 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     opening: hive.opening, requestedFileId: hive.requestedFileId,
     hiveError: errorText(hive.error), hivesError: errorText(hives.error), pathError: errorText(pathError),
     valuesError: errorText(values.error), rangeError: errorText(range.error),
-    retryHive: () => { if (hive.requestedFileId) void openHive(hive.requestedFileId); },
+    retryHive: async () => {
+      if (!hive.requestedFileId) return;
+      const current = await hives.refetch();
+      if (current.data) await openHive(hive.requestedFileId, current.data.pages[0].sourceRevision);
+    },
     loadChildren: (node: RegistryTreeNode) => { if (node.key) void tree.load(node.key, node.nextCursor); },
     copyPath: () => void copy([session?.hive.name, selectedKey?.path].filter(Boolean).join('\\')),
     copyValue: () => void copy(range.data?.decodedText ?? ''), copyStatus,

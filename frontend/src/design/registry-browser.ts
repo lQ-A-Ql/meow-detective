@@ -8,4 +8,5 @@ export const REGISTRY_BROWSER_LAYOUT = {
   valueRangeBytes: 64 * 1024,
   treeIndentPixels: 16,
   treePaddingPixels: 8,
+  treeRowPixels: 32,
 } as const;

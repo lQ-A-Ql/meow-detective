@@ -6,10 +6,12 @@ export function useRegistryTreeKeyboard(nodes: RegistryTreeNode[], activate: (no
   toggle: (node: RegistryTreeNode) => void) {
   const [focusedId, setFocusedId] = useState<string>();
   const treeRef = useRef<HTMLDivElement>(null);
+  const focusRequest = useRef(false);
   const rows = flattenRegistryTree(nodes);
   const effectiveFocus = rows.some((node) => node.id === focusedId) ? focusedId : rows[0]?.id;
   const focus = useCallback((node?: RegistryTreeNode) => {
     if (!node) return;
+    focusRequest.current = true;
     setFocusedId(node.id);
     const element = document.getElementById(node.domId);
     if (element && treeRef.current?.contains(element)) element.focus();
@@ -31,5 +33,5 @@ export function useRegistryTreeKeyboard(nodes: RegistryTreeNode[], activate: (no
     else return;
     event.preventDefault();
   };
-  return { focusedId: effectiveFocus, setFocusedId, treeRef, onKeyDown };
+  return { focusedId: effectiveFocus, setFocusedId, treeRef, onKeyDown, focusRequest };
 }

@@ -5,9 +5,9 @@ type Translate = (key: string, options?: Record<string, unknown>) => string;
 export function registryValueRows(values: RegistryValueMetadata[], t: Translate): RegistryValueRow[] {
   return values.map((value) => ({ ...value,
     displayName: value.name === '' ? t('registryBrowser.defaultValue') : value.name,
-    displayPreview: value.typeCode === 3 || value.readState === 'unsupported'
-      ? t('registryBrowser.binaryBytes', { count: value.byteLength })
-      : value.preview || t('registryBrowser.emptyString'),
+    displayPreview: value.readState === 'corrupt' ? t('registryBrowser.unreadableValue')
+      : value.typeCode === 3 || value.readState === 'unsupported' ? t('registryBrowser.binaryBytes', { count: value.byteLength })
+      : value.preview || ([1, 2, 6, 7].includes(value.typeCode) ? t('registryBrowser.emptyString') : t('registryBrowser.binaryBytes', { count: value.byteLength })),
     displayLength: value.byteLength.toLocaleString(),
   }));
 }

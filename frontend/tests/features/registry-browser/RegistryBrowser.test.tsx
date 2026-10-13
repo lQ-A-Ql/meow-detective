@@ -14,6 +14,27 @@ function preview(client = createRegistryBrowserMock()) {
 }
 
 describe('registry browser P0 workspace', () => {
+  it('clears expired bytes and rediscovers the source revision before reopening', async () => {
+    const base = createRegistryBrowserMock();
+    let revision = 'synthetic-v1';
+    let expire = true;
+    const client = { ...base,
+      listHives: vi.fn(async (request) => ({ ...await base.listHives(request), sourceRevision: revision })),
+      openHive: vi.fn(async (request) => { const session = await base.openHive(request); return { ...session, source: { ...session.source, sourceRevision: revision } }; }),
+      readValueRange: vi.fn(async (request) => {
+        if (expire) { expire = false; revision = 'synthetic-v2'; throw { code: 'expiredSession' }; }
+        return base.readValueRange(request);
+      }),
+    } satisfies typeof base;
+    preview(client); await screen.findByText('ProductName');
+    fireEvent.click(screen.getByText('Sequence'));
+    await screen.findByText('浏览会话已失效，请重新打开配置单元');
+    expect(screen.queryByText('ProductName')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    await screen.findByRole('treeitem', { name: 'Microsoft' });
+    expect(client.openHive).toHaveBeenCalledTimes(2);
+    expect(client.listHives).toHaveBeenCalledTimes(2);
+  });
   it('navigates from a tree to real default values and an empty key without fabricating rows', async () => {
     preview();
     await screen.findByText('ProductName');

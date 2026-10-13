@@ -19,6 +19,7 @@ export function RegistryValueDetail({ model }: { model: RegistryBrowserModel }) 
           <ScrollArea className="min-h-0 flex-1"><div className="registry-browser-data">
             {model.range.isPending ? <p>{t('registryBrowser.loading')}</p> : null}
             {model.rangeError ? <p role="alert">{model.rangeError}</p> : null}
+            {range?.decodeStatus === 'partial' ? <p>{t('registryBrowser.partialRange')}</p> : null}
             {range?.decodedText !== undefined ? <pre>{range.decodedText || t('registryBrowser.emptyString')}</pre>
               : range ? <p>{t('registryBrowser.rawOnly')}</p> : null}
           </div></ScrollArea>

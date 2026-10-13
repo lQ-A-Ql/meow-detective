@@ -108,7 +108,10 @@ export function WindowsAnalysisView({
       onValueChange={(value) => onActiveTabChange(value as AnalysisTabKey)}
       className="h-full min-h-0 flex-1 gap-0"
     >
-      <ScrollArea className="min-h-0 flex-1" viewportClassName="p-6">
+      <TabsContent value="registry" className="registry-analysis-content m-0 min-h-0 flex-1 data-[state=active]:flex data-[state=inactive]:hidden">
+        <RegistryExtractionPanel summary={registrySummary.data} structured={registryStructured} dataSourceId={dataSourceId} />
+      </TabsContent>
+      <ScrollArea className={activeTab === 'registry' ? 'hidden' : 'min-h-0 flex-1'} viewportClassName="p-6">
         {error ? <AnalysisErrorBanner message={error} onRetry={onRetry} /> : null}
         {loading ? (
           <AnalysisLoadingPanel text={t('analysis.loading.case')} />
@@ -130,17 +133,6 @@ export function WindowsAnalysisView({
                   summary={evidenceSummary.data}
                   pending={evidencePending}
                   onRun={onRunEvidence}
-                />
-              )}
-            </TabsContent>
-
-            <TabsContent value="registry" className="m-0 data-[state=inactive]:hidden">
-              {registrySummary.isLoading ? (
-                <AnalysisLoadingPanel text={t('analysis.loading.registry')} />
-              ) : (
-                <RegistryExtractionPanel
-                  summary={registrySummary.data}
-                  structured={registryStructured}
                 />
               )}
             </TabsContent>
