@@ -14,6 +14,9 @@ describe('registry browser wire and synthetic adapter', () => {
     expect(session.rootKey.lastWriteFiletime).toBe('133700000000000001');
     expect(registryFiletimeUtc(session.rootKey.lastWriteFiletime)).toMatch(/Z$/);
     expect(registryFiletimeUtc('not-a-time')).toBeUndefined();
+    expect(registryFiletimeUtc('1')).toBe('1601-01-01T00:00:00.000Z');
+    expect(registryFiletimeUtc('116444735999999999')).toBe('1969-12-31T23:59:59.999Z');
+    expect(registryFiletimeUtc('116444736000010000')).toBe('1970-01-01T00:00:00.001Z');
   });
 
   it('pages metadata without leaking raw payload or collapsing duplicate hive names', async () => {

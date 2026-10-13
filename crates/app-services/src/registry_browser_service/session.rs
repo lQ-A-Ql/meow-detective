@@ -98,7 +98,13 @@ pub(super) fn with_session<T>(
         return Err(RegistryBrowserError::ExpiredSession);
     }
     touch(session);
-    operation(session)
+    let revision = session.source.source_revision.clone();
+    let result = operation(session)?;
+    if ctx.revision(&source)? != revision {
+        state.sessions.remove(id);
+        return Err(RegistryBrowserError::ExpiredSession);
+    }
+    Ok(result)
 }
 pub fn close_hive(
     registry: &RegistryBrowserRegistry,
@@ -116,3 +122,7 @@ pub fn close_hive(
     state.sessions.remove(&request.session_id);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/registry_browser/session.rs"]
+mod tests;

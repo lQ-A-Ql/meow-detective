@@ -13,7 +13,7 @@ export function registryValueRows(values: RegistryValueMetadata[], t: Translate)
 }
 export function registryFiletimeUtc(filetime?: string): string | undefined {
   if (!filetime || !/^\d+$/.test(filetime)) return undefined;
-  const milliseconds = (BigInt(filetime) - 116444736000000000n) / 10000n;
+  const milliseconds = BigInt(filetime) / 10000n - 11644473600000n;
   if (milliseconds < -8640000000000000n || milliseconds > 8640000000000000n) return undefined;
   return new Date(Number(milliseconds)).toISOString();
 }

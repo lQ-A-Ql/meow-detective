@@ -68,7 +68,7 @@ fn registry_browser_reads_real_hives_and_hot_navigation_preserves_source_bytes()
         let mut report=Vec::new();
         for (id,path,bytes) in present {
             let started=Instant::now();
-            let session=open_hive(&registry,&ctx,RegistryHiveOpenRequestDto {file_id:format!("ds:sample-source:{id}"),view:RegistryHiveViewDto::Base}).unwrap();
+            let session=open_hive(&registry,&ctx,RegistryHiveOpenRequestDto {file_id:format!("ds:sample-source:{id}"),view:RegistryHiveViewDto::Base}).unwrap_or_else(|error|panic!("open {path}: {error:?}"));
             let cold_ms=started.elapsed().as_millis();
             let baseline=HiveSnapshot::open(Arc::new(bytes.clone())).unwrap();
             assert_eq!(session.root_key.name,baseline.root_key().unwrap().name);

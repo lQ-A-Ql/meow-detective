@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RegistryBrowserContainer } from '@/features/registry-browser/containers/RegistryBrowserContainer';
 import { createRegistryBrowserMock } from '../../../mocks/registry-browser/client';
@@ -7,6 +7,10 @@ import fixture from '../../../mocks/registry-browser/data.json';
 import type { RegistryKeyMetadata } from '@/types/registryBrowser';
 
 const context = { caseId: fixture.caseId, dataSourceId: fixture.dataSourceId, sourceRevision: 'synthetic-v1' };
+// Initial navigation crosses hive, key and page requests. Let those transitions
+// settle when this file shares CPU with the complete frontend suite.
+configure({ asyncUtilTimeout: 5000 });
+vi.setConfig({ testTimeout: 15000 });
 function preview(client = createRegistryBrowserMock()) {
   const query = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(<QueryClientProvider client={query}><RegistryBrowserContainer client={client} context={context}

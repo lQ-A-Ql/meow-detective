@@ -27,7 +27,11 @@ pub(super) fn decode(code: u32, bytes: &[u8], offset: usize, partial: bool) -> O
                 .chunks_exact(2)
                 .map(|v| u16::from_le_bytes([v[0], v[1]]))
                 .collect();
-            let mut text = String::from_utf16_lossy(&units);
+            let mut text = if partial {
+                String::from_utf16_lossy(&units)
+            } else {
+                String::from_utf16(&units).ok()?
+            };
             if !partial {
                 text = text.trim_end_matches('\0').to_string();
             }

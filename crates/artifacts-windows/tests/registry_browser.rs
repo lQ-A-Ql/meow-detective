@@ -123,3 +123,16 @@ fn paths_and_range_allocations_are_bounded() {
         BrowserError::Limit
     );
 }
+
+#[test]
+fn malformed_utf16_keeps_raw_bytes_without_claiming_successful_decoding() {
+    let mut fixture = fixture::Hive::new();
+    let value = fixture.value("broken", 1, &[0, 0xd8], true);
+    let root = fixture.key("ROOT", &[], &[value]);
+    let hive = HiveSnapshot::open(Arc::new(fixture.finish(root))).unwrap();
+    let value = hive.value(value).unwrap();
+    let range = hive.value_range(&value, 0, 65536).unwrap();
+    assert_eq!(range.bytes, [0, 0xd8]);
+    assert!(range.decoded.is_none());
+    assert!(!range.partial);
+}

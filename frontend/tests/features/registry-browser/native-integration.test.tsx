@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { apiClient } from '@/lib/api/client';
 import { RegistryExtractionPanelContainer } from '@/features/analysis/containers/RegistryExtractionPanelContainer';
@@ -34,6 +34,11 @@ describe('native raw registry tab', () => {
     fireEvent.click(screen.getByText('Sequence'));
     await within(screen.getByRole('region', { name: '所选值详情' })).findByText('18446744073709551615');
     expect(apiClient.request).toHaveBeenCalledWith('read_registry_value_range', { request: expect.objectContaining({ length: 65536, offset: 0 }) });
+    const opens = vi.mocked(apiClient.request).mock.calls.filter(([command]) => command === 'open_registry_hive').length;
+    await act(async () => { await query.refetchQueries({ queryKey: ['case', 'data-sources'] }); });
+    expect(vi.mocked(apiClient.request).mock.calls.filter(([command]) => command === 'open_registry_hive')).toHaveLength(opens);
+    expect(close).not.toHaveBeenCalled();
+    expect(within(screen.getByRole('region', { name: '所选值详情' })).getByText('18446744073709551615')).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByRole('tab', { name: '用户账户' }), { button: 0 });
     await waitFor(() => expect(close).toHaveBeenCalled());
     expect(screen.queryByRole('tree')).not.toBeInTheDocument();
