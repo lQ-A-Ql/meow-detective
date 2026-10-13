@@ -108,7 +108,7 @@ impl HiveSnapshot {
     }
 
     pub fn retained_bytes(&self) -> usize {
-        self.bytes.len() + self.cells.len() * 8
+        self.bytes.capacity() + self.cells.len() * 8
     }
     pub fn is_partial(&self) -> bool {
         self.partial
