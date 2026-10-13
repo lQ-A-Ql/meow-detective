@@ -48,7 +48,7 @@
 
 注册表页的“原始键值”Tab 使用案件和数据源绑定的只读 Hive 会话。旧的
 `browse_registry_key` 入口和旧 DTO 保持兼容；文件预览仍可调用旧接口。
-新浏览器读取基础 Hive，事务日志和已删除 cell 不参与此视图。
+浏览器支持基础 Hive 与 LOG1/LOG2 恢复视图；已删除 cell 不参与这两个视图。
 
 权威 DTO 位于 `crates/transport/src/dto/registry_browser/`；手工镜像位于
 `frontend/src/types/registryBrowser.ts`。`RegistryBrowserClient` 位于
@@ -65,7 +65,8 @@
 | `read_registry_value_range` | RegistryValueRangeRequest / RegistryValueRange |
 | `close_registry_hive` | RegistryHiveCloseRequest / null（客户端归一化为 true） |
 
-- 新会话只声明 `view=base`；`merged/recovered` 不属于此浏览器能力。
+- `view=base` 返回原始基础 Hive；`view=recovered` 按真实 REGF 脏页日志恢复。
+  不支持 `merged`（层叠 hive 合成）或扫描任意历史日志片段。
 - 来源绑定 `caseId/dataSourceId/fileId/sourceRevision/view`；所有 keyId、valueId、
   cursor 和 sessionId 都是来源/会话范围内的身份，不能跨会话复用。
 - 根键相对路径为 `""`；值名 `""` 表示确实存在的默认值。无默认值时不制造值行。
@@ -79,7 +80,8 @@
   `rawOnly/partial` 不等于成功解码。
 - 页大小 1–200（前端默认 100）、窗口 1–65,536 字节。单 Hive 上限 128 MiB，
   浏览器保留预算 256 MiB，最多 8 个会话；预算包含 cell bitmap 和每会话预留的
-  16 MiB 元数据。分配前预留，打开和读取持锁，淘汰空闲快照无外部租借。
+  16 MiB 元数据。恢复时另计 LOG1/LOG2 字节和 24 MiB 回放工作区，每个日志上限
+  64 MiB，增长后的 Hive 仍限 128 MiB。分配前预留，打开和读取持锁，淘汰空闲快照无外部租借。
 - 会话空闲 30 分钟过期；案件/数据源生命周期和 BitLocker generation 改变时失效。
   HivePage.sourceRevision 与打开会话的 revision 一致；游标绑定来源、revision、键和
   列表类型。无会话时关闭幂等成功。键和值 ID 为已签发的不透明 token，不能传入
@@ -87,8 +89,37 @@
 - 大值按 REGF 1.5+ 的 `db` 分段组装；每段最多 16,344 字节，窗口最多 64 KiB。
   所有分段边界验证后才返回 payload，参考 [REGF 格式文档](https://github.com/libyal/libregf/blob/main/documentation/Windows%20NT%20Registry%20File%20%28REGF%29%20format.asciidoc)。
 - 键树和值表按需加载，键树 DOM 虚拟化；路径定位会翻过中间子键页。筛选明确限定
-  已加载节点，完整 Hive 检索及事务恢复浏览尚未提供。
+  已加载节点，完整 Hive 检索尚未提供。
 - `diagnostics` 使用稳定代码而非宿主路径/堆栈文本；新增可选字段省略 None。
+
+### LOG1/LOG2 恢复与来源
+
+恢复视图只回放同一案件、同一数据源和同一证据目录中的同名 `.LOG1/.LOG2`。
+发现按含分区前缀的精确证据路径进行，不依赖名称分组或尚未完成的 parent 图；每个
+日志槽最多读取两个候选用于识别歧义。使用日志前校验 `regf` 头、XOR-32、Hive 身份、
+序列资格，以及 HvLE 记录的两个 Marvin64 校验值。旧式 `DIRT` 位图也支持。日志选择
+遵循序列而非文件名；拒绝冲突记录，序列缺口只保留验证通过的前缀并标为 partial。
+
+健康 Hive 的日志不回放，返回 `recovery.status=notNeeded`，基础与结果哈希一致。
+零字节日志占位文件不被当作有效记录。无法取得任何可用恢复记录时，打开请求返回
+`recoveryFailed`，safe details 携带 `RegistryRecoveryDto`；不静默回退并展示基础数据。
+成功/部分恢复会话则携带可选 `recovery` 字段。来源包含实际文件 ID、证据路径、SHA-256、
+格式、起止序列及应用记录/页计数；基础与派生快照哈希分别保存。此状态是全快照来源，
+不声称每一个值字节都由日志覆盖。
+
+恢复采用内存快照，原 Hive 与日志始终只读；不启用 Windows 的损坏 hive bin 自愈或
+历史片段雕刻。恢复后校验 hive bins、allocated-cell 边界与根键，失败则不返回派生视图。
+格式依据 [REGF transaction log specification](https://github.com/msuhanov/regf/blob/master/Windows%20registry%20file%20format%20specification.md)。
+
+合成契约位于 `frontend/mocks/registry-browser/recovery-contract.json`，由 transport
+serde 和前端测试共同校验；source/view/session 均进入导航、值和范围缓存键。
+`registry_log_service` 验证来源、视图隔离和缓存复用；`registry_log_e01` 为私有 opt-in
+回归，设置 `FORENSICS_E01_FIXTURE` 与 `FORENSICS_REGISTRY_LOG_VERIFICATION` 后运行
+`--ignored`。其中受控脏副本与原始样本明确区分，输出以 create_new 写入独立路径。
+`crates/app-services/tests/support/verify_registry_logs_yarp.py` 可独立比对这批输出；
+传入 `--verification-root`、`--reference-file`（YARP 的 RegistryFile.py）和新的
+`--report` 路径。参考源码必须匹配脚本中固定的 SHA-256；不自动下载，不覆盖已有输出。
+此对照针对 HvLE 样本；DIRT、序列回绕、校验失败和冲突规则由合成解析回归覆盖。
 
 共享合成 wire fixture：`frontend/mocks/registry-browser/contract.json`。
 `cargo test -p transport --test registry_browser_contract` 与前端
