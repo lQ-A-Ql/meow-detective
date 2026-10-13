@@ -52,7 +52,14 @@ impl Hive {
         }
         data[72..74].copy_from_slice(&(name.len() as u16).to_le_bytes());
         data.extend_from_slice(name.as_bytes());
-        self.cell(&data)
+        let parent = self.cell(&data);
+        for child in children {
+            let at = 4096 + *child as usize + 4 + 16;
+            if let Some(field) = self.bytes.get_mut(at..at + 4) {
+                field.copy_from_slice(&parent.to_le_bytes());
+            }
+        }
+        parent
     }
     pub fn value(&mut self, name: &str, kind: u32, raw: &[u8], inline: bool) -> u32 {
         let data_offset = if inline {

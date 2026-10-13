@@ -46,6 +46,7 @@ pub struct AppState {
     pub runtime_cache: Arc<Mutex<RuntimeCache>>,
     /// Source-scoped evidence runtimes and opaque preview sessions.
     pub preview_runtime: Arc<PreviewRuntimeRegistry>,
+    pub registry_browser: Arc<app_services::registry_browser_service::RegistryBrowserRegistry>,
     /// Verified BitLocker cipher state. Credentials are never stored here.
     pub bitlocker_runtime: Arc<BitLockerUnlockRegistry>,
     /// OS-protected persistence for verified FVEK/tweak packages.
@@ -80,6 +81,9 @@ impl Default for AppState {
             app_settings_path,
             runtime_cache: Arc::new(Mutex::new(runtime_cache)),
             preview_runtime: Arc::new(PreviewRuntimeRegistry::default()),
+            registry_browser: Arc::new(
+                app_services::registry_browser_service::RegistryBrowserRegistry::default(),
+            ),
             bitlocker_runtime: Arc::new(BitLockerUnlockRegistry::default()),
             bitlocker_key_store: crate::bitlocker_key_store::platform_bitlocker_key_store(),
             bitlocker_dictionary_attacks: Arc::new(BitLockerDictionaryAttackRegistry::default()),
@@ -212,6 +216,9 @@ impl AppState {
     }
 
     pub fn clear_preview_runtime_for_case(&self, case_id: &str) -> Result<(), String> {
+        self.registry_browser
+            .invalidate_case(case_id)
+            .map_err(|error| error.to_string())?;
         self.preview_runtime
             .invalidate_case(case_id)
             .map_err(|error| format!("Failed to clear preview runtime: {error}"))
@@ -222,12 +229,18 @@ impl AppState {
         case_id: &str,
         data_source_id: &str,
     ) -> Result<(), String> {
+        self.registry_browser
+            .invalidate_source(case_id, data_source_id)
+            .map_err(|error| error.to_string())?;
         self.preview_runtime
             .invalidate_source(case_id, data_source_id)
             .map_err(|error| format!("Failed to clear preview runtime: {error}"))
     }
 
     pub fn retire_preview_case(&self, case_id: &str, timeout: Duration) -> Result<bool, String> {
+        self.registry_browser
+            .invalidate_case(case_id)
+            .map_err(|error| error.to_string())?;
         let drained = self
             .preview_runtime
             .retire_case_and_drain(case_id, timeout)
@@ -282,6 +295,9 @@ impl AppState {
         data_source_id: &str,
         timeout: Duration,
     ) -> Result<bool, String> {
+        self.registry_browser
+            .invalidate_source(case_id, data_source_id)
+            .map_err(|error| error.to_string())?;
         let drained = self
             .preview_runtime
             .retire_source_and_drain(case_id, data_source_id, timeout)

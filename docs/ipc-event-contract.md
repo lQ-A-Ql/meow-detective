@@ -44,27 +44,28 @@
 4. 若 payload 是匿名 JSON，在消费方（`frontend/src/lib/events/bus.ts` 订阅者或具体 feature hook）同步字段名；若 payload 是 DTO，同时更新 `frontend/src/types/*.ts` 对应 interface。
 5. 运行 `powershell -File scripts/check-event-topic-drift.ps1` 确认 topic 集合同步；如涉及 DTO payload，同时运行 `powershell -File scripts/check-dto-drift.ps1`。
 
-## 注册表浏览会话契约（P0）
+## 注册表浏览会话契约
 
-P0 固定了只读浏览的数据契约，但没有注册新的 Tauri 命令或事件。当前
-`browse_registry_key` 入口和旧 DTO 保持兼容；后续 P1 实现原生读取与会话，
-P2 再将其接入正式注册表页。P0 样稿仅由 mock dev 入口注入合成客户端。
+注册表页的“原始键值”Tab 使用案件和数据源绑定的只读 Hive 会话。旧的
+`browse_registry_key` 入口和旧 DTO 保持兼容；文件预览仍可调用旧接口。
+新浏览器读取基础 Hive，事务日志和已删除 cell 不参与此视图。
 
 权威 DTO 位于 `crates/transport/src/dto/registry_browser/`；手工镜像位于
 `frontend/src/types/registryBrowser.ts`。`RegistryBrowserClient` 位于
-`frontend/src/lib/api/registry-browser.ts`，是用例边界而非已注册的 IPC 绑定。
+`frontend/src/lib/api/registry-browser.ts`，通过 `apiClient` 调用以下已注册命令。
+所有命令参数使用 `{ request: <DTO> }` 封装，不新增事件。
 
-| 用例 | 请求 / 响应 DTO（省略 Dto 后缀） |
+| 命令 | 请求 / 响应 DTO（省略 Dto 后缀） |
 | --- | --- |
-| 配置单元发现 | RegistryHiveListRequest / RegistryHivePage |
-| 打开只读 Hive | RegistryHiveOpenRequest / RegistryHiveSession |
-| 定位相对键路径 | RegistryKeyResolveRequest / RegistryKeyMetadata |
-| 子键分页 | RegistrySubkeysRequest / RegistrySubkeyPage |
-| 值元数据分页 | RegistryValuesRequest / RegistryValuePage |
-| 值字节范围读取 | RegistryValueRangeRequest / RegistryValueRange |
-| 关闭会话 | RegistryHiveCloseRequest / bool |
+| `list_registry_hives` | RegistryHiveListRequest / RegistryHivePage |
+| `open_registry_hive` | RegistryHiveOpenRequest / RegistryHiveSession |
+| `resolve_registry_key` | RegistryKeyResolveRequest / RegistryKeyMetadata |
+| `list_registry_subkeys` | RegistrySubkeysRequest / RegistrySubkeyPage |
+| `list_registry_values` | RegistryValuesRequest / RegistryValuePage |
+| `read_registry_value_range` | RegistryValueRangeRequest / RegistryValueRange |
+| `close_registry_hive` | RegistryHiveCloseRequest / null（客户端归一化为 true） |
 
-- 新会话只声明 `view=base`；`merged/recovered` 不属于 P0/P1 首版能力。
+- 新会话只声明 `view=base`；`merged/recovered` 不属于此浏览器能力。
 - 来源绑定 `caseId/dataSourceId/fileId/sourceRevision/view`；所有 keyId、valueId、
   cursor 和 sessionId 都是来源/会话范围内的身份，不能跨会话复用。
 - 根键相对路径为 `""`；值名 `""` 表示确实存在的默认值。无默认值时不制造值行。
@@ -76,10 +77,24 @@ P2 再将其接入正式注册表页。P0 样稿仅由 mock dev 入口注入合�
 - 值列表不携带原始 payload；大值保留元数据行，选中后按窗口读取。range 的 offset
   是组装后值 payload 内的偏移，不能伪称为连续物理区间。`decodedText` 可以缺省，
   `rawOnly/partial` 不等于成功解码。
-- P1 必须在分配/读取前验证页大小、字节窗口与会话预算，拒绝越界、过期及跨来源
-  请求。建议页大小 100、窗口 64 KiB；单 Hive/总缓存建议值 128/256 MiB 待实测。
+- 页大小 1–200（前端默认 100）、窗口 1–65,536 字节。单 Hive 上限 128 MiB，
+  浏览器保留预算 256 MiB，最多 8 个会话；预算包含 cell bitmap 和每会话预留的
+  16 MiB 元数据。分配前预留，打开和读取持锁，淘汰空闲快照无外部租借。
+- 会话空闲 30 分钟过期；案件/数据源生命周期和 BitLocker generation 改变时失效。
+  HivePage.sourceRevision 与打开会话的 revision 一致；游标绑定来源、revision、键和
+  列表类型。无会话时关闭幂等成功。键和值 ID 为已签发的不透明 token，不能传入
+  任意 cell 偏移读取。失效后的 UI 清除值数据并提供重新发现、打开操作。
+- 大值按 REGF 1.5+ 的 `db` 分段组装；每段最多 16,344 字节，窗口最多 64 KiB。
+  所有分段边界验证后才返回 payload，参考 [REGF 格式文档](https://github.com/libyal/libregf/blob/main/documentation/Windows%20NT%20Registry%20File%20%28REGF%29%20format.asciidoc)。
+- 键树和值表按需加载，键树 DOM 虚拟化；路径定位会翻过中间子键页。筛选明确限定
+  已加载节点，完整 Hive 检索及事务恢复浏览尚未提供。
 - `diagnostics` 使用稳定代码而非宿主路径/堆栈文本；新增可选字段省略 None。
 
 共享合成 wire fixture：`frontend/mocks/registry-browser/contract.json`。
 `cargo test -p transport --test registry_browser_contract` 与前端
 `tests/features/registry-browser/mock-contract.test.ts` 锁定字段、来源、精度和空值语义。
+
+服务回归：`cargo test -p app-services --test registry_browser_service`。真实样本回归
+`registry_browser_e01` 默认忽略；显式设置 `FORENSICS_E01_FIXTURE` 后使用 `--ignored`。
+可通过 `FORENSICS_REGISTRY_BROWSER_REPORT` 和 `FORENSICS_REGISTRY_BROWSER_ORACLE_DIR`
+指定报告及独立比对副本输出，文件均以 create_new 写入，原始镜像始终只读。

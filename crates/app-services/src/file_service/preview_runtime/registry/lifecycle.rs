@@ -11,6 +11,19 @@ use super::{
 };
 
 impl PreviewRuntimeRegistry {
+    /// Opaque generation used by other source-bound read-only snapshots.
+    pub fn source_generation(
+        &self,
+        case_id: &str,
+        data_source_id: &str,
+    ) -> Result<u64, FileServiceError> {
+        let state = self.lock_state()?;
+        let key = runtime_key(case_id, data_source_id);
+        if state.retired_cases.contains(case_id) || state.retired_sources.contains(&key) {
+            return Err(FileServiceError::invalid_input("source is retired"));
+        }
+        Ok(*state.generations.get(&key).unwrap_or(&0))
+    }
     pub fn invalidate_case(&self, case_id: &str) -> Result<(), FileServiceError> {
         let mut state = self.lock_state()?;
         invalidate_case_locked(&mut state, case_id);

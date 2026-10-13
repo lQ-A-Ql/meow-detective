@@ -36,6 +36,7 @@ export interface RegistryHiveListRequest {
   cursor?: string;
 }
 export interface RegistryHivePage {
+  sourceRevision: string;
   hives: RegistryHiveDescriptor[];
   coverage: RegistryBrowserCoverage;
   diagnostics: RegistryBrowserDiagnostic[];

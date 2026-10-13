@@ -7,6 +7,7 @@
   "valuesRequest":{"sessionId":"synthetic-session","keyId":"root","limit":100},
   "rangeRequest":{"sessionId":"synthetic-session","keyId":"root","valueId":"large-qword","offset":0,"length":65536},
   "hivePage":{
+    "sourceRevision":"synthetic-v1",
     "hives":[{"fileId":"ds:synthetic-source:hive:software","dataSourceId":"synthetic-source","name":"SOFTWARE","evidencePath":"[P1]/Windows/System32/config/SOFTWARE","byteLength":73400320,"readState":"readable","partitionIndex":1}],
     "coverage":{"declaredCount":1,"returnedCount":1,"skippedCount":0,"status":"complete"},"diagnostics":[]
   },

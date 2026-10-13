@@ -40,6 +40,7 @@ pub struct RegistryHiveListRequestDto {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistryHivePageDto {
+    pub source_revision: String,
     pub hives: Vec<RegistryHiveDescriptorDto>,
     pub coverage: RegistryBrowserCoverageDto,
     pub diagnostics: Vec<RegistryBrowserDiagnosticDto>,

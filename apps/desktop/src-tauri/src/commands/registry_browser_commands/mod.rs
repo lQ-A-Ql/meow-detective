@@ -1,0 +1,15 @@
+mod close;
+mod discovery;
+mod opening;
+mod range;
+mod resolve;
+mod subkeys;
+mod support;
+mod values;
+pub use close::close_registry_hive;
+pub use discovery::list_registry_hives;
+pub use opening::open_registry_hive;
+pub use range::read_registry_value_range;
+pub use resolve::resolve_registry_key;
+pub use subkeys::list_registry_subkeys;
+pub use values::list_registry_values;

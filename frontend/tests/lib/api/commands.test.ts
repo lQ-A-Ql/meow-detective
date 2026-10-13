@@ -8,8 +8,8 @@ function flattenCommands(obj: Record<string, Record<string, string>>): string[] 
 }
 
 function parseBackendHandlerCommands(): Set<string> {
-  // Tests run from frontend/, backend lib.rs is at ../apps/desktop/src-tauri/src/lib.rs
-  const libRs = path.resolve(process.cwd(), '..', 'apps', 'desktop', 'src-tauri', 'src', 'lib.rs');
+  // The registration macro is owned by the desktop command handler module.
+  const libRs = path.resolve(process.cwd(), '..', 'apps', 'desktop', 'src-tauri', 'src', 'command_handler.rs');
   const text = fs.readFileSync(libRs, 'utf-8');
   const marker = 'tauri::generate_handler![';
   const start = text.indexOf(marker);

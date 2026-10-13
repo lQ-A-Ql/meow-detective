@@ -3,6 +3,7 @@ use rusqlite::Connection;
 mod browse;
 mod lookup;
 mod mapping;
+mod registry_hives;
 mod writes;
 
 pub use mapping::file_encryption_status_from_row;

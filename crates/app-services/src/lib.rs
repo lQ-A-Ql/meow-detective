@@ -57,6 +57,7 @@ pub mod performance;
 pub mod plugin_action_service;
 pub mod plugin_loader;
 pub mod processing_phase_service;
+pub mod registry_browser_service;
 pub mod report;
 pub mod rule_pack;
 pub mod runtime_resources;

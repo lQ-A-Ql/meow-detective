@@ -28,11 +28,12 @@ impl HiveSnapshot {
             subkeys: u32_at(cell, 28)?,
             value_count: u32_at(cell, 36)?,
             values: u32_at(cell, 40)?,
+            parent: u32_at(cell, 16)?,
         })
     }
 
     pub fn resolve(&self, path: &str) -> Result<BrowserKey, BrowserError> {
-        if path.len() > 4096 || path.contains('\0') || path.contains('/') {
+        if path.len() > 4096 || path.contains('\0') {
             return Err(BrowserError::InvalidPath);
         }
         let parts: Vec<_> = path
@@ -50,7 +51,9 @@ impl HiveSnapshot {
             let mut found = None;
             for offset in offsets {
                 if let Ok(child) = self.key(offset, String::new()) {
-                    if child.name.to_lowercase() == part.to_lowercase() {
+                    if child.parent == key.offset
+                        && child.name.to_lowercase() == part.to_lowercase()
+                    {
                         found = Some(child);
                         break;
                     }
@@ -83,15 +86,23 @@ impl HiveSnapshot {
         let items = offsets[start..end]
             .iter()
             .map(|offset| {
-                let item = self.key(*offset, String::new()).map(|mut child| {
+                let item = self.key(*offset, String::new()).and_then(|mut child| {
+                    if child.parent != key.offset || child.offset == key.offset {
+                        return Err(BrowserError::Corrupt);
+                    }
                     child.path = join(&key.path, &child.name);
-                    child
+                    Ok(child)
                 });
                 (*offset, item)
             })
             .collect();
         Ok(BrowserPage {
             declared: key.subkey_count,
+            skipped: if end == offsets.len() {
+                key.subkey_count.saturating_sub(offsets.len() as u32)
+            } else {
+                0
+            },
             items,
             next: (end < offsets.len()).then_some(end),
             diagnostic,
@@ -127,6 +138,9 @@ impl HiveSnapshot {
         if depth > 8 || !seen.insert(offset) {
             return Err(BrowserError::Corrupt);
         }
+        if seen.len() > MAX_LIST_ITEMS {
+            return Err(BrowserError::Limit);
+        }
         let cell = self.cell(offset)?;
         let signature = cell.get(..2).ok_or(BrowserError::Corrupt)?;
         let count = u16_at(cell, 2)? as usize;
@@ -138,10 +152,13 @@ impl HiveSnapshot {
         if count * stride + 4 > cell.len() {
             return Err(BrowserError::Corrupt);
         }
+        let mut diagnostic = None;
         for index in 0..count {
             let child = u32_at(cell, 4 + index * stride)?;
             if signature == b"ri" {
-                self.walk_list(child, depth + 1, seen, out)?;
+                if let Err(error) = self.walk_list(child, depth + 1, seen, out) {
+                    diagnostic = Some(error);
+                }
             } else {
                 out.push(child);
             }
@@ -149,7 +166,7 @@ impl HiveSnapshot {
                 return Err(BrowserError::Limit);
             }
         }
-        Ok(())
+        diagnostic.map_or(Ok(()), Err)
     }
 }
 

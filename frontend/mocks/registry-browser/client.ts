@@ -51,7 +51,7 @@ export function createRegistryBrowserMock(scenario: RegistryPreviewScenario = 's
       await pause();
       if (scenario === 'failedSource') throw failure('sourceUnavailable');
       const result = page(scenario === 'emptySource' ? [] : hives, request.cursor, request.limit);
-      return { hives: result.rows, coverage: result.coverage, nextCursor: result.nextCursor, diagnostics: [] };
+      return { sourceRevision: 'synthetic-v1', hives: result.rows, coverage: result.coverage, nextCursor: result.nextCursor, diagnostics: [] };
     },
     async openHive(request) {
       await pause();

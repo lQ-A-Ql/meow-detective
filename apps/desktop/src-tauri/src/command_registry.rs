@@ -70,6 +70,10 @@ pub(crate) use crate::commands::{
         list_investigation_steps, list_notebook_entries, update_notebook_entry,
     },
     plugin_action_commands::{list_plugin_actions, recover_wechat_keys},
+    registry_browser_commands::{
+        close_registry_hive, list_registry_hives, list_registry_subkeys, list_registry_values,
+        open_registry_hive, read_registry_value_range, resolve_registry_key,
+    },
     report_commands::{
         export_csv_correlation_report, export_csv_report, export_html_report, export_json_report,
         get_report_history, get_report_templates,

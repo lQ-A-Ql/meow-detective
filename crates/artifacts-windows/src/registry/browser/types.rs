@@ -25,6 +25,7 @@ pub struct BrowserKey {
     pub value_count: u32,
     pub(super) subkeys: u32,
     pub(super) values: u32,
+    pub(super) parent: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +43,7 @@ pub struct BrowserValue {
 #[derive(Debug)]
 pub struct BrowserPage<T> {
     pub declared: u32,
+    pub skipped: u32,
     pub items: Vec<(u32, Result<T, BrowserError>)>,
     pub next: Option<usize>,
     pub diagnostic: Option<BrowserError>,

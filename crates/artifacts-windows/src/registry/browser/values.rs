@@ -13,6 +13,7 @@ impl HiveSnapshot {
         if key.value_count == 0 {
             return Ok(BrowserPage {
                 declared: 0,
+                skipped: 0,
                 items: Vec::new(),
                 next: None,
                 diagnostic: None,
@@ -37,6 +38,11 @@ impl HiveSnapshot {
         }
         Ok(BrowserPage {
             declared: key.value_count,
+            skipped: if end == available {
+                key.value_count.saturating_sub(available as u32)
+            } else {
+                0
+            },
             items,
             next: (end < available).then_some(end),
             diagnostic: (available != key.value_count as usize).then_some(BrowserError::Corrupt),
