@@ -16,6 +16,8 @@ pub enum RegistryBrowserError {
     Busy,
     #[error("registry runtime is unavailable")]
     Internal,
+    #[error("registry log recovery could not be completed")]
+    Recovery(Box<transport::dto::RegistryRecoveryDto>),
     #[error(transparent)]
     Parser(#[from] BrowserError),
 }
@@ -31,6 +33,7 @@ impl ServiceErrorCategory for RegistryBrowserError {
             Self::Parser(_) => ErrorCategory::Parser,
             Self::Busy => ErrorCategory::Validation,
             Self::Internal => ErrorCategory::Internal,
+            Self::Recovery(_) => ErrorCategory::Parser,
         }
     }
     fn code(&self) -> Option<&'static str> {
@@ -45,6 +48,7 @@ impl ServiceErrorCategory for RegistryBrowserError {
             Self::Parser(BrowserError::Unsupported) => "unsupportedHive",
             Self::Busy => "browserBusy",
             Self::Internal => "failed",
+            Self::Recovery(_) => "recoveryFailed",
         })
     }
     fn user_message(&self) -> Option<&'static str> {
@@ -52,5 +56,11 @@ impl ServiceErrorCategory for RegistryBrowserError {
     }
     fn recoverable(&self) -> Option<bool> {
         Some(true)
+    }
+    fn safe_details(&self) -> Option<serde_json::Value> {
+        match self {
+            Self::Recovery(report) => Some(serde_json::json!({"recovery":report})),
+            _ => None,
+        }
     }
 }

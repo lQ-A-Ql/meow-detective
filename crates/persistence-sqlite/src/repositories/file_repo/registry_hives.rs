@@ -8,6 +8,27 @@ const NAMES: &str =
     "('system','software','sam','security','default','ntuser.dat','usrclass.dat','amcache.hve')";
 
 impl FileRepo<'_> {
+    /// Match exact source-relative sibling paths, including partition prefixes.
+    /// A bounded result preserves duplicate-name ambiguity instead of selecting
+    /// an arbitrary log when the catalog contains conflicting entries.
+    pub fn registry_log_companions(
+        &self,
+        source: &DataSourceId,
+        hive_path: &str,
+    ) -> DbResult<Vec<FileEntry>> {
+        let path = hive_path.replace('\\', "/");
+        let sql=format!("SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE data_source_id=?1 AND deleted=0 AND entry_type='file' AND replace(path,'\\','/')=?2 COLLATE NOCASE ORDER BY id LIMIT 2");
+        let mut statement = self.conn.prepare(&sql)?;
+        let mut entries = Vec::new();
+        for suffix in ["LOG1", "LOG2"] {
+            let rows = statement.query_map(
+                params![source.0, format!("{path}.{suffix}")],
+                row_to_file_entry,
+            )?;
+            entries.extend(rows.collect::<Result<Vec<_>, _>>()?);
+        }
+        Ok(entries)
+    }
     pub fn registry_hive_candidates(
         &self,
         source: &DataSourceId,

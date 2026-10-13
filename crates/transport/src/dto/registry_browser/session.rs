@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     RegistryBrowserDiagnosticDto, RegistryBrowserSourceDto, RegistryHiveDescriptorDto,
-    RegistryHiveViewDto, RegistryKeyMetadataDto,
+    RegistryHiveViewDto, RegistryKeyMetadataDto, RegistryRecoveryDto,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -21,6 +21,8 @@ pub struct RegistryHiveSessionDto {
     pub root_key: RegistryKeyMetadataDto,
     pub expires_at: String,
     pub diagnostics: Vec<RegistryBrowserDiagnosticDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery: Option<RegistryRecoveryDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

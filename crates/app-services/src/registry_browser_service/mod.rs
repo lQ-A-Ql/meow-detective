@@ -1,9 +1,13 @@
 //! Source-bound base-hive sessions, paged navigation and bounded value reads.
+mod companion_logs;
 mod discovery;
 mod error;
+mod io;
 mod mapping;
 mod navigation;
 mod opening;
+mod recovered_view;
+mod recovery_mapping;
 mod registry;
 mod scope;
 mod session;

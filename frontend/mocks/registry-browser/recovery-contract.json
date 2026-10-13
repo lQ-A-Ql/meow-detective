@@ -1,0 +1,16 @@
+{
+  "status": "recovered",
+  "baseSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "resultSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "basePrimarySequence": 11,
+  "baseSecondarySequence": 10,
+  "baseChecksumValid": true,
+  "resultSequence": 11,
+  "appliedEntries": 2,
+  "appliedPages": 2,
+  "diagnosticCodes": [],
+  "logs": [
+    {"slot":"log1","status":"applied","fileId":"ds:synthetic-registry-source:log:software1","evidencePath":"[P1]/Windows/System32/config/SOFTWARE.LOG1","byteLength":1536,"sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","format":"hvle","firstSequence":11,"lastSequence":11,"appliedEntries":1,"appliedPages":1},
+    {"slot":"log2","status":"applied","fileId":"ds:synthetic-registry-source:log:software2","evidencePath":"[P1]/Windows/System32/config/SOFTWARE.LOG2","byteLength":1536,"sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","format":"hvle","firstSequence":10,"lastSequence":10,"appliedEntries":1,"appliedPages":1}
+  ]
+}

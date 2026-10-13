@@ -1,5 +1,7 @@
-/** P0 session contract. Native IPC handlers are implemented in P1. */
-export type RegistryHiveView = 'base';
+import type { RegistryRecovery } from './registryRecovery';
+export * from './registryRecovery';
+/** Source-bound native registry browsing contract. */
+export type RegistryHiveView = 'base' | 'recovered';
 export type RegistryHiveReadState = 'candidate' | 'readable' | 'locked' | 'unsupported' | 'corrupt';
 export type RegistryItemReadState = 'readable' | 'deferred' | 'unsupported' | 'corrupt';
 export interface RegistryBrowserSource {
@@ -63,6 +65,7 @@ export interface RegistryHiveSession {
   rootKey: RegistryKeyMetadata;
   expiresAt: string;
   diagnostics: RegistryBrowserDiagnostic[];
+  recovery?: RegistryRecovery;
 }
 export interface RegistryHiveCloseRequest {
   sessionId: string;

@@ -1,4 +1,5 @@
 use super::{
+    io::read_snapshot,
     mapping,
     registry::{MAX_HIVE_BYTES, TTL},
     session::Session,
@@ -29,6 +30,7 @@ pub fn open_hive(
     let entry = ctx.file(&conn, &global.local_id)?;
     let mut descriptor = mapping::descriptor(&entry);
     if descriptor.file_id != request.file_id
+        || entry.data_source_id != global.data_source_id
         || entry.deleted
         || entry.entry_type != domain::EntryType::File
     {
@@ -57,16 +59,23 @@ pub fn open_hive(
             + (handle.size as usize).div_ceil(64)
             + super::registry::METADATA_BUDGET,
     )?;
-    let bytes = read_snapshot(&mut context, &global.local_id, handle.size as usize)?;
-    if bytes.len() as u64 != handle.size {
-        return Err(RegistryBrowserError::SourceUnavailable);
-    }
-    state.reads += 1;
+    let companions = FileRepo::new(&conn)
+        .registry_log_companions(&global.data_source_id, &entry.path)
+        .map_err(|_| RegistryBrowserError::SourceUnavailable)?;
+    let has_logs = !companions.is_empty();
+    let (bytes, recovery) = load_view(
+        &mut state,
+        &mut context,
+        &entry,
+        handle.size as usize,
+        &request.view,
+        companions,
+    )?;
     let hive = HiveSnapshot::open(Arc::new(bytes))?;
     if ctx.revision(&global.data_source_id)? != revision {
         return Err(RegistryBrowserError::ExpiredSession);
     }
-    let diagnostics = hive_diagnostics(&hive, has_logs(&conn, &entry));
+    let diagnostics = hive_diagnostics(&hive, has_logs);
     let root = hive.root_key()?;
     descriptor.read_state = RegistryHiveReadStateDto::Readable;
     descriptor.byte_length = handle.size;
@@ -77,26 +86,37 @@ pub fn open_hive(
         source_revision: revision,
         view: request.view,
     };
-    register_session(&mut state, hive, source, descriptor, root, diagnostics)
+    let mut result = register_session(&mut state, hive, source, descriptor, root, diagnostics)?;
+    result.recovery = recovery;
+    if result.recovery.is_some() {
+        result.diagnostics.retain(|d| {
+            d.code != "baseHiveOnly"
+                && d.code != "dirtyHive"
+                && d.code != "transactionLogsAvailable"
+        });
+    }
+    Ok(result)
 }
-fn read_snapshot(
+fn load_view(
+    state: &mut super::registry::RegistryState,
     context: &mut crate::file_service::SourceReadContext<'_>,
-    id: &domain::FileEntryId,
+    entry: &domain::FileEntry,
     size: usize,
-) -> Result<Vec<u8>, RegistryBrowserError> {
-    use std::io::Read;
-    let source = context
-        .open_file_range_by_id(id)
-        .map_err(|_| RegistryBrowserError::SourceUnavailable)?;
-    let mut reader: Box<dyn Read> = match source {
-        crate::file_service::RangeContentReader::Seekable(reader) => reader,
-        crate::file_service::RangeContentReader::Streaming(reader) => reader,
-    };
-    let mut bytes = vec![0; size];
-    reader
-        .read_exact(&mut bytes)
-        .map_err(|_| RegistryBrowserError::SourceUnavailable)?;
-    Ok(bytes)
+    view: &RegistryHiveViewDto,
+    companions: Vec<domain::FileEntry>,
+) -> Result<(Vec<u8>, Option<RegistryRecoveryDto>), RegistryBrowserError> {
+    match view {
+        RegistryHiveViewDto::Base => {
+            let bytes = read_snapshot(context, &entry.id, size, size)?;
+            state.reads += 1;
+            Ok((bytes, None))
+        }
+        RegistryHiveViewDto::Recovered => {
+            let (bytes, report) =
+                super::recovered_view::load(state, context, entry, size, companions)?;
+            Ok((bytes, Some(report)))
+        }
+    }
 }
 fn hive_diagnostics(hive: &HiveSnapshot, logs: bool) -> Vec<RegistryBrowserDiagnosticDto> {
     let mut diagnostics = vec![mapping::diagnostic("baseHiveOnly", None)];
@@ -139,20 +159,6 @@ fn register_session(
         expires_at: (chrono::Utc::now() + chrono::Duration::seconds(TTL.as_secs() as i64))
             .to_rfc3339(),
         diagnostics,
+        recovery: None,
     })
-}
-fn has_logs(conn: &rusqlite::Connection, entry: &domain::FileEntry) -> bool {
-    let Some(parent) = &entry.parent_id else {
-        return false;
-    };
-    FileRepo::new(conn)
-        .find_children(parent)
-        .ok()
-        .is_some_and(|siblings| {
-            siblings.iter().any(|s| {
-                !s.deleted
-                    && (s.name.eq_ignore_ascii_case(&format!("{}.LOG1", entry.name))
-                        || s.name.eq_ignore_ascii_case(&format!("{}.LOG2", entry.name)))
-            })
-        })
 }

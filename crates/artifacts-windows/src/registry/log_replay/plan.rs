@@ -34,16 +34,13 @@ pub fn prepare_log_replay<'a>(
     }
     let mut parsed = Vec::new();
     for log in logs {
-        let mut item = LogReport {
-            slot: log.slot,
-            format: None,
-            disposition: LogDisposition::Unavailable,
-            first_sequence: None,
-            last_sequence: None,
-            applied_entries: 0,
-            applied_pages: 0,
-            diagnostic: None,
-        };
+        if log.bytes.is_some_and(|bytes| bytes.is_empty()) {
+            report
+                .logs
+                .push(log_report(log.slot, LogDisposition::NotSelected));
+            continue;
+        }
+        let mut item = log_report(log.slot, LogDisposition::Unavailable);
         match parse_log(log, &header, max_bytes) {
             Ok(data) => {
                 item.format = Some(data.format);
@@ -93,6 +90,18 @@ pub fn prepare_log_replay<'a>(
         .unwrap_or(plan.base.bins)
         .max(plan.base.bins);
     Ok(plan)
+}
+fn log_report(slot: super::LogSlot, disposition: LogDisposition) -> LogReport {
+    LogReport {
+        slot,
+        format: None,
+        disposition,
+        first_sequence: None,
+        last_sequence: None,
+        applied_entries: 0,
+        applied_pages: 0,
+        diagnostic: None,
+    }
 }
 fn parse_log<'a>(
     log: &HiveLog<'a>,

@@ -44,7 +44,7 @@ fn browser_responses_preserve_precision_default_names_and_coverage() {
 }
 
 #[test]
-fn read_state_enums_are_stable_and_recovered_view_is_not_advertised() {
+fn read_state_enums_are_stable_and_view_modes_are_explicit() {
     for state in ["candidate", "readable", "locked", "unsupported", "corrupt"] {
         roundtrip::<RegistryHiveReadStateDto>(&Value::String(state.to_string()));
     }
@@ -55,4 +55,38 @@ fn read_state_enums_are_stable_and_recovered_view_is_not_advertised() {
         roundtrip::<RegistryValueDecodeStatusDto>(&Value::String(state.to_string()));
     }
     assert!(serde_json::from_value::<RegistryHiveViewDto>(Value::String("merged".into())).is_err());
+    roundtrip::<RegistryHiveViewDto>(&Value::String("recovered".into()));
+}
+
+#[test]
+fn recovery_provenance_matches_shared_synthetic_wire_fixture() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../frontend/mocks/registry-browser/recovery-contract.json");
+    let value: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    roundtrip::<RegistryRecoveryDto>(&value);
+    roundtrip::<RegistryLogProvenanceDto>(&value["logs"][0]);
+    for state in ["notNeeded", "recovered", "partial", "failed"] {
+        roundtrip::<RegistryRecoveryStatusDto>(&Value::String(state.into()));
+    }
+    for state in [
+        "applied",
+        "notNeeded",
+        "stale",
+        "invalid",
+        "unavailable",
+        "duplicate",
+        "notSelected",
+        "missing",
+        "ambiguous",
+        "locked",
+        "tooLarge",
+    ] {
+        roundtrip::<RegistryLogStatusDto>(&Value::String(state.into()));
+    }
+    for format in ["hvle", "dirt"] {
+        roundtrip::<RegistryLogFormatDto>(&Value::String(format.into()));
+    }
+    for slot in ["log1", "log2"] {
+        roundtrip::<RegistryLogSlotDto>(&Value::String(slot.into()));
+    }
 }

@@ -19,6 +19,7 @@ pub struct RegistryBrowserRegistry {
 pub(super) struct RegistryState {
     pub sessions: HashMap<String, Session>,
     pub reads: u64,
+    pub log_reads: u64,
     pub discovery_cursors: HashMap<String, DiscoveryCursor>,
 }
 pub(super) struct DiscoveryCursor {
@@ -33,6 +34,7 @@ pub struct RegistryBrowserStats {
     pub session_count: usize,
     pub retained_bytes: usize,
     pub hive_reads: u64,
+    pub log_reads: u64,
 }
 impl RegistryBrowserRegistry {
     pub(super) fn lock(&self) -> Result<MutexGuard<'_, RegistryState>, RegistryBrowserError> {
@@ -72,6 +74,7 @@ impl RegistryBrowserRegistry {
             session_count: s.sessions.len(),
             retained_bytes: s.bytes(),
             hive_reads: s.reads,
+            log_reads: s.log_reads,
         })
     }
 }

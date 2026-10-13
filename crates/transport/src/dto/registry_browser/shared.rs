@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-/// The first browser slice reads base-hive evidence only.
+/// Requested byte provenance; recovered views report whether replay was needed.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum RegistryHiveViewDto {
     Base,
+    Recovered,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
