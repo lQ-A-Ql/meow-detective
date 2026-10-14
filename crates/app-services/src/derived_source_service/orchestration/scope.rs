@@ -17,7 +17,17 @@ pub(super) fn load_ceph_scope(
     ceph_scope_id: &CephScopeId,
 ) -> DerivedSourceResult<CephScopeState> {
     let summary = crate::cluster_service::require_ceph_scope(conn, &case_id.0, ceph_scope_id)
-        .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?;
+        .map_err(|error| match error {
+            crate::cluster_service::ClusterServiceError::Unsupported
+            | crate::cluster_service::ClusterServiceError::InvalidClusterId => {
+                DerivedSourceError::ScopeNotFound(ceph_scope_id.0.clone())
+            }
+            crate::cluster_service::ClusterServiceError::Db(error) => {
+                DerivedSourceError::Database(error)
+            }
+            crate::cluster_service::ClusterServiceError::Io(error) => DerivedSourceError::Io(error),
+            error => DerivedSourceError::InconsistentState(error.to_string()),
+        })?;
     Ok(CephScopeState {
         status: summary.status,
         member_count: summary.member_count as usize,

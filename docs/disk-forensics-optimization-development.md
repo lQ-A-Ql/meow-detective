@@ -461,17 +461,40 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
 - 媒体协议门禁入口同步；
 - MCP 查询、数据源摘要、案件创建/删除用例拆分；
   - NTFS WOF XPRESS/LZX 按块读取和真实 E01 验证。
-  - Stage 1：多算法 Hash Scope 的六类范围均已接入；不适用的源类型仍以 typed error fail-closed，NTFS Technical Inspector、全文索引 content sniffing。
-  - Stage 2：EXIF/GPS、Structured systemd、Git/GitLab 元数据与有界 gzip、Firefox Extensions。
+  - Stage 1 基础：多算法 Hash Scope 的六类范围后端已接入；不适用的源类型仍以 typed error fail-closed。文件 Hash Inspector 已隔离案件、对象与迟到请求；NTFS 基础 Inspector 已联通全局 MFT ID、状态与重试。全文索引已有扩展名和 content sniffing 核心。
+  - Stage 2 基础：Firefox Extensions 已接入浏览器制品；EXIF/GPS、Structured systemd、Git 元数据与有界 gzip 有基础实现，完整字段与 GitLab 专用结构化解析仍待验收。
   - Stage 3：Fixed/Dynamic/Differencing VHD、VHDX 和无压缩 QCOW/QCOW2 只读读取、Registry Browser source-bound 查询。
-  - Stage 3 闭环：从父源 FileEntry 校验并物化 Fixed VHD，派生源与 lineage 使用事务写入，输出采用临时文件和原子改名。
+  - Stage 3 物化：从父源 FileEntry 校验并物化 Fixed VHD，派生源与 lineage 使用事务写入，输出采用临时文件和原子改名；结果仍为 pending，派生分区/文件系统导入尚未接通。
 
   当前限制：
 
   - LogicalDisk 对 LocalDisk、Raw、AndroidSparse 使用逻辑字节流；Partition、File、DerivedEvidence 和容器范围均保留明确的输入边界，E01 不冒充原磁盘哈希。
   - VHDX parent chain、Dynamic/Differencing VHD、QCOW v1/v2/v3 无压缩 backing chain 均通过只读 block reader；压缩 QCOW2 cluster 仍 fail-closed，避免把压缩数据误当零块。
-  - Registry Browser 提供 Base hive 只读树和值查询；检测到 LOG1/LOG2 时返回明确提示，浏览器查询不会伪造合并状态。
+  - Registry Browser 已有 Base/Recovered 只读会话、LOG1/LOG2 replay 与日志 provenance 展示；完整 Hive Key/ValueName/ValueData 搜索与每项字节来源仍待收口。
   - Hash、嵌套证据物化目前在 Tauri blocking worker 执行；后续可统一接入 TaskManager 的可恢复任务句柄。
+  - 六范围统一 Hash Inspector、digest 持久化、全文内容查询 UI、完整 NTFS 属性/Hex 跳转、EXIF 子 IFD/格式语义和第 15 节统一调度仍属欠项；首轮界面与验证修复不代表三阶段整体验收完成。
+
+### 14.1 审计问题收口台账（2026-10-14）
+
+按原审计 A01–A11 的问题编号计数：1 项已收口、1 项部分收口、9 项未收口，合计 **10 项尚未完整收口**。不按子任务或失败测试数量重复计数。A11 计入已收口的是案件/文件切换及迟到请求造成的 digest 串值缺陷；输入 revision 校验、持久化和任务协议继续归入 A05，不把前端选择身份当作证据 revision。
+
+| 编号 | 状态 | 剩余验收范围 |
+|---|---|---|
+| A01 NTFS Inspector | 部分收口 | 全局 MFT ID 请求、状态、重试和截断提示已修复；完整属性字段与结构到 Hex 定位待完成 |
+| A02 Nested Evidence | 未收口 | 调查入口、任务、派生分区/文件系统导入、可浏览结果与父 FileEntry ID |
+| A03 Git / GitLab | 未收口 | loose refs、多 remote、历史调查链路与 GitLab 配置/日志专用解析 |
+| A04 EXIF / GPS | 未收口 | Exif 子 IFD、PNG/WebP、损坏状态、GPS 时间与恢复图片端到端验收 |
+| A05 多范围 Hash | 未收口 | 六范围统一 Inspector、结果持久化、审计、进度/取消、输入 revision 校验 |
+| A06 全文内容检索 | 未收口 | 内容查询 UI、命中来源、覆盖率和跳过原因统计 |
+| A07 DataRun 解码 | 未收口 | 普通读取与技术视图共享单一有界解码核心及损坏输入回归 |
+| A08 systemd | 未收口 | 预检复用解析器、symlink/drop-in 状态语义与专用统计/筛选 UI |
+| A09 Registry Browser | 未收口 | 恢复接入已有提交；完整 Hive 搜索与每项/字节范围来源契约仍待完成 |
+| A10 前端架构治理 | 未收口 | NTFS/Hash 本轮已分层并集中文案；其他渲染组件中的状态/副作用仍需迁移 |
+| A11 digest 对象归属 | 已收口 | 案件、文件、选择轮次及计算轮次隔离已实现；切换和迟到终态回归通过 |
+
+第 15 节统一调度仍是未完成专题，与 A02/A05/A06 等共享任务验收范围，以上计数不将它另加为第十二个审计问题。Firefox typed error/私人样本等原方案矩阵欠项也继续保留；本台账不是全部 Definition of Done 子条件的数量。
+
+验证方面，前端 136 个文件 / 883 个测试、Rust 全目标 Clippy 与本轮相关门禁已通过。Rust workspace 最终全量结果为 4186 passed / 15 failed / 184 ignored；失败来自三个插件回归目标，均缺少本地 plugins-src/Cargo.toml，用户已确认插件源码被删除。这是一个外部验证阻断，不计入上述十项功能/架构欠项，整仓测试仍未通过。
 
 ## 15. 长耗时计算与流程调度设计
 

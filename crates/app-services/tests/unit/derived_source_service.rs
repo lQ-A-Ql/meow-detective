@@ -109,6 +109,86 @@ fn rbd_materialization_rejects_a_kubernetes_scope() {
 }
 
 #[test]
+fn rbd_materialization_rejects_a_missing_scope_before_creating_output() {
+    let connection = persistence_sqlite::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&connection).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let output = directory.path().join("derived-must-not-exist");
+
+    let error = materialize_rbd_sources_for_scope(
+        &connection,
+        &output,
+        &CaseId("case-missing-scope".into()),
+        &domain::CephScopeId("scope:ceph:missing".into()),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(error, DerivedSourceError::ScopeNotFound(ref id) if id == "scope:ceph:missing")
+    );
+    assert!(!output.exists());
+    let sources: i64 = connection
+        .query_row("SELECT COUNT(*) FROM data_sources", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(sources, 0);
+}
+
+#[test]
+fn rbd_materialization_rejects_a_foreign_case_scope_before_creating_output() {
+    let connection = persistence_sqlite::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&connection).unwrap();
+    connection
+        .execute(
+            "INSERT INTO cases (id, name) VALUES ('case-owner', 'owner')",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO linux_topology_scopes (
+                id, case_id, scope_kind, name, identity_state, status,
+                evidence_completeness, diagnostics_json
+             ) VALUES ('scope:ceph:foreign', 'case-owner', 'ceph', 'Ceph',
+                'proven', 'ready', 'complete', '[]')",
+            [],
+        )
+        .unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let output = directory.path().join("derived-must-not-exist");
+
+    let error = materialize_rbd_sources_for_scope(
+        &connection,
+        &output,
+        &CaseId("case-other".into()),
+        &domain::CephScopeId("scope:ceph:foreign".into()),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(error, DerivedSourceError::ScopeNotFound(ref id) if id == "scope:ceph:foreign")
+    );
+    assert!(!output.exists());
+    let sources: i64 = connection
+        .query_row("SELECT COUNT(*) FROM data_sources", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(sources, 0);
+}
+
+#[test]
+fn rbd_materialization_preserves_database_failure_in_scope_validation() {
+    let connection = rusqlite::Connection::open_in_memory().unwrap();
+    let error = materialize_rbd_sources_for_scope(
+        &connection,
+        std::path::Path::new("."),
+        &CaseId("case-database-failure".into()),
+        &domain::CephScopeId("scope:ceph:database-failure".into()),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, DerivedSourceError::Database(_)));
+}
+
+#[test]
 fn catalog_manifest_supports_fast_reuse_and_explicit_deep_verification() {
     let connection = persistence_sqlite::open_in_memory().expect("open source database");
     persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");

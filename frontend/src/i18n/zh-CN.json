@@ -700,13 +700,20 @@
       },
       "hash": {
         "loading": "正在计算…",
-        "run": "计算 {{algorithm}}"
+        "run": "计算 {{algorithm}}",
+        "result": "{{algorithm}} · {{bytes}} 字节"
       },
       "ntfs": {
         "inode": "MFT inode",
         "recordOffset": "记录偏移",
         "attributes": "属性数",
-        "run": "数据运行"
+        "run": "数据运行",
+        "loading": "正在读取 NTFS 技术结构…",
+        "retry": "重试读取",
+        "unsupported": "当前对象不支持 NTFS 技术检查",
+        "runSummary": "LCN {{lcn}} · {{clusters}} 簇",
+        "raw": "原始字节 {{value}}",
+        "truncated": "已显示 {{shown}} / {{total}} 个数据运行"
       },
       "timestamp": {
         "modified": "M",

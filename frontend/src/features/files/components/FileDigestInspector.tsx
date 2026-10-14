@@ -11,7 +11,7 @@ const ALGORITHMS: DigestAlgorithm[] = ['md5', 'sha1', 'sha256', 'sm3'];
  * One row per algorithm: the drawn hash mark and the algorithm name, then the control that runs it.
  * The four rows sit in a 2x2 block so the whole digest choice is visible at once.
  */
-export function FileDigestInspector({ digest, loading, error, onCalculate }: { digest?: EvidenceDigest; loading: boolean; error?: string; onCalculate: (algorithm: DigestAlgorithm) => void }) {
+export function FileDigestInspector({ digest, loading, error, available, onCalculate }: { digest?: EvidenceDigest; loading: boolean; error?: string; available: boolean; onCalculate: (algorithm: DigestAlgorithm) => void }) {
   const { t } = useTranslation();
   return (
     <InspectorSection title={t('fileBrowser.inspector.sections.hash')}>
@@ -30,7 +30,7 @@ export function FileDigestInspector({ digest, loading, error, onCalculate }: { d
                   type="button"
                   variant="forensicsOutline"
                   aria-label={algorithm.toUpperCase()}
-                  disabled={loading}
+                  disabled={!available || loading}
                   onClick={() => onCalculate(algorithm)}
                 >
                   <ActionIcon name="play" />
@@ -41,7 +41,7 @@ export function FileDigestInspector({ digest, loading, error, onCalculate }: { d
         </div>
         {loading ? <InspectorValue value={t('fileBrowser.inspector.hash.loading')} /> : null}
         {error ? <div className="text-[10px] text-forensics-error-text">{error}</div> : null}
-        {digest ? <div className="space-y-1 font-mono text-[10px]"><div>{digest.algorithm.toUpperCase()} · {digest.byteLength} bytes</div><div className="break-all text-forensics-ink-2">{digest.value}</div></div> : null}
+        {digest ? <div className="space-y-1 font-mono text-[10px]"><div>{t('fileBrowser.inspector.hash.result', { algorithm: digest.algorithm.toUpperCase(), bytes: digest.byteLength })}</div><div className="break-all text-forensics-ink-2">{digest.value}</div></div> : null}
       </div>
     </InspectorSection>
   );

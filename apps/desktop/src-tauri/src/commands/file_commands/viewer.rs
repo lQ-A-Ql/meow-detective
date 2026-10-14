@@ -8,8 +8,6 @@ use transport::{
 
 use crate::state::AppState;
 
-#[cfg(test)]
-pub(super) use super::preview::{image_preview_for_file, text_preview_for_file};
 use super::support::run_active_case_command;
 
 /// Open a file handle for preview (returns handle ID and metadata).

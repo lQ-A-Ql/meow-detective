@@ -161,6 +161,16 @@ fn write_exfat_raw_fixture(path: &std::path::Path) -> std::io::Result<()> {
         data[offset..offset + CLUSTER_SIZE].fill(value);
     }
 
+    let mut checksum = 0u32;
+    for (index, byte) in data[..11 * SECTOR_SIZE].iter().enumerate() {
+        if !matches!(index, 106 | 107 | 112) {
+            checksum = checksum.rotate_right(1).wrapping_add(u32::from(*byte));
+        }
+    }
+    for word in data[11 * SECTOR_SIZE..12 * SECTOR_SIZE].chunks_exact_mut(4) {
+        word.copy_from_slice(&checksum.to_le_bytes());
+    }
+    data.copy_within(..12 * SECTOR_SIZE, 12 * SECTOR_SIZE);
     std::fs::write(path, data)
 }
 

@@ -4,7 +4,8 @@ mod support;
 mod viewer;
 
 use super::media::{media_data_url_for_file, media_range_for_file as media_range_for_file_inner};
-use super::viewer::{image_preview_for_file, read_file_range_for_state, text_preview_for_file};
+use super::preview::{image_preview_for_file, text_preview_for_file};
+use super::viewer::read_file_range_for_state;
 use crate::state::AppState;
 use transport::{
     dto::{

@@ -186,8 +186,8 @@ export function useFileBrowserModel() {
     selectedFile,
     viewerTab,
   });
-  const ntfsTechnicalQuery = useNtfsTechnicalFile(selectedFile?.id, Boolean(selectedFile?.id?.startsWith('mft:')));
-  const digestMutation = useFileDigest(selectedFile?.id);
+  const ntfsTechnicalQuery = useNtfsTechnicalFile(currentCase?.id, selectedFile?.id, selectedFile?.entryType === 'file');
+  const digestMutation = useFileDigest({ caseId: currentCase?.id, fileId: selectedFile?.id, available: selectedFile?.entryType === 'file' });
 
   const onViewTimeline = () => {
     if (!selectedFile) return;
@@ -246,12 +246,17 @@ export function useFileBrowserModel() {
     imageMetadataLoading: preview.imageMetadataLoading,
     imageMetadataError: preview.imageMetadataError,
     onRetryImageMetadata: preview.onRetryImageMetadata,
-    ntfsTechnical: ntfsTechnicalQuery.data,
-    ntfsTechnicalLoading: ntfsTechnicalQuery.isLoading,
-    ntfsTechnicalError: ntfsTechnicalQuery.error,
+    ntfsTechnical: ntfsTechnicalQuery.technical,
+    ntfsTechnicalEligible: ntfsTechnicalQuery.eligible,
+    ntfsTechnicalRuns: ntfsTechnicalQuery.runs,
+    ntfsTechnicalLoading: ntfsTechnicalQuery.loading,
+    ntfsTechnicalErrorText: ntfsTechnicalQuery.errorText,
+    ntfsTechnicalUnsupported: ntfsTechnicalQuery.unsupported,
+    retryNtfsTechnical: ntfsTechnicalQuery.retry,
     fileDigest: digestMutation.data,
     fileDigestLoading: digestMutation.isPending,
-    fileDigestError: digestMutation.error,
+    fileDigestErrorText: digestMutation.errorText,
+    fileDigestAvailable: digestMutation.available,
     calculateFileDigest: digestMutation.mutate,
     mediaUrl: preview.mediaUrl,
     documentPreview: preview.documentPreview,

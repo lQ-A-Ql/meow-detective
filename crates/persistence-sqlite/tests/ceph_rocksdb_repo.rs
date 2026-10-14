@@ -333,7 +333,7 @@ fn source_migration_installs_control_plane_schema_without_plaintext_internal_key
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_037_forensic_fingerprints"
+        "source_038_linux_evidence_facts"
     );
     for table in [
         "ceph_rocksdb_manifests",

@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   })),
   mediaUrl: vi.fn(),
   documentPreview: vi.fn(),
+  ntfsTechnical: vi.fn(),
   extractOpenForFile: vi.fn(),
   navigate: vi.fn(),
   selectionState: {
@@ -96,6 +97,7 @@ vi.mock('@/features/files/hooks', async (importOriginal) => {
     useImageMetadata: mocks.imageMetadata,
     useMediaUrl: mocks.mediaUrl,
     useDocumentPreview: mocks.documentPreview,
+    useNtfsTechnicalFile: mocks.ntfsTechnical,
   };
   return new Proxy(actual, {
     get(target, property, receiver) {
@@ -328,6 +330,23 @@ describe('FileBrowser media preview', () => {
     mocks.imagePreview.mockReturnValue(queryState(null));
     mocks.mediaUrl.mockReturnValue(queryState(null));
     mocks.documentPreview.mockReturnValue(queryState(null));
+    mocks.ntfsTechnical.mockReturnValue({ eligible: false, technical: undefined, loading: false, errorText: undefined, unsupported: false, runs: { rows: [], total: 0 }, retry: vi.fn() });
+  });
+
+  it('passes the case and global MFT identifier through the NTFS model to the inspector', () => {
+    const fileId = 'ds:sample-source:mft:0:42';
+    mocks.selectionState.selectedFileId = fileId;
+    mocks.fileRows.mockReturnValue(queryState({ rows: [{ ...videoFile, id: fileId }], totalCount: 1, offset: 0, limit: 500, truncated: false }));
+    mocks.ntfsTechnical.mockReturnValue({ eligible: true, loading: true, runs: { rows: [], total: 0 }, retry: vi.fn() });
+    const view = renderPage();
+    expect(mocks.ntfsTechnical).toHaveBeenCalledWith('case-1', fileId, true);
+    expect(screen.getByText('正在读取 NTFS 技术结构…')).toBeInTheDocument();
+    const retry = vi.fn();
+    mocks.ntfsTechnical.mockReturnValue({ eligible: true, loading: false, errorText: 'NTFS读取失败', runs: { rows: [], total: 0 }, retry });
+    view.rerender(<QueryClientProvider client={new QueryClient()}><FileBrowser /></QueryClientProvider>);
+    expect(screen.getByRole('alert')).toHaveTextContent('NTFS读取失败');
+    fireEvent.click(screen.getByRole('button', { name: '重试读取' }));
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it('enables only the hex preview chain on the hex tab', () => {

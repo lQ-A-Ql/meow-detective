@@ -301,7 +301,7 @@ fn write_synthetic_vhdx(
             .copy_from_slice(&(64 * 1024 + index as u32 * 8).to_le_bytes());
         bytes[entry + 20..entry + 24].copy_from_slice(&8u32.to_le_bytes());
     }
-    if parent_name.is_some() {
+    if let Some(parent_name) = parent_name {
         let entry = metadata + 32 + 3 * 32;
         let parent_guid = [
             0x2d, 0x5f, 0xd3, 0xa8, 0x0b, 0xb3, 0x4d, 0x45, 0xab, 0xf7, 0xd3, 0xd8, 0x48, 0x34,
@@ -310,7 +310,7 @@ fn write_synthetic_vhdx(
         bytes[entry..entry + 16].copy_from_slice(&parent_guid);
         bytes[entry + 16..entry + 20].copy_from_slice(&(64 * 1024 + 24u32).to_le_bytes());
         bytes[entry + 20..entry + 24].copy_from_slice(&128u32.to_le_bytes());
-        for (index, unit) in parent_name.unwrap().encode_utf16().enumerate() {
+        for (index, unit) in parent_name.encode_utf16().enumerate() {
             bytes[metadata + 64 * 1024 + 24 + index * 2..metadata + 64 * 1024 + 26 + index * 2]
                 .copy_from_slice(&unit.to_le_bytes());
         }

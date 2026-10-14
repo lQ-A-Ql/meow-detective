@@ -18,6 +18,7 @@ import { NtfsTechnicalInspector } from '@/features/files/components/NtfsTechnica
 import { FileDigestInspector } from '@/features/files/components/FileDigestInspector';
 import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
 import type { NtfsTechnicalFile } from '@/types/files';
+import type { ntfsInspectorRuns } from '../ntfs-inspector-runs';
 
 interface FileBrowserInspectorProps {
   selectedFile?: FileEntryRow;
@@ -33,9 +34,16 @@ interface FileBrowserInspectorProps {
   imageMetadataError?: ApiErrorDto | null;
   onRetryImageMetadata?: () => void;
   ntfsTechnical?: NtfsTechnicalFile;
+  ntfsTechnicalEligible?: boolean;
+  ntfsTechnicalLoading?: boolean;
+  ntfsTechnicalErrorText?: string;
+  ntfsTechnicalUnsupported?: boolean;
+  ntfsTechnicalRuns?: ReturnType<typeof ntfsInspectorRuns>;
+  retryNtfsTechnical?: () => void;
   fileDigest?: EvidenceDigest;
   fileDigestLoading?: boolean;
-  fileDigestError?: unknown;
+  fileDigestErrorText?: string;
+  fileDigestAvailable?: boolean;
   calculateFileDigest: (algorithm: DigestAlgorithm) => void;
 }
 
@@ -53,9 +61,16 @@ export function FileBrowserInspector({
   imageMetadataError,
   onRetryImageMetadata,
   ntfsTechnical,
+  ntfsTechnicalEligible,
+  ntfsTechnicalLoading,
+  ntfsTechnicalErrorText,
+  ntfsTechnicalUnsupported,
+  ntfsTechnicalRuns,
+  retryNtfsTechnical,
   fileDigest,
   fileDigestLoading,
-  fileDigestError,
+  fileDigestErrorText,
+  fileDigestAvailable,
   calculateFileDigest,
 }: FileBrowserInspectorProps) {
   const { t } = useTranslation();
@@ -111,8 +126,8 @@ export function FileBrowserInspector({
           <InspectorValue value={selectedFile?.hashSha256 ?? '-'} mono />
         </InspectorSection>
 
-        <FileDigestInspector digest={fileDigest} loading={Boolean(fileDigestLoading)} error={fileDigestError instanceof Error ? fileDigestError.message : undefined} onCalculate={calculateFileDigest} />
-        <NtfsTechnicalInspector technical={ntfsTechnical} />
+        <FileDigestInspector digest={fileDigest} loading={Boolean(fileDigestLoading)} error={fileDigestErrorText} available={Boolean(fileDigestAvailable)} onCalculate={calculateFileDigest} />
+        <NtfsTechnicalInspector technical={ntfsTechnical} eligible={ntfsTechnicalEligible} loading={ntfsTechnicalLoading} errorText={ntfsTechnicalErrorText} unsupported={ntfsTechnicalUnsupported} runs={ntfsTechnicalRuns} onRetry={retryNtfsTechnical} />
 
         {selectedFile?.entryType === 'file' && (imageMetadata || imageMetadataLoading || imageMetadataError) ? (
           <ImageMetadataInspector

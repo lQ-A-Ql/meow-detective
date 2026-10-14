@@ -277,5 +277,19 @@ fn write_exfat_raw_fixture(path: &Path) -> std::io::Result<()> {
         data[offset..offset + CLUSTER_SIZE].fill(value);
     }
 
+    seal_exfat_boot_regions(&mut data, SECTOR_SIZE);
     std::fs::write(path, data)
+}
+
+fn seal_exfat_boot_regions(data: &mut [u8], sector_size: usize) {
+    let mut checksum = 0u32;
+    for (index, byte) in data[..11 * sector_size].iter().enumerate() {
+        if !matches!(index, 106 | 107 | 112) {
+            checksum = checksum.rotate_right(1).wrapping_add(u32::from(*byte));
+        }
+    }
+    for word in data[11 * sector_size..12 * sector_size].chunks_exact_mut(4) {
+        word.copy_from_slice(&checksum.to_le_bytes());
+    }
+    data.copy_within(..12 * sector_size, 12 * sector_size);
 }

@@ -5,7 +5,7 @@ use super::*;
 fn write_document(root: &Path, cluster_id: &str, pools: &str) {
     let path = super::osdmap_evidence::evidence_path(root, cluster_id, "pool-evidence.json");
     let directory = path.parent().expect("evidence directory");
-    std::fs::create_dir_all(&directory).expect("evidence directory");
+    std::fs::create_dir_all(directory).expect("evidence directory");
     std::fs::write(
         path,
         format!(

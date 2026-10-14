@@ -11,7 +11,7 @@ fn document(pool_count: &str, digest: &str) -> String {
 fn write_document(root: &Path, payload: &str) {
     let path = evidence_path(root, "cluster-1", "osdmap-evidence.json");
     let directory = path.parent().expect("evidence directory");
-    std::fs::create_dir_all(&directory).expect("evidence directory");
+    std::fs::create_dir_all(directory).expect("evidence directory");
     std::fs::write(path, payload).expect("evidence document");
 }
 
@@ -213,10 +213,6 @@ fn uuid_deduplication_is_canonical_and_case_insensitive() {
     let payload = document(
         r#"[{"poolId":8,"poolType":"replicated","size":1,"minSize":1,"pgNum":8,"pgpNum":8}]"#,
         "placeholder",
-    )
-    .replace(
-        "\"osdId\":1,\"osdUuid\":\"22222222-2222-2222-2222-222222222222\"",
-        "\"osdId\":1,\"osdUuid\":\"22222222-2222-2222-2222-222222222222\"",
     );
     let mut parsed: EvidenceDocument =
         serde_json::from_str(&with_digest(payload)).expect("fixture JSON");
@@ -254,7 +250,7 @@ fn oversized_evidence_is_rejected_before_json_parsing() {
     let root = tempfile::TempDir::new().expect("root");
     let path = evidence_path(root.path(), "cluster-1", "osdmap-evidence.json");
     let directory = path.parent().expect("evidence directory");
-    std::fs::create_dir_all(&directory).expect("evidence directory");
+    std::fs::create_dir_all(directory).expect("evidence directory");
     std::fs::write(path, vec![b'{'; 8 * 1024 * 1024 + 1]).expect("evidence document");
     let error = validate_inventory_membership(root.path(), "cluster-1", &[])
         .expect_err("oversized evidence");

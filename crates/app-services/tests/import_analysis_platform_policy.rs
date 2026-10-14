@@ -55,8 +55,6 @@ fn unknown_platform_fails_before_database_or_staging_access() {
             enable_content_extraction: true,
             enable_text_indexing: true,
             analysis_mode: mode,
-
-            defer_linux_artifacts: false,
             content_budget: content_budget_for_mode(mode),
             memory_soft_limit_mb: default_memory_soft_limit_mb(),
             memory_hard_limit_mb: default_memory_hard_limit_mb(),
