@@ -8,6 +8,7 @@ fn lineage_round_trips_proved_range() {
     let value = NestedEvidenceLineage {
         parent_data_source_id: DataSourceId("parent".into()),
         nested_file_path: "disk.vhd".into(),
+        parent_file_id: Some("file-1".into()),
         derived_data_source_id: None,
         offset: 0,
         length: 4096,

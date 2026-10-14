@@ -72,7 +72,7 @@ pub(crate) use crate::commands::{
     plugin_action_commands::{list_plugin_actions, recover_wechat_keys},
     registry_browser_commands::{
         close_registry_hive, list_registry_hives, list_registry_subkeys, list_registry_values,
-        open_registry_hive, read_registry_value_range, resolve_registry_key,
+        open_registry_hive, read_registry_value_range, resolve_registry_key, search_registry_hive,
     },
     report_commands::{
         export_csv_correlation_report, export_csv_report, export_html_report, export_json_report,

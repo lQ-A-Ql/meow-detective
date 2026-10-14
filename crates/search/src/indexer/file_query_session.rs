@@ -55,12 +55,14 @@ pub struct FileSearchHit {
     pub hidden: bool,
     pub system: bool,
     pub encrypted: bool,
+    pub match_source: String,
 }
 
 struct FileResultFields {
     file_id: Field,
     name: Field,
     path: Field,
+    content: Field,
     extension: Field,
     entry_type: Field,
     size: Field,
@@ -241,6 +243,7 @@ impl FileSearchQuerySession {
                 "ranked file search hit does not match stored file_id".to_string(),
             ));
         }
+        let content = required_text(&document, self.fields.content, "content")?;
         Ok(FileSearchHit {
             file_id,
             name: required_text(&document, self.fields.name, "name")?,
@@ -253,6 +256,11 @@ impl FileSearchQuerySession {
             hidden: optional_bool(&document, self.fields.hidden),
             system: optional_bool(&document, self.fields.system),
             encrypted: optional_bool(&document, self.fields.encrypted),
+            match_source: if content.is_empty() {
+                "metadata".into()
+            } else {
+                "content".into()
+            },
         })
     }
 }
@@ -283,6 +291,7 @@ impl FileResultFields {
             file_id: field("file_id")?,
             name: field("name")?,
             path: field("path")?,
+            content: field("content")?,
             extension: field("extension")?,
             entry_type: field("entry_type")?,
             size: field("size")?,

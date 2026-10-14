@@ -5,6 +5,7 @@ use crate::DataSourceId;
 pub struct NestedEvidenceLineage {
     pub parent_data_source_id: DataSourceId,
     pub nested_file_path: String,
+    pub parent_file_id: Option<String>,
     pub derived_data_source_id: Option<DataSourceId>,
     pub offset: u64,
     pub length: u64,

@@ -5,6 +5,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use domain::{CaseId, DataSourceId, DataSourceKind};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+use persistence_sqlite::repositories::evidence_digest_repo::{
+    EvidenceDigestRecord, EvidenceDigestRepo,
+};
 use rusqlite::Connection;
 use transport::dto::{DigestAlgorithmDto, DigestScopeDto, DigestStatusDto, EvidenceDigestDto};
 use transport::{ErrorCategory, ServiceErrorCategory};
@@ -110,7 +113,7 @@ pub fn calculate_evidence_digest_with_cancel(
     execution: DigestExecution<'_>,
 ) -> Result<EvidenceDigestDto, DigestServiceError> {
     let algorithm = map_algorithm(algorithm);
-    match scope {
+    let result = match scope {
         DigestScopeDto::ContainerFile => {
             digest_container_file(case_conn, case_id, target.data_source_id, algorithm)
         }
@@ -147,7 +150,26 @@ pub fn calculate_evidence_digest_with_cancel(
             algorithm,
             execution,
         ),
+    };
+    if let Ok(digest) = &result {
+        EvidenceDigestRepo::new(case_conn).upsert(&EvidenceDigestRecord {
+            case_id: case_id.0.clone(),
+            scope: format!("{:?}", digest.scope),
+            algorithm: digest.algorithm.label().to_string(),
+            data_source_id: target.data_source_id.map(str::to_owned),
+            file_id: target.file_id.map(str::to_owned),
+            partition_index: target.partition_index,
+            value: digest.value.clone(),
+            byte_length: digest.byte_length,
+            status: "completed".into(),
+            source_revision: format!(
+                "{}:{}",
+                target.data_source_id.unwrap_or_default(),
+                target.file_id.unwrap_or_default()
+            ),
+        })?;
     }
+    result
 }
 
 fn digest_container_file(

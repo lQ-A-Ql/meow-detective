@@ -149,3 +149,31 @@ pub fn read_value_range(
         })
     })
 }
+
+pub fn search_hive(
+    registry: &RegistryBrowserRegistry,
+    ctx: &RegistryBrowserContext<'_>,
+    request: RegistrySearchRequestDto,
+) -> Result<RegistrySearchPageDto, RegistryBrowserError> {
+    with_session(registry, ctx, &request.session_id, |s| {
+        let page = s.hive.search(&request.query)?;
+        Ok(RegistrySearchPageDto {
+            hits: page
+                .hits
+                .into_iter()
+                .map(|hit| RegistrySearchHitDto {
+                    kind: hit.kind.into(),
+                    path: hit.path,
+                    name: hit.name,
+                    cell_offset: hit.cell_offset,
+                    matched_field: hit.matched_field.into(),
+                    preview: hit.preview,
+                })
+                .collect(),
+            scanned_keys: page.scanned_keys,
+            scanned_values: page.scanned_values,
+            skipped_count: page.skipped,
+            truncated: page.truncated,
+        })
+    })
+}

@@ -57,6 +57,25 @@ pub struct ValueRange {
     pub partial: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowserSearchHit {
+    pub kind: &'static str,
+    pub path: String,
+    pub name: String,
+    pub cell_offset: u32,
+    pub matched_field: &'static str,
+    pub preview: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowserSearchPage {
+    pub hits: Vec<BrowserSearchHit>,
+    pub scanned_keys: u32,
+    pub scanned_values: u32,
+    pub skipped: u32,
+    pub truncated: bool,
+}
+
 /// Immutable source bytes plus a compact allocation-boundary bitmap. A cell
 /// reference must identify an allocated cell start, never bytes within another.
 #[derive(Debug)]

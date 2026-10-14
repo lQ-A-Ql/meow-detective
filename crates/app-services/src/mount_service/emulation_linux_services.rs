@@ -38,11 +38,22 @@ struct UnitRiskAnalysis {
 }
 
 fn analyze_unit(unit: &str, read_script: impl Fn(&str) -> Option<String>) -> UnitRiskAnalysis {
-    let parsed = artifacts_linux::parse_systemd_unit("/etc/systemd/system/preflight.service", unit.as_bytes()).ok();
-    let always_restarts = parsed.as_ref().and_then(|unit| unit.restart.as_deref())
+    let parsed = artifacts_linux::parse_systemd_unit(
+        "/etc/systemd/system/preflight.service",
+        unit.as_bytes(),
+    )
+    .ok();
+    let always_restarts = parsed
+        .as_ref()
+        .and_then(|unit| unit.restart.as_deref())
         .is_some_and(|value| value.eq_ignore_ascii_case("always"));
-    let script = parsed.as_ref()
-        .and_then(|unit| unit.exec_start.iter().find_map(|command| exec_start_script(command)))
+    let script = parsed
+        .as_ref()
+        .and_then(|unit| {
+            unit.exec_start
+                .iter()
+                .find_map(|command| exec_start_script(command))
+        })
         .and_then(read_script);
     UnitRiskAnalysis {
         always_restarts,

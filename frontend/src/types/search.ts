@@ -25,6 +25,7 @@ export interface SearchFileHit {
   hidden: boolean;
   system: boolean;
   encrypted: boolean;
+  matchSource?: string;
 }
 
 export interface SearchRequestOptions {

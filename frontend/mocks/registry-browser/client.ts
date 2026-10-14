@@ -103,6 +103,7 @@ export function createRegistryBrowserMock(scenario: RegistryPreviewScenario = 's
         decodeStatus: value.payload.text !== undefined ? 'decoded' : 'rawOnly', decodedText: value.payload.text,
         diagnostics: [] };
     },
+    async searchHive() { return { hits: [], scannedKeys: 0, scannedValues: 0, skippedCount: 0, truncated: false }; },
     async closeHive(request) { sessions.delete(request.sessionId); return true; },
   };
 }

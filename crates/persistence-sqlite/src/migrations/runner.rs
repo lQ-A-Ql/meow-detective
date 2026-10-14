@@ -221,6 +221,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0061_nested_evidence_lineage",
         include_str!("scripts/0061_nested_evidence_lineage.sql"),
     ),
+    (
+        "0062_nested_parent_file_identity",
+        include_str!("scripts/0062_nested_parent_file_identity.sql"),
+    ),
 ];
 
 pub use super::case_graph::{

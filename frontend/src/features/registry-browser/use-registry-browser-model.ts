@@ -41,6 +41,8 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   useEffect(() => { if (expired) hive.expire(); }, [expired, hive.expire]);
   const [detailTab, setDetailTab] = useState<RegistryDetailTab>('decoded');
   const [filter, setFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchPage, setSearchPage] = useState<import('@/types/registryBrowser').RegistrySearchPage>();
   const [pathInput, setPathInput] = useState('');
   const [pathError, setPathError] = useState<unknown>();
   const [locating, setLocating] = useState(false);
@@ -126,6 +128,10 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     try { await navigator.clipboard.writeText(text); if (token === navigationEpoch.current) setCopyStatus(t('registryBrowser.copied')); }
     catch { if (token === navigationEpoch.current) setCopyStatus(t('registryBrowser.copyFailed')); }
   };
+  const search = useCallback(async () => {
+    if (!session || !searchQuery.trim()) { setSearchPage(undefined); return; }
+    setSearchPage(await client.searchHive({ sessionId: session.sessionId, query: searchQuery }));
+  }, [client, searchQuery, session]);
   const errorText = (error: unknown) => error ? t(`registryBrowser.errors.${registryBrowserErrorCode(error)}`) : undefined;
   const pages = values.data?.pages ?? [];
   const keyTime = registryFiletimeUtc(selectedKey?.lastWriteFiletime) ?? t('registryBrowser.unknown');
@@ -148,6 +154,7 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   }) : t('registryBrowser.previewOnly');
   return {
     t, instanceId, context, hives, session, selectedKey, selectedValue, range, values,
+    searchQuery, setSearchQuery, searchPage, search,
     nodes, keyboard, viewport, activate, toggle, openHive, selectKey, filter, setFilter,
     pathInput, setPathInput, locate, locating, detailTab, setDetailTab, offset, provenance, rangeSummary, selectedValueLabel,
     previousRange: () => setOffset((value) => Math.max(0, value - REGISTRY_BROWSER_LAYOUT.valueRangeBytes)),

@@ -3,7 +3,11 @@ mod cells;
 mod data;
 mod decode;
 mod keys;
+mod search;
 mod types;
 mod values;
 
-pub use types::{BrowserError, BrowserKey, BrowserPage, BrowserValue, HiveSnapshot, ValueRange};
+pub use types::{
+    BrowserError, BrowserKey, BrowserPage, BrowserSearchHit, BrowserSearchPage, BrowserValue,
+    HiveSnapshot, ValueRange,
+};

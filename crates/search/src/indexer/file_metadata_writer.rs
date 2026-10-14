@@ -31,6 +31,7 @@ pub struct SearchMetadataWriter {
 struct MetadataFields {
     file_id: Field,
     path: Field,
+    content: Field,
     name: Field,
     name_exact: Field,
     name_unigram: Field,
@@ -110,6 +111,7 @@ impl MetadataFields {
         Ok(Self {
             file_id: field("file_id")?,
             path: field("path")?,
+            content: field("content")?,
             name: field("name")?,
             name_exact: field("name_exact")?,
             name_unigram: field("name_unigram")?,
@@ -137,6 +139,7 @@ impl MetadataFields {
         let mut indexed = TantivyDocument::default();
         indexed.add_text(self.file_id, &source.file_id);
         indexed.add_text(self.path, &source.path);
+        indexed.add_text(self.content, "");
         indexed.add_text(self.name, &source.name);
         self.add_searchable_name(&mut indexed, &normalized_name);
         indexed.add_text(self.path_exact, &normalized_path);

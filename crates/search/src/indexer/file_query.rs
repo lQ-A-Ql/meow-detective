@@ -56,6 +56,14 @@ pub(super) fn compile_file_query(
     let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
     for term in split_query_terms(&options.query) {
         let name_query = substring_query(index, "name", &term)?;
+        let content_field = index
+            .schema
+            .get_field("content")
+            .map_err(|_| IndexError::Schema("missing content field".into()))?;
+        let content_query: Box<dyn Query> = Box::new(TermQuery::new(
+            Term::from_field_text(content_field, &normalize(&term)),
+            IndexRecordOption::WithFreqsAndPositions,
+        ));
         if options.match_path {
             let path_query = substring_query(index, "path", &term)?;
             clauses.push((
@@ -63,10 +71,17 @@ pub(super) fn compile_file_query(
                 Box::new(BooleanQuery::new(vec![
                     (Occur::Should, name_query),
                     (Occur::Should, path_query),
+                    (Occur::Should, content_query),
                 ])),
             ));
         } else {
-            clauses.push((Occur::Must, name_query));
+            clauses.push((
+                Occur::Must,
+                Box::new(BooleanQuery::new(vec![
+                    (Occur::Should, name_query),
+                    (Occur::Should, content_query),
+                ])),
+            ));
         }
     }
 

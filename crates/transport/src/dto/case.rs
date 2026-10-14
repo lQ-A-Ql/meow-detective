@@ -137,6 +137,8 @@ pub struct NestedEvidenceLineageDto {
     pub parent_data_source_id: String,
     pub nested_file_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_file_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub derived_data_source_id: Option<String>,
     pub offset: u64,
     pub length: u64,

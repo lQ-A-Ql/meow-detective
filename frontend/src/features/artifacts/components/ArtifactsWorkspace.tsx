@@ -25,6 +25,17 @@ interface ArtifactsWorkspaceProps {
 /** Pure artifact presentation surface. Query, selection, and navigation behavior stay in the model. */
 export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
   const { t } = useTranslation();
+  const systemdStateCounts = useMemo(() => {
+    if (model.selectedArtifactFamily !== 'LinuxSystemConfig') return undefined;
+    return model.tableRows.reduce<Record<string, number>>((counts, row) => {
+      const kind = String(row.attrs.configKind ?? '');
+      if (kind === 'systemdServiceUnit') {
+        const state = String(row.attrs.state ?? 'unknown');
+        counts[state] = (counts[state] ?? 0) + 1;
+      }
+      return counts;
+    }, {});
+  }, [model.selectedArtifactFamily, model.tableRows]);
   const columns = useMemo<DenseColumn<ArtifactRow>[]>(
     () => [
       { key: 'title', title: t('artifacts.columns.familyPath', { family: model.selectedArtifactFamily }), className: 'w-[38%] text-forensics-muted', render: (row) => row.title },
@@ -47,6 +58,9 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
           ))}
         </div>
       </ContextBar>
+      {systemdStateCounts ? <div className="flex flex-wrap gap-3 border-b border-forensics-divider px-4 py-2 font-mono text-[10px] text-forensics-muted">
+        {['enabled', 'disabled', 'masked', 'static'].map((state) => <span key={state}>{t(`artifacts.systemd.states.${state}`)}: {systemdStateCounts[state] ?? 0}</span>)}
+      </div> : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-forensics-border">
           <DenseDataTableFrame layout="fill" variant="plain">

@@ -54,6 +54,8 @@ pub struct SearchFileHitDto {
     pub hidden: bool,
     pub system: bool,
     pub encrypted: bool,
+    #[serde(default)]
+    pub match_source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -14,7 +14,7 @@ mod session;
 
 pub use discovery::list_hives;
 pub use error::RegistryBrowserError;
-pub use navigation::{list_subkeys, list_values, read_value_range, resolve_key};
+pub use navigation::{list_subkeys, list_values, read_value_range, resolve_key, search_hive};
 pub use opening::open_hive;
 pub use registry::{RegistryBrowserRegistry, RegistryBrowserStats};
 pub use scope::RegistryBrowserContext;

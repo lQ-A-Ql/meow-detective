@@ -50,6 +50,7 @@ fn to_dto(value: NestedEvidenceLineage) -> NestedEvidenceLineageDto {
     NestedEvidenceLineageDto {
         parent_data_source_id: value.parent_data_source_id.0,
         nested_file_path: value.nested_file_path,
+        parent_file_id: value.parent_file_id,
         derived_data_source_id: value.derived_data_source_id.map(|v| v.0),
         offset: value.offset,
         length: value.length,

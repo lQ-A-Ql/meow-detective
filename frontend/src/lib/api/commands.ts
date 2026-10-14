@@ -13,6 +13,7 @@ export const COMMANDS = {
     LIST_VALUES: 'list_registry_values',
     READ_VALUE_RANGE: 'read_registry_value_range',
     CLOSE_HIVE: 'close_registry_hive',
+    SEARCH_HIVE: 'search_registry_hive',
   },
   case: {
     GET_CURRENT_CASE: 'get_current_case',

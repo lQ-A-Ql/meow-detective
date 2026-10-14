@@ -478,6 +478,7 @@
     }
   },
   "artifacts": {
+    "systemd": { "states": { "enabled": "Enabled", "disabled": "Disabled", "masked": "Masked", "static": "Static" } },
     "columns": {
       "familyPath": "{{family}} path",
       "targetPath": "Target path",
@@ -1185,6 +1186,7 @@
       "modifiedAt": "Modified",
       "source": "Source"
     },
+    "sources": { "content": "Content", "metadata": "Metadata" },
     "empty": {
       "noMatch": "No matching files",
       "noMatchDescription": "Try changing the name, path or filters.",

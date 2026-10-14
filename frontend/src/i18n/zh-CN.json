@@ -478,6 +478,7 @@
     }
   },
   "artifacts": {
+    "systemd": { "states": { "enabled": "已启用", "disabled": "已禁用", "masked": "已屏蔽", "static": "静态" } },
     "columns": {
       "familyPath": "{{family}} 路径",
       "targetPath": "目标路径",
@@ -1185,6 +1186,7 @@
       "modifiedAt": "修改时间",
       "source": "数据源"
     },
+    "sources": { "content": "内容", "metadata": "元数据" },
     "empty": {
       "noMatch": "没有匹配的文件",
       "noMatchDescription": "尝试修改文件名、路径或筛选条件。",

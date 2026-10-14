@@ -119,6 +119,7 @@ fn materialize_inner(
         case_id,
         &parent,
         &entry.path,
+        &entry.id.0,
         &derived_id,
         &output_path,
         size,
@@ -127,7 +128,9 @@ fn materialize_inner(
         let _ = fs::remove_file(&output_path);
         return Err(MaterializeError::Database(error));
     }
-    Ok(materialized_result(parent, entry.path, derived_id, size))
+    Ok(materialized_result(
+        parent, entry.id.0, entry.path, derived_id, size,
+    ))
 }
 
 fn prepare_output_paths(
@@ -156,6 +159,7 @@ fn register_materialized_vhd(
     case_id: &CaseId,
     parent: &DataSourceId,
     nested_file_path: &str,
+    parent_file_id: &str,
     derived_id: &DataSourceId,
     output_path: &Path,
     size: u64,
@@ -179,6 +183,7 @@ fn register_materialized_vhd(
     let lineage = NestedEvidenceLineage {
         parent_data_source_id: parent.clone(),
         nested_file_path: nested_file_path.to_string(),
+        parent_file_id: Some(parent_file_id.to_string()),
         derived_data_source_id: Some(derived_id.clone()),
         offset: 0,
         length: size,
@@ -200,6 +205,7 @@ fn register_materialized_vhd(
 
 fn materialized_result(
     parent: DataSourceId,
+    parent_file_id: String,
     nested_file_path: String,
     derived_id: DataSourceId,
     size: u64,
@@ -208,6 +214,7 @@ fn materialized_result(
         lineage: NestedEvidenceLineageDto {
             parent_data_source_id: parent.0,
             nested_file_path,
+            parent_file_id: Some(parent_file_id),
             derived_data_source_id: Some(derived_id.0.clone()),
             offset: 0,
             length: size,

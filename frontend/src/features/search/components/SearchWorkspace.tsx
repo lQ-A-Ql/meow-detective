@@ -82,7 +82,7 @@ return [
     key: 'source',
     title: t('search.columns.source'),
     className: 'w-36 text-forensics-muted',
-    render: (row) => <span className="block truncate" title={row.dataSourceName}>{row.dataSourceName}</span>,
+    render: (row) => <span className="block truncate" title={row.dataSourceName}>{row.matchSource === 'content' ? t('search.sources.content') : t('search.sources.metadata')} · {row.dataSourceName}</span>,
   },
 ];
 }
@@ -195,7 +195,7 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           />
         </DenseDataTableFrame>
       </div>
-        {!model.activeQuery ? <BrandWatermark motif="detective-portrait" className="watermark-search" /> : null}
+        {!model.activeQuery ? <BrandWatermark motif="search" className="watermark-search" /> : null}
       </WorkspaceCard>
       <SearchFilePreviewDialog model={model.preview} />
     </WorkspaceFrame>

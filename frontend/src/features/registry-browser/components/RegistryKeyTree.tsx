@@ -14,6 +14,13 @@ export function RegistryKeyTree({ model }: { model: RegistryBrowserModel }) {
     <div className="registry-browser-tree-search"><Input aria-label={t('registryBrowser.filter')}
       placeholder={t('registryBrowser.filter')} value={model.filter} onChange={(event) => model.setFilter(event.target.value)} />
       <small>{t('registryBrowser.filterHint')}</small></div>
+    <div className="registry-browser-tree-search"><Input aria-label={t('registryBrowser.searchHive')} placeholder={t('registryBrowser.searchHive')} value={model.searchQuery} onChange={(event) => model.setSearchQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void model.search(); }} />
+      {model.searchPage ? <small>{t('registryBrowser.searchSummary', { keys: model.searchPage.scannedKeys, values: model.searchPage.scannedValues, hits: model.searchPage.hits.length })}</small> : null}</div>
+    {model.searchPage?.hits.length ? <div className="registry-browser-tree-search max-h-40 overflow-auto">
+      {model.searchPage.hits.map((hit) => <button key={`${hit.kind}:${hit.cellOffset}`} type="button" className="block w-full truncate text-left text-[10px]" onClick={() => void model.locate(hit.path)}>
+        <span className="font-mono">{hit.path}\{hit.name}</span><span className="ml-1 text-forensics-muted">{hit.matchedField}</span>
+      </button>)}
+    </div> : null}
     <ScrollArea className="min-h-0 flex-1" viewportRef={model.viewport.viewportRef} viewportClassName="registry-browser-tree-scroll">
       {model.hives.isPending ? <p className="registry-browser-message">{t('registryBrowser.loading')}</p> : null}
       {model.hivesError ? <div className="registry-browser-message" role="alert">{model.hivesError}

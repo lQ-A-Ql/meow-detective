@@ -125,3 +125,6 @@ export interface RegistryValueRange {
   diagnostics: RegistryBrowserDiagnostic[];
   decodedText?: string;
 }
+
+export interface RegistrySearchHit { kind: string; path: string; name: string; cellOffset: number; matchedField: string; preview: string; }
+export interface RegistrySearchPage { hits: RegistrySearchHit[]; scannedKeys: number; scannedValues: number; skippedCount: number; truncated: boolean; }
