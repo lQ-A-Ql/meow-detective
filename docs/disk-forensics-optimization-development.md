@@ -476,20 +476,20 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
 
 ### 14.1 审计问题收口台账（2026-10-14）
 
-按原审计 A01–A11 的问题编号计数：1 项已收口、1 项部分收口、9 项未收口，合计 **10 项尚未完整收口**。不按子任务或失败测试数量重复计数。A11 计入已收口的是案件/文件切换及迟到请求造成的 digest 串值缺陷；输入 revision 校验、持久化和任务协议继续归入 A05，不把前端选择身份当作证据 revision。
+按原审计 A01–A11 的问题编号计数：5 项已收口、2 项部分收口、4 项未收口，合计 **6 项尚未完整收口**。不按子任务或失败测试数量重复计数。A11 计入已收口的是案件/文件切换及迟到请求造成的 digest 串值缺陷；输入 revision 校验、持久化和任务协议继续归入 A05，不把前端选择身份当作证据 revision。
 
 | 编号 | 状态 | 剩余验收范围 |
 |---|---|---|
-| A01 NTFS Inspector | 部分收口 | 全局 MFT ID 请求、状态、重试和截断提示已修复；完整属性字段与结构到 Hex 定位待完成 |
+| A01 NTFS Inspector | 已收口 | 全局 MFT ID、完整属性/DataRun 字段、源/解码 MFT 字节、碎片 MFT 来源范围与结构到 Hex 定位已接通 |
 | A02 Nested Evidence | 未收口 | 调查入口、任务、派生分区/文件系统导入、可浏览结果与父 FileEntry ID |
-| A03 Git / GitLab | 未收口 | loose refs、多 remote、历史调查链路与 GitLab 配置/日志专用解析 |
-| A04 EXIF / GPS | 未收口 | Exif 子 IFD、PNG/WebP、损坏状态、GPS 时间与恢复图片端到端验收 |
+| A03 Git / GitLab | 已收口 | loose refs、多 remote、完整 commit/reflog、GitLab Ruby 配置/JSON 日志和 gzip 有界解析已覆盖 |
+| A04 EXIF / GPS | 已收口 | Exif 子 IFD、PNG/WebP、损坏/超限状态、GPS 坐标与 UTC 时间已覆盖 |
 | A05 多范围 Hash | 未收口 | 六范围统一 Inspector、结果持久化、审计、进度/取消、输入 revision 校验 |
 | A06 全文内容检索 | 未收口 | 内容查询 UI、命中来源、覆盖率和跳过原因统计 |
-| A07 DataRun 解码 | 未收口 | 普通读取与技术视图共享单一有界解码核心及损坏输入回归 |
-| A08 systemd | 未收口 | 预检复用解析器、symlink/drop-in 状态语义与专用统计/筛选 UI |
+| A07 DataRun 解码 | 已收口 | 普通读取与技术视图共享单一有界解码核心，非法/截断/溢出输入统一 fail-closed |
+| A08 systemd | 部分收口 | 预检已复用结构化解析器；symlink/drop-in 合并语义与专用统计/筛选 UI待完成 |
 | A09 Registry Browser | 未收口 | 恢复接入已有提交；完整 Hive 搜索与每项/字节范围来源契约仍待完成 |
-| A10 前端架构治理 | 未收口 | NTFS/Hash 本轮已分层并集中文案；其他渲染组件中的状态/副作用仍需迁移 |
+| A10 前端架构治理 | 部分收口 | BitLocker 与 Infrastructure 的状态/剪贴板副作用已迁移；其他渲染组件仍需治理 |
 | A11 digest 对象归属 | 已收口 | 案件、文件、选择轮次及计算轮次隔离已实现；切换和迟到终态回归通过 |
 
 第 15 节统一调度仍是未完成专题，与 A02/A05/A06 等共享任务验收范围，以上计数不将它另加为第十二个审计问题。Firefox typed error/私人样本等原方案矩阵欠项也继续保留；本台账不是全部 Definition of Done 子条件的数量。
