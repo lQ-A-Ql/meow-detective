@@ -112,6 +112,8 @@ testing = { path = "crates/testing" }
 runtime-cache = { path = "crates/runtime-cache" }
 evtx = { path = "crates/evtx-patched", default-features = false, features = ["multithreading"] }
 flate2 = "1"
+kamadak-exif = "0.6.1"
+crc32fast = "1.5"
 tar = { version = "0.4", default-features = false }
 containers-pst = { path = "crates/containers-pst" }
 ceph-wire = { path = "crates/ceph-wire" }

@@ -138,6 +138,7 @@ export interface ForensicDataRun {
 }
 
 export interface NtfsTechnicalAttribute {
+  recordOffset: number;
   attributeType: number;
   name?: string;
   instance: number;
@@ -157,7 +158,15 @@ export interface NtfsTechnicalFile {
   recordOffset: number;
   recordSize: number;
   recordRaw: number[];
+  recordDecoded: number[];
+  sourceRanges: NtfsRecordSourceRange[];
   attributes: NtfsTechnicalAttribute[];
+}
+
+export interface NtfsRecordSourceRange {
+  recordOffset: number;
+  sourceOffset: number;
+  length: number;
 }
 
 export type ImportTargetPlatform = 'windows' | 'linux' | 'android';

@@ -9,7 +9,7 @@ import {
 } from '@/components/layout/InspectorPane';
 import type { FileEntryRow, FileTreeNode } from '@/types/models';
 import type { DataSourcePartition } from '@/types/models';
-import { BitLockerVolumePanel } from '@/features/files/components/BitLockerVolumePanel';
+import { BitLockerVolumePanelController } from '@/features/files/containers/BitLockerVolumePanelController';
 import { formatUnixMode } from '@/features/files/components/FileListPanel';
 import type { BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
 import type { ApiErrorDto, ImageMetadata } from '@/types/models';
@@ -19,6 +19,7 @@ import { FileDigestInspector } from '@/features/files/components/FileDigestInspe
 import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
 import type { NtfsTechnicalFile } from '@/types/files';
 import type { ntfsInspectorRuns } from '../ntfs-inspector-runs';
+import type { useNtfsTechnicalFile } from '../hooks/use-ntfs-technical-file';
 
 interface FileBrowserInspectorProps {
   selectedFile?: FileEntryRow;
@@ -28,6 +29,7 @@ interface FileBrowserInspectorProps {
   extractionPending: boolean;
   onViewTimeline: () => void;
   bitLockerPartition?: DataSourcePartition;
+  bitLockerTargetKey?: string;
   bitLocker?: BitLockerVolumeModel;
   imageMetadata?: ImageMetadata | null;
   imageMetadataLoading?: boolean;
@@ -40,6 +42,7 @@ interface FileBrowserInspectorProps {
   ntfsTechnicalUnsupported?: boolean;
   ntfsTechnicalRuns?: ReturnType<typeof ntfsInspectorRuns>;
   retryNtfsTechnical?: () => void;
+  ntfsNavigation?: Pick<ReturnType<typeof useNtfsTechnicalFile>, 'hex' | 'selectHex' | 'setDecoded' | 'previousRuns' | 'nextRuns'>;
   fileDigest?: EvidenceDigest;
   fileDigestLoading?: boolean;
   fileDigestErrorText?: string;
@@ -55,6 +58,7 @@ export function FileBrowserInspector({
   extractionPending,
   onViewTimeline,
   bitLockerPartition,
+  bitLockerTargetKey,
   bitLocker,
   imageMetadata,
   imageMetadataLoading,
@@ -67,6 +71,7 @@ export function FileBrowserInspector({
   ntfsTechnicalUnsupported,
   ntfsTechnicalRuns,
   retryNtfsTechnical,
+  ntfsNavigation,
   fileDigest,
   fileDigestLoading,
   fileDigestErrorText,
@@ -83,7 +88,7 @@ export function FileBrowserInspector({
     >
       <div className="space-y-5">
         {bitLockerPartition && bitLocker ? (
-          <BitLockerVolumePanel partition={bitLockerPartition} model={bitLocker} />
+          <BitLockerVolumePanelController key={bitLockerTargetKey} partition={bitLockerPartition} model={bitLocker} />
         ) : null}
         <InspectorSection title={t('fileBrowser.inspector.sections.identity')}>
           <InspectorValue value={selectedFile?.name ?? '-'} mono strong />
@@ -127,7 +132,7 @@ export function FileBrowserInspector({
         </InspectorSection>
 
         <FileDigestInspector digest={fileDigest} loading={Boolean(fileDigestLoading)} error={fileDigestErrorText} available={Boolean(fileDigestAvailable)} onCalculate={calculateFileDigest} />
-        <NtfsTechnicalInspector technical={ntfsTechnical} eligible={ntfsTechnicalEligible} loading={ntfsTechnicalLoading} errorText={ntfsTechnicalErrorText} unsupported={ntfsTechnicalUnsupported} runs={ntfsTechnicalRuns} onRetry={retryNtfsTechnical} />
+        <NtfsTechnicalInspector technical={ntfsTechnical} eligible={ntfsTechnicalEligible} loading={ntfsTechnicalLoading} errorText={ntfsTechnicalErrorText} unsupported={ntfsTechnicalUnsupported} runs={ntfsTechnicalRuns} onRetry={retryNtfsTechnical} navigation={ntfsNavigation} />
 
         {selectedFile?.entryType === 'file' && (imageMetadata || imageMetadataLoading || imageMetadataError) ? (
           <ImageMetadataInspector

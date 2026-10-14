@@ -8,7 +8,15 @@ pub(super) fn extract(
     bytes: &[u8],
     outcome: &mut ExtractionOutcome,
 ) {
-    let records = artifacts_linux::parse_git_bytes(&candidate.path, bytes);
+    let records = match artifacts_linux::parse_git_bytes_checked(&candidate.path, bytes) {
+        Ok(records) => records,
+        Err(error) => {
+            outcome
+                .warnings
+                .push(format!("{}: {error}", candidate.path));
+            return;
+        }
+    };
     if records.is_empty() {
         outcome.warnings.push(format!(
             "{} Git metadata produced no structured records",
@@ -19,6 +27,19 @@ pub(super) fn extract(
     for record in records {
         let mut attrs = base_attrs(candidate);
         attrs.insert("recordType".into(), Value::String(record.kind.clone()));
+        for name in [
+            "lineNumber",
+            "byteOffset",
+            "offsetScope",
+            "commitHash",
+            "authorTime",
+            "committerTime",
+            "timestamp",
+        ] {
+            if let Some(value) = record.fields.get(name) {
+                attrs.insert(name.into(), Value::String(value.clone()));
+            }
+        }
         attrs.insert(
             "fields".into(),
             serde_json::to_value(record.fields).unwrap_or(Value::Null),

@@ -153,7 +153,9 @@ pub use notebook::{
     ListNotebookEntriesRequest, NotebookEntryDto, NotebookEntryStatusDto, NotebookEntryTypeDto,
     UpdateNotebookEntryRequest,
 };
-pub use ntfs::{ForensicDataRunDto, NtfsTechnicalAttributeDto, NtfsTechnicalFileDto};
+pub use ntfs::{
+    ForensicDataRunDto, NtfsRecordSourceRangeDto, NtfsTechnicalAttributeDto, NtfsTechnicalFileDto,
+};
 pub use recovery::{
     DeletedFileRecoveryDto, DeletedRecoveryContentRangeDto, DeletedRecoveryExportDto,
     DeletedRecoveryFailureDto, DeletedRecoveryHashSearchDto, DeletedRecoveryPageDto,

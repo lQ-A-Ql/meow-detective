@@ -38,10 +38,11 @@ struct UnitRiskAnalysis {
 }
 
 fn analyze_unit(unit: &str, read_script: impl Fn(&str) -> Option<String>) -> UnitRiskAnalysis {
-    let always_restarts =
-        unit_setting(unit, "Restart").is_some_and(|value| value.eq_ignore_ascii_case("always"));
-    let script = unit_setting(unit, "ExecStart")
-        .and_then(exec_start_script)
+    let parsed = artifacts_linux::parse_systemd_unit("/etc/systemd/system/preflight.service", unit.as_bytes()).ok();
+    let always_restarts = parsed.as_ref().and_then(|unit| unit.restart.as_deref())
+        .is_some_and(|value| value.eq_ignore_ascii_case("always"));
+    let script = parsed.as_ref()
+        .and_then(|unit| unit.exec_start.iter().find_map(|command| exec_start_script(command)))
         .and_then(read_script);
     UnitRiskAnalysis {
         always_restarts,
@@ -49,20 +50,6 @@ fn analyze_unit(unit: &str, read_script: impl Fn(&str) -> Option<String>) -> Uni
             .as_deref()
             .is_some_and(script_terminates_remote_sessions),
     }
-}
-
-fn unit_setting<'a>(unit: &'a str, key: &str) -> Option<&'a str> {
-    unit.lines().find_map(|line| {
-        let line = line.trim();
-        if line.starts_with('#') || line.starts_with(';') {
-            return None;
-        }
-        let (candidate, value) = line.split_once('=')?;
-        candidate
-            .trim()
-            .eq_ignore_ascii_case(key)
-            .then_some(value.trim())
-    })
 }
 
 fn exec_start_script(command: &str) -> Option<&str> {

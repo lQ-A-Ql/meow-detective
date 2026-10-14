@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { BitLockerVolumePanel } from '@/features/files/components/BitLockerVolumePanel';
+import { BitLockerVolumePanelController as BitLockerVolumePanel } from '@/features/files/containers/BitLockerVolumePanelController';
 import type { BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
 import type { DataSourcePartition } from '@/types/models';
 

@@ -20,6 +20,7 @@ pub struct ForensicDataRun {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NtfsTechnicalAttribute {
+    pub record_offset: u32,
     pub attribute_type: u32,
     pub name: Option<String>,
     pub instance: u16,
@@ -40,13 +41,24 @@ pub struct NtfsTechnicalFile {
     pub record_offset: u64,
     pub record_size: u32,
     pub record_raw: Vec<u8>,
+    pub record_decoded: Vec<u8>,
+    pub source_ranges: Vec<NtfsRecordSourceRange>,
     pub attributes: Vec<NtfsTechnicalAttribute>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NtfsRecordSourceRange {
+    pub record_offset: u32,
+    pub source_offset: u64,
+    pub length: u32,
 }
 
 impl NtfsReader {
     /// Inspect one FILE record without changing the normal file read path.
     pub fn inspect_file_by_inode(&self, inode: u64) -> io::Result<NtfsTechnicalFile> {
-        let record = self.read_mft_record(inode)?;
+        let record_raw = self.read_mft_record_raw(inode)?;
+        let mut record = record_raw.clone();
+        crate::utils::apply_record_fixup(&mut record, self.bytes_per_sector as usize)?;
         if record.len() < 0x18 || &record[..4] != b"FILE" {
             return Err(invalid_fs_data("inode is not a valid NTFS FILE record"));
         }
@@ -65,7 +77,9 @@ impl NtfsReader {
             parent_reference,
             record_offset,
             record_size: self.mft_record_size,
-            record_raw: record,
+            record_raw,
+            record_decoded: record,
+            source_ranges: self.mft_record_source_ranges(inode)?,
             attributes,
         })
     }
@@ -131,6 +145,7 @@ fn inspect_attributes(
         };
         let bounded_raw = raw.len().min(MAX_ATTRIBUTE_RAW_BYTES);
         attributes.push(NtfsTechnicalAttribute {
+            record_offset: position as u32,
             attribute_type,
             name,
             instance,

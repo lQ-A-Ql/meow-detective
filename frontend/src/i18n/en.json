@@ -1,5 +1,6 @@
 {
   "common": {
+    "clipboardUnavailable": "Clipboard access is unavailable or was denied",
     "close": "Close",
     "dataSourceKinds": {
       "localDisk": "Local disk",
@@ -695,7 +696,8 @@
           "present": "Present",
           "absent": "No EXIF",
           "unsupported": "Unsupported",
-          "corrupt": "Corrupt"
+          "corrupt": "Corrupt",
+          "oversized": "Image metadata exceeds the bounded read limit"
         }
       },
       "hash": {
@@ -704,6 +706,33 @@
         "result": "{{algorithm}} · {{bytes}} bytes"
       },
       "ntfs": {
+        "sequence": "MFT sequence",
+        "flags": "Record flags",
+        "parentReference": "Parent reference",
+        "recordSize": "Record bytes",
+        "attributeType": "Attribute type",
+        "attributeName": "Stream name",
+        "instance": "Attribute instance",
+        "residency": "Storage",
+        "resident": "Resident",
+        "nonResident": "Non-resident",
+        "allocatedSize": "Allocated bytes",
+        "realSize": "Real bytes",
+        "initializedSize": "Initialized bytes",
+        "recordRelativeOffset": "Offset in decoded MFT record",
+        "recordHex": "Locate MFT record bytes",
+        "attributeHex": "Locate attribute bytes",
+        "runHex": "Locate encoded run bytes",
+        "runFields": "Header {{header}} · length bytes {{lengthBytes}} · offset bytes {{offsetBytes}} · relative LCN {{relativeLcn}} · logical offset {{logicalOffset}} · source offset {{physicalOffset}}",
+        "sourceRecordBytes": "Original MFT bytes; offsets are relative to this record",
+        "decodedRecordBytes": "Decoded MFT bytes after sector fixup; derived interpretation",
+        "showSourceBytes": "Show source bytes",
+        "showDecodedBytes": "Show decoded bytes",
+        "sourceRange": "Record {{offset}} + {{length}} bytes → logical evidence offset",
+        "previousRuns": "Previous runs",
+        "nextRuns": "Next runs",
+        "runPage": "Page {{page}} / {{pages}}",
+        "attributeTypes": { "16": "$STANDARD_INFORMATION", "32": "$ATTRIBUTE_LIST", "48": "$FILE_NAME", "128": "$DATA" },
         "inode": "MFT inode",
         "recordOffset": "Record offset",
         "attributes": "Attributes",

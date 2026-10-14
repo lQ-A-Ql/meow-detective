@@ -1,5 +1,6 @@
 {
   "common": {
+    "clipboardUnavailable": "剪贴板不可用或访问被拒绝",
     "close": "关闭",
     "dataSourceKinds": {
       "localDisk": "本地磁盘",
@@ -695,7 +696,8 @@
           "present": "已发现",
           "absent": "无 EXIF",
           "unsupported": "不支持",
-          "corrupt": "结构损坏"
+          "corrupt": "结构损坏",
+          "oversized": "图片元数据超出有界读取限制"
         }
       },
       "hash": {
@@ -704,6 +706,33 @@
         "result": "{{algorithm}} · {{bytes}} 字节"
       },
       "ntfs": {
+        "sequence": "MFT 序列号",
+        "flags": "记录标志",
+        "parentReference": "父记录引用",
+        "recordSize": "记录字节数",
+        "attributeType": "属性类型",
+        "attributeName": "数据流名称",
+        "instance": "属性实例",
+        "residency": "存储方式",
+        "resident": "驻留",
+        "nonResident": "非驻留",
+        "allocatedSize": "分配字节数",
+        "realSize": "实际字节数",
+        "initializedSize": "初始化字节数",
+        "recordRelativeOffset": "解码 MFT 记录内偏移",
+        "recordHex": "定位 MFT 记录字节",
+        "attributeHex": "定位属性字节",
+        "runHex": "定位编码 run 字节",
+        "runFields": "头 {{header}} · 长度字段 {{lengthBytes}} 字节 · 偏移字段 {{offsetBytes}} 字节 · 相对 LCN {{relativeLcn}} · 逻辑偏移 {{logicalOffset}} · 来源偏移 {{physicalOffset}}",
+        "sourceRecordBytes": "MFT 原始来源字节；偏移相对于当前记录",
+        "decodedRecordBytes": "扇区修复后的解码 MFT 字节，属于派生解释",
+        "showSourceBytes": "显示原始来源字节",
+        "showDecodedBytes": "显示解码字节",
+        "sourceRange": "记录 {{offset}} + {{length}} 字节 → 逻辑证据偏移",
+        "previousRuns": "上一组数据运行",
+        "nextRuns": "下一组数据运行",
+        "runPage": "第 {{page}} / {{pages}} 页",
+        "attributeTypes": { "16": "$STANDARD_INFORMATION", "32": "$ATTRIBUTE_LIST", "48": "$FILE_NAME", "128": "$DATA" },
         "inode": "MFT inode",
         "recordOffset": "记录偏移",
         "attributes": "属性数",

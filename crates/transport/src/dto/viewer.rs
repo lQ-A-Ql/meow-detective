@@ -172,6 +172,7 @@ pub enum ImageMetadataStatusDto {
     Absent,
     Unsupported,
     Corrupt,
+    Oversized,
 }
 
 /// Media URL DTO

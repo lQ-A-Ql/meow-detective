@@ -8,12 +8,14 @@ pub mod mft_scanner;
 
 mod attribute;
 mod compression;
+mod data_run_decoder;
 mod data_runs;
 mod directory;
 mod file_name;
 mod file_stream;
 mod index_allocation;
 mod mft;
+mod mft_source_ranges;
 mod mft_stream;
 mod namespace_edit;
 mod path;
@@ -31,7 +33,9 @@ pub use file_stream::NtfsFileReader;
 pub use mft::{NtfsPreviewFile, NtfsReader};
 pub use namespace_edit::{DirectoryEntryRemoval, PlannedDiskEdit};
 pub use recovery::{NtfsAllocationState, NtfsDataExtent, NtfsDeletedFileRecord};
-pub use technical::{ForensicDataRun, NtfsTechnicalAttribute, NtfsTechnicalFile};
+pub use technical::{
+    ForensicDataRun, NtfsRecordSourceRange, NtfsTechnicalAttribute, NtfsTechnicalFile,
+};
 pub use utils::parse_mft_data_real_size;
 pub use write_map::NtfsFileExtent;
 

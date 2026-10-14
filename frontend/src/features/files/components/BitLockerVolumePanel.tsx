@@ -1,73 +1,28 @@
 import { Copy, RefreshCw, ShieldCheck } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import type { BitLockerPanelState } from '../hooks/use-bitlocker-panel-state';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Checkbox } from '@/app/components/ui/checkbox';
-import type { DataSourcePartition, BitLockerDictionaryBackend } from '@/types/models';
+import type { DataSourcePartition } from '@/types/models';
 import type { BitLockerUnlockMethod, BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
 
 interface BitLockerVolumePanelProps {
   partition: DataSourcePartition;
   model: BitLockerVolumeModel;
+  panel: BitLockerPanelState;
 }
 
-export function BitLockerVolumePanel({ partition, model }: BitLockerVolumePanelProps) {
+export function BitLockerVolumePanel({ partition, model, panel }: BitLockerVolumePanelProps) {
   const { t } = useTranslation();
-  const [method, setMethod] = useState<BitLockerUnlockMethod>('password');
-  const [credential, setCredential] = useState('');
-  const [dictionaryBackend, setDictionaryBackend] = useState<BitLockerDictionaryBackend>('cpu');
-  const [passwordCopied, setPasswordCopied] = useState(false);
+  const { method, setMethod, credential, setCredential, dictionaryBackend, setDictionaryBackend,
+    passwordCopied, canSubmit, submitCredential, copyRecoveredPassword } = panel;
   const status = model.status;
-  const canSubmit = Boolean(credential)
-    && !model.unlocking
-    && !model.memoryUnlocking
-    && !model.dictionaryAttacking;
   const reconstruction = status?.recoveryPasswordReconstruction;
-
-  const submitCredential = () => {
-    const submitted = credential;
-    setCredential('');
-    void model.unlock(method, submitted);
-  };
-
-  const copyResetTimer = useRef<number>();
-  const clipboardHoldsSecret = useRef(false);
-
-  /**
-   * A recovered BitLocker password must not outlive this panel in the OS clipboard:
-   * Windows clipboard history (Win+V) and cloud clipboard sync would otherwise keep the
-   * plaintext recovery key across app restarts, while every other path keeps secrets in
-   * `Zeroizing` buffers.
-   */
-  const wipeClipboardSecret = useCallback(() => {
-    if (!clipboardHoldsSecret.current) {
-      return;
-    }
-    clipboardHoldsSecret.current = false;
-    void navigator.clipboard?.writeText('').catch(() => undefined);
-  }, []);
-
-  const copyRecoveredPassword = (password: string) => {
-    void navigator.clipboard?.writeText(password).then(() => {
-      clipboardHoldsSecret.current = true;
-      setPasswordCopied(true);
-      window.clearTimeout(copyResetTimer.current);
-      copyResetTimer.current = window.setTimeout(() => {
-        setPasswordCopied(false);
-        wipeClipboardSecret();
-      }, 1500);
-    });
-  };
-
-  useEffect(() => () => {
-    window.clearTimeout(copyResetTimer.current);
-    wipeClipboardSecret();
-  }, [wipeClipboardSecret]);
 
   return (
     <section className="border border-forensics-border bg-forensics-surface p-3 space-y-3">

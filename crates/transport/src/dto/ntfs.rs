@@ -17,6 +17,7 @@ pub struct ForensicDataRunDto {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct NtfsTechnicalAttributeDto {
+    pub record_offset: u32,
     pub attribute_type: u32,
     pub name: Option<String>,
     pub instance: u16,
@@ -38,7 +39,17 @@ pub struct NtfsTechnicalFileDto {
     pub record_offset: u64,
     pub record_size: u32,
     pub record_raw: Vec<u8>,
+    pub record_decoded: Vec<u8>,
+    pub source_ranges: Vec<NtfsRecordSourceRangeDto>,
     pub attributes: Vec<NtfsTechnicalAttributeDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NtfsRecordSourceRangeDto {
+    pub record_offset: u32,
+    pub source_offset: u64,
+    pub length: u32,
 }
 
 #[cfg(test)]

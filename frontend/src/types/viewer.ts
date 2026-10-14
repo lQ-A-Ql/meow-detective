@@ -93,7 +93,7 @@ export interface ImagePreviewResponse {
   size: number;
 }
 
-export type ImageMetadataStatus = 'present' | 'absent' | 'unsupported' | 'corrupt';
+export type ImageMetadataStatus = 'present' | 'absent' | 'unsupported' | 'corrupt' | 'oversized';
 
 export interface ImageMetadata {
   status: ImageMetadataStatus;

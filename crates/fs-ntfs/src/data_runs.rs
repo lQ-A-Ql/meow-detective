@@ -17,120 +17,60 @@ pub(crate) fn parse_data_runs_bytes(data: &[u8]) -> io::Result<Vec<(i64, u64)>> 
         .collect())
 }
 
-/// Parse NTFS data runs into a sequence of [`DataRun`] values.
-pub(crate) fn parse_data_runs_ext(mut data: &[u8]) -> io::Result<Vec<DataRun>> {
-    const MAX_DATA_RUNS: usize = 100_000;
-
+/// Parse NTFS data runs into a sequence of lightweight values.
+pub(crate) fn parse_data_runs_ext(data: &[u8]) -> io::Result<Vec<DataRun>> {
     let mut runs = Vec::new();
-    let mut prev_lcn: i64 = 0;
-    while !data.is_empty() && data[0] != 0 {
-        if runs.len() >= MAX_DATA_RUNS {
-            return Err(invalid_fs_data(format!(
-                "too many data runs (limit: {})",
-                MAX_DATA_RUNS
-            )));
-        }
-        let header = data[0];
-        let size_bytes = (header & 0x0F) as usize;
-        let offset_bytes = ((header >> 4) & 0x0F) as usize;
-        if size_bytes > 8 || offset_bytes > 8 {
-            break;
-        }
-        data = &data[1..];
-        if data.len() < size_bytes + offset_bytes {
-            break;
-        }
-        let cluster_count = read_sized_le(&data[..size_bytes]);
-        data = &data[size_bytes..];
-        let lcn_offset = read_sized_le_signed(&data[..offset_bytes]);
-        data = &data[offset_bytes..];
-        let lcn = if offset_bytes == 0 {
-            None
-        } else if runs.is_empty() {
-            Some(lcn_offset)
-        } else {
-            Some(prev_lcn + lcn_offset)
-        };
-        if let Some(lcn) = lcn {
-            prev_lcn = lcn;
-        }
-        if cluster_count == 0 {
-            continue;
-        }
-        runs.push(DataRun { lcn, cluster_count });
-    }
+    crate::data_run_decoder::decode_data_runs(data, |run| {
+        runs.push(DataRun {
+            lcn: run.absolute_lcn,
+            cluster_count: run.cluster_count,
+        });
+        Ok(())
+    })?;
     Ok(runs)
 }
 
-/// Parse data runs while preserving the encoded fields required for forensic inspection.
+/// Preserve raw fields only when the investigator requests the technical view.
 pub(crate) fn parse_data_runs_forensic(
     data: &[u8],
     cluster_size: u64,
     volume_offset: u64,
 ) -> io::Result<Vec<crate::ForensicDataRun>> {
-    const MAX_DATA_RUNS: usize = 100_000;
-    let mut remaining = data;
-    let mut previous_lcn = 0i64;
+    if cluster_size == 0 {
+        return Err(invalid_fs_data("zero NTFS cluster size"));
+    }
     let mut logical_offset = 0u64;
     let mut runs = Vec::new();
-    while !remaining.is_empty() && remaining[0] != 0 {
-        if runs.len() >= MAX_DATA_RUNS {
-            return Err(invalid_fs_data("too many data runs"));
-        }
-        let header = remaining[0];
-        let length_field_size = header & 0x0f;
-        let offset_field_size = header >> 4;
-        if length_field_size == 0 || length_field_size > 8 || offset_field_size > 8 {
-            return Err(invalid_fs_data("invalid NTFS data run header"));
-        }
-        let body_len = 1usize + usize::from(length_field_size) + usize::from(offset_field_size);
-        if remaining.len() < body_len {
-            return Err(invalid_fs_data("truncated NTFS data run"));
-        }
-        let raw = remaining[..body_len].to_vec();
-        let cluster_count = read_sized_le(&remaining[1..1 + usize::from(length_field_size)]);
-        if cluster_count == 0 {
-            return Err(invalid_fs_data("zero-length NTFS data run"));
-        }
-        let relative_lcn = (offset_field_size != 0).then(|| {
-            read_sized_le_signed(&remaining[1 + usize::from(length_field_size)..body_len])
-        });
-        let absolute_lcn = relative_lcn.map(|delta| {
-            if runs.is_empty() {
-                delta
-            } else {
-                previous_lcn.checked_add(delta).unwrap_or(i64::MIN)
-            }
-        });
-        if absolute_lcn == Some(i64::MIN) {
-            return Err(invalid_fs_data("NTFS data run LCN overflow"));
-        }
-        let physical_offset = absolute_lcn
-            .and_then(|lcn| u64::try_from(lcn).ok())
-            .and_then(|lcn| lcn.checked_mul(cluster_size))
-            .and_then(|offset| volume_offset.checked_add(offset));
-        let run_bytes = cluster_count
+    crate::data_run_decoder::decode_data_runs(data, |run| {
+        let physical_offset = run
+            .absolute_lcn
+            .map(|lcn| {
+                (lcn as u64)
+                    .checked_mul(cluster_size)
+                    .and_then(|offset| volume_offset.checked_add(offset))
+                    .ok_or_else(|| invalid_fs_data("NTFS data run physical offset overflow"))
+            })
+            .transpose()?;
+        let run_bytes = run
+            .cluster_count
             .checked_mul(cluster_size)
             .ok_or_else(|| invalid_fs_data("NTFS data run size overflow"))?;
         runs.push(crate::ForensicDataRun {
-            header,
-            length_field_size,
-            offset_field_size,
-            cluster_count,
-            relative_lcn,
-            absolute_lcn,
+            header: run.header,
+            length_field_size: run.header & 0x0f,
+            offset_field_size: run.header >> 4,
+            cluster_count: run.cluster_count,
+            relative_lcn: run.relative_lcn,
+            absolute_lcn: run.absolute_lcn,
             logical_offset,
-            raw,
+            raw: run.raw.to_vec(),
             physical_offset,
         });
         logical_offset = logical_offset
             .checked_add(run_bytes)
             .ok_or_else(|| invalid_fs_data("NTFS data run logical offset overflow"))?;
-        if let Some(lcn) = absolute_lcn {
-            previous_lcn = lcn;
-        }
-        remaining = &remaining[body_len..];
-    }
+        Ok(())
+    })?;
     Ok(runs)
 }
 

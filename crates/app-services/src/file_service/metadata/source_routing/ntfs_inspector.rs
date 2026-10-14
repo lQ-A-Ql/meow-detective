@@ -86,12 +86,23 @@ fn convert_file(file: NtfsTechnicalFile) -> NtfsTechnicalFileDto {
         record_offset: file.record_offset,
         record_size: file.record_size,
         record_raw: file.record_raw,
+        record_decoded: file.record_decoded,
+        source_ranges: file
+            .source_ranges
+            .into_iter()
+            .map(|range| transport::dto::NtfsRecordSourceRangeDto {
+                record_offset: range.record_offset,
+                source_offset: range.source_offset,
+                length: range.length,
+            })
+            .collect(),
         attributes: file.attributes.into_iter().map(convert_attribute).collect(),
     }
 }
 
 fn convert_attribute(attribute: NtfsTechnicalAttribute) -> NtfsTechnicalAttributeDto {
     NtfsTechnicalAttributeDto {
+        record_offset: attribute.record_offset,
         attribute_type: attribute.attribute_type,
         name: attribute.name,
         instance: attribute.instance,

@@ -1,4 +1,7 @@
-//! NTFS synthetic fixture test — list_root_children with correct INDX offsets.
+#[path = "support/initialized_data.rs"]
+mod support;
+
+// NTFS synthetic fixture test — list_root_children with correct INDX offsets.
 use evidence_core::filesystem::FileSystemReader;
 use evidence_core::EvidenceReader;
 use fs_ntfs::NtfsReader;
@@ -546,7 +549,7 @@ fn index_alloc_entries_are_directories() {
 }
 
 #[test]
-fn data_run_parse_zero_length_runs_skipped() {
+fn data_run_parse_zero_length_run_is_rejected() {
     // Build a fixture where the data run has a zero-length (sparse) run
     let bps = 512u16;
     let spc = 1u8;
@@ -595,9 +598,9 @@ fn data_run_parse_zero_length_runs_skipped() {
     rec5[idxa + 0x28..idxa + 0x30].copy_from_slice(&512u64.to_le_bytes());
     rec5[idxa + 0x30..idxa + 0x38].copy_from_slice(&512u64.to_le_bytes());
     rec5[idxa + 0x38..idxa + 0x40].copy_from_slice(&512u64.to_le_bytes());
-    // Data runs: sparse run (length=0, skip), then real run
+    // A zero-length run is corrupt, even when followed by a readable real run.
     let run = idxa + 0x40;
-    rec5[run] = 0x11; // size=1, offset=1 → sparse marker
+    rec5[run] = 0x11; // size=1, offset=1: non-sparse encoding
     rec5[run + 1] = 0; // zero clusters
     rec5[run + 2] = 0; // zero offset
     rec5[run + 3] = 0x31; // size=1, offset=3
@@ -612,9 +615,11 @@ fn data_run_parse_zero_length_runs_skipped() {
 
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
-    let nodes = ntfs.list_root_children().unwrap();
-    assert_eq!(nodes.len(), 1);
-    assert_eq!(nodes[0].name, "FileA");
+    let error = ntfs
+        .list_root_children()
+        .expect_err("corrupt runlist must fail closed");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("zero-length"));
 }
 
 // --- Phase 17: $DATA attribute + open_file tests ---
@@ -1498,4 +1503,22 @@ fn efs_encrypted_file_detected() {
         secret.encrypted,
         "secret.docx should be flagged as encrypted"
     );
+}
+
+#[test]
+fn technical_record_preserves_source_bytes_and_reports_mft_source_ranges() {
+    let mut image = support::image(900, 600, false);
+    let source = &mut image[support::RECORD_OFFSET..support::RECORD_OFFSET + 1024];
+    source[510..512].copy_from_slice(&0xbeefu16.to_le_bytes());
+    source[1022..1024].copy_from_slice(&0xbeefu16.to_le_bytes());
+    let oracle = source.to_vec();
+    let (reader, _directory) = support::filesystem(&image);
+    let inspected = reader.inspect_file_by_inode(6).unwrap();
+    assert_eq!(inspected.record_raw, oracle);
+    assert_eq!(inspected.record_decoded.len(), inspected.record_raw.len());
+    assert_eq!(
+        inspected.source_ranges[0].source_offset,
+        support::RECORD_OFFSET as u64
+    );
+    assert_eq!(inspected.source_ranges[0].length, 1024);
 }

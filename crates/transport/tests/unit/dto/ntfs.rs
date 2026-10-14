@@ -29,6 +29,12 @@ fn technical_file_round_trips_empty_attributes() {
         record_offset: 4096,
         record_size: 1024,
         record_raw: vec![0x46, 0x49, 0x4c, 0x45],
+        record_decoded: vec![0x46, 0x49, 0x4c, 0x45],
+        source_ranges: vec![crate::dto::NtfsRecordSourceRangeDto {
+            record_offset: 0,
+            source_offset: 4096,
+            length: 4,
+        }],
         attributes: Vec::new(),
     };
     let round_trip: NtfsTechnicalFileDto =

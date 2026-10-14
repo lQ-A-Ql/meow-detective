@@ -137,7 +137,9 @@ pub(super) fn linux_artifact_section(normalized_path: &str) -> LinuxArtifactSect
 }
 
 fn route_kind(path: &str) -> LinuxArtifactRouteKind {
-    if is_journal_path(path) {
+    if is_git_path(path) {
+        LinuxArtifactRouteKind::Git
+    } else if is_journal_path(path) {
         LinuxArtifactRouteKind::Journal
     } else if is_nginx_config_path(path) {
         LinuxArtifactRouteKind::NginxConfig
@@ -195,8 +197,6 @@ fn route_kind(path: &str) -> LinuxArtifactRouteKind {
         LinuxArtifactRouteKind::TextLog
     } else if is_pve_log_path(path) {
         LinuxArtifactRouteKind::PveLog
-    } else if is_git_path(path) {
-        LinuxArtifactRouteKind::Git
     } else {
         LinuxArtifactRouteKind::Unsupported
     }

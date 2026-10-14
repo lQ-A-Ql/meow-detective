@@ -17,6 +17,7 @@ interface HexViewerProps {
   fileSize?: number;
   lineHeight?: number;
   activeOffset?: number;
+  highlightRange?: { start: number; end: number };
   loadedRanges?: HexLoadedRange[];
   onNeedMoreRange?: (direction: 'previous' | 'next') => void;
 }
@@ -71,6 +72,7 @@ export function HexViewer({
   fileSize,
   lineHeight = 24,
   activeOffset,
+  highlightRange,
   loadedRanges,
   onNeedMoreRange,
 }: HexViewerProps) {
@@ -326,6 +328,8 @@ export function HexViewer({
   // actual window whose selection must be retained.
   const selectionWindowSource = byteWindow.rawBytes ?? lines;
 
+  useEffect(() => { setSelection(undefined); }, [highlightRange?.start, highlightRange?.end]);
+
   useEffect(() => {
     draggingRef.current = false;
     dragAnchorRef.current = undefined;
@@ -362,8 +366,8 @@ export function HexViewer({
     return Math.max(80, lastOffset.length * 10 + 16);
   }, [byteWindow, lines, rowCount]);
 
-  const selectionStart = selection ? Math.min(selection.anchor, selection.focus) : undefined;
-  const selectionEnd = selection ? Math.max(selection.anchor, selection.focus) : undefined;
+  const selectionStart = selection ? Math.min(selection.anchor, selection.focus) : highlightRange?.start;
+  const selectionEnd = selection ? Math.max(selection.anchor, selection.focus) : highlightRange?.end;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-forensics-surface font-mono text-[12px]">
