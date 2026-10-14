@@ -222,6 +222,7 @@ fn materialized_result(
         },
         derived_data_source_id: derived_id.0,
         import_state: "pending".into(),
+        import_job_id: None,
     }
 }
 

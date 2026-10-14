@@ -481,10 +481,10 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
 | 编号 | 状态 | 剩余验收范围 |
 |---|---|---|
 | A01 NTFS Inspector | 已收口 | 全局 MFT ID、完整属性/DataRun 字段、源/解码 MFT 字节、碎片 MFT 来源范围与结构到 Hex 定位已接通 |
-| A02 Nested Evidence | 部分收口 | 父 FileEntry ID 与 lineage 已持久化；调查入口、可取消任务、派生分区/文件系统导入仍待接通 |
+| A02 Nested Evidence | 部分收口 | 父 FileEntry ID、lineage 与 materialize 后后台导入调度已接通；失败恢复和最终可浏览验收仍待完成 |
 | A03 Git / GitLab | 已收口 | loose refs、多 remote、完整 commit/reflog、GitLab Ruby 配置/JSON 日志和 gzip 有界解析已覆盖 |
 | A04 EXIF / GPS | 已收口 | Exif 子 IFD、PNG/WebP、损坏/超限状态、GPS 坐标与 UTC 时间已覆盖 |
-| A05 多范围 Hash | 部分收口 | 六范围持久化与 scope/algorithm 结果已落库；统一 taskId、取消/进度和 source revision 校验仍待接通 |
+| A05 多范围 Hash | 部分收口 | 六范围结果持久化已落库；统一 taskId、取消/进度、source revision 和完整 Inspector 仍待接通 |
 | A06 全文内容检索 | 部分收口 | 查询已覆盖 content 字段并返回 matchSource；索引覆盖率/跳过原因的细粒度统计仍待补齐 |
 | A07 DataRun 解码 | 已收口 | 普通读取与技术视图共享单一有界解码核心，非法/截断/溢出输入统一 fail-closed |
 | A08 systemd | 部分收口 | 预检已复用结构化解析器；symlink/drop-in 合并语义与专用统计/筛选 UI待完成 |

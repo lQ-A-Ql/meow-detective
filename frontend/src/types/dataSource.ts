@@ -45,6 +45,7 @@ export interface NestedEvidenceMaterialized {
   lineage: NestedEvidenceLineage;
   derivedDataSourceId: string;
   importState: string;
+  importJobId?: string;
 }
 
 export interface DataSourceProcessingSummary {

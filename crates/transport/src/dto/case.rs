@@ -151,6 +151,8 @@ pub struct NestedEvidenceMaterializedDto {
     pub lineage: NestedEvidenceLineageDto,
     pub derived_data_source_id: String,
     pub import_state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub import_job_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { BitLockerCatalogImportOverlay } from '@/features/files/components/BitLockerCatalogImportOverlay';
+import { BitLockerCatalogImportOverlayController as BitLockerCatalogImportOverlay } from '@/features/files/containers/BitLockerCatalogImportOverlayController';
 
 describe('BitLockerCatalogImportOverlay', () => {
   it('shows an indeterminate catalog phase without fabricating a percentage', () => {

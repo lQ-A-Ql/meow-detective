@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { InteractionLock } from '@/components/layout/InteractionLock';
-import { BitLockerCatalogImportOverlay } from '@/features/files/components/BitLockerCatalogImportOverlay';
+import { BitLockerCatalogImportOverlayController } from '@/features/files/containers/BitLockerCatalogImportOverlayController';
 import { FileBrowserInspector } from '@/features/files/components/FileBrowserInspector';
 import { FileExtractionDialogs } from '@/features/files/components/FileExtractionDialogs';
 import { FileListPanel } from '@/features/files/components/FileListPanel';
@@ -48,7 +48,7 @@ export function FileBrowserWorkspace({ model, mountModel }: FileBrowserWorkspace
           <FileBrowserInspector selectedFile={model.selectedFile} activeDirectoryPath={model.activeDirectoryPath} currentDirectory={model.currentDirectory} onExtractFile={model.fileExtraction.openForFile} extractionPending={model.fileExtraction.isExtracting} onViewTimeline={model.onViewTimeline} bitLockerPartition={model.bitLockerPartition} bitLockerTargetKey={model.bitLockerTargetKey} bitLocker={model.bitLocker} imageMetadata={model.imageMetadata} imageMetadataLoading={model.imageMetadataLoading} imageMetadataError={model.imageMetadataError} onRetryImageMetadata={model.onRetryImageMetadata} ntfsTechnical={model.ntfsTechnical} ntfsTechnicalEligible={model.ntfsTechnicalEligible} ntfsTechnicalLoading={model.ntfsTechnicalLoading} ntfsTechnicalErrorText={model.ntfsTechnicalErrorText} ntfsTechnicalUnsupported={model.ntfsTechnicalUnsupported} ntfsTechnicalRuns={model.ntfsTechnicalRuns} retryNtfsTechnical={model.retryNtfsTechnical} ntfsNavigation={model.ntfsNavigation} fileDigest={model.fileDigest} fileDigestLoading={model.fileDigestLoading} fileDigestErrorText={model.fileDigestErrorText} fileDigestAvailable={model.fileDigestAvailable} calculateFileDigest={model.calculateFileDigest} />
         </WorkspaceCard>
       </InteractionLock>
-      {model.bitLocker.catalogImport ? <BitLockerCatalogImportOverlay lifecycle={model.bitLocker.catalogImport} /> : null}
+      {model.bitLocker.catalogImport ? <BitLockerCatalogImportOverlayController lifecycle={model.bitLocker.catalogImport} /> : null}
       <FileExtractionDialogs model={model.fileExtraction} />
     </div>
   );
