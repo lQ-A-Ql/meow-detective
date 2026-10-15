@@ -1,8 +1,20 @@
-use super::{checkpoint_key, CandidateCompletionKind, CandidateProcessingContext};
+use super::{CandidateCompletionKind, CandidateProcessingContext};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::capability::AnalysisCapability;
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::extraction::artifact_query::already_has_v1_artifacts;
+
+pub(super) fn checkpoint_key(
+    candidate: &EvidenceCandidate,
+    capability: AnalysisCapability,
+) -> super::AnalysisCheckpointKey {
+    (
+        candidate.file_id.0.clone(),
+        capability.key.into(),
+        candidate.size,
+        candidate.content_identity.clone(),
+    )
+}
 
 pub(super) fn completion(
     context: &CandidateProcessingContext<'_>,

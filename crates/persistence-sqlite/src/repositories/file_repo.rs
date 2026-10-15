@@ -1,6 +1,7 @@
 use rusqlite::Connection;
 
 mod browse;
+mod indexing;
 mod lookup;
 mod mapping;
 mod registry_hives;

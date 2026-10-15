@@ -18,7 +18,14 @@ pub(super) fn load(
     entry: &FileEntry,
     size: usize,
     companions: Vec<FileEntry>,
-) -> Result<(Vec<u8>, RegistryRecoveryDto), RegistryBrowserError> {
+) -> Result<
+    (
+        Vec<u8>,
+        RegistryRecoveryDto,
+        Vec<artifacts_windows::registry::browser::ProvenanceSpan>,
+    ),
+    RegistryBrowserError,
+> {
     let mut logs = companion_logs::sources(companions, &entry.name);
     let log_bytes = companion_logs::sizes(context, &mut logs);
     state.reserve(reservation(size, log_bytes))?;
@@ -63,7 +70,7 @@ pub(super) fn load(
         Some(result_hash),
         logs.into_iter().map(|l| l.metadata).collect(),
     );
-    Ok((recovered.bytes, summary))
+    Ok((recovered.bytes, summary, recovered.provenance))
 }
 fn reservation(snapshot: usize, log_bytes: usize) -> usize {
     snapshot + snapshot.div_ceil(64) + log_bytes + METADATA_BUDGET + REPLAY_WORK_BYTES

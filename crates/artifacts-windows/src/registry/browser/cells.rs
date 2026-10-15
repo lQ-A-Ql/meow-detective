@@ -1,4 +1,4 @@
-use super::{BrowserError, HiveSnapshot};
+use super::{BrowserError, BrowserOverlaySource, HiveSnapshot, ProvenanceSpan};
 use std::sync::Arc;
 
 pub(super) fn u16_at(data: &[u8], at: usize) -> Result<u16, BrowserError> {
@@ -45,10 +45,55 @@ impl HiveSnapshot {
             minor,
             partial: false,
             dirty,
+            provenance: Vec::new(),
         };
         hive.index_cells()?;
         hive.key(root, String::new())?;
         Ok(hive)
+    }
+
+    pub fn open_with_provenance(
+        bytes: Arc<Vec<u8>>,
+        provenance: Vec<ProvenanceSpan>,
+    ) -> Result<Self, BrowserError> {
+        let mut hive = Self::open(bytes)?;
+        hive.provenance = provenance;
+        Ok(hive)
+    }
+
+    pub(super) fn overlay_for_range(&self, start: usize, end: usize) -> BrowserOverlaySource {
+        let mut recovered = false;
+        let mut base = false;
+        for span in &self.provenance {
+            if span.start < end && span.end > start {
+                recovered = true;
+            }
+        }
+        if start < end {
+            let mut cursor = start;
+            for span in &self.provenance {
+                if span.start > cursor {
+                    base = true;
+                }
+                if span.start <= cursor && span.end > cursor {
+                    cursor = span.end.min(end);
+                }
+            }
+            if cursor < end {
+                base = true;
+            }
+        }
+        match (base, recovered) {
+            (false, true) => BrowserOverlaySource::Recovered,
+            (true, false) => BrowserOverlaySource::Base,
+            (true, true) => BrowserOverlaySource::Merged,
+            (false, false) => BrowserOverlaySource::Base,
+        }
+    }
+
+    pub(super) fn overlay_for_cell(&self, offset: u32, length: usize) -> BrowserOverlaySource {
+        let start = 4096usize.saturating_add(offset as usize);
+        self.overlay_for_range(start, start.saturating_add(length.saturating_add(4)))
     }
 
     fn index_cells(&mut self) -> Result<(), BrowserError> {

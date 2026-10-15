@@ -26,6 +26,8 @@ export interface SearchFileHit {
   system: boolean;
   encrypted: boolean;
   matchSource?: string;
+  matchedSources?: string[];
+  snippet?: string;
 }
 
 export interface SearchRequestOptions {

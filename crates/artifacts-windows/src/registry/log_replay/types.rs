@@ -110,6 +110,7 @@ pub struct LogReplayFailure {
 pub struct ReplayedHive {
     pub bytes: Vec<u8>,
     pub report: LogReplayReport,
+    pub provenance: Vec<crate::registry::browser::ProvenanceSpan>,
 }
 
 pub struct LogReplayPlan<'a> {

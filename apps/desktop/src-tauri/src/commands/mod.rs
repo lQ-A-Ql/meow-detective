@@ -5,6 +5,7 @@ pub mod case_commands;
 pub(crate) mod command_support;
 pub mod digest_commands;
 pub mod emulation_commands;
+pub mod evidence_task_commands;
 pub mod file_commands;
 pub mod graph_commands;
 pub mod import;

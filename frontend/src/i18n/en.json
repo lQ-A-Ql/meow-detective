@@ -1,5 +1,15 @@
 {
+  "evidenceTask": {
+    "scanned": "Scanned {{processed}} entries",
+    "entries": "{{processed}} / {{total}} entries",
+    "states": { "queued": "Queued", "running": "Processing evidence", "cancelling": "Cancelling", "completed": "Completed", "failed": "Failed", "cancelled": "Cancelled" },
+    "progress": "{{processed}} / {{total}} bytes", "progressLabel": "Evidence task progress", "failed": "Evidence task failed ({{code}}). Retry to create a new attempt."
+  },
+  "evidenceDigest": { "scope": "Digest scope", "revision": "Evidence revision", "stale": "Evidence has changed; recalculate this result", "historyFailed": "Digest history could not be read", "scopes": { "containerFile": "Container file", "containerSet": "Container set", "logicalDisk": "Logical disk", "partition": "Partition", "file": "Logical file", "derivedEvidence": "Derived evidence" } },
+  "nestedEvidence": { "title": "Nested evidence import", "openResult": "Browse derived evidence" },
+  "contentIndex": { "build": "Build content index", "selectSource": "Select one source to build or inspect its content index", "complete": "Content classification complete ({{expected}} entries)", "notBuilt": "Content index not built ({{expected}} entries)", "stale": "Evidence changed; rebuild the content index", "coverageFailed": "Could not read content coverage", "statuses": { "indexed": "Text indexed", "binary": "Binary", "oversized": "Over size limit", "unreadable": "Unreadable", "unsupportedEncoding": "Unsupported encoding", "notApplicable": "Not applicable" }, "sources": { "metadata": "Metadata", "filename": "Filename", "path": "Path", "content": "Indexed content", "artifactField": "Artifact field" } },
   "common": {
+    "retry": "Retry",
     "clipboardUnavailable": "Clipboard access is unavailable or was denied",
     "close": "Close",
     "dataSourceKinds": {
@@ -928,6 +938,7 @@
       "showHidden": "Show hidden files"
     },
     "contextMenu": {
+      "openNested": "Open as nested evidence",
       "label": "{{name}} actions menu"
     },
     "preview": {

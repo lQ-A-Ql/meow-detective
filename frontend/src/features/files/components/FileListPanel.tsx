@@ -74,6 +74,7 @@ export interface FileListPanelProps {
   goToPreviousRows: () => void;
   goToNextRows: () => void;
   onExtractFile: (file: FileEntryRow) => void;
+  onOpenNested?: (file: FileEntryRow) => void;
 }
 
 export function FileListPanel({
@@ -95,6 +96,7 @@ export function FileListPanel({
   goToPreviousRows,
   goToNextRows,
   onExtractFile,
+  onOpenNested,
 }: FileListPanelProps) {
   const { t } = useTranslation();
   const selectedFile = sortedRows.find((row) => row.id === selectedFileId);
@@ -174,6 +176,7 @@ export function FileListPanel({
       <FileEntryContextMenu
         file={row}
         onExtractFile={onExtractFile}
+        onOpenNested={onOpenNested}
       >
         {trigger}
       </FileEntryContextMenu>

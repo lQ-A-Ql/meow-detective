@@ -12,6 +12,8 @@ import { useRegistryTreeKeyboard } from './hooks/use-registry-tree-keyboard';
 import { filterRegistryTree, flattenRegistryTree, registryTreeNodes } from './tree-model';
 import { useRegistryTreeViewport } from './hooks/use-registry-tree-viewport';
 import { useRegistrySessionCache } from './hooks/use-registry-session-cache';
+import { useRegistrySearch } from './hooks/use-registry-search';
+import type { RegistrySearchHit } from '@/types/registryBrowser';
 import { registryBrowserErrorCode } from './errors';
 import { registryFiletimeUtc, registryValueRows } from './value-model';
 import { recoveryFailureDetails } from './recovery-model';
@@ -27,10 +29,10 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   const session = hive.session;
   useRegistrySessionCache(session?.sessionId);
   const tree = useRegistryTree(client, session);
-  const [selection, setSelection] = useState<{ sessionId: string; key: RegistryKeyMetadata }>();
+  const [selection, setSelection] = useState<{ sessionId: string; key: RegistryKeyMetadata; initialValuesCursor?: string }>();
   const selectedKey = selection?.sessionId === session?.sessionId ? selection?.key : session?.rootKey;
   const [valueSelection, setValueSelection] = useState<{ sessionId: string; keyId: string; valueId: string }>();
-  const values = useRegistryValues(client, session, selectedKey);
+  const values = useRegistryValues(client, session, selectedKey, selection?.sessionId === session?.sessionId ? selection?.initialValuesCursor : undefined);
   const rawValues = useMemo(() => values.data?.pages.flatMap((page) => page.values) ?? [], [values.data]);
   const selectedValue = valueSelection && valueSelection.sessionId === session?.sessionId && valueSelection.keyId === selectedKey?.keyId
     ? rawValues.find((value) => value.valueId === valueSelection.valueId) : undefined;
@@ -41,8 +43,7 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   useEffect(() => { if (expired) hive.expire(); }, [expired, hive.expire]);
   const [detailTab, setDetailTab] = useState<RegistryDetailTab>('decoded');
   const [filter, setFilter] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchPage, setSearchPage] = useState<import('@/types/registryBrowser').RegistrySearchPage>();
+  const registrySearch = useRegistrySearch(session);
   const [pathInput, setPathInput] = useState('');
   const [pathError, setPathError] = useState<unknown>();
   const [locating, setLocating] = useState(false);
@@ -100,6 +101,7 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
       if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
       setSelection({ sessionId, key }); setPathInput(key.path); setValueSelection(undefined); setOffset(0);
       keyboard.setFocusedId(key.keyId);
+      return key;
     } catch (error) {
       if (token === navigationEpoch.current && activeSession.current === sessionId) setPathError(error);
     } finally { if (token === navigationEpoch.current) setLocating(false); }
@@ -128,10 +130,20 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     try { await navigator.clipboard.writeText(text); if (token === navigationEpoch.current) setCopyStatus(t('registryBrowser.copied')); }
     catch { if (token === navigationEpoch.current) setCopyStatus(t('registryBrowser.copyFailed')); }
   };
-  const search = useCallback(async () => {
-    if (!session || !searchQuery.trim()) { setSearchPage(undefined); return; }
-    setSearchPage(await client.searchHive({ sessionId: session.sessionId, query: searchQuery }));
-  }, [client, searchQuery, session]);
+  const locateSearchHit = async (hit: RegistrySearchHit) => {
+    if (!session) return;
+    const sessionId = session.sessionId;
+    const key = await locate(hit.path);
+    if (!key || activeSession.current !== sessionId || !client.locateSearchHit) return;
+    const token = navigationEpoch.current;
+    try {
+      const target = await client.locateSearchHit({ sessionId, keyPath: hit.path, keyCellOffset: hit.keyCellOffset ?? key.cellOffset, ...(hit.kind === 'value' ? { valueCellOffset: hit.cellOffset, valueIndex: hit.valueIndex } : {}) });
+      if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
+      setSelection({ sessionId, key: target.key, initialValuesCursor: target.valuesCursor });
+      setValueSelection(target.value ? { sessionId, keyId: target.key.keyId, valueId: target.value.valueId } : undefined);
+      setOffset(hit.dataOffset ?? 0);
+    } catch (error) { if (token === navigationEpoch.current && activeSession.current === sessionId) setPathError(error); }
+  };
   const errorText = (error: unknown) => error ? t(`registryBrowser.errors.${registryBrowserErrorCode(error)}`) : undefined;
   const pages = values.data?.pages ?? [];
   const keyTime = registryFiletimeUtc(selectedKey?.lastWriteFiletime) ?? t('registryBrowser.unknown');
@@ -146,6 +158,7 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     [t('registryBrowser.keyPath'), selectedKey?.path || '\\'],
     [t('registryBrowser.type'), selectedValue ? `${selectedValue.typeName} (${selectedValue.typeCode})` : undefined],
     [t('registryBrowser.cellOffset'), selectedValue ? `0x${selectedValue.cellOffset.toString(16)}` : undefined],
+    [t('registryBrowser.provenance'), selectedValue?.dataOverlaySource ?? selectedKey?.overlaySource],
     [t('registryBrowser.lastWrite'), keyTime],
     [t('registryBrowser.filetime'), selectedKey?.lastWriteFiletime],
   ].map(([name, value]) => ({ name: name!, value: value ?? t('registryBrowser.unknown') }));
@@ -154,7 +167,7 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   }) : t('registryBrowser.previewOnly');
   return {
     t, instanceId, context, hives, session, selectedKey, selectedValue, range, values,
-    searchQuery, setSearchQuery, searchPage, search,
+    registrySearch, locateSearchHit,
     nodes, keyboard, viewport, activate, toggle, openHive, selectKey, filter, setFilter,
     pathInput, setPathInput, locate, locating, detailTab, setDetailTab, offset, provenance, rangeSummary, selectedValueLabel,
     previousRange: () => setOffset((value) => Math.max(0, value - REGISTRY_BROWSER_LAYOUT.valueRangeBytes)),

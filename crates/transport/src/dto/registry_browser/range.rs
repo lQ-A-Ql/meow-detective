@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::RegistryBrowserDiagnosticDto;
+use super::{RegistryBrowserDiagnosticDto, RegistryOverlaySourceDto};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +30,7 @@ pub struct RegistryValueRangeDto {
     pub bytes: Vec<u8>,
     pub eof: bool,
     pub decode_status: RegistryValueDecodeStatusDto,
+    pub overlay_source: RegistryOverlaySourceDto,
     pub diagnostics: Vec<RegistryBrowserDiagnosticDto>,
     /// Integers are strings, including QWORD values larger than 2^53.
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -21,8 +21,8 @@ export function BrandEmptyState({
       )}
     >
       <BrandWatermark
-        motif="sitting"
-        className="absolute -bottom-12 -right-2 h-36 opacity-[0.055]"
+        motif="file-preview"
+        className="watermark-empty"
       />
       <div className="relative font-serif text-[15px] font-light tracking-wide text-forensics-text">{title}</div>
       {description ? (

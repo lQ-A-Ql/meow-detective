@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 pub mod evidence_jobs;
-mod volumes;
+pub(crate) mod volumes;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EvidenceHashError {

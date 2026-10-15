@@ -15,8 +15,8 @@ import type { BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-
 import type { ApiErrorDto, ImageMetadata } from '@/types/models';
 import { ImageMetadataInspector } from '@/features/files/components/ImageMetadataInspector';
 import { NtfsTechnicalInspector } from '@/features/files/components/NtfsTechnicalInspector';
-import { FileDigestInspector } from '@/features/files/components/FileDigestInspector';
-import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
+import { EvidenceDigestInspector } from './EvidenceDigestInspector';
+import type { useEvidenceDigestModel } from '../hooks/use-evidence-digest-model';
 import type { NtfsTechnicalFile } from '@/types/files';
 import type { ntfsInspectorRuns } from '../ntfs-inspector-runs';
 import type { useNtfsTechnicalFile } from '../hooks/use-ntfs-technical-file';
@@ -43,11 +43,7 @@ interface FileBrowserInspectorProps {
   ntfsTechnicalRuns?: ReturnType<typeof ntfsInspectorRuns>;
   retryNtfsTechnical?: () => void;
   ntfsNavigation?: Pick<ReturnType<typeof useNtfsTechnicalFile>, 'hex' | 'selectHex' | 'setDecoded' | 'previousRuns' | 'nextRuns'>;
-  fileDigest?: EvidenceDigest;
-  fileDigestLoading?: boolean;
-  fileDigestErrorText?: string;
-  fileDigestAvailable?: boolean;
-  calculateFileDigest: (algorithm: DigestAlgorithm) => void;
+  evidenceDigest: ReturnType<typeof useEvidenceDigestModel>;
 }
 
 export function FileBrowserInspector({
@@ -72,11 +68,7 @@ export function FileBrowserInspector({
   ntfsTechnicalRuns,
   retryNtfsTechnical,
   ntfsNavigation,
-  fileDigest,
-  fileDigestLoading,
-  fileDigestErrorText,
-  fileDigestAvailable,
-  calculateFileDigest,
+  evidenceDigest,
 }: FileBrowserInspectorProps) {
   const { t } = useTranslation();
 
@@ -131,7 +123,7 @@ export function FileBrowserInspector({
           <InspectorValue value={selectedFile?.hashSha256 ?? '-'} mono />
         </InspectorSection>
 
-        <FileDigestInspector digest={fileDigest} loading={Boolean(fileDigestLoading)} error={fileDigestErrorText} available={Boolean(fileDigestAvailable)} onCalculate={calculateFileDigest} />
+        <EvidenceDigestInspector model={evidenceDigest} />
         <NtfsTechnicalInspector technical={ntfsTechnical} eligible={ntfsTechnicalEligible} loading={ntfsTechnicalLoading} errorText={ntfsTechnicalErrorText} unsupported={ntfsTechnicalUnsupported} runs={ntfsTechnicalRuns} onRetry={retryNtfsTechnical} navigation={ntfsNavigation} />
 
         {selectedFile?.entryType === 'file' && (imageMetadata || imageMetadataLoading || imageMetadataError) ? (

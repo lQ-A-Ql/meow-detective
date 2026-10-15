@@ -137,7 +137,14 @@ export function EmulationWorkspace({ model, settingsOpen, onSettingsOpenChange }
                 ))}
               </div>
             )}
-            {model.metrics.activeCount === 0 ? <BrandWatermark motif="resting-cat" className="watermark-emulation" /> : null}
+            {model.metrics.activeCount === 0 ? (
+              <>
+                <div className="emulation-artwork-space">
+                  <BrandWatermark motif="moon-cat" className="ornament-emulation" />
+                </div>
+                <BrandWatermark motif="emulation" className="watermark-emulation" />
+              </>
+            ) : null}
           </WorkspaceCard>
         </ScrollArea>
       )}

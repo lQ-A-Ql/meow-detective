@@ -10,6 +10,7 @@ use persistence_sqlite::repositories::{
     nested_evidence_repo::NestedEvidenceRepo,
 };
 use rusqlite::Connection;
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use transport::dto::{NestedEvidenceLineageDto, NestedEvidenceMaterializedDto};
 
@@ -20,6 +21,8 @@ const MAX_VHD_BYTES: u64 = 512 * 1024 * 1024 * 1024;
 
 #[derive(Debug, Error)]
 pub enum MaterializeError {
+    #[error("nested evidence task cancelled")]
+    Cancelled,
     #[error("nested evidence source is not ready: {0}")]
     Source(String),
     #[error("nested file is not a regular file")]
@@ -50,16 +53,39 @@ pub fn materialize_fixed_vhd(
     parent_data_source_id: &str,
     file_entry_id: &str,
 ) -> Result<NestedEvidenceMaterializedDto, NestedEvidenceError> {
+    materialize_fixed_vhd_with_cancel(
+        case_conn,
+        case_root,
+        case_id,
+        parent_data_source_id,
+        file_entry_id,
+        &std::sync::atomic::AtomicBool::new(false),
+        &|_, _| {},
+    )
+}
+
+pub fn materialize_fixed_vhd_with_cancel(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    parent_data_source_id: &str,
+    file_entry_id: &str,
+    cancel: &std::sync::atomic::AtomicBool,
+    progress: &(dyn Fn(u64, u64) + Sync),
+) -> Result<NestedEvidenceMaterializedDto, NestedEvidenceError> {
     materialize_inner(
         case_conn,
         case_root,
         case_id,
         parent_data_source_id,
         file_entry_id,
+        cancel,
+        progress,
     )
     .map_err(|error| match error {
         MaterializeError::Database(error) => NestedEvidenceError::Database(error),
-        other => NestedEvidenceError::Materialization(other.to_string()),
+        MaterializeError::Cancelled => NestedEvidenceError::Cancelled,
+        other => NestedEvidenceError::Materialization(other),
     })
 }
 
@@ -69,32 +95,14 @@ fn materialize_inner(
     case_id: &CaseId,
     parent_id: &str,
     file_id: &str,
+    cancel: &std::sync::atomic::AtomicBool,
+    progress: &(dyn Fn(u64, u64) + Sync),
 ) -> Result<NestedEvidenceMaterializedDto, MaterializeError> {
+    if cancel.load(std::sync::atomic::Ordering::Acquire) {
+        return Err(MaterializeError::Cancelled);
+    }
     let parent = DataSourceId(parent_id.to_string());
-    let owner = DataSourceRepo::new(case_conn).case_id(&parent)?;
-    if owner != *case_id {
-        return Err(MaterializeError::Source(
-            "parent source is outside the active case".into(),
-        ));
-    }
-    let ready =
-        crate::source_db::open_ready_source_read_only_by_id(case_conn, case_root, case_id, &parent)
-            .map_err(|error| MaterializeError::Source(error.to_string()))?;
-    let entry = FileRepo::new(&ready.connection)
-        .find_by_id(&FileEntryId(file_id.to_string()))?
-        .ok_or_else(|| MaterializeError::Source("nested file was not found".into()))?;
-    if entry.data_source_id != parent {
-        return Err(MaterializeError::Source(
-            "file does not belong to parent source".into(),
-        ));
-    }
-    if entry.entry_type != domain::EntryType::File {
-        return Err(MaterializeError::NotFile);
-    }
-    let size = entry.size.ok_or(MaterializeError::UnsupportedFormat)?;
-    if !(512..=MAX_VHD_BYTES).contains(&size) {
-        return Err(MaterializeError::TooLarge);
-    }
+    let (ready, entry, size) = load_entry(case_conn, case_root, case_id, &parent, file_id)?;
     let mut reader = crate::file_service::SourceReadContext::new(
         &ready.connection,
         case_conn,
@@ -107,22 +115,70 @@ fn materialize_inner(
             .map_err(|error| MaterializeError::Source(error.to_string()))?;
     validate_fixed_vhd_footer(&footer, size)?;
 
-    let derived_id = DataSourceId(format!("nested-{}", uuid::Uuid::new_v4()));
+    let global_id = format!("ds:{parent_id}:{file_id}");
+    let target = crate::digest_service::DigestTarget {
+        data_source_id: Some(parent_id),
+        file_id: Some(&global_id),
+        partition_index: None,
+    };
+    let revision =
+        crate::digest_service::identity::snapshot(case_conn, case_root, case_id, &target)
+            .map_err(|error| MaterializeError::Source(error.to_string()))?
+            .revision;
+    let derived_id = DataSourceId(format!(
+        "nested-{}",
+        &hex::encode(Sha256::digest(format!("{parent_id}:{file_id}:{revision}")))[..32]
+    ));
+    if super::reuse::verify_existing(
+        case_conn,
+        case_root,
+        case_id,
+        &derived_id,
+        size,
+        cancel,
+        progress,
+    )? {
+        return Ok(materialized_result(
+            parent, entry.id.0, entry.path, derived_id, size,
+        ));
+    }
     let (output_path, temp_path) = prepare_output_paths(case_root, &derived_id)?;
-    let write_result = copy_entry(&mut reader, &entry.id, size, &temp_path, &output_path);
-    if write_result.is_err() {
-        let _ = fs::remove_file(&temp_path);
-        return write_result.map(|_| unreachable!());
+    let write_result = copy_entry(
+        &mut reader,
+        &entry.id,
+        size,
+        &temp_path,
+        &output_path,
+        cancel,
+        progress,
+    );
+    let hash = match write_result {
+        Ok(hash) => hash,
+        Err(error) => {
+            let _ = fs::remove_file(&temp_path);
+            return Err(error);
+        }
+    };
+    let unchanged =
+        crate::digest_service::identity::snapshot(case_conn, case_root, case_id, &target)
+            .map(|current| current.revision == revision)
+            .unwrap_or(false);
+    if !unchanged || cancel.load(std::sync::atomic::Ordering::Acquire) {
+        let _ = fs::remove_file(&output_path);
+        return Err(if unchanged {
+            MaterializeError::Cancelled
+        } else {
+            MaterializeError::Source("parent evidence changed during materialization".into())
+        });
     }
     let registration = register_materialized_vhd(
         case_conn,
         case_id,
         &parent,
-        &entry.path,
-        &entry.id.0,
+        &entry,
         &derived_id,
         &output_path,
-        size,
+        &hash,
     );
     if let Err(error) = registration {
         let _ = fs::remove_file(&output_path);
@@ -133,11 +189,51 @@ fn materialize_inner(
     ))
 }
 
+fn load_entry(
+    conn: &Connection,
+    root: &Path,
+    case: &CaseId,
+    parent: &DataSourceId,
+    file_id: &str,
+) -> Result<
+    (
+        crate::source_db::ReadySourceConnection,
+        domain::FileEntry,
+        u64,
+    ),
+    MaterializeError,
+> {
+    if DataSourceRepo::new(conn).case_id(parent)? != *case {
+        return Err(MaterializeError::Source(
+            "parent source is outside the active case".into(),
+        ));
+    }
+    let ready = crate::source_db::open_ready_source_read_only_by_id(conn, root, case, parent)
+        .map_err(|error| MaterializeError::Source(error.to_string()))?;
+    let entry = FileRepo::new(&ready.connection)
+        .find_by_id(&FileEntryId(file_id.into()))?
+        .ok_or_else(|| MaterializeError::Source("nested file was not found".into()))?;
+    if entry.data_source_id != *parent {
+        return Err(MaterializeError::Source(
+            "file does not belong to parent source".into(),
+        ));
+    }
+    if !entry.is_file() {
+        return Err(MaterializeError::NotFile);
+    }
+    let size = entry.size.ok_or(MaterializeError::UnsupportedFormat)?;
+    if !(512..=MAX_VHD_BYTES).contains(&size) {
+        return Err(MaterializeError::TooLarge);
+    }
+    Ok((ready, entry, size))
+}
+
 fn prepare_output_paths(
     case_root: &Path,
     derived_id: &DataSourceId,
 ) -> Result<(std::path::PathBuf, std::path::PathBuf), MaterializeError> {
     let output_dir = case_root.join("derived").join("nested-evidence");
+    crate::source_db::safe_case_managed_destination(case_root, &output_dir)?;
     fs::create_dir_all(&output_dir)?;
     let canonical_root = case_root.canonicalize()?;
     let canonical_output_dir = output_dir.canonicalize()?;
@@ -148,8 +244,16 @@ fn prepare_output_paths(
     }
     let output_path = output_dir.join(format!("{}.vhd", derived_id.0));
     let temp_path = output_dir.join(format!("{}.tmp", derived_id.0));
-    if output_path.exists() || temp_path.exists() {
-        return Err(MaterializeError::Conflict);
+    // These generated names identify unpublished files left by an interrupted
+    // attempt. Registered sources are verified by reuse before reaching here.
+    for path in [&output_path, &temp_path] {
+        if path.try_exists()? {
+            let metadata = fs::symlink_metadata(path)?;
+            if !metadata.is_file() || metadata.file_type().is_symlink() {
+                return Err(MaterializeError::Conflict);
+            }
+            fs::remove_file(path)?;
+        }
     }
     Ok((output_path, temp_path))
 }
@@ -158,23 +262,22 @@ fn register_materialized_vhd(
     case_conn: &Connection,
     case_id: &CaseId,
     parent: &DataSourceId,
-    nested_file_path: &str,
-    parent_file_id: &str,
+    entry: &domain::FileEntry,
     derived_id: &DataSourceId,
     output_path: &Path,
-    size: u64,
+    hash: &str,
 ) -> Result<(), persistence_sqlite::DbError> {
     let derived = DataSource {
         id: derived_id.clone(),
-        name: format!("Nested VHD: {nested_file_path}"),
+        name: format!("Nested VHD: {}", entry.path),
         kind: DataSourceKind::Raw,
         source_path: output_path.to_path_buf(),
         imported_at: chrono::Utc::now(),
         provenance: DataSourceProvenance {
-            source_hash_sha256: None,
-            hash_status: DataSourceHashStatus::Pending,
+            source_hash_sha256: Some(hash.into()),
+            hash_status: DataSourceHashStatus::Hashed,
             canonical_source_path: Some(output_path.to_path_buf()),
-            evidence_size: Some(size),
+            evidence_size: entry.size,
             reader_kind: Some("vhd-fixed".into()),
             provenance_status: DataSourceProvenanceStatus::Recorded,
             warnings: vec!["derived source pending import pipeline".into()],
@@ -182,11 +285,11 @@ fn register_materialized_vhd(
     };
     let lineage = NestedEvidenceLineage {
         parent_data_source_id: parent.clone(),
-        nested_file_path: nested_file_path.to_string(),
-        parent_file_id: Some(parent_file_id.to_string()),
+        nested_file_path: entry.path.clone(),
+        parent_file_id: Some(entry.id.0.clone()),
         derived_data_source_id: Some(derived_id.clone()),
         offset: 0,
-        length: size,
+        length: entry.size.unwrap_or_default(),
         probe_kind: "vhd-fixed".into(),
     };
     let transaction = case_conn
@@ -195,7 +298,11 @@ fn register_materialized_vhd(
     DataSourceRepo::new(&transaction).insert_with_storage(
         case_id,
         &derived,
-        &DataSourceStorage::source_db(&derived_id.0, Some("windows"), Some("nested_vhd".into())),
+        &DataSourceStorage::source_db(
+            &derived_id.0,
+            Some(super::platform::detect(output_path)?),
+            Some("nested_vhd".into()),
+        ),
     )?;
     NestedEvidenceRepo::new(&transaction).upsert(&lineage)?;
     transaction
@@ -236,7 +343,20 @@ fn validate_fixed_vhd_footer(footer: &[u8], size: u64) -> Result<(), Materialize
     // payload must fit entirely before it.  Allowing `virtual_size == size`
     // would register a source whose logical reader exposes footer bytes.
     let payload_len = size.saturating_sub(512);
-    if disk_type != 2 || virtual_size == 0 || virtual_size > payload_len {
+    let version = u32::from_be_bytes(footer[12..16].try_into().expect("fixed slice"));
+    let checksum = u32::from_be_bytes(footer[64..68].try_into().expect("fixed slice"));
+    let sum = footer
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !(64..68).contains(i))
+        .fold(0u32, |sum, (_, byte)| sum.wrapping_add(u32::from(*byte)));
+    if disk_type != 2
+        || version != 0x0001_0000
+        || checksum != !sum
+        || virtual_size == 0
+        || virtual_size != payload_len
+        || virtual_size % 512 != 0
+    {
         return Err(MaterializeError::UnsupportedFormat);
     }
     Ok(())
@@ -248,23 +368,39 @@ fn copy_entry(
     size: u64,
     temp_path: &Path,
     output_path: &Path,
-) -> Result<(), MaterializeError> {
-    let mut output = fs::File::create(temp_path)?;
+    cancel: &std::sync::atomic::AtomicBool,
+    progress: &(dyn Fn(u64, u64) + Sync),
+) -> Result<String, MaterializeError> {
+    let mut output = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(temp_path)?;
     let mut offset = 0u64;
+    let mut hash = Sha256::new();
     while offset < size {
+        if cancel.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(MaterializeError::Cancelled);
+        }
         let amount = (size - offset).min(u64::from(CHUNK_BYTES)) as u32;
         let bytes =
             crate::file_service::read_file_bytes_for_case(&mut *reader, file_id, offset, amount)
                 .map_err(|error| MaterializeError::Source(error.to_string()))?;
-        if bytes.is_empty() {
+        if bytes.is_empty() || bytes.len() > amount as usize {
             return Err(MaterializeError::Source(
                 "source returned an empty range".into(),
             ));
         }
         output.write_all(&bytes)?;
-        offset = offset.saturating_add(bytes.len() as u64);
+        hash.update(&bytes);
+        offset += bytes.len() as u64;
+        progress(offset, size);
     }
     output.sync_all()?;
-    fs::rename(temp_path, output_path)?;
-    Ok(())
+    if cancel.load(std::sync::atomic::Ordering::Acquire) {
+        return Err(MaterializeError::Cancelled);
+    }
+    drop(output);
+    fs::hard_link(temp_path, output_path)?;
+    fs::remove_file(temp_path)?;
+    Ok(hex::encode(hash.finalize()))
 }

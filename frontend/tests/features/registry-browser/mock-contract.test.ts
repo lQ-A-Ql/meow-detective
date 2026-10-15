@@ -9,7 +9,7 @@ import i18n from '@/i18n';
 describe('registry browser wire and synthetic adapter', () => {
   it('preserves the shared Rust session shape and decimal FILETIME', () => {
     const session: RegistryHiveSession = { ...wire.session, source: { ...wire.session.source, view: 'base' },
-      hive: { ...wire.session.hive, readState: 'readable' }, rootKey: { ...wire.session.rootKey, readState: 'readable' } };
+      hive: { ...wire.session.hive, readState: 'readable' }, rootKey: { ...wire.session.rootKey, readState: 'readable', overlaySource: 'base' } };
     expect(JSON.parse(JSON.stringify(session))).toEqual(wire.session);
     expect(session.rootKey.lastWriteFiletime).toBe('133700000000000001');
     expect(registryFiletimeUtc(session.rootKey.lastWriteFiletime)).toMatch(/Z$/);

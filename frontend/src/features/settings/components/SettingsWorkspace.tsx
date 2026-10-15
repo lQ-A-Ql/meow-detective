@@ -35,8 +35,9 @@ export function SettingsWorkspace({ model }: SettingsWorkspaceProps) {
 
   return (
     <WorkspaceFrame>
-      <WorkspaceCard className="hidden w-52 shrink-0 xl:block">
+      <WorkspaceCard className="relative hidden w-52 shrink-0 xl:block">
         <AnchorNav items={anchors} label={t('settings.anchors.label')} className="workspace-content" />
+        <BrandWatermark motif="ink-botanicals" className="ornament-settings" />
       </WorkspaceCard>
       <WorkspaceCard className="relative isolate flex min-h-0 flex-1 flex-col">
         <ScrollArea className="min-h-0 flex-1" viewportClassName="workspace-content space-y-8">
@@ -62,7 +63,7 @@ export function SettingsWorkspace({ model }: SettingsWorkspaceProps) {
       <ActionBar note={settingsMessage}>
         <IconButton label={t('settings.actions.save')} variant="solid" onClick={() => void saveSettings()} disabled={savingSettings}><ActionIcon name="save" /></IconButton>
       </ActionBar>
-      <BrandWatermark motif="headphones-portrait" className="watermark-settings" />
+      <BrandWatermark motif="settings" className="watermark-settings" />
       </WorkspaceCard>
     </WorkspaceFrame>
   );

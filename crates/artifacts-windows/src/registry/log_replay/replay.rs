@@ -16,10 +16,12 @@ impl LogReplayPlan<'_> {
             return Ok(ReplayedHive {
                 bytes,
                 report: self.report,
+                provenance: Vec::new(),
             });
         }
         let mut expected = None;
         let mut last = None;
+        let mut provenance = Vec::new();
         let mut header = self.base.bytes;
         for index in &self.order {
             let log = &self.logs[*index];
@@ -41,6 +43,10 @@ impl LogReplayPlan<'_> {
                     let at = 4096 + page.offset;
                     bytes[at..at + page.length]
                         .copy_from_slice(&log.data[page.data_start..page.data_start + page.length]);
+                    provenance.push(crate::registry::browser::ProvenanceSpan {
+                        start: at,
+                        end: at + page.length,
+                    });
                 }
                 header[40..44].copy_from_slice(&(record.bins as u32).to_le_bytes());
                 if log.format == LogFormat::Hvle {
@@ -98,6 +104,7 @@ impl LogReplayPlan<'_> {
         Ok(ReplayedHive {
             bytes,
             report: self.report,
+            provenance,
         })
     }
 }

@@ -1,0 +1,290 @@
+import { useTranslation } from 'react-i18next';
+import { useEffect, useRef, useState } from 'react';
+import type { GraphEdge, GraphNode } from '@/types/models';
+import { deterministicNodePosition, degreeMap, fitTransform, tickSimulation, type SimulationNode } from './logic/graph-utils';
+
+
+const MAX_SIMULATION_TICKS = 240;
+
+const STABLE_TICK_TARGET = 12;
+
+const STABLE_VELOCITY_THRESHOLD = 0.03;
+
+
+interface ForceGraphProps {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  selectedNodeId?: string;
+  selectedEdgeId?: string;
+  onNodeClick?: (node: GraphNode) => void;
+  onNodeDoubleClick?: (node: GraphNode) => void;
+  onEdgeClick?: (edge: GraphEdge) => void;
+  onBackgroundClick?: () => void;
+  width: number;
+  height: number;
+  running?: boolean;
+}
+
+
+function capturePointer(target: Element, pointerId: number) {
+  try {
+    target.setPointerCapture(pointerId);
+  } catch {
+    // Older WebViews can reject capture while the pointer is transitioning.
+  }
+}
+
+
+function releasePointer(target: Element, pointerId: number) {
+  try {
+    if (target.hasPointerCapture(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+  } catch {
+    // Capture may already have been released by the host WebView.
+  }
+}
+export function useForceGraphModel({
+  nodes,
+  edges,
+  selectedNodeId,
+  selectedEdgeId,
+  onNodeClick,
+  onNodeDoubleClick,
+  onEdgeClick,
+  onBackgroundClick,
+  width,
+  height,
+  running = true,
+}: ForceGraphProps) {
+
+  const { t } = useTranslation();
+
+  const containerRef = useRef<SVGSVGElement>(null);
+
+  const [positions, setPositions] = useState<Map<string, SimulationNode>>(new Map());
+
+  const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
+
+  const initialFitRef = useRef(false);
+
+  const simulationTickRef = useRef(0);
+
+  const stableTickRef = useRef(0);
+
+  const dragNodeIdRef = useRef<string | null>(null);
+
+  const isPanningRef = useRef(false);
+
+  const lastPointerRef = useRef({ x: 0, y: 0 });
+
+
+  useEffect(() => {
+    const clearPointerInteraction = () => {
+      dragNodeIdRef.current = null;
+      isPanningRef.current = false;
+    };
+    window.addEventListener('pointerup', clearPointerInteraction);
+    window.addEventListener('pointercancel', clearPointerInteraction);
+    window.addEventListener('blur', clearPointerInteraction);
+    return () => {
+      window.removeEventListener('pointerup', clearPointerInteraction);
+      window.removeEventListener('pointercancel', clearPointerInteraction);
+      window.removeEventListener('blur', clearPointerInteraction);
+    };
+  }, []);
+
+
+  const degrees = degreeMap(nodes, edges);
+
+  const nodeSignature = nodes.map((node) => node.id).join('\0');
+
+
+  useEffect(() => {
+    initialFitRef.current = false;
+    simulationTickRef.current = 0;
+    stableTickRef.current = 0;
+  }, [nodeSignature, edges]);
+
+
+  // Initialize / merge positions when nodes change.
+  useEffect(() => {
+    if (width === 0 || height === 0) return;
+    setPositions((prev) => {
+      const next = new Map(prev);
+      let changed = false;
+      const nodeIds = new Set(nodes.map((n) => n.id));
+      for (const node of nodes) {
+        if (!next.has(node.id)) {
+          const degree = degrees.get(node.id) ?? 0;
+          const radius = 6 + Math.sqrt(degree) * 2;
+          const initial = deterministicNodePosition(node.id, width, height);
+          next.set(node.id, {
+            id: node.id,
+            x: initial.x,
+            y: initial.y,
+            vx: 0,
+            vy: 0,
+            radius,
+          });
+          changed = true;
+        }
+      }
+      for (const [id] of next) {
+        if (!nodeIds.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [nodes, edges, width, height]);
+
+
+  // Fit view once after positions are first populated.
+  useEffect(() => {
+    if (positions.size > 0 && !initialFitRef.current && width > 0 && height > 0) {
+      setTransform(fitTransform(positions, width, height));
+      initialFitRef.current = true;
+    }
+  }, [positions, width, height]);
+
+
+  // Simulation loop.
+  useEffect(() => {
+    if (!running || positions.size === 0 || width === 0 || height === 0) return;
+    let raf = 0;
+    const loop = () => {
+      if (
+        simulationTickRef.current >= MAX_SIMULATION_TICKS ||
+        stableTickRef.current >= STABLE_TICK_TARGET
+      ) {
+        return;
+      }
+      setPositions((prev) => {
+        const next = new Map(prev);
+        tickSimulation(next, edges, width, height);
+        simulationTickRef.current += 1;
+        const averageVelocity =
+          Array.from(next.values()).reduce(
+            (sum, node) => sum + Math.hypot(node.vx, node.vy),
+            0,
+          ) / Math.max(1, next.size);
+        stableTickRef.current =
+          averageVelocity < STABLE_VELOCITY_THRESHOLD ? stableTickRef.current + 1 : 0;
+        return next;
+      });
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [running, positions.size, edges, width, height]);
+
+
+  function screenToWorld(sx: number, sy: number) {
+    return {
+      x: (sx - transform.x) / transform.k,
+      y: (sy - transform.y) / transform.k,
+    };
+  }
+
+
+  function zoomAround(delta: number, sx: number, sy: number) {
+    const factor = delta > 0 ? 0.9 : 1.1;
+    const newK = Math.min(Math.max(transform.k * factor, 0.1), 5);
+    const world = screenToWorld(sx, sy);
+    setTransform({
+      x: sx - world.x * newK,
+      y: sy - world.y * newK,
+      k: newK,
+    });
+  }
+
+
+  function handlePointerDown(event: React.PointerEvent<SVGSVGElement>) {
+    const target = event.target as Element;
+    if (target.closest('[data-node]')) return;
+    if (event.button !== 0) return;
+    isPanningRef.current = true;
+    lastPointerRef.current = { x: event.clientX, y: event.clientY };
+    capturePointer(event.currentTarget, event.pointerId);
+  }
+
+
+  function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
+    const nodeId = dragNodeIdRef.current;
+    if (nodeId) {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const world = screenToWorld(event.clientX - rect.left, event.clientY - rect.top);
+      setPositions((prev) => {
+        const next = new Map(prev);
+        const n = next.get(nodeId);
+        if (n) {
+          n.x = world.x;
+          n.y = world.y;
+          n.vx = 0;
+          n.vy = 0;
+        }
+        return next;
+      });
+      return;
+    }
+    if (!isPanningRef.current) return;
+    const dx = event.clientX - lastPointerRef.current.x;
+    const dy = event.clientY - lastPointerRef.current.y;
+    lastPointerRef.current = { x: event.clientX, y: event.clientY };
+    setTransform((t) => ({ ...t, x: t.x + dx, y: t.y + dy }));
+  }
+
+
+  function handlePointerUp(event: React.PointerEvent<SVGSVGElement>) {
+    dragNodeIdRef.current = null;
+    isPanningRef.current = false;
+    releasePointer(event.currentTarget, event.pointerId);
+  }
+
+
+  function handleWheel(event: React.WheelEvent<SVGSVGElement>) {
+    event.preventDefault();
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const sx = event.clientX - rect.left;
+    const sy = event.clientY - rect.top;
+    zoomAround(event.deltaY, sx, sy);
+  }
+
+
+  function handleNodePointerDown(event: React.PointerEvent<SVGCircleElement>, node: GraphNode) {
+    event.stopPropagation();
+    dragNodeIdRef.current = node.id;
+    simulationTickRef.current = 0;
+    stableTickRef.current = 0;
+    lastPointerRef.current = { x: event.clientX, y: event.clientY };
+    capturePointer(event.currentTarget, event.pointerId);
+    onNodeClick?.(node);
+  }
+
+
+  function handleNodePointerUp(event: React.PointerEvent<SVGCircleElement>) {
+    dragNodeIdRef.current = null;
+    releasePointer(event.currentTarget, event.pointerId);
+  }
+
+
+  const showAllLabels = nodes.length <= 40;
+  const clearPointerInteraction = () => { dragNodeIdRef.current = null; isPanningRef.current = false; };
+  const zoomIn = () => setTransform((current) => ({ ...current, k: Math.min(current.k * 1.2, 5) }));
+  const zoomOut = () => setTransform((current) => ({ ...current, k: Math.max(current.k / 1.2, 0.1) }));
+  const fit = () => setTransform(fitTransform(positions, width, height));
+  const reset = () => {
+    initialFitRef.current = false;
+    setPositions((previous) => {
+      const next = new Map(previous);
+      for (const node of next.values()) { const initial = deterministicNodePosition(node.id, width, height); node.x = initial.x; node.y = initial.y; node.vx = 0; node.vy = 0; }
+      simulationTickRef.current = 0; stableTickRef.current = 0;
+      return next;
+    });
+  };
+return { clearPointerInteraction, zoomIn, zoomOut, fit, reset, nodes, edges, selectedNodeId, selectedEdgeId, onNodeDoubleClick, onEdgeClick, onBackgroundClick, width, height, t, containerRef, positions, setPositions, transform, setTransform, initialFitRef, simulationTickRef, stableTickRef, dragNodeIdRef, isPanningRef, degrees, handlePointerDown, handlePointerMove, handlePointerUp, handleWheel, handleNodePointerDown, handleNodePointerUp, showAllLabels };
+}

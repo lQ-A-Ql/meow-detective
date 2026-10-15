@@ -88,20 +88,7 @@ export function summarizeLeadKinds(lead: CorrelationLead) {
   return uniqueLabels.join(' / ');
 }
 
-export function isReviewLead(lead: CorrelationLead) {
-  return (
-    lead.caveats.length > 0
-    || lead.confidence === 'weak'
-    || lead.confidence === 'heuristic'
-    || lead.provenance.some(
-      (item) => item.guaranteeLevel === 'experimental' || item.guaranteeLevel === 'notGuaranteed',
-    )
-  );
-}
-
-export function isHighConfidenceLead(lead: CorrelationLead) {
-  return lead.confidence === 'direct' || lead.confidence === 'strong';
-}
+export { isReviewLead, isHighConfidenceLead } from '../correlation-lead-classifiers';
 
 export function Metric({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return <MetricCard label={label} value={value} mono={mono} size="sm" />;

@@ -30,6 +30,7 @@ impl ServiceErrorCategory for RegistryBrowserError {
             Self::Parser(BrowserError::Unsupported | BrowserError::Limit) => {
                 ErrorCategory::Unsupported
             }
+            Self::Parser(BrowserError::Cancelled) => ErrorCategory::Cancelled,
             Self::Parser(_) => ErrorCategory::Parser,
             Self::Busy => ErrorCategory::Validation,
             Self::Internal => ErrorCategory::Internal,
@@ -46,6 +47,7 @@ impl ServiceErrorCategory for RegistryBrowserError {
             Self::Parser(BrowserError::NotFound) => "keyNotFound",
             Self::Parser(BrowserError::Corrupt) => "corruptKey",
             Self::Parser(BrowserError::Unsupported) => "unsupportedHive",
+            Self::Parser(BrowserError::Cancelled) => "cancelled",
             Self::Busy => "browserBusy",
             Self::Internal => "failed",
             Self::Recovery(_) => "recoveryFailed",

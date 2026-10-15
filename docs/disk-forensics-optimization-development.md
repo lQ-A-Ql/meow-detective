@@ -462,39 +462,39 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
 - MCP 查询、数据源摘要、案件创建/删除用例拆分；
   - NTFS WOF XPRESS/LZX 按块读取和真实 E01 验证。
   - Stage 1 基础：多算法 Hash Scope 的六类范围后端已接入；不适用的源类型仍以 typed error fail-closed。文件 Hash Inspector 已隔离案件、对象与迟到请求；NTFS 基础 Inspector 已联通全局 MFT ID、状态与重试。全文索引已有扩展名和 content sniffing 核心。
-  - Stage 2 基础：Firefox Extensions 已接入浏览器制品；EXIF/GPS、Structured systemd、Git 元数据与有界 gzip 有基础实现，完整字段与 GitLab 专用结构化解析仍待验收。
+  - Stage 2：Firefox Extensions、EXIF/GPS、Structured systemd、Git/GitLab 元数据与有界 gzip 解析均已完成并纳入回归。
   - Stage 3：Fixed/Dynamic/Differencing VHD、VHDX 和无压缩 QCOW/QCOW2 只读读取、Registry Browser source-bound 查询。
-  - Stage 3 物化：从父源 FileEntry 校验并物化 Fixed VHD，派生源与 lineage 使用事务写入，输出采用临时文件和原子改名；结果仍为 pending，派生分区/文件系统导入尚未接通。
+  - Stage 3 物化：从父源 FileEntry 校验并物化 Fixed VHD，派生源与 lineage 使用事务写入，输出采用临时文件和原子改名；派生分区/文件系统导入由统一 evidence task 完成并可浏览。
 
   当前限制：
 
   - LogicalDisk 对 LocalDisk、Raw、AndroidSparse 使用逻辑字节流；Partition、File、DerivedEvidence 和容器范围均保留明确的输入边界，E01 不冒充原磁盘哈希。
   - VHDX parent chain、Dynamic/Differencing VHD、QCOW v1/v2/v3 无压缩 backing chain 均通过只读 block reader；压缩 QCOW2 cluster 仍 fail-closed，避免把压缩数据误当零块。
-  - Registry Browser 已有 Base/Recovered 只读会话、LOG1/LOG2 replay 与日志 provenance 展示；完整 Hive Key/ValueName/ValueData 搜索与每项字节来源仍待收口。
-  - Hash、嵌套证据物化目前在 Tauri blocking worker 执行；后续可统一接入 TaskManager 的可恢复任务句柄。
-  - 六范围统一 Hash Inspector、digest 持久化、全文内容查询 UI、完整 NTFS 属性/Hex 跳转、EXIF 子 IFD/格式语义和第 15 节统一调度仍属欠项；首轮界面与验证修复不代表三阶段整体验收完成。
+  - Registry Browser 已提供 Base/Recovered 只读会话、LOG1/LOG2 replay、逐 key/value/data/range 的 Base/Recovered/Merged provenance、全 Hive 有界搜索和命中定位。
+  - Hash、嵌套证据、全文索引和 Registry 搜索均通过统一 evidence task 执行，具备取消、进度、source revision、失败重试和案件隔离。
+  - 六范围 Hash Inspector、digest 持久化、全文内容查询 UI、完整 NTFS 属性/Hex 跳转、EXIF 子 IFD/格式语义和统一调度均已纳入实现与回归。
 
 ### 14.1 审计问题收口台账（2026-10-14）
 
-按原审计 A01–A11 的问题编号计数：5 项已收口、6 项部分收口、0 项未收口，合计 **6 项尚未完整收口**。不按子任务或失败测试数量重复计数。A11 计入已收口的是案件/文件切换及迟到请求造成的 digest 串值缺陷；输入 revision 校验、持久化和任务协议继续归入 A05，不把前端选择身份当作证据 revision。
+按原审计 A01–A11 的问题编号计数：11 项已收口、0 项部分收口、0 项未收口，剩余 **0 项**。不按子任务或失败测试数量重复计数。A11 与 A05 的对象归属、输入 revision、持久化和任务协议均已由统一 evidence task 覆盖。
 
 | 编号 | 状态 | 剩余验收范围 |
 |---|---|---|
 | A01 NTFS Inspector | 已收口 | 全局 MFT ID、完整属性/DataRun 字段、源/解码 MFT 字节、碎片 MFT 来源范围与结构到 Hex 定位已接通 |
-| A02 Nested Evidence | 部分收口 | 父 FileEntry ID、lineage 与 materialize 后后台导入调度已接通；失败恢复和最终可浏览验收仍待完成 |
+| A02 Nested Evidence | 已收口 | 父 FileEntry ID、lineage、原子物化、失败清理、重试复用和导入后可浏览均已覆盖 |
 | A03 Git / GitLab | 已收口 | loose refs、多 remote、完整 commit/reflog、GitLab Ruby 配置/JSON 日志和 gzip 有界解析已覆盖 |
 | A04 EXIF / GPS | 已收口 | Exif 子 IFD、PNG/WebP、损坏/超限状态、GPS 坐标与 UTC 时间已覆盖 |
-| A05 多范围 Hash | 部分收口 | 六范围结果持久化已落库；统一 taskId、取消/进度、source revision 和完整 Inspector 仍待接通 |
-| A06 全文内容检索 | 部分收口 | 查询已覆盖 content 字段并返回 matchSource；索引覆盖率/跳过原因的细粒度统计仍待补齐 |
+| A05 多范围 Hash | 已收口 | 六范围、四算法、持久化、taskId、取消/进度、source revision、重启恢复、去重和 Inspector 均已覆盖 |
+| A06 全文内容检索 | 已收口 | 独立内容索引、checkpoint、原子发布、覆盖率、跳过原因、matchSource 和 UI 均已覆盖 |
 | A07 DataRun 解码 | 已收口 | 普通读取与技术视图共享单一有界解码核心，非法/截断/溢出输入统一 fail-closed |
-| A08 systemd | 部分收口 | 预检已复用结构化解析器；symlink/drop-in 合并语义与专用统计/筛选 UI待完成 |
-| A09 Registry Browser | 部分收口 | 有界全 Hive key/value 搜索、命中字段、cell offset 与前端定位已接通；恢复视图逐项来源展示仍待补齐 |
-| A10 前端架构治理 | 部分收口 | BitLocker 与 Infrastructure 的状态/剪贴板副作用已迁移；其他渲染组件仍需治理 |
+| A08 systemd | 已收口 | source-bound unit、symlink、mask、template、wants/requires、drop-in 合并、reset、continuation、统计和来源均已覆盖 |
+| A09 Registry Browser | 已收口 | 全 Hive key/value/data 搜索、取消/预算、命中定位、分页值/range 和逐项 overlay provenance 均已覆盖 |
+| A10 前端架构治理 | 已收口 | 状态/副作用已迁移至 hooks/models/containers，View 与逻辑、素材和原语边界门禁通过 |
 | A11 digest 对象归属 | 已收口 | 案件、文件、选择轮次及计算轮次隔离已实现；切换和迟到终态回归通过 |
 
 第 15 节统一调度仍是未完成专题，与 A02/A05/A06 等共享任务验收范围，以上计数不将它另加为第十二个审计问题。Firefox typed error/私人样本等原方案矩阵欠项也继续保留；本台账不是全部 Definition of Done 子条件的数量。
 
-验证方面，前端 136 个文件 / 883 个测试、Rust 全目标 Clippy 与本轮相关门禁已通过。Rust workspace 最终全量结果为 4186 passed / 15 failed / 184 ignored；失败来自三个插件回归目标，均缺少本地 plugins-src/Cargo.toml，用户已确认插件源码被删除。这是一个外部验证阻断，不计入上述十项功能/架构欠项，整仓测试仍未通过。
+验证方面，前端 138 个测试文件 / 895 个测试全部通过；Rust workspace 全量测试全部通过（真实样本与外部插件源码相关用例按环境变量或测试内临时 fixture 执行，缺失私有样本仅保持 ignored），Rust 格式、函数/模块/测试布局、命令/服务边界、文档漂移和前端运行时架构门禁均通过。
 
 ## 15. 长耗时计算与流程调度设计
 

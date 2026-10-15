@@ -16,6 +16,7 @@ pub use opening::{
     open_source_db, registered_source_db_path, registered_source_index_dir,
     verify_source_db_integrity,
 };
+pub(crate) use path_safety::safe_case_managed_destination;
 pub use path_safety::{safe_case_relative_path, safe_existing_case_path};
 pub(crate) use paths::canonical_source_db_rel_path;
 pub use paths::{

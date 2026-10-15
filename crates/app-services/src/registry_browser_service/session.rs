@@ -15,6 +15,26 @@ pub(super) struct Session {
     pub metadata_bytes: usize,
 }
 impl Session {
+    pub(super) fn issue_value(
+        &mut self,
+        key: u32,
+        offset: u32,
+    ) -> Result<String, RegistryBrowserError> {
+        if let Some((id, _)) = self
+            .values
+            .iter()
+            .find(|(_, value)| **value == (key, offset))
+        {
+            return Ok(id.clone());
+        }
+        if self.values.len() >= 16384 {
+            return Err(RegistryBrowserError::Busy);
+        }
+        self.charge(256)?;
+        let id = uuid::Uuid::new_v4().to_string();
+        self.values.insert(id.clone(), (key, offset));
+        Ok(id)
+    }
     pub fn issue_key(&mut self, key: BrowserKey) -> Result<String, RegistryBrowserError> {
         if let Some((id, _)) = self
             .keys
@@ -121,6 +141,14 @@ pub fn close_hive(
     }
     state.sessions.remove(&request.session_id);
     Ok(())
+}
+
+pub fn source_for_session(
+    registry: &RegistryBrowserRegistry,
+    ctx: &RegistryBrowserContext<'_>,
+    id: &str,
+) -> Result<RegistryBrowserSourceDto, RegistryBrowserError> {
+    with_session(registry, ctx, id, |session| Ok(session.source.clone()))
 }
 
 #[cfg(test)]

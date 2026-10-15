@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   useCreateCase,
@@ -13,8 +12,8 @@ import {
   useRenameDataSource,
 } from '@/features/case/hooks';
 import { useImportDataSource } from '@/features/files/hooks';
-import { calculateEvidenceDigest } from '@/lib/api/digest';
-import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
+import { useEvidenceTask } from '@/features/jobs/hooks/use-evidence-task';
+import type { DigestAlgorithm } from '@/types/digest';
 import { useJobsSnapshot } from '@/features/jobs/hooks';
 import { useAppSettings } from '@/features/settings/hooks';
 import { useImportDataSourceDialogModel } from '@/features/import/use-import-data-source-dialog-model';
@@ -37,9 +36,7 @@ export function useCaseHomeModel() {
   const jobsQuery = useJobsSnapshot();
   const appSettingsQuery = useAppSettings();
   const importMutation = useImportDataSource();
-  const logicalDiskDigestMutation = useMutation<EvidenceDigest, unknown, { dataSourceId: string; algorithm: DigestAlgorithm }>({
-    mutationFn: ({ dataSourceId, algorithm }) => calculateEvidenceDigest({ scope: 'logicalDisk', dataSourceId, algorithm }),
-  });
+  const logicalDiskDigestTask = useEvidenceTask(currentCaseQuery.data?.id, 'source-digest');
   const createCaseMutation = useCreateCase();
   const openCaseMutation = useOpenCase();
   const renameDataSourceMutation = useRenameDataSource();
@@ -127,16 +124,17 @@ export function useCaseHomeModel() {
     });
   }, [importMutation]);
   const calculateLogicalDiskDigest = useCallback((dataSourceId: string, algorithm: DigestAlgorithm) => {
-    logicalDiskDigestMutation.mutate({ dataSourceId, algorithm });
-  }, [logicalDiskDigestMutation]);
+    logicalDiskDigestTask.start({ kind: 'digest', request: { scope: 'logicalDisk', dataSourceId, algorithm } });
+  }, [logicalDiskDigestTask]);
 
   return {
     caseName,
     caseRoot,
-    logicalDiskDigest: logicalDiskDigestMutation.data,
-    logicalDiskDigestSourceId: logicalDiskDigestMutation.variables?.dataSourceId,
-    logicalDiskDigestLoading: logicalDiskDigestMutation.isPending,
-    logicalDiskDigestErrorText: logicalDiskDigestMutation.error == null ? undefined : errorMessage(logicalDiskDigestMutation.error),
+    logicalDiskDigest: logicalDiskDigestTask.task?.result?.kind === 'digest' ? logicalDiskDigestTask.task.result.result : undefined,
+    logicalDiskDigestSourceId: logicalDiskDigestTask.request?.kind === 'digest' ? logicalDiskDigestTask.request.request.dataSourceId : undefined,
+    logicalDiskDigestLoading: logicalDiskDigestTask.loading,
+    logicalDiskDigestErrorText: logicalDiskDigestTask.errorText,
+    logicalDiskDigestTask,
     calculateLogicalDiskDigest,
     createCase,
     createCaseError: mutationError(createCaseMutation.error),

@@ -1,6 +1,6 @@
 use super::{
     cells::{u16_at, u32_at},
-    decode, BrowserError, BrowserValue, HiveSnapshot, ValueRange,
+    decode, BrowserError, BrowserOverlaySource, BrowserValue, HiveSnapshot, ValueRange,
 };
 use std::collections::HashSet;
 
@@ -38,11 +38,33 @@ impl HiveSnapshot {
         };
         let partial = start != 0 || end != total;
         let decoded = decode::decode(value.type_code, &bytes, start, partial);
+        let overlay_source = self.overlay_for_cell(value.offset, 20 + value.name.len() * 2);
+        let data_source = if value.inline {
+            self.overlay_for_cell(value.offset, 20 + value.name.len() * 2)
+        } else {
+            self.overlay_for_range(
+                4096usize.saturating_add(value.data as usize),
+                4096usize
+                    .saturating_add(value.data as usize)
+                    .saturating_add(total + 4),
+            )
+        };
+        let overlay_source = match (overlay_source, data_source) {
+            (BrowserOverlaySource::Base, BrowserOverlaySource::Recovered)
+            | (BrowserOverlaySource::Recovered, BrowserOverlaySource::Base)
+            | (BrowserOverlaySource::Merged, _)
+            | (_, BrowserOverlaySource::Merged) => BrowserOverlaySource::Merged,
+            (BrowserOverlaySource::Recovered, BrowserOverlaySource::Recovered) => {
+                BrowserOverlaySource::Recovered
+            }
+            _ => BrowserOverlaySource::Base,
+        };
         Ok(ValueRange {
             bytes,
             total_length: value.byte_length,
             decoded,
             partial,
+            overlay_source,
         })
     }
 

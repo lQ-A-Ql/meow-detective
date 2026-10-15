@@ -7,6 +7,8 @@
 //! unbounded memory during evidence import.
 
 use crate::LinuxArtifactError;
+pub mod catalog;
+mod syntax;
 
 const MAX_UNIT_BYTES: usize = 1024 * 1024;
 const MAX_UNIT_LINES: usize = 4096;
@@ -30,6 +32,10 @@ pub struct LinuxServiceUnit {
     pub wanted_by: Vec<String>,
     pub required_by: Vec<String>,
     pub enablement_symlink: Option<String>,
+    pub aliases: Vec<String>,
+    pub also: Vec<String>,
+    pub drop_ins: Vec<String>,
+    pub source_paths: Vec<String>,
 }
 
 /// Parse one systemd unit.  `unit_file` is the evidence path (without
@@ -39,6 +45,19 @@ pub struct LinuxServiceUnit {
 pub fn parse_systemd_unit(
     unit_file: &str,
     bytes: &[u8],
+) -> Result<LinuxServiceUnit, LinuxArtifactError> {
+    parse_systemd_unit_with_drop_ins(unit_file, bytes, &[])
+}
+
+pub struct SystemdDropIn<'a> {
+    pub path: &'a str,
+    pub bytes: &'a [u8],
+}
+
+pub fn parse_systemd_unit_with_drop_ins(
+    unit_file: &str,
+    bytes: &[u8],
+    drop_ins: &[SystemdDropIn<'_>],
 ) -> Result<LinuxServiceUnit, LinuxArtifactError> {
     if bytes.len() > MAX_UNIT_BYTES {
         return Err(LinuxArtifactError::ParseError {
@@ -56,15 +75,34 @@ pub fn parse_systemd_unit(
         .filter(|value| !value.is_empty())
         .unwrap_or(unit_file)
         .to_string();
-    let masked = text.trim() == "/dev/null";
-    let fields = parse_unit_fields(text)?;
+    let masked = bytes.is_empty() || text.trim() == "/dev/null";
+    let mut fields = parse_unit_fields(text)?;
+    let mut total = bytes.len();
+    if drop_ins.len() > 128 {
+        return Err(syntax::error("too many drop-in files"));
+    }
+    for drop_in in drop_ins {
+        total = total
+            .checked_add(drop_in.bytes.len())
+            .ok_or_else(|| syntax::error("drop-in size overflow"))?;
+        if total > MAX_UNIT_BYTES {
+            return Err(syntax::error("merged unit exceeds 1 MiB limit"));
+        }
+        let text = std::str::from_utf8(drop_in.bytes)
+            .map_err(|_| syntax::error("drop-in file is not UTF-8"))?;
+        apply_unit_fields(&mut fields, text)?;
+    }
 
     let enablement_symlink = infer_enablement_symlink(unit_file);
     // `[Install]` describes how a unit *can* be enabled; only a concrete
     // `.wants/` or `.requires/` evidence path proves it is enabled in the
     // captured image.
     let enabled = enablement_symlink.is_some();
-    let static_unit = !masked && !fields.has_install_section;
+    let static_unit = !masked
+        && fields.wanted_by.is_empty()
+        && fields.required_by.is_empty()
+        && fields.aliases.is_empty()
+        && fields.also.is_empty();
     let state = if masked {
         "masked"
     } else if enabled {
@@ -93,9 +131,19 @@ pub fn parse_systemd_unit(
         wanted_by: fields.wanted_by,
         required_by: fields.required_by,
         enablement_symlink,
+        aliases: fields.aliases,
+        also: fields.also,
+        drop_ins: drop_ins
+            .iter()
+            .map(|drop_in| drop_in.path.to_owned())
+            .collect(),
+        source_paths: std::iter::once(unit_file.to_owned())
+            .chain(drop_ins.iter().map(|drop_in| drop_in.path.to_owned()))
+            .collect(),
     })
 }
 
+#[derive(Default)]
 struct UnitFields {
     description: Option<String>,
     exec_start: Vec<String>,
@@ -106,30 +154,19 @@ struct UnitFields {
     restart: Option<String>,
     wanted_by: Vec<String>,
     required_by: Vec<String>,
-    has_install_section: bool,
+    aliases: Vec<String>,
+    also: Vec<String>,
 }
 
 fn parse_unit_fields(text: &str) -> Result<UnitFields, LinuxArtifactError> {
-    let mut fields = UnitFields {
-        description: None,
-        exec_start: Vec::new(),
-        exec_stop: Vec::new(),
-        user: None,
-        group: None,
-        working_directory: None,
-        restart: None,
-        wanted_by: Vec::new(),
-        required_by: Vec::new(),
-        has_install_section: false,
-    };
+    let mut fields = UnitFields::default();
+    apply_unit_fields(&mut fields, text)?;
+    Ok(fields)
+}
+
+fn apply_unit_fields(fields: &mut UnitFields, text: &str) -> Result<(), LinuxArtifactError> {
     let mut section = String::new();
-    for (index, raw_line) in text.lines().enumerate() {
-        if index == MAX_UNIT_LINES {
-            return Err(LinuxArtifactError::ParseError {
-                parser: "systemd.unit",
-                message: "unit file exceeds line limit".to_string(),
-            });
-        }
+    for raw_line in syntax::logical_lines(text)? {
         let line = raw_line.trim();
         if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
             continue;
@@ -137,16 +174,12 @@ fn parse_unit_fields(text: &str) -> Result<UnitFields, LinuxArtifactError> {
         if let Some(section_name) = line.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
             section.clear();
             section.push_str(section_name.trim());
-            fields.has_install_section |= section == "Install";
             continue;
         }
         let Some((key, value)) = line.split_once('=') else {
             continue;
         };
         let value = value.trim();
-        if value.len() > MAX_VALUE_BYTES {
-            continue;
-        }
         match (section.as_str(), key.trim()) {
             ("Unit", "Description") => fields.description = non_empty(value),
             ("Service", "ExecStart") => push_value(&mut fields.exec_start, value),
@@ -157,19 +190,27 @@ fn parse_unit_fields(text: &str) -> Result<UnitFields, LinuxArtifactError> {
             ("Service", "Restart") => fields.restart = non_empty(value),
             ("Install", "WantedBy") => extend_words(&mut fields.wanted_by, value),
             ("Install", "RequiredBy") => extend_words(&mut fields.required_by, value),
+            ("Install", "Alias") => extend_words(&mut fields.aliases, value),
+            ("Install", "Also") => extend_words(&mut fields.also, value),
             _ => {}
         }
     }
-    Ok(fields)
+    Ok(())
 }
 
 fn push_value(values: &mut Vec<String>, value: &str) {
+    if value.is_empty() {
+        values.clear();
+    }
     if !value.is_empty() && values.len() < 64 {
         values.push(value.to_string());
     }
 }
 
 fn extend_words(values: &mut Vec<String>, value: &str) {
+    if value.is_empty() {
+        values.clear();
+    }
     for item in value
         .split_whitespace()
         .take(64usize.saturating_sub(values.len()))

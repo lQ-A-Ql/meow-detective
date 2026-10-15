@@ -52,6 +52,17 @@ impl<'a> SourceMetaRepo<'a> {
             .map_err(|_| DbError::System("source_meta value is not valid UTF-8".to_string()))
     }
 
+    pub fn write(&self, key: &str, value: &str) -> DbResult<()> {
+        validate_key(key)?;
+        if value.len() > MAX_VALUE_BYTES {
+            return Err(DbError::System(
+                "source_meta value exceeds persistence limit".into(),
+            ));
+        }
+        self.conn.execute("INSERT INTO source_meta(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",rusqlite::params![key,value])?;
+        Ok(())
+    }
+
     pub fn read_revision(&self, key: &str) -> DbResult<u64> {
         if !self.table_available()? {
             return Ok(0);
@@ -102,7 +113,7 @@ impl<'a> SourceMetaRepo<'a> {
         parse_revision_value(key, &value)
     }
 
-    fn table_available(&self) -> DbResult<bool> {
+    pub fn table_available(&self) -> DbResult<bool> {
         self.conn
             .query_row(
                 "SELECT EXISTS(

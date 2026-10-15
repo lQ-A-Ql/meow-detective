@@ -21,6 +21,7 @@ import type { SearchFileHit } from '@/types/search';
 import { WorkspaceFrame } from '@/components/layout/WorkspaceFrame';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 import { BrandWatermark } from '@/components/brand';
+import { ContentIndexStatus } from './ContentIndexStatus';
 
 interface SearchWorkspaceProps {
   model: SearchWorkspaceModel;
@@ -60,7 +61,7 @@ return [
     sortable: true,
     sortKey: 'path',
     className: 'w-[38%] text-forensics-text-secondary',
-    render: (row) => <span className="block truncate">{row.path}</span>,
+    render: (row) => <div><span className="block truncate">{row.path}</span>{row.snippet ? <span className="block truncate text-[10px] text-forensics-muted" title={row.snippet}>{row.snippet}</span> : null}</div>,
   },
   {
     key: 'size',
@@ -82,7 +83,7 @@ return [
     key: 'source',
     title: t('search.columns.source'),
     className: 'w-36 text-forensics-muted',
-    render: (row) => <span className="block truncate" title={row.dataSourceName}>{row.matchSource === 'content' ? t('search.sources.content') : t('search.sources.metadata')} · {row.dataSourceName}</span>,
+    render: (row) => <span className="block truncate" title={row.dataSourceName}>{(row.matchedSources?.length ? row.matchedSources : [row.matchSource ?? 'metadata']).map((source) => t(`contentIndex.sources.${source}`)).join(' / ')} · {row.dataSourceName}</span>,
   },
 ];
 }
@@ -157,6 +158,7 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
       </ContextBar>
 
       <div className="flex min-h-0 flex-1 flex-col">
+        <ContentIndexStatus model={model.contentIndex} />
         <div className="flex shrink-0 items-center gap-3 border-b border-forensics-divider bg-forensics-panel px-4 py-2 font-mono text-[10px] text-forensics-muted">
           <span>{model.activeQuery ? t('search.meta.found', { count: model.totalHits }) : t('search.meta.idle')}</span>
           {model.activeQuery ? <span>{t('search.meta.took', { ms: model.searchTookMs })}</span> : null}

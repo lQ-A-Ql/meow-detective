@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
-import { useFileDigest, useFileJumpContext, useNtfsTechnicalFile } from '@/features/files/hooks';
+import { useFileJumpContext, useNtfsTechnicalFile } from '@/features/files/hooks';
 import { collectTreeNodeIds } from '@/features/files/file-tree-utils';
 import { useFilePagination } from '@/features/files/hooks/use-file-pagination';
 import { useFilePreview } from '@/features/files/hooks/use-file-preview';
@@ -13,6 +13,9 @@ import { useFileExtractionModel } from '@/features/files/hooks/use-file-extracti
 import { useUiStore } from '@/stores/ui-store';
 import { partitionIndexFromRootName } from '@/lib/partition-display';
 import type { DataSourcePartition } from '@/types/models';
+import { parseSourceScopedFileId } from './source-scoped-file-id';
+import { useNestedEvidenceModel } from './hooks/use-nested-evidence-model';
+import { useEvidenceDigestModel } from './hooks/use-evidence-digest-model';
 
 const FILE_BROWSER_PAGE_LIMIT = 500;
 
@@ -181,13 +184,23 @@ export function useFileBrowserModel() {
   }, [activePartitionContext]);
   const bitLocker = useBitLockerVolumeModel(bitLockerTarget);
   const fileExtraction = useFileExtractionModel();
+  const nestedEvidence = useNestedEvidenceModel(currentCase?.id);
+  const openNestedResult = () => {
+    if (nestedEvidence.result) {
+      const directoryId = `data-source:${nestedEvidence.result.derivedDataSourceId}`;
+      setSelectedDirectoryId(directoryId);
+      setSelectedFileId(undefined);
+      tree.setExpandedDirectoryIds((current) => Array.from(new Set([...current, directoryId])));
+    }
+  };
 
   const preview = useFilePreview({
     selectedFile,
     viewerTab,
   });
   const ntfsTechnicalQuery = useNtfsTechnicalFile(currentCase?.id, selectedFile?.id, selectedFile?.entryType === 'file');
-  const digestMutation = useFileDigest({ caseId: currentCase?.id, fileId: selectedFile?.id, available: selectedFile?.entryType === 'file' });
+  const digestSource = dataSources?.find((source) => source.id === (parseSourceScopedFileId(selectedFile?.id)?.sourceId ?? activePartitionContext?.dataSourceId ?? tree.activeRootNode?.dataSourceId));
+  const evidenceDigest = useEvidenceDigestModel(currentCase?.id, selectedFile, digestSource, activePartition?.index);
 
   const onViewTimeline = () => {
     if (!selectedFile) return;
@@ -254,11 +267,7 @@ export function useFileBrowserModel() {
     ntfsTechnicalUnsupported: ntfsTechnicalQuery.unsupported,
     retryNtfsTechnical: ntfsTechnicalQuery.retry,
     ntfsNavigation: ntfsTechnicalQuery,
-    fileDigest: digestMutation.data,
-    fileDigestLoading: digestMutation.isPending,
-    fileDigestErrorText: digestMutation.errorText,
-    fileDigestAvailable: digestMutation.available,
-    calculateFileDigest: digestMutation.mutate,
+    evidenceDigest,
     mediaUrl: preview.mediaUrl,
     documentPreview: preview.documentPreview,
     previewError: preview.previewError,
@@ -275,6 +284,9 @@ export function useFileBrowserModel() {
     activeRootNode: tree.activeRootNode,
     executableCount: pagination.executableCount,
     fileExtraction,
+    nestedEvidence,
+    openNested: nestedEvidence.open,
+    openNestedResult,
     onViewTimeline,
     dataSources,
   };

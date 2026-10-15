@@ -20,6 +20,7 @@ pub struct FileSearchQuerySession {
     index_generation: String,
     schema_version: u32,
     snapshot_opstamp: u64,
+    source_queries: super::file_match_sources::FileMatchSources,
 }
 
 #[derive(Debug)]
@@ -56,13 +57,14 @@ pub struct FileSearchHit {
     pub system: bool,
     pub encrypted: bool,
     pub match_source: String,
+    pub matched_sources: Vec<String>,
+    pub snippet: Option<String>,
 }
 
 struct FileResultFields {
     file_id: Field,
     name: Field,
     path: Field,
-    content: Field,
     extension: Field,
     entry_type: Field,
     size: Field,
@@ -109,6 +111,8 @@ impl SearchIndex {
             ));
         }
         let query = compile_file_query(self, options)?;
+        let source_queries =
+            super::file_match_sources::FileMatchSources::create(self, &searcher, options)?;
         Ok(FileSearchQuerySession {
             searcher,
             query,
@@ -119,10 +123,14 @@ impl SearchIndex {
             index_generation: self.generation().to_string(),
             schema_version: self.schema_version(),
             snapshot_opstamp,
+            source_queries,
         })
     }
 
     pub fn validate_file_search_schema(&self) -> Result<()> {
+        for field in ["content", "artifact_text"] {
+            self.validate_text_field(field, true, true, false)?;
+        }
         for field in [
             "file_id",
             "sort_name",
@@ -243,7 +251,9 @@ impl FileSearchQuerySession {
                 "ranked file search hit does not match stored file_id".to_string(),
             ));
         }
-        let content = required_text(&document, self.fields.content, "content")?;
+        let (matched_sources, snippet) =
+            self.source_queries
+                .materialize(&self.searcher, ranked.address, &document)?;
         Ok(FileSearchHit {
             file_id,
             name: required_text(&document, self.fields.name, "name")?,
@@ -256,11 +266,12 @@ impl FileSearchQuerySession {
             hidden: optional_bool(&document, self.fields.hidden),
             system: optional_bool(&document, self.fields.system),
             encrypted: optional_bool(&document, self.fields.encrypted),
-            match_source: if content.is_empty() {
-                "metadata".into()
-            } else {
-                "content".into()
-            },
+            match_source: matched_sources
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "metadata".into()),
+            matched_sources,
+            snippet,
         })
     }
 }
@@ -291,7 +302,6 @@ impl FileResultFields {
             file_id: field("file_id")?,
             name: field("name")?,
             path: field("path")?,
-            content: field("content")?,
             extension: field("extension")?,
             entry_type: field("entry_type")?,
             size: field("size")?,

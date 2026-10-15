@@ -1,22 +1,22 @@
 //! Case-scoped evidence digest use case.
-
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-
+use crate::file_service::{self, SourceReadContext};
+use crate::hash_service::{EvidenceHashError, HashService};
 use domain::{CaseId, DataSourceId, DataSourceKind};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use persistence_sqlite::repositories::evidence_digest_repo::{
     EvidenceDigestRecord, EvidenceDigestRepo,
 };
 use rusqlite::Connection;
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use transport::dto::{DigestAlgorithmDto, DigestScopeDto, DigestStatusDto, EvidenceDigestDto};
 use transport::{ErrorCategory, ServiceErrorCategory};
-
-use crate::file_service::{self, SourceReadContext};
-use crate::hash_service::{EvidenceHashError, HashService};
-
+pub(crate) mod identity;
+pub mod results;
 #[derive(Debug, thiserror::Error)]
 pub enum DigestServiceError {
+    #[error("evidence changed during digest calculation")]
+    EvidenceChanged,
     #[error("digest database operation failed")]
     Database(#[source] persistence_sqlite::DbError),
     #[error("digest target was not found")]
@@ -30,31 +30,41 @@ pub enum DigestServiceError {
     #[error("digest computation failed")]
     Hash(#[source] EvidenceHashError),
 }
-
 pub struct DigestTarget<'a> {
     pub data_source_id: Option<&'a str>,
     pub file_id: Option<&'a str>,
     pub partition_index: Option<u32>,
 }
-
+#[derive(Clone, Copy)]
 pub struct DigestExecution<'a> {
     pub cancelled: &'a AtomicBool,
     pub progress: &'a (dyn Fn(u64, u64) + Sync),
 }
-
 impl From<persistence_sqlite::DbError> for DigestServiceError {
     fn from(error: persistence_sqlite::DbError) -> Self {
         Self::Database(error)
     }
 }
-
 impl From<file_service::FileServiceError> for DigestServiceError {
     fn from(error: file_service::FileServiceError) -> Self {
         Self::File(error)
     }
 }
-
 impl ServiceErrorCategory for DigestServiceError {
+    fn code(&self) -> Option<&'static str> {
+        match self {
+            Self::EvidenceChanged => Some("evidence_changed"),
+            _ => None,
+        }
+    }
+    fn user_message(&self) -> Option<&'static str> {
+        match self {
+            Self::EvidenceChanged => {
+                Some("Evidence changed during calculation; retry against the current revision")
+            }
+            _ => Some("Evidence digest operation failed"),
+        }
+    }
     fn category(&self) -> ErrorCategory {
         match self {
             Self::Database(_) | Self::File(file_service::FileServiceError::Io(_)) => {
@@ -67,10 +77,10 @@ impl ServiceErrorCategory for DigestServiceError {
                 ErrorCategory::Unsupported
             }
             Self::NotFound | Self::InvalidInput => ErrorCategory::Validation,
+            Self::EvidenceChanged => ErrorCategory::Security,
         }
     }
 }
-
 /// Calculates one digest against an active case without exposing a host path.
 ///
 /// The command layer runs this use case on a blocking worker. Scope support is
@@ -98,7 +108,6 @@ pub fn calculate_evidence_digest(
         },
     )
 }
-
 /// Calculates a digest while allowing a task manager to cancel the read and
 /// observe byte progress.  The `LogicalDisk` scope is intentionally restricted
 /// to `DataSourceKind::LocalDisk`; image containers must use `ContainerSet` so
@@ -112,11 +121,21 @@ pub fn calculate_evidence_digest_with_cancel(
     target: DigestTarget<'_>,
     execution: DigestExecution<'_>,
 ) -> Result<EvidenceDigestDto, DigestServiceError> {
+    if scope == DigestScopeDto::LogicalDisk
+        && load_source(case_conn, case_id, target.data_source_id)?.kind == DataSourceKind::E01
+    {
+        return Err(DigestServiceError::Unsupported);
+    }
+    let identity = identity::snapshot(case_conn, case_root, case_id, &target)?;
     let algorithm = map_algorithm(algorithm);
     let result = match scope {
-        DigestScopeDto::ContainerFile => {
-            digest_container_file(case_conn, case_id, target.data_source_id, algorithm)
-        }
+        DigestScopeDto::ContainerFile => digest_container_file(
+            case_conn,
+            case_id,
+            target.data_source_id,
+            algorithm,
+            execution,
+        ),
         DigestScopeDto::ContainerSet => digest_container_set(
             case_conn,
             case_id,
@@ -151,41 +170,76 @@ pub fn calculate_evidence_digest_with_cancel(
             execution,
         ),
     };
+    if execution.cancelled.load(Ordering::Acquire) {
+        return Err(DigestServiceError::Hash(EvidenceHashError::Cancelled));
+    }
+    let after = identity::snapshot(case_conn, case_root, case_id, &target);
+    if after
+        .as_ref()
+        .is_ok_and(|after| after.revision != identity.revision)
+    {
+        return Err(DigestServiceError::EvidenceChanged);
+    }
     if let Ok(digest) = &result {
+        after?;
         EvidenceDigestRepo::new(case_conn).upsert(&EvidenceDigestRecord {
             case_id: case_id.0.clone(),
             scope: format!("{:?}", digest.scope),
             algorithm: digest.algorithm.label().to_string(),
-            data_source_id: target.data_source_id.map(str::to_owned),
-            file_id: target.file_id.map(str::to_owned),
+            data_source_id: Some(identity.source_id),
+            file_id: identity.file_id,
             partition_index: target.partition_index,
             value: digest.value.clone(),
             byte_length: digest.byte_length,
             status: "completed".into(),
-            source_revision: format!(
-                "{}:{}",
-                target.data_source_id.unwrap_or_default(),
-                target.file_id.unwrap_or_default()
-            ),
+            source_revision: identity.revision,
         })?;
     }
     result
 }
-
 fn digest_container_file(
     case_conn: &Connection,
     case_id: &CaseId,
     data_source_id: Option<&str>,
     algorithm: infrastructure::hashing::HashAlgorithm,
+    execution: DigestExecution<'_>,
 ) -> Result<EvidenceDigestDto, DigestServiceError> {
     let source = load_source(case_conn, case_id, data_source_id)?;
-    let digest =
-        HashService::digest_file(Path::new(&source.source_path), algorithm).map_err(|error| {
+    let mut file = std::fs::File::open(&source.source_path).map_err(|error| {
+        DigestServiceError::Hash(EvidenceHashError::Io {
+            operation: "open container",
+            kind: error.kind(),
+        })
+    })?;
+    let total = file
+        .metadata()
+        .map_err(|error| {
             DigestServiceError::Hash(EvidenceHashError::Io {
-                operation: "read container file",
+                operation: "inspect container",
                 kind: error.kind(),
             })
-        })?;
+        })?
+        .len();
+    let processed = AtomicU64::new(0);
+    let digest = HashService::digest_reader(
+        &mut file,
+        algorithm,
+        || execution.cancelled.load(Ordering::Acquire),
+        |bytes| {
+            processed.store(bytes, Ordering::Release);
+            (execution.progress)(bytes, total);
+        },
+    )
+    .map_err(|error| {
+        DigestServiceError::Hash(EvidenceHashError::Io {
+            operation: "read container file",
+            kind: error.kind(),
+        })
+    })?
+    .ok_or(DigestServiceError::Hash(EvidenceHashError::Cancelled))?;
+    if processed.load(Ordering::Acquire) != total {
+        return Err(short_read());
+    }
     let byte_length = std::fs::metadata(&source.source_path)
         .map_err(|error| {
             DigestServiceError::Hash(EvidenceHashError::Io {
@@ -201,7 +255,6 @@ fn digest_container_file(
         byte_length,
     ))
 }
-
 fn digest_container_set(
     case_conn: &Connection,
     case_id: &CaseId,
@@ -225,7 +278,6 @@ fn digest_container_set(
         result.bytes_processed,
     ))
 }
-
 fn digest_logical_disk(
     case_conn: &Connection,
     case_id: &CaseId,
@@ -252,7 +304,6 @@ fn digest_logical_disk(
         result.bytes_processed,
     ))
 }
-
 fn digest_partition(
     case_conn: &Connection,
     case_id: &CaseId,
@@ -282,11 +333,15 @@ fn digest_partition(
                     kind: error.kind(),
                 })
             })?;
+    let processed = AtomicU64::new(0);
     let digest = HashService::digest_reader(
         &mut window,
         algorithm,
         || execution.cancelled.load(Ordering::Acquire),
-        |amount| (execution.progress)(amount, partition.length),
+        |amount| {
+            processed.store(amount, Ordering::Release);
+            (execution.progress)(amount, partition.length);
+        },
     )
     .map_err(|error| {
         DigestServiceError::Hash(EvidenceHashError::Io {
@@ -295,6 +350,9 @@ fn digest_partition(
         })
     })?
     .ok_or(DigestServiceError::Hash(EvidenceHashError::Cancelled))?;
+    if processed.load(Ordering::Acquire) != partition.length {
+        return Err(short_read());
+    }
     Ok(completed(
         DigestScopeDto::Partition,
         algorithm,
@@ -302,7 +360,6 @@ fn digest_partition(
         partition.length,
     ))
 }
-
 fn digest_derived(
     case_conn: &Connection,
     case_id: &CaseId,
@@ -354,6 +411,10 @@ fn digest_file(
         case_id,
         &global_id.data_source_id,
     );
+    let total = persistence_sqlite::repositories::file_repo::FileRepo::new(&source_conn)
+        .find_by_id(&global_id.local_id)?
+        .ok_or(DigestServiceError::NotFound)?
+        .size;
     let mut reader = file_service::open_file_content_by_id(&mut context, &global_id.local_id)?;
     let processed = AtomicU64::new(0);
     let digest = HashService::digest_reader(
@@ -362,7 +423,7 @@ fn digest_file(
         || execution.cancelled.load(Ordering::Acquire),
         |amount| {
             processed.store(amount, Ordering::Release);
-            (execution.progress)(amount, 0);
+            (execution.progress)(amount, total.unwrap_or_default());
         },
     )
     .map_err(|error| {
@@ -372,6 +433,9 @@ fn digest_file(
         })
     })?
     .ok_or(DigestServiceError::Hash(EvidenceHashError::Cancelled))?;
+    if total.is_some_and(|total| total != processed.load(Ordering::Acquire)) {
+        return Err(short_read());
+    }
     Ok(completed(
         DigestScopeDto::File,
         algorithm,
@@ -379,7 +443,12 @@ fn digest_file(
         processed.load(Ordering::Acquire),
     ))
 }
-
+fn short_read() -> DigestServiceError {
+    DigestServiceError::Hash(EvidenceHashError::Io {
+        operation: "read complete digest input",
+        kind: std::io::ErrorKind::UnexpectedEof,
+    })
+}
 fn load_source(
     case_conn: &Connection,
     case_id: &CaseId,
@@ -397,7 +466,6 @@ fn load_source(
         .find(|source| source.id == id)
         .ok_or(DigestServiceError::NotFound)
 }
-
 fn map_algorithm(algorithm: DigestAlgorithmDto) -> infrastructure::hashing::HashAlgorithm {
     match algorithm {
         DigestAlgorithmDto::Md5 => infrastructure::hashing::HashAlgorithm::Md5,
@@ -406,7 +474,6 @@ fn map_algorithm(algorithm: DigestAlgorithmDto) -> infrastructure::hashing::Hash
         DigestAlgorithmDto::Sm3 => infrastructure::hashing::HashAlgorithm::Sm3,
     }
 }
-
 fn completed(
     scope: DigestScopeDto,
     algorithm: infrastructure::hashing::HashAlgorithm,
@@ -426,7 +493,6 @@ fn completed(
         status: DigestStatusDto::Completed,
     }
 }
-
 #[cfg(test)]
 #[path = "../tests/unit/digest_service.rs"]
 mod tests;

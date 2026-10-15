@@ -280,6 +280,8 @@ pub(super) fn file_hit_to_dto(
         system: hit.system,
         encrypted: hit.encrypted,
         match_source: hit.match_source,
+        matched_sources: hit.matched_sources,
+        snippet: hit.snippet,
     }
 }
 

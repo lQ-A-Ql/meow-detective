@@ -128,6 +128,7 @@ impl LinuxEvidenceSetImportPlan {
                     }
                 };
                 Some(ImportSourceConfig {
+                    existing_data_source_id: None,
                     source_path: member.source_path.clone(),
                     source_path_display: member.source_path.display().to_string(),
                     source_name: member.source_name.clone(),

@@ -1,5 +1,15 @@
 {
+  "evidenceTask": {
+    "scanned": "已扫描 {{processed}} 项",
+    "entries": "{{processed}} / {{total}} 项",
+    "states": { "queued": "排队中", "running": "正在处理证据", "cancelling": "正在取消", "completed": "已完成", "failed": "失败", "cancelled": "已取消" },
+    "progress": "{{processed}} / {{total}} 字节", "progressLabel": "证据任务进度", "failed": "证据任务失败（{{code}}）。重试将创建新的任务记录。"
+  },
+  "evidenceDigest": { "scope": "摘要范围", "revision": "证据版本", "stale": "证据已变化，请重新计算此结果", "historyFailed": "无法读取摘要历史", "scopes": { "containerFile": "单个容器文件", "containerSet": "完整容器集合", "logicalDisk": "逻辑磁盘", "partition": "分区", "file": "逻辑文件", "derivedEvidence": "派生证据" } },
+  "nestedEvidence": { "title": "嵌套证据导入", "openResult": "浏览派生证据" },
+  "contentIndex": { "build": "构建内容索引", "selectSource": "选择单个数据源以构建或查看内容索引", "complete": "内容分类完整（{{expected}} 项）", "notBuilt": "尚未构建内容索引（{{expected}} 项）", "stale": "证据已变化，请重建内容索引", "coverageFailed": "无法读取内容覆盖率", "statuses": { "indexed": "已索引文本", "binary": "二进制", "oversized": "超出大小限制", "unreadable": "不可读取", "unsupportedEncoding": "不支持的编码", "notApplicable": "不适用" }, "sources": { "metadata": "元数据", "filename": "文件名", "path": "路径", "content": "索引内容", "artifactField": "产物字段" } },
   "common": {
+    "retry": "重试",
     "clipboardUnavailable": "剪贴板不可用或访问被拒绝",
     "close": "关闭",
     "dataSourceKinds": {
@@ -928,6 +938,7 @@
       "showHidden": "显示隐藏文件"
     },
     "contextMenu": {
+      "openNested": "作为嵌套证据打开",
       "label": "{{name}} 操作菜单"
     },
     "preview": {

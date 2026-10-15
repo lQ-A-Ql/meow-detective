@@ -12,6 +12,7 @@ import { RegistryValueDetail } from './RegistryValueDetail';
 import { RegistryRecoverySummary } from './RegistryRecoverySummary';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import type { RegistryHiveView } from '@/types/registryBrowser';
+import { RegistrySearchPanel } from './RegistrySearchPanel';
 
 export function RegistryBrowserView({ model }: { model: RegistryBrowserModel }) {
   const { t } = model;
@@ -32,6 +33,7 @@ export function RegistryBrowserView({ model }: { model: RegistryBrowserModel }) 
       {model.session?.diagnostics.map((item) => <span key={item.code}>{t(`registryBrowser.diagnostics.${item.code}`)}</span>)}
     </div>
     <RegistryRecoverySummary model={model} />
+    <RegistrySearchPanel model={model.registrySearch} enabled={Boolean(model.session) && !model.opening} onLocate={(hit) => void model.locateSearchHit(hit)} />
     <form className="registry-browser-address" onSubmit={(event) => { event.preventDefault(); void model.locate(model.pathInput); }}>
       <Label htmlFor={`${model.instanceId}-path`}>{t('registryBrowser.path')}</Label>
       <Input id={`${model.instanceId}-path`} value={model.pathInput} disabled={!model.session}

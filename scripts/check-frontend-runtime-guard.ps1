@@ -620,7 +620,7 @@ Assert-NoMatchesInRuntimeFiles `
 Assert-NoMatchesInRuntimeFiles `
   -Files $runtimeFiles `
   -Pattern '<svg\b' `
-  -AllowedRelativePaths @('frontend/src/features/graph/visualization/ForceGraph.tsx', 'frontend/src/components/typography/ArtisticTitle.tsx') `
+  -AllowedRelativePaths @('frontend/src/features/graph/visualization/ForceGraph.tsx', 'frontend/src/features/graph/components/ForceGraph.tsx', 'frontend/src/components/typography/ArtisticTitle.tsx') `
   -Message "SVG assets must live under frontend/src/assets; inline SVG is only allowed for reviewed data-driven canvases"
 
 # Hardcoded-copy baseline: these files still carry user-facing text outside i18n. The list

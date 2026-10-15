@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "generator": "built-in image_gen",
+  "reference": "../../backgrounds/case-entry.webp",
+  "palette": "monochrome",
+  "displayOpacity": 0.3,
+  "assets": [
+    {
+      "name": "emulation-edge",
+      "prompt": "Edit the supplied wide structural illustration. Change ONLY the facial expression. The adult feline-eared detective is now VISIBLY PUZZLED AND SKEPTICAL: one eyebrow noticeably raised, the other slightly drawn inward, attentive gray eyes with an inquisitive sideways glance, and lips slightly parted with a neutral to gently DOWNWARD mouth line. The lip corners must NOT turn upward. Absolutely NO smile, smirk, grin, amused expression or cheerful mouth. This should clearly read as a quiet question or mild disbelief, rather than happiness.\nKeep the same face identity, head angle, black hair, feline ears, gloved hand near the chin, coat, grayscale ink style, original wide canvas and structural composition. Keep the figure at the far right and its shoulder/coat connected to the bottom and right edges; retain the long hair/ribbon along the lower left and the transparent upper-left empty area. Do not recenter, add a sticker outline, introduce text, alter the pose, or add color. Genuine transparent RGBA background; normal artwork opacity for later 0.3 CSS display. Output one asset.",
+      "expression": "puzzled, raised eyebrow, no smile",
+      "file": "emulation-edge.webp",
+      "width": 2172,
+      "height": 724,
+      "sourceSha256": "3598476f511366ab1091032331c50e942a7011a1daa44e239f8ff6aed6843a7f",
+      "webpSha256": "27b574c87b5f8f2997c1182dfb36ee56c7e97ef40076a5bc2c37021e2e06bb80"
+    },
+    {
+      "name": "report-side",
+      "prompt": "Edit the supplied report illustration into a clear LEFT-FACING THREE-QUARTER SIDE POSE. The body must be turned about 60 degrees toward the left, not the current nearly frontal pose. Turn the head with the body into a graceful near-profile looking down at the sheet: one gray eye and the nose silhouette are dominant, the far eye is only subtly visible. Preserve the same adult feline-eared detective, serious focused NON-SMILING expression, long black hair, coat, gloves, monochrome ink style and transparent background.\nRebuild the shoulders and BOTH arm chains for this side perspective, not merely rotate the head. The near anatomical LEFT shoulder/arm is on the viewer's right in the foreground; its upper arm descends naturally to a separate elbow, and its forearm extends forward to the LEFT hand supporting the paper from below. The far anatomical RIGHT shoulder is offset left/back relative to the near shoulder; its own upper arm and elbow remain coherently visible behind the near arm, and its forearm leads to the RIGHT writing hand. Right hand uses a normal pen grip, nib touching the sheet. Left supporting palm and fingers visibly hold the lower paper edge. Distinct cuffs and wrists, modest natural hand sizes, plausible depth ordering. The farther writing arm must not appear to emerge from the nearer shoulder or the supporting sleeve. No crossed forearms, backward wrist, floating paper, disconnected elbow or duplicate fingers.\nCompose the connected side silhouette in a tall narrow canvas about 0.65:1, oriented toward transparent left-side space. Keep face, ear shapes, writing hand and supporting hand readable; only lower outer coat/hair may extend beyond the right and lower canvas boundaries for page-edge decoration. The shoulder/arm junctions required to understand the pose must remain visible. No frontal symmetrical shoulders, smile, lettering, tabletop, background rectangle, border, logos or added props. Genuine transparent RGBA and normal art opacity for later 0.3 CSS display. Output ONE side-facing, anatomically coherent illustration.",
+      "expression": "serious focused side pose, two connected arms, supporting and writing hands",
+      "file": "report-side.webp",
+      "width": 1011,
+      "height": 1555,
+      "sourceSha256": "cb722417b2f86ee14436151adcc014bff758c1316d04a901d874a81bc9f106ab",
+      "webpSha256": "f5391f4f60cd3d3cba7ae37133257fac8c693f7252ecc9acb1f6429ccb68106e"
+    },
+    {
+      "name": "settings-side",
+      "prompt": "Edit target: the FIRST image, the tall narrow right-gutter illustration. The SECOND image is identity reference only. Change ONLY the facial expression: the same adult feline-eared detective now has peacefully CLOSED EYES, softened eyebrows and a small relaxed closed-mouth smile, as if quietly enjoying music. This serene, warm expression must be distinctly different from the open-eyed serious expression of the source. Keep anatomy, face proportions, ear and headset placement, long vertical hair, coat collar, fine monochrome ink style, narrow portrait canvas, right-edge crop and bottom-edge hair anchor unchanged. Preserve the full transparent alpha background and the existing empty left space; do not add any opaque backdrop or border. No raised hand, blush, colors, lettering, wide grin or large expression marks. Normal art opacity, genuine transparent RGBA. Output one asset.",
+      "expression": "closed eyes, relaxed slight smile",
+      "file": "settings-side.webp",
+      "width": 793,
+      "height": 1983,
+      "sourceSha256": "836066f697add646ab54230145882f555effa29a6ba32c954170371dac7c5da9",
+      "webpSha256": "165c264bacce7476349dca8d05e6f7f5aaf7bfa61686b72ecfd3abd68876320e"
+    }
+  ]
+}

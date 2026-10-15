@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "generator": "built-in image_gen",
+  "reference": "../../backgrounds/case-entry.webp",
+  "palette": "monochrome",
+  "displayOpacity": 0.3,
+  "assets": [
+    {
+      "name": "case-overview",
+      "file": "case-overview.webp",
+      "prompt": "Use case: stylized-concept. Create a newly illustrated EXTREMELY WIDE, SHALLOW horizontal background strip for a digital-forensics case overview header. Use the attached picture ONLY as the monochrome character and art-style reference. Requested canvas composition is panoramic around 8:1, NOT a portrait or small sticker.\nComposition: at the far RIGHT edge, only the familiar adult black-haired feline-eared detective's complete face, ears, sharp coat collar and connected upper shoulder are visible, in a calm three-quarter profile facing toward the middle. Her long hair and a few precise diagonal ink strokes flow horizontally into the right quarter of the banner. Keep the face and both ear tips complete within a small margin. At the far LEFT edge, a sparse group of overlapping thin white evidence-folder silhouettes with two blank tabs, a simple paper corner and a quiet sweeping black ink line balance the composition. No disconnected human hands at the left. The middle 55 percent of the panoramic canvas MUST remain genuinely transparent, empty, and free of any marks to accommodate a centered case name, metadata and round import button. Illustration occupies only the outer left/right portions and tapers into the empty center; it is one continuous panoramic artwork, not a frame or two boxed stickers.\nSame refined monochrome angular ink rendering as the reference: black hair, white inner feline-ear tufts, gray eyes, black coat, crisp varied linework, subtle cool grayscale. Normal opacity artwork; the app will apply 0.3 opacity. Genuine transparent RGBA background, including the broad center. NO legs, full body, text, logo, signature, flowers, badge, ornamental border, rectangle background, readable labels, large city scenery, or thick outlines. Decoration only. Produce ONE full-width shallow banner image with practical margins, not a collage sheet.",
+      "width": 2172,
+      "height": 724,
+      "sourceSha256": "3b8dbdac2ef62aedc0e4df2e43670956cf77ae55cdc79de98d3cf05855ba4825",
+      "webpSha256": "8f93d46690dabd778577efdce2fdb7a3578b1a50b68ab91b16e7e2fc7d690716"
+    },
+    {
+      "name": "search",
+      "file": "search.webp",
+      "prompt": "Use case: stylized-concept. Redraw one search-page decorative fragment from scratch using the attached image ONLY as the character and monochrome illustration reference. The adult anime detective has long black hair, feline ears with white inner tufts, calm gray eyes, a sharp black coat collar and black gloves.\nMake an elegant side-profile portrait cropped naturally at the upper collar, facing left, studying a small blank clue slip held near her chest. Her other black-gloved hand holds a simple magnifying glass BELOW and to the LEFT of the face, between her eye line and the clue, with CLEAR SPACE separating the glass circle from her eyes, nose and hair. Both hands emerge naturally from slim visible coat cuffs. The magnifier lens is empty clear glass with one delicate reflection, showing only the transparent background; it must NEVER cover an eye or contain a duplicated, reflected, enlarged or distorted eye. Use a reserved analytical expression. The head, one ear, a few tapered hair strands, two small hands and the thin glass handle make a compact asymmetric horizontal silhouette around 1.35:1. No torso below the collar, no legs, no full body.\nMatch the supplied character's refined crisp black/white angular ink rendering. Avoid broad heavy shoulder masses and busy visual noise. Genuine transparent RGBA background, normal-opacity black/white/cool grayscale art. No flowers, decorative frame, circular badge, border, city, background surface, lettering, writing, logo, signature or watermark text. Keep a small transparent margin around all important contours. Natural anatomy, believable grip on the magnifier and slip, no extra fingers or floating hands. Produce ONE isolated illustration.",
+      "width": 1459,
+      "height": 1078,
+      "sourceSha256": "3265f28ea905da92d3ff016ae407da1028e2779f9f7a0bb8257382c5832532f6",
+      "webpSha256": "5a364c5ea3afe332a9eeeeeb073c1c3d5b5f5ee77f2eb8667979afadc00a0388"
+    },
+    {
+      "name": "reports",
+      "file": "reports.webp",
+      "prompt": "Use case: stylized-concept. Redraw the report-page UI decoration as ONE anatomically connected illustration, based only on the attached character/style reference. The previous disembodied gloved-hands image was rejected: DO NOT draw floating hands, disconnected cuffs, a headless body, or a tiny half chin at the edge.\nShow the familiar adult anime detective with black hair, feline ears with white tufts, reserved gray eyes, sharp black trench-coat collar and black gloves, in a gentle three-quarter upper-body portrait leaning slightly over two thin report pages. Her COMPLETE face and feline ears are visible, looking down at the pen tip. One gloved hand naturally writes a small annotation, the other lightly steadies the page. Both hands and visible forearms MUST be clearly and correctly connected to her shoulder/upper torso inside the composition. Keep natural hand proportions and a believable pen grip. The face, coat, forearms and pages form a SINGLE joined diagonal silhouette; no visual gap that makes the arms look detached. Crop only below upper torso, soften/taper the lower coat and page contours into transparency. No legs or full body.\nArtwork silhouette about 1.45:1, compact and quiet, suitable beside the report export settings, not in a remote empty page corner. Match the supplied refined crisp black/white angular ink art, cool grayscale and restrained solid blacks; the paper has two faint abstract rules and no readable writing. Genuine transparent RGBA background at normal art opacity (the app applies 0.3). Small clear margin around every ear, head, hand and page. No flowers, decorative frame, badge, circle background, table surface, logo, signature, text, city, magnifying glass, monitor, or full-body scene. Produce ONE isolated illustration.",
+      "width": 1510,
+      "height": 1041,
+      "sourceSha256": "fc9de1df29912b36cc177990ba9e2a37ee283a3a93d12e3fa6022ac71e768258",
+      "webpSha256": "87e3f0ba9a6605afa2fcaa09f56bbd1c5b8156705fbda4393caafe7c6184ae34"
+    },
+    {
+      "name": "emulation",
+      "file": "emulation.webp",
+      "prompt": "Use case: stylized-concept. Create ONE newly drawn transparent UI decoration for a black/white digital-forensics application, using the attached image ONLY as character and ink-style reference. Preserve the same recognizable adult anime detective woman: long straight black hair, black feline ears with small white inner tufts, reserved gray eyes, sharp black trench-coat collar and black gloves. Match the refined monochrome angular ink illustration, crisp varied line weight, restrained solid black masses and white highlights. Newly draw the specified fragment; do not copy or crop the reference scene. Genuine transparent RGBA background, monochrome black/white/cool grayscale artwork at normal opacity (the application applies 0.3 opacity later). This is a quiet decorative fragment, not a poster or a sticker sheet. NO full body, legs, flowers, ornamental frame, circle badge, border, scenery, city, floor, lettering, logo, signature, fake watermark text or background rectangle. Let peripheral contours taper naturally into transparency. Keep essential shapes legible at a small UI display size. Leave a small clear transparent margin around all artwork. Output just one asset.\nPage identity: virtual-machine monitoring. A landscape asymmetric fragment, approximately 1.65:1 artwork silhouette. Rear three-quarter close crop of the detective's feline ears, head and just one shoulder facing a small angled desktop monitor. Her gloved hand rests lightly against the monitor's upper edge. The screen contains only a restrained abstract black terminal glow with three pale geometric strokes, no readable text and no invented dashboard UI. Coat collar is sharply graphic; do not draw below the upper chest. One discreet cable curve reinforces the machine motif. Clear separation of character and screen, open composition.",
+      "width": 1611,
+      "height": 976,
+      "sourceSha256": "511f3fafd89c1ae83459822ecfcd6427d44a8b603ff7466fecf9b6be939a84e0",
+      "webpSha256": "ed3bb6df0fc1fd0d7b011201f6d182d5c78362a17e60f164235cb55c3901daa0"
+    },
+    {
+      "name": "settings",
+      "file": "settings.webp",
+      "prompt": "Use case: stylized-concept. Create ONE newly drawn transparent UI decoration for a black/white digital-forensics application, using the attached image ONLY as character and ink-style reference. Preserve the same recognizable adult anime detective woman: long straight black hair, black feline ears with small white inner tufts, reserved gray eyes, sharp black trench-coat collar and black gloves. Match the refined monochrome angular ink illustration, crisp varied line weight, restrained solid black masses and white highlights. Newly draw the specified fragment; do not copy or crop the reference scene. Genuine transparent RGBA background, monochrome black/white/cool grayscale artwork at normal opacity (the application applies 0.3 opacity later). This is a quiet decorative fragment, not a poster or a sticker sheet. NO full body, legs, flowers, ornamental frame, circle badge, border, scenery, city, floor, lettering, logo, signature, fake watermark text or background rectangle. Let peripheral contours taper naturally into transparency. Keep essential shapes legible at a small UI display size. Leave a small clear transparent margin around all artwork. Output just one asset.\nPage identity: adjusting configuration. A narrow upright fragment, approximately 0.72:1 artwork silhouette. Profile close-up of the detective's feline ears, face and raised gloved hand carefully adjusting the large circular earcup/rotary dial of a simple over-ear headset. Include upper coat collar and three short precision tick marks around the dial to suggest calibration. No body below collar, no flowers, mechanical gears, labels or decorative circles surrounding the artwork. Quiet focused expression, vertical hair strands taper to transparency, very different silhouette from the other page assets.",
+      "width": 1064,
+      "height": 1478,
+      "sourceSha256": "a4b14bbb89958f954e2092763c429a8d801bbcb4414b8c72d9eefbd678e382c5",
+      "webpSha256": "d3ca95e61b9b8f60e9f1a9207a8cc906bf372858ed292d97d831255c9d794ac8"
+    },
+    {
+      "name": "file-preview",
+      "file": "file-preview.webp",
+      "prompt": "Use case: stylized-concept. Create ONE newly drawn transparent UI decoration for the evidence-file browser in a monochrome digital-forensics app. Use the attached image ONLY as character and ink-style reference. Preserve the recognizable adult anime detective woman: long black hair, black feline ears with white tufts, reserved gray eyes, sharp trench-coat collar and black gloves. Refined monochrome angular ink illustration, crisp varied line weights and restrained black masses with white highlights. Genuine transparent RGBA background; black/white/cool grayscale artwork at normal opacity (CSS will apply 0.3 later). \nPage identity: read-only browsing and inspecting evidence files. A compact upright fragment, approximately 0.88:1 artwork silhouette. A white open evidence folder and lifted sheet are foremost; behind the folder only the detective's cat ears, curious gray eyes, upper fringe and one black-gloved hand peeking around the page edge are visible. Her hand separates the two paper sheets. Hide everything below the nose behind the folder. Two small plain folder tabs and precise thin page edges, asymmetrical negative space, very different from the wide report-writing hands asset. Peripheral contours taper naturally into transparency. Leave a small clear transparent margin; output a single asset.\nNO torso, full body, pen, magnifying glass, headset, monitor, flowers, frame, badge, border, scenery, readable text, numbers, logo, signature, or background rectangle. Do not crop or copy the reference; newly draw this fragment.",
+      "width": 1176,
+      "height": 1337,
+      "sourceSha256": "b24f1a8c01cd9d0e15e432c7921815d39c0780733b046b6056ddd787473d1ddb",
+      "webpSha256": "e052c7124fb34156c34b808748378cdec2ea59c374fbb0688ea3cbc73b46dd6a"
+    }
+  ]
+}

@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use super::{RegistryBrowserCoverageDto, RegistryBrowserDiagnosticDto, RegistryItemReadStateDto};
+use super::{
+    RegistryBrowserCoverageDto, RegistryBrowserDiagnosticDto, RegistryItemReadStateDto,
+    RegistryOverlaySourceDto,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -14,6 +17,8 @@ pub struct RegistryValueMetadataDto {
     pub preview: String,
     pub cell_offset: u32,
     pub read_state: RegistryItemReadStateDto,
+    pub overlay_source: RegistryOverlaySourceDto,
+    pub data_overlay_source: RegistryOverlaySourceDto,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

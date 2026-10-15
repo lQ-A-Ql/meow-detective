@@ -3,15 +3,16 @@ use super::{MetadataInputError, MetadataReader};
 #[test]
 fn read_quota_is_enforced_before_calling_the_source() {
     let mut calls = 0;
-    let mut reader = MetadataReader::new(u64::MAX, |_, length| {
-        calls += 1;
-        Ok(vec![0; length as usize])
-    });
-    assert!(matches!(
-        reader.bytes(0, super::MAX_METADATA_BYTES + 1),
-        Err(MetadataInputError::Limit)
-    ));
-    drop(reader);
+    {
+        let mut reader = MetadataReader::new(u64::MAX, |_, length| {
+            calls += 1;
+            Ok(vec![0; length as usize])
+        });
+        assert!(matches!(
+            reader.bytes(0, super::MAX_METADATA_BYTES + 1),
+            Err(MetadataInputError::Limit)
+        ));
+    }
     assert_eq!(calls, 0);
 }
 

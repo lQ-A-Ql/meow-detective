@@ -5,12 +5,13 @@
  * 只渲染可见区域的节点，大幅提升性能。
  */
 
-import { useRef, useCallback, useState, type MutableRefObject, type ReactNode, type Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
+import { VirtualList } from '@/components/lists/VirtualList';
 import { TreeRow } from '@/components/tree/TreeRow';
-import { useVirtualizer, type Rect, type Virtualizer } from '@tanstack/react-virtual';
 
 
-import { ScrollArea } from '@/app/components/ui/scroll-area';
+
+
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { FileIconWithStatusOverlay } from '@/features/files/components/FileIconWithStatusOverlay';
 import type { FileTreeNode } from '@/types/models';
@@ -32,21 +33,6 @@ interface VirtualFileTreeProps {
   viewportTabIndex?: number;
 }
 
-function observeTreeViewport(
-  instance: Virtualizer<HTMLDivElement, HTMLDivElement>,
-  onRectChange: (rect: Rect) => void,
-) {
-  const viewport = instance.scrollElement;
-  if (!viewport) return undefined;
-  const update = () => onRectChange({ width: viewport.clientWidth, height: viewport.clientHeight || 600 });
-  update();
-  const ResizeObserverImpl = instance.targetWindow?.ResizeObserver;
-  if (!ResizeObserverImpl) return undefined;
-  const observer = new ResizeObserverImpl(update);
-  observer.observe(viewport);
-  return () => observer.disconnect();
-}
-
 export function VirtualFileTree({
   nodes,
   onNodeClick,
@@ -57,75 +43,16 @@ export function VirtualFileTree({
   viewportClassName,
   viewportTabIndex,
 }: VirtualFileTreeProps) {
-  const parentRef = useRef<HTMLDivElement | null>(null) as MutableRefObject<HTMLDivElement | null>;
-  const [, setViewportReady] = useState(0);
-  const getItemKey = useCallback(
-    (index: number) => nodes[index]?.id ?? index,
-    [nodes],
-  );
+  return <VirtualList items={nodes} getItemKey={(node) => node.id} estimateSize={itemSize} overscan={overscan} fixedSize treeContent className="min-h-0 flex-1" scrollContainerRef={scrollContainerRef} viewportClassName={viewportClassName ?? 'overflow-x-hidden'} viewportTabIndex={viewportTabIndex}
+    renderItem={(node, index) => {
 
-  const virtualizer = useVirtualizer({
-    count: nodes.length,
-    getScrollElement: () => parentRef.current,
-    getItemKey,
-    estimateSize: () => itemSize,
-    overscan,
-    initialRect: { width: 0, height: 600 },
-    observeElementRect: observeTreeViewport,
-  });
-
-  const setViewportRef = useCallback((element: HTMLDivElement | null) => {
-    if (parentRef.current !== element) setViewportReady((value) => value + 1);
-    parentRef.current = element;
-    if (!scrollContainerRef) return;
-    if (typeof scrollContainerRef === 'function') {
-      scrollContainerRef(element);
-    } else {
-      (scrollContainerRef as MutableRefObject<HTMLDivElement | null>).current = element;
-    }
-  }, [scrollContainerRef]);
-
-  const handleClick = useCallback(
-    (node: FileTreeNode) => {
-      onNodeClick(node);
-    },
-    [onNodeClick]
-  );
-
-  return (
-    <ScrollArea
-      className="min-h-0 flex-1"
-      viewportRef={setViewportRef}
-      viewportClassName={viewportClassName ?? 'overflow-x-hidden'}
-      viewportProps={{ tabIndex: viewportTabIndex, style: { contain: 'strict' } }}
-    >
-      <div
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        {virtualizer.getVirtualItems().map((virtualRow) => {
-          const node = nodes[virtualRow.index];
           if (!node) return null;
 
           const isLast =
-            virtualRow.index === nodes.length - 1 ||
-            (nodes[virtualRow.index + 1]?.depth ?? 0) < node.depth;
+            index === nodes.length - 1 ||
+            (nodes[index + 1]?.depth ?? 0) < node.depth;
 
-          return (
-            <div
-              key={node.id}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: `${virtualRow.size}px`,
-                transform: `translateY(${virtualRow.start}px)`,
-              }}
-            >
+          return <div className="h-full">
               {renderNode ? renderNode(node, isLast) : (
               <TreeRow
                 depth={node.depth}
@@ -134,8 +61,8 @@ export function VirtualFileTree({
                 selected={node.active}
                 active={node.active}
                 ariaLabel={node.name}
-                onActivate={() => handleClick(node)}
-                onToggle={() => handleClick(node)}
+                onActivate={() => onNodeClick(node)}
+                onToggle={() => onNodeClick(node)}
                 toggleLabel={node.name}
                 className="h-full"
                 style={{ paddingLeft: `${8 + node.depth * 16}px` }}
@@ -162,10 +89,6 @@ export function VirtualFileTree({
                 }
               />
               )}
-            </div>
-          );
-        })}
-      </div>
-    </ScrollArea>
-  );
+          </div>;
+        }} />;
 }

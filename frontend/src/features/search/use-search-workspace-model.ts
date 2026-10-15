@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useDataSources } from '@/features/case/hooks';
+import { useCurrentCase, useDataSources } from '@/features/case/hooks';
+import { useContentIndexModel } from './use-content-index-model';
 import { useInfiniteSearchResults } from '@/features/search/hooks';
 import { useSearchSelection } from '@/features/search/use-search-page-model';
 import { useSearchPreviewModel } from '@/features/search/use-search-preview-model';
@@ -30,6 +31,8 @@ export function useSearchWorkspaceModel() {
   const [extensionInput, setExtensionInputState] = useState('');
   const [options, setOptions] = useState<SearchRequestOptions>(DEFAULT_OPTIONS);
   const { data: dataSources } = useDataSources();
+  const { data: currentCase } = useCurrentCase();
+  const contentIndex = useContentIndexModel(currentCase?.id, options.dataSourceIds.length === 1 ? options.dataSourceIds[0] : undefined);
   const searchQuery = useInfiniteSearchResults(activeQuery, 100, options);
   const searchHits = useMemo(
     () => searchQuery.data?.pages.flatMap((page) => page.items) ?? [],
@@ -82,6 +85,7 @@ export function useSearchWorkspaceModel() {
 
   return {
     activeQuery,
+    contentIndex,
     clearQuery,
     coverage: firstPage?.coverage,
     dataSources: dataSources ?? [],

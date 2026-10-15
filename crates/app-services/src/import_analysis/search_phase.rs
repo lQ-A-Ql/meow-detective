@@ -221,7 +221,10 @@ fn reconcile_index_generation(current: &Path) -> Result<(), ImportAnalysisError>
     Ok(())
 }
 
-fn replace_index_generation(next: &Path, current: &Path) -> Result<(), ImportAnalysisError> {
+pub(crate) fn replace_index_generation(
+    next: &Path,
+    current: &Path,
+) -> Result<(), ImportAnalysisError> {
     let previous = previous_index_dir(current);
     if previous.try_exists().map_err(ImportAnalysisError::Io)? {
         fs::remove_dir_all(&previous).map_err(ImportAnalysisError::Io)?;

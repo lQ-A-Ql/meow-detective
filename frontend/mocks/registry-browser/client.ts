@@ -101,7 +101,7 @@ export function createRegistryBrowserMock(scenario: RegistryPreviewScenario = 's
       return { valueId: value.valueId, offset: request.offset, totalLength: value.byteLength, bytes,
         eof: request.offset + bytes.length >= value.byteLength,
         decodeStatus: value.payload.text !== undefined ? 'decoded' : 'rawOnly', decodedText: value.payload.text,
-        diagnostics: [] };
+        diagnostics: [], overlaySource: value.dataOverlaySource };
     },
     async searchHive() { return { hits: [], scannedKeys: 0, scannedValues: 0, skippedCount: 0, truncated: false }; },
     async closeHive(request) { sessions.delete(request.sessionId); return true; },

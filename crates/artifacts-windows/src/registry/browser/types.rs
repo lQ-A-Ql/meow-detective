@@ -3,6 +3,8 @@ use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum BrowserError {
+    #[error("registry search cancelled")]
+    Cancelled,
     #[error("registry hive format is unsupported")]
     Unsupported,
     #[error("registry cell is corrupt")]
@@ -26,6 +28,7 @@ pub struct BrowserKey {
     pub(super) subkeys: u32,
     pub(super) values: u32,
     pub(super) parent: u32,
+    pub overlay_source: BrowserOverlaySource,
 }
 
 #[derive(Debug, Clone)]
@@ -36,8 +39,17 @@ pub struct BrowserValue {
     pub byte_length: u32,
     pub preview: String,
     pub data_error: Option<BrowserError>,
+    pub overlay_source: BrowserOverlaySource,
+    pub data_overlay_source: BrowserOverlaySource,
     pub(super) inline: bool,
     pub(super) data: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserOverlaySource {
+    Base,
+    Recovered,
+    Merged,
 }
 
 #[derive(Debug)]
@@ -55,6 +67,7 @@ pub struct ValueRange {
     pub total_length: u32,
     pub decoded: Option<String>,
     pub partial: bool,
+    pub overlay_source: BrowserOverlaySource,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,6 +78,11 @@ pub struct BrowserSearchHit {
     pub cell_offset: u32,
     pub matched_field: &'static str,
     pub preview: String,
+    pub key_offset: u32,
+    pub value_index: Option<u32>,
+    pub data_offset: Option<u64>,
+    pub overlay_source: BrowserOverlaySource,
+    pub data_overlay_source: BrowserOverlaySource,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,11 +92,13 @@ pub struct BrowserSearchPage {
     pub scanned_values: u32,
     pub skipped: u32,
     pub truncated: bool,
+    pub total_matches: u64,
+    pub complete: bool,
 }
 
 /// Immutable source bytes plus a compact allocation-boundary bitmap. A cell
 /// reference must identify an allocated cell start, never bytes within another.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HiveSnapshot {
     pub(super) bytes: Arc<Vec<u8>>,
     pub(super) cells: Vec<u64>,
@@ -87,4 +107,11 @@ pub struct HiveSnapshot {
     pub(super) minor: u32,
     pub(super) partial: bool,
     pub(super) dirty: bool,
+    pub(super) provenance: Vec<ProvenanceSpan>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ProvenanceSpan {
+    pub start: usize,
+    pub end: usize,
 }
