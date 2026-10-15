@@ -122,7 +122,8 @@ fn staging_connections_use_bounded_single_writer_pragmas() {
         assert_eq!(temp_store, 2);
         assert_eq!(foreign_keys, 1);
         assert_eq!(cache_size, -(16 * 1024));
-        assert_eq!(locking_mode, "exclusive");
+        // An idle writer must release locks so the merge connection can ATTACH it.
+        assert_eq!(locking_mode, "normal");
     }
 }
 
