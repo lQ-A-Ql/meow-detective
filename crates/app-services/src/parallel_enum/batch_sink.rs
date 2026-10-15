@@ -250,7 +250,7 @@ pub(super) fn stage_mft_record(
     record: &MftRecord,
     data_source_id: &str,
     partition_index: usize,
-) -> Result<(Option<String>, String), String> {
+) -> Result<(Option<String>, String, u64), String> {
     let name = if record.record_number == 5 && (record.name.is_empty() || record.name == ".") {
         "\\".to_string()
     } else {
@@ -261,7 +261,7 @@ pub(super) fn stage_mft_record(
         .as_deref()
         .map(|parent| mft_entry_id_from_key(partition_index, parent));
     let (hidden, system) = visibility_flags_for_name(&name, record.hidden, record.system);
-    statement
+    let inserted = statement
         .execute(rusqlite::params![
             mft_entry_id(partition_index, record.record_number),
             parent_id,
@@ -283,7 +283,7 @@ pub(super) fn stage_mft_record(
             partition_index as i64,
         ])
         .map_err(|error| format!("Insert MFT staging row: {error}"))?;
-    Ok((parent_key, name))
+    Ok((parent_key, name, inserted as u64))
 }
 
 pub(super) fn prepare_ntfs_index_insert(conn: &Connection) -> Result<CachedStatement<'_>, String> {

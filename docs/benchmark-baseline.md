@@ -226,3 +226,39 @@ Windows E01 导入门禁还要求至少 90,000 条文件记录、枚举吞吐至
 - 冷/热缓存状态、软内存上限和回退原因。
 
 单次结果不构成发布阈值。只有在受控缓存条件、重复运行 p50/p95 与提取窗口高频 RSS/CPU 采样齐备后，才可更新治理事实源中的 large dataset gate。
+
+## 11. NTFS 导入细粒度测量协议
+
+`scripts/run-import-profile.ps1` 使用与普通导入相同的 application-service 用例，
+在独立案件中测量 RAW/E01 NTFS 导入。Windows 下需先进入 Visual Studio developer 环境。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run-import-profile.ps1 -SyntheticRecords 100000 -Runs 3
+powershell -ExecutionPolicy Bypass -File scripts/run-import-profile.ps1 -FixturePath $env:FORENSICS_IMPORT_FIXTURE -Runs 3 -Release
+```
+
+合成样本是固定 record 布局、resident 文件和空目录索引的数据卷；它验证扫描规模和结果一致性，
+不能代表真实大目录 INDX、碎片化、复杂属性或真实 E01 压缩率。测试 profile 与 release
+profile 必须分开比较；脚本默认将 OS 缓存条件标记为 `uncontrolled`，不声称是冷缓存。
+
+报告版本为 `schemaVersion=1`。`report.samples` 保留 source 级 wall time 与各 partition
+记录；`partitionAggregates` 是相同 phase 的分区工作量之和，不能当成并行 source wall time。
+`inclusive=true` 的 workflow/enumeration/analysis/timeline 不再与子 phase 相加。
+
+MFT 读取、解析、stage、目录 reader 初始化、大小校正、目录回填、路径解析、验证和 commit
+分开计时。scanned records、parsed records 与实际 staged rows 各自记录；逻辑读取字节
+不等于 E01 物理 I/O。没有物理 I/O 观测时省略该字段，未执行的索引构建为 `notApplicable`，
+不是零耗时成功。RSS end 与进程 lifetime 高水位分别记录，oracle 快照在采集 import RSS 后构造。
+
+`workflow` 覆盖导入用例入口到返回，包括 finalization 之后可能执行的自动制品提取；不包含
+队列等待、测试案件创建或 oracle 查询。旧 E01 runner、日志和 IPC 进度事件继续兼容。
+
+每次运行输出 catalog、graph、timeline 的行数及规范化 SHA-256。oracle 只映射本次生成的
+case/source/partition-root ID，并排除 Graph 的运行时 created_at；文件 ID、路径、属性、
+null、取证时间和来源字段保留。重复运行摘要必须一致，缺少必要 workflow/MFT 数据使脚本失败。
+默认回归另比较 profiling 开/关的全部 catalog 字段、Graph 和 Timeline，并验证合成 E01/RAW
+逻辑字节及 resident 文件范围读取一致。
+
+报告、私有证据路径、摘要和原始日志写入本地 `artifacts/import-profiles/`；不写入版本库。
+`selectedInputFileSha256` 仅标识传入的文件，不能冒充 E01 全部 segment 的容器集合摘要。
+这些测量暂不修改现有发布阈值。

@@ -1,9 +1,13 @@
 use super::batch_sink::{clear_staging_file_entries, enumerate_fs_to_staging, EnumerationStats};
 use super::ntfs::enumerate_ntfs_mft_to_staging;
+use crate::import_pipeline::{profile::PhaseRecorder, ImportProfiler};
 use crate::staging;
 use evidence_core::FileSystemReader;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
+use transport::dto::import_benchmark::{
+    ImportBenchmarkPhaseDto as Phase, ImportBenchmarkStateDto as State,
+};
 
 /// Work required to enumerate one partition.
 pub struct PartitionWork {
@@ -73,7 +77,26 @@ pub(super) fn enumerate_single_partition(
     cancel_token: &AtomicBool,
     progress_cb: Option<&dyn Fn(u64, u64)>,
 ) -> PartitionResult {
+    enumerate_single_partition_profiled(
+        case_root,
+        data_source_id,
+        partition,
+        cancel_token,
+        progress_cb,
+        None,
+    )
+}
+
+pub(super) fn enumerate_single_partition_profiled(
+    case_root: &Path,
+    data_source_id: &str,
+    partition: PartitionWork,
+    cancel_token: &AtomicBool,
+    progress_cb: Option<&dyn Fn(u64, u64)>,
+    profiler: Option<ImportProfiler>,
+) -> PartitionResult {
     let index = partition.index;
+    let mut profile = PhaseRecorder::new(profiler, Some(index));
     let conn = match staging::open_partition_staging(case_root, data_source_id, index) {
         Ok(conn) => conn,
         Err(error) => {
@@ -90,6 +113,7 @@ pub(super) fn enumerate_single_partition(
 
     let _ = staging::set_staging_meta(&conn, "status", "running");
     let mut warnings = Vec::new();
+    let started = profile.start();
     let result = enumerate_partition(
         &conn,
         &partition,
@@ -97,7 +121,20 @@ pub(super) fn enumerate_single_partition(
         cancel_token,
         progress_cb,
         &mut warnings,
+        &mut profile,
     );
+    profile.record(
+        Phase::Enumeration,
+        started,
+        if result.is_ok() {
+            State::Completed
+        } else {
+            State::Failed
+        },
+    );
+    if result.is_err() && cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
+        profile.cancel(Phase::Enumeration);
+    }
     finish_partition(&conn, index, warnings, result)
 }
 
@@ -123,6 +160,7 @@ fn enumerate_partition(
     cancel_token: &AtomicBool,
     progress_cb: Option<&dyn Fn(u64, u64)>,
     warnings: &mut Vec<String>,
+    profile: &mut PhaseRecorder,
 ) -> Result<EnumerationStats, String> {
     if !partition.fs_kind.eq_ignore_ascii_case("ntfs") {
         return enumerate_fs_to_staging(
@@ -135,8 +173,14 @@ fn enumerate_partition(
         );
     }
 
-    match enumerate_ntfs_mft_to_staging(conn, partition, data_source_id, cancel_token, progress_cb)
-    {
+    match enumerate_ntfs_mft_to_staging(
+        conn,
+        partition,
+        data_source_id,
+        cancel_token,
+        progress_cb,
+        profile,
+    ) {
         Ok(stats) => Ok(stats),
         Err(error) => {
             tracing::warn!(
@@ -148,14 +192,16 @@ fn enumerate_partition(
             let message = error.to_string();
             let _ = staging::set_staging_meta(conn, "mft_fallback_warning", &message);
             warnings.push(format!("MFT fast path fallback: {message}"));
-            enumerate_fs_to_staging(
-                conn,
-                &*partition.fs,
-                data_source_id,
-                partition.index,
-                cancel_token,
-                progress_cb,
-            )
+            profile.measure(Phase::FallbackEnumeration, || {
+                enumerate_fs_to_staging(
+                    conn,
+                    &*partition.fs,
+                    data_source_id,
+                    partition.index,
+                    cancel_token,
+                    progress_cb,
+                )
+            })
         }
     }
 }

@@ -1,5 +1,7 @@
+use super::partition_work::enumerate_single_partition_profiled;
 use super::partition_work::{enumerate_single_partition, PartitionResult, PartitionWork};
 use super::progress::{heartbeat_percent, PROGRESS_CHANNEL_CAPACITY};
+use crate::import_pipeline::ImportProfiler;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use domain::DataSourceId;
 use std::path::{Path, PathBuf};
@@ -7,6 +9,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
+
+#[derive(Clone)]
+struct WorkerExecution {
+    cancel_token: Arc<AtomicBool>,
+    profiler: Option<ImportProfiler>,
+}
 
 type ProgressMessage = (usize, u64, u64);
 
@@ -44,6 +52,26 @@ pub fn enumerate_partitions_parallel(
     cancel_token: Arc<AtomicBool>,
     progress_cb: &dyn Fn(usize, u32, &str),
 ) -> Result<Vec<PartitionResult>, String> {
+    enumerate_partitions_profiled(
+        case_root,
+        data_source_id,
+        partitions,
+        max_workers,
+        cancel_token,
+        None,
+        progress_cb,
+    )
+}
+
+pub(crate) fn enumerate_partitions_profiled(
+    case_root: &Path,
+    data_source_id: &DataSourceId,
+    partitions: Vec<PartitionWork>,
+    max_workers: usize,
+    cancel_token: Arc<AtomicBool>,
+    profiler: Option<ImportProfiler>,
+    progress_cb: &dyn Fn(usize, u32, &str),
+) -> Result<Vec<PartitionResult>, String> {
     if partitions.is_empty() {
         return Ok(Vec::new());
     }
@@ -60,7 +88,10 @@ pub fn enumerate_partitions_parallel(
         case_root,
         data_source_id,
         &channels,
-        cancel_token,
+        WorkerExecution {
+            cancel_token,
+            profiler,
+        },
     )?;
     drop(channels.work_tx);
     drop(channels.result_tx);
@@ -115,7 +146,7 @@ fn spawn_workers(
     case_root: &Path,
     data_source_id: &DataSourceId,
     channels: &Channels,
-    cancel_token: Arc<AtomicBool>,
+    execution: WorkerExecution,
 ) -> Result<Vec<JoinHandle<()>>, String> {
     let mut handles = Vec::with_capacity(worker_count);
     for worker_index in 0..worker_count {
@@ -126,7 +157,7 @@ fn spawn_workers(
             channels.work_rx.clone(),
             channels.result_tx.clone(),
             channels.progress_tx.clone(),
-            cancel_token.clone(),
+            execution.clone(),
         )?);
     }
     Ok(handles)
@@ -139,11 +170,12 @@ fn spawn_worker(
     work_rx: Receiver<PartitionWork>,
     result_tx: Sender<PartitionResult>,
     progress_tx: Sender<ProgressMessage>,
-    cancel_token: Arc<AtomicBool>,
+    execution: WorkerExecution,
 ) -> Result<JoinHandle<()>, String> {
     std::thread::Builder::new()
         .name(format!("enum-worker-{worker_index}"))
         .spawn(move || {
+            let cancel_token = execution.cancel_token;
             while let Ok(partition) = work_rx.recv() {
                 let index = partition.index;
                 if cancel_token.load(Ordering::Relaxed) {
@@ -153,13 +185,24 @@ fn spawn_worker(
                 let progress = |entries, size| {
                     let _ = progress_tx.try_send((index, entries, size));
                 };
-                let result = enumerate_single_partition(
-                    &case_root,
-                    &data_source_id,
-                    partition,
-                    &cancel_token,
-                    Some(&progress),
-                );
+                let result = if let Some(profiler) = &execution.profiler {
+                    enumerate_single_partition_profiled(
+                        &case_root,
+                        &data_source_id,
+                        partition,
+                        &cancel_token,
+                        Some(&progress),
+                        Some(profiler.clone()),
+                    )
+                } else {
+                    enumerate_single_partition(
+                        &case_root,
+                        &data_source_id,
+                        partition,
+                        &cancel_token,
+                        Some(&progress),
+                    )
+                };
                 let _ = result_tx.send(result);
                 if cancel_token.load(Ordering::Relaxed) {
                     break;

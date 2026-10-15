@@ -37,6 +37,73 @@ pub fn execute_import_job_with_counts(
     job_id: &domain::JobId,
     options: ImportJobOptions<'_>,
 ) -> Result<(String, JobOutcomeCounts), CommandError> {
+    execute_import_job_internal(
+        conn,
+        case_id,
+        case_root,
+        import_config,
+        job_id,
+        options,
+        None,
+    )
+}
+
+/// Execute the same workflow with a job-local benchmark collector.
+pub fn execute_import_job_profiled(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+    case_root: &std::path::Path,
+    import_config: import_precheck::ImportSourceConfig,
+    job_id: &domain::JobId,
+    options: ImportJobOptions<'_>,
+    profiler: &super::ImportProfiler,
+) -> Result<(String, JobOutcomeCounts), CommandError> {
+    use transport::dto::import_benchmark::{
+        ImportBenchmarkPhaseDto as Phase, ImportBenchmarkStateDto as State,
+    };
+    let started = Instant::now();
+    let result = execute_import_job_internal(
+        conn,
+        case_id,
+        case_root,
+        import_config,
+        job_id,
+        options,
+        Some(profiler.clone()),
+    );
+    let state = if result.is_ok() {
+        State::Completed
+    } else if options.cancel_token.load(Ordering::Relaxed) {
+        State::Cancelled
+    } else {
+        State::Failed
+    };
+    profiler.record(
+        None,
+        Phase::Workflow,
+        Some(started.elapsed()),
+        state,
+        profile::Counters::default(),
+    );
+    profiler.record(
+        None,
+        Phase::SourceIndexBuild,
+        None,
+        State::NotApplicable,
+        profile::Counters::default(),
+    );
+    result
+}
+
+fn execute_import_job_internal(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+    case_root: &std::path::Path,
+    import_config: import_precheck::ImportSourceConfig,
+    job_id: &domain::JobId,
+    options: ImportJobOptions<'_>,
+    profiler: Option<super::ImportProfiler>,
+) -> Result<(String, JobOutcomeCounts), CommandError> {
     let job_repo = JobRepo::new(conn);
     let mut counts = JobOutcomeCounts::default();
     let import_started = Instant::now();
@@ -56,6 +123,7 @@ pub fn execute_import_job_with_counts(
         job_repo,
         counts: &mut counts,
         content_kind: crate::import_pipeline::context::ImportContentKind::Filesystem,
+        profiler,
     };
 
     let ds = phases::run_attach_phase(&mut ctx)?;
@@ -74,7 +142,12 @@ pub fn execute_import_job_with_counts(
         reject_cancelled_after_register(&ctx, &ds)?;
 
         let stats = phases::run_enumeration_phase(&mut ctx, &ds)?;
-        let pipeline_msg = phases::run_analyze_phase(&mut ctx, &ds)?;
+        let profiler = ctx.profiler.clone();
+        let pipeline_msg = profile::measure_optional(
+            profiler.as_ref(),
+            transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Analysis,
+            || phases::run_analyze_phase(&mut ctx, &ds),
+        )?;
         phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)
     })();
 

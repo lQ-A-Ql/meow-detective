@@ -21,21 +21,28 @@ pub(super) fn merge_enumeration_results(
     persist_merging_phase(ctx.case_root, manifest)?;
 
     let started = Instant::now();
-    let merged = staging::merge_all_staging_to_main_with_cancel(
-        ctx.source_connection()?,
-        ctx.case_root,
-        &data_source.id.0,
-        manifest,
-        Some(&|completed, total| {
-            let percent = 62 + (completed as u32 * 8 / total as u32);
-            crate::import_pipeline::emit::emit_job_progress(
-                ctx.event_sink(),
-                &ctx.job_id.0,
-                percent.min(70),
-                &format!("Merged {completed}/{total} partitions"),
-            );
-        }),
-        Some(ctx.options.cancel_token),
+    let source_connection = ctx.source_connection()?;
+    let merged = super::super::profile::measure_optional(
+        ctx.profiler.as_ref(),
+        transport::dto::import_benchmark::ImportBenchmarkPhaseDto::StagingMerge,
+        || {
+            staging::merge_all_staging_to_main_with_cancel(
+                source_connection,
+                ctx.case_root,
+                &data_source.id.0,
+                manifest,
+                Some(&|completed, total| {
+                    let percent = 62 + (completed as u32 * 8 / total as u32);
+                    crate::import_pipeline::emit::emit_job_progress(
+                        ctx.event_sink(),
+                        &ctx.job_id.0,
+                        percent.min(70),
+                        &format!("Merged {completed}/{total} partitions"),
+                    );
+                }),
+                Some(ctx.options.cancel_token),
+            )
+        },
     )
     .map(|stats| stats.merged_rows)
     .map_err(CommandError::from_service_error)?;

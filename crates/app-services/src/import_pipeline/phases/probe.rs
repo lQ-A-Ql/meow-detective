@@ -20,7 +20,11 @@ pub(super) fn seed_manifest_if_needed(
         return Ok(ProbeSeedOutcome::Filesystem);
     }
     let started = std::time::Instant::now();
-    let mut probe = probe_image(ctx)?;
+    let mut probe = super::super::profile::measure_optional(
+        ctx.profiler.as_ref(),
+        transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Probe,
+        || probe_image(ctx),
+    )?;
     datasource_service::expand_lvm_pool_candidates(
         &mut probe,
         &ctx.import_config.source_path,
@@ -65,7 +69,11 @@ pub(super) fn load_resume_candidates(
         return Ok(());
     }
     let started = std::time::Instant::now();
-    let mut probe = probe_image(ctx)?;
+    let mut probe = super::super::profile::measure_optional(
+        ctx.profiler.as_ref(),
+        transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Probe,
+        || probe_image(ctx),
+    )?;
     datasource_service::expand_lvm_pool_candidates(
         &mut probe,
         &ctx.import_config.source_path,

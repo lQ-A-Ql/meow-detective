@@ -4,8 +4,10 @@ use super::super::partition_work::PartitionWork;
 use super::mft_scan::{self, prepare_mft_scan};
 use super::path_reconstruction::MftCatalog;
 use super::validation::validate_mft_staging_shape;
+use crate::import_pipeline::profile::{Counters, PhaseRecorder};
 use crate::staging;
 use std::sync::atomic::{AtomicBool, Ordering};
+use transport::dto::import_benchmark::ImportBenchmarkPhaseDto as Phase;
 
 pub(in crate::parallel_enum) fn enumerate_ntfs_mft_to_staging(
     conn: &rusqlite::Connection,
@@ -13,17 +15,21 @@ pub(in crate::parallel_enum) fn enumerate_ntfs_mft_to_staging(
     data_source_id: &str,
     cancel_token: &AtomicBool,
     progress_cb: Option<&dyn Fn(u64, u64)>,
+    profile: &mut PhaseRecorder,
 ) -> Result<EnumerationStats, ParallelEnumError> {
     check_cancelled(cancel_token)?;
-    let mut scan = prepare_mft_scan(partition)?;
-    enumerate_ntfs_mft_scan_to_staging(
-        conn,
+    let mut scan = prepare_mft_scan(partition, profile)?;
+    enumerate_scan(
+        &mut EnumerationContext {
+            conn,
+            data_source_id,
+            partition_index: partition.index,
+            volume_offset: partition.volume_offset,
+            cancel_token,
+            progress_cb,
+            profile,
+        },
         &mut scan,
-        data_source_id,
-        partition.index,
-        partition.volume_offset,
-        cancel_token,
-        progress_cb,
     )
 }
 
@@ -37,96 +43,109 @@ pub(in crate::parallel_enum) fn enumerate_ntfs_reader_to_staging(
     progress_cb: Option<&dyn Fn(u64, u64)>,
 ) -> Result<EnumerationStats, ParallelEnumError> {
     check_cancelled(cancel_token)?;
-    let mut scan = mft_scan::prepare_mft_scan_from_reader(reader, volume_offset)?;
-    enumerate_ntfs_mft_scan_to_staging(
-        conn,
+    let mut profile = PhaseRecorder::new(None, Some(partition_index));
+    let mut scan = mft_scan::prepare_mft_scan_from_reader(reader, volume_offset, &mut profile)?;
+    enumerate_scan(
+        &mut EnumerationContext {
+            conn,
+            data_source_id,
+            partition_index,
+            volume_offset,
+            cancel_token,
+            progress_cb,
+            profile: &mut profile,
+        },
         &mut scan,
-        data_source_id,
-        partition_index,
-        volume_offset,
-        cancel_token,
-        progress_cb,
     )
 }
 
-fn enumerate_ntfs_mft_scan_to_staging(
-    conn: &rusqlite::Connection,
-    scan: &mut mft_scan::MftScan,
-    data_source_id: &str,
+struct EnumerationContext<'a> {
+    conn: &'a rusqlite::Connection,
+    data_source_id: &'a str,
     partition_index: usize,
     volume_offset: u64,
-    cancel_token: &AtomicBool,
-    progress_cb: Option<&dyn Fn(u64, u64)>,
+    cancel_token: &'a AtomicBool,
+    progress_cb: Option<&'a dyn Fn(u64, u64)>,
+    profile: &'a mut PhaseRecorder,
+}
+
+fn enumerate_scan(
+    ctx: &mut EnumerationContext<'_>,
+    scan: &mut mft_scan::MftScan,
 ) -> Result<EnumerationStats, ParallelEnumError> {
     let total_records = scan.total_records();
-
-    conn.execute_batch("BEGIN TRANSACTION")
+    ctx.conn
+        .execute_batch("BEGIN TRANSACTION")
         .map_err(ParallelEnumError::Db)?;
-    let result = scan_mft_transaction(
-        conn,
-        data_source_id,
-        partition_index,
-        volume_offset,
-        cancel_token,
-        progress_cb,
-        scan,
-    );
+    let result = scan_mft_transaction(ctx, scan);
     let stats = match result {
         Ok(stats) => {
-            conn.execute_batch("COMMIT")
+            ctx.profile
+                .measure(Phase::MftCommit, || ctx.conn.execute_batch("COMMIT"))
                 .map_err(ParallelEnumError::Db)?;
             stats
         }
         Err(error) => {
-            conn.execute_batch("ROLLBACK").ok();
+            ctx.conn.execute_batch("ROLLBACK").ok();
             return Err(error);
         }
     };
-
-    staging::set_staging_meta(conn, "enum_strategy", "mft")
+    staging::set_staging_meta(ctx.conn, "enum_strategy", "mft")
         .map_err(|error| ParallelEnumError::MftParams(format!("Mark MFT strategy: {error}")))?;
-    staging::set_staging_meta(conn, "mft_records", &total_records.to_string())
+    staging::set_staging_meta(ctx.conn, "mft_records", &total_records.to_string())
         .map_err(|error| ParallelEnumError::MftParams(format!("Mark MFT record count: {error}")))?;
     Ok(stats)
 }
 
 fn scan_mft_transaction(
-    conn: &rusqlite::Connection,
-    data_source_id: &str,
-    partition_index: usize,
-    volume_offset: u64,
-    cancel_token: &AtomicBool,
-    progress_cb: Option<&dyn Fn(u64, u64)>,
+    ctx: &mut EnumerationContext<'_>,
     scan: &mut mft_scan::MftScan,
 ) -> Result<EnumerationStats, ParallelEnumError> {
-    let mut statement = prepare_mft_insert(conn)?;
+    let mut statement = prepare_mft_insert(ctx.conn)?;
     let mut catalog = MftCatalog::default();
     let mut start_record = 0;
-
     while start_record < scan.total_records() {
-        check_cancelled(cancel_token)?;
-        let (records, scanned_count) = scan.read_chunk(start_record)?;
-        catalog.stage_records(&mut statement, &records, data_source_id, partition_index)?;
+        check_cancelled(ctx.cancel_token)?;
+        let (records, scanned_count) = scan.read_chunk(start_record, ctx.profile)?;
+        let staged_rows = ctx.profile.measure(Phase::MftStage, || {
+            catalog.stage_records(
+                &mut statement,
+                &records,
+                ctx.data_source_id,
+                ctx.partition_index,
+            )
+        })?;
+        ctx.profile.count(
+            Phase::MftStage,
+            Counters {
+                staged: staged_rows,
+                ..Default::default()
+            },
+        );
         start_record += scanned_count;
-        if let Some(callback) = progress_cb {
+        if let Some(callback) = ctx.progress_cb {
             let stats = catalog.stats();
             callback(stats.file_count + stats.dir_count, stats.total_size);
         }
     }
-
     drop(statement);
     scan.release_buffer();
     catalog.backfill_directory_indexes(
-        conn,
-        data_source_id,
+        ctx.conn,
+        ctx.data_source_id,
         scan.take_reader()?,
-        partition_index,
-        volume_offset,
+        ctx.partition_index,
+        ctx.volume_offset,
+        ctx.profile,
     )?;
-    catalog.update_staging_paths(conn, data_source_id, partition_index)?;
+    ctx.profile.measure(Phase::MftPathResolve, || {
+        catalog.update_staging_paths(ctx.conn, ctx.data_source_id, ctx.partition_index)
+    })?;
     let stats = catalog.stats();
     drop(catalog);
-    validate_mft_staging_shape(conn, data_source_id, partition_index)?;
+    ctx.profile.measure(Phase::MftValidate, || {
+        validate_mft_staging_shape(ctx.conn, ctx.data_source_id, ctx.partition_index)
+    })?;
     Ok(stats)
 }
 

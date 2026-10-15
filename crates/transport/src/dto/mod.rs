@@ -24,6 +24,7 @@ pub mod files;
 mod governance;
 pub mod graph;
 pub mod import;
+pub mod import_benchmark;
 pub mod infrastructure_graph;
 pub mod jobs;
 pub mod ledger;

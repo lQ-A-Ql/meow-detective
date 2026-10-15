@@ -1,9 +1,11 @@
 use super::super::error::ParallelEnumError;
 use super::super::partition_work::PartitionWork;
+use crate::import_pipeline::profile::{Counters, PhaseRecorder};
 use evidence_core::{EvidenceReader, LocalDiskReader, RawImageReader};
 use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
 use image_e01::E01Reader;
 use std::io::{Read, Seek, SeekFrom};
+use transport::dto::import_benchmark::ImportBenchmarkPhaseDto as Phase;
 
 const MFT_CHUNK_RECORDS: u64 = 10_000;
 const MFT_FALLBACK_SIZE: u64 = 100 * 1024 * 1024;
@@ -24,7 +26,36 @@ impl MftScan {
     pub(in crate::parallel_enum) fn read_chunk(
         &mut self,
         start_record: u64,
+        profile: &mut PhaseRecorder,
     ) -> Result<(Vec<MftRecord>, u64), ParallelEnumError> {
+        let chunk_count = profile.measure(Phase::MftRead, || self.read_raw_chunk(start_record))?;
+        profile.count(
+            Phase::MftRead,
+            Counters {
+                scanned: chunk_count,
+                bytes: self.buffer.len() as u64,
+                ..Default::default()
+            },
+        );
+        let records = profile.measure(Phase::MftParse, || {
+            Ok::<_, ParallelEnumError>(self.scanner.parse_chunk(
+                &self.buffer,
+                start_record,
+                chunk_count,
+            ))
+        })?;
+        profile.count(
+            Phase::MftParse,
+            Counters {
+                scanned: chunk_count,
+                parsed: records.len() as u64,
+                ..Default::default()
+            },
+        );
+        Ok((records, chunk_count))
+    }
+
+    fn read_raw_chunk(&mut self, start_record: u64) -> Result<u64, ParallelEnumError> {
         let chunk_count = MFT_CHUNK_RECORDS.min(self.total_records - start_record);
         let byte_count = chunk_count * self.scanner.record_size() as u64;
         self.buffer.resize(byte_count as usize, 0);
@@ -54,11 +85,7 @@ impl MftScan {
             .map_err(ParallelEnumError::Io)?;
         }
 
-        Ok((
-            self.scanner
-                .parse_chunk(&self.buffer, start_record, chunk_count),
-            chunk_count,
-        ))
+        Ok(chunk_count)
     }
 
     pub(in crate::parallel_enum) fn release_buffer(&mut self) {
@@ -76,16 +103,29 @@ impl MftScan {
 
 pub(in crate::parallel_enum) fn prepare_mft_scan(
     partition: &PartitionWork,
+    profile: &mut PhaseRecorder,
 ) -> Result<MftScan, ParallelEnumError> {
-    let reader = open_partition_evidence_reader(partition)?;
-    prepare_mft_scan_from_reader(reader, partition.volume_offset)
+    let reader = profile.measure(Phase::MftReaderOpen, || {
+        open_partition_evidence_reader(partition)
+    })?;
+    profile.count(
+        Phase::MftReaderOpen,
+        Counters {
+            opens: 1,
+            ..Default::default()
+        },
+    );
+    prepare_mft_scan_from_reader(reader, partition.volume_offset, profile)
 }
 
 pub(in crate::parallel_enum) fn prepare_mft_scan_from_reader(
     mut reader: Box<dyn EvidenceReader>,
     volume_offset: u64,
+    profile: &mut PhaseRecorder,
 ) -> Result<MftScan, ParallelEnumError> {
-    let params = read_ntfs_mft_parameters_at(&mut *reader, volume_offset)?;
+    let params = profile.measure(Phase::MftParams, || {
+        read_ntfs_mft_parameters_at(&mut *reader, volume_offset)
+    })?;
     if params.mft_data_size == 0 {
         return Err(ParallelEnumError::MftParams(
             "MFT data size is zero".to_string(),

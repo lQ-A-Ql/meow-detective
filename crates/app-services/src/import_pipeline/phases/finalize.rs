@@ -65,10 +65,16 @@ fn materialize_timeline(
 ) -> Result<u64, CommandError> {
     let source_conn = ctx.source_connection()?;
     ctx.report_job_progress(94, "Materializing timeline...")?;
-    let projection = timeline_service::materialize_file_activity(
-        source_conn,
-        ctx.import_config.platform,
-        ctx.options.cancel_token.as_ref(),
+    let projection = super::super::profile::measure_optional(
+        ctx.profiler.as_ref(),
+        transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Timeline,
+        || {
+            timeline_service::materialize_file_activity(
+                source_conn,
+                ctx.import_config.platform,
+                ctx.options.cancel_token.as_ref(),
+            )
+        },
     )
     .map_err(CommandError::from_service_error)?;
     emit_phase_profile(
@@ -130,7 +136,12 @@ fn checkpoint_source_database(
         return Ok(());
     };
     let started = Instant::now();
-    source_db::checkpoint_source_db(source_conn).map_err(|error| {
+    super::super::profile::measure_optional(
+        ctx.profiler.as_ref(),
+        transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Checkpoint,
+        || source_db::checkpoint_source_db(source_conn),
+    )
+    .map_err(|error| {
         tracing::error!(
             data_source_id = %data_source.id.0,
             error = %error,

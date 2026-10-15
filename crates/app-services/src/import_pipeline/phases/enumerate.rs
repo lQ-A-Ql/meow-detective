@@ -10,7 +10,7 @@ use super::{
 };
 use crate::import_pipeline::context::ImportJobContext;
 use crate::import_pipeline::execute::{emit_import_cancellation_state, mark_import_cancelling};
-use crate::import_pipeline::partition::build_partition_work;
+use crate::import_pipeline::partition::build_partition_work_profiled;
 use crate::import_pipeline::profile::{
     bytes_to_mb, elapsed_ms, emit_import_profile_progress, emit_phase_profile, mb_per_sec,
     rows_per_sec,
@@ -118,14 +118,14 @@ fn build_pending_partition_work(
         .iter()
         .filter(|partition| partition.status != staging::PartitionStatus::Done)
     {
-        match build_partition_work(
+        let work = build_partition_work_profiled(
             &ctx.import_config.source_path,
             &ctx.import_config.kind,
-            partition.index,
-            &partition.name,
-            &partition.fs_kind,
+            partition,
             candidates,
-        ) {
+            ctx.profiler.clone(),
+        );
+        match work {
             Some(work) => pending.push(work),
             None => failures.push((
                 partition.index,
@@ -221,12 +221,13 @@ fn run_parallel_enumeration(
     max_workers: usize,
 ) -> Result<Vec<crate::parallel_enum::PartitionResult>, CommandError> {
     let total_partitions = manifest.partitions.len() as u32;
-    crate::parallel_enum::enumerate_partitions_parallel(
+    crate::parallel_enum::enumerate_partitions_profiled(
         ctx.case_root,
         &data_source.id,
         pending,
         max_workers,
         Arc::clone(ctx.options.cancel_token),
+        ctx.profiler.clone(),
         &|partition_index, percent, detail| {
             let overall = 25 + (percent * 35 / 100);
             crate::import_pipeline::emit::emit_job_progress(
@@ -353,9 +354,11 @@ fn populate_file_graph(
     let Some(source_conn) = ctx.source_conn else {
         return;
     };
-    if let Err(error) =
-        file_service::populate_file_graph_for_data_source(source_conn, &data_source.id)
-    {
+    if let Err(error) = super::super::profile::measure_optional(
+        ctx.profiler.as_ref(),
+        transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Graph,
+        || file_service::populate_file_graph_for_data_source(source_conn, &data_source.id),
+    ) {
         let warning = format!("Graph population warning: {error}");
         tracing::warn!(%warning, "Failed to populate file graph after enumeration");
         stats.warnings.push(warning);

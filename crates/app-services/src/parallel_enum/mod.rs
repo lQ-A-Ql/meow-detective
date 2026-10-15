@@ -12,6 +12,7 @@ mod ntfs_entry;
 mod partition_work;
 mod progress;
 
+pub(crate) use coordinator::enumerate_partitions_profiled;
 pub use coordinator::{
     default_worker_count, effective_worker_count, enumerate_partitions_parallel,
     resolve_worker_count,
