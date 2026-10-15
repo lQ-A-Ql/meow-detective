@@ -24,6 +24,7 @@ Meow~Detective 面向磁盘镜像、逻辑目录与 Linux/PVE 证据源的本地
 - 文件选择器接受 `.e01`/`.ewf`、`.dd`/`.raw`/`.img`、`.iso` 和 `.vmdk`；扩展名只用于选择入口，最终是否可读仍由 magic、descriptor、PVD 和长度校验决定。
 - VMDK 目前仅接受 UTF-8、`createType="monolithicFlat"`、单个零偏移 `FLAT` extent；descriptor 与 extent 的逻辑长度、截断、溢出和路径边界都会校验。`.001/.002/...` 分卷集合、sparse/streamOptimized VMDK 明确拒绝。VHD fixed/dynamic/differencing、带相对父链的 VHDX，以及无压缩 QCOW/QCOW2 backing chain 提供只读读取；压缩 QCOW2 cluster 和损坏的虚拟磁盘元数据 fail-closed。
 - ISO 适配器优先使用 Joliet 名称，目录和文件 extent 均受卷边界限制；ISO 可直接导入，也可嵌套在 E01 或受支持的 flat VMDK 字节流中。UDF、Rock Ridge、交错或 multi-extent 记录不在当前承诺范围。
+- NTFS 导入复用数据源 reader 工厂，按资源预算并行读取和解析 MFT，再按记录顺序由单一 writer 写入数值 staging。新 source DB 的次级索引在合并后重建并执行 ANALYZE，完成前不会发布 Ready；异常退出后的索引状态可随导入恢复。
 - 自动识别 MBR/GPT、常见分区与文件系统；支持 NTFS、FAT、exFAT、ext4、XFS、Btrfs 以及 Linux LVM 直接逻辑卷映射。
 - 文件树、目录分页、筛选、自然排序、文件属性与数据源分区信息均由后端统一提供。
 - 文本、Hex、图片、音视频、PDF/Office/SQLite 等预览走受限的只读证据读取链路；大文件使用范围读取，避免一次性载入完整文件。

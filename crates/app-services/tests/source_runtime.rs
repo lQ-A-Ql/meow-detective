@@ -70,3 +70,13 @@ fn unsupported_logical_source_has_no_host_reader_factory() {
     let temp = tempfile::TempDir::new().unwrap();
     assert!(open_factory(temp.path(), &DataSourceKind::LogicalDirectory).is_err());
 }
+
+#[test]
+fn raw_factory_rejects_a_changed_source_member() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("changing.raw");
+    std::fs::write(&path, vec![0; 512]).unwrap();
+    let factory = open_factory(&path, &DataSourceKind::Raw).unwrap();
+    std::fs::write(&path, vec![0; 1024]).unwrap();
+    assert!(factory.open_reader().is_err());
+}

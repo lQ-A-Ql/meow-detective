@@ -451,3 +451,57 @@ fn test_section_desc(stype: &str, next: u64, size: u64) -> [u8; 76] {
     desc[24..32].copy_from_slice(&size.to_le_bytes());
     desc
 }
+
+#[test]
+fn open_plan_shares_chunk_table_and_reads_across_independent_segment_handles() {
+    let directory = temporary_chunk_path("open-plan-segments").with_extension("");
+    std::fs::create_dir_all(&directory).unwrap();
+    let first_path = directory.join("source.E01");
+    let second_path = directory.join("source.E02");
+    std::fs::write(&first_path, vec![0x11; 512]).unwrap();
+    std::fs::write(&second_path, vec![0x22; 512]).unwrap();
+    let reader = E01Reader::from_parts(
+        evidence_core::ReaderInfo {
+            path: first_path.clone(),
+            size: 1024,
+            kind: "e01".into(),
+        },
+        1024,
+        1,
+        512,
+        vec![(0, 0, false, 512), (1, 0, false, 512)],
+        vec![
+            std::fs::File::open(&first_path).unwrap(),
+            std::fs::File::open(&second_path).unwrap(),
+        ],
+    );
+    let plan = reader.open_plan().unwrap();
+    assert_eq!(plan.segment_count(), 2);
+    let first = plan.open_reader().unwrap();
+    let second = plan.open_reader().unwrap();
+    assert!(std::sync::Arc::ptr_eq(
+        &first.chunk_table,
+        &second.chunk_table
+    ));
+    std::thread::scope(|scope| {
+        for mut reader in [first, second] {
+            scope.spawn(move || {
+                for _ in 0..100 {
+                    let mut bytes = [0; 24];
+                    reader.seek(SeekFrom::Start(500)).unwrap();
+                    reader.read_exact(&mut bytes).unwrap();
+                    assert_eq!(&bytes[..12], &[0x11; 12]);
+                    assert_eq!(&bytes[12..], &[0x22; 12]);
+                }
+            });
+        }
+    });
+    let third_path = directory.join("source.E03");
+    std::fs::write(&third_path, [0]).unwrap();
+    assert!(plan.open_reader().is_err());
+    std::fs::remove_file(&third_path).unwrap();
+    std::fs::remove_file(&second_path).unwrap();
+    assert!(plan.open_reader().is_err());
+    std::fs::remove_file(&first_path).unwrap();
+    std::fs::remove_dir(&directory).unwrap();
+}

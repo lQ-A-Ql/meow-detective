@@ -1,6 +1,7 @@
 mod factory;
 mod identity;
 mod partition;
+mod snapshot;
 
 pub use factory::open_factory;
 pub use identity::{SourceIdentity, SourceRuntime};

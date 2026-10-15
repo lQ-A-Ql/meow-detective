@@ -12,6 +12,8 @@ fn cached_e01_plan_returns_independent_handles_after_template_eviction() {
     let mut second = open_e01_reader_cached(&fixture, "plan-test").unwrap();
     let mut head = [0u8; 8];
     second.read_exact(&mut head).unwrap();
+    clear_e01_reader_cache();
+    assert_eq!(first.stream_position().unwrap(), 20);
     assert_eq!(second.stream_position().unwrap(), 8);
     assert_ne!(value, head);
     clear_e01_reader_cache();

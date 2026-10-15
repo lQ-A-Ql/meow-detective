@@ -63,9 +63,11 @@ impl SourceBulkLoadRepo {
                 |row| row.get(0),
             )
             .optional()?;
-        let definitions: Vec<(String, String)> =
-            serde_json::from_str(saved.as_deref().unwrap_or("[]"))
-                .map_err(|e| DbError::System(format!("Invalid deferred index manifest: {e}")))?;
+        let saved = saved.ok_or_else(|| {
+            DbError::System("Missing deferred index manifest; import recovery required".into())
+        })?;
+        let definitions: Vec<(String, String)> = serde_json::from_str(&saved)
+            .map_err(|e| DbError::System(format!("Invalid deferred index manifest: {e}")))?;
         conn.execute(
             "UPDATE source_meta SET value='rebuilding' WHERE key='bulk_load.state'",
             [],
@@ -86,6 +88,16 @@ impl SourceBulkLoadRepo {
                     return Err(DbError::System("Invalid deferred index definition".into()));
                 }
                 transaction.execute(&sql, [])?;
+            }
+            let actual: (String, String) = transaction.query_row(
+                "SELECT tbl_name, sql FROM sqlite_master WHERE type='index' AND name=?1",
+                [&name],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            if actual != ("file_entries".to_string(), sql) {
+                return Err(DbError::System(
+                    "Deferred index definition differs from its manifest".into(),
+                ));
             }
         }
         transaction.execute_batch("ANALYZE file_entries")?;

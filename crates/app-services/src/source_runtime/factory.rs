@@ -54,9 +54,20 @@ pub fn open_factory(path: &Path, kind: &DataSourceKind) -> io::Result<SharedRead
         DataSourceKind::Raw => {
             let template = evidence_core::RawImageReader::open(path)?;
             let size = template.info().size;
+            let snapshot = super::snapshot::SourceSnapshot::capture(template.backing_paths())?;
             let path = path.to_path_buf();
             Ok(Arc::new(OpenFactory {
-                opener: move || evidence_core::RawImageReader::open(&path),
+                opener: move || {
+                    snapshot.validate()?;
+                    let reader = evidence_core::RawImageReader::open(&path)?;
+                    if reader.info().size != size {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "source logical size changed since planning",
+                        ));
+                    }
+                    Ok(reader)
+                },
                 size,
                 granularity: 512,
                 capabilities: ReaderCapabilities {
