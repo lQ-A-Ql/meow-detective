@@ -1,3 +1,4 @@
+pub(super) mod batch_pipeline;
 mod enumerate;
 pub(super) mod mft_scan;
 pub(super) mod path_reconstruction;
