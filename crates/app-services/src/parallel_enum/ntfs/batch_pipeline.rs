@@ -37,7 +37,7 @@ impl OrderedMftWindow {
         }
     }
 
-    pub fn reserve(&self, start_record: u64) -> bool {
+    pub fn reserve(&self, _start_record: u64) -> bool {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if state.in_flight >= self.capacity {
             return false;
@@ -47,6 +47,7 @@ impl OrderedMftWindow {
     }
 
     pub fn submit(&self, batch: MftBatch) -> Result<(), MftBatch> {
+        let _batch_shape = (batch.logical_bytes, batch.records.len());
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if state.ready.contains_key(&batch.start_record) {
             return Err(batch);

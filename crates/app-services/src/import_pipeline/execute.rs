@@ -130,6 +130,13 @@ fn execute_import_job_internal(
     let ds = phases::run_attach_phase(&mut ctx)?;
     let source_conn = crate::source_db::open_source_db(case_root, &ds.id)
         .map_err(CommandError::from_service_error)?;
+    let bulk_attempt = job_id.0.as_str();
+    persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::set_state(
+        &source_conn,
+        persistence_sqlite::repositories::source_bulk_load_repo::BulkLoadState::Active,
+        bulk_attempt,
+    )
+    .map_err(CommandError::from_service_error)?;
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(case_id, &ds)
         .map_err(CommandError::from_service_error)?;
@@ -182,7 +189,24 @@ fn execute_import_job_internal(
             "ready_metadata"
         }
     };
+    let import_succeeded = result.is_ok();
     let mut message = persist_import_outcome(conn, &ds.id, ready_state, result)?;
+    if import_succeeded {
+        persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::set_state(
+            &source_conn,
+            persistence_sqlite::repositories::source_bulk_load_repo::BulkLoadState::Rebuilding,
+            bulk_attempt,
+        )
+        .map_err(CommandError::from_service_error)?;
+        persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::set_state(
+            &source_conn,
+            persistence_sqlite::repositories::source_bulk_load_repo::BulkLoadState::Ready,
+            bulk_attempt,
+        )
+        .map_err(CommandError::from_service_error)?;
+        persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::clear_transient(&source_conn)
+            .map_err(CommandError::from_service_error)?;
+    }
     message = auto_extract_linux_artifacts(&mut ctx, &ds, &source_conn, message)?;
     phases::emit_data_source_ready(&ctx, &ds)?;
     Ok((message, counts))
