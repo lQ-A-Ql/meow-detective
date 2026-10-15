@@ -26,23 +26,15 @@ all-features = false
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
 db-path = "~/.cargo/advisory-db"
+# Reject exceptions once the advisory no longer matches the resolved graph.
+unused-ignored-advisory = "deny"
 ignore = [
-    { id = "RUSTSEC-2024-0419", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
-    { id = "RUSTSEC-2024-0413", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
-    { id = "RUSTSEC-2024-0416", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
-    { id = "RUSTSEC-2024-0412", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
-    { id = "RUSTSEC-2024-0418", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
-    { id = "RUSTSEC-2024-0411", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
-    { id = "RUSTSEC-2024-0417", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
-    { id = "RUSTSEC-2024-0414", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
-    { id = "RUSTSEC-2024-0415", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
-    { id = "RUSTSEC-2024-0420", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
-    { id = "RUSTSEC-2024-0370", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; gtk/glib transitive proc-macro-error path from Tauri linux dependencies; blocked on upstream." },
-    { id = "RUSTSEC-2025-0075", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; urlpattern through tauri-utils pulls rust-unic transitive crates; blocked on upstream Tauri dependency refresh." },
-    { id = "RUSTSEC-2025-0080", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; urlpattern through tauri-utils pulls rust-unic transitive crates; blocked on upstream Tauri dependency refresh." },
-    { id = "RUSTSEC-2025-0081", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; urlpattern through tauri-utils pulls rust-unic transitive crates; blocked on upstream Tauri dependency refresh." },
-    { id = "RUSTSEC-2025-0098", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; urlpattern through tauri-utils pulls rust-unic transitive crates; blocked on upstream Tauri dependency refresh." },
-    { id = "RUSTSEC-2025-0100", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; urlpattern through tauri-utils pulls rust-unic transitive crates; blocked on upstream Tauri dependency refresh." },
+    { id = "RUSTSEC-2024-0370", reason = "owner: Dependency Maintenance; expires: 2026-11-15; reviewed: 2026-10-16, Low, first renewal. proc-macro-error 1.0.4 is build-time only via glib-macros/gtk3-macros on the Linux Tauri path, absent from the Windows target. No patched release; replace through upstream GTK/Tauri. See docs/dependency-decisions.md." },
+    { id = "RUSTSEC-2025-0075", reason = "owner: Dependency Maintenance; expires: 2026-11-15; reviewed: 2026-10-16, Low, first renewal. unic 0.9.0 is transitive through urlpattern 0.3.0 and tauri-utils 2.9.3 for trusted application capability/configuration URL patterns, not a forensic evidence parser. No patched unic releases; track upstream replacement. See docs/dependency-decisions.md." },
+    { id = "RUSTSEC-2025-0080", reason = "owner: Dependency Maintenance; expires: 2026-11-15; reviewed: 2026-10-16, Low, first renewal. unic 0.9.0 is transitive through urlpattern 0.3.0 and tauri-utils 2.9.3 for trusted application capability/configuration URL patterns, not a forensic evidence parser. No patched unic releases; track upstream replacement. See docs/dependency-decisions.md." },
+    { id = "RUSTSEC-2025-0081", reason = "owner: Dependency Maintenance; expires: 2026-11-15; reviewed: 2026-10-16, Low, first renewal. unic 0.9.0 is transitive through urlpattern 0.3.0 and tauri-utils 2.9.3 for trusted application capability/configuration URL patterns, not a forensic evidence parser. No patched unic releases; track upstream replacement. See docs/dependency-decisions.md." },
+    { id = "RUSTSEC-2025-0098", reason = "owner: Dependency Maintenance; expires: 2026-11-15; reviewed: 2026-10-16, Low, first renewal. unic 0.9.0 is transitive through urlpattern 0.3.0 and tauri-utils 2.9.3 for trusted application capability/configuration URL patterns, not a forensic evidence parser. No patched unic releases; track upstream replacement. See docs/dependency-decisions.md." },
+    { id = "RUSTSEC-2025-0100", reason = "owner: Dependency Maintenance; expires: 2026-11-15; reviewed: 2026-10-16, Low, first renewal. unic 0.9.0 is transitive through urlpattern 0.3.0 and tauri-utils 2.9.3 for trusted application capability/configuration URL patterns, not a forensic evidence parser. No patched unic releases; track upstream replacement. See docs/dependency-decisions.md." },
 ]
 
 [licenses]
