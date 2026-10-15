@@ -124,7 +124,10 @@ fn apply_staging_connection_pragmas(conn: &Connection) -> DbResult<()> {
          PRAGMA busy_timeout=5000;
          PRAGMA cache_size=-{STAGING_CACHE_SIZE_KIB};
          PRAGMA mmap_size={STAGING_MMAP_SIZE_BYTES};
-         PRAGMA locking_mode=EXCLUSIVE;"
+         -- The merge phase ATTACHes this database from the source connection.
+         -- Keep normal locking so an idle staging handle does not retain an
+         -- exclusive lock while its file is being folded into source.db.
+         PRAGMA locking_mode=NORMAL;"
     ))?;
     Ok(())
 }
