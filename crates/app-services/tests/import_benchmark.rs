@@ -406,3 +406,33 @@ fn parallel_raw_and_e01_keep_the_serial_catalog_graph_and_timeline() {
         }
     }
 }
+
+#[test]
+fn cancellation_before_enumeration_keeps_source_indexes_and_skips_runtime_open() {
+    let temporary = tempfile::tempdir().unwrap();
+    let image = temporary.path().join("cancel.raw");
+    std::fs::write(&image, fixture::image(96)).unwrap();
+    let active =
+        case_service::create_case(&temporary.path().join("cases"), "cancel", None).unwrap();
+    active.with_conn(|conn| {
+        let job = JobRepo::new(conn).create(&active.meta.id.0, "cancel")?;
+        let config = import_precheck::prepare_import_source_config_from_path(
+            &image.to_string_lossy(), DataSourcePlatform::Windows).unwrap();
+        let cancel = Arc::new(AtomicBool::new(true));
+        let options = ImportJobOptions { event_sink: None, cancel_token: &cancel,
+            max_import_workers: Some(4), max_analysis_workers: Some(1),
+            analysis_mode: ImportAnalysisMode::MetadataOnly, defer_linux_artifacts: false };
+        let profiler = ImportProfiler::default();
+        assert!(execute_import_job_profiled(conn, &active.meta.id, &active.case_root,
+            config, &job, options, &profiler).is_err());
+        let (source_id, state): (String, String) = conn.query_row(
+            "SELECT id, import_state FROM data_sources", [], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        assert_eq!(state, "failed");
+        let source = source_db::open_registered_source_db_read_only(conn, &active.case_root, &DataSourceId(source_id))?;
+        let active_indexes: bool = source.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='idx_source_file_entries_path')", [], |row| row.get(0))?;
+        assert!(active_indexes);
+        assert!(!profiler.report().samples.iter().any(|sample| sample.phase == Phase::MftReaderOpen));
+        Ok(())
+    }).unwrap();
+}

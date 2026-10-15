@@ -132,14 +132,13 @@ fn execute_import_job_internal(
     ctx.source_conn = Some(&source_conn);
     ctx.ds = Some(&ds);
     let result = (|| {
+        reject_cancelled_after_register(&ctx, &ds)?;
         super::runtime::prepare_runtime(&mut ctx, &ds)?;
         persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::begin(
             &source_conn,
             &job_id.0,
         )
         .map_err(CommandError::from_typed_service_error)?;
-        reject_cancelled_after_register(&ctx, &ds)?;
-
         let stats = phases::run_enumeration_phase(&mut ctx, &ds)?;
         let profiler = ctx.profiler.clone();
         let pipeline_msg = profile::measure_optional(
