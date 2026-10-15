@@ -146,6 +146,17 @@ pub fn read_value_range(
             decode_status,
             diagnostics: Vec::new(),
             decoded_text: range.decoded,
+            overlay_source: match range.overlay_source {
+                artifacts_windows::registry::browser::BrowserOverlaySource::Base => {
+                    RegistryOverlaySourceDto::Base
+                }
+                artifacts_windows::registry::browser::BrowserOverlaySource::Recovered => {
+                    RegistryOverlaySourceDto::Recovered
+                }
+                artifacts_windows::registry::browser::BrowserOverlaySource::Merged => {
+                    RegistryOverlaySourceDto::Merged
+                }
+            },
         })
     })
 }
@@ -155,25 +166,65 @@ pub fn search_hive(
     ctx: &RegistryBrowserContext<'_>,
     request: RegistrySearchRequestDto,
 ) -> Result<RegistrySearchPageDto, RegistryBrowserError> {
-    with_session(registry, ctx, &request.session_id, |s| {
-        let page = s.hive.search(&request.query)?;
-        Ok(RegistrySearchPageDto {
-            hits: page
-                .hits
-                .into_iter()
-                .map(|hit| RegistrySearchHitDto {
-                    kind: hit.kind.into(),
-                    path: hit.path,
-                    name: hit.name,
-                    cell_offset: hit.cell_offset,
-                    matched_field: hit.matched_field.into(),
-                    preview: hit.preview,
-                })
-                .collect(),
-            scanned_keys: page.scanned_keys,
-            scanned_values: page.scanned_values,
-            skipped_count: page.skipped,
-            truncated: page.truncated,
-        })
+    search_hive_with_cancel(
+        registry,
+        ctx,
+        request,
+        &std::sync::atomic::AtomicBool::new(false),
+        &|_, _| {},
+    )
+}
+pub fn search_hive_with_cancel(
+    registry: &RegistryBrowserRegistry,
+    ctx: &RegistryBrowserContext<'_>,
+    request: RegistrySearchRequestDto,
+    cancel: &std::sync::atomic::AtomicBool,
+    progress: &(dyn Fn(u64, u64) + Sync),
+) -> Result<RegistrySearchPageDto, RegistryBrowserError> {
+    let snapshot = with_session(registry, ctx, &request.session_id, |session| {
+        Ok(session.hive.clone())
+    })?;
+    // Immutable bytes let navigation and case retirement proceed during search.
+    let page = snapshot.search_with_cancel(&request.query, cancel, progress)?;
+    Ok(RegistrySearchPageDto {
+        hits: page
+            .hits
+            .into_iter()
+            .map(|hit| RegistrySearchHitDto {
+                kind: hit.kind.into(),
+                path: hit.path,
+                name: hit.name,
+                cell_offset: hit.cell_offset,
+                matched_field: hit.matched_field.into(),
+                preview: hit.preview,
+                key_cell_offset: hit.key_offset,
+                value_index: hit.value_index,
+                data_offset: hit.data_offset,
+                overlay_source: search_overlay(hit.overlay_source),
+                data_overlay_source: search_overlay(hit.data_overlay_source),
+            })
+            .collect(),
+        scanned_keys: page.scanned_keys,
+        scanned_values: page.scanned_values,
+        skipped_count: page.skipped,
+        truncated: page.truncated,
+        total_matches: page.total_matches,
+        complete: page.complete,
     })
+}
+
+fn search_overlay(
+    source: artifacts_windows::registry::browser::BrowserOverlaySource,
+) -> RegistryOverlaySourceDto {
+    match source {
+        artifacts_windows::registry::browser::BrowserOverlaySource::Base => {
+            RegistryOverlaySourceDto::Base
+        }
+        artifacts_windows::registry::browser::BrowserOverlaySource::Recovered => {
+            RegistryOverlaySourceDto::Recovered
+        }
+        artifacts_windows::registry::browser::BrowserOverlaySource::Merged => {
+            RegistryOverlaySourceDto::Merged
+        }
+    }
 }

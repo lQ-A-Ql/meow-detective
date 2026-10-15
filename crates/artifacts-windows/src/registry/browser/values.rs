@@ -68,9 +68,12 @@ impl HiveSnapshot {
             data: u32_at(cell, 8)?,
             preview: String::new(),
             data_error: None,
+            overlay_source: self.overlay_for_cell(offset, 20 + length),
+            data_overlay_source: self.overlay_for_cell(offset, 20 + length),
         };
         match self.value_range(&value, 0, 256) {
             Ok(range) => {
+                value.data_overlay_source = range.overlay_source;
                 value.preview = range
                     .decoded
                     .unwrap_or_else(|| hex::encode(&range.bytes[..range.bytes.len().min(32)]));

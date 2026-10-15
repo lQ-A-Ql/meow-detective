@@ -116,7 +116,7 @@ pub(super) fn webp(exif: &[u8]) -> Vec<u8> {
     bytes.extend_from_slice(b"EXIF");
     bytes.extend_from_slice(&(exif.len() as u32).to_le_bytes());
     bytes.extend_from_slice(exif);
-    if exif.len() % 2 != 0 {
+    if !exif.len().is_multiple_of(2) {
         bytes.push(0);
     }
     let size = bytes.len() as u32 - 8;

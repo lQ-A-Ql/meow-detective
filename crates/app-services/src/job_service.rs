@@ -233,6 +233,9 @@ pub fn cancel_job(conn: &Connection, job_id: &JobId, reason: &str) -> Result<(),
 /// shutdown.  Partial results (warning/skipped/failed counts) are preserved
 /// so the user can decide whether to retry or discard the data source.
 pub fn recover_interrupted_jobs(conn: &Connection) -> Result<RecoveryResult, JobServiceError> {
+    persistence_sqlite::repositories::evidence_task_repo::EvidenceTaskRepo::new(conn)
+        .recover_all()
+        .map_err(|error| JobServiceError::Other(error.to_string()))?;
     let repo = JobRepo::new(conn);
     let interrupted_ids = repo
         .find_interrupted()

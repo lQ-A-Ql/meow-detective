@@ -1,4 +1,5 @@
 #[path = "support/initialized_data.rs"]
+#[allow(dead_code)]
 mod support;
 
 // NTFS synthetic fixture test — list_root_children with correct INDX offsets.

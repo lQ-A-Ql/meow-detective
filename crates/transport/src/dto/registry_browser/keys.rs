@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{RegistryBrowserCoverageDto, RegistryBrowserDiagnosticDto};
+use super::{RegistryBrowserCoverageDto, RegistryBrowserDiagnosticDto, RegistryOverlaySourceDto};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -23,6 +23,7 @@ pub struct RegistryKeyMetadataDto {
     pub subkey_count: u32,
     pub value_count: u32,
     pub read_state: RegistryItemReadStateDto,
+    pub overlay_source: RegistryOverlaySourceDto,
     /// Decimal FILETIME preserves all 100 ns ticks across JavaScript transport.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_write_filetime: Option<String>,

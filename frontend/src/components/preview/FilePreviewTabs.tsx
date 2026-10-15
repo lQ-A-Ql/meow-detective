@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActionIcon } from '@/components/controls/ActionIcon';
-import { Tooltip } from '@/app/components/ui/tooltip';
+import { useMemo } from 'react';
+import { HexPreviewContent } from './containers/HexPreviewContentContainer';
+
+
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp } from 'lucide-react';
-import { Button } from '@/app/components/ui/button';
-import { Input } from '@/app/components/ui/input';
+
+
+
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { ViewerTabFrame } from '@/components/tabs/ViewerTabFrame';
-import { HexViewer } from '@/components/viewers/HexViewer';
+
 import { TextViewer } from '@/components/viewers/TextViewer';
 import { ImageViewer } from '@/components/viewers/ImageViewer';
 import { VideoViewer } from '@/components/viewers/VideoViewer';
@@ -97,108 +98,6 @@ function LargeMediaFallback({
   );
 }
 
-function HexPreviewContent({
-  viewer,
-  onHexJumpInputChange,
-  onHexJump,
-  onLoadNextHexRange,
-  onLoadPreviousHexRange,
-}: Pick<
-  FilePreviewTabsProps,
-  'viewer' | 'onHexJumpInputChange' | 'onHexJump' | 'onLoadNextHexRange' | 'onLoadPreviousHexRange'
->) {
-  const { t } = useTranslation();
-  const [inspectorExpanded, setInspectorExpanded] = useState(false);
-  const handleNeedMoreRange = useCallback(
-    (direction: 'previous' | 'next') => {
-      if (direction === 'next') {
-        void onLoadNextHexRange();
-      } else {
-        void onLoadPreviousHexRange();
-      }
-    },
-    [onLoadNextHexRange, onLoadPreviousHexRange],
-  );
-
-  useEffect(() => {
-    setInspectorExpanded(false);
-  }, [viewer?.handle.handleId]);
-
-  if (!viewer || (viewer.rawBytes.length === 0 && viewer.lines.length === 0)) {
-    return <div className="text-forensics-muted">{t('viewer.hex.empty')}</div>;
-  }
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1">
-        <HexViewer
-          lines={viewer.lines}
-          rawBytes={viewer.rawBytes}
-          baseOffset={viewer.baseOffset}
-          fileSize={viewer.fileSize}
-          activeOffset={viewer.activeOffset}
-          loadedRanges={viewer.loadedRanges}
-          onNeedMoreRange={handleNeedMoreRange}
-        />
-      </div>
-      {viewer.error ? (
-        <div className="mt-2 shrink-0 text-[10px] text-forensics-error-text">{viewer.error}</div>
-      ) : null}
-      <div className="mt-2 shrink-0 border border-forensics-border bg-forensics-panel">
-        <Button
-          type="button"
-          variant="forensicsGhost"
-          shape="row"
-          aria-expanded={inspectorExpanded}
-          onClick={() => setInspectorExpanded((value) => !value)}
-          className="h-auto w-full justify-between gap-3 rounded-none px-3 py-2 text-left text-[10px]"
-        >
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="font-light text-forensics-text">
-              {viewer.mode === 'full' ? t('preview.hex.fullMode') : t('preview.hex.chunkedMode')}
-            </span>
-            <span>
-              {t('preview.hex.loaded')}{' '}
-              {formatBytes(
-                viewer.loadedRanges.reduce((total, range) => total + (range.end - range.start), 0),
-              )}{' '}
-              / {formatBytes(viewer.fileSize)}
-            </span>
-            <span>offset={viewer.activeOffset.toString(16).toUpperCase().padStart(8, '0')}</span>
-          </div>
-          {inspectorExpanded ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-        </Button>
-        {inspectorExpanded ? (
-          <div className="border-t border-forensics-border px-3 py-2 text-[10px] text-forensics-muted">
-            <div className="flex items-center gap-2">
-              <Input
-                value={viewer.jumpOffsetInput}
-                onChange={(event) => onHexJumpInputChange(event.target.value)}
-                variant="mono"
-                inputSize="inline"
-                className="w-32"
-                placeholder="0x0"
-              />
-              <Tooltip content={t('preview.hex.jump')}><Button aria-label={t('preview.hex.jump')}
-                type="button"
-                variant="forensicsOutline"
-                size="compact"
-                onClick={() => {
-                  void onHexJump();
-                }}
-              ><ActionIcon name="chevron-left" /></Button></Tooltip>
-            </div>
-            <div className="mt-2">
-              {viewer.mode === 'chunked'
-                ? t('preview.hex.chunkedHint')
-                : t('preview.hex.fullHint')}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 function DocumentSectionBody({ section }: { section: DocumentSection }) {
   const { t } = useTranslation();
   const table = useMemo(() => {
@@ -249,10 +148,6 @@ function DocumentPreviewContent({
   return (
     <ScrollArea className="h-full" viewportClassName="px-3 py-2">
       <div className="relative isolate min-h-full">
-        <BrandWatermark
-          motif="documentPaw"
-          className="absolute bottom-36 -right-2 h-24 opacity-[0.02]"
-        />
         <div className="relative">
           <div className="mb-2 flex items-center gap-2 text-[11px] text-forensics-muted">
             <span className="rounded bg-forensics-info-bg px-1.5 py-0.5 uppercase">
@@ -269,8 +164,9 @@ function DocumentPreviewContent({
             </div>
           ) : null}
           {documentPreview.sections.length === 0 ? (
-            <div className="flex h-32 items-center justify-center text-forensics-muted-light">
-              {t('preview.document.empty')}
+            <div className="relative isolate flex h-32 items-center justify-center text-forensics-muted-light">
+              <BrandWatermark motif="file-preview" className="watermark-document" />
+              <span className="relative">{t('preview.document.empty')}</span>
             </div>
           ) : (
             documentPreview.sections.map((section, index) => (

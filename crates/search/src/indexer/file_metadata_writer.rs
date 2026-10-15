@@ -32,6 +32,7 @@ struct MetadataFields {
     file_id: Field,
     path: Field,
     content: Field,
+    artifact_text: Field,
     name: Field,
     name_exact: Field,
     name_unigram: Field,
@@ -81,6 +82,26 @@ impl SearchIndex {
 }
 
 impl SearchMetadataWriter {
+    pub fn add_content_document(
+        &mut self,
+        source: &SearchFileDocument,
+        content: &str,
+        artifact_text: &str,
+    ) -> Result<()> {
+        if self.replace_existing {
+            self.writer
+                .delete_term(Term::from_field_text(self.fields.file_id, &source.file_id));
+        }
+        let mut document = self.fields.document(source);
+        document.add_text(self.fields.content, content);
+        document.add_text(self.fields.artifact_text, artifact_text);
+        self.writer.add_document(document)?;
+        Ok(())
+    }
+
+    pub fn checkpoint(&mut self) -> Result<u64> {
+        self.writer.commit().map_err(Into::into)
+    }
     pub fn add_documents(&mut self, documents: &[SearchFileDocument]) -> Result<u64> {
         for document in documents {
             if self.replace_existing {
@@ -89,7 +110,10 @@ impl SearchMetadataWriter {
                     &document.file_id,
                 ));
             }
-            self.writer.add_document(self.fields.document(document))?;
+            let mut indexed = self.fields.document(document);
+            indexed.add_text(self.fields.content, "");
+            indexed.add_text(self.fields.artifact_text, "");
+            self.writer.add_document(indexed)?;
         }
         Ok(documents.len() as u64)
     }
@@ -112,6 +136,7 @@ impl MetadataFields {
             file_id: field("file_id")?,
             path: field("path")?,
             content: field("content")?,
+            artifact_text: field("artifact_text")?,
             name: field("name")?,
             name_exact: field("name_exact")?,
             name_unigram: field("name_unigram")?,
@@ -139,7 +164,6 @@ impl MetadataFields {
         let mut indexed = TantivyDocument::default();
         indexed.add_text(self.file_id, &source.file_id);
         indexed.add_text(self.path, &source.path);
-        indexed.add_text(self.content, "");
         indexed.add_text(self.name, &source.name);
         self.add_searchable_name(&mut indexed, &normalized_name);
         indexed.add_text(self.path_exact, &normalized_path);

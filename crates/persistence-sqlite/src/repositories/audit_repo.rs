@@ -24,6 +24,7 @@ pub struct AuditLogEntry {
 
 #[derive(Debug, Clone, Copy)]
 pub enum AuditAction {
+    DigestCalculate,
     CaseCreate,
     CaseOpen,
     CaseClose,
@@ -72,6 +73,7 @@ pub enum AuditAction {
 impl AuditAction {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Self::DigestCalculate => "evidence.digest",
             Self::CaseCreate => "case.create",
             Self::CaseOpen => "case.open",
             Self::CaseClose => "case.close",
@@ -120,6 +122,7 @@ impl AuditAction {
 
     pub fn resource_type(&self) -> &'static str {
         match self {
+            Self::DigestCalculate => "evidence",
             Self::CaseCreate | Self::CaseOpen | Self::CaseClose | Self::CaseDelete => "case",
             Self::DataSourceImport | Self::DataSourceDelete | Self::DataSourceRename => {
                 "datasource"

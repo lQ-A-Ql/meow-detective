@@ -40,6 +40,7 @@ pub(super) fn key(key: &BrowserKey, id: String) -> RegistryKeyMetadataDto {
         subkey_count: key.subkey_count,
         value_count: key.value_count,
         read_state: RegistryItemReadStateDto::Readable,
+        overlay_source: overlay_source(key.overlay_source),
         last_write_filetime: key.filetime.map(|v| v.to_string()),
     }
 }
@@ -52,6 +53,7 @@ pub(super) fn corrupt_key(offset: u32, id: String) -> RegistryKeyMetadataDto {
         subkey_count: 0,
         value_count: 0,
         read_state: RegistryItemReadStateDto::Corrupt,
+        overlay_source: RegistryOverlaySourceDto::Base,
         last_write_filetime: None,
     }
 }
@@ -71,6 +73,8 @@ pub(super) fn value(value: BrowserValue, id: String) -> RegistryValueMetadataDto
         } else {
             RegistryItemReadStateDto::Readable
         },
+        overlay_source: overlay_source(value.overlay_source),
+        data_overlay_source: overlay_source(value.data_overlay_source),
     }
 }
 pub(super) fn corrupt_value(offset: u32, id: String) -> RegistryValueMetadataDto {
@@ -83,6 +87,23 @@ pub(super) fn corrupt_value(offset: u32, id: String) -> RegistryValueMetadataDto
         preview: String::new(),
         cell_offset: offset,
         read_state: RegistryItemReadStateDto::Corrupt,
+        overlay_source: RegistryOverlaySourceDto::Base,
+        data_overlay_source: RegistryOverlaySourceDto::Base,
+    }
+}
+fn overlay_source(
+    source: artifacts_windows::registry::browser::BrowserOverlaySource,
+) -> RegistryOverlaySourceDto {
+    match source {
+        artifacts_windows::registry::browser::BrowserOverlaySource::Base => {
+            RegistryOverlaySourceDto::Base
+        }
+        artifacts_windows::registry::browser::BrowserOverlaySource::Recovered => {
+            RegistryOverlaySourceDto::Recovered
+        }
+        artifacts_windows::registry::browser::BrowserOverlaySource::Merged => {
+            RegistryOverlaySourceDto::Merged
+        }
     }
 }
 pub(super) fn diagnostic(code: &str, id: Option<String>) -> RegistryBrowserDiagnosticDto {

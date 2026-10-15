@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { dataSourcePlatformLabel, sourceKindIconLarge } from '@/lib/data-source-utils';
-import type { AnalysisSourceRowData } from './analysis-source-rows';
+import type { AnalysisSourceRowData } from '../analysis-source-rows';
 import type { AnalysisSourceSidebarProps } from './analysis-source-sidebar-types';
 
 interface Props {

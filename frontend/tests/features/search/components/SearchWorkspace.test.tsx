@@ -29,6 +29,7 @@ const hit: SearchFileHit = {
 function createModel(overrides: Partial<SearchWorkspaceModel> = {}) {
   const model = {
     activeQuery: 'report',
+    contentIndex: { task: undefined, request: undefined, loading: false, errorText: undefined, cancelPending: false, start: vi.fn(), retry: vi.fn(), cancel: vi.fn(), coverage: undefined, coverageError: null, available: false, build: vi.fn() },
     clearQuery: vi.fn(),
     coverage: {
       readySourceCount: 2,

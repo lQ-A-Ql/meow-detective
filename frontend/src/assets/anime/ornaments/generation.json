@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "generator": "built-in image_gen",
+  "reference": "../../backgrounds/case-entry.webp",
+  "palette": "monochrome ink and wash",
+  "displayOpacity": 0.3,
+  "assets": [
+    {
+      "name": "moon-cat",
+      "file": "moon-cat.webp",
+      "prompt": "Use case: stylized-concept. Create ONE elegant artistic decorative illustration for a quiet black/white desktop application. The attached image is ONLY an ink-style and monochrome mood reference, not a scene to copy. This ornament is ARTISTIC rather than technical or professional: no detective tools, workstation, charts, files with labels, magnifier, settings gears, icons, logos or UI. Refined black ink and cool gray wash, expressive variable line weights, gently broken contours, a few carefully placed dark shapes, lots of transparent negative space. No full human body or character portrait. Genuinely transparent RGBA background; normal artwork opacity (the application will apply 0.3 opacity). No border, badge, opaque background, lettering, signature, readable writing or watermark text. Keep a small transparent margin and produce a single isolated composition.\nA small black cat curled peacefully asleep against the lower curve of a thin crescent moon. The cat's tail follows one graceful loose ink curve, with two tiny scattered star sparks and a single wispy ribbon of gray wash. Almost-square asymmetric composition, approximately 1.15:1. Poetic, restful and understated, like a delicate book illustration; keep the moon open and airy, not a giant solid black circle. The moon and cat should form a naturally connected silhouette.",
+      "width": 1345,
+      "height": 1169,
+      "sourceSha256": "f9450048005a5e2e4e3c1a456d67a5f97e07f97942a6ccdc4a8a5dd06471e3d0",
+      "webpSha256": "da4ba0de4dec51c69c65b42bea03e4e1d7d543000bc7afa7e73f9007c66eeb30"
+    },
+    {
+      "name": "paper-butterflies",
+      "file": "paper-butterflies.webp",
+      "prompt": "Use case: stylized-concept. Create ONE elegant artistic decorative illustration for a quiet black/white desktop application. The attached image is ONLY an ink-style and monochrome mood reference, not a scene to copy. This ornament is ARTISTIC rather than technical or professional: no detective tools, workstation, charts, files with labels, magnifier, settings gears, icons, logos or UI. Refined black ink and cool gray wash, expressive variable line weights, gently broken contours, a few carefully placed dark shapes, lots of transparent negative space. No full human body or character portrait. Genuinely transparent RGBA background; normal artwork opacity (the application will apply 0.3 opacity). No border, badge, opaque background, lettering, signature, readable writing or watermark text. Keep a small transparent margin and produce a single isolated composition.\nThree light paper butterflies drift along an expressive sweeping ink ribbon: one angular folded-paper butterfly, one delicate open-wing ink butterfly, and one small distant butterfly. Their wings are mostly white with precise dark edges and a few soft cool gray brush marks. Very wide shallow composition about 2.6:1, airy and asymmetrical, like a poetic margin drawing. One loose ribbon stroke traces their movement; no rectangular pages, business document, professional symbols or realistic anatomy. Leave plenty of transparent space between the forms.",
+      "width": 2020,
+      "height": 778,
+      "sourceSha256": "8b95499bcf36ea60ade5afe3550acf22ef9fe2abdf738e01b57576474b81cd4c",
+      "webpSha256": "10802f27c87dcddfc99c00b1b36c981561aed49982ee4cec1bf2a27edc0f12bd"
+    },
+    {
+      "name": "ink-botanicals",
+      "file": "ink-botanicals.webp",
+      "prompt": "Use case: stylized-concept. Create ONE elegant artistic decorative illustration for a quiet black/white desktop application. The attached image is ONLY an ink-style and monochrome mood reference, not a scene to copy. This ornament is ARTISTIC rather than technical or professional: no detective tools, workstation, charts, files with labels, magnifier, settings gears, icons, logos or UI. Refined black ink and cool gray wash, expressive variable line weights, gently broken contours, a few carefully placed dark shapes, lots of transparent negative space. No full human body or character portrait. Genuinely transparent RGBA background; normal artwork opacity (the application will apply 0.3 opacity). No border, badge, opaque background, lettering, signature, readable writing or watermark text. Keep a small transparent margin and produce a single isolated composition.\nA tall slender botanical ink vignette, approximately 0.52:1: one gracefully arcing wild branch, a single pale camellia flower near the upper-middle, two dark narrow leaves, one lower bud and a few wisps of gray ink wash. Painterly and irregular, like a restrained monochrome garden sketch in the margin of an art book. Keep the composition open and sculptural, avoid an ornamental frame, bouquet, full wreath or symmetry. No cat, human, instrument or professional object.",
+      "width": 905,
+      "height": 1737,
+      "sourceSha256": "20ec655d0e7ee45589cf58023d62393e5d375b9ff586c6f75782471cc3f65d04",
+      "webpSha256": "a3484b217b4ccd4760eb1d0f9a77c097e42c95d94a5fa02d9ef356e644c73214"
+    }
+  ]
+}

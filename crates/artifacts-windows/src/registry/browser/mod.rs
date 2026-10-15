@@ -4,10 +4,11 @@ mod data;
 mod decode;
 mod keys;
 mod search;
+mod search_walk;
 mod types;
 mod values;
 
 pub use types::{
-    BrowserError, BrowserKey, BrowserPage, BrowserSearchHit, BrowserSearchPage, BrowserValue,
-    HiveSnapshot, ValueRange,
+    BrowserError, BrowserKey, BrowserOverlaySource, BrowserPage, BrowserSearchHit,
+    BrowserSearchPage, BrowserValue, HiveSnapshot, ProvenanceSpan, ValueRange,
 };

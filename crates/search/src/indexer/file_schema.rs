@@ -14,6 +14,7 @@ pub(super) fn build_search_schema() -> Schema {
     // name again duplicates postings for every metadata document.
     schema.add_text_field("path", STORED);
     schema.add_text_field("content", TEXT | STORED);
+    schema.add_text_field("artifact_text", TEXT | STORED);
     schema.add_text_field("name", STORED);
     schema.add_text_field("name_exact", STRING);
     schema.add_text_field(

@@ -3,10 +3,7 @@ use transport::{
     commands::{
         GetNestedEvidenceLineageRequest, MaterializeNestedEvidenceRequest, RenameDataSourceRequest,
     },
-    dto::{
-        CaseMetricsDto, DataSourceSummaryDto, NestedEvidenceLineageDto,
-        NestedEvidenceMaterializedDto, RecentObjectDto,
-    },
+    dto::{CaseMetricsDto, DataSourceSummaryDto, NestedEvidenceLineageDto, RecentObjectDto},
     CommandError,
 };
 
@@ -82,63 +79,18 @@ pub async fn materialize_nested_evidence(
     state: State<'_, AppState>,
     app: AppHandle,
     request: MaterializeNestedEvidenceRequest,
-) -> Result<NestedEvidenceMaterializedDto, CommandError> {
-    request.validate().map_err(CommandError::invalid_input)?;
-    let app_state = state.inner().clone();
+) -> Result<transport::dto::EvidenceTaskDto, CommandError> {
+    let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let (db_path, case_root, case_id) = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            (
-                active.db_path(),
-                active.case_root.clone(),
-                active.meta.id.clone(),
-            )
-        };
-        let conn = app_services::connection::open_case_db(&db_path)
-            .map_err(CommandError::from_typed_service_error)?;
-        let mut result = app_services::nested_evidence_service::materialize_fixed_vhd(
-            &conn,
-            &case_root,
-            &case_id,
-            &request.parent_data_source_id,
-            &request.file_entry_id,
+        crate::evidence_task_jobs::start(
+            state,
+            app,
+            transport::dto::EvidenceTaskRequestDto::NestedImport(request),
         )
-        .map_err(CommandError::from_typed_service_error)?;
-        let source_path = case_root
-            .join("derived")
-            .join("nested-evidence")
-            .join(format!("{}.vhd", result.derived_data_source_id));
-        let import_config = app_services::import_precheck::prepare_import_source_config_from_path(
-            &source_path.to_string_lossy(),
-            domain::DataSourcePlatform::Windows,
-        )
-        .map_err(|error| CommandError::from_typed_service_error(error))?;
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-        let job_id = crate::commands::import::schedule::schedule_import_for_active_case(
-            active,
-            import_config,
-            Some(&app),
-            app_state.task_manager.clone(),
-            None,
-            None,
-            app_services::import_analysis::ImportAnalysisMode::MetadataOnly,
-        )?;
-        result.import_state = "scheduled".into();
-        result.import_job_id = Some(job_id);
-        Ok(result)
     })
     .await
     .map_err(CommandError::from_join_error)?
 }
-
 #[tauri::command]
 pub async fn get_recent_objects(
     state: State<'_, AppState>,

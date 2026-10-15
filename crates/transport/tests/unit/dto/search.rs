@@ -55,6 +55,9 @@ fn file_search_page_round_trip_preserves_metadata_and_coverage() {
             hidden: false,
             system: false,
             encrypted: true,
+            match_source: "filename".into(),
+            matched_sources: vec!["filename".into()],
+            snippet: None,
         }],
         coverage: SearchCoverageDto {
             ready_source_count: 2,

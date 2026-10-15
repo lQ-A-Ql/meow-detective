@@ -33,6 +33,7 @@ export interface DataSourceSummary {
 }
 
 export interface NestedEvidenceLineage {
+  parentFileId?: string;
   parentDataSourceId: string;
   nestedFilePath: string;
   derivedDataSourceId?: string;

@@ -15,16 +15,32 @@ pub(crate) fn run_attach_phase(
     ctx.report_job_progress(10, &format!("Attaching data source {source_name}"))?;
 
     let telemetry = PhaseTelemetry::new();
-    let data_source = datasource_service::attach_data_source_with_storage(
-        ctx.conn,
-        ctx.case_id,
-        &source_name,
-        &path,
-        kind,
-        ctx.import_config.platform,
-        ctx.import_config.profile.clone(),
-    )
-    .map_err(CommandError::from_service_error)?;
+    let data_source = if let Some(id) = &ctx.import_config.existing_data_source_id {
+        let repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(ctx.conn);
+        let source = repo
+            .find_by_case(ctx.case_id)
+            .map_err(CommandError::from_service_error)?
+            .into_iter()
+            .find(|source| source.id == *id)
+            .ok_or_else(|| CommandError::not_found("Registered import source"))?;
+        if source.source_path != path || source.kind != kind {
+            return Err(CommandError::security(
+                "Registered import identity differs from its source",
+            ));
+        }
+        source
+    } else {
+        datasource_service::attach_data_source_with_storage(
+            ctx.conn,
+            ctx.case_id,
+            &source_name,
+            &path,
+            kind,
+            ctx.import_config.platform,
+            ctx.import_config.profile.clone(),
+        )
+        .map_err(CommandError::from_service_error)?
+    };
 
     persist_import_set_membership(ctx, &data_source)?;
     emit_phase_profile(

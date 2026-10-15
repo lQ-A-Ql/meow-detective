@@ -29,6 +29,7 @@ export interface DataSourcesPanelProps {
   onRename: (dataSourceId: string, name: string) => void;
   onRequestDelete: (source: DataSourceSummary) => void;
   logicalDiskDigest?: EvidenceDigest;
+  logicalDiskDigestTask?: ReturnType<typeof useEvidenceTask>;
   logicalDiskDigestSourceId?: string;
   logicalDiskDigestLoading?: boolean;
   logicalDiskDigestError?: string;
@@ -46,6 +47,7 @@ export function DataSourcesPanel({
   onRename,
   onRequestDelete,
   logicalDiskDigest,
+  logicalDiskDigestTask,
   logicalDiskDigestSourceId,
   logicalDiskDigestLoading = false,
   logicalDiskDigestError,
@@ -170,7 +172,7 @@ export function DataSourcesPanel({
                             </Button>
                           ))}
                         </div>
-                        {logicalDiskDigestLoading && logicalDiskDigestSourceId === source.id ? <div className="mt-1.5 text-[10px] text-forensics-info-text">{t('caseHome.dataSources.physicalDiskHashRunning')}</div> : null}
+                        {logicalDiskDigestTask && logicalDiskDigestSourceId === source.id ? <EvidenceTaskStatus model={logicalDiskDigestTask} /> : null}
                         {logicalDiskDigestError && logicalDiskDigestSourceId === source.id ? <div className="mt-1.5 text-[10px] text-forensics-error-text">{logicalDiskDigestError}</div> : null}
                         {logicalDiskDigest && logicalDiskDigestSourceId === source.id ? <div className="mt-1.5 space-y-1 font-mono text-[10px]"><div>{logicalDiskDigest.algorithm.toUpperCase()} · {logicalDiskDigest.byteLength} bytes</div><div className="break-all text-forensics-text" data-testid={`physical-disk-digest-${source.id}`}>{logicalDiskDigest.value}</div></div> : null}
                       </div>
@@ -272,3 +274,5 @@ export function DataSourcesPanel({
     </>
   );
 }
+import type { useEvidenceTask } from '@/features/jobs/hooks/use-evidence-task';
+import { EvidenceTaskStatus } from '@/features/jobs/components/EvidenceTaskStatus';

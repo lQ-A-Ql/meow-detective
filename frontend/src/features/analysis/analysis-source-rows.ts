@@ -1,5 +1,5 @@
 import type { DataSourceSummary, PluginModule } from '@/types/models';
-import { ANDROID_NODES, LINUX_NODES, WINDOWS_NODES, WINDOWS_DELETED_RECOVERY_NODE, type SourceTreeNode } from './analysis-source-nodes';
+import { ANDROID_NODES, LINUX_NODES, WINDOWS_NODES, WINDOWS_DELETED_RECOVERY_NODE, type SourceTreeNode } from './components/analysis-source-nodes';
 
 export type AnalysisSourceRowData = {
   key: string;

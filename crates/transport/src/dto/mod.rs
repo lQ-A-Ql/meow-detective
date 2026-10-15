@@ -19,7 +19,9 @@ pub mod bitlocker_dictionary;
 pub mod case;
 pub mod correlation;
 pub mod digest;
+pub mod digest_results;
 pub mod emulation;
+pub mod evidence_task;
 pub mod files;
 mod governance;
 pub mod graph;
@@ -104,6 +106,7 @@ pub use correlation::{
     CorrelationProvenanceDto, CorrelationSnapshotDto,
 };
 pub use digest::{DigestAlgorithmDto, DigestScopeDto, DigestStatusDto, EvidenceDigestDto};
+pub use digest_results::{DigestResultDto, DigestResultsRequestDto};
 pub use emulation::{
     EmulationBootRouteDto, EmulationBypassAccountDto, EmulationBypassActionDto,
     EmulationBypassApplyRequestDto, EmulationBypassResultDto, EmulationControlModeDto,
@@ -114,6 +117,10 @@ pub use emulation::{
     EmulationOptionsDto, EmulationOsdataCleanupDto, EmulationOsdataCleanupRequestDto,
     EmulationOsdataCleanupStateDto, EmulationPreflightDto, EmulationSessionStatusDto,
     EmulationStateDto, PrepareEmulationRequestDto,
+};
+pub use evidence_task::{
+    ContentIndexCoverageDto, ContentIndexSummaryDto, EvidenceTaskDto, EvidenceTaskRequestDto,
+    EvidenceTaskResultDto,
 };
 pub use files::{
     FileChildrenDto, FileEntryRowDto, FileExtractionPhaseDto, FileExtractionProgressDto,

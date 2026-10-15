@@ -56,6 +56,10 @@ pub struct SearchFileHitDto {
     pub encrypted: bool,
     #[serde(default)]
     pub match_source: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub matched_sources: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

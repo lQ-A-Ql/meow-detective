@@ -1,7 +1,7 @@
 use std::io;
 use std::path::Path;
 
-pub(super) fn discover_e01_segments(path: &Path) -> io::Result<Vec<std::path::PathBuf>> {
+pub(crate) fn discover_e01_segments(path: &Path) -> io::Result<Vec<std::path::PathBuf>> {
     let mut segments = vec![path.to_path_buf()];
     let extension = path
         .extension()

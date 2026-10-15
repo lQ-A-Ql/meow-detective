@@ -1,4 +1,6 @@
-use tantivy::query::{AllQuery, BooleanQuery, Occur, PhraseQuery, Query, RegexQuery, TermQuery};
+use tantivy::query::{
+    AllQuery, BooleanQuery, Occur, PhraseQuery, Query, QueryParser, RegexQuery, TermQuery,
+};
 use tantivy::schema::{Field, IndexRecordOption};
 use tantivy::Term;
 use unicode_normalization::UnicodeNormalization;
@@ -56,14 +58,8 @@ pub(super) fn compile_file_query(
     let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
     for term in split_query_terms(&options.query) {
         let name_query = substring_query(index, "name", &term)?;
-        let content_field = index
-            .schema
-            .get_field("content")
-            .map_err(|_| IndexError::Schema("missing content field".into()))?;
-        let content_query: Box<dyn Query> = Box::new(TermQuery::new(
-            Term::from_field_text(content_field, &normalize(&term)),
-            IndexRecordOption::WithFreqsAndPositions,
-        ));
+        let content_query = text_query(index, "content", &term)?;
+        let artifact_query = text_query(index, "artifact_text", &term)?;
         if options.match_path {
             let path_query = substring_query(index, "path", &term)?;
             clauses.push((
@@ -72,6 +68,7 @@ pub(super) fn compile_file_query(
                     (Occur::Should, name_query),
                     (Occur::Should, path_query),
                     (Occur::Should, content_query),
+                    (Occur::Should, artifact_query),
                 ])),
             ));
         } else {
@@ -80,6 +77,7 @@ pub(super) fn compile_file_query(
                 Box::new(BooleanQuery::new(vec![
                     (Occur::Should, name_query),
                     (Occur::Should, content_query),
+                    (Occur::Should, artifact_query),
                 ])),
             ));
         }
@@ -115,6 +113,46 @@ pub(super) fn compile_file_query(
     } else {
         Ok(Box::new(BooleanQuery::new(clauses)))
     }
+}
+
+fn text_query(index: &SearchIndex, field: &str, term: &str) -> Result<Box<dyn Query>> {
+    let escaped = term.replace('\\', "\\\\").replace('"', "\\\"");
+    QueryParser::for_index(&index.index, vec![required_field(index, field)?])
+        .parse_query(&format!("\"{escaped}\""))
+        .map_err(|error| IndexError::Query(error.to_string()))
+}
+pub(super) fn source_queries(
+    index: &SearchIndex,
+    options: &FileSearchOptions,
+) -> Result<Vec<(String, Box<dyn Query>)>> {
+    let terms = split_query_terms(&options.query);
+    let mut sources = Vec::new();
+    for (source, field) in [
+        ("filename", "name"),
+        ("path", "path"),
+        ("content", "content"),
+        ("artifactField", "artifact_text"),
+    ] {
+        if field == "path" && !options.match_path {
+            continue;
+        }
+        let mut clauses = Vec::new();
+        for term in &terms {
+            let query = if field == "name" || field == "path" {
+                substring_query(index, field, term)?
+            } else {
+                text_query(index, field, term)?
+            };
+            clauses.push((Occur::Should, query));
+        }
+        if !clauses.is_empty() {
+            sources.push((
+                source.into(),
+                Box::new(BooleanQuery::new(clauses)) as Box<dyn Query>,
+            ));
+        }
+    }
+    Ok(sources)
 }
 
 fn substring_query(index: &SearchIndex, prefix: &str, raw: &str) -> Result<Box<dyn Query>> {

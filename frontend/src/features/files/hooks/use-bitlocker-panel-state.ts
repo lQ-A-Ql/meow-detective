@@ -16,7 +16,7 @@ export function useBitLockerPanelState(model: BitLockerVolumeModel) {
   const [credential, setCredential] = useState('');
   const [dictionaryBackend, setDictionaryBackend] = useState<BitLockerDictionaryBackend>('cpu');
   const [passwordCopied, setPasswordCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setInterval>>();
   const copyEpoch = useRef(0);
   const mounted = useRef(true);
   const heldSecret = useRef<string>();
@@ -26,7 +26,7 @@ export function useBitLockerPanelState(model: BitLockerVolumeModel) {
     return () => {
       mounted.current = false;
       copyEpoch.current += 1;
-      clearTimeout(timer.current);
+      clearInterval(timer.current);
       void wipeClipboardSecret(heldSecret.current);
       heldSecret.current = undefined;
     };
@@ -43,11 +43,12 @@ export function useBitLockerPanelState(model: BitLockerVolumeModel) {
       }
       heldSecret.current = password;
       setPasswordCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
+      clearInterval(timer.current);
+      timer.current = setInterval(() => {
         setPasswordCopied(false);
         heldSecret.current = undefined;
         void wipeClipboardSecret(password);
+        clearInterval(timer.current);
       }, 1500);
     } catch {
       if (mounted.current && epoch === copyEpoch.current) setPasswordCopied(false);

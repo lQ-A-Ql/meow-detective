@@ -10,7 +10,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/features/case/hooks', () => ({
   useDataSources: () => ({ data: [] }),
+  useCurrentCase: () => ({ data: { id: 'case-a' } }),
 }));
+
+vi.mock('@/features/search/use-content-index-model', () => ({ useContentIndexModel: () => ({ available: false }) }));
 
 vi.mock('@/features/search/hooks', () => ({
   useInfiniteSearchResults: (...args: unknown[]) => {

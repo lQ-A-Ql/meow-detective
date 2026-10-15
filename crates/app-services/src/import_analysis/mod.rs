@@ -28,6 +28,7 @@ pub use options::{
     AnalysisProgressCallback, ImportAnalysisMode, ImportAnalysisOptions, ImportAnalysisStats,
     JobOutcomeCounts, PostImportPipelineError, PostImportPipelineOptions, PostImportPipelineReport,
 };
+pub(crate) use search_phase::replace_index_generation;
 pub(crate) use search_phase::run_search_index_phase;
 pub use worker_pool::{
     default_analysis_worker_count, resolve_analysis_worker_count,

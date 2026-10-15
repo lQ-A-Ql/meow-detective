@@ -107,6 +107,12 @@ impl<'a> JobRepo<'a> {
         Ok(())
     }
 
+    /// A committed result wins a cancellation requested after publication.
+    pub fn complete_committed(&self, id: &JobId, detail: &str) -> DbResult<()> {
+        self.conn.execute("UPDATE jobs SET status='completed',progress=100,detail=?1,finished_at=datetime('now') WHERE id=?2 AND status IN ('running','pending','cancelling')", params![detail,id.0])?;
+        Ok(())
+    }
+
     pub fn complete_if_active(&self, id: &JobId, detail: &str) -> DbResult<bool> {
         let updated = self.conn.execute(
             "UPDATE jobs

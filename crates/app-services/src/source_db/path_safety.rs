@@ -32,7 +32,7 @@ pub fn safe_existing_case_path(case_root: &Path, path: &Path) -> DbResult<PathBu
     Ok(canonical_path)
 }
 
-pub(super) fn safe_case_managed_destination(case_root: &Path, path: &Path) -> DbResult<PathBuf> {
+pub(crate) fn safe_case_managed_destination(case_root: &Path, path: &Path) -> DbResult<PathBuf> {
     let canonical_root = std::fs::canonicalize(case_root)?;
     let mut ancestor = path;
     while !ancestor.exists() {

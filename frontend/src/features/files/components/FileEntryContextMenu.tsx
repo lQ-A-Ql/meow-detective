@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download } from 'lucide-react';
+import { Download, HardDrive } from 'lucide-react';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -13,12 +13,14 @@ export interface FileEntryContextMenuProps {
   file: FileEntryRow;
   children: ReactElement;
   onExtractFile: (file: FileEntryRow) => void;
+  onOpenNested?: (file: FileEntryRow) => void;
 }
 
 export function FileEntryContextMenu({
   file,
   children,
   onExtractFile,
+  onOpenNested,
 }: FileEntryContextMenuProps) {
   const { t } = useTranslation();
   if (file.entryType !== 'file') {
@@ -33,6 +35,7 @@ export function FileEntryContextMenu({
           <Download />
           {t('fileBrowser.inspector.extract.button')}
         </ContextMenuItem>
+        {onOpenNested && /\.vhd$/i.test(file.name) ? <ContextMenuItem onSelect={() => onOpenNested(file)}><HardDrive />{t('fileBrowser.contextMenu.openNested')}</ContextMenuItem> : null}
       </ContextMenuContent>
     </ContextMenu>
   );

@@ -5,6 +5,7 @@
  * this file. Do not use bare string literals in API modules.
  */
 export const COMMANDS = {
+  evidenceTasks: { START: 'start_evidence_task', GET: 'get_evidence_task', CANCEL: 'cancel_evidence_task', COVERAGE: 'get_content_index_coverage' },
   registryBrowser: {
     LIST_HIVES: 'list_registry_hives',
     OPEN_HIVE: 'open_registry_hive',
@@ -14,6 +15,7 @@ export const COMMANDS = {
     READ_VALUE_RANGE: 'read_registry_value_range',
     CLOSE_HIVE: 'close_registry_hive',
     SEARCH_HIVE: 'search_registry_hive',
+    LOCATE_SEARCH_HIT: 'locate_registry_search_hit',
   },
   case: {
     GET_CURRENT_CASE: 'get_current_case',
@@ -33,6 +35,7 @@ export const COMMANDS = {
   },
   files: {
     CALCULATE_EVIDENCE_DIGEST: 'calculate_evidence_digest',
+    LIST_EVIDENCE_DIGESTS: 'list_evidence_digests',
     GET_FILE_TREE_REQUEST: 'get_file_tree_request',
     LIST_LOCAL_DISKS: 'list_local_disks',
     GET_FILE_ROWS_REQUEST: 'get_file_rows_request',

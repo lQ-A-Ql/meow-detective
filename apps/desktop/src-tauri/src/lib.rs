@@ -7,6 +7,7 @@ mod dokan_runtime;
 mod emulation_backend;
 mod emulation_registry;
 pub mod events;
+mod evidence_task_jobs;
 mod mcp_host;
 mod media_protocol;
 mod mount_backend;

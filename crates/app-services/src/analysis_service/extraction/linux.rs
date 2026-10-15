@@ -10,6 +10,8 @@ mod pve;
 mod shell_history;
 mod sudo;
 mod system_config;
+mod systemd_projection;
+pub(super) use systemd_projection::append_resolved_unit;
 mod text_log;
 mod timezone;
 mod web;

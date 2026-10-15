@@ -6,16 +6,20 @@ use transport::dto::NestedEvidenceLineageDto;
 use transport::{ErrorCategory, ServiceErrorCategory};
 
 mod materialize;
-pub use materialize::materialize_fixed_vhd;
+mod platform;
+mod reuse;
+pub use materialize::{materialize_fixed_vhd, materialize_fixed_vhd_with_cancel, MaterializeError};
 
 #[derive(Debug, Error)]
 pub enum NestedEvidenceError {
+    #[error("nested evidence task cancelled")]
+    Cancelled,
     #[error("database error: {0}")]
     Database(#[from] persistence_sqlite::DbError),
     #[error("parent data source is not part of the active case")]
     WrongCase,
     #[error("nested evidence materialization failed: {0}")]
-    Materialization(String),
+    Materialization(#[source] MaterializeError),
 }
 
 impl ServiceErrorCategory for NestedEvidenceError {
@@ -23,8 +27,20 @@ impl ServiceErrorCategory for NestedEvidenceError {
         match self {
             Self::Database(_) => ErrorCategory::Io,
             Self::WrongCase => ErrorCategory::Security,
-            Self::Materialization(_) => ErrorCategory::Unsupported,
+            Self::Materialization(error) => match error {
+                MaterializeError::Cancelled => ErrorCategory::Cancelled,
+                MaterializeError::Io(_)
+                | MaterializeError::Database(_)
+                | MaterializeError::Sqlite(_) => ErrorCategory::Io,
+                MaterializeError::Source(_) | MaterializeError::Conflict => ErrorCategory::Security,
+                MaterializeError::NotFile | MaterializeError::TooLarge => ErrorCategory::Validation,
+                MaterializeError::UnsupportedFormat => ErrorCategory::Unsupported,
+            },
+            Self::Cancelled => ErrorCategory::Cancelled,
         }
+    }
+    fn user_message(&self) -> Option<&'static str> {
+        Some("Nested evidence operation failed")
     }
 }
 

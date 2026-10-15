@@ -15,19 +15,19 @@
     "sessionId":"synthetic-session",
     "source":{"caseId":"synthetic-case","dataSourceId":"synthetic-source","fileId":"ds:synthetic-source:hive:software","sourceRevision":"synthetic-v1","view":"base"},
     "hive":{"fileId":"ds:synthetic-source:hive:software","dataSourceId":"synthetic-source","name":"SOFTWARE","evidencePath":"[P1]/Windows/System32/config/SOFTWARE","byteLength":73400320,"readState":"readable","partitionIndex":1},
-    "rootKey":{"keyId":"root","path":"","name":"SOFTWARE","cellOffset":32,"subkeyCount":2,"valueCount":1,"readState":"readable","lastWriteFiletime":"133700000000000001"},
+    "rootKey":{"keyId":"root","path":"","name":"SOFTWARE","cellOffset":32,"subkeyCount":2,"valueCount":1,"readState":"readable","overlaySource":"base","lastWriteFiletime":"133700000000000001"},
     "expiresAt":"2099-01-01T00:00:00Z","diagnostics":[{"code":"transactionLogsNotMerged","recoverable":false}]
   },
   "subkeyPage":{
-    "keys":[{"keyId":"child","path":"EmptyKey","name":"EmptyKey","cellOffset":256,"subkeyCount":0,"valueCount":0,"readState":"readable"}],
+    "keys":[{"keyId":"child","path":"EmptyKey","name":"EmptyKey","cellOffset":256,"subkeyCount":0,"valueCount":0,"readState":"readable","overlaySource":"base"}],
     "coverage":{"declaredCount":2,"returnedCount":1,"skippedCount":0,"status":"complete"},"diagnostics":[],"nextCursor":"synthetic-opaque-cursor"
   },
   "valuePage":{
-    "values":[{"valueId":"default","name":"","typeCode":1,"typeName":"REG_SZ","byteLength":2,"preview":"","cellOffset":512,"readState":"readable"}],
+    "values":[{"valueId":"default","name":"","typeCode":1,"typeName":"REG_SZ","byteLength":2,"preview":"","cellOffset":512,"readState":"readable","overlaySource":"base","dataOverlaySource":"base"}],
     "coverage":{"declaredCount":2,"returnedCount":1,"skippedCount":1,"status":"partial"},"diagnostics":[{"code":"partialValues","recoverable":false,"itemId":"skipped-value"}]
   },
   "range":{
     "valueId":"large-qword","offset":0,"totalLength":8,"bytes":[255,255,255,255,255,255,255,255],"eof":true,
-    "decodeStatus":"decoded","diagnostics":[],"decodedText":"18446744073709551615"
+    "decodeStatus":"decoded","overlaySource":"base","diagnostics":[],"decodedText":"18446744073709551615"
   }
 }

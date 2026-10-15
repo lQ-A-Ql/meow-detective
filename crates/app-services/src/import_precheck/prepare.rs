@@ -16,6 +16,7 @@ pub struct ImportSourceConfig {
     pub profile: Option<String>,
     pub mode: ImportSourceMode,
     pub import_set: Option<ImportSetMemberConfig>,
+    pub existing_data_source_id: Option<domain::DataSourceId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,6 +110,7 @@ pub fn prepare_import_source_config_from_path_with_kind(
         profile: None,
         mode,
         import_set: None,
+        existing_data_source_id: None,
     })
 }
 

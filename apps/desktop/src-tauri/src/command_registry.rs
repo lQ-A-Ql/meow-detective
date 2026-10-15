@@ -27,13 +27,16 @@ pub(crate) use crate::commands::{
         get_recent_objects, materialize_nested_evidence, open_case, remove_case_from_list,
         rename_data_source,
     },
-    digest_commands::calculate_evidence_digest,
+    digest_commands::{calculate_evidence_digest, list_evidence_digests},
     emulation_commands::{
         apply_emulation_bypass, apply_emulation_linux_bypass, cleanup_emulation_osdata,
         get_emulation_bypass_accounts, get_emulation_linux_accounts, get_emulation_preflight,
         get_emulation_status, install_emulation_efi_fallback, launch_emulation,
         list_emulation_sessions, prepare_emulation, release_emulation,
         repair_emulation_fs_journals,
+    },
+    evidence_task_commands::{
+        cancel_evidence_task, get_content_index_coverage, get_evidence_task, start_evidence_task,
     },
     file_commands::{
         browse_registry_key, cancel_bitlocker_dictionary_attack, close_file_handle,
@@ -72,7 +75,8 @@ pub(crate) use crate::commands::{
     plugin_action_commands::{list_plugin_actions, recover_wechat_keys},
     registry_browser_commands::{
         close_registry_hive, list_registry_hives, list_registry_subkeys, list_registry_values,
-        open_registry_hive, read_registry_value_range, resolve_registry_key, search_registry_hive,
+        locate_registry_search_hit, open_registry_hive, read_registry_value_range,
+        resolve_registry_key, search_registry_hive,
     },
     report_commands::{
         export_csv_correlation_report, export_csv_report, export_html_report, export_json_report,

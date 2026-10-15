@@ -24,6 +24,7 @@ mod runner;
 mod scheduler;
 mod state;
 mod summary;
+mod systemd_preload;
 
 pub use self::evtx::extract_evtx_candidate;
 pub use self::linux::extract_linux_candidate;

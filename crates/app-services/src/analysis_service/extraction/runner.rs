@@ -221,6 +221,7 @@ fn run_analysis_extraction_with_plugin_loader(
         cancel_token,
         &mut guarded_file_reader,
     )?;
+    preloads.systemd.annotate(&mut candidates);
     ensure_not_cancelled(cancel_token)?;
     progress_reporter.begin_extraction();
     let discovery_elapsed_ms = elapsed_millis(discovery_started);
@@ -246,7 +247,7 @@ fn run_analysis_extraction_with_plugin_loader(
     let processing_elapsed_ms = elapsed_millis(processing_started);
     ensure_not_cancelled(cancel_token)?;
     progress_reporter.begin_persisting();
-    finalize_run(
+    let result = finalize_run(
         conn,
         case_id,
         state,
@@ -255,7 +256,9 @@ fn run_analysis_extraction_with_plugin_loader(
         processing_elapsed_ms,
         plugin_loads,
         plugin_rejections,
-    )
+    )?;
+    preloads.systemd.persist_markers(conn)?;
+    Ok(result)
 }
 
 /// Persist pending outputs, build the run DTO, complete the progress
@@ -353,6 +356,7 @@ fn load_run_plugins(
 
 /// Owned preload contexts for one extraction run.
 struct RunPreloads {
+    systemd: super::systemd_preload::SystemdPreload,
     registry: RegistryPreloadContext,
     browser: BrowserPreloadContext,
     linux_log_time: LinuxLogTimeContext,
@@ -362,6 +366,7 @@ struct RunPreloads {
 impl RunPreloads {
     fn as_refs(&self) -> PreloadContexts<'_> {
         PreloadContexts {
+            systemd: Some(&self.systemd),
             registry: &self.registry,
             browser: &self.browser,
             linux_log_time: &self.linux_log_time,
@@ -389,12 +394,18 @@ fn prepare_run_preloads(
         file_reader,
     )?;
     let browser = prepare_browser_preload(conn, candidates, cancel_token, file_reader)?;
+    let systemd = if platform == DataSourcePlatform::Linux {
+        super::systemd_preload::prepare(conn, candidates, cancel_token, file_reader)?
+    } else {
+        super::systemd_preload::SystemdPreload::default()
+    };
     let (linux_log_time, timezone_warnings) = if platform == DataSourcePlatform::Linux {
         resolve_linux_log_time(conn, cancel_token, file_reader)
     } else {
         (LinuxLogTimeContext::utc(), Vec::new())
     };
     Ok(RunPreloads {
+        systemd,
         registry,
         browser,
         linux_log_time,

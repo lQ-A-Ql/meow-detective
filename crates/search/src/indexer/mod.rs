@@ -1,3 +1,4 @@
+mod file_match_sources;
 mod file_metadata_writer;
 mod file_query;
 mod file_query_session;

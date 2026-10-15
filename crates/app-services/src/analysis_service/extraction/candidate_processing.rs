@@ -42,6 +42,7 @@ mod panic_diagnostics;
 mod routing;
 mod source_preparation;
 
+use checkpoint::checkpoint_key;
 use panic_diagnostics::PanicDiagnostics;
 pub(super) use routing::{capability_for_candidate, discovery_categories};
 
@@ -66,6 +67,7 @@ impl ExistingCheckpoints<'_> {
 }
 
 pub(super) struct PreloadContexts<'a> {
+    pub(super) systemd: Option<&'a super::systemd_preload::SystemdPreload>,
     pub(super) registry: &'a RegistryPreloadContext,
     pub(super) browser: &'a BrowserPreloadContext,
     pub(super) linux_log_time: &'a LinuxLogTimeContext,
@@ -254,6 +256,18 @@ where
             candidate,
             capability,
             kind,
+        }));
+    }
+    if let Some(outcome) = coordinator
+        .context
+        .preloads
+        .systemd
+        .and_then(|preload| preload.outcome(&candidate))
+    {
+        return Ok(PreparedWork::Ready(CandidateCompletion {
+            candidate,
+            capability,
+            kind: CandidateCompletionKind::Outcome(outcome),
         }));
     }
     if is_unsupported_linux_candidate(&candidate) {
@@ -463,18 +477,6 @@ fn is_unsupported_linux_candidate(candidate: &EvidenceCandidate) -> bool {
     candidate.category == LINUX_UMBRELLA_KEY
         && linux_candidate_support(&normalize_evidence_path(&candidate.path))
             == LinuxCandidateSupport::Unsupported
-}
-
-fn checkpoint_key(
-    candidate: &EvidenceCandidate,
-    capability: AnalysisCapability,
-) -> AnalysisCheckpointKey {
-    (
-        candidate.file_id.0.clone(),
-        capability.key.to_string(),
-        candidate.size,
-        candidate.content_identity.clone(),
-    )
 }
 
 fn log_scheduler_snapshot(snapshot: SchedulerSnapshot, policy: ExtractionSchedulingPolicy) {

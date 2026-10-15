@@ -40,9 +40,9 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
     <>
       {confirmation}
       <WorkspaceFrame><WorkspaceCard className="flex min-h-0 flex-1 flex-col">
-        <section className="relative isolate shrink-0 px-5 pb-6 pt-10 text-center lg:pt-12" aria-labelledby="case-home-title">
-          <BrandWatermark motif="profile-portrait" className="watermark-home" />
-          <div className="mx-auto max-w-3xl">
+        <section className="case-home-banner relative isolate shrink-0 px-5 pb-6 pt-10 text-center lg:pt-12" aria-labelledby="case-home-title">
+          <BrandWatermark motif="case-overview" layout="banner" className="watermark-home" />
+          <div className="relative mx-auto max-w-3xl">
             <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forensics-red-ink">{t('caseHome.workspace.active')}</div>
             <h1 id="case-home-title" className="mt-2 truncate text-2xl font-semibold tracking-tight text-forensics-ink lg:text-3xl">{model.currentCase.name}</h1>
             <div className="mt-2 flex flex-wrap items-center justify-center gap-2 font-mono text-[10px] text-forensics-ink-3">
@@ -65,7 +65,7 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
         <section className="min-h-0 flex-1 overflow-hidden px-4 py-4 lg:px-8" aria-label={t('caseHome.dataSources.title')}>
           <div className="flex h-full min-h-0 flex-col overflow-hidden bg-forensics-paper">
             <div className="flex min-h-0 flex-1 flex-col">
-              <DataSourcesPanel dataSources={model.dataSources} showHeader={false} hashJobs={model.evidenceHashJobs} editingDataSourceId={model.editingDataSourceId} editingDataSourceName={model.editingDataSourceName} setEditingDataSourceId={model.setEditingDataSourceId} setEditingDataSourceName={model.setEditingDataSourceName} onRename={model.renameDataSource} onRequestDelete={model.requestDeleteDataSource} logicalDiskDigest={model.logicalDiskDigest} logicalDiskDigestSourceId={model.logicalDiskDigestSourceId} logicalDiskDigestLoading={model.logicalDiskDigestLoading} logicalDiskDigestError={model.logicalDiskDigestErrorText} onCalculateLogicalDiskDigest={model.calculateLogicalDiskDigest} />
+              <DataSourcesPanel dataSources={model.dataSources} showHeader={false} hashJobs={model.evidenceHashJobs} editingDataSourceId={model.editingDataSourceId} editingDataSourceName={model.editingDataSourceName} setEditingDataSourceId={model.setEditingDataSourceId} setEditingDataSourceName={model.setEditingDataSourceName} onRename={model.renameDataSource} onRequestDelete={model.requestDeleteDataSource} logicalDiskDigest={model.logicalDiskDigest} logicalDiskDigestTask={model.logicalDiskDigestTask} logicalDiskDigestSourceId={model.logicalDiskDigestSourceId} logicalDiskDigestLoading={model.logicalDiskDigestLoading} logicalDiskDigestError={model.logicalDiskDigestErrorText} onCalculateLogicalDiskDigest={model.calculateLogicalDiskDigest} />
             </div>
           </div>
         </section>

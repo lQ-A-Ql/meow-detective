@@ -3,6 +3,7 @@ import type {
   RegistryHiveSession, RegistryKeyMetadata, RegistryKeyResolveRequest, RegistrySubkeyPage,
   RegistrySubkeysRequest, RegistryValuePage, RegistryValueRange, RegistryValueRangeRequest,
   RegistryValuesRequest, RegistrySearchPage,
+  RegistrySearchLocation, RegistrySearchLocateRequest,
 } from '@/types/registryBrowser';
 import { apiClient } from './client';
 import { COMMANDS } from './commands';
@@ -17,6 +18,7 @@ export interface RegistryBrowserClient {
   readValueRange: (request: RegistryValueRangeRequest) => Promise<RegistryValueRange>;
   closeHive: (request: RegistryHiveCloseRequest) => Promise<boolean>;
   searchHive: (request: { sessionId: string; query: string }) => Promise<RegistrySearchPage>;
+  locateSearchHit?: (request: RegistrySearchLocateRequest) => Promise<RegistrySearchLocation>;
 }
 
 export const registryBrowserClient: RegistryBrowserClient = {
@@ -28,7 +30,8 @@ export const registryBrowserClient: RegistryBrowserClient = {
   readValueRange: (request) => apiClient.request(COMMANDS.registryBrowser.READ_VALUE_RANGE, { request }),
   closeHive: async (request) => { await apiClient.request(COMMANDS.registryBrowser.CLOSE_HIVE, { request }); return true; },
   searchHive: (request) => apiClient.request(COMMANDS.registryBrowser.SEARCH_HIVE, { request }),
+  locateSearchHit: (request) => apiClient.request(COMMANDS.registryBrowser.LOCATE_SEARCH_HIT, { request }),
 };
 export async function searchRegistryHive(request: { sessionId: string; query: string }): Promise<import('@/types/registryBrowser').RegistrySearchPage> {
-  return apiClient.request('search_registry_hive', { request });
+  return apiClient.request(COMMANDS.registryBrowser.SEARCH_HIVE, { request });
 }
