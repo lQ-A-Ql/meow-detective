@@ -23,6 +23,10 @@ impl MftScan {
         self.total_records
     }
 
+    pub(super) fn record_size(&self) -> u32 {
+        self.scanner.record_size()
+    }
+
     pub(in crate::parallel_enum) fn read_chunk(
         &mut self,
         start_record: u64,

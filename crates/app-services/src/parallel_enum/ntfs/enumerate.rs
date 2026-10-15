@@ -1,6 +1,7 @@
 use super::super::batch_sink::{prepare_mft_insert, EnumerationStats};
 use super::super::error::ParallelEnumError;
 use super::super::partition_work::PartitionWork;
+use super::batch_pipeline::{MftBatch, OrderedMftWindow};
 use super::mft_scan::{self, prepare_mft_scan};
 use super::path_reconstruction::MftCatalog;
 use super::validation::validate_mft_staging_shape;
@@ -106,14 +107,31 @@ fn scan_mft_transaction(
 ) -> Result<EnumerationStats, ParallelEnumError> {
     let mut statement = prepare_mft_insert(ctx.conn)?;
     let mut catalog = MftCatalog::default();
+    let window = OrderedMftWindow::new(1);
     let mut start_record = 0;
     while start_record < scan.total_records() {
         check_cancelled(ctx.cancel_token)?;
         let (records, scanned_count) = scan.read_chunk(start_record, ctx.profile)?;
+        if !window.reserve(start_record) {
+            return Err(ParallelEnumError::MftParams(
+                "MFT batch window is full".to_string(),
+            ));
+        }
+        window
+            .submit(MftBatch {
+                start_record,
+                scanned_records: scanned_count,
+                logical_bytes: scanned_count.saturating_mul(scan.record_size() as u64),
+                records,
+            })
+            .map_err(|_| ParallelEnumError::MftParams("duplicate MFT batch".to_string()))?;
+        let batch = window
+            .take_next()
+            .ok_or_else(|| ParallelEnumError::MftParams("MFT batch order gap".to_string()))?;
         let staged_rows = ctx.profile.measure(Phase::MftStage, || {
             catalog.stage_records(
                 &mut statement,
-                &records,
+                &batch.records,
                 ctx.data_source_id,
                 ctx.partition_index,
             )
