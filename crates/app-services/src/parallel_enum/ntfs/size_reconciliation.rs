@@ -58,8 +58,8 @@ impl ExternalFileSizes {
 
 pub(in crate::parallel_enum) fn apply_authoritative_size(
     conn: &Connection,
-    data_source_id: &str,
-    partition_index: usize,
+    _data_source_id: &str,
+    _partition_index: usize,
     inode: u64,
     catalog_size: u64,
     authoritative_size: u64,
@@ -68,10 +68,9 @@ pub(in crate::parallel_enum) fn apply_authoritative_size(
     if catalog_size == authoritative_size {
         return Ok(false);
     }
-    let id = format!("mft:{partition_index}:{inode}");
     let changed = conn.execute(
-        "UPDATE file_entries SET size = ?1 WHERE id = ?2 AND data_source_id = ?3",
-        params![authoritative_size, id, data_source_id],
+        "UPDATE ntfs_entries SET size = ?1 WHERE record_num = ?2",
+        params![authoritative_size, inode],
     )?;
     if changed > 0 {
         stats.total_size = stats

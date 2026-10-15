@@ -1,5 +1,5 @@
-use std::collections::BTreeMap;
-use std::sync::{Condvar, Mutex};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Mutex;
 
 use fs_ntfs::mft_scanner::MftRecord;
 
@@ -12,7 +12,7 @@ pub struct MftBatch {
 }
 
 struct WindowState {
-    in_flight: usize,
+    reserved: BTreeSet<u64>,
     next_record: u64,
     ready: BTreeMap<u64, MftBatch>,
 }
@@ -21,7 +21,6 @@ struct WindowState {
 pub struct OrderedMftWindow {
     capacity: usize,
     state: Mutex<WindowState>,
-    changed: Condvar,
 }
 
 impl OrderedMftWindow {
@@ -29,31 +28,30 @@ impl OrderedMftWindow {
         Self {
             capacity: capacity.max(1),
             state: Mutex::new(WindowState {
-                in_flight: 0,
+                reserved: BTreeSet::new(),
                 next_record: 0,
                 ready: BTreeMap::new(),
             }),
-            changed: Condvar::new(),
         }
     }
 
-    pub fn reserve(&self, _start_record: u64) -> bool {
+    pub fn reserve(&self, start_record: u64) -> bool {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        if state.in_flight >= self.capacity {
+        if state.reserved.len() >= self.capacity || start_record < state.next_record {
             return false;
         }
-        state.in_flight += 1;
-        true
+        state.reserved.insert(start_record)
     }
 
     pub fn submit(&self, batch: MftBatch) -> Result<(), MftBatch> {
-        let _batch_shape = (batch.logical_bytes, batch.records.len());
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        if state.ready.contains_key(&batch.start_record) {
+        if batch.scanned_records == 0
+            || !state.reserved.contains(&batch.start_record)
+            || state.ready.contains_key(&batch.start_record)
+        {
             return Err(batch);
         }
         state.ready.insert(batch.start_record, batch);
-        self.changed.notify_all();
         Ok(())
     }
 
@@ -65,17 +63,8 @@ impl OrderedMftWindow {
         }
         let batch = state.ready.remove(&key)?;
         state.next_record = state.next_record.saturating_add(batch.scanned_records);
-        state.in_flight = state.in_flight.saturating_sub(1);
-        self.changed.notify_all();
+        state.reserved.remove(&key);
         Some(batch)
-    }
-
-    #[cfg(test)]
-    pub fn outstanding(&self) -> usize {
-        self.state
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .in_flight
     }
 }
 

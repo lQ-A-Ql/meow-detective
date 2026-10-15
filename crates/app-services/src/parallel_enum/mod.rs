@@ -10,6 +10,7 @@ pub mod error;
 mod ntfs;
 mod ntfs_entry;
 mod ntfs_plan;
+mod ntfs_sink;
 mod partition_enumeration;
 mod partition_work;
 mod progress;

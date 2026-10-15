@@ -29,6 +29,10 @@ struct ImportResult {
 }
 
 fn import(path: &Path, profiling: bool) -> ImportResult {
+    import_with_workers(path, profiling, 1)
+}
+
+fn import_with_workers(path: &Path, profiling: bool, workers: usize) -> ImportResult {
     let temporary = tempfile::TempDir::new().unwrap();
     let active = case_service::create_case(
         &temporary.path().join("cases"),
@@ -41,7 +45,7 @@ fn import(path: &Path, profiling: bool) -> ImportResult {
         let config = import_precheck::prepare_import_source_config_from_path(&path.to_string_lossy(), DataSourcePlatform::Windows).unwrap();
         let cancel = Arc::new(AtomicBool::new(false));
         let options = ImportJobOptions { event_sink: None, cancel_token: &cancel,
-            max_import_workers: Some(1), max_analysis_workers: Some(1),
+            max_import_workers: Some(workers), max_analysis_workers: Some(1),
             analysis_mode: ImportAnalysisMode::MetadataOnly, defer_linux_artifacts: false };
         let profiler = ImportProfiler::default();
         let result = if profiling {
@@ -373,4 +377,32 @@ fn fixture_import_profile() {
     let result = import(&path, true);
     assert!(!result.catalog.is_empty());
     emit_benchmark(&result);
+}
+
+#[test]
+fn parallel_raw_and_e01_keep_the_serial_catalog_graph_and_timeline() {
+    let temporary = tempfile::tempdir().unwrap();
+    let raw = temporary.path().join("parallel.raw");
+    let e01 = temporary.path().join("parallel.E01");
+    let bytes = fixture::image(20_003);
+    std::fs::write(&raw, &bytes).unwrap();
+    fixture::write_e01(&e01, &bytes).unwrap();
+    let serial = import_with_workers(&raw, true, 1);
+    for path in [&raw, &e01] {
+        let parallel = import_with_workers(path, true, 4);
+        assert_eq!(serial.catalog, parallel.catalog);
+        assert_eq!(serial.graph, parallel.graph);
+        assert_eq!(serial.timeline, parallel.timeline);
+        verify_report(&parallel.report, 20_003);
+        let opens: u64 = parallel
+            .report
+            .partition_aggregates
+            .iter()
+            .filter(|sample| sample.phase == Phase::MftReaderOpen)
+            .map(|sample| sample.full_image_opens)
+            .sum();
+        if app_services::parallel_enum::default_worker_count() > 1 {
+            assert!(opens > 1);
+        }
+    }
 }

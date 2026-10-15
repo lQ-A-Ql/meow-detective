@@ -41,6 +41,7 @@ pub mod options;
 pub mod partition;
 mod phases;
 pub(crate) mod profile;
+mod runtime;
 
 pub use emit::{ImportEventSink, NoopImportEventSink};
 pub use execute::{

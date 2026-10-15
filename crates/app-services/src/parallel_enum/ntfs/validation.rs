@@ -7,6 +7,16 @@ pub(in crate::parallel_enum) fn validate_mft_staging_shape(
     data_source_id: &str,
     partition_index: usize,
 ) -> Result<(), ParallelEnumError> {
+    use persistence_sqlite::repositories::ntfs_staging_repo::NtfsStagingRepo;
+    if NtfsStagingRepo::is_numeric(conn)? {
+        let (total, roots, orphans, reachable) = NtfsStagingRepo::tree_shape(conn)?;
+        if total > 0 && roots == 1 && orphans == 0 && reachable == total {
+            return Ok(());
+        }
+        return Err(ParallelEnumError::MftParams(format!(
+            "MFT catalog tree is incomplete: total={total}, roots={roots}, reachable={reachable}, orphans={orphans}"
+        )));
+    }
     let root_id = mft_entry_id(partition_index, 5);
     let id_pattern = format!("mft:{partition_index}:%");
     let total = count_rows(

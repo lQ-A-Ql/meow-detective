@@ -1,6 +1,5 @@
 use super::progress::ENUM_PROGRESS_INTERVAL;
 use evidence_core::{FileSystemReader, FsNode};
-use fs_ntfs::mft_scanner::MftRecord;
 use rusqlite::{CachedStatement, Connection};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -231,118 +230,15 @@ pub(super) fn visibility_flags_for_name(name: &str, hidden: bool, system: bool) 
     )
 }
 
-pub(super) fn prepare_mft_insert(conn: &Connection) -> rusqlite::Result<CachedStatement<'_>> {
-    conn.prepare_cached(
-        "INSERT OR IGNORE INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type,
-          size, ext, deleted, hidden, system, read_only, archive, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
-          partition_index)
-         VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, NULL, ?18)",
-    )
-}
-
-pub(super) fn stage_mft_record(
-    statement: &mut CachedStatement<'_>,
-    record: &MftRecord,
-    data_source_id: &str,
-    partition_index: usize,
-) -> rusqlite::Result<(Option<String>, String, u64)> {
-    let name = if record.record_number == 5 && (record.name.is_empty() || record.name == ".") {
-        "\\".to_string()
-    } else {
-        record.name.clone()
-    };
-    let parent_key = (record.record_number != 5).then(|| record.parent_ref.to_string());
-    let parent_id = parent_key
-        .as_deref()
-        .map(|parent| mft_entry_id_from_key(partition_index, parent));
-    let (hidden, system) = visibility_flags_for_name(&name, record.hidden, record.system);
-    let inserted = statement.execute(rusqlite::params![
-        mft_entry_id(partition_index, record.record_number),
-        parent_id,
-        data_source_id,
-        name,
-        if record.is_dir { "directory" } else { "file" },
-        (!record.is_dir).then_some(record.size),
-        mft_record_extension(record),
-        record.deleted as i32,
-        hidden as i32,
-        system as i32,
-        record.read_only as i32,
-        record.archive as i32,
-        record.encrypted as i32,
-        record.created_at.as_ref().map(|value| value.to_rfc3339()),
-        record.modified_at.as_ref().map(|value| value.to_rfc3339()),
-        record.accessed_at.as_ref().map(|value| value.to_rfc3339()),
-        record.changed_at.as_ref().map(|value| value.to_rfc3339()),
-        partition_index as i64,
-    ])?;
-    Ok((parent_key, name, inserted as u64))
-}
-
-pub(super) fn prepare_ntfs_index_insert(
-    conn: &Connection,
-) -> rusqlite::Result<CachedStatement<'_>> {
-    conn.prepare_cached(
-        "INSERT OR IGNORE INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type,
-          size, ext, deleted, hidden, system, read_only, archive, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
-          partition_index)
-         VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, 0, ?8, ?9, ?10, ?11, ?12, NULL, NULL, NULL, NULL, NULL, ?13)",
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(super) fn insert_ntfs_index_entry(
-    statement: &mut CachedStatement<'_>,
-    data_source_id: &str,
-    partition_index: usize,
-    parent_ref: u64,
-    mft_ref: u64,
-    name: &str,
-    is_dir: bool,
-    size: u64,
-    hidden: bool,
-    system: bool,
-    read_only: bool,
-    archive: bool,
-    encrypted: bool,
-) -> rusqlite::Result<usize> {
-    let (hidden, system) = visibility_flags_for_name(name, hidden, system);
-    statement.execute(rusqlite::params![
-        mft_entry_id(partition_index, mft_ref),
-        mft_entry_id(partition_index, parent_ref),
-        data_source_id,
-        name,
-        if is_dir { "directory" } else { "file" },
-        (!is_dir).then_some(size),
-        (!is_dir).then(|| extension_from_name(name)).flatten(),
-        hidden as i32,
-        system as i32,
-        read_only as i32,
-        archive as i32,
-        encrypted as i32,
-        partition_index as i64,
-    ])
-}
+pub(super) use super::ntfs_sink::{
+    insert_ntfs_index_entry, prepare_mft_insert, prepare_ntfs_index_insert, stage_mft_record,
+};
 
 pub(super) fn mft_entry_id(partition_index: usize, record_number: u64) -> String {
     format!("mft:{partition_index}:{record_number}")
 }
 
-pub(super) fn mft_entry_id_from_key(partition_index: usize, record_key: &str) -> String {
-    format!("mft:{partition_index}:{record_key}")
-}
-
-fn mft_record_extension(record: &MftRecord) -> Option<String> {
-    if record.is_dir {
-        None
-    } else {
-        extension_from_name(&record.name)
-    }
-}
-
-fn extension_from_name(name: &str) -> Option<String> {
+pub(super) fn extension_from_name(name: &str) -> Option<String> {
     name.rsplit('.')
         .next()
         .filter(|extension| *extension != name)

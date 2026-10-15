@@ -30,7 +30,7 @@ impl E01ReaderCache {
             return cached.open_reader();
         }
 
-        let plan = E01Reader::open(source_path)?.open_plan();
+        let plan = E01Reader::open(source_path)?.open_plan()?;
         while self.paths.len() >= self.max_size {
             if let Some(evicted_path) = self.paths.pop_front() {
                 self.plans.remove(&evicted_path);

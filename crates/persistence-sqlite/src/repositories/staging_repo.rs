@@ -227,6 +227,7 @@ impl StagingRepo {
 
 impl StagingRepo {
     pub fn reset_partition_staging(conn: &Connection) -> DbResult<()> {
+        crate::repositories::ntfs_staging_repo::NtfsStagingRepo::reset_layout(conn)?;
         conn.execute_batch(
             "DELETE FROM file_entries;
              DELETE FROM staging_meta

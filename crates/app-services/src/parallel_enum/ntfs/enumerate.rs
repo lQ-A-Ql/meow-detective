@@ -1,8 +1,8 @@
 use super::super::batch_sink::{prepare_mft_insert, EnumerationStats};
 use super::super::error::ParallelEnumError;
 use super::super::partition_work::PartitionWork;
-use super::batch_pipeline::{MftBatch, OrderedMftWindow};
 use super::mft_scan::{self, prepare_mft_scan};
+use super::parallel_scan::collect_batches;
 use super::path_reconstruction::MftCatalog;
 use super::validation::validate_mft_staging_shape;
 use crate::import_pipeline::profile::{Counters, PhaseRecorder};
@@ -26,6 +26,8 @@ pub(in crate::parallel_enum) fn enumerate_ntfs_mft_to_staging(
             data_source_id,
             partition_index: partition.index,
             volume_offset: partition.volume_offset,
+            factory: partition.reader_factory.as_deref(),
+            workers: partition.mft_workers,
             cancel_token,
             progress_cb,
             profile,
@@ -52,6 +54,8 @@ pub(in crate::parallel_enum) fn enumerate_ntfs_reader_to_staging(
             data_source_id,
             partition_index,
             volume_offset,
+            factory: None,
+            workers: 1,
             cancel_token,
             progress_cb,
             profile: &mut profile,
@@ -65,6 +69,8 @@ struct EnumerationContext<'a> {
     data_source_id: &'a str,
     partition_index: usize,
     volume_offset: u64,
+    factory: Option<&'a dyn evidence_core::EvidenceReaderFactory>,
+    workers: usize,
     cancel_token: &'a AtomicBool,
     progress_cb: Option<&'a dyn Fn(u64, u64)>,
     profile: &'a mut PhaseRecorder,
@@ -78,7 +84,18 @@ fn enumerate_scan(
     ctx.conn
         .execute_batch("BEGIN TRANSACTION")
         .map_err(ParallelEnumError::Db)?;
-    let result = scan_mft_transaction(ctx, scan);
+    let result = (|| {
+        persistence_sqlite::repositories::ntfs_staging_repo::NtfsStagingRepo::reset_layout(
+            ctx.conn,
+        )?;
+        ctx.conn.execute_batch("DELETE FROM file_entries")?;
+        persistence_sqlite::repositories::ntfs_staging_repo::NtfsStagingRepo::begin(
+            ctx.conn,
+            ctx.data_source_id,
+            ctx.partition_index,
+        )?;
+        scan_mft_transaction(ctx, scan)
+    })();
     let stats = match result {
         Ok(stats) => {
             let commit = ctx
@@ -107,48 +124,41 @@ fn scan_mft_transaction(
 ) -> Result<EnumerationStats, ParallelEnumError> {
     let mut statement = prepare_mft_insert(ctx.conn)?;
     let mut catalog = MftCatalog::default();
-    let window = OrderedMftWindow::new(1);
-    let mut start_record = 0;
-    while start_record < scan.total_records() {
-        check_cancelled(ctx.cancel_token)?;
-        let (records, scanned_count) = scan.read_chunk(start_record, ctx.profile)?;
-        if !window.reserve(start_record) {
-            return Err(ParallelEnumError::MftParams(
-                "MFT batch window is full".to_string(),
-            ));
-        }
-        window
-            .submit(MftBatch {
-                start_record,
-                scanned_records: scanned_count,
-                logical_bytes: scanned_count.saturating_mul(scan.record_size() as u64),
-                records,
-            })
-            .map_err(|_| ParallelEnumError::MftParams("duplicate MFT batch".to_string()))?;
-        let batch = window
-            .take_next()
-            .ok_or_else(|| ParallelEnumError::MftParams("MFT batch order gap".to_string()))?;
-        let staged_rows = ctx.profile.measure(Phase::MftStage, || {
-            catalog.stage_records(
-                &mut statement,
-                &batch.records,
-                ctx.data_source_id,
-                ctx.partition_index,
-            )
-        })?;
-        ctx.profile.count(
-            Phase::MftStage,
-            Counters {
-                staged: staged_rows,
-                ..Default::default()
-            },
-        );
-        start_record += scanned_count;
-        if let Some(callback) = ctx.progress_cb {
-            let stats = catalog.stats();
-            callback(stats.file_count + stats.dir_count, stats.total_size);
-        }
-    }
+    let scan_record_bytes = scan.record_size() as u64;
+    collect_batches(
+        scan,
+        ctx.factory,
+        ctx.workers,
+        ctx.cancel_token,
+        ctx.profile,
+        |batch, profile| {
+            if batch.logical_bytes != batch.scanned_records * scan_record_bytes {
+                return Err(ParallelEnumError::MftParams(
+                    "invalid MFT logical byte count".into(),
+                ));
+            }
+            let staged_rows = profile.measure(Phase::MftStage, || {
+                catalog.stage_records(
+                    &mut statement,
+                    &batch.records,
+                    ctx.data_source_id,
+                    ctx.partition_index,
+                )
+            })?;
+            profile.count(
+                Phase::MftStage,
+                Counters {
+                    staged: staged_rows,
+                    ..Default::default()
+                },
+            );
+            if let Some(callback) = ctx.progress_cb {
+                let stats = catalog.stats();
+                callback(stats.file_count + stats.dir_count, stats.total_size);
+            }
+            Ok(())
+        },
+    )?;
     drop(statement);
     scan.release_buffer();
     catalog.backfill_directory_indexes(

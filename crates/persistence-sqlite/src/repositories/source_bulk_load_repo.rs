@@ -46,13 +46,18 @@ impl SourceBulkLoadRepo {
             Some("active") => BulkLoadState::Active,
             Some("rebuilding") => BulkLoadState::Rebuilding,
             Some("ready") => BulkLoadState::Ready,
-            _ => BulkLoadState::Inactive,
+            None | Some("inactive") => BulkLoadState::Inactive,
+            _ => {
+                return Err(crate::DbError::System(
+                    "Unknown source bulk-load state".into(),
+                ))
+            }
         })
     }
     pub fn clear_transient(conn: &Connection) -> DbResult<()> {
         conn.execute(
-            "DELETE FROM source_meta WHERE key LIKE ?1",
-            [format!("{BULK_LOAD_PREFIX}%")],
+            "DELETE FROM source_meta WHERE key GLOB ?1",
+            [format!("{BULK_LOAD_PREFIX}*")],
         )?;
         Ok(())
     }

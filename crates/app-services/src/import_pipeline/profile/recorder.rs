@@ -42,6 +42,10 @@ impl PhaseRecorder {
         result
     }
 
+    pub(crate) fn fork(&self) -> Self {
+        Self::new(self.profiler.clone(), self.partition)
+    }
+
     pub(crate) fn start(&self) -> Option<Instant> {
         self.profiler.as_ref().map(|_| Instant::now())
     }

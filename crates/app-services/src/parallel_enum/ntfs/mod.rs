@@ -1,7 +1,10 @@
 pub(super) mod batch_pipeline;
 mod enumerate;
 pub(super) mod mft_scan;
+mod numeric_paths;
+mod parallel_scan;
 pub(super) mod path_reconstruction;
+mod reader_open;
 pub(super) mod size_reconciliation;
 pub(super) mod validation;
 

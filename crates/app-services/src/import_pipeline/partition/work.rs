@@ -74,9 +74,14 @@ pub(crate) fn build_partition_work_typed_with_factory(
             candidate: candidate.clone(),
         })
     } else {
-        let fs = open_candidate_filesystem(source_path, source_kind, candidate)
-            .map_err(|error| super::PartitionBuildError::Reader(std::io::Error::other(error)))?
-            .ok_or(super::PartitionBuildError::Unavailable)?;
+        let fs = open_candidate_filesystem_with_factory(
+            source_path,
+            source_kind,
+            candidate,
+            reader_factory.as_deref(),
+        )
+        .map_err(|error| super::PartitionBuildError::Reader(std::io::Error::other(error)))?
+        .ok_or(super::PartitionBuildError::Unavailable)?;
         parallel_enum::PartitionEnumStrategy::Generic(fs)
     };
     Ok(parallel_enum::PartitionWork {
@@ -88,6 +93,7 @@ pub(crate) fn build_partition_work_typed_with_factory(
         source_kind: source_kind.clone(),
         volume_offset: candidate.offset,
         reader_factory,
+        mft_workers: 1,
     })
 }
 
@@ -96,8 +102,28 @@ pub(super) fn open_candidate_filesystem(
     source_kind: &domain::DataSourceKind,
     candidate: &datasource_service::ImageFilesystemCandidate,
 ) -> Result<Option<Box<dyn FileSystemReader + Send>>, String> {
+    open_candidate_filesystem_with_factory(source_path, source_kind, candidate, None)
+}
+
+fn open_candidate_filesystem_with_factory(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    candidate: &datasource_service::ImageFilesystemCandidate,
+    factory: Option<&dyn evidence_core::EvidenceReaderFactory>,
+) -> Result<Option<Box<dyn FileSystemReader + Send>>, String> {
+    let open = || {
+        if !matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume) {
+            if let Some(factory) = factory {
+                return factory
+                    .open_reader()
+                    .map(|reader| (reader, candidate.offset))
+                    .map_err(|error| error.to_string());
+            }
+        }
+        open_candidate_reader(source_path, source_kind, candidate)
+    };
     if candidate.kind == ImageFilesystemKind::Iso9660 {
-        let (reader, fs_offset) = open_candidate_reader(source_path, source_kind, candidate)?;
+        let (reader, fs_offset) = open()?;
         let reader = evidence_core::PartitionWindowReader::new(reader, fs_offset, candidate.length)
             .map_err(|error| error.to_string())?;
         return Ok(Some(Box::new(
@@ -108,7 +134,7 @@ pub(super) fn open_candidate_filesystem(
             .map_err(|error| error.to_string())?,
         )));
     }
-    let (mut base_reader, fs_offset) = open_candidate_reader(source_path, source_kind, candidate)?;
+    let (mut base_reader, fs_offset) = open()?;
     let fs: Box<dyn FileSystemReader + Send> = match candidate.kind {
         ImageFilesystemKind::Ntfs => Box::new(
             fs_ntfs::NtfsReader::open(base_reader, fs_offset).map_err(|error| error.to_string())?,

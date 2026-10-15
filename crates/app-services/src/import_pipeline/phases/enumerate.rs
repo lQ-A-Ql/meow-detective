@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 use transport::CommandError;
 
@@ -40,6 +39,7 @@ pub(crate) fn run_enumeration_phase(
             ));
         }
     };
+    super::super::runtime::finish_indexes(ctx)?;
     populate_file_graph(ctx, data_source, &mut stats);
     ctx.counts.add_warnings(stats.warnings.len());
     report_catalog_ready(ctx, data_source, &stats);

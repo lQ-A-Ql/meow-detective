@@ -85,13 +85,6 @@ pub fn execute_import_job_profiled(
         state,
         profile::Counters::default(),
     );
-    profiler.record(
-        None,
-        Phase::SourceIndexBuild,
-        None,
-        State::NotApplicable,
-        profile::Counters::default(),
-    );
     result
 }
 
@@ -130,13 +123,6 @@ fn execute_import_job_internal(
     let ds = phases::run_attach_phase(&mut ctx)?;
     let source_conn = crate::source_db::open_source_db(case_root, &ds.id)
         .map_err(CommandError::from_service_error)?;
-    let bulk_attempt = job_id.0.as_str();
-    persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::set_state(
-        &source_conn,
-        persistence_sqlite::repositories::source_bulk_load_repo::BulkLoadState::Active,
-        bulk_attempt,
-    )
-    .map_err(CommandError::from_service_error)?;
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(case_id, &ds)
         .map_err(CommandError::from_service_error)?;
@@ -145,32 +131,13 @@ fn execute_import_job_internal(
         .map_err(CommandError::from_service_error)?;
     ctx.source_conn = Some(&source_conn);
     ctx.ds = Some(&ds);
-    if matches!(
-        ctx.import_config.kind,
-        domain::DataSourceKind::Raw
-            | domain::DataSourceKind::E01
-            | domain::DataSourceKind::LocalDisk
-    ) {
-        let factory = crate::source_runtime::open_factory(
-            &ctx.import_config.source_path,
-            &ctx.import_config.kind,
+    let result = (|| {
+        super::runtime::prepare_runtime(&mut ctx, &ds)?;
+        persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::begin(
+            &source_conn,
+            &job_id.0,
         )
         .map_err(CommandError::from_typed_service_error)?;
-        ctx.runtime = Some(std::sync::Arc::new(
-            crate::source_runtime::SourceRuntime::new(
-                crate::source_runtime::SourceIdentity {
-                    case_id: case_id.0.clone(),
-                    data_source_id: ds.id.clone(),
-                    revision: 0,
-                    source_kind: ctx.import_config.kind.clone(),
-                    path: ctx.import_config.source_path.clone(),
-                },
-                factory,
-            ),
-        ));
-    }
-
-    let result = (|| {
         reject_cancelled_after_register(&ctx, &ds)?;
 
         let stats = phases::run_enumeration_phase(&mut ctx, &ds)?;
@@ -189,24 +156,7 @@ fn execute_import_job_internal(
             "ready_metadata"
         }
     };
-    let import_succeeded = result.is_ok();
     let mut message = persist_import_outcome(conn, &ds.id, ready_state, result)?;
-    if import_succeeded {
-        persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::set_state(
-            &source_conn,
-            persistence_sqlite::repositories::source_bulk_load_repo::BulkLoadState::Rebuilding,
-            bulk_attempt,
-        )
-        .map_err(CommandError::from_service_error)?;
-        persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::set_state(
-            &source_conn,
-            persistence_sqlite::repositories::source_bulk_load_repo::BulkLoadState::Ready,
-            bulk_attempt,
-        )
-        .map_err(CommandError::from_service_error)?;
-        persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::clear_transient(&source_conn)
-            .map_err(CommandError::from_service_error)?;
-    }
     message = auto_extract_linux_artifacts(&mut ctx, &ds, &source_conn, message)?;
     phases::emit_data_source_ready(&ctx, &ds)?;
     Ok((message, counts))

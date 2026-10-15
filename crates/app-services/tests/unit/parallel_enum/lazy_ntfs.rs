@@ -219,7 +219,7 @@ fn sqlite_stage_failure_rolls_back_without_recursive_fallback() {
     let path = temp.path().join("stage-error.raw");
     std::fs::write(&path, fixture::image(96)).unwrap();
     let conn = staging::open_partition_staging(temp.path(), "db-source", 0).unwrap();
-    conn.execute_batch("CREATE TRIGGER reject_insert BEFORE INSERT ON file_entries BEGIN SELECT RAISE(ABORT, 'synthetic stage failure'); END").unwrap();
+    conn.execute_batch("CREATE TRIGGER reject_insert BEFORE INSERT ON ntfs_entries BEGIN SELECT RAISE(ABORT, 'synthetic stage failure'); END").unwrap();
     drop(conn);
     let max = Arc::new(AtomicUsize::new(0));
     let work = fake_ntfs(path, Arc::new(AtomicUsize::new(0)), max.clone());
@@ -315,4 +315,36 @@ fn invalid_deferred_offset_is_rejected_before_reader_initialization() {
         .samples
         .iter()
         .any(|sample| sample.phase == Phase::MftReaderOpen));
+}
+
+#[test]
+fn cancellation_after_a_parallel_batch_rolls_back_and_never_starts_fallback() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("parallel-cancel.raw");
+    std::fs::write(&path, fixture::image(20_003)).unwrap();
+    let mut work = deferred(&path, DataSourceKind::Raw);
+    work.reader_factory =
+        Some(crate::source_runtime::open_factory(&path, &DataSourceKind::Raw).unwrap());
+    work.mft_workers = 3;
+    let cancel = AtomicBool::new(false);
+    let progress = |_, _| {
+        cancel.store(true, Ordering::SeqCst);
+    };
+    let result = enumerate_single_partition(
+        temp.path(),
+        "cancel-parallel",
+        work,
+        &cancel,
+        Some(&progress),
+    );
+    assert!(result.error.unwrap().contains("Cancelled"));
+    assert!(result.warnings.is_empty());
+    let conn = staging::open_partition_staging(temp.path(), "cancel-parallel", 0).unwrap();
+    assert_eq!(staging::staging_db_row_count(&conn).unwrap(), 0);
+    assert_ne!(
+        staging::get_staging_meta(&conn, "status")
+            .unwrap()
+            .as_deref(),
+        Some("done")
+    );
 }

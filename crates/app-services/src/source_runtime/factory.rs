@@ -36,10 +36,9 @@ where
 pub fn open_factory(path: &Path, kind: &DataSourceKind) -> io::Result<SharedReaderFactory> {
     match kind {
         DataSourceKind::E01 => {
-            let plan = image_e01::E01Reader::open(path)?.open_plan();
+            let plan = image_e01::E01Reader::open(path)?.open_plan()?;
             let size = plan.logical_size();
             let plan = Arc::new(plan);
-            let segment_count = plan.segment_count();
             let opener_plan = Arc::clone(&plan);
             Ok(Arc::new(OpenFactory {
                 opener: move || image_e01::E01Reader::from_open_plan(&opener_plan),
@@ -47,7 +46,7 @@ pub fn open_factory(path: &Path, kind: &DataSourceKind) -> io::Result<SharedRead
                 granularity: 512,
                 capabilities: ReaderCapabilities {
                     independent_cursor: true,
-                    max_concurrent_readers: segment_count.max(1),
+                    max_concurrent_readers: 4,
                     stable_snapshot: true,
                 },
             }))
@@ -60,7 +59,10 @@ pub fn open_factory(path: &Path, kind: &DataSourceKind) -> io::Result<SharedRead
                 opener: move || evidence_core::RawImageReader::open(&path),
                 size,
                 granularity: 512,
-                capabilities: ReaderCapabilities::default(),
+                capabilities: ReaderCapabilities {
+                    max_concurrent_readers: 4,
+                    ..ReaderCapabilities::default()
+                },
             }))
         }
         DataSourceKind::LocalDisk => {

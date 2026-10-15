@@ -190,6 +190,7 @@ fn fake_partition_work(
         source_kind: domain::DataSourceKind::Raw,
         volume_offset: 0,
         reader_factory: None,
+        mft_workers: 1,
     }
 }
 
@@ -266,7 +267,7 @@ fn fake_ntfs_index_entry(
 }
 
 fn mft_directory_index_backfill_actions(
-    path_map: &mut HashMap<String, (Option<String>, String, bool)>,
+    path_map: &mut HashMap<u64, (Option<u64>, String, bool)>,
     directory_ref: u64,
     entries: Vec<NtfsDirectoryEntry>,
 ) -> Vec<MftDirectoryIndexBackfillAction> {
@@ -416,12 +417,28 @@ fn recursive_enum_persists_partition_index_for_every_row() {
 }
 
 fn insert_staging_entry(conn: &rusqlite::Connection, id: &str, ds_id: &str) {
-    conn.execute(
-        "INSERT INTO file_entries (id, data_source_id, path, name, entry_type)
-             VALUES (?1, ?2, '', ?3, 'File')",
-        rusqlite::params![id, ds_id, id],
-    )
-    .unwrap();
+    if !id.starts_with("mft:") {
+        conn.execute("INSERT INTO file_entries(id,data_source_id,path,name,entry_type) VALUES(?1,?2,'',?1,'file')", rusqlite::params![id,ds_id]).unwrap();
+        return;
+    }
+    let mut fields = id.split(':');
+    assert_eq!(fields.next(), Some("mft"));
+    let partition: usize = fields.next().unwrap().parse().unwrap();
+    let record: u64 = fields.next().unwrap().parse().unwrap();
+    let is_view: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='view' AND name='file_entries')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    if !is_view {
+        persistence_sqlite::repositories::ntfs_staging_repo::NtfsStagingRepo::begin(
+            conn, ds_id, partition,
+        )
+        .unwrap();
+    }
+    conn.execute("INSERT INTO ntfs_entries(record_num,sequence_num,name,entry_type,deleted,hidden,system,read_only,archive) VALUES(?1,0,?2,0,0,0,0,0,0)", rusqlite::params![record,id]).unwrap();
 }
 
 fn stage_mft_records_for_test(
@@ -430,6 +447,12 @@ fn stage_mft_records_for_test(
     data_source_id: &str,
     partition_index: usize,
 ) -> MftCatalog {
+    persistence_sqlite::repositories::ntfs_staging_repo::NtfsStagingRepo::begin(
+        conn,
+        data_source_id,
+        partition_index,
+    )
+    .unwrap();
     let mut statement = prepare_mft_insert(conn).unwrap();
     let mut catalog = MftCatalog::default();
     catalog
@@ -469,7 +492,7 @@ fn ntfs_mft_updates_paths_and_parent_ids() {
 #[test]
 fn ntfs_directory_index_backfill_traverses_newly_discovered_directories() {
     let mut path_map = HashMap::new();
-    path_map.insert("5".to_string(), (None, "/".to_string(), true));
+    path_map.insert(5, (None, "/".to_string(), true));
     let mut indexes = HashMap::new();
     indexes.insert(5, vec![fake_ntfs_index_entry(42, "Users", true)]);
     indexes.insert(42, vec![fake_ntfs_index_entry(43, "Liu Yang", true)]);
@@ -495,8 +518,8 @@ fn ntfs_directory_index_backfill_traverses_newly_discovered_directories() {
 
     assert_eq!(visited, HashSet::from([5, 42, 43]));
     assert_eq!(
-        path_map.get("44"),
-        Some(&(Some("43".to_string()), "NTUSER.DAT".to_string(), false))
+        path_map.get(&44),
+        Some(&(Some(43), "NTUSER.DAT".to_string(), false))
     );
 }
 
@@ -512,15 +535,9 @@ fn ntfs_directory_index_parentage_corrects_existing_misparented_rows() {
     insert_staging_entry(&conn, "mft:4:42", ds_id);
     insert_staging_entry(&conn, "mft:4:43", ds_id);
     let mut path_map = HashMap::new();
-    path_map.insert("5".to_string(), (None, "/".to_string(), true));
-    path_map.insert(
-        "42".to_string(),
-        (Some("5".to_string()), "Users".to_string(), true),
-    );
-    path_map.insert(
-        "43".to_string(),
-        (Some("5".to_string()), "Liu Yang".to_string(), true),
-    );
+    path_map.insert(5, (None, "/".to_string(), true));
+    path_map.insert(42, (Some(5), "Users".to_string(), true));
+    path_map.insert(43, (Some(5), "Liu Yang".to_string(), true));
 
     let actions = mft_directory_index_backfill_actions(
         &mut path_map,
@@ -530,8 +547,8 @@ fn ntfs_directory_index_parentage_corrects_existing_misparented_rows() {
 
     assert_eq!(actions.len(), 1);
     assert_eq!(
-        path_map.get("43"),
-        Some(&(Some("42".to_string()), "Liu Yang".to_string(), true))
+        path_map.get(&43),
+        Some(&(Some(42), "Liu Yang".to_string(), true))
     );
 
     let deleted_records = HashSet::new();
@@ -551,11 +568,8 @@ fn ntfs_directory_index_parentage_corrects_existing_misparented_rows() {
 #[test]
 fn ntfs_directory_index_backfill_preserves_canonical_name_priority() {
     let mut path_map = HashMap::new();
-    path_map.insert("5".to_string(), (None, "/".to_string(), true));
-    path_map.insert(
-        "42".to_string(),
-        (Some("5".to_string()), "PROGRA~1".to_string(), true),
-    );
+    path_map.insert(5, (None, "/".to_string(), true));
+    path_map.insert(42, (Some(5), "PROGRA~1".to_string(), true));
 
     let actions = mft_directory_index_backfill_actions(
         &mut path_map,
@@ -569,24 +583,18 @@ fn ntfs_directory_index_backfill_preserves_canonical_name_priority() {
     assert_eq!(actions[0].name, "Program Files");
     assert_eq!(actions[1].name, "Program Files Hardlink");
     assert_eq!(
-        path_map.get("42"),
-        Some(&(Some("5".to_string()), "Program Files".to_string(), true))
+        path_map.get(&42),
+        Some(&(Some(5), "Program Files".to_string(), true))
     );
 }
 
 #[test]
 fn ntfs_hardlink_representative_is_deterministic_across_parent_order() {
-    fn select(order: &[(u64, &str)]) -> HashMap<String, (Option<String>, String, bool)> {
+    fn select(order: &[(u64, &str)]) -> HashMap<u64, (Option<u64>, String, bool)> {
         let mut path_map = HashMap::from([
-            ("5".to_string(), (None, "/".to_string(), true)),
-            (
-                "10".to_string(),
-                (Some("5".to_string()), "Alpha".to_string(), true),
-            ),
-            (
-                "20".to_string(),
-                (Some("5".to_string()), "Beta".to_string(), true),
-            ),
+            (5, (None, "/".to_string(), true)),
+            (10, (Some(5), "Alpha".to_string(), true)),
+            (20, (Some(5), "Beta".to_string(), true)),
         ]);
         let mut representatives = HashMap::new();
         for (parent, name) in order {
@@ -603,10 +611,10 @@ fn ntfs_hardlink_representative_is_deterministic_across_parent_order() {
     let forward = select(&[(20, "zeta.txt"), (10, "alpha.txt")]);
     let reverse = select(&[(10, "alpha.txt"), (20, "zeta.txt")]);
 
-    assert_eq!(forward.get("99"), reverse.get("99"));
+    assert_eq!(forward.get(&99), reverse.get(&99));
     assert_eq!(
-        forward.get("99"),
-        Some(&(Some("10".to_string()), "alpha.txt".to_string(), false))
+        forward.get(&99),
+        Some(&(Some(10), "alpha.txt".to_string(), false))
     );
 }
 
@@ -630,11 +638,8 @@ fn ntfs_directory_index_backfill_updates_persisted_mft_name() {
     insert_staging_entry(&conn, "mft:4:5", ds_id);
     insert_staging_entry(&conn, "mft:4:42", ds_id);
     let mut path_map = HashMap::from([
-        ("5".to_string(), (None, "/".to_string(), true)),
-        (
-            "42".to_string(),
-            (Some("5".to_string()), "PROGRA~1".to_string(), true),
-        ),
+        (5, (None, "/".to_string(), true)),
+        (42, (Some(5), "PROGRA~1".to_string(), true)),
     ]);
 
     mft_directory_index_backfill_actions(
@@ -666,15 +671,9 @@ fn mft_large_record_count_uses_sqlite_resolver() {
     insert_staging_entry(&conn, "mft:9:42", ds_id);
     insert_staging_entry(&conn, "mft:9:43", ds_id);
     let mut path_map = HashMap::new();
-    path_map.insert("5".to_string(), (None, "/".to_string(), true));
-    path_map.insert(
-        "42".to_string(),
-        (Some("5".to_string()), "Windows".to_string(), true),
-    );
-    path_map.insert(
-        "43".to_string(),
-        (Some("42".to_string()), "notepad.exe".to_string(), false),
-    );
+    path_map.insert(5, (None, "/".to_string(), true));
+    path_map.insert(42, (Some(5), "Windows".to_string(), true));
+    path_map.insert(43, (Some(42), "notepad.exe".to_string(), false));
 
     let deleted_records = HashSet::new();
     update_mft_staging_paths_via_sqlite(&conn, ds_id, 9, &path_map, &deleted_records).unwrap();
@@ -691,28 +690,25 @@ fn mft_large_record_count_uses_sqlite_resolver() {
 }
 
 #[test]
-fn ntfs_mft_update_uses_record_key_without_numeric_fallback() {
+fn numeric_mft_key_does_not_conflate_zero_with_another_record() {
     let conn = persistence_sqlite::connection::open_in_memory().unwrap();
     conn.execute_batch(include_str!(
         "../../../../persistence-sqlite/src/migrations/scripts/staging_001.sql"
     ))
     .unwrap();
     insert_staging_entry(&conn, "mft:8:0", "ds-mft");
-    insert_staging_entry(&conn, "mft:8:bad-key", "ds-mft");
+    insert_staging_entry(&conn, "mft:8:77", "ds-mft");
 
     let mut path_map = HashMap::new();
-    path_map.insert("5".to_string(), (None, "/".to_string(), true));
-    path_map.insert(
-        "bad-key".to_string(),
-        (Some("5".to_string()), "orphan.bin".to_string(), false),
-    );
+    path_map.insert(5, (None, "/".to_string(), true));
+    path_map.insert(77, (Some(5), "orphan.bin".to_string(), false));
 
     let deleted_records = HashSet::new();
     update_mft_staging_paths_via_sqlite(&conn, "ds-mft", 8, &path_map, &deleted_records).unwrap();
 
     let bad: (String, Option<String>) = conn
         .query_row(
-            "SELECT path, parent_id FROM file_entries WHERE id = 'mft:8:bad-key'",
+            "SELECT path, parent_id FROM file_entries WHERE id = 'mft:8:77'",
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -1142,6 +1138,7 @@ fn real_e01_ntfs_mft_parameters_include_data_runs() {
         source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
         reader_factory: None,
+        mft_workers: 1,
     };
 
     let mut evidence_reader = open_partition_evidence_reader(&partition).unwrap();
@@ -1193,6 +1190,7 @@ fn real_e01_mft_parser_keeps_windows_parent_chain() {
         source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
         reader_factory: None,
+        mft_workers: 1,
     };
     let mut evidence_reader = open_partition_evidence_reader(&partition).unwrap();
     let params =

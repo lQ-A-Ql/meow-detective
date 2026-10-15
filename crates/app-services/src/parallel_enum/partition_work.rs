@@ -20,6 +20,8 @@ pub struct PartitionWork {
     pub source_kind: domain::DataSourceKind,
     pub volume_offset: u64,
     pub reader_factory: Option<SharedReaderFactory>,
+    /// Reader budget assigned by the import coordinator.
+    pub mft_workers: usize,
 }
 
 impl PartitionWork {

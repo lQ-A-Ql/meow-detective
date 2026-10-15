@@ -15,7 +15,12 @@ use std::path::{Path, PathBuf};
 
 pub fn open_source_db(case_root: &Path, data_source_id: &DataSourceId) -> DbResult<Connection> {
     super::identity::validate_source_storage_id(data_source_id)?;
-    persistence_sqlite::open_or_create_source(&source_db_path(case_root, data_source_id))
+    let connection =
+        persistence_sqlite::open_or_create_source(&source_db_path(case_root, data_source_id))?;
+    persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::recover(
+        &connection,
+    )?;
+    Ok(connection)
 }
 
 pub fn open_registered_source_db(
@@ -89,6 +94,14 @@ pub fn open_registered_source_db_read_only(
             "Data source '{}' physical source DB schema is obsolete; re-import is required",
             data_source_id.0
         )));
+    }
+    if persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::state(
+        &connection,
+    )? != persistence_sqlite::repositories::source_bulk_load_repo::BulkLoadState::Inactive
+    {
+        return Err(DbError::System(
+            "Source bulk load requires import recovery before read access".into(),
+        ));
     }
     Ok(connection)
 }

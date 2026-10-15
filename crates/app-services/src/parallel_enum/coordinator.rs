@@ -66,7 +66,7 @@ pub fn enumerate_partitions_parallel(
 pub(crate) fn enumerate_partitions_profiled(
     case_root: &Path,
     data_source_id: &DataSourceId,
-    partitions: Vec<PartitionWork>,
+    mut partitions: Vec<PartitionWork>,
     max_workers: usize,
     cancel_token: Arc<AtomicBool>,
     profiler: Option<ImportProfiler>,
@@ -77,6 +77,9 @@ pub(crate) fn enumerate_partitions_profiled(
     }
 
     let worker_count = effective_worker_count(&partitions, max_workers);
+    for partition in &mut partitions {
+        partition.mft_workers = (max_workers.max(1) / worker_count).clamp(1, 4);
+    }
     let channels = Channels::new(partitions.len(), worker_count);
     let submitted = submit_work(partitions, &channels.work_tx, &cancel_token, progress_cb)?;
     if submitted == 0 {

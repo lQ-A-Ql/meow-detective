@@ -1,13 +1,12 @@
 use super::super::error::ParallelEnumError;
 use super::super::partition_work::PartitionWork;
 use crate::import_pipeline::profile::{Counters, PhaseRecorder};
-use evidence_core::{EvidenceReader, LocalDiskReader, RawImageReader};
+use evidence_core::EvidenceReader;
 use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
-use image_e01::E01Reader;
 use std::io::{Read, Seek, SeekFrom};
 use transport::dto::import_benchmark::ImportBenchmarkPhaseDto as Phase;
 
-const MFT_CHUNK_RECORDS: u64 = 10_000;
+pub(super) const MFT_CHUNK_RECORDS: u64 = 10_000;
 const MFT_FALLBACK_SIZE: u64 = 100 * 1024 * 1024;
 
 pub(in crate::parallel_enum) struct MftScan {
@@ -19,6 +18,28 @@ pub(in crate::parallel_enum) struct MftScan {
 }
 
 impl MftScan {
+    pub(super) fn reopen(
+        &self,
+        factory: &dyn evidence_core::EvidenceReaderFactory,
+    ) -> Result<Self, ParallelEnumError> {
+        let params = self.params.clone();
+        let scanner = MftScanner::new(
+            params.volume_offset,
+            params.mft_cluster,
+            params.cluster_size,
+            params.record_size,
+            params.bytes_per_sector,
+            params.mft_data_size,
+        );
+        Ok(Self {
+            reader: Some(factory.open_reader()?),
+            params,
+            scanner,
+            total_records: self.total_records,
+            buffer: Vec::new(),
+        })
+    }
+
     pub(super) fn total_records(&self) -> u64 {
         self.total_records
     }
@@ -236,26 +257,7 @@ fn read_mft_record_zero(
     Ok(record)
 }
 
-pub(in crate::parallel_enum) fn open_partition_evidence_reader(
-    partition: &PartitionWork,
-) -> Result<Box<dyn EvidenceReader>, ParallelEnumError> {
-    if let Some(factory) = &partition.reader_factory {
-        return factory.open_reader().map_err(ParallelEnumError::Io);
-    }
-    if partition.uses_e01_reader() {
-        return Ok(Box::new(
-            E01Reader::open(&partition.source_path).map_err(|error| error.to_string())?,
-        ));
-    }
-    if partition.uses_local_disk_reader() {
-        return Ok(Box::new(
-            LocalDiskReader::open(&partition.source_path).map_err(|error| error.to_string())?,
-        ));
-    }
-    Ok(Box::new(
-        RawImageReader::open(&partition.source_path).map_err(|error| error.to_string())?,
-    ))
-}
+pub(in crate::parallel_enum) use super::reader_open::open_partition_evidence_reader;
 
 fn mft_record_size_from_boot(boot: &[u8]) -> u32 {
     let raw = boot[0x40] as i8;

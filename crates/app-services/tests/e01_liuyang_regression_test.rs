@@ -433,6 +433,7 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_users_tree() {
         source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
         reader_factory: None,
+        mft_workers: 1,
     };
 
     let results = parallel_enum::enumerate_partitions_parallel(
@@ -676,6 +677,7 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_system_volume_information_children
         source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
         reader_factory: None,
+        mft_workers: 1,
     };
 
     let results = parallel_enum::enumerate_partitions_parallel(
