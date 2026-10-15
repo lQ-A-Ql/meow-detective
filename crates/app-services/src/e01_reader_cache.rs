@@ -1,6 +1,6 @@
 //! Per-case cache for parsed E01 metadata and chunk tables.
 
-use image_e01::E01Reader;
+use image_e01::{E01OpenPlan, E01Reader};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 
@@ -9,7 +9,7 @@ pub(crate) const E01_READER_CACHE_PER_CASE_MAX_SIZE: usize = 16;
 struct E01ReaderCache {
     max_size: usize,
     paths: VecDeque<PathBuf>,
-    readers: HashMap<PathBuf, E01Reader>,
+    plans: HashMap<PathBuf, E01OpenPlan>,
 }
 
 impl E01ReaderCache {
@@ -17,31 +17,31 @@ impl E01ReaderCache {
         Self {
             max_size,
             paths: VecDeque::with_capacity(max_size),
-            readers: HashMap::with_capacity(max_size),
+            plans: HashMap::with_capacity(max_size),
         }
     }
 
     fn get_or_open(&mut self, source_path: &Path) -> std::io::Result<E01Reader> {
-        if let Some(cached) = self.readers.get(source_path) {
+        if let Some(cached) = self.plans.get(source_path) {
             if let Some(position) = self.paths.iter().position(|path| path == source_path) {
                 self.paths.remove(position);
             }
             self.paths.push_back(source_path.to_path_buf());
-            return cached.re_open(source_path);
+            return cached.open_reader();
         }
 
-        let reader = E01Reader::open(source_path)?;
+        let plan = E01Reader::open(source_path)?.open_plan();
         while self.paths.len() >= self.max_size {
             if let Some(evicted_path) = self.paths.pop_front() {
-                self.readers.remove(&evicted_path);
+                self.plans.remove(&evicted_path);
             }
         }
         self.paths.push_back(source_path.to_path_buf());
-        self.readers.insert(source_path.to_path_buf(), reader);
-        self.readers
+        self.plans.insert(source_path.to_path_buf(), plan);
+        self.plans
             .get(source_path)
-            .expect("reader was just inserted")
-            .re_open(source_path)
+            .expect("plan was just inserted")
+            .open_reader()
     }
 }
 
@@ -69,14 +69,14 @@ impl E01ReaderCacheRegistry {
 
     fn clear(&mut self) {
         self.default_bucket.paths.clear();
-        self.default_bucket.readers.clear();
+        self.default_bucket.plans.clear();
         self.buckets.clear();
     }
 
     fn clear_case(&mut self, case_id: &str) {
         if case_id.is_empty() {
             self.default_bucket.paths.clear();
-            self.default_bucket.readers.clear();
+            self.default_bucket.plans.clear();
         } else {
             self.buckets.remove(case_id);
         }
@@ -102,10 +102,7 @@ pub fn clear_e01_reader_cache_for_case(case_id: &str) {
     }
 }
 
-pub(crate) fn open_e01_reader_cached(
-    source_path: &Path,
-    case_id: &str,
-) -> std::io::Result<E01Reader> {
+pub fn open_e01_reader_cached(source_path: &Path, case_id: &str) -> std::io::Result<E01Reader> {
     let mut registry = E01_READER_CACHE.lock().unwrap_or_else(|poisoned| {
         let mut registry = poisoned.into_inner();
         registry.clear();
