@@ -57,6 +57,7 @@ fn all_benchmark_phases_and_states_round_trip() {
         Phase::MftPathResolve,
         Phase::MftValidate,
         Phase::MftCommit,
+        Phase::FallbackReaderBuild,
         Phase::FallbackEnumeration,
         Phase::StagingMerge,
         Phase::SourceIndexBuild,

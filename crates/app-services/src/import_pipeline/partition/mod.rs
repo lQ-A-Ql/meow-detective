@@ -1,3 +1,4 @@
+mod build_error;
 mod candidates;
 mod profiling;
 mod status;
@@ -12,5 +13,7 @@ pub use status::{
 };
 pub use work::build_partition_work;
 
+pub(crate) use build_error::PartitionBuildError;
 pub(crate) use status::partition_status_label;
+pub(crate) use work::build_partition_work_typed;
 pub(crate) use work::open_candidate_reader;

@@ -9,6 +9,8 @@ mod coordinator;
 pub mod error;
 mod ntfs;
 mod ntfs_entry;
+mod ntfs_plan;
+mod partition_enumeration;
 mod partition_work;
 mod progress;
 
@@ -18,6 +20,7 @@ pub use coordinator::{
     resolve_worker_count,
 };
 pub use error::ParallelEnumError;
+pub use ntfs_plan::{NtfsPartitionPlan, PartitionEnumStrategy};
 pub use partition_work::{PartitionResult, PartitionWork};
 
 pub(crate) use ntfs_entry::enumerate_ntfs_reader_to_staging;

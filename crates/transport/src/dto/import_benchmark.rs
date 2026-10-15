@@ -19,6 +19,7 @@ pub enum ImportBenchmarkPhaseDto {
     MftPathResolve,
     MftValidate,
     MftCommit,
+    FallbackReaderBuild,
     FallbackEnumeration,
     StagingMerge,
     SourceIndexBuild,

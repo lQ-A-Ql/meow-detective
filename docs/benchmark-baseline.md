@@ -243,7 +243,7 @@ profile 必须分开比较；脚本默认将 OS 缓存条件标记为 `uncontrol
 
 报告版本为 `schemaVersion=1`。`report.samples` 保留 source 级 wall time 与各 partition
 记录；`partitionAggregates` 是相同 phase 的分区工作量之和，不能当成并行 source wall time。
-`inclusive=true` 的 workflow/enumeration/analysis/timeline 不再与子 phase 相加。
+`inclusive=true` 的 workflow/enumeration/analysis/timeline/fallbackEnumeration 不再与子 phase 相加。
 
 MFT 读取、解析、stage、目录 reader 初始化、大小校正、目录回填、路径解析、验证和 commit
 分开计时。scanned records、parsed records 与实际 staged rows 各自记录；逻辑读取字节
@@ -253,8 +253,9 @@ MFT 读取、解析、stage、目录 reader 初始化、大小校正、目录回
 `workflow` 覆盖导入用例入口到返回，包括 finalization 之后可能执行的自动制品提取；不包含
 队列等待、测试案件创建或 oracle 查询。旧 E01 runner、日志和 IPC 进度事件继续兼容。
 
-每次运行输出 catalog、graph、timeline 的行数及规范化 SHA-256。oracle 只映射本次生成的
-case/source/partition-root ID，并排除 Graph 的运行时 created_at；文件 ID、路径、属性、
+每次运行输出 catalog、graph、timeline 的行数及规范化 SHA-256。oracle 映射本次生成的
+case/source/partition-root ID，以及按分区和路径确定的 Generic FS UUID；原生 MFT 文件 ID
+保持不变。重复 Generic 路径会使 oracle 显式失败。排除 Graph 的运行时 created_at；路径、属性、
 null、取证时间和来源字段保留。重复运行摘要必须一致，缺少必要 workflow/MFT 数据使脚本失败。
 默认回归另比较 profiling 开/关的全部 catalog 字段、Graph 和 Timeline，并验证合成 E01/RAW
 逻辑字节及 resident 文件范围读取一致。

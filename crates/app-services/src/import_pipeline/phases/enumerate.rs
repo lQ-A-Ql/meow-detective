@@ -126,14 +126,21 @@ fn build_pending_partition_work(
             ctx.profiler.clone(),
         );
         match work {
-            Some(work) => pending.push(work),
-            None => failures.push((
-                partition.index,
-                format!(
-                    "Partition {} ({}): could not build filesystem reader",
-                    partition.index, partition.name
-                ),
-            )),
+            Ok(work) => pending.push(work),
+            Err(error) => {
+                tracing::warn!(
+                    partition_index = partition.index,
+                    ?error,
+                    "Partition preparation failed"
+                );
+                failures.push((
+                    partition.index,
+                    format!(
+                        "Partition {} ({}): {error}",
+                        partition.index, partition.name
+                    ),
+                ));
+            }
         }
     }
     report_reader_build(ctx, data_source, started, pending.len(), failures.len());

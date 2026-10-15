@@ -27,10 +27,6 @@ impl EnumerationStats {
     }
 }
 
-pub(super) fn clear_staging_file_entries(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch("DELETE FROM file_entries")
-}
-
 /// Enumerate one filesystem with serial evidence reads and one SQLite writer.
 pub(super) fn enumerate_fs_to_staging(
     conn: &Connection,
@@ -250,7 +246,7 @@ pub(super) fn stage_mft_record(
     record: &MftRecord,
     data_source_id: &str,
     partition_index: usize,
-) -> Result<(Option<String>, String, u64), String> {
+) -> rusqlite::Result<(Option<String>, String, u64)> {
     let name = if record.record_number == 5 && (record.name.is_empty() || record.name == ".") {
         "\\".to_string()
     } else {
@@ -261,32 +257,32 @@ pub(super) fn stage_mft_record(
         .as_deref()
         .map(|parent| mft_entry_id_from_key(partition_index, parent));
     let (hidden, system) = visibility_flags_for_name(&name, record.hidden, record.system);
-    let inserted = statement
-        .execute(rusqlite::params![
-            mft_entry_id(partition_index, record.record_number),
-            parent_id,
-            data_source_id,
-            name,
-            if record.is_dir { "directory" } else { "file" },
-            (!record.is_dir).then_some(record.size),
-            mft_record_extension(record),
-            record.deleted as i32,
-            hidden as i32,
-            system as i32,
-            record.read_only as i32,
-            record.archive as i32,
-            record.encrypted as i32,
-            record.created_at.as_ref().map(|value| value.to_rfc3339()),
-            record.modified_at.as_ref().map(|value| value.to_rfc3339()),
-            record.accessed_at.as_ref().map(|value| value.to_rfc3339()),
-            record.changed_at.as_ref().map(|value| value.to_rfc3339()),
-            partition_index as i64,
-        ])
-        .map_err(|error| format!("Insert MFT staging row: {error}"))?;
+    let inserted = statement.execute(rusqlite::params![
+        mft_entry_id(partition_index, record.record_number),
+        parent_id,
+        data_source_id,
+        name,
+        if record.is_dir { "directory" } else { "file" },
+        (!record.is_dir).then_some(record.size),
+        mft_record_extension(record),
+        record.deleted as i32,
+        hidden as i32,
+        system as i32,
+        record.read_only as i32,
+        record.archive as i32,
+        record.encrypted as i32,
+        record.created_at.as_ref().map(|value| value.to_rfc3339()),
+        record.modified_at.as_ref().map(|value| value.to_rfc3339()),
+        record.accessed_at.as_ref().map(|value| value.to_rfc3339()),
+        record.changed_at.as_ref().map(|value| value.to_rfc3339()),
+        partition_index as i64,
+    ])?;
     Ok((parent_key, name, inserted as u64))
 }
 
-pub(super) fn prepare_ntfs_index_insert(conn: &Connection) -> Result<CachedStatement<'_>, String> {
+pub(super) fn prepare_ntfs_index_insert(
+    conn: &Connection,
+) -> rusqlite::Result<CachedStatement<'_>> {
     conn.prepare_cached(
         "INSERT OR IGNORE INTO file_entries
          (id, parent_id, data_source_id, path, name, entry_type,
@@ -294,7 +290,6 @@ pub(super) fn prepare_ntfs_index_insert(conn: &Connection) -> Result<CachedState
           partition_index)
          VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, 0, ?8, ?9, ?10, ?11, ?12, NULL, NULL, NULL, NULL, NULL, ?13)",
     )
-    .map_err(|error| format!("Prepare NTFS directory index backfill: {error}"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -312,25 +307,23 @@ pub(super) fn insert_ntfs_index_entry(
     read_only: bool,
     archive: bool,
     encrypted: bool,
-) -> Result<usize, String> {
+) -> rusqlite::Result<usize> {
     let (hidden, system) = visibility_flags_for_name(name, hidden, system);
-    statement
-        .execute(rusqlite::params![
-            mft_entry_id(partition_index, mft_ref),
-            mft_entry_id(partition_index, parent_ref),
-            data_source_id,
-            name,
-            if is_dir { "directory" } else { "file" },
-            (!is_dir).then_some(size),
-            (!is_dir).then(|| extension_from_name(name)).flatten(),
-            hidden as i32,
-            system as i32,
-            read_only as i32,
-            archive as i32,
-            encrypted as i32,
-            partition_index as i64,
-        ])
-        .map_err(|error| format!("Insert NTFS directory index backfill row: {error}"))
+    statement.execute(rusqlite::params![
+        mft_entry_id(partition_index, mft_ref),
+        mft_entry_id(partition_index, parent_ref),
+        data_source_id,
+        name,
+        if is_dir { "directory" } else { "file" },
+        (!is_dir).then_some(size),
+        (!is_dir).then(|| extension_from_name(name)).flatten(),
+        hidden as i32,
+        system as i32,
+        read_only as i32,
+        archive as i32,
+        encrypted as i32,
+        partition_index as i64,
+    ])
 }
 
 pub(super) fn mft_entry_id(partition_index: usize, record_number: u64) -> String {

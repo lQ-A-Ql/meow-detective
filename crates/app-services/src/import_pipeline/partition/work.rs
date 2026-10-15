@@ -16,6 +16,25 @@ pub fn build_partition_work(
     fs_kind: &str,
     probe_candidates: &[datasource_service::ImageFilesystemCandidate],
 ) -> Option<parallel_enum::PartitionWork> {
+    build_partition_work_typed(
+        source_path,
+        source_kind,
+        partition_index,
+        partition_name,
+        fs_kind,
+        probe_candidates,
+    )
+    .ok()
+}
+
+pub(crate) fn build_partition_work_typed(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    partition_index: usize,
+    partition_name: &str,
+    fs_kind: &str,
+    probe_candidates: &[datasource_service::ImageFilesystemCandidate],
+) -> Result<parallel_enum::PartitionWork, super::PartitionBuildError> {
     let index_map = datasource_service::assign_effective_partition_indices(probe_candidates);
     let candidate = probe_candidates
         .iter()
@@ -24,15 +43,29 @@ pub fn build_partition_work(
             datasource_service::effective_partition_index(candidate, *ordinal, &index_map)
                 == partition_index
         })
-        .map(|(_, candidate)| candidate)?;
-    let fs = open_candidate_filesystem(source_path, source_kind, candidate).ok()??;
-    Some(parallel_enum::PartitionWork {
+        .map(|(_, candidate)| candidate)
+        .ok_or(super::PartitionBuildError::MissingCandidate(
+            partition_index,
+        ))?;
+    let strategy = if fs_kind.eq_ignore_ascii_case("ntfs")
+        && parallel_enum::NtfsPartitionPlan::eligible(source_kind, candidate)
+    {
+        parallel_enum::PartitionEnumStrategy::NtfsDeferred(parallel_enum::NtfsPartitionPlan {
+            candidate: candidate.clone(),
+        })
+    } else {
+        let fs = open_candidate_filesystem(source_path, source_kind, candidate)
+            .map_err(|error| super::PartitionBuildError::Reader(std::io::Error::other(error)))?
+            .ok_or(super::PartitionBuildError::Unavailable)?;
+        parallel_enum::PartitionEnumStrategy::Generic(fs)
+    };
+    Ok(parallel_enum::PartitionWork {
         index: partition_index,
         name: partition_name.to_string(),
         fs_kind: fs_kind.to_string(),
-        fs,
+        strategy,
         source_path: source_path.to_path_buf(),
-        source_kind: format!("{source_kind:?}"),
+        source_kind: source_kind.clone(),
         volume_offset: candidate.offset,
     })
 }

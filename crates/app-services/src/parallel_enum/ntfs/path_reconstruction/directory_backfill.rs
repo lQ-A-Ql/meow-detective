@@ -58,8 +58,7 @@ impl MftCatalog {
         ntfs: &NtfsReader,
         partition_index: usize,
     ) -> Result<(), ParallelEnumError> {
-        let mut statement =
-            prepare_ntfs_index_insert(conn).map_err(ParallelEnumError::MftParams)?;
+        let mut statement = prepare_ntfs_index_insert(conn)?;
         let mut queue = VecDeque::from([5]);
         let mut visited = HashSet::new();
         while let Some(directory_ref) = queue.pop_front() {

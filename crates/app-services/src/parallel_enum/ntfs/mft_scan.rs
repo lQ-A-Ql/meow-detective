@@ -240,9 +240,7 @@ pub(in crate::parallel_enum) fn open_partition_evidence_reader(
             E01Reader::open(&partition.source_path).map_err(|error| error.to_string())?,
         ));
     }
-    if partition.source_kind.eq_ignore_ascii_case("localdisk")
-        || partition.source_kind.eq_ignore_ascii_case("local_disk")
-    {
+    if partition.uses_local_disk_reader() {
         return Ok(Box::new(
             LocalDiskReader::open(&partition.source_path).map_err(|error| error.to_string())?,
         ));

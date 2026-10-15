@@ -428,9 +428,9 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_users_tree() {
         index: partition_index,
         name: partition_name.clone(),
         fs_kind: "ntfs".to_string(),
-        fs,
+        strategy: parallel_enum::PartitionEnumStrategy::Generic(fs),
         source_path: fixture_path.clone(),
-        source_kind: "e01".to_string(),
+        source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
     };
 
@@ -670,9 +670,9 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_system_volume_information_children
         index: partition_index,
         name: partition_name.clone(),
         fs_kind: "ntfs".to_string(),
-        fs,
+        strategy: parallel_enum::PartitionEnumStrategy::Generic(fs),
         source_path: fixture_path.clone(),
-        source_kind: "e01".to_string(),
+        source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
     };
 

@@ -11,6 +11,12 @@ pub enum ParallelEnumError {
     MftParams(String),
     #[error("Database error: {0}")]
     Db(#[from] rusqlite::Error),
+    #[error("Staging persistence error: {0}")]
+    Staging(#[from] persistence_sqlite::DbError),
+    #[error("Invalid deferred NTFS partition plan")]
+    InvalidPlan,
+    #[error("Filesystem enumeration error: {0}")]
+    Filesystem(String),
 }
 
 impl From<String> for ParallelEnumError {
@@ -25,18 +31,28 @@ impl From<&str> for ParallelEnumError {
     }
 }
 
-impl From<persistence_sqlite::DbError> for ParallelEnumError {
-    fn from(e: persistence_sqlite::DbError) -> Self {
-        Self::MftParams(e.to_string())
+impl ParallelEnumError {
+    pub(super) fn allows_fallback(&self) -> bool {
+        matches!(self, Self::MftParams(_) | Self::Io(_))
+    }
+
+    pub(super) fn recursive(message: String, cancelled: bool) -> Self {
+        if cancelled && message == "Cancelled" {
+            Self::Cancelled
+        } else {
+            Self::Filesystem(message)
+        }
     }
 }
 
 impl transport::ServiceErrorCategory for ParallelEnumError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
-            Self::Cancelled => transport::ErrorCategory::Internal,
+            Self::Cancelled => transport::ErrorCategory::Cancelled,
             Self::Io(_) | Self::Db(_) => transport::ErrorCategory::Io,
-            Self::MftParams(_) => transport::ErrorCategory::Validation,
+            Self::MftParams(_) | Self::InvalidPlan => transport::ErrorCategory::Validation,
+            Self::Staging(error) => transport::ServiceErrorCategory::category(error),
+            Self::Filesystem(_) => transport::ErrorCategory::Parser,
         }
     }
 }

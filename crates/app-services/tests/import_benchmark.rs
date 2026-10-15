@@ -55,16 +55,57 @@ fn import(path: &Path, profiling: bool) -> ImportResult {
         let (source_id, state): (String, String) = conn.query_row("SELECT id, import_state FROM data_sources", [], |row| Ok((row.get(0)?, row.get(1)?)))?;
         assert_eq!(state, "ready");
         let source = source_db::open_registered_source_db_read_only(conn, &active.case_root, &DataSourceId(source_id.clone()))?;
-        let roots: Vec<String> = source.prepare("SELECT id FROM file_entries WHERE parent_id IS NULL ORDER BY partition_index")?
-            .query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;
-        let mut replacements = vec![(source_id, "__source__".into()), (active.meta.id.0.clone(), "__case__".into())];
-        replacements.extend(roots.into_iter().enumerate().map(|(i, id)| (id, format!("__root_{i}__"))));
+        let replacements = canonical_replacements(&source, &active.meta.id.0, &source_id);
         let catalog = snapshot(&source, "SELECT id, parent_id, path, name, entry_type, size, ext, deleted, hidden, system, read_only, archive, unix_mode, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256, partition_index FROM file_entries", &replacements);
         let mut graph = snapshot(&source, "SELECT id, node_type, label, summary, tags FROM graph_nodes", &replacements);
         graph.extend(snapshot(&source, "SELECT id, source_id, target_id, edge_type, confidence, provenance FROM graph_edges", &replacements));
         let timeline = snapshot(&source, "SELECT id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs FROM timeline_events", &replacements);
         Ok(ImportResult { catalog, graph, timeline, report })
     }).unwrap()
+}
+
+fn canonical_replacements(
+    conn: &Connection,
+    case_id: &str,
+    source_id: &str,
+) -> Vec<(String, String)> {
+    let roots: Vec<String> = conn
+        .prepare("SELECT id FROM file_entries WHERE parent_id IS NULL ORDER BY partition_index")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    let mut replacements = vec![
+        (source_id.into(), "__source__".into()),
+        (case_id.into(), "__case__".into()),
+    ];
+    replacements.extend(
+        roots
+            .into_iter()
+            .enumerate()
+            .map(|(i, id)| (id, format!("__root_{i}__"))),
+    );
+    let generated: Vec<(String, Option<i64>, String)> = conn.prepare(
+        "SELECT id, partition_index, path FROM file_entries WHERE parent_id IS NOT NULL AND length(id) = 36 AND id GLOB '[0-9a-fA-F]*'"
+    ).unwrap().query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).unwrap().collect::<Result<_, _>>().unwrap();
+    let mut identities = std::collections::HashSet::new();
+    for (id, partition, path) in generated {
+        if uuid::Uuid::parse_str(&id).is_ok_and(|id| id.get_version_num() == 4) {
+            let stable = format!(
+                "__file_{}:{}:{}__",
+                partition.unwrap_or(-1),
+                path.len(),
+                path
+            );
+            assert!(
+                identities.insert(stable.clone()),
+                "ambiguous generated-file identity in benchmark oracle"
+            );
+            replacements.push((id, stable));
+        }
+    }
+    replacements
 }
 
 fn snapshot(conn: &Connection, sql: &str, replacements: &[(String, String)]) -> Vec<Vec<Value>> {
@@ -75,11 +116,26 @@ fn snapshot(conn: &Connection, sql: &str, replacements: &[(String, String)]) -> 
         .unwrap()
         .collect::<Result<_, _>>()
         .unwrap();
+    let identities: std::collections::HashMap<_, _> = replacements
+        .iter()
+        .map(|(id, stable)| (id.as_str(), stable.as_str()))
+        .collect();
+    let uuid =
+        regex::Regex::new(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+            .unwrap();
     for row in &mut rows {
         for value in row {
             if let Value::Text(text) = value {
-                for (original, replacement) in replacements {
-                    *text = text.replace(original, replacement);
+                if let std::borrow::Cow::Owned(normalized) =
+                    uuid.replace_all(text, |capture: &regex::Captures<'_>| {
+                        identities
+                            .get(&capture[0])
+                            .copied()
+                            .unwrap_or(&capture[0])
+                            .to_owned()
+                    })
+                {
+                    *text = normalized;
                 }
             }
         }
@@ -89,6 +145,28 @@ fn snapshot(conn: &Connection, sql: &str, replacements: &[(String, String)]) -> 
 }
 
 fn verify_report(report: &ImportBenchmarkReportDto, record_count: u64) {
+    let builds = report
+        .partition_aggregates
+        .iter()
+        .find(|sample| sample.phase == Phase::ReaderBuild)
+        .unwrap();
+    assert_eq!(
+        builds.filesystem_builds, 0,
+        "direct NTFS must not build an eager filesystem"
+    );
+    let backfill = report
+        .partition_aggregates
+        .iter()
+        .find(|sample| sample.phase == Phase::MftDirReaderBuild)
+        .unwrap();
+    assert_eq!(
+        backfill.filesystem_builds, 1,
+        "directory backfill still requires its NTFS reader"
+    );
+    assert!(!report
+        .samples
+        .iter()
+        .any(|sample| sample.phase == Phase::FallbackReaderBuild));
     for phase in [
         Phase::Probe,
         Phase::Graph,
@@ -228,6 +306,47 @@ fn mft_profile_counts_invalid_records_and_the_short_final_chunk() {
     let path = temporary.path().join("two-chunks.raw");
     std::fs::write(&path, fixture::image(10_019)).unwrap();
     verify_report(&import(&path, true).report, 10_019);
+}
+
+#[test]
+fn oracle_normalizes_generated_generic_ids_and_preserves_native_mft_ids() {
+    fn catalog() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE file_entries (id TEXT PRIMARY KEY, parent_id TEXT, path TEXT, partition_index INTEGER)").unwrap();
+        let root = uuid::Uuid::new_v4().to_string();
+        let generated = uuid::Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO file_entries VALUES (?1,NULL,'[P1]',1)",
+            [&root],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_entries VALUES (?1,?2,'[P1]/note.txt',1)",
+            [&generated, &root],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_entries VALUES ('mft:1:25',?1,'[P1]/native.txt',1)",
+            [&root],
+        )
+        .unwrap();
+        conn
+    }
+    let first = catalog();
+    let second = catalog();
+    let a = canonical_replacements(&first, "case", "source");
+    let b = canonical_replacements(&second, "case", "source");
+    let sql = "SELECT id,parent_id,path FROM file_entries";
+    assert_eq!(snapshot(&first, sql, &a), snapshot(&second, sql, &b));
+    let edges = "SELECT 'contains:' || parent_id || ':' || id, id FROM file_entries WHERE parent_id IS NOT NULL";
+    assert_eq!(snapshot(&first, edges, &a), snapshot(&second, edges, &b));
+    second
+        .execute(
+            "UPDATE file_entries SET id='mft:1:26' WHERE id='mft:1:25'",
+            [],
+        )
+        .unwrap();
+    assert_ne!(snapshot(&first, sql, &a), snapshot(&second, sql, &b));
 }
 
 #[test]

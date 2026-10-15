@@ -1,4 +1,5 @@
 use super::*;
+mod lazy_ntfs;
 use super::{
     batch_sink::{prepare_mft_insert, EnumerationStats},
     ntfs::{
@@ -178,15 +179,15 @@ fn fake_partition_work(
         index,
         name: format!("Partition {index}"),
         fs_kind: "FakeFs".to_string(),
-        fs: Box::new(FakeFsReader::new(
+        strategy: PartitionEnumStrategy::Generic(Box::new(FakeFsReader::new(
             format!("fake-{index}"),
             entry_count,
             root_list_delay,
             active_lists,
             max_active_lists,
-        )),
+        ))),
         source_path: PathBuf::from(format!("fake-{index}.img")),
-        source_kind: "Raw".to_string(),
+        source_kind: domain::DataSourceKind::Raw,
         volume_offset: 0,
     }
 }
@@ -1129,15 +1130,15 @@ fn real_e01_ntfs_mft_parameters_include_data_runs() {
             .clone()
             .unwrap_or_else(|| "NTFS".to_string()),
         fs_kind: "ntfs".to_string(),
-        fs: Box::new(FakeFsReader::new(
+        strategy: PartitionEnumStrategy::Generic(Box::new(FakeFsReader::new(
             "unused",
             0,
             Duration::ZERO,
             Arc::new(AtomicUsize::new(0)),
             Arc::new(AtomicUsize::new(0)),
-        )),
+        ))),
         source_path: sample,
-        source_kind: "e01".to_string(),
+        source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
     };
 
@@ -1179,15 +1180,15 @@ fn real_e01_mft_parser_keeps_windows_parent_chain() {
         index: ntfs.partition_index.unwrap_or(0),
         name: "NTFS".to_string(),
         fs_kind: "ntfs".to_string(),
-        fs: Box::new(FakeFsReader::new(
+        strategy: PartitionEnumStrategy::Generic(Box::new(FakeFsReader::new(
             "unused",
             0,
             Duration::ZERO,
             Arc::new(AtomicUsize::new(0)),
             Arc::new(AtomicUsize::new(0)),
-        )),
+        ))),
         source_path: sample,
-        source_kind: "e01".to_string(),
+        source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
     };
     let mut evidence_reader = open_partition_evidence_reader(&partition).unwrap();
@@ -1357,7 +1358,7 @@ fn parallel_enum_serializes_e01_partition_reads() {
                 active_lists.clone(),
                 max_active_lists.clone(),
             );
-            work.source_kind = "e01".to_string();
+            work.source_kind = domain::DataSourceKind::E01;
             work
         })
         .collect();

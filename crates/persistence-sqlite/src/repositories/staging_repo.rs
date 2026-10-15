@@ -473,3 +473,5 @@ impl StagingRepo {
         rows.collect()
     }
 }
+mod completion;
+mod fallback;

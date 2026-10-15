@@ -145,7 +145,11 @@ impl Measurement {
             state: self.state,
             inclusive: matches!(
                 phase,
-                Phase::Workflow | Phase::Enumeration | Phase::Analysis | Phase::Timeline
+                Phase::Workflow
+                    | Phase::Enumeration
+                    | Phase::Analysis
+                    | Phase::Timeline
+                    | Phase::FallbackEnumeration
             ),
             elapsed_ns: self
                 .duration

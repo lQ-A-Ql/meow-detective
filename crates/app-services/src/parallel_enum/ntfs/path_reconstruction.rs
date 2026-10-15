@@ -29,7 +29,7 @@ impl MftCatalog {
         records: &[MftRecord],
         data_source_id: &str,
         partition_index: usize,
-    ) -> Result<u64, String> {
+    ) -> Result<u64, ParallelEnumError> {
         let mut staged_rows = 0u64;
         for record in records.iter().filter(|record| {
             record.is_valid && (!record.name.is_empty() || record.record_number == 5)
@@ -95,8 +95,7 @@ impl MftCatalog {
             action.read_only,
             action.archive,
             action.encrypted,
-        )
-        .map_err(ParallelEnumError::MftParams)?;
+        )?;
         if changed > 0 {
             if action.is_dir {
                 self.stats.dir_count += 1;

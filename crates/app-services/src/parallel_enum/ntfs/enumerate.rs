@@ -80,9 +80,14 @@ fn enumerate_scan(
     let result = scan_mft_transaction(ctx, scan);
     let stats = match result {
         Ok(stats) => {
-            ctx.profile
+            let commit = ctx
+                .profile
                 .measure(Phase::MftCommit, || ctx.conn.execute_batch("COMMIT"))
-                .map_err(ParallelEnumError::Db)?;
+                .map_err(ParallelEnumError::Db);
+            if let Err(error) = commit {
+                ctx.conn.execute_batch("ROLLBACK").ok();
+                return Err(error);
+            }
             stats
         }
         Err(error) => {
@@ -90,10 +95,8 @@ fn enumerate_scan(
             return Err(error);
         }
     };
-    staging::set_staging_meta(ctx.conn, "enum_strategy", "mft")
-        .map_err(|error| ParallelEnumError::MftParams(format!("Mark MFT strategy: {error}")))?;
-    staging::set_staging_meta(ctx.conn, "mft_records", &total_records.to_string())
-        .map_err(|error| ParallelEnumError::MftParams(format!("Mark MFT record count: {error}")))?;
+    staging::set_staging_meta(ctx.conn, "enum_strategy", "mft")?;
+    staging::set_staging_meta(ctx.conn, "mft_records", &total_records.to_string())?;
     Ok(stats)
 }
 

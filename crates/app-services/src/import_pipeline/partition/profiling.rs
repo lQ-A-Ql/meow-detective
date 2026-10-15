@@ -15,10 +15,10 @@ pub(crate) fn build_partition_work_profiled(
     partition: &crate::staging::PartitionEntry,
     candidates: &[ImageFilesystemCandidate],
     profiler: Option<ImportProfiler>,
-) -> Option<PartitionWork> {
+) -> Result<PartitionWork, super::PartitionBuildError> {
     let mut profile = PhaseRecorder::new(profiler, Some(partition.index));
     let started = profile.start();
-    let work = super::build_partition_work(
+    let work = super::build_partition_work_typed(
         source_path,
         source_kind,
         partition.index,
@@ -29,7 +29,7 @@ pub(crate) fn build_partition_work_profiled(
     profile.record(
         Phase::ReaderBuild,
         started,
-        if work.is_some() {
+        if work.is_ok() {
             State::Completed
         } else {
             State::Failed
@@ -38,7 +38,12 @@ pub(crate) fn build_partition_work_profiled(
     profile.count(
         Phase::ReaderBuild,
         Counters {
-            builds: u64::from(work.is_some()),
+            builds: u64::from(work.as_ref().is_ok_and(|work| {
+                matches!(
+                    &work.strategy,
+                    crate::parallel_enum::PartitionEnumStrategy::Generic(_)
+                )
+            })),
             ..Default::default()
         },
     );

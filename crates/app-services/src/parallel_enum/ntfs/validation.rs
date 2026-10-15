@@ -24,7 +24,7 @@ pub(in crate::parallel_enum) fn validate_mft_staging_shape(
             params![data_source_id, root_id],
             |row| row.get::<_, i64>(0),
         )
-        .map_err(|error| error.to_string())?;
+        .map_err(ParallelEnumError::Db)?;
     let orphan_count = conn
         .query_row(
             "SELECT COUNT(*) FROM file_entries child
@@ -38,7 +38,7 @@ pub(in crate::parallel_enum) fn validate_mft_staging_shape(
             params![data_source_id, id_pattern],
             |row| row.get::<_, i64>(0),
         )
-        .map_err(|error| error.to_string())?;
+        .map_err(ParallelEnumError::Db)?;
     let reachable = conn
         .query_row(
             "WITH RECURSIVE reachable(id) AS (
@@ -53,7 +53,7 @@ pub(in crate::parallel_enum) fn validate_mft_staging_shape(
             params![data_source_id, root_id, id_pattern],
             |row| row.get::<_, i64>(0),
         )
-        .map_err(|error| error.to_string())?;
+        .map_err(ParallelEnumError::Db)?;
 
     if total == 0 || root_count != 1 || orphan_count != 0 || reachable != total {
         return Err(ParallelEnumError::MftParams(format!(
@@ -68,7 +68,6 @@ fn count_rows(
     query: &str,
     data_source_id: &str,
     id_pattern: &str,
-) -> Result<i64, String> {
+) -> rusqlite::Result<i64> {
     conn.query_row(query, params![data_source_id, id_pattern], |row| row.get(0))
-        .map_err(|error| error.to_string())
 }

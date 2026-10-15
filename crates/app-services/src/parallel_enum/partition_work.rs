@@ -1,8 +1,8 @@
-use super::batch_sink::{clear_staging_file_entries, enumerate_fs_to_staging, EnumerationStats};
-use super::ntfs::enumerate_ntfs_mft_to_staging;
+use super::batch_sink::EnumerationStats;
+use super::ntfs_plan::PartitionEnumStrategy;
+use super::partition_enumeration::enumerate_partition;
 use crate::import_pipeline::{profile::PhaseRecorder, ImportProfiler};
 use crate::staging;
-use evidence_core::FileSystemReader;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use transport::dto::import_benchmark::{
@@ -14,20 +14,19 @@ pub struct PartitionWork {
     pub index: usize,
     pub name: String,
     pub fs_kind: String,
-    pub fs: Box<dyn FileSystemReader + Send>,
+    pub strategy: PartitionEnumStrategy,
     pub source_path: PathBuf,
-    pub source_kind: String,
+    pub source_kind: domain::DataSourceKind,
     pub volume_offset: u64,
 }
 
 impl PartitionWork {
     pub(super) fn uses_e01_reader(&self) -> bool {
-        self.source_kind.eq_ignore_ascii_case("e01")
+        self.source_kind == domain::DataSourceKind::E01
     }
 
     pub(super) fn uses_local_disk_reader(&self) -> bool {
-        self.source_kind.eq_ignore_ascii_case("localdisk")
-            || self.source_kind.eq_ignore_ascii_case("local_disk")
+        self.source_kind == domain::DataSourceKind::LocalDisk
     }
 }
 
@@ -123,19 +122,25 @@ pub(super) fn enumerate_single_partition_profiled(
         &mut warnings,
         &mut profile,
     );
+    let result = finish_partition(
+        &conn,
+        index,
+        warnings,
+        result.map_err(|error| error.to_string()),
+    );
     profile.record(
         Phase::Enumeration,
         started,
-        if result.is_ok() {
+        if result.error.is_none() {
             State::Completed
         } else {
             State::Failed
         },
     );
-    if result.is_err() && cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
+    if result.error.is_some() && cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
         profile.cancel(Phase::Enumeration);
     }
-    finish_partition(&conn, index, warnings, result)
+    result
 }
 
 fn completed_staging_result(conn: &rusqlite::Connection, index: usize) -> Option<PartitionResult> {
@@ -153,59 +158,6 @@ fn completed_staging_result(conn: &rusqlite::Connection, index: usize) -> Option
     })
 }
 
-fn enumerate_partition(
-    conn: &rusqlite::Connection,
-    partition: &PartitionWork,
-    data_source_id: &str,
-    cancel_token: &AtomicBool,
-    progress_cb: Option<&dyn Fn(u64, u64)>,
-    warnings: &mut Vec<String>,
-    profile: &mut PhaseRecorder,
-) -> Result<EnumerationStats, String> {
-    if !partition.fs_kind.eq_ignore_ascii_case("ntfs") {
-        return enumerate_fs_to_staging(
-            conn,
-            &*partition.fs,
-            data_source_id,
-            partition.index,
-            cancel_token,
-            progress_cb,
-        );
-    }
-
-    match enumerate_ntfs_mft_to_staging(
-        conn,
-        partition,
-        data_source_id,
-        cancel_token,
-        progress_cb,
-        profile,
-    ) {
-        Ok(stats) => Ok(stats),
-        Err(error) => {
-            tracing::warn!(
-                "MFT fast path failed for partition {}: {}; falling back to recursive enum",
-                partition.index,
-                error
-            );
-            let _ = clear_staging_file_entries(conn);
-            let message = error.to_string();
-            let _ = staging::set_staging_meta(conn, "mft_fallback_warning", &message);
-            warnings.push(format!("MFT fast path fallback: {message}"));
-            profile.measure(Phase::FallbackEnumeration, || {
-                enumerate_fs_to_staging(
-                    conn,
-                    &*partition.fs,
-                    data_source_id,
-                    partition.index,
-                    cancel_token,
-                    progress_cb,
-                )
-            })
-        }
-    }
-}
-
 fn finish_partition(
     conn: &rusqlite::Connection,
     index: usize,
@@ -214,15 +166,31 @@ fn finish_partition(
 ) -> PartitionResult {
     match result {
         Ok(stats) => {
-            let _ = staging::set_staging_meta(conn, "status", "done");
-            let _ = staging::set_staging_meta(conn, "file_count", &stats.file_count.to_string());
-            let _ = staging::set_staging_meta(conn, "dir_count", &stats.dir_count.to_string());
-            PartitionResult::completed(index, warnings, stats)
+            match persistence_sqlite::repositories::staging_repo::StagingRepo::complete_enum(
+                conn,
+                stats.file_count,
+                stats.dir_count,
+            ) {
+                Ok(()) => PartitionResult::completed(index, warnings, stats),
+                Err(error) => failed_partition(
+                    conn,
+                    index,
+                    warnings,
+                    format!("Failed to complete partition staging: {error}"),
+                ),
+            }
         }
-        Err(error) => {
-            let _ = staging::set_staging_meta(conn, "status", "failed");
-            let _ = staging::set_staging_meta(conn, "error", &error);
-            PartitionResult::failed(index, warnings, error)
-        }
+        Err(error) => failed_partition(conn, index, warnings, error),
     }
+}
+
+fn failed_partition(
+    conn: &rusqlite::Connection,
+    index: usize,
+    warnings: Vec<String>,
+    error: String,
+) -> PartitionResult {
+    let _ = staging::set_staging_meta(conn, "status", "failed");
+    let _ = staging::set_staging_meta(conn, "error", &error);
+    PartitionResult::failed(index, warnings, error)
 }
