@@ -28,7 +28,7 @@ fn raw_factory_reopens_independent_cursors_with_stable_size() {
 }
 
 #[test]
-fn runtime_generation_invalidates_old_leases_explicitly() {
+fn runtime_keeps_source_identity_when_its_generation_tag_changes() {
     let temp = tempfile::TempDir::new().unwrap();
     let path = temp.path().join("source.raw");
     std::fs::write(&path, vec![0; 512]).unwrap();
