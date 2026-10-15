@@ -5,7 +5,7 @@ mod reader;
 mod segment;
 mod table;
 
-pub use reader::E01Reader;
+pub use reader::{E01OpenPlan, E01Reader};
 
 pub(crate) use segment::build_segment_path;
 pub(crate) const SECTION_DESCRIPTOR_SIZE: u64 = 76;

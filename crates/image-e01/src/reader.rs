@@ -31,7 +31,37 @@ pub struct E01Reader {
     last_chunk_read: Option<u64>,
 }
 
+/// Immutable E01 parsing state that can produce independent readers.
+pub struct E01OpenPlan {
+    template: Arc<E01Reader>,
+}
+
+impl E01OpenPlan {
+    pub fn open_reader(&self) -> io::Result<E01Reader> {
+        self.template.re_open(&self.template.info.path)
+    }
+
+    pub fn logical_size(&self) -> u64 {
+        self.template.total_bytes
+    }
+    pub fn chunk_count(&self) -> usize {
+        self.template.chunk_table.len()
+    }
+    pub fn segment_count(&self) -> usize {
+        self.template.segment_files.len()
+    }
+}
+
 impl E01Reader {
+    pub fn open_plan(self) -> E01OpenPlan {
+        E01OpenPlan {
+            template: Arc::new(self),
+        }
+    }
+
+    pub fn from_open_plan(plan: &E01OpenPlan) -> io::Result<Self> {
+        plan.open_reader()
+    }
     pub(crate) fn from_parts(
         info: ReaderInfo,
         total_bytes: u64,

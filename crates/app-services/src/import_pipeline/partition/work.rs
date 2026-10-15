@@ -35,6 +35,26 @@ pub(crate) fn build_partition_work_typed(
     fs_kind: &str,
     probe_candidates: &[datasource_service::ImageFilesystemCandidate],
 ) -> Result<parallel_enum::PartitionWork, super::PartitionBuildError> {
+    build_partition_work_typed_with_factory(
+        source_path,
+        source_kind,
+        partition_index,
+        partition_name,
+        fs_kind,
+        probe_candidates,
+        None,
+    )
+}
+
+pub(crate) fn build_partition_work_typed_with_factory(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    partition_index: usize,
+    partition_name: &str,
+    fs_kind: &str,
+    probe_candidates: &[datasource_service::ImageFilesystemCandidate],
+    reader_factory: Option<evidence_core::SharedReaderFactory>,
+) -> Result<parallel_enum::PartitionWork, super::PartitionBuildError> {
     let index_map = datasource_service::assign_effective_partition_indices(probe_candidates);
     let candidate = probe_candidates
         .iter()
@@ -67,6 +87,7 @@ pub(crate) fn build_partition_work_typed(
         source_path: source_path.to_path_buf(),
         source_kind: source_kind.clone(),
         volume_offset: candidate.offset,
+        reader_factory,
     })
 }
 

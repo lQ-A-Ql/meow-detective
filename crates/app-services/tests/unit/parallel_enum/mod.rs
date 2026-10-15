@@ -189,6 +189,7 @@ fn fake_partition_work(
         source_path: PathBuf::from(format!("fake-{index}.img")),
         source_kind: domain::DataSourceKind::Raw,
         volume_offset: 0,
+        reader_factory: None,
     }
 }
 
@@ -1140,6 +1141,7 @@ fn real_e01_ntfs_mft_parameters_include_data_runs() {
         source_path: sample,
         source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
+        reader_factory: None,
     };
 
     let mut evidence_reader = open_partition_evidence_reader(&partition).unwrap();
@@ -1190,6 +1192,7 @@ fn real_e01_mft_parser_keeps_windows_parent_chain() {
         source_path: sample,
         source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
+        reader_factory: None,
     };
     let mut evidence_reader = open_partition_evidence_reader(&partition).unwrap();
     let params =

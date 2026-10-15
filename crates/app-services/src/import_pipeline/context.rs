@@ -21,6 +21,7 @@ pub(crate) struct ImportJobContext<'a> {
     pub counts: &'a mut JobOutcomeCounts,
     pub content_kind: ImportContentKind,
     pub profiler: Option<super::ImportProfiler>,
+    pub runtime: Option<std::sync::Arc<crate::source_runtime::SourceRuntime>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -3,6 +3,7 @@ use super::ntfs_plan::PartitionEnumStrategy;
 use super::partition_enumeration::enumerate_partition;
 use crate::import_pipeline::{profile::PhaseRecorder, ImportProfiler};
 use crate::staging;
+use evidence_core::SharedReaderFactory;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use transport::dto::import_benchmark::{
@@ -18,6 +19,7 @@ pub struct PartitionWork {
     pub source_path: PathBuf,
     pub source_kind: domain::DataSourceKind,
     pub volume_offset: u64,
+    pub reader_factory: Option<SharedReaderFactory>,
 }
 
 impl PartitionWork {

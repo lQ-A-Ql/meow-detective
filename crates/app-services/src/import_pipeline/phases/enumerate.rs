@@ -124,6 +124,7 @@ fn build_pending_partition_work(
             partition,
             candidates,
             ctx.profiler.clone(),
+            ctx.runtime.as_ref().map(|runtime| runtime.factory()),
         );
         match work {
             Ok(work) => pending.push(work),

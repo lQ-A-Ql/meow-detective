@@ -235,6 +235,9 @@ fn read_mft_record_zero(
 pub(in crate::parallel_enum) fn open_partition_evidence_reader(
     partition: &PartitionWork,
 ) -> Result<Box<dyn EvidenceReader>, ParallelEnumError> {
+    if let Some(factory) = &partition.reader_factory {
+        return factory.open_reader().map_err(ParallelEnumError::Io);
+    }
     if partition.uses_e01_reader() {
         return Ok(Box::new(
             E01Reader::open(&partition.source_path).map_err(|error| error.to_string())?,

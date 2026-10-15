@@ -15,16 +15,18 @@ pub(crate) fn build_partition_work_profiled(
     partition: &crate::staging::PartitionEntry,
     candidates: &[ImageFilesystemCandidate],
     profiler: Option<ImportProfiler>,
+    reader_factory: Option<evidence_core::SharedReaderFactory>,
 ) -> Result<PartitionWork, super::PartitionBuildError> {
     let mut profile = PhaseRecorder::new(profiler, Some(partition.index));
     let started = profile.start();
-    let work = super::build_partition_work_typed(
+    let work = super::build_partition_work_typed_with_factory(
         source_path,
         source_kind,
         partition.index,
         &partition.name,
         &partition.fs_kind,
         candidates,
+        reader_factory,
     );
     profile.record(
         Phase::ReaderBuild,

@@ -1,8 +1,10 @@
 use std::io::{Read, Seek};
 use std::path::PathBuf;
 
+mod factory;
 mod partition_window;
 
+pub use factory::{EvidenceReaderFactory, ReaderCapabilities, SharedReaderFactory};
 pub use partition_window::PartitionWindowReader;
 
 #[derive(Debug, Clone)]

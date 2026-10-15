@@ -63,6 +63,7 @@ pub mod rule_pack;
 pub mod runtime_resources;
 pub mod search_service;
 pub mod source_db;
+pub mod source_runtime;
 pub mod staging;
 pub mod step_recorder;
 pub mod text_service;

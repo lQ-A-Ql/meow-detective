@@ -432,6 +432,7 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_users_tree() {
         source_path: fixture_path.clone(),
         source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
+        reader_factory: None,
     };
 
     let results = parallel_enum::enumerate_partitions_parallel(
@@ -674,6 +675,7 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_system_volume_information_children
         source_path: fixture_path.clone(),
         source_kind: domain::DataSourceKind::E01,
         volume_offset: ntfs.offset,
+        reader_factory: None,
     };
 
     let results = parallel_enum::enumerate_partitions_parallel(
@@ -2545,6 +2547,7 @@ fn field_value(field: Option<&artifacts_windows::ParsedRegistryField>) -> Option
 fn read_mft_parameters(
     path: &std::path::Path,
     volume_offset: u64,
+    reader_factory: None,
 ) -> std::io::Result<(u64, u64, u32, u16, u64)> {
     let mut reader = E01Reader::open(path)?;
     reader.seek(SeekFrom::Start(volume_offset))?;

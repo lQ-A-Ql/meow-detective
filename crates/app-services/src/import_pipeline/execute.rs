@@ -124,6 +124,7 @@ fn execute_import_job_internal(
         counts: &mut counts,
         content_kind: crate::import_pipeline::context::ImportContentKind::Filesystem,
         profiler,
+        runtime: None,
     };
 
     let ds = phases::run_attach_phase(&mut ctx)?;
@@ -137,6 +138,30 @@ fn execute_import_job_internal(
         .map_err(CommandError::from_service_error)?;
     ctx.source_conn = Some(&source_conn);
     ctx.ds = Some(&ds);
+    if matches!(
+        ctx.import_config.kind,
+        domain::DataSourceKind::Raw
+            | domain::DataSourceKind::E01
+            | domain::DataSourceKind::LocalDisk
+    ) {
+        let factory = crate::source_runtime::open_factory(
+            &ctx.import_config.source_path,
+            &ctx.import_config.kind,
+        )
+        .map_err(CommandError::from_typed_service_error)?;
+        ctx.runtime = Some(std::sync::Arc::new(
+            crate::source_runtime::SourceRuntime::new(
+                crate::source_runtime::SourceIdentity {
+                    case_id: case_id.0.clone(),
+                    data_source_id: ds.id.clone(),
+                    revision: 0,
+                    source_kind: ctx.import_config.kind.clone(),
+                    path: ctx.import_config.source_path.clone(),
+                },
+                factory,
+            ),
+        ));
+    }
 
     let result = (|| {
         reject_cancelled_after_register(&ctx, &ds)?;
