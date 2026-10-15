@@ -77,15 +77,6 @@ impl OrderedMftWindow {
             .unwrap_or_else(|e| e.into_inner())
             .in_flight
     }
-    #[cfg(test)]
-    #[cfg(test)]
-    pub fn buffered(&self) -> usize {
-        self.state
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .ready
-            .len()
-    }
 }
 
 #[cfg(test)]

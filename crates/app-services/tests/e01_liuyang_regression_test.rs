@@ -2547,7 +2547,6 @@ fn field_value(field: Option<&artifacts_windows::ParsedRegistryField>) -> Option
 fn read_mft_parameters(
     path: &std::path::Path,
     volume_offset: u64,
-    reader_factory: None,
 ) -> std::io::Result<(u64, u64, u32, u16, u64)> {
     let mut reader = E01Reader::open(path)?;
     reader.seek(SeekFrom::Start(volume_offset))?;

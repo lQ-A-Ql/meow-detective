@@ -85,8 +85,14 @@ fn assert_sparse_file_read(
     )
     .expect("build filesystem work from sparse image");
 
+    let filesystem = match work.strategy {
+        app_services::parallel_enum::PartitionEnumStrategy::Generic(fs) => fs,
+        app_services::parallel_enum::PartitionEnumStrategy::NtfsDeferred(_) => {
+            panic!("Android sparse filesystem must use generic strategy")
+        }
+    };
     assert_eq!(
-        work.fs
+        filesystem
             .read_file_range(path, 0, expected_content.len())
             .expect("read file range through application filesystem work"),
         expected_content
