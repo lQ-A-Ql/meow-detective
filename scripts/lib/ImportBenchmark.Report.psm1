@@ -62,7 +62,8 @@ function Get-ImportBenchmarkSummary {
         })
         if ($values.Count -ne $group.Count) { continue }
         [ordered]@{ phase = $phase; scope = if ($scope -eq 'samples') { 'source-wall-inclusive' } else { 'partition-work-sum' }
-          seconds = Get-ImportBenchmarkStatistics -Values $values }
+          seconds = Get-ImportBenchmarkStatistics -Values $values
+          counters = @(Get-ImportBenchmarkPhaseCounters -Trials $group -Scope $scope -Phase $phase) }
       }
     })
     [ordered]@{
@@ -71,9 +72,57 @@ function Get-ImportBenchmarkSummary {
       workflowSeconds = Get-ImportBenchmarkStatistics -Values $workflow
       importProcessPeakRssMb = Get-ImportBenchmarkStatistics -Values $rss
       sampledChildPeakHandles = Get-ImportBenchmarkStatistics -Values $handles
+      processMetrics = @(Get-ImportBenchmarkProcessStatistics -Trials $group)
       phases = $phaseStats
     }
   })
+}
+
+function Get-ImportBenchmarkPhaseCounters {
+  param([object[]]$Trials, [string]$Scope, [string]$Phase)
+  foreach ($metric in @('maxBufferedBatches', 'maxBufferedRecords', 'mainTableUpdatedRows', 'sampledWalMaxBytes')) {
+    $values = @(foreach ($trial in $Trials) {
+      $samples = @($trial.payload.report.$Scope | Where-Object { $_.phase -eq $Phase -and
+          ($Scope -eq 'partitionAggregates' -or $null -eq $_.PSObject.Properties['partitionIndex']) })
+      if ($samples.Count -ne 1) { continue }
+      $property = $samples[0].PSObject.Properties[$metric]
+      if ($null -ne $property -and $null -ne $property.Value) { [double]$property.Value }
+    })
+    if ($values.Count -eq 0) { continue }
+    [ordered]@{ metric = $metric; observations = $values.Count; expectedObservations = $Trials.Count
+      availableForAllTrials = $values.Count -eq $Trials.Count
+      partitionAggregation = if ($metric -eq 'mainTableUpdatedRows') { 'sum' } else { 'max-single-partition' }
+      statistics = Get-ImportBenchmarkStatistics -Values $values }
+  }
+}
+
+function Get-ImportBenchmarkProcessStatistics {
+  param([object[]]$Trials)
+  foreach ($metric in @(
+      @{ field = 'userCpuNs'; name = 'userCpuSeconds'; divisor = 1e9; unit = 'seconds' },
+      @{ field = 'kernelCpuNs'; name = 'kernelCpuSeconds'; divisor = 1e9; unit = 'seconds' },
+      @{ field = 'cpuCoreEquivalents'; name = 'cpuCoreEquivalents'; divisor = 1; unit = 'cores' },
+      @{ field = 'processReadTransferBytes'; name = 'processReadTransferBytes'; divisor = 1; unit = 'bytes' },
+      @{ field = 'processWriteTransferBytes'; name = 'processWriteTransferBytes'; divisor = 1; unit = 'bytes' },
+      @{ field = 'processReadOperations'; name = 'processReadOperations'; divisor = 1; unit = 'operations' },
+      @{ field = 'processWriteOperations'; name = 'processWriteOperations'; divisor = 1; unit = 'operations' },
+      @{ field = 'handlesAtStart'; name = 'handlesAtStart'; divisor = 1; unit = 'handles' },
+      @{ field = 'handlesAtEnd'; name = 'handlesAtEnd'; divisor = 1; unit = 'handles' }
+    )) {
+    $values = @(foreach ($trial in $Trials) {
+      if (-not $trial.payload.report.PSObject.Properties['processUsage']) { continue }
+      $usage = $trial.payload.report.processUsage
+      if ($null -eq $usage -or $usage.scope -cne 'workflowProcessWindow') { continue }
+      $property = $usage.PSObject.Properties[$metric.field]
+      if ($null -ne $property -and $null -ne $property.Value) { [double]$property.Value / $metric.divisor }
+    })
+    [ordered]@{
+      metric = $metric.name; unit = $metric.unit; scope = 'workflow-process-window'
+      observations = $values.Count; expectedObservations = $Trials.Count
+      availableForAllTrials = $values.Count -eq $Trials.Count
+      statistics = if ($values.Count) { Get-ImportBenchmarkStatistics -Values $values } else { $null }
+    }
+  }
 }
 
 Export-ModuleMember -Function Assert-ImportBenchmarkPayload, Assert-ImportBenchmarkOracle, Get-ImportBenchmarkStatistics, Get-ImportBenchmarkSummary

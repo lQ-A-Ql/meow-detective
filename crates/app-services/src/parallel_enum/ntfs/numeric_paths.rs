@@ -1,6 +1,13 @@
 use super::path_reconstruction::PathMap;
 use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
+
+pub(in crate::parallel_enum) struct PathMaterializationStats {
+    pub compute_elapsed: Duration,
+    pub sql_elapsed: Duration,
+    pub updated_main_rows: u64,
+}
 
 pub(in crate::parallel_enum) fn update_mft_staging_paths_via_sqlite(
     conn: &Connection,
@@ -8,7 +15,8 @@ pub(in crate::parallel_enum) fn update_mft_staging_paths_via_sqlite(
     partition_index: usize,
     path_map: &PathMap,
     deleted_records: &HashSet<u64>,
-) -> rusqlite::Result<()> {
+) -> rusqlite::Result<PathMaterializationStats> {
+    let compute_started = Instant::now();
     let mut resolved = HashMap::with_capacity(path_map.len());
     let mut records: Vec<_> = path_map.keys().copied().collect();
     records.sort_unstable();
@@ -21,6 +29,9 @@ pub(in crate::parallel_enum) fn update_mft_staging_paths_via_sqlite(
             partition_index,
         );
     }
+    let compute_elapsed = compute_started.elapsed();
+    let sql_started = Instant::now();
+    let mut updated_main_rows = 0;
     let mut statement = conn.prepare_cached(
         "UPDATE ntfs_entries SET path=?1, name=?2, parent_record_num=?3 WHERE record_num=?4",
     )?;
@@ -33,9 +44,14 @@ pub(in crate::parallel_enum) fn update_mft_staging_paths_via_sqlite(
                 .filter(|p| path_map.contains_key(p))
                 .or_else(|| path_map.contains_key(&5).then_some(5))
         };
-        statement.execute(params![resolved[&record], name, parent, record])?;
+        updated_main_rows +=
+            statement.execute(params![resolved[&record], name, parent, record])? as u64;
     }
-    Ok(())
+    Ok(PathMaterializationStats {
+        compute_elapsed,
+        sql_elapsed: sql_started.elapsed(),
+        updated_main_rows,
+    })
 }
 
 fn resolve_mft_path(

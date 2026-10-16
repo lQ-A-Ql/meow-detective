@@ -140,6 +140,13 @@ fn record_timeline_subphases(
             state,
             Counters {
                 staged: rows,
+                sampled_wal_bytes: if phase == Phase::TimelineGraph && !projection.already_projected
+                {
+                    ctx.source_conn
+                        .and_then(super::super::profile::sample_wal_size)
+                } else {
+                    None
+                },
                 ..Counters::default()
             },
         );

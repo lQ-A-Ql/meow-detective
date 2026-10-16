@@ -9,8 +9,7 @@ use transport::dto::import_benchmark::{
     ImportBenchmarkPhaseDto as Phase, ImportBenchmarkStateDto as State,
 };
 
-#[path = "../../support/import_ntfs_fixture.rs"]
-mod fixture;
+use super::ntfs_fixture as fixture;
 
 fn candidate() -> ImageFilesystemCandidate {
     ImageFilesystemCandidate {

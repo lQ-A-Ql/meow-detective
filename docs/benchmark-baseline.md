@@ -362,3 +362,24 @@ Formal 缺 Release、轮数或预热即拒绝；Pressure 保留单次压力口�
 baselineStrategyReference 只描述冻结基线，不会隐式启用未来 Path/channel/cache/WAL 候选参数。
 普通 RAW/E01 仍直接写 source.db 并通过 import_state 门控；派生源 build/seal/rename 是独立路径。
 构建 helper 的 16384 页 checkpoint 常量不代表普通源连接也使用此值。
+
+### 导入窗口与波次观测
+
+`processUsage` 在 profiled workflow 前后捕获进程 CPU、OS read/write transfer 和 handles，
+其 wallTimeNs 与 workflow 的 elapsedNs 相同，排除后续 oracle。CPU 使用 core-equivalents
+（CPU 秒/墙钟秒）；2.0 表示约两个核心。进程计数包含同一进程其他并发工作，不能当作独占 job
+归因或把重叠窗口相加。OS transfer 不是设备物理 I/O；handlesAtStart/End 也不是窗口句柄峰值。
+API 不可用、省略字段、重复复用 profiler 窗口时，不补造零值。
+
+`mftReadParseWall` 测量每个分区当前波次的实际 read/parse 完成窗口；`mftWriterWall` 测量
+其后单 writer callback（包含 Catalog bookkeeping/进度）。当前 writer 在前一窗口等待，reader
+在后一窗口暂停；这不是持续 channel 的 queue latency。两者仍属于分区观测，跨分区汇总为 work-sum。
+`mftRead`/`mftParse` 是 worker 累计工作时间，不能直接与这两个 inclusive 父窗口相加。
+`mftPathCompute` 与 `mftPathSql` 分开记录，父级 `mftPathResolve` 因此也为 inclusive。
+
+`maxBufferedBatches/Records` 是单分区已读波次的驻留载荷计数，不是内存字节；聚合取单分区 max。
+`mainTableUpdatedRows` 当前记录路径物化实际 UPDATE 的受影响行，聚合求和；不能当作物理写入量。
+`sampledWalMaxBytes` 是批次/阶段边界采样到的 WAL 文件长度，聚合取 max，不保证捕获瞬时峰值。
+MFT staging、路径 SQL、commit 与 Timeline Graph 结束处均有对应观测边界。
+匿名 SQLite 排序文件峰值和设备物理 I/O 尚未采集，在 `observationLimits` 明确声明。
+这些均为 oracleVersion=2 / report schemaVersion=1 的可选兼容扩展，不修改业务 IPC 事件。

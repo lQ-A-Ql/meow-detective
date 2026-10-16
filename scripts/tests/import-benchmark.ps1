@@ -57,6 +57,24 @@ Assert-Equal $summary.Count 1 'One condition'
 Assert-Equal $summary[0].workflowSeconds.median 2 'Workflow remains source wall time'
 Assert-Equal ($summary[0].phases | Where-Object { $_.scope -eq 'partition-work-sum' }).seconds.median 3 'Partition work retains own scope'
 Assert-Equal @($summary[0].phases | Where-Object { $_.phase -eq 'mftRead' -and $_.scope -eq 'source-wall-inclusive' }).Count 0 'Partition sample is not source wall time'
+Assert-Equal @($summary[0].processMetrics | Where-Object { $_.availableForAllTrials }).Count 0 'Missing process counters are unavailable, not zero'
+$payload.report | Add-Member -NotePropertyName processUsage -NotePropertyValue ([pscustomobject]@{
+  scope = 'workflowProcessWindow'; wallTimeNs = 2e9; userCpuNs = 3e9; kernelCpuNs = 1e9
+  cpuCoreEquivalents = 2; processReadTransferBytes = 0; handlesAtStart = 40; handlesAtEnd = 41
+})
+$resources = @(Get-ImportBenchmarkSummary -Results @($trial))[0].processMetrics
+Assert-Equal ($resources | Where-Object { $_.metric -eq 'userCpuSeconds' }).statistics.median 3 'CPU uses seconds'
+Assert-Equal ($resources | Where-Object { $_.metric -eq 'cpuCoreEquivalents' }).statistics.median 2 'CPU core equivalents are not percentages'
+Assert-Equal ($resources | Where-Object { $_.metric -eq 'processReadTransferBytes' }).statistics.median 0 'Supported zero IO remains zero'
+Assert-Equal ($resources | Where-Object { $_.metric -eq 'processWriteTransferBytes' }).observations 0 'Unavailable IO is never synthesized'
+$payload.report.partitionAggregates[0] | Add-Member -NotePropertyName maxBufferedBatches -NotePropertyValue 4
+$payload.report.partitionAggregates[0] | Add-Member -NotePropertyName mainTableUpdatedRows -NotePropertyValue 82
+$payload.report.partitionAggregates[0] | Add-Member -NotePropertyName sampledWalMaxBytes -NotePropertyValue 0
+$counters = (@(Get-ImportBenchmarkSummary -Results @($trial))[0].phases |
+  Where-Object { $_.phase -eq 'mftRead' -and $_.scope -eq 'partition-work-sum' }).counters
+Assert-Equal ($counters | Where-Object { $_.metric -eq 'maxBufferedBatches' }).statistics.median 4 'Payload high water survives aggregation'
+Assert-Equal ($counters | Where-Object { $_.metric -eq 'mainTableUpdatedRows' }).partitionAggregation 'sum' 'Rows are counts rather than gauges'
+Assert-Equal ($counters | Where-Object { $_.metric -eq 'sampledWalMaxBytes' }).statistics.median 0 'Existing empty WAL is measured zero'
 
 $directory = Join-Path $root ('target/import-benchmark-test-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $directory

@@ -2,6 +2,65 @@ use super::*;
 use crate::import_pipeline::profile::PhaseRecorder;
 
 #[test]
+fn buffered_payload_gauges_use_partition_maximum_instead_of_parallel_sum() {
+    let profiler = ImportProfiler::default();
+    for (partition, batches, records) in [(0, 4, 40000), (1, 2, 20000)] {
+        profiler.record(
+            Some(partition),
+            Phase::MftReadParseWall,
+            Some(Duration::from_secs(1)),
+            State::Completed,
+            Counters {
+                buffered_batches: Some(batches),
+                buffered_records: Some(records),
+                updated_main_rows: Some(records),
+                sampled_wal_bytes: Some(records * 10),
+                ..Default::default()
+            },
+        );
+    }
+    let report = profiler.report();
+    let aggregate = &report.partition_aggregates[0];
+    assert_eq!(aggregate.max_buffered_batches, Some(4));
+    assert_eq!(aggregate.max_buffered_records, Some(40000));
+    assert_eq!(aggregate.main_table_updated_rows, Some(60000));
+    assert_eq!(aggregate.sampled_wal_max_bytes, Some(400000));
+    assert_eq!(aggregate.elapsed_ns, Some(2_000_000_000));
+    assert!(aggregate.inclusive);
+}
+
+#[test]
+fn wal_observation_distinguishes_unavailable_from_existing_wal_file_size() {
+    use crate::import_pipeline::profile::sample_wal_size;
+    let memory = rusqlite::Connection::open_in_memory().unwrap();
+    assert_eq!(sample_wal_size(&memory), None);
+    let temporary = tempfile::tempdir().unwrap();
+    let path = temporary.path().join("observed.db");
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    assert_eq!(sample_wal_size(&conn), None);
+    conn.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE sample(id INTEGER PRIMARY KEY); INSERT INTO sample VALUES(1)").unwrap();
+    let actual = std::fs::metadata(temporary.path().join("observed.db-wal"))
+        .unwrap()
+        .len();
+    assert!(actual > 0);
+    assert_eq!(sample_wal_size(&conn), Some(actual));
+}
+
+#[test]
+fn reused_profiler_does_not_publish_a_single_process_window_for_multiple_workflows() {
+    let profiler = ImportProfiler::default();
+    let usage = crate::runtime_resources::ProcessCounterSnapshot::default().usage_until(
+        crate::runtime_resources::ProcessCounterSnapshot::default(),
+        Duration::from_secs(1),
+    );
+    profiler.record_process_usage(usage.clone());
+    assert!(profiler.report().process_usage.is_some());
+    profiler.record_process_usage(usage.clone());
+    profiler.record_process_usage(usage);
+    assert!(profiler.report().process_usage.is_none());
+}
+
+#[test]
 fn timeline_write_parents_include_their_exclusive_children() {
     let profiler = ImportProfiler::default();
     for phase in [

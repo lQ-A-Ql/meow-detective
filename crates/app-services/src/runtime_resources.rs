@@ -1,3 +1,6 @@
+mod process_counters;
+pub(crate) use process_counters::ProcessCounterSnapshot;
+
 const DEFAULT_MEMORY_SOFT_LIMIT_MB: u64 = 4 * 1024;
 const DEFAULT_MEMORY_HARD_LIMIT_MB: u64 = 6 * 1024;
 

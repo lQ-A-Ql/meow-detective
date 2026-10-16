@@ -217,6 +217,29 @@ fn snapshot(conn: &Connection, sql: &str, replacements: &[(String, String)]) -> 
 }
 
 fn verify_report(report: &ImportBenchmarkReportDto, record_count: u64) {
+    let workflow = report
+        .samples
+        .iter()
+        .find(|sample| sample.phase == Phase::Workflow)
+        .unwrap();
+    let process_usage = report
+        .process_usage
+        .as_ref()
+        .expect("profiled workflow process window");
+    assert_eq!(Some(process_usage.wall_time_ns), workflow.elapsed_ns);
+    #[cfg(target_os = "windows")]
+    {
+        assert!(process_usage.user_cpu_ns.is_some());
+        assert!(process_usage.kernel_cpu_ns.is_some());
+        assert!(process_usage.process_read_transfer_bytes.is_some());
+        assert!(process_usage.handles_at_start.is_some());
+    }
+    let path_sql = report
+        .partition_aggregates
+        .iter()
+        .find(|sample| sample.phase == Phase::MftPathSql)
+        .unwrap();
+    assert_eq!(path_sql.main_table_updated_rows, Some(record_count - 14));
     let builds = report
         .partition_aggregates
         .iter()
@@ -246,6 +269,10 @@ fn verify_report(report: &ImportBenchmarkReportDto, record_count: u64) {
         Phase::Timeline,
         Phase::TimelineEvents,
         Phase::TimelineGraph,
+        Phase::MftReadParseWall,
+        Phase::MftWriterWall,
+        Phase::MftPathCompute,
+        Phase::MftPathSql,
         Phase::TimelineEventClear,
         Phase::TimelineEventCursor,
         Phase::TimelineEventInsert,

@@ -60,7 +60,7 @@ impl MftCatalog {
         conn: &Connection,
         data_source_id: &str,
         partition_index: usize,
-    ) -> rusqlite::Result<()> {
+    ) -> rusqlite::Result<super::numeric_paths::PathMaterializationStats> {
         update_mft_staging_paths_via_sqlite(
             conn,
             data_source_id,

@@ -6,7 +6,10 @@ use crate::parallel_enum::error::ParallelEnumError;
 use evidence_core::EvidenceReaderFactory;
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicBool, Ordering};
-use transport::dto::import_benchmark::ImportBenchmarkPhaseDto as Phase;
+use std::time::Instant;
+use transport::dto::import_benchmark::{
+    ImportBenchmarkPhaseDto as Phase, ImportBenchmarkStateDto as State,
+};
 
 pub(super) fn collect_batches(
     scan: &mut MftScan,
@@ -17,32 +20,8 @@ pub(super) fn collect_batches(
     mut consume: impl FnMut(MftBatch, &mut PhaseRecorder) -> Result<(), ParallelEnumError>,
 ) -> Result<(), ParallelEnumError> {
     let total = scan.total_records();
-    let workers = factory
-        .map_or(1, |factory| {
-            let capabilities = factory.capabilities();
-            if capabilities.independent_cursor && capabilities.stable_snapshot {
-                requested
-                    .clamp(1, 4)
-                    .min(capabilities.max_concurrent_readers.max(1))
-            } else {
-                1
-            }
-        })
-        .min(total.div_ceil(MFT_CHUNK_RECORDS).max(1) as usize);
-    let mut extra = Vec::new();
-    for _ in 1..workers {
-        let reader = profile.measure(Phase::MftReaderOpen, || {
-            scan.reopen(factory.expect("multiple readers require a factory"))
-        })?;
-        profile.count(
-            Phase::MftReaderOpen,
-            Counters {
-                opens: 1,
-                ..Default::default()
-            },
-        );
-        extra.push(reader);
-    }
+    let mut extra = open_extra_readers(scan, factory, requested, profile)?;
+    let workers = extra.len() + 1;
     let mut readers: Vec<_> = std::iter::once(scan)
         .chain(extra.iter_mut())
         .map(|scan| (scan, profile.fork()))
@@ -55,6 +34,7 @@ pub(super) fn collect_batches(
         }
         // Each wave contains at most `workers` chunks, including out-of-order results.
         // Reuse independent readers and their buffers across waves.
+        let wave_started = profile.start();
         let results: Vec<_> = readers
             .par_iter_mut()
             .enumerate()
@@ -63,6 +43,7 @@ pub(super) fn collect_batches(
                 (offset < total).then(|| read_batch(scan, offset, cancel, recorder))
             })
             .collect();
+        record_wave(profile, wave_started, &results);
         for result in results {
             let batch = result?;
             if !window.reserve(batch.start_record) {
@@ -79,10 +60,89 @@ pub(super) fn collect_batches(
                 return Err(ParallelEnumError::Cancelled);
             }
             start += batch.scanned_records;
-            consume(batch, profile)?;
+            let writer_started = profile.start();
+            let result = consume(batch, profile);
+            profile.record(Phase::MftWriterWall, writer_started, result_state(&result));
+            result?;
         }
     }
     Ok(())
+}
+
+fn open_extra_readers(
+    scan: &MftScan,
+    factory: Option<&dyn EvidenceReaderFactory>,
+    requested: usize,
+    profile: &mut PhaseRecorder,
+) -> Result<Vec<MftScan>, ParallelEnumError> {
+    let workers = factory
+        .map_or(1, |factory| {
+            let capabilities = factory.capabilities();
+            if capabilities.independent_cursor && capabilities.stable_snapshot {
+                requested
+                    .clamp(1, 4)
+                    .min(capabilities.max_concurrent_readers.max(1))
+            } else {
+                1
+            }
+        })
+        .min(scan.total_records().div_ceil(MFT_CHUNK_RECORDS).max(1) as usize);
+    let mut extra = Vec::new();
+    for _ in 1..workers {
+        let reader = profile.measure(Phase::MftReaderOpen, || {
+            scan.reopen(factory.expect("multiple readers require a factory"))
+        })?;
+        profile.count(
+            Phase::MftReaderOpen,
+            Counters {
+                opens: 1,
+                ..Default::default()
+            },
+        );
+        extra.push(reader);
+    }
+    Ok(extra)
+}
+
+fn result_state<T>(result: &Result<T, ParallelEnumError>) -> State {
+    match result {
+        Ok(_) => State::Completed,
+        Err(ParallelEnumError::Cancelled) => State::Cancelled,
+        Err(_) => State::Failed,
+    }
+}
+
+fn record_wave(
+    profile: &mut PhaseRecorder,
+    started: Option<Instant>,
+    results: &[Result<MftBatch, ParallelEnumError>],
+) {
+    if started.is_none() {
+        return;
+    }
+    let states = results.iter().map(result_state).collect::<Vec<_>>();
+    let state = if states.contains(&State::Failed) {
+        State::Failed
+    } else if states.contains(&State::Cancelled) {
+        State::Cancelled
+    } else {
+        State::Completed
+    };
+    profile.record(Phase::MftReadParseWall, started, state);
+    profile.count(
+        Phase::MftReadParseWall,
+        Counters {
+            buffered_batches: Some(results.iter().filter(|result| result.is_ok()).count() as u64),
+            buffered_records: Some(
+                results
+                    .iter()
+                    .filter_map(|result| result.as_ref().ok())
+                    .map(|batch| batch.records.len() as u64)
+                    .sum(),
+            ),
+            ..Default::default()
+        },
+    );
 }
 
 fn read_batch(
@@ -102,3 +162,7 @@ fn read_batch(
         records,
     })
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/parallel_enum/parallel_scan.rs"]
+mod tests;

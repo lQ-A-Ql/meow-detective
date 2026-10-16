@@ -21,12 +21,18 @@ fn benchmark_report_round_trip_preserves_scopes_and_missing_measurements() {
             full_image_opens: 0,
             filesystem_builds: 0,
             failures: 0,
+            max_buffered_batches: None,
+            max_buffered_records: None,
+            main_table_updated_rows: None,
+            sampled_wal_max_bytes: None,
             records_per_sec: None,
             logical_mb_per_sec: None,
         }],
         partition_aggregates: Vec::new(),
         rss_at_end_mb: 128,
         process_peak_rss_mb: 256,
+        process_usage: None,
+        observation_limits: Vec::new(),
     };
     let value = serde_json::to_value(&report).unwrap();
     assert_eq!(value["schemaVersion"], 1);
@@ -40,6 +46,44 @@ fn benchmark_report_round_trip_preserves_scopes_and_missing_measurements() {
 }
 
 #[test]
+fn workflow_process_usage_preserves_unavailable_and_supported_zero_counters() {
+    use transport::dto::import_benchmark::{
+        ImportBenchmarkProcessScopeDto, ImportBenchmarkProcessUsageDto,
+    };
+    let value = serde_json::json!({
+        "scope":"workflowProcessWindow", "wallTimeNs":1000000000,
+        "userCpuNs":1500000000, "kernelCpuNs":500000000, "cpuCoreEquivalents":2.0,
+        "processReadTransferBytes":0, "processWriteTransferBytes":10,
+        "handlesAtStart":40, "handlesAtEnd":42
+    });
+    let usage: ImportBenchmarkProcessUsageDto = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(
+        usage.scope,
+        ImportBenchmarkProcessScopeDto::WorkflowProcessWindow
+    );
+    assert_eq!(usage.process_read_transfer_bytes, Some(0));
+    assert_eq!(usage.process_read_operations, None);
+    assert_eq!(serde_json::to_value(usage).unwrap(), value);
+}
+
+#[test]
+fn observation_limits_round_trip_without_becoming_zero_measurements() {
+    use transport::dto::import_benchmark::ImportBenchmarkObservationLimitDto as Limit;
+    for limit in [
+        Limit::ProcessCountersSharedAcrossConcurrentJobs,
+        Limit::DevicePhysicalIoNotMeasured,
+        Limit::SqliteWalSizeSampledAtBatchBoundaries,
+        Limit::AnonymousSortFilePeakNotMeasured,
+        Limit::ChannelQueueDelayNotApplicableToWavePipeline,
+    ] {
+        assert_eq!(
+            serde_json::from_value::<Limit>(serde_json::to_value(limit).unwrap()).unwrap(),
+            limit
+        );
+    }
+}
+
+#[test]
 fn all_benchmark_phases_and_states_round_trip() {
     for phase in [
         Phase::Workflow,
@@ -50,11 +94,15 @@ fn all_benchmark_phases_and_states_round_trip() {
         Phase::MftParams,
         Phase::MftRead,
         Phase::MftParse,
+        Phase::MftReadParseWall,
+        Phase::MftWriterWall,
         Phase::MftStage,
         Phase::MftDirReaderBuild,
         Phase::MftSizeReconcile,
         Phase::MftDirBackfill,
         Phase::MftPathResolve,
+        Phase::MftPathCompute,
+        Phase::MftPathSql,
         Phase::MftValidate,
         Phase::MftCommit,
         Phase::FallbackReaderBuild,

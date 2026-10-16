@@ -91,6 +91,18 @@ impl PhaseRecorder {
             sample.failures = 0;
         }
     }
+
+    pub(crate) fn observe_wal(&mut self, phase: Phase, conn: &rusqlite::Connection) {
+        if self.profiler.is_some() {
+            self.count(
+                phase,
+                Counters {
+                    sampled_wal_bytes: super::sample_wal_size(conn),
+                    ..Counters::default()
+                },
+            );
+        }
+    }
 }
 
 impl Drop for PhaseRecorder {

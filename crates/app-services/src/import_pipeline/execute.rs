@@ -61,6 +61,7 @@ pub fn execute_import_job_profiled(
     use transport::dto::import_benchmark::{
         ImportBenchmarkPhaseDto as Phase, ImportBenchmarkStateDto as State,
     };
+    let process_start = crate::runtime_resources::ProcessCounterSnapshot::capture();
     let started = Instant::now();
     let result = execute_import_job_internal(
         conn,
@@ -78,10 +79,15 @@ pub fn execute_import_job_profiled(
     } else {
         State::Failed
     };
+    let elapsed = started.elapsed();
+    profiler.record_process_usage(process_start.usage_until(
+        crate::runtime_resources::ProcessCounterSnapshot::capture(),
+        elapsed,
+    ));
     profiler.record(
         None,
         Phase::Workflow,
-        Some(started.elapsed()),
+        Some(elapsed),
         state,
         profile::Counters::default(),
     );

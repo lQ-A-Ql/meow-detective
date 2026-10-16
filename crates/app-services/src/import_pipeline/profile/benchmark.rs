@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use transport::dto::import_benchmark::{
-    ImportBenchmarkPhaseDto as Phase, ImportBenchmarkReportDto, ImportBenchmarkSampleDto,
-    ImportBenchmarkStateDto as State,
+    ImportBenchmarkPhaseDto as Phase, ImportBenchmarkProcessUsageDto, ImportBenchmarkReportDto,
+    ImportBenchmarkSampleDto, ImportBenchmarkStateDto as State,
 };
 
 type SampleKey = (Option<usize>, Phase);
@@ -13,6 +13,13 @@ type SampleKey = (Option<usize>, Phase);
 #[derive(Debug, Clone, Default)]
 pub struct ImportProfiler {
     samples: Arc<Mutex<BTreeMap<SampleKey, Measurement>>>,
+    process_usage: Arc<Mutex<ProcessUsageState>>,
+}
+
+#[derive(Debug, Default)]
+struct ProcessUsageState {
+    windows: u64,
+    usage: Option<ImportBenchmarkProcessUsageDto>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -23,6 +30,10 @@ pub(crate) struct Counters {
     pub bytes: u64,
     pub opens: u64,
     pub builds: u64,
+    pub buffered_batches: Option<u64>,
+    pub buffered_records: Option<u64>,
+    pub updated_main_rows: Option<u64>,
+    pub sampled_wal_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +45,16 @@ pub(super) struct Measurement {
 }
 
 impl ImportProfiler {
+    pub(crate) fn record_process_usage(&self, usage: ImportBenchmarkProcessUsageDto) {
+        let mut state = self
+            .process_usage
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state.windows = state.windows.saturating_add(1);
+        // A reused profiler cannot attribute multiple process windows to one workflow.
+        state.usage = (state.windows == 1).then_some(usage);
+    }
+
     pub(crate) fn record(
         &self,
         partition: Option<usize>,
@@ -119,6 +140,19 @@ impl ImportProfiler {
                 .collect(),
             rss_at_end_mb: crate::runtime_resources::current_rss_mb(),
             process_peak_rss_mb: crate::runtime_resources::peak_rss_mb(),
+            process_usage: self
+                .process_usage
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .usage
+                .clone(),
+            observation_limits: vec![
+                transport::dto::import_benchmark::ImportBenchmarkObservationLimitDto::ProcessCountersSharedAcrossConcurrentJobs,
+                transport::dto::import_benchmark::ImportBenchmarkObservationLimitDto::DevicePhysicalIoNotMeasured,
+                transport::dto::import_benchmark::ImportBenchmarkObservationLimitDto::SqliteWalSizeSampledAtBatchBoundaries,
+                transport::dto::import_benchmark::ImportBenchmarkObservationLimitDto::AnonymousSortFilePeakNotMeasured,
+                transport::dto::import_benchmark::ImportBenchmarkObservationLimitDto::ChannelQueueDelayNotApplicableToWavePipeline,
+            ],
         }
     }
 }
@@ -151,6 +185,9 @@ impl Measurement {
                     | Phase::Timeline
                     | Phase::TimelineEvents
                     | Phase::TimelineGraph
+                    | Phase::MftReadParseWall
+                    | Phase::MftWriterWall
+                    | Phase::MftPathResolve
                     | Phase::FallbackEnumeration
             ),
             elapsed_ns: self
@@ -164,6 +201,10 @@ impl Measurement {
             full_image_opens: self.counters.opens,
             filesystem_builds: self.counters.builds,
             failures: self.failures,
+            max_buffered_batches: self.counters.buffered_batches,
+            max_buffered_records: self.counters.buffered_records,
+            main_table_updated_rows: self.counters.updated_main_rows,
+            sampled_wal_max_bytes: self.counters.sampled_wal_bytes,
             records_per_sec: seconds
                 .filter(|_| self.counters.scanned > 0)
                 .map(|s| self.counters.scanned as f64 / s),
@@ -182,6 +223,13 @@ impl Counters {
         self.bytes = self.bytes.saturating_add(other.bytes);
         self.opens = self.opens.saturating_add(other.opens);
         self.builds = self.builds.saturating_add(other.builds);
+        self.buffered_batches = self.buffered_batches.max(other.buffered_batches);
+        self.buffered_records = self.buffered_records.max(other.buffered_records);
+        self.sampled_wal_bytes = self.sampled_wal_bytes.max(other.sampled_wal_bytes);
+        self.updated_main_rows = match (self.updated_main_rows, other.updated_main_rows) {
+            (Some(a), Some(b)) => Some(a.saturating_add(b)),
+            (a, b) => a.or(b),
+        };
     }
 }
 

@@ -8,7 +8,9 @@ use super::validation::validate_mft_staging_shape;
 use crate::import_pipeline::profile::{Counters, PhaseRecorder};
 use crate::staging;
 use std::sync::atomic::{AtomicBool, Ordering};
-use transport::dto::import_benchmark::ImportBenchmarkPhaseDto as Phase;
+use transport::dto::import_benchmark::{
+    ImportBenchmarkPhaseDto as Phase, ImportBenchmarkStateDto as State,
+};
 
 pub(in crate::parallel_enum) fn enumerate_ntfs_mft_to_staging(
     conn: &rusqlite::Connection,
@@ -106,6 +108,7 @@ fn enumerate_scan(
                 ctx.conn.execute_batch("ROLLBACK").ok();
                 return Err(error);
             }
+            ctx.profile.observe_wal(Phase::MftCommit, ctx.conn);
             stats
         }
         Err(error) => {
@@ -145,6 +148,7 @@ fn scan_mft_transaction(
                     ctx.partition_index,
                 )
             })?;
+            profile.observe_wal(Phase::MftStage, ctx.conn);
             profile.count(
                 Phase::MftStage,
                 Counters {
@@ -169,9 +173,27 @@ fn scan_mft_transaction(
         ctx.volume_offset,
         ctx.profile,
     )?;
-    ctx.profile.measure(Phase::MftPathResolve, || {
+    let path_stats = ctx.profile.measure(Phase::MftPathResolve, || {
         catalog.update_staging_paths(ctx.conn, ctx.data_source_id, ctx.partition_index)
     })?;
+    ctx.profile.record_duration(
+        Phase::MftPathCompute,
+        Some(path_stats.compute_elapsed),
+        State::Completed,
+    );
+    ctx.profile.record_duration(
+        Phase::MftPathSql,
+        Some(path_stats.sql_elapsed),
+        State::Completed,
+    );
+    ctx.profile.count(
+        Phase::MftPathSql,
+        Counters {
+            updated_main_rows: Some(path_stats.updated_main_rows),
+            ..Default::default()
+        },
+    );
+    ctx.profile.observe_wal(Phase::MftPathSql, ctx.conn);
     let stats = catalog.stats();
     drop(catalog);
     ctx.profile.measure(Phase::MftValidate, || {
