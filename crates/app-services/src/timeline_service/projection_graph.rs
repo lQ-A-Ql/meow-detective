@@ -60,6 +60,7 @@ pub(super) fn populate_timeline_event_graph_with_batch(
             "timeline graph batch size must be greater than zero".to_string(),
         ));
     }
+    ensure_not_cancelled(cancel_token)?;
     let Some(case_id) = resolve_timeline_case_id(conn)? else {
         return Ok(Vec::new());
     };

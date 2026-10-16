@@ -26,6 +26,8 @@ pub enum ImportBenchmarkPhaseDto {
     Graph,
     Analysis,
     Timeline,
+    TimelineEvents,
+    TimelineGraph,
     Checkpoint,
 }
 

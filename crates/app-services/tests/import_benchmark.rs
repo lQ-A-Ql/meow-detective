@@ -244,6 +244,8 @@ fn verify_report(report: &ImportBenchmarkReportDto, record_count: u64) {
         Phase::Graph,
         Phase::Analysis,
         Phase::Timeline,
+        Phase::TimelineEvents,
+        Phase::TimelineGraph,
         Phase::Checkpoint,
         Phase::StagingMerge,
         Phase::Workflow,

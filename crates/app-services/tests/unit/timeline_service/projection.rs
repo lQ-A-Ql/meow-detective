@@ -587,3 +587,25 @@ fn cancelled_timeline_projection_does_not_claim_completion() {
         0
     );
 }
+
+#[test]
+fn cancelled_graph_projection_does_not_refresh_statistics_or_write_graph_rows() {
+    let connection = projection_connection();
+    insert_timeline_row(&connection, "event", "file");
+    let error =
+        populate_timeline_event_graph_with_batch_inner(&connection, 2, &AtomicBool::new(true))
+            .unwrap_err();
+    assert!(matches!(error, TimelineServiceError::Cancelled));
+    let statistics_tables: u64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='sqlite_stat1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(statistics_tables, 0);
+    let nodes: u64 = connection
+        .query_row("SELECT COUNT(*) FROM graph_nodes", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(nodes, 0);
+}

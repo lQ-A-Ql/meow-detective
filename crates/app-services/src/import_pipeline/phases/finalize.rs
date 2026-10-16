@@ -77,6 +77,7 @@ fn materialize_timeline(
         },
     )
     .map_err(CommandError::from_service_error)?;
+    record_timeline_subphases(ctx, &projection);
     emit_phase_profile(
         ctx.event_sink(),
         ctx.job_id,
@@ -102,6 +103,47 @@ fn materialize_timeline(
         );
     }
     Ok(projection.inserted_count)
+}
+
+fn record_timeline_subphases(
+    ctx: &ImportJobContext<'_>,
+    projection: &timeline_service::TimelineProjectionStats,
+) {
+    use super::super::profile::Counters;
+    use transport::dto::import_benchmark::{
+        ImportBenchmarkPhaseDto as Phase, ImportBenchmarkStateDto as State,
+    };
+    let Some(profiler) = ctx.profiler.as_ref() else {
+        return;
+    };
+    for (phase, elapsed, rows) in [
+        (
+            Phase::TimelineEvents,
+            projection.events_elapsed_ms,
+            projection.inserted_count,
+        ),
+        (Phase::TimelineGraph, projection.graph_elapsed_ms, 0),
+    ] {
+        let state = if projection.already_projected {
+            State::NotApplicable
+        } else if phase == Phase::TimelineGraph && !projection.graph_complete {
+            State::Failed
+        } else {
+            State::Completed
+        };
+        let duration = (!projection.already_projected)
+            .then(|| std::time::Duration::from_millis(u64::try_from(elapsed).unwrap_or(u64::MAX)));
+        profiler.record(
+            None,
+            phase,
+            duration,
+            state,
+            Counters {
+                staged: rows,
+                ..Counters::default()
+            },
+        );
+    }
 }
 
 pub(crate) fn emit_data_source_ready(

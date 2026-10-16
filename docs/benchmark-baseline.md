@@ -250,6 +250,11 @@ MFT 读取、解析、stage、目录 reader 初始化、大小校正、目录回
 不等于 E01 物理 I/O。没有物理 I/O 观测时省略该字段，未执行的索引构建为 `notApplicable`，
 不是零耗时成功。RSS end 与进程 lifetime 高水位分别记录，oracle 快照在采集 import RSS 后构造。
 
+`timelineEvents` 和 `timelineGraph` 进一步区分事件批量写入与图谱投影；后者包含
+分页查询、节点/关联写入及各批次提交。它们使用投影统计的毫秒观测值转换为纳秒字段，不代表纳秒精度。
+父级 `timeline` 仍是 inclusive wall time，不能再与两个子阶段相加。仅新增内部 benchmark
+phase，不增加业务 IPC 事件。
+
 `workflow` 覆盖导入用例入口到返回，包括 finalization 之后可能执行的自动制品提取；不包含
 队列等待、测试案件创建或 oracle 查询。旧 E01 runner、日志和 IPC 进度事件继续兼容。
 
