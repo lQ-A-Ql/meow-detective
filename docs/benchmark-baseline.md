@@ -342,3 +342,23 @@ Windows / metadataOnly / 4 workers。每条件预热 1 次、测量 5 次，并�
 `artifacts/timeline-optimization/20261016/atomic-index-acceptance.md` 与其同目录。
 事务、索引重建失败及强制终止恢复见 `persistence-sqlite/tests/timeline_bulk_indexes.rs`。
 下一步对照图谱节点写入与批次提交，并继续核对真实 E01 的整体耗时。
+
+### 分阶段优化的测量协议
+
+`scripts/baselines/import-optimization-protocol.json` 冻结正式测量至少 5 轮/1 预热、Release、
+2048 MiB 导入 RSS 门限、热点/总耗时收益目标与其他场景 median/p95 回退阈值。
+协议和 `import-optimization-contracts.json` 均计入源码输入摘要，运行前后还独立核对协议 SHA。
+契约清单锁定当前 oracleVersion=2 的导出列与允许的身份规范化，额外标出尚不在表摘要内的 scope、
+Search、partition UUID 和 reader/range 断言；不能把表摘要等价解释为已经覆盖全部语义。
+
+`run-import-benchmark.ps1` 的 `-RunKind` 为 Exploratory（默认）、Formal 或 Pressure。
+Formal 缺 Release、轮数或预热即拒绝；Pressure 保留单次压力口径。报告的 assessment 同时检查
+每条件轮数、唯一 round/sequence、warmup 分离、完整 oracle、失败状态与导入峰值 RSS，包含预热资源违规。
+单版本报告只证明选定输入的测量/资源检查，不判定性能提升或完整发布矩阵通过。
+显式传入空 FixturePath、目录、非首段或不完整 E01 集合必须在构建前拒绝，不能退回合成测试。
+
+`scripts/new-import-benchmark-snapshot.ps1` 用当前 Cargo 构建结果捕获独立可执行文件、代码、协议、
+工具链和显式输入 manifest，并在结束时复核。该入口只生成快照，不产生性能通过结论。
+baselineStrategyReference 只描述冻结基线，不会隐式启用未来 Path/channel/cache/WAL 候选参数。
+普通 RAW/E01 仍直接写 source.db 并通过 import_state 门控；派生源 build/seal/rename 是独立路径。
+构建 helper 的 16384 页 checkpoint 常量不代表普通源连接也使用此值。

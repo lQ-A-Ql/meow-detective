@@ -50,7 +50,8 @@ function Get-ImportBenchmarkCodeContext {
   $files = @(& git -c core.quotepath=false -C $RepoRoot ls-files --cached --others --exclude-standard)
   if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate code inputs' }
   # Capture clean files too: a commit during the run must not hide changed input.
-  $code = @($files | Where-Object { $_ -match '(\.(rs|sql|ps1|psm1|toml)$|Cargo\.lock$|\.cargo/)' } |
+  $code = @($files | Where-Object { $_ -match '(\.(rs|sql|ps1|psm1|toml)$|Cargo\.lock$|\.cargo/)' -or
+      $_ -match '^scripts/baselines/import-optimization-[^/]+\.json$' } |
     Sort-Object -Unique | ForEach-Object {
       $path = Join-Path $RepoRoot $_
       [ordered]@{ path = $_; sha256 = if (Test-Path -LiteralPath $path -PathType Leaf) {

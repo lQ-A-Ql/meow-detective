@@ -2,7 +2,7 @@
 .SYNOPSIS
 Repeatable NTFS import matrix with per-process measurements and correctness oracles.
 .EXAMPLE
-./scripts/run-import-benchmark.ps1 -Records 100000 -Runs 5 -WarmupRuns 1 -Release
+./scripts/run-import-benchmark.ps1 -Records 100000 -Runs 5 -WarmupRuns 1 -Release -RunKind Formal
 .EXAMPLE
 ./scripts/run-import-benchmark.ps1 -FixturePath C:\evidence\disk.E01 -Runs 5 -Release
 #>
@@ -16,26 +16,49 @@ param(
   [ValidateRange(0, 10)][int]$WarmupRuns = 1,
   [int]$Seed = 20261016,
   [string]$OutputDir = '',
+  [ValidateSet('Exploratory', 'Formal', 'Pressure')][string]$RunKind = 'Exploratory',
+  [string]$ProtocolPath = '',
   [switch]$Release
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-foreach ($module in @('Process', 'Input', 'Report')) {
+foreach ($module in @('Process', 'Input', 'Report', 'Protocol')) {
   Import-Module (Join-Path $PSScriptRoot "lib/ImportBenchmark.$module.psm1") -Force
 }
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 if (-not $env:OS -or $env:OS -ne 'Windows_NT') { throw 'This benchmark currently targets Windows' }
 if ($Workers.Count -eq 0 -or $Formats.Count -eq 0) { throw 'Select at least one worker budget and format' }
+if ($PSBoundParameters.ContainsKey('FixturePath') -and [string]::IsNullOrWhiteSpace($FixturePath)) {
+  throw 'An explicit FixturePath must not be empty; a missing real input is not a synthetic trial'
+}
+if (-not $ProtocolPath) { $ProtocolPath = Join-Path $PSScriptRoot 'baselines/import-optimization-protocol.json' }
+$protocol = Read-ImportBenchmarkProtocol -Path $ProtocolPath
+Assert-ImportBenchmarkRunConfiguration $protocol $RunKind $Runs $WarmupRuns ([bool]$Release)
 if ($FixturePath -and ($PSBoundParameters.ContainsKey('Records') -or $PSBoundParameters.ContainsKey('Formats'))) {
   throw 'Choose FixturePath or synthetic Records/Formats'
 }
-if ($FixturePath) { $FixturePath = (Resolve-Path -LiteralPath $FixturePath).Path }
+if ($FixturePath) {
+  $FixturePath = (Resolve-Path -LiteralPath $FixturePath).Path
+  $null = @(Get-ImportBenchmarkSegments -Path $FixturePath)
+}
 if (-not $OutputDir) { $OutputDir = Join-Path $repo 'artifacts/import-benchmarks' }
 $directory = Join-Path ([IO.Path]::GetFullPath($OutputDir)) ('matrix-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 $null = New-Item -ItemType Directory -Path $directory
 Write-Host "Benchmark artifacts: $directory"
 $code = Get-ImportBenchmarkCodeContext -RepoRoot $repo
 $codeJson = $code | ConvertTo-Json -Depth 6 -Compress
+$configurationPath = Join-Path $directory 'run-configuration.json'
+$configuration = [ordered]@{
+  schemaVersion = 1; protocolId = $protocol.definition.protocolId; protocolSha256 = $protocol.sha256
+  runKind = $RunKind; release = [bool]$Release; workers = @($Workers | Sort-Object -Unique)
+  runs = $Runs; warmupRuns = $WarmupRuns; seed = $Seed
+  fixturePath = if ($FixturePath) { $FixturePath } else { $null }
+  syntheticRecords = if ($FixturePath) { $null } else { $Records }
+  formats = if ($FixturePath) { @() } else { @($Formats | Sort-Object -Unique) }
+}
+[IO.File]::WriteAllText($configurationPath, ($configuration | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+$configurationHash = (Get-FileHash -LiteralPath $configurationPath -Algorithm SHA256).Hash.ToLowerInvariant()
+[IO.File]::WriteAllText((Join-Path $directory 'code-context.json'), ($code | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
 $executable = Get-ImportBenchmarkExecutable -RepoRoot $repo -Directory $directory -Release:$Release
 $executableHash = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
 $hostInfo = [ordered]@{ os = [Environment]::OSVersion.VersionString; processors = [Environment]::ProcessorCount
@@ -58,9 +81,11 @@ if ($FixturePath) { $paths = @($FixturePath) } else {
   $paths = @($Formats | Sort-Object -Unique | ForEach-Object { Join-Path $fixtureDirectory "synthetic.$_" })
 }
 $inputs = @($paths | ForEach-Object { Get-ImportBenchmarkManifest -Path $_ })
+[IO.File]::WriteAllText((Join-Path $directory 'inputs.json'), (ConvertTo-Json -InputObject $inputs -Depth 10), (New-Object Text.UTF8Encoding($false)))
 $conditions = @(foreach ($inputIndex in 0..($inputs.Count - 1)) {
   foreach ($budget in ($Workers | Sort-Object -Unique)) {
-    [pscustomobject]@{ key = "$($inputs[$inputIndex].format)-w$budget"; input = $inputIndex; workers = $budget }
+    [pscustomobject]@{ key = "$($inputs[$inputIndex].format)-w$budget"; input = $inputIndex; workers = $budget
+      oracleGroup = if ($FixturePath) { [string]$inputIndex } else { 'synthetic-logical-image' } }
   }
 })
 $results = New-Object 'System.Collections.Generic.List[object]'
@@ -104,6 +129,7 @@ if ($codeJson -cne ((Get-ImportBenchmarkCodeContext -RepoRoot $repo) | ConvertTo
 }
 $report = [ordered]@{
   schemaVersion = 2; completedUtc = [DateTime]::UtcNow.ToString('o'); codeContext = $code
+  protocol = $protocol; runKind = $RunKind; configuration = $configuration; configurationSha256 = $configurationHash
   executableSha256 = $executableHash; rustc = @(& rustc -Vv); cargo = @(& cargo -V)
   buildEnvironment = [ordered]@{ rustflags = $env:RUSTFLAGS; cargoBuildTarget = $env:CARGO_BUILD_TARGET
     cargoIncremental = $env:CARGO_INCREMENTAL; rayonNumThreads = $env:RAYON_NUM_THREADS }
@@ -116,6 +142,14 @@ $report = [ordered]@{
   statistics = 'median and nearest-rank p95; partition phase durations are work sums, never workflow wall time'
   summary = @(Get-ImportBenchmarkSummary -Results $results.ToArray()); warmups = $warmups.ToArray(); results = $results.ToArray()
 }
+$afterProtocol = Read-ImportBenchmarkProtocol -Path $protocol.path
+if ($afterProtocol.sha256 -cne $protocol.sha256 -or
+    (Get-FileHash -LiteralPath $configurationPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $configurationHash) {
+  throw 'Protocol or run configuration changed during measurement; reject all timings'
+}
+$report.assessment = Get-ImportBenchmarkRunAssessment -Protocol $protocol -RunKind $RunKind -Conditions $conditions `
+  -Results $results.ToArray() -Warmups $warmups.ToArray() -Runs $Runs -WarmupRuns $WarmupRuns -Release ([bool]$Release)
 $json = Join-Path $directory 'report.json'
 [IO.File]::WriteAllText($json, ($report | ConvertTo-Json -Depth 30), (New-Object Text.UTF8Encoding($false)))
 Write-Host "Validated matrix report: $json"
+if (-not $report.assessment.measurementGatesPassed) { throw "Benchmark gates failed; see $json" }

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "protocolId": "import-optimization-20261016-v1",
+  "baselineRevision": "b84b67b4d10da9b142320c295aae7a015ab3a4ee",
+  "measurement": {
+    "minimumFormalRuns": 5,
+    "minimumWarmupRuns": 1,
+    "formalRequiresRelease": true,
+    "pressureRuns": 1,
+    "seed": 20261016,
+    "workerBudgets": [1, 2, 4],
+    "analysisMode": "metadataOnly",
+    "platform": "windows",
+    "statistics": "median-and-nearest-rank-p95",
+    "cachePolicy": "input-hash-read-before-trials; no-os-cache-flush"
+  },
+  "gates": {
+    "maxImportProcessPeakRssMiB": 2048,
+    "minimumHotspotReductionPercent": 10,
+    "minimumWorkflowReductionPercent": 3,
+    "maximumOtherWorkflowRegressionPercent": 3,
+    "maximumP95RegressionPercent": 5,
+    "confirmationRuns": 5
+  },
+  "oracle": {
+    "payloadSchemaVersion": 2,
+    "oracleVersion": 2,
+    "reportSchemaVersion": 1,
+    "order": "canonical-primary-id; graph-nodes-before-edges",
+    "requiredFullTables": ["catalog", "graph", "timeline"],
+    "normalization": "generated case/source/partition-root and bounded generic filesystem identity map only",
+    "excludedRuntimeColumns": ["graph_nodes.created_at", "graph_edges.created_at"],
+    "additionalCoverage": "search-content-and-range-oracles-pending-S1.P3"
+  },
+  "coverage": {
+    "scope": "selected-inputs-only-until-full-release-matrix",
+    "syntheticRecordCounts": [100000, 500000, 1000000],
+    "formats": ["raw", "e01"],
+    "privateInputs": "explicit-path-or-environment-opt-in; absent-is-not-run",
+    "singleVersionPerformanceVerdict": "not-evaluated-without-baseline"
+  },
+  "baselineStrategyReference": {
+    "scope": "reference-only-not-runtime-configuration",
+    "mftPipeline": "boundedWave",
+    "pathMaterialization": "numericRowUpdate",
+    "mftChunkRecords": 10000,
+    "maximumMftReaders": 4,
+    "timelineGraphBatchRows": 20000,
+    "timelineCacheKiB": 1000000,
+    "freshSourceBuildWalAutocheckpointPages": 16384,
+    "ordinarySourceWalAutocheckpoint": "connection-default-not-build-helper-setting",
+    "schedulerMemoryReservationMiB": 4096,
+    "experimentalOverrides": "not-applied-until-owning-stage-implements-an-options-policy-adapter"
+  }
+}

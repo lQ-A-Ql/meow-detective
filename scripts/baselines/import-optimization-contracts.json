@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "baselineRevision": "b84b67b4d10da9b142320c295aae7a015ab3a4ee",
+  "oracleVersion": 2,
+  "querySource": "crates/app-services/tests/support/import_benchmark_queries.rs",
+  "tables": [
+    { "query": "CATALOG", "table": "file_entries", "columns": ["id", "parent_id", "path", "name", "entry_type", "size", "ext", "deleted", "hidden", "system", "read_only", "archive", "unix_mode", "encrypted", "created_at", "modified_at", "accessed_at", "changed_at", "hash_sha256", "partition_index"] },
+    { "query": "NODES", "table": "graph_nodes", "columns": ["id", "node_type", "label", "summary", "tags"] },
+    { "query": "EDGES", "table": "graph_edges", "columns": ["id", "source_id", "target_id", "edge_type", "confidence", "provenance"] },
+    { "query": "TIMELINE", "table": "timeline_events", "columns": ["id", "source_object_id", "event_type", "ts", "title", "description", "parser_id", "parser_version", "confidence", "source_attribution", "attrs"] }
+  ],
+  "canonicalization": {
+    "ordering": "canonical-primary-id; graph-nodes-before-edges",
+    "cellEncoding": "SQLite null/integer/real/text/blob type retained; JSON row plus newline fed to SHA-256",
+    "generatedIdentityMap": ["case", "source", "partition roots", "generic UUIDv4 files keyed by partition and path"],
+    "maximumIdentityEntries": 100000,
+    "maximumIdentityMapBytes": 67108864,
+    "nativeMftIds": "preserved",
+    "runtimeColumnsExcluded": ["graph_nodes.created_at", "graph_edges.created_at"],
+    "fieldsVerifiedOutsideCurrentTableHash": ["case/source registration scope", "partition UUID metadata", "source readiness", "Search coverage", "reader logical/physical byte semantics", "preview and extraction bytes"]
+  },
+  "invariants": [
+    { "id": "identity", "contract": "Native mft:partition:record IDs, root folding, sequence and namespace representative rules remain stable", "code": "crates/app-services/src/parallel_enum/ntfs/path_reconstruction.rs", "tests": "crates/app-services/tests/import_benchmark.rs" },
+    { "id": "path", "contract": "[Pn] prefixes, names, parents, deleted orphans and unresolved paths retain their existing values", "code": "crates/app-services/src/parallel_enum/ntfs/numeric_paths.rs", "tests": "crates/app-services/tests/import_benchmark.rs" },
+    { "id": "timestamps", "contract": "Preserve RFC3339 strings and precision, filtering, parser IDs/version, confidence, attrs and provenance", "code": "crates/app-services/src/timeline_service/projection.rs", "tests": "crates/app-services/tests/unit/timeline_service/projection.rs" },
+    { "id": "byte-views", "contract": "Logical bytes beyond initialized_size are zero; physical residue and container bytes are separate views", "code": "crates/fs-ntfs/src", "tests": "crates/fs-ntfs/tests" },
+    { "id": "scope", "contract": "Case/source/partition/LVM/derived view boundaries remain explicit; ready_metadata is not an ordinary filesystem source", "code": "crates/app-services/src/source_db", "tests": "crates/app-services/tests/source_db_ready_routing.rs" },
+    { "id": "reader", "contract": "Independent cursor and handles; immutable E01 state; segment changes invalidate an open plan", "code": "crates/app-services/src/source_runtime", "tests": "crates/app-services/tests/e01_open_plan.rs" },
+    { "id": "indexes", "contract": "Primary/unique constraints remain; cross-transaction file index deferral has a durable manifest; timeline index DDL shares the event transaction", "code": "crates/persistence-sqlite/src/repositories", "tests": "crates/persistence-sqlite/tests/timeline_bulk_indexes.rs" },
+    { "id": "ready", "contract": "Ordinary source visibility is import_state gated; derived source build/publish is a separate protocol", "code": "crates/app-services/src/import_pipeline/execute.rs", "tests": "crates/app-services/tests/unit/source_db.rs" },
+    { "id": "graph-retry", "contract": "Completed graph batches survive a later batch failure; retries remain idempotent and missing-target warnings remain retryable", "code": "crates/app-services/src/timeline_service/projection_graph.rs", "tests": "crates/app-services/tests/unit/timeline_service/projection.rs" },
+    { "id": "preview", "contract": "Read evidence by FileEntryId/range; media uses evidence-media handles and exports default to overwrite=false", "code": "crates/app-services/src/file_service", "tests": "crates/app-services/tests/unit/file_service" }
+  ]
+}
