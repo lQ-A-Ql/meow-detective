@@ -28,6 +28,15 @@ pub enum ImportBenchmarkPhaseDto {
     Timeline,
     TimelineEvents,
     TimelineGraph,
+    TimelineEventClear,
+    TimelineEventCursor,
+    TimelineEventInsert,
+    TimelineEventIndexes,
+    TimelineEventCommit,
+    TimelineGraphPage,
+    TimelineGraphNodes,
+    TimelineGraphEdges,
+    TimelineGraphCommit,
     Checkpoint,
 }
 

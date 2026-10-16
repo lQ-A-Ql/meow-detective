@@ -144,6 +144,44 @@ fn record_timeline_subphases(
             },
         );
     }
+    record_timeline_write_timings(profiler, projection);
+}
+
+fn record_timeline_write_timings(
+    profiler: &crate::import_pipeline::ImportProfiler,
+    projection: &timeline_service::TimelineProjectionStats,
+) {
+    use super::super::profile::Counters;
+    use transport::dto::import_benchmark::{
+        ImportBenchmarkPhaseDto as Phase, ImportBenchmarkStateDto as State,
+    };
+    let timings = &projection.timings;
+    for (phase, elapsed, graph) in [
+        (Phase::TimelineEventClear, timings.event_clear, false),
+        (Phase::TimelineEventCursor, timings.event_cursor, false),
+        (Phase::TimelineEventInsert, timings.event_insert, false),
+        (Phase::TimelineEventIndexes, timings.event_indexes, false),
+        (Phase::TimelineEventCommit, timings.event_commit, false),
+        (Phase::TimelineGraphPage, timings.graph_page, true),
+        (Phase::TimelineGraphNodes, timings.graph_nodes, true),
+        (Phase::TimelineGraphEdges, timings.graph_edges, true),
+        (Phase::TimelineGraphCommit, timings.graph_commit, true),
+    ] {
+        let state = if projection.already_projected {
+            State::NotApplicable
+        } else if graph && !projection.graph_complete {
+            State::Failed
+        } else {
+            State::Completed
+        };
+        profiler.record(
+            None,
+            phase,
+            (!projection.already_projected).then_some(elapsed),
+            state,
+            Counters::default(),
+        );
+    }
 }
 
 pub(crate) fn emit_data_source_ready(

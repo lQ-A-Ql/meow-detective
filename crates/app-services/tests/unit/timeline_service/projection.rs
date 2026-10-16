@@ -10,7 +10,12 @@ fn populate_timeline_event_graph_with_batch(
     batch_size: u32,
 ) -> Result<Vec<String>, TimelineServiceError> {
     let cancel_token = AtomicBool::new(false);
-    populate_timeline_event_graph_with_batch_inner(conn, batch_size, &cancel_token)
+    populate_timeline_event_graph_with_batch_inner(
+        conn,
+        batch_size,
+        &cancel_token,
+        &mut TimelineWriteTimings::default(),
+    )
 }
 
 fn projection_connection() -> Connection {
@@ -592,9 +597,13 @@ fn cancelled_timeline_projection_does_not_claim_completion() {
 fn cancelled_graph_projection_does_not_refresh_statistics_or_write_graph_rows() {
     let connection = projection_connection();
     insert_timeline_row(&connection, "event", "file");
-    let error =
-        populate_timeline_event_graph_with_batch_inner(&connection, 2, &AtomicBool::new(true))
-            .unwrap_err();
+    let error = populate_timeline_event_graph_with_batch_inner(
+        &connection,
+        2,
+        &AtomicBool::new(true),
+        &mut TimelineWriteTimings::default(),
+    )
+    .unwrap_err();
     assert!(matches!(error, TimelineServiceError::Cancelled));
     let statistics_tables: u64 = connection
         .query_row(

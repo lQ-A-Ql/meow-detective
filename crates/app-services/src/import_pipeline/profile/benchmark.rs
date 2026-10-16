@@ -149,6 +149,8 @@ impl Measurement {
                     | Phase::Enumeration
                     | Phase::Analysis
                     | Phase::Timeline
+                    | Phase::TimelineEvents
+                    | Phase::TimelineGraph
                     | Phase::FallbackEnumeration
             ),
             elapsed_ns: self

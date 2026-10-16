@@ -8,6 +8,8 @@ const TIMELINE_SELECT_COLUMNS: &str = "id, source_object_id, event_type, ts, tit
 const TIMELINE_ORDER_BY: &str = "ORDER BY ts DESC, id ASC";
 
 mod analysis_outputs;
+mod bulk_indexes;
+pub use bulk_indexes::with_deferred_empty_indexes;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimelineSortKey {

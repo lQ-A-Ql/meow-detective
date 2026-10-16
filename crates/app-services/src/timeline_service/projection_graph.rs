@@ -1,9 +1,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use chrono::Utc;
 use rusqlite::{params, Connection, Rows, Statement};
 
-use super::TimelineServiceError;
+use super::{TimelineServiceError, TimelineWriteTimings};
 
 const TIMELINE_GRAPH_BATCH: u32 = 20_000;
 pub(super) const FIRST_GRAPH_PAGE_SQL: &str = "SELECT id
@@ -46,14 +47,16 @@ pub(super) struct TimelineGraphRow {
 pub(super) fn populate_timeline_event_graph(
     conn: &Connection,
     cancel_token: &AtomicBool,
+    timings: &mut TimelineWriteTimings,
 ) -> Result<Vec<String>, TimelineServiceError> {
-    populate_timeline_event_graph_with_batch(conn, TIMELINE_GRAPH_BATCH, cancel_token)
+    populate_timeline_event_graph_with_batch(conn, TIMELINE_GRAPH_BATCH, cancel_token, timings)
 }
 
 pub(super) fn populate_timeline_event_graph_with_batch(
     conn: &Connection,
     batch_size: u32,
     cancel_token: &AtomicBool,
+    timings: &mut TimelineWriteTimings,
 ) -> Result<Vec<String>, TimelineServiceError> {
     if batch_size == 0 {
         return Err(TimelineServiceError::InvalidInput(
@@ -71,7 +74,9 @@ pub(super) fn populate_timeline_event_graph_with_batch(
 
     loop {
         ensure_not_cancelled(cancel_token)?;
+        let started = Instant::now();
         let rows = load_graph_page(conn, &case_id, cursor.as_deref(), batch_size)?;
+        timings.graph_page += started.elapsed();
         if rows.is_empty() {
             break;
         }
@@ -85,6 +90,7 @@ pub(super) fn populate_timeline_event_graph_with_batch(
             &created_at,
             require_existing_target,
             cancel_token,
+            timings,
         )?;
         cursor = Some(next_cursor);
     }
@@ -178,6 +184,7 @@ fn write_graph_batch(
     created_at: &str,
     require_existing_target: bool,
     cancel_token: &AtomicBool,
+    timings: &mut TimelineWriteTimings,
 ) -> Result<u64, TimelineServiceError> {
     let Some(first_id) = rows.first().map(|row| row.id.as_str()) else {
         return Ok(0);
@@ -188,6 +195,7 @@ fn write_graph_batch(
     let transaction = conn.unchecked_transaction().map_err(|error| {
         TimelineServiceError::Other(format!("begin timeline graph batch: {error}"))
     })?;
+    let started = Instant::now();
     transaction
         .execute(
             INSERT_GRAPH_NODES_FOR_RANGE_SQL,
@@ -196,21 +204,26 @@ fn write_graph_batch(
         .map_err(|error| {
             TimelineServiceError::Other(format!("timeline graph node batch insert: {error}"))
         })?;
+    timings.graph_nodes += started.elapsed();
     ensure_not_cancelled(cancel_token)?;
     let edge_sql = if require_existing_target {
         INSERT_GRAPH_EDGES_WITH_TARGET_FOR_RANGE_SQL
     } else {
         INSERT_GRAPH_EDGES_FOR_RANGE_SQL
     };
+    let started = Instant::now();
     let inserted_edges = transaction
         .execute(edge_sql, params![case_id, first_id, last_id, created_at])
         .map_err(|error| {
             TimelineServiceError::Other(format!("timeline graph edge batch insert: {error}"))
         })? as u64;
+    timings.graph_edges += started.elapsed();
     let skipped = rows.len() as u64 - inserted_edges.min(rows.len() as u64);
+    let started = Instant::now();
     transaction.commit().map_err(|error| {
         TimelineServiceError::Other(format!("commit timeline graph batch: {error}"))
     })?;
+    timings.graph_commit += started.elapsed();
     Ok(skipped)
 }
 

@@ -66,6 +66,15 @@ fn all_benchmark_phases_and_states_round_trip() {
         Phase::Timeline,
         Phase::TimelineEvents,
         Phase::TimelineGraph,
+        Phase::TimelineEventClear,
+        Phase::TimelineEventCursor,
+        Phase::TimelineEventInsert,
+        Phase::TimelineEventIndexes,
+        Phase::TimelineEventCommit,
+        Phase::TimelineGraphPage,
+        Phase::TimelineGraphNodes,
+        Phase::TimelineGraphEdges,
+        Phase::TimelineGraphCommit,
         Phase::Checkpoint,
     ] {
         assert_eq!(

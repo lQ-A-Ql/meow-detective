@@ -252,8 +252,15 @@ MFT 读取、解析、stage、目录 reader 初始化、大小校正、目录回
 
 `timelineEvents` 和 `timelineGraph` 进一步区分事件批量写入与图谱投影；后者包含
 分页查询、节点/关联写入及各批次提交。它们使用投影统计的毫秒观测值转换为纳秒字段，不代表纳秒精度。
-父级 `timeline` 仍是 inclusive wall time，不能再与两个子阶段相加。仅新增内部 benchmark
-phase，不增加业务 IPC 事件。
+`timeline`、`timelineEvents`、`timelineGraph` 均为 inclusive wall time，不与子阶段相加。
+事件阶段的 clear/cursor/insert/indexes/commit，以及图谱阶段的 page/nodes/edges/commit
+各自记录互不重叠的 `Duration`；其中 indexes 包含空表检查、暂缓和重建索引。
+仅新增内部 benchmark phase，不增加业务 IPC 事件。
+
+首次文件活动投影进入事务时若 Timeline 为空，会在现有事件事务的 savepoint 中暂缓普通
+非唯一二级索引，并在提交前按原始 SQL 全部重建。主键及唯一索引始终保留；已有事件的重投影
+保持索引在线。写入或重建出错、取消及外层事务回滚均恢复数据和索引，WAL 读连接只能看到
+已提交的完整状态；无需 schema 迁移或跨事务恢复清单。图谱仍逐批提交并保留既有重试语义。
 
 `workflow` 覆盖导入用例入口到返回，包括 finalization 之后可能执行的自动制品提取；不包含
 队列等待、测试案件创建或 oracle 查询。旧 E01 runner、日志和 IPC 进度事件继续兼容。
@@ -313,3 +320,25 @@ Catalog/Graph/Timeline 放入 Rust 内存。按规范化后的唯一主键排序
 
 合成数据卷仍以 resident 文件和空根目录索引为主；真实 INDX、碎片化、多分段 E01、
 恢复/崩溃注入和发布阈值需要独立验收。矩阵入口通过不等于 RAW/E01 加速目标已经达成。
+
+### Timeline 空表索引维护对照（2026-10-16）
+
+优化前为 `26592adc` 加相同细分计时；前后使用冻结的 Release 可执行文件，均为
+Windows / metadataOnly / 4 workers。每条件预热 1 次、测量 5 次，并打乱各轮执行顺序。
+以下均为中位数，单位为秒；每轮 Catalog / Graph / Timeline 行数及完整 SHA-256 相同。
+
+| 输入 | 总导入（前 → 后） | Timeline（前 → 后） |
+|---|---:|---:|
+| 十万条 RAW | 11.544 → 10.976 | 7.294 → 6.596 |
+| 十万条 E01 | 11.424 → 11.122 | 6.986 → 6.584 |
+| 真实 E01 | 20.594 → 21.030 | 2.918 → 2.689 |
+
+真实 E01 的 Timeline 局部收益未转化为整体收益，总导入中位数增加约 2.1%，不能宣称全面提速。
+百万条 RAW 只做单次压力对照：总导入 143.988 → 126.591，Timeline 95.031 → 80.116，
+峰值 RSS 1150 → 1407 MB，均低于本轮 2048 MB 门限。单次结果不作为稳定加速比例。
+原始输入、源码和冻结二进制在测量前后均复核；OS 缓存未清除。
+
+本地完整报告、p95、阶段分解及源码补丁保存在
+`artifacts/timeline-optimization/20261016/atomic-index-acceptance.md` 与其同目录。
+事务、索引重建失败及强制终止恢复见 `persistence-sqlite/tests/timeline_bulk_indexes.rs`。
+下一步对照图谱节点写入与批次提交，并继续核对真实 E01 的整体耗时。

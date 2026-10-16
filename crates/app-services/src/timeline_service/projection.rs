@@ -1,7 +1,7 @@
 use domain::{DataSourcePlatform, FileEntry};
 use persistence_sqlite::repositories::{
     source_meta_repo::{SourceMetaRepo, TIMELINE_CURSOR_REVISION_KEY},
-    timeline_repo::TimelineRepo,
+    timeline_repo::{with_deferred_empty_indexes, TimelineRepo},
 };
 use rayon::prelude::*;
 use rusqlite::{params, Connection};
@@ -14,7 +14,7 @@ use super::projection_meta::{
     ensure_projection_meta_table, is_projection_done, mark_projection_done, projection_identity,
     projection_source_tables_present, table_has_column, timeline_graph_tables_present,
 };
-use super::TimelineServiceError;
+use super::{TimelineServiceError, TimelineWriteTimings};
 
 const FILE_ACTIVITY_PROJECTION_KEY: &str = "file_activity_v2";
 const TIMELINE_GRAPH_PROJECTION_KEY: &str = "timeline_graph_v3";
@@ -26,6 +26,7 @@ pub struct TimelineProjectionStats {
     pub elapsed_ms: u128,
     pub events_elapsed_ms: u128,
     pub graph_elapsed_ms: u128,
+    pub timings: TimelineWriteTimings,
     pub already_projected: bool,
     pub graph_complete: bool,
     pub warnings: Vec<String>,
@@ -81,11 +82,13 @@ pub fn materialize_file_activity_with_identity(
 
     with_timeline_page_cache(conn, || {
         let started = Instant::now();
+        let mut timings = TimelineWriteTimings::default();
         let events_started = Instant::now();
         let inserted_count = if file_events_done {
             0
         } else {
-            let inserted = replace_file_activity_events(conn, platform, cancel_token)?;
+            let inserted =
+                replace_file_activity_events(conn, platform, cancel_token, &mut timings)?;
             mark_projection_done(conn, FILE_ACTIVITY_PROJECTION_KEY, inserted, input_identity)?;
             inserted
         };
@@ -94,7 +97,7 @@ pub fn materialize_file_activity_with_identity(
         let warnings = if graph_done {
             Vec::new()
         } else {
-            populate_graph_non_fatal(conn, cancel_token, input_identity)?
+            populate_graph_non_fatal(conn, cancel_token, input_identity, &mut timings)?
         };
         let graph_elapsed_ms = graph_started.elapsed().as_millis();
         let graph_complete = !graph_supported
@@ -104,6 +107,7 @@ pub fn materialize_file_activity_with_identity(
             elapsed_ms: started.elapsed().as_millis(),
             events_elapsed_ms,
             graph_elapsed_ms,
+            timings,
             already_projected: false,
             graph_complete,
             warnings,
@@ -133,17 +137,25 @@ fn replace_file_activity_events(
     conn: &Connection,
     platform: DataSourcePlatform,
     cancel_token: &AtomicBool,
+    timings: &mut TimelineWriteTimings,
 ) -> Result<u64, TimelineServiceError> {
-    let transaction = conn.unchecked_transaction().map_err(|error| {
+    let mut transaction = conn.unchecked_transaction().map_err(|error| {
         TimelineServiceError::Other(format!("begin file activity replacement: {error}"))
     })?;
-    clear_previous_file_projection(&transaction)?;
-    let inserted = insert_file_activity_batched(&transaction, platform, cancel_token)?;
+    let (inserted, index_time) = with_deferred_empty_indexes(&mut transaction, |conn| {
+        let started = Instant::now();
+        clear_previous_file_projection(conn)?;
+        timings.event_clear += started.elapsed();
+        insert_file_activity_batched(conn, platform, cancel_token, timings)
+    })?;
+    timings.event_indexes += index_time;
     ensure_not_cancelled(cancel_token)?;
     SourceMetaRepo::new(&transaction).bump_revision(TIMELINE_CURSOR_REVISION_KEY)?;
+    let started = Instant::now();
     transaction.commit().map_err(|error| {
         TimelineServiceError::Other(format!("commit file activity replacement: {error}"))
     })?;
+    timings.event_commit += started.elapsed();
     Ok(inserted)
 }
 
@@ -151,12 +163,21 @@ fn insert_file_activity_batched(
     conn: &Connection,
     platform: DataSourcePlatform,
     cancel_token: &AtomicBool,
+    timings: &mut TimelineWriteTimings,
 ) -> Result<u64, TimelineServiceError> {
     let mut cursor = String::new();
     let mut inserted = 0;
-    while let Some(next_cursor) = next_source_cursor(conn, &cursor, SOURCE_BATCH_SIZE)? {
+    loop {
+        let started = Instant::now();
+        let next_cursor = next_source_cursor(conn, &cursor, SOURCE_BATCH_SIZE)?;
+        timings.event_cursor += started.elapsed();
+        let Some(next_cursor) = next_cursor else {
+            break;
+        };
         ensure_not_cancelled(cancel_token)?;
+        let started = Instant::now();
         inserted += insert_source_range(conn, platform, &cursor, &next_cursor)?;
+        timings.event_insert += started.elapsed();
         cursor = next_cursor;
     }
     Ok(inserted)
@@ -336,8 +357,9 @@ fn populate_graph_non_fatal(
     conn: &Connection,
     cancel_token: &AtomicBool,
     input_identity: &str,
+    timings: &mut TimelineWriteTimings,
 ) -> Result<Vec<String>, TimelineServiceError> {
-    match super::projection_graph::populate_timeline_event_graph(conn, cancel_token) {
+    match super::projection_graph::populate_timeline_event_graph(conn, cancel_token, timings) {
         Ok(warnings) => {
             if warnings.is_empty() {
                 mark_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, 0, input_identity)?;

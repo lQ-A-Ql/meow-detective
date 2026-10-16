@@ -2,6 +2,35 @@ use super::*;
 use crate::import_pipeline::profile::PhaseRecorder;
 
 #[test]
+fn timeline_write_parents_include_their_exclusive_children() {
+    let profiler = ImportProfiler::default();
+    for phase in [
+        Phase::Timeline,
+        Phase::TimelineEvents,
+        Phase::TimelineGraph,
+        Phase::TimelineEventInsert,
+        Phase::TimelineGraphCommit,
+    ] {
+        profiler.record(
+            None,
+            phase,
+            Some(Duration::from_secs(1)),
+            State::Completed,
+            Counters::default(),
+        );
+    }
+    for sample in profiler.report().samples {
+        assert_eq!(
+            sample.inclusive,
+            matches!(
+                sample.phase,
+                Phase::Timeline | Phase::TimelineEvents | Phase::TimelineGraph
+            )
+        );
+    }
+}
+
+#[test]
 fn partition_work_is_aggregated_without_double_counting_source_wall_time() {
     let profiler = ImportProfiler::default();
     profiler.record(

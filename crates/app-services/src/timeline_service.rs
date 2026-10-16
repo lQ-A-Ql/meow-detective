@@ -6,6 +6,7 @@ mod pagination;
 mod projection;
 mod projection_graph;
 mod projection_meta;
+mod projection_timing;
 mod query;
 
 pub use error::TimelineServiceError;
@@ -24,6 +25,7 @@ pub use projection::{
     materialize_file_activity_with_identity, project_and_store_file_activity,
     TimelineProjectionStats,
 };
+pub use projection_timing::TimelineWriteTimings;
 pub use query::{
     count_timeline_events_for_case, get_timeline_event_by_id, get_timeline_event_by_id_for_case,
     query_timeline, query_timeline_filtered, TimelineQuery,
