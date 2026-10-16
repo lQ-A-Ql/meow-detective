@@ -393,11 +393,14 @@ MFT staging、路径 SQL、commit 与 Timeline Graph 结束处均有对应观测
 exit/timeout/process status 和短 TEMP；失败轮不进入成功汇总。重试必须新建整个矩阵，不能挑换失败轮。
 正式矩阵中不要编译、编辑或提交；确认回退时另开五轮矩阵。单轮筛选与 Pressure 不能作收益结论。
 
-新增的 `semanticOracle.version=1` 按 `import-optimization-semantic-oracle.json` 独立版本管理。
+新增的 `semanticOracle.version=2` 按 `import-optimization-semantic-oracle.json` 独立版本管理。
 保留完整 v2 表摘要与身份规范化，只增加每列/64 个 ID 桶的变异定位、文件/目录/删除/parent/root 统计、
 元数据及正文 Search 文档集合/固定查询、实际 source-scoped 预览与提取摘要。内容索引与元数据索引分开。
 正文覆盖跳过原因、投影 revision/游标/幂等、E01 分段/分区/派生窗口/初始化长度字节语义另有定向测试。
 Oracle 位于 workflow 和导入 RSS 采集之后；它的开销、进程退出与清理不计入导入时间。
+Search 查询结果在磁盘临时库中按规范化 ID 排序后摘要，并拒绝重复文档 ID。v1 曾直接沿用 Search
+的原始 UUID tie-break 顺序，在独立案件的相同排序键下产生假阳性，失败矩阵与 v1 契约提交均保留。
+实际 API 排序、跨源合并、游标及 revision 行为由服务回归验证；不扩大身份规范化或更改 v2 表摘要。
 
 原 resident/空根目录索引样本继续明确标识。`FORENSICS_IMPORT_BENCH_SCENARIO=indexed-fragmented`
 启用独立的固定布局：真实 INDX、嵌套 parent、分散时间戳、deleted、ATTRIBUTE_LIST 外部 DATA、

@@ -106,11 +106,15 @@ pub(super) fn capture(
         "Search coverage differs from Catalog ids"
     );
     let preview = preview(conn, case_conn, root, case, source, normalizer);
-    json!({"version": 1, "catalog": catalog(conn, normalizer), "search": results, "contentSearch": content_results, "previewExtraction": preview,
+    json!({"version": 2, "catalog": catalog(conn, normalizer), "search": results, "contentSearch": content_results, "previewExtraction": preview,
         "scope": "post-workflow; canonical local document ids; no Tantivy segment bytes; preview first three readable eligible files"})
 }
 
-fn search_ids(index: &search::SearchIndex, query: &str, normalizer: &Normalizer) -> Json {
+pub(super) fn search_ids(
+    index: &search::SearchIndex,
+    query: &str,
+    normalizer: &Normalizer,
+) -> Json {
     let options = search::FileSearchOptions {
         query: query.into(),
         match_path: true,
@@ -119,7 +123,13 @@ fn search_ids(index: &search::SearchIndex, query: &str, normalizer: &Normalizer)
     };
     let session = index.file_query_session(&options).unwrap();
     let mut after = None;
-    let mut hash = Sha256::new();
+    // Search uses generated raw ids as a final tie-breaker. Across independent
+    // cases those ids are intentionally different. Fingerprint the canonical
+    // result set in a disk-backed sorter; API ordering is verified separately.
+    let temporary = tempfile::tempdir().unwrap();
+    let ids = Connection::open(temporary.path().join("search-ids.db")).unwrap();
+    ids.execute_batch("PRAGMA cache_size=-16384; PRAGMA journal_mode=OFF; CREATE TABLE ids(id TEXT PRIMARY KEY) WITHOUT ROWID; BEGIN;").unwrap();
+    let mut insert = ids.prepare("INSERT INTO ids VALUES(?1)").unwrap();
     let mut count = 0u64;
     let mut coverage = [0u8; 32];
     loop {
@@ -131,13 +141,24 @@ fn search_ids(index: &search::SearchIndex, query: &str, normalizer: &Normalizer)
         for hit in page.hits {
             after = Some(hit.after_key());
             let id = normalizer.normalize(hit.file_id());
-            hash.update(id.as_bytes());
-            hash.update(b"\n");
+            insert.execute([&id]).expect("duplicate Search document id");
             add_id(&mut coverage, &id);
             count += 1;
         }
     }
-    json!({"query": query, "documents": count, "idsSha256": hex::encode(hash.finalize()), "coverageSetSha256": hex::encode(coverage)})
+    drop(insert);
+    ids.execute_batch("COMMIT").unwrap();
+    let mut hash = Sha256::new();
+    for id in ids
+        .prepare("SELECT id FROM ids ORDER BY id COLLATE BINARY")
+        .unwrap()
+        .query_map([], |r| r.get::<_, String>(0))
+        .unwrap()
+    {
+        hash.update(id.unwrap().as_bytes());
+        hash.update(b"\n");
+    }
+    json!({"query": query, "documents": count, "idsOrder":"canonical-id-binary", "idsSha256": hex::encode(hash.finalize()), "coverageSetSha256": hex::encode(coverage)})
 }
 
 // Order independent 256-bit sum of SHA256(id), with document count checked separately.

@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
-  "sidecarVersion": 1,
+  "sidecarVersion": 2,
+  "previousSidecarContractRevision": "50ad00c4e72b4349c83345a6bd6ae3276aeef887",
   "legacyOracleVersion": 2,
   "timingScope": "after workflow and import RSS capture",
   "analysisModes": ["metadataOnly", "fullContent"],
@@ -15,7 +16,7 @@
   "search": {
     "indexes": ["metadata", "content when present"],
     "queries": ["", "file-16", "hello", "__oracle_absent_20261016__"],
-    "ids": "canonical local file ids, ordered by actual Search Path order and raw local id tie-break",
+    "ids": "unique canonical local file ids, disk-sorted in SQLite BINARY order; generated raw UUID tie order excluded; actual API cursor/sort behavior tested separately",
     "coverageSetSha256": "order-independent 256-bit little-endian sum of SHA256(canonical id); count checked separately; not an evidence byte digest",
     "coverage": "all metadata index document ids must equal Catalog ids as a multiset; Tantivy segment files excluded",
     "contentCoverage": "published content index document set; skip-reason, replacement and cancellation tests remain in content_index integration suite"

@@ -2,6 +2,50 @@ use super::*;
 use evidence_core::FileSystemReader;
 
 #[test]
+fn search_oracle_canonicalizes_generated_id_ties_without_changing_membership() {
+    fn capture(reverse: bool) -> serde_json::Value {
+        let temp = tempfile::tempdir().unwrap();
+        let index = search::SearchIndex::create(temp.path()).unwrap();
+        let mut writer = index.metadata_writer().unwrap();
+        let low = "00000000-0000-4000-8000-000000000001";
+        let high = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+        let raw = if reverse { [high, low] } else { [low, high] };
+        let documents: Vec<_> = raw
+            .iter()
+            .zip(["Same.txt", "same.txt"])
+            .map(|(id, path)| search::SearchFileDocument {
+                file_id: (*id).into(),
+                path: path.into(),
+                name: path.into(),
+                extension: "txt".into(),
+                entry_type: "file".into(),
+                size: Some(1),
+                modified_at: None,
+                deleted: false,
+                hidden: false,
+                system: false,
+                encrypted: false,
+            })
+            .collect();
+        writer.add_documents(&documents).unwrap();
+        writer.commit().unwrap();
+        let conn = Connection::open_in_memory().unwrap();
+        let normalizer = streaming::configure(
+            &conn,
+            vec![
+                (raw[0].into(), "__file_A__".into()),
+                (raw[1].into(), "__file_B__".into()),
+            ],
+        );
+        semantics::search_ids(&index, "same", &normalizer)
+    }
+    let forward = capture(false);
+    let reversed = capture(true);
+    assert_eq!(forward["documents"], 2);
+    assert_eq!(forward, reversed);
+}
+
+#[test]
 fn catalog_sidecar_localizes_each_business_field_mutation() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("fixture.raw");

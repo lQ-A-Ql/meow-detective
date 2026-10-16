@@ -39,7 +39,7 @@ $report = [ordered]@{ schemaVersion = 1; status = 'running'; definition = $defin
   rustc = @(& rustc -Vv); cargo = @(& cargo -V); runKind = $RunKind; buildProfile = 'release'
   environment = @{ tempRoot = $TempRoot; cache = 'input hashes read before trials; full import warmup; no OS cache flush'; processIsolation = 'one fresh process/case per trial'
     background = @('cargo','rustc','forensics-desktop' | ForEach-Object { @(Get-Process -Name $_ -ErrorAction SilentlyContinue | Select-Object Id,ProcessName) })
-    retryPolicy = 'fail-fast; retain logs, process status and failed case; rerun entire matrix with new id, never replace failed trial'
+    retryPolicy = 'fail-fast; retain logs/status/payload; Rust panic and timeout retain case; cross-trial mismatch after successful child cleanup retains fingerprints; rerun whole matrix with new id'
     rustflags = $env:RUSTFLAGS; rayon = $env:RAYON_NUM_THREADS; cpu = [Environment]::ProcessorCount }
   trials = @(); summary = @(); comparisons = @(); assessment = $null; failure = $null }
 function Save-Report { [IO.File]::WriteAllText((Join-Path $directory 'report.json'), ($report | ConvertTo-Json -Depth 40), (New-Object Text.UTF8Encoding($false))) }
@@ -61,6 +61,7 @@ try {
         -Arguments @('matrix_import_profile','--exact','--ignored','--nocapture','--test-threads=1') `
         -Environment @{ TEMP=$scratch; TMP=$scratch; FORENSICS_IMPORT_FIXTURE=$inputs[$c.input].path; FORENSICS_IMPORT_BENCH_WORKERS=$c.workers; FORENSICS_IMPORT_BENCH_ANALYSIS=$c.mode }
       $payload = Read-ImportBenchmarkPayload $log
+      $current.payload=$payload
       Assert-ImportBenchmarkPayload $payload $c.workers
       $actualMode = if ($payload.PSObject.Properties['executionMode']) { $payload.executionMode } else { 'metadataOnly' }
       if ($actualMode -cne $c.mode) { throw 'Executable ignored requested analysis mode' }
