@@ -168,6 +168,7 @@ fn partition_root_names_reject_misleading_filesystem_names() {
         name: "/".to_string(),
         kind_label: "NTFS".to_string(),
         type_guid: None,
+        uuid: None,
         offset: 2048,
         length: 4096,
         status: crate::datasource_service::PartitionStatus::Supported,

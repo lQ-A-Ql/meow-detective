@@ -178,6 +178,8 @@ pub struct PartitionRecord {
     pub name: String,
     pub kind_label: String,
     pub type_guid: Option<String>,
+    /// GPT unique partition GUID; never a partition type GUID or filesystem ID.
+    pub uuid: Option<String>,
     pub offset: u64,
     pub length: u64,
     pub status: PartitionStatus,

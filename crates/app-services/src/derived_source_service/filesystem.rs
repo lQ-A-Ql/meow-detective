@@ -1,3 +1,6 @@
+mod partition_placeholders;
+use partition_placeholders::seed_placeholders;
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
@@ -396,6 +399,7 @@ fn expand_one_rbd_lvm_pool(
             name: format!("{} / {}", identity.vg_name, identity.lv_name),
             kind_label: format!("{:?}", fs_candidate.kind),
             type_guid: None,
+            uuid: None,
             offset: pool_candidate.offset,
             length: volume.size_bytes,
             status: PartitionStatus::Supported,
@@ -468,27 +472,6 @@ fn open_rbd_descriptor(
 ) -> DerivedSourceResult<RbdEvidenceReader> {
     open_rbd_head_image(descriptor, Box::new(provider.clone()))
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))
-}
-
-fn seed_placeholders(
-    conn: &rusqlite::Connection,
-    data_source_id: &DataSourceId,
-    partitions: &[PartitionRecord],
-    cancel_token: &AtomicBool,
-) -> DerivedSourceResult<HashMap<usize, domain::FileEntryId>> {
-    let mut placeholders = HashMap::new();
-    for partition in partitions {
-        ensure_not_cancelled(cancel_token)?;
-        let root = file_service::insert_partition_placeholder_root(
-            conn,
-            data_source_id,
-            partition.index,
-            &partition.name,
-            "supported",
-        )?;
-        placeholders.insert(partition.index, root);
-    }
-    Ok(placeholders)
 }
 
 fn ensure_not_cancelled(cancel_token: &AtomicBool) -> DerivedSourceResult<()> {

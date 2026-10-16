@@ -42,6 +42,8 @@ pub fn get_data_sources_for_case(
             let file_count = FileRepo::new(source_conn)
                 .count_by_data_source(&source.id)
                 .ok();
+            let partition_uuids =
+                PartitionRepo::new(source_conn).uuids_for_data_source(&source.id.0)?;
             let partitions = PartitionRepo::new(source_conn)
                 .find_by_data_source(&source.id.0)
                 .map(|items| {
@@ -55,6 +57,7 @@ pub fn get_data_sources_for_case(
                             offset: item.offset,
                             length: item.length,
                             type_guid: item.type_guid,
+                            uuid: partition_uuids.get(&item.partition_index).cloned(),
                             filesystem: item.filesystem,
                             unlock_hint: item.unlock_hint,
                         })

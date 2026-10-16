@@ -1,5 +1,8 @@
 use crate::connection::DbResult;
 use rusqlite::{params, Connection};
+use std::collections::BTreeMap;
+
+mod uuid_metadata;
 
 #[derive(Debug, Clone)]
 pub struct DataSourcePartitionRecord {
@@ -35,6 +38,19 @@ impl<'a> PartitionRepo<'a> {
         &self,
         data_source_id: &str,
         records: &[DataSourcePartitionRecord],
+    ) -> DbResult<()> {
+        self.replace_for_data_source_with_uuids(data_source_id, records, &BTreeMap::new())
+    }
+
+    pub fn uuids_for_data_source(&self, data_source_id: &str) -> DbResult<BTreeMap<u32, String>> {
+        uuid_metadata::read(self.conn, data_source_id)
+    }
+
+    pub fn replace_for_data_source_with_uuids(
+        &self,
+        data_source_id: &str,
+        records: &[DataSourcePartitionRecord],
+        uuids: &BTreeMap<u32, String>,
     ) -> DbResult<()> {
         let tx = self.conn.unchecked_transaction()?;
         tx.execute(
@@ -73,6 +89,7 @@ impl<'a> PartitionRepo<'a> {
             }
         }
 
+        uuid_metadata::replace(&tx, data_source_id, uuids)?;
         tx.commit()?;
         Ok(())
     }
@@ -220,10 +237,21 @@ impl<'a> PartitionRepo<'a> {
 
     /// 删除数据源的所有分区
     pub fn delete_by_data_source(&self, data_source_id: &str) -> DbResult<usize> {
-        let count = self.conn.execute(
+        // Deletion is also used inside caller-owned case transactions.
+        let transaction = self
+            .conn
+            .is_autocommit()
+            .then(|| self.conn.unchecked_transaction())
+            .transpose()?;
+        let connection = transaction.as_deref().unwrap_or(self.conn);
+        let count = connection.execute(
             "DELETE FROM data_source_partitions WHERE data_source_id = ?1",
             params![data_source_id],
         )?;
+        uuid_metadata::replace(connection, data_source_id, &BTreeMap::new())?;
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
         Ok(count)
     }
 }

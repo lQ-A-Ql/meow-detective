@@ -1,5 +1,7 @@
 use super::*;
 
+const PARTITION_UUID: &str = "00112233-4455-6677-8899-aabbccddeeff";
+
 fn setup_db() -> rusqlite::Connection {
     let conn = crate::connection::open_in_memory().unwrap();
     conn.execute_batch(
@@ -184,4 +186,98 @@ fn mark_bitlocker_catalog_ready_updates_only_the_scoped_partition() {
             .status,
         "ok"
     );
+}
+
+fn uuid_connection() -> Connection {
+    let connection = setup_db();
+    connection
+        .execute_batch("CREATE TABLE source_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)")
+        .unwrap();
+    connection
+}
+
+#[test]
+fn partition_uuids_round_trip_without_changing_partition_row_ids() {
+    let connection = uuid_connection();
+    let repo = PartitionRepo::new(&connection);
+    let records = vec![make_partition("row-1", "source[1]", 1, "System")];
+    let uuids = BTreeMap::from([(1, PARTITION_UUID.to_string())]);
+    repo.replace_for_data_source_with_uuids("source[1]", &records, &uuids)
+        .unwrap();
+    assert_eq!(repo.uuids_for_data_source("source[1]").unwrap(), uuids);
+    assert!(repo.uuids_for_data_source("source1").unwrap().is_empty());
+    assert_eq!(
+        repo.find_by_data_source("source[1]").unwrap()[0].id,
+        "row-1"
+    );
+    repo.replace_for_data_source("source[1]", &records).unwrap();
+    assert!(repo.uuids_for_data_source("source[1]").unwrap().is_empty());
+}
+
+#[test]
+fn invalid_uuid_rolls_back_partition_and_identity_replacement() {
+    let connection = uuid_connection();
+    let repo = PartitionRepo::new(&connection);
+    repo.replace_for_data_source_with_uuids(
+        "source",
+        &[make_partition("row", "source", 1, "Original")],
+        &BTreeMap::from([(1, PARTITION_UUID.into())]),
+    )
+    .unwrap();
+    assert!(repo
+        .replace_for_data_source_with_uuids(
+            "source",
+            &[make_partition("row", "source", 1, "Changed")],
+            &BTreeMap::from([(1, "not-a-uuid".into())])
+        )
+        .is_err());
+    assert_eq!(
+        repo.find_by_data_source("source").unwrap()[0].name,
+        "Original"
+    );
+    assert_eq!(
+        repo.uuids_for_data_source("source").unwrap()[&1],
+        PARTITION_UUID
+    );
+}
+
+#[test]
+fn uuid_cleanup_respects_caller_transaction_and_other_source_metadata() {
+    let connection = uuid_connection();
+    let repo = PartitionRepo::new(&connection);
+    for source in ["source", "source-other"] {
+        repo.replace_for_data_source_with_uuids(
+            source,
+            &[make_partition(source, source, 1, "Volume")],
+            &BTreeMap::from([(1, PARTITION_UUID.into())]),
+        )
+        .unwrap();
+    }
+    let transaction = connection.unchecked_transaction().unwrap();
+    PartitionRepo::new(&transaction)
+        .delete_by_data_source("source")
+        .unwrap();
+    assert!(PartitionRepo::new(&transaction)
+        .uuids_for_data_source("source")
+        .unwrap()
+        .is_empty());
+    transaction.rollback().unwrap();
+    assert_eq!(
+        repo.uuids_for_data_source("source").unwrap()[&1],
+        PARTITION_UUID
+    );
+    repo.delete_by_data_source("source").unwrap();
+    assert_eq!(
+        repo.uuids_for_data_source("source-other").unwrap()[&1],
+        PARTITION_UUID
+    );
+}
+
+#[test]
+fn legacy_partition_storage_has_no_fabricated_uuid() {
+    let connection = setup_db();
+    let repo = PartitionRepo::new(&connection);
+    repo.insert_batch(&[make_partition("row", "source", 1, "Volume")])
+        .unwrap();
+    assert!(repo.uuids_for_data_source("source").unwrap().is_empty());
 }

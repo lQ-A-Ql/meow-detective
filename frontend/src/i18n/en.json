@@ -1583,6 +1583,9 @@
       "deferredCount": "Deferred {{count}}"
     },
     "partitions": {
+      "uuid": "Partition UUID: {{value}}",
+      "typeGuid": "Partition type GUID: {{value}}",
+      "uuidNotRecorded": "Not recorded",
       "supported": "Browsable",
       "locked": "Unlock required",
       "unsupported": "Unsupported",

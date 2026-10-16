@@ -55,6 +55,7 @@ fn data_source_summary_serializes_provenance_fields_as_frontend_contract() {
             offset: 1048576,
             length: 4096,
             type_guid: None,
+            uuid: Some("00112233-4455-6677-8899-aabbccddeeff".into()),
             filesystem: Some("NTFS".to_string()),
             unlock_hint: None,
         }],
@@ -62,6 +63,10 @@ fn data_source_summary_serializes_provenance_fields_as_frontend_contract() {
 
     let value = serde_json::to_value(dto).unwrap();
 
+    assert_eq!(
+        value["partitions"][0]["uuid"],
+        "00112233-4455-6677-8899-aabbccddeeff"
+    );
     assert_eq!(value["sourcePath"], "D:/evidence/disk.raw");
     assert_eq!(value["importedAt"], "2026-06-04T00:00:00Z");
     assert_eq!(value["fileCount"], 42);
@@ -142,4 +147,18 @@ fn data_source_summary_skips_missing_optional_provenance_fields() {
     assert!(value.get("provenanceStatus").is_none());
     assert!(value.get("warnings").is_none());
     assert!(value.get("partitions").is_none());
+}
+
+#[test]
+fn partition_uuid_is_optional_for_older_ipc_payloads() {
+    let partition: DataSourcePartitionDto = serde_json::from_value(serde_json::json!({
+        "index": 1, "name": "Data", "kindLabel": "NTFS", "status": "supported",
+        "offset": 4096, "length": 1024
+    }))
+    .unwrap();
+    assert!(partition.uuid.is_none());
+    assert!(serde_json::to_value(partition)
+        .unwrap()
+        .get("uuid")
+        .is_none());
 }

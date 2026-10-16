@@ -125,6 +125,9 @@ pub struct DataSourcePartitionDto {
     pub length: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub type_guid: Option<String>,
+    /// Unique GPT partition GUID, distinct from the type GUID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uuid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filesystem: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

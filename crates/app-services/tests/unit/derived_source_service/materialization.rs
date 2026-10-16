@@ -726,3 +726,30 @@ fn cancelled_catalog_is_deferred_and_remains_retryable() {
         .expect("reclaimed catalog phase");
     assert_eq!(reclaimed.state, ProcessingPhaseState::Running);
 }
+
+#[test]
+fn catalog_recovery_rejects_changed_partition_uuid_metadata() {
+    let temp = tempfile::tempdir().unwrap();
+    let (connection, source, _, _) = setup_recoverable_catalog(temp.path());
+    let source_connection = crate::source_db::open_source_db(temp.path(), &source.id).unwrap();
+    let repository =
+        persistence_sqlite::repositories::partition_repo::PartitionRepo::new(&source_connection);
+    let records = repository.find_by_data_source(&source.id.0).unwrap();
+    repository
+        .replace_for_data_source_with_uuids(
+            &source.id.0,
+            &records,
+            &std::collections::BTreeMap::from([(0, "00112233-4455-6677-8899-aabbccddeeff".into())]),
+        )
+        .unwrap();
+    crate::source_db::checkpoint_source_db(&source_connection).unwrap();
+    drop(source_connection);
+    let error = reuse_existing_catalog(
+        &connection,
+        temp.path(),
+        &CaseId("case-1".into()),
+        &source.id,
+    )
+    .unwrap_err();
+    assert!(matches!(error, DerivedSourceError::InconsistentState(_)));
+}

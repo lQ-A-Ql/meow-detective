@@ -428,6 +428,7 @@ fn append_logical_volume_partition(
             .unwrap_or_else(|| format!("LV_{index}")),
         kind_label: kind_label(candidate.kind),
         type_guid: None,
+        uuid: None,
         offset: candidate.offset,
         length: size_bytes,
         status: PartitionStatus::Supported,

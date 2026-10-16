@@ -782,6 +782,7 @@ fn synthetic_lvm_partition(
             name: name.to_string(),
             kind_label: "LVM".to_string(),
             type_guid: None,
+            uuid: None,
             offset,
             length: SYNTHETIC_PV_SIZE,
             status: app_services::datasource_service::PartitionStatus::Supported,

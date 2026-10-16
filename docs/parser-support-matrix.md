@@ -83,6 +83,14 @@ VMDK 是会话 COW overlay 的宿主材料，与“把用户选择的 VMDK 作�
 这一修复不改变解析器支持等级，也不按 EVTX 文件头块数截断日志。
 内置分析版本更新为 `1.3.1`，重新分析时不复用 `1.3.0` 的检查点和旧告警。
 
+### 2.3 分区身份元数据
+
+首页的分区 `uuid` 来自 GPT entry 的唯一分区 GUID，与 `typeGuid`（分区类型 GUID）、
+文件系统 UUID、NTFS 卷序列号以及应用生成的分区记录 ID 分开。新导入将非零 GUID
+记录在 source DB 的可选元数据中，不因此提升案件 schema 版本；旧案件未记录、MBR、
+直接卷和全零 GUID 显示“未记录”，不会以类型 GUID 或随机 ID 补齐。首页不为此自动重读证据。
+这些元数据随分区替换和删除清理；派生源 manifest 在有 UUID 时也校验该值。
+
 ## 3. 数据源分析补充链路 — Browser Medium Fixtures: `testdata/fixtures/public-medium/browser/`
 
 | 链路 | 平台 | 当前等级 | 已验证样本 | 字段承诺 | Medium Fixture | 备注 |

@@ -1583,6 +1583,9 @@
       "deferredCount": "延后 {{count}}"
     },
     "partitions": {
+      "uuid": "分区 UUID：{{value}}",
+      "typeGuid": "分区类型 GUID：{{value}}",
+      "uuidNotRecorded": "未记录",
       "supported": "可浏览",
       "locked": "需要解锁",
       "unsupported": "暂不支持",

@@ -35,6 +35,7 @@ pub fn get_data_sources_real(
             let processing = crate::processing_phase_service::get_data_source_processing_summary(
                 conn, &source.id,
             )?;
+            let partition_uuids = partition_repo.uuids_for_data_source(&source.id.0)?;
             let partitions = partition_repo
                 .find_by_data_source(&source.id.0)
                 .map(|items| {
@@ -48,6 +49,7 @@ pub fn get_data_sources_real(
                             offset: item.offset,
                             length: item.length,
                             type_guid: item.type_guid,
+                            uuid: partition_uuids.get(&item.partition_index).cloned(),
                             filesystem: item.filesystem,
                             unlock_hint: item.unlock_hint,
                         })

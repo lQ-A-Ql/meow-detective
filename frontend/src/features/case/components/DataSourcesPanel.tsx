@@ -232,9 +232,12 @@ export function DataSourcesPanel({
                                     <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted">
                                       {t('caseHome.partitions.offsetLength', { offset: partition.offset, length: partition.length })}
                                     </div>
+                                    <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
+                                      {t('caseHome.partitions.uuid', { value: partition.uuid ?? t('caseHome.partitions.uuidNotRecorded') })}
+                                    </div>
                                     {partition.typeGuid ? (
                                       <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
-                                        GUID {partition.typeGuid}
+                                        {t('caseHome.partitions.typeGuid', { value: partition.typeGuid })}
                                       </div>
                                     ) : null}
                                     {partition.unlockHint ? (

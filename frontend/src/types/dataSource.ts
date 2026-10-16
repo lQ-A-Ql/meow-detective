@@ -82,6 +82,8 @@ export interface DataSourcePartition {
   offset: number;
   length: number;
   typeGuid?: string;
+  /** GPT unique partition GUID; distinct from its type GUID. */
+  uuid?: string;
   filesystem?: string;
   unlockHint?: string;
 }

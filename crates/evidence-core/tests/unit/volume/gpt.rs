@@ -6,6 +6,10 @@ fn parse_gpt_entries_with_minimum_entry_size() {
     let mut entry = vec![0u8; 128];
     // Set type GUID (first 16 bytes)
     entry[0..16].copy_from_slice(&MS_BASIC_DATA);
+    let unique = [
+        0x33, 0x22, 0x11, 0, 0x55, 0x44, 0x77, 0x66, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+    ];
+    entry[16..32].copy_from_slice(&unique);
     // Set start LBA at offset 32
     entry[32..40].copy_from_slice(&100u64.to_le_bytes());
     // Set end LBA at offset 40
@@ -23,6 +27,12 @@ fn parse_gpt_entries_with_minimum_entry_size() {
     let parts = parse_gpt_entries(&entry, 128, 1);
     assert_eq!(parts.len(), 1);
     assert_eq!(parts[0].name, "Test");
+    assert_eq!(parts[0].unique_guid, unique);
+    assert_ne!(parts[0].unique_guid, parts[0].type_guid);
+    assert_eq!(
+        format_guid(&parts[0].unique_guid).to_ascii_lowercase(),
+        "00112233-4455-6677-8899-aabbccddeeff"
+    );
     assert_eq!(parts[0].start_lba, 100);
     assert_eq!(parts[0].end_lba, 200);
 }

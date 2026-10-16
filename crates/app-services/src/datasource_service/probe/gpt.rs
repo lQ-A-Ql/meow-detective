@@ -100,6 +100,8 @@ where
             type_guid: Some(evidence_core::volume::gpt::format_guid(
                 &partition.type_guid,
             )),
+            uuid: (partition.unique_guid != [0; 16])
+                .then(|| evidence_core::volume::gpt::format_guid(&partition.unique_guid)),
             offset,
             length: partition
                 .end_lba

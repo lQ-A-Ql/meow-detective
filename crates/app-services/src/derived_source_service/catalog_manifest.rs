@@ -374,6 +374,8 @@ fn summarize_partitions(
     connection: &Connection,
     data_source_id: &str,
 ) -> DerivedSourceResult<PartitionSummary> {
+    let uuids = persistence_sqlite::repositories::partition_repo::PartitionRepo::new(connection)
+        .uuids_for_data_source(data_source_id)?;
     let mut statement = connection
         .prepare(
             "SELECT id, partition_index, name, kind_label, status, type_guid,
@@ -399,6 +401,12 @@ fn summarize_partitions(
         update_field(&mut hasher, row.kind_label.as_bytes());
         update_field(&mut hasher, row.status.as_bytes());
         update_optional_text(&mut hasher, row.type_guid.as_deref());
+        // Absent identities preserve older manifest digests. Newly recorded
+        // identities are covered so a modified UUID cannot pass verification.
+        if let Some(uuid) = uuids.get(&(row.partition_index as u32)) {
+            update_field(&mut hasher, b"gpt-partition-uuid-v1");
+            update_field(&mut hasher, uuid.as_bytes());
+        }
         update_i64(&mut hasher, row.offset);
         update_i64(&mut hasher, row.length);
         for value in [

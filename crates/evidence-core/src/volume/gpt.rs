@@ -17,6 +17,7 @@ pub struct GptHeader {
 pub struct GptPartition {
     pub index: usize,
     pub type_guid: [u8; 16],
+    pub unique_guid: [u8; 16],
     pub start_lba: u64,
     pub end_lba: u64,
     pub name: String,
@@ -72,6 +73,8 @@ pub fn parse_gpt_entries(data: &[u8], entry_size: u32, count: u32) -> Vec<GptPar
         let entry = &data[off..off + entry_size as usize];
         let mut type_guid = [0u8; 16];
         type_guid.copy_from_slice(&entry[0..16]);
+        let mut unique_guid = [0u8; 16];
+        unique_guid.copy_from_slice(&entry[16..32]);
         let start = u64::from_le_bytes(entry[32..40].try_into().unwrap_or([0; 8]));
         let end = u64::from_le_bytes(entry[40..48].try_into().unwrap_or([0; 8]));
         if start == 0 && end == 0 {
@@ -93,6 +96,7 @@ pub fn parse_gpt_entries(data: &[u8], entry_size: u32, count: u32) -> Vec<GptPar
         parts.push(GptPartition {
             index: i as usize + 1,
             type_guid,
+            unique_guid,
             start_lba: start,
             end_lba: end,
             name,

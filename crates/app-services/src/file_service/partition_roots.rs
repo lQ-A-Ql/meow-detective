@@ -302,7 +302,16 @@ pub fn store_data_source_partitions(
         })
         .collect::<Vec<_>>();
 
-    repo.replace_for_data_source(&data_source_id.0, &records)?;
+    let uuids = partitions
+        .iter()
+        .filter_map(|partition| {
+            partition
+                .uuid
+                .as_ref()
+                .map(|uuid| (partition.index as u32, uuid.clone()))
+        })
+        .collect();
+    repo.replace_for_data_source_with_uuids(&data_source_id.0, &records, &uuids)?;
     Ok(())
 }
 

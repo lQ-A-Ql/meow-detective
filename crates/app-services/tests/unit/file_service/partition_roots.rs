@@ -82,6 +82,7 @@ fn store_data_source_partitions_persists_lvm_identity() {
             name: "vg/root".to_string(),
             kind_label: "XFS".to_string(),
             type_guid: None,
+            uuid: None,
             offset: 1_048_576,
             length: 0,
             status: PartitionStatus::Supported,
