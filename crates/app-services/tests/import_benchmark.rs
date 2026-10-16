@@ -1,7 +1,13 @@
 #[path = "support/import_ntfs_fixture.rs"]
 mod fixture;
+#[path = "support/import_benchmark_oracle_tests.rs"]
+mod oracle_tests;
 #[path = "support/import_benchmark_queries.rs"]
 mod queries;
+#[path = "support/import_ntfs_scenarios.rs"]
+mod scenarios;
+#[path = "support/import_benchmark_semantics.rs"]
+mod semantics;
 #[path = "support/import_benchmark_stream.rs"]
 mod streaming;
 
@@ -63,6 +69,22 @@ fn with_import<T>(
     workers: usize,
     capture: impl FnOnce(&Connection, &str, &str, ImportBenchmarkReportDto) -> T,
 ) -> T {
+    with_import_context(
+        path,
+        profiling,
+        workers,
+        ImportAnalysisMode::MetadataOnly,
+        |source, _, _, case, id, report| capture(source, case, id, report),
+    )
+}
+
+fn with_import_context<T>(
+    path: &Path,
+    profiling: bool,
+    workers: usize,
+    mode: ImportAnalysisMode,
+    capture: impl FnOnce(&Connection, &Connection, &Path, &str, &str, ImportBenchmarkReportDto) -> T,
+) -> T {
     let temporary = tempfile::TempDir::new().unwrap();
     let active = case_service::create_case(
         &temporary.path().join("cases"),
@@ -70,60 +92,77 @@ fn with_import<T>(
         Some("tester"),
     )
     .unwrap();
-    active
-        .with_conn(|conn| {
-            let job = JobRepo::new(conn).create(&active.meta.id.0, "Synthetic benchmark")?;
-            let config = import_precheck::prepare_import_source_config_from_path(
-                &path.to_string_lossy(),
-                DataSourcePlatform::Windows,
-            )
-            .unwrap();
-            let cancel = Arc::new(AtomicBool::new(false));
-            let options = ImportJobOptions {
-                event_sink: None,
-                cancel_token: &cancel,
-                max_import_workers: Some(workers),
-                max_analysis_workers: Some(1),
-                analysis_mode: ImportAnalysisMode::MetadataOnly,
-                defer_linux_artifacts: false,
-            };
-            let profiler = ImportProfiler::default();
-            let result = if profiling {
-                execute_import_job_profiled(
-                    conn,
-                    &active.meta.id,
-                    &active.case_root,
-                    config,
-                    &job,
-                    options,
-                    &profiler,
+    let captured = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        active
+            .with_conn(|conn| {
+                let job = JobRepo::new(conn).create(&active.meta.id.0, "Synthetic benchmark")?;
+                let config = import_precheck::prepare_import_source_config_from_path(
+                    &path.to_string_lossy(),
+                    DataSourcePlatform::Windows,
                 )
-            } else {
-                execute_import_job_with_counts(
+                .unwrap();
+                let cancel = Arc::new(AtomicBool::new(false));
+                let options = ImportJobOptions {
+                    event_sink: None,
+                    cancel_token: &cancel,
+                    max_import_workers: Some(workers),
+                    max_analysis_workers: Some(1),
+                    analysis_mode: mode,
+                    defer_linux_artifacts: false,
+                };
+                let profiler = ImportProfiler::default();
+                let result = if profiling {
+                    execute_import_job_profiled(
+                        conn,
+                        &active.meta.id,
+                        &active.case_root,
+                        config,
+                        &job,
+                        options,
+                        &profiler,
+                    )
+                } else {
+                    execute_import_job_with_counts(
+                        conn,
+                        &active.meta.id,
+                        &active.case_root,
+                        config,
+                        &job,
+                        options,
+                    )
+                };
+                result.unwrap_or_else(|error| panic!("synthetic import failed: {error}"));
+                // Capture import RSS before the correctness oracle allocates snapshots.
+                let report = profiler.report();
+                let (source_id, state): (String, String) =
+                    conn.query_row("SELECT id, import_state FROM data_sources", [], |row| {
+                        Ok((row.get(0)?, row.get(1)?))
+                    })?;
+                assert_eq!(state, "ready");
+                let source = source_db::open_registered_source_db_read_only(
                     conn,
-                    &active.meta.id,
                     &active.case_root,
-                    config,
-                    &job,
-                    options,
-                )
-            };
-            result.unwrap_or_else(|error| panic!("synthetic import failed: {error}"));
-            // Capture import RSS before the correctness oracle allocates snapshots.
-            let report = profiler.report();
-            let (source_id, state): (String, String) =
-                conn.query_row("SELECT id, import_state FROM data_sources", [], |row| {
-                    Ok((row.get(0)?, row.get(1)?))
-                })?;
-            assert_eq!(state, "ready");
-            let source = source_db::open_registered_source_db_read_only(
-                conn,
-                &active.case_root,
-                &DataSourceId(source_id.clone()),
-            )?;
-            Ok(capture(&source, &active.meta.id.0, &source_id, report))
-        })
-        .unwrap()
+                    &DataSourceId(source_id.clone()),
+                )?;
+                Ok(capture(
+                    &source,
+                    conn,
+                    &active.case_root,
+                    &active.meta.id.0,
+                    &source_id,
+                    report,
+                ))
+            })
+            .unwrap()
+    }));
+    match captured {
+        Ok(value) => value,
+        Err(error) => {
+            drop(active);
+            eprintln!("[failed-case-retained] {}", temporary.keep().display());
+            std::panic::resume_unwind(error)
+        }
+    }
 }
 
 fn canonical_replacements(
@@ -570,7 +609,9 @@ fn prepare_import_benchmark_fixture() {
     std::fs::create_dir(&directory).expect("new fixture directory");
     let raw = directory.join("synthetic.raw");
     let e01 = directory.join("synthetic.E01");
-    let bytes = fixture::image(records);
+    let scenario =
+        std::env::var("FORENSICS_IMPORT_BENCH_SCENARIO").unwrap_or_else(|_| "resident".into());
+    let bytes = scenarios::image(records, &scenario);
     std::fs::write(&raw, &bytes).unwrap();
     fixture::write_e01(&e01, &bytes).unwrap();
     eprintln!(

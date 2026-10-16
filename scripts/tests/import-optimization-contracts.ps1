@@ -17,3 +17,7 @@ foreach ($invariant in $contract.invariants) {
   }
 }
 Write-Host "Frozen oracle contracts passed: $($contract.tables.Count) table queries, $($contract.invariants.Count) invariants"
+$sidecar=Get-Content (Join-Path $root 'scripts/baselines/import-optimization-semantic-oracle.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($sidecar.schemaVersion -ne 1 -or $sidecar.sidecarVersion -ne 1 -or $sidecar.legacyOracleVersion -ne 2 -or
+    ($sidecar.analysisModes -join ',') -cne 'metadataOnly,fullContent' -or $sidecar.byteOracles.Count -ne 5) { throw 'Semantic sidecar contract drifted' }
+Write-Host 'Semantic sidecar contract passed: version 1, legacy oracle 2 preserved'

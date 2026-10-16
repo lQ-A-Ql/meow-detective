@@ -26,34 +26,47 @@ pub(super) fn profile(path: &Path, workers: usize) -> serde_json::Value {
         );
         assert_eq!(reader.backing_paths().len(), 1);
     }
-    super::with_import(path, true, workers, |conn, case, source, report| {
-        let replacements = super::canonical_replacements(conn, case, source);
-        let normalizer = configure(conn, replacements);
-        let catalog = fingerprint(conn, &[super::queries::CATALOG], &normalizer);
-        let graph = fingerprint(
-            conn,
-            &[super::queries::NODES, super::queries::EDGES],
-            &normalizer,
-        );
-        let timeline = fingerprint(conn, &[super::queries::TIMELINE], &normalizer);
-        assert!(
-            report.partition_aggregates.iter().any(|sample| {
-                sample.phase == super::Phase::MftRead && sample.scanned_records > 0
-            }),
-            "benchmark requires at least one NTFS MFT scan"
-        );
-        serde_json::json!({
-            "schemaVersion": 2, "oracleVersion": 2,
-            "oracleOrder": "canonical-primary-id; graph-nodes-before-edges",
-            "analysisMode": "metadataOnly", "platform": "windows",
-            "workersRequested": workers,
-            "workersResolved": app_services::parallel_enum::resolve_worker_count(Some(workers)),
-            "catalogRows": catalog.rows, "catalogSha256": catalog.sha256,
-            "graphRows": graph.rows, "graphSha256": graph.sha256,
-            "timelineRows": timeline.rows, "timelineSha256": timeline.sha256,
-            "report": report,
-        })
-    })
+    let mode = match std::env::var("FORENSICS_IMPORT_BENCH_ANALYSIS").as_deref() {
+        Err(_) | Ok("metadataOnly") => super::ImportAnalysisMode::MetadataOnly,
+        Ok("fullContent") => super::ImportAnalysisMode::FullContent,
+        value => panic!("unsupported benchmark analysis mode: {value:?}"),
+    };
+    super::with_import_context(
+        path,
+        true,
+        workers,
+        mode,
+        |conn, case_conn, root, case, source, report| {
+            let replacements = super::canonical_replacements(conn, case, source);
+            let normalizer = configure(conn, replacements);
+            let catalog = fingerprint(conn, &[super::queries::CATALOG], &normalizer);
+            let graph = fingerprint(
+                conn,
+                &[super::queries::NODES, super::queries::EDGES],
+                &normalizer,
+            );
+            let timeline = fingerprint(conn, &[super::queries::TIMELINE], &normalizer);
+            assert!(
+                report.partition_aggregates.iter().any(|sample| {
+                    sample.phase == super::Phase::MftRead && sample.scanned_records > 0
+                }),
+                "benchmark requires at least one NTFS MFT scan"
+            );
+            serde_json::json!({
+                "schemaVersion": 2, "oracleVersion": 2,
+                "oracleOrder": "canonical-primary-id; graph-nodes-before-edges",
+                "analysisMode": mode.as_str(), "platform": "windows",
+                "executionMode": mode.as_str(),
+                "workersRequested": workers,
+                "workersResolved": app_services::parallel_enum::resolve_worker_count(Some(workers)),
+                "catalogRows": catalog.rows, "catalogSha256": catalog.sha256,
+                "graphRows": graph.rows, "graphSha256": graph.sha256,
+                "timelineRows": timeline.rows, "timelineSha256": timeline.sha256,
+                "semanticOracle": super::semantics::capture(conn, case_conn, root, case, source, &normalizer),
+                "report": report,
+            })
+        },
+    )
 }
 
 #[derive(Clone)]
@@ -63,7 +76,7 @@ pub(super) struct Normalizer {
 }
 
 impl Normalizer {
-    fn normalize(&self, value: &str) -> String {
+    pub(super) fn normalize(&self, value: &str) -> String {
         self.regex
             .replace_all(value, |capture: &regex::Captures<'_>| {
                 self.identities

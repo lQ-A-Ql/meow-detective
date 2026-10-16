@@ -37,7 +37,7 @@ pub fn image(record_count: usize) -> Vec<u8> {
     bytes
 }
 
-fn record(index: usize, name: &str, record_count: usize) -> [u8; RECORD_BYTES] {
+pub(super) fn record(index: usize, name: &str, record_count: usize) -> [u8; RECORD_BYTES] {
     let mut record = [0u8; RECORD_BYTES];
     record[..4].copy_from_slice(b"FILE");
     record[4..6].copy_from_slice(&48u16.to_le_bytes());
@@ -90,7 +90,7 @@ fn record(index: usize, name: &str, record_count: usize) -> [u8; RECORD_BYTES] {
     record
 }
 
-fn resident(record: &mut [u8], start: usize, kind: u32, data: &[u8]) -> usize {
+pub(super) fn resident(record: &mut [u8], start: usize, kind: u32, data: &[u8]) -> usize {
     let length = (24 + data.len()).div_ceil(8) * 8;
     record[start..start + 4].copy_from_slice(&kind.to_le_bytes());
     record[start + 4..start + 8].copy_from_slice(&(length as u32).to_le_bytes());

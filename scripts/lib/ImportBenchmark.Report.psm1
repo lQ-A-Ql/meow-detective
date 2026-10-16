@@ -5,7 +5,7 @@ function Assert-ImportBenchmarkPayload {
   param($Payload, [int]$Workers)
   if ($Payload.schemaVersion -ne 2 -or $Payload.oracleVersion -ne 2 -or $Payload.report.schemaVersion -ne 1 -or
       $Payload.oracleOrder -ne 'canonical-primary-id; graph-nodes-before-edges' -or
-      $Payload.analysisMode -ne 'metadataOnly' -or $Payload.platform -ne 'windows') { throw 'Incompatible benchmark contract' }
+      $Payload.analysisMode -notin @('metadataOnly','fullContent') -or $Payload.platform -ne 'windows') { throw 'Incompatible benchmark contract' }
   if ($Payload.workersRequested -ne $Workers -or $Payload.workersResolved -lt 1 -or $Payload.workersResolved -gt $Workers) {
     throw 'Worker budget does not match the requested condition'
   }
@@ -28,6 +28,11 @@ function Assert-ImportBenchmarkOracle {
   foreach ($key in @('oracleVersion', 'oracleOrder', 'analysisMode', 'platform',
       'catalogRows', 'catalogSha256', 'graphRows', 'graphSha256', 'timelineRows', 'timelineSha256')) {
     if ($Expected.$key -cne $Actual.$key) { throw "Correctness oracle differs: $key" }
+  }
+  if ($Expected.PSObject.Properties['semanticOracle'] -and $Actual.PSObject.Properties['semanticOracle']) {
+    $left = $Expected.semanticOracle | ConvertTo-Json -Depth 25 -Compress
+    $right = $Actual.semanticOracle | ConvertTo-Json -Depth 25 -Compress
+    if ($left -cne $right) { throw 'Versioned semantic oracle differs' }
   }
 }
 

@@ -49,15 +49,24 @@ function Invoke-ImportBenchmarkProcess {
     $output = $stdout.GetAwaiter().GetResult()
     $errors = $stderr.GetAwaiter().GetResult()
     [IO.File]::WriteAllText($Log, $output + "`n" + $errors, (New-Object Text.UTF8Encoding($false)))
+  } catch {
+    [IO.File]::WriteAllText($Log, $_.Exception.ToString(), (New-Object Text.UTF8Encoding($false)))
+    $failure = @{status='process-error'; exitCode=$exitCode; timedOut=$timedOut; log=$Log; error=$_.Exception.Message}
+    [IO.File]::WriteAllText("$Log.process.json", ($failure | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+    throw
   } finally { $watch.Stop(); $process.Dispose() }
-  if ($timedOut) { throw "Benchmark process timed out; see $Log" }
-  if ($exitCode -ne 0) { throw "Benchmark process failed (exit $exitCode); see $Log" }
-  [pscustomobject]@{
+  $result = [pscustomobject]@{
     log = $Log; processSeconds = $watch.Elapsed.TotalSeconds
+    exitCode = $exitCode; timedOut = $timedOut
+    status = if ($timedOut) { 'timeout' } elseif ($exitCode -ne 0) { 'failed' } else { 'completed' }
     sampledPeakHandles = $handles; handleSamples = $observations
     processPeakWorkingSetBytes = $peakBytes
     samplingIntervalMs = 100; samplingScope = 'entire-child-including-oracle-and-cleanup'
   }
+  [IO.File]::WriteAllText("$Log.process.json", ($result | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding($false)))
+  if ($timedOut) { throw "Benchmark process timed out; see $Log" }
+  if ($exitCode -ne 0) { throw "Benchmark process failed (exit $exitCode); see $Log" }
+  $result
 }
 
 function Get-ImportBenchmarkExecutable {

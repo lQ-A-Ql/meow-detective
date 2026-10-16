@@ -383,3 +383,25 @@ API 不可用、省略字段、重复复用 profiler 窗口时，不补造零值
 MFT staging、路径 SQL、commit 与 Timeline Graph 结束处均有对应观测边界。
 匿名 SQLite 排序文件峰值和设备物理 I/O 尚未采集，在 `observationLimits` 明确声明。
 这些均为 oracleVersion=2 / report schemaVersion=1 的可选兼容扩展，不修改业务 IPC 事件。
+
+### S1 样本与语义验收入口
+
+`run-import-comparison.ps1` 接收显式 JSON definition：`schemaVersion=1`，`versions` 中每项含
+`name/executable/sha256/revision/analysisModes`，`inputs` 中每项含 `name/path/logicalGroup`。
+只运行冻结的 Release 可执行文件；不同版本/输入/worker/mode 在每轮按固定 seed 打乱，预热独立。
+运行前后复核输入、源码、协议、definition 和二进制。报告逐轮落盘，异常立即失败并保留原始日志、
+exit/timeout/process status 和短 TEMP；失败轮不进入成功汇总。重试必须新建整个矩阵，不能挑换失败轮。
+正式矩阵中不要编译、编辑或提交；确认回退时另开五轮矩阵。单轮筛选与 Pressure 不能作收益结论。
+
+新增的 `semanticOracle.version=1` 按 `import-optimization-semantic-oracle.json` 独立版本管理。
+保留完整 v2 表摘要与身份规范化，只增加每列/64 个 ID 桶的变异定位、文件/目录/删除/parent/root 统计、
+元数据及正文 Search 文档集合/固定查询、实际 source-scoped 预览与提取摘要。内容索引与元数据索引分开。
+正文覆盖跳过原因、投影 revision/游标/幂等、E01 分段/分区/派生窗口/初始化长度字节语义另有定向测试。
+Oracle 位于 workflow 和导入 RSS 采集之后；它的开销、进程退出与清理不计入导入时间。
+
+原 resident/空根目录索引样本继续明确标识。`FORENSICS_IMPORT_BENCH_SCENARIO=indexed-fragmented`
+启用独立的固定布局：真实 INDX、嵌套 parent、分散时间戳、deleted、ATTRIBUTE_LIST 外部 DATA、
+两段非连续 DATA 与初始化尾部。生成器固定且没有随机时钟输入，RAW/E01 对应相同逻辑字节。
+私有 inventory 测试只接收显式 `FORENSICS_IMPORT_FIXTURE`，默认 ignored。规模按实际 MFT 槽位和目录数登记，
+记录完整分段 SHA 与容器/逻辑大小比；碎片报告只表示首 128 个有效记录抽样，不能视作全卷统计。
+缺失、不适用和探测失败分别记录，不由合成集替代，也不构成完整发布矩阵通过。

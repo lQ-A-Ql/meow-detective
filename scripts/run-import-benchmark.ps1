@@ -11,6 +11,7 @@ param(
   [string]$FixturePath = '',
   [ValidateRange(32, 1100000)][int]$Records = 100000,
   [ValidateSet('raw', 'e01')][string[]]$Formats = @('raw', 'e01'),
+  [ValidateSet('resident', 'indexed-fragmented')][string]$Scenario = 'resident',
   [ValidateRange(1, 4)][int[]]$Workers = @(1, 2, 4),
   [ValidateRange(1, 100)][int]$Runs = 5,
   [ValidateRange(0, 10)][int]$WarmupRuns = 1,
@@ -34,7 +35,7 @@ if ($PSBoundParameters.ContainsKey('FixturePath') -and [string]::IsNullOrWhiteSp
 if (-not $ProtocolPath) { $ProtocolPath = Join-Path $PSScriptRoot 'baselines/import-optimization-protocol.json' }
 $protocol = Read-ImportBenchmarkProtocol -Path $ProtocolPath
 Assert-ImportBenchmarkRunConfiguration $protocol $RunKind $Runs $WarmupRuns ([bool]$Release)
-if ($FixturePath -and ($PSBoundParameters.ContainsKey('Records') -or $PSBoundParameters.ContainsKey('Formats'))) {
+if ($FixturePath -and ($PSBoundParameters.ContainsKey('Records') -or $PSBoundParameters.ContainsKey('Formats') -or $PSBoundParameters.ContainsKey('Scenario'))) {
   throw 'Choose FixturePath or synthetic Records/Formats'
 }
 if ($FixturePath) {
@@ -54,6 +55,7 @@ $configuration = [ordered]@{
   runs = $Runs; warmupRuns = $WarmupRuns; seed = $Seed
   fixturePath = if ($FixturePath) { $FixturePath } else { $null }
   syntheticRecords = if ($FixturePath) { $null } else { $Records }
+  scenario = if ($FixturePath) { $null } else { $Scenario }
   formats = if ($FixturePath) { @() } else { @($Formats | Sort-Object -Unique) }
 }
 [IO.File]::WriteAllText($configurationPath, ($configuration | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
@@ -74,7 +76,7 @@ if ($FixturePath) { $paths = @($FixturePath) } else {
   $log = Join-Path $directory 'prepare.log'
   $null = Invoke-ImportBenchmarkProcess -Executable $executable -WorkingDirectory $repo -Log $log `
     -Arguments @('prepare_import_benchmark_fixture', '--exact', '--ignored', '--nocapture', '--test-threads=1') `
-    -Environment @{ FORENSICS_IMPORT_BENCH_DIR = $fixtureDirectory; FORENSICS_IMPORT_BENCH_RECORDS = $Records }
+    -Environment @{ FORENSICS_IMPORT_BENCH_DIR = $fixtureDirectory; FORENSICS_IMPORT_BENCH_RECORDS = $Records; FORENSICS_IMPORT_BENCH_SCENARIO = $Scenario }
   $prepared = @([IO.File]::ReadLines($log) | Where-Object { $_ -match '^\[fixture-prepared\] records=\d+ logicalSha256=[0-9a-f]{64}$' })
   if ($prepared.Count -ne 1) { throw "Missing fixture preparation result; see $log" }
   $logicalHash = $prepared[0].Split('=')[-1]
@@ -105,7 +107,7 @@ for ($round = 1; $round -le ($WarmupRuns + $Runs); $round++) {
     $log = Join-Path $directory ('{0:000}-{1}.log' -f $sequence, $condition.key)
     $process = Invoke-ImportBenchmarkProcess -Executable $executable -WorkingDirectory $repo -Log $log `
       -Arguments @('matrix_import_profile', '--exact', '--ignored', '--nocapture', '--test-threads=1') `
-      -Environment @{ FORENSICS_IMPORT_FIXTURE = $inputs[$condition.input].path; FORENSICS_IMPORT_BENCH_WORKERS = $condition.workers }
+      -Environment @{ FORENSICS_IMPORT_FIXTURE = $inputs[$condition.input].path; FORENSICS_IMPORT_BENCH_WORKERS = $condition.workers; FORENSICS_IMPORT_BENCH_ANALYSIS = 'metadataOnly' }
     $payload = Read-ImportBenchmarkPayload -Log $log
     Assert-ImportBenchmarkPayload -Payload $payload -Workers $condition.workers
     # Synthetic RAW and E01 represent identical logical bytes; real input is
@@ -137,7 +139,7 @@ $report = [ordered]@{
   cacheCondition = if ($WarmupRuns -gt 0) { 'warm-by-full-import' } else { 'uncontrolled' }
   cacheNotes = 'Input SHA256 reads precede trials; OS caches are never cleared. Each trial uses a fresh process and case. Timings exclude oracle and case cleanup.'
   syntheticRecords = if ($FixturePath) { $null } else { $Records }
-  syntheticLayout = if ($FixturePath) { $null } else { 'resident-files-empty-root-index' }
+  syntheticLayout = if ($FixturePath) { $null } elseif ($Scenario -eq 'resident') { 'resident-files-empty-root-index' } else { 'indexed-fragmented-v1' }
   syntheticLogicalSha256 = $logicalHash; inputs = $inputs; seed = $Seed; runs = $Runs; warmupRuns = $WarmupRuns
   statistics = 'median and nearest-rank p95; partition phase durations are work sums, never workflow wall time'
   summary = @(Get-ImportBenchmarkSummary -Results $results.ToArray()); warmups = $warmups.ToArray(); results = $results.ToArray()
