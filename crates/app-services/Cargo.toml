@@ -79,6 +79,7 @@ plugin-api = { path = "../plugin-api" }
 windows-sys.workspace = true
 
 [dev-dependencies]
+rusqlite = { workspace = true, features = ["functions"] }
 tempfile.workspace = true
 sha2.workspace = true
 testing.workspace = true

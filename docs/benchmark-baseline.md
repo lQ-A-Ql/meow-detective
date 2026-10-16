@@ -263,3 +263,48 @@ null、取证时间和来源字段保留。重复运行摘要必须一致，缺�
 报告、私有证据路径、摘要和原始日志写入本地 `artifacts/import-profiles/`；不写入版本库。
 `selectedInputFileSha256` 仅标识传入的文件，不能冒充 E01 全部 segment 的容器集合摘要。
 这些测量暂不修改现有发布阈值。
+
+## 12. NTFS 导入矩阵与流式 oracle
+
+`scripts/run-import-benchmark.ps1` 是重复测量入口。默认固定一次合成输入，分别执行 RAW/E01
+的 1/2/4 workers，每个条件先预热一次，再测量五次。Cargo 只编译一次；fixture 准备和
+每次导入均使用独立进程及独立临时案件。编译限制为两个 jobs，并在测量前结束。
+
+```powershell
+# S/M/L 合成规模分别使用 100000、500000、1000000 records；正式比较使用 Release。
+./scripts/run-import-benchmark.ps1 -Records 100000 -Runs 5 -WarmupRuns 1 -Release
+./scripts/run-import-benchmark.ps1 -FixturePath $env:FORENSICS_IMPORT_FIXTURE -Runs 5 -Release
+# 快速验证入口和完整逻辑结果，不据此设定吞吐目标。
+./scripts/run-import-benchmark.ps1 -Records 20003 -Runs 1 -WarmupRuns 0
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/import-benchmark.ps1
+```
+
+输入限于单文件裸 RAW/dd/img 或从 `.E01` 开始的完整数值分段集。虚拟磁盘 adapter、
+非首段、分段编号不连续均拒绝。矩阵开始和结束时复核每个分段的长度、修改时间和 SHA-256；
+Rust/SQL 源文件、TOML 配置、锁文件、PowerShell 脚本及 test executable 同样复核，
+变化使本次矩阵失败。真实样本只从显式 `FixturePath` 参数读入，不搜寻工作站证据。
+
+报告保存在本地 `artifacts/import-benchmarks/matrix-*/report.json`，记录 CPU、内存、OS、
+toolchain、代码文件摘要、输入分段 manifest、build profile、随机 seed 和实际执行顺序。
+每轮使用可复现的随机排列，每个条件恰好执行一次。`workersRequested` 是预算，
+`workersResolved` 是机器上解析后的预算；二者均不表示已观测到的同时工作线程数。
+
+预热轮也必须通过 oracle，且保留原始报告，但不参与统计。缓存口径为 `warm-by-full-import`
+或 `uncontrolled`；输入哈希本身会读取证据，脚本从不清除 OS 缓存，因此不能宣称冷缓存。
+测试 profile、release、不同缓存条件、不同硬件和不同输入之间不能直接推导优化倍数。
+报告内的 median 与 nearest-rank p95 只汇总同一输入和 worker 条件。
+
+`schemaVersion=2` / `oracleVersion=2` 使用 SQLite 文件临时排序和逐行 SHA-256，避免把整个
+Catalog/Graph/Timeline 放入 Rust 内存。按规范化后的唯一主键排序；Graph 顺序固定为 nodes
+后接 edges；单元格仍保留 SQLite 类型。生成 UUID 的规范化规则与旧 oracle 相同，映射
+超过 100k entries 或估计 64 MiB 时显式失败。v1 按整行排序，摘要与 v2 不可直接比较。
+所有重复轮次及 workers 必须保持行数和摘要相同；合成 RAW/E01 还必须互相一致。
+
+`workflowSeconds` 使用 source workflow wall time，排除案件创建、oracle 和清理。
+`importProcessPeakRssMb` 是导入完成、oracle 之前捕获的进程 lifetime RSS 高水位；
+不代表独立扣除启动开销的工作集。外部每 100 ms 采样的 handles 和 working-set 高水位
+覆盖整个子进程，包括 oracle 和清理；短暂峰值可能漏采。两种口径分开报告。
+阶段汇总明确标为 `source-wall-inclusive` 或 `partition-work-sum`，不得相加推算总耗时。
+
+合成数据卷仍以 resident 文件和空根目录索引为主；真实 INDX、碎片化、多分段 E01、
+恢复/崩溃注入和发布阈值需要独立验收。矩阵入口通过不等于 RAW/E01 加速目标已经达成。

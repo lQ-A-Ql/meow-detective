@@ -1,5 +1,9 @@
 #[path = "support/import_ntfs_fixture.rs"]
 mod fixture;
+#[path = "support/import_benchmark_queries.rs"]
+mod queries;
+#[path = "support/import_benchmark_stream.rs"]
+mod streaming;
 
 use app_services::{
     case_service,
@@ -33,6 +37,32 @@ fn import(path: &Path, profiling: bool) -> ImportResult {
 }
 
 fn import_with_workers(path: &Path, profiling: bool, workers: usize) -> ImportResult {
+    with_import(
+        path,
+        profiling,
+        workers,
+        |source, case_id, source_id, report| {
+            let replacements = canonical_replacements(source, case_id, source_id);
+            let catalog = snapshot(source, queries::CATALOG, &replacements);
+            let mut graph = snapshot(source, queries::NODES, &replacements);
+            graph.extend(snapshot(source, queries::EDGES, &replacements));
+            let timeline = snapshot(source, queries::TIMELINE, &replacements);
+            ImportResult {
+                catalog,
+                graph,
+                timeline,
+                report,
+            }
+        },
+    )
+}
+
+fn with_import<T>(
+    path: &Path,
+    profiling: bool,
+    workers: usize,
+    capture: impl FnOnce(&Connection, &str, &str, ImportBenchmarkReportDto) -> T,
+) -> T {
     let temporary = tempfile::TempDir::new().unwrap();
     let active = case_service::create_case(
         &temporary.path().join("cases"),
@@ -40,32 +70,60 @@ fn import_with_workers(path: &Path, profiling: bool, workers: usize) -> ImportRe
         Some("tester"),
     )
     .unwrap();
-    active.with_conn(|conn| {
-        let job = JobRepo::new(conn).create(&active.meta.id.0, "Synthetic benchmark")?;
-        let config = import_precheck::prepare_import_source_config_from_path(&path.to_string_lossy(), DataSourcePlatform::Windows).unwrap();
-        let cancel = Arc::new(AtomicBool::new(false));
-        let options = ImportJobOptions { event_sink: None, cancel_token: &cancel,
-            max_import_workers: Some(workers), max_analysis_workers: Some(1),
-            analysis_mode: ImportAnalysisMode::MetadataOnly, defer_linux_artifacts: false };
-        let profiler = ImportProfiler::default();
-        let result = if profiling {
-            execute_import_job_profiled(conn, &active.meta.id, &active.case_root, config, &job, options, &profiler)
-        } else {
-            execute_import_job_with_counts(conn, &active.meta.id, &active.case_root, config, &job, options)
-        };
-        result.unwrap_or_else(|error| panic!("synthetic import failed: {error}"));
-        // Capture import RSS before the correctness oracle allocates snapshots.
-        let report = profiler.report();
-        let (source_id, state): (String, String) = conn.query_row("SELECT id, import_state FROM data_sources", [], |row| Ok((row.get(0)?, row.get(1)?)))?;
-        assert_eq!(state, "ready");
-        let source = source_db::open_registered_source_db_read_only(conn, &active.case_root, &DataSourceId(source_id.clone()))?;
-        let replacements = canonical_replacements(&source, &active.meta.id.0, &source_id);
-        let catalog = snapshot(&source, "SELECT id, parent_id, path, name, entry_type, size, ext, deleted, hidden, system, read_only, archive, unix_mode, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256, partition_index FROM file_entries", &replacements);
-        let mut graph = snapshot(&source, "SELECT id, node_type, label, summary, tags FROM graph_nodes", &replacements);
-        graph.extend(snapshot(&source, "SELECT id, source_id, target_id, edge_type, confidence, provenance FROM graph_edges", &replacements));
-        let timeline = snapshot(&source, "SELECT id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs FROM timeline_events", &replacements);
-        Ok(ImportResult { catalog, graph, timeline, report })
-    }).unwrap()
+    active
+        .with_conn(|conn| {
+            let job = JobRepo::new(conn).create(&active.meta.id.0, "Synthetic benchmark")?;
+            let config = import_precheck::prepare_import_source_config_from_path(
+                &path.to_string_lossy(),
+                DataSourcePlatform::Windows,
+            )
+            .unwrap();
+            let cancel = Arc::new(AtomicBool::new(false));
+            let options = ImportJobOptions {
+                event_sink: None,
+                cancel_token: &cancel,
+                max_import_workers: Some(workers),
+                max_analysis_workers: Some(1),
+                analysis_mode: ImportAnalysisMode::MetadataOnly,
+                defer_linux_artifacts: false,
+            };
+            let profiler = ImportProfiler::default();
+            let result = if profiling {
+                execute_import_job_profiled(
+                    conn,
+                    &active.meta.id,
+                    &active.case_root,
+                    config,
+                    &job,
+                    options,
+                    &profiler,
+                )
+            } else {
+                execute_import_job_with_counts(
+                    conn,
+                    &active.meta.id,
+                    &active.case_root,
+                    config,
+                    &job,
+                    options,
+                )
+            };
+            result.unwrap_or_else(|error| panic!("synthetic import failed: {error}"));
+            // Capture import RSS before the correctness oracle allocates snapshots.
+            let report = profiler.report();
+            let (source_id, state): (String, String) =
+                conn.query_row("SELECT id, import_state FROM data_sources", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })?;
+            assert_eq!(state, "ready");
+            let source = source_db::open_registered_source_db_read_only(
+                conn,
+                &active.case_root,
+                &DataSourceId(source_id.clone()),
+            )?;
+            Ok(capture(&source, &active.meta.id.0, &source_id, report))
+        })
+        .unwrap()
 }
 
 fn canonical_replacements(
@@ -90,11 +148,16 @@ fn canonical_replacements(
             .enumerate()
             .map(|(i, id)| (id, format!("__root_{i}__"))),
     );
-    let generated: Vec<(String, Option<i64>, String)> = conn.prepare(
+    let mut statement = conn.prepare(
         "SELECT id, partition_index, path FROM file_entries WHERE parent_id IS NOT NULL AND length(id) = 36 AND id GLOB '[0-9a-fA-F]*'"
-    ).unwrap().query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).unwrap().collect::<Result<_, _>>().unwrap();
+    ).unwrap();
+    let mut rows = statement.query([]).unwrap();
     let mut identities = std::collections::HashSet::new();
-    for (id, partition, path) in generated {
+    let mut replacement_bytes = 0usize;
+    while let Some(row) = rows.next().unwrap() {
+        let id: String = row.get(0).unwrap();
+        let partition: Option<i64> = row.get(1).unwrap();
+        let path: String = row.get(2).unwrap();
         if uuid::Uuid::parse_str(&id).is_ok_and(|id| id.get_version_num() == 4) {
             let stable = format!(
                 "__file_{}:{}:{}__",
@@ -105,6 +168,11 @@ fn canonical_replacements(
             assert!(
                 identities.insert(stable.clone()),
                 "ambiguous generated-file identity in benchmark oracle"
+            );
+            replacement_bytes += id.len() + stable.len() + 128;
+            assert!(
+                replacements.len() < 100_000 && replacement_bytes <= 64 * 1024 * 1024,
+                "benchmark UUID normalization map exceeds its 64 MiB / 100k-entry limit"
             );
             replacements.push((id, stable));
         }
@@ -435,4 +503,82 @@ fn cancellation_before_enumeration_keeps_source_indexes_and_skips_runtime_open()
         assert!(!profiler.report().samples.iter().any(|sample| sample.phase == Phase::MftReaderOpen));
         Ok(())
     }).unwrap();
+}
+
+#[test]
+#[ignore = "explicit benchmark matrix; requires FORENSICS_IMPORT_FIXTURE"]
+fn matrix_import_profile() {
+    let path = std::env::var_os("FORENSICS_IMPORT_FIXTURE")
+        .map(std::path::PathBuf::from)
+        .expect("set FORENSICS_IMPORT_FIXTURE");
+    let workers: usize = std::env::var("FORENSICS_IMPORT_BENCH_WORKERS")
+        .unwrap_or_else(|_| "1".into())
+        .parse()
+        .expect("valid worker count");
+    assert!((1..=4).contains(&workers));
+    eprintln!("[import-benchmark] {}", streaming::profile(&path, workers));
+}
+
+#[test]
+#[ignore = "explicit synthetic RAW/E01 fixture preparation; requires FORENSICS_IMPORT_BENCH_DIR"]
+fn prepare_import_benchmark_fixture() {
+    let directory = std::env::var_os("FORENSICS_IMPORT_BENCH_DIR")
+        .map(std::path::PathBuf::from)
+        .expect("set FORENSICS_IMPORT_BENCH_DIR");
+    let records: usize = std::env::var("FORENSICS_IMPORT_BENCH_RECORDS")
+        .expect("set FORENSICS_IMPORT_BENCH_RECORDS")
+        .parse()
+        .expect("valid record count");
+    std::fs::create_dir(&directory).expect("new fixture directory");
+    let raw = directory.join("synthetic.raw");
+    let e01 = directory.join("synthetic.E01");
+    let bytes = fixture::image(records);
+    std::fs::write(&raw, &bytes).unwrap();
+    fixture::write_e01(&e01, &bytes).unwrap();
+    eprintln!(
+        "[fixture-prepared] records={records} logicalSha256={}",
+        hex::encode(Sha256::digest(&bytes))
+    );
+}
+
+#[test]
+fn streaming_oracle_is_order_independent_and_detects_changed_rows() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection.execute_batch("CREATE TABLE items(id TEXT PRIMARY KEY,payload); INSERT INTO items VALUES('mft:0:20',42),('mft:0:1','hello')").unwrap();
+    let normalizer = streaming::configure(&connection, vec![]);
+    let first = streaming::fingerprint(&connection, &["SELECT id,payload FROM items"], &normalizer);
+    connection
+        .execute_batch(
+            "DELETE FROM items; INSERT INTO items VALUES('mft:0:1','hello'),('mft:0:20',42)",
+        )
+        .unwrap();
+    assert_eq!(
+        first,
+        streaming::fingerprint(&connection, &["SELECT id,payload FROM items"], &normalizer)
+    );
+    connection
+        .execute_batch("UPDATE items SET payload='42' WHERE id='mft:0:20'")
+        .unwrap();
+    assert_ne!(
+        first,
+        streaming::fingerprint(&connection, &["SELECT id,payload FROM items"], &normalizer)
+    );
+}
+
+#[test]
+fn streaming_oracle_normalizes_generated_ids_in_rows_and_sort_keys() {
+    fn fingerprint() -> streaming::Fingerprint {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE items(id TEXT PRIMARY KEY,payload)")
+            .unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO items VALUES (?1,?2)",
+            rusqlite::params![id, format!("parent:{id}")],
+        )
+        .unwrap();
+        let normalizer = streaming::configure(&conn, vec![(id, "__root__".into())]);
+        streaming::fingerprint(&conn, &["SELECT id,payload FROM items"], &normalizer)
+    }
+    assert_eq!(fingerprint(), fingerprint());
 }
