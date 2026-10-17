@@ -501,3 +501,9 @@ medium E01 的回归分布在 analysis、enumeration、graph 与 MFT directory b
 130 MiB。下一轮应先补充 analysis worker、search/index、SQLite staging merge 和
 E01 reader admission 的独立计时与等待计数，再针对确认后的热点做最小修复；full128 E01
 优先按 P95 抖动复核，不把一次较好的中位数当作已解决。
+
+benchmark harness 已支持 `FORENSICS_IMPORT_BENCH_PHASE_TRACE=1`，只在显式启用时将
+现有 import phase 事件写入测试日志；不改变生产默认事件流、数据库或 oracle。medium
+E01 的一次 trace 位于 `S3/iteration-03/phase-trace-medium.log`，full128 E01 位于
+`phase-trace-full128.log`。full128 样本只有 114 条记录，analysis worker 实际收敛为 1，
+因此不能用它证明并发资源路径的稳定 P95；后续优先复测 medium E01 的 phase trace。
