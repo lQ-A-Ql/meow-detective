@@ -11,6 +11,7 @@ mod semantics;
 #[path = "support/import_benchmark_stream.rs"]
 mod streaming;
 
+use app_services::import_pipeline::ImportEventSink;
 use app_services::{
     case_service,
     import_analysis::ImportAnalysisMode,
@@ -30,6 +31,40 @@ use std::sync::{atomic::AtomicBool, Arc};
 use transport::dto::import_benchmark::{
     ImportBenchmarkPhaseDto as Phase, ImportBenchmarkReportDto,
 };
+use transport::dto::{
+    DataSourceSummaryDto, ImportPhaseProgressDto, IndexCacheStatusDto, JobCancellationDto,
+    PartialResultDto,
+};
+
+struct BenchmarkPhaseSink;
+
+impl ImportEventSink for BenchmarkPhaseSink {
+    fn job_progress(&self, _job_id: &str, _progress: u32, _detail: &str) {}
+    fn partition_progress(
+        &self,
+        _job_id: &str,
+        _current_partition: &str,
+        _completed: u32,
+        _total: u32,
+        _partition_pct: u32,
+    ) {
+    }
+    fn timeline_updated(&self, _event_count: u64) {}
+    fn search_index_progress(&self, _progress: u32, _detail: &str) {}
+    fn data_source_imported(
+        &self,
+        _case_id: &str,
+        _data_source: &DataSourceSummaryDto,
+        _job_id: &str,
+    ) {
+    }
+    fn import_phase_progress(&self, progress: &ImportPhaseProgressDto) {
+        eprintln!("[import-phase] {}", progress.detail);
+    }
+    fn import_partial_result(&self, _result: &PartialResultDto) {}
+    fn cache_index_status(&self, _status: &IndexCacheStatusDto) {}
+    fn job_cancellation(&self, _cancellation: &JobCancellationDto) {}
+}
 
 struct ImportResult {
     catalog: Vec<Vec<Value>>,
@@ -102,8 +137,10 @@ fn with_import_context<T>(
                 )
                 .unwrap();
                 let cancel = Arc::new(AtomicBool::new(false));
+                let phase_sink = BenchmarkPhaseSink;
+                let phase_trace = std::env::var_os("FORENSICS_IMPORT_BENCH_PHASE_TRACE").is_some();
                 let options = ImportJobOptions {
-                    event_sink: None,
+                    event_sink: phase_trace.then_some(&phase_sink as &dyn ImportEventSink),
                     cancel_token: &cancel,
                     max_import_workers: Some(workers),
                     max_analysis_workers: Some(1),
