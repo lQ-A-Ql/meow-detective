@@ -378,7 +378,7 @@ API 不可用、省略字段、重复复用 profiler 窗口时，不补造零值
 `mftPathCompute` 与 `mftPathSql` 分开记录，父级 `mftPathResolve` 因此也为 inclusive。
 
 `maxBufferedBatches/Records` 是单分区已读波次的驻留载荷计数，不是内存字节；聚合取单分区 max。
-`mainTableUpdatedRows` 当前记录路径物化实际 UPDATE 的受影响行，聚合求和；不能当作物理写入量。
+`mainTableUpdatedRows` 记录路径物化实际 UPDATE 的受影响行，聚合求和；不能当作物理写入量。
 `sampledWalMaxBytes` 是批次/阶段边界采样到的 WAL 文件长度，聚合取 max，不保证捕获瞬时峰值。
 MFT staging、路径 SQL、commit 与 Timeline Graph 结束处均有对应观测边界。
 匿名 SQLite 排序文件峰值和设备物理 I/O 尚未采集，在 `observationLimits` 明确声明。
@@ -419,3 +419,50 @@ S1 于 2026-10-17 完成校准。冻结测量版本为 `53f55c31`，5 个有效�
 真实 DD 候选被 native FAT reader 以 invalid BPB 拒绝，IMG 候选 probe EOF，尚无已验证的真实 RAW 验收样本。
 逐 task、样本和运行边界见本地 `docs/architecture-performance-stage-S1-20261016.md`，
 原始报告及完整性核对索引见 `artifacts/stage-optimization/20261016/S1/acceptance.json`。
+
+### S2 路径与索引生命周期验收
+
+S2 于 2026-10-17 完成所选输入验收。冻结候选为 `811d7dc9`，对照 S1 的 `53f55c31`；
+完整 v2 表摘要和 semanticOracle v2 保持不变。4 个矩阵共 92 次独立子进程：12 次筛选、
+60 次正式测量、12 次预热、8 次压力。源码、协议、definition、输入分段及冻结 Release binary
+均前后复核。正式条件为 workers=4、独立预热一次和测量五次；失败轮不替换。
+
+| 输入 / 分析模式 | 基线 median s | 候选 median s | median 变化 | p95 变化 |
+|---|---:|---:|---:|---:|
+| 100K RAW / metadataOnly | 13.114669 | 12.971296 | -1.09% | +2.52% |
+| 100K E01 / metadataOnly | 13.756376 | 13.216385 | -3.93% | -1.77% |
+| 小型真实 E01 / metadataOnly | 2.072240 | 1.965240 | -5.16% | -5.50% |
+| 中型真实 E01 / metadataOnly | 24.377009 | 24.409533 | +0.13% | -2.32% |
+| 合成 128 RAW / fullContent | 0.812450 | 0.826391 | +1.72% | -0.20% |
+| 合成 128 E01 / fullContent | 0.631652 | 0.623705 | -1.26% | +0.92% |
+
+四个 metadataOnly 正式输入的路径 SQL median 下降 29.78%–38.77%，候选路径主表 UPDATE
+计数均为 0。100K E01 和小型真实 E01 同时达到热点下降至少 10% 与 workflow 下降至少 3%
+的门槛；其他正式条件未触发 median +3% / p95 +5% 的追加确认门槛。RAW、中型真实 E01
+和 fullContent 代表集不宣称整链提速。workflow 含 commit、索引及 final checkpoint。
+
+默认使用 ntfs-v3 窄路径投影与验证后的数值 merge；generic merge 保留。known v2 transient
+由 staging owner 原子清除并重枚举，unknown layout 和 published source 拒绝替换。
+`ntfs_parent` 仅在校验期维护；source bulk manifest 恢复前，读写 Ready 路由都拒绝打开。
+writer batch 1024/2048/4096/10000 的五轮 native 实验无有意义差异，保留 10000 与整分区事务。
+绑定/调用未成热点，不启用多行 INSERT；本轮没有持续 channel 或 worker 默认策略变更。
+
+新增可选计数 `materializedPathRows` / `writerBatches` / `partitionCommits` 聚合求和；
+`writerBatchMaxRecords` / `readChunkRecords` / `stagingLogicalBytes` 取单分区 max。
+最后一项为路径物化结束时 `page_count * page_size`，不含 WAL，不代表 TEMP 峰值。
+100K 的 ingest + path 已观测 DML 两版均为 199972 行：宽表 UPDATE 改为窄表 INSERT。
+全部 SQL/触发器/索引写次数未采集，不据此宣称总写操作减少。100K E01 commit WAL
+采样长度从 18732512 增至 19923832 bytes，workflow OS write transfer median 从
+1335878132 变为 1335076088 bytes；没有普遍显著物理写量下降的结论。
+
+全部轮次完整 C/G/T 和 semantic v2 在同 logicalGroup/mode 内一致；最大导入峰值 1421 MiB，
+候选最大 1413 MiB，低于 2048 MiB。500K/1M RAW/E01 为单次压力，rich-100K 为单轮筛选；
+不据此宣称稳定提速。fullContent 仅合成 128 代表集，大型真实 E01、真实 RAW 性能和完整
+私有 artifact/plugin 发布矩阵未运行。新增校验成本、WAL 增长及匿名排序空间观察限制均保留。
+
+阶段回归：app-services 库 1094 passed / 10 ignored、import_benchmark 12 / 4、Ready 路由 2 / 0，
+persistence-sqlite 全 crate 391 / 4；相关 all-targets clippy 与架构守卫通过。这不是 workspace
+全量或 S8 发布门禁。逐 task 决策见本地 `docs/architecture-performance-stage-S2-20261017.md`，
+原始报告/日志摘要、oracle、成本和门槛复核见 `artifacts/stage-optimization/20261017/S2/acceptance.json`。
+测量完成后仅调整 import-optimization 守卫以跟随实际引用的独立 SQL；前后 SHA 另行登记，
+生产源码与冻结二进制保持测量版本，原失败日志保留。

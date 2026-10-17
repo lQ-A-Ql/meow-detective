@@ -11,6 +11,9 @@ $e01PipelineTestPath = Join-Path $repoRoot "crates/app-services/tests/unit/impor
 # to persistence-sqlite/src/repositories/staging_repo.rs during the
 # engineering refactor (commit c24a989 + 1b1a7e3).
 $stagingPath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/staging_repo.rs"
+$enumMergePath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/staging_enum_merge.sql"
+$numericMergeOwnerPath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/ntfs_staging_merge.rs"
+$numericMergePath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/ntfs_staging/merge.sql"
 # Import finalization owns the bounded file-activity Timeline projection.
 $pipelineFinalizePath = Join-Path $repoRoot "crates/app-services/src/import_pipeline/phases/finalize.rs"
 $timelineProjectionPath = Join-Path $repoRoot "crates/app-services/src/timeline_service/projection.rs"
@@ -24,6 +27,9 @@ $performanceGatePath = Join-Path $repoRoot "scripts/check-e01-import-performance
 foreach ($path in @(
     $e01PipelineTestPath,
     $stagingPath,
+    $enumMergePath,
+    $numericMergeOwnerPath,
+    $numericMergePath,
     $pipelineFinalizePath,
     $timelineProjectionPath,
     $workerPoolPath,
@@ -39,6 +45,9 @@ foreach ($path in @(
 
 $e01PipelineTest = Get-Content -LiteralPath $e01PipelineTestPath -Raw -Encoding UTF8
 $staging = Get-Content -LiteralPath $stagingPath -Raw -Encoding UTF8
+$enumMerge = Get-Content -LiteralPath $enumMergePath -Raw -Encoding UTF8
+$numericMergeOwner = Get-Content -LiteralPath $numericMergeOwnerPath -Raw -Encoding UTF8
+$numericMerge = Get-Content -LiteralPath $numericMergePath -Raw -Encoding UTF8
 $pipelineFinalize = Get-Content -LiteralPath $pipelineFinalizePath -Raw -Encoding UTF8
 $timelineProjection = Get-Content -LiteralPath $timelineProjectionPath -Raw -Encoding UTF8
 $workerPool = Get-Content -LiteralPath $workerPoolPath -Raw -Encoding UTF8
@@ -89,8 +98,14 @@ foreach ($pattern in @(
     throw "staging DB aggressive temp pragma is missing or weakened: $pattern"
   }
 }
-if ($staging -notmatch 'SELECT[\s\S]*?LOWER\(entry_type\)[\s\S]*?FROM\s+staging\.file_entries') {
+if ($staging -notmatch 'include_str!\("staging_enum_merge\.sql"\)' -or
+    $enumMerge -notmatch 'SELECT[\s\S]*?LOWER\(entry_type\)[\s\S]*?FROM\s+staging\.file_entries') {
   throw "enum staging merge must normalize entry_type to lowercase before writing app.db"
+}
+if ($staging -notmatch 'ntfs_staging_merge::merge_completed_numeric\(' -or
+    $numericMergeOwner -notmatch 'include_str!\("ntfs_staging/merge\.sql"\)' -or
+    $numericMerge -notmatch "CASE\s+f\.entry_type\s+WHEN\s+1\s+THEN\s+'directory'\s+ELSE\s+'file'\s+END") {
+  throw "numeric staging merge must project lowercase entry_type through its referenced SQL"
 }
 
 foreach ($mainDbSource in @($appState, $persistenceConnection)) {
