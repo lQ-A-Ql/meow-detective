@@ -42,7 +42,7 @@ impl SourceBulkLoadRepo {
                 |row| row.get(0),
             )
             .optional()?;
-        Ok(match value.as_deref() {
+        let state = match value.as_deref() {
             Some("active") => BulkLoadState::Active,
             Some("rebuilding") => BulkLoadState::Rebuilding,
             Some("ready") => BulkLoadState::Ready,
@@ -52,7 +52,20 @@ impl SourceBulkLoadRepo {
                     "Unknown source bulk-load state".into(),
                 ))
             }
-        })
+        };
+        if state == BulkLoadState::Inactive {
+            let orphaned: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM source_meta WHERE key='bulk_load.indexes')",
+                [],
+                |r| r.get(0),
+            )?;
+            if orphaned {
+                return Err(crate::DbError::System(
+                    "Orphaned source index manifest requires import recovery".into(),
+                ));
+            }
+        }
+        Ok(state)
     }
     pub fn clear_transient(conn: &Connection) -> DbResult<()> {
         conn.execute(

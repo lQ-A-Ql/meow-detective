@@ -48,6 +48,7 @@ pub mod linux_topology_membership_repo;
 pub mod linux_topology_scope_repo;
 pub mod nested_evidence_repo;
 pub mod notebook_repo;
+mod ntfs_staging_merge;
 mod ntfs_staging_paths;
 pub mod ntfs_staging_repo;
 pub mod partition_repo;

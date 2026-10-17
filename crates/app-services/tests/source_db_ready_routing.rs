@@ -53,6 +53,46 @@ fn register_source(
 }
 
 #[test]
+fn ready_route_rejects_every_unfinished_bulk_state_and_orphan_manifest() {
+    use persistence_sqlite::repositories::source_bulk_load_repo::{
+        BulkLoadState, SourceBulkLoadRepo as Bulk,
+    };
+    let root = tempfile::tempdir().unwrap();
+    let case = persistence_sqlite::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&case).unwrap();
+    let id = create_case(&case, "bulk-case");
+    let source = register_source(&case, root.path(), &id, "bulk-source", "windows", "ready");
+    let path =
+        app_services::source_db::registered_source_db_path(&case, root.path(), &source).unwrap();
+    let db = persistence_sqlite::open_existing_source(&path).unwrap();
+    Bulk::begin(&db, "unfinished").unwrap();
+    for state in [
+        BulkLoadState::Active,
+        BulkLoadState::Rebuilding,
+        BulkLoadState::Ready,
+    ] {
+        Bulk::set_state(&db, state, "unfinished").unwrap();
+        assert!(open_ready_source_by_id(&case, root.path(), &id, &source).is_err());
+        assert!(app_services::source_db::open_ready_source_read_only_by_id(
+            &case,
+            root.path(),
+            &id,
+            &source
+        )
+        .is_err());
+    }
+    Bulk::recover(&db).unwrap();
+    assert!(open_ready_source_by_id(&case, root.path(), &id, &source).is_ok());
+    db.execute(
+        "INSERT INTO source_meta(key,value) VALUES('bulk_load.indexes','[]')",
+        [],
+    )
+    .unwrap();
+    assert!(open_ready_source_by_id(&case, root.path(), &id, &source).is_err());
+    assert!(Bulk::recover(&db).is_err());
+}
+
+#[test]
 fn ready_source_route_enforces_case_state_and_platform_before_opening() {
     let case_root = tempfile::TempDir::new().expect("case root");
     let case_conn = persistence_sqlite::open_in_memory().expect("control database");

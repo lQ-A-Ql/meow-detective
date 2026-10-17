@@ -14,7 +14,7 @@ impl NtfsStagingRepo {
     {
         conn.execute_batch("SAVEPOINT ntfs_paths_build")?;
         let result = (|| {
-            conn.execute_batch("DROP INDEX IF EXISTS ntfs_parent; DELETE FROM ntfs_paths; DELETE FROM ntfs_staging_meta WHERE key='paths_complete'")?;
+            conn.execute_batch("DROP INDEX IF EXISTS ntfs_parent; DELETE FROM ntfs_paths; DELETE FROM ntfs_staging_meta WHERE key IN ('paths_complete','tree_validated')")?;
             let mut statement=conn.prepare_cached("INSERT INTO ntfs_paths(record_num,resolved_path,catalog_name,catalog_parent_record_num,resolution_status) VALUES(?1,?2,?3,?4,?5)")?;
             let value = write(&mut statement)?;
             drop(statement);
@@ -32,11 +32,11 @@ impl NtfsStagingRepo {
     }
 
     pub fn validate_paths(conn: &Connection) -> rusqlite::Result<()> {
-        let (complete,missing,extra):(bool,u64,u64)=conn.query_row(
+        let (complete,difference,extra):(bool,i64,bool)=conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM ntfs_staging_meta WHERE key='paths_complete' AND value='1'),
-            (SELECT COUNT(*) FROM ntfs_entries f LEFT JOIN ntfs_paths p USING(record_num) WHERE p.record_num IS NULL),
-            (SELECT COUNT(*) FROM ntfs_paths p LEFT JOIN ntfs_entries f USING(record_num) WHERE f.record_num IS NULL)",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
-        if !complete || missing != 0 || extra != 0 {
+            (SELECT COUNT(*) FROM ntfs_entries)-(SELECT COUNT(*) FROM ntfs_paths),
+            EXISTS(SELECT 1 FROM ntfs_paths p WHERE NOT EXISTS(SELECT 1 FROM ntfs_entries f WHERE f.record_num=p.record_num))",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+        if !complete || difference != 0 || extra {
             return Err(rusqlite::Error::InvalidQuery);
         }
         Ok(())

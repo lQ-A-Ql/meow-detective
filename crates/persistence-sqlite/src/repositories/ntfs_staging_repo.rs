@@ -50,18 +50,24 @@ impl NtfsStagingRepo {
     }
 
     pub fn tree_shape(conn: &Connection) -> rusqlite::Result<(i64, i64, i64, i64)> {
+        conn.execute(
+            "DELETE FROM ntfs_staging_meta WHERE key='tree_validated'",
+            [],
+        )?;
         conn.execute_batch(
             "CREATE INDEX IF NOT EXISTS ntfs_parent ON ntfs_paths(catalog_parent_record_num)",
         )?;
-        conn.query_row(
-            "SELECT (SELECT COUNT(*) FROM ntfs_entries),
-              (SELECT COUNT(*) FROM ntfs_paths p JOIN ntfs_entries f USING(record_num) WHERE p.record_num=5 AND p.catalog_parent_record_num IS NULL AND f.entry_type=1),
-              (SELECT COUNT(*) FROM ntfs_paths child WHERE catalog_parent_record_num IS NOT NULL AND NOT EXISTS
-                (SELECT 1 FROM ntfs_paths parent WHERE parent.record_num=child.catalog_parent_record_num)),
-              (WITH RECURSIVE reachable(id) AS (SELECT record_num FROM ntfs_paths WHERE record_num=5
-                UNION SELECT child.record_num FROM ntfs_paths child JOIN reachable parent ON child.catalog_parent_record_num=parent.id)
-                SELECT COUNT(*) FROM reachable)", [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+        let shape: (i64, i64, i64, i64) =
+            conn.query_row(include_str!("ntfs_staging/tree_shape.sql"), [], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?;
+        if shape.0 > 0 && shape.1 == 1 && shape.2 == 0 && shape.3 == shape.0 {
+            conn.execute(
+                "INSERT OR REPLACE INTO ntfs_staging_meta(key,value) VALUES('tree_validated','1')",
+                [],
+            )?;
+        }
+        Ok(shape)
     }
 
     pub fn ensure_schema(conn: &Connection) -> DbResult<()> {

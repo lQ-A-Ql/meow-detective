@@ -56,6 +56,7 @@ pub fn open_ready_source_by_id(
 ) -> Result<ReadySourceConnection, ReadySourceError> {
     let platform = resolve_ready_source_platform(case_conn, case_id, data_source_id)?;
     let connection = super::open_registered_source_db(case_conn, case_root, data_source_id)?;
+    super::opening::validate_bulk_ready(&connection)?;
 
     Ok(ReadySourceConnection {
         data_source_id: data_source_id.clone(),

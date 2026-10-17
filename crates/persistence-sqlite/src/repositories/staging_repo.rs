@@ -326,6 +326,9 @@ impl StagingRepo {
         partition_name: &str,
     ) -> rusqlite::Result<u64> {
         super::staging_merge_validation::validate_enum_merge_target(main_conn)?;
+        if super::ntfs_staging_repo::NtfsStagingRepo::is_numeric(staging_conn)? {
+            super::ntfs_staging_repo::NtfsStagingRepo::validate_paths(staging_conn)?;
+        }
         let staging_path = staging_db_file_path(staging_conn)?;
         let escaped = staging_path.replace('\'', "''");
         main_conn.execute_batch(&format!("ATTACH DATABASE '{}' AS staging", escaped))?;
@@ -362,41 +365,21 @@ impl StagingRepo {
                 partition_index,
             )?;
 
-            let inserted = main_conn.execute(
-                "INSERT INTO main.file_entries
-                    (id, parent_id, data_source_id, path, name, entry_type,
-                      size, ext, deleted, hidden, system, read_only, archive, unix_mode, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
-                      partition_index)
-                     SELECT
-                        id,
-                        CASE
-                          WHEN parent_id IS NULL THEN ?1
-                          WHEN parent_id = id THEN ?1
-                          WHEN parent_id IN (
-                            SELECT id FROM staging.file_entries
-                            WHERE entry_type = 'directory'
-                              AND (
-                                parent_id IS NULL
-                                OR parent_id = id
-                              )
-                              AND name IN ('\\', '/', '.')
-                          ) THEN ?1
-                          ELSE parent_id
-                        END,
-                        data_source_id, path, name, LOWER(entry_type),
-                        size, ext, deleted, hidden, system, read_only, archive, unix_mode, encrypted,
-                        created_at, modified_at, accessed_at, changed_at, hash_sha256,
-                        ?2
-                     FROM staging.file_entries
-                     WHERE NOT (
-                        entry_type = 'directory'
-                        AND (parent_id IS NULL OR parent_id = id)
-                        AND name IN ('\\', '/', '.')
-                     )",
-                params![placeholder_root_id, partition_index as i64],
-            )?;
+            let inserted = match super::ntfs_staging_merge::merge_completed_numeric(
+                main_conn,
+                staging_conn,
+                data_source_id,
+                partition_index,
+                &placeholder_root_id,
+            )? {
+                Some(rows) => rows,
+                None => main_conn.execute(
+                    include_str!("staging_enum_merge.sql"),
+                    params![placeholder_root_id, partition_index as i64],
+                )? as u64,
+            };
             main_conn.execute_batch("COMMIT")?;
-            Ok(inserted as u64)
+            Ok(inserted)
         })();
         if result.is_err() {
             let _ = main_conn.execute_batch("ROLLBACK");

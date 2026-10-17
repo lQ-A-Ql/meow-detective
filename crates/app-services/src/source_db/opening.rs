@@ -95,15 +95,20 @@ pub fn open_registered_source_db_read_only(
             data_source_id.0
         )));
     }
+    validate_bulk_ready(&connection)?;
+    Ok(connection)
+}
+
+pub(super) fn validate_bulk_ready(connection: &Connection) -> DbResult<()> {
     if persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::state(
-        &connection,
+        connection,
     )? != persistence_sqlite::repositories::source_bulk_load_repo::BulkLoadState::Inactive
     {
         return Err(DbError::System(
-            "Source bulk load requires import recovery before read access".into(),
+            "Source bulk load requires import recovery before access".into(),
         ));
     }
-    Ok(connection)
+    Ok(())
 }
 
 pub fn registered_source_db_path(
