@@ -2,6 +2,7 @@
 use sha2::{Digest, Sha256};
 use std::{io, path::PathBuf, time::SystemTime};
 
+#[derive(Clone)]
 pub(super) struct SourceSnapshot(Vec<(PathBuf, u64, SystemTime, Option<SystemTime>)>);
 impl SourceSnapshot {
     pub(super) fn metadata_bytes(&self) -> u64 {

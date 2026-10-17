@@ -37,7 +37,6 @@ where
         self.route.scope()
     }
     fn open_reader(&self) -> io::Result<Box<dyn EvidenceReader>> {
-        self.validate_snapshot()?;
         let hold = self
             .resources
             .as_ref()
@@ -174,8 +173,10 @@ fn raw_factory(
     );
     let metadata_identity = Some(snapshot.metadata_identity());
     let route = super::resources::ResourceRoute::default();
+    let opener_snapshot = snapshot.clone();
     Ok(Arc::new(OpenFactory {
         opener: move || {
+            opener_snapshot.validate()?;
             let reader = evidence_core::RawImageReader::open(&path)?;
             if reader.info().size != size {
                 return Err(io::Error::new(
