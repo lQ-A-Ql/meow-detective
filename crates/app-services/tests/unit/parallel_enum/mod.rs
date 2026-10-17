@@ -4,6 +4,7 @@ mod lazy_ntfs;
 pub(super) mod ntfs_fixture;
 mod path_projection;
 mod staging_lifecycle;
+mod writer_cost;
 use super::{
     batch_sink::{prepare_mft_insert, EnumerationStats},
     ntfs::{
@@ -459,9 +460,7 @@ fn stage_mft_records_for_test(
     .unwrap();
     let mut statement = prepare_mft_insert(conn).unwrap();
     let mut catalog = MftCatalog::default();
-    catalog
-        .stage_records(&mut statement, records, data_source_id, partition_index)
-        .unwrap();
+    catalog.stage_records(&mut statement, records).unwrap();
     drop(statement);
     catalog
 }

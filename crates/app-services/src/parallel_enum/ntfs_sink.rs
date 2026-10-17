@@ -14,8 +14,6 @@ pub(super) fn prepare_mft_insert(conn: &Connection) -> rusqlite::Result<CachedSt
 pub(super) fn stage_mft_record(
     statement: &mut CachedStatement<'_>,
     record: &MftRecord,
-    _data_source_id: &str,
-    _partition_index: usize,
 ) -> rusqlite::Result<(Option<u64>, String, u64)> {
     let name = if record.record_number == 5 && (record.name.is_empty() || record.name == ".") {
         "\\".to_string()

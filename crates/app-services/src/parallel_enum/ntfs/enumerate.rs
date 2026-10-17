@@ -5,6 +5,7 @@ use super::mft_scan::{self, prepare_mft_scan};
 use super::parallel_scan::collect_batches;
 use super::path_reconstruction::MftCatalog;
 use super::validation::validate_mft_staging_shape;
+use super::writer::{stage_batches, MFT_WRITER_BATCH_RECORDS};
 use crate::import_pipeline::profile::{Counters, PhaseRecorder};
 use crate::staging;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -104,6 +105,13 @@ fn enumerate_scan(
                 .profile
                 .measure(Phase::MftCommit, || ctx.conn.execute_batch("COMMIT"))
                 .map_err(ParallelEnumError::Db);
+            ctx.profile.count(
+                Phase::MftCommit,
+                Counters {
+                    partition_commits: Some(u64::from(commit.is_ok())),
+                    ..Default::default()
+                },
+            );
             if let Err(error) = commit {
                 ctx.conn.execute_batch("ROLLBACK").ok();
                 return Err(error);
@@ -140,19 +148,23 @@ fn scan_mft_transaction(
                     "invalid MFT logical byte count".into(),
                 ));
             }
-            let staged_rows = profile.measure(Phase::MftStage, || {
-                catalog.stage_records(
+            let written = profile.measure(Phase::MftStage, || {
+                stage_batches(
+                    &mut catalog,
                     &mut statement,
                     &batch.records,
-                    ctx.data_source_id,
-                    ctx.partition_index,
+                    MFT_WRITER_BATCH_RECORDS,
+                    ctx.cancel_token,
                 )
             })?;
             profile.observe_wal(Phase::MftStage, ctx.conn);
             profile.count(
                 Phase::MftStage,
                 Counters {
-                    staged: staged_rows,
+                    staged: written.rows,
+                    writer_batches: Some(written.batches),
+                    writer_batch_max_records: Some(written.maximum_records),
+                    read_chunk_records: Some(mft_scan::MFT_READ_CHUNK_RECORDS),
                     ..Default::default()
                 },
             );
@@ -174,6 +186,27 @@ fn scan_mft_transaction(
         ctx.volume_offset,
         ctx.profile,
     )?;
+    materialize_catalog_paths(ctx, &catalog)?;
+    let stats = catalog.stats();
+    drop(catalog);
+    ctx.profile.measure(Phase::MftValidate, || {
+        validate_mft_staging_shape(ctx.conn, ctx.data_source_id, ctx.partition_index)
+    })?;
+    Ok(stats)
+}
+
+fn check_cancelled(cancel_token: &AtomicBool) -> Result<(), ParallelEnumError> {
+    if cancel_token.load(Ordering::Relaxed) {
+        Err(ParallelEnumError::Cancelled)
+    } else {
+        Ok(())
+    }
+}
+
+fn materialize_catalog_paths(
+    ctx: &mut EnumerationContext<'_>,
+    catalog: &MftCatalog,
+) -> Result<(), ParallelEnumError> {
     let path_stats = ctx.profile.measure(Phase::MftPathResolve, || {
         catalog.update_staging_paths(
             ctx.conn,
@@ -202,18 +235,5 @@ fn scan_mft_transaction(
         },
     );
     ctx.profile.observe_wal(Phase::MftPathSql, ctx.conn);
-    let stats = catalog.stats();
-    drop(catalog);
-    ctx.profile.measure(Phase::MftValidate, || {
-        validate_mft_staging_shape(ctx.conn, ctx.data_source_id, ctx.partition_index)
-    })?;
-    Ok(stats)
-}
-
-fn check_cancelled(cancel_token: &AtomicBool) -> Result<(), ParallelEnumError> {
-    if cancel_token.load(Ordering::Relaxed) {
-        Err(ParallelEnumError::Cancelled)
-    } else {
-        Ok(())
-    }
+    Ok(())
 }

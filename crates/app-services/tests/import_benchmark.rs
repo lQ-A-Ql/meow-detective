@@ -280,6 +280,23 @@ fn verify_report(report: &ImportBenchmarkReportDto, record_count: u64) {
         .unwrap();
     assert_eq!(path_sql.main_table_updated_rows, Some(0));
     assert_eq!(path_sql.materialized_path_rows, Some(record_count - 14));
+    let stage = report
+        .partition_aggregates
+        .iter()
+        .find(|s| s.phase == Phase::MftStage)
+        .unwrap();
+    assert!(stage.writer_batches.is_some_and(|b| b > 0));
+    assert!(stage.writer_batch_max_records.is_some_and(|n| n <= 10000));
+    assert_eq!(stage.read_chunk_records, Some(10000));
+    assert_eq!(
+        report
+            .partition_aggregates
+            .iter()
+            .find(|s| s.phase == Phase::MftCommit)
+            .unwrap()
+            .partition_commits,
+        Some(1)
+    );
     assert!(path_sql
         .staging_logical_bytes
         .is_some_and(|bytes| bytes > 0));

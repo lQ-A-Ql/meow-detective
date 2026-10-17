@@ -1,6 +1,6 @@
 //! A bounded read/parse wave uses the shared Rayon pool; only the caller writes SQLite.
 use super::batch_pipeline::{MftBatch, OrderedMftWindow};
-use super::mft_scan::{MftScan, MFT_CHUNK_RECORDS};
+use super::mft_scan::{MftScan, MFT_READ_CHUNK_RECORDS};
 use crate::import_pipeline::profile::{Counters, PhaseRecorder};
 use crate::parallel_enum::error::ParallelEnumError;
 use evidence_core::EvidenceReaderFactory;
@@ -39,7 +39,7 @@ pub(super) fn collect_batches(
             .par_iter_mut()
             .enumerate()
             .filter_map(|(slot, (scan, recorder))| {
-                let offset = start + slot as u64 * MFT_CHUNK_RECORDS;
+                let offset = start + slot as u64 * MFT_READ_CHUNK_RECORDS;
                 (offset < total).then(|| read_batch(scan, offset, cancel, recorder))
             })
             .collect();
@@ -86,7 +86,7 @@ fn open_extra_readers(
                 1
             }
         })
-        .min(scan.total_records().div_ceil(MFT_CHUNK_RECORDS).max(1) as usize);
+        .min(scan.total_records().div_ceil(MFT_READ_CHUNK_RECORDS).max(1) as usize);
     let mut extra = Vec::new();
     for _ in 1..workers {
         let reader = profile.measure(Phase::MftReaderOpen, || {

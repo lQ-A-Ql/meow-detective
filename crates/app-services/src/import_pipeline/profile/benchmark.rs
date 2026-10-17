@@ -34,6 +34,10 @@ pub(crate) struct Counters {
     pub buffered_records: Option<u64>,
     pub updated_main_rows: Option<u64>,
     pub materialized_path_rows: Option<u64>,
+    pub writer_batches: Option<u64>,
+    pub writer_batch_max_records: Option<u64>,
+    pub read_chunk_records: Option<u64>,
+    pub partition_commits: Option<u64>,
     pub staging_logical_bytes: Option<u64>,
     pub sampled_wal_bytes: Option<u64>,
 }
@@ -207,6 +211,10 @@ impl Measurement {
             max_buffered_records: self.counters.buffered_records,
             main_table_updated_rows: self.counters.updated_main_rows,
             materialized_path_rows: self.counters.materialized_path_rows,
+            writer_batches: self.counters.writer_batches,
+            writer_batch_max_records: self.counters.writer_batch_max_records,
+            read_chunk_records: self.counters.read_chunk_records,
+            partition_commits: self.counters.partition_commits,
             staging_logical_bytes: self.counters.staging_logical_bytes,
             sampled_wal_max_bytes: self.counters.sampled_wal_bytes,
             records_per_sec: seconds
@@ -240,6 +248,18 @@ impl Counters {
                 (a, b) => a.or(b),
             };
         self.staging_logical_bytes = self.staging_logical_bytes.max(other.staging_logical_bytes);
+        self.writer_batches = match (self.writer_batches, other.writer_batches) {
+            (Some(a), Some(b)) => Some(a.saturating_add(b)),
+            (a, b) => a.or(b),
+        };
+        self.partition_commits = match (self.partition_commits, other.partition_commits) {
+            (Some(a), Some(b)) => Some(a.saturating_add(b)),
+            (a, b) => a.or(b),
+        };
+        self.writer_batch_max_records = self
+            .writer_batch_max_records
+            .max(other.writer_batch_max_records);
+        self.read_chunk_records = self.read_chunk_records.max(other.read_chunk_records);
     }
 }
 

@@ -6,7 +6,7 @@ use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
 use std::io::{Read, Seek, SeekFrom};
 use transport::dto::import_benchmark::ImportBenchmarkPhaseDto as Phase;
 
-pub(super) const MFT_CHUNK_RECORDS: u64 = 10_000;
+pub(super) const MFT_READ_CHUNK_RECORDS: u64 = 10_000;
 const MFT_FALLBACK_SIZE: u64 = 100 * 1024 * 1024;
 
 pub(in crate::parallel_enum) struct MftScan {
@@ -81,7 +81,7 @@ impl MftScan {
     }
 
     fn read_raw_chunk(&mut self, start_record: u64) -> Result<u64, ParallelEnumError> {
-        let chunk_count = MFT_CHUNK_RECORDS.min(self.total_records - start_record);
+        let chunk_count = MFT_READ_CHUNK_RECORDS.min(self.total_records - start_record);
         let byte_count = chunk_count * self.scanner.record_size() as u64;
         self.buffer.resize(byte_count as usize, 0);
         let stream_offset = start_record * self.scanner.record_size() as u64;

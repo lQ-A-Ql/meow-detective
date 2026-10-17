@@ -4,6 +4,25 @@ use transport::dto::import_benchmark::{
 };
 
 #[test]
+fn writer_and_path_metrics_keep_supported_zero_and_legacy_absence() {
+    let legacy = serde_json::json!({"phase":"mftCommit","state":"failed","inclusive":false,"elapsedNs":1,
+        "scannedRecords":0,"parsedRecords":0,"stagedRows":0,"logicalBytesRead":0,"fullImageOpens":0,"filesystemBuilds":0,"failures":1});
+    let old: ImportBenchmarkSampleDto = serde_json::from_value(legacy.clone()).unwrap();
+    assert_eq!(old.writer_batches, None);
+    assert_eq!(old.partition_commits, None);
+    let mut current = legacy;
+    current["partitionCommits"] = serde_json::json!(0);
+    current["writerBatches"] = serde_json::json!(0);
+    current["materializedPathRows"] = serde_json::json!(0);
+    let sample: ImportBenchmarkSampleDto = serde_json::from_value(current).unwrap();
+    let encoded = serde_json::to_value(sample).unwrap();
+    assert_eq!(encoded["partitionCommits"], 0);
+    assert_eq!(encoded["writerBatches"], 0);
+    assert_eq!(encoded["materializedPathRows"], 0);
+    assert!(encoded.get("readChunkRecords").is_none());
+}
+
+#[test]
 fn benchmark_report_round_trip_preserves_scopes_and_missing_measurements() {
     let report = ImportBenchmarkReportDto {
         schema_version: 1,
@@ -25,6 +44,10 @@ fn benchmark_report_round_trip_preserves_scopes_and_missing_measurements() {
             max_buffered_records: None,
             main_table_updated_rows: None,
             materialized_path_rows: None,
+            writer_batches: None,
+            writer_batch_max_records: None,
+            read_chunk_records: None,
+            partition_commits: None,
             staging_logical_bytes: None,
             sampled_wal_max_bytes: None,
             records_per_sec: None,

@@ -27,8 +27,6 @@ impl MftCatalog {
         &mut self,
         statement: &mut CachedStatement<'_>,
         records: &[MftRecord],
-        data_source_id: &str,
-        partition_index: usize,
     ) -> Result<u64, ParallelEnumError> {
         let mut staged_rows = 0u64;
         for record in records.iter().filter(|record| {
@@ -37,8 +35,7 @@ impl MftCatalog {
             self.external_file_sizes.track(record);
             self.record_sequences
                 .insert(record.record_number, record.sequence_number);
-            let (parent_key, name, inserted) =
-                stage_mft_record(statement, record, data_source_id, partition_index)?;
+            let (parent_key, name, inserted) = stage_mft_record(statement, record)?;
             staged_rows += inserted;
             self.path_map
                 .insert(record.record_number, (parent_key, name, record.is_dir));
