@@ -494,3 +494,10 @@ workflow P95 `+9.33%`（门槛 `+5%`）仍未关闭；详见
 因此 S3 的资源与发布保护可以进入后续阶段，性能验收不能宣称整体通过，也不能修改阈值
 或 verifier 来掩盖这两项回归。持续 channel 依据当前 warm-cache 上界保留 No-Go；
 PVE、preview 和多任务 RSS 组合仍属于 S5/S8。
+
+已完成的 phase 级复核见本地 `artifacts/stage-optimization/20261017/S3/iteration-03/phase-profile.json`。
+medium E01 的回归分布在 analysis、enumeration、graph 与 MFT directory backfill，
+不是单独的 snapshot 校验热点；候选 RSS 中位约 1,115 MiB，对基线约 982 MiB，增加约
+130 MiB。下一轮应先补充 analysis worker、search/index、SQLite staging merge 和
+E01 reader admission 的独立计时与等待计数，再针对确认后的热点做最小修复；full128 E01
+优先按 P95 抖动复核，不把一次较好的中位数当作已解决。
