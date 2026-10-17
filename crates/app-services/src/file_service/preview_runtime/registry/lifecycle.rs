@@ -128,6 +128,7 @@ fn runtime_key(case_id: &str, data_source_id: &str) -> RuntimeKey {
 }
 
 fn invalidate_case_locked(state: &mut RegistryState, case_id: &str) {
+    crate::source_runtime::invalidate_case(case_id);
     let keys = state
         .generations
         .keys()

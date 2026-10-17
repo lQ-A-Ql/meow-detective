@@ -466,3 +466,23 @@ persistence-sqlite 全 crate 391 / 4；相关 all-targets clippy 与架构守卫
 原始报告/日志摘要、oracle、成本和门槛复核见 `artifacts/stage-optimization/20261017/S2/acceptance.json`。
 测量完成后仅调整 import-optimization 守卫以跟随实际引用的独立 SQL；前后 SHA 另行登记，
 生产源码与冻结二进制保持测量版本，原失败日志保留。
+
+### S3 身份与提交保护（进行中）
+
+S3 首批改动将普通导入的 SourceRuntime lease 接到 source DB、analysis staging merge
+和 Ready 状态的事务提交点；来源失效时拒绝提交。独立 reader 打开前后检查 epoch，
+RAW backing members 与 E01 segments 在重开和提交前验证元数据。元数据身份带
+`metadata-v1` 前缀，绑定到 source_meta 以拒绝来源变化或缺少绑定的旧续导工作，
+包括损坏 manifest 目录。该标记不是证据内容哈希。新 owner 已接手后，旧失败状态也不能
+覆盖新结果；owner 次序不会随新 runtime 析构而丢失。未增加 UI 步骤或修改外部文件 ID。
+
+持续 channel 仍未启用。依据固定 S2 原报告，即使把全部 `mftReadParseWall` 分区 work-sum
+完全从 workflow 移除、保留单 writer 工作，所选正式输入所有轮次的节省上界也仅 2.2631%，
+低于 3% 门槛；采用这个宽松上界也考虑了消除慢批波次屏障的空间。它是当前 warm-cache
+workload 的 No-Go 预评估，不是 channel 实测，不代表新/冷缓存/慢 I/O 输入都没有收益。
+
+S3 尚未完成：其他发布点（含 Ready 后自动 Linux 制品路径）仍需审计；reader/byte/handle
+permits 与缓存统一 admission 须先落实 S5.P1，再对包装后的 reader 和并发策略验收。
+本片段没有新的 Release 性能/RSS 验收，不能把 S2 测量当作新保护代码的性能结果。
+功能验证日志、源码清单与预评估见本地 `artifacts/stage-optimization/20261017/S3/`，
+逐项边界见 `docs/architecture-performance-stage-S3-20261017.md`。

@@ -1,4 +1,5 @@
 mod analyze;
+mod catalog_publication;
 mod enumerate;
 mod finalize;
 mod locked;

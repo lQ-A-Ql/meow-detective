@@ -33,6 +33,7 @@ impl ImportAnalysisMode {
 
 #[derive(Debug, Clone)]
 pub struct ImportAnalysisOptions {
+    pub publication_lease: Option<crate::source_runtime::SourcePublicationLease>,
     pub case_root: PathBuf,
     pub db_path: PathBuf,
     pub case_id: String,
@@ -91,6 +92,7 @@ impl JobOutcomeCounts {
 
 #[derive(Debug, Clone)]
 pub struct PostImportPipelineOptions {
+    pub publication_lease: Option<crate::source_runtime::SourcePublicationLease>,
     pub case_root: PathBuf,
     pub db_path: PathBuf,
     pub case_id: String,
@@ -124,6 +126,7 @@ pub struct PostImportPipelineReport {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SearchIndexPhaseOptions {
+    pub(crate) publication_lease: Option<crate::source_runtime::SourcePublicationLease>,
     pub(crate) db_path: PathBuf,
     pub(crate) data_source_id: DataSourceId,
     pub(crate) platform: DataSourcePlatform,

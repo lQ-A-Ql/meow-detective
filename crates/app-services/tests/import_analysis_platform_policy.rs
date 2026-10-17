@@ -44,6 +44,7 @@ fn unknown_platform_fails_before_database_or_staging_access() {
     let mode = ImportAnalysisMode::BudgetedContent;
     let error = run_import_analysis_staging(
         ImportAnalysisOptions {
+            publication_lease: None,
             case_root: case_root.clone(),
             db_path: db_path.clone(),
             case_id: "case-unknown".to_string(),

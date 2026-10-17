@@ -42,6 +42,10 @@ pub(crate) fn run_search_index_phase(
         .eligible_count
         .saturating_sub(stats.indexed_count.saturating_add(stats.failed_count));
     drop(index);
+    if let Some(lease) = &options.publication_lease {
+        lease.validate()?;
+    }
+    ensure_not_cancelled(&options)?;
     replace_index_generation(&next_index_dir, &options.index_dir)?;
     build.mark_published();
     Ok(stats)

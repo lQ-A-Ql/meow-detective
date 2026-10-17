@@ -22,6 +22,7 @@ pub(super) fn merge_enumeration_results(
 
     let started = Instant::now();
     let source_connection = ctx.source_connection()?;
+    super::super::runtime::validate_current(ctx.runtime.as_deref())?;
     let merged = super::super::profile::measure_optional(
         ctx.profiler.as_ref(),
         transport::dto::import_benchmark::ImportBenchmarkPhaseDto::StagingMerge,

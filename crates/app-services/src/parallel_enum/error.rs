@@ -35,7 +35,13 @@ impl From<&str> for ParallelEnumError {
 
 impl ParallelEnumError {
     pub(super) fn allows_fallback(&self) -> bool {
-        matches!(self, Self::MftParams(_) | Self::Io(_))
+        match self {
+            Self::MftParams(_) => true,
+            Self::Io(error) => !error
+                .get_ref()
+                .is_some_and(|cause| cause.is::<crate::source_runtime::SourceInvalidated>()),
+            _ => false,
+        }
     }
 
     pub(super) fn recursive(message: String, cancelled: bool) -> Self {

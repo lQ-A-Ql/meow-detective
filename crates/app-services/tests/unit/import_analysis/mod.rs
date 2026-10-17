@@ -236,6 +236,7 @@ fn analysis_options(
     mode: ImportAnalysisMode,
 ) -> ImportAnalysisOptions {
     ImportAnalysisOptions {
+        publication_lease: None,
         case_root: tmp.path().to_path_buf(),
         db_path,
         case_id: "case-1".to_string(),
@@ -290,6 +291,7 @@ fn post_import_options(
     mode: ImportAnalysisMode,
 ) -> PostImportPipelineOptions {
     PostImportPipelineOptions {
+        publication_lease: None,
         case_root: tmp.path().to_path_buf(),
         db_path,
         case_id: "case-1".to_string(),
@@ -310,6 +312,7 @@ fn post_import_skip_uses_progress_sink_without_running_workers() {
     let tmp = TempDir::new().unwrap();
     let (db_path, data_source_id) = setup_source_db(&tmp);
     let options = PostImportPipelineOptions {
+        publication_lease: None,
         case_root: tmp.path().to_path_buf(),
         db_path,
         case_id: "case-1".to_string(),

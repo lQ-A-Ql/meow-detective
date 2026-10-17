@@ -14,6 +14,7 @@ pub(crate) fn run_finalize_phase(
     pipeline_message: &str,
     import_started: Instant,
 ) -> Result<String, CommandError> {
+    super::super::runtime::validate_current(ctx.runtime.as_deref())?;
     let timeline_count =
         if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::Filesystem {
             Some(materialize_timeline(ctx, data_source)?)

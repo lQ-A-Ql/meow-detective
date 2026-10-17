@@ -14,6 +14,7 @@ fn dedicated_search_phase_never_creates_a_missing_source_database() {
     let db_path = tmp.path().join("missing-source.db");
     let index_dir = tmp.path().join("search-index");
     let error = run_search_index_phase(SearchIndexPhaseOptions {
+        publication_lease: None,
         db_path: db_path.clone(),
         data_source_id: domain::DataSourceId("missing-source".to_string()),
         platform: DataSourcePlatform::Linux,
@@ -49,6 +50,7 @@ fn dedicated_search_phase_indexes_every_metadata_row_without_evidence_reads() {
 
     let index_dir = tmp.path().join("search-index");
     let stats = run_search_index_phase(SearchIndexPhaseOptions {
+        publication_lease: None,
         db_path,
         data_source_id,
         platform: DataSourcePlatform::Linux,

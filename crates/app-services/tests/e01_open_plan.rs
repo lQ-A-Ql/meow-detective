@@ -64,4 +64,5 @@ fn e01_plan_rejects_a_changed_segment_before_reusing_its_chunk_table() {
         .set_len(64)
         .unwrap();
     assert!(plan.open_reader().is_err());
+    assert!(plan.validate_snapshot().is_err());
 }

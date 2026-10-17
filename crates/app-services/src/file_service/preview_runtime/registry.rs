@@ -415,6 +415,7 @@ fn insert_runtime_locked(
 }
 
 pub(super) fn invalidate_scope_locked(state: &mut RegistryState, key: &RuntimeKey) {
+    crate::source_runtime::invalidate_source(&key.case_id, &key.data_source_id);
     bump_generation(state, key);
     invalidate_runtime_locked(state, key);
     state.sessions.retain(|_, entry| {

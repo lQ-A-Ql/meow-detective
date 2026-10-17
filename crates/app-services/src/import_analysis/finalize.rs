@@ -38,9 +38,17 @@ pub(super) fn merge_finished_analysis_staging(
         cb(84, "Merging analysis staging DBs...");
     }
     let merge_started = Instant::now();
+    if let Some(lease) = &options.publication_lease {
+        lease.validate()?;
+    }
+    let source = persistence_sqlite::open_existing_source(&options.db_path)?;
+    let _source_fence = options
+        .publication_lease
+        .as_ref()
+        .map(|lease| lease.fence_connection(&source));
     let content_index_dir = crate::source_db::source_content_index_dir(&options.index_dir);
     let merge_stats = staging::merge_analysis_staging_to_main(
-        &persistence_sqlite::open_existing_source(&options.db_path)?,
+        &source,
         &options.case_root,
         &options.data_source_id.0,
         worker_ids,
@@ -79,6 +87,7 @@ pub(super) fn rebuild_file_metadata_index(
         callback(92, "Building complete file metadata search index...");
     }
     let stats = super::search_phase::run_search_index_phase(SearchIndexPhaseOptions {
+        publication_lease: options.publication_lease.clone(),
         db_path: options.db_path.clone(),
         data_source_id: options.data_source_id.clone(),
         platform: options.platform,

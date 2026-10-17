@@ -132,6 +132,7 @@ fn execute_import_job_internal(
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(case_id, &ds)
         .map_err(CommandError::from_service_error)?;
+    let initialize_view = super::runtime::source_is_pending(conn, &ds.id)?;
     DataSourceRepo::new(conn)
         .update_import_state(&ds.id, "importing", None)
         .map_err(CommandError::from_service_error)?;
@@ -139,7 +140,11 @@ fn execute_import_job_internal(
     ctx.ds = Some(&ds);
     let result = (|| {
         reject_cancelled_after_register(&ctx, &ds)?;
-        super::runtime::prepare_runtime(&mut ctx, &ds)?;
+        super::runtime::prepare_runtime(&mut ctx, &ds, initialize_view)?;
+        let publication = ctx.runtime.as_ref().map(|r| r.publication_lease());
+        let _source_fence = publication
+            .as_ref()
+            .map(|lease| lease.fence_connection(&source_conn));
         persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::begin(
             &source_conn,
             &job_id.0,
@@ -161,7 +166,7 @@ fn execute_import_job_internal(
             "ready_metadata"
         }
     };
-    let mut message = persist_import_outcome(conn, &ds.id, ready_state, result)?;
+    let mut message = super::runtime::persist_outcome(&ctx, &ds, ready_state, result)?;
     message = auto_extract_linux_artifacts(&mut ctx, &ds, &source_conn, message)?;
     phases::emit_data_source_ready(&ctx, &ds)?;
     Ok((message, counts))
@@ -260,7 +265,7 @@ fn reject_cancelled_after_register(
     Err(CommandError::internal("Import cancelled by user"))
 }
 
-fn persist_import_outcome(
+pub(super) fn persist_import_outcome(
     conn: &rusqlite::Connection,
     data_source_id: &domain::DataSourceId,
     ready_state: &str,
@@ -306,7 +311,7 @@ fn persist_import_outcome(
     }
 }
 
-fn persist_failed_import(
+pub(super) fn persist_failed_import(
     conn: &rusqlite::Connection,
     data_source_id: &domain::DataSourceId,
     error: &CommandError,

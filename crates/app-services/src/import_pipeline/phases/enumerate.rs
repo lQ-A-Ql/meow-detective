@@ -39,10 +39,7 @@ pub(crate) fn run_enumeration_phase(
             ));
         }
     };
-    super::super::runtime::finish_indexes(ctx)?;
-    populate_file_graph(ctx, data_source, &mut stats);
-    ctx.counts.add_warnings(stats.warnings.len());
-    report_catalog_ready(ctx, data_source, &stats);
+    super::catalog_publication::finish_catalog(ctx, data_source, &mut stats)?;
     reject_cancelled_before_analysis(ctx, data_source)?;
     Ok(stats)
 }
@@ -348,48 +345,6 @@ fn report_enumeration_complete(
             bytes_to_mb(bytes),
             mb_per_sec(bytes, elapsed),
             workers,
-            crate::runtime_resources::current_rss_mb()
-        ),
-        ctx.cancel_requested(),
-    );
-}
-
-fn populate_file_graph(
-    ctx: &ImportJobContext<'_>,
-    data_source: &domain::DataSource,
-    stats: &mut file_service::EnumerationStats,
-) {
-    let Some(source_conn) = ctx.source_conn else {
-        return;
-    };
-    if let Err(error) = super::super::profile::measure_optional(
-        ctx.profiler.as_ref(),
-        transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Graph,
-        || file_service::populate_file_graph_for_data_source(source_conn, &data_source.id),
-    ) {
-        let warning = format!("Graph population warning: {error}");
-        tracing::warn!(%warning, "Failed to populate file graph after enumeration");
-        stats.warnings.push(warning);
-    }
-}
-
-fn report_catalog_ready(
-    ctx: &ImportJobContext<'_>,
-    data_source: &domain::DataSource,
-    stats: &file_service::EnumerationStats,
-) {
-    emit_phase_profile(
-        ctx.event_sink(),
-        ctx.job_id,
-        ctx.case_id,
-        Some(&data_source.id),
-        70,
-        format!(
-            "File catalog ready: phase=enum-merge rows={} files={} dirs={} warnings={} rssMb={}",
-            stats.file_count + stats.dir_count,
-            stats.file_count,
-            stats.dir_count,
-            stats.warnings.len(),
             crate::runtime_resources::current_rss_mb()
         ),
         ctx.cancel_requested(),

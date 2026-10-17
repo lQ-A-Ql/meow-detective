@@ -134,6 +134,7 @@ fn run_search_projection(context: SearchPhaseContext<'_>) -> Result<String, Stri
     )
     .map_err(|error| format!("Resolve registered search index path: {error}"))?;
     let stats = import_analysis::run_search_index_phase(SearchIndexPhaseOptions {
+        publication_lease: None,
         db_path,
         data_source_id: context.data_source_id.clone(),
         platform: context.platform,

@@ -118,7 +118,7 @@ tar = { version = "0.4", default-features = false }
 containers-pst = { path = "crates/containers-pst" }
 ceph-wire = { path = "crates/ceph-wire" }
 rocksdb-wire = { path = "crates/rocksdb-wire" }
-rusqlite = { version = "0.31", features = ["bundled", "serialize"] }
+rusqlite = { version = "0.31", features = ["bundled", "serialize", "hooks"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.24"
 tempfile = "3"

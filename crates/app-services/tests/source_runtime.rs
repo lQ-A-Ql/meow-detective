@@ -80,3 +80,34 @@ fn raw_factory_rejects_a_changed_source_member() {
     std::fs::write(&path, vec![0; 1024]).unwrap();
     assert!(factory.open_reader().is_err());
 }
+
+#[test]
+fn raw_factory_rejects_a_changed_qcow_backing_member_even_when_child_is_unchanged() {
+    let temp = tempfile::tempdir().unwrap();
+    let parent = temp.path().join("parent.raw");
+    std::fs::write(&parent, b"parent payload").unwrap();
+    let child = temp.path().join("child.qcow2");
+    let mut bytes = vec![0u8; 1024];
+    bytes[..4].copy_from_slice(b"QFI\xfb");
+    bytes[4..8].copy_from_slice(&3u32.to_be_bytes());
+    bytes[8..16].copy_from_slice(&72u64.to_be_bytes());
+    bytes[16..20].copy_from_slice(&10u32.to_be_bytes());
+    bytes[20..24].copy_from_slice(&9u32.to_be_bytes());
+    bytes[24..32].copy_from_slice(&14u64.to_be_bytes());
+    bytes[36..40].copy_from_slice(&1u32.to_be_bytes());
+    bytes[40..48].copy_from_slice(&512u64.to_be_bytes());
+    bytes[72..82].copy_from_slice(b"parent.raw");
+    std::fs::write(&child, &bytes).unwrap();
+    let factory = open_factory(&child, &DataSourceKind::Raw).unwrap();
+    factory.validate_snapshot().unwrap();
+    let mut reader = factory.open_reader().unwrap();
+    let mut output = [0; 14];
+    reader.read_exact(&mut output).unwrap();
+    assert_eq!(&output, b"parent payload");
+    std::fs::write(&parent, b"changed parent payload").unwrap();
+    assert!(factory.validate_snapshot().is_err());
+    assert!(factory.open_reader().is_err());
+    std::fs::remove_file(&parent).unwrap();
+    assert!(factory.validate_snapshot().is_err());
+    assert_eq!(std::fs::read(&child).unwrap(), bytes);
+}

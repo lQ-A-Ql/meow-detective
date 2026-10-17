@@ -9,6 +9,8 @@ use evidence_core::{
 
 struct OpenFactory<F> {
     opener: F,
+    validator: Box<dyn Fn() -> io::Result<()> + Send + Sync>,
+    metadata_identity: Option<String>,
     size: u64,
     granularity: usize,
     capabilities: ReaderCapabilities,
@@ -20,6 +22,7 @@ where
     R: EvidenceReader + 'static,
 {
     fn open_reader(&self) -> io::Result<Box<dyn EvidenceReader>> {
+        self.validate_snapshot()?;
         (self.opener)().map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
     }
     fn logical_size(&self) -> u64 {
@@ -31,17 +34,30 @@ where
     fn capabilities(&self) -> ReaderCapabilities {
         self.capabilities
     }
+    fn validate_snapshot(&self) -> io::Result<()> {
+        (self.validator)().map_err(|error| io::Error::new(error.kind(), super::SourceInvalidated))
+    }
+    fn metadata_identity(&self) -> Option<&str> {
+        self.metadata_identity.as_deref()
+    }
 }
 
 pub fn open_factory(path: &Path, kind: &DataSourceKind) -> io::Result<SharedReaderFactory> {
     match kind {
         DataSourceKind::E01 => {
-            let plan = image_e01::E01Reader::open(path)?.open_plan()?;
+            let plan = image_e01::E01Reader::open(&path.canonicalize()?)?.open_plan()?;
+            let snapshot = super::snapshot::SourceSnapshot::capture(&plan.segment_paths())?;
+            let metadata_identity = Some(snapshot.metadata_identity());
             let size = plan.logical_size();
             let plan = Arc::new(plan);
             let opener_plan = Arc::clone(&plan);
             Ok(Arc::new(OpenFactory {
                 opener: move || image_e01::E01Reader::from_open_plan(&opener_plan),
+                validator: Box::new(move || {
+                    snapshot.validate()?;
+                    plan.validate_snapshot()
+                }),
+                metadata_identity,
                 size,
                 granularity: 512,
                 capabilities: ReaderCapabilities {
@@ -52,13 +68,13 @@ pub fn open_factory(path: &Path, kind: &DataSourceKind) -> io::Result<SharedRead
             }))
         }
         DataSourceKind::Raw => {
-            let template = evidence_core::RawImageReader::open(path)?;
+            let path = path.canonicalize()?;
+            let template = evidence_core::RawImageReader::open(&path)?;
             let size = template.info().size;
             let snapshot = super::snapshot::SourceSnapshot::capture(template.backing_paths())?;
-            let path = path.to_path_buf();
+            let metadata_identity = Some(snapshot.metadata_identity());
             Ok(Arc::new(OpenFactory {
                 opener: move || {
-                    snapshot.validate()?;
                     let reader = evidence_core::RawImageReader::open(&path)?;
                     if reader.info().size != size {
                         return Err(io::Error::new(
@@ -68,6 +84,8 @@ pub fn open_factory(path: &Path, kind: &DataSourceKind) -> io::Result<SharedRead
                     }
                     Ok(reader)
                 },
+                validator: Box::new(move || snapshot.validate()),
+                metadata_identity,
                 size,
                 granularity: 512,
                 capabilities: ReaderCapabilities {
@@ -82,6 +100,9 @@ pub fn open_factory(path: &Path, kind: &DataSourceKind) -> io::Result<SharedRead
             let path = path.to_path_buf();
             Ok(Arc::new(OpenFactory {
                 opener: move || evidence_core::LocalDiskReader::open(&path),
+                // A live device has no immutable metadata snapshot guarantee.
+                validator: Box::new(|| Ok(())),
+                metadata_identity: None,
                 size,
                 granularity: 512,
                 capabilities: ReaderCapabilities {

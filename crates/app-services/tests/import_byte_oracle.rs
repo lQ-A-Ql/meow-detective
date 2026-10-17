@@ -96,6 +96,7 @@ fn segment_chunk_partition_and_derived_window_ranges_match_logical_bytes() {
     );
     std::fs::remove_file(temp.path().join("split.E02")).unwrap();
     assert!(plan.open_reader().is_err());
+    assert!(plan.validate_snapshot().is_err());
 }
 
 #[test]

@@ -986,6 +986,7 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
             let index_dir = active.case_root.join("indexes").join("tantivy");
             let (message, counts) = import_analysis::run_post_import_pipeline_with_counts(
                 import_analysis::PostImportPipelineOptions {
+                    publication_lease: None,
                     case_root: active.case_root.clone(),
                     db_path: active.case_root.join("app.db"),
                     case_id: active.meta.id.0.clone(),

@@ -34,6 +34,31 @@ impl E01Reader {
 }
 
 impl E01OpenPlan {
+    pub fn segment_paths(&self) -> Vec<std::path::PathBuf> {
+        (1..=self.segments.len())
+            .map(|index| build_segment_path(&self.info.path, index as u32))
+            .collect()
+    }
+    /// Metadata identity only; does not claim to hash or freeze the evidence.
+    pub fn validate_snapshot(&self) -> io::Result<()> {
+        for (index, expected) in self.segments.iter().enumerate() {
+            let metadata =
+                std::fs::metadata(build_segment_path(&self.info.path, index as u32 + 1))?;
+            if (metadata.len(), metadata.modified()?) != *expected {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "E01 segment changed since planning",
+                ));
+            }
+        }
+        if build_segment_path(&self.info.path, self.segments.len() as u32 + 1).try_exists()? {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "E01 segment set changed since planning",
+            ));
+        }
+        Ok(())
+    }
     pub fn open_reader(&self) -> io::Result<E01Reader> {
         let mut files = Vec::with_capacity(self.segments.len());
         for (index, expected) in self.segments.iter().enumerate() {

@@ -128,6 +128,7 @@ fn import_analysis_options(
     tier_state: Arc<std::sync::Mutex<super::tier::TierStateMachine>>,
 ) -> ImportAnalysisOptions {
     ImportAnalysisOptions {
+        publication_lease: options.publication_lease.clone(),
         case_root: options.case_root,
         db_path: options.db_path,
         case_id: options.case_id,

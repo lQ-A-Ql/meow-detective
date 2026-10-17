@@ -26,6 +26,15 @@ pub trait EvidenceReaderFactory: Send + Sync {
     fn logical_size(&self) -> u64;
     fn preferred_read_granularity(&self) -> usize;
     fn capabilities(&self) -> ReaderCapabilities;
+    /// Recheck the physical members before publishing derived results. This is
+    /// metadata identity validation, not a cryptographic evidence digest.
+    fn validate_snapshot(&self) -> io::Result<()> {
+        Ok(())
+    }
+    /// Versioned physical-member metadata identity, never a content digest.
+    fn metadata_identity(&self) -> Option<&str> {
+        None
+    }
 }
 
 pub type SharedReaderFactory = Arc<dyn EvidenceReaderFactory>;

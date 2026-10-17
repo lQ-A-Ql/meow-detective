@@ -1,4 +1,12 @@
 use super::*;
+
+#[test]
+fn invalidated_evidence_scope_is_never_reopened_through_generic_fallback() {
+    let error = ParallelEnumError::Io(std::io::Error::other(
+        crate::source_runtime::SourceInvalidated,
+    ));
+    assert!(!error.allows_fallback());
+}
 mod lazy_ntfs;
 #[path = "../../support/import_ntfs_fixture.rs"]
 pub(super) mod ntfs_fixture;
