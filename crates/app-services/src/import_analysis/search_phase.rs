@@ -19,6 +19,15 @@ const SEARCH_METADATA_PAGE_SIZE: u64 = 1_000;
 pub(crate) fn run_search_index_phase(
     options: SearchIndexPhaseOptions,
 ) -> Result<SearchIndexPhaseStats, ImportAnalysisError> {
+    let _budget = crate::resource_budget::pool_for(options.publication_lease.as_ref())
+        .acquire(
+            crate::resource_budget::Resources {
+                bytes: 128 * crate::resource_budget::MIB,
+                ..Default::default()
+            },
+            Some(&options.cancel_token),
+        )
+        .map_err(|e| ImportAnalysisError::Io(e.into_io()))?;
     validate_analysis_platform(options.platform)?;
     reconcile_index_generation(&options.index_dir)?;
     ensure_not_cancelled(&options)?;

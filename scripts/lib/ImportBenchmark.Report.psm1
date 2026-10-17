@@ -85,7 +85,7 @@ function Get-ImportBenchmarkSummary {
 
 function Get-ImportBenchmarkPhaseCounters {
   param([object[]]$Trials, [string]$Scope, [string]$Phase)
-  foreach ($metric in @('maxBufferedBatches', 'maxBufferedRecords', 'mainTableUpdatedRows', 'materializedPathRows', 'writerBatches', 'writerBatchMaxRecords', 'readChunkRecords', 'partitionCommits', 'stagingLogicalBytes', 'sampledWalMaxBytes')) {
+  foreach ($metric in @('maxBufferedBatches', 'maxReservedMftBytes', 'mftReadersActual', 'actualChunkRecords', 'maxBufferedRecords', 'mainTableUpdatedRows', 'materializedPathRows', 'writerBatches', 'writerBatchMaxRecords', 'readChunkRecords', 'partitionCommits', 'stagingLogicalBytes', 'sampledWalMaxBytes')) {
     $values = @(foreach ($trial in $Trials) {
       $samples = @($trial.payload.report.$Scope | Where-Object { $_.phase -eq $Phase -and
           ($Scope -eq 'partitionAggregates' -or $null -eq $_.PSObject.Properties['partitionIndex']) })

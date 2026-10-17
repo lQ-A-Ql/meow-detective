@@ -48,6 +48,12 @@ impl SourceRuntime {
     pub fn open_reader(&self) -> io::Result<Box<dyn EvidenceReader>> {
         self.factory().open_reader()
     }
+    pub fn open_reader_with_cancel(
+        &self,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> io::Result<Box<dyn EvidenceReader>> {
+        self.factory().open_reader_with_cancel(cancel)
+    }
     pub fn capabilities(&self) -> ReaderCapabilities {
         self.factory.capabilities()
     }
@@ -85,6 +91,15 @@ struct LeasedFactory {
 }
 
 impl EvidenceReaderFactory for LeasedFactory {
+    fn bind_reader_scope(&self, scope: Arc<dyn evidence_core::reader::ReaderAllocationScope>) {
+        self.inner.bind_reader_scope(scope);
+    }
+    fn reader_memory_bound(&self) -> u64 {
+        self.inner.reader_memory_bound()
+    }
+    fn reader_scope(&self) -> Option<Arc<dyn evidence_core::reader::ReaderAllocationScope>> {
+        self.inner.reader_scope()
+    }
     fn open_reader(&self) -> io::Result<Box<dyn EvidenceReader>> {
         self.lease.validate_epoch()?;
         let reader = self.inner.open_reader()?;

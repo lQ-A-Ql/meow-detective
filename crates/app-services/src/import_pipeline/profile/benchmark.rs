@@ -31,6 +31,9 @@ pub(crate) struct Counters {
     pub opens: u64,
     pub builds: u64,
     pub buffered_batches: Option<u64>,
+    pub buffered_bytes: Option<u64>,
+    pub mft_readers: Option<u64>,
+    pub actual_chunk_records: Option<u64>,
     pub buffered_records: Option<u64>,
     pub updated_main_rows: Option<u64>,
     pub materialized_path_rows: Option<u64>,
@@ -208,6 +211,9 @@ impl Measurement {
             filesystem_builds: self.counters.builds,
             failures: self.failures,
             max_buffered_batches: self.counters.buffered_batches,
+            max_reserved_mft_bytes: self.counters.buffered_bytes,
+            mft_readers_actual: self.counters.mft_readers,
+            actual_chunk_records: self.counters.actual_chunk_records,
             max_buffered_records: self.counters.buffered_records,
             main_table_updated_rows: self.counters.updated_main_rows,
             materialized_path_rows: self.counters.materialized_path_rows,
@@ -236,6 +242,9 @@ impl Counters {
         self.opens = self.opens.saturating_add(other.opens);
         self.builds = self.builds.saturating_add(other.builds);
         self.buffered_batches = self.buffered_batches.max(other.buffered_batches);
+        self.buffered_bytes = self.buffered_bytes.max(other.buffered_bytes);
+        self.mft_readers = self.mft_readers.max(other.mft_readers);
+        self.actual_chunk_records = self.actual_chunk_records.max(other.actual_chunk_records);
         self.buffered_records = self.buffered_records.max(other.buffered_records);
         self.sampled_wal_bytes = self.sampled_wal_bytes.max(other.sampled_wal_bytes);
         self.updated_main_rows = match (self.updated_main_rows, other.updated_main_rows) {

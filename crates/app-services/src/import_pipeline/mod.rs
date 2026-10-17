@@ -40,6 +40,7 @@ mod execute;
 pub mod options;
 pub mod partition;
 mod phases;
+mod post_ready;
 pub(crate) mod profile;
 mod runtime;
 

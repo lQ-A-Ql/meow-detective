@@ -4,6 +4,10 @@ use std::{io, path::PathBuf, time::SystemTime};
 
 pub(super) struct SourceSnapshot(Vec<(PathBuf, u64, SystemTime, Option<SystemTime>)>);
 impl SourceSnapshot {
+    pub(super) fn metadata_bytes(&self) -> u64 {
+        (self.0.capacity() * std::mem::size_of::<(PathBuf, u64, SystemTime, Option<SystemTime>)>()
+            + self.0.iter().map(|e| e.0.capacity()).sum::<usize>()) as u64
+    }
     pub(super) fn metadata_identity(&self) -> String {
         let mut digest = Sha256::new();
         for (path, length, modified, created) in &self.0 {

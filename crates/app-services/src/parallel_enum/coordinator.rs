@@ -283,7 +283,7 @@ fn join_workers(handles: Vec<JoinHandle<()>>) -> Result<(), String> {
 
 /// Get the opt-in upper bound for explicit worker settings.
 pub fn default_worker_count() -> usize {
-    crate::import_scheduler::default_cpu_budget()
+    crate::import_scheduler::resolve_import_worker_count(None)
 }
 
 /// Resolve worker count from settings.

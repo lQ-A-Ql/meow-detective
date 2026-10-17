@@ -151,6 +151,24 @@ pub(crate) fn run_source_analysis_extraction_execution_with_cancel(
     )
 }
 
+fn admit_extraction(
+    control: &AnalysisExecutionControl<'_>,
+) -> Result<crate::resource_budget::ResourcePermit, AnalysisServiceError> {
+    let budget = control
+        .source_runtime
+        .resource_pool()
+        .acquire(
+            crate::resource_budget::Resources {
+                bytes: 384 * crate::resource_budget::MIB,
+                workers: 1,
+                ..Default::default()
+            },
+            Some(&control.cancel_token),
+        )
+        .map_err(|e| AnalysisServiceError::Io(e.into_io()))?;
+    Ok(budget)
+}
+
 fn run_source_analysis_extraction_execution_with_progress(
     case_conn: &Connection,
     case_root: &Path,
@@ -159,7 +177,11 @@ fn run_source_analysis_extraction_execution_with_progress(
     categories: &[&str],
     control: AnalysisExecutionControl<'_>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
+    control.source_runtime.validate_publication()?;
+    let _budget = admit_extraction(&control)?;
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
+    let _source_fence = control.source_runtime.fence(&source.connection);
+    let _audit_fence = control.source_runtime.fence(case_conn);
     if source.platform == domain::DataSourcePlatform::Android {
         return Err(AnalysisServiceError::Unsupported(
             "use the Android analysis command for Android sources".to_string(),
@@ -231,6 +253,7 @@ fn run_source_analysis_extraction_execution_with_progress(
         );
     }
     if extraction.is_ok() {
+        control.source_runtime.validate_publication()?;
         if let Err(error) = source_reader.flush_derived_filesystem_locators() {
             tracing::warn!(
                 data_source_id = %data_source_id.0,
@@ -240,6 +263,30 @@ fn run_source_analysis_extraction_execution_with_progress(
         }
     }
     extraction
+}
+
+pub(crate) fn run_import_source_extraction(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    source: &DataSourceId,
+    runtime: &AnalysisSourceReadRuntime,
+    cancel_token: Arc<AtomicBool>,
+) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
+    let mut ignore = |_update: ExtractionProgressUpdate| {};
+    run_source_analysis_extraction_execution_with_progress(
+        case_conn,
+        case_root,
+        case_id,
+        source,
+        &["LinuxArtifacts"],
+        AnalysisExecutionControl {
+            cancel_token,
+            source_runtime: runtime,
+            progress: &mut ignore,
+        },
+    )
+    .map(|execution| execution.dto)
 }
 
 fn candidate_source_from_range_reader(reader: RangeContentReader) -> CandidateSource {

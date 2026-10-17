@@ -56,16 +56,16 @@ fn bounded_scheduler_runs_work_in_parallel_and_applies_in_input_order() {
 
 #[test]
 fn scheduling_policy_throttles_workers_at_the_memory_soft_limit() {
-    let normal = ExtractionSchedulingPolicy::for_runtime(6, 1024, 4096);
+    let normal = ExtractionSchedulingPolicy::for_runtime(6, 384, 1536);
     assert_eq!(normal.worker_count, 6);
     assert_eq!(normal.max_in_flight_items, 6);
     assert_eq!(normal.max_in_flight_bytes, DEFAULT_MAX_IN_FLIGHT_BYTES);
 
-    let pressure = ExtractionSchedulingPolicy::for_runtime(6, 2048, 4096);
+    let pressure = ExtractionSchedulingPolicy::for_runtime(6, 768, 1536);
     assert_eq!(pressure.worker_count, 4);
     assert_eq!(pressure.max_in_flight_items, 4);
 
-    let throttled = ExtractionSchedulingPolicy::for_runtime(6, 4096, 4096);
+    let throttled = ExtractionSchedulingPolicy::for_runtime(6, 1536, 1536);
     assert_eq!(throttled.worker_count, 1);
     assert_eq!(throttled.max_in_flight_items, 1);
     assert_eq!(throttled.max_in_flight_bytes, THROTTLED_MAX_IN_FLIGHT_BYTES);

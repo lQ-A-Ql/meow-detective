@@ -42,6 +42,7 @@ pub use platforms::{
 pub use summary::generate_analysis_summary;
 pub use system_info::extract_system_info_for_case;
 mod system_info_boot;
+pub(crate) use use_cases::run_import_source_extraction;
 pub(crate) use use_cases::run_source_analysis_extraction_execution_with_cancel;
 pub use use_cases::{
     classify_source_files, generate_source_analysis_summary, get_file_classification_board,

@@ -2,6 +2,7 @@ use crate::reader::{EvidenceReader, ReaderInfo};
 mod formats;
 use formats::{read_backend, Backend};
 mod open;
+mod resources;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 

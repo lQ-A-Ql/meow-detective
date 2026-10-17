@@ -475,10 +475,17 @@ fn open_plan_shares_chunk_table_and_reads_across_independent_segment_handles() {
             std::fs::File::open(&second_path).unwrap(),
         ],
     );
-    let plan = reader.open_plan().unwrap();
+    let active = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let plan = reader.open_plan().unwrap().with_resources(
+        std::sync::Arc::new(()),
+        std::sync::Arc::new(CountingAdmission(active.clone())),
+    );
     assert_eq!(plan.segment_count(), 2);
     let first = plan.open_reader().unwrap();
     let second = plan.open_reader().unwrap();
+    let third = first.re_open(&first_path).unwrap();
+    assert_eq!(active.load(std::sync::atomic::Ordering::Acquire), 3);
+    drop(third);
     assert!(std::sync::Arc::ptr_eq(
         &first.chunk_table,
         &second.chunk_table
@@ -496,12 +503,83 @@ fn open_plan_shares_chunk_table_and_reads_across_independent_segment_handles() {
             });
         }
     });
+    assert_eq!(active.load(std::sync::atomic::Ordering::Acquire), 0);
     let third_path = directory.join("source.E03");
     std::fs::write(&third_path, [0]).unwrap();
     assert!(plan.open_reader().is_err());
     std::fs::remove_file(&third_path).unwrap();
     std::fs::remove_file(&second_path).unwrap();
     assert!(plan.open_reader().is_err());
+    assert_eq!(active.load(std::sync::atomic::Ordering::Acquire), 0);
     std::fs::remove_file(&first_path).unwrap();
     std::fs::remove_dir(&directory).unwrap();
+}
+
+struct CountingAdmission(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+struct CountingHold(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+impl Drop for CountingHold {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+impl evidence_core::reader::ReaderAdmission for CountingAdmission {
+    fn acquire(&self) -> io::Result<std::sync::Arc<dyn evidence_core::reader::ReaderResourceHold>> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        Ok(std::sync::Arc::new(CountingHold(self.0.clone())))
+    }
+}
+#[test]
+fn hostile_table_count_is_rejected_before_allocating_entries() {
+    let mut content = vec![0; V1_TABLE_HEADER_SIZE + 4];
+    content[..4].copy_from_slice(&u32::MAX.to_le_bytes());
+    let section = crate::table::E01Section {
+        kind: "table".into(),
+        segment_index: 0,
+        start_offset: 0,
+        next_offset: 0,
+        content,
+    };
+    assert_eq!(
+        crate::table::build_chunk_table(&[section], 4096, "table")
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::OutOfMemory
+    );
+}
+#[test]
+fn aggregate_section_content_and_count_have_separate_finite_limits() {
+    use crate::open_limits::*;
+    let mut budget = OpenBudget::default();
+    budget.content(MAX_SECTION_BYTES).unwrap();
+    assert_eq!(
+        budget.content(1).unwrap_err().kind(),
+        io::ErrorKind::OutOfMemory
+    );
+    let mut budget = OpenBudget {
+        sections: MAX_SECTIONS,
+        content: 0,
+    };
+    assert_eq!(
+        budget.section().unwrap_err().kind(),
+        io::ErrorKind::OutOfMemory
+    );
+}
+
+#[test]
+fn bounded_open_refuses_segment_growth_before_parsing_any_segment() {
+    let directory = temporary_chunk_path("segment-limit").with_extension("");
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("source.E01");
+    std::fs::write(&path, [0; 13]).unwrap();
+    std::fs::write(directory.join("source.E02"), [0; 13]).unwrap();
+    assert_eq!(
+        E01Reader::open_with_segment_limit(&path, 1)
+            .err()
+            .unwrap()
+            .kind(),
+        io::ErrorKind::OutOfMemory
+    );
+    std::fs::remove_file(&path).unwrap();
+    std::fs::remove_file(directory.join("source.E02")).unwrap();
+    std::fs::remove_dir(directory).unwrap();
 }

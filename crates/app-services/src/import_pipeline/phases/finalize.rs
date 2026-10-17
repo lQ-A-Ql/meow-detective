@@ -64,6 +64,17 @@ fn materialize_timeline(
     ctx: &ImportJobContext<'_>,
     data_source: &domain::DataSource,
 ) -> Result<u64, CommandError> {
+    let _budget = crate::resource_budget::pool_for(
+        ctx.runtime.as_ref().map(|r| r.publication_lease()).as_ref(),
+    )
+    .acquire(
+        crate::resource_budget::Resources {
+            bytes: crate::resource_budget::TIMELINE_BYTES,
+            ..Default::default()
+        },
+        Some(ctx.options.cancel_token),
+    )
+    .map_err(CommandError::from_typed_service_error)?;
     let source_conn = ctx.source_connection()?;
     ctx.report_job_progress(94, "Materializing timeline...")?;
     let projection = super::super::profile::measure_optional(
@@ -196,11 +207,13 @@ pub(crate) fn emit_data_source_ready(
     ctx: &ImportJobContext<'_>,
     data_source: &domain::DataSource,
 ) -> Result<(), CommandError> {
+    super::super::runtime::validate_current(ctx.runtime.as_deref())?;
     let summary = file_service::get_data_sources_for_case(ctx.conn, ctx.case_root, ctx.case_id)
         .map_err(CommandError::from_service_error)?
         .into_iter()
         .find(|source| source.id == data_source.id.0);
     if let Some(summary) = summary {
+        super::super::runtime::validate_current(ctx.runtime.as_deref())?;
         crate::import_pipeline::emit::emit_data_source_imported(
             ctx.event_sink(),
             &ctx.case_id.0,

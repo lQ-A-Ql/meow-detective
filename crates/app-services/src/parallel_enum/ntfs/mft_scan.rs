@@ -15,6 +15,8 @@ pub(in crate::parallel_enum) struct MftScan {
     scanner: MftScanner,
     total_records: u64,
     buffer: Vec<u8>,
+    pub(super) chunk_records: u64,
+    pub(super) resource_hold: Option<std::sync::Arc<dyn evidence_core::reader::ReaderResourceHold>>,
 }
 
 impl MftScan {
@@ -37,6 +39,8 @@ impl MftScan {
             scanner,
             total_records: self.total_records,
             buffer: Vec::new(),
+            chunk_records: self.chunk_records,
+            resource_hold: self.resource_hold.clone(),
         })
     }
 
@@ -81,7 +85,7 @@ impl MftScan {
     }
 
     fn read_raw_chunk(&mut self, start_record: u64) -> Result<u64, ParallelEnumError> {
-        let chunk_count = MFT_READ_CHUNK_RECORDS.min(self.total_records - start_record);
+        let chunk_count = self.chunk_records.min(self.total_records - start_record);
         let byte_count = chunk_count * self.scanner.record_size() as u64;
         self.buffer.resize(byte_count as usize, 0);
         let stream_offset = start_record * self.scanner.record_size() as u64;
@@ -115,6 +119,7 @@ impl MftScan {
 
     pub(in crate::parallel_enum) fn release_buffer(&mut self) {
         self.buffer = Vec::new();
+        self.resource_hold = None;
     }
 
     pub(in crate::parallel_enum) fn take_reader(
@@ -129,9 +134,17 @@ impl MftScan {
 pub(in crate::parallel_enum) fn prepare_mft_scan(
     partition: &PartitionWork,
     profile: &mut PhaseRecorder,
+    cancel: &std::sync::atomic::AtomicBool,
 ) -> Result<MftScan, ParallelEnumError> {
-    let reader = profile.measure(Phase::MftReaderOpen, || {
-        open_partition_evidence_reader(partition)
+    let reader = profile.measure(Phase::MftReaderOpen, || match &partition.reader_factory {
+        Some(factory) => factory.open_reader_with_cancel(cancel).map_err(|e| {
+            if cancel.load(std::sync::atomic::Ordering::Acquire) {
+                ParallelEnumError::Cancelled
+            } else {
+                ParallelEnumError::Io(e)
+            }
+        }),
+        None => open_partition_evidence_reader(partition),
     })?;
     profile.count(
         Phase::MftReaderOpen,
@@ -176,6 +189,8 @@ pub(in crate::parallel_enum) fn prepare_mft_scan_from_reader(
         scanner,
         total_records,
         buffer: Vec::new(),
+        chunk_records: MFT_READ_CHUNK_RECORDS,
+        resource_hold: None,
     })
 }
 
@@ -208,6 +223,11 @@ pub(in crate::parallel_enum) fn read_ntfs_mft_parameters_at(
     let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
     let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap_or([0; 8]));
     let record_size = mft_record_size_from_boot(&boot);
+    if record_size > 16 * 1024 * 1024 {
+        return Err(ParallelEnumError::MftResourceLimit(
+            "MFT parameter record exceeds 16 MiB",
+        ));
+    }
     let mut record = read_mft_record_zero(
         reader,
         volume_offset + mft_cluster * cluster_size,
@@ -463,26 +483,4 @@ fn invalid_data(message: impl Into<String>) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::InvalidData, message.into())
 }
 
-fn read_sized_le(bytes: &[u8]) -> u64 {
-    bytes
-        .iter()
-        .enumerate()
-        .take(8)
-        .fold(0, |value, (index, byte)| {
-            value | (*byte as u64) << (index * 8)
-        })
-}
-
-fn read_sized_le_signed(bytes: &[u8]) -> i64 {
-    let length = bytes.len().min(8);
-    if length == 0 {
-        return 0;
-    }
-    let mut value = read_sized_le(&bytes[..length]);
-    if bytes[length - 1] & 0x80 != 0 {
-        for index in length..8 {
-            value |= 0xFFu64 << (index * 8);
-        }
-    }
-    value as i64
-}
+use super::run_numbers::{read_sized_le, read_sized_le_signed};

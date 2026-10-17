@@ -10,14 +10,14 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
 
 const DEFAULT_CPU_CAP: usize = 6;
-// E01 members are independent disk-backed sources. Allow three members in
+// E01 members are independent disk-backed sources. Allow two members in
 // flight by default; each member still has a bounded worker budget and the
 // weighted admission controller prevents CPU/memory overcommit.
-const CLUSTER_MEMBER_CAP: usize = 3;
+const CLUSTER_MEMBER_CAP: usize = 2;
 const CLUSTER_MEMBER_WORKER_CAP: usize = 2;
-const MEMORY_CAPACITY_MB: u64 = 4096;
-const SINGLE_SOURCE_MEMORY_RESERVATION_MB: u64 = 4096;
-const ANALYSIS_WORKER_MEMORY_RESERVATION_MB: u64 = 512;
+const MEMORY_CAPACITY_MB: u64 = 1536;
+const SINGLE_SOURCE_MEMORY_RESERVATION_MB: u64 = 1536;
+const ANALYSIS_WORKER_MEMORY_RESERVATION_MB: u64 = 192;
 const ADMISSION_WAIT: Duration = Duration::from_millis(100);
 
 /// Work topology used to derive a bounded import policy.
@@ -71,7 +71,7 @@ impl ImportSchedulingPolicy {
     ) -> Self {
         let cpu_budget = cpu_budget.max(1);
         // A cluster member is an independent evidence reader.  Cap its local
-        // worker budget at three so two members can make progress without
+        // worker budget at two so two members can make progress without
         // multiplying the ordinary six-worker source budget.
         let member_worker_cap = cpu_budget.clamp(1, CLUSTER_MEMBER_WORKER_CAP);
         let test_member_worker_cap = test_override("FORENSICS_TEST_MEMBER_WORKER_CAP")
@@ -353,7 +353,7 @@ pub fn resolve_analysis_worker_count_for_memory(
 fn resolve_requested(requested: Option<usize>, capacity: usize) -> usize {
     requested
         .filter(|count| *count > 0)
-        .unwrap_or(capacity)
+        .unwrap_or(capacity.min(2))
         .min(capacity)
         .max(1)
 }

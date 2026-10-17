@@ -65,14 +65,24 @@ fn clear_preview_caches_for_source(app: &AppHandle, case_id: &str, data_source_i
         return;
     }
 
-    let drained =
-        match state.retire_preview_source(case_id, data_source_id, Duration::from_secs(30)) {
-            Ok(drained) => drained,
-            Err(error) => {
-                tracing::error!(%error, "Failed to retire preview runtime after import");
-                return;
-            }
-        };
+    if let Err(error) = state
+        .registry_browser
+        .invalidate_source(case_id, data_source_id)
+    {
+        tracing::error!(%error, "Failed to refresh registry browser after import");
+        return;
+    }
+    let drained = match state.preview_runtime.retire_source_preview_only_and_drain(
+        case_id,
+        data_source_id,
+        Duration::from_secs(30),
+    ) {
+        Ok(drained) => drained,
+        Err(error) => {
+            tracing::error!(%error, "Failed to retire preview runtime after import");
+            return;
+        }
+    };
     if !drained {
         tracing::error!(
             case_id = %case_id,
@@ -81,10 +91,16 @@ fn clear_preview_caches_for_source(app: &AppHandle, case_id: &str, data_source_i
         );
         return;
     }
+    if let Err(error) = state
+        .bitlocker_runtime
+        .invalidate_source(case_id, data_source_id)
+    {
+        tracing::error!(%error, "Failed to refresh BitLocker runtime after import");
+        return;
+    }
     if let Err(error) = state.clear_runtime_cache_for_case(case_id) {
         tracing::error!(%error, "Failed to clear runtime cache after import");
     }
-    app_services::file_service::clear_e01_reader_cache_for_case(case_id);
     if let Err(error) = state.reactivate_preview_source(case_id, data_source_id) {
         tracing::error!(%error, "Failed to reactivate preview runtime after import");
         return;

@@ -138,9 +138,17 @@ fn execute_import_job_internal(
         .map_err(CommandError::from_service_error)?;
     ctx.source_conn = Some(&source_conn);
     ctx.ds = Some(&ds);
+    let mut workspace = None;
     let result = (|| {
         reject_cancelled_after_register(&ctx, &ds)?;
         super::runtime::prepare_runtime(&mut ctx, &ds, initialize_view)?;
+        if let Some(runtime) = &ctx.runtime {
+            let admitted = crate::resource_budget::global_pool()
+                .workspace(ctx.options.cancel_token)
+                .map_err(CommandError::from_typed_service_error)?;
+            runtime.publication_lease().bind_pool(admitted.pool());
+            workspace = Some(admitted);
+        }
         let publication = ctx.runtime.as_ref().map(|r| r.publication_lease());
         let _source_fence = publication
             .as_ref()
@@ -167,71 +175,8 @@ fn execute_import_job_internal(
         }
     };
     let mut message = super::runtime::persist_outcome(&ctx, &ds, ready_state, result)?;
-    message = auto_extract_linux_artifacts(&mut ctx, &ds, &source_conn, message)?;
-    phases::emit_data_source_ready(&ctx, &ds)?;
+    message = super::post_ready::finish(&mut ctx, &ds, &source_conn, message)?;
     Ok((message, counts))
-}
-
-fn auto_extract_linux_artifacts(
-    ctx: &mut ImportJobContext<'_>,
-    data_source: &domain::DataSource,
-    source_conn: &rusqlite::Connection,
-    mut message: String,
-) -> Result<String, CommandError> {
-    let should_run = ctx.import_config.platform == domain::DataSourcePlatform::Linux
-        && matches!(
-            ctx.content_kind,
-            crate::import_pipeline::context::ImportContentKind::Filesystem
-        )
-        && ctx.import_config.import_set.is_none()
-        && !ctx.options.defer_linux_artifacts
-        && !ctx.options.cancel_token.load(Ordering::Relaxed);
-    if !should_run {
-        return Ok(message);
-    }
-    ctx.report_job_progress(96, "Linux artifact analysis started automatically")?;
-    match crate::analysis_service::run_source_analysis_extraction(
-        ctx.conn,
-        ctx.case_root,
-        ctx.case_id,
-        &data_source.id,
-        &["LinuxArtifacts"],
-    ) {
-        Ok(run) => {
-            let facts = crate::cluster_service::collect_linux_evidence_facts(
-                ctx.conn,
-                ctx.case_root,
-                ctx.case_id,
-                &data_source.id,
-            );
-            if let Err(error) = crate::cluster_service::persist_linux_evidence_facts(
-                source_conn,
-                &data_source.id,
-                &facts,
-            ) {
-                tracing::warn!(data_source_id = %data_source.id.0, %error, "Linux evidence facts cache could not be persisted");
-            }
-            message.push_str(&format!(
-                "; Linux artifacts auto-analyzed: artifacts={} timeline={}",
-                run.artifact_count, run.timeline_event_count
-            ));
-        }
-        Err(error) => {
-            ctx.counts.warning_count = ctx.counts.warning_count.saturating_add(1);
-            ctx.counts.failed_count = ctx.counts.failed_count.saturating_add(1);
-            ctx.job_repo
-                .update_outcome_counts(
-                    ctx.job_id,
-                    ctx.counts.warning_count,
-                    ctx.counts.skipped_count,
-                    ctx.counts.failed_count,
-                    true,
-                )
-                .map_err(CommandError::from_service_error)?;
-            message.push_str(&format!("; Linux artifact auto-analysis partial: {error}"));
-        }
-    }
-    Ok(message)
 }
 
 fn reject_cancelled_after_register(

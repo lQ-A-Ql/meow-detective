@@ -10,12 +10,21 @@ fn writer_and_path_metrics_keep_supported_zero_and_legacy_absence() {
     let old: ImportBenchmarkSampleDto = serde_json::from_value(legacy.clone()).unwrap();
     assert_eq!(old.writer_batches, None);
     assert_eq!(old.partition_commits, None);
+    assert_eq!(old.max_reserved_mft_bytes, None);
+    assert_eq!(old.mft_readers_actual, None);
+    assert_eq!(old.actual_chunk_records, None);
     let mut current = legacy;
+    current["maxReservedMftBytes"] = serde_json::json!(0);
+    current["mftReadersActual"] = serde_json::json!(0);
+    current["actualChunkRecords"] = serde_json::json!(0);
     current["partitionCommits"] = serde_json::json!(0);
     current["writerBatches"] = serde_json::json!(0);
     current["materializedPathRows"] = serde_json::json!(0);
     let sample: ImportBenchmarkSampleDto = serde_json::from_value(current).unwrap();
     let encoded = serde_json::to_value(sample).unwrap();
+    assert_eq!(encoded["maxReservedMftBytes"], 0);
+    assert_eq!(encoded["mftReadersActual"], 0);
+    assert_eq!(encoded["actualChunkRecords"], 0);
     assert_eq!(encoded["partitionCommits"], 0);
     assert_eq!(encoded["writerBatches"], 0);
     assert_eq!(encoded["materializedPathRows"], 0);
@@ -41,6 +50,9 @@ fn benchmark_report_round_trip_preserves_scopes_and_missing_measurements() {
             filesystem_builds: 0,
             failures: 0,
             max_buffered_batches: None,
+            max_reserved_mft_bytes: None,
+            mft_readers_actual: None,
+            actual_chunk_records: None,
             max_buffered_records: None,
             main_table_updated_rows: None,
             materialized_path_rows: None,

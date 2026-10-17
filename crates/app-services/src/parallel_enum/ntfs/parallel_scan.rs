@@ -17,11 +17,52 @@ pub(super) fn collect_batches(
     requested: usize,
     cancel: &AtomicBool,
     profile: &mut PhaseRecorder,
-    mut consume: impl FnMut(MftBatch, &mut PhaseRecorder) -> Result<(), ParallelEnumError>,
+    mut consume: impl FnMut(&MftBatch, &mut PhaseRecorder) -> Result<(), ParallelEnumError>,
 ) -> Result<(), ParallelEnumError> {
+    collect_batches_with_budget(
+        scan,
+        factory,
+        requested,
+        cancel,
+        profile,
+        256 * crate::resource_budget::MIB,
+        &mut consume,
+    )
+}
+
+pub(super) fn collect_batches_with_budget(
+    scan: &mut MftScan,
+    factory: Option<&dyn EvidenceReaderFactory>,
+    requested: usize,
+    cancel: &AtomicBool,
+    profile: &mut PhaseRecorder,
+    window_bytes: u64,
+    mut consume: impl FnMut(&MftBatch, &mut PhaseRecorder) -> Result<(), ParallelEnumError>,
+) -> Result<(), ParallelEnumError> {
+    let desired = factory.map_or(1, |f| {
+        let c = f.capabilities();
+        if c.independent_cursor && c.stable_snapshot {
+            requested.clamp(1, 4).min(c.max_concurrent_readers.max(1))
+        } else {
+            1
+        }
+    });
+    let (budget_workers, reserved) = reserve_wave(scan, factory, desired, window_bytes, cancel)?;
+    scan.resource_hold = Some(reserved);
+    let chunk_records = scan.chunk_records;
     let total = scan.total_records();
-    let mut extra = open_extra_readers(scan, factory, requested, profile)?;
+    let mut extra = open_extra_readers(scan, factory, budget_workers, profile)?;
     let workers = extra.len() + 1;
+    profile.record_duration(Phase::MftReadParseWall, None, State::NotApplicable);
+    profile.count(
+        Phase::MftReadParseWall,
+        Counters {
+            mft_readers: Some(workers as u64),
+            buffered_bytes: Some(wave_bytes(scan, budget_workers)),
+            actual_chunk_records: Some(chunk_records),
+            ..Default::default()
+        },
+    );
     let mut readers: Vec<_> = std::iter::once(scan)
         .chain(extra.iter_mut())
         .map(|scan| (scan, profile.fork()))
@@ -39,7 +80,7 @@ pub(super) fn collect_batches(
             .par_iter_mut()
             .enumerate()
             .filter_map(|(slot, (scan, recorder))| {
-                let offset = start + slot as u64 * MFT_READ_CHUNK_RECORDS;
+                let offset = start + slot as u64 * chunk_records;
                 (offset < total).then(|| read_batch(scan, offset, cancel, recorder))
             })
             .collect();
@@ -61,12 +102,97 @@ pub(super) fn collect_batches(
             }
             start += batch.scanned_records;
             let writer_started = profile.start();
-            let result = consume(batch, profile);
+            let result = consume(&batch, profile);
             profile.record(Phase::MftWriterWall, writer_started, result_state(&result));
             result?;
         }
     }
     Ok(())
+}
+
+fn wave_bytes(scan: &MftScan, workers: usize) -> u64 {
+    workers as u64
+        * (scan.chunk_records
+            * (3 * u64::from(scan.record_size())
+                + 2 * std::mem::size_of::<fs_ntfs::mft_scanner::MftRecord>() as u64)
+            + 2 * u64::from(scan.record_size()))
+}
+type WaveReservation = (
+    usize,
+    std::sync::Arc<dyn evidence_core::reader::ReaderResourceHold>,
+);
+
+fn reserve_wave(
+    scan: &mut MftScan,
+    factory: Option<&dyn EvidenceReaderFactory>,
+    requested: usize,
+    limit: u64,
+    cancel: &AtomicBool,
+) -> Result<WaveReservation, ParallelEnumError> {
+    use crate::resource_budget::{global_pool, Resources};
+    let scope = factory.and_then(|f| f.reader_scope());
+    let acquire =
+        |bytes,
+         workers|
+         -> std::io::Result<std::sync::Arc<dyn evidence_core::reader::ReaderResourceHold>> {
+            if cancel.load(Ordering::Acquire) {
+                return Err(crate::resource_budget::ResourceError::Cancelled.into_io());
+            }
+            if let Some(scope) = &scope {
+                return scope.acquire_work(bytes, workers);
+            }
+            global_pool()
+                .acquire(
+                    Resources {
+                        bytes,
+                        workers,
+                        ..Default::default()
+                    },
+                    if workers == 1 { Some(cancel) } else { None },
+                )
+                .map(|p| {
+                    std::sync::Arc::new(p)
+                        as std::sync::Arc<dyn evidence_core::reader::ReaderResourceHold>
+                })
+                .map_err(crate::resource_budget::ResourceError::into_io)
+        };
+    let per_record = 3 * u64::from(scan.record_size())
+        + 2 * std::mem::size_of::<fs_ntfs::mft_scanner::MftRecord>() as u64;
+    scan.chunk_records = MFT_READ_CHUNK_RECORDS
+        .min(limit.saturating_sub(2 * u64::from(scan.record_size())) / per_record);
+    if scan.chunk_records == 0 {
+        return Err(ParallelEnumError::MftResourceLimit(
+            "MFT window cannot hold one record",
+        ));
+    }
+    let mut workers =
+        requested.min(scan.total_records().div_ceil(scan.chunk_records).max(1) as usize);
+    while workers > 1 {
+        let bytes = wave_bytes(scan, workers);
+        if bytes <= limit {
+            match acquire(bytes, workers as u64) {
+                Ok(permit) => return Ok((workers, permit)),
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(error) => {
+                    return Err(if cancel.load(Ordering::Acquire) {
+                        ParallelEnumError::Cancelled
+                    } else {
+                        ParallelEnumError::Io(error)
+                    })
+                }
+            }
+        }
+        workers -= 1;
+    }
+    acquire(wave_bytes(scan, 1), 1)
+        .map(|permit| (1, permit))
+        .map_err(|error| {
+            if cancel.load(Ordering::Acquire) {
+                ParallelEnumError::Cancelled
+            } else {
+                ParallelEnumError::Io(error)
+            }
+        })
 }
 
 fn open_extra_readers(
@@ -89,9 +215,15 @@ fn open_extra_readers(
         .min(scan.total_records().div_ceil(MFT_READ_CHUNK_RECORDS).max(1) as usize);
     let mut extra = Vec::new();
     for _ in 1..workers {
-        let reader = profile.measure(Phase::MftReaderOpen, || {
+        let reader = match profile.measure(Phase::MftReaderOpen, || {
             scan.reopen(factory.expect("multiple readers require a factory"))
-        })?;
+        }) {
+            Ok(reader) => reader,
+            Err(ParallelEnumError::Io(error)) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                break
+            }
+            Err(error) => return Err(error),
+        };
         profile.count(
             Phase::MftReaderOpen,
             Counters {

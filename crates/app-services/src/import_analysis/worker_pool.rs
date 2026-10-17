@@ -188,7 +188,7 @@ fn post_import_message(stats: &ImportAnalysisStats, counts: &JobOutcomeCounts) -
 }
 
 pub fn default_analysis_worker_count() -> usize {
-    crate::import_scheduler::default_cpu_budget()
+    crate::import_scheduler::resolve_analysis_worker_count(None)
 }
 
 pub fn resolve_analysis_worker_count(max_analysis_workers: Option<usize>) -> usize {
@@ -215,10 +215,11 @@ pub fn run_import_analysis_staging(
 }
 
 fn run_import_analysis_staging_with_runtime(
-    options: ImportAnalysisOptions,
+    mut options: ImportAnalysisOptions,
     derived_runtime: Option<Arc<crate::ceph_reconstruction::DerivedRbdRuntime>>,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
 ) -> Result<ImportAnalysisStats, ImportAnalysisError> {
+    options.max_analysis_workers = Some(super::admission::worker_count(&options));
     let analysis_started = validated_analysis_start(options.platform)?;
     let setup = AnalysisRunSetup::for_options(&options);
     let startup_action = prepare_analysis_staging_startup(
@@ -244,6 +245,7 @@ fn run_import_analysis_staging_with_runtime(
         );
     }
 
+    let _budget = super::admission::admit_workers(&options, &setup.worker_ids)?;
     let mut stats = run_analysis_workers(
         &options,
         AnalysisWorkerRunConfig {
@@ -256,6 +258,7 @@ fn run_import_analysis_staging_with_runtime(
         },
         progress_cb,
     )?;
+    drop(_budget);
     advance_analysis_tier(&options)?;
     if options.cancel_token.load(Ordering::Relaxed) {
         stats.warning_count = stats.warning_count.saturating_add(1);

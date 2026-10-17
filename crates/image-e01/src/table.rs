@@ -47,6 +47,13 @@ pub(crate) fn build_chunk_table(
         .filter(|section| section.kind == section_type)
     {
         let entries = parse_table_section(section, segment_len)?;
+        if chunk_table.len().saturating_add(entries.len())
+            > crate::open_limits::MAX_METADATA_BYTES
+                / std::mem::size_of::<(usize, u64, bool, u64)>()
+        {
+            return Err(crate::open_limits::limit());
+        }
+        chunk_table.reserve_exact(entries.len());
         chunk_table.extend(entries);
     }
     Ok(chunk_table)
@@ -61,6 +68,11 @@ fn parse_table_section(
         return Err(invalid_table(section, "table section is too short"));
     }
     let entry_count = u32::from_le_bytes(content[0..4].try_into().unwrap_or([0; 4])) as usize;
+    if entry_count
+        > crate::open_limits::MAX_METADATA_BYTES / std::mem::size_of::<(usize, u64, bool, u64)>()
+    {
+        return Err(crate::open_limits::limit());
+    }
     if entry_count == 0 {
         return Err(invalid_table(section, "table declares zero entries"));
     }

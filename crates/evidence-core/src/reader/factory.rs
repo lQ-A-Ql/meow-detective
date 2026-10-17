@@ -22,7 +22,33 @@ impl Default for ReaderCapabilities {
 }
 
 pub trait EvidenceReaderFactory: Send + Sync {
+    fn bind_reader_scope(&self, _scope: Arc<dyn super::admission::ReaderAllocationScope>) {}
+    fn reader_memory_bound(&self) -> u64 {
+        0
+    }
+    fn reader_scope(&self) -> Option<Arc<dyn super::admission::ReaderAllocationScope>> {
+        None
+    }
     fn open_reader(&self) -> io::Result<Box<dyn EvidenceReader>>;
+    fn open_reader_with_cancel(
+        &self,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> io::Result<Box<dyn EvidenceReader>> {
+        loop {
+            if cancel.load(std::sync::atomic::Ordering::Acquire) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "Reader admission cancelled",
+                ));
+            }
+            match self.open_reader() {
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(10))
+                }
+                result => return result,
+            }
+        }
+    }
     fn logical_size(&self) -> u64;
     fn preferred_read_granularity(&self) -> usize;
     fn capabilities(&self) -> ReaderCapabilities;

@@ -25,10 +25,14 @@ pub struct E01Reader {
     pub(crate) bytes_per_sector: u32,
     pub(crate) chunk_table: Arc<Vec<(usize, u64, bool, u64)>>,
     pub(crate) segment_files: Vec<std::fs::File>,
+    pub(crate) segment_metadata: Option<Vec<(u64, std::time::SystemTime)>>,
     pub(crate) cursor: u64,
     pub(crate) chunk_cache: VecDeque<CachedChunk>,
     pub(crate) chunk_cache_bytes: usize,
     pub(crate) last_chunk_read: Option<u64>,
+    pub(crate) resource_metadata: Option<Arc<dyn evidence_core::reader::ReaderResourceHold>>,
+    pub(crate) resource_admission: Option<Arc<dyn evidence_core::reader::ReaderAdmission>>,
+    pub(crate) _resource_reader: Option<Arc<dyn evidence_core::reader::ReaderResourceHold>>,
 }
 
 impl E01Reader {
@@ -44,6 +48,14 @@ impl E01Reader {
         chunk_table: Vec<(usize, u64, bool, u64)>,
         segment_files: Vec<std::fs::File>,
     ) -> Self {
+        let segment_metadata = segment_files
+            .iter()
+            .map(|f| {
+                let m = f.metadata()?;
+                Ok((m.len(), m.modified()?))
+            })
+            .collect::<io::Result<Vec<_>>>()
+            .ok();
         Self {
             info,
             total_bytes,
@@ -51,10 +63,14 @@ impl E01Reader {
             bytes_per_sector,
             chunk_table: Arc::new(chunk_table),
             segment_files,
+            segment_metadata,
             cursor: 0,
             chunk_cache: VecDeque::new(),
             chunk_cache_bytes: 0,
             last_chunk_read: None,
+            resource_metadata: None,
+            resource_admission: None,
+            _resource_reader: None,
         }
     }
 
@@ -71,28 +87,35 @@ impl E01Reader {
 
     /// Open independent segment handles while reusing the parsed chunk table.
     pub fn re_open(&self, source_path: &Path) -> io::Result<Self> {
-        let mut segment_files = Vec::new();
-        for segment in 1u32.. {
-            match std::fs::File::open(build_segment_path(source_path, segment)) {
-                Ok(file) => segment_files.push(file),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => break,
-                Err(error) => return Err(error),
+        let resource_reader = self
+            .resource_admission
+            .as_ref()
+            .map(|a| a.acquire())
+            .transpose()?;
+        let expected = self.segment_metadata.as_ref().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "E01 segment metadata snapshot is unavailable",
+            )
+        })?;
+        let mut segment_files = Vec::with_capacity(expected.len());
+        for (index, metadata) in expected.iter().enumerate() {
+            let file = std::fs::File::open(build_segment_path(source_path, index as u32 + 1))?;
+            let actual = file.metadata()?;
+            if (actual.len(), actual.modified()?) != *metadata {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "E01 segment changed since opening",
+                ));
             }
+            segment_files.push(file);
         }
-        if segment_files.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "no E01 segments found",
-            ));
-        }
-        if segment_files.len() != self.segment_files.len() {
+        if segment_files.is_empty()
+            || build_segment_path(source_path, expected.len() as u32 + 1).try_exists()?
+        {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "E01 segment set changed: expected {}, found {}",
-                    self.segment_files.len(),
-                    segment_files.len()
-                ),
+                "E01 segment set changed since opening",
             ));
         }
         Ok(Self {
@@ -102,10 +125,14 @@ impl E01Reader {
             bytes_per_sector: self.bytes_per_sector,
             chunk_table: Arc::clone(&self.chunk_table),
             segment_files,
+            segment_metadata: self.segment_metadata.clone(),
             cursor: 0,
             chunk_cache: VecDeque::new(),
             chunk_cache_bytes: 0,
             last_chunk_read: None,
+            resource_metadata: self.resource_metadata.clone(),
+            resource_admission: self.resource_admission.clone(),
+            _resource_reader: resource_reader,
         })
     }
 

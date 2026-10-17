@@ -40,7 +40,11 @@ pub(super) fn persist_outcome(
     }
 }
 
-fn record_failure(ctx: &ImportJobContext<'_>, ds: &domain::DataSource, error: &CommandError) {
+pub(super) fn record_failure(
+    ctx: &ImportJobContext<'_>,
+    ds: &domain::DataSource,
+    error: &CommandError,
+) {
     let lease = ctx.runtime.as_ref().map(|r| r.publication_lease());
     if lease
         .as_ref()
@@ -90,9 +94,11 @@ pub(super) fn prepare_runtime(
             | domain::DataSourceKind::E01
             | domain::DataSourceKind::LocalDisk
     ) {
-        let factory = crate::source_runtime::open_factory(
+        let factory = crate::source_runtime::factory::open_factory_for_case(
             &ctx.import_config.source_path,
             &ctx.import_config.kind,
+            ctx.options.cancel_token,
+            &ctx.case_id.0,
         )
         .map_err(CommandError::from_typed_service_error)?;
         crate::source_runtime::resume::bind_source_view(

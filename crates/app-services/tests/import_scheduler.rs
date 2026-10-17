@@ -19,7 +19,7 @@ fn ordinary_and_cluster_policies_share_the_same_cpu_cap() {
     assert!((1..=6).contains(&ordinary.cpu_budget));
     assert!(ordinary.import_workers <= ordinary.cpu_budget);
     assert!(ordinary.analysis_workers <= ordinary.cpu_budget);
-    assert!(cluster.source_concurrency <= 3);
+    assert!(cluster.source_concurrency <= 2);
     assert!(cluster.import_workers <= 2);
     assert!(cluster.analysis_workers <= 2);
     assert!(
@@ -28,30 +28,30 @@ fn ordinary_and_cluster_policies_share_the_same_cpu_cap() {
 }
 
 #[test]
-fn cluster_policy_keeps_three_low_weight_members_parallel() {
+fn cluster_policy_caps_low_weight_members_at_two() {
     let policy = ImportSchedulingPolicy::for_linux_evidence_set(4, 1, 1, 6);
 
-    assert_eq!(policy.source_concurrency, 3);
-    assert_eq!(policy.source_worker_count(100), 3);
+    assert_eq!(policy.source_concurrency, 2);
+    assert_eq!(policy.source_worker_count(100), 2);
     assert_eq!(policy.source_worker_count(0), 0);
     assert_eq!(policy.import_workers, 1);
     assert_eq!(policy.analysis_workers, 1);
-    assert_eq!(policy.memory_reservation_mb, 1365);
+    assert_eq!(policy.memory_reservation_mb, 1024);
 }
 
 #[test]
-fn cluster_policy_uses_three_workers_per_member_with_six_cpu_budget() {
+fn cluster_policy_uses_two_workers_per_member_with_six_cpu_budget() {
     let policy = ImportSchedulingPolicy::for_linux_evidence_set(6, 99, 99, 6);
 
     assert_eq!(policy.import_workers, 2);
     assert_eq!(policy.analysis_workers, 2);
-    assert_eq!(policy.source_concurrency, 3);
+    assert_eq!(policy.source_concurrency, 2);
     assert_eq!(policy.admission_request().cpu_weight, 2);
     assert_eq!(
         policy.admission_request().cpu_weight * policy.source_concurrency,
-        6
+        4
     );
-    assert_eq!(policy.memory_reservation_mb, 1365);
+    assert_eq!(policy.memory_reservation_mb, 1024);
 }
 
 #[test]
@@ -67,23 +67,23 @@ fn cluster_policy_respects_a_small_cpu_budget() {
 #[test]
 fn analysis_worker_budget_reduces_with_remaining_memory_headroom() {
     assert_eq!(
-        resolve_analysis_worker_count_for_memory(Some(6), 0, 4096),
+        resolve_analysis_worker_count_for_memory(Some(6), 0, 1536),
         6
     );
     assert_eq!(
-        resolve_analysis_worker_count_for_memory(Some(6), 1024, 4096),
+        resolve_analysis_worker_count_for_memory(Some(6), 384, 1536),
         6
     );
     assert_eq!(
-        resolve_analysis_worker_count_for_memory(Some(6), 2048, 4096),
+        resolve_analysis_worker_count_for_memory(Some(6), 768, 1536),
         4
     );
     assert_eq!(
-        resolve_analysis_worker_count_for_memory(Some(6), 3584, 4096),
+        resolve_analysis_worker_count_for_memory(Some(6), 1344, 1536),
         1
     );
     assert_eq!(
-        resolve_analysis_worker_count_for_memory(Some(6), 6144, 4096),
+        resolve_analysis_worker_count_for_memory(Some(6), 2048, 1536),
         1
     );
 }
@@ -225,4 +225,17 @@ fn permit_releases_capacity_during_panic_unwind() {
     assert_eq!(snapshot.active_sources, 0);
     assert_eq!(snapshot.cpu_in_use, 0);
     assert_eq!(snapshot.memory_in_use_mb, 0);
+}
+
+#[test]
+fn defaults_use_two_workers_while_explicit_experiments_keep_one_two_and_four() {
+    use app_services::import_scheduler::resolve_import_worker_count;
+    let capacity = app_services::import_scheduler::default_cpu_budget();
+    assert_eq!(resolve_import_worker_count(None), capacity.min(2));
+    for requested in [1, 2, 4] {
+        assert_eq!(
+            resolve_import_worker_count(Some(requested)),
+            capacity.min(requested)
+        );
+    }
 }

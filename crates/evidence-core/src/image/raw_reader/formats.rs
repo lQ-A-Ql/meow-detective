@@ -391,6 +391,12 @@ pub(crate) fn open_dynamic_vhd(
     if entries == 0 || block_size == 0 || !block_size.is_power_of_two() {
         return Err(invalid_data("invalid VHD dynamic geometry"));
     }
+    if u64::from(entries) * 4 > 16 * 1024 * 1024 {
+        return Err(io::Error::new(
+            io::ErrorKind::OutOfMemory,
+            "VHD metadata table exceeds reader capacity",
+        ));
+    }
     let mut bat = vec![
         0u8;
         usize::try_from(u64::from(entries) * 4)

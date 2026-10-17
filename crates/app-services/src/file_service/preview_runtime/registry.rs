@@ -224,6 +224,9 @@ impl PreviewRuntimeRegistry {
             return Err(preview_scope_unavailable());
         }
         let generation = *state.generations.entry(key.clone()).or_default();
+        while state.sessions.len() >= self.max_sessions {
+            evict_oldest_session(&mut state);
+        }
         *state.active_opens.entry(key.clone()).or_default() += 1;
         Ok(PreviewScopeToken {
             registry: self,
@@ -415,7 +418,6 @@ fn insert_runtime_locked(
 }
 
 pub(super) fn invalidate_scope_locked(state: &mut RegistryState, key: &RuntimeKey) {
-    crate::source_runtime::invalidate_source(&key.case_id, &key.data_source_id);
     bump_generation(state, key);
     invalidate_runtime_locked(state, key);
     state.sessions.retain(|_, entry| {

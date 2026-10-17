@@ -22,6 +22,18 @@ pub(crate) fn run_enumeration_phase(
     ctx: &mut ImportJobContext<'_>,
     data_source: &domain::DataSource,
 ) -> Result<file_service::EnumerationStats, CommandError> {
+    let _budget = crate::resource_budget::pool_for(
+        ctx.runtime.as_ref().map(|r| r.publication_lease()).as_ref(),
+    )
+    .acquire(
+        crate::resource_budget::Resources {
+            bytes: crate::resource_budget::ENUMERATION_BYTES,
+            catalogs: 1,
+            ..Default::default()
+        },
+        Some(ctx.options.cancel_token),
+    )
+    .map_err(CommandError::from_typed_service_error)?;
     ctx.report_job_progress(25, "Enumerating filesystem...")?;
     let mut stats = match ctx.import_config.kind {
         domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive => {

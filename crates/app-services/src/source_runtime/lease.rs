@@ -29,6 +29,7 @@ pub struct SourcePublicationLease {
     owner: u64,
     revocation: u64,
     factory: SharedReaderFactory,
+    pool: Arc<Mutex<Option<crate::resource_budget::ResourcePool>>>,
 }
 
 impl std::fmt::Debug for SourcePublicationLease {
@@ -53,9 +54,25 @@ impl SourcePublicationLease {
             owner,
             revocation,
             factory,
+            pool: Arc::new(Mutex::new(None)),
         }
     }
 
+    pub(crate) fn bind_pool(&self, pool: crate::resource_budget::ResourcePool) {
+        self.factory
+            .bind_reader_scope(Arc::new(super::resources::WorkspaceAdmission(pool.clone())));
+        *self.pool.lock().unwrap_or_else(|p| p.into_inner()) = Some(pool);
+    }
+    pub(crate) fn resource_pool(&self) -> crate::resource_budget::ResourcePool {
+        self.pool
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+            .unwrap_or_else(|| crate::resource_budget::global_pool().clone())
+    }
+    pub(crate) fn reader_memory_bound(&self) -> u64 {
+        self.factory.reader_memory_bound()
+    }
     pub fn validate(&self) -> io::Result<()> {
         self.validate_epoch()?;
         self.factory.validate_snapshot()?;

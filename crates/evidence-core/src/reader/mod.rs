@@ -1,7 +1,9 @@
 use std::io::{Read, Seek};
 use std::path::PathBuf;
 
+mod admission;
 mod factory;
+pub use admission::{ReaderAdmission, ReaderAllocationScope, ReaderResourceHold};
 mod partition_window;
 
 pub use factory::{EvidenceReaderFactory, ReaderCapabilities, SharedReaderFactory};

@@ -167,3 +167,102 @@ fn superseded_failure_cannot_overwrite_newer_ready_even_after_new_runtime_drops(
         "ready"
     );
 }
+
+#[test]
+fn preview_refresh_preserves_import_lease_but_source_retirement_revokes_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let runtime = runtime(&temp);
+    let registry = crate::file_service::PreviewRuntimeRegistry::default();
+    assert!(registry
+        .retire_source_preview_only_and_drain(
+            &runtime.identity().case_id,
+            "source",
+            std::time::Duration::ZERO
+        )
+        .unwrap());
+    runtime.publication_lease().validate().unwrap();
+    registry
+        .reactivate_source(&runtime.identity().case_id, "source")
+        .unwrap();
+    registry
+        .retire_source_and_drain(
+            &runtime.identity().case_id,
+            "source",
+            std::time::Duration::ZERO,
+        )
+        .unwrap();
+    assert!(runtime.publication_lease().validate().is_err());
+}
+
+#[test]
+fn scoped_raw_reader_survives_workspace_and_factory_then_returns_its_bytes() {
+    use crate::resource_budget::{ResourcePool, Resources, MIB};
+    let temp = tempfile::tempdir().unwrap();
+    let runtime = runtime(&temp);
+    let root = ResourcePool::new(Resources {
+        bytes: 1536 * MIB,
+        workers: 4,
+        ..Default::default()
+    });
+    let workspace = root
+        .workspace(&std::sync::atomic::AtomicBool::new(false))
+        .unwrap();
+    runtime.publication_lease().bind_pool(workspace.pool());
+    let reader = runtime.open_reader().unwrap();
+    let resident = runtime.factory().reader_memory_bound();
+    assert_eq!(workspace.pool().snapshot().0.bytes, resident);
+    drop(workspace);
+    assert_eq!(root.snapshot().0.bytes, resident);
+    drop(runtime);
+    assert_eq!(root.snapshot().0.bytes, resident);
+    drop(reader);
+    assert_eq!(root.snapshot().0, Resources::default());
+}
+#[test]
+fn factory_e01_plan_is_reused_inside_workspace_without_metadata_reparse() {
+    use crate::resource_budget::{ResourcePool, Resources, MIB};
+    let path = testing::fixtures::tiny_e01_image();
+    let temp = tempfile::tempdir().unwrap();
+    let case = temp.path().to_string_lossy().into_owned();
+    let factory = crate::source_runtime::factory::open_factory_for_case(
+        &path,
+        &DataSourceKind::E01,
+        &std::sync::atomic::AtomicBool::new(false),
+        &case,
+    )
+    .unwrap();
+    let runtime = SourceRuntime::new(
+        SourceIdentity {
+            case_id: case.clone(),
+            data_source_id: DataSourceId("e01".into()),
+            revision: 0,
+            source_kind: DataSourceKind::E01,
+            path: path.clone(),
+        },
+        factory,
+    );
+    let root = ResourcePool::new(Resources {
+        bytes: 1536 * MIB,
+        workers: 4,
+        ..Default::default()
+    });
+    let workspace = root
+        .workspace(&std::sync::atomic::AtomicBool::new(false))
+        .unwrap();
+    runtime.publication_lease().bind_pool(workspace.pool());
+    let a = crate::open_e01_reader_cached(&path, &case).unwrap();
+    assert_eq!(
+        workspace.pool().snapshot().0.bytes,
+        runtime.factory().reader_memory_bound()
+    );
+    drop(workspace);
+    let b = runtime.open_reader().unwrap();
+    assert_eq!(
+        root.snapshot().0.bytes,
+        runtime.factory().reader_memory_bound()
+    );
+    drop(a);
+    assert_eq!(root.snapshot().0.bytes, 0);
+    drop(b);
+    crate::clear_e01_reader_cache_for_case(&case);
+}

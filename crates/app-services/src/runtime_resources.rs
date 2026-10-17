@@ -1,8 +1,8 @@
 mod process_counters;
 pub(crate) use process_counters::ProcessCounterSnapshot;
 
-const DEFAULT_MEMORY_SOFT_LIMIT_MB: u64 = 4 * 1024;
-const DEFAULT_MEMORY_HARD_LIMIT_MB: u64 = 6 * 1024;
+const DEFAULT_MEMORY_SOFT_LIMIT_MB: u64 = 1536;
+const DEFAULT_MEMORY_HARD_LIMIT_MB: u64 = 2048;
 
 pub fn current_rss_mb() -> u64 {
     process_memory_bytes().0 / (1024 * 1024)

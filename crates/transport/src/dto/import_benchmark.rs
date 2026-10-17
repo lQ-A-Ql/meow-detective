@@ -77,6 +77,13 @@ pub struct ImportBenchmarkSampleDto {
     /// Maximum buffered batches within this partition; aggregates use max, not sum.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_buffered_batches: Option<u64>,
+    /// Conservative reservation covering read buffers and parsed payloads; not RSS.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_reserved_mft_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mft_readers_actual: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actual_chunk_records: Option<u64>,
     /// Parsed records held by the wave; not allocated or physical bytes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_buffered_records: Option<u64>,

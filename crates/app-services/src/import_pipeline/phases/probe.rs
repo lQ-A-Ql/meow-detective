@@ -95,7 +95,7 @@ fn probe_image(
 ) -> Result<datasource_service::ImageFilesystemProbe, CommandError> {
     if let Some(runtime) = &ctx.runtime {
         let mut reader = runtime
-            .open_reader()
+            .open_reader_with_cancel(ctx.options.cancel_token)
             .map_err(CommandError::from_typed_service_error)?;
         return datasource_service::detect_image_filesystem(&mut reader)
             .map_err(CommandError::from_typed_service_error);

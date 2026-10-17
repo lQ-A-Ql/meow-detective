@@ -1,4 +1,8 @@
 use super::*;
+#[path = "parallel_scan/pressure.rs"]
+mod pressure;
+#[path = "parallel_scan/resource_grid.rs"]
+mod resource_grid;
 use crate::import_pipeline::ImportProfiler;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::time::Duration;

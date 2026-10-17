@@ -5,6 +5,7 @@ use std::path::Path;
 use evidence_core::ReaderInfo;
 
 use super::{build_segment_path, E01Reader, SECTION_DESCRIPTOR_SIZE};
+use crate::open_limits::{OpenBudget, MAX_METADATA_BYTES, MAX_SEGMENTS};
 use crate::table::{
     build_chunk_table, find_geometry, should_read_section_content, E01Geometry, E01Section,
 };
@@ -18,7 +19,11 @@ struct SegmentSections {
 
 impl E01Reader {
     pub fn open(path: &Path) -> io::Result<Self> {
-        let mut segment_files = open_segment_files(path)?;
+        Self::open_with_segment_limit(path, MAX_SEGMENTS)
+    }
+    /// Reject segment growth before opening more handles than the caller reserved.
+    pub fn open_with_segment_limit(path: &Path, max_segments: u32) -> io::Result<Self> {
+        let mut segment_files = open_segment_files(path, max_segments.min(MAX_SEGMENTS))?;
         let segment_sections = read_all_segment_sections(&mut segment_files)?;
         let geometry = geometry(&segment_sections)?;
         let total_bytes = geometry.total_bytes()?;
@@ -39,14 +44,17 @@ impl E01Reader {
     }
 }
 
-fn open_segment_files(path: &Path) -> io::Result<Vec<std::fs::File>> {
+fn open_segment_files(path: &Path, max_segments: u32) -> io::Result<Vec<std::fs::File>> {
     let mut files = Vec::new();
-    for segment in 1u32.. {
+    for segment in 1..=max_segments {
         match std::fs::File::open(build_segment_path(path, segment)) {
             Ok(file) => files.push(file),
             Err(error) if error.kind() == io::ErrorKind::NotFound => break,
             Err(error) => return Err(error),
         }
+    }
+    if build_segment_path(path, max_segments + 1).try_exists()? {
+        return Err(crate::open_limits::limit());
     }
     if files.is_empty() {
         return Err(io::Error::new(
@@ -60,12 +68,13 @@ fn open_segment_files(path: &Path) -> io::Result<Vec<std::fs::File>> {
 fn read_all_segment_sections(
     segment_files: &mut [std::fs::File],
 ) -> io::Result<Vec<SegmentSections>> {
+    let mut budget = OpenBudget::default();
     segment_files
         .iter_mut()
         .enumerate()
         .map(|(segment_index, file)| {
             let file_len = verify_header(file, segment_index)?;
-            let sections = read_sections(file, file_len, segment_index)?;
+            let sections = read_sections(file, file_len, segment_index, &mut budget)?;
             Ok(SegmentSections { file_len, sections })
         })
         .collect()
@@ -92,6 +101,7 @@ fn read_sections(
     file: &mut std::fs::File,
     file_len: u64,
     segment_index: usize,
+    budget: &mut OpenBudget,
 ) -> io::Result<Vec<E01Section>> {
     let mut visited = HashSet::new();
     let mut next_offset = Some(13u64);
@@ -102,7 +112,8 @@ fn read_sections(
                 "E01 segment {segment_index} section chain cycles at offset {offset}"
             )));
         }
-        let section = read_section(file, file_len, segment_index, offset)?;
+        budget.section()?;
+        let section = read_section(file, file_len, segment_index, offset, budget)?;
         let done = section.kind == "done";
         next_offset = if done {
             None
@@ -119,6 +130,7 @@ fn read_section(
     file_len: u64,
     segment_index: usize,
     offset: u64,
+    budget: &mut OpenBudget,
 ) -> io::Result<E01Section> {
     let descriptor_end = offset
         .checked_add(SECTION_DESCRIPTOR_SIZE)
@@ -136,7 +148,7 @@ fn read_section(
         .to_string();
     let next_offset = u64::from_le_bytes(descriptor[16..24].try_into().unwrap_or([0; 8]));
     let section_size = u64::from_le_bytes(descriptor[24..32].try_into().unwrap_or([0; 8]));
-    let content = read_section_content(file, file_len, offset, section_size, &kind)?;
+    let content = read_section_content(file, file_len, offset, section_size, &kind, budget)?;
     Ok(E01Section {
         kind,
         segment_index,
@@ -152,6 +164,7 @@ fn read_section_content(
     offset: u64,
     section_size: u64,
     section_type: &str,
+    budget: &mut OpenBudget,
 ) -> io::Result<Vec<u8>> {
     if !should_read_section_content(section_type) {
         return Ok(Vec::new());
@@ -178,6 +191,7 @@ fn read_section_content(
             "E01 {section_type} section at offset {offset} extends beyond its segment"
         )));
     }
+    budget.content(read_size as usize)?;
     let mut content = vec![0u8; read_size as usize];
     file.seek(SeekFrom::Start(data_start))?;
     file.read_exact(&mut content)?;
@@ -218,9 +232,19 @@ fn select_chunk_table(
     total_bytes: u64,
     chunk_bytes: u64,
 ) -> io::Result<Vec<(usize, u64, bool, u64)>> {
-    let mut table = Vec::new();
+    let expected_chunks = total_bytes.div_ceil(chunk_bytes);
+    if expected_chunks
+        > (MAX_METADATA_BYTES / std::mem::size_of::<(usize, u64, bool, u64)>()) as u64
+    {
+        return Err(crate::open_limits::limit());
+    }
+    let mut table = Vec::with_capacity(expected_chunks as usize);
     for segment in segments {
-        table.extend(select_segment_chunk_table(segment)?);
+        let entries = select_segment_chunk_table(segment)?;
+        if table.len().saturating_add(entries.len()) > expected_chunks as usize {
+            return Err(invalid_data("E01 chunk table count exceeds geometry"));
+        }
+        table.extend(entries);
     }
     let expected_chunks = total_bytes.div_ceil(chunk_bytes);
     if table.len() as u64 != expected_chunks {

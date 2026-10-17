@@ -25,6 +25,7 @@ impl PreviewRuntimeRegistry {
         Ok(*state.generations.get(&key).unwrap_or(&0))
     }
     pub fn invalidate_case(&self, case_id: &str) -> Result<(), FileServiceError> {
+        crate::e01_reader_cache::clear_e01_reader_cache_for_case(case_id);
         let mut state = self.lock_state()?;
         invalidate_case_locked(&mut state, case_id);
         self.runtime_ready.notify_all();
@@ -36,6 +37,8 @@ impl PreviewRuntimeRegistry {
         case_id: &str,
         data_source_id: &str,
     ) -> Result<(), FileServiceError> {
+        crate::e01_reader_cache::evict_e01_plans_for_case(case_id);
+        crate::source_runtime::invalidate_source(case_id, data_source_id);
         let mut state = self.lock_state()?;
         let key = runtime_key(case_id, data_source_id);
         invalidate_scope_locked(&mut state, &key);
@@ -48,6 +51,7 @@ impl PreviewRuntimeRegistry {
         case_id: &str,
         timeout: Duration,
     ) -> Result<bool, FileServiceError> {
+        crate::e01_reader_cache::clear_e01_reader_cache_for_case(case_id);
         let mut state = self.lock_state()?;
         state.retired_cases.insert(case_id.to_string());
         invalidate_case_locked(&mut state, case_id);
@@ -61,6 +65,18 @@ impl PreviewRuntimeRegistry {
         data_source_id: &str,
         timeout: Duration,
     ) -> Result<bool, FileServiceError> {
+        crate::source_runtime::invalidate_source(case_id, data_source_id);
+        self.retire_source_preview_only_and_drain(case_id, data_source_id, timeout)
+    }
+
+    /// Cache refresh is not evidence replacement or import cancellation.
+    pub fn retire_source_preview_only_and_drain(
+        &self,
+        case_id: &str,
+        data_source_id: &str,
+        timeout: Duration,
+    ) -> Result<bool, FileServiceError> {
+        crate::e01_reader_cache::evict_e01_plans_for_case(case_id);
         let key = runtime_key(case_id, data_source_id);
         let mut state = self.lock_state()?;
         state.retired_sources.insert(key.clone());

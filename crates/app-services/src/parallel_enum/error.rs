@@ -37,9 +37,10 @@ impl ParallelEnumError {
     pub(super) fn allows_fallback(&self) -> bool {
         match self {
             Self::MftParams(_) => true,
-            Self::Io(error) => !error
-                .get_ref()
-                .is_some_and(|cause| cause.is::<crate::source_runtime::SourceInvalidated>()),
+            Self::Io(error) => !error.get_ref().is_some_and(|cause| {
+                cause.is::<crate::source_runtime::SourceInvalidated>()
+                    || cause.is::<crate::resource_budget::ResourceError>()
+            }),
             _ => false,
         }
     }

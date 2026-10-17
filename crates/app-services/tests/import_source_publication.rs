@@ -40,7 +40,7 @@ impl ImportEventSink for RetireAt {
     fn job_cancellation(&self, _: &JobCancellationDto) {}
 }
 
-fn reject_stale_source(progress: u32) {
+fn reject_stale_source(progress: u32, platform: domain::DataSourcePlatform) {
     let temp = tempfile::tempdir().unwrap();
     let image = temp.path().join("source.raw");
     std::fs::write(&image, fixture::image(96)).unwrap();
@@ -55,7 +55,7 @@ fn reject_stale_source(progress: u32) {
         .with_conn(|conn| {
             let config = import_precheck::prepare_import_source_config_from_path(
                 &image.to_string_lossy(),
-                domain::DataSourcePlatform::Windows,
+                platform,
             )
             .unwrap();
             let job = JobRepo::new(conn).create(&active.meta.id.0, "source fence")?;
@@ -112,10 +112,15 @@ fn reject_stale_source(progress: u32) {
 
 #[test]
 fn retired_generation_cannot_merge_a_completed_staging_partition() {
-    reject_stale_source(62);
+    reject_stale_source(62, domain::DataSourcePlatform::Windows);
 }
 
 #[test]
 fn invalidation_inside_finalization_event_cannot_publish_ready_or_deadlock() {
-    reject_stale_source(95);
+    reject_stale_source(95, domain::DataSourcePlatform::Windows);
+}
+
+#[test]
+fn invalidation_at_automatic_linux_analysis_cannot_publish_ready() {
+    reject_stale_source(96, domain::DataSourcePlatform::Linux);
 }

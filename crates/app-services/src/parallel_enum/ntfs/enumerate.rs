@@ -22,7 +22,7 @@ pub(in crate::parallel_enum) fn enumerate_ntfs_mft_to_staging(
     profile: &mut PhaseRecorder,
 ) -> Result<EnumerationStats, ParallelEnumError> {
     check_cancelled(cancel_token)?;
-    let mut scan = prepare_mft_scan(partition, profile)?;
+    let mut scan = prepare_mft_scan(partition, profile, cancel_token)?;
     enumerate_scan(
         &mut EnumerationContext {
             conn,
