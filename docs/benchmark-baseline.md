@@ -467,7 +467,7 @@ persistence-sqlite 全 crate 391 / 4；相关 all-targets clippy 与架构守卫
 测量完成后仅调整 import-optimization 守卫以跟随实际引用的独立 SQL；前后 SHA 另行登记，
 生产源码与冻结二进制保持测量版本，原失败日志保留。
 
-### S3 身份与提交保护（进行中）
+### S3 身份、资源 admission 与 Release 验收（功能完成，性能回归开放）
 
 S3 首批改动将普通导入的 SourceRuntime lease 接到 source DB、analysis staging merge
 和 Ready 状态的事务提交点；来源失效时拒绝提交。独立 reader 打开前后检查 epoch，
@@ -481,8 +481,16 @@ RAW backing members 与 E01 segments 在重开和提交前验证元数据。元�
 低于 3% 门槛；采用这个宽松上界也考虑了消除慢批波次屏障的空间。它是当前 warm-cache
 workload 的 No-Go 预评估，不是 channel 实测，不代表新/冷缓存/慢 I/O 输入都没有收益。
 
-S3 尚未完成：其他发布点（含 Ready 后自动 Linux 制品路径）仍需审计；reader/byte/handle
-permits 与缓存统一 admission 须先落实 S5.P1，再对包装后的 reader 和并发策略验收。
-本片段没有新的 Release 性能/RSS 验收，不能把 S2 测量当作新保护代码的性能结果。
-功能验证日志、源码清单与预评估见本地 `artifacts/stage-optimization/20261017/S3/`，
-逐项边界见 `docs/architecture-performance-stage-S3-20261017.md`。
+普通 RAW/E01 的 reader、metadata、handle、worker 和阶段工作集 admission 已接入，
+SourceRuntime publication fence 已覆盖 source DB、analysis staging merge、Ready 状态及
+Ready 后自动 Linux 制品动作。当前提交为 `e668eae8`；功能门禁、E01 byte oracle、
+publication、reader budget、module/function/test-layout 守卫通过。
+
+S3 iteration-02 的 Release 矩阵已完成：原生 MFT 90/90，screen 24/24，focused 48/48，
+full 24/24，pressure 8/8；所有 trial 语义 oracle 一致，最大 RSS 1417 MiB，低于 2048 MiB。
+按协议独立确认后，medium E01 workflow median `+5.35%`（门槛 `+3%`）和 full128 E01
+workflow P95 `+9.33%`（门槛 `+5%`）仍未关闭；详见
+`artifacts/stage-optimization/20261017/S3/iteration-03/targeted-followup.json`。
+因此 S3 的资源与发布保护可以进入后续阶段，性能验收不能宣称整体通过，也不能修改阈值
+或 verifier 来掩盖这两项回归。持续 channel 依据当前 warm-cache 上界保留 No-Go；
+PVE、preview 和多任务 RSS 组合仍属于 S5/S8。
