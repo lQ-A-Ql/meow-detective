@@ -82,6 +82,11 @@ pub struct ImportBenchmarkSampleDto {
     pub max_buffered_records: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub main_table_updated_rows: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub materialized_path_rows: Option<u64>,
+    /// Staging page_count * page_size; excludes WAL and is not peak temp usage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staging_logical_bytes: Option<u64>,
     /// Sampled WAL file length, not physical writes or an exact instantaneous peak.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampled_wal_max_bytes: Option<u64>,

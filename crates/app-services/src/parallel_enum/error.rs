@@ -9,6 +9,8 @@ pub enum ParallelEnumError {
     Io(#[from] std::io::Error),
     #[error("MFT parameter error: {0}")]
     MftParams(String),
+    #[error("NTFS materialization resource limit: {0}")]
+    MftResourceLimit(&'static str),
     #[error("Database error: {0}")]
     Db(#[from] rusqlite::Error),
     #[error("Staging persistence error: {0}")]
@@ -50,7 +52,9 @@ impl transport::ServiceErrorCategory for ParallelEnumError {
         match self {
             Self::Cancelled => transport::ErrorCategory::Cancelled,
             Self::Io(_) | Self::Db(_) => transport::ErrorCategory::Io,
-            Self::MftParams(_) | Self::InvalidPlan => transport::ErrorCategory::Validation,
+            Self::MftParams(_) | Self::MftResourceLimit(_) | Self::InvalidPlan => {
+                transport::ErrorCategory::Validation
+            }
             Self::Staging(error) => transport::ServiceErrorCategory::category(error),
             Self::Filesystem(_) => transport::ErrorCategory::Parser,
         }

@@ -85,7 +85,7 @@ function Get-ImportBenchmarkSummary {
 
 function Get-ImportBenchmarkPhaseCounters {
   param([object[]]$Trials, [string]$Scope, [string]$Phase)
-  foreach ($metric in @('maxBufferedBatches', 'maxBufferedRecords', 'mainTableUpdatedRows', 'sampledWalMaxBytes')) {
+  foreach ($metric in @('maxBufferedBatches', 'maxBufferedRecords', 'mainTableUpdatedRows', 'materializedPathRows', 'stagingLogicalBytes', 'sampledWalMaxBytes')) {
     $values = @(foreach ($trial in $Trials) {
       $samples = @($trial.payload.report.$Scope | Where-Object { $_.phase -eq $Phase -and
           ($Scope -eq 'partitionAggregates' -or $null -eq $_.PSObject.Properties['partitionIndex']) })
@@ -96,7 +96,7 @@ function Get-ImportBenchmarkPhaseCounters {
     if ($values.Count -eq 0) { continue }
     [ordered]@{ metric = $metric; observations = $values.Count; expectedObservations = $Trials.Count
       availableForAllTrials = $values.Count -eq $Trials.Count
-      partitionAggregation = if ($metric -eq 'mainTableUpdatedRows') { 'sum' } else { 'max-single-partition' }
+      partitionAggregation = if ($metric -in @('mainTableUpdatedRows','materializedPathRows')) { 'sum' } else { 'max-single-partition' }
       statistics = Get-ImportBenchmarkStatistics -Values $values }
   }
 }

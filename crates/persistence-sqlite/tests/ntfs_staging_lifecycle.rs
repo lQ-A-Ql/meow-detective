@@ -12,9 +12,13 @@ fn staging() -> Connection {
 }
 fn root(c: &Connection) {
     c.execute_batch("INSERT INTO ntfs_entries(record_num,parent_record_num,sequence_num,name,entry_type,deleted,hidden,system,read_only,archive) VALUES(5,NULL,7,'root',1,0,0,0,0,0)").unwrap();
+    Repo::write_paths(c, |s| {
+        s.execute(rusqlite::params![5, "", "root", Option::<u64>::None, 0])
+    })
+    .unwrap();
 }
 fn indexes(c: &Connection) -> Vec<String> {
-    c.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='ntfs_entries' ORDER BY name").unwrap().query_map([],|r|r.get(0)).unwrap().collect::<Result<_,_>>().unwrap()
+    c.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name IN ('ntfs_entries','ntfs_paths') ORDER BY name").unwrap().query_map([],|r|r.get(0)).unwrap().collect::<Result<_,_>>().unwrap()
 }
 #[test]
 fn parent_index_belongs_to_validation_not_next_ingest() {

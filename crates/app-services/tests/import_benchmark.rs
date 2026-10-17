@@ -278,7 +278,11 @@ fn verify_report(report: &ImportBenchmarkReportDto, record_count: u64) {
         .iter()
         .find(|sample| sample.phase == Phase::MftPathSql)
         .unwrap();
-    assert_eq!(path_sql.main_table_updated_rows, Some(record_count - 14));
+    assert_eq!(path_sql.main_table_updated_rows, Some(0));
+    assert_eq!(path_sql.materialized_path_rows, Some(record_count - 14));
+    assert!(path_sql
+        .staging_logical_bytes
+        .is_some_and(|bytes| bytes > 0));
     let builds = report
         .partition_aggregates
         .iter()

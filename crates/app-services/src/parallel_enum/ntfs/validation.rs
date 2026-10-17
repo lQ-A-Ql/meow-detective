@@ -9,6 +9,7 @@ pub(in crate::parallel_enum) fn validate_mft_staging_shape(
 ) -> Result<(), ParallelEnumError> {
     use persistence_sqlite::repositories::ntfs_staging_repo::NtfsStagingRepo;
     if NtfsStagingRepo::is_numeric(conn)? {
+        NtfsStagingRepo::validate_paths(conn)?;
         let (total, roots, orphans, reachable) = NtfsStagingRepo::tree_shape(conn)?;
         if total > 0 && roots == 1 && orphans == 0 && reachable == total {
             return Ok(());

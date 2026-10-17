@@ -87,6 +87,7 @@ impl StagingRepo {
         let path = enum_staging_db_path(case_root, data_source_id, partition_index);
         let conn =
             open_staging_with_schema(&path, include_str!("../migrations/scripts/staging_001.sql"))?;
+        crate::repositories::ntfs_staging_repo::NtfsStagingRepo::rebuild_previous_layout(&conn)?;
         Self::ensure_enum_staging_columns(&conn)?;
         crate::repositories::ntfs_staging_repo::NtfsStagingRepo::ensure_schema(&conn)?;
         Ok(conn)

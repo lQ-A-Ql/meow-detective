@@ -3,7 +3,6 @@ CREATE TABLE IF NOT EXISTS ntfs_entries (
     parent_record_num INTEGER,
     sequence_num INTEGER NOT NULL,
     name TEXT NOT NULL,
-    path TEXT NOT NULL DEFAULT '',
     entry_type INTEGER NOT NULL,
     size INTEGER,
     ext TEXT,
@@ -17,4 +16,11 @@ CREATE TABLE IF NOT EXISTS ntfs_entries (
     modified_at TEXT,
     accessed_at TEXT,
     changed_at TEXT
+);
+CREATE TABLE IF NOT EXISTS ntfs_paths (
+    record_num INTEGER PRIMARY KEY CHECK(record_num BETWEEN 0 AND 281474976710655),
+    resolved_path TEXT NOT NULL,
+    catalog_name TEXT NOT NULL,
+    catalog_parent_record_num INTEGER,
+    resolution_status INTEGER NOT NULL CHECK(resolution_status BETWEEN 0 AND 3)
 );

@@ -2,6 +2,7 @@ use super::*;
 mod lazy_ntfs;
 #[path = "../../support/import_ntfs_fixture.rs"]
 pub(super) mod ntfs_fixture;
+mod path_projection;
 mod staging_lifecycle;
 use super::{
     batch_sink::{prepare_mft_insert, EnumerationStats},
@@ -479,7 +480,9 @@ fn ntfs_mft_updates_paths_and_parent_ids() {
         fake_mft_record(43, 42, "notepad.exe", false),
     ];
     let catalog = stage_mft_records_for_test(&conn, &records, "ds-mft", 3);
-    catalog.update_staging_paths(&conn, "ds-mft", 3).unwrap();
+    catalog
+        .update_staging_paths(&conn, "ds-mft", 3, &AtomicBool::new(false))
+        .unwrap();
 
     let (path, parent_id): (String, Option<String>) = conn
         .query_row(
@@ -555,7 +558,15 @@ fn ntfs_directory_index_parentage_corrects_existing_misparented_rows() {
     );
 
     let deleted_records = HashSet::new();
-    update_mft_staging_paths_via_sqlite(&conn, ds_id, 4, &path_map, &deleted_records).unwrap();
+    update_mft_staging_paths_via_sqlite(
+        &conn,
+        ds_id,
+        4,
+        &path_map,
+        &deleted_records,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
     let (path, parent_id): (String, Option<String>) = conn
         .query_row(
             "SELECT path, parent_id FROM file_entries WHERE id = 'mft:4:43'",
@@ -650,7 +661,15 @@ fn ntfs_directory_index_backfill_updates_persisted_mft_name() {
         5,
         vec![fake_ntfs_index_entry(42, "Program Files", true)],
     );
-    update_mft_staging_paths_via_sqlite(&conn, ds_id, 4, &path_map, &HashSet::new()).unwrap();
+    update_mft_staging_paths_via_sqlite(
+        &conn,
+        ds_id,
+        4,
+        &path_map,
+        &HashSet::new(),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
 
     let name: String = conn
         .query_row(
@@ -679,7 +698,15 @@ fn mft_large_record_count_uses_sqlite_resolver() {
     path_map.insert(43, (Some(42), "notepad.exe".to_string(), false));
 
     let deleted_records = HashSet::new();
-    update_mft_staging_paths_via_sqlite(&conn, ds_id, 9, &path_map, &deleted_records).unwrap();
+    update_mft_staging_paths_via_sqlite(
+        &conn,
+        ds_id,
+        9,
+        &path_map,
+        &deleted_records,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
 
     let (path, parent_id): (String, Option<String>) = conn
         .query_row(
@@ -707,7 +734,15 @@ fn numeric_mft_key_does_not_conflate_zero_with_another_record() {
     path_map.insert(77, (Some(5), "orphan.bin".to_string(), false));
 
     let deleted_records = HashSet::new();
-    update_mft_staging_paths_via_sqlite(&conn, "ds-mft", 8, &path_map, &deleted_records).unwrap();
+    update_mft_staging_paths_via_sqlite(
+        &conn,
+        "ds-mft",
+        8,
+        &path_map,
+        &deleted_records,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
 
     let bad: (String, Option<String>) = conn
         .query_row(
@@ -741,7 +776,9 @@ fn ntfs_mft_deleted_orphan_uses_deleted_orphans_path() {
         fake_deleted_mft_record(77, 999, "old.txt", false),
     ];
     let catalog = stage_mft_records_for_test(&conn, &records, ds_id, 2);
-    catalog.update_staging_paths(&conn, ds_id, 2).unwrap();
+    catalog
+        .update_staging_paths(&conn, ds_id, 2, &AtomicBool::new(false))
+        .unwrap();
 
     let (path, parent_id): (String, Option<String>) = conn
         .query_row(

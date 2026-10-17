@@ -6,7 +6,7 @@ use rusqlite::Connection;
 #[test]
 fn numeric_layout_is_versioned_and_clear_preserves_layout() {
     let c = Connection::open_in_memory().unwrap();
-    c.execute_batch("CREATE TABLE source_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)")
+    c.execute_batch(include_str!("../src/migrations/scripts/staging_001.sql"))
         .unwrap();
     NtfsStagingRepo::ensure_schema(&c).unwrap();
     assert_eq!(

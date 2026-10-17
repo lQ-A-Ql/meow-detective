@@ -24,6 +24,8 @@ fn benchmark_report_round_trip_preserves_scopes_and_missing_measurements() {
             max_buffered_batches: None,
             max_buffered_records: None,
             main_table_updated_rows: None,
+            materialized_path_rows: None,
+            staging_logical_bytes: None,
             sampled_wal_max_bytes: None,
             records_per_sec: None,
             logical_mb_per_sec: None,

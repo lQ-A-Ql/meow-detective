@@ -164,6 +164,7 @@ fn scan_mft_transaction(
         },
     )?;
     drop(statement);
+    check_cancelled(ctx.cancel_token)?;
     scan.release_buffer();
     catalog.backfill_directory_indexes(
         ctx.conn,
@@ -174,7 +175,12 @@ fn scan_mft_transaction(
         ctx.profile,
     )?;
     let path_stats = ctx.profile.measure(Phase::MftPathResolve, || {
-        catalog.update_staging_paths(ctx.conn, ctx.data_source_id, ctx.partition_index)
+        catalog.update_staging_paths(
+            ctx.conn,
+            ctx.data_source_id,
+            ctx.partition_index,
+            ctx.cancel_token,
+        )
     })?;
     ctx.profile.record_duration(
         Phase::MftPathCompute,
@@ -190,6 +196,8 @@ fn scan_mft_transaction(
         Phase::MftPathSql,
         Counters {
             updated_main_rows: Some(path_stats.updated_main_rows),
+            materialized_path_rows: Some(path_stats.materialized_rows),
+            staging_logical_bytes: Some(path_stats.staging_logical_bytes),
             ..Default::default()
         },
     );

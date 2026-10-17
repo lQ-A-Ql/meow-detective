@@ -33,6 +33,8 @@ pub(crate) struct Counters {
     pub buffered_batches: Option<u64>,
     pub buffered_records: Option<u64>,
     pub updated_main_rows: Option<u64>,
+    pub materialized_path_rows: Option<u64>,
+    pub staging_logical_bytes: Option<u64>,
     pub sampled_wal_bytes: Option<u64>,
 }
 
@@ -204,6 +206,8 @@ impl Measurement {
             max_buffered_batches: self.counters.buffered_batches,
             max_buffered_records: self.counters.buffered_records,
             main_table_updated_rows: self.counters.updated_main_rows,
+            materialized_path_rows: self.counters.materialized_path_rows,
+            staging_logical_bytes: self.counters.staging_logical_bytes,
             sampled_wal_max_bytes: self.counters.sampled_wal_bytes,
             records_per_sec: seconds
                 .filter(|_| self.counters.scanned > 0)
@@ -230,6 +234,12 @@ impl Counters {
             (Some(a), Some(b)) => Some(a.saturating_add(b)),
             (a, b) => a.or(b),
         };
+        self.materialized_path_rows =
+            match (self.materialized_path_rows, other.materialized_path_rows) {
+                (Some(a), Some(b)) => Some(a.saturating_add(b)),
+                (a, b) => a.or(b),
+            };
+        self.staging_logical_bytes = self.staging_logical_bytes.max(other.staging_logical_bytes);
     }
 }
 
