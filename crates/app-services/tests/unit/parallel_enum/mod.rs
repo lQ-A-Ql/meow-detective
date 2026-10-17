@@ -2,6 +2,7 @@ use super::*;
 mod lazy_ntfs;
 #[path = "../../support/import_ntfs_fixture.rs"]
 pub(super) mod ntfs_fixture;
+mod staging_lifecycle;
 use super::{
     batch_sink::{prepare_mft_insert, EnumerationStats},
     ntfs::{

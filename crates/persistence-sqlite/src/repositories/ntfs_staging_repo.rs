@@ -42,6 +42,9 @@ impl NtfsStagingRepo {
     }
     /// IDs are projected only when the completed catalog is inspected or merged.
     pub fn begin(conn: &Connection, source_id: &str, partition: usize) -> DbResult<()> {
+        with_layout_savepoint(conn, || Self::begin_layout(conn, source_id, partition))
+    }
+    fn begin_layout(conn: &Connection, source_id: &str, partition: usize) -> DbResult<()> {
         Self::ensure_schema(conn)?;
         let count: i64 =
             conn.query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
@@ -50,6 +53,7 @@ impl NtfsStagingRepo {
                 "Cannot replace nonempty staging catalog".into(),
             ));
         }
+        conn.execute_batch("DROP INDEX IF EXISTS ntfs_parent")?;
         Self::set_meta(conn, "source_id", source_id)?;
         Self::set_meta(conn, "partition", &partition.to_string())?;
         conn.execute_batch("DROP TABLE file_entries;")?;
@@ -57,6 +61,17 @@ impl NtfsStagingRepo {
         Ok(())
     }
     pub fn reset_layout(conn: &Connection) -> DbResult<()> {
+        with_layout_savepoint(conn, || Self::reset_layout_inner(conn))
+    }
+    fn reset_layout_inner(conn: &Connection) -> DbResult<()> {
+        let has_entries: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ntfs_entries')",
+            [],
+            |r| r.get(0),
+        )?;
+        if has_entries {
+            Self::ensure_schema(conn)?;
+        }
         let is_view: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='view' AND name='file_entries')",
             [],
@@ -93,7 +108,26 @@ impl NtfsStagingRepo {
         .map_err(Into::into)
     }
     pub fn clear(conn: &Connection) -> DbResult<()> {
-        conn.execute_batch("DELETE FROM ntfs_entries; DELETE FROM ntfs_staging_meta WHERE key <> 'layout_version';")?;
-        Ok(())
+        with_layout_savepoint(conn, || {
+            Self::ensure_schema(conn)?;
+            conn.execute_batch("DROP INDEX IF EXISTS ntfs_parent; DELETE FROM ntfs_entries; DELETE FROM ntfs_staging_meta WHERE key <> 'layout_version';")?;
+            Ok(())
+        })
     }
+}
+
+fn with_layout_savepoint<T>(
+    conn: &Connection,
+    action: impl FnOnce() -> DbResult<T>,
+) -> DbResult<T> {
+    conn.execute_batch("SAVEPOINT ntfs_layout")?;
+    let result = action().and_then(|value| {
+        conn.execute_batch("RELEASE ntfs_layout")?;
+        Ok(value)
+    });
+    if result.is_err() && !conn.is_autocommit() {
+        // SQLITE_FULL can already have rolled back the outer transaction.
+        conn.execute_batch("ROLLBACK TO ntfs_layout; RELEASE ntfs_layout")?;
+    }
+    result
 }
