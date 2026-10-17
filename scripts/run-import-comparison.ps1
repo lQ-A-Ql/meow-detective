@@ -34,10 +34,10 @@ $conditions = @(foreach ($i in 0..($inputs.Count-1)) { foreach ($v in $definitio
     oracleGroup = "$($definition.inputs[$i].logicalGroup)-$mode" }
 } } } })
 if (@($conditions.key | Sort-Object -Unique).Count -ne $conditions.Count) { throw 'Duplicate matrix condition' }
-$report = [ordered]@{ schemaVersion = 1; status = 'running'; definition = $definition; definitionSha256 = $definitionHash
+$report = [ordered]@{ schemaVersion = 1; status = 'running'; startedUtc = [DateTime]::UtcNow.ToString('o'); completedUtc = $null; definition = $definition; definitionSha256 = $definitionHash
   codeContext = $code; protocol = $protocol; inputs = $inputs; conditions = $conditions; runs = $Runs; warmupRuns = $WarmupRuns; seed = $Seed
   rustc = @(& rustc -Vv); cargo = @(& cargo -V); runKind = $RunKind; buildProfile = 'release'
-  environment = @{ tempRoot = $TempRoot; cache = 'input hashes read before trials; full import warmup; no OS cache flush'; processIsolation = 'one fresh process/case per trial'
+  environment = @{ tempRoot = $TempRoot; cache = if ($WarmupRuns -gt 0) { 'input hashes read before trials; full import warmup; no OS cache flush' } else { 'input hashes read before trials; no full-import warmup; no OS cache flush' }; processIsolation = 'one fresh process/case per trial'
     background = @('cargo','rustc','forensics-desktop' | ForEach-Object { @(Get-Process -Name $_ -ErrorAction SilentlyContinue | Select-Object Id,ProcessName) })
     retryPolicy = 'fail-fast; retain logs/status/payload; Rust panic and timeout retain case; cross-trial mismatch after successful child cleanup retains fingerprints; rerun whole matrix with new id'
     rustflags = $env:RUSTFLAGS; rayon = $env:RAYON_NUM_THREADS; cpu = [Environment]::ProcessorCount }
@@ -101,8 +101,8 @@ try {
   $report.status='completed'
 } catch {
   if ($trials.Count -and $trials[-1].status -eq 'running') { $trials[-1].status='failed' }
-  $report.status='failed'; $report.failure=$_.Exception.Message; $report.trials=$trials.ToArray(); Save-Report
+  $report.status='failed'; $report.completedUtc=[DateTime]::UtcNow.ToString('o'); $report.failure=$_.Exception.Message; $report.trials=$trials.ToArray(); Save-Report
   throw
 }
-Save-Report
+$report.completedUtc=[DateTime]::UtcNow.ToString('o'); Save-Report
 Write-Host "Frozen matrix: $directory/report.json"

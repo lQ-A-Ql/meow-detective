@@ -408,3 +408,14 @@ Search 查询结果在磁盘临时库中按规范化 ID 排序后摘要，并拒
 私有 inventory 测试只接收显式 `FORENSICS_IMPORT_FIXTURE`，默认 ignored。规模按实际 MFT 槽位和目录数登记，
 记录完整分段 SHA 与容器/逻辑大小比；碎片报告只表示首 128 个有效记录抽样，不能视作全卷统计。
 缺失、不适用和探测失败分别记录，不由合成集替代，也不构成完整发布矩阵通过。
+
+S1 于 2026-10-17 完成校准。冻结测量版本为 `53f55c31`，5 个有效矩阵共 100 个独立子进程
+（86 测量、14 预热）；完整 v2 表摘要一致，64 个当前候选还验证 semanticOracle v2。
+最大导入峰值 1419 MiB，低于 2048 MiB。首轮 100K RAW median/p95 与中型 E01 p95 触线后，
+各追加五轮确认：RAW median +1.73% / p95 +1.46%，中型 E01 -1.36% / -0.83%，均未再次触线。
+首轮和确认报告分别保留；本轮没有生产策略切换，不宣称提速或零开销。
+
+完整分析五轮代表集为合成 128-record RAW/E01；大型真实 E01 本轮只登记，完整性能矩阵未运行。
+真实 DD 候选被 native FAT reader 以 invalid BPB 拒绝，IMG 候选 probe EOF，尚无已验证的真实 RAW 验收样本。
+逐 task、样本和运行边界见本地 `docs/architecture-performance-stage-S1-20261016.md`，
+原始报告及完整性核对索引见 `artifacts/stage-optimization/20261016/S1/acceptance.json`。

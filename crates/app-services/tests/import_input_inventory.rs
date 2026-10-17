@@ -1,4 +1,5 @@
 //! Opt-in inventory only. No workstation paths and no private dependencies in CI.
+use evidence_core::FileSystemReader;
 use serde_json::json;
 use std::io::{Read, Seek, SeekFrom};
 
@@ -22,6 +23,15 @@ fn inspect_import_benchmark_input() {
     let probe = app_services::datasource_service::detect_image_filesystem(&mut reader).unwrap();
     let mut volumes = Vec::new();
     for candidate in probe.candidates {
+        if candidate.kind == app_services::datasource_service::ImageFilesystemKind::Fat {
+            volumes.push(match fs_fat::FatReader::open(factory.open_reader().unwrap(), candidate.offset) {
+                Ok(fat) => fat_inventory(&fat, candidate.offset),
+                Err(error) => json!({"filesystem":"FatSignatureOnly","offset":candidate.offset,
+                    "ntfsBenchmark":"not-applicable","readerStatus":"rejected","readerErrorKind":format!("{:?}",error.kind()),
+                    "readerError":error.to_string(),"directoryInventory":"unavailable"}),
+            });
+            continue;
+        }
         if candidate.kind != app_services::datasource_service::ImageFilesystemKind::Ntfs {
             volumes.push(json!({"filesystem":format!("{:?}",candidate.kind),"offset":candidate.offset,"ntfsBenchmark":"not-applicable"}));
             continue;
@@ -105,4 +115,34 @@ fn inspect_import_benchmark_input() {
         "[input-inventory] {}",
         json!({"schemaVersion":1,"geometry":geometry,"volumes":volumes})
     );
+}
+
+fn fat_inventory(reader: &fs_fat::FatReader, offset: u64) -> serde_json::Value {
+    let mut pending = std::collections::VecDeque::from([(String::new(), 0usize)]);
+    let mut visited = std::collections::HashSet::new();
+    let mut files = 0u64;
+    let mut directories = 0u64;
+    let mut bytes = 0u64;
+    while let Some((path, depth)) = pending.pop_front() {
+        assert!(
+            depth < 64 && visited.insert(path.clone()),
+            "invalid FAT directory topology"
+        );
+        for node in reader.list_children(&path).unwrap() {
+            assert!(
+                files + directories < 1_000_000,
+                "FAT inventory bound exceeded"
+            );
+            if node.is_dir {
+                directories += 1;
+                pending.push_back((node.path, depth + 1));
+            } else {
+                files += 1;
+                bytes += node.size;
+            }
+        }
+    }
+    json!({"filesystem":reader.data_source_name(),"offset":offset,"ntfsBenchmark":"not-applicable",
+        "files":files,"directoriesExcludingRoot":directories,"logicalFileBytes":bytes,
+        "scope":"complete visible directory traversal with native FAT reader; deleted entries and fragmentation topology not exposed"})
 }
