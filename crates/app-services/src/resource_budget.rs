@@ -4,6 +4,7 @@ use std::sync::{Arc, Condvar, LazyLock, Mutex};
 use std::time::Duration;
 
 pub const MIB: u64 = 1024 * 1024;
+pub const WORKSPACE_BYTES: u64 = 1020 * MIB;
 pub const ENUMERATION_BYTES: u64 = 560 * MIB;
 pub const TIMELINE_BYTES: u64 = 1_000_000 * 1024;
 
@@ -190,7 +191,7 @@ impl ResourcePool {
     pub fn workspace(&self, cancel: &AtomicBool) -> Result<Workspace, ResourceError> {
         let parent = self.acquire(
             Resources {
-                bytes: 1024 * MIB,
+                bytes: WORKSPACE_BYTES,
                 workers: 4,
                 ..Default::default()
             },
@@ -198,7 +199,7 @@ impl ResourcePool {
         )?;
         let pool = Self(Arc::new(Inner {
             limits: Resources {
-                bytes: 1024 * MIB,
+                bytes: WORKSPACE_BYTES,
                 workers: 4,
                 catalogs: 1,
                 readers: 32,
@@ -265,7 +266,7 @@ pub fn global_pool() -> &'static ResourcePool {
     static POOL: LazyLock<ResourcePool> = LazyLock::new(|| {
         ResourcePool::new(Resources {
             bytes: 1536 * MIB,
-            metadata: 512 * MIB,
+            metadata: 516 * MIB,
             readers: 32,
             handles: 512,
             workers: 4,

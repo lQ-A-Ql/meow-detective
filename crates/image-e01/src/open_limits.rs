@@ -1,7 +1,7 @@
 //! Allocation bounds for the metadata parse performed before any data reads.
 use std::io;
-pub(crate) const MAX_METADATA_BYTES: usize = 255 * 1024 * 1024;
-pub(crate) const MAX_SECTION_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const MAX_METADATA_BYTES: usize = 256 * 1024 * 1024;
+pub(crate) const MAX_SECTION_BYTES: usize = 128 * 1024 * 1024;
 pub(crate) const MAX_SECTIONS: usize = 100_000;
 pub(crate) const MAX_SEGMENTS: u32 = 512;
 

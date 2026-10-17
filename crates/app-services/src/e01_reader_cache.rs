@@ -11,8 +11,8 @@ use std::{
 };
 
 pub(crate) const E01_READER_CACHE_PER_CASE_MAX_SIZE: usize = 16;
-const CASE_BYTES: u64 = 128 * MIB;
-const GLOBAL_BYTES: u64 = 256 * MIB;
+const CASE_BYTES: u64 = 258 * MIB;
+const GLOBAL_BYTES: u64 = 258 * MIB;
 const MAX_CASES: usize = 32;
 struct PlanEntry {
     plan: E01OpenPlan,

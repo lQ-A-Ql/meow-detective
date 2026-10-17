@@ -164,3 +164,66 @@ fn segment(path: &std::path::Path, total: Option<u64>, bytes: &[u8]) {
     f.write_all(bytes).unwrap();
     f.flush().unwrap();
 }
+
+#[test]
+#[ignore = "explicit FORENSICS_IMPORT_FIXTURE reader capability and fixed-range byte oracle"]
+fn factory_capabilities_match_independent_logical_ranges() {
+    let path = std::path::PathBuf::from(
+        std::env::var_os("FORENSICS_IMPORT_FIXTURE").expect("set FORENSICS_IMPORT_FIXTURE"),
+    );
+    let e01 = path
+        .extension()
+        .is_some_and(|v| v.eq_ignore_ascii_case("e01"));
+    let kind = if e01 {
+        domain::DataSourceKind::E01
+    } else {
+        domain::DataSourceKind::Raw
+    };
+    let factory = app_services::source_runtime::open_factory(&path, &kind)
+        .expect("budgeted factory must admit the fixture");
+    let size = factory.logical_size();
+    let mut reference: Box<dyn EvidenceReader> = if e01 {
+        Box::new(image_e01::E01Reader::open(&path).expect("independent E01 reference"))
+    } else {
+        Box::new(evidence_core::RawImageReader::open(&path).expect("independent RAW reference"))
+    };
+    assert_eq!(reference.info().size, size);
+    let mut ranges = Vec::new();
+    for offset in [
+        0,
+        4095,
+        32767,
+        1024 * 1024 - 3,
+        size / 3,
+        size / 2,
+        size.saturating_sub(65537),
+    ] {
+        let length = (size - offset).min(65536) as usize;
+        let mut bytes = vec![0; length];
+        reference.seek(SeekFrom::Start(offset)).unwrap();
+        reference.read_exact(&mut bytes).unwrap();
+        ranges.push((offset, bytes));
+    }
+    for workers in [1usize, 2, 4] {
+        std::thread::scope(|scope| {
+            for worker in 0..workers {
+                let factory = &factory;
+                let ranges = &ranges;
+                scope.spawn(move || {
+                    let mut reader = factory.open_reader().unwrap();
+                    for step in 0..ranges.len() * 4 {
+                        let (offset, expected) = &ranges[(step * 3 + worker) % ranges.len()];
+                        let mut actual = vec![0; expected.len()];
+                        reader.seek(SeekFrom::Start(*offset)).unwrap();
+                        reader.read_exact(&mut actual).unwrap();
+                        assert_eq!(&actual, expected);
+                    }
+                });
+            }
+        });
+    }
+    eprintln!(
+        "[reader-capability-oracle] {}",
+        serde_json::json!({"version":1,"view":"logicalDisk","bytes":size,"metadataBytes":app_services::resource_budget::global_pool().snapshot().0.metadata,"rangeSha256":ranges.iter().map(|(offset,bytes)|serde_json::json!({"offset":offset,"sha256":hex::encode(Sha256::digest(bytes))})).collect::<Vec<_>>()})
+    );
+}

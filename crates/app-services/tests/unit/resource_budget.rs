@@ -116,7 +116,7 @@ fn retired_workspace_keeps_only_borrowed_bytes_charged_until_last_drop() {
             None,
         )
         .unwrap();
-    assert_eq!(root.snapshot().0.bytes, 1024 * MIB);
+    assert_eq!(root.snapshot().0.bytes, WORKSPACE_BYTES);
     assert_eq!(child.snapshot().0.bytes, 17 * MIB);
     drop(job);
     assert_eq!(root.snapshot().0.bytes, 17 * MIB);
@@ -158,5 +158,28 @@ fn nested_phase_cannot_wait_on_resources_it_already_holds() {
     ));
     drop(phase);
     drop(job);
+    assert_eq!(root.snapshot().0, Resources::default());
+}
+
+#[test]
+fn two_maximum_e01_metadata_owners_leave_capacity_for_one_workspace() {
+    let root = ResourcePool::new(Resources {
+        bytes: 1536 * MIB,
+        metadata: 516 * MIB,
+        workers: 4,
+        ..Default::default()
+    });
+    let request = Resources {
+        bytes: 258 * MIB,
+        metadata: 258 * MIB,
+        ..Default::default()
+    };
+    let first = root.acquire(request, None).unwrap();
+    let second = root.acquire(request, None).unwrap();
+    let workspace = root.workspace(&AtomicBool::new(false)).unwrap();
+    assert_eq!(root.snapshot().0.bytes, root.limits().bytes);
+    drop(workspace);
+    drop(first);
+    drop(second);
     assert_eq!(root.snapshot().0, Resources::default());
 }

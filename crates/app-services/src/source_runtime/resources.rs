@@ -140,11 +140,18 @@ pub(crate) fn open_e01_plan(
     if handles == 0 || handles > 512 {
         return Err(ResourceError::Limit.into_io());
     }
+    // Cache entries without borrowed owners must not pin the capacity needed
+    // to parse a new plan. Borrowed readers keep their metadata reservation.
+    if global_pool().snapshot().0.metadata
+        > global_pool().limits().metadata.saturating_sub(258 * MIB)
+    {
+        crate::e01_reader_cache::clear_e01_reader_cache();
+    }
     let parse = global_pool()
         .acquire(
             Resources {
-                bytes: 896 * MIB,
-                metadata: 256 * MIB,
+                bytes: 1024 * MIB,
+                metadata: 258 * MIB,
                 handles,
                 ..Default::default()
             },

@@ -3,7 +3,8 @@ use super::{ImportAnalysisError, ImportAnalysisOptions};
 use crate::resource_budget::{pool_for, ResourceError, ResourcePermit, Resources, MIB};
 pub(super) fn worker_count(options: &ImportAnalysisOptions) -> usize {
     let cap = options.publication_lease.as_ref().map_or(4, |lease| {
-        (1024 * MIB / (192 * MIB + lease.reader_memory_bound())).clamp(1, 4) as usize
+        (crate::resource_budget::WORKSPACE_BYTES / (192 * MIB + lease.reader_memory_bound()))
+            .clamp(1, 4) as usize
     });
     super::resolve_analysis_worker_count(options.max_analysis_workers).min(cap)
 }

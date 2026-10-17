@@ -583,3 +583,14 @@ fn bounded_open_refuses_segment_growth_before_parsing_any_segment() {
     std::fs::remove_file(directory.join("source.E02")).unwrap();
     std::fs::remove_dir(directory).unwrap();
 }
+
+#[test]
+fn mirrored_tables_for_a_256_gib_image_fit_the_metadata_section_budget() {
+    let mut budget = crate::open_limits::OpenBudget::default();
+    // 8,388,608 chunk offsets per mirrored table, 513 table headers each,
+    // and the geometry section: the real format crosses 64 MiB of headers.
+    budget.content(33_568_796).unwrap();
+    budget.content(33_568_796).unwrap();
+    budget.content(1052).unwrap();
+    assert!(budget.content > 64 * 1024 * 1024);
+}
