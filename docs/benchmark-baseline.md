@@ -511,3 +511,9 @@ medium E01 第二次 trace 的 workflow 为约 93.5 秒，第一次约 95.4 秒�
 稳定为 enumeration 约 27 秒、post-import metadata/index 约 49 秒、timeline 约 3.8 秒。
 这说明当前回归不是一次性 snapshot 校验抖动，后续应优先拆解 analysis/search/index
 与 enumeration 内部等待，而不是继续调整 publication fence。
+
+随后使用 Release benchmark executable 重跑同一 medium E01，得到 workflow 23.35 秒、
+enumeration 4.42 秒、metadata search index 6.52 秒、timeline 2.91 秒、峰值 RSS 1113 MiB；
+完整诊断记录为 `artifacts/stage-optimization/20261017/S3/iteration-03/phase-trace-medium-release.json`。
+此前 debug trace 的 93–95 秒不再作为性能证据。Release trace 只用于定位阶段，不替换
+iteration-02/03 的正式矩阵或回归结论。
