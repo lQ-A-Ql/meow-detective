@@ -618,3 +618,62 @@ fn cancelled_graph_projection_does_not_refresh_statistics_or_write_graph_rows() 
         .unwrap();
     assert_eq!(nodes, 0);
 }
+
+#[test]
+#[ignore = "S4 graph batch performance grid"]
+fn s4_graph_batch_grid_reports_node_edge_commit_costs() {
+    const EVENT_COUNT: u32 = 120_000;
+    for batch_size in [20_000_u32, 50_000, 100_000] {
+        let connection = projection_connection();
+        connection
+            .execute_batch(&format!(
+                "CREATE INDEX idx_timeline_graph_grid_case_id
+                    ON timeline_events(case_id, id);
+                 CREATE INDEX idx_graph_grid_case_id
+                    ON graph_nodes(case_id);
+                 INSERT INTO graph_nodes
+                    (id, case_id, node_type, label, created_at)
+                 VALUES ('file', 'case-1', 'file', 'file', '2026-07-18T00:00:00Z');
+                 WITH RECURSIVE numbers(n) AS (
+                    VALUES(0) UNION ALL SELECT n+1 FROM numbers WHERE n < {last}
+                 )
+                 INSERT INTO timeline_events
+                    (id, case_id, source_object_id, event_type, ts, title)
+                 SELECT printf('event:%08d', n), 'case-1', 'file',
+                        'FILE_MODIFIED', '2026-07-18T00:00:00Z', 'event'
+                 FROM numbers;",
+                last = EVENT_COUNT - 1
+            ))
+            .expect("create S4 graph grid fixture");
+        let mut timings = TimelineWriteTimings::default();
+        let started = std::time::Instant::now();
+        let warnings = populate_timeline_event_graph_with_batch_inner(
+            &connection,
+            batch_size,
+            &AtomicBool::new(false),
+            &mut timings,
+        )
+        .expect("project S4 graph grid");
+        let workflow = started.elapsed();
+        let nodes: u64 = connection
+            .query_row("SELECT COUNT(*) FROM graph_nodes", [], |row| row.get(0))
+            .unwrap();
+        let edges: u64 = connection
+            .query_row("SELECT COUNT(*) FROM graph_edges", [], |row| row.get(0))
+            .unwrap();
+        assert!(warnings.is_empty());
+        assert_eq!(nodes, u64::from(EVENT_COUNT) + 1);
+        assert_eq!(edges, u64::from(EVENT_COUNT));
+        println!(
+            "[s4-graph-grid] batch={} events={} workflowMs={} pageMs={} nodeMs={} edgeMs={} commitMs={} residentRows<={}",
+            batch_size,
+            EVENT_COUNT,
+            workflow.as_millis(),
+            timings.graph_page.as_millis(),
+            timings.graph_nodes.as_millis(),
+            timings.graph_edges.as_millis(),
+            timings.graph_commit.as_millis(),
+            batch_size
+        );
+    }
+}
