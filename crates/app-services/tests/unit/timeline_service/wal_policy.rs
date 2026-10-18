@@ -75,6 +75,14 @@ fn restore_failure_is_not_success_and_preserves_primary_error() {
 fn invalid_policy_is_rejected_before_database_work() {
     for policy in [
         TimelineProjectionPolicy {
+            cache_kib: 0,
+            ..Default::default()
+        },
+        TimelineProjectionPolicy {
+            cache_kib: 1024 * 1024 + 1,
+            ..Default::default()
+        },
+        TimelineProjectionPolicy {
             graph_batch_rows: 0,
             ..Default::default()
         },

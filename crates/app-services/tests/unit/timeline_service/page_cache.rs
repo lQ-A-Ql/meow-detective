@@ -1,4 +1,4 @@
-use crate::timeline_service::{projection::with_timeline_page_cache, TimelineServiceError};
+use crate::timeline_service::{page_cache::with_timeline_page_cache_kib, TimelineServiceError};
 use rusqlite::{
     hooks::{AuthAction, AuthContext, Authorization},
     Connection,
@@ -7,6 +7,13 @@ use rusqlite::{
 fn cache_size(conn: &Connection) -> i64 {
     conn.pragma_query_value(None, "cache_size", |row| row.get(0))
         .unwrap()
+}
+
+fn with_timeline_page_cache<T>(
+    conn: &Connection,
+    operation: impl FnOnce() -> Result<T, TimelineServiceError>,
+) -> Result<T, TimelineServiceError> {
+    with_timeline_page_cache_kib(conn, 1_000_000, operation)
 }
 
 #[test]
@@ -62,4 +69,18 @@ fn cache_restore_failure_cannot_be_reported_as_success() {
     });
     assert!(result.is_err());
     conn.authorizer(None::<fn(AuthContext<'_>) -> Authorization>);
+}
+
+#[test]
+fn explicit_cache_grid_uses_kib_and_restores_positive_page_based_settings() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.pragma_update(None, "cache_size", 321).unwrap();
+    for mib in [128, 256, 512, 1024] {
+        with_timeline_page_cache_kib(&conn, mib * 1024, || {
+            assert_eq!(cache_size(&conn), -i64::from(mib) * 1024);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(cache_size(&conn), 321);
+    }
 }

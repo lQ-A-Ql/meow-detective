@@ -26,6 +26,14 @@ V2 长期执行与发布口径见：
 
 ## 2. 核心矩阵
 
+PNG carving 为 **Experimental**：在 RAW/E01 的 logicalDisk 视图中显式扫描指定区间，
+逐 chunk 校验 CRC、zlib 和栅格长度，记录 source/revision/view/offset/length/SHA256。
+结果通过 Artifact/Graph、分页元数据查询、Hex 预览和不覆盖导出访问；普通导入不自动扫描。
+支持范围冻结为 [PNG 第二版（2003）](https://www.w3.org/TR/2003/REC-PNG-20031110/)
+中的 8-bit、非交错 grayscale/RGB/gray-alpha/RGBA。palette、16-bit、interlace、ZIP
+不支持。合成 PNG/RAW/E01 与固定 mutation seeds 覆盖位置、长度、摘要及拒绝理由；
+真实 PNG 恢复覆盖统计尚未执行。结果不推断原文件、删除状态、未分配空间或 MACB。
+
 | 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | Medium Fixture | 备注 |
 |---|---|---|---|---|---|---|---|
 | E01 reader | Windows | Beta | `tiny.E01` | expected.json / 8 个测试 | open / read / seek / EOF / chunk 解压；多段 segment/table 自动识别 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/e01/` multi-segment complex variants | 多段自动识别已实现，但 public-medium 目录尚空，厂商自定义压缩与复杂变体待补 |

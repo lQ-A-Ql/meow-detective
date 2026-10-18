@@ -1,6 +1,8 @@
 //! Generated disk-only trials. Invoke one condition in each fresh test process.
 use crate::timeline_service::projection_graph::populate_timeline_event_graph_with_policy;
-use crate::timeline_service::{page_cache::with_timeline_page_cache, wal_policy::with_wal_policy};
+use crate::timeline_service::{
+    page_cache::with_timeline_page_cache_kib, wal_policy::with_wal_policy,
+};
 use crate::timeline_service::{TimelineProjectionPolicy, TimelineWriteTimings};
 use std::{
     sync::{
@@ -14,6 +16,7 @@ mod experiment_fixture;
 
 fn policy() -> TimelineProjectionPolicy {
     let value = TimelineProjectionPolicy {
+        cache_kib: 1_000_000,
         graph_batch_rows: std::env::var("FORENSICS_S4_BATCH")
             .unwrap_or_else(|_| "20000".into())
             .parse()
@@ -52,7 +55,7 @@ fn disk_graph_trial() {
     let mut timings = TimelineWriteTimings::default();
     let started = Instant::now();
     let warnings = with_wal_policy(&connection, policy.wal_autocheckpoint_pages, || {
-        with_timeline_page_cache(&connection, || {
+        with_timeline_page_cache_kib(&connection, policy.cache_kib, || {
             populate_timeline_event_graph_with_policy(
                 &connection,
                 policy,

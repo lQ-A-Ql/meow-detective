@@ -1,4 +1,20 @@
 use super::*;
+
+#[test]
+fn bounded_mutation_smoke_mft_offsets_lengths_fixups_and_flags() {
+    let seed_record = make_test_record(42, "bounded.txt", 5, false);
+    let mut parser = MftRecordParser::new(1024, 512);
+    for seed in 0..256usize {
+        let mut record = seed_record.clone();
+        let offset = (seed * 37) % (record.len() - 4);
+        record[offset..offset + 4]
+            .copy_from_slice(&u32::MAX.wrapping_sub(seed as u32).to_le_bytes());
+        let length = if seed % 3 == 0 { seed % 1024 } else { 1024 };
+        if let Some(parsed) = parser.parse(&record[..length], 42) {
+            assert!(parsed.name.len() <= record.len() * 3);
+        }
+    }
+}
 use chrono::Datelike;
 
 fn make_test_record(_record_number: u64, name: &str, parent: u64, is_dir: bool) -> Vec<u8> {

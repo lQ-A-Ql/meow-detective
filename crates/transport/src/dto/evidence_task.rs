@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
     rename_all_fields = "camelCase"
 )]
 pub enum EvidenceTaskRequestDto {
+    CarvePng(super::PngCarvingRequestDto),
     Digest(CalculateEvidenceDigestRequest),
     NestedImport(MaterializeNestedEvidenceRequest),
     ContentIndex {
@@ -25,6 +26,7 @@ pub enum EvidenceTaskRequestDto {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "result", rename_all = "camelCase")]
 pub enum EvidenceTaskResultDto {
+    CarvePng(super::PngCarvingSummaryDto),
     Digest(EvidenceDigestDto),
     NestedImport(NestedEvidenceMaterializedDto),
     ContentIndex(ContentIndexSummaryDto),

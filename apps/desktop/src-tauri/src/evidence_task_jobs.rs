@@ -31,6 +31,7 @@ pub(crate) fn start(
     let worker_token = token.clone();
     let manager = state.task_manager.clone();
     let source_id = match &plan.request {
+        EvidenceTaskRequestDto::CarvePng(request) => Some(request.data_source_id.clone()),
         EvidenceTaskRequestDto::Digest(request) => request.data_source_id.clone().or_else(|| {
             request
                 .file_id

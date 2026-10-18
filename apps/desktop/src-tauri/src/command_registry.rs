@@ -21,6 +21,9 @@ pub(crate) use crate::commands::{
         cancel_batch, create_batch_plan, get_batch_job, list_batch_jobs, pause_batch, resume_batch,
         start_batch,
     },
+    carving_commands::{
+        export_carved_artifact, read_carved_artifact_range, search_carved_artifacts,
+    },
     case_commands::{
         close_case, create_case, delete_case, delete_data_source, get_case_metrics,
         get_current_case, get_data_sources, get_nested_evidence_lineage, get_recent_cases,

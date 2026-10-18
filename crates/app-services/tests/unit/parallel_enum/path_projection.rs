@@ -143,3 +143,34 @@ fn very_deep_ancestor_chain_is_bounded_and_never_publishes_partial_paths() {
     );
     assert!(Repo::validate_paths(&c).is_err());
 }
+
+#[test]
+fn long_leaf_paths_stream_without_a_second_catalog_sized_path_cache() {
+    let mut map = HashMap::from([(5, (None, "\\".into(), true))]);
+    let long_name = "数据".repeat(100);
+    for id in 100..2100 {
+        map.insert(id, (Some(5), format!("{long_name}-{id}"), false));
+    }
+    let conn = setup(&map);
+    let stats = update_mft_staging_paths_via_sqlite(
+        &conn,
+        "source",
+        4,
+        &map,
+        &HashSet::new(),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!(stats.materialized_rows, 2001);
+    assert_eq!(stats.cached_parent_paths, 1);
+    assert_eq!(stats.cached_parent_bytes, 0);
+    let last: String = conn
+        .query_row(
+            "SELECT resolved_path FROM ntfs_paths WHERE record_num=2099",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(last, format!("{long_name}-2099"));
+    Repo::validate_paths(&conn).unwrap();
+}

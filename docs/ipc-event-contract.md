@@ -1,5 +1,18 @@
 # IPC 事件契约
 
+## PNG carving 任务与字节地址
+
+新增能力复用 `start_evidence_task` / 查询 / 取消链路，tag 为 `carvePng`；
+不新增事件 topic。读取命令为 `search_carved_artifacts`、
+`read_carved_artifact_range`、`export_carved_artifact`。
+权威 DTO 在 `transport/dto/carving.rs`，前端镜像在 `types/carving.ts`。
+offset、length、scannedBytes、bytesWritten 跨 IPC 使用规范十进制字符串，
+禁止经 JavaScript Number 转换；每次预览的有界请求 length 为 u32。
+查询 cursor 绑定 source、query、source revision 和 artifact revision；
+来源替换或新增制品后旧 cursor 返回失效错误。
+任务摘要最多附带 128 个完整结果和 64 个拒绝样本，其余通过分页查询读取。
+已校验批次可保留于取消/失败后；任务失败或取消不会发布 completed，也不更改导入 Ready。
+
 本文档列出后端到前端的全部 20 个 Tauri 事件 topic，及其 payload 类型来源。事件契约没有代码生成，Rust 端 `crates/transport/src/events/mod.rs` 与前端 `frontend/src/types/events.ts` 的 `EventTopic` 联合类型必须手工保持一致——`scripts/check-event-topic-drift.ps1` 在 CI 中校验两者一一对应。
 
 发送侧统一走 `apps/desktop/src-tauri/src/events/event_bridge.rs` 中的 `emit_*` 辅助函数，每个函数构造一个 `EventEnvelope<T>`（`eventId`/`topic`/`ts`/`payload`）并通过 `app.emit_to("main", topic, event)` 发出。接收侧统一走前端 `frontend/src/lib/events/bus.ts` 的 `EventBus`，按 `EventTopic` 字符串订阅。

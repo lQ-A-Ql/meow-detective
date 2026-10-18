@@ -1,6 +1,35 @@
 use super::*;
 
 #[test]
+fn corrupt_header_length_and_reversed_partition_range_are_rejected() {
+    let mut header = [0u8; 512];
+    header[..8].copy_from_slice(b"EFI PART");
+    header[12..16].copy_from_slice(&u32::MAX.to_le_bytes());
+    assert!(parse_gpt_header(&header).is_none());
+    let mut entry = [0u8; 128];
+    entry[..16].copy_from_slice(&MS_BASIC_DATA);
+    entry[32..40].copy_from_slice(&100u64.to_le_bytes());
+    entry[40..48].copy_from_slice(&99u64.to_le_bytes());
+    assert!(parse_gpt_entries(&entry, 128, u32::MAX).is_empty());
+}
+
+#[test]
+fn bounded_mutation_smoke_gpt_counts_lengths_and_lbas() {
+    for seed in 0..256usize {
+        let mut bytes = vec![0u8; 512];
+        bytes[..8].copy_from_slice(b"EFI PART");
+        bytes[12..16].copy_from_slice(&(seed as u32 * 17).to_le_bytes());
+        bytes[seed % 512] ^= (seed as u8).wrapping_mul(71);
+        let _ = parse_gpt_header(&bytes[..seed % 513]);
+        for size in [0, 1, 127, 128, 256, u32::MAX] {
+            let partitions = parse_gpt_entries(&bytes, size, u32::MAX);
+            assert!(partitions.len() <= 4);
+            assert!(partitions.iter().all(|p| p.end_lba >= p.start_lba));
+        }
+    }
+}
+
+#[test]
 fn parse_gpt_entries_with_minimum_entry_size() {
     // Create a minimal GPT entry (128 bytes)
     let mut entry = vec![0u8; 128];

@@ -1,5 +1,22 @@
 use super::*;
 
+#[test]
+fn bounded_mutation_smoke_indx_lengths_names_flags_and_truncation() {
+    for seed in 0..256usize {
+        let mut entry = index_entry(42, "bounded-directory", 1);
+        let offset = (seed * 17) % (entry.len() - 4);
+        entry[offset..offset + 4]
+            .copy_from_slice(&u32::MAX.wrapping_sub(seed as u32).to_le_bytes());
+        let length = if seed % 2 == 0 {
+            seed % entry.len()
+        } else {
+            entry.len()
+        };
+        let parsed = parse_indx_entries(&entry[..length]);
+        assert!(parsed.len() <= entry.len() / 8);
+    }
+}
+
 fn index_entry(mft_ref: u64, name: &str, namespace: u8) -> Vec<u8> {
     index_entry_with_flags(mft_ref, name, namespace, 0)
 }

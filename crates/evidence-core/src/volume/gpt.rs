@@ -44,7 +44,7 @@ pub fn parse_gpt_header(data: &[u8]) -> Option<GptHeader> {
         return None;
     }
     let header_size = u32::from_le_bytes(data[12..16].try_into().ok()?);
-    if header_size < 92 {
+    if header_size < 92 || header_size as usize > data.len() {
         return None;
     }
     Some(GptHeader {
@@ -65,19 +65,18 @@ pub fn parse_gpt_entries(data: &[u8], entry_size: u32, count: u32) -> Vec<GptPar
         return Vec::new();
     }
     let mut parts = Vec::new();
-    for i in 0..count {
-        let off = i as usize * entry_size as usize;
-        if off + entry_size as usize > data.len() {
-            break;
-        }
-        let entry = &data[off..off + entry_size as usize];
+    for (i, entry) in data
+        .chunks_exact(entry_size as usize)
+        .take(count as usize)
+        .enumerate()
+    {
         let mut type_guid = [0u8; 16];
         type_guid.copy_from_slice(&entry[0..16]);
         let mut unique_guid = [0u8; 16];
         unique_guid.copy_from_slice(&entry[16..32]);
         let start = u64::from_le_bytes(entry[32..40].try_into().unwrap_or([0; 8]));
         let end = u64::from_le_bytes(entry[40..48].try_into().unwrap_or([0; 8]));
-        if start == 0 && end == 0 {
+        if (start == 0 && end == 0) || end < start {
             continue;
         }
         // Safe name extraction — ensure we don't read past entry boundary
@@ -94,7 +93,7 @@ pub fn parse_gpt_entries(data: &[u8], entry_size: u32, count: u32) -> Vec<GptPar
             .collect();
         let name = String::from_utf16_lossy(&chars);
         parts.push(GptPartition {
-            index: i as usize + 1,
+            index: i + 1,
             type_guid,
             unique_guid,
             start_lba: start,

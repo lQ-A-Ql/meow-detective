@@ -21,6 +21,7 @@ import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { HexViewer } from '@/components/viewers/HexViewer';
 import type { DeletedFileRecovery, RecoveryProvenanceRange } from '@/types/models';
 import type { DeletedRecoveryViewModel } from '../types';
+import { PngCarvingPanel } from '@/features/carving/PngCarvingPanel';
 
 const HASH_ALGORITHM_LABELS = {
   md5: 'MD5',
@@ -207,6 +208,7 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
   );
   return (
     <div className="flex h-full min-h-[36rem] flex-col gap-3">
+        {model.pngCarving ? <PngCarvingPanel model={model.pngCarving} /> : null}
 
       {model.partitions.length === 0 ? (
         <EmptyState>{t('recovery.noPartitions')}</EmptyState>

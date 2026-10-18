@@ -12,6 +12,8 @@ pub(in crate::parallel_enum) struct PathMaterializationStats {
     pub updated_main_rows: u64,
     pub materialized_rows: u64,
     pub staging_logical_bytes: u64,
+    pub cached_parent_paths: u64,
+    pub cached_parent_bytes: u64,
 }
 
 pub(in crate::parallel_enum) fn update_mft_staging_paths_via_sqlite(
@@ -23,29 +25,36 @@ pub(in crate::parallel_enum) fn update_mft_staging_paths_via_sqlite(
     cancel: &AtomicBool,
 ) -> Result<PathMaterializationStats, ParallelEnumError> {
     let compute_started = Instant::now();
-    let mut resolved = HashMap::with_capacity(path_map.len());
+    let needed: HashSet<_> = path_map
+        .values()
+        .filter_map(|(parent, _, _)| *parent)
+        .filter(|parent| path_map.contains_key(parent))
+        .collect();
+    let mut resolved = HashMap::with_capacity(needed.len());
     let mut records: Vec<_> = path_map.keys().copied().collect();
     records.sort_unstable();
     let mut budget = PathBudget {
         used: 0,
         maximum: 256 * 1024 * 1024,
+        needed,
     };
-    for record in &records {
-        resolve_mft_path(
-            *record,
-            path_map,
-            deleted_records,
-            &mut resolved,
-            &mut budget,
-            cancel,
-        )?;
-    }
-    let compute_elapsed = compute_started.elapsed();
+    let mut compute_elapsed = compute_started.elapsed();
+    let mut resolving_elapsed = Duration::ZERO;
     let sql_started = Instant::now();
     let materialized_rows = NtfsStagingRepo::write_paths(conn, |statement| {
         let mut rows = 0u64;
         for record in records {
             check_cancel(cancel)?;
+            let started = Instant::now();
+            let path = resolve_mft_path(
+                record,
+                path_map,
+                deleted_records,
+                &mut resolved,
+                &mut budget,
+                cancel,
+            )?;
+            resolving_elapsed += started.elapsed();
             let (parent, name, _) = &path_map[&record];
             let parent = if record == 5 {
                 None
@@ -54,7 +63,6 @@ pub(in crate::parallel_enum) fn update_mft_staging_paths_via_sqlite(
                     .filter(|p| path_map.contains_key(p))
                     .or_else(|| path_map.contains_key(&5).then_some(5))
             };
-            let path = &resolved[&record];
             let status = if record == 5 {
                 0
             } else if path.starts_with("/$DeletedOrphans/") {
@@ -68,32 +76,50 @@ pub(in crate::parallel_enum) fn update_mft_staging_paths_via_sqlite(
         }
         Ok::<_, ParallelEnumError>(rows)
     })?;
+    compute_elapsed += resolving_elapsed;
     let (pages,size):(u64,u64) = conn.query_row("SELECT (SELECT page_count FROM pragma_page_count),(SELECT page_size FROM pragma_page_size)",[],|r|Ok((r.get(0)?,r.get(1)?)))?;
-    Ok(PathMaterializationStats {
+    let stats = PathMaterializationStats {
         compute_elapsed,
-        sql_elapsed: sql_started.elapsed(),
+        sql_elapsed: sql_started.elapsed().saturating_sub(resolving_elapsed),
         updated_main_rows: 0,
         materialized_rows,
         staging_logical_bytes: pages.saturating_mul(size),
-    })
+        cached_parent_paths: resolved.len() as u64,
+        cached_parent_bytes: budget.used as u64,
+    };
+    tracing::debug!(
+        cached_parent_paths = stats.cached_parent_paths,
+        cached_parent_bytes = stats.cached_parent_bytes,
+        materialized_rows = stats.materialized_rows,
+        "NTFS parent path cache high water"
+    );
+    Ok(stats)
 }
 
 struct PathBudget {
     used: usize,
     maximum: usize,
+    needed: HashSet<u64>,
 }
 impl PathBudget {
     fn store(
         &mut self,
         cache: &mut HashMap<u64, String>,
         id: u64,
-        path: String,
+        path: &str,
     ) -> Result<(), ParallelEnumError> {
-        if path.len() > 256 * 1024 || self.used.saturating_add(path.capacity()) > self.maximum {
+        if path.len() > 256 * 1024 {
             return Err(ParallelEnumError::MftResourceLimit("resolved path bytes"));
         }
-        self.used += path.capacity();
-        cache.insert(id, path);
+        if self.needed.contains(&id) {
+            if self.used.saturating_add(path.len()) > self.maximum {
+                return Err(ParallelEnumError::MftResourceLimit(
+                    "resolved parent path bytes",
+                ));
+            }
+            self.used += path.len();
+            cache.insert(id, path.to_owned());
+        }
         Ok(())
     }
 }
@@ -107,10 +133,10 @@ fn resolve_mft_path(
     resolved: &mut HashMap<u64, String>,
     budget: &mut PathBudget,
     cancel: &AtomicBool,
-) -> Result<(), ParallelEnumError> {
+) -> Result<String, ParallelEnumError> {
     check_cancel(cancel)?;
-    if resolved.contains_key(&record) {
-        return Ok(());
+    if let Some(path) = resolved.get(&record) {
+        return Ok(path.clone());
     }
     let mut chain = Vec::new();
     let mut current = record;
@@ -131,7 +157,7 @@ fn resolve_mft_path(
                 current = *parent;
             }
             Some(_) if current == 5 => {
-                budget.store(resolved, current, String::new())?;
+                budget.store(resolved, current, "")?;
                 break String::new();
             }
             Some((_, name, _)) => {
@@ -140,12 +166,12 @@ fn resolve_mft_path(
                 } else {
                     format!("/Unresolved/{name}")
                 };
-                budget.store(resolved, current, path.clone())?;
+                budget.store(resolved, current, &path)?;
                 break path;
             }
             None => {
                 let path = format!("/Unresolved/{current}");
-                budget.store(resolved, current, path.clone())?;
+                budget.store(resolved, current, &path)?;
                 break path;
             }
         }
@@ -159,9 +185,9 @@ fn resolve_mft_path(
         } else {
             format!("{path}/{name}")
         };
-        budget.store(resolved, id, path.clone())?;
+        budget.store(resolved, id, &path)?;
     }
-    Ok(())
+    Ok(path)
 }
 fn check_cancel(cancel: &AtomicBool) -> Result<(), ParallelEnumError> {
     if cancel.load(Ordering::Relaxed) {

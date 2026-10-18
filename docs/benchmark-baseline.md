@@ -517,7 +517,7 @@ enumeration 4.42 秒、metadata search index 6.52 秒、timeline 2.91 秒、峰�
 完整诊断记录为 `artifacts/stage-optimization/20261017/S3/iteration-03/phase-trace-medium-release.json`。
 此前 debug trace 的 93–95 秒不再作为性能证据。Release trace 只用于定位阶段，不替换
 iteration-02/03 的正式矩阵或回归结论。
-### S4 Timeline / Graph / Search Projection（2026-10-18，进行中）
+### S4 Timeline / Graph / Search Projection（2026-10-18，用户指示停止长矩阵）
 
 默认 Graph batch 仍为 20,000，Timeline cache 仍为 -1,000,000 KiB；source/build 的
 WAL 与 synchronous 策略不变。本轮修复取消与恢复边界，不宣称工作流提速。
@@ -553,3 +553,30 @@ autocheckpoint 单位是页；这些值不是实测内存或 WAL 峰值。
 `p2-acceptance.json`，记录日志/源码 SHA、失败重现与确认结果；旧 query-plan/grid/S3 reports
 保持不变。早前“P1 已关闭”的记录仅代表探索与材料汇总，本表更正正式 task 完成范围，
 不会用内存库计数或单轮耗时替代真实输入的完整性能门禁。
+
+用户在确认已完成导入无错误后要求直接进入 S5–S8，因此 S4 剩余 full-content 与 million
+矩阵记为 **NOT-RUN**，不是性能通过。此前已完成的 57 次导入均为 `exitCode=0`、oracle
+一致；native Release 54/54 仅用于策略成本与取消/搜索功能回归，不能替代完整五轮发布矩阵。
+停止记录见 `artifacts/stage-optimization/20261018/S4/closure/user-directed-stop.json`。
+
+### S5–S8 收口状态（2026-10-18）
+
+S5 的统一资源账本继续使用 1536 MiB 全局估算、1020 MiB 单重型 workspace、516 MiB
+metadata 上限和 2 GiB 实测 RSS 门槛。路径物化已改为直接写窄表，仅驻留被其他节点引用的
+父路径；Timeline cache 的实验参数明确以 KiB 传递并在异常/取消/unwind 后恢复。resource
+与 path 回归通过，但多任务 PVE/preview RSS 组合和完整 cache 性能网格 **NOT-RUN**。
+
+S6 已提交 public corpus manifest、SHA/预算/许可校验器、固定 mutation seeds 和有界
+超时清理。MFT、INDX、GPT、E01 以及 carving PNG 边界回归通过；授权真实 E01 使用 Sleuth
+Kit 4.15.0 对三个 logical sector ranges 的字节对照通过。完整文件导出差异分类、长期
+fuzz/sanitizer 和 private PVE 运行 **NOT-RUN**。
+
+S7 交付 PNG 最小闭环：纯 core 的窗口扫描、CRC/zlib/raster 校验、source/revision 追溯，
+bounded producer/single writer，Artifact/Graph/Search 幂等，64 KiB 预览、整候选 SHA
+复算和 no-clobber 原子导出。支持范围为 8-bit、非交错 grayscale/RGB/gray-alpha/RGBA；
+palette、16-bit、interlace、ZIP 和“原文件/删除/未分配空间”推断均不支持。
+
+S8 focused functional、frontend 898 tests/typecheck/lint/build、静态 guards 和公开 small/
+corrupt corpus 通过。完整 100K/500K/1M 与真实 S/M/L 五轮矩阵、强制终止/reopen rollback
+drill 尚未完成。`cargo deny` 仍被基线已有 `zip 2.4.2` 的 RUSTSEC-2026-0367/0368/0369
+阻断；未新增 advisory suppression 或未经评审的 major upgrade。

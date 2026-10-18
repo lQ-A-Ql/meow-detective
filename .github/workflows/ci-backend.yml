@@ -56,6 +56,20 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Public forensic corpus and bounded corruption smoke
+        run: |
+          python scripts/check-forensic-corpus.py --run --group small
+          python scripts/check-forensic-corpus.py --run --group corrupt
+      - name: Upload forensic corpus evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forensic-corpus
+          path: artifacts/corpus
+          if-no-files-found: ignore
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
       - name: Rust coverage

@@ -1,0 +1,9 @@
+{
+  "title":"PNG byte signature scan",
+  "scope":"Explicit logical-disk range scan. This does not identify unallocated space or original file identity. Supports non-interlaced 8-bit grayscale/RGB with optional alpha, excluding indexed color; validates CRC, zlib and scanlines.",
+  "offset":"Start byte (decimal)","length":"Range bytes (blank: up to 64 MiB)",
+  "start":"Scan PNG","cancel":"Cancel scan","search":"Filter offset, hash or metadata","load":"Load existing candidates",
+  "more":"Next page","first":"First page","preview":"View bytes","export":"Extract PNG",
+  "verified":"Verified","rejected":"Rejected","partial":"Partial",
+  "exported":"Extracted and SHA-256 verified","invalid":"Use canonical nonnegative decimal integers; each task is limited to 1 GiB."
+}

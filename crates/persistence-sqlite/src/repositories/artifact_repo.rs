@@ -4,6 +4,7 @@ use crate::repositories::source_meta_repo::{SourceMetaRepo, ARTIFACT_CURSOR_REVI
 use crate::sql_builder::ClauseBuilder;
 use domain::{Artifact, ArtifactId};
 use rusqlite::{params, Connection};
+mod carving;
 
 const ARTIFACT_SELECT_COLUMNS: &str = "id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at";
 

@@ -69,7 +69,7 @@ fn materialize_timeline(
     )
     .acquire(
         crate::resource_budget::Resources {
-            bytes: crate::resource_budget::TIMELINE_BYTES,
+            bytes: u64::from(ctx.options.projection_policy.cache_kib) * 1024,
             ..Default::default()
         },
         Some(ctx.options.cancel_token),

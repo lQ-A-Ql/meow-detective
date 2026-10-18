@@ -3,6 +3,34 @@ use crate::table::{find_geometry, should_read_section_content, V1_TABLE_HEADER_S
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
+#[test]
+fn bounded_mutation_smoke_e01_table_geometry_and_open_limits() {
+    for seed in 0..256usize {
+        let mut content = vec![0u8; 32 + seed % 128];
+        let count = [0, 1, 2, u32::MAX][seed % 4];
+        content[..4].copy_from_slice(&count.to_le_bytes());
+        content[8..16].copy_from_slice(&u64::MAX.wrapping_sub(seed as u64).to_le_bytes());
+        let sections = [crate::table::E01Section {
+            kind: "table".into(),
+            segment_index: 0,
+            start_offset: 13,
+            next_offset: 0,
+            content,
+        }];
+        if let Ok(rows) = crate::table::build_chunk_table(&sections, 4096, "table") {
+            assert!(rows.len() <= 40);
+        }
+        let mut disk = vec![0u8; 32];
+        disk[8..12].copy_from_slice(&(seed as u32).to_le_bytes());
+        disk[12..16].copy_from_slice(&u32::MAX.wrapping_sub(seed as u32).to_le_bytes());
+        disk[16..24].copy_from_slice(&u64::MAX.to_le_bytes());
+        let _ = find_geometry(&[("disk".into(), disk)]);
+    }
+    assert!(crate::open_limits::OpenBudget::default()
+        .content(usize::MAX)
+        .is_err());
+}
+
 impl E01Reader {
     fn cached_chunk_indices_for_test(&self) -> Vec<u64> {
         self.chunk_cache.iter().map(|chunk| chunk.idx).collect()

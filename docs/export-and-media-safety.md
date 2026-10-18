@@ -65,6 +65,12 @@ V2 安全治理与发布门禁总计划见：
 
 ## 5. overwrite 口径
 
+PNG carving 的预览与导出只接受案件内 source-scoped Artifact ID；来源 revision、
+logicalDisk 视图及原始 offset/length 必须仍有效。预览每次至多 1 MiB，经 evidence
+reader 读取；前端 Hex 预览请求 64 KiB，不把宿主证据路径转成媒体 URL。
+导出以 64 KiB buffer 复算整个候选的 SHA256，写同目录临时文件，sync 后使用
+no-clobber 原子发布；该接口没有 overwrite 选项。失败时移除临时文件。
+
 - 默认拒绝覆盖
 - 如前端提供“覆盖”选项，必须是显式用户操作
 - 文档、测试和验收都必须覆盖“默认不覆盖”的真实行为

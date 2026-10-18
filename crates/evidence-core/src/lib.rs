@@ -1,3 +1,4 @@
+pub mod carving;
 pub mod filesystem;
 pub mod image;
 pub mod probe;

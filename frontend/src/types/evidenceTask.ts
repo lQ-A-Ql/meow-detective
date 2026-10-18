@@ -7,12 +7,14 @@ export interface ContentIndexSummary {
   unsupportedEncoding: number; notApplicable: number; expected: number; complete: boolean;
 }
 export type EvidenceTaskRequest =
+  | { kind: 'carvePng'; request: import('./carving').PngCarvingRequest }
   | { kind: 'digest'; request: CalculateEvidenceDigestRequest }
   | { kind: 'nestedImport'; request: { parentDataSourceId: string; fileEntryId: string } }
   | { kind: 'contentIndex'; request: { dataSourceId: string } }
   | RegistrySearchTaskRequest;
 export type RegistrySearchTaskRequest = { kind: 'registrySearch'; request: { fileId: string; sessionId: string; query: string } };
 export type EvidenceTaskResult =
+  | { kind: 'carvePng'; result: import('./carving').PngCarvingSummary }
   | { kind: 'digest'; result: EvidenceDigest }
   | { kind: 'nestedImport'; result: NestedEvidenceMaterialized }
   | { kind: 'contentIndex'; result: ContentIndexSummary }

@@ -108,6 +108,12 @@ fn dispatch(
     progress: &(dyn Fn(u64, u64) + Sync),
 ) -> Result<EvidenceTaskResultDto, CommandError> {
     match &ctx.plan.request {
+        EvidenceTaskRequestDto::CarvePng(request) => {
+            app_services::carving_service::run_png_carving(
+                conn, &ctx.root, &ctx.case, request, cancel, progress,
+            )
+            .map(EvidenceTaskResultDto::CarvePng)
+        }
         EvidenceTaskRequestDto::Digest(request) => {
             app_services::digest_service::calculate_evidence_digest_with_cancel(
                 conn,

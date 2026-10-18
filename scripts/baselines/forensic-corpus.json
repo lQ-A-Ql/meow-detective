@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 1,
+  "policy": "Public synthetic samples only; private absence is NOT-RUN; no golden refresh; mutation smoke is not long-running fuzz",
+  "samples": [
+    {
+      "id": "tiny-raw",
+      "path": "testdata/fixtures/public-small/raw/tiny.raw",
+      "format": "RAW",
+      "expected": "1024 deterministic bytes; MBR signature; no filesystem claim",
+      "license": "Repository MIT; deterministic synthetic fixture",
+      "source": "scripts/generate-tiny-fixtures.ps1",
+      "private": false,
+      "maxBytes": 16777216,
+      "sha256": "c0463380c4fc1f2ba06b2cc5f20c53bd6ef56b145381ef21966ea8c5c4417268"
+    },
+    {
+      "id": "tiny-e01",
+      "path": "testdata/fixtures/public-small/e01/tiny.E01",
+      "format": "E01",
+      "expected": "single uncompressed logical 4096-byte chunk; internal reader fixture; not independent-tool conformance",
+      "license": "Repository MIT; deterministic synthetic fixture",
+      "source": "scripts/generate-tiny-fixtures.ps1",
+      "private": false,
+      "maxBytes": 16777216,
+      "sha256": "78b6764e2ab617039ddc3bb3656ff532195b716a739ed9c1cf541351e7b9cf0e"
+    },
+    {
+      "id": "tiny-system-hive",
+      "path": "testdata/fixtures/public-small/logical/Windows/System32/config/SYSTEM",
+      "format": "REGF",
+      "expected": "targeted generated SYSTEM keys; not a full registry corpus",
+      "license": "Repository MIT; deterministic synthetic fixture",
+      "source": "scripts/generate-tiny-fixtures.ps1",
+      "private": false,
+      "maxBytes": 16777216,
+      "sha256": "69d8ca8530e978f7e9503cc21878f2cac4e1fb906c8c5ffe7fc29b2e17ae1ba6"
+    }
+  ],
+  "generators": [
+    {
+      "id": "ntfs-import",
+      "source": "crates/app-services/tests/support/import_ntfs_fixture.rs",
+      "sourceSha256": "e91819233bbc7180509e1c43fc2ebc4068cf11c789bcd2a17002bf6aea9de256",
+      "license": "Repository MIT",
+      "features": [
+        "normal",
+        "resident",
+        "record reference",
+        "MFT",
+        "E01 compression"
+      ],
+      "inputBudgetBytes": 131072,
+      "mutationSeeds": 0,
+      "expected": "owning-crate assertions; golden values are not auto-refreshed"
+    },
+    {
+      "id": "ntfs-mft-boundaries",
+      "source": "crates/fs-ntfs/tests/unit/mft_scanner.rs",
+      "sourceSha256": "3d09cbe6022e9b7084cbf857e4a31995a43781dfabfcda47d049798d659d7df4",
+      "license": "Repository MIT",
+      "features": [
+        "deleted",
+        "ADS",
+        "encrypted metadata",
+        "filename namespace",
+        "bounded mutation"
+      ],
+      "inputBudgetBytes": 131072,
+      "mutationSeeds": 256,
+      "expected": "owning-crate assertions; golden values are not auto-refreshed"
+    },
+    {
+      "id": "ntfs-indx-boundaries",
+      "source": "crates/fs-ntfs/tests/unit/directory.rs",
+      "sourceSha256": "214abbae8609b4e49cd18922e06778b3984bb70b951b5fff9c9140a027ded1f2",
+      "license": "Repository MIT",
+      "features": [
+        "INDX",
+        "short name",
+        "sequence",
+        "bounded mutation"
+      ],
+      "inputBudgetBytes": 131072,
+      "mutationSeeds": 256,
+      "expected": "owning-crate assertions; golden values are not auto-refreshed"
+    },
+    {
+      "id": "ntfs-path-boundaries",
+      "source": "crates/app-services/tests/unit/parallel_enum/path_projection.rs",
+      "sourceSha256": "f909ea6e32bf471fb1bd6429ace2d4e5d75a3d47f566a587ec9890d3989641f3",
+      "license": "Repository MIT",
+      "features": [
+        "long names",
+        "deep chain",
+        "orphan",
+        "cycle",
+        "cancellation"
+      ],
+      "inputBudgetBytes": 131072,
+      "mutationSeeds": 0,
+      "expected": "owning-crate assertions; golden values are not auto-refreshed"
+    },
+    {
+      "id": "gpt-boundaries",
+      "source": "crates/evidence-core/tests/unit/volume/gpt.rs",
+      "sourceSha256": "777fd76d27da70a4eab9b5b8372dea7cf1a63f6507c9d5b6ce8c8b1e0a571226",
+      "license": "Repository MIT",
+      "features": [
+        "GUID",
+        "oversize header",
+        "reversed LBA",
+        "bounded mutation"
+      ],
+      "inputBudgetBytes": 131072,
+      "mutationSeeds": 256,
+      "expected": "owning-crate assertions; golden values are not auto-refreshed"
+    },
+    {
+      "id": "e01-boundaries",
+      "source": "crates/image-e01/tests/unit/image_e01.rs",
+      "sourceSha256": "ef488e67c42eb1e230e765b3ca91610a0e65f95a0f4dc3bd62fd8dc5cf4d0fa4",
+      "license": "Repository MIT",
+      "features": [
+        "compressed",
+        "multichunk",
+        "truncated",
+        "metadata limits",
+        "bounded mutation"
+      ],
+      "inputBudgetBytes": 131072,
+      "mutationSeeds": 256,
+      "expected": "owning-crate assertions; golden values are not auto-refreshed"
+    },
+    {
+      "id": "png-carving",
+      "source": "crates/evidence-core/tests/unit/carving.rs",
+      "sourceSha256": "758bdec09594aafe22bc855e6c59d429dcb84d90ac61401a5c780b3114466204",
+      "license": "Repository MIT",
+      "features": [
+        "cross-window",
+        "CRC",
+        "zlib raster",
+        "truncation",
+        "budgets",
+        "bounded mutation"
+      ],
+      "inputBudgetBytes": 131072,
+      "mutationSeeds": 256,
+      "expected": "exact offset/length/SHA256 for complete outputs; negatives never complete"
+    }
+  ],
+  "suites": [
+    {
+      "id": "ntfs",
+      "group": "small",
+      "cargo": [
+        "test",
+        "--locked",
+        "-p",
+        "fs-ntfs",
+        "--lib",
+        "--jobs",
+        "2"
+      ],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "reader",
+      "group": "small",
+      "cargo": [
+        "test",
+        "--locked",
+        "-p",
+        "image-e01",
+        "--lib",
+        "--jobs",
+        "2"
+      ],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "core",
+      "group": "small",
+      "cargo": [
+        "test",
+        "--locked",
+        "-p",
+        "evidence-core",
+        "--lib",
+        "--jobs",
+        "2"
+      ],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "corruption",
+      "group": "corrupt",
+      "cargo": [
+        "test",
+        "--locked",
+        "-p",
+        "fs-ntfs",
+        "-p",
+        "evidence-core",
+        "-p",
+        "image-e01",
+        "--lib",
+        "bounded_mutation_smoke",
+        "--jobs",
+        "2"
+      ],
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "resource",
+      "group": "resource",
+      "cargo": [
+        "test",
+        "--locked",
+        "-p",
+        "app-services",
+        "--test",
+        "reader_resource_budget",
+        "--jobs",
+        "2"
+      ],
+      "timeoutSeconds": 180
+    },
+    {
+      "id": "import-oracle",
+      "group": "integration",
+      "cargo": [
+        "test",
+        "--locked",
+        "-p",
+        "app-services",
+        "--test",
+        "import_benchmark",
+        "--jobs",
+        "2"
+      ],
+      "timeoutSeconds": 240
+    }
+  ],
+  "privateEnvironments": [
+    "FORENSICS_E01_FIXTURE",
+    "FORENSICS_LIUYANG_E01_FIXTURE",
+    "FORENSICS_PVE_CLUSTER_ROOT"
+  ]
+}

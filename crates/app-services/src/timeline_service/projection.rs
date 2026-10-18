@@ -10,7 +10,7 @@ use std::{
     time::Instant,
 };
 
-use super::page_cache::with_timeline_page_cache;
+use super::page_cache::with_timeline_page_cache_kib;
 use super::projection_meta::{
     ensure_projection_meta_table, is_projection_done, mark_projection_done, projection_identity,
     projection_source_tables_present, table_has_column, timeline_graph_tables_present,
@@ -120,7 +120,7 @@ pub fn materialize_file_activity_with_identity_and_policy(
     }
 
     super::wal_policy::with_wal_policy(conn, policy.wal_autocheckpoint_pages, || {
-        with_timeline_page_cache(conn, || {
+        with_timeline_page_cache_kib(conn, policy.cache_kib, || {
             let started = Instant::now();
             let mut timings = TimelineWriteTimings::default();
             let events_started = Instant::now();

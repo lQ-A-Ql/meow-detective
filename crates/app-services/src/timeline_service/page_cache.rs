@@ -3,8 +3,9 @@ use rusqlite::Connection;
 
 use super::TimelineServiceError;
 
-pub(super) fn with_timeline_page_cache<T>(
+pub(super) fn with_timeline_page_cache_kib<T>(
     connection: &Connection,
+    cache_kib: u32,
     operation: impl FnOnce() -> Result<T, TimelineServiceError>,
 ) -> Result<T, TimelineServiceError> {
     let previous = connection.pragma_query_value(None, "cache_size", |row| row.get(0))?;
@@ -13,7 +14,7 @@ pub(super) fn with_timeline_page_cache<T>(
         previous,
         restore_pending: true,
     };
-    connection.pragma_update(None, "cache_size", -1_000_000)?;
+    connection.pragma_update(None, "cache_size", -i64::from(cache_kib))?;
     let result = operation();
     let restored = guard.restore();
     match result {

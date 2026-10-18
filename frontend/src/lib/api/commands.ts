@@ -5,6 +5,7 @@
  * this file. Do not use bare string literals in API modules.
  */
 export const COMMANDS = {
+  carving: { SEARCH: 'search_carved_artifacts', READ: 'read_carved_artifact_range', EXPORT: 'export_carved_artifact' },
   evidenceTasks: { START: 'start_evidence_task', GET: 'get_evidence_task', CANCEL: 'cancel_evidence_task', COVERAGE: 'get_content_index_coverage' },
   registryBrowser: {
     LIST_HIVES: 'list_registry_hives',

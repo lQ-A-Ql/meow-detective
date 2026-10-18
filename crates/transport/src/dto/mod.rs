@@ -16,12 +16,14 @@ pub mod artifacts;
 pub mod batch;
 pub mod bitlocker;
 pub mod bitlocker_dictionary;
+pub mod carving;
 pub mod case;
 pub mod correlation;
 pub mod digest;
 pub mod digest_results;
 pub mod emulation;
 pub mod evidence_task;
+pub use carving::*;
 pub mod files;
 mod governance;
 pub mod graph;
@@ -118,10 +120,7 @@ pub use emulation::{
     EmulationOsdataCleanupStateDto, EmulationPreflightDto, EmulationSessionStatusDto,
     EmulationStateDto, PrepareEmulationRequestDto,
 };
-pub use evidence_task::{
-    ContentIndexCoverageDto, ContentIndexSummaryDto, EvidenceTaskDto, EvidenceTaskRequestDto,
-    EvidenceTaskResultDto,
-};
+pub use evidence_task::*;
 pub use files::{
     FileChildrenDto, FileEntryRowDto, FileExtractionPhaseDto, FileExtractionProgressDto,
     FileExtractionResultDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto, LocalDiskDto,
