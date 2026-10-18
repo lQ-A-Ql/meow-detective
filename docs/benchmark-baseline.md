@@ -529,3 +529,10 @@ S4 已开始，首个任务验证了 source SQLite Timeline graph projection 的
 改动。下一步是 S4.P1.T2：比较 graph batch 20,000 / 50,000 / 100,000 的 node、edge、
 commit、驻留窗口和取消延迟，保持每批独立提交及现有幂等/重试语义。
 
+S4.P1.T2 的 Release synthetic grid 已完成，证据为
+`artifacts/stage-optimization/20261018/S4/iteration-01/graph-batch-grid.json`：120k events
+下，20k/50k/100k 均得到 120001 nodes、120000 edges、零 warning。workflow 分别为
+241ms、212ms、216ms；node/edge/commit 成本接近，50k/100k 的墙钟略低但驻留窗口显著
+更大。本轮不改变 20k 默认值，待 S4.P1.T4 用 100K RAW/E01、真实 E01 和压力规模验证后
+再决定；现有取消回归保持通过。
+
