@@ -581,3 +581,41 @@ palette、16-bit、interlace 和“原文件/删除/未分配空间”推断不�
 S8 focused functional、frontend 898 tests/typecheck/lint/build、静态 guards 和公开 small/
 corrupt corpus 通过。完整 100K/500K/1M 与真实 S/M/L 五轮矩阵、强制终止/reopen rollback
 drill 尚未完成。`cargo deny` advisories 已通过；仍有 duplicate/yanked dependency warnings，未新增 advisory suppression。
+
+### S8 登记矩阵与独立复核（2026-10-19）
+
+候选固定为 `5ddcc9538389217275e78c2d8aef5cad9aac83b5` 的 Release benchmark，
+对照 baseline 为 `b1cca115c631293b1c326ffe174fb92650bf4926`。本轮完成此前登记的
+十个输入及触线条件复核：screen 24/24、focused 48/48、full 24/24、pressure 8/8，
+focused-confirm、full-confirm、pressure-confirm-retry 各 24/24，共 176 次有效试验，
+其中 24 次预热。每条退出码为 0，完整 Catalog/Graph/Timeline 与 semantic v2 oracle 一致。
+
+最高导入峰值为 1414 MiB；包含 oracle 和清理阶段的最高子进程峰值为 1599.54 MiB，
+均低于 2048 MiB。正确性与内存通过，**性能非回退门禁失败**。正值表示耗时增加；
+下表对触线输入采用独立五轮复核结果，不与初始轮次合并。P95 按 nearest-rank 计算。
+
+| 输入 / 模式 | Median 耗时变化 | P95 耗时变化 | 判定 |
+|---|---:|---:|---|
+| 100K RAW / metadataOnly | +5.90% | +13.12% | 确认回退 |
+| 100K E01 / metadataOnly | -0.40% | -3.41% | 门槛内 |
+| small E01 / metadataOnly | +1.20% | +4.07% | 复核后门槛内 |
+| medium E01 / metadataOnly | +2.46% | -63.15% | 门槛内 |
+| full128 RAW / fullContent | +4.69% | +4.43% | 确认回退 |
+| full128 E01 / fullContent | -7.80% | +2.40% | 复核后门槛内 |
+| 500K RAW / metadataOnly | -1.83% | +0.47% | 五轮复核后门槛内 |
+| 500K E01 / metadataOnly | +1.85% | +1.08% | 五轮复核后门槛内 |
+| 1M RAW / metadataOnly | -1.88% | -1.88% | 单次压力，无稳定提速结论 |
+| 1M E01 / metadataOnly | -0.59% | -0.59% | 单次压力，无稳定提速结论 |
+
+100K RAW 的分阶段观测在 Timeline 事件写入、Graph 和提交上增加较多，尚未建立因果归因。
+不调整既定 median +3% / P95 +5% 门槛，不改变默认策略，不宣称总体性能验收通过。
+本轮 baseline 为 b1cca115，不能据此关闭此前相对 S2 登记的 S3 回归。
+
+首次 500K confirmation 在完成 15 条后进程结束，原报告与中断审计保留；完整重跑使用
+新目录且不混入中断结果。证据索引为 `artifacts/stage-optimization/20261018/S8/acceptance.json`，
+`acceptance.md`、`workflow-comparison.csv`、`phase-and-process-metrics.csv` 和
+`evidence-sha256.json` 保存完整统计、CPU/I/O、子阶段与日志摘要。
+
+本轮替代上述十输入矩阵的 NOT-RUN 状态；真实 RAW、大型真实 E01、大规模/真实 fullContent，
+以及 PVE/preview/多任务 RSS 组合仍为 NOT-RUN，不能将本轮等同于完整发布覆盖。
+process transfer counters 不等于设备物理 I/O，设备物理 I/O 仍为 unavailable。
