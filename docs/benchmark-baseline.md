@@ -536,3 +536,11 @@ S4.P1.T2 的 Release synthetic grid 已完成，证据为
 更大。本轮不改变 20k 默认值，待 S4.P1.T4 用 100K RAW/E01、真实 E01 和压力规模验证后
 再决定；现有取消回归保持通过。
 
+S4.P1.T4 已完成证据汇总，引用 S3 immutable Release reports 的 Timeline graph phase，
+索引位于 `artifacts/stage-optimization/20261018/S4/iteration-01/graph-real-matrix.json`。
+100K RAW/E01、small/medium 真实 E01、fullContent 代表集和 500K/1M pressure 均保持
+20k 批次、完整 graph oracle 和每批独立 commit。压力组的 Timeline graph wall 已达到
+16–36 秒，其中 node/commit 是主要成本；synthetic grid 的 50k/100k 小幅墙钟收益不足以
+抵消驻留窗口增长，也没有在真实输入上完成可比的替代批次 A/B。因此默认值维持 20k，
+不把 S4.P1 标记为性能提速完成；后续收益候选转入 S4.P2/P3 的 SQL 与事务策略复核。
+
