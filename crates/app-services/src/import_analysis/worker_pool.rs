@@ -245,7 +245,20 @@ fn run_import_analysis_staging_with_runtime(
         );
     }
 
+    let admission_started = Instant::now();
     let _budget = super::admission::admit_workers(&options, &setup.worker_ids)?;
+    if let Some(cb) = progress_cb {
+        cb(
+            73,
+            &format!(
+                "Analysis resources admitted: phase=analysis-admission state=completed elapsedMs={} workers={} bytes={} rssMb={}",
+                admission_started.elapsed().as_millis(),
+                setup.worker_count,
+                setup.worker_count as u64 * 192 * crate::resource_budget::MIB,
+                current_rss_mb()
+            ),
+        );
+    }
     let mut stats = run_analysis_workers(
         &options,
         AnalysisWorkerRunConfig {

@@ -91,7 +91,9 @@ fn import_phase_from_profile(detail: &str, progress: u32) -> ImportPhaseDto {
         Some("enumeration") => ImportPhaseDto::Enumerate,
         Some("enum-merge") => ImportPhaseDto::MergeEnumeration,
         Some("analysis-start") | Some("analysis") => ImportPhaseDto::Analyze,
+        Some("analysis-admission") => ImportPhaseDto::Analyze,
         Some("analysis-merge") => ImportPhaseDto::MergeAnalysis,
+        Some("search-index") => ImportPhaseDto::MergeAnalysis,
         Some("timeline")
         | Some("checkpoint")
         | Some("post-import")

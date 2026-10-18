@@ -84,8 +84,12 @@ pub(super) fn rebuild_file_metadata_index(
     progress_cb: Option<AnalysisProgressCallback<'_>>,
 ) -> Result<SearchIndexPhaseStats, ImportAnalysisError> {
     if let Some(callback) = progress_cb {
-        callback(92, "Building complete file metadata search index...");
+        callback(
+            92,
+            "Building complete file metadata search index: phase=search-index state=running",
+        );
     }
+    let search_started = Instant::now();
     let stats = super::search_phase::run_search_index_phase(SearchIndexPhaseOptions {
         publication_lease: options.publication_lease.clone(),
         db_path: options.db_path.clone(),
@@ -98,8 +102,12 @@ pub(super) fn rebuild_file_metadata_index(
         callback(
             94,
             &format!(
-                "File metadata search index ready: indexed={} eligible={} failed={}",
-                stats.indexed_count, stats.eligible_count, stats.failed_count
+                "File metadata search index ready: phase=search-index state=completed elapsedMs={} indexed={} eligible={} failed={} rssMb={}",
+                search_started.elapsed().as_millis(),
+                stats.indexed_count,
+                stats.eligible_count,
+                stats.failed_count,
+                current_rss_mb()
             ),
         );
     }
