@@ -507,3 +507,7 @@ benchmark harness 已支持 `FORENSICS_IMPORT_BENCH_PHASE_TRACE=1`，只在显�
 E01 的一次 trace 位于 `S3/iteration-03/phase-trace-medium.log`，full128 E01 位于
 `phase-trace-full128.log`。full128 样本只有 114 条记录，analysis worker 实际收敛为 1，
 因此不能用它证明并发资源路径的稳定 P95；后续优先复测 medium E01 的 phase trace。
+medium E01 第二次 trace 的 workflow 为约 93.5 秒，第一次约 95.4 秒；两次阶段比例
+稳定为 enumeration 约 27 秒、post-import metadata/index 约 49 秒、timeline 约 3.8 秒。
+这说明当前回归不是一次性 snapshot 校验抖动，后续应优先拆解 analysis/search/index
+与 enumeration 内部等待，而不是继续调整 publication fence。
