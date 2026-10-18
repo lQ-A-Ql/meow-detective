@@ -544,3 +544,10 @@ S4.P1.T4 已完成证据汇总，引用 S3 immutable Release reports 的 Timelin
 抵消驻留窗口增长，也没有在真实输入上完成可比的替代批次 A/B。因此默认值维持 20k，
 不把 S4.P1 标记为性能提速完成；后续收益候选转入 S4.P2/P3 的 SQL 与事务策略复核。
 
+S4.P2.T1 的状态复核已完成，证据为
+`artifacts/stage-optimization/20261018/S4/iteration-01/projection-state-review.json`。
+空 Timeline、非空 Timeline、已投影、graph-only retry、索引重建失败/回滚、WAL 只读可见性
+和 projection identity migration 均有现有回归覆盖；当前策略保持不变：空表在事务内延迟并
+重建二级索引，非空表保持索引，graph projection 只有在 target 完整物化后才标记 done。
+本任务没有新增 SQL 或改变完成状态语义。
+
