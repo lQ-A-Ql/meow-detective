@@ -229,6 +229,14 @@ pub(super) fn dto(
     {
         return Err(CommandError::security("Carving artifact source mismatch"));
     }
+    let expected_validator = if artifact.family == "carving.zip" {
+        evidence_core::carving::ZIP_VALIDATOR_VERSION
+    } else {
+        evidence_core::carving::PNG_VALIDATOR_VERSION
+    };
+    if value("validatorVersion")? != expected_validator {
+        return Err(CommandError::security("Carving validator version mismatch"));
+    }
     Ok(CarvedArtifactDto {
         artifact_id: crate::source_db::encode_source_scoped_id(source, &artifact.id.0),
         data_source_id: source.0.clone(),
