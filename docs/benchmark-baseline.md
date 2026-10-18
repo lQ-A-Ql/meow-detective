@@ -517,3 +517,15 @@ enumeration 4.42 秒、metadata search index 6.52 秒、timeline 2.91 秒、峰�
 完整诊断记录为 `artifacts/stage-optimization/20261017/S3/iteration-03/phase-trace-medium-release.json`。
 此前 debug trace 的 93–95 秒不再作为性能证据。Release trace 只用于定位阶段，不替换
 iteration-02/03 的正式矩阵或回归结论。
+### S4 Timeline / Graph / Search Projection（已进入，P1.T1 完成）
+
+S4 已开始，首个任务验证了 source SQLite Timeline graph projection 的完整查询计划。
+证据位于 `artifacts/stage-optimization/20261018/S4/iteration-01/query-plan.json`，测试为
+`crates/persistence-sqlite/tests/timeline_projection_query_plan.rs`。
+
+当前结论：Timeline page 使用 covering index `idx_source_timeline_case_id_id`；Graph node
+与 edge 的 range SELECT 使用同一 `(case_id,id)` 索引；target `EXISTS` 使用
+`graph_nodes` 主键覆盖查找；三类计划均无 TEMP B-TREE。没有新增索引、ANALYZE 或生产 SQL
+改动。下一步是 S4.P1.T2：比较 graph batch 20,000 / 50,000 / 100,000 的 node、edge、
+commit、驻留窗口和取消延迟，保持每批独立提交及现有幂等/重试语义。
+
