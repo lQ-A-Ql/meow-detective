@@ -551,3 +551,10 @@ S4.P2.T1 的状态复核已完成，证据为
 重建二级索引，非空表保持索引，graph projection 只有在 target 完整物化后才标记 done。
 本任务没有新增 SQL 或改变完成状态语义。
 
+S4.P2.T2 的首个低风险优化已提交为 `8135ef5b`：file-activity projection 现在在一次
+projection 内计算平台 policy，后续 source batch 复用该 policy，不再为每个 batch 重复
+执行 `pragma_table_info` schema probe。过滤条件、时间排除、deleted confidence、attrs、
+ID 和索引事务语义均未改变；验证记录见
+`artifacts/stage-optimization/20261018/S4/iteration-01/projection-policy-reuse.json`。
+该改动尚未宣称真实输入提速，需在 Release workflow 中单独比较 event_insert 与总收尾成本。
+
