@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum EvidenceTaskRequestDto {
     CarvePng(super::PngCarvingRequestDto),
+    CarveZip(super::ZipCarvingRequestDto),
     Digest(CalculateEvidenceDigestRequest),
     NestedImport(MaterializeNestedEvidenceRequest),
     ContentIndex {
@@ -27,6 +28,7 @@ pub enum EvidenceTaskRequestDto {
 #[serde(tag = "kind", content = "result", rename_all = "camelCase")]
 pub enum EvidenceTaskResultDto {
     CarvePng(super::PngCarvingSummaryDto),
+    CarveZip(super::ZipCarvingSummaryDto),
     Digest(EvidenceDigestDto),
     NestedImport(NestedEvidenceMaterializedDto),
     ContentIndex(ContentIndexSummaryDto),

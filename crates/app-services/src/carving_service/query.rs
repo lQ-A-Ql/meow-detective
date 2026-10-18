@@ -93,13 +93,7 @@ pub fn search_carved_artifacts(
     };
     let items = artifacts
         .iter()
-        .map(|artifact| {
-            let dto = super::access::dto(artifact, &DataSourceId(cursor.source.clone()))?;
-            if dto.source_revision != cursor.source_revision {
-                return Err(CommandError::security("Carving source revision changed"));
-            }
-            Ok(dto)
-        })
+        .map(|artifact| super::access::dto(artifact, &DataSourceId(cursor.source.clone())))
         .collect::<Result<_, _>>()?;
     Ok(CarvedArtifactPageDto { items, next_cursor })
 }

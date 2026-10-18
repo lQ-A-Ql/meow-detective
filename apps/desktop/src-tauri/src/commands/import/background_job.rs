@@ -12,8 +12,6 @@ mod single;
 mod status;
 mod types;
 
-#[cfg(test)]
-pub(crate) use cluster::run_background_linux_evidence_set_import_until_browseable;
 pub(crate) use cluster::run_background_linux_evidence_set_import_with_scheduler;
 pub(crate) use cluster_status::{
     cancel_browseable_evidence_set_job, complete_browseable_evidence_set_job,

@@ -25,6 +25,21 @@ pub(crate) fn source_revision(
     case: &CaseId,
     source: &str,
 ) -> Result<String, CommandError> {
+    source_revision_for(
+        conn,
+        root,
+        case,
+        source,
+        evidence_core::carving::PNG_VALIDATOR_VERSION,
+    )
+}
+pub(crate) fn source_revision_for(
+    conn: &Connection,
+    root: &Path,
+    case: &CaseId,
+    source: &str,
+    validator: &str,
+) -> Result<String, CommandError> {
     let source_meta = DataSourceRepo::new(conn)
         .find_by_case(case)
         .map_err(CommandError::from_service_error)?
@@ -43,11 +58,7 @@ pub(crate) fn source_revision(
     };
     let identity = crate::digest_service::identity::snapshot(conn, root, case, &target)
         .map_err(CommandError::from_typed_service_error)?;
-    Ok(format!(
-        "{}:{}",
-        evidence_core::carving::PNG_VALIDATOR_VERSION,
-        identity.revision
-    ))
+    Ok(format!("{}:{}", validator, identity.revision))
 }
 pub(super) fn factory(
     conn: &Connection,
@@ -84,6 +95,35 @@ pub(crate) fn validate_request(
         decimal(offset)?;
     }
     if let Some(length) = &request.length {
+        if !(1..=1024 * 1024 * 1024).contains(&decimal(length)?) {
+            return Err(CommandError::invalid_input(
+                "Carving range exceeds its per-task budget",
+            ));
+        }
+    }
+    Ok(())
+}
+pub(crate) fn validate_zip_request(
+    request: &transport::dto::ZipCarvingRequestDto,
+) -> Result<(), CommandError> {
+    validate_range(
+        request.data_source_id.as_str(),
+        request.offset.as_deref(),
+        request.length.as_deref(),
+    )
+}
+fn validate_range(
+    source: &str,
+    offset: Option<&str>,
+    length: Option<&str>,
+) -> Result<(), CommandError> {
+    if source.is_empty() || source.len() > 256 {
+        return Err(CommandError::invalid_input("Invalid carving source"));
+    }
+    if let Some(offset) = offset {
+        decimal(offset)?;
+    }
+    if let Some(length) = length {
         if !(1..=1024 * 1024 * 1024).contains(&decimal(length)?) {
             return Err(CommandError::invalid_input(
                 "Carving range exceeds its per-task budget",
@@ -129,6 +169,48 @@ pub(super) fn prepare(
     scope.end().map_err(super::run::core_error)?;
     Ok((factory, scope))
 }
+pub(super) fn prepare_zip(
+    conn: &Connection,
+    root: &Path,
+    case: &CaseId,
+    request: &transport::dto::ZipCarvingRequestDto,
+) -> Result<(SharedReaderFactory, evidence_core::carving::CarveScope), CommandError> {
+    validate_zip_request(request)?;
+    let revision = source_revision_for(
+        conn,
+        root,
+        case,
+        &request.data_source_id,
+        evidence_core::carving::ZIP_VALIDATOR_VERSION,
+    )?;
+    let factory = factory(conn, case, &request.data_source_id)?;
+    let offset = request
+        .offset
+        .as_deref()
+        .map(decimal)
+        .transpose()?
+        .unwrap_or(0);
+    let remaining = factory
+        .logical_size()
+        .checked_sub(offset)
+        .ok_or_else(|| CommandError::invalid_input("Carving offset outside source"))?;
+    let length = request
+        .length
+        .as_deref()
+        .map(decimal)
+        .transpose()?
+        .unwrap_or(remaining.min(64 * 1024 * 1024));
+    let scope = evidence_core::carving::CarveScope {
+        source_id: request.data_source_id.clone(),
+        revision,
+        view: "logicalDisk".into(),
+        source_length: factory.logical_size(),
+        offset,
+        length,
+    };
+    scope.end().map_err(super::run::core_error)?;
+    Ok((factory, scope))
+}
 pub(super) fn dto(
     artifact: &domain::Artifact,
     source: &DataSourceId,
@@ -141,8 +223,8 @@ pub(super) fn dto(
             .map(str::to_owned)
             .ok_or_else(|| CommandError::security("Carving provenance is incomplete"))
     };
-    if artifact.family != "carving.png"
-        || artifact.extractor_id.as_deref() != Some("carving.png")
+    if !matches!(artifact.family.as_str(), "carving.png" | "carving.zip")
+        || artifact.extractor_id.as_deref() != Some(artifact.family.as_str())
         || value("dataSourceId")? != source.0
     {
         return Err(CommandError::security("Carving artifact source mismatch"));
@@ -174,8 +256,8 @@ pub(super) fn load(
         .ok_or_else(|| CommandError::not_found("Carved artifact"))?;
     let result = dto(&artifact, &source)?;
     if result.view != "logicalDisk"
-        || result.validator_version != evidence_core::carving::PNG_VALIDATOR_VERSION
-        || result.source_revision != source_revision(conn, root, case, &source.0)?
+        || result.source_revision
+            != source_revision_for(conn, root, case, &source.0, &result.validator_version)?
     {
         return Err(CommandError::security("Carving source revision changed"));
     }

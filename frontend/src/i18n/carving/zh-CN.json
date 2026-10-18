@@ -1,9 +1,10 @@
 {
-  "title":"PNG 字节签名扫描",
+  "title":"PNG 字节签名扫描","zipTitle":"ZIP 结构扫描",
   "scope":"显式扫描逻辑磁盘区间；不标称未分配空间，不推断原文件身份。支持 8 位非交错灰度/RGB（可含 Alpha），不含索引色；校验 CRC、zlib 与扫描行。",
+  "zipScope":"显式扫描逻辑磁盘区间；校验 ZIP 本地头、中央目录和 EOCD，不解包不可信条目。",
   "offset":"起始字节（十进制）","length":"区间字节数（留空最多 64 MiB）",
-  "start":"扫描 PNG","cancel":"取消扫描","search":"按偏移、hash 或元数据筛选","load":"查看已有候选",
-  "more":"下一页","first":"第一页","preview":"查看字节","export":"提取 PNG",
+  "start":"扫描 PNG","startZip":"扫描 ZIP","cancel":"取消扫描","search":"按偏移、hash 或元数据筛选","load":"查看已有候选",
+  "more":"下一页","first":"第一页","preview":"查看字节","export":"提取 PNG","exportZip":"提取 ZIP",
   "verified":"已验证","rejected":"未通过","partial":"不完整",
   "exported":"已提取并校验 SHA-256","invalid":"请输入规范的非负十进制整数；单次区间最多 1 GiB。"
 }

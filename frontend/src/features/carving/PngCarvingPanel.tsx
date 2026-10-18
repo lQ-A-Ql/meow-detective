@@ -3,20 +3,20 @@ import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Input } from '@/app/components/ui/input';
 import { Badge } from '@/app/components/ui/badge';
 import { HexViewer } from '@/components/viewers/HexViewer';
-import type { PngCarvingModel } from './hooks';
+import type { PngCarvingModel, ZipCarvingModel } from './hooks';
 import { useTranslation } from 'react-i18next';
 import { CollapsibleSection } from '@/components/layout/CollapsibleSection';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 
-export function PngCarvingPanel({ model }: { model: PngCarvingModel }) {
+export function PngCarvingPanel({ model, format = 'png' }: { model: PngCarvingModel | ZipCarvingModel; format?: 'png' | 'zip' }) {
   const { t } = useTranslation();
   if (!model.supported) return null;
-  return <CollapsibleSection title={t('carving.title')} defaultOpen={false} className="border border-forensics-border p-3" contentClassName="space-y-2 pt-2">
-    <p className="text-[11px] text-forensics-muted">{t('carving.scope')}</p>
+  return <CollapsibleSection title={t(format === 'zip' ? 'carving.zipTitle' : 'carving.title')} defaultOpen={false} className="border border-forensics-border p-3" contentClassName="space-y-2 pt-2">
+    <p className="text-[11px] text-forensics-muted">{t(format === 'zip' ? 'carving.zipScope' : 'carving.scope')}</p>
     <div className="flex flex-wrap gap-2">
       <Input aria-label={t('carving.offset')} placeholder={t('carving.offset')} value={model.offset} onChange={e => model.setOffset(e.target.value)} className="max-w-56" />
       <Input aria-label={t('carving.length')} placeholder={t('carving.length')} value={model.length} onChange={e => model.setLength(e.target.value)} className="max-w-80" />
-      <IconButton label={t('carving.start')} variant="forensicsOutline" disabled={!model.valid || model.scanning} onClick={model.start}><ActionIcon name="play" /></IconButton>
+      <IconButton label={t(format === 'zip' ? 'carving.startZip' : 'carving.start')} variant="forensicsOutline" disabled={!model.valid || model.scanning} onClick={model.start}><ActionIcon name="play" /></IconButton>
       <IconButton label={t('carving.load')} onClick={model.load}><ActionIcon name="list" /></IconButton>
       {model.scanning ? <IconButton label={t('carving.cancel')} onClick={model.cancel}><ActionIcon name="close" /></IconButton> : null}
     </div>
@@ -32,7 +32,7 @@ export function PngCarvingPanel({ model }: { model: PngCarvingModel }) {
         <span className="font-mono">{item.offset} + {item.length}</span>
         <span className="min-w-0 flex-1 truncate font-mono" title={item.sha256}>{item.sha256}</span>
         <IconButton label={t('carving.preview')} disabled={model.busy} onClick={() => model.read(item)}><ActionIcon name="eye" /></IconButton>
-        <IconButton label={t('carving.export')} disabled={model.busy} onClick={() => model.extract(item)}><ActionIcon name="download" /></IconButton>
+        <IconButton label={t(format === 'zip' ? 'carving.exportZip' : 'carving.export')} disabled={model.busy} onClick={() => model.extract(item)}><ActionIcon name="download" /></IconButton>
       </div>)}
     </ScrollArea>
     {model.hasPrevious || model.hasNext ? <div className="flex gap-2">

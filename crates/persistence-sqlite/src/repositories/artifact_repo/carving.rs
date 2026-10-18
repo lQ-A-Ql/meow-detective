@@ -9,7 +9,7 @@ impl ArtifactRepo<'_> {
             .replace('%', "\\%")
             .replace('_', "\\_");
         let pattern = format!("%{escaped}%");
-        let sql=format!("SELECT {ARTIFACT_SELECT_COLUMNS} FROM artifacts WHERE data_source_id=?1 AND artifact_type='carving.png' AND id>?2
+        let sql=format!("SELECT {ARTIFACT_SELECT_COLUMNS} FROM artifacts WHERE data_source_id=?1 AND artifact_type IN ('carving.png','carving.zip') AND id>?2
             AND (title LIKE ?3 ESCAPE '\\' OR attrs LIKE ?3 ESCAPE '\\') ORDER BY id LIMIT 101");
         let mut statement = self.conn.prepare(&sql)?;
         let rows =

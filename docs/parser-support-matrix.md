@@ -30,8 +30,8 @@ PNG carving 为 **Experimental**：在 RAW/E01 的 logicalDisk 视图中显式�
 逐 chunk 校验 CRC、zlib 和栅格长度，记录 source/revision/view/offset/length/SHA256。
 结果通过 Artifact/Graph、分页元数据查询、Hex 预览和不覆盖导出访问；普通导入不自动扫描。
 支持范围冻结为 [PNG 第二版（2003）](https://www.w3.org/TR/2003/REC-PNG-20031110/)
-中的 8-bit、非交错 grayscale/RGB/gray-alpha/RGBA。palette、16-bit、interlace、ZIP
-不支持。合成 PNG/RAW/E01 与固定 mutation seeds 覆盖位置、长度、摘要及拒绝理由；
+中的 8-bit、非交错 grayscale/RGB/gray-alpha/RGBA。palette、16-bit、interlace 不支持；ZIP carving 已支持结构验证（local header、central directory、EOCD），
+不解包不可信条目。合成 PNG/RAW/E01 与固定 mutation seeds 覆盖位置、长度、摘要及拒绝理由；
 真实 PNG 恢复覆盖统计尚未执行。结果不推断原文件、删除状态、未分配空间或 MACB。
 
 | 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | Medium Fixture | 备注 |

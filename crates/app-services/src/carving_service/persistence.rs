@@ -79,20 +79,27 @@ fn artifact(candidate: &CarveCandidate) -> Result<Artifact, CommandError> {
         digest
     ])
     .to_string();
-    let id = format!("carved-png:{}", hex::encode(Sha256::digest(identity)));
+    let is_zip = candidate.validator_version == evidence_core::carving::ZIP_VALIDATOR_VERSION;
+    let family = if is_zip { "carving.zip" } else { "carving.png" };
+    let format_name = if is_zip { "ZIP" } else { "PNG" };
+    let id = format!(
+        "carved-{}:{}",
+        format_name.to_ascii_lowercase(),
+        hex::encode(Sha256::digest(identity))
+    );
     let attrs = serde_json::json!({"dataSourceId":candidate.source_id,"sourceRevision":candidate.revision,"view":candidate.view,
         "addressSpace":"logicalDisk","offset":candidate.offset.to_string(),"length":length.to_string(),"sha256":digest,
         "hashScope":"carvedBytes","validatorVersion":candidate.validator_version,"validation":candidate.reason,"originalFileIdentity":"unknown"});
     Ok(Artifact {
         id: ArtifactId(id),
-        family: "carving.png".into(),
-        title: format!("PNG candidate @ {}", candidate.offset),
+        family: family.into(),
+        title: format!("{format_name} candidate @ {}", candidate.offset),
         summary: format!(
-            "{} bytes; CRC/zlib verified; original file identity unknown",
+            "{} bytes; structure verified; original file identity unknown",
             length
         ),
         source_object_id: None,
-        extractor_id: Some("carving.png".into()),
+        extractor_id: Some(family.into()),
         extractor_version: Some(candidate.validator_version.into()),
         confidence: Some(0.9),
         source_attribution: Some(candidate.source_id.clone()),

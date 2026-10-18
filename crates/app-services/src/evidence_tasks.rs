@@ -26,6 +26,7 @@ pub fn plan(
 ) -> Result<EvidenceTaskPlan, CommandError> {
     let kind = match &request {
         EvidenceTaskRequestDto::CarvePng(_) => "carvePng",
+        EvidenceTaskRequestDto::CarveZip(_) => "carveZip",
         EvidenceTaskRequestDto::Digest(_) => "digest",
         EvidenceTaskRequestDto::NestedImport(_) => "nestedImport",
         EvidenceTaskRequestDto::ContentIndex { .. } => "contentIndex",
@@ -93,6 +94,16 @@ pub fn revision(
         crate::carving_service::validate_request(request)?;
         return crate::carving_service::source_revision(conn, root, case, &request.data_source_id);
     }
+    if let EvidenceTaskRequestDto::CarveZip(request) = request {
+        crate::carving_service::validate_zip_request(request)?;
+        return crate::carving_service::source_revision_for(
+            conn,
+            root,
+            case,
+            &request.data_source_id,
+            evidence_core::carving::ZIP_VALIDATOR_VERSION,
+        );
+    }
     if let EvidenceTaskRequestDto::RegistrySearch {
         file_id,
         session_id,
@@ -149,6 +160,9 @@ pub fn revision(
             return Err(CommandError::invalid_input("Invalid registry search"))
         }
         EvidenceTaskRequestDto::CarvePng(_) => {
+            return Err(CommandError::invalid_input("Invalid carving scope"))
+        }
+        EvidenceTaskRequestDto::CarveZip(_) => {
             return Err(CommandError::invalid_input("Invalid carving scope"))
         }
     };
@@ -215,6 +229,9 @@ pub fn finish(
         Ok(result) => {
             let total = match &result {
                 EvidenceTaskResultDto::CarvePng(summary) => {
+                    summary.scanned_bytes.parse::<u64>().unwrap_or(0)
+                }
+                EvidenceTaskResultDto::CarveZip(summary) => {
                     summary.scanned_bytes.parse::<u64>().unwrap_or(0)
                 }
                 EvidenceTaskResultDto::Digest(digest) => digest.byte_length,

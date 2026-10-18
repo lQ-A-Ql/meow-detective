@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { usePngCarvingModel } from '@/features/carving/hooks';
+import { usePngCarvingModel, useZipCarvingModel } from '@/features/carving/hooks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useCurrentCase } from '@/features/case/hooks';
@@ -75,6 +75,8 @@ export function useDeletedRecoveryModel(
 ): DeletedRecoveryViewModel {
   const currentCase = useCurrentCase();
   const pngCarving = usePngCarvingModel(currentCase.data?.id,
+    source && (source.kind === 'raw' || source.kind === 'e01') && (!source.importState || source.importState === 'ready') ? source.id : undefined, enabled);
+  const zipCarving = useZipCarvingModel(currentCase.data?.id,
     source && (source.kind === 'raw' || source.kind === 'e01') && (!source.importState || source.importState === 'ready') ? source.id : undefined, enabled);
   const queryClient = useQueryClient();
   const partitions = useMemo(
@@ -338,6 +340,7 @@ export function useDeletedRecoveryModel(
   return {
     partitions,
     pngCarving,
+    zipCarving,
     selectedPartitionIndex,
     selectPartition,
     state,

@@ -13,6 +13,7 @@ use std::{
 };
 use transport::dto::{
     CarvedExportRequestDto, CarvedRangeRequestDto, CarvedSearchRequestDto, PngCarvingRequestDto,
+    ZipCarvingRequestDto,
 };
 static SERIAL: Mutex<()> = Mutex::new(());
 
@@ -47,6 +48,68 @@ fn request(source: &str) -> PngCarvingRequestDto {
         offset: None,
         length: None,
     }
+}
+fn zip_request(source: &str) -> ZipCarvingRequestDto {
+    ZipCarvingRequestDto {
+        data_source_id: source.into(),
+        offset: None,
+        length: None,
+    }
+}
+
+#[test]
+fn zip_carving_persists_verified_structure_and_rejects_truncated_archive() {
+    let _serial = SERIAL.lock().unwrap();
+    let case = fixture::EvidenceCase::new();
+    let archive = {
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        let mut writer = zip::ZipWriter::new(&mut cursor);
+        writer
+            .start_file("evidence.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        std::io::Write::write_all(&mut writer, b"source bytes").unwrap();
+        writer.finish().unwrap();
+        cursor.into_inner()
+    };
+    let path = case.temp.path().join("source.raw");
+    std::fs::write(&path, [vec![0; 7], archive.clone(), vec![0; 3]].concat()).unwrap();
+    case.active
+        .with_conn(|conn| {
+            drop(case.source(conn, "source", &path, DataSourceKind::Raw));
+            let result = app_services::carving_service::run_zip_carving(
+                conn,
+                &case.active.case_root,
+                &case.active.meta.id,
+                &zip_request("source"),
+                &AtomicBool::new(false),
+                &|_, _| {},
+            )
+            .unwrap();
+            assert_eq!(result.complete, 1);
+            assert_eq!(result.artifacts[0].offset, "7");
+            assert_eq!(result.artifacts[0].length, archive.len().to_string());
+            assert_eq!(
+                result.artifacts[0].validator_version,
+                evidence_core::carving::ZIP_VALIDATOR_VERSION
+            );
+            let truncated = case.temp.path().join("truncated.raw");
+            std::fs::write(&truncated, &archive[..archive.len() - 3]).unwrap();
+            let second = case.source(conn, "truncated", &truncated, DataSourceKind::Raw);
+            drop(second);
+            let result = app_services::carving_service::run_zip_carving(
+                conn,
+                &case.active.case_root,
+                &case.active.meta.id,
+                &zip_request("truncated"),
+                &AtomicBool::new(false),
+                &|_, _| {},
+            )
+            .unwrap();
+            assert_eq!(result.partial, 1);
+            assert_eq!(result.complete, 0);
+            Ok(())
+        })
+        .unwrap();
 }
 
 #[test]

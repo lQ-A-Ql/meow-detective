@@ -62,6 +62,108 @@ fn run(bytes: Vec<u8>, window: usize) -> (ScanReport, Vec<CarveCandidate>) {
     .unwrap();
     (report, output)
 }
+fn zip_stored(name: &[u8], data: &[u8]) -> Vec<u8> {
+    let crc = crc32fast::hash(data);
+    let mut local = Vec::new();
+    local.extend_from_slice(b"PK\x03\x04");
+    local.extend_from_slice(&20u16.to_le_bytes());
+    local.extend_from_slice(&0u16.to_le_bytes());
+    local.extend_from_slice(&0u16.to_le_bytes());
+    local.extend_from_slice(&0u16.to_le_bytes());
+    local.extend_from_slice(&0u16.to_le_bytes());
+    local.extend_from_slice(&crc.to_le_bytes());
+    local.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    local.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    local.extend_from_slice(&(name.len() as u16).to_le_bytes());
+    local.extend_from_slice(&0u16.to_le_bytes());
+    local.extend_from_slice(name);
+    local.extend_from_slice(data);
+    let central_offset = local.len() as u32;
+    let mut central = Vec::new();
+    central.extend_from_slice(b"PK\x01\x02");
+    central.extend_from_slice(&20u16.to_le_bytes());
+    central.extend_from_slice(&20u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&crc.to_le_bytes());
+    central.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    central.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    central.extend_from_slice(&(name.len() as u16).to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u32.to_le_bytes());
+    central.extend_from_slice(&0u32.to_le_bytes());
+    central.extend_from_slice(name);
+    let mut output = [local, central.clone()].concat();
+    output.extend_from_slice(b"PK\x05\x06");
+    output.extend_from_slice(&0u16.to_le_bytes());
+    output.extend_from_slice(&0u16.to_le_bytes());
+    output.extend_from_slice(&1u16.to_le_bytes());
+    output.extend_from_slice(&1u16.to_le_bytes());
+    output.extend_from_slice(&(central.len() as u32).to_le_bytes());
+    output.extend_from_slice(&central_offset.to_le_bytes());
+    output.extend_from_slice(&0u16.to_le_bytes());
+    output
+}
+fn run_zip(bytes: Vec<u8>, window: usize) -> (ScanReport, Vec<CarveCandidate>) {
+    let source = scope(&bytes);
+    let mut output = Vec::new();
+    let report = scan_zip(
+        &mut Cursor::new(bytes),
+        ScanRequest {
+            scope: &source,
+            limits: CarveLimits {
+                window_bytes: window,
+                ..Default::default()
+            },
+            cancel: &AtomicBool::new(false),
+            progress: &|_, _| {},
+        },
+        |candidate| {
+            output.push(candidate);
+            Ok(())
+        },
+    )
+    .unwrap();
+    (report, output)
+}
+
+#[test]
+fn zip_structure_validator_handles_embedded_archive_and_rejects_truncation() {
+    let archive = zip_stored(b"evidence.txt", b"source bytes");
+    let bytes = [vec![0; 9], archive.clone(), vec![0; 7]].concat();
+    let (report, results) = run_zip(bytes.clone(), 16);
+    assert_eq!((report.complete, results.len()), (1, 1));
+    assert_eq!(results[0].offset, 9);
+    assert_eq!(results[0].length, Some(archive.len() as u64));
+    assert_eq!(results[0].validator_version, ZIP_VALIDATOR_VERSION);
+    assert_eq!(
+        results[0].sha256,
+        Some(format!("{:x}", Sha256::digest(&archive)))
+    );
+    let mut truncated = archive;
+    truncated.truncate(truncated.len() - 3);
+    let (_, results) = run_zip(truncated, 64);
+    assert_eq!(results[0].status, CarveStatus::Partial);
+}
+
+#[test]
+fn zip_structure_validator_rejects_data_descriptors_and_zip64_sentinels() {
+    let mut descriptor = zip_stored(b"x", b"x");
+    descriptor[6..8].copy_from_slice(&8u16.to_le_bytes());
+    assert_eq!(run_zip(descriptor, 64).1[0].reason, "unsupportedZipFlags");
+    let mut zip64 = zip_stored(b"x", b"x");
+    let central = zip64
+        .windows(4)
+        .position(|value| value == b"PK\x01\x02")
+        .unwrap();
+    zip64[central + 20..central + 24].copy_from_slice(&u32::MAX.to_le_bytes());
+    assert_eq!(run_zip(zip64, 64).1[0].reason, "unsupportedZip64");
+}
 
 #[test]
 fn cross_window_signature_is_emitted_once_with_exact_scope_length_and_hash() {

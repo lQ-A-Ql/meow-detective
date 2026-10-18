@@ -26,6 +26,7 @@ export interface DeletedRecoveryPreviewWindow {
 
 export interface DeletedRecoveryViewModel {
   pngCarving?: import('@/features/carving/hooks').PngCarvingModel;
+  zipCarving?: import('@/features/carving/hooks').ZipCarvingModel;
   partitions: DataSourcePartition[];
   selectedPartitionIndex?: number;
   selectPartition: (partitionIndex: number) => void;

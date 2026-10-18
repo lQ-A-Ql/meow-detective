@@ -76,3 +76,24 @@ fn carving_task_results_ranges_export_and_search_contracts_are_camel_case() {
     )
     .is_err());
 }
+
+#[test]
+fn zip_carving_task_contract_preserves_decimal_ranges() {
+    let request = EvidenceTaskRequestDto::CarveZip(ZipCarvingRequestDto {
+        data_source_id: "source".into(),
+        offset: Some("9007199254740993".into()),
+        length: Some("67108864".into()),
+    });
+    let value = serde_json::to_value(request).unwrap();
+    assert_eq!(value["kind"], "carveZip");
+    assert_eq!(value["request"]["offset"], "9007199254740993");
+    let result = EvidenceTaskResultDto::CarveZip(ZipCarvingSummaryDto {
+        scanned_bytes: "67".into(),
+        range_offset: "0".into(),
+        range_length: "67".into(),
+        ..Default::default()
+    });
+    let value = serde_json::to_value(result).unwrap();
+    assert_eq!(value["kind"], "carveZip");
+    assert_eq!(value["result"]["scannedBytes"], "67");
+}

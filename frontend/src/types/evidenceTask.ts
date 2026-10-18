@@ -8,6 +8,7 @@ export interface ContentIndexSummary {
 }
 export type EvidenceTaskRequest =
   | { kind: 'carvePng'; request: import('./carving').PngCarvingRequest }
+  | { kind: 'carveZip'; request: import('./carving').ZipCarvingRequest }
   | { kind: 'digest'; request: CalculateEvidenceDigestRequest }
   | { kind: 'nestedImport'; request: { parentDataSourceId: string; fileEntryId: string } }
   | { kind: 'contentIndex'; request: { dataSourceId: string } }
@@ -15,6 +16,7 @@ export type EvidenceTaskRequest =
 export type RegistrySearchTaskRequest = { kind: 'registrySearch'; request: { fileId: string; sessionId: string; query: string } };
 export type EvidenceTaskResult =
   | { kind: 'carvePng'; result: import('./carving').PngCarvingSummary }
+  | { kind: 'carveZip'; result: import('./carving').ZipCarvingSummary }
   | { kind: 'digest'; result: EvidenceDigest }
   | { kind: 'nestedImport'; result: NestedEvidenceMaterialized }
   | { kind: 'contentIndex'; result: ContentIndexSummary }

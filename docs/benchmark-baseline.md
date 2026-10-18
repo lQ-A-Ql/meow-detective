@@ -574,9 +574,10 @@ fuzz/sanitizer 和 private PVE 运行 **NOT-RUN**。
 S7 交付 PNG 最小闭环：纯 core 的窗口扫描、CRC/zlib/raster 校验、source/revision 追溯，
 bounded producer/single writer，Artifact/Graph/Search 幂等，64 KiB 预览、整候选 SHA
 复算和 no-clobber 原子导出。支持范围为 8-bit、非交错 grayscale/RGB/gray-alpha/RGBA；
-palette、16-bit、interlace、ZIP 和“原文件/删除/未分配空间”推断均不支持。
+palette、16-bit、interlace 和“原文件/删除/未分配空间”推断不支持；ZIP 已加入结构验证闭环，
+
+仅支持 bounded local header/central directory/EOCD 验证，不解包不可信条目。
 
 S8 focused functional、frontend 898 tests/typecheck/lint/build、静态 guards 和公开 small/
 corrupt corpus 通过。完整 100K/500K/1M 与真实 S/M/L 五轮矩阵、强制终止/reopen rollback
-drill 尚未完成。`cargo deny` 仍被基线已有 `zip 2.4.2` 的 RUSTSEC-2026-0367/0368/0369
-阻断；未新增 advisory suppression 或未经评审的 major upgrade。
+drill 尚未完成。`cargo deny` advisories 已通过；仍有 duplicate/yanked dependency warnings，未新增 advisory suppression。

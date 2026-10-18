@@ -209,6 +209,7 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
   return (
     <div className="flex h-full min-h-[36rem] flex-col gap-3">
         {model.pngCarving ? <PngCarvingPanel model={model.pngCarving} /> : null}
+        {model.zipCarving ? <PngCarvingPanel model={model.zipCarving} format="zip" /> : null}
 
       {model.partitions.length === 0 ? (
         <EmptyState>{t('recovery.noPartitions')}</EmptyState>

@@ -10,6 +10,15 @@ pub struct PngCarvingRequestDto {
     pub length: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ZipCarvingRequestDto {
+    pub data_source_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub length: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CarvedArtifactDto {
     pub artifact_id: String,
@@ -24,6 +33,20 @@ pub struct CarvedArtifactDto {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PngCarvingSummaryDto {
+    pub scanned_bytes: String,
+    pub range_offset: String,
+    pub range_length: String,
+    pub candidates: u32,
+    pub complete: u32,
+    pub partial: u32,
+    pub rejected: u32,
+    pub artifacts: Vec<CarvedArtifactDto>,
+    pub artifacts_truncated: bool,
+    pub rejections: Vec<CarvingRejectionDto>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ZipCarvingSummaryDto {
     pub scanned_bytes: String,
     pub range_offset: String,
     pub range_length: String,

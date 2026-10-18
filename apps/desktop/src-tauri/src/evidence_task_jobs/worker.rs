@@ -114,6 +114,12 @@ fn dispatch(
             )
             .map(EvidenceTaskResultDto::CarvePng)
         }
+        EvidenceTaskRequestDto::CarveZip(request) => {
+            app_services::carving_service::run_zip_carving(
+                conn, &ctx.root, &ctx.case, request, cancel, progress,
+            )
+            .map(EvidenceTaskResultDto::CarveZip)
+        }
         EvidenceTaskRequestDto::Digest(request) => {
             app_services::digest_service::calculate_evidence_digest_with_cancel(
                 conn,
