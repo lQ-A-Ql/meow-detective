@@ -517,44 +517,39 @@ enumeration 4.42 秒、metadata search index 6.52 秒、timeline 2.91 秒、峰�
 完整诊断记录为 `artifacts/stage-optimization/20261017/S3/iteration-03/phase-trace-medium-release.json`。
 此前 debug trace 的 93–95 秒不再作为性能证据。Release trace 只用于定位阶段，不替换
 iteration-02/03 的正式矩阵或回归结论。
-### S4 Timeline / Graph / Search Projection（已进入，P1.T1 完成）
+### S4 Timeline / Graph / Search Projection（2026-10-18，进行中）
 
-S4 已开始，首个任务验证了 source SQLite Timeline graph projection 的完整查询计划。
-证据位于 `artifacts/stage-optimization/20261018/S4/iteration-01/query-plan.json`，测试为
-`crates/persistence-sqlite/tests/timeline_projection_query_plan.rs`。
+默认 Graph batch 仍为 20,000，Timeline cache 仍为 -1,000,000 KiB；source/build 的
+WAL 与 synchronous 策略不变。本轮修复取消与恢复边界，不宣称工作流提速。
+S3 的 medium E01 median 与 full128 E01 P95 回归保持开放。
 
-当前结论：Timeline page 使用 covering index `idx_source_timeline_case_id_id`；Graph node
-与 edge 的 range SELECT 使用同一 `(case_id,id)` 索引；target `EXISTS` 使用
-`graph_nodes` 主键覆盖查找；三类计划均无 TEMP B-TREE。没有新增索引、ANALYZE 或生产 SQL
-改动。下一步是 S4.P1.T2：比较 graph batch 20,000 / 50,000 / 100,000 的 node、edge、
-commit、驻留窗口和取消延迟，保持每批独立提交及现有幂等/重试语义。
+| Phase / Task | 当前进度与证据 | 未完成边界 |
+|---|---|---|
+| S4.P1.T1 | 完整 source schema 的 page/node/edge/target EXISTS 范围查询计划已验证；复用现有 case/id 索引，target 用主键，无临时排序 | statement prepare/execute 成本尚未分别测量 |
+| S4.P1.T2 | 120k events 的单轮内存库 Release grid：20k/50k/100k 分别约 241/212/216 ms；计数一致 | 尚未测完整磁盘 schema 的 commit、驻留字节、批次取消延迟及多轮统计 |
+| S4.P1.T3 | 保留已有 range SQL 与 upsert/FK/空目标语义 | prepared statement 候选尚未测量 |
+| S4.P1.T4 | S3 固定 Release reports 仅作为 20k 策略的参考成本 | 没有 50k/100k 真实输入 A/B；不能将旧 S3 reports 计为 S4 正式验收 |
+| S4.P2.T1 | 已复核空/非空、已投影、graph-only retry，保持事务内索引延期与失败重试 | 保留既有完成语义 |
+| S4.P2.T2 | `8135ef5b` 将平台 policy/schema probe 提升到 projection 级复用 | 单次 Release 诊断不足以证明收益，不扩大 SQL 改动 |
+| S4.P2.T3 | 增加同时间戳跨 lookahead、变页大小、后插入回填时间事件及 Ready 源集合变化回归；沿用 revision/high-water keyset | 不引入 OFFSET 替代 cursor |
+| S4.P2.T4 | 取消发生在 Graph edge 写入期间时回滚当前批；新增 index rebuild 取消和 cache 恢复故障回归；保留 WAL reader、强制终止和旧 schema 回归 | 没有新的发布性能验收结论 |
+| S4.P3.T1 | 已实测 source/build/staging/read-only 连接 PRAGMA | WAL/TEMP 峰值、物理 I/O 尚未完整采集 |
+| S4.P3.T2/T3 | page cache 使用 RAII 恢复；busy checkpoint 禁止 build 封存/发布，释放读快照后可重试 | 更大有限 WAL 阈值实验与 disk-full 尚未完成 |
+| S4.P3.T4 | 保留必要 final checkpoint | 必须用含收尾的完整 workflow 评估候选，当前无新候选结论 |
+| S4.P4 | 首批调用链盘点区分普通导入、派生 source、制品持久化及已有 Timeline/Search 投影入口 | adapter 迁移与批量 Search 实验尚未完成 |
 
-S4.P1.T2 的 Release synthetic grid 已完成，证据为
-`artifacts/stage-optimization/20261018/S4/iteration-01/graph-batch-grid.json`：120k events
-下，20k/50k/100k 均得到 120001 nodes、120000 edges、零 warning。workflow 分别为
-241ms、212ms、216ms；node/edge/commit 成本接近，50k/100k 的墙钟略低但驻留窗口显著
-更大。本轮不改变 20k 默认值，待 S4.P1.T4 用 100K RAW/E01、真实 E01 和压力规模验证后
-再决定；现有取消回归保持通过。
+本轮修复将 `TimelineServiceError::Cancelled` 映射为 cancelled。Graph 的节点和边仍在
+同一批事务内写入，新增写边后的提交前取消检查；已提交的早批保留，当前批回滚后可幂等
+重试。page cache 在成功、错误、取消和 unwind 时恢复；恢复失败不能伪装成成功，原始
+操作错误仍优先保留。没有改变 FileEntry/Artifact、事件 ID、attrs 或 provenance。
 
-S4.P1.T4 已完成证据汇总，引用 S3 immutable Release reports 的 Timeline graph phase，
-索引位于 `artifacts/stage-optimization/20261018/S4/iteration-01/graph-real-matrix.json`。
-100K RAW/E01、small/medium 真实 E01、fullContent 代表集和 500K/1M pressure 均保持
-20k 批次、完整 graph oracle 和每批独立 commit。压力组的 Timeline graph wall 已达到
-16–36 秒，其中 node/commit 是主要成本；synthetic grid 的 50k/100k 小幅墙钟收益不足以
-抵消驻留窗口增长，也没有在真实输入上完成可比的替代批次 A/B。因此默认值维持 20k，
-不把 S4.P1 标记为性能提速完成；后续收益候选转入 S4.P2/P3 的 SQL 与事务策略复核。
+source/build 连接实测 page_size=4096、synchronous=NORMAL；普通连接 autocheckpoint=1000，
+build=16384。staging 为 page_size=8192、cache_size=-16384、temp_store=MEMORY，
+synchronous=OFF 只限可重建 staging。read-only 连接 query_only=1，实测 synchronous=FULL
+是该连接的观测值，不应解释成源 writer 配置发生变化。cache_size 负数单位是 KiB，
+autocheckpoint 单位是页；这些值不是实测内存或 WAL 峰值。
 
-S4.P2.T1 的状态复核已完成，证据为
-`artifacts/stage-optimization/20261018/S4/iteration-01/projection-state-review.json`。
-空 Timeline、非空 Timeline、已投影、graph-only retry、索引重建失败/回滚、WAL 只读可见性
-和 projection identity migration 均有现有回归覆盖；当前策略保持不变：空表在事务内延迟并
-重建二级索引，非空表保持索引，graph projection 只有在 target 完整物化后才标记 done。
-本任务没有新增 SQL 或改变完成状态语义。
-
-S4.P2.T2 的首个低风险优化已提交为 `8135ef5b`：file-activity projection 现在在一次
-projection 内计算平台 policy，后续 source batch 复用该 policy，不再为每个 batch 重复
-执行 `pragma_table_info` schema probe。过滤条件、时间排除、deleted confidence、attrs、
-ID 和索引事务语义均未改变；验证记录见
-`artifacts/stage-optimization/20261018/S4/iteration-01/projection-policy-reuse.json`。
-该改动尚未宣称真实输入提速，需在 Release workflow 中单独比较 event_insert 与总收尾成本。
-
+证据目录：`artifacts/stage-optimization/20261018/S4/iteration-01/`。本轮索引为
+`p2-acceptance.json`，记录日志/源码 SHA、失败重现与确认结果；旧 query-plan/grid/S3 reports
+保持不变。早前“P1 已关闭”的记录仅代表探索与材料汇总，本表更正正式 task 完成范围，
+不会用内存库计数或单轮耗时替代真实输入的完整性能门禁。

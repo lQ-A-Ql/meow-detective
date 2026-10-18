@@ -36,6 +36,11 @@ use transport::dto::{
     PartialResultDto,
 };
 
+// Correctness comparisons must not compete with another test's import for the
+// process-wide resource pool while collecting preview/extraction oracles.
+// Reader workers inside each workflow retain their requested concurrency.
+static IMPORT_ORACLE_WINDOW: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 struct BenchmarkPhaseSink;
 
 impl ImportEventSink for BenchmarkPhaseSink {
@@ -120,6 +125,9 @@ fn with_import_context<T>(
     mode: ImportAnalysisMode,
     capture: impl FnOnce(&Connection, &Connection, &Path, &str, &str, ImportBenchmarkReportDto) -> T,
 ) -> T {
+    let _oracle_window = IMPORT_ORACLE_WINDOW
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
     let temporary = tempfile::TempDir::new().unwrap();
     let active = case_service::create_case(
         &temporary.path().join("cases"),

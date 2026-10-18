@@ -10,6 +10,7 @@ use std::{
     time::Instant,
 };
 
+use super::page_cache::with_timeline_page_cache;
 use super::projection_meta::{
     ensure_projection_meta_table, is_projection_done, mark_projection_done, projection_identity,
     projection_source_tables_present, table_has_column, timeline_graph_tables_present,
@@ -113,24 +114,6 @@ pub fn materialize_file_activity_with_identity(
             warnings,
         })
     })
-}
-
-/// Timeline materialization is dominated by random B-tree descends on
-/// multi-gigabyte sources; a large page cache cut the write-side cost by
-/// 5-8x in real-image measurements. Run the phase with a ~1 GiB cache and
-/// restore the previous setting afterwards (the value is per-connection).
-fn with_timeline_page_cache<T>(
-    conn: &Connection,
-    f: impl FnOnce() -> Result<T, TimelineServiceError>,
-) -> Result<T, TimelineServiceError> {
-    let previous: i64 = conn
-        .query_row("PRAGMA cache_size", [], |row| row.get(0))
-        .map_err(|error| TimelineServiceError::Other(format!("read cache_size: {error}")))?;
-    conn.execute_batch("PRAGMA cache_size = -1000000")
-        .map_err(|error| TimelineServiceError::Other(format!("raise cache_size: {error}")))?;
-    let result = f();
-    let _ = conn.execute_batch(&format!("PRAGMA cache_size = {previous}"));
-    result
 }
 
 fn replace_file_activity_events(

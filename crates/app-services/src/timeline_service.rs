@@ -2,6 +2,7 @@ mod error;
 mod export;
 mod facets;
 mod ingestion;
+mod page_cache;
 mod pagination;
 mod projection;
 mod projection_graph;

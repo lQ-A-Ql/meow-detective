@@ -218,6 +218,7 @@ fn write_graph_batch(
             TimelineServiceError::Other(format!("timeline graph edge batch insert: {error}"))
         })? as u64;
     timings.graph_edges += started.elapsed();
+    ensure_not_cancelled(cancel_token)?;
     let skipped = rows.len() as u64 - inserted_edges.min(rows.len() as u64);
     let started = Instant::now();
     transaction.commit().map_err(|error| {

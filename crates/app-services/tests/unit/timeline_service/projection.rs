@@ -5,6 +5,9 @@ use super::super::projection_graph::{
 };
 use super::*;
 
+mod cancellation;
+mod page_cache;
+
 fn populate_timeline_event_graph_with_batch(
     conn: &Connection,
     batch_size: u32,
