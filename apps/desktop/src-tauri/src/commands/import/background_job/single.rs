@@ -73,6 +73,7 @@ pub(crate) fn run_background_import_job(
         "Single-source import admitted by import scheduler"
     );
     let options = ImportJobOptions {
+        projection_policy: Default::default(),
         event_sink: event_sink
             .as_ref()
             .map(|sink| sink as &dyn app_services::import_pipeline::ImportEventSink),

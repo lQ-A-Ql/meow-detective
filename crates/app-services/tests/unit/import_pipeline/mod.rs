@@ -660,6 +660,7 @@ fn cancellation_after_attach_marks_job_cancelling_without_failure() {
                 import_config_for_path(&evidence_dir),
                 &job_id,
                 ImportJobOptions {
+                    projection_policy: Default::default(),
                     event_sink: None,
                     cancel_token: &cancel,
                     max_import_workers: None,
@@ -710,6 +711,7 @@ fn image_import_without_supported_filesystem_fails_closed() {
                 import_config_for_path(&image_path),
                 &job_id,
                 ImportJobOptions {
+                    projection_policy: Default::default(),
                     event_sink: None,
                     cancel_token: &cancel,
                     max_import_workers: Some(1),
@@ -771,7 +773,7 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
                 &active.case_root,
                 import_config_for_path(&evidence_dir),
                 &job_id,
-                ImportJobOptions {
+                ImportJobOptions { projection_policy: Default::default(),
                     event_sink: None,
                     cancel_token: &cancel,
                     max_import_workers: None,
@@ -899,6 +901,7 @@ fn logical_import_reports_progress_through_tauri_free_sink() {
                 import_config_for_path(&evidence_dir),
                 &job_id,
                 ImportJobOptions {
+                    projection_policy: Default::default(),
                     event_sink: Some(&event_sink),
                     cancel_token: &cancel,
                     max_import_workers: None,
@@ -1091,7 +1094,7 @@ fn e01_full_import() {
                 &active.case_root,
                 import_config_for_path(&e01_path),
                 &job_id,
-                ImportJobOptions {
+                ImportJobOptions { projection_policy: Default::default(),
                     event_sink: Some(&profile_sink),
                     cancel_token: &cancel,
                     max_import_workers: None,

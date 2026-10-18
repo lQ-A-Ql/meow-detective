@@ -37,6 +37,7 @@ fn import_image(active: &app_services::active_case::ActiveCase, image: &Path) ->
                 config,
                 &job_id,
                 ImportJobOptions {
+                    projection_policy: Default::default(),
                     event_sink: None,
                     cancel_token: &cancel,
                     max_import_workers: Some(1),

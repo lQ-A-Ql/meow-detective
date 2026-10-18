@@ -4,11 +4,13 @@ mod facets;
 mod ingestion;
 mod page_cache;
 mod pagination;
+mod policy;
 mod projection;
 mod projection_graph;
 mod projection_meta;
 mod projection_timing;
 mod query;
+mod wal_policy;
 
 pub use error::TimelineServiceError;
 pub use export::{
@@ -19,11 +21,13 @@ pub use facets::get_timeline_facets_for_case;
 pub use pagination::{
     query_timeline_aggregated, query_timeline_filtered_for_case, query_timeline_for_case,
 };
+pub use policy::TimelineProjectionPolicy;
 pub use projection::{
     materialize_file_activity, materialize_file_activity_unknown,
     materialize_file_activity_unknown_with_cancel,
     materialize_file_activity_unknown_with_cancel_and_identity,
-    materialize_file_activity_with_identity, project_and_store_file_activity,
+    materialize_file_activity_with_identity, materialize_file_activity_with_identity_and_policy,
+    materialize_file_activity_with_policy, project_and_store_file_activity,
     TimelineProjectionStats,
 };
 pub use projection_timing::TimelineWriteTimings;

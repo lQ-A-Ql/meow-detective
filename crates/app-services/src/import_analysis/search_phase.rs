@@ -4,8 +4,8 @@ use std::{
     sync::atomic::Ordering,
 };
 
-use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, Row};
+use crate::search_metadata_projection::MetadataProjection;
+use rusqlite::{params, Connection};
 use search::{SearchFileDocument, SearchIndex, SearchMetadataWriter};
 
 use super::{
@@ -19,6 +19,18 @@ const SEARCH_METADATA_PAGE_SIZE: u64 = 1_000;
 pub(crate) fn run_search_index_phase(
     options: SearchIndexPhaseOptions,
 ) -> Result<SearchIndexPhaseStats, ImportAnalysisError> {
+    run_search_index_phase_with_page_size(options, SEARCH_METADATA_PAGE_SIZE)
+}
+
+fn run_search_index_phase_with_page_size(
+    options: SearchIndexPhaseOptions,
+    page_size: u64,
+) -> Result<SearchIndexPhaseStats, ImportAnalysisError> {
+    if !(1..=4000).contains(&page_size) {
+        return Err(ImportAnalysisError::Other(
+            "Invalid metadata page size".into(),
+        ));
+    }
     let _budget = crate::resource_budget::pool_for(options.publication_lease.as_ref())
         .acquire(
             crate::resource_budget::Resources {
@@ -32,6 +44,7 @@ pub(crate) fn run_search_index_phase(
     reconcile_index_generation(&options.index_dir)?;
     ensure_not_cancelled(&options)?;
     let connection = persistence_sqlite::open_existing_source_read_only(&options.db_path)?;
+    let projection = MetadataProjection::new(&options.data_source_id, data_version(&connection)?);
     let next_index_dir = next_index_dir(&options.index_dir);
     let mut build = IndexBuildGuard::prepare(next_index_dir.clone())?;
     let index = SearchIndex::create(&next_index_dir)
@@ -43,7 +56,14 @@ pub(crate) fn run_search_index_phase(
         eligible_count: count_metadata_rows(&connection, &options)?,
         ..SearchIndexPhaseStats::default()
     };
-    index_metadata_rows(&connection, &options, &mut writer, &mut stats)?;
+    index_metadata_rows(
+        &connection,
+        &options,
+        &projection,
+        page_size,
+        &mut writer,
+        &mut stats,
+    )?;
     writer
         .commit()
         .map_err(|error| ImportAnalysisError::Other(format!("Commit search index: {error}")))?;
@@ -51,6 +71,9 @@ pub(crate) fn run_search_index_phase(
         .eligible_count
         .saturating_sub(stats.indexed_count.saturating_add(stats.failed_count));
     drop(index);
+    projection
+        .validate(&options.data_source_id, &data_version(&connection)?)
+        .map_err(|_| ImportAnalysisError::Other("Search projection input changed".into()))?;
     if let Some(lease) = &options.publication_lease {
         lease.validate()?;
     }
@@ -58,6 +81,12 @@ pub(crate) fn run_search_index_phase(
     replace_index_generation(&next_index_dir, &options.index_dir)?;
     build.mark_published();
     Ok(stats)
+}
+
+fn data_version(conn: &Connection) -> rusqlite::Result<String> {
+    conn.pragma_query_value(None, "data_version", |row| {
+        row.get::<_, i64>(0).map(|v| v.to_string())
+    })
 }
 
 fn count_metadata_rows(
@@ -75,13 +104,21 @@ fn count_metadata_rows(
 fn index_metadata_rows(
     connection: &Connection,
     options: &SearchIndexPhaseOptions,
+    projection: &MetadataProjection<'_>,
+    page_size: u64,
     writer: &mut SearchMetadataWriter,
     stats: &mut SearchIndexPhaseStats,
 ) -> Result<(), ImportAnalysisError> {
     let mut after_id = String::new();
     loop {
         ensure_not_cancelled(options)?;
-        let page = fetch_metadata_page(connection, &options.data_source_id.0, &after_id)?;
+        let page = fetch_metadata_page(
+            connection,
+            &options.data_source_id.0,
+            &after_id,
+            page_size,
+            projection,
+        )?;
         if page.scanned == 0 {
             break;
         }
@@ -93,7 +130,7 @@ fn index_metadata_rows(
                 .saturating_add(writer.add_documents(&page.documents).map_err(|error| {
                     ImportAnalysisError::Other(format!("Write search metadata: {error}"))
                 })?);
-        if page.scanned < SEARCH_METADATA_PAGE_SIZE {
+        if page.scanned < page_size {
             break;
         }
     }
@@ -111,18 +148,20 @@ fn fetch_metadata_page(
     connection: &Connection,
     data_source_id: &str,
     after_id: &str,
+    page_size: u64,
+    projection: &MetadataProjection<'_>,
 ) -> Result<MetadataPage, ImportAnalysisError> {
     let mut statement = connection.prepare(
         "SELECT id, path, name, entry_type, size, ext, modified_at,
-                deleted, hidden, system, encrypted
+                deleted, hidden, system, encrypted, data_source_id
          FROM file_entries
          WHERE data_source_id = ?1 AND id > ?2
          ORDER BY id ASC
          LIMIT ?3",
     )?;
-    let mut rows = statement.query(params![data_source_id, after_id, SEARCH_METADATA_PAGE_SIZE])?;
+    let mut rows = statement.query(params![data_source_id, after_id, page_size])?;
     let mut page = MetadataPage {
-        documents: Vec::with_capacity(SEARCH_METADATA_PAGE_SIZE as usize),
+        documents: Vec::with_capacity(page_size as usize),
         last_id: after_id.to_string(),
         scanned: 0,
         failed: 0,
@@ -137,7 +176,7 @@ fn fetch_metadata_page(
             }
         };
         page.last_id = id.clone();
-        match metadata_document(row, id) {
+        match projection.row(row, id) {
             Ok(document) => page.documents.push(document),
             Err(error) => {
                 page.failed = page.failed.saturating_add(1);
@@ -146,28 +185,6 @@ fn fetch_metadata_page(
         }
     }
     Ok(page)
-}
-
-fn metadata_document(row: &Row<'_>, file_id: String) -> rusqlite::Result<SearchFileDocument> {
-    Ok(SearchFileDocument {
-        file_id,
-        path: row.get(1)?,
-        name: row.get(2)?,
-        entry_type: row.get::<_, String>(3)?.to_ascii_lowercase(),
-        size: row.get(4)?,
-        extension: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
-        modified_at: parse_timestamp(row.get(6)?),
-        deleted: row.get::<_, i32>(7)? != 0,
-        hidden: row.get::<_, i32>(8)? != 0,
-        system: row.get::<_, i32>(9)? != 0,
-        encrypted: row.get::<_, i32>(10)? != 0,
-    })
-}
-
-fn parse_timestamp(value: Option<String>) -> Option<i64> {
-    value
-        .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
-        .map(|value| value.with_timezone(&Utc).timestamp_millis())
 }
 
 struct IndexBuildGuard {
@@ -284,3 +301,7 @@ fn ensure_not_cancelled(options: &SearchIndexPhaseOptions) -> Result<(), ImportA
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/import_analysis/search_batch_experiment.rs"]
+mod tests;

@@ -126,6 +126,7 @@ fn run_member_import(
     }
     let event_sink = execution.app.as_ref().map(TauriImportEventSink::new);
     let options = ImportJobOptions {
+        projection_policy: Default::default(),
         event_sink: event_sink
             .as_ref()
             .map(|sink| sink as &dyn app_services::import_pipeline::ImportEventSink),

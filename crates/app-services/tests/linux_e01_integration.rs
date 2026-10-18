@@ -3487,7 +3487,7 @@ fn pve_cluster_representative_host_imports_tree_and_previews_by_file_id() {
                 &active.case_root,
                 config,
                 &job_id,
-                ImportJobOptions {
+                ImportJobOptions { projection_policy: Default::default(),
                     event_sink: None,
                     cancel_token: &cancel,
                     max_import_workers: Some(1),

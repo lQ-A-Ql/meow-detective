@@ -54,6 +54,7 @@ pub(super) fn profile(path: &Path, workers: usize) -> serde_json::Value {
             );
             serde_json::json!({
                 "schemaVersion": 2, "oracleVersion": 2,
+                "timelinePolicy": super::projection_policy::describe(),
                 "oracleOrder": "canonical-primary-id; graph-nodes-before-edges",
                 "analysisMode": mode.as_str(), "platform": "windows",
                 "executionMode": mode.as_str(),

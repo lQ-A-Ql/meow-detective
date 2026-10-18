@@ -4,9 +4,8 @@ use std::time::Instant;
 use chrono::Utc;
 use rusqlite::{params, Connection, Rows, Statement};
 
-use super::{TimelineServiceError, TimelineWriteTimings};
+use super::{TimelineProjectionPolicy, TimelineServiceError, TimelineWriteTimings};
 
-const TIMELINE_GRAPH_BATCH: u32 = 20_000;
 pub(super) const FIRST_GRAPH_PAGE_SQL: &str = "SELECT id
      FROM timeline_events
      WHERE case_id = ?1
@@ -44,17 +43,37 @@ pub(super) struct TimelineGraphRow {
     pub(super) id: String,
 }
 
-pub(super) fn populate_timeline_event_graph(
+pub(super) fn populate_timeline_event_graph_with_policy(
     conn: &Connection,
+    policy: TimelineProjectionPolicy,
     cancel_token: &AtomicBool,
     timings: &mut TimelineWriteTimings,
 ) -> Result<Vec<String>, TimelineServiceError> {
-    populate_timeline_event_graph_with_batch(conn, TIMELINE_GRAPH_BATCH, cancel_token, timings)
+    policy.validate()?;
+    if !policy.cached_graph_statements {
+        return populate_timeline_event_graph_with_batch(
+            conn,
+            policy.graph_batch_rows,
+            cancel_token,
+            timings,
+        );
+    }
+    populate_graph(conn, policy.graph_batch_rows, true, cancel_token, timings)
 }
 
 pub(super) fn populate_timeline_event_graph_with_batch(
     conn: &Connection,
     batch_size: u32,
+    cancel_token: &AtomicBool,
+    timings: &mut TimelineWriteTimings,
+) -> Result<Vec<String>, TimelineServiceError> {
+    populate_graph(conn, batch_size, false, cancel_token, timings)
+}
+
+fn populate_graph(
+    conn: &Connection,
+    batch_size: u32,
+    cached_statements: bool,
     cancel_token: &AtomicBool,
     timings: &mut TimelineWriteTimings,
 ) -> Result<Vec<String>, TimelineServiceError> {
@@ -69,29 +88,39 @@ pub(super) fn populate_timeline_event_graph_with_batch(
     };
     let created_at = Utc::now().to_rfc3339();
     let require_existing_target = graph_edges_require_existing_target(conn)?;
+    let context = GraphBatchContext {
+        case_id: &case_id,
+        created_at: &created_at,
+        require_existing_target,
+        cached_statements,
+        cancel_token,
+    };
     let mut skipped_empty_source = 0;
     let mut cursor: Option<String> = None;
 
     loop {
         ensure_not_cancelled(cancel_token)?;
         let started = Instant::now();
-        let rows = load_graph_page(conn, &case_id, cursor.as_deref(), batch_size)?;
+        let rows = load_graph_page(
+            conn,
+            &case_id,
+            cursor.as_deref(),
+            batch_size,
+            cached_statements,
+            timings,
+        )?;
         timings.graph_page += started.elapsed();
+        timings.graph_buffer_rows = timings.graph_buffer_rows.max(rows.len() as u64);
+        let resident = rows.capacity() * std::mem::size_of::<TimelineGraphRow>()
+            + rows.iter().map(|row| row.id.capacity()).sum::<usize>();
+        timings.graph_buffer_bytes = timings.graph_buffer_bytes.max(resident as u64);
         if rows.is_empty() {
             break;
         }
         let next_cursor = rows.last().map(|row| row.id.clone()).ok_or_else(|| {
             TimelineServiceError::Other("timeline graph page was empty".to_string())
         })?;
-        skipped_empty_source += write_graph_batch(
-            conn,
-            &rows,
-            &case_id,
-            &created_at,
-            require_existing_target,
-            cancel_token,
-            timings,
-        )?;
+        skipped_empty_source += write_graph_batch(conn, &rows, &context, timings)?;
         cursor = Some(next_cursor);
     }
 
@@ -122,19 +151,28 @@ fn load_graph_page(
     case_id: &str,
     after_id: Option<&str>,
     batch_size: u32,
+    cached: bool,
+    timings: &mut TimelineWriteTimings,
 ) -> Result<Vec<TimelineGraphRow>, TimelineServiceError> {
-    match after_id {
-        Some(after_id) => {
-            let mut statement = conn.prepare(NEXT_GRAPH_PAGE_SQL).map_err(|error| {
-                TimelineServiceError::Other(format!("prepare next timeline graph page: {error}"))
-            })?;
-            load_graph_rows_after(&mut statement, case_id, after_id, batch_size)
+    let started = Instant::now();
+    let sql = if after_id.is_some() {
+        NEXT_GRAPH_PAGE_SQL
+    } else {
+        FIRST_GRAPH_PAGE_SQL
+    };
+    if cached {
+        let mut statement = conn.prepare_cached(sql)?;
+        timings.graph_page_prepare += started.elapsed();
+        match after_id {
+            Some(after) => load_graph_rows_after(&mut statement, case_id, after, batch_size),
+            None => load_first_graph_rows(&mut statement, case_id, batch_size),
         }
-        None => {
-            let mut statement = conn.prepare(FIRST_GRAPH_PAGE_SQL).map_err(|error| {
-                TimelineServiceError::Other(format!("prepare first timeline graph page: {error}"))
-            })?;
-            load_first_graph_rows(&mut statement, case_id, batch_size)
+    } else {
+        let mut statement = conn.prepare(sql)?;
+        timings.graph_page_prepare += started.elapsed();
+        match after_id {
+            Some(after) => load_graph_rows_after(&mut statement, case_id, after, batch_size),
+            None => load_first_graph_rows(&mut statement, case_id, batch_size),
         }
     }
 }
@@ -177,13 +215,18 @@ fn collect_graph_rows(mut rows: Rows<'_>) -> Result<Vec<TimelineGraphRow>, Timel
     Ok(collected)
 }
 
+struct GraphBatchContext<'a> {
+    case_id: &'a str,
+    created_at: &'a str,
+    require_existing_target: bool,
+    cached_statements: bool,
+    cancel_token: &'a AtomicBool,
+}
+
 fn write_graph_batch(
     conn: &Connection,
     rows: &[TimelineGraphRow],
-    case_id: &str,
-    created_at: &str,
-    require_existing_target: bool,
-    cancel_token: &AtomicBool,
+    context: &GraphBatchContext<'_>,
     timings: &mut TimelineWriteTimings,
 ) -> Result<u64, TimelineServiceError> {
     let Some(first_id) = rows.first().map(|row| row.id.as_str()) else {
@@ -196,35 +239,44 @@ fn write_graph_batch(
         TimelineServiceError::Other(format!("begin timeline graph batch: {error}"))
     })?;
     let started = Instant::now();
-    transaction
-        .execute(
-            INSERT_GRAPH_NODES_FOR_RANGE_SQL,
-            params![case_id, first_id, last_id, created_at],
-        )
-        .map_err(|error| {
-            TimelineServiceError::Other(format!("timeline graph node batch insert: {error}"))
-        })?;
+    execute_range(
+        &transaction,
+        INSERT_GRAPH_NODES_FOR_RANGE_SQL,
+        [context.case_id, first_id, last_id, context.created_at],
+        context.cached_statements,
+        &mut timings.graph_node_prepare,
+    )
+    .map_err(|error| {
+        TimelineServiceError::Other(format!("timeline graph node batch insert: {error}"))
+    })?;
     timings.graph_nodes += started.elapsed();
-    ensure_not_cancelled(cancel_token)?;
-    let edge_sql = if require_existing_target {
+    ensure_not_cancelled(context.cancel_token)?;
+    let edge_sql = if context.require_existing_target {
         INSERT_GRAPH_EDGES_WITH_TARGET_FOR_RANGE_SQL
     } else {
         INSERT_GRAPH_EDGES_FOR_RANGE_SQL
     };
     let started = Instant::now();
-    let inserted_edges = transaction
-        .execute(edge_sql, params![case_id, first_id, last_id, created_at])
-        .map_err(|error| {
-            TimelineServiceError::Other(format!("timeline graph edge batch insert: {error}"))
-        })? as u64;
+    let inserted_edges = execute_range(
+        &transaction,
+        edge_sql,
+        [context.case_id, first_id, last_id, context.created_at],
+        context.cached_statements,
+        &mut timings.graph_edge_prepare,
+    )
+    .map_err(|error| {
+        TimelineServiceError::Other(format!("timeline graph edge batch insert: {error}"))
+    })? as u64;
     timings.graph_edges += started.elapsed();
-    ensure_not_cancelled(cancel_token)?;
+    ensure_not_cancelled(context.cancel_token)?;
     let skipped = rows.len() as u64 - inserted_edges.min(rows.len() as u64);
+    sample_wal(conn, timings);
     let started = Instant::now();
     transaction.commit().map_err(|error| {
         TimelineServiceError::Other(format!("commit timeline graph batch: {error}"))
     })?;
     timings.graph_commit += started.elapsed();
+    sample_wal(conn, timings);
     Ok(skipped)
 }
 
@@ -256,5 +308,34 @@ fn graph_warnings(skipped_empty_source: u64) -> Vec<String> {
         vec![format!(
             "{skipped_empty_source} timeline event(s) skipped because the source object was empty or not materialized as a graph node; no References edges were created"
         )]
+    }
+}
+
+fn execute_range(
+    conn: &Connection,
+    sql: &str,
+    values: [&str; 4],
+    cached: bool,
+    prepare_time: &mut std::time::Duration,
+) -> rusqlite::Result<usize> {
+    let started = Instant::now();
+    if cached {
+        let mut statement = conn.prepare_cached(sql)?;
+        *prepare_time += started.elapsed();
+        statement.execute(values)
+    } else {
+        let mut statement = conn.prepare(sql)?;
+        *prepare_time += started.elapsed();
+        statement.execute(values)
+    }
+}
+
+fn sample_wal(conn: &Connection, timings: &mut TimelineWriteTimings) {
+    if let Some(bytes) = conn
+        .path()
+        .and_then(|path| std::fs::metadata(format!("{path}-wal")).ok())
+        .map(|meta| meta.len())
+    {
+        timings.graph_wal_sampled_bytes = timings.graph_wal_sampled_bytes.max(bytes);
     }
 }

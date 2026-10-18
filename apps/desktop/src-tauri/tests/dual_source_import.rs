@@ -154,6 +154,7 @@ fn import_fixture_serially(
         .expect("create import job");
     let cancel_token = Arc::new(AtomicBool::new(false));
     let options = ImportJobOptions {
+        projection_policy: Default::default(),
         event_sink: None,
         cancel_token: &cancel_token,
         max_import_workers: Some(1),

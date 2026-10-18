@@ -231,6 +231,7 @@ fn execute_nested(
         config,
         &domain::JobId(ctx.plan.task.task_id.clone()),
         app_services::import_pipeline::ImportJobOptions {
+            projection_policy: Default::default(),
             event_sink: Some(&sink),
             cancel_token: cancel,
             max_import_workers: Some(1),

@@ -2,6 +2,8 @@
 mod fixture;
 #[path = "support/import_benchmark_oracle_tests.rs"]
 mod oracle_tests;
+#[path = "support/import_projection_policy.rs"]
+mod projection_policy;
 #[path = "support/import_benchmark_queries.rs"]
 mod queries;
 #[path = "support/import_ntfs_scenarios.rs"]
@@ -148,6 +150,7 @@ fn with_import_context<T>(
                 let phase_sink = BenchmarkPhaseSink;
                 let phase_trace = std::env::var_os("FORENSICS_IMPORT_BENCH_PHASE_TRACE").is_some();
                 let options = ImportJobOptions {
+                    projection_policy: projection_policy::requested(),
                     event_sink: phase_trace.then_some(&phase_sink as &dyn ImportEventSink),
                     cancel_token: &cancel,
                     max_import_workers: Some(workers),
@@ -630,7 +633,7 @@ fn cancellation_before_enumeration_keeps_source_indexes_and_skips_runtime_open()
         let config = import_precheck::prepare_import_source_config_from_path(
             &image.to_string_lossy(), DataSourcePlatform::Windows).unwrap();
         let cancel = Arc::new(AtomicBool::new(true));
-        let options = ImportJobOptions { event_sink: None, cancel_token: &cancel,
+        let options = ImportJobOptions { projection_policy: Default::default(), event_sink: None, cancel_token: &cancel,
             max_import_workers: Some(4), max_analysis_workers: Some(1),
             analysis_mode: ImportAnalysisMode::MetadataOnly, defer_linux_artifacts: false };
         let profiler = ImportProfiler::default();

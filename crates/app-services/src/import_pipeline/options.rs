@@ -15,6 +15,7 @@ pub struct JobOutcomeCounts {
 /// Options controlling import job execution.
 #[derive(Clone, Copy)]
 pub struct ImportJobOptions<'a> {
+    pub projection_policy: crate::timeline_service::TimelineProjectionPolicy,
     pub event_sink: Option<&'a dyn ImportEventSink>,
     pub cancel_token: &'a Arc<AtomicBool>,
     pub max_import_workers: Option<usize>,

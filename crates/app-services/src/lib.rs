@@ -67,6 +67,7 @@ pub mod report;
 pub mod resource_budget;
 pub mod rule_pack;
 pub mod runtime_resources;
+mod search_metadata_projection;
 pub mod search_service;
 pub mod source_db;
 pub mod source_runtime;

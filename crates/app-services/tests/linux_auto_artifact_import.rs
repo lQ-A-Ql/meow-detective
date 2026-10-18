@@ -54,6 +54,7 @@ fn linux_logical_import_auto_extracts_identity_and_service_artifacts() {
                 config,
                 &job_id,
                 ImportJobOptions {
+                    projection_policy: Default::default(),
                     event_sink: None,
                     cancel_token: &cancel,
                     max_import_workers: Some(1),

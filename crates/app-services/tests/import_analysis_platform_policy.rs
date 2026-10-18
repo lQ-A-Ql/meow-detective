@@ -106,6 +106,7 @@ fn run_logical_import(platform: DataSourcePlatform, case_name: &str) -> Pipeline
                 config,
                 &job_id,
                 ImportJobOptions {
+                    projection_policy: Default::default(),
                     event_sink: None,
                     cancel_token: &cancel,
                     max_import_workers: Some(1),

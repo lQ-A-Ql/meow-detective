@@ -68,7 +68,7 @@ if ($e01PipelineTest -notmatch 'Timeline events after import') {
   throw "real E01 import profile must verify the import-finalized Timeline projection"
 }
 if ($pipelineFinalize -notmatch 'ImportContentKind::Filesystem' -or
-    $pipelineFinalize -notmatch 'timeline_service::materialize_file_activity\(') {
+    $pipelineFinalize -notmatch 'timeline_service::materialize_file_activity_with_policy\(') {
   throw "Filesystem imports must finalize the narrowed file-activity Timeline projection before becoming ready"
 }
 foreach ($pattern in @(

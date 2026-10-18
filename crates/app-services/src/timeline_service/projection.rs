@@ -15,7 +15,7 @@ use super::projection_meta::{
     ensure_projection_meta_table, is_projection_done, mark_projection_done, projection_identity,
     projection_source_tables_present, table_has_column, timeline_graph_tables_present,
 };
-use super::{TimelineServiceError, TimelineWriteTimings};
+use super::{TimelineProjectionPolicy, TimelineServiceError, TimelineWriteTimings};
 
 const FILE_ACTIVITY_PROJECTION_KEY: &str = "file_activity_v2";
 const TIMELINE_GRAPH_PROJECTION_KEY: &str = "timeline_graph_v3";
@@ -53,8 +53,29 @@ pub fn materialize_file_activity(
     platform: DataSourcePlatform,
     cancel_token: &AtomicBool,
 ) -> Result<TimelineProjectionStats, TimelineServiceError> {
+    materialize_file_activity_with_policy(
+        conn,
+        platform,
+        cancel_token,
+        TimelineProjectionPolicy::default(),
+    )
+}
+
+pub fn materialize_file_activity_with_policy(
+    conn: &Connection,
+    platform: DataSourcePlatform,
+    cancel_token: &AtomicBool,
+    policy: TimelineProjectionPolicy,
+) -> Result<TimelineProjectionStats, TimelineServiceError> {
+    policy.validate()?;
     let identity = projection_identity(conn, platform)?;
-    materialize_file_activity_with_identity(conn, platform, cancel_token, &identity)
+    materialize_file_activity_with_identity_and_policy(
+        conn,
+        platform,
+        cancel_token,
+        &identity,
+        policy,
+    )
 }
 
 pub fn materialize_file_activity_with_identity(
@@ -63,7 +84,24 @@ pub fn materialize_file_activity_with_identity(
     cancel_token: &AtomicBool,
     input_identity: &str,
 ) -> Result<TimelineProjectionStats, TimelineServiceError> {
+    materialize_file_activity_with_identity_and_policy(
+        conn,
+        platform,
+        cancel_token,
+        input_identity,
+        TimelineProjectionPolicy::default(),
+    )
+}
+
+pub fn materialize_file_activity_with_identity_and_policy(
+    conn: &Connection,
+    platform: DataSourcePlatform,
+    cancel_token: &AtomicBool,
+    input_identity: &str,
+    policy: TimelineProjectionPolicy,
+) -> Result<TimelineProjectionStats, TimelineServiceError> {
     ensure_not_cancelled(cancel_token)?;
+    policy.validate()?;
     if input_identity.trim().is_empty() {
         return Err(TimelineServiceError::InvalidInput(
             "timeline projection input identity must not be empty".to_string(),
@@ -81,37 +119,39 @@ pub fn materialize_file_activity_with_identity(
         return Ok(already_projected_stats());
     }
 
-    with_timeline_page_cache(conn, || {
-        let started = Instant::now();
-        let mut timings = TimelineWriteTimings::default();
-        let events_started = Instant::now();
-        let inserted_count = if file_events_done {
-            0
-        } else {
-            let inserted =
-                replace_file_activity_events(conn, platform, cancel_token, &mut timings)?;
-            mark_projection_done(conn, FILE_ACTIVITY_PROJECTION_KEY, inserted, input_identity)?;
-            inserted
-        };
-        let events_elapsed_ms = events_started.elapsed().as_millis();
-        let graph_started = Instant::now();
-        let warnings = if graph_done {
-            Vec::new()
-        } else {
-            populate_graph_non_fatal(conn, cancel_token, input_identity, &mut timings)?
-        };
-        let graph_elapsed_ms = graph_started.elapsed().as_millis();
-        let graph_complete = !graph_supported
-            || is_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, input_identity)?;
-        Ok(TimelineProjectionStats {
-            inserted_count,
-            elapsed_ms: started.elapsed().as_millis(),
-            events_elapsed_ms,
-            graph_elapsed_ms,
-            timings,
-            already_projected: false,
-            graph_complete,
-            warnings,
+    super::wal_policy::with_wal_policy(conn, policy.wal_autocheckpoint_pages, || {
+        with_timeline_page_cache(conn, || {
+            let started = Instant::now();
+            let mut timings = TimelineWriteTimings::default();
+            let events_started = Instant::now();
+            let inserted_count = if file_events_done {
+                0
+            } else {
+                let inserted =
+                    replace_file_activity_events(conn, platform, cancel_token, &mut timings)?;
+                mark_projection_done(conn, FILE_ACTIVITY_PROJECTION_KEY, inserted, input_identity)?;
+                inserted
+            };
+            let events_elapsed_ms = events_started.elapsed().as_millis();
+            let graph_started = Instant::now();
+            let warnings = if graph_done {
+                Vec::new()
+            } else {
+                populate_graph_non_fatal(conn, cancel_token, input_identity, policy, &mut timings)?
+            };
+            let graph_elapsed_ms = graph_started.elapsed().as_millis();
+            let graph_complete = !graph_supported
+                || is_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, input_identity)?;
+            Ok(TimelineProjectionStats {
+                inserted_count,
+                elapsed_ms: started.elapsed().as_millis(),
+                events_elapsed_ms,
+                graph_elapsed_ms,
+                timings,
+                already_projected: false,
+                graph_complete,
+                warnings,
+            })
         })
     })
 }
@@ -341,9 +381,15 @@ fn populate_graph_non_fatal(
     conn: &Connection,
     cancel_token: &AtomicBool,
     input_identity: &str,
+    policy: TimelineProjectionPolicy,
     timings: &mut TimelineWriteTimings,
 ) -> Result<Vec<String>, TimelineServiceError> {
-    match super::projection_graph::populate_timeline_event_graph(conn, cancel_token, timings) {
+    match super::projection_graph::populate_timeline_event_graph_with_policy(
+        conn,
+        policy,
+        cancel_token,
+        timings,
+    ) {
         Ok(warnings) => {
             if warnings.is_empty() {
                 mark_projection_done(conn, TIMELINE_GRAPH_PROJECTION_KEY, 0, input_identity)?;

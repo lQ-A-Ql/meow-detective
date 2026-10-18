@@ -21,6 +21,17 @@ foreach ($v in $definition.versions) {
   if ($v.name -notmatch '^[a-zA-Z0-9_-]+$' -or $v.sha256 -notmatch '^[0-9a-fA-F]{64}$' -or
       $v.sha256 -ine (Get-FileHash -LiteralPath $v.executable).Hash -or -not $v.revision) { throw 'Invalid frozen version identity' }
   foreach ($mode in $v.analysisModes) { if ($mode -notin @('metadataOnly','fullContent')) { throw 'Unsupported analysis mode' } }
+  if ($v.PSObject.Properties['environment']) {
+    foreach ($property in $v.environment.PSObject.Properties) {
+      $valid = switch ($property.Name) {
+        'FORENSICS_TIMELINE_GRAPH_BATCH' { [string]$property.Value -match '^(20000|50000|100000)$' }
+        'FORENSICS_TIMELINE_CACHED_STATEMENTS' { [string]$property.Value -cmatch '^(true|false)$' }
+        'FORENSICS_TIMELINE_WAL_PAGES' { [string]$property.Value -match '^(1000|16384|32768)$' }
+        default { $false }
+      }
+      if (-not $valid) { throw 'Unsupported bounded projection experiment environment' }
+    }
+  }
 }
 $directory = Join-Path ([IO.Path]::GetFullPath($OutputDir)) ('comparison-' + (Get-Date -Format yyyyMMdd-HHmmss) + '-' + [guid]::NewGuid().ToString('N').Substring(0,8))
 $null = New-Item -ItemType Directory -Path $directory
@@ -57,12 +68,24 @@ try {
       $trial = [ordered]@{ sequence=$sequence; round=$round; condition=$c.key; input=$c.input; version=$c.version; mode=$c.mode; warmup=$round -le $WarmupRuns
         status='running'; log=$log; temp=$scratch; process=$null; payload=$null }
       $trials.Add([pscustomobject]$trial); $current = $trials[$trials.Count-1]; $report.trials=$trials.ToArray(); Save-Report
+      $childEnvironment = @{ TEMP=$scratch; TMP=$scratch; FORENSICS_IMPORT_FIXTURE=$inputs[$c.input].path; FORENSICS_IMPORT_BENCH_WORKERS=$c.workers; FORENSICS_IMPORT_BENCH_ANALYSIS=$c.mode }
+      foreach ($key in @('FORENSICS_TIMELINE_GRAPH_BATCH','FORENSICS_TIMELINE_CACHED_STATEMENTS','FORENSICS_TIMELINE_WAL_PAGES')) { $childEnvironment[$key] = $null }
+      if ($v.PSObject.Properties['environment']) {
+        foreach ($property in $v.environment.PSObject.Properties) { $childEnvironment[$property.Name] = $property.Value }
+      }
       $current.process = Invoke-ImportBenchmarkProcess -Executable $v.executable -WorkingDirectory $repo -Log $log -TimeoutSeconds $TimeoutSeconds `
         -Arguments @('matrix_import_profile','--exact','--ignored','--nocapture','--test-threads=1') `
-        -Environment @{ TEMP=$scratch; TMP=$scratch; FORENSICS_IMPORT_FIXTURE=$inputs[$c.input].path; FORENSICS_IMPORT_BENCH_WORKERS=$c.workers; FORENSICS_IMPORT_BENCH_ANALYSIS=$c.mode }
+        -Environment $childEnvironment
       $payload = Read-ImportBenchmarkPayload $log
       $current.payload=$payload
       Assert-ImportBenchmarkPayload $payload $c.workers
+      if ($v.PSObject.Properties['environment']) {
+        if (-not $payload.PSObject.Properties['timelinePolicy']) { throw 'Executable did not report requested projection policy' }
+        $fields = @{ FORENSICS_TIMELINE_GRAPH_BATCH='graphBatchRows'; FORENSICS_TIMELINE_CACHED_STATEMENTS='cachedGraphStatements'; FORENSICS_TIMELINE_WAL_PAGES='walAutocheckpointPages' }
+        foreach ($property in $v.environment.PSObject.Properties) {
+          if ([string]$payload.timelinePolicy.($fields[$property.Name]) -ine [string]$property.Value) { throw 'Executable ignored requested projection policy' }
+        }
+      }
       $actualMode = if ($payload.PSObject.Properties['executionMode']) { $payload.executionMode } else { 'metadataOnly' }
       if ($actualMode -cne $c.mode) { throw 'Executable ignored requested analysis mode' }
       if ($payload.report.processPeakRssMb -gt $protocol.definition.gates.maxImportProcessPeakRssMiB) { throw 'Import RSS gate failed' }

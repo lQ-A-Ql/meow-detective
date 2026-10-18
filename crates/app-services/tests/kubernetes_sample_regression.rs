@@ -65,6 +65,7 @@ fn real_kubernetes_e01_import_matches_external_identity_and_auto_analysis() {
             config,
             &job_id,
             ImportJobOptions {
+                projection_policy: Default::default(),
                 event_sink: None,
                 cancel_token: &cancel_token,
                 max_import_workers: Some(1),

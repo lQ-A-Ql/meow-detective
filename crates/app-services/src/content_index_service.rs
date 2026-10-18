@@ -26,6 +26,11 @@ pub fn build(
         data_source_id: source_id.into(),
     };
     let revision = crate::evidence_tasks::revision(conn, root, case, &request)?;
+    let projection_source = DataSourceId(source_id.into());
+    let projection = crate::search_metadata_projection::MetadataProjection::new(
+        &projection_source,
+        revision.clone(),
+    );
     let key = hex::encode(Sha256::digest(format!("content-v5:{source_id}:{revision}")));
     let source = crate::source_db::open_ready_source_read_only_by_id(
         conn,
@@ -72,6 +77,7 @@ pub fn build(
         &mut writer,
         IndexPageContext {
             source_id,
+            projection: &projection,
             repo: ContentIndexRepo::new(conn),
             key: &key,
             cancel,
@@ -81,9 +87,10 @@ pub fn build(
         &mut after,
     )?;
     writer.commit().map_err(index_error)?;
-    if crate::evidence_tasks::revision(conn, root, case, &request)? != revision {
-        return Err(CommandError::security("Evidence changed during indexing"));
-    }
+    projection.validate(
+        &projection_source,
+        &crate::evidence_tasks::revision(conn, root, case, &request)?,
+    )?;
     ensure_active(cancel)?;
     summary.complete = projection::processed(&summary) == expected;
     if !summary.complete {
@@ -121,6 +128,7 @@ fn index_error(error: search::indexer::tantivy_writer::IndexError) -> CommandErr
 
 struct IndexPageContext<'a> {
     source_id: &'a str,
+    projection: &'a crate::search_metadata_projection::MetadataProjection<'a>,
     repo: ContentIndexRepo<'a>,
     key: &'a str,
     cancel: &'a AtomicBool,
@@ -135,6 +143,7 @@ fn index_remaining(
 ) -> Result<(), CommandError> {
     let IndexPageContext {
         source_id,
+        projection,
         repo,
         key,
         cancel,
@@ -162,7 +171,7 @@ fn index_remaining(
                 .artifact_text(source_id, &entry.id.0, &global)
                 .map_err(CommandError::from_service_error)?;
             writer
-                .add_content_document(&projection::document(&entry), &text, &artifacts)
+                .add_content_document(&projection.entry(&entry)?, &text, &artifacts)
                 .map_err(index_error)?;
             *after = entry.id.0.clone();
             statuses.push((entry.id.0, status.into()));

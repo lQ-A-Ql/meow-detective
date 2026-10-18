@@ -55,6 +55,7 @@ fn xfs_log_repair_and_materialization() {
                 config,
                 &job_id,
                 app_services::import_pipeline::ImportJobOptions {
+                    projection_policy: Default::default(),
                     event_sink: None,
                     cancel_token: &cancel,
                     max_import_workers: Some(1),

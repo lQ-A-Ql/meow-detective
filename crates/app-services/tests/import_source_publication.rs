@@ -67,6 +67,7 @@ fn reject_stale_source(progress: u32, platform: domain::DataSourcePlatform) {
                 config,
                 &job,
                 ImportJobOptions {
+                    projection_policy: Default::default(),
                     event_sink: Some(&sink),
                     cancel_token: &cancel,
                     max_import_workers: Some(2),

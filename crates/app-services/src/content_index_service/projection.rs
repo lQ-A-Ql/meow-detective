@@ -53,21 +53,6 @@ pub(super) fn read(
     };
     Ok((status, text.content))
 }
-pub(super) fn document(entry: &FileEntry) -> search::SearchFileDocument {
-    search::SearchFileDocument {
-        file_id: entry.id.0.clone(),
-        path: entry.path.clone(),
-        name: entry.name.clone(),
-        extension: entry.ext.clone().unwrap_or_default(),
-        entry_type: if entry.is_file() { "file" } else { "directory" }.into(),
-        size: entry.size,
-        modified_at: entry.modified_at.map(|time| time.timestamp_millis()),
-        deleted: entry.deleted,
-        hidden: entry.hidden,
-        system: entry.system,
-        encrypted: entry.encrypted,
-    }
-}
 pub(super) fn count(summary: &mut ContentIndexSummaryDto, status: &str) {
     match status {
         "indexed" => summary.indexed += 1,

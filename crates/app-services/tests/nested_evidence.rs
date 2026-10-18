@@ -90,6 +90,7 @@ fn nested_pipeline_reuses_registered_id_and_exposes_child_catalog_and_bytes() {
                 config,
                 &job,
                 ImportJobOptions {
+                    projection_policy: Default::default(),
                     event_sink: None,
                     cancel_token: &std::sync::Arc::new(AtomicBool::new(false)),
                     max_import_workers: Some(1),

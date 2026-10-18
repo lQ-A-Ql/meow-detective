@@ -81,10 +81,11 @@ fn materialize_timeline(
         ctx.profiler.as_ref(),
         transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Timeline,
         || {
-            timeline_service::materialize_file_activity(
+            timeline_service::materialize_file_activity_with_policy(
                 source_conn,
                 ctx.import_config.platform,
                 ctx.options.cancel_token.as_ref(),
+                ctx.options.projection_policy,
             )
         },
     )
@@ -182,6 +183,21 @@ fn record_timeline_write_timings(
         (Phase::TimelineEventIndexes, timings.event_indexes, false),
         (Phase::TimelineEventCommit, timings.event_commit, false),
         (Phase::TimelineGraphPage, timings.graph_page, true),
+        (
+            Phase::TimelineGraphNodePrepare,
+            timings.graph_node_prepare,
+            true,
+        ),
+        (
+            Phase::TimelineGraphEdgePrepare,
+            timings.graph_edge_prepare,
+            true,
+        ),
+        (
+            Phase::TimelineGraphPagePrepare,
+            timings.graph_page_prepare,
+            true,
+        ),
         (Phase::TimelineGraphNodes, timings.graph_nodes, true),
         (Phase::TimelineGraphEdges, timings.graph_edges, true),
         (Phase::TimelineGraphCommit, timings.graph_commit, true),
