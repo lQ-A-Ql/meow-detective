@@ -165,6 +165,7 @@ fn insert_file_activity_batched(
     cancel_token: &AtomicBool,
     timings: &mut TimelineWriteTimings,
 ) -> Result<u64, TimelineServiceError> {
+    let policy = file_policy_sql(conn, platform)?;
     let mut cursor = String::new();
     let mut inserted = 0;
     loop {
@@ -176,7 +177,7 @@ fn insert_file_activity_batched(
         };
         ensure_not_cancelled(cancel_token)?;
         let started = Instant::now();
-        inserted += insert_source_range(conn, platform, &cursor, &next_cursor)?;
+        inserted += insert_source_range(conn, platform, &policy, &cursor, &next_cursor)?;
         timings.event_insert += started.elapsed();
         cursor = next_cursor;
     }
@@ -210,10 +211,10 @@ fn next_source_cursor(
 fn insert_source_range(
     conn: &Connection,
     platform: DataSourcePlatform,
+    policy: &str,
     after_id: &str,
     through_id: &str,
 ) -> Result<u64, TimelineServiceError> {
-    let policy = file_policy_sql(conn, platform)?;
     let sql = format!(
         "WITH activity(
             id_prefix, event_type, timestamp_field, title_prefix,
