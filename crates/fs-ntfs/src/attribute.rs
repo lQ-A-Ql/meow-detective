@@ -187,7 +187,9 @@ pub(crate) fn parse_attribute_list_entries(mut data: &[u8]) -> io::Result<Vec<At
         } else {
             let name_end = name_off + name_bytes;
             let chars = data[name_off..name_end]
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
                 .collect::<Vec<_>>();
             Some(String::from_utf16_lossy(&chars))
@@ -379,7 +381,9 @@ pub(crate) fn attribute_name_matches(
         return false;
     }
     let chars = record[name_start..name_end]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
         .collect::<Vec<_>>();
     String::from_utf16_lossy(&chars).eq_ignore_ascii_case(expected)

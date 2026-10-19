@@ -178,7 +178,9 @@ fn parse_stripes_list(raw: &str, context: &str) -> Result<Vec<(String, u64)>> {
         });
     }
     parts
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| {
             if pair[0].is_empty() {
                 return Err(LvmError::MetadataParseError {
@@ -228,7 +230,7 @@ fn split_list(raw: &str) -> Vec<&str> {
 }
 
 fn looks_like_typed_areas_list(parts: &[&str]) -> bool {
-    parts.chunks_exact(3).all(|chunk| {
+    parts.as_chunks::<3>().0.iter().all(|chunk| {
         matches!(
             chunk[0],
             "pv" | "PV"
@@ -248,7 +250,9 @@ fn looks_like_typed_areas_list(parts: &[&str]) -> bool {
 
 fn parse_typed_areas_list(parts: &[&str]) -> Result<Vec<SegmentArea>> {
     parts
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|chunk| {
             let start_extent =
                 chunk[2]
@@ -284,7 +288,9 @@ fn parse_untyped_areas_list(
     lv_names: &HashSet<&str>,
 ) -> Result<Vec<SegmentArea>> {
     parts
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| {
             let name = pair[0];
             if name.is_empty() {

@@ -47,7 +47,9 @@ pub(crate) fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
             && name_start + name_len * 2 <= off + entry_size
         {
             let chars: Vec<u16> = data[name_start..name_start + name_len * 2]
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|c| u16::from_le_bytes([c[0], c[1]]))
                 .collect();
             let name = String::from_utf16_lossy(&chars);

@@ -160,8 +160,8 @@ impl Sm3 {
 
 fn compress(state: &mut [u32; 8], block: &[u8]) {
     let mut w = [0u32; 68];
-    for (i, bytes) in block.chunks_exact(4).enumerate() {
-        w[i] = u32::from_be_bytes(bytes.try_into().expect("four byte word"));
+    for (i, bytes) in block.as_chunks::<4>().0.iter().enumerate() {
+        w[i] = u32::from_be_bytes(*bytes);
     }
     for i in 16..68 {
         let x = w[i - 16] ^ w[i - 9] ^ w[i - 3].rotate_left(15);

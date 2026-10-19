@@ -185,8 +185,8 @@ impl X64AddressSpace {
             return Ok(None);
         }
         let page = self.image.read_page(pt_base)?;
-        for (pt_index, chunk) in page.chunks_exact(8).enumerate() {
-            let pt_entry = u64::from_le_bytes(chunk.try_into().expect("8-byte chunk"));
+        for (pt_index, chunk) in page.as_chunks::<8>().0.iter().enumerate() {
+            let pt_entry = u64::from_le_bytes(*chunk);
             if pt_entry & PRESENT == 0 {
                 continue;
             }

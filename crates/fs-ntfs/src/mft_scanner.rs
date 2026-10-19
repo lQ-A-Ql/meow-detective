@@ -139,11 +139,8 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
                         let name_ns = content[0x41]; // namespace: 0=POSIX, 1=Win32, 2=DOS, 3=Win32+DOS
                         let name_start = 0x42;
                         if name_len > 0 && name_start + name_len * 2 <= content.len() {
-                            let chars: Vec<u16> = content[name_start..name_start + name_len * 2]
-                                .chunks_exact(2)
-                                .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                                .collect();
-                            let parsed_name = String::from_utf16_lossy(&chars);
+                            let parsed_name =
+                                decode_file_name(&content[name_start..name_start + name_len * 2]);
 
                             let rank = FileNameNamespace::from_raw(name_ns).rank();
                             if selected_name_rank.is_none_or(|current| rank > current) {
@@ -228,6 +225,16 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
         deleted,
         is_valid: true,
     })
+}
+
+fn decode_file_name(bytes: &[u8]) -> String {
+    let chars: Vec<u16> = bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|word| u16::from_le_bytes(*word))
+        .collect();
+    String::from_utf16_lossy(&chars)
 }
 
 fn record_name_is_valid(deleted: bool, name: &str, record_number: u64) -> bool {

@@ -134,7 +134,9 @@ impl DirectoryEntry {
     fn parse_filename_entry(data: &[u8]) -> io::Result<Self> {
         // FileName is 15 UTF-16LE characters (30 bytes) starting at offset 2
         let chars: Vec<u16> = data[2..32]
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .take_while(|&c| c != 0)
             .collect();
@@ -181,7 +183,9 @@ impl DirectoryEntry {
             .get(2..end)
             .ok_or_else(|| invalid_fs_data("invalid volume label length"))?;
         let chars: Vec<u16> = label_bytes
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
 

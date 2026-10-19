@@ -288,7 +288,10 @@ fn seal_exfat_boot_regions(data: &mut [u8], sector_size: usize) {
             checksum = checksum.rotate_right(1).wrapping_add(u32::from(*byte));
         }
     }
-    for word in data[11 * sector_size..12 * sector_size].chunks_exact_mut(4) {
+    for word in data[11 * sector_size..12 * sector_size]
+        .as_chunks_mut::<4>()
+        .0
+    {
         word.copy_from_slice(&checksum.to_le_bytes());
     }
     data.copy_within(..12 * sector_size, 12 * sector_size);

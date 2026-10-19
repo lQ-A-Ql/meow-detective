@@ -184,7 +184,7 @@ fn rejects_trailing_bytes_after_header_and_tail() {
         BlueStoreOmapKeyFamily::PerPool,
         BlueStoreOmapKeyFamily::PerPg,
     ] {
-        for marker in [b'-', b'~'] {
+        for marker in *b"-~" {
             let key = logical_key(family, marker, b"trailing");
             assert_invalid(decode_bluestore_omap_key(family, &key));
         }

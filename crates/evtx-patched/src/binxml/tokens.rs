@@ -184,7 +184,7 @@ pub(crate) fn read_template_values_cursor<'a>(
             // Sometimes however the log will contain a lot of zero fields.
             warn!(
                 "Read incorrect amount of data, cursor position is at {}, but should have ended up at {}, last descriptor was {:?}.",
-                current_position, expected_position, &descriptor
+                current_position, expected_position, descriptor
             );
 
             match u64::try_from(diff) {

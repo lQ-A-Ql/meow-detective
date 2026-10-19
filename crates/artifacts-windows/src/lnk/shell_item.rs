@@ -71,7 +71,7 @@ fn read_name(data: &[u8], offset: usize, is_unicode: bool) -> Option<String> {
     let remainder = &data[offset..];
     if is_unicode {
         let mut chars = Vec::new();
-        for chunk in remainder.chunks_exact(2) {
+        for chunk in remainder.as_chunks::<2>().0.iter() {
             let c = u16::from_le_bytes([chunk[0], chunk[1]]);
             if c == 0 {
                 break;

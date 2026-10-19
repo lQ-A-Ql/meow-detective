@@ -42,15 +42,17 @@ export interface EmulationInstall {
   bootRiskNotes?: string[];
 }
 
+export interface DirectNtfsVolume {
+  bytesPerSector: number;
+  logicalMediaBytes: number;
+  declaredVolumeBytes: number;
+  verifiedExtentBytes?: number;
+  volumeSerial: string;
+}
+
 export interface EmulationPreflight {
   dataSourceId: string;
-  directVolume?: {
-    bytesPerSector: number;
-    logicalMediaBytes: number;
-    declaredVolumeBytes: number;
-    verifiedExtentBytes?: number;
-    volumeSerial: string;
-  };
+  directVolume?: DirectNtfsVolume;
   installs: EmulationInstall[];
   recommendedBootRoute: 'recoveryMedia' | 'directSystem';
   maintenanceToolAvailable?: boolean;

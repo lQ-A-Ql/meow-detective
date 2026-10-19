@@ -104,8 +104,8 @@ pub(super) fn parse_entry(
     let mut fallback_ts = None;
     let items = &payload[ENTRY_FIXED_LEN..];
     if ctx.compact {
-        for chunk in items.chunks_exact(4).take(MAX_ENTRY_ITEMS) {
-            let object_offset = u32::from_le_bytes(chunk.try_into().unwrap_or([0; 4]));
+        for chunk in items.as_chunks::<4>().0.iter().take(MAX_ENTRY_ITEMS) {
+            let object_offset = u32::from_le_bytes(*chunk);
             if object_offset != 0 {
                 apply_data(
                     ctx,
@@ -118,7 +118,7 @@ pub(super) fn parse_entry(
             }
         }
     } else {
-        for chunk in items.chunks_exact(16).take(MAX_ENTRY_ITEMS) {
+        for chunk in items.as_chunks::<16>().0.iter().take(MAX_ENTRY_ITEMS) {
             let object_offset = read_u64_at(chunk, 0).unwrap_or(0);
             let item_hash = read_u64_at(chunk, 8).unwrap_or(0);
             if object_offset != 0 {

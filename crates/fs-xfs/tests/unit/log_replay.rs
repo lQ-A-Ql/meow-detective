@@ -171,8 +171,10 @@ fn conservative_log_clear_discards_valid_agi_unlinked_state() {
         .expect("valid AGI gets a conservative clear patch");
     assert_eq!(agi_patch.bytes.len(), XLOG_BASIC_BLOCK_SIZE);
     assert!(agi_patch.bytes[40..(40 + 64 * 4)]
-        .chunks_exact(4)
-        .all(|value| value == u32::MAX.to_be_bytes()));
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .all(|value| *value == u32::MAX.to_be_bytes()));
     assert_eq!(&agi_patch.bytes[320..328], &[0u8; 8]);
     assert_eq!(
         u32::from_le_bytes(agi_patch.bytes[312..316].try_into().unwrap()),

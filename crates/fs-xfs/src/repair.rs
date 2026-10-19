@@ -314,8 +314,10 @@ impl XfsReader {
                 continue;
             }
             if block[AGI_UNLINKED_OFFSET..AGI_UNLINKED_OFFSET + AGI_UNLINKED_COUNT * 4]
-                .chunks_exact(4)
-                .any(|value| value != u32::MAX.to_be_bytes())
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|value| *value != u32::MAX.to_be_bytes())
             {
                 return Err(XfsLogError::InvalidData(format!(
                     "AGI block for allocation group {ag} still contains an unlinked inode"

@@ -123,8 +123,10 @@ fn validates_original_clean_hives_and_controlled_real_log_recovery() {
 }
 fn seal(bytes: &mut [u8]) {
     let value = bytes[..508]
-        .chunks_exact(4)
-        .fold(0u32, |s, b| s ^ u32::from_le_bytes(b.try_into().unwrap()));
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .fold(0u32, |s, b| s ^ u32::from_le_bytes(*b));
     let value = match value {
         0 => 1,
         u32::MAX => u32::MAX - 1,

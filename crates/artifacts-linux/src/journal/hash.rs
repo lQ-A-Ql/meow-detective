@@ -27,9 +27,9 @@ pub fn siphash24(data: &[u8], key: &[u8; 16]) -> u64 {
     let mut v2 = 0x6c79_6765_6e65_7261u64 ^ k0;
     let mut v3 = 0x7465_6462_7974_6573u64 ^ k1;
 
-    let mut chunks = data.chunks_exact(8);
-    for block in &mut chunks {
-        let m = u64::from_le_bytes(block.try_into().unwrap_or([0; 8]));
+    let (chunks, remainder) = data.as_chunks::<8>();
+    for block in chunks {
+        let m = u64::from_le_bytes(*block);
         v3 ^= m;
         sipround(&mut v0, &mut v1, &mut v2, &mut v3);
         sipround(&mut v0, &mut v1, &mut v2, &mut v3);
@@ -37,7 +37,7 @@ pub fn siphash24(data: &[u8], key: &[u8; 16]) -> u64 {
     }
 
     let mut last = (data.len() as u64) << 56;
-    for (index, byte) in chunks.remainder().iter().enumerate() {
+    for (index, byte) in remainder.iter().enumerate() {
         last |= u64::from(*byte) << (8 * index);
     }
 

@@ -53,7 +53,9 @@ fn decode_hex_class_name(raw: &str) -> Option<Vec<u8>> {
     }
     cleaned
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| {
             let high = hex_char_to_nibble(pair[0])?;
             let low = hex_char_to_nibble(pair[1])?;

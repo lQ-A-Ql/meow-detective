@@ -304,7 +304,7 @@ pub fn read_codeview_identity(
     )? {
         return Ok(None);
     }
-    for entry in directories.chunks_exact(28) {
+    for entry in directories.as_chunks::<28>().0.iter() {
         if u32_at(entry, 12).ok_or(MemoryWindowsError::MalformedPe)? != 2 {
             continue;
         }

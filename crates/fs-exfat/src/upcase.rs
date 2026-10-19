@@ -43,7 +43,7 @@ impl UpcaseTable {
         let mut mappings = vec![0u16; UPCASE_CODEPOINTS];
         let mut index = 0usize;
         let mut skip = false;
-        for raw in data.chunks_exact(2) {
+        for raw in data.as_chunks::<2>().0 {
             if index >= UPCASE_CODEPOINTS {
                 break;
             }
@@ -96,7 +96,7 @@ impl UpcaseTable {
 pub(crate) fn load(reader: &ExfatReader) -> io::Result<UpcaseTable> {
     let root_data = reader.read_cluster_chain_data(reader.boot.first_cluster_of_root)?;
     let mut upcase_entry = None;
-    for chunk in root_data.chunks_exact(crate::types::DIR_ENTRY_SIZE) {
+    for chunk in root_data.as_chunks::<{ crate::types::DIR_ENTRY_SIZE }>().0 {
         match DirectoryEntry::parse(chunk)? {
             DirectoryEntry::UpcaseTable {
                 checksum,

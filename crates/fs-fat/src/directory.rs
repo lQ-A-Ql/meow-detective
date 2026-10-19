@@ -57,7 +57,7 @@ impl FatReader {
         let mut nodes = Vec::new();
         let mut long_name = String::new();
 
-        for entry in data.chunks_exact(32) {
+        for entry in data.as_chunks::<32>().0 {
             if entry[0] == 0x00 {
                 break;
             }
@@ -99,7 +99,7 @@ impl FatReader {
 fn find_entry_in_data(data: &[u8], target: &str) -> Option<DirectoryEntry> {
     let target_lower = target.to_lowercase();
     let mut long_name = String::new();
-    for entry in data.chunks_exact(32) {
+    for entry in data.as_chunks::<32>().0 {
         if entry[0] == 0x00 {
             break;
         }
@@ -129,7 +129,7 @@ fn append_long_name_part(long_name: &mut String, entry: &[u8]) {
     }
     let mut part = String::new();
     for chunk in [&entry[1..11], &entry[14..26], &entry[28..32]] {
-        for pair in chunk.chunks_exact(2) {
+        for pair in chunk.as_chunks::<2>().0 {
             let character = u16::from_le_bytes([pair[0], pair[1]]);
             if character != 0 && character != 0xFFFF {
                 part.push(char::from_u32(character as u32).unwrap_or('\u{FFFD}'));

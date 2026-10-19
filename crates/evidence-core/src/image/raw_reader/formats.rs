@@ -405,8 +405,10 @@ pub(crate) fn open_dynamic_vhd(
     file.seek(SeekFrom::Start(table_offset))?;
     file.read_exact(&mut bat)?;
     let bat = bat
-        .chunks_exact(4)
-        .map(|v| u32::from_be_bytes(v.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|v| u32::from_be_bytes(*v))
         .collect();
     Ok(Backend::DynamicVhd {
         file,
@@ -465,8 +467,10 @@ pub(crate) fn open_qcow2(
     file.seek(SeekFrom::Start(l1_offset))?;
     file.read_exact(&mut raw)?;
     let l1 = raw
-        .chunks_exact(8)
-        .map(|v| u64::from_be_bytes(v.try_into().unwrap()))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|v| u64::from_be_bytes(*v))
         .collect();
     Ok(Some((
         Backend::Qcow2 {
@@ -498,8 +502,10 @@ fn read_qcow_l1(
     file.seek(SeekFrom::Start(l1_offset))?;
     file.read_exact(&mut raw)?;
     let l1 = raw
-        .chunks_exact(8)
-        .map(|v| u64::from_be_bytes(v.try_into().unwrap()))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|v| u64::from_be_bytes(*v))
         .collect();
     Ok(Backend::Qcow2 {
         file,
@@ -662,8 +668,10 @@ fn read_vhdx_bat(
     file.seek(SeekFrom::Start(bat_offset))?;
     file.read_exact(&mut raw)?;
     Ok(raw
-        .chunks_exact(8)
-        .map(|value| u64::from_le_bytes(value.try_into().unwrap()))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|value| u64::from_le_bytes(*value))
         .collect())
 }
 pub(crate) fn read_vhd_footer(path: &Path) -> io::Result<Option<VhdFooter>> {

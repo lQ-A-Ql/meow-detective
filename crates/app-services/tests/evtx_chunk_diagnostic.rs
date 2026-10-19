@@ -222,7 +222,9 @@ fn windows_filesystem(fixture: &Path) -> (NtfsReader, u64) {
 
 fn chunk_diagnostics(bytes: &[u8]) -> Vec<serde_json::Value> {
     bytes[HEADER_SIZE..]
-        .chunks_exact(CHUNK_SIZE)
+        .as_chunks::<CHUNK_SIZE>()
+        .0
+        .iter()
         .enumerate()
         .map(|(id, chunk)| {
             let valid_magic = chunk.starts_with(b"ElfChnk\0");

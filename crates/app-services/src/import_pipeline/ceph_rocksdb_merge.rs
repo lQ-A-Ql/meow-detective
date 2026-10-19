@@ -60,19 +60,14 @@ fn merge_int64_array(
         }
         let mut merged = vec![0; right.len()];
         for ((left, right), output) in left
-            .chunks_exact(8)
-            .zip(right.chunks_exact(8))
-            .zip(merged.chunks_exact_mut(8))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .zip(right.as_chunks::<8>().0.iter())
+            .zip(merged.as_chunks_mut::<8>().0.iter_mut())
         {
-            let left = u64::from_le_bytes(
-                left.try_into()
-                    .map_err(|_| merge_error("invalid int64_array left operand width"))?,
-            );
-            let right = u64::from_le_bytes(
-                right
-                    .try_into()
-                    .map_err(|_| merge_error("invalid int64_array right operand width"))?,
-            );
+            let left = u64::from_le_bytes(*left);
+            let right = u64::from_le_bytes(*right);
             output.copy_from_slice(&left.wrapping_add(right).to_le_bytes());
         }
         Ok(merged)

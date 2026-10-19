@@ -196,7 +196,9 @@ impl GpuRuntime {
         }
         Ok(Some(Zeroizing::new(
             output
-                .chunks_exact(8)
+                .as_chunks::<8>()
+                .0
+                .iter()
                 .map(|words| {
                     let mut bytes = [0u8; 32];
                     for (i, word) in words.iter().enumerate() {

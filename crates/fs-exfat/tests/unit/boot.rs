@@ -153,7 +153,8 @@ fn make_valid_boot_region() -> Vec<u8> {
         )
         .unwrap();
         for chunk in data[region_start + 11 * sector_size..region_start + 12 * sector_size]
-            .chunks_exact_mut(4)
+            .as_chunks_mut::<4>()
+            .0
         {
             chunk.copy_from_slice(&checksum.to_le_bytes());
         }

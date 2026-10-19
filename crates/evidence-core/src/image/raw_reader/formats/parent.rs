@@ -98,7 +98,9 @@ fn read_vhdx_metadata_offset(file: &mut File) -> io::Result<u64> {
 
 fn decode_vhdx_parent_name(payload: &[u8]) -> Option<String> {
     let units: Vec<u16> = payload
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
         .collect();
     String::from_utf16_lossy(&units)
@@ -125,7 +127,9 @@ pub(crate) fn read_vhd_parent_name(path: &Path) -> io::Result<String> {
     let mut footer = [0u8; 512];
     file.read_exact(&mut footer)?;
     let value: String = footer[64..]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
         .take(224)
         .filter(|unit| *unit != 0)

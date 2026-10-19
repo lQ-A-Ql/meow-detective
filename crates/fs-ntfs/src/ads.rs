@@ -70,7 +70,9 @@ impl NtfsReader {
             return None;
         }
         let chars: Vec<u16> = record[name_start..name_end]
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
         Some(String::from_utf16_lossy(&chars))

@@ -513,7 +513,7 @@ fn jc2_visibility_and_partitions() {
                 .enumerate()
             {
                 let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
-                let ds_name = format!("jc2-part{}", candidate.partition_index.map_or(i, |idx| idx));
+                let ds_name = format!("jc2-part{}", candidate.partition_index.unwrap_or(i));
 
                 DataSourceRepo::new(conn).insert(
                     &case_id,

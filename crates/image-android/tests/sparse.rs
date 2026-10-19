@@ -13,7 +13,7 @@ fn parses_and_reads_all_data_chunk_kinds() {
     let bytes = sparse_image(
         &[
             raw_chunk(b"ABCD"),
-            fill_chunk(2, [b'X', b'Y', b'Z', b'!']),
+            fill_chunk(2, *b"XYZ!"),
             dont_care_chunk(1),
             crc_chunk(0x1234_5678),
         ],
@@ -28,7 +28,7 @@ fn parses_and_reads_all_data_chunk_kinds() {
     let file = write_temp(&sparse_image(
         &[
             raw_chunk(b"ABCD"),
-            fill_chunk(2, [b'X', b'Y', b'Z', b'!']),
+            fill_chunk(2, *b"XYZ!"),
             dont_care_chunk(100),
         ],
         103,
@@ -46,7 +46,7 @@ fn range_reads_cross_chunk_boundaries_without_expanding_source() {
     let file = write_temp(&sparse_image(
         &[
             raw_chunk(b"ABCD"),
-            fill_chunk(2, [b'1', b'2', b'3', b'4']),
+            fill_chunk(2, *b"1234"),
             dont_care_chunk(100),
         ],
         103,
@@ -94,7 +94,7 @@ fn verifies_logical_crc32_and_header_checksum() {
     // zlib CRC-32 of the expanded logical image b"ABCDXYZ!XYZ!" (AOSP sparse_crc32 vector).
     let checksum = 0xa817_8db6;
     let bytes = sparse_image_with_checksum(
-        &[raw_chunk(b"ABCD"), fill_chunk(2, [b'X', b'Y', b'Z', b'!'])],
+        &[raw_chunk(b"ABCD"), fill_chunk(2, *b"XYZ!")],
         3,
         checksum,
         checksum,

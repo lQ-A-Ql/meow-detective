@@ -533,7 +533,7 @@ fn liuyang_walk_to_screenshots_via_resolve_path() {
             Ok(mut data) => {
                 let mut buf = [0u8; 8];
                 data.read_exact(&mut buf).unwrap();
-                eprintln!("✅ resolve: '{}' → magic {:02X?}", path, &buf);
+                eprintln!("✅ resolve: '{}' → magic {:02X?}", path, buf);
             }
             Err(e) => {
                 eprintln!("❌ resolve: '{}' → {}", path, e);

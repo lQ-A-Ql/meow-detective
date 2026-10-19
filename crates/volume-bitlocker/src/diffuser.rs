@@ -36,7 +36,9 @@ const CYCLES_B: usize = 3;
 /// word-aligned, so a sub-word remainder only arises for out-of-spec input.
 pub(crate) fn to_words(sector: &[u8]) -> Vec<u32> {
     sector
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
         .collect()
 }

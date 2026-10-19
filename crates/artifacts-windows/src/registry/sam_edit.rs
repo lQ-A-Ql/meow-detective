@@ -273,7 +273,9 @@ fn username_from_v(v: &[u8]) -> Option<String> {
     let start = USER_V_HEADER_LEN.checked_add(relative)?;
     let bytes = v.get(start..start.checked_add(length)?)?;
     let units: Vec<u16> = bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
         .collect();
     let value = String::from_utf16_lossy(&units);

@@ -166,7 +166,9 @@ fn read_prop_value(prop_type: u16, data: &[u8]) -> Option<PropValue> {
             let len = std::cmp::min(read_u32_le(data, 0)? as usize, data.len().saturating_sub(4));
             let str_data = data.get(4..4 + len)?;
             let chars: Vec<u16> = str_data
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|c| u16::from_le_bytes([c[0], c[1]]))
                 .filter(|&c| c != 0) // skip null terminators
                 .collect();
@@ -207,7 +209,9 @@ fn read_prop_value(prop_type: u16, data: &[u8]) -> Option<PropValue> {
                 }
                 if end > pos {
                     let chars: Vec<u16> = data[pos..end]
-                        .chunks_exact(2)
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
                         .map(|c| u16::from_le_bytes([c[0], c[1]]))
                         .collect();
                     if let Ok(s) = String::from_utf16(&chars) {

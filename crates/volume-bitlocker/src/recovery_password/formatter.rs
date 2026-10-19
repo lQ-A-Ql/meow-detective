@@ -6,7 +6,13 @@ use super::material::RecoveryPasswordMaterial;
 
 pub(super) fn format_material(material: &RecoveryPasswordMaterial) -> RecoveryPassword {
     let mut output = String::with_capacity(55);
-    for (index, bytes) in material.expose_for_formatting().chunks_exact(2).enumerate() {
+    for (index, bytes) in material
+        .expose_for_formatting()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .enumerate()
+    {
         if index != 0 {
             output.push('-');
         }

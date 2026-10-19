@@ -18,6 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -58,9 +60,10 @@ jobs:
       - name: Audit dependencies
         run: pnpm --dir frontend audit --audit-level high
       - name: Generate frontend SBOM
-        run: pnpm dlx @cyclonedx/cyclonedx-npm --output-file frontend/frontend-sbom.json --spec-version 1.6 --output-format JSON --validate frontend/package.json
+        working-directory: frontend
+        run: pnpm dlx @cyclonedx/cdxgen@12.8.6 -t js --no-install-deps --no-recurse --no-babel --fail-on-error --spec-version 1.6 -o frontend-sbom.json .
       - name: Verify frontend SBOM
-        run: node -e "const fs=require('fs'); const bom=JSON.parse(fs.readFileSync('frontend/frontend-sbom.json','utf8')); if (bom.bomFormat !== 'CycloneDX') throw new Error('frontend SBOM is not CycloneDX');"
+        run: node -e "const fs=require('fs'); const bom=JSON.parse(fs.readFileSync('frontend/frontend-sbom.json','utf8')); if (bom.bomFormat !== 'CycloneDX' || bom.specVersion !== '1.6' || !bom.components?.length || !bom.dependencies?.length) throw new Error('frontend SBOM is missing its CycloneDX component/dependency graph');"
       - name: Upload frontend SBOM
         uses: actions/upload-artifact@v4
         with:

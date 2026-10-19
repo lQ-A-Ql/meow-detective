@@ -17,7 +17,9 @@ pub(super) fn decode_utf16le_lossy(bytes: &[u8]) -> String {
         return String::new();
     }
     let units = bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
         .collect::<Vec<_>>();
     String::from_utf16_lossy(&units)

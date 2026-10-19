@@ -151,7 +151,9 @@ pub(crate) fn txlog_data_to_string(data: &[u8]) -> Option<String> {
     // Primary path: UTF-16LE (registry REG_SZ / REG_EXPAND_SZ wire format).
     if data.len() >= 2 && data.len().is_multiple_of(2) {
         let units: Vec<u16> = data
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
         let s = String::from_utf16_lossy(&units);

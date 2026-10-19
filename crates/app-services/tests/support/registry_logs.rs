@@ -1,7 +1,9 @@
 pub fn checksum(header: &mut [u8]) {
     let value = header[..508]
-        .chunks_exact(4)
-        .fold(0u32, |x, b| x ^ u32::from_le_bytes(b.try_into().unwrap()));
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .fold(0u32, |x, b| x ^ u32::from_le_bytes(*b));
     header[508..512].copy_from_slice(
         &match value {
             0 => 1,
@@ -65,8 +67,8 @@ fn hash(bytes: &[u8]) -> u64 {
         *a = a.rotate_left(27).wrapping_add(*b);
         *b = b.rotate_left(19);
     };
-    for word in bytes.chunks_exact(4) {
-        mix(&mut a, &mut b, u32::from_le_bytes(word.try_into().unwrap()));
+    for word in bytes.as_chunks::<4>().0.iter() {
+        mix(&mut a, &mut b, u32::from_le_bytes(*word));
     }
     mix(&mut a, &mut b, 0x80);
     mix(&mut a, &mut b, 0);

@@ -167,7 +167,10 @@ fn write_exfat_raw_fixture(path: &std::path::Path) -> std::io::Result<()> {
             checksum = checksum.rotate_right(1).wrapping_add(u32::from(*byte));
         }
     }
-    for word in data[11 * SECTOR_SIZE..12 * SECTOR_SIZE].chunks_exact_mut(4) {
+    for word in data[11 * SECTOR_SIZE..12 * SECTOR_SIZE]
+        .as_chunks_mut::<4>()
+        .0
+    {
         word.copy_from_slice(&checksum.to_le_bytes());
     }
     data.copy_within(..12 * SECTOR_SIZE, 12 * SECTOR_SIZE);

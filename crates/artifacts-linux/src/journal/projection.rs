@@ -114,14 +114,14 @@ fn walk_entry_array_chain(ctx: &EntryContext<'_>, start: u64) -> Option<Vec<u64>
 
         let items = &payload[8..];
         if ctx.compact {
-            for chunk in items.chunks_exact(4) {
-                let offset = u32::from_le_bytes(chunk.try_into().unwrap_or([0; 4]));
+            for chunk in items.as_chunks::<4>().0.iter() {
+                let offset = u32::from_le_bytes(*chunk);
                 if offset != 0 {
                     offsets.push(u64::from(offset));
                 }
             }
         } else {
-            for chunk in items.chunks_exact(8) {
+            for chunk in items.as_chunks::<8>().0.iter() {
                 let offset = read_u64_at(chunk, 0)?;
                 if offset != 0 {
                     offsets.push(offset);

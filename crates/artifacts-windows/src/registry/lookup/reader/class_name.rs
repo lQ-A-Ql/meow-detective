@@ -77,7 +77,9 @@ fn decode_class_name(data: &[u8]) -> Result<Option<String>, String> {
         return Ok(None);
     }
     let units = data
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
         .collect::<Vec<_>>();
     let value = String::from_utf16_lossy(&units);

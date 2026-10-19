@@ -290,7 +290,9 @@ fn read_driver_name(
     let mut bytes = vec![0u8; length];
     address_space.read_virtual_exact(buffer, &mut bytes)?;
     let words = bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
         .collect::<Vec<_>>();
     String::from_utf16(&words).map_err(|_| MemoryWindowsError::MalformedFvevolDriverObject)

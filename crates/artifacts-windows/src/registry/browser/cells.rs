@@ -172,7 +172,9 @@ pub(super) fn name(data: &[u8], compressed: bool) -> Result<String, BrowserError
     }
     String::from_utf16(
         &data
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|v| u16::from_le_bytes([v[0], v[1]]))
             .collect::<Vec<_>>(),
     )

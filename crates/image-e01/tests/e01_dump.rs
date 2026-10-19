@@ -57,5 +57,5 @@ fn dump_first_table_bytes() {
     f.read_exact(&mut content).unwrap();
 
     eprintln!("table desc[0..32]: {:02X?}", &desc[0..32]);
-    eprintln!("table content[0..64]: {:02X?}", &content);
+    eprintln!("table content[0..64]: {:02X?}", content);
 }

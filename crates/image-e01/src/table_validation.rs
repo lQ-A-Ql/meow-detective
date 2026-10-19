@@ -103,9 +103,8 @@ fn validate_table(
         file.read_exact(&mut buffer[..length])?;
         checksum.update(&buffer[..length]);
         table.page_checksums.push(page_digest(&buffer[..length]));
-        for entry in buffer[..length].chunks_exact(4) {
-            let relative =
-                u64::from(u32::from_le_bytes(entry.try_into().unwrap_or([0; 4])) & 0x7fff_ffff);
+        for entry in buffer[..length].as_chunks::<4>().0.iter() {
+            let relative = u64::from(u32::from_le_bytes(*entry) & 0x7fff_ffff);
             let absolute = table
                 .base
                 .checked_add(relative)

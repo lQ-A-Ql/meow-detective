@@ -173,7 +173,9 @@ fn decode_shimcache_path(bytes: &[u8]) -> String {
         return String::new();
     }
     let units: Vec<u16> = bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|c| u16::from_le_bytes([c[0], c[1]]))
         .collect();
     let s = String::from_utf16_lossy(&units);
@@ -214,7 +216,7 @@ fn decode_utf16le_path(data: &[u8]) -> Option<String> {
     }
     // Decode until a null unit or non-printable character.
     let mut units = Vec::new();
-    for chunk in data.chunks_exact(2) {
+    for chunk in data.as_chunks::<2>().0.iter() {
         let unit = u16::from_le_bytes([chunk[0], chunk[1]]);
         if unit == 0 {
             break;

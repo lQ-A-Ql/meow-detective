@@ -198,8 +198,10 @@ fn write_exfat_boot_checksum(data: &mut [u8], region_offset: usize, sector_size:
             checksum = checksum.rotate_right(1).wrapping_add(u32::from(*byte));
         }
     }
-    for checksum_bytes in
-        data[region_offset + 11 * sector_size..region_offset + 12 * sector_size].chunks_exact_mut(4)
+    for checksum_bytes in data[region_offset + 11 * sector_size..region_offset + 12 * sector_size]
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
     {
         checksum_bytes.copy_from_slice(&checksum.to_le_bytes());
     }

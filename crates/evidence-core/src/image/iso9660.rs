@@ -426,7 +426,9 @@ fn decode_name(raw: &[u8], joliet: bool) -> io::Result<String> {
             return Err(invalid_data("Joliet file name has an odd byte length"));
         }
         let units = raw
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]))
             .collect::<Vec<_>>();
         String::from_utf16(&units)

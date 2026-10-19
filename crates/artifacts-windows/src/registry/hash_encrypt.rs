@@ -90,7 +90,7 @@ fn aes128_cbc_encrypt(key: &[u8], iv: &[u8; 16], plaintext: &[u8]) -> Option<Vec
     let cipher = aes::Aes128::new_from_slice(key).ok()?;
     let mut prev: [u8; 16] = *iv;
     let mut ciphertext = vec![0u8; plaintext.len()];
-    for (i, chunk) in plaintext.chunks_exact(16).enumerate() {
+    for (i, chunk) in plaintext.as_chunks::<16>().0.iter().enumerate() {
         let mut block = GenericArray::clone_from_slice(chunk);
         for j in 0..16 {
             block[j] ^= prev[j];

@@ -36,7 +36,7 @@ pub(super) fn parse_partitions(
     let mut names = HashSet::new();
     let mut owned_extents = vec![false; wire_extents.len()];
     let mut partitions = Vec::new();
-    for entry in bytes.chunks_exact(PARTITION_ENTRY_SIZE) {
+    for entry in bytes.as_chunks::<PARTITION_ENTRY_SIZE>().0 {
         let raw_name = read_name(&entry[..36], "logical partition name")?;
         let wire = WirePartition {
             attributes: read_u32(entry, 36, "partition attributes")?,
@@ -187,7 +187,9 @@ fn linear_target(
 
 pub(super) fn parse_extents(bytes: &[u8]) -> Result<Vec<WireExtent>> {
     bytes
-        .chunks_exact(EXTENT_ENTRY_SIZE as usize)
+        .as_chunks::<{ EXTENT_ENTRY_SIZE as usize }>()
+        .0
+        .iter()
         .map(|entry| {
             Ok(WireExtent {
                 num_sectors: read_u64(entry, 0, "extent sector count")?,
@@ -201,7 +203,9 @@ pub(super) fn parse_extents(bytes: &[u8]) -> Result<Vec<WireExtent>> {
 
 pub(super) fn parse_block_devices(bytes: &[u8]) -> Result<Vec<BlockDevice>> {
     let devices: Result<Vec<_>> = bytes
-        .chunks_exact(BLOCK_DEVICE_ENTRY_SIZE as usize)
+        .as_chunks::<{ BLOCK_DEVICE_ENTRY_SIZE as usize }>()
+        .0
+        .iter()
         .map(|entry| {
             Ok(BlockDevice {
                 first_logical_sector: read_u64(entry, 0, "first logical sector")?,

@@ -359,7 +359,7 @@ fn verify_boot_region_copy<R: Read + Seek + ?Sized>(
     }
 
     reader.read_exact(&mut sector)?;
-    for raw in sector.chunks_exact(4) {
+    for raw in sector.as_chunks::<4>().0 {
         let stored = u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]);
         if stored != checksum {
             return Err(invalid_fs_data(format!(

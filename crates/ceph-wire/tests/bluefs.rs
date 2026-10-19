@@ -28,7 +28,7 @@ const SERVER03_SUPER_PREFIX_HEX: &str = concat!(
 
 fn superblock_from_prefix(prefix: &str) -> Vec<u8> {
     let mut block = vec![0; BLUEFS_SUPER_BLOCK_SIZE];
-    for (index, pair) in prefix.as_bytes().chunks_exact(2).enumerate() {
+    for (index, pair) in prefix.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         let digits = std::str::from_utf8(pair).expect("ASCII fixture hex");
         block[index] = u8::from_str_radix(digits, 16).expect("valid fixture hex");
     }

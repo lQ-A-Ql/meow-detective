@@ -119,7 +119,9 @@ fn read_utf16_name(
     let mut bytes = vec![0u8; length];
     read_module_bytes(address_space, address, &mut bytes, scanned_bytes, limits)?;
     let words = bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| u16::from_le_bytes([pair[0], pair[1]]));
     let name = String::from_utf16(&words.collect::<Vec<_>>())
         .map_err(|_| MemoryWindowsError::MalformedModuleList)?;

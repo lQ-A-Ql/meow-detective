@@ -64,7 +64,7 @@ fn valid_utf16(data: &[u8], little_endian: bool) -> bool {
         return false;
     }
     let mut units = Vec::with_capacity(bytes.len() / 2);
-    for chunk in bytes.chunks_exact(2) {
+    for chunk in bytes.as_chunks::<2>().0 {
         units.push(if little_endian {
             u16::from_le_bytes([chunk[0], chunk[1]])
         } else {
@@ -151,7 +151,9 @@ fn extract_utf16_le(file_id: &str, buf: &[u8], byte_count: u64) -> ExtractedText
         return invalid_encoding(file_id, byte_count);
     }
     let chars: Vec<u16> = buf[2..]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|c| u16::from_le_bytes([c[0], c[1]]))
         .collect();
     let Ok(content) = String::from_utf16(&chars) else {
@@ -172,7 +174,9 @@ fn extract_utf16_be(file_id: &str, buf: &[u8], byte_count: u64) -> ExtractedText
         return invalid_encoding(file_id, byte_count);
     }
     let chars: Vec<u16> = buf[2..]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|c| u16::from_be_bytes([c[0], c[1]]))
         .collect();
     let Ok(content) = String::from_utf16(&chars) else {

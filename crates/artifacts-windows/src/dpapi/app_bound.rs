@@ -181,7 +181,9 @@ pub fn parse_cng_system_key_file(bytes: &[u8]) -> Result<CngSystemKeyFile, Dpapi
         ));
     }
     let units = description_raw
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
         .take_while(|unit| *unit != 0)
         .collect::<Vec<_>>();

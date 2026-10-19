@@ -263,7 +263,7 @@ impl<'a> ByteCursor<'a> {
         }
 
         let mut actual_chars = bytes.len() / 2;
-        for (idx, chunk) in bytes.chunks_exact(2).enumerate() {
+        for (idx, chunk) in bytes.as_chunks::<2>().0.iter().enumerate() {
             if chunk[0] == 0 && chunk[1] == 0 {
                 actual_chars = idx;
                 break;

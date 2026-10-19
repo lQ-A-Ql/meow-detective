@@ -78,7 +78,9 @@ impl Header {
 }
 fn filename(bytes: &[u8; 512]) -> String {
     let units: Vec<_> = bytes[48..112]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|b| u16::from_le_bytes([b[0], b[1]]))
         .take_while(|u| *u != 0)
         .collect();
@@ -106,9 +108,11 @@ pub(super) fn u64_at(bytes: &[u8], at: usize) -> Result<u64, LogReplayError> {
     ))
 }
 pub(super) fn checksum(bytes: &[u8]) -> u32 {
-    let sum = bytes[..508].chunks_exact(4).fold(0, |sum, b| {
-        sum ^ u32::from_le_bytes(b.try_into().expect("four-byte chunk"))
-    });
+    let sum = bytes[..508]
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .fold(0, |sum, b| sum ^ u32::from_le_bytes(*b));
     match sum {
         0 => 1,
         u32::MAX => u32::MAX - 1,

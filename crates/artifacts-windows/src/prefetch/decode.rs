@@ -106,12 +106,16 @@ fn read_utf16le_string(reader: &mut impl Read, byte_len: usize) -> Option<String
     let mut data = vec![0u8; byte_len.min(256)];
     reader.read_exact(&mut data).ok()?;
     let end = data
-        .chunks_exact(2)
-        .position(|chunk| chunk == [0, 0])
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .position(|chunk| *chunk == [0, 0])
         .map(|index| index * 2)
         .unwrap_or(data.len());
     let characters = data[..end]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
         .collect::<Vec<_>>();
     String::from_utf16(&characters).ok()

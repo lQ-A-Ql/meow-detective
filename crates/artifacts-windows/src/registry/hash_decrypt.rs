@@ -404,14 +404,14 @@ fn aes128_cbc_decrypt(key: &[u8], iv: &[u8; 16], ciphertext: &[u8]) -> Option<Ve
     let mut prev: [u8; 16] = *iv;
     let mut plaintext = vec![0u8; ciphertext.len()];
 
-    for (i, chunk) in ciphertext.chunks_exact(16).enumerate() {
+    for (i, chunk) in ciphertext.as_chunks::<16>().0.iter().enumerate() {
         let mut block = GenericArray::clone_from_slice(chunk);
         cipher.decrypt_block(&mut block);
         for j in 0..16 {
             block[j] ^= prev[j];
         }
         plaintext[i * 16..(i + 1) * 16].copy_from_slice(&block);
-        prev = chunk.try_into().ok()?;
+        prev = *chunk;
     }
     Some(plaintext)
 }

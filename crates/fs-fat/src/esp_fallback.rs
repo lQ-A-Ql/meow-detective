@@ -250,7 +250,7 @@ fn find_sfn_entry(
     name: &str,
 ) -> io::Result<Option<FoundEntry>> {
     let data = layout.walk_cluster_chain(dir_cluster)?;
-    for entry in data.chunks_exact(32) {
+    for entry in data.as_chunks::<32>().0 {
         if entry[0] == ENTRY_END {
             break;
         }
@@ -293,7 +293,7 @@ fn insert_directory_entry(
         let base = cluster_offset(layout, cluster)?;
         let mut data = vec![0u8; layout.cluster_size as usize];
         io.read_at(base, &mut data)?;
-        for (index, slot) in data.chunks_exact(32).enumerate() {
+        for (index, slot) in data.as_chunks::<32>().0.iter().enumerate() {
             if slot[0] == ENTRY_FREE || slot[0] == ENTRY_END {
                 let offset = base + (index * 32) as u64;
                 io.write_at(offset, entry)?;

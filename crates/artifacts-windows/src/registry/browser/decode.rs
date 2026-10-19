@@ -24,7 +24,9 @@ pub(super) fn decode(code: u32, bytes: &[u8], offset: usize, partial: bool) -> O
                 return None;
             }
             let units: Vec<_> = bytes
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|v| u16::from_le_bytes([v[0], v[1]]))
                 .collect();
             let mut text = if partial {

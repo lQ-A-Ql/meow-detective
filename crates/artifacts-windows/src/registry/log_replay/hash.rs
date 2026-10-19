@@ -3,15 +3,10 @@
 pub(super) fn marvin64(data: &[u8]) -> u64 {
     let mut lo = 0x7a4e55c5u32;
     let mut hi = 0x82ef4d88u32;
-    let mut words = data.chunks_exact(4);
-    for word in &mut words {
-        mix(
-            &mut lo,
-            &mut hi,
-            u32::from_le_bytes(word.try_into().expect("four-byte chunk")),
-        );
+    let (words, tail) = data.as_chunks::<4>();
+    for word in words {
+        mix(&mut lo, &mut hi, u32::from_le_bytes(*word));
     }
-    let tail = words.remainder();
     let mut end = 0x80u32 << (tail.len() * 8);
     for (i, byte) in tail.iter().enumerate() {
         end |= (*byte as u32) << (i * 8);
