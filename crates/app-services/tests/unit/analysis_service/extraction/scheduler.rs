@@ -56,14 +56,19 @@ fn bounded_scheduler_runs_work_in_parallel_and_applies_in_input_order() {
 
 #[test]
 fn scheduling_policy_throttles_workers_at_the_memory_soft_limit() {
+    let cpu_bound = crate::import_scheduler::default_cpu_budget().min(6);
     let normal = ExtractionSchedulingPolicy::for_runtime(6, 384, 1536);
-    assert_eq!(normal.worker_count, 6);
-    assert_eq!(normal.max_in_flight_items, 6);
+    assert_eq!(normal.worker_count, cpu_bound);
+    assert_eq!(normal.max_in_flight_items, cpu_bound);
     assert_eq!(normal.max_in_flight_bytes, DEFAULT_MAX_IN_FLIGHT_BYTES);
 
     let pressure = ExtractionSchedulingPolicy::for_runtime(6, 768, 1536);
-    assert_eq!(pressure.worker_count, 4);
-    assert_eq!(pressure.max_in_flight_items, 4);
+    assert_eq!(pressure.worker_count, cpu_bound.min(4));
+    assert_eq!(pressure.max_in_flight_items, cpu_bound.min(4));
+
+    let constrained = ExtractionSchedulingPolicy::for_runtime(6, 1152, 1536);
+    assert_eq!(constrained.worker_count, cpu_bound.min(2));
+    assert_eq!(constrained.max_in_flight_items, cpu_bound.min(2));
 
     let throttled = ExtractionSchedulingPolicy::for_runtime(6, 1536, 1536);
     assert_eq!(throttled.worker_count, 1);

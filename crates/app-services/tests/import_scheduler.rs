@@ -66,17 +66,22 @@ fn cluster_policy_respects_a_small_cpu_budget() {
 
 #[test]
 fn analysis_worker_budget_reduces_with_remaining_memory_headroom() {
+    let cpu_bound = app_services::import_scheduler::default_cpu_budget().min(6);
     assert_eq!(
         resolve_analysis_worker_count_for_memory(Some(6), 0, 1536),
-        6
+        cpu_bound
     );
     assert_eq!(
         resolve_analysis_worker_count_for_memory(Some(6), 384, 1536),
-        6
+        cpu_bound
     );
     assert_eq!(
         resolve_analysis_worker_count_for_memory(Some(6), 768, 1536),
-        4
+        cpu_bound.min(4)
+    );
+    assert_eq!(
+        resolve_analysis_worker_count_for_memory(Some(6), 1152, 1536),
+        cpu_bound.min(2)
     );
     assert_eq!(
         resolve_analysis_worker_count_for_memory(Some(6), 1344, 1536),
