@@ -42,6 +42,7 @@ members = [
   "crates/ceph-wire",
   "crates/rocksdb-wire",
   "crates/plugin-api",
+  "crates/portable-updater",
 ]
 exclude = ["vendor/iscsi-target"]
 
@@ -76,6 +77,9 @@ tauri = { version = "~2.11.3", features = [] }
 tauri-build = { version = "~2", features = [] }
 embed-resource = "~3.0"
 tauri-plugin-dialog = "~2.7.1"
+tauri-plugin-updater = { version = "~2.10.1", default-features = false, features = ["rustls-tls"] }
+minisign-verify = "~0.2"
+semver = "~1.0"
 transport = { path = "crates/transport" }
 app-services = { path = "crates/app-services" }
 domain = { path = "crates/domain" }
@@ -134,7 +138,7 @@ axum = { version = "~0.8", default-features = false, features = ["http1", "tokio
 rmcp = { version = "~3.5", default-features = false, features = ["server", "transport-streamable-http-server"] }
 tokio-util = { version = "~0.7", features = ["rt"] }
 unicode-normalization = "0.1"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression", "Win32_Storage_FileSystem", "Win32_Storage_IscsiDisc", "Win32_System_Ioctl", "Win32_System_Services"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression", "Win32_Storage_FileSystem", "Win32_Storage_IscsiDisc", "Win32_System_Ioctl", "Win32_System_Services", "Win32_System_Threading"] }
 iscsi-target = "1.0.0"
 dirs = "6"
 # Dynamic loading of parser plugin DLLs by the app-services plugin_loader host.

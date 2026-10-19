@@ -13,6 +13,7 @@ pub(crate) use crate::commands::{
         run_analysis_extraction, run_android_analysis, run_evidence_classification,
         run_kubernetes_cluster_analysis,
     },
+    app_update_commands::{check_app_update, get_app_update_info, install_app_update},
     artifact_commands::{
         get_artifact_by_id, get_artifact_families, get_artifact_family_counts, get_artifact_rows,
         get_artifact_rows_request,

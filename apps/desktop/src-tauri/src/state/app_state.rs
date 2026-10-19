@@ -26,6 +26,7 @@ pub type SharedMcpClient = Arc<AsyncMutex<McpClient>>;
 /// Application state shared across Tauri commands.
 #[derive(Clone)]
 pub struct AppState {
+    pub(crate) app_update: Arc<crate::app_update::UpdateRuntime>,
     /// Currently active case (if any).
     pub active_case: Arc<Mutex<Option<ActiveCase>>>,
     /// Serializes create/open/close/delete transitions across the active case.
@@ -71,6 +72,7 @@ impl Default for AppState {
         let runtime_cache = RuntimeCache::open_in_memory().expect("runtime cache must initialize");
 
         Self {
+            app_update: Arc::new(crate::app_update::UpdateRuntime::default()),
             active_case: Arc::new(Mutex::new(None)),
             case_lifecycle: Arc::new(AsyncMutex::new(())),
             task_manager: Arc::new(TaskManager::new()),

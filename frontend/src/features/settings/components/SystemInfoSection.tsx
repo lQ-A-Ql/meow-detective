@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { BRAND_DISPLAY_NAME } from '@/lib/branding';
 
-export function SystemInfoSection() {
+export function SystemInfoSection({ version }: { version?: string }) {
   const { t } = useTranslation();
 
   return (
@@ -12,7 +12,7 @@ export function SystemInfoSection() {
       <div className="max-w-4xl space-y-3 text-[12px] font-mono text-forensics-muted">
         <div className="flex justify-between border-b border-forensics-border-light pb-1">
           <span>{t('settings.sections.systemInfo.version')}</span>
-          <span>{BRAND_DISPLAY_NAME} 0.1.0</span>
+          <span>{BRAND_DISPLAY_NAME} {version ?? t('appUpdate.unknown')}</span>
         </div>
         <div className="flex justify-between border-b border-forensics-border-light pb-1">
           <span>{t('settings.sections.systemInfo.platform')}</span>

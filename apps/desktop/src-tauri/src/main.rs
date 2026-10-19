@@ -1,4 +1,7 @@
 fn main() {
+    if portable_updater::run_if_requested() {
+        return;
+    }
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

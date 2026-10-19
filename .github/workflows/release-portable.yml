@@ -1,0 +1,125 @@
+name: Portable release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable tag, matching all package versions
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: portable-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    environment: release-signing
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      MEOW_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate tag, versions and signing configuration
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if (-not $env:SIGNING_KEY) { throw 'TAURI_SIGNING_PRIVATE_KEY is required' }
+          python scripts/portable-release.py preflight --tag $env:RELEASE_TAG
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $revision = (git rev-parse HEAD).Trim()
+          foreach ($workflow in @('ci-frontend.yml', 'ci-backend.yml')) {
+            $json = gh api "repos/$env:GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$revision&per_page=100"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $runs = ($json | ConvertFrom-Json).workflow_runs
+            if (-not ($runs | Where-Object { $_.head_sha -eq $revision -and $_.conclusion -eq 'success' })) {
+              throw "The exact tagged commit must pass $workflow before release. Rerun this workflow after CI succeeds."
+            }
+          }
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build frontend
+        run: |
+          pnpm --dir frontend install --frozen-lockfile
+          ./scripts/check-tauri-version-alignment.ps1
+          pnpm --dir frontend build
+      - name: Build embedded WinPE tool
+        shell: pwsh
+        run: |
+          $env:RUSTFLAGS = '-C target-feature=+crt-static'
+          cargo build --release --locked -p winpe-maintenance
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "MEOW_WINPE_HELPER=$((Resolve-Path target/release/meow-winpe-maintenance.exe).Path)" >> $env:GITHUB_ENV
+      - name: Build single executable
+        run: cargo build --release --locked -p forensics-desktop
+      - name: Package portable executable with signed metadata
+        shell: pwsh
+        run: |
+          cargo install tauri-cli --version 2.11.2 --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/portable-release.py package --tag $env:RELEASE_TAG --binary target/release/forensics-desktop.exe
+      - name: Sign, verify and generate complete update index
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $version = $env:RELEASE_TAG.Substring(1)
+          $executable = "artifacts/portable-release/meow-detective_v${version}_windows-x86_64.exe"
+          cargo tauri signer sign $executable
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo run --locked -p portable-updater --example verify_release -- $executable $version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/portable-release.py manifest --tag $env:RELEASE_TAG --binary $executable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-portable-release
+          if-no-files-found: error
+          path: |
+            artifacts/portable-release/*.exe
+            artifacts/portable-release/latest.json
+
+  draft:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-portable-release
+          path: release
+      - name: Create draft release for final review
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo 'A release already exists for this tag. Existing assets will not be overwritten.' >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "Meow~Detective $RELEASE_TAG" --generate-notes release/*.exe release/latest.json

@@ -49,8 +49,8 @@ invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请�
 
 | 事实 | 当前值 |
 |---|---:|
-| Rust workspace crate | 40 |
-| Tauri commands | 176 |
+| Rust workspace crate | 41 |
+| Tauri commands | 179 |
 | app-services source modules | 45 |
 | SQLite repositories | 63 logical repositories |
 | SQLite migration scripts | 103 |
@@ -60,7 +60,7 @@ invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请�
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 12 |
 | `frontend/tests/**/*.{test,spec}.{ts,tsx}` | 143 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 176 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 179 |
 
 治理事实源：
 
@@ -88,4 +88,3 @@ pnpm --dir frontend typecheck
 
 这些命令覆盖 reader 的字节/seek 语义、物理块 provider、导入预检查、应用路由和前端
 入口；真实镜像只通过受控环境变量进入 ignored 回归，不提交到仓库。
-

@@ -6,9 +6,11 @@ import carvingZh from './carving/zh-CN.json';
 import carvingEn from './carving/en.json';
 import registryHardwareZh from './registry-hardware/zh-CN.json';
 import registryHardwareEn from './registry-hardware/en.json';
+import appUpdateZh from './app-update/zh-CN.json';
+import appUpdateEn from './app-update/en.json';
 
 /** One composition point for centrally owned, independently maintained copy modules. */
 export const i18nTranslations = {
-  'zh-CN': { ...zhCN, registryBrowser: registryBrowserZh, carving: carvingZh, registryHardware: registryHardwareZh },
-  en: { ...en, registryBrowser: registryBrowserEn, carving: carvingEn, registryHardware: registryHardwareEn },
+  'zh-CN': { ...zhCN, registryBrowser: registryBrowserZh, carving: carvingZh, registryHardware: registryHardwareZh, appUpdate: appUpdateZh },
+  en: { ...en, registryBrowser: registryBrowserEn, carving: carvingEn, registryHardware: registryHardwareEn, appUpdate: appUpdateEn },
 };

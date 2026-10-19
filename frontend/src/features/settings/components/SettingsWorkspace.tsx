@@ -15,13 +15,16 @@ import { SystemInfoSection } from '@/features/settings/components/SystemInfoSect
 import { UiDebugSection } from '@/features/settings/components/UiDebugSection';
 import type { useSettingsPageModel } from '@/features/settings/use-settings-page-model';
 import { BrandWatermark } from '@/components/brand';
+import { UpdateSection } from '@/features/app-update/components/UpdateSection';
+import type { useUpdateModel } from '@/features/app-update/use-update-model';
 
 interface SettingsWorkspaceProps {
   model: ReturnType<typeof useSettingsPageModel>;
+  update: ReturnType<typeof useUpdateModel>;
 }
 
 /** Pure settings presentation surface. Settings persistence belongs to the page model. */
-export function SettingsWorkspace({ model }: SettingsWorkspaceProps) {
+export function SettingsWorkspace({ model, update }: SettingsWorkspaceProps) {
   const { t } = useTranslation();
   const { settings, setSettings, settingsMessage, savingSettings, saveSettings } = model;
   const anchors = [
@@ -31,6 +34,7 @@ export function SettingsWorkspace({ model }: SettingsWorkspaceProps) {
     { id: 'settings-ui', label: t('settings.anchors.ui') },
     { id: 'settings-mcp', label: t('settings.anchors.mcp') },
     { id: 'settings-system', label: t('settings.anchors.system') },
+    { id: 'settings-updates', label: t('appUpdate.title') },
   ];
 
   return (
@@ -57,7 +61,10 @@ export function SettingsWorkspace({ model }: SettingsWorkspaceProps) {
             <McpSectionContainer />
     </section>
     <section id="settings-system" className="scroll-mt-4">
-            <SystemInfoSection />
+            <SystemInfoSection version={update.info?.currentVersion} />
+    </section>
+    <section id="settings-updates" className="scroll-mt-4">
+            <UpdateSection model={update} />
     </section>
         </ScrollArea>
       <ActionBar note={settingsMessage}>

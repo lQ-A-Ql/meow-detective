@@ -18,10 +18,13 @@ bench = false
 [build-dependencies]
 tauri-build.workspace = true
 embed-resource.workspace = true
+sha2.workspace = true
 
 [dependencies]
 tauri.workspace = true
 tauri-plugin-dialog = { workspace = true }
+tauri-plugin-updater.workspace = true
+portable-updater = { path = "../../../crates/portable-updater" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

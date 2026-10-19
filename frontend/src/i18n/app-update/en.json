@@ -1,0 +1,30 @@
+{
+  "title": "Application updates",
+  "current": "Current version: {{version}}",
+  "unknown": "Loading",
+  "policy": "Checks silently once every 24 hours. Finish tasks and close the case before updating. The app verifies the signature, exits, replaces its executable and restarts.",
+  "unconfigured": "This build has no update signing public key. Download an official portable release manually.",
+  "manualFirst": "This executable has no portable release metadata. Download an official release first.",
+  "available": "Version {{version}} is available",
+  "noNotes": "No release notes provided.",
+  "check": "Check for updates",
+  "install": "Download update and restart",
+  "copyLink": "Copy official download address",
+  "copied": "Download address copied",
+  "manual": "Download portable release manually",
+  "progress": "Update download progress",
+  "bytes": "Downloaded {{bytes}} bytes",
+  "confirmTitle": "Update application and restart",
+  "confirmDescription": "Finish tasks, release mounts and close the case first. The app downloads and verifies the update, exits, replaces itself and restarts. Only the application EXE changes; cases, evidence and settings are preserved.",
+  "later": "Later",
+  "phases": { "idle": "", "checking": "Checking for updates…", "current": "You are up to date.", "available": "An update is available.", "downloading": "Downloading update…", "verifying": "Verifying signature and version…", "restarting": "Exiting and restarting…", "failed": "Update incomplete." },
+  "errors": {
+    "closeCase": "Close the current case before updating.",
+    "busy": "Tasks, mounts or emulation sessions are still active. Finish them and retry.",
+    "schema": "This version changes the case database schema. Back up cases and follow the release notes to upgrade manually.",
+    "signature": "Signature or release metadata verification failed. Replacement was refused.",
+    "network": "Cannot reach the update source. Check the connection or download manually.",
+    "recovery": "An update is pending recovery. Restart the application before retrying.",
+    "failed": "Update failed. Your current program is preserved. Retry or download manually."
+  }
+}

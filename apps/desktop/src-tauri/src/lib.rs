@@ -1,3 +1,4 @@
+mod app_update;
 mod bitlocker_key_store;
 mod cache_invalidation;
 mod command_registry;
@@ -22,7 +23,11 @@ use command_registry::*;
 mod command_handler;
 
 mod desktop_runtime;
+mod embedded_maintenance;
 pub fn run() {
+    if app_update::startup::recover_if_needed() {
+        return;
+    }
     let app = desktop_runtime::builder()
         .invoke_handler(desktop_command_handler!())
         .build(tauri::generate_context!())

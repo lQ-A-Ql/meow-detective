@@ -1,4 +1,6 @@
 pub mod analysis;
+mod app_update;
+pub use app_update::*;
 mod analysis_android;
 mod analysis_base;
 mod analysis_browser;
@@ -47,7 +49,6 @@ pub mod timeline;
 pub mod topology;
 pub mod v3_governance;
 pub mod viewer;
-
 pub use analysis::{
     AmcacheApplicationDto, AmcacheApplicationFileDto, AnalysisBootRecordDto,
     AnalysisClassifiedFileDto, AnalysisExtractionPhaseDto, AnalysisExtractionProgressDto,

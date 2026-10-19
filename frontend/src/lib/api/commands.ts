@@ -5,6 +5,7 @@
  * this file. Do not use bare string literals in API modules.
  */
 export const COMMANDS = {
+  appUpdate: { INFO: 'get_app_update_info', CHECK: 'check_app_update', INSTALL: 'install_app_update' },
   carving: { SEARCH: 'search_carved_artifacts', READ: 'read_carved_artifact_range', EXPORT: 'export_carved_artifact' },
   evidenceTasks: { START: 'start_evidence_task', GET: 'get_evidence_task', CANCEL: 'cancel_evidence_task', COVERAGE: 'get_content_index_coverage' },
   registryBrowser: {

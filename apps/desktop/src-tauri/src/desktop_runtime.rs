@@ -12,7 +12,16 @@ pub(crate) fn run_app(app: tauri::App) {
 pub(crate) fn builder() -> tauri::Builder<tauri::Wry> {
     media_protocol::register(tauri::Builder::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .pubkey(portable_updater::PUBLIC_KEY)
+                .build(),
+        )
         .setup(|app| {
+            if let Err(error) = crate::embedded_maintenance::initialize() {
+                tracing::warn!(%error, "Embedded maintenance tool unavailable");
+            }
+            crate::app_update::startup::acknowledge_boot();
             cache_invalidation::register(app.handle().clone());
             let state = app.state::<AppState>().inner().clone();
             tauri::async_runtime::spawn(async move {

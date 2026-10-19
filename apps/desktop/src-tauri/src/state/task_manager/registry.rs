@@ -45,6 +45,7 @@ impl TaskScope {
 
 #[derive(Debug)]
 pub enum TaskRegistrationError {
+    UpdateInProgress,
     DuplicateTaskId(String),
     RetiredCase(String),
     RetiredDataSource {
@@ -58,6 +59,7 @@ pub enum TaskRegistrationError {
 impl fmt::Display for TaskRegistrationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UpdateInProgress => write!(formatter, "application update is in progress"),
             Self::DuplicateTaskId(task_id) => {
                 write!(formatter, "background task '{task_id}' is already active")
             }
@@ -89,6 +91,7 @@ impl std::error::Error for TaskRegistrationError {}
 
 #[derive(Default)]
 pub(super) struct RegistryState {
+    pub(super) updating: bool,
     pub(super) tasks: HashMap<String, TaskEntry>,
     pub(super) completed: HashMap<String, TaskResult>,
     pub(super) completed_order: VecDeque<String>,
@@ -128,6 +131,9 @@ pub(super) fn validate_registration(
     task_id: &str,
     scope: Option<&TaskScope>,
 ) -> Result<(), TaskRegistrationError> {
+    if state.updating {
+        return Err(TaskRegistrationError::UpdateInProgress);
+    }
     if state.tasks.contains_key(task_id) {
         return Err(TaskRegistrationError::DuplicateTaskId(task_id.to_string()));
     }

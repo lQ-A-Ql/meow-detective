@@ -19,6 +19,12 @@
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: http://qpic.cn https://qpic.cn http://*.qpic.cn https://*.qpic.cn; media-src 'self' data: evidence-media:; connect-src ipc: http://ipc.localhost; font-src 'self'"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": ["https://github.com/lQ-A-Ql/meow-detective/releases/latest/download/latest.json"]
+    }
+  },
   "bundle": {
     "active": false
   }

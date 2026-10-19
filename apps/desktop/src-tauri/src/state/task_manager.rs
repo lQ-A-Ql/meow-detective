@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 
 mod heavy_queue;
 mod registry;
+mod update_guard;
+pub use update_guard::UpdateTaskGuard;
 
 use heavy_queue::HeavyTaskQueue;
 use registry::{cancel_and_collect, thread_name, validate_registration, TaskEntry, TaskRegistry};

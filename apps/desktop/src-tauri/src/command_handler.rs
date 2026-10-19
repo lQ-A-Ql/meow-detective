@@ -1,6 +1,9 @@
 macro_rules! desktop_command_handler {
     () => {
         tauri::generate_handler![
+            get_app_update_info,
+            check_app_update,
+            install_app_update,
             create_case,
             open_case,
             close_case,

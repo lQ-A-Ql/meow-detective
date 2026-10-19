@@ -1,7 +1,7 @@
 {
   "name": "@meow-detective/workbench",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
   "packageManager": "pnpm@10.25.0",
   "scripts": {

@@ -193,6 +193,9 @@ fn resolve_maintenance_tool() -> Option<PathBuf> {
         }
     }
     let file_name = "meow-winpe-maintenance.exe";
+    if let Some(path) = crate::embedded_maintenance::path() {
+        return Some(path);
+    }
     if let Ok(executable) = std::env::current_exe() {
         let bundled = executable.parent()?.join("tools").join(file_name);
         if bundled.is_file() {
