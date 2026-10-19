@@ -79,7 +79,7 @@ impl RegistryHiveReader<'_> {
         Ok(None)
     }
 
-    fn value_offsets(&self, key: &NkRecord) -> Result<Vec<u32>, String> {
+    pub(super) fn value_offsets(&self, key: &NkRecord) -> Result<Vec<u32>, String> {
         if key.num_values == 0 || key.values_list_offset == INVALID_OFFSET {
             return Ok(Vec::new());
         }

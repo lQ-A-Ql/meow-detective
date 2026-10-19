@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { REGISTRY_ANALYSIS_TABS } from '@/design/registry-analysis';
 import type { RegistryExtractionSummary, RegistryHiveOverview, RegistryStructuredSummary } from '@/types/models';
 
-type RegistryTab = 'users' | 'activity' | 'network' | 'software' | 'usb' | 'raw';
+type RegistryTab = typeof REGISTRY_ANALYSIS_TABS[number]['key'];
 export function useRegistryPanelModel(summary?: RegistryExtractionSummary, structured?: RegistryStructuredSummary) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<RegistryTab>('users');

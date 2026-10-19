@@ -1,5 +1,6 @@
 mod close;
 mod discovery;
+mod hardware;
 mod opening;
 mod range;
 mod resolve;
@@ -10,6 +11,7 @@ mod support;
 mod values;
 pub use close::close_registry_hive;
 pub use discovery::list_registry_hives;
+pub use hardware::get_registry_hardware;
 pub use opening::open_registry_hive;
 pub use range::read_registry_value_range;
 pub use resolve::resolve_registry_key;

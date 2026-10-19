@@ -10,6 +10,7 @@ export const COMMANDS = {
   registryBrowser: {
     LIST_HIVES: 'list_registry_hives',
     OPEN_HIVE: 'open_registry_hive',
+    HARDWARE: 'get_registry_hardware',
     RESOLVE_KEY: 'resolve_registry_key',
     LIST_SUBKEYS: 'list_registry_subkeys',
     LIST_VALUES: 'list_registry_values',

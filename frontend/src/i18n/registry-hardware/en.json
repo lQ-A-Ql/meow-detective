@@ -1,0 +1,30 @@
+{
+  "title": "System hardware",
+  "description": "Read SMBIOS caches and device configuration from the evidence SYSTEM hive. Records may describe historical or virtual devices; missing fields remain unknown.",
+  "hiveLabel": "Select SYSTEM hive",
+  "refresh": "Reload hardware information",
+  "loadMore": "Find more SYSTEM hives",
+  "loading": "Reading evidence hardware information…",
+  "noHive": "No readable SYSTEM hive was found in this source",
+  "notExtracted": "Not extracted",
+  "knownMemory": "Identified memory modules: {{value}}",
+  "unknownMemory": "{{count}} memory record(s) have unknown capacity and are excluded from the total.",
+  "partial": "Some registry caches could not be parsed or exceeded a read limit. Only confirmed records are shown.",
+  "recovery": "Log recovery status: {{status}}",
+  "recordCount": "{{count}} records",
+  "offset": "Value offset {{value}}",
+  "empty": "No {{kind}} records extracted",
+  "emptyDescription": "This hive may not retain the information, or the cache may be unreadable.",
+  "groups": { "cpu": "CPU", "gpu": "GPU", "ram": "RAM", "system": "System", "baseboard": "Baseboard", "firmware": "BIOS / UEFI" },
+  "unnamed": { "cpu": "Processor", "gpu": "Display adapter", "ram": "Memory module", "system": "Computer", "baseboard": "Baseboard", "firmware": "Firmware" },
+  "columns": { "device": "Device / manufacturer", "specification": "Specifications", "source": "Registry source" },
+  "units": { "mhz": "{{value}} MHz", "mts": "{{value}} MT/s" },
+  "properties": {
+    "coreCount": "Cores", "enabledCoreCount": "Enabled cores", "threadCount": "Threads", "socket": "Socket",
+    "maxSpeedMhz": "Maximum frequency", "currentSpeedMhz": "Cached frequency", "capacityBytes": "Reported capacity", "memoryType": "Memory type",
+    "formFactor": "Form factor", "deviceLocator": "Device locator", "bankLocator": "Bank", "speedMtS": "Rated speed", "configuredSpeedMtS": "Configured speed",
+    "partNumber": "Part number", "serialNumber": "Serial number", "driverVersion": "Driver version", "driverDate": "Driver date", "chipType": "Chip",
+    "biosVersion": "Video BIOS", "matchingDeviceId": "Device ID", "version": "Version", "releaseDate": "Release date", "sku": "SKU", "family": "Product family",
+    "registryInstanceCount": "Registry device nodes"
+  }
+}

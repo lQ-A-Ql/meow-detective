@@ -1,6 +1,7 @@
 use super::types::{BASE_BLOCK_SIZE, HBIN_MAGIC, INVALID_OFFSET};
 use super::utf16::read_u32;
 
+mod bounded;
 mod cells;
 mod class_name;
 mod navigation;

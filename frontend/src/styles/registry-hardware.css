@@ -1,0 +1,19 @@
+.registry-hardware { display: flex; flex-direction: column; gap: 12px; padding: 4px 0 16px; min-width: 0; }
+.registry-hardware-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.registry-hardware-toolbar [data-slot="select-trigger"] { max-width: min(100%, 42rem); }
+.registry-hardware-note { color: var(--forensics-ink-3); font-size: 11px; line-height: 1.7; }
+.registry-hardware-path { color: var(--forensics-ink-2); font-size: 11px; overflow-wrap: anywhere; }
+.registry-hardware-total { font-size: 14px; color: var(--forensics-text); }
+.registry-hardware-group { min-width: 0; }
+.registry-hardware-group h3 { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; font-size: 12px; font-weight: 400; }
+.registry-hardware-group h3 svg { width: 15px; height: 15px; }
+.registry-hardware-group h3 small { font-size: 10px; color: var(--forensics-ink-3); }
+.registry-hardware-device, .registry-hardware-origin { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.registry-hardware-device small, .registry-hardware-origin small { color: var(--forensics-ink-3); font-size: 10px; }
+.registry-hardware-specs { display: flex; gap: 14px; align-items: center; white-space: nowrap; font-size: 11px; }
+.registry-hardware-specs > span { display: inline-flex; align-items: baseline; gap: 5px; }
+.registry-hardware-specs small { color: var(--forensics-ink-3); font-size: 10px; }
+.registry-hardware-origin code { font-size: 10px; white-space: nowrap; }
+.registry-hardware-name-column { min-width: 200px; width: 24%; }
+.registry-hardware-details-column { min-width: 300px; width: 44%; }
+.registry-hardware-source-column { min-width: 240px; width: 32%; }

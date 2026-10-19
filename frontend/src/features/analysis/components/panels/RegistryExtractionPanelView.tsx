@@ -5,6 +5,7 @@ import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { ExtractionTableSection } from './helpers';
 import { NativeRegistryBrowserContainer } from '@/features/registry-browser/containers/NativeRegistryBrowserContainer';
+import { NativeRegistryHardwareContainer } from '@/features/registry-hardware/containers/NativeRegistryHardwareContainer';
 import { createRegistryColumns } from './registry-columns';
 
 const TABLE_CONTENT_CLASS = 'm-0 flex-col overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden';
@@ -14,13 +15,17 @@ export function RegistryExtractionPanelView({ model, dataSourceId }: { model: Re
   const columns = createRegistryColumns(t);
   return (
     <div className="registry-extraction-workspace">
-      {activeTab !== 'raw' ? <ExtractionTableSection title={t('analysis.registry.title')} status={info.status} generatedAt={info.generatedAt} warnings={info.warnings} stats={stats}>{null}</ExtractionTableSection> : null}
+      {activeTab !== 'raw' && activeTab !== 'hardware' ? <ExtractionTableSection title={t('analysis.registry.title')} status={info.status} generatedAt={info.generatedAt} warnings={info.warnings} stats={stats}>{null}</ExtractionTableSection> : null}
       <PanelTabs className="min-h-0 flex-1" value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} tabs={tabs.map(({ key, label, icon }) => ({ value: key, label, icon }))} variant="underline">
         <TabsContent value="users" className={TABLE_CONTENT_CLASS}>
           <RegistryTable rows={data?.samUsers ?? []} columns={columns.samColumns} rowKey={(row) => row.username} {...empty('users')} />
         </TabsContent>
         <TabsContent value="activity" className={TABLE_CONTENT_CLASS}>
           <RegistryTable rows={data?.userAssistEntries ?? []} columns={columns.userAssistColumns} rowKey={(row) => row.programPath} {...empty('activity')} />
+        </TabsContent>
+        <TabsContent value="hardware" className={TABLE_CONTENT_CLASS}>
+          {activeTab === 'hardware' ? dataSourceId ? <NativeRegistryHardwareContainer dataSourceId={dataSourceId} />
+            : <p className="registry-browser-message">{t('registryBrowser.errors.sourceUnavailable')}</p> : null}
         </TabsContent>
         <TabsContent value="network" className={TABLE_CONTENT_CLASS}>
           <div className="space-y-3">

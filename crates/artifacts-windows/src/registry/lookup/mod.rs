@@ -1,6 +1,7 @@
 pub mod amcache;
 mod browser;
 mod fields;
+pub mod hardware;
 pub mod lsa;
 pub mod muicache;
 pub mod ntuser;

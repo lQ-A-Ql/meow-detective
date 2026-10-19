@@ -93,6 +93,16 @@ fn source_bound_sessions_read_once_and_reject_foreign_ids_cursors_and_generation
             )
             .unwrap();
             assert_eq!(session.source.source_revision, page.source_revision);
+            let hardware = read_hardware(
+                &registry,
+                &ctx,
+                RegistryHardwareRequestDto {
+                    session_id: session.session_id.clone(),
+                },
+            )
+            .unwrap();
+            assert_eq!(hardware.source, session.source);
+            assert!(hardware.devices.is_empty());
             for _ in 0..3 {
                 let key = resolve_key(
                     &registry,
@@ -138,6 +148,16 @@ fn source_bound_sessions_read_once_and_reject_foreign_ids_cursors_and_generation
                 ..case.context(conn)
             };
             assert!(matches!(
+                read_hardware(
+                    &registry,
+                    &foreign_ctx,
+                    RegistryHardwareRequestDto {
+                        session_id: session.session_id.clone()
+                    }
+                ),
+                Err(RegistryBrowserError::ExpiredSession)
+            ));
+            assert!(matches!(
                 resolve_key(
                     &registry,
                     &foreign_ctx,
@@ -158,6 +178,16 @@ fn source_bound_sessions_read_once_and_reject_foreign_ids_cursors_and_generation
             case.preview
                 .invalidate_source(&case.active.meta.id.0, "source-a")
                 .unwrap();
+            assert!(matches!(
+                read_hardware(
+                    &registry,
+                    &ctx,
+                    RegistryHardwareRequestDto {
+                        session_id: session.session_id.clone()
+                    }
+                ),
+                Err(RegistryBrowserError::ExpiredSession)
+            ));
             assert!(matches!(
                 resolve_key(
                     &registry,

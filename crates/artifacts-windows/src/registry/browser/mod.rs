@@ -2,6 +2,7 @@
 mod cells;
 mod data;
 mod decode;
+mod hardware;
 mod keys;
 mod search;
 mod search_walk;

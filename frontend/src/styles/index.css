@@ -10,6 +10,7 @@
 @import './tree.css';
 @import './resizable.css';
 @import './registry-browser.css';
+@import './registry-hardware.css';
 @import './motion/welcome.css';
 @import './motion/ink-wordmark.css';
 @import './motion/controls.css';

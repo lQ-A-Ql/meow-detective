@@ -2,6 +2,7 @@
 mod companion_logs;
 mod discovery;
 mod error;
+mod hardware;
 mod io;
 mod mapping;
 mod navigation;
@@ -16,6 +17,7 @@ pub use search_location::locate_search_hit;
 
 pub use discovery::list_hives;
 pub use error::RegistryBrowserError;
+pub use hardware::read_hardware;
 pub use navigation::{
     list_subkeys, list_values, read_value_range, resolve_key, search_hive, search_hive_with_cancel,
 };

@@ -9,6 +9,7 @@ describe('RegistryExtractionPanel', () => {
     render(createElement(RegistryExtractionPanel, {}));
     expect(screen.getByText('注册表提取')).toBeDefined();
     expect(screen.getByText('用户账户')).toBeDefined();
+    expect(screen.getByText('系统硬件')).toBeDefined();
     expect(screen.getByText('用户活动')).toBeDefined();
     expect(screen.getByText('网络配置')).toBeDefined();
     expect(screen.getByText('软件列表')).toBeDefined();
@@ -31,6 +32,9 @@ describe('RegistryExtractionPanel', () => {
     render(createElement(RegistryExtractionPanel, {}));
     fireEvent.mouseDown(screen.getByRole('tab', { name: '原始键值' }), { button: 0 });
     expect(screen.getByText('来源暂不可读')).toBeDefined();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: '系统硬件' }), { button: 0 });
+    expect(screen.getByText('来源暂不可读')).toBeDefined();
+    expect(screen.queryByText('注册表提取')).not.toBeInTheDocument();
   });
 
   it('renders SAM user data when provided', () => {

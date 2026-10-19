@@ -1,0 +1,30 @@
+{
+  "title": "系统硬件",
+  "description": "从检材 SYSTEM 注册表读取 SMBIOS 缓存与设备配置。记录可能包含历史或虚拟设备；缺失项不以本机硬件补全。",
+  "hiveLabel": "选择 SYSTEM 配置单元",
+  "refresh": "重新读取硬件信息",
+  "loadMore": "继续查找 SYSTEM 配置单元",
+  "loading": "正在读取检材硬件信息…",
+  "noHive": "此数据源未发现可读取的 SYSTEM 配置单元",
+  "notExtracted": "未提取",
+  "knownMemory": "已识别内存模块合计：{{value}}",
+  "unknownMemory": "另有 {{count}} 条内存记录的容量未知，未计入合计。",
+  "partial": "部分注册表缓存无法解析或已达到读取上限；以下仅展示可确认的记录。",
+  "recovery": "日志恢复状态：{{status}}",
+  "recordCount": "{{count}} 条记录",
+  "offset": "值内偏移 {{value}}",
+  "empty": "未提取到{{kind}}记录",
+  "emptyDescription": "配置单元可能未保存该信息，或对应缓存不可读取。",
+  "groups": { "cpu": "CPU", "gpu": "GPU", "ram": "RAM 内存", "system": "整机信息", "baseboard": "主板", "firmware": "BIOS / UEFI" },
+  "unnamed": { "cpu": "处理器", "gpu": "显示适配器", "ram": "内存模块", "system": "计算机", "baseboard": "主板", "firmware": "固件" },
+  "columns": { "device": "设备 / 厂商", "specification": "硬件规格", "source": "来源注册表键值" },
+  "units": { "mhz": "{{value}} MHz", "mts": "{{value}} MT/s" },
+  "properties": {
+    "coreCount": "核心数", "enabledCoreCount": "已启用核心", "threadCount": "线程数", "socket": "插槽",
+    "maxSpeedMhz": "最大频率", "currentSpeedMhz": "缓存频率", "capacityBytes": "报告容量", "memoryType": "内存类型",
+    "formFactor": "规格", "deviceLocator": "位置", "bankLocator": "存储体", "speedMtS": "标称速率", "configuredSpeedMtS": "配置速率",
+    "partNumber": "部件编号", "serialNumber": "序列号", "driverVersion": "驱动版本", "driverDate": "驱动日期", "chipType": "芯片",
+    "biosVersion": "显卡 BIOS", "matchingDeviceId": "设备标识", "version": "版本", "releaseDate": "发布日期", "sku": "SKU", "family": "产品系列",
+    "registryInstanceCount": "注册表设备节点数"
+  }
+}

@@ -57,6 +57,7 @@ macro_rules! desktop_command_handler {
             browse_registry_key,
             list_registry_hives,
             open_registry_hive,
+            get_registry_hardware,
             resolve_registry_key,
             list_registry_subkeys,
             list_registry_values,
