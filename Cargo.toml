@@ -72,10 +72,10 @@ num_cpus = "~1"
 rayon = "~1.12"
 tracing = "~0.1"
 tracing-subscriber = { version = "~0.3", features = ["env-filter", "fmt", "json"] }
-tauri = { version = "~2", features = [] }
+tauri = { version = "~2.11.3", features = [] }
 tauri-build = { version = "~2", features = [] }
 embed-resource = "~3.0"
-tauri-plugin-dialog = "2"
+tauri-plugin-dialog = "~2.7.1"
 transport = { path = "crates/transport" }
 app-services = { path = "crates/app-services" }
 domain = { path = "crates/domain" }

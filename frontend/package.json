@@ -45,8 +45,8 @@
     "@radix-ui/react-tooltip": "1.1.8",
     "@tanstack/react-query": "5.90.5",
     "@tanstack/react-virtual": "^3.14.21",
-    "@tauri-apps/api": "^2.12.4",
-    "@tauri-apps/plugin-dialog": "^2.8.3",
+    "@tauri-apps/api": "~2.11.1",
+    "@tauri-apps/plugin-dialog": "~2.7.3",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
@@ -90,6 +90,11 @@
     "typescript-eslint": "^8.71.2",
     "vite": "6.4.3",
     "vitest": "4.1.11"
+  },
+  "pnpm": {
+    "overrides": {
+      "@tauri-apps/api": "$@tauri-apps/api"
+    }
   },
   "peerDependencies": {
     "react": "18.3.1",

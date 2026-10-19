@@ -38,6 +38,7 @@ jobs:
       - name: Build frontend assets for the Tauri context
         run: |
           pnpm --dir frontend install --frozen-lockfile
+          ./scripts/check-tauri-version-alignment.ps1
           pnpm --dir frontend build
       - name: Format
         run: cargo fmt --all -- --check

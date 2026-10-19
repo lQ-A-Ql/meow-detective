@@ -6,6 +6,9 @@ on:
     branches: [master]
     paths:
       - 'frontend/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'scripts/check-tauri-version-alignment.ps1'
       - 'scripts/check-frontend-*.ps1'
       - 'scripts/lib/FrontendArchitectureGuard.mjs'
       - 'scripts/lib/frontend-source-policy.mjs'
@@ -29,6 +32,9 @@ jobs:
       - name: Frontend lockfile policy
         shell: pwsh
         run: ./scripts/check-frontend-lockfile-policy.ps1
+      - name: Tauri package version alignment
+        shell: pwsh
+        run: ./scripts/check-tauri-version-alignment.ps1
       - name: Typecheck
         run: pnpm --dir frontend typecheck
       - name: Lint
