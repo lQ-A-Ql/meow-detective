@@ -58,8 +58,9 @@ pub fn cleanup_osdata(
         .plan_directory_entry_removal(CONFIG_DIR_PATH, OSDATA_ENTRY_NAME)
         .map_err(|error| EmulationBypassError::Edit(error.to_string()))?;
     for edit in &removal.edits {
-        let absolute = context
-            .partition_offset
+        let absolute = disk
+            .evidence_partition_offset(context.partition_offset)
+            .map_err(|error| EmulationBypassError::Edit(error.to_string()))?
             .checked_add(edit.offset)
             .ok_or_else(|| EmulationBypassError::Edit("edit address overflows".to_string()))?;
         disk.write_all_at(absolute, &edit.bytes)
@@ -86,8 +87,9 @@ fn verify_removal(
     edits: &[fs_ntfs::PlannedDiskEdit],
 ) -> Result<(), EmulationBypassError> {
     for edit in edits {
-        let absolute = context
-            .partition_offset
+        let absolute = disk
+            .evidence_partition_offset(context.partition_offset)
+            .map_err(|error| EmulationBypassError::Edit(error.to_string()))?
             .checked_add(edit.offset)
             .ok_or_else(|| EmulationBypassError::Edit("edit address overflows".to_string()))?;
         let mut readback = vec![0u8; edit.bytes.len()];

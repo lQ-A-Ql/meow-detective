@@ -28,14 +28,27 @@ pub(crate) fn direct_volume(
         .map_err(MountServiceError::SourceMetadata)
 }
 
-/// Fail before the full container hash or workspace creation if no boot disk exists.
-pub fn validate_emulation_disk_layout(
+/// Select a derived volume only when validated recovery media is available.
+pub fn prepare_emulation_disk_layout(
     conn: &Connection,
     case: &CaseId,
     source: &DataSourceId,
-) -> Result<(), MountServiceError> {
-    if direct_volume(conn, case, source)?.is_some() {
-        return Err(MountServiceError::DirectVolumeBootLayoutRequired);
+    recovery_media_available: bool,
+) -> Result<Option<DirectNtfsVolumeDto>, MountServiceError> {
+    let geometry = direct_volume(conn, case, source)?;
+    if let Some(volume) = &geometry {
+        if !recovery_media_available {
+            return Err(MountServiceError::DirectVolumeRecoveryRequired);
+        }
+        if volume.bytes_per_sector != 512
+            || volume
+                .verified_extent_bytes
+                .is_none_or(|length| length == 0 || length / 512 > u64::from(u32::MAX) - 2048)
+        {
+            return Err(MountServiceError::Unsupported(
+                "derived NTFS boot disks require a verified 512-byte MBR-sized volume".into(),
+            ));
+        }
     }
-    Ok(())
+    Ok(geometry)
 }

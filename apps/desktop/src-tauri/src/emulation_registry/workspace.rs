@@ -151,6 +151,7 @@ pub(super) struct EmulationProvenance<'a> {
     case_id: &'a str,
     data_source_id: &'a str,
     parent_sha256: String,
+    parent_hash_scope: &'static str,
     logical_length: u64,
     firmware: &'static str,
     created_at: String,
@@ -165,6 +166,8 @@ pub(super) struct EmulationProvenance<'a> {
     maintenance_media: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     recovery_media: Option<RecoveryMediaProvenance<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    derived_ntfs: Option<&'a transport::dto::case::DerivedNtfsDiskDto>,
 }
 
 #[derive(Serialize)]
@@ -189,6 +192,7 @@ pub(super) struct ProvenanceGuest<'a> {
     pub disk_adapter: evidence_emulation::VmdkAdapter,
     pub disk_adapter_reason: &'a str,
     pub maintenance_media: bool,
+    pub derived_ntfs: Option<&'a transport::dto::case::DerivedNtfsDiskDto>,
 }
 
 impl<'a> EmulationProvenance<'a> {
@@ -199,11 +203,12 @@ impl<'a> EmulationProvenance<'a> {
         recovery_media: Option<RecoveryMediaProvenance<'a>>,
     ) -> Self {
         Self {
-            schema_version: 1,
+            schema_version: 2,
             session_id: ids.session_id,
             case_id: ids.case_id,
             data_source_id: ids.data_source_id,
             parent_sha256: encode_hex(identity.sha256()),
+            parent_hash_scope: "importSourceFingerprint",
             logical_length: identity.logical_length(),
             firmware: match guest.firmware {
                 VmwareFirmware::Bios => "bios",
@@ -225,6 +230,7 @@ impl<'a> EmulationProvenance<'a> {
             disk_adapter_reason: guest.disk_adapter_reason,
             maintenance_media: guest.maintenance_media,
             recovery_media,
+            derived_ntfs: guest.derived_ntfs,
         }
     }
 }

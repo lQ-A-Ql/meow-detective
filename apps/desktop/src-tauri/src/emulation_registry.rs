@@ -3,12 +3,10 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use app_services::mount_service::{prepare_emulation_source, MountServiceError};
+use app_services::mount_service::MountServiceError;
 use domain::{CaseId, DataSourceId};
-use evidence_block::{open_block_provider, BlockDeviceError};
-use evidence_emulation::{
-    CowDisk, CowDiskConfig, EmulationError, ParentIdentity, VmOptions, VmwareFirmware,
-};
+use evidence_block::BlockDeviceError;
+use evidence_emulation::{CowDisk, CowDiskConfig, EmulationError, VmOptions, VmwareFirmware};
 use thiserror::Error;
 
 use crate::emulation_backend::{self, EmulationBackendHandle};
@@ -33,7 +31,7 @@ use backend_status::refresh_backend;
 use guest::guest_profile_for_source;
 use guest_phase::refresh_guest_phase;
 pub(crate) use materials::maintenance_tool_available;
-use materials::{detect_firmware, image_kind, prepare_machine_materials};
+use materials::{detect_firmware, prepare_machine_materials};
 use network::{
     build_maintenance_for_guest, cleanup_prepare_failure, prepare_linux_network_if_needed,
 };

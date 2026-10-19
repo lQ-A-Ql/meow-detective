@@ -3,8 +3,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum MountServiceError {
-    #[error("the source is a direct NTFS volume without an enclosing disk boot layout; a derived boot disk is required for emulation")]
-    DirectVolumeBootLayoutRequired,
+    #[error("emulation parent view failed: {0}")]
+    DerivedVolume(#[from] evidence_emulation::EmulationError),
+    #[error("emulation block reader failed: {0}")]
+    Block(#[from] evidence_block::BlockDeviceError),
+    #[error("a direct NTFS volume requires recovery media for its generated boot disk")]
+    DirectVolumeRecoveryRequired,
     #[error("database error: {0}")]
     Database(#[from] DbError),
     #[error("source metadata could not be read: {0}")]
@@ -34,6 +38,10 @@ pub enum MountServiceError {
 impl transport::ServiceErrorCategory for MountServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::DerivedVolume(evidence_emulation::EmulationError::InvalidDerivedVolume(_)) => {
+                transport::ErrorCategory::Unsupported
+            }
+            Self::DerivedVolume(_) | Self::Block(_) => transport::ErrorCategory::Io,
             Self::Database(_) | Self::SourceMetadata(_) | Self::Reader(_) | Self::Catalog(_) => {
                 transport::ErrorCategory::Io
             }
@@ -42,7 +50,7 @@ impl transport::ServiceErrorCategory for MountServiceError {
             | Self::SourceHashMismatch { .. } => transport::ErrorCategory::Security,
             Self::SourceHashVerify(_) => transport::ErrorCategory::Io,
             Self::SourceNotReady(_) | Self::NotFound(_) => transport::ErrorCategory::Validation,
-            Self::Unsupported(_) | Self::DirectVolumeBootLayoutRequired => {
+            Self::Unsupported(_) | Self::DirectVolumeRecoveryRequired => {
                 transport::ErrorCategory::Unsupported
             }
         }

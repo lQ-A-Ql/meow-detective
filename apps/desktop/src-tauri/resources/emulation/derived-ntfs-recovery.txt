@@ -1,0 +1,33 @@
+Meow~Detective derived NTFS disk
+
+This is a generated MBR disk containing the selected evidence volume as
+partition 1. DERIVED.JSON records its exact mapping and generated identity.
+The original disk's partition table and Windows boot layout were not acquired.
+Every guest write goes to the temporary COW overlay.
+
+Run the following only INSIDE THE GUEST WinPE environment:
+
+1. Find the offline Windows drive, for example with dir C:\Windows and
+   dir D:\Windows. Do not assume that the WinPE drive letter is C:.
+2. In diskpart, use list disk, select disk, detail disk and list partition
+   to confirm the generated signature from DERIVED.JSON. Partition 1 should
+   contain the expected NTFS volume. Do not operate on any unrelated disk.
+3. Set that partition active if needed, then leave diskpart.
+4. If the offline Windows volume is W:, repair its BIOS boot files with:
+
+   bootsect /nt60 W: /mbr
+   bcdboot W:\Windows /s W: /f BIOS
+
+   Substitute the verified offline drive letter for W:. Missing tools or any
+   repair error must be resolved before attempting installed-system boot.
+5. Restart THIS SAME VM and use its firmware boot menu to select the IDE
+   hard disk. The recovery CD remains attached under the session's device
+   isolation policy. Keep the emulation session open: releasing it discards
+   all temporary repairs.
+
+Creating this partition map does not prove that the installed Windows system
+will boot. Record the actual repair commands and observed boot outcome.
+
+Microsoft command references:
+https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/bootsect-command-line-options
+https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/bcdboot-command-line-options-techref-di

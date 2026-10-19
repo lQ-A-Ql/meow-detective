@@ -47,8 +47,8 @@ fn existing_case_direct_volume_preflight_is_read_only_and_explicit() {
     assert!(geometry.declared_volume_bytes > 0);
     assert!(geometry.verified_extent_bytes.is_some());
     assert!(matches!(
-        app_services::mount_service::validate_emulation_disk_layout(&conn, &case, &source),
-        Err(app_services::mount_service::MountServiceError::DirectVolumeBootLayoutRequired)
+        app_services::mount_service::prepare_emulation_disk_layout(&conn, &case, &source, false),
+        Err(app_services::mount_service::MountServiceError::DirectVolumeRecoveryRequired)
     ));
     println!(
         "read-only preflightMs={} mediaBytes={} declaredBytes={} verifiedBytes={:?} serial={}",

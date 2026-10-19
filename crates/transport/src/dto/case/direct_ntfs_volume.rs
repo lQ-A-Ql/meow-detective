@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DirectNtfsVolumeDto {
+    pub bytes_per_sector: u32,
     pub logical_media_bytes: u64,
     pub declared_volume_bytes: u64,
     /// Includes a matching backup VBR; absent when only the primary is verified.

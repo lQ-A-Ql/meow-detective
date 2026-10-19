@@ -20,6 +20,7 @@ pub(super) fn cleanup_prepare_failure(
 pub(super) fn build_maintenance_for_guest(
     requested: bool,
     linux: bool,
+    derived_ntfs: bool,
     conn: &rusqlite::Connection,
     root: &Path,
     case_id: &CaseId,
@@ -31,7 +32,7 @@ pub(super) fn build_maintenance_for_guest(
     if linux {
         super::materials::build_linux_rescue_payload(conn, root, case_id, source_id)
     } else {
-        super::materials::build_maintenance_payload(conn, root, case_id, source_id)
+        super::materials::build_maintenance_payload(conn, root, case_id, source_id, derived_ntfs)
     }
 }
 

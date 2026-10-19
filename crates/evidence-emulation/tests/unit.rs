@@ -89,6 +89,7 @@ fn cow_disk_preserves_parent_and_applies_committed_cross_cluster_write() {
     let config = CowDiskConfig {
         cluster_size: 4096,
         max_write_length: 64 * 1024,
+        source_volume: None,
     };
     let disk = CowDisk::create(&overlay, Arc::clone(&parent), identity.clone(), config).unwrap();
     let patch = vec![0xa5; 6000];
@@ -114,6 +115,7 @@ fn cow_disk_cluster_cache_serves_repeated_reads_and_tracks_writes() {
     let config = CowDiskConfig {
         cluster_size: 4096,
         max_write_length: 64 * 1024,
+        source_volume: None,
     };
     let disk = CowDisk::create(
         &directory.path().join("overlay.cow"),
@@ -153,6 +155,7 @@ fn parent_read_does_not_hold_the_disk_lock_during_slow_io() {
             CowDiskConfig {
                 cluster_size: 4096,
                 max_write_length: 64 * 1024,
+                source_volume: None,
             },
         )
         .unwrap(),
@@ -193,6 +196,7 @@ fn cow_disk_full_cluster_write_skips_the_parent_read_through() {
     let config = CowDiskConfig {
         cluster_size: 4096,
         max_write_length: 64 * 1024,
+        source_volume: None,
     };
     let disk = CowDisk::create(
         &directory.path().join("overlay.cow"),
@@ -243,6 +247,7 @@ fn cow_disk_rejects_oversized_and_out_of_bounds_requests() {
     let config = CowDiskConfig {
         cluster_size: 4096,
         max_write_length: 512,
+        source_volume: None,
     };
     let disk = CowDisk::create(
         &directory.path().join("overlay.cow"),

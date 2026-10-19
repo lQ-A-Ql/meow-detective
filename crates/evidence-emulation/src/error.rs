@@ -4,6 +4,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum EmulationError {
+    #[error("derived NTFS boot disk is unsupported: {0}")]
+    InvalidDerivedVolume(&'static str),
     #[error("emulation I/O failed: {0}")]
     Io(#[from] std::io::Error),
     #[error("parent image read failed: {0}")]

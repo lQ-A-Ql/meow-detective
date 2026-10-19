@@ -2,10 +2,10 @@
 //! provenance, and the optional maintenance CD-ROM that carries the WinPE
 //! helper tool plus the import-index-derived target manifest into the guest.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use domain::{CaseId, DataSourceId};
-use evidence_block::EvidenceImageKind;
 use evidence_emulation::{
     build_iso, CowDisk, EmulationError, IsoFile, ParentIdentity, VmOptions, VmdkAdapter,
     VmdkDescriptor, VmwareFirmware, VmxConfig,
@@ -20,6 +20,10 @@ use super::EmulationRegistryError;
 /// The helper executable is delivered read-only inside the guest; anything
 /// larger indicates a packaging mistake rather than a legitimate build.
 const MAX_MAINTENANCE_TOOL_BYTES: u64 = 64 * 1024 * 1024;
+const DERIVED_RECOVERY_README: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/resources/emulation/derived-ntfs-recovery.txt"
+));
 
 const MAINTENANCE_README: &str = "Meow~Detective maintenance media\r\n\
 \r\n\
@@ -123,20 +127,14 @@ pub(super) fn build_maintenance_payload(
     case_root: &Path,
     case_id: &CaseId,
     data_source_id: &DataSourceId,
+    include_without_tool: bool,
 ) -> Result<Option<MaintenancePayload>, EmulationRegistryError> {
-    let Some(tool_path) = resolve_maintenance_tool() else {
-        tracing::warn!("WinPE maintenance tool was not found; maintenance media is skipped");
+    let tool = resolve_maintenance_tool()
+        .map(|path| read_maintenance_tool(&path))
+        .transpose()?;
+    if tool.is_none() && !include_without_tool {
         return Ok(None);
-    };
-    let metadata = std::fs::metadata(&tool_path)
-        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
-    if metadata.len() > MAX_MAINTENANCE_TOOL_BYTES {
-        return Err(EmulationRegistryError::Workspace(
-            "maintenance tool exceeds the delivery size limit".to_string(),
-        ));
     }
-    let tool = std::fs::read(&tool_path)
-        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
     let preflight = app_services::mount_service::emulation_preflight(
         case_conn,
         case_root,
@@ -147,9 +145,13 @@ pub(super) fn build_maintenance_payload(
     let targets_json = serde_json::to_vec_pretty(&preflight)
         .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
     Ok(Some(MaintenancePayload {
-        tool: Some(tool),
+        readme: if tool.is_some() {
+            MAINTENANCE_README
+        } else {
+            DERIVED_RECOVERY_README
+        },
+        tool,
         targets_json,
-        readme: MAINTENANCE_README,
     }))
 }
 
@@ -202,7 +204,7 @@ fn resolve_maintenance_tool() -> Option<PathBuf> {
     if packaged.is_file() {
         return Some(packaged);
     }
-    let dev = manifest_dir.join("../../target/release").join(file_name);
+    let dev = manifest_dir.join("../../../target/release").join(file_name);
     dev.is_file().then_some(dev)
 }
 
@@ -213,6 +215,7 @@ pub(super) struct MachineSpec<'a> {
     pub disk_adapter: VmdkAdapter,
     pub disk_adapter_reason: &'a str,
     pub network_pci_slot: u16,
+    pub derived_ntfs: Option<&'a transport::dto::case::DerivedNtfsDiskDto>,
 }
 
 pub(super) fn prepare_machine_materials(
@@ -255,35 +258,10 @@ pub(super) fn prepare_machine_materials(
         vmx = vmx.with_recovery_iso(media.vmware_path())?;
     }
     if let Some(payload) = maintenance {
-        let mut iso_files = vec![
-            IsoFile {
-                name: "TARGETS.JSON",
-                data: &payload.targets_json,
-            },
-            IsoFile {
-                name: "README.TXT",
-                data: payload.readme.as_bytes(),
-            },
-        ];
-        if let Some(tool) = &payload.tool {
-            iso_files.insert(
-                0,
-                IsoFile {
-                    name: "MEOWMTN.EXE",
-                    data: tool,
-                },
-            );
-        }
-        let iso = build_iso(&iso_files)?;
-        let iso_path = workspace
-            .write_maintenance_iso(&iso)
-            .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
-        let iso_text = iso_path.to_str().ok_or_else(|| {
-            EmulationRegistryError::Workspace(
-                "maintenance ISO path is not valid Unicode".to_string(),
-            )
-        })?;
-        vmx = vmx.with_maintenance_iso(iso_text)?;
+        let iso_path = write_guest_maintenance(workspace, payload, spec.derived_ntfs)?;
+        let iso_text = super::recovery_media::vmware_path(&iso_path)
+            .map_err(|error| EmulationRegistryError::RecoveryMedia(error.to_string()))?;
+        vmx = vmx.with_maintenance_iso(&iso_text)?;
     }
     let rendered_vmx = vmx.render();
     VmxConfig::validate_rendered(&rendered_vmx, options, maintenance.is_some())?;
@@ -300,6 +278,7 @@ pub(super) fn prepare_machine_materials(
                 disk_adapter,
                 disk_adapter_reason: spec.disk_adapter_reason,
                 maintenance_media: maintenance.is_some(),
+                derived_ntfs: spec.derived_ntfs,
             },
             recovery_media.map(|media| RecoveryMediaProvenance {
                 file_name: media.file_name(),
@@ -369,11 +348,66 @@ fn gpt_has_bios_boot_partition(
     )
 }
 
-pub(super) fn image_kind(
-    kind: app_services::mount_service::PreparedPhysicalImageKind,
-) -> EvidenceImageKind {
-    match kind {
-        app_services::mount_service::PreparedPhysicalImageKind::E01 => EvidenceImageKind::E01,
-        app_services::mount_service::PreparedPhysicalImageKind::Raw => EvidenceImageKind::Raw,
+fn write_guest_maintenance(
+    workspace: &SessionWorkspace,
+    payload: &MaintenancePayload,
+    derived: Option<&transport::dto::case::DerivedNtfsDiskDto>,
+) -> Result<PathBuf, EmulationRegistryError> {
+    let derived_json = derived
+        .map(serde_json::to_vec_pretty)
+        .transpose()
+        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
+    let mut files = vec![
+        IsoFile {
+            name: "TARGETS.JSON",
+            data: &payload.targets_json,
+        },
+        IsoFile {
+            name: "README.TXT",
+            data: payload.readme.as_bytes(),
+        },
+    ];
+    if let Some(tool) = &payload.tool {
+        files.push(IsoFile {
+            name: "MEOWMTN.EXE",
+            data: tool,
+        });
     }
+    if let Some(json) = &derived_json {
+        files.push(IsoFile {
+            name: "DERIVED.JSON",
+            data: json,
+        });
+        files.push(IsoFile {
+            name: "DERIVED.TXT",
+            data: DERIVED_RECOVERY_README.as_bytes(),
+        });
+    }
+    let iso = build_iso(&files)?;
+    workspace
+        .write_maintenance_iso(&iso)
+        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))
+}
+
+fn read_maintenance_tool(path: &Path) -> Result<Vec<u8>, EmulationRegistryError> {
+    let file = std::fs::File::open(path)
+        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
+    let metadata = file
+        .metadata()
+        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
+    if metadata.len() > MAX_MAINTENANCE_TOOL_BYTES {
+        return Err(EmulationRegistryError::Workspace(
+            "maintenance tool exceeds the delivery size limit".into(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_MAINTENANCE_TOOL_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
+    if bytes.len() as u64 > MAX_MAINTENANCE_TOOL_BYTES {
+        return Err(EmulationRegistryError::Workspace(
+            "maintenance tool exceeds the delivery size limit".into(),
+        ));
+    }
+    Ok(bytes)
 }

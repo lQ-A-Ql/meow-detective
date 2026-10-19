@@ -121,6 +121,7 @@ describe('useEmulationWorkspaceModel', () => {
       installs: [],
       recommendedBootRoute: 'recoveryMedia',
       directVolume: {
+        bytesPerSector: 512,
         logicalMediaBytes: 2_000_396_321_280,
         declaredVolumeBytes: 275_402_194_432,
         verifiedExtentBytes: 275_402_194_944,
@@ -132,6 +133,9 @@ describe('useEmulationWorkspaceModel', () => {
     expect(result.current.canStart).toBe(false);
     expect(mocks.prepare).not.toHaveBeenCalled();
     expect(mocks.launch).not.toHaveBeenCalled();
+    mocks.openDialog.mockResolvedValue('C:\\Tools\\recovery.iso');
+    await act(async () => result.current.pickRecoveryIso());
+    await waitFor(() => expect(result.current.canStart).toBe(true));
   });
 
   it('owns the selected PE path and launches it without direct-boot confirmation', async () => {

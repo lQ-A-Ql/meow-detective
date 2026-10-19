@@ -2042,6 +2042,7 @@
       "failed": "待清理"
     },
     "launch": {
+      "directVolumeDerived": "将创建派生磁盘并将该 NTFS 卷放入新分区。请先启动 WinPE，在临时会话中修复缺失的 Windows 引导布局。",
       "title": "启动配置",
       "source": "证据数据源",
       "sourcePlaceholder": "选择 E01 或 RAW 数据源",
@@ -2177,7 +2178,10 @@
     },
     "errors": {
       "sourceRequired": "请选择证据数据源。",
-      "directVolumeBootLayout": "该检材是 NTFS 逻辑卷，未包含完整磁盘的分区与引导布局。仿真需要派生启动磁盘；仍可浏览和提取文件。",
+      "directVolumeRecoveryRequired": "该检材是直接 NTFS 逻辑卷。请选择 WinPE 恢复介质以创建独立的派生磁盘。",
+      "derivedBootSectorSizeUnsupported": "当前派生启动磁盘仅支持 512 字节扇区的 NTFS 卷。",
+      "derivedBootBackupUnverified": "尚未验证备份引导扇区，暂不能创建派生启动磁盘。",
+      "derivedBootMbrCapacity": "该卷超过当前派生 MBR 磁盘支持的容量。",
       "preflightRequired": "镜像预检尚未成功完成，已阻止创建仿真会话。",
       "linuxAccountRequired": "已启用 Linux 绕密，但目标账户尚未成功解析或选择。",
       "osdataNonEmpty": "OSDATA 为非空目录，已拒绝自动清除。",

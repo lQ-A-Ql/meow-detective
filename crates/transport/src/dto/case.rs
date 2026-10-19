@@ -166,7 +166,9 @@ pub struct RecentCaseDto {
     pub opened_at: String,
 }
 
+mod derived_ntfs_disk;
 mod direct_ntfs_volume;
+pub use derived_ntfs_disk::DerivedNtfsDiskDto;
 #[cfg(test)]
 #[path = "../../tests/unit/dto/case.rs"]
 mod tests;

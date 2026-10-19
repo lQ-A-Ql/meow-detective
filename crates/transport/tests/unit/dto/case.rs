@@ -1,8 +1,35 @@
 use super::*;
 
 #[test]
+fn derived_ntfs_disk_provenance_round_trip_distinguishes_source_and_guest() {
+    let dto = crate::dto::case::DerivedNtfsDiskDto {
+        layout_version: 1,
+        source_media_bytes: 2_000_396_321_280,
+        source_volume_offset: 0,
+        source_volume_bytes: 275_402_194_944,
+        source_volume_serial: "4482D035A65A1162".into(),
+        guest_partition_index: 1,
+        guest_partition_offset: 1_048_576,
+        guest_disk_bytes: 275_403_243_520,
+        generated_disk_signature: 123,
+        source_hidden_sectors: 649216,
+        guest_hidden_sectors: 2048,
+        generated_mbr_sha256: "aa".repeat(32),
+        boot_repair_required: true,
+    };
+    let json = serde_json::to_value(&dto).unwrap();
+    assert_eq!(json["sourceVolumeOffset"], 0);
+    assert_eq!(json["guestPartitionOffset"], 1048576);
+    assert_eq!(
+        serde_json::from_value::<crate::dto::case::DerivedNtfsDiskDto>(json).unwrap(),
+        dto
+    );
+}
+
+#[test]
 fn direct_ntfs_geometry_round_trips_without_a_fabricated_partition_uuid() {
     let dto = crate::dto::DirectNtfsVolumeDto {
+        bytes_per_sector: 512,
         logical_media_bytes: 2_000_396_321_280,
         declared_volume_bytes: 275_402_194_432,
         verified_extent_bytes: Some(275_402_194_944),

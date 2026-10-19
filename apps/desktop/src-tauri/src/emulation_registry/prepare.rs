@@ -11,16 +11,18 @@ impl EmulationRegistry {
         options: VmOptions,
     ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
         self.reject_duplicate(case_root, data_source_id)?;
-        let recovery_media = recovery_iso
-            .map(RecoveryMedia::open)
-            .transpose()
-            .map_err(|error| EmulationRegistryError::RecoveryMedia(error.to_string()))?;
-        let (provider, identity) = open_verified_parent(case_conn, case_id, data_source_id)?;
+        let recovery_media = open_recovery_media(recovery_iso)?;
+        let parent = app_services::mount_service::prepare_emulation_parent(
+            case_conn,
+            case_id,
+            data_source_id,
+            recovery_media.is_some(),
+        )?;
         let guest = guest_profile_for_source(case_conn, case_root, case_id, data_source_id)?;
         let session_id = format!("emulation-{}", uuid::Uuid::new_v4());
         let workspace = SessionWorkspace::create(case_root, &session_id)
             .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
-        let (disk, firmware, backend) = match build_session_disk(&workspace, provider, &identity) {
+        let (disk, firmware, backend) = match build_session_disk(&workspace, &parent) {
             Ok(parts) => parts,
             Err(error) => {
                 workspace.remove_best_effort();
@@ -41,6 +43,7 @@ impl EmulationRegistry {
         let maintenance = build_maintenance_for_guest(
             recovery_media.is_some(),
             guest.is_linux,
+            parent.source_volume.is_some(),
             case_conn,
             case_root,
             case_id,
@@ -52,13 +55,14 @@ impl EmulationRegistry {
         })?;
         let materials = prepare_machine_materials(
             &workspace,
-            &identity,
+            &parent.identity,
             materials::MachineSpec {
                 firmware,
                 guest_os: &guest.guest_os,
                 disk_adapter: guest.disk_adapter,
                 disk_adapter_reason: &guest.disk_adapter_reason,
                 network_pci_slot: guest.network_pci_slot,
+                derived_ntfs: parent.derived_ntfs.as_ref(),
             },
             ProvenanceIds {
                 session_id: &session_id,
@@ -74,15 +78,12 @@ impl EmulationRegistry {
             workspace.remove_best_effort();
             return Err(error);
         }
-        let status = EmulationSessionStatus {
-            session_id: session_id.clone(),
-            data_source_id: data_source_id.0.clone(),
-            state: EmulationState::DescriptorReady,
-            guest_phase: EmulationGuestPhase::Unknown,
-            logical_length: identity.logical_length(),
-            maintenance_media: maintenance.is_some(),
-            error: None,
-        };
+        let status = descriptor_ready_status(
+            &session_id,
+            data_source_id,
+            parent.identity.logical_length(),
+            maintenance.is_some(),
+        );
         self.insert_entry(
             session_id,
             EmulationEntry {
@@ -99,36 +100,50 @@ impl EmulationRegistry {
         Ok(status)
     }
 }
-fn open_verified_parent(
-    case_conn: &rusqlite::Connection,
-    case_id: &CaseId,
-    data_source_id: &DataSourceId,
-) -> Result<(Arc<dyn evidence_block::BlockProvider>, ParentIdentity), EmulationRegistryError> {
-    app_services::mount_service::validate_emulation_disk_layout(
-        case_conn,
-        case_id,
-        data_source_id,
-    )?;
-    let prepared = prepare_emulation_source(case_conn, data_source_id)?;
-    let provider = open_block_provider(&prepared.source_path, image_kind(prepared.image_kind))?;
-    let identity = ParentIdentity::new(provider.len(), prepared.parent_sha256)?;
-    Ok((provider, identity))
+fn open_recovery_media(
+    path: Option<&Path>,
+) -> Result<Option<RecoveryMedia>, EmulationRegistryError> {
+    path.map(RecoveryMedia::open)
+        .transpose()
+        .map_err(|error| EmulationRegistryError::RecoveryMedia(error.to_string()))
 }
 
 fn build_session_disk(
     workspace: &SessionWorkspace,
-    provider: Arc<dyn evidence_block::BlockProvider>,
-    identity: &ParentIdentity,
+    parent: &app_services::mount_service::PreparedEmulationParent,
 ) -> Result<(Arc<CowDisk>, VmwareFirmware, EmulationBackendHandle), EmulationRegistryError> {
     let disk = Arc::new(CowDisk::create(
         workspace.overlay_path(),
-        provider,
-        identity.clone(),
-        CowDiskConfig::default(),
+        Arc::clone(&parent.provider),
+        parent.identity.clone(),
+        CowDiskConfig {
+            source_volume: parent.source_volume,
+            ..Default::default()
+        },
     )?);
+    if let Some(mapping) = parent.source_volume {
+        mapping.seed_guest_boot_parameters(&disk)?;
+    }
     let firmware = detect_firmware(&disk)?;
     let backend =
         emulation_backend::start(Arc::clone(&disk), workspace.root(), workspace.mount_point())
             .map_err(|error| EmulationRegistryError::Backend(error.to_string()))?;
     Ok((disk, firmware, backend))
+}
+
+fn descriptor_ready_status(
+    session_id: &str,
+    source: &DataSourceId,
+    length: u64,
+    maintenance: bool,
+) -> EmulationSessionStatus {
+    EmulationSessionStatus {
+        session_id: session_id.to_string(),
+        data_source_id: source.0.clone(),
+        state: EmulationState::DescriptorReady,
+        guest_phase: EmulationGuestPhase::Unknown,
+        logical_length: length,
+        maintenance_media: maintenance,
+        error: None,
+    }
 }

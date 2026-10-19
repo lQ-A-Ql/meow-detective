@@ -45,6 +45,7 @@ export interface EmulationInstall {
 export interface EmulationPreflight {
   dataSourceId: string;
   directVolume?: {
+    bytesPerSector: number;
     logicalMediaBytes: number;
     declaredVolumeBytes: number;
     verifiedExtentBytes?: number;

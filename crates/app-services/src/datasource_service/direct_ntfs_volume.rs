@@ -64,6 +64,7 @@ fn read_geometry<R: Read + Seek + ?Sized>(
         }
     }
     Ok(Some(DirectNtfsVolumeDto {
+        bytes_per_sector: bps as u32,
         logical_media_bytes: media,
         declared_volume_bytes: declared,
         verified_extent_bytes,

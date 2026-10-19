@@ -184,7 +184,8 @@ pub(crate) fn open_partition_filesystem_over_overlay(
     let reader = crate::emulation_cow_reader::CowDiskReader::new(Arc::clone(disk));
     let window = evidence_core::PartitionWindowReader::new(
         Box::new(reader),
-        context.partition_offset,
+        disk.evidence_partition_offset(context.partition_offset)
+            .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))?,
         context.partition_length,
     )
     .map_err(|error| EmulationBypassError::EvidenceRead(error.to_string()))?;
@@ -218,6 +219,7 @@ fn read_whole_file(fs: &fs_ntfs::NtfsReader, path: &str) -> Result<Vec<u8>, Emul
 
 /// Bounds-check one extent write against the declared partition length.
 fn check_extent_write(
+    disk: &CowDisk,
     context: &PartitionFilesystem,
     extent_offset: u64,
     length: u64,
@@ -232,8 +234,8 @@ fn check_extent_write(
             ));
         }
     }
-    context
-        .partition_offset
+    disk.evidence_partition_offset(context.partition_offset)
+        .map_err(|error| EmulationBypassError::Unsupported(error.to_string()))?
         .checked_add(extent_offset)
         .ok_or_else(|| EmulationBypassError::Unsupported("extent address overflows".into()))
 }
@@ -254,7 +256,8 @@ fn write_hive_through_overlay(
         if start >= end {
             continue;
         }
-        let absolute = check_extent_write(context, extent.volume_offset, (end - start) as u64)?;
+        let absolute =
+            check_extent_write(disk, context, extent.volume_offset, (end - start) as u64)?;
         disk.write_all_at(absolute, &hive[start..end])
             .map_err(|error| EmulationBypassError::OverlayWrite(error.to_string()))?;
     }
@@ -279,7 +282,8 @@ fn verify_overlay_write(
         if start >= end {
             continue;
         }
-        let absolute = check_extent_write(context, extent.volume_offset, (end - start) as u64)?;
+        let absolute =
+            check_extent_write(disk, context, extent.volume_offset, (end - start) as u64)?;
         disk.read_exact_at(absolute, &mut readback[start..end])
             .map_err(|error| EmulationBypassError::OverlayWrite(error.to_string()))?;
     }

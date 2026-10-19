@@ -128,7 +128,7 @@ fn has_iso_extension(path: &Path) -> bool {
         .is_some_and(|value| value.eq_ignore_ascii_case("iso"))
 }
 
-fn vmware_path(path: &Path) -> Result<String, RecoveryMediaError> {
+pub(super) fn vmware_path(path: &Path) -> Result<String, RecoveryMediaError> {
     let value = path.to_str().ok_or(RecoveryMediaError::InvalidFile)?;
     let value = value.strip_prefix(r"\\?\").unwrap_or(value);
     let bytes = value.as_bytes();

@@ -339,6 +339,7 @@ fn map_emulation_error(error: EmulationError) -> NTSTATUS {
         EmulationError::OutOfBounds { .. } => STATUS_DISK_FULL,
         EmulationError::WriteTooLarge { .. } => STATUS_INVALID_BUFFER_SIZE,
         EmulationError::ArithmeticOverflow
+        | EmulationError::InvalidDerivedVolume(_)
         | EmulationError::InvalidLogicalLength(_)
         | EmulationError::InvalidClusterSize(_)
         | EmulationError::InvalidExtentPath(_)

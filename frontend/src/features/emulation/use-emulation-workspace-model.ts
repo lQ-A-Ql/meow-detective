@@ -237,6 +237,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
       && !linuxAccountsQuery.error
       && Boolean(linuxUsername)
       && linuxAccountsQuery.data?.some((account) => account.username === linuxUsername));
+  const sourceBootPolicy = derivedBootPolicy(preflightQuery.data, Boolean(recoveryIsoPath));
   const startMutation = useMutation({
     mutationFn: async (allowDirectBoot: boolean) => {
       if (!selectedSourceId) {
@@ -245,8 +246,8 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
       if (!preflightReady) {
         throw new Error(t('emulationPage.errors.preflightRequired'));
       }
-      if (preflightQuery.data?.directVolume) {
-        throw new Error(t('emulationPage.errors.directVolumeBootLayout'));
+      if (!sourceBootPolicy.allowed) {
+        throw new Error(t(sourceBootPolicy.hintKey ?? 'emulationPage.errors.preflightRequired'));
       }
       if (!linuxBypassReady) {
         throw new Error(t('emulationPage.errors.linuxAccountRequired'));
@@ -392,8 +393,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     selectSource: setSelectedSourceId,
     preflight: preflightQuery.data,
     preflightLoading: preflightQuery.isFetching,
-    sourceLayoutHint: preflightQuery.data?.directVolume
-      ? t('emulationPage.errors.directVolumeBootLayout') : undefined,
+    sourceLayoutHint: sourceBootPolicy.hintKey ? t(sourceBootPolicy.hintKey) : undefined,
     recoveryIsoPath,
     bootRoute: recoveryIsoPath ? 'recoveryMedia' : 'directSystem',
     pickRecoveryIso,
@@ -436,7 +436,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     },
     canStart: Boolean(selectedSourceId)
       && preflightReady
-      && !preflightQuery.data?.directVolume
+      && sourceBootPolicy.allowed
       && Boolean(linuxBypassReady)
       && !activeSourceIds.has(selectedSourceId)
       && !startMutation.isPending
@@ -453,3 +453,4 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     confirmDirectBoot,
   };
 }
+import { derivedBootPolicy } from '@/features/emulation/derived-boot-policy';

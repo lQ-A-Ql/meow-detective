@@ -1,4 +1,34 @@
-use super::{validate_boot_descriptors, RecoveryMedia, RecoveryMediaError};
+use super::{validate_boot_descriptors, vmware_path, RecoveryMedia, RecoveryMediaError};
+
+#[test]
+#[cfg(windows)]
+fn canonical_workspace_iso_path_is_valid_for_generated_maintenance_drive() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("maintenance.iso");
+    std::fs::write(&path, b"generated maintenance CD").unwrap();
+    let canonical = path.canonicalize().unwrap();
+    assert!(canonical.to_string_lossy().starts_with(r"\\?\"));
+    let normalized = vmware_path(&canonical).unwrap();
+    assert!(!normalized.starts_with(r"\\?\"));
+    let config =
+        evidence_emulation::VmxConfig::new("disk.vmdk", evidence_emulation::VmwareFirmware::Bios)
+            .unwrap()
+            .with_recovery_iso(r"C:\Recovery\WinPE.iso")
+            .unwrap()
+            .with_maintenance_iso(&normalized)
+            .unwrap();
+    evidence_emulation::VmxConfig::validate_rendered(
+        &config.render(),
+        evidence_emulation::VmOptions::default(),
+        true,
+    )
+    .unwrap();
+    assert!(vmware_path(std::path::Path::new(
+        r"\\?\UNC\server\share\maintenance.iso"
+    ))
+    .is_err());
+    assert!(vmware_path(std::path::Path::new(r"\\.\C:\maintenance.iso")).is_err());
+}
 
 #[test]
 fn bootable_iso_is_validated_and_fingerprinted() {

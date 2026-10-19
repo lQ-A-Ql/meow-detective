@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+#[path = "emulation_registry/derived_private.rs"]
+mod derived_private;
+
 use evidence_block::{BlockDeviceError, BlockProvider};
 use evidence_emulation::{CowDisk, CowDiskConfig, ParentIdentity};
 use sha2::{Digest, Sha256};
@@ -145,6 +148,7 @@ fn real_e01_mount_uses_a_descriptor_and_sparse_cow_without_materializing_the_dis
             disk_adapter: evidence_emulation::VmdkAdapter::Ide,
             disk_adapter_reason: "test",
             network_pci_slot: 160,
+            derived_ntfs: None,
         },
         super::workspace::ProvenanceIds {
             session_id: &session_id,
@@ -239,6 +243,7 @@ fn real_e01_launches_vmware_from_the_sparse_mounted_extent() {
             disk_adapter: evidence_emulation::VmdkAdapter::Ide,
             disk_adapter_reason: "test",
             network_pci_slot: 160,
+            derived_ntfs: None,
         },
         super::workspace::ProvenanceIds {
             session_id: &session_id,

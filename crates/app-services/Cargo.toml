@@ -71,6 +71,7 @@ containers-pst.workspace = true
 tempfile.workspace = true
 base64.workspace = true
 evidence-emulation.workspace = true
+evidence-block.workspace = true
 libloading.workspace = true
 dirs.workspace = true
 plugin-api = { path = "../plugin-api" }
@@ -84,5 +85,4 @@ tempfile.workspace = true
 sha2.workspace = true
 testing.workspace = true
 winpe-maintenance.workspace = true
-evidence-block.workspace = true
 tracing-subscriber.workspace = true

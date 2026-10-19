@@ -16,6 +16,7 @@ const MAX_CLUSTER_SIZE: u32 = 1024 * 1024;
 pub struct CowDiskConfig {
     pub cluster_size: u32,
     pub max_write_length: usize,
+    pub source_volume: Option<crate::SourceVolumeMapping>,
 }
 
 impl Default for CowDiskConfig {
@@ -23,6 +24,7 @@ impl Default for CowDiskConfig {
         Self {
             cluster_size: DEFAULT_CLUSTER_SIZE,
             max_write_length: DEFAULT_MAX_WRITE,
+            source_volume: None,
         }
     }
 }
@@ -40,6 +42,14 @@ struct DiskState {
 }
 
 impl CowDisk {
+    pub fn source_volume_mapping(&self) -> Option<crate::SourceVolumeMapping> {
+        self.config.source_volume
+    }
+    pub fn evidence_partition_offset(&self, offset: u64) -> Result<u64, EmulationError> {
+        self.config
+            .source_volume
+            .map_or(Ok(offset), |mapping| mapping.partition_offset(offset))
+    }
     pub fn create(
         overlay_path: &Path,
         parent: Arc<dyn BlockProvider>,
@@ -233,6 +243,17 @@ fn validate_config(
     // import fingerprint and fails closed before `CowDisk::create`.
     if parent.len() != identity.logical_length() {
         return Err(EmulationError::ParentMismatch);
+    }
+    if let Some(mapping) = config.source_volume {
+        if mapping.guest_length()? != parent.len()
+            || mapping.source_volume_length == 0
+            || !mapping.source_volume_length.is_multiple_of(512)
+            || mapping.disk_signature == 0
+            || mapping.source_volume_length > mapping.source_media_length
+            || mapping.guest_volume_offset != crate::NTFS_GUEST_VOLUME_OFFSET
+        {
+            return Err(EmulationError::ParentMismatch);
+        }
     }
     Ok(())
 }
