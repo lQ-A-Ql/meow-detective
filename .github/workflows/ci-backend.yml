@@ -6,6 +6,7 @@ on:
     paths:
       - 'crates/**'
       - 'apps/desktop/src-tauri/**'
+      - 'frontend/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
@@ -27,6 +28,16 @@ jobs:
         with:
           components: rustfmt, clippy, llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build frontend assets for the Tauri context
+        run: |
+          pnpm --dir frontend install --frozen-lockfile
+          pnpm --dir frontend build
       - name: Format
         run: cargo fmt --all -- --check
       - name: Stage 0 backend structure guards

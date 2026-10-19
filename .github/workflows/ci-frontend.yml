@@ -9,6 +9,7 @@ on:
       - 'scripts/lib/FrontendArchitectureGuard.mjs'
       - 'scripts/lib/frontend-source-policy.mjs'
       - '.github/workflows/ci-frontend.yml'
+      - '.github/workflows/ci-backend.yml'
   pull_request:
     branches: [master]
 
