@@ -129,7 +129,7 @@ describe('CaseWelcomeForms', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: '最近打开案件' }));
-    fireEvent.click(screen.getByTitle('删除案件'));
+    fireEvent.click(screen.getByRole('button', { name: '删除案件' }));
     expect(onRequestDeleteCase).toHaveBeenCalledWith({
       caseRoot: 'C:\\cases\\case-1',
       name: 'Case One',
@@ -137,5 +137,21 @@ describe('CaseWelcomeForms', () => {
     });
     expect(onOpenCase).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('binds each visible deletion action to its own case record', () => {
+    const onRequestDeleteCase = vi.fn();
+    const onOpenCase = vi.fn();
+    const cases = [
+      { caseRoot: 'D:/cases/' + 'long-parent-directory/'.repeat(12) + 'first', name: 'Same name', openedAt: '2026-10-19' },
+      { caseRoot: 'E:/cases/second', name: 'Same name', openedAt: '2026-10-18' },
+    ];
+    render(<CaseWelcomeForms {...baseWelcomeProps({ recentCases: cases, onRequestDeleteCase, onOpenCase })} />);
+    fireEvent.click(screen.getByRole('button', { name: '最近打开案件' }));
+    const actions = screen.getAllByRole('button', { name: '删除案件' });
+    expect(actions).toHaveLength(2);
+    fireEvent.click(actions[1]);
+    expect(onRequestDeleteCase).toHaveBeenCalledExactlyOnceWith(cases[1]);
+    expect(onOpenCase).not.toHaveBeenCalled();
   });
 });
