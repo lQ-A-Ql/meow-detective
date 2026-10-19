@@ -16,6 +16,7 @@ import {
 } from '@/lib/api/case';
 import { getFileTree } from '@/lib/api/files';
 import i18n from '@/i18n';
+import { resetSearchContext } from './hooks/reset-search-context';
 
 export function useCurrentCase() {
   return useQuery({ queryKey: ['case', 'current'], queryFn: getCurrentCase, retry: false });
@@ -57,7 +58,8 @@ export function useCreateCase() {
   return useMutation({
     mutationFn: (params: { caseRoot: string; name: string; examiner?: string }) =>
       createCase(params.caseRoot, params.name, params.examiner),
-    onSuccess: () => {
+    onSuccess: (summary) => {
+      resetSearchContext(qc, summary);
       qc.invalidateQueries({ queryKey: ['case'] });
     },
   });
@@ -67,7 +69,8 @@ export function useOpenCase() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (caseRoot: string) => openCase(caseRoot),
-    onSuccess: () => {
+    onSuccess: (summary) => {
+      resetSearchContext(qc, summary);
       qc.invalidateQueries({ queryKey: ['case'] });
       qc.invalidateQueries({ queryKey: ['files'] });
       qc.invalidateQueries({ queryKey: ['jobs'] });
@@ -100,6 +103,7 @@ export function useCloseCase() {
   return useMutation({
     mutationFn: () => closeCase(),
     onSuccess: () => {
+      resetSearchContext(qc, null);
       qc.invalidateQueries();
     },
   });

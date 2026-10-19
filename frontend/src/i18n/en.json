@@ -3,11 +3,40 @@
     "scanned": "Scanned {{processed}} entries",
     "entries": "{{processed}} / {{total}} entries",
     "states": { "queued": "Queued", "running": "Processing evidence", "cancelling": "Cancelling", "completed": "Completed", "failed": "Failed", "cancelled": "Cancelled" },
-    "progress": "{{processed}} / {{total}} bytes", "progressLabel": "Evidence task progress", "failed": "Evidence task failed ({{code}}). Retry to create a new attempt."
+    "progress": "{{processed}} / {{total}} bytes",
+    "progressLabel": "Evidence task progress",
+    "failed": "Evidence task failed ({{code}}). Retry to create a new attempt."
   },
   "evidenceDigest": { "scope": "Digest scope", "revision": "Evidence revision", "stale": "Evidence has changed; recalculate this result", "historyFailed": "Digest history could not be read", "scopes": { "containerFile": "Container file", "containerSet": "Container set", "logicalDisk": "Logical disk", "partition": "Partition", "file": "Logical file", "derivedEvidence": "Derived evidence" } },
   "nestedEvidence": { "title": "Nested evidence import", "openResult": "Browse derived evidence" },
-  "contentIndex": { "build": "Build content index", "selectSource": "Select one source to build or inspect its content index", "complete": "Content classification complete ({{expected}} entries)", "notBuilt": "Content index not built ({{expected}} entries)", "stale": "Evidence changed; rebuild the content index", "coverageFailed": "Could not read content coverage", "statuses": { "indexed": "Text indexed", "binary": "Binary", "oversized": "Over size limit", "unreadable": "Unreadable", "unsupportedEncoding": "Unsupported encoding", "notApplicable": "Not applicable" }, "sources": { "metadata": "Metadata", "filename": "Filename", "path": "Path", "content": "Indexed content", "artifactField": "Artifact field" } },
+  "contentIndex": {
+    "build": "Build content index",
+    "selectSource": "Choose an index source",
+    "complete": "Content classification complete ({{expected}} entries)",
+    "notBuilt": "Content index not built ({{expected}} entries)",
+    "stale": "Evidence changed; rebuild the content index",
+    "coverageFailed": "Could not read content coverage",
+    "statuses": {
+      "indexed": "Text indexed",
+      "binary": "Binary",
+      "oversized": "Over size limit",
+      "unreadable": "Unreadable",
+      "unsupportedEncoding": "Unsupported encoding",
+      "notApplicable": "Not applicable"
+    },
+    "sources": {
+      "metadata": "Metadata",
+      "filename": "Filename",
+      "path": "Path",
+      "content": "Indexed content",
+      "artifactField": "Artifact field"
+    },
+    "title": "File content index",
+    "sourceLabel": "Content index source",
+    "rebuild": "Rebuild content index",
+    "refresh": "Refresh index coverage",
+    "loading": "Loading index coverage…"
+  },
   "common": {
     "retry": "Retry",
     "clipboardUnavailable": "Clipboard access is unavailable or was denied",
@@ -1168,7 +1197,7 @@
     "exportFailed": "Failed to export recovered file: {{message}}"
   },
   "search": {
-    "inputPlaceholder": "Enter a file, directory or path",
+    "inputPlaceholder": "Search names, content or paths; leave empty to browse the index",
     "inputLabel": "File name search",
     "pathToggle": "Path",
     "allTypes": "All types",
@@ -1185,7 +1214,7 @@
       "took": "Query {{ms}} ms"
     },
     "coverage": {
-      "incomplete": "Index coverage is incomplete; re-analysis required {{indexed}}/{{expected}}",
+      "incomplete": "File name and path index not ready: {{indexed}}/{{expected}}",
       "complete": "Index covers {{indexed}} entries / {{sources}} sources",
       "missingTitle": "Sources not ready: {{sources}}"
     },
@@ -1202,10 +1231,19 @@
       "noMatch": "No matching files",
       "noMatchDescription": "Try changing the name, path or filters.",
       "start": "Enter a file name to search",
-      "startDescription": "Search only covers files and directories from imported sources."
+      "startDescription": "Search only covers files and directories from imported sources.",
+      "indexEmpty": "No searchable files in this case",
+      "indexEmptyDescription": "File name and path indexes appear here after a source finishes importing."
     },
     "clearQuery": "Clear search",
-    "clear": "Clear filters"
+    "clear": "Clear filters",
+    "previewSelected": "Preview selected file",
+    "locateSelected": "Locate selected entry",
+    "refresh": "Refresh file index",
+    "loading": "Searching file index…",
+    "locating": "Locating file…",
+    "noCase": "Open a case first",
+    "doubleClickHint": "Click to select · Double-click to locate"
   },
   "infrastructure": {
     "caseLabel": "Current case",
@@ -1650,7 +1688,8 @@
       "deleteCaseTitle": "Delete case",
       "deleteCaseDescription": "Delete case “{{name}}”? This permanently deletes the case directory and all of its data.",
       "deleteDataSourceTitle": "Delete data source",
-      "deleteDataSourceDescription": "Delete data source “{{name}}”? This permanently deletes its file entries, timeline events, and extracted artifacts."
+      "deleteDataSourceDescription": "Delete data source “{{name}}”? This permanently deletes its file entries, timeline events, and extracted artifacts.",
+      "chooseCaseToDelete": "Choose a case to delete"
     }
   },
   "bottomDrawer": {

@@ -11,6 +11,7 @@ import { DataSourcesPanel } from '@/features/case/components/CaseOverview';
 import type { CaseHomeModel } from '@/features/case/use-case-home-model';
 import { ImportDataSourceDialog } from '@/features/import/components/ImportDataSourceDialog';
 import { BrandWatermark } from '@/components/brand';
+import { RecentCasesDialog } from './RecentCasesDialog';
 
 interface CaseHomeWorkspaceProps {
   model: CaseHomeModel;
@@ -24,7 +25,7 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
       open={Boolean(deleteTarget)}
       onOpenChange={(open) => { if (!open) model.setDeleteTarget(undefined); }}
       title={deleteTarget?.kind === 'case' ? t('caseHome.confirm.deleteCaseTitle') : t('caseHome.confirm.deleteDataSourceTitle')}
-      description={deleteTarget?.kind === 'case' ? t('caseHome.confirm.deleteCaseDescription', { name: deleteTarget.value.name }) : t('caseHome.confirm.deleteDataSourceDescription', { name: deleteTarget?.value.name ?? '' })}
+      description={deleteTarget?.kind === 'case' ? <>{t('caseHome.confirm.deleteCaseDescription', { name: deleteTarget.value.name })}<span className="mt-2 block break-all font-mono">{deleteTarget.value.caseRoot}</span></> : t('caseHome.confirm.deleteDataSourceDescription', { name: deleteTarget?.value.name ?? '' })}
       cancelLabel={t('caseHome.actions.cancel')}
       confirmLabel={t('caseHome.actions.delete')}
       onConfirm={model.confirmDelete}
@@ -50,10 +51,16 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
               <span className="text-forensics-line-2">·</span>
               <span>{t('caseHome.workspace.examiner')}: {model.currentCase.examiner ?? '-'}</span>
             </div>
-            <div className="mt-4 flex justify-center">
+            <div className="mt-4 flex justify-center gap-3">
               <Tooltip content={model.importButtonLabel}>
                 <Button type="button" variant="forensicsPrimary" size="icon" aria-label={model.importButtonLabel} onClick={() => model.setImportDialogOpen(true)}>
                   <ActionIcon name="upload" />
+                </Button>
+              </Tooltip>
+              <Tooltip content={t('caseHome.actions.deleteCase')}>
+                <Button type="button" variant="forensicsDangerGhost" size="icon" aria-label={t('caseHome.actions.deleteCase')}
+                  onClick={() => model.setDeleteCaseDialogOpen(true)}>
+                  <ActionIcon name="trash" />
                 </Button>
               </Tooltip>
             </div>
@@ -61,6 +68,8 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
         </section>
 
         <ImportDataSourceDialog open={model.importDialogOpen} onOpenChange={model.setImportDialogOpen} onImport={model.importDataSource} importPending={model.importPending} pickSourcePath={model.pickImportSourcePath} pickDirectoryPath={model.pickImportDirectoryPath} listLocalDisks={model.listLocalDisks} />
+        <RecentCasesDialog open={model.deleteCaseDialogOpen} onOpenChange={model.setDeleteCaseDialogOpen}
+          intent="delete" recentCases={model.recentCases} onOpen={(item) => model.openCase(item.caseRoot)} onDelete={model.requestDeleteCase} />
 
         <section className="min-h-0 flex-1 overflow-hidden px-4 py-4 lg:px-8" aria-label={t('caseHome.dataSources.title')}>
           <div className="flex h-full min-h-0 flex-col overflow-hidden bg-forensics-paper">

@@ -43,7 +43,7 @@ describe('search hooks', () => {
   });
 
   it('fetches search results for a given query', async () => {
-    const { result } = renderHook(() => useSearchResults('evidence'), {
+    const { result } = renderHook(() => useSearchResults('case-a', 'evidence'), {
       wrapper: createWrapper(),
     });
 
@@ -53,7 +53,7 @@ describe('search hooks', () => {
   });
 
   it('passes query text to the search API', async () => {
-    const { result } = renderHook(() => useSearchResults('malware ransomware'), {
+    const { result } = renderHook(() => useSearchResults('case-a', 'malware ransomware'), {
       wrapper: createWrapper(),
     });
 
@@ -78,7 +78,7 @@ describe('search hooks', () => {
       },
     });
 
-    const { result } = renderHook(() => useSearchResults('nonexistent'), {
+    const { result } = renderHook(() => useSearchResults('case-a', 'nonexistent'), {
       wrapper: createWrapper(),
     });
 
@@ -89,7 +89,7 @@ describe('search hooks', () => {
   it('exposes error state when search fails', async () => {
     mocks.searchFiles.mockRejectedValue(new Error('index not ready'));
 
-    const { result } = renderHook(() => useSearchResults('test'), {
+    const { result } = renderHook(() => useSearchResults('case-a', 'test'), {
       wrapper: createWrapper(),
     });
 
@@ -100,7 +100,7 @@ describe('search hooks', () => {
   it('does not retry on failure', async () => {
     mocks.searchFiles.mockRejectedValue(new Error('timeout'));
 
-    const { result } = renderHook(() => useSearchResults('timeout test'), {
+    const { result } = renderHook(() => useSearchResults('case-a', 'timeout test'), {
       wrapper: createWrapper(),
     });
 
@@ -128,7 +128,7 @@ describe('search hooks', () => {
         coverage: { complete: true },
       });
 
-    const { result } = renderHook(() => useInfiniteSearchResults('evidence', 2), {
+    const { result } = renderHook(() => useInfiniteSearchResults('case-a', 'evidence', 2), {
       wrapper: createWrapper(),
     });
 
@@ -178,7 +178,7 @@ describe('search hooks', () => {
         items: [],
         coverage: { complete: true },
       });
-    const { result } = renderHook(() => useInfiniteSearchResults('evidence', 2), {
+    const { result } = renderHook(() => useInfiniteSearchResults('case-a', 'evidence', 2), {
       wrapper: createWrapper(),
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -198,7 +198,7 @@ describe('search hooks', () => {
       items: [{ fileId: 'f1' }, { fileId: 'f2' }],
       coverage: { complete: true },
     });
-    const { result } = renderHook(() => useInfiniteSearchResults('evidence', 2), {
+    const { result } = renderHook(() => useInfiniteSearchResults('case-a', 'evidence', 2), {
       wrapper: createWrapper(),
     });
 
@@ -206,5 +206,50 @@ describe('search hooks', () => {
     expect(result.current.data?.pages[0]?.total).toBe(200_000);
     expect(result.current.hasNextPage).toBe(false);
     expect(mocks.searchFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('browses an empty query only when a case is open', async () => {
+    const { result, rerender } = renderHook(({ caseId }) => useInfiniteSearchResults(caseId, ''), {
+      initialProps: { caseId: undefined as string | undefined }, wrapper: createWrapper(),
+    });
+    expect(mocks.searchFiles).not.toHaveBeenCalled();
+    rerender({ caseId: 'case-a' });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mocks.searchFiles).toHaveBeenCalledWith('', 0, 100, undefined, expect.any(Object));
+  });
+
+  it('keeps identical text in different cases in separate caches', async () => {
+    mocks.searchFiles.mockResolvedValueOnce({ total: 1, items: [{ fileId: 'case-a-file' }], tookMs: 0 });
+    const { result, rerender } = renderHook(({ caseId }) => useInfiniteSearchResults(caseId, 'same'), {
+      initialProps: { caseId: 'case-a' }, wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.data?.pages[0]?.items[0].fileId).toBe('case-a-file'));
+    mocks.searchFiles.mockResolvedValueOnce({ total: 1, items: [{ fileId: 'case-b-file' }], tookMs: 0 });
+    rerender({ caseId: 'case-b' });
+    expect(result.current.data).toBeUndefined();
+    await waitFor(() => expect(result.current.data?.pages[0]?.items[0].fileId).toBe('case-b-file'));
+    expect(mocks.searchFiles).toHaveBeenCalledTimes(2);
+  });
+
+  it('bounds loaded rows without changing the actual total or over-fetching the final page', async () => {
+    mocks.searchFiles.mockImplementation(async (_query, _offset, limit, cursor) => {
+      const start = cursor ? Number(cursor) : 0;
+      return { total: 8_000, tookMs: 0, items: Array.from({ length: limit }, (_, index) => ({ fileId: `file-${start+index}` })), nextCursor: String(start+limit) };
+    });
+    const { result } = renderHook(() => useInfiniteSearchResults('case-a', ''), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.pages[0].items).toHaveLength(100);
+    expect(result.current.hasNextPage).toBe(true);
+    for (let count = 0; count < 10; count++) {
+      await act(async () => {
+        const page = await result.current.fetchNextPage();
+        expect(page.error).toBeNull();
+      });
+      await waitFor(() => expect(result.current.data?.pages).toHaveLength(count + 2));
+    }
+    expect(result.current.data?.pages.flatMap((page) => page.items)).toHaveLength(5_000);
+    expect(result.current.data?.pages[0]?.total).toBe(8_000);
+    expect(result.current.hasNextPage).toBe(false);
+    expect(mocks.searchFiles).toHaveBeenLastCalledWith('', 0, 400, '4600', expect.any(Object));
   });
 });

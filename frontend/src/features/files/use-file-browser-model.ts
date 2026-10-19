@@ -83,6 +83,7 @@ export function useFileBrowserModel() {
     FILE_BROWSER_PAGE_LIMIT,
     pagination.fileSortKey,
     pagination.fileSortDirection,
+    currentCase?.id,
   );
 
   useEffect(() => {

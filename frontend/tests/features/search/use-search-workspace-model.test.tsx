@@ -1,11 +1,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   openPreview: vi.fn(),
   search: vi.fn(),
   setSelected: vi.fn(),
+  jump: vi.fn(),
+  closePreview: vi.fn(),
 }));
 
 vi.mock('@/features/case/hooks', () => ({
@@ -16,6 +19,7 @@ vi.mock('@/features/case/hooks', () => ({
 vi.mock('@/features/search/use-content-index-model', () => ({ useContentIndexModel: () => ({ available: false }) }));
 
 vi.mock('@/features/search/hooks', () => ({
+  MAX_LOADED_SEARCH_RESULTS: 5_000,
   useInfiniteSearchResults: (...args: unknown[]) => {
     mocks.search(...args);
     return {
@@ -42,14 +46,19 @@ vi.mock('@/features/search/use-search-preview-model', () => ({
   useSearchPreviewModel: () => ({
     open: false,
     openHit: mocks.openPreview,
+    onOpenChange: mocks.closePreview,
   }),
+}));
+vi.mock('@/features/files/hooks/use-file-navigation', () => ({
+  useFileNavigation: () => ({ jump: mocks.jump, pending: false, errorText: undefined }),
 }));
 
 import { useSearchWorkspaceModel } from '@/features/search/use-search-workspace-model';
 
 function wrapper(initialEntry = '/search') {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return function SearchRouter({ children }: { children: React.ReactNode }) {
-    return <MemoryRouter initialEntries={[initialEntry]}>{children}</MemoryRouter>;
+    return <QueryClientProvider client={client}><MemoryRouter initialEntries={[initialEntry]}>{children}</MemoryRouter></QueryClientProvider>;
   };
 }
 
@@ -71,6 +80,7 @@ describe('useSearchWorkspaceModel', () => {
     expect(result.current.queryInput).toBe('report.7z');
     expect(result.current.activeQuery).toBe('report.7z');
     expect(mocks.search).toHaveBeenLastCalledWith(
+      'case-a',
       'report.7z',
       100,
       expect.objectContaining({ sortKey: 'name', sortDirection: 'asc' }),
@@ -89,6 +99,7 @@ describe('useSearchWorkspaceModel', () => {
     act(() => vi.advanceTimersByTime(1));
     expect(result.current.activeQuery).toBe('beta');
     expect(mocks.search).toHaveBeenLastCalledWith(
+      'case-a',
       'beta',
       100,
       expect.objectContaining({ sortKey: 'name', sortDirection: 'asc' }),
@@ -104,6 +115,7 @@ describe('useSearchWorkspaceModel', () => {
     expect(result.current.activeQuery).toBe('evidence');
     expect(result.current.options.entryType).toBe('directory');
     expect(mocks.search).toHaveBeenLastCalledWith(
+      'case-a',
       'evidence',
       100,
       expect.objectContaining({ entryType: 'directory' }),
@@ -118,10 +130,12 @@ describe('useSearchWorkspaceModel', () => {
     act(() => result.current.setExtensionInput('.txt; log,'));
 
     expect(result.current.extensionInput).toBe('.txt; log,');
+    expect(result.current.options.extensions).toEqual([]);
+    act(() => vi.advanceTimersByTime(180));
     expect(result.current.options.extensions).toEqual(['txt', 'log']);
   });
 
-  it('opens file content only after an explicit result-row click', () => {
+  it('selects on a single click and resolves a double-click navigation without opening a modal', () => {
     const { result } = renderHook(() => useSearchWorkspaceModel(), {
       wrapper: wrapper('/search?q=evidence'),
     });
@@ -142,6 +156,9 @@ describe('useSearchWorkspaceModel', () => {
     expect(mocks.openPreview).not.toHaveBeenCalled();
     act(() => result.current.onHitRowClick(hit));
     expect(mocks.setSelected).toHaveBeenCalledWith('file-1');
-    expect(mocks.openPreview).toHaveBeenCalledWith(hit);
+    expect(mocks.openPreview).not.toHaveBeenCalled();
+    act(() => result.current.jumpToFile(hit));
+    expect(mocks.closePreview).toHaveBeenCalledWith(false);
+    expect(mocks.jump).toHaveBeenCalledWith('file-1');
   });
 });

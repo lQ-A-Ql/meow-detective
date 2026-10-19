@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useContentIndexModel } from './use-content-index-model';
-import { useInfiniteSearchResults } from '@/features/search/hooks';
+import { MAX_LOADED_SEARCH_RESULTS, useInfiniteSearchResults } from '@/features/search/hooks';
+import { useFileNavigation } from '@/features/files/hooks/use-file-navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearchSelection } from '@/features/search/use-search-page-model';
 import { useSearchPreviewModel } from '@/features/search/use-search-preview-model';
 import type {
@@ -32,17 +34,32 @@ export function useSearchWorkspaceModel() {
   const [options, setOptions] = useState<SearchRequestOptions>(DEFAULT_OPTIONS);
   const { data: dataSources } = useDataSources();
   const { data: currentCase } = useCurrentCase();
-  const contentIndex = useContentIndexModel(currentCase?.id, options.dataSourceIds.length === 1 ? options.dataSourceIds[0] : undefined);
-  const searchQuery = useInfiniteSearchResults(activeQuery, 100, options);
+  const cache = useQueryClient();
+  const caseId = currentCase?.id;
+  const [owner, setOwner] = useState(caseId);
+  if (owner !== caseId) {
+    setOwner(caseId);
+    setOptions(DEFAULT_OPTIONS);
+    setExtensionInputState('');
+  }
+  const indexSources = useMemo(() => (dataSources ?? []).filter((source) => !source.importState || source.importState === 'ready'), [dataSources]);
+  const [indexTarget, setIndexTarget] = useState<{ caseId?: string; sourceId?: string }>({ caseId });
+  const indexSourceId = indexTarget.caseId === caseId && indexSources.some((source) => source.id === indexTarget.sourceId)
+    ? indexTarget.sourceId : indexSources[0]?.id;
+  const contentIndex = useContentIndexModel(caseId, indexSourceId);
+  const fileNavigation = useFileNavigation(caseId);
+  const searchQuery = useInfiniteSearchResults(caseId, activeQuery, 100, options);
   const searchHits = useMemo(
-    () => searchQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    () => Array.from(new Map(searchQuery.data?.pages.flatMap((page) => page.items).map((hit) => [hit.fileId, hit] as const) ?? []).values()),
     [searchQuery.data],
   );
   const firstPage = searchQuery.data?.pages[0];
   const { selectedSearchHitId, setSelectedSearchHitId } = useSearchSelection();
-  const preview = useSearchPreviewModel();
+  const preview = useSearchPreviewModel(caseId);
   const { openHit: openHitPreview } = preview;
   const selectedHit = searchHits.find((hit) => hit.fileId === selectedSearchHitId);
+  const pages = searchQuery.data?.pages;
+  const localLimitReached = searchHits.length >= MAX_LOADED_SEARCH_RESULTS && Boolean(pages?.[pages.length - 1]?.nextCursor);
 
   useEffect(() => {
     const nextQuery = urlQuery?.trim() || DEFAULT_QUERY;
@@ -56,22 +73,32 @@ export function useSearchWorkspaceModel() {
     return () => window.clearTimeout(timer);
   }, [activeQuery, queryInput]);
 
+  useEffect(() => {
+    const extensions = Array.from(new Set(extensionInput.split(/[;,\s]+/)
+      .map((extension) => extension.trim().replace(/^\.+/, '').toLowerCase()).filter(Boolean)));
+    if (extensions.join(';') === options.extensions.join(';')) return;
+    const timer = window.setTimeout(() => setOptions((current) => ({ ...current, extensions })), 180);
+    return () => window.clearTimeout(timer);
+  }, [extensionInput, options.extensions]);
+
   const setOption = useCallback(<K extends keyof SearchRequestOptions>(key: K, value: SearchRequestOptions[K]) => {
     setOptions((current) => ({ ...current, [key]: value }));
   }, []);
   const setExtensionInput = useCallback((value: string) => {
     setExtensionInputState(value);
-    const extensions = value
-      .split(/[;,\s]+/)
-      .map((extension) => extension.trim().replace(/^\.+/, ''))
-      .filter(Boolean);
-    setOptions((current) => ({ ...current, extensions }));
   }, []);
   const onHitRowClick = useCallback((hit: SearchFileHit) => {
     setSelectedSearchHitId(hit.fileId);
-    openHitPreview(hit);
-  }, [openHitPreview, setSelectedSearchHitId]);
-  const loadNextPage = useCallback(() => { void searchQuery.fetchNextPage(); }, [searchQuery]);
+  }, [setSelectedSearchHitId]);
+  const previewSelected = useCallback(() => { if (selectedHit) openHitPreview(selectedHit); }, [selectedHit, openHitPreview]);
+  const jumpToFile = useCallback((hit: SearchFileHit) => {
+    setSelectedSearchHitId(hit.fileId);
+    preview.onOpenChange(false);
+    fileNavigation.jump(hit.fileId);
+  }, [fileNavigation, preview, setSelectedSearchHitId]);
+  const loadNextPage = useCallback(() => {
+    if (searchQuery.hasNextPage && !searchQuery.isFetching) void searchQuery.fetchNextPage();
+  }, [searchQuery]);
   const retry = useCallback(() => { void searchQuery.refetch(); }, [searchQuery]);
   const clearQuery = useCallback(() => setQueryInput(''), []);
   const toggleSort = useCallback((key: string) => {
@@ -85,22 +112,35 @@ export function useSearchWorkspaceModel() {
 
   return {
     activeQuery,
-    contentIndex,
+    contentIndex: { ...contentIndex, build: () => {
+      setIndexTarget({ caseId, sourceId: indexSourceId });
+      contentIndex.build();
+    } },
+    indexSources,
+    indexSourceId,
+    setIndexSourceId: (sourceId: string) => { if (!contentIndex.loading) setIndexTarget({ caseId, sourceId }); },
     clearQuery,
     coverage: firstPage?.coverage,
     dataSources: dataSources ?? [],
     extensionInput,
     hasMore: searchQuery.hasNextPage,
     initialLoadFailed: searchQuery.isError && searchHits.length === 0,
-    loadContextKey: `${activeQuery}:${JSON.stringify(options)}`,
+    loadContextKey: `${caseId}:${activeQuery}:${JSON.stringify(options)}`,
     loadMoreFailed: searchQuery.isFetchNextPageError,
     loadNextPage,
     loadingMore: searchQuery.isFetchingNextPage,
     onHitRowClick,
+    jumpToFile,
+    previewSelected,
+    navigating: fileNavigation.pending,
+    navigationError: fileNavigation.errorText,
+    available: Boolean(caseId),
+    updating: searchQuery.isFetching || queryInput.trim() !== activeQuery,
     options,
     preview,
     queryInput,
     retry,
+    refresh: () => { void cache.resetQueries({ queryKey: ['search', caseId] }); contentIndex.refresh(); },
     searchHits,
     searchQueryStateKey: searchQuery.dataUpdatedAt,
     searchTookMs: searchQuery.data?.pages.reduce((total, page) => total + page.tookMs, 0) ?? 0,
@@ -112,7 +152,7 @@ export function useSearchWorkspaceModel() {
     sortKey: options.sortKey,
     toggleSort,
     totalHits: firstPage?.total ?? 0,
-    truncated: firstPage?.truncated ?? false,
+    truncated: (firstPage?.truncated ?? false) || localLimitReached,
   };
 }
 

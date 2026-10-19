@@ -29,6 +29,16 @@ const hit: SearchFileHit = {
 function createModel(overrides: Partial<SearchWorkspaceModel> = {}) {
   const model = {
     activeQuery: 'report',
+    available: true,
+    updating: false,
+    navigating: false,
+    navigationError: undefined,
+    indexSources: [],
+    indexSourceId: undefined,
+    setIndexSourceId: vi.fn(),
+    previewSelected: vi.fn(),
+    jumpToFile: vi.fn(),
+    refresh: vi.fn(),
     contentIndex: { task: undefined, request: undefined, loading: false, errorText: undefined, cancelPending: false, start: vi.fn(), retry: vi.fn(), cancel: vi.fn(), coverage: undefined, coverageError: null, available: false, build: vi.fn() },
     clearQuery: vi.fn(),
     coverage: {
@@ -83,10 +93,10 @@ describe('SearchWorkspace', () => {
     expect(screen.getByRole('textbox', { name: '文件名搜索' })).toHaveValue('report');
     expect(screen.getByText('report.7z')).toBeInTheDocument();
     expect(screen.getByText('Users/alice/Downloads/report.7z')).toBeInTheDocument();
-    expect(screen.getByText(/索引覆盖不完整，需要重新分析以重建索引 80\/100/)).toBeInTheDocument();
+    expect(screen.getByText(/文件名与路径索引未就绪 80\/100/)).toBeInTheDocument();
   });
 
-  it('opens the preview from a single result-row click', () => {
+  it('selects on click, previews explicitly and locates the entry on double-click', () => {
     const model = createModel();
     render(<SearchWorkspace model={model} />);
 
@@ -94,6 +104,10 @@ describe('SearchWorkspace', () => {
     expect(row).not.toBeNull();
     fireEvent.click(row!);
     expect(model.onHitRowClick).toHaveBeenCalledWith(hit);
+    fireEvent.click(screen.getByRole('button', { name: '预览所选文件' }));
+    expect(model.previewSelected).toHaveBeenCalledTimes(1);
+    fireEvent.doubleClick(row!);
+    expect(model.jumpToFile).toHaveBeenCalledWith(hit);
   });
 
   it('passes sortable column clicks to the workspace model', () => {

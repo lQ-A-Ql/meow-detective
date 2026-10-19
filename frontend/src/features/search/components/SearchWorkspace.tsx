@@ -22,6 +22,7 @@ import { WorkspaceFrame } from '@/components/layout/WorkspaceFrame';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 import { BrandWatermark } from '@/components/brand';
 import { ContentIndexStatus } from './ContentIndexStatus';
+import { IconButton } from '@/components/controls/IconButton';
 
 interface SearchWorkspaceProps {
   model: SearchWorkspaceModel;
@@ -96,15 +97,16 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
   return (
     <WorkspaceFrame>
       <WorkspaceCard className="relative isolate flex flex-1 flex-col">
-      <ContextBar>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5">
+      <ContextBar className="h-auto min-h-9 overflow-visible py-1">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-1 basis-72 items-center gap-2 px-3 py-1.5">
             <Search size={14} className="shrink-0 text-forensics-ink-3" />
             {model.queryInput ? null : (
               <span aria-hidden="true" className="forensics-caret h-4 w-[7px] shrink-0 bg-forensics-red" />
             )}
             <Input
               autoFocus
+              disabled={!model.available}
               value={model.queryInput}
               onChange={(event) => model.setQueryInput(event.target.value)}
               onKeyDown={(event) => {
@@ -128,6 +130,7 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
             type="button"
             variant={model.options.matchPath ? 'forensicsPrimary' : 'forensicsOutline'}
             size="compact"
+            aria-pressed={model.options.matchPath}
             onClick={() => model.setOption('matchPath', !model.options.matchPath)}
           ><ActionIcon name="chevron-down" /></Button></Tooltip>
           <Select value={model.options.entryType} onValueChange={(value) => model.setOption('entryType', value as SearchWorkspaceModel['options']['entryType'])}>
@@ -155,13 +158,19 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
             </SelectContent>
           </Select>
         </div>
+        <IconButton label={t('search.previewSelected')} disabled={!model.selectedHit} onClick={model.previewSelected}><ActionIcon name="eye" /></IconButton>
+        <IconButton label={t('search.locateSelected')} disabled={!model.selectedHit || model.navigating} onClick={() => { if (model.selectedHit) model.jumpToFile(model.selectedHit); }}><ActionIcon name="folder" /></IconButton>
+        <IconButton label={t('search.refresh')} disabled={!model.available || model.updating} onClick={model.refresh}><ActionIcon name="refresh" /></IconButton>
       </ContextBar>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <ContentIndexStatus model={model.contentIndex} />
-        <div className="flex shrink-0 items-center gap-3 border-b border-forensics-divider bg-forensics-panel px-4 py-2 font-mono text-[10px] text-forensics-muted">
-          <span>{model.activeQuery ? t('search.meta.found', { count: model.totalHits }) : t('search.meta.idle')}</span>
-          {model.activeQuery ? <span>{t('search.meta.took', { ms: model.searchTookMs })}</span> : null}
+        <ContentIndexStatus model={model.contentIndex} sources={model.indexSources} sourceId={model.indexSourceId} onSourceChange={model.setIndexSourceId} />
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-forensics-divider bg-forensics-panel px-4 py-2 font-mono text-[10px] text-forensics-muted">
+          <span>{!model.available ? t('search.noCase') : model.updating ? t('search.loading') : t('search.meta.found', { count: model.totalHits })}</span>
+          <span>{t('search.meta.loaded', { shown: model.searchHits.length, total: model.totalHits })}</span>
+          <span>{t('search.meta.took', { ms: model.searchTookMs })}</span>
+          <span>{t('search.doubleClickHint')}</span>
+          {model.navigating ? <span role="status">{t('search.locating')}</span> : null}
           {coverage && !coverage.complete ? (
             <span className="flex items-center gap-1 text-forensics-error-text" title={t('search.coverage.missingTitle', { sources: coverage.missingSourceIds.join(', ') })}>
               <AlertTriangle size={12} />{t('search.coverage.incomplete', { indexed: coverage.indexedEntryCount, expected: coverage.expectedEntryCount })}
@@ -170,6 +179,7 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           {model.truncated ? <span className="text-forensics-error-text">{t('search.truncated', { count: model.searchHits.length > 0 ? model.searchHits.length : model.totalHits })}</span> : null}
         </div>
 
+        {model.navigationError ? <div role="alert" className="px-4 py-2 text-[11px] text-forensics-error-text">{model.navigationError}</div> : null}
         <DenseDataTableFrame layout="fill" variant="plain">
           <DenseDataTable<SearchFileHit>
           rows={model.searchHits}
@@ -177,8 +187,9 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
           getRowKey={(row) => row.fileId}
           selectedRowKey={model.selectedHit?.fileId}
           onRowClick={model.onHitRowClick}
-          emptyTitle={model.activeQuery ? t('search.empty.noMatch') : t('search.empty.start')}
-          emptyDescription={model.activeQuery ? t('search.empty.noMatchDescription') : t('search.empty.startDescription')}
+          onRowDoubleClick={model.jumpToFile}
+          emptyTitle={!model.available ? t('search.noCase') : model.updating ? t('search.loading') : model.activeQuery ? t('search.empty.noMatch') : t('search.empty.indexEmpty')}
+          emptyDescription={model.activeQuery ? t('search.empty.noMatchDescription') : t('search.empty.indexEmptyDescription')}
             emptyAction={model.activeQuery ? (
               <Tooltip content={t('search.clear')}><Button aria-label={t('search.clear')} type="button" variant="outline" size="sm" onClick={model.clearQuery}><ActionIcon name="close" /></Button></Tooltip>
             ) : undefined}

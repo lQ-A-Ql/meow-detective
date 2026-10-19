@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/app/components/ui/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/app/components/ui/select';
 import { InspectorSection } from '@/components/layout/InspectorPane';
 import { EvidenceTaskStatus } from '@/features/jobs/components/EvidenceTaskStatus';
 import type { useEvidenceDigestModel } from '../hooks/use-evidence-digest-model';
 import type { DigestScope } from '@/types/digest';
+import { DigestAlgorithmActions } from './DigestAlgorithmActions';
 
 export function EvidenceDigestInspector({ model }: { model: ReturnType<typeof useEvidenceDigestModel> }) {
   const { t } = useTranslation();
@@ -14,7 +14,7 @@ export function EvidenceDigestInspector({ model }: { model: ReturnType<typeof us
         <SelectTrigger aria-label={t('evidenceDigest.scope')}><SelectValue /></SelectTrigger>
         <SelectContent>{model.scopes.map((scope) => <SelectItem key={scope} value={scope}>{t(`evidenceDigest.scopes.${scope}`)}</SelectItem>)}</SelectContent>
       </Select>
-      <div className="grid grid-cols-2 gap-1">{model.algorithms.map((algorithm) => <Button key={algorithm} variant="forensicsOutline" disabled={!model.available || model.loading} onClick={() => model.calculate(algorithm)}>{algorithm.toUpperCase()}</Button>)}</div>
+      <DigestAlgorithmActions available={model.available} loading={model.loading} onCalculate={model.calculate} />
       <EvidenceTaskStatus model={model} />
       {model.historyError ? <div role="alert">{t('evidenceDigest.historyFailed')}</div> : null}
       {model.results.map(({ digest, sourceRevision, stale }) => <div key={digest.algorithm} className="space-y-1 break-all font-mono text-[10px]">

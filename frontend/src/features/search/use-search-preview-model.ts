@@ -23,8 +23,9 @@ function toFileEntryRow(hit: SearchFileHit): FileEntryRow {
   };
 }
 
-export function useSearchPreviewModel() {
-  const [previewHit, setPreviewHit] = useState<SearchFileHit>();
+export function useSearchPreviewModel(caseId?: string) {
+  const [selection, setSelection] = useState<{ caseId?: string; hit?: SearchFileHit }>({ caseId });
+  const previewHit = selection.caseId === caseId ? selection.hit : undefined;
   const [viewerTab, setViewerTab] = useState<PreviewViewerTab>('metadata');
   const selectedFile = useMemo(
     () => (previewHit ? toFileEntryRow(previewHit) : undefined),
@@ -39,11 +40,11 @@ export function useSearchPreviewModel() {
   const openHit = useCallback((hit: SearchFileHit) => {
     const file = toFileEntryRow(hit);
     setViewerTab(getDefaultFilePreviewTab(file));
-    setPreviewHit(hit);
-  }, []);
+    setSelection({ caseId, hit });
+  }, [caseId]);
   const onOpenChange = useCallback((open: boolean) => {
-    if (!open) setPreviewHit(undefined);
-  }, []);
+    if (!open) setSelection({ caseId });
+  }, [caseId]);
 
   return {
     ...preview,

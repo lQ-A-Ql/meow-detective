@@ -154,6 +154,24 @@ describe('CaseHome page', () => {
     expect(screen.queryByText(/当前没有活动案件/)).toBeNull();
   });
 
+  it('restores case deletion in the active workspace and confirms the selected recorded path', async () => {
+    const remove = vi.fn();
+    mocks.currentCase.mockReturnValue(mockQueryState({ data: { id: 'case-a', name: 'Same name' } }));
+    mocks.recentCases.mockReturnValue(mockQueryState({ data: [
+      { name: 'Same name', caseRoot: 'D:\\CustomCases\\first', openedAt: '2026-10-19' },
+      { name: 'Same name', caseRoot: 'E:\\OpenedElsewhere\\second', openedAt: '2026-10-18' },
+    ] }));
+    mocks.deleteCase.mockReturnValue(mockMutationState({ mutate: remove }));
+    await renderPageAsync();
+    fireEvent.click(screen.getByRole('button', { name: '删除案件' }));
+    expect(screen.getByRole('heading', { name: '选择要删除的案件' })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Same name' })[1]);
+    expect(remove).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toHaveTextContent('E:\\OpenedElsewhere\\second');
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+    expect(remove).toHaveBeenCalledWith('E:\\OpenedElsewhere\\second', expect.any(Object));
+  });
+
   it('shows a structured backend error for creating a case', async () => {
     mocks.createCase.mockReturnValue(mockMutationState({ error: { code: 'CONFLICT', message: '案件目录已存在', category: 'validation', recoverable: true } }));
     await renderPageAsync();

@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getFileChildren,
   getFileChildrenPage,
-  getFileJumpContext,
   getFileRows,
   getFileRowsPage,
   getFileTree,
@@ -31,6 +30,7 @@ import type { FileSortKey, FileSortDirection } from '@/lib/file-sort';
 import { expectJobsSnapshotActivity } from '@/features/jobs/hooks';
 import { invalidateImportProjectionQueries } from '@/features/cache-invalidation';
 import { parseOffsetInput } from '@/lib/hex-offset-parser';
+import { fileJumpQuery } from './hooks/file-jump-query';
 import { mergeLoadedRanges } from '@/lib/hex-range-merger';
 import { getPreviewSettings } from '@/lib/settings';
 import {
@@ -109,19 +109,9 @@ export function useFileJumpContext(
   pageLimit = 500,
   sortKey: FileSortKey = 'name',
   sortDirection: FileSortDirection = 'asc',
+  caseId?: string,
 ) {
-  return useQuery({
-    queryKey: ['files', 'jump-context', fileId ?? null, showHidden, pageLimit, sortKey, sortDirection],
-    queryFn: () =>
-      getFileJumpContext(fileId!, {
-        showHidden,
-        pageLimit,
-        sortKey,
-        sortDirection,
-      }),
-    enabled: Boolean(fileId),
-    retry: false,
-  });
+  return useQuery(fileJumpQuery(caseId, fileId, showHidden, pageLimit, sortKey, sortDirection));
 }
 
 export function useFileChildren(parentId?: string, showHidden = false) {

@@ -3,11 +3,40 @@
     "scanned": "已扫描 {{processed}} 项",
     "entries": "{{processed}} / {{total}} 项",
     "states": { "queued": "排队中", "running": "正在处理证据", "cancelling": "正在取消", "completed": "已完成", "failed": "失败", "cancelled": "已取消" },
-    "progress": "{{processed}} / {{total}} 字节", "progressLabel": "证据任务进度", "failed": "证据任务失败（{{code}}）。重试将创建新的任务记录。"
+    "progress": "{{processed}} / {{total}} 字节",
+    "progressLabel": "证据任务进度",
+    "failed": "证据任务失败（{{code}}）。重试将创建新的任务记录。"
   },
   "evidenceDigest": { "scope": "摘要范围", "revision": "证据版本", "stale": "证据已变化，请重新计算此结果", "historyFailed": "无法读取摘要历史", "scopes": { "containerFile": "单个容器文件", "containerSet": "完整容器集合", "logicalDisk": "逻辑磁盘", "partition": "分区", "file": "逻辑文件", "derivedEvidence": "派生证据" } },
   "nestedEvidence": { "title": "嵌套证据导入", "openResult": "浏览派生证据" },
-  "contentIndex": { "build": "构建内容索引", "selectSource": "选择单个数据源以构建或查看内容索引", "complete": "内容分类完整（{{expected}} 项）", "notBuilt": "尚未构建内容索引（{{expected}} 项）", "stale": "证据已变化，请重建内容索引", "coverageFailed": "无法读取内容覆盖率", "statuses": { "indexed": "已索引文本", "binary": "二进制", "oversized": "超出大小限制", "unreadable": "不可读取", "unsupportedEncoding": "不支持的编码", "notApplicable": "不适用" }, "sources": { "metadata": "元数据", "filename": "文件名", "path": "路径", "content": "索引内容", "artifactField": "产物字段" } },
+  "contentIndex": {
+    "build": "构建内容索引",
+    "selectSource": "选择索引数据源",
+    "complete": "内容分类完整（{{expected}} 项）",
+    "notBuilt": "尚未构建内容索引（{{expected}} 项）",
+    "stale": "证据已变化，请重建内容索引",
+    "coverageFailed": "无法读取内容覆盖率",
+    "statuses": {
+      "indexed": "已索引文本",
+      "binary": "二进制",
+      "oversized": "超出大小限制",
+      "unreadable": "不可读取",
+      "unsupportedEncoding": "不支持的编码",
+      "notApplicable": "不适用"
+    },
+    "sources": {
+      "metadata": "元数据",
+      "filename": "文件名",
+      "path": "路径",
+      "content": "索引内容",
+      "artifactField": "产物字段"
+    },
+    "title": "文件内容索引",
+    "sourceLabel": "内容索引数据源",
+    "rebuild": "重建内容索引",
+    "refresh": "刷新索引覆盖情况",
+    "loading": "正在读取索引覆盖情况…"
+  },
   "common": {
     "retry": "重试",
     "clipboardUnavailable": "剪贴板不可用或访问被拒绝",
@@ -1168,7 +1197,7 @@
     "exportFailed": "恢复文件导出失败: {{message}}"
   },
   "search": {
-    "inputPlaceholder": "输入文件名、目录名或路径",
+    "inputPlaceholder": "输入文件名、内容或路径，留空浏览索引",
     "inputLabel": "文件名搜索",
     "pathToggle": "路径",
     "allTypes": "全部类型",
@@ -1185,7 +1214,7 @@
       "took": "查询 {{ms}} ms"
     },
     "coverage": {
-      "incomplete": "索引覆盖不完整，需要重新分析以重建索引 {{indexed}}/{{expected}}",
+      "incomplete": "文件名与路径索引未就绪 {{indexed}}/{{expected}}",
       "complete": "索引覆盖 {{indexed}} 项 / {{sources}} 个数据源",
       "missingTitle": "未就绪数据源: {{sources}}"
     },
@@ -1202,10 +1231,19 @@
       "noMatch": "没有匹配的文件",
       "noMatchDescription": "尝试修改文件名、路径或筛选条件。",
       "start": "输入文件名开始搜索",
-      "startDescription": "搜索仅定位已导入数据源中的文件和目录。"
+      "startDescription": "搜索仅定位已导入数据源中的文件和目录。",
+      "indexEmpty": "当前案件暂无可搜索的文件",
+      "indexEmptyDescription": "数据源导入完成后，文件名与路径索引会显示在这里。"
     },
     "clearQuery": "清除搜索",
-    "clear": "清除条件"
+    "clear": "清除条件",
+    "previewSelected": "预览所选文件",
+    "locateSelected": "定位所选条目",
+    "refresh": "刷新文件索引",
+    "loading": "正在查询文件索引…",
+    "locating": "正在定位文件…",
+    "noCase": "请先打开案件",
+    "doubleClickHint": "单击选中 · 双击定位"
   },
   "infrastructure": {
     "caseLabel": "当前案件",
@@ -1650,7 +1688,8 @@
       "deleteCaseTitle": "删除案件",
       "deleteCaseDescription": "确定删除案件“{{name}}”？该操作将删除案件目录及其所有数据，且不可撤销。",
       "deleteDataSourceTitle": "删除数据源",
-      "deleteDataSourceDescription": "确定删除数据源“{{name}}”？该操作将级联删除其下的所有文件条目、时间线事件和提取痕迹，且不可撤销。"
+      "deleteDataSourceDescription": "确定删除数据源“{{name}}”？该操作将级联删除其下的所有文件条目、时间线事件和提取痕迹，且不可撤销。",
+      "chooseCaseToDelete": "选择要删除的案件"
     }
   },
   "bottomDrawer": {

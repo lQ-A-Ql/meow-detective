@@ -910,6 +910,7 @@ describe('FileBrowser media preview', () => {
         500,
         'name',
         'asc',
+        'case-1',
       ),
     );
     await waitFor(() => expect(mocks.fileTree).toHaveBeenLastCalledWith(true));

@@ -45,6 +45,7 @@ export function useCaseHomeModel() {
   const removeCaseFromListMutation = useRemoveCaseFromList();
   const importDialog = useImportDataSourceDialogModel();
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [deleteCaseDialogOpen, setDeleteCaseDialogOpen] = useState(false);
   const [caseRoot, setCaseRoot] = useState(() => readLocalSettings().caseRoot);
   const [caseName, setCaseName] = useState('');
   const [openCasePath, setOpenCasePath] = useState('');
@@ -97,7 +98,10 @@ export function useCaseHomeModel() {
       },
     });
   }, [deleteCaseMutation, removeCaseFromListMutation]);
-  const requestDeleteCase = useCallback((recentCase: RecentCase) => setDeleteTarget({ kind: 'case', value: recentCase }), []);
+  const requestDeleteCase = useCallback((recentCase: RecentCase) => {
+    setDeleteCaseDialogOpen(false);
+    setDeleteTarget({ kind: 'case', value: recentCase });
+  }, []);
   const requestDeleteDataSource = useCallback((source: DataSourceSummary) => setDeleteTarget({ kind: 'dataSource', value: source }), []);
   const confirmDelete = useCallback(() => {
     if (!deleteTarget) return;
@@ -142,6 +146,8 @@ export function useCaseHomeModel() {
     currentCase,
     dataSources: dataSourcesQuery.data,
     deleteCase,
+    deleteCaseDialogOpen,
+    setDeleteCaseDialogOpen,
     deleteTarget,
     deleteDataSource: deleteDataSourceMutation.mutate,
     confirmDelete,
