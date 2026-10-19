@@ -1,25 +1,11 @@
 use super::*;
-use crate::table::{find_geometry, should_read_section_content, V1_TABLE_HEADER_SIZE};
+use crate::geometry::{find_geometry, V1_TABLE_HEADER_SIZE};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 #[test]
 fn bounded_mutation_smoke_e01_table_geometry_and_open_limits() {
     for seed in 0..256usize {
-        let mut content = vec![0u8; 32 + seed % 128];
-        let count = [0, 1, 2, u32::MAX][seed % 4];
-        content[..4].copy_from_slice(&count.to_le_bytes());
-        content[8..16].copy_from_slice(&u64::MAX.wrapping_sub(seed as u64).to_le_bytes());
-        let sections = [crate::table::E01Section {
-            kind: "table".into(),
-            segment_index: 0,
-            start_offset: 13,
-            next_offset: 0,
-            content,
-        }];
-        if let Ok(rows) = crate::table::build_chunk_table(&sections, 4096, "table") {
-            assert!(rows.len() <= 40);
-        }
         let mut disk = vec![0u8; 32];
         disk[8..12].copy_from_slice(&(seed as u32).to_le_bytes());
         disk[12..16].copy_from_slice(&u32::MAX.wrapping_sub(seed as u32).to_le_bytes());
@@ -76,7 +62,7 @@ fn test_section_descriptor_size() {
 
 #[test]
 fn test_v1_table_header_size() {
-    assert_eq!(crate::table::V1_TABLE_HEADER_SIZE, 24);
+    assert_eq!(crate::geometry::V1_TABLE_HEADER_SIZE, 24);
 }
 
 #[test]
@@ -146,15 +132,6 @@ fn oversized_chunk_geometry_is_rejected() {
 
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert!(error.to_string().contains("above the 134217728 byte limit"));
-}
-
-#[test]
-fn sectors_sections_are_not_loaded_into_memory_during_section_walk() {
-    assert!(!should_read_section_content("sectors"));
-    assert!(should_read_section_content("disk"));
-    assert!(should_read_section_content("volume"));
-    assert!(should_read_section_content("table"));
-    assert!(should_read_section_content("table2"));
 }
 
 #[test]
@@ -301,7 +278,7 @@ fn compressed_chunk_length_error_contains_forensic_context() {
     let compressed = encoder.finish().unwrap();
     std::fs::write(&path, &compressed).unwrap();
     let file = std::fs::File::open(&path).unwrap();
-    let mut reader = E01Reader::from_parts(
+    let mut reader = reader_from_test_entries(
         evidence_core::ReaderInfo {
             path: path.clone(),
             size: 512,
@@ -332,7 +309,7 @@ fn source_chunk_short_read_is_distinct_from_decode_failure() {
     let path = temporary_chunk_path("source-short-read");
     std::fs::write(&path, [0x42; 4]).unwrap();
     let file = std::fs::File::open(&path).unwrap();
-    let mut reader = E01Reader::from_parts(
+    let mut reader = reader_from_test_entries(
         evidence_core::ReaderInfo {
             path: path.clone(),
             size: 512,
@@ -354,7 +331,7 @@ fn source_chunk_short_read_is_distinct_from_decode_failure() {
     let message = error.to_string();
     assert!(message.contains("E01 chunk 0 codec=raw"));
     assert!(message.contains("stored_length=512"));
-    assert!(message.contains("stored range ends at 512, beyond segment length 4"));
+    assert!(message.contains("stored range ends at 512, beyond segment length 8"));
 }
 
 #[test]
@@ -366,7 +343,7 @@ fn final_compressed_chunk_uses_remaining_logical_length() {
     let compressed = encoder.finish().unwrap();
     std::fs::write(&path, &compressed).unwrap();
     let file = std::fs::File::open(&path).unwrap();
-    let mut reader = E01Reader::from_parts(
+    let mut reader = reader_from_test_entries(
         evidence_core::ReaderInfo {
             path: path.clone(),
             size: 512,
@@ -392,7 +369,7 @@ fn invalid_raw_chunk_length_is_reported() {
     let path = temporary_chunk_path("invalid-raw-length");
     std::fs::write(&path, [0x44; 513]).unwrap();
     let file = std::fs::File::open(&path).unwrap();
-    let mut reader = E01Reader::from_parts(
+    let mut reader = reader_from_test_entries(
         evidence_core::ReaderInfo {
             path: path.clone(),
             size: 512,
@@ -468,7 +445,9 @@ fn write_multichunk_e01(path: &Path, chunk_count: u32) -> io::Result<()> {
         chunk[0..4].copy_from_slice(&idx.to_le_bytes());
         f.write_all(&chunk)?;
     }
-    f.flush()
+    f.flush()?;
+    drop(f);
+    testing::ewf::finalize_synthetic_e01(path)
 }
 
 fn test_section_desc(stype: &str, next: u64, size: u64) -> [u8; 76] {
@@ -488,7 +467,7 @@ fn open_plan_shares_chunk_table_and_reads_across_independent_segment_handles() {
     let second_path = directory.join("source.E02");
     std::fs::write(&first_path, vec![0x11; 512]).unwrap();
     std::fs::write(&second_path, vec![0x22; 512]).unwrap();
-    let reader = E01Reader::from_parts(
+    let reader = reader_from_test_entries(
         evidence_core::ReaderInfo {
             path: first_path.clone(),
             size: 1024,
@@ -557,24 +536,6 @@ impl evidence_core::reader::ReaderAdmission for CountingAdmission {
     }
 }
 #[test]
-fn hostile_table_count_is_rejected_before_allocating_entries() {
-    let mut content = vec![0; V1_TABLE_HEADER_SIZE + 4];
-    content[..4].copy_from_slice(&u32::MAX.to_le_bytes());
-    let section = crate::table::E01Section {
-        kind: "table".into(),
-        segment_index: 0,
-        start_offset: 0,
-        next_offset: 0,
-        content,
-    };
-    assert_eq!(
-        crate::table::build_chunk_table(&[section], 4096, "table")
-            .unwrap_err()
-            .kind(),
-        io::ErrorKind::OutOfMemory
-    );
-}
-#[test]
 fn aggregate_section_content_and_count_have_separate_finite_limits() {
     use crate::open_limits::*;
     let mut budget = OpenBudget::default();
@@ -621,4 +582,43 @@ fn mirrored_tables_for_a_256_gib_image_fit_the_metadata_section_budget() {
     budget.content(33_568_796).unwrap();
     budget.content(1052).unwrap();
     assert!(budget.content > 64 * 1024 * 1024);
+}
+
+fn reader_from_test_entries(
+    info: evidence_core::ReaderInfo,
+    total: u64,
+    sectors: u32,
+    bps: u32,
+    entries: Vec<(usize, u64, bool, u64)>,
+    files: Vec<std::fs::File>,
+) -> E01Reader {
+    use crate::paged_index::{PagedIndex, TableSpan};
+    let mut tables = Vec::new();
+    for (index, (segment, offset, compressed, size)) in entries.into_iter().enumerate() {
+        let path = build_segment_path(&info.path, segment as u32 + 1);
+        let mut writer = std::fs::OpenOptions::new().append(true).open(path).unwrap();
+        let entries_offset = writer.seek(SeekFrom::End(0)).unwrap();
+        let raw = (offset as u32 | if compressed { 0x8000_0000 } else { 0 }).to_le_bytes();
+        writer.write_all(&raw).unwrap();
+        tables.push(TableSpan {
+            first_chunk: index as u64,
+            count: 1,
+            segment,
+            base: 0,
+            entries_offset,
+            last_end: offset + size,
+            max_stored: size,
+            mirrored: false,
+            page_checksums: vec![crate::checksum::page_digest(&raw)],
+        });
+    }
+    let expected = tables.len() as u64;
+    E01Reader::from_parts(
+        info,
+        total,
+        sectors,
+        bps,
+        PagedIndex::new(tables, expected).unwrap(),
+        files,
+    )
 }

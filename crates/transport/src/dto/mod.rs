@@ -99,8 +99,8 @@ pub use bitlocker::{
 pub use bitlocker_dictionary::{BitLockerDictionaryAttackDto, BitLockerDictionaryBackendDto};
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceProcessingPhaseDto,
-    DataSourceProcessingSummaryDto, DataSourceSummaryDto, NestedEvidenceLineageDto,
-    NestedEvidenceMaterializedDto, RecentCaseDto, RecentObjectDto,
+    DataSourceProcessingSummaryDto, DataSourceSummaryDto, DirectNtfsVolumeDto,
+    NestedEvidenceLineageDto, NestedEvidenceMaterializedDto, RecentCaseDto, RecentObjectDto,
 };
 pub use correlation::{
     CorrelationClusterDto, CorrelationConfidenceDto, CorrelationEdgeDto, CorrelationEdgeKindDto,

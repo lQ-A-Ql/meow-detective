@@ -44,6 +44,12 @@ export interface EmulationInstall {
 
 export interface EmulationPreflight {
   dataSourceId: string;
+  directVolume?: {
+    logicalMediaBytes: number;
+    declaredVolumeBytes: number;
+    verifiedExtentBytes?: number;
+    volumeSerial: string;
+  };
   installs: EmulationInstall[];
   recommendedBootRoute: 'recoveryMedia' | 'directSystem';
   maintenanceToolAvailable?: boolean;

@@ -48,6 +48,23 @@ pub fn prepare_mount_session(
         &case_id.0,
         &partition,
     )?;
+    let volume_size = if partition.length == 0 && partition.offset == 0 {
+        let mut reader = crate::file_service::open_host_evidence_reader(
+            &source_kind.to_string(),
+            Path::new(&source_path),
+            &case_id.0,
+        )
+        .map_err(|error| MountServiceError::Reader(error.to_string()))?;
+        crate::datasource_service::direct_ntfs_volume::probe(&mut reader)?
+            .map(|geometry| {
+                geometry
+                    .verified_extent_bytes
+                    .unwrap_or(geometry.declared_volume_bytes)
+            })
+            .unwrap_or(0)
+    } else {
+        partition.length
+    };
     let plan = MountPlan::new(
         data_source_id.clone(),
         partition_index,
@@ -58,7 +75,7 @@ pub fn prepare_mount_session(
         fingerprint,
     )
     .map_err(|error| MountServiceError::Catalog(error.to_string()))?
-    .with_volume_size(partition.length);
+    .with_volume_size(volume_size);
     let catalog = CatalogMountFileSystem::new(
         ready.connection,
         filesystem,

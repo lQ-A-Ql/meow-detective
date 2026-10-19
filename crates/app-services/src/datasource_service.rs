@@ -1,5 +1,6 @@
 mod attach;
 mod bluestore;
+pub(crate) mod direct_ntfs_volume;
 mod fs_magic;
 mod lvm;
 mod partition_index;

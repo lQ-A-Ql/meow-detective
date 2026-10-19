@@ -89,7 +89,9 @@ fn write_tiny_e01(path: &std::path::Path) -> std::io::Result<()> {
     let mut chunk = vec![0u8; chunk_bytes];
     chunk[..marker.len()].copy_from_slice(marker);
     f.write_all(&chunk)?;
-    f.flush()
+    f.flush()?;
+    drop(f);
+    testing::ewf::finalize_synthetic_e01(path)
 }
 
 fn section_desc(stype: &str, next: u64, size: u64) -> [u8; 76] {

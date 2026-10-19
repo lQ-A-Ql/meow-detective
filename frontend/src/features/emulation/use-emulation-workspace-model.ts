@@ -53,6 +53,7 @@ export interface EmulationWorkspaceModel {
   selectSource: (sourceId: string) => void;
   preflight?: EmulationPreflight;
   preflightLoading: boolean;
+  sourceLayoutHint?: string;
   recoveryIsoPath: string;
   bootRoute: 'recoveryMedia' | 'directSystem';
   pickRecoveryIso: () => Promise<void>;
@@ -244,6 +245,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
       if (!preflightReady) {
         throw new Error(t('emulationPage.errors.preflightRequired'));
       }
+      if (preflightQuery.data?.directVolume) {
+        throw new Error(t('emulationPage.errors.directVolumeBootLayout'));
+      }
       if (!linuxBypassReady) {
         throw new Error(t('emulationPage.errors.linuxAccountRequired'));
       }
@@ -388,6 +392,8 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     selectSource: setSelectedSourceId,
     preflight: preflightQuery.data,
     preflightLoading: preflightQuery.isFetching,
+    sourceLayoutHint: preflightQuery.data?.directVolume
+      ? t('emulationPage.errors.directVolumeBootLayout') : undefined,
     recoveryIsoPath,
     bootRoute: recoveryIsoPath ? 'recoveryMedia' : 'directSystem',
     pickRecoveryIso,
@@ -430,6 +436,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     },
     canStart: Boolean(selectedSourceId)
       && preflightReady
+      && !preflightQuery.data?.directVolume
       && Boolean(linuxBypassReady)
       && !activeSourceIds.has(selectedSourceId)
       && !startMutation.isPending

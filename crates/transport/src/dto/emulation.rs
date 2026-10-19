@@ -166,6 +166,8 @@ pub struct EmulationInstallDto {
 #[serde(rename_all = "camelCase")]
 pub struct EmulationPreflightDto {
     pub data_source_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct_volume: Option<super::DirectNtfsVolumeDto>,
     pub installs: Vec<EmulationInstallDto>,
     pub recommended_boot_route: EmulationBootRouteDto,
     /// Set by the command layer: whether the WinPE maintenance tool binary is

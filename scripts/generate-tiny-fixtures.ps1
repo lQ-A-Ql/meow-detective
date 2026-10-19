@@ -1,3 +1,4 @@
+param([switch]$SkipRegistry)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -20,6 +21,17 @@ $bytes[511] = 0xAA
 [System.IO.File]::WriteAllBytes($rawPath, $bytes)
 Write-Host "Wrote $rawPath ($($bytes.Length) bytes)"
 
+function Get-Adler32 {
+    param([byte[]]$Bytes)
+    [UInt64]$a = 1
+    [UInt64]$b = 0
+    foreach ($value in $Bytes) {
+        $a = ($a + $value) % 65521
+        $b = ($b + $a) % 65521
+    }
+    return [UInt32](($b -shl 16) -bor $a)
+}
+
 function New-SectionDescriptor {
     param(
         [Parameter(Mandatory = $true)][string]$Type,
@@ -32,6 +44,7 @@ function New-SectionDescriptor {
     [Array]::Copy($typeBytes, 0, $descriptor, 0, [Math]::Min($typeBytes.Length, 16))
     [Array]::Copy([BitConverter]::GetBytes($Next), 0, $descriptor, 16, 8)
     [Array]::Copy([BitConverter]::GetBytes($Size), 0, $descriptor, 24, 8)
+    [Array]::Copy([BitConverter]::GetBytes((Get-Adler32 $descriptor[0..71])), 0, $descriptor, 72, 4)
     return $descriptor
 }
 
@@ -52,12 +65,14 @@ $dataStart = [UInt64]($doneDescOffset + 76)
 
 $volume = New-Object byte[] $volumeSize
 [Array]::Copy([BitConverter]::GetBytes($chunkSectors), 0, $volume, 8, 4)
-[Array]::Copy([BitConverter]::GetBytes($chunkSectors), 0, $volume, 12, 4)
+[Array]::Copy([BitConverter]::GetBytes([UInt32]512), 0, $volume, 12, 4)
 [Array]::Copy([BitConverter]::GetBytes($sectors), 0, $volume, 16, 8)
 
 $table = New-Object byte[] $tableSize
 [Array]::Copy([BitConverter]::GetBytes([UInt32]1), 0, $table, 0, 4)
 [Array]::Copy([BitConverter]::GetBytes($dataStart), 0, $table, 8, 8)
+[Array]::Copy([BitConverter]::GetBytes((Get-Adler32 $table[0..19])), 0, $table, 20, 4)
+[Array]::Copy([BitConverter]::GetBytes((Get-Adler32 $table[24..27])), 0, $table, 28, 4)
 
 $chunk = New-Object byte[] $chunkBytes
 $chunkMarker = [System.Text.Encoding]::ASCII.GetBytes('FWB-TINY-E01')
@@ -83,6 +98,7 @@ try {
 }
 Write-Host "Wrote $e01Path ($((Get-Item $e01Path).Length) bytes)"
 
+if ($SkipRegistry) { return }
 $cargo = if ($env:CARGO) { $env:CARGO } else { 'cargo' }
 & $cargo run --quiet -p testing --bin generate_tiny_registry_fixtures -- $repoRoot
 if ($LASTEXITCODE -ne 0) {

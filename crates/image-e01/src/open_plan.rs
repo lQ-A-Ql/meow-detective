@@ -9,7 +9,7 @@ pub struct E01OpenPlan {
     total_bytes: u64,
     chunk_size_sectors: u32,
     bytes_per_sector: u32,
-    chunk_table: Arc<Vec<(usize, u64, bool, u64)>>,
+    chunk_table: Arc<crate::paged_index::PagedIndex>,
     max_stored_chunk: u64,
     segments: Vec<(u64, SystemTime)>,
     resource_metadata: Option<Arc<dyn evidence_core::reader::ReaderResourceHold>>,
@@ -26,7 +26,7 @@ impl E01Reader {
                 Ok((metadata.len(), metadata.modified()?))
             })
             .collect::<io::Result<_>>()?;
-        let max_stored_chunk = self.chunk_table.iter().map(|c| c.3).max().unwrap_or(0);
+        let max_stored_chunk = self.chunk_table.max_stored_chunk();
         Ok(E01OpenPlan {
             info: self.info,
             total_bytes: self.total_bytes,
@@ -109,7 +109,7 @@ impl E01OpenPlan {
         })
     }
     pub fn metadata_bytes(&self) -> u64 {
-        (self.chunk_table.capacity() * std::mem::size_of::<(usize, u64, bool, u64)>()
+        (self.chunk_table.metadata_bytes()
             + self.segments.capacity() * std::mem::size_of::<(u64, SystemTime)>()
             + self.info.path.capacity()
             + self.segments.len() * (2 * self.info.path.capacity() + 128)
@@ -124,7 +124,10 @@ impl E01OpenPlan {
             .saturating_add(stored.saturating_mul(2))
             .saturating_add(chunk.max(16 * 1024 * 1024))
             .saturating_add(
-                65536 + 4 * self.info.path.capacity() as u64 + 64 * self.segments.len() as u64,
+                65536
+                    + 2 * crate::paged_index::PAGE_BYTES as u64
+                    + 4 * self.info.path.capacity() as u64
+                    + 64 * self.segments.len() as u64,
             )
     }
     pub fn with_reader_admission(
@@ -148,6 +151,10 @@ impl E01OpenPlan {
     }
     pub fn chunk_count(&self) -> usize {
         self.chunk_table.len()
+    }
+    /// Number of validated table2 sections used by the bounded paged plan.
+    pub fn mirrored_table_count(&self) -> usize {
+        self.chunk_table.mirrored_tables()
     }
     pub fn segment_count(&self) -> usize {
         self.segments.len()

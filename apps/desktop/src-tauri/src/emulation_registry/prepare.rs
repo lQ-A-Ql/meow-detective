@@ -15,10 +15,8 @@ impl EmulationRegistry {
             .map(RecoveryMedia::open)
             .transpose()
             .map_err(|error| EmulationRegistryError::RecoveryMedia(error.to_string()))?;
-        let prepared = prepare_emulation_source(case_conn, data_source_id)?;
+        let (provider, identity) = open_verified_parent(case_conn, case_id, data_source_id)?;
         let guest = guest_profile_for_source(case_conn, case_root, case_id, data_source_id)?;
-        let provider = open_block_provider(&prepared.source_path, image_kind(prepared.image_kind))?;
-        let identity = ParentIdentity::new(provider.len(), prepared.parent_sha256)?;
         let session_id = format!("emulation-{}", uuid::Uuid::new_v4());
         let workspace = SessionWorkspace::create(case_root, &session_id)
             .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
@@ -101,6 +99,22 @@ impl EmulationRegistry {
         Ok(status)
     }
 }
+fn open_verified_parent(
+    case_conn: &rusqlite::Connection,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> Result<(Arc<dyn evidence_block::BlockProvider>, ParentIdentity), EmulationRegistryError> {
+    app_services::mount_service::validate_emulation_disk_layout(
+        case_conn,
+        case_id,
+        data_source_id,
+    )?;
+    let prepared = prepare_emulation_source(case_conn, data_source_id)?;
+    let provider = open_block_provider(&prepared.source_path, image_kind(prepared.image_kind))?;
+    let identity = ParentIdentity::new(provider.len(), prepared.parent_sha256)?;
+    Ok((provider, identity))
+}
+
 fn build_session_disk(
     workspace: &SessionWorkspace,
     provider: Arc<dyn evidence_block::BlockProvider>,

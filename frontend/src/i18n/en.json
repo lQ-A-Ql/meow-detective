@@ -1585,6 +1585,7 @@
     "partitions": {
       "uuid": "Partition UUID: {{value}}",
       "typeGuid": "Partition type GUID: {{value}}",
+      "lengthUnknown": "Unknown",
       "uuidNotRecorded": "Not recorded",
       "supported": "Browsable",
       "locked": "Unlock required",
@@ -2176,6 +2177,7 @@
     },
     "errors": {
       "sourceRequired": "Select an evidence source.",
+      "directVolumeBootLayout": "This evidence is an NTFS volume without its enclosing disk partition and boot layout. Emulation requires a derived boot disk; file browsing and extraction remain available.",
       "preflightRequired": "Image preflight has not completed successfully, so the emulation session was not created.",
       "linuxAccountRequired": "Linux logon bypass is enabled, but the target account has not been resolved and selected.",
       "osdataNonEmpty": "OSDATA is a non-empty directory; automatic removal was refused.",

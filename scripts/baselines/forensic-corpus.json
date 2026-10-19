@@ -22,7 +22,7 @@
       "source": "scripts/generate-tiny-fixtures.ps1",
       "private": false,
       "maxBytes": 16777216,
-      "sha256": "78b6764e2ab617039ddc3bb3656ff532195b716a739ed9c1cf541351e7b9cf0e"
+      "sha256": "9b613edefdb8320f3bb1c9309b51dc120f43c5fc632ed51cad7503f0b01a0d6d"
     },
     {
       "id": "tiny-system-hive",
@@ -40,7 +40,7 @@
     {
       "id": "ntfs-import",
       "source": "crates/app-services/tests/support/import_ntfs_fixture.rs",
-      "sourceSha256": "e91819233bbc7180509e1c43fc2ebc4068cf11c789bcd2a17002bf6aea9de256",
+      "sourceSha256": "1d4721a8625077855ac5ab155efc2ff87a45babc027f727eac2cfed8b6a36f1a",
       "license": "Repository MIT",
       "features": [
         "normal",
@@ -118,7 +118,7 @@
     {
       "id": "e01-boundaries",
       "source": "crates/image-e01/tests/unit/image_e01.rs",
-      "sourceSha256": "ef488e67c42eb1e230e765b3ca91610a0e65f95a0f4dc3bd62fd8dc5cf4d0fa4",
+      "sourceSha256": "74526145a6ce77cc431d48fbab1ce6cea9277b926894a1e441e68640b9a0b4ea",
       "license": "Repository MIT",
       "features": [
         "compressed",
@@ -134,7 +134,7 @@
     {
       "id": "png-carving",
       "source": "crates/evidence-core/tests/unit/carving.rs",
-      "sourceSha256": "758bdec09594aafe22bc855e6c59d429dcb84d90ac61401a5c780b3114466204",
+      "sourceSha256": "dc68fda2f31893dd6638a9909b1234c95c3166cbd53125d49d5576af9fd2bbd3",
       "license": "Repository MIT",
       "features": [
         "cross-window",
@@ -142,11 +142,31 @@
         "zlib raster",
         "truncation",
         "budgets",
-        "bounded mutation"
+        "bounded mutation",
+        "ZIP stored/deflate",
+        "ZIP central directory",
+        "ZIP entry/expansion limits"
       ],
       "inputBudgetBytes": 131072,
       "mutationSeeds": 256,
       "expected": "exact offset/length/SHA256 for complete outputs; negatives never complete"
+    },
+    {
+      "id": "e01-paged-index",
+      "source": "crates/image-e01/tests/unit/paged_index.rs",
+      "sourceSha256": "a0ba0e84f3a0463769c376c3bf402b08f335f07cde0272d6f908a3f5746e7580",
+      "license": "Repository MIT",
+      "features": [
+        "offset page boundary",
+        "streaming validation",
+        "mirror fallback",
+        "independent cursors",
+        "page identity",
+        "hostile counts"
+      ],
+      "inputBudgetBytes": 16777216,
+      "mutationSeeds": 0,
+      "expected": "owning-crate assertions; golden values are not auto-refreshed"
     }
   ],
   "suites": [

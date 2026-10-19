@@ -158,7 +158,9 @@ pub(crate) fn open_e01_plan(
             cancel,
         )
         .map_err(ResourceError::into_io)?;
-    let plan = image_e01::E01Reader::open_with_segment_limit(path, handles as u32)?.open_plan()?;
+    let plan =
+        image_e01::E01Reader::open_with_segment_limit_cancellable(path, handles as u32, cancel)?
+            .open_plan()?;
     let bytes = plan.metadata_bytes();
     let budget = ReaderBudget {
         bytes: plan.reader_memory_bound(),

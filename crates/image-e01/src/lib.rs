@@ -1,10 +1,14 @@
 //! Read-only E01/EWF image access with multi-segment support.
 
+mod checksum;
+mod geometry;
 mod open;
 mod open_limits;
+mod paged_index;
 mod reader;
+mod sections;
 mod segment;
-mod table;
+mod table_validation;
 
 mod open_plan;
 pub use open_plan::E01OpenPlan;

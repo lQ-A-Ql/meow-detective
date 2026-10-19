@@ -115,6 +115,25 @@ describe('useEmulationWorkspaceModel', () => {
     expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
   });
 
+  it('explains a direct volume layout and prevents emulation admission', async () => {
+    mocks.preflight.mockResolvedValue({
+      dataSourceId: 'source-1',
+      installs: [],
+      recommendedBootRoute: 'recoveryMedia',
+      directVolume: {
+        logicalMediaBytes: 2_000_396_321_280,
+        declaredVolumeBytes: 275_402_194_432,
+        verifiedExtentBytes: 275_402_194_944,
+        volumeSerial: '4482D035A65A1162',
+      },
+    });
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.sourceLayoutHint).toBeTruthy());
+    expect(result.current.canStart).toBe(false);
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.launch).not.toHaveBeenCalled();
+  });
+
   it('owns the selected PE path and launches it without direct-boot confirmation', async () => {
     const confirm = vi.spyOn(window, 'confirm');
     mocks.openDialog.mockResolvedValue('C:\\Tools\\WinPE.iso');

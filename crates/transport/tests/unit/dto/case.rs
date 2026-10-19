@@ -1,6 +1,31 @@
 use super::*;
 
 #[test]
+fn direct_ntfs_geometry_round_trips_without_a_fabricated_partition_uuid() {
+    let dto = crate::dto::DirectNtfsVolumeDto {
+        logical_media_bytes: 2_000_396_321_280,
+        declared_volume_bytes: 275_402_194_432,
+        verified_extent_bytes: Some(275_402_194_944),
+        volume_serial: "4482D035A65A1162".into(),
+    };
+    let value = serde_json::to_value(&dto).unwrap();
+    assert_eq!(value["volumeSerial"], "4482D035A65A1162");
+    assert!(value.get("uuid").is_none());
+    assert_eq!(
+        serde_json::from_value::<crate::dto::DirectNtfsVolumeDto>(value).unwrap(),
+        dto
+    );
+    let absent = crate::dto::DirectNtfsVolumeDto {
+        verified_extent_bytes: None,
+        ..dto
+    };
+    assert!(serde_json::to_value(absent)
+        .unwrap()
+        .get("verifiedExtentBytes")
+        .is_none());
+}
+
+#[test]
 fn data_source_summary_serializes_provenance_fields_as_frontend_contract() {
     let dto = DataSourceSummaryDto {
         id: "ds-1".to_string(),

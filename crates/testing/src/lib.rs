@@ -4,4 +4,5 @@
 //! private workstation image.
 
 pub mod builders;
+pub mod ewf;
 pub mod fixtures;

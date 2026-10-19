@@ -151,12 +151,22 @@ where
     let Some(kind) = read_boot_filesystem(reader, 0)? else {
         return Ok(None);
     };
+    let length = if kind == ImageFilesystemKind::Ntfs {
+        super::direct_ntfs_volume::probe(reader)?.map(|geometry| {
+            geometry
+                .verified_extent_bytes
+                .unwrap_or(geometry.declared_volume_bytes)
+        })
+    } else {
+        let bytes = reader.seek(std::io::SeekFrom::End(0))?;
+        (bytes > 0).then_some(bytes)
+    };
     let candidate = ImageFilesystemCandidate {
         partition_index: Some(1),
         partition_name: Some("Volume".to_string()),
         kind,
         offset: 0,
-        length: None,
+        length,
         source: ImageFilesystemSource::DirectVolume,
         lvm_identity: None,
     };
@@ -167,7 +177,7 @@ where
         type_guid: None,
         uuid: None,
         offset: 0,
-        length: 0,
+        length: length.unwrap_or(0),
         status: partition_status_for_filesystem(kind),
         filesystem: Some(kind),
         lvm_identity: None,

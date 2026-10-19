@@ -92,21 +92,28 @@ pub fn emulation_preflight(
         .map(|storage| storage.platform)
         .unwrap_or_default();
     let repo = FileRepo::new(&source.connection);
-    match platform.as_str() {
+    let direct_volume = super::emulation_layout::direct_volume(case_conn, case_id, data_source_id)?;
+    let mut preflight = match platform.as_str() {
         "linux" => linux_preflight(case_conn, &source, &repo, data_source_id),
-        "windows" => windows_preflight(case_conn, &source, &repo, data_source_id),
+        "windows" => windows_preflight(case_conn, case_id, &source, &repo, data_source_id),
         _ => {
-            let mut dto = windows_preflight(case_conn, &source, &repo, data_source_id)?;
+            let mut dto = windows_preflight(case_conn, case_id, &source, &repo, data_source_id)?;
             if dto.installs.is_empty() {
                 dto = linux_preflight(case_conn, &source, &repo, data_source_id)?;
             }
             Ok(dto)
         }
+    }?;
+    if direct_volume.is_some() {
+        preflight.recommended_boot_route = EmulationBootRouteDto::RecoveryMedia;
     }
+    preflight.direct_volume = direct_volume;
+    Ok(preflight)
 }
 
 fn windows_preflight(
     case_conn: &Connection,
+    case_id: &CaseId,
     source: &crate::source_db::ReadySourceConnection,
     repo: &FileRepo<'_>,
     data_source_id: &DataSourceId,
@@ -173,7 +180,7 @@ fn windows_preflight(
             "emulation preflight partition scan truncated"
         );
     }
-    enrich_installs_from_fs(case_conn, data_source_id, source, &mut installs);
+    enrich_installs_from_fs(case_conn, case_id, data_source_id, source, &mut installs);
     let recommended_boot_route = if installs.iter().any(|install| install.osdata_present) {
         EmulationBootRouteDto::RecoveryMedia
     } else {
@@ -181,6 +188,7 @@ fn windows_preflight(
     };
     Ok(EmulationPreflightDto {
         data_source_id: data_source_id.0.clone(),
+        direct_volume: None,
         installs,
         recommended_boot_route,
         maintenance_tool_available: false,
@@ -238,6 +246,7 @@ fn linux_preflight(
     )?;
     Ok(EmulationPreflightDto {
         data_source_id: data_source_id.0.clone(),
+        direct_volume: None,
         installs,
         recommended_boot_route: EmulationBootRouteDto::DirectSystem,
         maintenance_tool_available: false,
@@ -263,6 +272,7 @@ fn path_present(
 /// is empty. Failures here are non-fatal — the catalog verdict stands.
 fn enrich_installs_from_fs(
     case_conn: &Connection,
+    case_id: &CaseId,
     data_source_id: &DataSourceId,
     source: &crate::source_db::ReadySourceConnection,
     installs: &mut [EmulationInstallDto],
@@ -286,6 +296,7 @@ fn enrich_installs_from_fs(
     for install in installs.iter_mut() {
         let Some(probe) = probe_install_from_fs(
             &context,
+            &case_id.0,
             &partitions,
             data_source_id,
             install.partition_index,
@@ -331,6 +342,7 @@ struct FsInstallProbe {
 /// probe.
 fn probe_install_from_fs(
     context: &EvidenceContext,
+    case_id: &str,
     partitions: &PartitionRepo<'_>,
     data_source_id: &DataSourceId,
     partition_index: u32,
@@ -338,9 +350,12 @@ fn probe_install_from_fs(
     let record = partitions
         .find_by_data_source_and_index(&data_source_id.0, partition_index as usize)
         .ok()??;
-    let reader =
-        crate::datasource_service::open_evidence_reader(&context.source_path, &context.kind)
-            .ok()?;
+    let reader = crate::file_service::open_host_evidence_reader(
+        &context.kind.to_string(),
+        &context.source_path,
+        case_id,
+    )
+    .ok()?;
     let length = (record.length > 0).then_some(record.length);
     let window = evidence_core::PartitionWindowReader::new(reader, record.offset, length).ok()?;
     let fs = fs_ntfs::NtfsReader::open(Box::new(window), 0).ok()?;

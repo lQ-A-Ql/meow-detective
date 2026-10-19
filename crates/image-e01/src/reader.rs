@@ -4,7 +4,7 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::{build_segment_path, table::MAX_STORED_CHUNK_BYTES};
+use crate::{build_segment_path, geometry::MAX_STORED_CHUNK_BYTES};
 
 const SEQUENTIAL_PREFETCH_CHUNKS: u64 = 3;
 pub(crate) const SEQUENTIAL_CACHE_MAX_BYTES: usize = 16 * 1024 * 1024;
@@ -16,14 +16,13 @@ pub(crate) struct CachedChunk {
 
 /// E01 reader with multi-segment support.
 ///
-/// The chunk table maps each entry to
-/// `(segment_index, file_offset, compressed, stored_size)`.
+/// A shared validated section index resolves chunk addresses on demand.
 pub struct E01Reader {
     pub(crate) info: ReaderInfo,
     pub(crate) total_bytes: u64,
     pub(crate) chunk_size_sectors: u32,
     pub(crate) bytes_per_sector: u32,
-    pub(crate) chunk_table: Arc<Vec<(usize, u64, bool, u64)>>,
+    pub(crate) chunk_table: Arc<crate::paged_index::PagedIndex>,
     pub(crate) segment_files: Vec<std::fs::File>,
     pub(crate) segment_metadata: Option<Vec<(u64, std::time::SystemTime)>>,
     pub(crate) cursor: u64,
@@ -45,7 +44,7 @@ impl E01Reader {
         total_bytes: u64,
         chunk_size_sectors: u32,
         bytes_per_sector: u32,
-        chunk_table: Vec<(usize, u64, bool, u64)>,
+        chunk_table: crate::paged_index::PagedIndex,
         segment_files: Vec<std::fs::File>,
     ) -> Self {
         let segment_metadata = segment_files
@@ -146,7 +145,8 @@ impl E01Reader {
     }
 
     fn read_chunk_uncached(&mut self, idx: u64) -> io::Result<Vec<u8>> {
-        let (segment, offset, compressed, stored_size) = chunk_entry(&self.chunk_table, idx)?;
+        let (segment, offset, compressed, stored_size) =
+            self.chunk_table.lookup(idx, &mut self.segment_files)?;
         let chunk_size = self.chunk_size_bytes();
         let chunk_start = idx.checked_mul(chunk_size).ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidData, "E01 chunk offset overflow")
@@ -430,11 +430,4 @@ impl EvidenceReader for E01Reader {
     fn preferred_read_granularity(&self) -> usize {
         usize::try_from(self.chunk_size_bytes()).unwrap_or(usize::MAX)
     }
-}
-
-fn chunk_entry(table: &[(usize, u64, bool, u64)], idx: u64) -> io::Result<(usize, u64, bool, u64)> {
-    table
-        .get(idx as usize)
-        .copied()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "chunk not found"))
 }

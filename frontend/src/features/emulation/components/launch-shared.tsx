@@ -29,6 +29,7 @@ export function LaunchPanelShell({ model, recoveryHint, inspection, maintenance 
         <h2 className="text-[14px] text-forensics-ink">{t('emulationPage.launch.title')}</h2>
         <SourceSelectField model={model} />
         <SourceInfoList model={model} />
+        {model.sourceLayoutHint ? <FieldHint>{model.sourceLayoutHint}</FieldHint> : null}
         <RecoveryIsoField model={model} hint={recoveryHint} />
         <BootRouteRow model={model} />
         {inspection}

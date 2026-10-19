@@ -163,6 +163,8 @@ fn segment(path: &std::path::Path, total: Option<u64>, bytes: &[u8]) {
     f.write_all(&section("done", 0, 0)).unwrap();
     f.write_all(bytes).unwrap();
     f.flush().unwrap();
+    drop(f);
+    testing::ewf::finalize_synthetic_e01(path).unwrap();
 }
 
 #[test]

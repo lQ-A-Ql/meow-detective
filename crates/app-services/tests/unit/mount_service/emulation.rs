@@ -30,6 +30,50 @@ fn prepare_emulation_source_verifies_the_parent_hash() {
 }
 
 #[test]
+fn direct_ntfs_volume_requires_a_derived_boot_layout_and_correct_case_scope() {
+    let mut bytes = vec![0; 128 * 512];
+    bytes[3..11].copy_from_slice(b"NTFS    ");
+    bytes[11..13].copy_from_slice(&512u16.to_le_bytes());
+    bytes[13] = 8;
+    bytes[40..48].copy_from_slice(&64u64.to_le_bytes());
+    bytes[48..56].copy_from_slice(&2u64.to_le_bytes());
+    bytes[510..512].copy_from_slice(&[0x55, 0xaa]);
+    let (_tmp, connection, source_id, _) = setup_ready_source(&bytes);
+    let error = crate::mount_service::validate_emulation_disk_layout(
+        &connection,
+        &CaseId("case-emulation-prepare".into()),
+        &source_id,
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        MountServiceError::DirectVolumeBootLayoutRequired
+    ));
+    assert!(matches!(
+        error.category(),
+        transport::ErrorCategory::Unsupported
+    ));
+    let error = crate::mount_service::validate_emulation_disk_layout(
+        &connection,
+        &CaseId("foreign-case".into()),
+        &source_id,
+    )
+    .unwrap_err();
+    assert!(matches!(error, MountServiceError::NotFound(_)));
+}
+
+#[test]
+fn disk_layout_admission_does_not_misclassify_an_ordinary_raw_disk() {
+    let (_tmp, connection, source_id, _) = setup_ready_source(&[0; 1024]);
+    crate::mount_service::validate_emulation_disk_layout(
+        &connection,
+        &CaseId("case-emulation-prepare".into()),
+        &source_id,
+    )
+    .unwrap();
+}
+
+#[test]
 fn prepare_emulation_source_fails_closed_on_same_length_tampering() {
     let (tmp, connection, source_id, _) = setup_ready_source(b"emulation evidence bytes");
     let mut tampered = b"emulation evidence bytes".to_vec();

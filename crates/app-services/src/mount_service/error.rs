@@ -3,6 +3,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum MountServiceError {
+    #[error("the source is a direct NTFS volume without an enclosing disk boot layout; a derived boot disk is required for emulation")]
+    DirectVolumeBootLayoutRequired,
     #[error("database error: {0}")]
     Database(#[from] DbError),
     #[error("source metadata could not be read: {0}")]
@@ -40,7 +42,9 @@ impl transport::ServiceErrorCategory for MountServiceError {
             | Self::SourceHashMismatch { .. } => transport::ErrorCategory::Security,
             Self::SourceHashVerify(_) => transport::ErrorCategory::Io,
             Self::SourceNotReady(_) | Self::NotFound(_) => transport::ErrorCategory::Validation,
-            Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
+            Self::Unsupported(_) | Self::DirectVolumeBootLayoutRequired => {
+                transport::ErrorCategory::Unsupported
+            }
         }
     }
 }

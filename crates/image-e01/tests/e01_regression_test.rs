@@ -172,6 +172,7 @@ fn multi_segment_with_only_first_file_works() {
     f.write_all(&c0).unwrap();
     f.flush().unwrap();
     drop(f);
+    testing::ewf::finalize_synthetic_e01(&e01_path).unwrap();
 
     let mut r = E01Reader::open(&e01_path).unwrap();
     assert_eq!(r.info().size, sectors * 512);
@@ -244,6 +245,7 @@ fn prefers_primary_table_over_table2_duplicates() {
     f.write_all(&c1).unwrap();
     f.flush().unwrap();
     drop(f);
+    testing::ewf::finalize_synthetic_e01(&e01_path).unwrap();
 
     let mut r = E01Reader::open(&e01_path).unwrap();
     let mut buf = vec![0u8; chunk_bytes * 2];
@@ -328,7 +330,9 @@ fn write_single_chunk_segment(
     let mut chunk = vec![0u8; 8 * 512];
     chunk[..marker.len()].copy_from_slice(marker);
     file.write_all(&chunk)?;
-    file.flush()
+    file.flush()?;
+    drop(file);
+    testing::ewf::finalize_synthetic_e01(path)
 }
 
 fn sdesc(stype: &str, next: u64, size: u64) -> [u8; 76] {

@@ -230,7 +230,7 @@ export function DataSourcesPanel({
                                     </div>
                                     <div className="mt-1 text-forensics-text-tertiary">{partition.name}</div>
                                     <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted">
-                                      {t('caseHome.partitions.offsetLength', { offset: partition.offset, length: partition.length })}
+                                      {t('caseHome.partitions.offsetLength', { offset: partition.offset, length: partitionLengthLabel(partition.length, t('caseHome.partitions.lengthUnknown')) })}
                                     </div>
                                     <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
                                       {t('caseHome.partitions.uuid', { value: partition.uuid ?? t('caseHome.partitions.uuidNotRecorded') })}
@@ -279,3 +279,4 @@ export function DataSourcesPanel({
 }
 import type { useEvidenceTask } from '@/features/jobs/hooks/use-evidence-task';
 import { EvidenceTaskStatus } from '@/features/jobs/components/EvidenceTaskStatus';
+import { partitionLengthLabel } from '@/features/case/partition-length';

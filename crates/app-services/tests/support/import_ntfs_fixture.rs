@@ -157,7 +157,9 @@ pub fn write_e01(path: &Path, bytes: &[u8]) -> io::Result<()> {
     for chunk in chunks {
         file.write_all(&chunk)?;
     }
-    file.flush()
+    file.flush()?;
+    drop(file);
+    testing::ewf::finalize_synthetic_e01(path)
 }
 
 fn section(kind: &str, next: u64, length: u64) -> [u8; 76] {
