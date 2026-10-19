@@ -5,6 +5,17 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub enum ImportBenchmarkPhaseDto {
     Workflow,
+    Attach,
+    SourceDatabaseOpen,
+    SourceMetadataInitialize,
+    RuntimePrepare,
+    WorkspaceAdmission,
+    BulkLoadBegin,
+    Catalog,
+    Finalize,
+    OutcomePersistence,
+    PostReady,
+    Cleanup,
     Probe,
     ReaderBuild,
     Enumeration,

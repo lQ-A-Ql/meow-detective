@@ -124,6 +124,17 @@ fn observation_limits_round_trip_without_becoming_zero_measurements() {
 fn all_benchmark_phases_and_states_round_trip() {
     for phase in [
         Phase::Workflow,
+        Phase::Attach,
+        Phase::SourceDatabaseOpen,
+        Phase::SourceMetadataInitialize,
+        Phase::RuntimePrepare,
+        Phase::WorkspaceAdmission,
+        Phase::BulkLoadBegin,
+        Phase::Catalog,
+        Phase::Finalize,
+        Phase::OutcomePersistence,
+        Phase::PostReady,
+        Phase::Cleanup,
         Phase::Probe,
         Phase::ReaderBuild,
         Phase::Enumeration,

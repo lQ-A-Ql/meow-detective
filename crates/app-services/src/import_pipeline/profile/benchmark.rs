@@ -189,6 +189,10 @@ impl Measurement {
             inclusive: matches!(
                 phase,
                 Phase::Workflow
+                    | Phase::Catalog
+                    | Phase::Finalize
+                    | Phase::PostReady
+                    | Phase::SourceDatabaseOpen
                     | Phase::Enumeration
                     | Phase::Analysis
                     | Phase::Timeline

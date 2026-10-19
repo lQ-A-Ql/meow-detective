@@ -43,6 +43,7 @@ mod phases;
 mod post_ready;
 pub(crate) mod profile;
 mod runtime;
+mod setup;
 
 pub use emit::{ImportEventSink, NoopImportEventSink};
 pub use execute::{

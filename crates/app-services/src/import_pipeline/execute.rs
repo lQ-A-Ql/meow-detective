@@ -4,6 +4,7 @@ use std::time::Instant;
 use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo, job_repo::JobRepo, linux_import_set_repo::LinuxImportSetRepo,
 };
+use transport::dto::import_benchmark::ImportBenchmarkPhaseDto as Phase;
 use transport::{dto::CancellationStateDto, CommandError};
 
 use crate::import_pipeline::{
@@ -103,6 +104,9 @@ fn execute_import_job_internal(
     options: ImportJobOptions<'_>,
     profiler: Option<super::ImportProfiler>,
 ) -> Result<(String, JobOutcomeCounts), CommandError> {
+    // First local, so the observer drops after all pre-existing workflow locals.
+    let mut cleanup = profile::CleanupRecorder::new(profiler.clone());
+    let profiling = profiler.clone();
     let job_repo = JobRepo::new(conn);
     let mut counts = JobOutcomeCounts::default();
     let import_started = Instant::now();
@@ -126,46 +130,39 @@ fn execute_import_job_internal(
         runtime: None,
     };
 
-    let ds = phases::run_attach_phase(&mut ctx)?;
-    let source_conn = crate::source_db::open_source_db(case_root, &ds.id)
-        .map_err(CommandError::from_service_error)?;
-    DataSourceRepo::new(&source_conn)
-        .upsert_source_local_metadata(case_id, &ds)
-        .map_err(CommandError::from_service_error)?;
-    let initialize_view = super::runtime::source_is_pending(conn, &ds.id)?;
-    DataSourceRepo::new(conn)
-        .update_import_state(&ds.id, "importing", None)
-        .map_err(CommandError::from_service_error)?;
+    let ds = profile::measure_optional(profiling.as_ref(), Phase::Attach, || {
+        phases::run_attach_phase(&mut ctx)
+    })?;
+    let (source_conn, initialize_view) = super::setup::open_source(&ctx, &ds)?;
     ctx.source_conn = Some(&source_conn);
     ctx.ds = Some(&ds);
     let mut workspace = None;
     let result = (|| {
         reject_cancelled_after_register(&ctx, &ds)?;
-        super::runtime::prepare_runtime(&mut ctx, &ds, initialize_view)?;
-        if let Some(runtime) = &ctx.runtime {
-            let admitted = crate::resource_budget::global_pool()
-                .workspace(ctx.options.cancel_token)
-                .map_err(CommandError::from_typed_service_error)?;
-            runtime.publication_lease().bind_pool(admitted.pool());
-            workspace = Some(admitted);
-        }
+        workspace = super::setup::prepare_resources(&mut ctx, &ds, initialize_view)?;
         let publication = ctx.runtime.as_ref().map(|r| r.publication_lease());
         let _source_fence = publication
             .as_ref()
             .map(|lease| lease.fence_connection(&source_conn));
-        persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::begin(
-            &source_conn,
-            &job_id.0,
-        )
-        .map_err(CommandError::from_typed_service_error)?;
-        let stats = phases::run_enumeration_phase(&mut ctx, &ds)?;
+        profile::measure_optional(profiling.as_ref(), Phase::BulkLoadBegin, || {
+            persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::begin(
+                &source_conn,
+                &job_id.0,
+            )
+            .map_err(CommandError::from_typed_service_error)
+        })?;
+        let stats = profile::measure_optional(profiling.as_ref(), Phase::Catalog, || {
+            phases::run_enumeration_phase(&mut ctx, &ds)
+        })?;
         let profiler = ctx.profiler.clone();
         let pipeline_msg = profile::measure_optional(
             profiler.as_ref(),
             transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Analysis,
             || phases::run_analyze_phase(&mut ctx, &ds),
         )?;
-        phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)
+        profile::measure_optional(profiling.as_ref(), Phase::Finalize, || {
+            phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)
+        })
     })();
 
     let ready_state = match ctx.content_kind {
@@ -174,8 +171,13 @@ fn execute_import_job_internal(
             "ready_metadata"
         }
     };
-    let mut message = super::runtime::persist_outcome(&ctx, &ds, ready_state, result)?;
-    message = super::post_ready::finish(&mut ctx, &ds, &source_conn, message)?;
+    let message = profile::measure_optional(profiling.as_ref(), Phase::OutcomePersistence, || {
+        super::runtime::persist_outcome(&ctx, &ds, ready_state, result)
+    })?;
+    let message = profile::measure_optional(profiling.as_ref(), Phase::PostReady, || {
+        super::post_ready::finish(&mut ctx, &ds, &source_conn, message)
+    })?;
+    cleanup.start();
     Ok((message, counts))
 }
 

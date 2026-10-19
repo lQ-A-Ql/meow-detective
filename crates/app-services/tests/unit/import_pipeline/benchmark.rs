@@ -2,6 +2,37 @@ use super::*;
 use crate::import_pipeline::profile::PhaseRecorder;
 
 #[test]
+fn cleanup_observer_runs_after_later_locals_without_recording_an_unfinished_body() {
+    use crate::import_pipeline::profile::CleanupRecorder;
+    struct LaterLocal(ImportProfiler);
+    impl Drop for LaterLocal {
+        fn drop(&mut self) {
+            assert!(!self
+                .0
+                .report()
+                .samples
+                .iter()
+                .any(|s| s.phase == Phase::Cleanup));
+        }
+    }
+    let profiler = ImportProfiler::default();
+    {
+        let mut cleanup = CleanupRecorder::new(Some(profiler.clone()));
+        let _local = LaterLocal(profiler.clone());
+        cleanup.start();
+    }
+    let samples = profiler.report().samples;
+    assert_eq!(samples.len(), 1);
+    assert_eq!(samples[0].phase, Phase::Cleanup);
+    assert_eq!(samples[0].state, State::Completed);
+    assert!(samples[0].elapsed_ns.is_some());
+    assert!(!samples[0].inclusive);
+    let empty = ImportProfiler::default();
+    drop(CleanupRecorder::new(Some(empty.clone())));
+    assert!(empty.report().samples.is_empty());
+}
+
+#[test]
 fn buffered_payload_gauges_use_partition_maximum_instead_of_parallel_sum() {
     let profiler = ImportProfiler::default();
     for (partition, batches, records) in [(0, 4, 40000), (1, 2, 20000)] {

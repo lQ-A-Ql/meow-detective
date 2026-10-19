@@ -372,6 +372,17 @@ fn verify_report(report: &ImportBenchmarkReportDto, record_count: u64) {
         .any(|sample| sample.phase == Phase::FallbackReaderBuild));
     for phase in [
         Phase::Probe,
+        Phase::Attach,
+        Phase::SourceDatabaseOpen,
+        Phase::SourceMetadataInitialize,
+        Phase::RuntimePrepare,
+        Phase::WorkspaceAdmission,
+        Phase::BulkLoadBegin,
+        Phase::Catalog,
+        Phase::Finalize,
+        Phase::OutcomePersistence,
+        Phase::PostReady,
+        Phase::Cleanup,
         Phase::Graph,
         Phase::Analysis,
         Phase::Timeline,
@@ -402,6 +413,35 @@ fn verify_report(report: &ImportBenchmarkReportDto, record_count: u64) {
             "missing {phase:?}"
         );
     }
+    let root_phases = [
+        Phase::Attach,
+        Phase::SourceDatabaseOpen,
+        Phase::SourceMetadataInitialize,
+        Phase::RuntimePrepare,
+        Phase::WorkspaceAdmission,
+        Phase::BulkLoadBegin,
+        Phase::Catalog,
+        Phase::Analysis,
+        Phase::Finalize,
+        Phase::OutcomePersistence,
+        Phase::PostReady,
+        Phase::Cleanup,
+    ];
+    let covered: u64 = report
+        .samples
+        .iter()
+        .filter(|sample| sample.partition_index.is_none() && root_phases.contains(&sample.phase))
+        .map(|sample| sample.elapsed_ns.unwrap())
+        .sum();
+    let workflow = report
+        .samples
+        .iter()
+        .find(|sample| sample.phase == Phase::Workflow)
+        .unwrap();
+    assert!(
+        covered <= workflow.elapsed_ns.unwrap(),
+        "root spans overlap or double-count work"
+    );
     for phase in [
         Phase::MftReaderOpen,
         Phase::MftParams,

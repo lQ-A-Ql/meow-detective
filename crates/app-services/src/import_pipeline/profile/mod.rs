@@ -1,4 +1,5 @@
 mod benchmark;
+mod cleanup;
 mod parsing;
 pub(crate) mod progress;
 mod recorder;
@@ -7,6 +8,7 @@ mod storage;
 
 pub(crate) use benchmark::Counters;
 pub use benchmark::ImportProfiler;
+pub(crate) use cleanup::CleanupRecorder;
 pub(crate) use parsing::{bytes_to_mb, elapsed_ms, mb_per_sec, rows_per_sec};
 pub(crate) use progress::{emit_import_profile_progress, emit_phase_profile};
 pub(crate) use recorder::PhaseRecorder;
