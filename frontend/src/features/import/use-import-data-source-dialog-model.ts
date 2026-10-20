@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { IMPORT_SOURCE_FILE_EXTENSIONS } from '@/design/import-source';
 import { openDialog, singleDialogPath } from '@/lib/platform/dialog';
 import { listLocalDisks } from '@/lib/api/files';
 
@@ -11,23 +12,7 @@ export function useImportDataSourceDialogModel() {
         filters: [
           {
             name: filterName,
-            extensions: [
-              'e01',
-              'E01',
-              'ewf',
-              'dd',
-              'raw',
-              'img',
-              'simg',
-              'sparse',
-              'iso',
-              'vmdk',
-              'tar',
-              'tar.gz',
-              'tgz',
-              'gz',
-              'gzip',
-            ],
+            extensions: [...IMPORT_SOURCE_FILE_EXTENSIONS],
           },
         ],
       });
