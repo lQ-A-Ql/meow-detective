@@ -53,7 +53,7 @@ pub(crate) async fn check(app: AppHandle) -> Result<AppUpdateInfoDto, CommandErr
         .try_lock()
         .map_err(|_| failure("UPDATE_BUSY"))?;
     if !info(&app)?.configured {
-        return Ok(info(&app)?);
+        return info(&app);
     }
     let updater = app
         .updater_builder()

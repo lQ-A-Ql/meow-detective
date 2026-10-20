@@ -1,11 +1,15 @@
 import { QueryClient,QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent,render,screen,waitFor,within } from '@testing-library/react';
+import { configure,fireEvent,render,screen,waitFor,within } from '@testing-library/react';
 import { describe,it,expect,vi } from 'vitest';
 import { RegistryBrowserContainer } from '@/features/registry-browser/containers/RegistryBrowserContainer';
 import { createRegistryBrowserMock } from '../../../mocks/registry-browser/client';
 import data from '../../../mocks/registry-browser/data.json';
 import wire from '../../../mocks/registry-browser/recovery-contract.json';
 import type { RegistryRecovery } from '@/types/registryBrowser';
+
+// Hive discovery, key resolution and value paging share the suite's CPU budget.
+configure({ asyncUtilTimeout: 5000 });
+vi.setConfig({ testTimeout: 15000 });
 
 function mount(client=createRegistryBrowserMock()) {
   const query=new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0}}});

@@ -213,7 +213,8 @@ foreach ($item in $knownLimitationsFact.items) {
 # ── Benchmark baseline structural validation ─────────────────────
 Assert-Contains $benchmarkBaseline.hostProfile 'Windows' 'benchmark-baseline hostProfile is missing Windows'
 Assert-Equals $benchmarkBaseline.baselineVersion '2026.06' 'benchmark-baseline baselineVersion drifted'
-Assert-Contains $benchmarkBaseline.lastVerifiedAt '2026-06-13' 'benchmark-baseline lastVerifiedAt is stale'
+$benchmarkVerifiedDate = ([DateTimeOffset]$benchmarkBaseline.lastVerifiedAt).UtcDateTime.ToString('yyyy-MM-dd')
+Assert-Equals $benchmarkVerifiedDate '2026-06-13' 'benchmark-baseline lastVerifiedAt is stale'
 $requiredCheckCount = $benchmarkBaseline.requiredChecks.Count
 $scenarioCount = $benchmarkBaseline.scenarios.Count
 Assert-Contains $readme "v2-benchmark-baseline.json" 'README is missing benchmark baseline fact source'

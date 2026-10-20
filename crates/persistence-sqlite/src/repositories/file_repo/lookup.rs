@@ -15,8 +15,7 @@ impl FileRepo<'_> {
         entry_id: &FileEntryId,
         max_depth: usize,
     ) -> DbResult<(Vec<FileEntry>, bool)> {
-        let sql = format!(
-            "WITH RECURSIVE ancestors(id, parent_id, depth) AS (
+        let sql = "WITH RECURSIVE ancestors(id, parent_id, depth) AS (
                  SELECT id, parent_id, 0 FROM file_entries WHERE id = ?1
                  UNION ALL
                  SELECT parent.id, parent.parent_id, ancestors.depth + 1
@@ -33,9 +32,8 @@ impl FileRepo<'_> {
                     file_entries.encrypted, file_entries.read_only,
                     file_entries.archive, file_entries.unix_mode, ancestors.depth
              FROM file_entries JOIN ancestors ON ancestors.id = file_entries.id
-             ORDER BY ancestors.depth DESC"
-        );
-        let mut statement = self.conn.prepare(&sql)?;
+             ORDER BY ancestors.depth DESC";
+        let mut statement = self.conn.prepare(sql)?;
         let rows = statement.query_map(
             params![entry_id.0, max_depth as i64],
             super::mapping::row_to_file_entry,

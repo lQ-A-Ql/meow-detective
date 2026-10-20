@@ -83,7 +83,7 @@ function deferred<T>() {
 
 describe('files hooks', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mocks.closeFileHandle.mockResolvedValue(false);
   });
 
@@ -558,16 +558,16 @@ describe('files hooks', () => {
       }
     });
 
-    it('re-opens an expired preview handle once and retries the range', async () => {
+    it.each(['PREVIEW_HANDLE_EXPIRED', 'PREVIEW_SCOPE_CHANGED'])('re-opens for %s and retries the range', async (code) => {
       mocks.openFileHandle
         .mockResolvedValueOnce({ handleId: 'file:stale-1', size: 2 * 1024 * 1024, mime: undefined })
         .mockResolvedValueOnce({ handleId: 'file:stale-2', size: 2 * 1024 * 1024, mime: undefined });
       mocks.readFileRange
         .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x41] })
         .mockRejectedValueOnce({
-          code: 'COMMAND_READ_FILE_RANGE_FAILED',
+          code,
           message: 'Preview handle expired or invalid',
-          category: 'internal',
+          category: 'validation',
           recoverable: true,
         })
         .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x42] })

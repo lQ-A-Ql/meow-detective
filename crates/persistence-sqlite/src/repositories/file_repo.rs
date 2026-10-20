@@ -1,6 +1,7 @@
 use rusqlite::Connection;
 
 mod browse;
+mod browse_paging;
 mod indexing;
 mod lookup;
 mod mapping;
