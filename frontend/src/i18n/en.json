@@ -331,6 +331,8 @@
     "hex": {
       "ariaLabel": "Hex and ASCII byte preview",
       "empty": "Select a file to preview hexadecimal data",
+      "emptyFile": "Empty file (0 bytes); there is no hex content to show",
+      "emptyRange": "This range returned no bytes to display",
       "loadedRanges": "Loaded ranges",
       "efsTitle": "EFS Encrypted",
       "efsDetail": "This file is encrypted with NTFS Encrypting File System. Content cannot be decrypted without the private key."
@@ -1243,7 +1245,7 @@
     "loading": "Searching file index…",
     "locating": "Locating file…",
     "noCase": "Open a case first",
-    "doubleClickHint": "Click to select · Double-click to locate"
+    "doubleClickHint": "Click to preview · Double-click to locate"
   },
   "infrastructure": {
     "caseLabel": "Current case",

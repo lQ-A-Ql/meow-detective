@@ -10,8 +10,17 @@ import { formatBytes } from '@/lib/format-bytes';
 export function HexPreviewContentView({ model }: { model: ReturnType<typeof useHexPreviewModel> }) {
  const { t } = useTranslation();
  const { viewer, onHexJumpInputChange, onHexJump, inspectorExpanded, handleNeedMoreRange, toggleInspector } = model;
-  if (!viewer || (viewer.rawBytes.length === 0 && viewer.lines.length === 0)) {
+  if (!viewer) {
     return <div className="text-forensics-muted">{t('viewer.hex.empty')}</div>;
+  }
+  if (viewer.rawBytes.length === 0 && viewer.lines.length === 0) {
+    // A selected file with no displayable bytes is either genuinely empty or its
+    // window carried nothing; saying "select a file" here hid the real state.
+    return (
+      <div className="text-forensics-muted">
+        {viewer.fileSize === 0 ? t('viewer.hex.emptyFile') : t('viewer.hex.emptyRange')}
+      </div>
+    );
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -84,4 +93,3 @@ export function HexPreviewContentView({ model }: { model: ReturnType<typeof useH
     </div>
   );
 }
-

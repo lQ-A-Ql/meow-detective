@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getFileChildren,
@@ -33,6 +33,8 @@ import { parseOffsetInput } from '@/lib/hex-offset-parser';
 import { fileJumpQuery } from './hooks/file-jump-query';
 import { mergeLoadedRanges } from '@/lib/hex-range-merger';
 import { getPreviewSettings } from '@/lib/settings';
+import { clampViewerRangeLength } from '@/lib/preview-limits';
+import { errorMessage, isApiErrorDto } from '@/lib/errors';
 import {
   adoptPreviewHandle,
   ensurePreviewRequestActive,
@@ -132,6 +134,36 @@ export function useFileChildrenPage(parentId?: string, offset = 0, limit = 500, 
   });
 }
 
+export interface FileChildrenBranchRequest {
+  parentId: string;
+  offset: number;
+}
+
+/**
+ * Loads the children of every expanded tree branch, not just the active directory.
+ *
+ * Without this, expanding a branch programmatically (a search jump, nested-evidence
+ * open, or a restored expansion after a page switch) left the intermediate levels
+ * without children, so the deepest directory never rendered even though it was
+ * expanded and selected - the tree "lost" the path. The queries share the
+ * `children-page` cache entries with {@link useFileChildrenPage}, so a branch that was
+ * already fetched by clicking it is never requested twice.
+ */
+export function useFileChildrenBranches(
+  branches: readonly FileChildrenBranchRequest[],
+  limit = 500,
+  showHidden = false,
+) {
+  return useQueries({
+    queries: branches.map((branch) => ({
+      queryKey: ['files', 'children-page', branch.parentId, branch.offset, limit, showHidden],
+      queryFn: () => getFileChildrenPage(branch.parentId, branch.offset, limit, showHidden),
+      enabled: Boolean(branch.parentId),
+      staleTime: 60_000,
+    })),
+  });
+}
+
 export function useImportDataSource() {
   const qc = useQueryClient();
   return useMutation({
@@ -172,6 +204,62 @@ export function useFileHandle(fileId?: string, enabled = true) {
  */
 const MAX_RETAINED_HEX_CHUNKS = 8;
 
+/**
+ * Requested window length, clamped to what one IPC range request may ask for. The
+ * backend clamps anything longer, and a caller that keeps the requested (not the
+ * returned) length would mark unloaded bytes as loaded.
+ */
+function clampRequestedRangeLength(length: number) {
+  return clampViewerRangeLength(length);
+}
+
+/**
+ * Number of bytes a range response actually carried. Prepared preview sessions return
+ * raw bytes; the legacy routed fallback returns formatted lines only, where the
+ * requested length is the best available estimate.
+ */
+function readRangeByteLength(range: ViewerRangeResponse | undefined, requestedLength: number) {
+  const rawBytes = range?.rawBytes;
+  if (rawBytes) return rawBytes.length;
+  return requestedLength;
+}
+
+/**
+ * Base offset of the loaded window that contains `activeOffset`. Normally the window is
+ * aligned to the configured chunk size, but a short read (end of file, or a truncated
+ * backend response) shifts the windows, so the closest loaded offset wins.
+ */
+function resolveWindowBaseOffset(
+  activeOffset: number,
+  chunkSize: number,
+  loadedChunks: Record<number, ViewerRangeResponse>,
+) {
+  let base = Math.max(0, Math.floor(activeOffset / chunkSize) * chunkSize);
+  for (const key of Object.keys(loadedChunks)) {
+    const offset = Number(key);
+    if (offset <= activeOffset && offset > base) base = offset;
+  }
+  return base;
+}
+
+/**
+ * A preview handle is a short-lived, case-scoped credential (30 minute TTL, invalidated by
+ * source refreshes and BitLocker unlock). Losing it is a normal condition, not a corrupt
+ * file, so the viewer re-opens the handle once instead of latching an error forever.
+ */
+function isStalePreviewHandleError(error: unknown) {
+  if (isApiErrorDto(error)) {
+    return error.code === 'PREVIEW_HANDLE_EXPIRED' || error.code === 'PREVIEW_SCOPE_CHANGED';
+  }
+  const message = errorMessage(error, '').toLowerCase();
+  if (!message) return false;
+  return (message.includes('handle') || message.includes('session'))
+    && (message.includes('expired')
+      || message.includes('invalid')
+      || message.includes('not found')
+      || message.includes('unavailable'));
+}
+
 export function useFileViewer(fileId?: string, enabled = true) {
   const preview = useMemo(() => getPreviewSettings(), []);
   const owner = usePreviewHandleOwner(`${fileId ?? ''}:viewer`);
@@ -185,9 +273,13 @@ export function useFileViewer(fileId?: string, enabled = true) {
   // Identifies the file that the in-flight chunk read belongs to. A read that resolves
   // after the investigator switched files must never write into the new file's state.
   const loadedFileIdRef = useRef(fileId);
+  // One handle re-open per file: a second stale-handle failure is surfaced instead of
+  // looping between re-open and read.
+  const handleReopenedRef = useRef(false);
 
   useEffect(() => {
     loadedFileIdRef.current = fileId;
+    handleReopenedRef.current = false;
     setLoadedRanges([]);
     setLoadedChunks({});
     setActiveOffset(0);
@@ -212,13 +304,14 @@ export function useFileViewer(fileId?: string, enabled = true) {
           preview.maxViewerRangeLength,
           preview.hexChunkBytes,
         );
+        const requestedLength = clampRequestedRangeLength(Math.max(1, initialLength));
         const range = await readFileRange({
           handleId: handle.handleId,
           offset: 0,
-          length: Math.max(1, initialLength),
+          length: requestedLength,
         });
         await ensurePreviewRequestActive(owner, handle.handleId, signal);
-        return { handle, range };
+        return { handle, range, requestedLength };
       } catch (error) {
         await releasePreviewHandle(owner, handle.handleId);
         throw error;
@@ -230,16 +323,36 @@ export function useFileViewer(fileId?: string, enabled = true) {
     if (!baseQuery.data) {
       return;
     }
-    const { handle, range } = baseQuery.data;
-    const initialLength = getHexWindowSize(
-      handle.size,
-      preview.maxViewerRangeLength,
-      preview.hexChunkBytes,
-    );
-    setLoadedRanges([{ start: 0, end: initialLength }]);
-    setLoadedChunks({ 0: range });
+    const { range, requestedLength } = baseQuery.data;
+    const loadedLength = readRangeByteLength(range, requestedLength);
+    // Merge rather than replace: a handle re-open for the same (immutable) evidence
+    // produces a new response for offset 0 while later windows stay valid. Replacing
+    // would drop them and re-read bytes the investigator already scrolled past.
+    setLoadedChunks((current) => ({ ...current, 0: range }));
+    setLoadedRanges((current) => mergeLoadedRanges(current, { start: 0, end: loadedLength }));
     setViewerError(undefined);
+    handleReopenedRef.current = false;
   }, [baseQuery.data]);
+
+  /**
+   * Read a range, re-opening the preview handle once when the backend reports that the
+   * cached handle expired. The subsequent refresh of `baseQuery` installs the new handle
+   * for every later read.
+   */
+  const readRange = async (offset: number, length: number): Promise<ViewerRangeResponse> => {
+    const handle = baseQuery.data?.handle;
+    if (!handle) throw new Error('Preview handle is not ready');
+    try {
+      return await readFileRange({ handleId: handle.handleId, offset, length });
+    } catch (error) {
+      if (!isStalePreviewHandleError(error) || handleReopenedRef.current) throw error;
+      handleReopenedRef.current = true;
+      const refreshed = await baseQuery.refetch();
+      const nextHandle = refreshed.data?.handle;
+      if (!nextHandle) throw error;
+      return readFileRange({ handleId: nextHandle.handleId, offset, length });
+    }
+  };
 
   const loadRange = async (offset: number) => {
     if (!baseQuery.data || rangeLoadInFlight.current) {
@@ -271,18 +384,15 @@ export function useFileViewer(fileId?: string, enabled = true) {
     setIsLoadingMore(true);
     setViewerError(undefined);
     try {
-      const length = Math.min(
+      const length = clampRequestedRangeLength(Math.min(
         getHexWindowSize(handle.size, preview.maxViewerRangeLength, preview.hexChunkBytes),
         Math.max(1, handle.size - alignedOffset),
-      );
-      const range = await readFileRange({
-        handleId: handle.handleId,
-        offset: alignedOffset,
-        length,
-      });
+      ));
+      const range = await readRange(alignedOffset, length);
       if (loadedFileIdRef.current !== requestedFileId) {
         return;
       }
+      const bytesRead = readRangeByteLength(range, length);
       setLoadedChunks((current) => {
         const next = { ...current, [alignedOffset]: range };
         const offsets = Object.keys(next).map(Number);
@@ -299,14 +409,14 @@ export function useFileViewer(fileId?: string, enabled = true) {
         ) as Record<number, ViewerRangeResponse>;
       });
       setLoadedRanges((current) =>
-        mergeLoadedRanges(current, { start: alignedOffset, end: alignedOffset + length }),
+        mergeLoadedRanges(current, { start: alignedOffset, end: alignedOffset + bytesRead }),
       );
       setActiveOffset(clampedOffset);
     } catch (error) {
       if (loadedFileIdRef.current !== requestedFileId) {
         return;
       }
-      setViewerError(error instanceof Error ? error.message : 'Hex range load failed');
+      setViewerError(errorMessage(error, 'Hex range load failed'));
     } finally {
       if (loadedFileIdRef.current === requestedFileId) {
         rangeLoadInFlight.current = false;
@@ -322,15 +432,15 @@ export function useFileViewer(fileId?: string, enabled = true) {
 
     const { handle } = baseQuery.data;
     const mode = handle.size <= preview.maxViewerRangeLength ? 'full' : 'chunked';
-    const baseOffset =
-      mode === 'full'
-        ? 0
-        : Math.max(0, Math.floor(activeOffset / preview.hexChunkBytes) * preview.hexChunkBytes);
+    const baseOffset = mode === 'full'
+      ? 0
+      : resolveWindowBaseOffset(activeOffset, preview.hexChunkBytes, loadedChunks);
     const activeChunk = loadedChunks[baseOffset] ?? baseQuery.data.range;
     const rawBytes = getRawBytes(activeChunk);
     const lines = createHexByteWindowLines(activeChunk?.lines ?? [], rawBytes, baseOffset, handle.size);
-    const isFullyLoaded =
-      mode === 'full' || loadedRanges.some((range) => range.start === 0 && range.end >= handle.size);
+    const isFullyLoaded = loadedRanges.some(
+      (range) => range.start === 0 && range.end >= handle.size,
+    );
     const firstRange = loadedRanges[0];
     const lastRange = loadedRanges[loadedRanges.length - 1];
 

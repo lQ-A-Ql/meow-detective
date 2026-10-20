@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useFileJumpContext, useNtfsTechnicalFile } from '@/features/files/hooks';
-import { collectTreeNodeIds } from '@/features/files/file-tree-utils';
 import { useFilePagination } from '@/features/files/hooks/use-file-pagination';
 import { useFilePreview } from '@/features/files/hooks/use-file-preview';
 import { useFileSelection } from '@/features/files/hooks/use-file-selection';
@@ -56,6 +55,30 @@ export function useFileBrowserModel() {
     () => dataSources?.flatMap((source) => source.partitions ?? []) ?? [],
     [dataSources],
   );
+  const fileSortKey = useUiStore((s) => s.fileSortKey);
+  const fileSortDirection = useUiStore((s) => s.fileSortDirection);
+
+  // The jump context is resolved (and cached) before the router navigates here, so it
+  // is available on the first render of the browser and can drive the tree reveal.
+  const {
+    data: jumpContext,
+    isLoading: jumpContextLoading,
+    isFetching: jumpContextFetching,
+  } = useFileJumpContext(
+    selectedFileId,
+    showHidden,
+    FILE_BROWSER_PAGE_LIMIT,
+    fileSortKey,
+    fileSortDirection,
+    currentCase?.id,
+  );
+
+  const revealDirectoryIds = useMemo(() => {
+    if (!jumpContext || !selectedFileId || jumpContext.target.id !== selectedFileId) {
+      return undefined;
+    }
+    return [...jumpContext.ancestorDirectoryIds, jumpContext.directory.id];
+  }, [jumpContext, selectedFileId]);
 
   const tree = useFileTree({
     showHidden,
@@ -65,6 +88,9 @@ export function useFileBrowserModel() {
     setSelectedFileId,
     partitions,
     dataSources,
+    caseId: currentCase?.id,
+    revealDirectoryIds,
+    jumpPathNodes: jumpContext?.ancestorNodes,
   });
 
   const pagination = useFilePagination({
@@ -73,36 +99,28 @@ export function useFileBrowserModel() {
     showHidden,
   });
 
-  const {
-    data: jumpContext,
-    isLoading: jumpContextLoading,
-    isFetching: jumpContextFetching,
-  } = useFileJumpContext(
-    selectedFileId,
-    showHidden,
-    FILE_BROWSER_PAGE_LIMIT,
-    pagination.fileSortKey,
-    pagination.fileSortDirection,
-    currentCase?.id,
-  );
-
   useEffect(() => {
-    const visibleIds = collectTreeNodeIds(tree.rootTree, tree.treeChildren);
-    if (jumpContext) {
-      visibleIds.add(jumpContext.directory.id);
-      for (const id of jumpContext.ancestorDirectoryIds) visibleIds.add(id);
+    // Never reset the selection while the tree is still materializing: a jumped-to
+    // directory is expanded but its ancestor levels are still being fetched, and
+    // resetting during that window would throw the jump away. `tree.treeNodes` is the
+    // rendered (visible) tree, so cached-but-collapsed branches do not count.
+    if (!tree.treeSettled) return;
+    const visibleIds = new Set(tree.treeNodes.map((node) => node.id));
+    if (revealDirectoryIds) {
+      for (const id of revealDirectoryIds) visibleIds.add(id);
     }
     if (selectedDirectoryId && !visibleIds.has(selectedDirectoryId)) {
       setSelectedDirectoryId(tree.rootTree?.[0]?.id);
       setSelectedFileId(undefined);
     }
   }, [
-    jumpContext,
-    tree.rootTree,
-    tree.treeChildren,
+    revealDirectoryIds,
     selectedDirectoryId,
     setSelectedDirectoryId,
     setSelectedFileId,
+    tree.rootTree,
+    tree.treeNodes,
+    tree.treeSettled,
   ]);
 
   useEffect(() => {

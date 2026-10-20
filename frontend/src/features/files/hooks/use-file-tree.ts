@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFileChildrenPage, useFileTree as useFileTreeQuery } from '@/features/files/hooks';
+import {
+  useFileChildrenBranches,
+  useFileTree as useFileTreeQuery,
+  type FileChildrenBranchRequest,
+} from '@/features/files/hooks';
 import { useFileTreeKeyboard } from '@/hooks/use-file-tree-keyboard';
 import { useResizablePanel } from '@/hooks/use-resizable-panel';
 import { formatPartitionRootDisplayName } from '@/lib/partition-display';
@@ -12,6 +16,11 @@ import {
   rebaseTreeNodeDepths,
   sameTreeNodeList,
 } from '@/features/files/file-tree-utils';
+import {
+  DEFAULT_FILE_TREE_SCOPE,
+  readFileTreeExpansion,
+  writeFileTreeExpansion,
+} from '@/features/files/file-tree-expansion-store';
 import type {
   DataSourcePartition,
   DataSourceSummary,
@@ -61,6 +70,16 @@ interface UseFileTreeOptions {
   setSelectedFileId: (id?: string) => void;
   partitions: DataSourcePartition[];
   dataSources?: DataSourceSummary[];
+  /** Case that owns the expansion state, so switching cases starts from a clean tree. */
+  caseId?: string;
+  /**
+   * Directory ids that must be materialized even though they are not reachable from
+   * the current tree yet (search jump / nested-evidence open). Their ancestor levels
+   * are fetched in parallel instead of one level per commit.
+   */
+  revealDirectoryIds?: readonly string[];
+  /** Backend-proven path nodes for a jump; avoids guessing ancestor pages. */
+  jumpPathNodes?: readonly FileTreeNode[];
 }
 
 export function useFileTree({
@@ -71,18 +90,44 @@ export function useFileTree({
   setSelectedFileId,
   partitions,
   dataSources,
+  caseId,
+  revealDirectoryIds,
+  jumpPathNodes,
 }: UseFileTreeOptions) {
-  const [expandedDirectoryIds, setExpandedDirectoryIds] = useState<string[]>([]);
+  const expansionScope = caseId ?? DEFAULT_FILE_TREE_SCOPE;
+  const [expandedDirectoryIds, setExpandedDirectoryIdsState] = useState<string[]>(
+    () => readFileTreeExpansion(expansionScope),
+  );
   const [treeChildren, setTreeChildren] = useState<Record<string, FileTreeNode[]>>({});
   const [treeChildOffsets, setTreeChildOffsets] = useState<Record<string, number>>({});
   const [filterQuery, setFilterQuery] = useState('');
   const treeContainerRef = useRef<HTMLDivElement>(null);
+  const expansionScopeRef = useRef(expansionScope);
   const { width: treeWidth, isResizing, onResizeStart } = useResizablePanel({
     defaultWidth: 224,
     minWidth: 160,
     maxWidth: 400,
     storageKey: 'fileTreeWidth',
   });
+
+  // A case switch must not inherit the previous case's expansion or cached children.
+  if (expansionScopeRef.current !== expansionScope) {
+    expansionScopeRef.current = expansionScope;
+    setExpandedDirectoryIdsState(readFileTreeExpansion(expansionScope));
+    setTreeChildren({});
+    setTreeChildOffsets({});
+  }
+
+  const setExpandedDirectoryIds = useCallback(
+    (updater: (current: string[]) => string[]) => {
+      setExpandedDirectoryIdsState((current) => {
+        const next = updater(current);
+        if (next !== current) writeFileTreeExpansion(expansionScope, next);
+        return next;
+      });
+    },
+    [expansionScope],
+  );
 
   const { data: rootTree, isFetching: rootTreeFetching } = useFileTreeQuery(showHidden);
 
@@ -153,6 +198,28 @@ export function useFileTree({
     });
   }, [dataSources, rootTree, wrappedRootTree, showHidden]);
 
+  useEffect(() => {
+    if (!jumpPathNodes?.length) return;
+    setTreeChildren((current) => {
+      const next = { ...current };
+      const first = jumpPathNodes[0];
+      const dataSourceId = first.dataSourceId;
+      if (dataSourceId && dataSources?.some((source) => source.id === dataSourceId)) {
+        const sourceNodeId = dataSourceNodeId(dataSourceId);
+        const parent = wrappedRootTree.find((node) => node.id === sourceNodeId);
+        if (parent) {
+          next[sourceNodeId] = normalizeChildrenForParent([first], parent);
+        }
+      }
+      for (let index = 0; index < jumpPathNodes.length - 1; index += 1) {
+        const parent = jumpPathNodes[index];
+        const child = jumpPathNodes[index + 1];
+        next[parent.id] = normalizeChildrenForParent([child], parent);
+      }
+      return next;
+    });
+  }, [dataSources, jumpPathNodes, showHidden, wrappedRootTree]);
+
   const rootNodes = wrappedRootTree.length > 0 ? wrappedRootTree : (rootTree ?? []);
 
   // Auto-expand the first data source node so its partition children are visible
@@ -166,67 +233,114 @@ export function useFileTree({
           : [...current, wrappedRootTree[0].id],
       );
     }
-  }, [wrappedRootTree]);
+  }, [setExpandedDirectoryIds, wrappedRootTree]);
 
   const activeDirectoryId = selectedDirectoryId ?? rootNodes[0]?.id;
   const activeDirectoryIsDataSource = isDataSourceTreeNodeId(activeDirectoryId);
-  const activeDirectoryExpanded = Boolean(
-    activeDirectoryId && expandedDirectoryIds.includes(activeDirectoryId)
-  );
-  const activeChildrenOffset = activeDirectoryId
-    ? (treeChildOffsets[activeDirectoryId] ?? 0)
-    : 0;
-  const backendChildrenParentId =
-    activeDirectoryExpanded && !activeDirectoryIsDataSource ? activeDirectoryId : undefined;
-  const { data: activeChildrenPage } = useFileChildrenPage(
-    backendChildrenParentId,
-    activeChildrenOffset,
-    pageLimit,
-    showHidden
-  );
-  const activeChildren = activeChildrenPage?.children;
+  const expandedIdSet = useMemo(() => new Set(expandedDirectoryIds), [expandedDirectoryIds]);
 
-  useEffect(() => {
-    if (!activeDirectoryId || activeDirectoryIsDataSource || !activeChildren) return;
-    const pageOffset = activeChildrenOffset;
-    const activeParent = findTreeNode(activeDirectoryId, rootNodes, treeChildren);
-    const normalizedChildren = normalizeChildrenForParent(activeChildren, activeParent);
-    setTreeChildren((current) => {
-      const keys = Object.keys(current);
-      const previousChildren = current[activeDirectoryId] ?? [];
-      const nextChildren = pageOffset > 0
-        ? mergeTreeNodePages(previousChildren, normalizedChildren)
-        : normalizedChildren;
-      if (sameTreeNodeList(previousChildren, nextChildren)) return current;
-      if (!current[activeDirectoryId] && keys.length >= MAX_TREE_CACHE_SIZE) {
-        // Keep every expanded, visible branch resident. Evicting an ancestor
-        // would make its whole subtree disappear despite its expanded state.
-        const pinnedIds = new Set(keys.filter(isDataSourceTreeNodeId));
-        const evictKey = findEvictableTreeCacheKey(
-          rootNodes,
-          current,
-          new Set(expandedDirectoryIds),
-          pinnedIds,
-        );
-        if (evictKey) {
-          const { [evictKey]: _, ...rest } = current;
-          return { ...rest, [activeDirectoryId]: nextChildren };
-        }
+  const flatTree = useMemo(
+    () => flattenExpandedTree(rootNodes, treeChildren, expandedIdSet),
+    [expandedIdSet, rootNodes, treeChildren],
+  );
+
+  // Every expanded branch that is already visible gets its children, not just the
+  // active directory. The walk loads one level per commit, so restoring a large
+  // remembered expansion set cannot fan out into a query per remembered branch.
+  const branchRequests = useMemo<FileChildrenBranchRequest[]>(() => {
+    const parentIds = new Set<string>();
+    for (const node of flatTree) {
+      if (expandedIdSet.has(node.id) && !isDataSourceTreeNodeId(node.id)) {
+        parentIds.add(node.id);
       }
-      return { ...current, [activeDirectoryId]: nextChildren };
-    });
-    // `showHidden` is included so the cached children page is re-merged after
-    // the visibility-reset wipe even when the query data reference is
-    // unchanged (placeholderData / structural sharing).
+    }
+    if (
+      activeDirectoryId
+      && !activeDirectoryIsDataSource
+      && expandedIdSet.has(activeDirectoryId)
+    ) {
+      parentIds.add(activeDirectoryId);
+    }
+    // A programmatic reveal knows the ancestor ids before they are reachable, so
+    // those levels are fetched together instead of stalling the tree walk.
+    for (const id of revealDirectoryIds ?? []) {
+      if (id && !isDataSourceTreeNodeId(id)) parentIds.add(id);
+    }
+    return Array.from(parentIds, (parentId) => ({
+      parentId,
+      offset: treeChildOffsets[parentId] ?? 0,
+    }));
   }, [
-    activeChildren,
-    activeChildrenOffset,
     activeDirectoryId,
     activeDirectoryIsDataSource,
-    expandedDirectoryIds,
+    expandedIdSet,
+    flatTree,
+    revealDirectoryIds,
+    treeChildOffsets,
+  ]);
+
+  const branchQueries = useFileChildrenBranches(branchRequests, pageLimit, showHidden);
+
+  const jumpPathChildren = useMemo(() => {
+    const result = new Map<string, FileTreeNode>();
+    if (!jumpPathNodes?.length) return result;
+    for (let index = 1; index < jumpPathNodes.length; index += 1) {
+      result.set(jumpPathNodes[index - 1].id, jumpPathNodes[index]);
+    }
+    return result;
+  }, [jumpPathNodes]);
+
+  useEffect(() => {
+    if (branchRequests.length === 0) return;
+    setTreeChildren((current) => {
+      let next = current;
+      for (let index = 0; index < branchRequests.length; index += 1) {
+        const request = branchRequests[index];
+        const page = branchQueries[index]?.data;
+        if (!page) continue;
+        const parent =
+          findTreeNode(request.parentId, rootNodes, next)
+          ?? findTreeNode(request.parentId, rootNodes, current);
+        const normalized = normalizeChildrenForParent(page.children, parent);
+        const jumpChild = jumpPathChildren.get(request.parentId);
+        const normalizedWithJumpChild = jumpChild && !normalized.some((node) => node.id === jumpChild.id)
+          ? [...normalized, jumpChild]
+          : normalized;
+        const previous = next[request.parentId] ?? current[request.parentId] ?? [];
+        const merged = request.offset > 0 || jumpChild
+          ? mergeTreeNodePages(previous, normalizedWithJumpChild)
+          : normalizedWithJumpChild;
+        if (sameTreeNodeList(previous, merged)) continue;
+        if (!current[request.parentId] && Object.keys(current).length >= MAX_TREE_CACHE_SIZE) {
+          // Keep every expanded, visible branch resident. Evicting an ancestor
+          // would make its whole subtree disappear despite its expanded state.
+          const pinnedIds = new Set(Object.keys(current).filter(isDataSourceTreeNodeId));
+          const evictKey = findEvictableTreeCacheKey(
+            rootNodes,
+            current,
+            expandedIdSet,
+            pinnedIds,
+          );
+          if (evictKey) {
+            const { [evictKey]: _dropped, ...rest } = next;
+            next = rest;
+          }
+        }
+        if (next === current) next = { ...current };
+        next[request.parentId] = merged;
+      }
+      return next;
+    });
+    // `showHidden` is included so cached branches are re-merged after the
+    // visibility-reset wipe even when the query data reference is unchanged.
+  }, [
+    branchQueries,
+    branchRequests,
+    expandedIdSet,
+    jumpPathChildren,
     rootNodes,
-    treeChildren,
     showHidden,
+    treeChildren,
   ]);
 
   useEffect(() => {
@@ -238,14 +352,15 @@ export function useFileTree({
           : [...current, rootNodes[0].id]
       );
     }
-  }, [rootNodes, selectedDirectoryId, setSelectedDirectoryId]);
+  }, [rootNodes, selectedDirectoryId, setExpandedDirectoryIds, setSelectedDirectoryId]);
 
-  const expandedIdSet = useMemo(() => new Set(expandedDirectoryIds), [expandedDirectoryIds]);
-
-  const flatTree = useMemo(
-    () => flattenExpandedTree(rootNodes, treeChildren, expandedIdSet),
-    [expandedIdSet, rootNodes, treeChildren],
+  const activeBranchIndex = useMemo(
+    () => branchRequests.findIndex((request) => request.parentId === activeDirectoryId),
+    [activeDirectoryId, branchRequests],
   );
+  const activeChildrenPage = activeBranchIndex >= 0
+    ? branchQueries[activeBranchIndex]?.data
+    : undefined;
 
   const currentDirectory = flatTree.find((node) => node.id === activeDirectoryId);
   const parentDirectory = useMemo(() => {
@@ -300,7 +415,7 @@ export function useFileTree({
           : [...current, node.id]
       );
     },
-    [setSelectedDirectoryId, setSelectedFileId]
+    [setExpandedDirectoryIds, setSelectedDirectoryId, setSelectedFileId]
   );
   const handleNodeOpen = useCallback(
     (nodeId: string) => {
@@ -341,9 +456,26 @@ export function useFileTree({
     }));
   }, [activeDirectoryId, activeDirectoryIsDataSource, pageLimit]);
 
+  // True once the root tree and every requested branch have settled. Callers use it
+  // to decide whether a selected directory is genuinely unreachable (and should be
+  // reset) or simply still being materialized.
+  //
+  // A branch that is reachable and expanded but has no children entry yet is still
+  // materializing even when its query already resolved - the merge lands in the next
+  // commit - so it must keep the tree unsettled until the walk reaches the deepest
+  // expanded level.
+  const branchesMaterialized = branchRequests.every(
+    (request) => treeChildren[request.parentId] !== undefined,
+  );
+  const treeSettled = rootTree !== undefined
+    && !rootTreeFetching
+    && !branchQueries.some((query) => query.isFetching)
+    && branchesMaterialized;
+
   return {
     rootTree: rootNodes,
     treeLoading: rootTreeFetching && rootTree === undefined,
+    treeSettled,
     treeChildren,
     expandedDirectoryIds,
     setExpandedDirectoryIds,

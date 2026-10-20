@@ -498,6 +498,128 @@ describe('files hooks', () => {
       await waitFor(() => expect(result.current.data?.activeOffset).toBe(64 * 1024));
     });
 
+    it('records the bytes the backend actually returned instead of the requested length', async () => {
+      mocks.openFileHandle.mockResolvedValue({
+        handleId: 'file:short-read',
+        size: 4096,
+        mime: 'application/octet-stream',
+      });
+      mocks.readFileRange.mockResolvedValue({
+        kind: 'hex',
+        lines: [],
+        rawBytes: Array.from({ length: 100 }, (_, index) => index & 0xff),
+      });
+
+      const { result } = renderHook(() => useFileViewer('file:short-read'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mocks.readFileRange).toHaveBeenCalledWith({
+        handleId: 'file:short-read',
+        offset: 0,
+        length: 4096,
+      });
+      // A truncated response must not be recorded as the whole requested window: the
+      // remaining bytes then look loaded and are never requested again.
+      expect(result.current.data?.loadedRanges).toEqual([{ start: 0, end: 100 }]);
+      expect(result.current.data?.isFullyLoaded).toBe(false);
+      expect(result.current.data?.hasMoreAfter).toBe(true);
+    });
+
+    it('clamps an oversized configured window to the transport maximum', async () => {
+      localStorage.setItem(
+        'Meow_Detective.localSettings',
+        JSON.stringify({ hexChunkBytes: '4194304', maxViewerRangeLength: '8388608' }),
+      );
+      try {
+        mocks.openFileHandle.mockResolvedValue({
+          handleId: 'file:oversized-window',
+          size: 3 * 1024 * 1024,
+          mime: 'application/octet-stream',
+        });
+        mocks.readFileRange.mockResolvedValue({ kind: 'hex', lines: [], rawBytes: [0x41] });
+
+        const { result } = renderHook(() => useFileViewer('file:oversized-window'), {
+          wrapper: createWrapper(),
+        });
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        // The backend would silently shorten anything above 1 MiB, so the viewer must
+        // never ask for more than that (otherwise windows drift by the clamped amount).
+        expect(mocks.readFileRange).toHaveBeenCalledWith({
+          handleId: 'file:oversized-window',
+          offset: 0,
+          length: 1024 * 1024,
+        });
+        expect(result.current.data?.chunkSize).toBe(1024 * 1024);
+      } finally {
+        localStorage.removeItem('Meow_Detective.localSettings');
+      }
+    });
+
+    it('re-opens an expired preview handle once and retries the range', async () => {
+      mocks.openFileHandle
+        .mockResolvedValueOnce({ handleId: 'file:stale-1', size: 2 * 1024 * 1024, mime: undefined })
+        .mockResolvedValueOnce({ handleId: 'file:stale-2', size: 2 * 1024 * 1024, mime: undefined });
+      mocks.readFileRange
+        .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x41] })
+        .mockRejectedValueOnce({
+          code: 'COMMAND_READ_FILE_RANGE_FAILED',
+          message: 'Preview handle expired or invalid',
+          category: 'internal',
+          recoverable: true,
+        })
+        .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x42] })
+        .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x43, 0x44] });
+
+      const { result } = renderHook(() => useFileViewer('file:stale'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.data?.hasMoreAfter).toBe(true));
+      await act(async () => {
+        await result.current.loadNextRange();
+      });
+
+      await waitFor(() => expect(result.current.data?.baseOffset).toBe(64 * 1024));
+      expect(mocks.openFileHandle).toHaveBeenCalledTimes(2);
+      expect(mocks.readFileRange).toHaveBeenLastCalledWith({
+        handleId: 'file:stale-2',
+        offset: 64 * 1024,
+        length: 64 * 1024,
+      });
+      expect(result.current.data?.rawBytes).toEqual([0x43, 0x44]);
+      expect(result.current.data?.error).toBeUndefined();
+    });
+
+    it('surfaces the typed range error message instead of a generic placeholder', async () => {
+      mocks.openFileHandle.mockResolvedValue({
+        handleId: 'file:range-error',
+        size: 2 * 1024 * 1024,
+        mime: undefined,
+      });
+      mocks.readFileRange
+        .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x41] })
+        .mockRejectedValueOnce({
+          code: 'COMMAND_READ_FILE_RANGE_FAILED',
+          message: 'Unsupported filesystem layout',
+          category: 'internal',
+          recoverable: true,
+        });
+
+      const { result } = renderHook(() => useFileViewer('file:range-error'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.data?.hasMoreAfter).toBe(true));
+      await act(async () => {
+        await result.current.loadNextRange();
+      });
+
+      await waitFor(() => expect(result.current.data?.error).toBe('Unsupported filesystem layout'));
+    });
+
     it('closes the handle when the initial hex range fails', async () => {
       mocks.openFileHandle.mockResolvedValue({
         handleId: 'file:range-failed',

@@ -1,4 +1,5 @@
 import { BRAND_CODE_NAME } from '@/lib/branding';
+import { clampHexChunkBytes, clampPreviewRangeLength } from '@/lib/preview-limits';
 
 export type ImportAnalysisMode = 'metadataOnly' | 'budgetedContent' | 'fullContent';
 
@@ -127,8 +128,10 @@ export function getPreviewSettings(): PreviewSettings {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
   };
   return {
-    hexChunkBytes: parse(local.hexChunkBytes, 64 * 1024),
-    maxViewerRangeLength: parse(local.maxViewerRangeLength, 1024 * 1024),
+    // Clamp to the transport contract: an oversized value would be silently truncated
+    // by the backend while the viewer recorded the full requested length as loaded.
+    hexChunkBytes: clampHexChunkBytes(parse(local.hexChunkBytes, 64 * 1024)),
+    maxViewerRangeLength: clampPreviewRangeLength(parse(local.maxViewerRangeLength, 1024 * 1024)),
     maxInlineImagePreviewBytes: parse(local.maxInlineImagePreviewBytes, 5 * 1024 * 1024),
     maxInlineMediaPreviewBytes: parse(local.maxInlineMediaPreviewBytes, 20 * 1024 * 1024),
   };

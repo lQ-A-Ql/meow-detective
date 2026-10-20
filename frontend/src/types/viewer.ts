@@ -11,6 +11,9 @@ export interface ViewerRangeRequest {
 }
 
 export interface ViewerRangeResponse {
+  offset?: number;
+  bytesRead?: number;
+  eof?: boolean;
   kind: 'hex' | 'text';
   lines: string[];
   encoding?: string;

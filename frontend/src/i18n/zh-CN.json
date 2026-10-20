@@ -331,6 +331,8 @@
     "hex": {
       "ariaLabel": "Hex 与 ASCII 字节预览",
       "empty": "选择文件后显示十六进制预览",
+      "emptyFile": "空文件（0 字节），没有可显示的十六进制内容",
+      "emptyRange": "该范围没有返回可显示的字节",
       "loadedRanges": "已加载区间",
       "efsTitle": "EFS 加密",
       "efsDetail": "该文件使用 NTFS 加密文件系统加密，缺少私钥时无法解密内容。"
@@ -1243,7 +1245,7 @@
     "loading": "正在查询文件索引…",
     "locating": "正在定位文件…",
     "noCase": "请先打开案件",
-    "doubleClickHint": "单击选中 · 双击定位"
+    "doubleClickHint": "单击预览 · 双击定位"
   },
   "infrastructure": {
     "caseLabel": "当前案件",

@@ -135,7 +135,7 @@ describe('useSearchWorkspaceModel', () => {
     expect(result.current.options.extensions).toEqual(['txt', 'log']);
   });
 
-  it('selects on a single click and resolves a double-click navigation without opening a modal', () => {
+  it('opens the preview dialog on a single click and lets a double click locate instead', () => {
     const { result } = renderHook(() => useSearchWorkspaceModel(), {
       wrapper: wrapper('/search?q=evidence'),
     });
@@ -156,9 +156,38 @@ describe('useSearchWorkspaceModel', () => {
     expect(mocks.openPreview).not.toHaveBeenCalled();
     act(() => result.current.onHitRowClick(hit));
     expect(mocks.setSelected).toHaveBeenCalledWith('file-1');
+    // The dialog waits out the double-click window so a locate is still possible.
     expect(mocks.openPreview).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(219));
+    expect(mocks.openPreview).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(mocks.openPreview).toHaveBeenCalledWith(hit);
+  });
+
+  it('cancels the pending single-click preview when the row is located instead', () => {
+    const { result } = renderHook(() => useSearchWorkspaceModel(), {
+      wrapper: wrapper('/search?q=evidence'),
+    });
+    const hit = {
+      fileId: 'file-2',
+      dataSourceId: 'source-1',
+      dataSourceName: '检材2.E01',
+      name: 'secret.txt',
+      path: 'Users/alice/secret.txt',
+      entryType: 'file',
+      extension: 'txt',
+      deleted: false,
+      hidden: false,
+      system: false,
+      encrypted: false,
+    };
+
+    act(() => result.current.onHitRowClick(hit));
     act(() => result.current.jumpToFile(hit));
+    act(() => vi.advanceTimersByTime(500));
+
+    expect(mocks.openPreview).not.toHaveBeenCalled();
     expect(mocks.closePreview).toHaveBeenCalledWith(false);
-    expect(mocks.jump).toHaveBeenCalledWith('file-1');
+    expect(mocks.jump).toHaveBeenCalledWith('file-2');
   });
 });

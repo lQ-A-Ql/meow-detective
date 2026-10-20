@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useContentIndexModel } from './use-content-index-model';
@@ -13,6 +13,14 @@ import type {
   SearchSortDirection,
   SearchSortKey,
 } from '@/types/models';
+
+/**
+ * A single click opens the preview dialog, a double click locates the file in the
+ * browser. The click handler therefore waits out the double-click window before
+ * opening the modal: a modal that opened on the first click would cover the grid and
+ * swallow the second click, so "double-click to locate" could never fire.
+ */
+const SINGLE_CLICK_PREVIEW_DELAY_MS = 220;
 
 const DEFAULT_QUERY = '';
 const DEFAULT_OPTIONS: SearchRequestOptions = {
@@ -87,15 +95,33 @@ export function useSearchWorkspaceModel() {
   const setExtensionInput = useCallback((value: string) => {
     setExtensionInputState(value);
   }, []);
+  // Pending single-click preview, cancelled by a double click (or by unmount).
+  const pendingPreviewTimer = useRef<number | undefined>(undefined);
+  const cancelPendingPreview = useCallback(() => {
+    if (pendingPreviewTimer.current !== undefined) {
+      window.clearTimeout(pendingPreviewTimer.current);
+      pendingPreviewTimer.current = undefined;
+    }
+  }, []);
+  useEffect(() => cancelPendingPreview, [cancelPendingPreview]);
   const onHitRowClick = useCallback((hit: SearchFileHit) => {
     setSelectedSearchHitId(hit.fileId);
-  }, [setSelectedSearchHitId]);
-  const previewSelected = useCallback(() => { if (selectedHit) openHitPreview(selectedHit); }, [selectedHit, openHitPreview]);
+    cancelPendingPreview();
+    pendingPreviewTimer.current = window.setTimeout(() => {
+      pendingPreviewTimer.current = undefined;
+      openHitPreview(hit);
+    }, SINGLE_CLICK_PREVIEW_DELAY_MS);
+  }, [cancelPendingPreview, openHitPreview, setSelectedSearchHitId]);
+  const previewSelected = useCallback(() => {
+    cancelPendingPreview();
+    if (selectedHit) openHitPreview(selectedHit);
+  }, [cancelPendingPreview, selectedHit, openHitPreview]);
   const jumpToFile = useCallback((hit: SearchFileHit) => {
+    cancelPendingPreview();
     setSelectedSearchHitId(hit.fileId);
     preview.onOpenChange(false);
     fileNavigation.jump(hit.fileId);
-  }, [fileNavigation, preview, setSelectedSearchHitId]);
+  }, [cancelPendingPreview, fileNavigation, preview, setSelectedSearchHitId]);
   const loadNextPage = useCallback(() => {
     if (searchQuery.hasNextPage && !searchQuery.isFetching) void searchQuery.fetchNextPage();
   }, [searchQuery]);

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FileBrowser } from '@/app/pages/FileBrowser';
+import { resetFileTreeExpansion } from '@/features/files/file-tree-expansion-store';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
@@ -87,6 +88,13 @@ vi.mock('@/features/files/hooks', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   const overrides: Record<string, unknown> = {
     useFileChildrenPage: mocks.fileChildren,
+    // The tree loads every expanded branch, so the page test routes the branch list
+    // through the same children mock it always asserted against.
+    useFileChildrenBranches: (
+      branches: Array<{ parentId: string; offset: number }>,
+      limit: number,
+      showHidden: boolean,
+    ) => branches.map((branch) => mocks.fileChildren(branch.parentId, branch.offset, limit, showHidden)),
     useFileJumpContext: mocks.fileJumpContext,
     useFileRowsPage: mocks.fileRows,
     useFileTree: mocks.fileTree,
@@ -253,6 +261,9 @@ function renderPage() {
 describe('FileBrowser media preview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The expansion store is shared by every remount of the page, so each test starts
+    // from a collapsed tree unless it exercises persistence explicitly.
+    resetFileTreeExpansion();
     mocks.selectionState.setSelectedDirectoryId.mockImplementation((id?: string) => {
       mocks.selectionState.selectedDirectoryId = id;
     });
@@ -928,6 +939,120 @@ describe('FileBrowser media preview', () => {
       ),
     );
     expect(screen.getAllByText('secret.dat').length).toBeGreaterThan(0);
+  });
+
+  it('reveals the jumped directory inside the tree instead of only the file list', async () => {
+    Object.assign(mocks.selectionState, {
+      selectedDirectoryId: 'root',
+      selectedFileId: 'deep-file',
+    });
+    mocks.dataSources.mockReturnValue(queryState([]));
+    mocks.fileTree.mockReturnValue(queryState(rootTree));
+    mocks.fileChildren.mockImplementation((parentId, offset, limit) => {
+      const children =
+        parentId === 'root'
+          ? [{ id: 'dir-mid', name: 'mid-branch', depth: 1, hasChildren: true, deleted: false, hidden: false, system: false }]
+          : parentId === 'dir-mid'
+            ? [{ id: 'dir-deep', name: 'deep-branch', depth: 2, hasChildren: true, deleted: false, hidden: false, system: false }]
+            : [];
+      return queryState({ children, totalCount: children.length, offset, limit, truncated: false });
+    });
+    const deepFile = {
+      ...videoFile,
+      id: 'deep-file',
+      parentId: 'dir-deep',
+      path: '/evidence/deep/secret.dat',
+      name: 'secret.dat',
+      ext: 'dat',
+    };
+    mocks.fileRows.mockImplementation((parentId) =>
+      queryState({
+        rows: parentId === 'dir-deep' ? [deepFile] : [],
+        totalCount: parentId === 'dir-deep' ? 1 : 0,
+        offset: 0,
+        limit: 500,
+        truncated: false,
+      }),
+    );
+    mocks.fileJumpContext.mockReturnValue(
+      queryState({
+        target: deepFile,
+        directory: { ...deepFile, id: 'dir-deep', name: 'deep-branch', entryType: 'directory' as const },
+        ancestorDirectoryIds: ['root', 'dir-mid'],
+        rowOffset: 0,
+        requiresShowHidden: false,
+      }),
+    );
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getAllByText('deep-branch').length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(mocks.selectionState.setSelectedDirectoryId).toHaveBeenCalledWith('dir-deep'),
+    );
+    expect(mocks.selectionState.setSelectedDirectoryId).not.toHaveBeenCalledWith('root');
+    expect(screen.getAllByText('secret.dat').length).toBeGreaterThan(0);
+  });
+
+  it('restores the expanded tree path after leaving and re-entering the page', async () => {
+    Object.assign(mocks.selectionState, {
+      selectedDirectoryId: 'root',
+      selectedFileId: 'deep-file',
+    });
+    mocks.dataSources.mockReturnValue(queryState([]));
+    mocks.fileTree.mockReturnValue(queryState(rootTree));
+    mocks.fileChildren.mockImplementation((parentId, offset, limit) => {
+      const children =
+        parentId === 'root'
+          ? [{ id: 'dir-mid', name: 'mid-branch', depth: 1, hasChildren: true, deleted: false, hidden: false, system: false }]
+          : parentId === 'dir-mid'
+            ? [{ id: 'dir-deep', name: 'deep-branch', depth: 2, hasChildren: true, deleted: false, hidden: false, system: false }]
+            : [];
+      return queryState({ children, totalCount: children.length, offset, limit, truncated: false });
+    });
+    const deepFile = {
+      ...videoFile,
+      id: 'deep-file',
+      parentId: 'dir-deep',
+      path: '/evidence/deep/secret.dat',
+      name: 'secret.dat',
+      ext: 'dat',
+    };
+    mocks.fileRows.mockImplementation((parentId) =>
+      queryState({
+        rows: parentId === 'dir-deep' ? [deepFile] : [],
+        totalCount: parentId === 'dir-deep' ? 1 : 0,
+        offset: 0,
+        limit: 500,
+        truncated: false,
+      }),
+    );
+    mocks.fileJumpContext.mockReturnValue(
+      queryState({
+        target: deepFile,
+        directory: { ...deepFile, id: 'dir-deep', name: 'deep-branch', entryType: 'directory' as const },
+        ancestorDirectoryIds: ['root', 'dir-mid'],
+        rowOffset: 0,
+        requiresShowHidden: false,
+      }),
+    );
+
+    const first = renderPage();
+    await waitFor(() => expect(screen.getAllByText('deep-branch').length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(mocks.selectionState.selectedDirectoryId).toBe('dir-deep'),
+    );
+    first.unmount();
+
+    // Re-entering the page no longer has the jump context (it was a one-shot lookup) and
+    // a fresh query cache: only the remembered expansion can rebuild the visible path.
+    mocks.fileJumpContext.mockReturnValue(queryState(null));
+    mocks.selectionState.setSelectedDirectoryId.mockClear();
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getAllByText('deep-branch').length).toBeGreaterThan(0));
+    expect(mocks.selectionState.setSelectedDirectoryId).not.toHaveBeenCalledWith('root');
   });
 
   it('renders the file tree when a case is active', async () => {
