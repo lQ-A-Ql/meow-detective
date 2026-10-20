@@ -35,6 +35,8 @@ fn legacy_source_connection() -> Connection {
              path TEXT NOT NULL,
              name TEXT NOT NULL,
              entry_type TEXT NOT NULL,
+             hidden INTEGER NOT NULL DEFAULT 0,
+             system INTEGER NOT NULL DEFAULT 0,
              partition_index INTEGER
          );
          CREATE TABLE artifacts (
@@ -147,10 +149,10 @@ fn source_016_backfills_only_reliable_partition_roots_and_descendants() {
     insert_entry(&conn, "unknown", None, "ds-a", "Volume (XFS)", None);
     insert_entry(&conn, "preset", None, "ds-a", "Partition 3", Some(99));
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 23);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 24);
     assert_eq!(
         runner::latest_source_version(),
-        "source_038_linux_evidence_facts"
+        "source_039_file_browse_paging_index"
     );
 
     for id in ["root-2", "etc", "ssh"] {
@@ -220,7 +222,9 @@ fn source_016_adds_partition_column_for_staging_compatible_catalogs() {
              data_source_id TEXT NOT NULL,
              path TEXT NOT NULL,
              name TEXT NOT NULL,
-             entry_type TEXT NOT NULL
+             entry_type TEXT NOT NULL,
+             hidden INTEGER NOT NULL DEFAULT 0,
+             system INTEGER NOT NULL DEFAULT 0
          );
          CREATE TABLE artifacts (
              id TEXT PRIMARY KEY NOT NULL,
@@ -272,7 +276,7 @@ fn source_016_adds_partition_column_for_staging_compatible_catalogs() {
         .unwrap();
     }
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 23);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 24);
     for id in ["root-4", "child"] {
         let partition_index: Option<i64> = conn
             .query_row(
@@ -289,7 +293,7 @@ fn source_016_adds_partition_column_for_staging_compatible_catalogs() {
 fn source_022_repairs_rows_added_after_source_016() {
     let conn = source_021_connection_with_late_file_rows();
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 17);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 18);
     for id in ["late-root", "late-child"] {
         let partition_index: Option<i64> = conn
             .query_row(
@@ -317,7 +321,9 @@ fn source_022_repairs_a_catalog_created_after_source_016_was_skipped() {
              data_source_id TEXT NOT NULL,
              path TEXT NOT NULL,
              name TEXT NOT NULL,
-             entry_type TEXT NOT NULL
+             entry_type TEXT NOT NULL,
+             hidden INTEGER NOT NULL DEFAULT 0,
+             system INTEGER NOT NULL DEFAULT 0
          );
          CREATE TABLE timeline_events (
              id TEXT PRIMARY KEY NOT NULL,
@@ -374,7 +380,7 @@ fn source_022_repairs_a_catalog_created_after_source_016_was_skipped() {
         .unwrap();
     }
 
-    assert_eq!(runner::run_source_all(&conn).unwrap(), 17);
+    assert_eq!(runner::run_source_all(&conn).unwrap(), 18);
     let partition_index: Option<i64> = conn
         .query_row(
             "SELECT partition_index FROM file_entries WHERE id = 'late-root-no-column'",

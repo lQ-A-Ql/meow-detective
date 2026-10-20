@@ -568,7 +568,7 @@ fn source_019_is_latest_and_reapplication_is_idempotent() {
     let (conn, _) = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_038_linux_evidence_facts"
+        "source_039_file_browse_paging_index"
     );
     assert_eq!(runner::run_source_all(&conn).unwrap(), 0);
     for table in [
