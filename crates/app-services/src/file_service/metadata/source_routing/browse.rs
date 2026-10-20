@@ -42,6 +42,14 @@ fn wrap_jump_context(context: &mut FileJumpContextDto, data_source_id: &DataSour
                 .0;
         }
     }
+    for node in &mut context.ancestor_nodes {
+        if !node.id.starts_with("ds:") {
+            node.id = GlobalFileId::new(data_source_id.clone(), FileEntryId(node.id.clone()))
+                .encode()
+                .0;
+        }
+        node.data_source_id = Some(data_source_id.0.clone());
+    }
 }
 
 fn wrap_row_id(row: &mut transport::dto::FileEntryRowDto, data_source_id: &DataSourceId) {

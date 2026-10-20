@@ -171,6 +171,8 @@ fn file_jump_context_serializes_camel_case_fields() {
             hash_sha256: None,
         },
         ancestor_directory_ids: vec!["root".to_string(), "dir-1".to_string()],
+        ancestor_nodes: vec![],
+        ancestors_complete: true,
         row_offset: 500,
         requires_show_hidden: false,
     };

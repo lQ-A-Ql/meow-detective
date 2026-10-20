@@ -131,4 +131,32 @@ impl transport::ServiceErrorCategory for FileServiceError {
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
     }
+
+    fn code(&self) -> Option<&'static str> {
+        match self {
+            Self::NotFound(message) if message.contains("Preview handle") => {
+                Some("PREVIEW_HANDLE_EXPIRED")
+            }
+            Self::NotFound(message) if message.contains("Preview scope") => {
+                Some("PREVIEW_SCOPE_CHANGED")
+            }
+            Self::Other(message) if message.contains("Prepared") => {
+                Some("PREVIEW_PREPARED_UNAVAILABLE")
+            }
+            Self::Other(message) if message.contains("Preview") => Some("PREVIEW_READ_FAILED"),
+            _ => None,
+        }
+    }
+
+    fn recoverable(&self) -> Option<bool> {
+        self.code().map(|code| {
+            matches!(
+                code,
+                "PREVIEW_HANDLE_EXPIRED"
+                    | "PREVIEW_SCOPE_CHANGED"
+                    | "PREVIEW_PREPARED_UNAVAILABLE"
+                    | "PREVIEW_READ_FAILED"
+            )
+        })
+    }
 }

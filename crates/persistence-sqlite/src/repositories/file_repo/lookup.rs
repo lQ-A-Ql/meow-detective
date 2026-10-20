@@ -10,6 +10,46 @@ use super::{
 };
 
 impl FileRepo<'_> {
+    pub fn find_ancestor_chain(
+        &self,
+        entry_id: &FileEntryId,
+        max_depth: usize,
+    ) -> DbResult<(Vec<FileEntry>, bool)> {
+        let sql = format!(
+            "WITH RECURSIVE ancestors(id, parent_id, depth) AS (
+                 SELECT id, parent_id, 0 FROM file_entries WHERE id = ?1
+                 UNION ALL
+                 SELECT parent.id, parent.parent_id, ancestors.depth + 1
+                 FROM file_entries AS parent
+                 JOIN ancestors ON parent.id = ancestors.parent_id
+                 WHERE ancestors.depth < ?2
+             )
+             SELECT file_entries.id, file_entries.parent_id, file_entries.data_source_id,
+                    file_entries.path, file_entries.name, file_entries.entry_type,
+                    file_entries.size, file_entries.ext, file_entries.deleted,
+                    file_entries.hidden, file_entries.system, file_entries.created_at,
+                    file_entries.modified_at, file_entries.accessed_at,
+                    file_entries.changed_at, file_entries.hash_sha256,
+                    file_entries.encrypted, file_entries.read_only,
+                    file_entries.archive, file_entries.unix_mode, ancestors.depth
+             FROM file_entries JOIN ancestors ON ancestors.id = file_entries.id
+             ORDER BY ancestors.depth DESC"
+        );
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(
+            params![entry_id.0, max_depth as i64],
+            super::mapping::row_to_file_entry,
+        )?;
+        let mut entries = Vec::new();
+        for row in rows {
+            entries.push(row?);
+        }
+        let complete = entries
+            .last()
+            .is_some_and(|entry| entry.parent_id.is_none());
+        Ok((entries, complete))
+    }
+
     pub fn find_by_partition_and_path(
         &self,
         data_source_id: &DataSourceId,

@@ -36,6 +36,15 @@ impl ViewerRangeRequestDto {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ViewerRangeResponseDto {
+    /// Start offset of the returned bytes.
+    #[serde(default)]
+    pub offset: u64,
+    /// Number of bytes actually returned. This may be shorter than requested.
+    #[serde(default)]
+    pub bytes_read: u32,
+    /// True when the response reaches the catalogued end of the file.
+    #[serde(default)]
+    pub eof: bool,
     pub kind: String,
     /// Compatibility field for older hex viewers. Bytes-only responses leave this empty.
     pub lines: Vec<String>,

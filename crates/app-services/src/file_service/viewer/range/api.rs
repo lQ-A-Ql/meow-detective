@@ -45,6 +45,9 @@ where
         request.length,
     )?;
     Ok(ViewerRangeResponseDto {
+        offset: request.offset,
+        bytes_read: bytes.len() as u32,
+        eof: bytes.len() < request.length as usize,
         raw_bytes: Some(bytes),
         kind: "hex".into(),
         lines: Vec::new(),

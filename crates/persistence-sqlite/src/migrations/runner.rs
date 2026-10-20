@@ -229,6 +229,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0063_evidence_tasks",
         include_str!("scripts/0063_evidence_tasks.sql"),
     ),
+    (
+        "0064_file_browse_paging_index",
+        include_str!("scripts/0064_file_browse_paging_index.sql"),
+    ),
 ];
 
 pub use super::case_graph::{

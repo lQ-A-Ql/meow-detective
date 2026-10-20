@@ -104,6 +104,11 @@ pub struct FileJumpContextDto {
     pub target: FileEntryRowDto,
     pub directory: FileEntryRowDto,
     pub ancestor_directory_ids: Vec<String>,
+    /// Ordered, source-scoped nodes from the visible root to the target directory.
+    /// This lets a client materialize a jump without guessing which page contains
+    /// an ancestor.
+    pub ancestor_nodes: Vec<FileTreeNodeDto>,
+    pub ancestors_complete: bool,
     pub row_offset: u64,
     pub requires_show_hidden: bool,
 }

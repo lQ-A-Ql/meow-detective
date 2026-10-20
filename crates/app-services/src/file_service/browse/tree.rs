@@ -122,13 +122,20 @@ pub fn get_file_children_lazy_with_visibility(
         }
     };
 
-    let mut directories = repo.find_child_directories_visible(&parent.id, show_hidden)?;
-    let total_count = directories.len() as u64;
-    sort_directories_for_tree(&mut directories);
-
-    let start = (offset as usize).min(directories.len());
-    let end = start.saturating_add(limit as usize).min(directories.len());
-    let children = &directories[start..end];
+    let total_count = repo.count_child_directories_visible(&parent.id, show_hidden)?;
+    let mut children = if repo.child_directories_need_natural_sort(&parent.id, show_hidden)? {
+        // Natural numeric ordering is not representable by the current SQLite
+        // schema. Preserve the established oracle for affected directories while
+        // using SQL paging for the common non-numeric case.
+        let mut all = repo.find_child_directories_visible(&parent.id, show_hidden)?;
+        sort_directories_for_tree(&mut all);
+        let start = (offset as usize).min(all.len());
+        let end = start.saturating_add(limit as usize).min(all.len());
+        all[start..end].to_vec()
+    } else {
+        repo.find_child_directories_page_visible(&parent.id, offset, limit, show_hidden)?
+    };
+    sort_directories_for_tree(&mut children);
     let child_depth = directory_depth(&parent).saturating_add(1);
 
     let child_counts = repo

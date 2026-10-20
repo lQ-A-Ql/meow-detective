@@ -4,7 +4,10 @@ use rusqlite::Connection;
 use transport::{commands::GetFileJumpContextRequest, dto::FileJumpContextDto};
 
 use crate::file_service::{
-    metadata::{lookup::file_entry_to_dto, sorting::sort_entries},
+    metadata::{
+        lookup::{file_entry_to_dto, file_entry_to_tree_node},
+        sorting::sort_entries,
+    },
     FileServiceError,
 };
 
@@ -26,7 +29,17 @@ pub fn get_file_jump_context(
     let requires_show_hidden =
         target.hidden || target.system || directory.hidden || directory.system;
     let effective_show_hidden = request.show_hidden || requires_show_hidden;
-    let ancestor_directory_ids = collect_ancestor_directory_ids(&repo, &directory);
+    let (ancestor_directories, ancestors_complete) =
+        repo.find_ancestor_chain(&directory.id, JUMP_CONTEXT_MAX_ANCESTOR_DEPTH)?;
+    let ancestor_directory_ids = ancestor_directories
+        .iter()
+        .map(|entry| entry.id.0.clone())
+        .collect::<Vec<_>>();
+    let ancestor_nodes = ancestor_directories
+        .iter()
+        .enumerate()
+        .map(|(depth, entry)| file_entry_to_tree_node(entry, depth as u32, Some(true)))
+        .collect::<Vec<_>>();
     let mut rows = jump_rows(&repo, &target, &directory, effective_show_hidden)?;
     sort_entries(&mut rows, request.sort_key, request.sort_direction);
     let index = rows
@@ -39,6 +52,8 @@ pub fn get_file_jump_context(
         target: file_entry_to_dto(&target),
         directory: file_entry_to_dto(&directory),
         ancestor_directory_ids,
+        ancestor_nodes,
+        ancestors_complete,
         row_offset,
         requires_show_hidden,
     })
@@ -64,25 +79,4 @@ fn resolve_jump_directory(repo: &FileRepo<'_>, target: &FileEntry) -> Option<Fil
         return Some(target.clone());
     }
     repo.find_by_id(target.parent_id.as_ref()?).ok()?
-}
-
-fn collect_ancestor_directory_ids(repo: &FileRepo<'_>, directory: &FileEntry) -> Vec<String> {
-    let mut chain = Vec::new();
-    let mut cursor = directory.parent_id.clone();
-    let mut depth = 0usize;
-    while let Some(parent_id) = cursor {
-        if depth > JUMP_CONTEXT_MAX_ANCESTOR_DEPTH {
-            break;
-        }
-        depth += 1;
-        chain.push(parent_id.0.clone());
-        cursor = repo
-            .find_by_id(&parent_id)
-            .ok()
-            .flatten()
-            .and_then(|entry| entry.parent_id);
-    }
-    chain.reverse();
-    chain.push(directory.id.0.clone());
-    chain
 }

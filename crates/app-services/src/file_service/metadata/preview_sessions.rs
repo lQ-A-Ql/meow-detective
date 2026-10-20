@@ -293,22 +293,44 @@ fn read_preview_session_range_internal(
     request.validate().map_err(FileServiceError::InvalidInput)?;
     let session = registry.get_session(&case_id.0, &request.handle_id)?;
     let length = (request.length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
-    if let Some(bytes) = session.read_prepared_range(request.offset, length)? {
-        return Ok(ViewerRangeResponseDto {
-            raw_bytes: Some(bytes),
-            kind: "hex".to_string(),
-            lines: Vec::new(),
-            encoding: None,
-        });
+    match session.read_prepared_range(request.offset, length) {
+        Ok(Some(bytes)) => {
+            return Ok(ViewerRangeResponseDto {
+                offset: request.offset,
+                bytes_read: bytes.len() as u32,
+                eof: request.offset.saturating_add(bytes.len() as u64) >= session.size(),
+                raw_bytes: Some(bytes),
+                kind: "hex".to_string(),
+                lines: Vec::new(),
+                encoding: None,
+            });
+        }
+        Ok(None) => {}
+        Err(error) if prepared_reader_can_fallback(&error) => {
+            tracing::warn!(error = %error, "Prepared preview reader failed; retrying through the source-routed reader");
+        }
+        Err(error) => return Err(error),
     }
 
     request.handle_id = format!("file:{}", session.global_file_id());
-    match bitlocker_runtime {
+    let routed = match bitlocker_runtime {
         Some(runtime) => crate::file_service::read_file_range_for_source_case_with_bitlocker(
             runtime, case_conn, case_root, case_id, &request,
         ),
         None => read_file_range_for_source_case(case_conn, case_root, case_id, &request),
-    }
+    };
+    routed.map_err(|error| match error {
+        FileServiceError::InvalidInput(_)
+        | FileServiceError::NotFound(_)
+        | FileServiceError::Security(_)
+        | FileServiceError::PathTraversal(_)
+        | FileServiceError::Integrity(_) => error,
+        _ => FileServiceError::other("Preview routed read failed"),
+    })
+}
+
+fn prepared_reader_can_fallback(error: &FileServiceError) -> bool {
+    matches!(error, FileServiceError::Io(_) | FileServiceError::Other(_))
 }
 
 pub fn read_preview_session_media_range_for_case(
