@@ -3,6 +3,8 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 
 mod parent;
+const MAX_VHDX_BAT_BYTES: u64 = 16 * 1024 * 1024;
+
 pub(crate) use parent::{
     read_qcow_backing_path, read_vhd_parent_name, read_vhdx_parent_path, resolve_vhd_parent_path,
 };
@@ -661,10 +663,23 @@ fn read_vhdx_bat(
     let data_blocks = virtual_size.div_ceil(block_size);
     let chunk_ratio = (1u64 << 23) * 512 / block_size;
     let bat_entries = data_blocks + data_blocks.saturating_sub(1) / chunk_ratio;
-    if bat_entries * 8 > u64::from(bat_length) || bat_entries > 1_000_000 {
-        return Err(invalid_data("VHDX BAT is too small"));
+    let bat_bytes = bat_entries
+        .checked_mul(std::mem::size_of::<u64>() as u64)
+        .ok_or_else(|| invalid_data("VHDX BAT size overflows u64"))?;
+    if bat_bytes > u64::from(bat_length) {
+        return Err(invalid_data("VHDX BAT region is too small"));
     }
-    let mut raw = vec![0u8; (bat_entries * 8) as usize];
+    if bat_bytes > MAX_VHDX_BAT_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::OutOfMemory,
+            "VHDX BAT exceeds reader capacity",
+        ));
+    }
+    let mut raw = vec![
+        0u8;
+        usize::try_from(bat_bytes)
+            .map_err(|_| invalid_data("VHDX BAT size exceeds platform capacity"))?
+    ];
     file.seek(SeekFrom::Start(bat_offset))?;
     file.read_exact(&mut raw)?;
     Ok(raw

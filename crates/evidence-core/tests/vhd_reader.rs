@@ -255,7 +255,39 @@ fn write_synthetic_vhdx(
     differencing: bool,
     parent_name: Option<&str>,
 ) {
-    let mut bytes = vec![0u8; 3 * 1024 * 1024];
+    write_synthetic_vhdx_with_virtual_size(
+        path,
+        payload,
+        differencing,
+        parent_name,
+        1_048_576,
+    );
+}
+
+#[test]
+fn opens_vhdx_with_more_than_one_million_bat_entries() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("large.vhdx");
+    write_synthetic_vhdx_with_virtual_size(&path, b"", false, None, 1u64 << 40);
+
+    let reader = RawImageReader::open(&path).unwrap();
+    assert_eq!(reader.info().kind, "vhdx");
+    assert_eq!(reader.info().size, 1u64 << 40);
+}
+
+fn write_synthetic_vhdx_with_virtual_size(
+    path: &std::path::Path,
+    payload: &[u8],
+    differencing: bool,
+    parent_name: Option<&str>,
+    virtual_size: u64,
+) {
+    let bat_length = if virtual_size > 1_000_000_000 {
+        9 * 1024 * 1024
+    } else {
+        1024 * 1024
+    };
+    let mut bytes = vec![0u8; 3 * 1024 * 1024 + bat_length];
     bytes[..8].copy_from_slice(b"vhdxfile");
     let region = 192 * 1024;
     bytes[region..region + 4].copy_from_slice(b"regi");
@@ -270,7 +302,7 @@ fn write_synthetic_vhdx(
     ];
     bytes[region + 16..region + 32].copy_from_slice(&bat_guid);
     bytes[region + 32..region + 40].copy_from_slice(&(1024u64 * 1024).to_le_bytes());
-    bytes[region + 40..region + 44].copy_from_slice(&(1024u32 * 1024).to_le_bytes());
+    bytes[region + 40..region + 44].copy_from_slice(&(bat_length as u32).to_le_bytes());
     bytes[region + 48..region + 64].copy_from_slice(&metadata_guid);
     bytes[region + 64..region + 72].copy_from_slice(&(256u64 * 1024).to_le_bytes());
     bytes[region + 72..region + 76].copy_from_slice(&(1024u32 * 1024).to_le_bytes());
@@ -320,7 +352,7 @@ fn write_synthetic_vhdx(
     bytes[metadata + 64 * 1024 + 4..metadata + 64 * 1024 + 8]
         .copy_from_slice(&(if differencing { 2u32 } else { 1u32 }).to_le_bytes());
     bytes[metadata + 64 * 1024 + 8..metadata + 64 * 1024 + 16]
-        .copy_from_slice(&1_048_576u64.to_le_bytes());
+        .copy_from_slice(&virtual_size.to_le_bytes());
     bytes[metadata + 64 * 1024 + 16..metadata + 64 * 1024 + 20]
         .copy_from_slice(&512u32.to_le_bytes());
     let descriptor = if differencing { 0 } else { 2 * 1024 * 1024 + 6 };
