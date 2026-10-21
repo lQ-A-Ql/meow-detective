@@ -191,7 +191,9 @@ fn registry_value_text(value: &RegistryValue) -> Option<String> {
         RegistryValue::MultiString(values) => values.first().map(|value| value.trim().to_string()),
         RegistryValue::Binary(bytes) if bytes.len() >= 2 && bytes.len().is_multiple_of(2) => {
             let units = bytes
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
                 .take_while(|unit| *unit != 0)
                 .collect::<Vec<_>>();

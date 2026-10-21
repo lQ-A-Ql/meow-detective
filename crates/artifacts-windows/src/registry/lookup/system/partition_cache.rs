@@ -16,7 +16,9 @@ pub(super) fn partitions(bytes: &[u8]) -> Vec<CachedPartition> {
         return Vec::new();
     }
     bytes[48..]
-        .chunks_exact(144)
+        .as_chunks::<144>()
+        .0
+        .iter()
         .filter_map(|entry| {
             let offset = u64::from_le_bytes(entry[8..16].try_into().ok()?);
             let length = u64::from_le_bytes(entry[16..24].try_into().ok()?);
