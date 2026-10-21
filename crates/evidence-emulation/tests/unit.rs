@@ -551,7 +551,9 @@ fn vmx_options_enable_exactly_one_isolation_exception_each() {
         false,
     )
     .unwrap();
-    assert!(!clipboard.contains("isolation.tools.copy.disable"));
+    assert!(clipboard.contains("isolation.tools.copy.disable = \"FALSE\""));
+    assert!(clipboard.contains("isolation.tools.dnd.disable = \"FALSE\""));
+    assert!(clipboard.contains("isolation.tools.paste.disable = \"FALSE\""));
     assert!(clipboard.contains("tools.syncTime = \"TRUE\""));
     assert!(!clipboard.contains("time.synchronize"));
     assert!(clipboard.contains("ethernet0.present = \"FALSE\""));

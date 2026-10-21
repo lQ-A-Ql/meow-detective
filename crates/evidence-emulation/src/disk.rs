@@ -11,6 +11,11 @@ const DEFAULT_CLUSTER_SIZE: u32 = 64 * 1024;
 const DEFAULT_MAX_WRITE: usize = 16 * 1024 * 1024;
 const MIN_CLUSTER_SIZE: u32 = 4096;
 const MAX_CLUSTER_SIZE: u32 = 1024 * 1024;
+// VMware probes the flat extent with adjacent small reads during power-on.
+// Keep the window bounded so this reduces E01/Dokan crossings without making
+// random guest access scale with the evidence size.
+const READ_AHEAD_BYTES: usize = 256 * 1024;
+const MAX_READ_AHEAD_CLUSTERS: usize = 4;
 
 #[derive(Debug, Clone, Copy)]
 pub struct CowDiskConfig {
@@ -100,29 +105,33 @@ impl CowDisk {
                 // Parent I/O and E01 decompression must not block writers or
                 // unrelated VM reads that only need the overlay state.
                 drop(state);
-                read_parent_cluster(
+                let read_ahead_clusters = read_ahead_clusters(cluster_size);
+                let mut prefetched = vec![0u8; cluster_size * read_ahead_clusters];
+                read_parent_window(
                     &self.parent,
                     self.len(),
                     self.config.cluster_size,
                     cluster_index,
-                    &mut cluster,
+                    &mut prefetched,
                 )?;
                 state = self
                     .state
                     .lock()
                     .map_err(|_| EmulationError::LockPoisoned)?;
                 state.overlay.ensure_readable()?;
+                for (index, data) in prefetched.chunks_exact(cluster_size).enumerate() {
+                    let index = cluster_index.saturating_add(index as u64);
+                    if !state.cache.contains(index) && !state.overlay.contains_cluster(index) {
+                        state.cache.insert(index, data);
+                    }
+                }
                 // A concurrent write may have committed while the parent was
-                // being read. Prefer that newer overlay data over the stale
-                // parent result, then cache whichever view is authoritative.
-                if state.cache.copy_to(cluster_index, &mut cluster)
-                    || state
+                // being read. Prefer that newer overlay data over stale cache
+                // contents, then use the authoritative view for this request.
+                if !state.cache.copy_to(cluster_index, &mut cluster) {
+                    state
                         .overlay
-                        .read_overlay_cluster(cluster_index, &mut cluster)?
-                {
-                    // The cluster was populated by the cache or overlay.
-                } else {
-                    state.cache.insert(cluster_index, &cluster);
+                        .read_overlay_cluster(cluster_index, &mut cluster)?;
                 }
             } else if overlay_hit {
                 state.cache.insert(cluster_index, &cluster);
@@ -207,7 +216,7 @@ impl CowDisk {
     }
 }
 
-fn read_parent_cluster(
+fn read_parent_window(
     parent: &Arc<dyn BlockProvider>,
     disk_length: u64,
     cluster_size: u32,
@@ -223,6 +232,10 @@ fn read_parent_cluster(
         parent.read_exact_at(offset, &mut buffer[..available])?;
     }
     Ok(())
+}
+
+fn read_ahead_clusters(cluster_size: usize) -> usize {
+    (READ_AHEAD_BYTES / cluster_size.max(1)).clamp(1, MAX_READ_AHEAD_CLUSTERS)
 }
 
 fn validate_config(

@@ -100,11 +100,10 @@ pub(crate) fn conditional_security_settings(
     options: VmOptions,
 ) -> Vec<(&'static str, &'static str)> {
     let mut settings = Vec::new();
-    if !options.clipboard {
-        settings.push(("isolation.tools.copy.disable", "TRUE"));
-        settings.push(("isolation.tools.dnd.disable", "TRUE"));
-        settings.push(("isolation.tools.paste.disable", "TRUE"));
-    }
+    let clipboard_value = if options.clipboard { "FALSE" } else { "TRUE" };
+    settings.push(("isolation.tools.copy.disable", clipboard_value));
+    settings.push(("isolation.tools.dnd.disable", clipboard_value));
+    settings.push(("isolation.tools.paste.disable", clipboard_value));
     if options.time_sync {
         settings.push(("tools.syncTime", "TRUE"));
     } else {

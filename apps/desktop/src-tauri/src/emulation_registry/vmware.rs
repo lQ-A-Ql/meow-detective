@@ -175,6 +175,7 @@ pub(super) fn is_vmx_running(vmx: &Path) -> Result<bool, VmwareError> {
 pub(super) fn launch(vmx: &Path) -> Result<VmwareControl, VmwareError> {
     let (_workstation, vmrun) = discover()?;
     let vmx = vmware_compatible_path(vmx);
+    let launch_started_at = Instant::now();
     let vmx_log_baseline = vmx
         .parent()
         .map(|path| path.join("vmware.log"))
@@ -194,7 +195,13 @@ pub(super) fn launch(vmx: &Path) -> Result<VmwareControl, VmwareError> {
         vmx_log_baseline,
     };
     match wait_for_control(child, "start", START_TIMEOUT) {
-        Ok(()) => Ok(control),
+        Ok(()) => {
+            tracing::info!(
+                elapsed_ms = launch_started_at.elapsed().as_millis() as u64,
+                "VMware power-on command acknowledged"
+            );
+            Ok(control)
+        }
         Err(error) => recover_after_start_failure(control, error),
     }
 }

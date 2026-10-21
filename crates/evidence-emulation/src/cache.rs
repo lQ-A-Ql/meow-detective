@@ -31,6 +31,10 @@ impl ClusterLru {
         true
     }
 
+    pub(crate) fn contains(&self, cluster_index: u64) -> bool {
+        self.entries.contains_key(&cluster_index)
+    }
+
     pub(crate) fn insert(&mut self, cluster_index: u64, data: &[u8]) {
         if data.is_empty() || data.len() > self.max_bytes {
             return;

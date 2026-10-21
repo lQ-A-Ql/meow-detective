@@ -102,6 +102,10 @@ impl Overlay {
         self.ensure_usable()
     }
 
+    pub(crate) fn contains_cluster(&self, cluster_index: u64) -> bool {
+        self.index.contains_key(&cluster_index)
+    }
+
     pub(crate) fn commit_clusters(
         &mut self,
         clusters: &[(u64, Vec<u8>)],

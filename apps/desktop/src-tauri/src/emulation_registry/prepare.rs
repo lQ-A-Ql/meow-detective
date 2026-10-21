@@ -12,12 +12,18 @@ impl EmulationRegistry {
     ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
         self.reject_duplicate(case_root, data_source_id)?;
         let recovery_media = open_recovery_media(recovery_iso)?;
+        let parent_started_at = std::time::Instant::now();
         let parent = app_services::mount_service::prepare_emulation_parent(
             case_conn,
             case_id,
             data_source_id,
             recovery_media.is_some(),
         )?;
+        tracing::info!(
+            data_source_id = %data_source_id.0,
+            elapsed_ms = parent_started_at.elapsed().as_millis() as u64,
+            "emulation parent preparation completed"
+        );
         let guest = guest_profile_for_source(case_conn, case_root, case_id, data_source_id)?;
         let session_id = format!("emulation-{}", uuid::Uuid::new_v4());
         let workspace = SessionWorkspace::create(case_root, &session_id)
