@@ -11,6 +11,7 @@ import type { DataSourceSummary, DataSourcePartition } from '@/types/models';
 import type { EvidenceHashJobView } from '../types';
 import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
 import { LinuxRootMounts } from './LinuxRootMounts';
+import { createLinuxRootMountViewModel } from '../linux-root-mount-view-model';
 
 const processingStateTone = {
   pending: 'border-forensics-border bg-forensics-panel text-forensics-muted',
@@ -131,7 +132,7 @@ export function DataSourcesPanel({
                         {t('caseHome.dataSources.gptDiskGuid', { value: source.gptDiskGuid })}
                       </div>
                     ) : null}
-                    <LinuxRootMounts source={source} />
+                    <LinuxRootMounts model={createLinuxRootMountViewModel(source, t)} />
                     <div className="mt-2 py-2">
                       <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-forensics-muted-light">
                         <span>{t('caseHome.dataSources.sha256')}</span>

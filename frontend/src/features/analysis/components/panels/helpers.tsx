@@ -207,8 +207,8 @@ export function ExtractionTableSection({
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-[14px] font-light text-forensics-text">{title}</h3>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-forensics-muted">
+          {title ? <h3 className="text-[14px] font-light text-forensics-text">{title}</h3> : null}
+          <div className={`${title ? 'mt-1 ' : ''}flex flex-wrap items-center gap-2 text-[11px] text-forensics-muted`}>
             <StatusPill status={status} />
             <span>{t('analysisPanels.generatedAt', { value: generatedAt || '-' })}</span>
           </div>

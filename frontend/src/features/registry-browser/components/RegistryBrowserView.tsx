@@ -16,7 +16,7 @@ import { RegistrySearchPanel } from './RegistrySearchPanel';
 
 export function RegistryBrowserView({ model }: { model: RegistryBrowserModel }) {
   const { t } = model;
-  return <section className="registry-browser" aria-label={t('registryBrowser.title')}>
+  return <section className="registry-browser registry-subview" aria-label={t('registryBrowser.title')}>
     <header className="registry-browser-header">
       <div><h1>{t('registryBrowser.title')}</h1><p>{t('registryBrowser.rawTab')}</p></div>
       <div className="registry-browser-badges">

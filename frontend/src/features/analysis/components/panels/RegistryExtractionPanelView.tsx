@@ -15,35 +15,48 @@ export function RegistryExtractionPanelView({ model, dataSourceId }: { model: Re
   const columns = createRegistryColumns(t);
   return (
     <div className="registry-extraction-workspace">
-      {activeTab !== 'raw' && activeTab !== 'hardware' ? <ExtractionTableSection title={t('analysis.registry.title')} status={info.status} generatedAt={info.generatedAt} warnings={info.warnings} stats={stats}>{null}</ExtractionTableSection> : null}
-      <PanelTabs className="min-h-0 flex-1" value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} tabs={tabs.map(({ key, label, icon }) => ({ value: key, label, icon }))} variant="underline">
-        <TabsContent value="users" className={TABLE_CONTENT_CLASS}>
-          <RegistryTable rows={data?.samUsers ?? []} columns={columns.samColumns} rowKey={(row) => row.username} {...empty('users')} />
-        </TabsContent>
-        <TabsContent value="activity" className={TABLE_CONTENT_CLASS}>
-          <RegistryTable rows={data?.userAssistEntries ?? []} columns={columns.userAssistColumns} rowKey={(row) => row.programPath} {...empty('activity')} />
-        </TabsContent>
-        <TabsContent value="hardware" className={TABLE_CONTENT_CLASS}>
-          {activeTab === 'hardware' ? dataSourceId ? <NativeRegistryHardwareContainer dataSourceId={dataSourceId} />
-            : <p className="registry-browser-message">{t('registryBrowser.errors.sourceUnavailable')}</p> : null}
-        </TabsContent>
-        <TabsContent value="network" className={TABLE_CONTENT_CLASS}>
-          <div className="space-y-3">
-            <RegistryTable title={t('analysis.registry.network.adapters')} rows={data?.networkAdapters ?? []} columns={columns.adapterColumns} rowKey={(row) => row.guid} {...empty('adapters')} />
-            <RegistryTable title={t('analysis.registry.network.profiles')} rows={data?.networkProfiles ?? []} columns={columns.networkColumns} rowKey={(row) => row.profileGuid} {...empty('profiles')} />
-          </div>
-        </TabsContent>
-        <TabsContent value="software" className={TABLE_CONTENT_CLASS}>
-          <RegistryTable rows={data?.installedSoftware ?? []} columns={columns.softwareColumns} rowKey={(row) => `${row.displayName}-${row.version}`} {...empty('software')} />
-        </TabsContent>
-        <TabsContent value="usb" className={TABLE_CONTENT_CLASS}>
-          <RegistryTable rows={data?.usbDevices ?? []} columns={columns.usbColumns} rowKey={(row) => row.serialNumber} {...empty('usb')} />
-        </TabsContent>
-        <TabsContent value="raw" data-registry-raw className={`${TABLE_CONTENT_CLASS} min-h-0 flex-1`}>
-          {activeTab === 'raw' ? dataSourceId ? <NativeRegistryBrowserContainer dataSourceId={dataSourceId} />
-            : <p className="registry-browser-message">{t('registryBrowser.errors.sourceUnavailable')}</p> : null}
-        </TabsContent>
-      </PanelTabs>
+      <header className="registry-analysis-header">
+        <div className="registry-analysis-heading">
+          <span className="registry-analysis-kicker">{t('analysis.registry.context')}</span>
+          {activeTab !== 'raw' && activeTab !== 'hardware' ? <h2>{t('analysis.registry.title')}</h2> : null}
+          <p>{t('analysis.registry.description')}</p>
+        </div>
+        <div className="registry-analysis-meta">
+          <span className="registry-analysis-status">{t(`analysis.registry.status.${info.status}`, { defaultValue: info.status })}</span>
+          <span>{t('analysisPanels.generatedAt', { value: info.generatedAt || '-' })}</span>
+        </div>
+      </header>
+      <div className="registry-analysis-panels">
+        <PanelTabs className="registry-analysis-panel-tabs" value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} tabs={tabs.map(({ key, label, icon }) => ({ value: key, label, icon }))} variant="underline">
+          {activeTab !== 'raw' && activeTab !== 'hardware' ? <ExtractionTableSection title="" status={info.status} generatedAt={info.generatedAt} warnings={info.warnings} stats={stats}>{null}</ExtractionTableSection> : null}
+          <TabsContent value="users" className={TABLE_CONTENT_CLASS}>
+            <RegistryTable rows={data?.samUsers ?? []} columns={columns.samColumns} rowKey={(row) => row.username} {...empty('users')} />
+          </TabsContent>
+          <TabsContent value="activity" className={TABLE_CONTENT_CLASS}>
+            <RegistryTable rows={data?.userAssistEntries ?? []} columns={columns.userAssistColumns} rowKey={(row) => row.programPath} {...empty('activity')} />
+          </TabsContent>
+          <TabsContent value="hardware" className={TABLE_CONTENT_CLASS}>
+            {activeTab === 'hardware' ? dataSourceId ? <NativeRegistryHardwareContainer dataSourceId={dataSourceId} />
+              : <p className="registry-browser-message">{t('registryBrowser.errors.sourceUnavailable')}</p> : null}
+          </TabsContent>
+          <TabsContent value="network" className={TABLE_CONTENT_CLASS}>
+            <div className="space-y-3">
+              <RegistryTable title={t('analysis.registry.network.adapters')} rows={data?.networkAdapters ?? []} columns={columns.adapterColumns} rowKey={(row) => row.guid} {...empty('adapters')} />
+              <RegistryTable title={t('analysis.registry.network.profiles')} rows={data?.networkProfiles ?? []} columns={columns.networkColumns} rowKey={(row) => row.profileGuid} {...empty('profiles')} />
+            </div>
+          </TabsContent>
+          <TabsContent value="software" className={TABLE_CONTENT_CLASS}>
+            <RegistryTable rows={data?.installedSoftware ?? []} columns={columns.softwareColumns} rowKey={(row) => `${row.displayName}-${row.version}`} {...empty('software')} />
+          </TabsContent>
+          <TabsContent value="usb" className={TABLE_CONTENT_CLASS}>
+            <RegistryTable rows={data?.usbDevices ?? []} columns={columns.usbColumns} rowKey={(row) => row.serialNumber} {...empty('usb')} />
+          </TabsContent>
+          <TabsContent value="raw" data-registry-raw className={`${TABLE_CONTENT_CLASS} min-h-0 flex-1`}>
+            {activeTab === 'raw' ? dataSourceId ? <NativeRegistryBrowserContainer dataSourceId={dataSourceId} />
+              : <p className="registry-browser-message">{t('registryBrowser.errors.sourceUnavailable')}</p> : null}
+          </TabsContent>
+        </PanelTabs>
+      </div>
     </div>
   );
 }

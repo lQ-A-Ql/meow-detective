@@ -1833,6 +1833,14 @@
   "analysis": {
     "registry": {
       "title": "Registry extraction",
+      "context": "Windows registry",
+      "description": "Review extracted artifacts, hardware cache, and source-bound hive values.",
+      "status": {
+        "parsed": "Parsed",
+        "partial": "Partial",
+        "unavailable": "Unavailable",
+        "failed": "Failed"
+      },
       "unavailable": "Registry extraction results are unavailable.",
       "tabs": {
         "users": "User accounts",

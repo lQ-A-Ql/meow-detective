@@ -10,7 +10,7 @@ import { hardwareColumns } from './hardware-columns';
 export function RegistryHardwareView({ model }: { model: RegistryHardwareModel }) {
   const { t } = model;
   const columns = hardwareColumns(t);
-  return <section className="registry-hardware" aria-label={t('registryHardware.title')}>
+  return <section className="registry-hardware registry-subview" aria-label={t('registryHardware.title')}>
     <div className="registry-hardware-toolbar">
       {model.systems.length ? <Select value={model.selected?.fileId} disabled={model.loading} onValueChange={model.selectHive}>
         <SelectTrigger aria-label={t('registryHardware.hiveLabel')}><SelectValue /></SelectTrigger>

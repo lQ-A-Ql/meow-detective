@@ -1833,6 +1833,14 @@
   "analysis": {
     "registry": {
       "title": "注册表提取",
+      "context": "Windows 注册表",
+      "description": "查看提取的注册表工件、硬件缓存和绑定来源的 Hive 键值。",
+      "status": {
+        "parsed": "已解析",
+        "partial": "部分完成",
+        "unavailable": "暂不可用",
+        "failed": "失败"
+      },
       "unavailable": "注册表提取结果暂不可用。",
       "tabs": {
         "users": "用户账户",
