@@ -1,4 +1,5 @@
 use super::super::fs_magic::{kind_label, read_boot_filesystem};
+use super::super::read_filesystem_uuid;
 use super::super::reader::open_evidence_reader;
 use super::super::{
     ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe, ImageFilesystemSource,
@@ -320,12 +321,32 @@ fn append_readable_volume_candidates(
         let filesystem = read_boot_filesystem(&mut *lv_reader, 0);
         match filesystem {
             Ok(Some(fs_kind)) if !matches!(fs_kind, ImageFilesystemKind::LvmPool) => {
+                let filesystem_uuid = match read_filesystem_uuid(
+                    &mut *lv_reader,
+                    0,
+                    Some(lv_info.size_bytes),
+                    fs_kind,
+                ) {
+                    Ok(uuid) => uuid,
+                    Err(error) => {
+                        tracing::warn!(
+                            ?error,
+                            lv_index = lv_idx,
+                            "LVM filesystem UUID read failed"
+                        );
+                        probe.warnings.push(format!(
+                            "LVM filesystem UUID unavailable for logical volume index {lv_idx}"
+                        ));
+                        None
+                    }
+                };
                 state.new_candidates.push(build_logical_volume_candidate(
                     representative,
                     vg,
                     &lv_info,
                     fs_kind,
                     expanded,
+                    filesystem_uuid,
                 ));
             }
             Ok(_) => {
@@ -349,7 +370,8 @@ fn build_logical_volume_candidate(
     lv_info: &fs_lvm::LvInfo,
     fs_kind: ImageFilesystemKind,
     expanded: &ExpandedPoolSources,
-) -> (ImageFilesystemCandidate, u64) {
+    filesystem_uuid: Option<String>,
+) -> (ImageFilesystemCandidate, u64, Option<String>) {
     let vg_name = if vg.name.is_empty() {
         representative
             .and_then(|candidate| candidate.partition_name.as_deref())
@@ -376,6 +398,7 @@ fn build_logical_volume_candidate(
             lvm_identity: Some(lvm_identity),
         },
         lv_info.size_bytes,
+        filesystem_uuid,
     )
 }
 
@@ -402,14 +425,22 @@ fn apply_expansion_results(probe: &mut ImageFilesystemProbe, mut state: LvmExpan
         .max()
         .unwrap_or(0)
         + 1;
-    for (position, (candidate, size_bytes)) in state.new_candidates.iter_mut().enumerate() {
-        append_logical_volume_partition(probe, candidate, *size_bytes, next_index + position);
+    for (position, (candidate, size_bytes, filesystem_uuid)) in
+        state.new_candidates.iter_mut().enumerate()
+    {
+        append_logical_volume_partition(
+            probe,
+            candidate,
+            *size_bytes,
+            filesystem_uuid.clone(),
+            next_index + position,
+        );
     }
     probe.candidates.extend(
         state
             .new_candidates
             .into_iter()
-            .map(|(candidate, _)| candidate),
+            .map(|(candidate, _, _)| candidate),
     );
 }
 
@@ -417,6 +448,7 @@ fn append_logical_volume_partition(
     probe: &mut ImageFilesystemProbe,
     candidate: &mut ImageFilesystemCandidate,
     size_bytes: u64,
+    filesystem_uuid: Option<String>,
     index: usize,
 ) {
     candidate.partition_index = Some(index);
@@ -428,7 +460,8 @@ fn append_logical_volume_partition(
             .unwrap_or_else(|| format!("LV_{index}")),
         kind_label: kind_label(candidate.kind),
         type_guid: None,
-        uuid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid,
         offset: candidate.offset,
         length: size_bytes,
         status: PartitionStatus::Supported,

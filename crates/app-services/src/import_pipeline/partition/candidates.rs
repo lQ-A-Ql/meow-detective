@@ -106,8 +106,13 @@ where
         return Ok(empty_stats(probe.warnings));
     }
 
-    file_service::store_data_source_partitions(conn, data_source_id, &probe.partitions)
-        .map_err(system_error)?;
+    file_service::store_data_source_partitions_with_gpt_disk_guid(
+        conn,
+        data_source_id,
+        &probe.partitions,
+        probe.gpt_disk_guid.as_deref(),
+    )
+    .map_err(system_error)?;
     let placeholders = seed_partition_roots(
         conn,
         data_source_id,

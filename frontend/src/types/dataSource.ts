@@ -29,7 +29,20 @@ export interface DataSourceSummary {
   readerKind?: string;
   provenanceStatus?: string;
   warnings?: string[];
+  gptDiskGuid?: string;
   partitions?: DataSourcePartition[];
+  linuxRootMounts?: LinuxRootMount[];
+}
+
+export interface LinuxRootMount {
+  fstabPartitionIndex: number;
+  sourceSpec: string;
+  evidencePath: string;
+  evidenceLine: number;
+  status: 'confirmed' | 'ambiguous' | 'unresolved' | string;
+  resolvedPartitionIndex?: number;
+  filesystemUuid?: string;
+  gptPartitionUuid?: string;
 }
 
 export interface NestedEvidenceLineage {
@@ -82,8 +95,9 @@ export interface DataSourcePartition {
   offset: number;
   length: number;
   typeGuid?: string;
-  /** GPT unique partition GUID; distinct from its type GUID. */
-  uuid?: string;
+  /** GPT unique partition GUID (Linux PARTUUID), distinct from filesystem UUID. */
+  gptPartitionUuid?: string;
+  filesystemUuid?: string;
   filesystem?: string;
   unlockHint?: string;
 }

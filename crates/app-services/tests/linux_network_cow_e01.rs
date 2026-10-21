@@ -39,8 +39,13 @@ fn linux_static_network_profile_is_cleared_in_cow_only() {
         .expect("attach source");
     let db_path = app_services::source_db::source_db_path(&active.case_root, &source.id);
     let db = persistence_sqlite::open_or_create_source(&db_path).expect("source db");
-    app_services::file_service::store_data_source_partitions(&db, &source.id, &probe.partitions)
-        .expect("partitions");
+    app_services::file_service::store_data_source_partitions_with_gpt_disk_guid(
+        &db,
+        &source.id,
+        &probe.partitions,
+        probe.gpt_disk_guid.as_deref(),
+    )
+    .expect("partitions");
     active
         .with_conn(|conn| {
             persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)

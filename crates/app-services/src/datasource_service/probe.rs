@@ -1,6 +1,8 @@
 mod gpt;
+pub(crate) mod identity;
 
 use self::gpt::detect_gpt_filesystems;
+use self::identity::read_filesystem_uuid;
 use super::fs_magic::{kind_label, read_boot_filesystem, read_iso9660, SECTOR_SIZE};
 use super::{
     DataSourceError, ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe,
@@ -56,6 +58,7 @@ where
     if read_iso9660(reader)? {
         let length = reader.seek(std::io::SeekFrom::End(0))?;
         return Ok(ImageFilesystemProbe {
+            gpt_disk_guid: None,
             candidates: vec![ImageFilesystemCandidate {
                 partition_index: Some(1),
                 partition_name: Some("ISO9660 Volume".to_string()),
@@ -70,7 +73,8 @@ where
                 name: "ISO9660 Volume".to_string(),
                 kind_label: kind_label(ImageFilesystemKind::Iso9660),
                 type_guid: None,
-                uuid: None,
+                gpt_partition_uuid: None,
+                filesystem_uuid: None,
                 offset: 0,
                 length,
                 status: PartitionStatus::Supported,
@@ -97,10 +101,11 @@ where
     let mut candidates = Vec::new();
     detect_mbr_candidates(reader, &mbr_entries, &mut candidates)?;
 
-    let (mut partitions, mut warnings) = if is_gpt_protective {
-        (Vec::new(), Vec::new())
+    let (mut partitions, mut warnings, mut gpt_disk_guid) = if is_gpt_protective {
+        (Vec::new(), Vec::new(), None)
     } else {
-        detect_mbr_partitions(reader, &mbr_entries)?
+        let (partitions, warnings) = detect_mbr_partitions(reader, &mbr_entries)?;
+        (partitions, warnings, None)
     };
 
     if is_gpt_protective {
@@ -118,10 +123,12 @@ where
         }
         partitions = gpt_probe.partitions;
         warnings.extend(gpt_probe.warnings);
+        gpt_disk_guid = gpt_probe.gpt_disk_guid;
     }
 
     if !candidates.is_empty() {
         return Ok(ImageFilesystemProbe {
+            gpt_disk_guid,
             candidates,
             partitions,
             unsupported_volumes: Vec::new(),
@@ -137,6 +144,7 @@ where
         ));
     }
     Ok(ImageFilesystemProbe {
+        gpt_disk_guid,
         candidates,
         partitions,
         unsupported_volumes,
@@ -170,12 +178,14 @@ where
         source: ImageFilesystemSource::DirectVolume,
         lvm_identity: None,
     };
+    let filesystem_uuid = read_filesystem_uuid(reader, 0, length, kind)?;
     let partition = PartitionRecord {
         index: 1,
         name: "Volume".to_string(),
         kind_label: kind_label(kind),
         type_guid: None,
-        uuid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid,
         offset: 0,
         length: length.unwrap_or(0),
         status: partition_status_for_filesystem(kind),
@@ -183,6 +193,7 @@ where
         lvm_identity: None,
     };
     Ok(Some(ImageFilesystemProbe {
+        gpt_disk_guid: None,
         candidates: vec![candidate],
         partitions: vec![partition],
         unsupported_volumes: Vec::new(),
@@ -297,7 +308,18 @@ where
             name: display_name,
             kind_label,
             type_guid: None,
-            uuid: None,
+            gpt_partition_uuid: None,
+            filesystem_uuid: fs_kind
+                .map(|kind| {
+                    read_filesystem_uuid(
+                        reader,
+                        offset,
+                        Some(entry.sector_count as u64 * SECTOR_SIZE),
+                        kind,
+                    )
+                })
+                .transpose()?
+                .flatten(),
             offset,
             length: entry.sector_count as u64 * SECTOR_SIZE,
             status,

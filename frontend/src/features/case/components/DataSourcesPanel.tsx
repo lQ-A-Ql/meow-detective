@@ -10,6 +10,7 @@ import { formatPartitionDisplayName, partitionDisplayLabel } from '@/lib/partiti
 import type { DataSourceSummary, DataSourcePartition } from '@/types/models';
 import type { EvidenceHashJobView } from '../types';
 import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
+import { LinuxRootMounts } from './LinuxRootMounts';
 
 const processingStateTone = {
   pending: 'border-forensics-border bg-forensics-panel text-forensics-muted',
@@ -125,6 +126,12 @@ export function DataSourcesPanel({
                     )}
                     <div className="mt-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">{source.kind}</div>
                     <div className="mt-1 text-[11px] text-forensics-muted font-mono break-all">{source.sourcePath}</div>
+                    {source.gptDiskGuid ? (
+                      <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
+                        {t('caseHome.dataSources.gptDiskGuid', { value: source.gptDiskGuid })}
+                      </div>
+                    ) : null}
+                    <LinuxRootMounts source={source} />
                     <div className="mt-2 py-2">
                       <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-forensics-muted-light">
                         <span>{t('caseHome.dataSources.sha256')}</span>
@@ -233,7 +240,10 @@ export function DataSourcesPanel({
                                       {t('caseHome.partitions.offsetLength', { offset: partition.offset, length: partitionLengthLabel(partition.length, t('caseHome.partitions.lengthUnknown')) })}
                                     </div>
                                     <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
-                                      {t('caseHome.partitions.uuid', { value: partition.uuid ?? t('caseHome.partitions.uuidNotRecorded') })}
+                                      {t('caseHome.partitions.gptPartitionUuid', { value: partition.gptPartitionUuid ?? t('caseHome.partitions.uuidNotRecorded') })}
+                                    </div>
+                                    <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
+                                      {t('caseHome.partitions.filesystemUuid', { value: partition.filesystemUuid ?? t('caseHome.partitions.uuidNotRecorded') })}
                                     </div>
                                     {partition.typeGuid ? (
                                       <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">

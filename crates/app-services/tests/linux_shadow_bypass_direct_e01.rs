@@ -77,10 +77,11 @@ fn linux_shadow_bypass_with_direct_partition_registration() {
     {
         let source_conn = persistence_sqlite::connection::open_or_create_source(&source_db)
             .expect("create the source database");
-        app_services::file_service::store_data_source_partitions(
+        app_services::file_service::store_data_source_partitions_with_gpt_disk_guid(
             &source_conn,
             &ds.id,
             &probe.partitions,
+            probe.gpt_disk_guid.as_deref(),
         )
         .expect("store the probed partitions");
     }

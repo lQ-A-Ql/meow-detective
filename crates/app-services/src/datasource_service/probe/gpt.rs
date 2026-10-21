@@ -1,3 +1,4 @@
+use super::identity::read_filesystem_uuid;
 use super::{partition_display_name, partition_status_for_filesystem};
 use crate::datasource_service::fs_magic::{
     kind_label, read_boot_filesystem, read_sector, SECTOR_SIZE,
@@ -19,7 +20,7 @@ pub(super) fn detect_gpt_filesystems<R>(reader: &mut R) -> Result<ImageFilesyste
 where
     R: Read + Seek,
 {
-    let partitions = read_gpt_partitions(reader)?;
+    let (gpt_disk_guid, partitions) = read_gpt_partitions(reader)?;
     let mut candidates = Vec::new();
     let mut records = Vec::new();
     let mut warnings = Vec::new();
@@ -39,6 +40,7 @@ where
     }
 
     Ok(ImageFilesystemProbe {
+        gpt_disk_guid,
         candidates,
         partitions: records,
         unsupported_volumes: Vec::new(),
@@ -46,26 +48,34 @@ where
     })
 }
 
-fn read_gpt_partitions<R>(reader: &mut R) -> Result<Vec<GptPartition>>
+fn read_gpt_partitions<R>(reader: &mut R) -> Result<(Option<String>, Vec<GptPartition>)>
 where
     R: Read + Seek,
 {
     let header_sector = read_sector(reader, SECTOR_SIZE)?;
     let Some(header) = evidence_core::volume::gpt::parse_gpt_header(&header_sector) else {
-        return Ok(Vec::new());
+        return Ok((None, Vec::new()));
     };
     let entry_bytes = header.entry_size.saturating_mul(header.partition_count);
     if entry_bytes == 0 {
-        return Ok(Vec::new());
+        return Ok((
+            (header.disk_guid != [0; 16])
+                .then(|| evidence_core::volume::gpt::format_guid(&header.disk_guid)),
+            Vec::new(),
+        ));
     }
 
     reader.seek(SeekFrom::Start(header.partition_entry_lba * SECTOR_SIZE))?;
     let mut entry_data = vec![0u8; entry_bytes as usize];
     reader.read_exact(&mut entry_data)?;
-    Ok(evidence_core::volume::gpt::parse_gpt_entries(
-        &entry_data,
-        header.entry_size,
-        header.partition_count,
+    Ok((
+        (header.disk_guid != [0; 16])
+            .then(|| evidence_core::volume::gpt::format_guid(&header.disk_guid)),
+        evidence_core::volume::gpt::parse_gpt_entries(
+            &entry_data,
+            header.entry_size,
+            header.partition_count,
+        ),
     ))
 }
 
@@ -74,6 +84,11 @@ where
     R: Read + Seek,
 {
     let offset = partition.start_lba * SECTOR_SIZE;
+    let length = partition
+        .end_lba
+        .saturating_sub(partition.start_lba)
+        .saturating_add(1)
+        .saturating_mul(SECTOR_SIZE);
     let partition_type = evidence_core::volume::gpt::classify_partition_type(&partition.type_guid);
     let type_name = evidence_core::volume::gpt::partition_type_name(partition_type);
     let fs_kind = read_boot_filesystem(reader, offset)?;
@@ -100,14 +115,14 @@ where
             type_guid: Some(evidence_core::volume::gpt::format_guid(
                 &partition.type_guid,
             )),
-            uuid: (partition.unique_guid != [0; 16])
+            gpt_partition_uuid: (partition.unique_guid != [0; 16])
                 .then(|| evidence_core::volume::gpt::format_guid(&partition.unique_guid)),
+            filesystem_uuid: fs_kind
+                .map(|kind| read_filesystem_uuid(reader, offset, Some(length), kind))
+                .transpose()?
+                .flatten(),
             offset,
-            length: partition
-                .end_lba
-                .saturating_sub(partition.start_lba)
-                .saturating_add(1)
-                * SECTOR_SIZE,
+            length,
             status,
             filesystem: fs_kind,
             lvm_identity: None,

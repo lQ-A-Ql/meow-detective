@@ -374,8 +374,9 @@ fn summarize_partitions(
     connection: &Connection,
     data_source_id: &str,
 ) -> DerivedSourceResult<PartitionSummary> {
-    let uuids = persistence_sqlite::repositories::partition_repo::PartitionRepo::new(connection)
-        .uuids_for_data_source(data_source_id)?;
+    let identities =
+        persistence_sqlite::repositories::partition_repo::PartitionRepo::new(connection)
+            .identities_for_data_source(data_source_id)?;
     let mut statement = connection
         .prepare(
             "SELECT id, partition_index, name, kind_label, status, type_guid,
@@ -391,6 +392,10 @@ fn summarize_partitions(
         .query_map([data_source_id], read_partition_row)
         .map_err(persistence_sqlite::DbError::from)?;
     let mut hasher = Sha256::new();
+    if let Some(guid) = identities.gpt_disk_guid.as_deref() {
+        update_field(&mut hasher, b"gpt-disk-guid-v1");
+        update_field(&mut hasher, guid.as_bytes());
+    }
     let mut record_count = 0u64;
     for row in rows {
         let row = row.map_err(persistence_sqlite::DbError::from)?;
@@ -401,11 +406,16 @@ fn summarize_partitions(
         update_field(&mut hasher, row.kind_label.as_bytes());
         update_field(&mut hasher, row.status.as_bytes());
         update_optional_text(&mut hasher, row.type_guid.as_deref());
-        // Absent identities preserve older manifest digests. Newly recorded
-        // identities are covered so a modified UUID cannot pass verification.
-        if let Some(uuid) = uuids.get(&(row.partition_index as u32)) {
-            update_field(&mut hasher, b"gpt-partition-uuid-v1");
-            update_field(&mut hasher, uuid.as_bytes());
+        // Both GPT and filesystem identities are part of the source digest.
+        if let Some(identity) = identities.partitions.get(&(row.partition_index as u32)) {
+            if let Some(uuid) = identity.gpt_partition_uuid.as_deref() {
+                update_field(&mut hasher, b"gpt-partition-uuid-v1");
+                update_field(&mut hasher, uuid.as_bytes());
+            }
+            if let Some(uuid) = identity.filesystem_uuid.as_deref() {
+                update_field(&mut hasher, b"filesystem-uuid-v1");
+                update_field(&mut hasher, uuid.as_bytes());
+            }
         }
         update_i64(&mut hasher, row.offset);
         update_i64(&mut hasher, row.length);

@@ -1603,6 +1603,17 @@
       "physicalDiskHashRunning": "Reading original physical disk…",
       "objects": "objects",
       "partitions": "Partition structure",
+      "gptDiskGuid": "GPT disk GUID: {{value}}",
+      "linuxRootMount": "Linux / ({{status}}) · device {{source}} · matched partition {{partition}} · filesystem UUID: {{uuid}} · evidence P{{evidencePartition}} {{evidence}}",
+      "rootPartitionUnknown": "unconfirmed",
+      "rootPartition": "P{{index}}",
+      "linuxRootHint": "Root mount configuration and identity matches come from the evidence /etc/fstab; verify live mounts separately in the guest.",
+      "linuxRootUnknown": "Linux / is unconfirmed: no complete /etc/fstab root entry was obtained. Verify the filesystem UUID against boot configuration or guest mount information.",
+      "rootMountStatus": {
+        "confirmed": "configuration matched",
+        "ambiguous": "ambiguous",
+        "unresolved": "unresolved"
+      },
       "empty": "Imported evidence sources for this case will appear here and can be renamed."
     },
     "hash": {
@@ -1623,7 +1634,8 @@
       "deferredCount": "Deferred {{count}}"
     },
     "partitions": {
-      "uuid": "Partition UUID: {{value}}",
+      "gptPartitionUuid": "GPT partition UUID (PARTUUID): {{value}}",
+      "filesystemUuid": "Filesystem UUID: {{value}}",
       "typeGuid": "Partition type GUID: {{value}}",
       "lengthUnknown": "Unknown",
       "uuidNotRecorded": "Not recorded",

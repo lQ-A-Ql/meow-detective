@@ -368,7 +368,8 @@ describe('CaseHome page', () => {
             {
               index: 1,
               name: 'EFI system partition',
-              uuid: '00112233-4455-6677-8899-aabbccddeeff',
+              gptPartitionUuid: '00112233-4455-6677-8899-aabbccddeeff',
+              filesystemUuid: '11112222-3333-4444-5555-666677778888',
               typeGuid: 'c12a7328-f81f-11d2-ba4b-00a0c93ec93b',
               kindLabel: 'FAT',
               status: 'supported',
@@ -406,9 +407,11 @@ describe('CaseHome page', () => {
     await renderPageAsync();
 
     expect(screen.getByText('分区1（FAT）')).toBeDefined();
-    expect(screen.getByText('分区 UUID：00112233-4455-6677-8899-aabbccddeeff')).toBeDefined();
+    expect(screen.getByText('GPT 分区 UUID（PARTUUID）：00112233-4455-6677-8899-aabbccddeeff')).toBeDefined();
+    expect(screen.getByText('文件系统 UUID：11112222-3333-4444-5555-666677778888')).toBeDefined();
     expect(screen.getByText('分区类型 GUID：c12a7328-f81f-11d2-ba4b-00a0c93ec93b')).toBeDefined();
-    expect(screen.getAllByText('分区 UUID：未记录')).toHaveLength(2);
+    expect(screen.getAllByText('GPT 分区 UUID（PARTUUID）：未记录')).toHaveLength(2);
+    expect(screen.getAllByText('文件系统 UUID：未记录')).toHaveLength(2);
     expect(screen.getByText('分区2（NTFS）')).toBeDefined();
     expect(screen.getByText('分区3（RECOVERY）')).toBeDefined();
   });

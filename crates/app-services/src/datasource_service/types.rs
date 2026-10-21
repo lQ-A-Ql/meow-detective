@@ -178,8 +178,10 @@ pub struct PartitionRecord {
     pub name: String,
     pub kind_label: String,
     pub type_guid: Option<String>,
-    /// GPT unique partition GUID; never a partition type GUID or filesystem ID.
-    pub uuid: Option<String>,
+    /// GPT unique partition GUID (Linux PARTUUID), never a filesystem UUID.
+    pub gpt_partition_uuid: Option<String>,
+    /// Filesystem UUID read from the filesystem superblock when available.
+    pub filesystem_uuid: Option<String>,
     pub offset: u64,
     pub length: u64,
     pub status: PartitionStatus,
@@ -189,6 +191,8 @@ pub struct PartitionRecord {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageFilesystemProbe {
+    /// GPT disk GUID, distinct from partition and filesystem identities.
+    pub gpt_disk_guid: Option<String>,
     pub candidates: Vec<ImageFilesystemCandidate>,
     pub partitions: Vec<PartitionRecord>,
     pub unsupported_volumes: Vec<UnsupportedImageVolume>,

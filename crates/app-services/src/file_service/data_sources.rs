@@ -7,11 +7,10 @@ use domain::{
 use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
     file_repo::FileRepo,
-    partition_repo::PartitionRepo,
 };
 use rusqlite::Connection;
 use std::path::Path;
-use transport::dto::{DataSourcePartitionDto, DataSourceSummaryDto, RecentObjectDto};
+use transport::dto::{DataSourceSummaryDto, RecentObjectDto};
 
 pub fn get_data_sources_real(
     conn: &Connection,
@@ -19,7 +18,6 @@ pub fn get_data_sources_real(
 ) -> Result<Vec<DataSourceSummaryDto>, FileServiceError> {
     let ds_repo = DataSourceRepo::new(conn);
     let file_repo = FileRepo::new(conn);
-    let partition_repo = PartitionRepo::new(conn);
     let sources = ds_repo.find_by_case(case_id)?;
 
     sources
@@ -35,27 +33,15 @@ pub fn get_data_sources_real(
             let processing = crate::processing_phase_service::get_data_source_processing_summary(
                 conn, &source.id,
             )?;
-            let partition_uuids = partition_repo.uuids_for_data_source(&source.id.0)?;
-            let partitions = partition_repo
-                .find_by_data_source(&source.id.0)
-                .map(|items| {
-                    items
-                        .into_iter()
-                        .map(|item| DataSourcePartitionDto {
-                            index: item.partition_index,
-                            name: item.name,
-                            kind_label: item.kind_label,
-                            status: item.status,
-                            offset: item.offset,
-                            length: item.length,
-                            type_guid: item.type_guid,
-                            uuid: partition_uuids.get(&item.partition_index).cloned(),
-                            filesystem: item.filesystem,
-                            unlock_hint: item.unlock_hint,
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
+            let (partitions, gpt_disk_guid) =
+                super::partition_identity::summaries(conn, &source.id.0)?;
+            let linux_root_mounts = if platform == "linux" {
+                super::linux_root_mounts::collect(conn, &source.id, &partitions, |id, length| {
+                    super::read_file_bytes_for_case(conn, id, 0, length)
+                })?
+            } else {
+                Vec::new()
+            };
 
             Ok(DataSourceSummaryDto {
                 id: source.id.0.clone(),
@@ -89,6 +75,8 @@ pub fn get_data_sources_real(
                 )),
                 warnings: source.provenance.warnings,
                 partitions,
+                gpt_disk_guid,
+                linux_root_mounts,
             })
         })
         .collect()

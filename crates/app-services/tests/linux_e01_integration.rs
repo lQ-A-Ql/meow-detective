@@ -328,6 +328,7 @@ fn lvm_expansion_classifies_bluestore_logical_volume_without_fs_candidate() {
 
     let (candidate, partition) = synthetic_lvm_partition(1, "ceph pv", pv_offset);
     let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        gpt_disk_guid: None,
         candidates: vec![candidate],
         partitions: vec![partition],
         unsupported_volumes: Vec::new(),
@@ -358,7 +359,7 @@ fn lvm_expansion_iterates_independent_volume_groups_by_remaining_pv_offsets() {
     let source_path = tmp.path().join("two-vgs.raw");
     let low_offset = 1_048_576u64;
     let high_offset = low_offset + SYNTHETIC_PV_SIZE + 1_048_576;
-    let low_pv = build_synthetic_lvm_pv(
+    let mut low_pv = build_synthetic_lvm_pv(
         "low_vg",
         "vg-low",
         "low_root",
@@ -366,7 +367,7 @@ fn lvm_expansion_iterates_independent_volume_groups_by_remaining_pv_offsets() {
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         1,
     );
-    let high_pv = build_synthetic_lvm_pv(
+    let mut high_pv = build_synthetic_lvm_pv(
         "high_vg",
         "vg-high",
         "high_root",
@@ -374,6 +375,9 @@ fn lvm_expansion_iterates_independent_volume_groups_by_remaining_pv_offsets() {
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         99,
     );
+    let uuid_offset = SYNTHETIC_LV_MARKER_OFFSET + 1024 + 104;
+    low_pv[uuid_offset..uuid_offset + 16].fill(0x11);
+    high_pv[uuid_offset..uuid_offset + 16].fill(0x22);
     let mut disk = vec![0u8; (high_offset + SYNTHETIC_PV_SIZE) as usize];
     disk[low_offset as usize..low_offset as usize + low_pv.len()].copy_from_slice(&low_pv);
     disk[high_offset as usize..high_offset as usize + high_pv.len()].copy_from_slice(&high_pv);
@@ -382,6 +386,7 @@ fn lvm_expansion_iterates_independent_volume_groups_by_remaining_pv_offsets() {
     let (low_candidate, low_partition) = synthetic_lvm_partition(1, "low pv", low_offset);
     let (high_candidate, high_partition) = synthetic_lvm_partition(2, "high pv", high_offset);
     let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        gpt_disk_guid: None,
         candidates: vec![low_candidate, high_candidate],
         partitions: vec![low_partition, high_partition],
         unsupported_volumes: Vec::new(),
@@ -399,6 +404,23 @@ fn lvm_expansion_iterates_independent_volume_groups_by_remaining_pv_offsets() {
     assert_eq!(u16::from_le_bytes(direct_magic), 0xEF53);
     expand_lvm_pool_candidates(&mut probe, &source_path, &source_kind);
     assert!(probe.warnings.is_empty(), "warnings={:?}", probe.warnings);
+    for (name, uuid) in [
+        ("low_root", "11111111-1111-1111-1111-111111111111"),
+        ("high_root", "22222222-2222-2222-2222-222222222222"),
+    ] {
+        let partition = probe
+            .partitions
+            .iter()
+            .find(|partition| {
+                partition
+                    .lvm_identity
+                    .as_ref()
+                    .is_some_and(|identity| identity.lv_name == name)
+            })
+            .unwrap();
+        assert_eq!(partition.filesystem_uuid.as_deref(), Some(uuid));
+        assert!(partition.gpt_partition_uuid.is_none());
+    }
 
     let identities = probe
         .candidates
@@ -491,6 +513,7 @@ fn lvm_expansion_skips_incomplete_high_seqno_vg_but_expands_complete_vg() {
     let (low_candidate, low_partition) = synthetic_lvm_partition(1, "low pv", low_offset);
     let (high_candidate, high_partition) = synthetic_lvm_partition(2, "high pv", high_offset);
     let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        gpt_disk_guid: None,
         candidates: vec![low_candidate, high_candidate],
         partitions: vec![low_partition, high_partition],
         unsupported_volumes: Vec::new(),
@@ -611,6 +634,7 @@ fn lvm_expansion_reports_metadata_parse_diagnostics() {
 
     let (candidate, partition) = synthetic_lvm_partition(1, "corrupt pv", pv_offset);
     let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        gpt_disk_guid: None,
         candidates: vec![candidate],
         partitions: vec![partition],
         unsupported_volumes: Vec::new(),
@@ -650,6 +674,7 @@ fn lvm_expansion_skips_internal_and_thin_logical_volumes() {
 
     let (candidate, partition) = synthetic_lvm_partition(1, "mixed pv", pv_offset);
     let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        gpt_disk_guid: None,
         candidates: vec![candidate],
         partitions: vec![partition],
         unsupported_volumes: Vec::new(),
@@ -725,6 +750,7 @@ thin_root { id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1 
 
     let (candidate, partition) = synthetic_lvm_partition(1, "lvm pv", pv_offset);
     let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        gpt_disk_guid: None,
         candidates: vec![candidate],
         partitions: vec![partition],
         unsupported_volumes: Vec::new(),
@@ -782,7 +808,8 @@ fn synthetic_lvm_partition(
             name: name.to_string(),
             kind_label: "LVM".to_string(),
             type_guid: None,
-            uuid: None,
+            gpt_partition_uuid: None,
+            filesystem_uuid: None,
             offset,
             length: SYNTHETIC_PV_SIZE,
             status: app_services::datasource_service::PartitionStatus::Supported,
@@ -1136,7 +1163,13 @@ fn enumerate_root_lv_into_case(
 ) -> app_services::file_service::EnumerationStats {
     let probe = detect_expanded_linux_probe();
     let root_lv = root_lv_candidate(&probe);
-    file_service::store_data_source_partitions(conn, ds_id, &probe.partitions).unwrap();
+    file_service::store_data_source_partitions_with_gpt_disk_guid(
+        conn,
+        ds_id,
+        &probe.partitions,
+        probe.gpt_disk_guid.as_deref(),
+    )
+    .unwrap();
 
     let fixture = fixture_path();
     let fixture_identity = fixture_identity(&fixture);
@@ -2186,7 +2219,13 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
 
     let ds_id = DataSourceId("e01-linux-ds".to_string());
     let conn = setup_linux_fixture_case("linux-e01-test", &ds_id);
-    file_service::store_data_source_partitions(&conn, &ds_id, &probe.partitions).unwrap();
+    file_service::store_data_source_partitions_with_gpt_disk_guid(
+        &conn,
+        &ds_id,
+        &probe.partitions,
+        probe.gpt_disk_guid.as_deref(),
+    )
+    .unwrap();
 
     let fs = open_root_lv_xfs();
     let root_children = fs

@@ -1,8 +1,9 @@
 use crate::connection::DbResult;
 use rusqlite::{params, Connection};
-use std::collections::BTreeMap;
 
-mod uuid_metadata;
+mod identity_metadata;
+
+pub use identity_metadata::{PartitionIdentityMetadata, SourceIdentityMetadata};
 
 #[derive(Debug, Clone)]
 pub struct DataSourcePartitionRecord {
@@ -39,19 +40,39 @@ impl<'a> PartitionRepo<'a> {
         data_source_id: &str,
         records: &[DataSourcePartitionRecord],
     ) -> DbResult<()> {
-        self.replace_for_data_source_with_uuids(data_source_id, records, &BTreeMap::new())
+        self.replace_for_data_source_with_identities(
+            data_source_id,
+            records,
+            &SourceIdentityMetadata::default(),
+        )
     }
 
-    pub fn uuids_for_data_source(&self, data_source_id: &str) -> DbResult<BTreeMap<u32, String>> {
-        uuid_metadata::read(self.conn, data_source_id)
+    pub fn identities_for_data_source(
+        &self,
+        data_source_id: &str,
+    ) -> DbResult<SourceIdentityMetadata> {
+        identity_metadata::read(self.conn, data_source_id)
     }
 
-    pub fn replace_for_data_source_with_uuids(
+    pub fn replace_for_data_source_with_identities(
         &self,
         data_source_id: &str,
         records: &[DataSourcePartitionRecord],
-        uuids: &BTreeMap<u32, String>,
+        identities: &SourceIdentityMetadata,
     ) -> DbResult<()> {
+        if records
+            .iter()
+            .any(|record| record.data_source_id != data_source_id)
+            || identities.partitions.keys().any(|index| {
+                !records
+                    .iter()
+                    .any(|record| record.partition_index == *index)
+            })
+        {
+            return Err(crate::DbError::System(
+                "Partition identities must belong to the replaced source and partitions".into(),
+            ));
+        }
         let tx = self.conn.unchecked_transaction()?;
         tx.execute(
             "DELETE FROM data_source_partitions WHERE data_source_id = ?1",
@@ -89,7 +110,7 @@ impl<'a> PartitionRepo<'a> {
             }
         }
 
-        uuid_metadata::replace(&tx, data_source_id, uuids)?;
+        identity_metadata::replace(&tx, data_source_id, identities)?;
         tx.commit()?;
         Ok(())
     }
@@ -248,7 +269,11 @@ impl<'a> PartitionRepo<'a> {
             "DELETE FROM data_source_partitions WHERE data_source_id = ?1",
             params![data_source_id],
         )?;
-        uuid_metadata::replace(connection, data_source_id, &BTreeMap::new())?;
+        identity_metadata::replace(
+            connection,
+            data_source_id,
+            &SourceIdentityMetadata::default(),
+        )?;
         if let Some(transaction) = transaction {
             transaction.commit()?;
         }

@@ -1603,6 +1603,17 @@
       "physicalDiskHashRunning": "正在读取原始物理磁盘…",
       "objects": "对象",
       "partitions": "分区结构",
+      "gptDiskGuid": "GPT 磁盘 GUID：{{value}}",
+      "linuxRootMount": "Linux /（{{status}}）· 设备 {{source}} · 匹配分区 {{partition}} · 文件系统 UUID：{{uuid}} · 证据 P{{evidencePartition}} {{evidence}}",
+      "rootPartitionUnknown": "未确认",
+      "rootPartition": "P{{index}}",
+      "linuxRootHint": "以上为证据中 /etc/fstab 的根挂载配置及标识匹配结果；仿真内的实时挂载需另行核对。",
+      "linuxRootUnknown": "Linux / 尚未确认：未取得完整的 /etc/fstab 根挂载记录，请结合启动配置或系统内挂载信息核对文件系统 UUID。",
+      "rootMountStatus": {
+        "confirmed": "配置已匹配",
+        "ambiguous": "有歧义",
+        "unresolved": "未解析"
+      },
       "empty": "导入数据源后，这里会展示当前案件中的全部证据源，并允许重命名。"
     },
     "hash": {
@@ -1623,7 +1634,8 @@
       "deferredCount": "延后 {{count}}"
     },
     "partitions": {
-      "uuid": "分区 UUID：{{value}}",
+      "gptPartitionUuid": "GPT 分区 UUID（PARTUUID）：{{value}}",
+      "filesystemUuid": "文件系统 UUID：{{value}}",
       "typeGuid": "分区类型 GUID：{{value}}",
       "lengthUnknown": "待探测",
       "uuidNotRecorded": "未记录",

@@ -94,6 +94,7 @@ pub(super) fn build_catalog_on_connection(
         context.source_conn,
         &context.data_source.id,
         &probe.partitions,
+        probe.gpt_disk_guid.as_deref(),
     )?;
     ensure_not_cancelled(context.cancel_token)?;
     let placeholders = seed_placeholders(
@@ -120,15 +121,20 @@ fn store_rbd_partitions(
     source_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     partitions: &[PartitionRecord],
+    gpt_disk_guid: Option<&str>,
 ) -> DerivedSourceResult<()> {
-    file_service::store_data_source_partitions(source_conn, data_source_id, partitions).map_err(
-        |error| {
-            DerivedSourceError::Database(match error {
-                file_service::FileServiceError::Db(error) => error,
-                other => persistence_sqlite::DbError::System(other.to_string()),
-            })
-        },
+    file_service::store_data_source_partitions_with_gpt_disk_guid(
+        source_conn,
+        data_source_id,
+        partitions,
+        gpt_disk_guid,
     )
+    .map_err(|error| {
+        DerivedSourceError::Database(match error {
+            file_service::FileServiceError::Db(error) => error,
+            other => persistence_sqlite::DbError::System(other.to_string()),
+        })
+    })
 }
 
 fn enumerate_rbd_candidates(context: RbdEnumerationContext<'_>) -> DerivedSourceResult<()> {
@@ -399,7 +405,12 @@ fn expand_one_rbd_lvm_pool(
             name: format!("{} / {}", identity.vg_name, identity.lv_name),
             kind_label: format!("{:?}", fs_candidate.kind),
             type_guid: None,
-            uuid: None,
+            gpt_partition_uuid: None,
+            filesystem_uuid: lv_probe
+                .partitions
+                .iter()
+                .find(|partition| partition.filesystem == Some(fs_candidate.kind))
+                .and_then(|partition| partition.filesystem_uuid.clone()),
             offset: pool_candidate.offset,
             length: volume.size_bytes,
             status: PartitionStatus::Supported,

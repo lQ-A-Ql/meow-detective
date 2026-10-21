@@ -17,6 +17,7 @@ pub(crate) use fs_magic::{is_exfat_boot_sector, read_boot_filesystem};
 pub use lvm::{expand_lvm_pool_candidates, expand_lvm_pool_candidates_with_sources};
 pub(crate) use lvm::{lvm_source_fingerprint, normalize_lvm_uuid_for_match};
 pub use partition_index::{assign_effective_partition_indices, effective_partition_index};
+pub(crate) use probe::identity::read_filesystem_uuid;
 pub use probe::{detect_image_filesystem, partition_display_name, volume_display_name};
 pub(crate) use reader::open_evidence_reader;
 pub use types::{

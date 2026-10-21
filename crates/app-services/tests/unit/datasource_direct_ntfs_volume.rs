@@ -32,7 +32,8 @@ fn includes_verified_backup_after_declared_ntfs_sector_range() {
     assert_eq!(result.partitions[0].offset, 0);
     assert_eq!(result.partitions[0].length, 65 * 512);
     assert_eq!(result.candidates[0].length, Some(65 * 512));
-    assert_eq!(result.partitions[0].uuid, None);
+    assert_eq!(result.partitions[0].gpt_partition_uuid, None);
+    assert_eq!(result.partitions[0].filesystem_uuid, None);
 }
 
 #[test]

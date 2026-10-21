@@ -74,7 +74,7 @@ fn store_data_source_partitions_persists_lvm_identity() {
     .unwrap();
 
     let data_source_id = DataSourceId("ds-lvm".to_string());
-    store_data_source_partitions(
+    store_data_source_partitions_with_gpt_disk_guid(
         &conn,
         &data_source_id,
         &[PartitionRecord {
@@ -82,7 +82,8 @@ fn store_data_source_partitions_persists_lvm_identity() {
             name: "vg/root".to_string(),
             kind_label: "XFS".to_string(),
             type_guid: None,
-            uuid: None,
+            gpt_partition_uuid: None,
+            filesystem_uuid: None,
             offset: 1_048_576,
             length: 0,
             status: PartitionStatus::Supported,
@@ -111,6 +112,7 @@ fn store_data_source_partitions_persists_lvm_identity() {
                 ],
             }),
         }],
+        None,
     )
     .unwrap();
 

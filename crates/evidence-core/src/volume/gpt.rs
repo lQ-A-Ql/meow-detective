@@ -5,6 +5,8 @@
 /// first/last usable LBA, partition entry LBA, count, size.
 #[derive(Debug, Clone)]
 pub struct GptHeader {
+    /// Disk GUID stored in the GPT header, distinct from every partition GUID.
+    pub disk_guid: [u8; 16],
     pub first_usable_lba: u64,
     pub last_usable_lba: u64,
     pub partition_entry_lba: u64,
@@ -48,6 +50,7 @@ pub fn parse_gpt_header(data: &[u8]) -> Option<GptHeader> {
         return None;
     }
     Some(GptHeader {
+        disk_guid: data[56..72].try_into().ok()?,
         first_usable_lba: u64::from_le_bytes(data[40..48].try_into().ok()?),
         last_usable_lba: u64::from_le_bytes(data[48..56].try_into().ok()?),
         partition_entry_lba: u64::from_le_bytes(data[72..80].try_into().ok()?),

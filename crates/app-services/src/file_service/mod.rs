@@ -9,8 +9,10 @@ mod enumeration;
 mod error;
 mod extraction;
 pub(crate) mod filesystem_locators;
+mod linux_root_mounts;
 mod metadata;
 mod mft;
+mod partition_identity;
 mod partition_roots;
 mod preview_runtime;
 mod source_read;
@@ -72,7 +74,7 @@ pub(crate) use partition_roots::partition_placeholder_status;
 pub use partition_roots::{
     insert_partition_placeholder_root, remove_partition_placeholder_root,
     replace_placeholder_root_with_real, replace_placeholder_root_with_real_and_cancel,
-    store_data_source_partitions,
+    store_data_source_partitions_with_gpt_disk_guid,
 };
 pub use preview_runtime::{PreviewRuntimeRegistry, PreviewRuntimeStats};
 pub(crate) use source_read::{PreparedSourceReadState, SourceReadContext, SourceReadFileHint};

@@ -4,7 +4,10 @@ use crate::{
 };
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use persistence_sqlite::{
-    repositories::{file_repo::FileRepo, partition_repo::PartitionRepo},
+    repositories::{
+        file_repo::FileRepo,
+        partition_repo::{PartitionIdentityMetadata, PartitionRepo, SourceIdentityMetadata},
+    },
     DbResult,
 };
 use rusqlite::Connection;
@@ -236,10 +239,11 @@ pub(crate) fn normalized_bare_root_name_from_partitions(
     }
 }
 
-pub fn store_data_source_partitions(
+pub fn store_data_source_partitions_with_gpt_disk_guid(
     conn: &Connection,
     data_source_id: &DataSourceId,
     partitions: &[crate::datasource_service::PartitionRecord],
+    gpt_disk_guid: Option<&str>,
 ) -> Result<(), FileServiceError> {
     let repo = PartitionRepo::new(conn);
     let records = partitions
@@ -302,16 +306,22 @@ pub fn store_data_source_partitions(
         })
         .collect::<Vec<_>>();
 
-    let uuids = partitions
-        .iter()
-        .filter_map(|partition| {
-            partition
-                .uuid
-                .as_ref()
-                .map(|uuid| (partition.index as u32, uuid.clone()))
-        })
-        .collect();
-    repo.replace_for_data_source_with_uuids(&data_source_id.0, &records, &uuids)?;
+    let mut identities = SourceIdentityMetadata {
+        gpt_disk_guid: gpt_disk_guid.map(str::to_string),
+        partitions: std::collections::BTreeMap::new(),
+    };
+    for partition in partitions {
+        if partition.gpt_partition_uuid.is_some() || partition.filesystem_uuid.is_some() {
+            identities.partitions.insert(
+                partition.index as u32,
+                PartitionIdentityMetadata {
+                    gpt_partition_uuid: partition.gpt_partition_uuid.clone(),
+                    filesystem_uuid: partition.filesystem_uuid.clone(),
+                },
+            );
+        }
+    }
+    repo.replace_for_data_source_with_identities(&data_source_id.0, &records, &identities)?;
     Ok(())
 }
 

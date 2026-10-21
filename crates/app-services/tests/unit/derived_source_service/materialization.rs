@@ -735,12 +735,18 @@ fn catalog_recovery_rejects_changed_partition_uuid_metadata() {
     let repository =
         persistence_sqlite::repositories::partition_repo::PartitionRepo::new(&source_connection);
     let records = repository.find_by_data_source(&source.id.0).unwrap();
+    let identities = persistence_sqlite::repositories::partition_repo::SourceIdentityMetadata {
+        partitions: std::collections::BTreeMap::from([(
+            0,
+            persistence_sqlite::repositories::partition_repo::PartitionIdentityMetadata {
+                gpt_partition_uuid: Some("00112233-4455-6677-8899-aabbccddeeff".into()),
+                filesystem_uuid: None,
+            },
+        )]),
+        ..Default::default()
+    };
     repository
-        .replace_for_data_source_with_uuids(
-            &source.id.0,
-            &records,
-            &std::collections::BTreeMap::from([(0, "00112233-4455-6677-8899-aabbccddeeff".into())]),
-        )
+        .replace_for_data_source_with_identities(&source.id.0, &records, &identities)
         .unwrap();
     crate::source_db::checkpoint_source_db(&source_connection).unwrap();
     drop(source_connection);

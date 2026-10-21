@@ -15,7 +15,7 @@ pub(super) struct LvmMetadataGroup {
 
 #[derive(Default)]
 pub(super) struct LvmExpansionState {
-    pub(super) new_candidates: Vec<(ImageFilesystemCandidate, u64)>,
+    pub(super) new_candidates: Vec<(ImageFilesystemCandidate, u64, Option<String>)>,
     pub(super) remove_indices: Vec<usize>,
     pub(super) expanded_vgs: HashSet<String>,
 }

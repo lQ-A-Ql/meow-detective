@@ -255,13 +255,7 @@ fn write_synthetic_vhdx(
     differencing: bool,
     parent_name: Option<&str>,
 ) {
-    write_synthetic_vhdx_with_virtual_size(
-        path,
-        payload,
-        differencing,
-        parent_name,
-        1_048_576,
-    );
+    write_synthetic_vhdx_with_virtual_size(path, payload, differencing, parent_name, 1_048_576);
 }
 
 #[test]

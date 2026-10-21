@@ -14,6 +14,7 @@ fn bluestore_volume(name: &str) -> UnsupportedImageVolume {
 #[test]
 fn single_bluestore_volume_is_supported_by_metadata_path() {
     let probe = ImageFilesystemProbe {
+        gpt_disk_guid: None,
         candidates: Vec::new(),
         partitions: Vec::new(),
         unsupported_volumes: vec![bluestore_volume("osd-block-0")],
@@ -26,6 +27,7 @@ fn single_bluestore_volume_is_supported_by_metadata_path() {
 #[test]
 fn multiple_bluestore_volumes_fail_closed_with_typed_error() {
     let probe = ImageFilesystemProbe {
+        gpt_disk_guid: None,
         candidates: Vec::new(),
         partitions: Vec::new(),
         unsupported_volumes: vec![

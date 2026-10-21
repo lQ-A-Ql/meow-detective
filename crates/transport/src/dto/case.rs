@@ -77,6 +77,27 @@ pub struct DataSourceSummaryDto {
     pub warnings: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub partitions: Vec<DataSourcePartitionDto>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpt_disk_guid: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub linux_root_mounts: Vec<LinuxRootMountDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxRootMountDto {
+    pub fstab_partition_index: u32,
+    pub source_spec: String,
+    pub evidence_path: String,
+    pub evidence_line: u32,
+    /// `confirmed`, `ambiguous`, or `unresolved`.
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_partition_index: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filesystem_uuid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpt_partition_uuid: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,9 +146,11 @@ pub struct DataSourcePartitionDto {
     pub length: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub type_guid: Option<String>,
-    /// Unique GPT partition GUID, distinct from the type GUID.
+    /// Unique GPT partition GUID (Linux PARTUUID), distinct from type and filesystem IDs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub uuid: Option<String>,
+    pub gpt_partition_uuid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filesystem_uuid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filesystem: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

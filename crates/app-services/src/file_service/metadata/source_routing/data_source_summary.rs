@@ -1,18 +1,16 @@
 use std::path::Path;
 
 use domain::CaseId;
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, file_repo::FileRepo, partition_repo::PartitionRepo,
-};
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 use rusqlite::Connection;
-use transport::dto::{DataSourcePartitionDto, DataSourceSummaryDto};
+use transport::dto::DataSourceSummaryDto;
 
 use crate::file_service::{
     data_sources::{data_source_hash_status_label, data_source_provenance_status_label},
     FileServiceError,
 };
 
-use super::shared::open_source_for_data_source;
+use super::shared::{open_source_for_data_source, scoped_context};
 
 /// Build sanitized summaries for every data source in a case.
 pub fn get_data_sources_for_case(
@@ -38,35 +36,31 @@ pub fn get_data_sources_for_case(
         )?;
         let source_conn =
             open_source_for_data_source(case_conn, case_root, case_id, &source.id).ok();
-        let (file_count, partitions) = if let Some(source_conn) = source_conn.as_ref() {
+        let (file_count, partitions, gpt_disk_guid, linux_root_mounts) = if let Some(source_conn) =
+            source_conn.as_ref()
+        {
             let file_count = FileRepo::new(source_conn)
                 .count_by_data_source(&source.id)
                 .ok();
-            let partition_uuids =
-                PartitionRepo::new(source_conn).uuids_for_data_source(&source.id.0)?;
-            let partitions = PartitionRepo::new(source_conn)
-                .find_by_data_source(&source.id.0)
-                .map(|items| {
-                    items
-                        .into_iter()
-                        .map(|item| DataSourcePartitionDto {
-                            index: item.partition_index,
-                            name: item.name,
-                            kind_label: item.kind_label,
-                            status: item.status,
-                            offset: item.offset,
-                            length: item.length,
-                            type_guid: item.type_guid,
-                            uuid: partition_uuids.get(&item.partition_index).cloned(),
-                            filesystem: item.filesystem,
-                            unlock_hint: item.unlock_hint,
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            (file_count, partitions)
+            let (partitions, disk_guid) =
+                crate::file_service::partition_identity::summaries(source_conn, &source.id.0)?;
+            let roots = if platform == "linux" {
+                let mut context =
+                    scoped_context(source_conn, case_conn, case_root, case_id, &source.id);
+                crate::file_service::linux_root_mounts::collect(
+                    source_conn,
+                    &source.id,
+                    &partitions,
+                    |id, length| {
+                        crate::file_service::read_file_bytes_for_case(&mut context, id, 0, length)
+                    },
+                )?
+            } else {
+                Vec::new()
+            };
+            (file_count, partitions, disk_guid, roots)
         } else {
-            (None, Vec::new())
+            (None, Vec::new(), None, Vec::new())
         };
 
         summaries.push(DataSourceSummaryDto {
@@ -101,6 +95,8 @@ pub fn get_data_sources_for_case(
             )),
             warnings: source.provenance.warnings,
             partitions,
+            gpt_disk_guid,
+            linux_root_mounts,
         });
     }
 

@@ -3,9 +3,9 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 pub(crate) const PROCESSING_PHASE_VERSION: u32 = 1;
-pub(crate) const CATALOG_MATERIALIZER_VERSION: u32 = 3;
+pub(crate) const CATALOG_MATERIALIZER_VERSION: u32 = 4;
 pub(crate) const CATALOG_SCHEMA_DEPENDENCY: &str = "source_015_ceph_bluestore_rbd_header_context";
-pub(crate) const CATALOG_POLICY_VERSION: &str = "rbd-filesystem-catalog-v2-xfs-macb";
+pub(crate) const CATALOG_POLICY_VERSION: &str = "rbd-filesystem-catalog-v3-partition-identities";
 
 const SOURCE_META_KEY: &str = "derived.catalog.manifest";
 

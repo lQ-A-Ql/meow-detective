@@ -132,8 +132,13 @@ fn enumerate_staged_catalog(
     cancel_token: Arc<AtomicBool>,
     env_name: &str,
 ) -> persistence_sqlite::DbResult<(u64, u64, u64)> {
-    file_service::store_data_source_partitions(source_conn, data_source_id, &probe.partitions)
-        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    file_service::store_data_source_partitions_with_gpt_disk_guid(
+        source_conn,
+        data_source_id,
+        &probe.partitions,
+        probe.gpt_disk_guid.as_deref(),
+    )
+    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
 
     let mut work = Vec::new();
     for partition in &probe.partitions {
