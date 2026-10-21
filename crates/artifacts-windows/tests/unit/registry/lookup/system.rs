@@ -793,6 +793,62 @@ fn extract_usb_devices_from_system_hive_parses_class_and_serial() {
 }
 
 #[test]
+fn extract_usb_devices_from_control_set_usb_includes_uasp_mass_storage() {
+    let mut data = empty_hive("SYSTEM");
+    write_nk(
+        &mut data,
+        0x20,
+        "SYSTEM",
+        &[("Select", 0x200), ("ControlSet001", 0x300)],
+        &[],
+    );
+    write_nk(&mut data, 0x200, "Select", &[], &[0x1000]);
+    write_dword_value(&mut data, 0x1000, "Current", 1);
+    write_nk(&mut data, 0x300, "ControlSet001", &[("Enum", 0x400)], &[]);
+    write_nk(&mut data, 0x400, "Enum", &[("USB", 0x500)], &[]);
+    write_nk(
+        &mut data,
+        0x500,
+        "USB",
+        &[("VID_04E8&PID_61F5", 0x600)],
+        &[],
+    );
+    write_nk(
+        &mut data,
+        0x600,
+        "VID_04E8&PID_61F5",
+        &[("MSFT301234568A0804", 0x700)],
+        &[],
+    );
+    write_nk(
+        &mut data,
+        0x700,
+        "MSFT301234568A0804",
+        &[],
+        &[0x1100, 0x1200],
+    );
+    write_string_value(&mut data, 0x1100, "Service", "UASPStor", 0x3200);
+    write_string_value(
+        &mut data,
+        0x1200,
+        "DeviceDesc",
+        "USB Attached SCSI (UAS) Mass Storage Device",
+        0x3300,
+    );
+
+    let entries = extract_usb_devices_from_system_hive(&data, "SYSTEM").unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(
+        entries[0].device_name,
+        "USB Attached SCSI (UAS) Mass Storage Device"
+    );
+    assert_eq!(entries[0].serial_number, "MSFT301234568A0804");
+    assert_eq!(entries[0].vendor.as_deref(), Some("04E8"));
+    assert_eq!(entries[0].product.as_deref(), Some("61F5"));
+}
+
+#[test]
 fn extract_mounted_devices_from_system_hive_parses_dos_and_volume() {
     let mut data = empty_hive("SYSTEM");
     write_nk(&mut data, 0x20, "SYSTEM", &[("MountedDevices", 0x200)], &[]);
