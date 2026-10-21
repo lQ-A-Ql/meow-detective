@@ -58,3 +58,9 @@ pub struct AmcacheApplicationFileEntry {
     pub link_date: Option<String>,
     pub registry_key_path: String,
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PortableDeviceEntry {
+    pub volume_identity: String,
+    pub volume_label: String,
+    pub source_key_path: String,
+}

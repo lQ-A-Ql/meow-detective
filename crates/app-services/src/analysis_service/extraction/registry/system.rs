@@ -231,6 +231,23 @@ pub(super) fn usb_device_artifacts(
                 attrs.insert("lastConnect".to_string(), Value::String(ts.clone()));
             }
             attrs.insert(
+                "usbInstanceId".to_string(),
+                Value::String(entry.instance_id.clone()),
+            );
+            attrs.insert(
+                "sourceKeyPath".to_string(),
+                Value::String(entry.source_key_path.clone()),
+            );
+            if let Some(volume) = entry.volumes.first() {
+                attrs.insert(
+                    "volumeIdentity".to_string(),
+                    Value::String(volume.volume_identity.clone()),
+                );
+                if let Some(letter) = volume.drive_letters.first().filter(|s| !s.is_empty()) {
+                    attrs.insert("driveLetter".to_string(), Value::String(letter.clone()));
+                }
+            }
+            attrs.insert(
                 "parser".to_string(),
                 Value::String("registry.system.usb".to_string()),
             );

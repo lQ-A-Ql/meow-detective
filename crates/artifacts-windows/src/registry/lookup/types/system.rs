@@ -127,6 +127,16 @@ pub struct UsbDeviceHistoryEntry {
     pub revision: Option<String>,
     pub first_connect: Option<String>,
     pub last_connect: Option<String>,
+    pub instance_id: String,
+    pub source_key_path: String,
+    pub volumes: Vec<UsbVolumeEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UsbVolumeEntry {
+    pub volume_identity: String,
+    pub drive_letters: Vec<String>,
+    pub source_key_paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

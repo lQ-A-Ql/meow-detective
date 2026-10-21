@@ -3,7 +3,7 @@ use super::super::context::RegistryExtractionContext;
 use super::super::shared::registry_field_artifacts;
 use super::super::software::{
     installed_software_artifacts, machine_run_key_artifacts, network_profile_artifacts,
-    winlogon_config_artifacts,
+    portable_device_artifacts, winlogon_config_artifacts,
 };
 
 pub(in crate::analysis_service::extraction::registry) fn extract(
@@ -14,6 +14,7 @@ pub(in crate::analysis_service::extraction::registry) fn extract(
     extract_machine_run_keys(context);
     extract_winlogon(context);
     extract_network_profiles(context);
+    extract_portable_devices(context);
     extract_appcompat_layers(context);
 }
 
@@ -98,6 +99,22 @@ fn extract_network_profiles(context: &mut RegistryExtractionContext<'_>) {
             .extend(network_profile_artifacts(context.candidate, &entries)),
         Err(err) => context.warnings.push(format!(
             "{} NetworkList profile extraction failed: {}",
+            context.candidate.path, err
+        )),
+    }
+}
+
+fn extract_portable_devices(context: &mut RegistryExtractionContext<'_>) {
+    match artifacts_windows::extract_portable_devices_from_software_hive(
+        context.bytes,
+        &context.candidate.path,
+    ) {
+        Ok(entries) => context
+            .outcome
+            .artifacts
+            .extend(portable_device_artifacts(context.candidate, &entries)),
+        Err(err) => context.warnings.push(format!(
+            "{} portable-device extraction failed: {}",
             context.candidate.path, err
         )),
     }

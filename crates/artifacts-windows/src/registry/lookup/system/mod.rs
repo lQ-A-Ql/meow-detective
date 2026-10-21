@@ -4,16 +4,20 @@ use super::*;
 use crate::registry::RegistryError;
 
 mod drivers;
+mod mounted;
 mod network;
+mod partition_cache;
 mod services;
 mod shutdown;
 mod usb;
+mod usb_mapping;
 
 #[cfg(test)]
 #[path = "../../../../tests/unit/registry/lookup/system.rs"]
 mod tests;
 
 pub use drivers::extract_shimcache_from_system_hive;
+pub use mounted::extract_mounted_devices_from_system_hive;
 pub use network::extract_network_adapters_from_system_hive;
 pub use services::extract_services_from_system_hive;
 pub use shutdown::extract_shutdown_time_from_system_hive;
@@ -120,47 +124,6 @@ pub fn extract_lsa_packages_from_system_hive(
 }
 
 /// Extract mounted-device mappings from `SYSTEM\MountedDevices`.
-pub fn extract_mounted_devices_from_system_hive(
-    bytes: &[u8],
-    _hive_path: &str,
-) -> Result<Vec<MountedDeviceEntry>, String> {
-    let hive = RegistryHiveReader::new(bytes)?;
-    let mut entries = Vec::new();
-
-    let Some(mounted_nk) = hive.navigate_to(&["MountedDevices"]).unwrap_or(None) else {
-        return Ok(entries);
-    };
-    let values = hive
-        .read_all_values_from_nk(&mounted_nk)
-        .unwrap_or_default();
-
-    for (device_name, value) in values {
-        let drive_letter = device_name
-            .strip_prefix("\\DosDevices\\")
-            .map(str::to_string);
-        let volume_guid = device_name
-            .strip_prefix("\\\\?\\Volume{")
-            .and_then(|rest| rest.split('}').next())
-            .map(str::to_string);
-
-        let (disk_signature_hex, target_name) = match value {
-            RegistryValue::Binary(bytes) => (Some(hex::encode(bytes)), None),
-            RegistryValue::String(s) => (None, Some(s)),
-            _ => (None, None),
-        };
-
-        entries.push(MountedDeviceEntry {
-            device_name,
-            drive_letter,
-            volume_guid,
-            disk_signature_hex,
-            target_name,
-        });
-    }
-
-    Ok(entries)
-}
-
 /// Like [`extract_system_hive_fields`], but after standard extraction checks a
 /// transaction log for more recent writes.  When a txlog entry holds a newer
 /// value (higher sequence number), the field's value is overwritten.

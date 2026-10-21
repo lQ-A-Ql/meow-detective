@@ -63,6 +63,12 @@ pub(crate) fn base_attrs(candidate: &EvidenceCandidate) -> BTreeMap<String, Valu
         "sourcePath".to_string(),
         Value::String(candidate.path.clone()),
     );
+    if let Some(partition_index) = candidate.partition_index {
+        attrs.insert(
+            "partitionIndex".to_string(),
+            Value::Number((partition_index as u64).into()),
+        );
+    }
     // Files under a Docker overlay2 layer describe container content, not host
     // state. Extraction still runs (the records are valid evidence), but every
     // artifact carries this marker so consumers can separate container findings

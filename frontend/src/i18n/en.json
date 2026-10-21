@@ -1901,6 +1901,7 @@
         "deviceName": "Device name",
         "serialNumber": "Serial number",
         "driveLetter": "Drive letter",
+        "volumeLabel": "Volume label",
         "fileSystem": "Filesystem",
         "capacity": "Capacity",
         "firstConnected": "First connected",

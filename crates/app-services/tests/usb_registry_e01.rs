@@ -56,12 +56,49 @@ fn usb_storage_history_survives_extraction_and_summary() {
         parser: "registry.hive".into(),
         category: "Registry".into(),
     };
-    let outcome =
+    let mut outcome =
         analysis_service::extract_registry_candidate(&candidate, &bytes, None, None, None);
+    let software_candidate = EvidenceCandidate {
+        file_id: domain::FileEntryId("usb-software".into()),
+        data_source_id: "usb-source".into(),
+        partition_index: candidate.partition_index,
+        path: "Windows/System32/config/SOFTWARE".into(),
+        size: 0,
+        encrypted: false,
+        content_identity: "usb-software".into(),
+        companions: Vec::new(),
+        modified_at: None,
+        evidence_kind: "registry_hive".into(),
+        parser: "registry.hive".into(),
+        category: "Registry".into(),
+    };
+    let mut software_bytes = Vec::new();
+    fs.open_file("Windows/System32/config/SOFTWARE")
+        .unwrap()
+        .take(256 * 1024 * 1024)
+        .read_to_end(&mut software_bytes)
+        .unwrap();
+    if !software_bytes.is_empty() {
+        outcome.artifacts.extend(
+            analysis_service::extract_registry_candidate(
+                &software_candidate,
+                &software_bytes,
+                None,
+                None,
+                None,
+            )
+            .artifacts,
+        );
+    }
     let artifacts: Vec<_> = outcome
         .artifacts
         .into_iter()
-        .filter(|a| a.family == "RegistryUsbDevice")
+        .filter(|a| {
+            matches!(
+                a.family.as_str(),
+                "RegistryUsbDevice" | "RegistryPortableDevice"
+            )
+        })
         .collect();
     assert!(!artifacts.is_empty(), "USB storage history must be found");
     let temp = tempfile::TempDir::new().unwrap();
@@ -82,7 +119,12 @@ fn usb_storage_history_survives_extraction_and_summary() {
         )?;
         ArtifactRepo::new(conn).insert_batch(&artifacts, &case.meta.id.0, "usb-source")?;
         let summary = analysis_service::get_registry_structured_summary(conn).unwrap();
-        assert_eq!(summary.usb_devices.len(), artifacts.len());
+        assert_eq!(summary.usb_devices.len(), 1);
+        assert_eq!(summary.usb_devices[0].drive_letter.as_deref(), Some("D:"));
+        assert_eq!(
+            summary.usb_devices[0].volume_label.as_deref(),
+            Some("Samsung_T5")
+        );
         assert_eq!(
             summary.usb_devices[0].device_name,
             "Samsung Portable SSD T5 SCSI Disk Device"

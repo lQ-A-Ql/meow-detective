@@ -1901,6 +1901,7 @@
         "deviceName": "设备名称",
         "serialNumber": "序列号",
         "driveLetter": "盘符",
+        "volumeLabel": "卷标",
         "fileSystem": "文件系统",
         "capacity": "容量",
         "firstConnected": "首次连接",

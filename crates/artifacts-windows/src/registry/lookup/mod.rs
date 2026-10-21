@@ -14,6 +14,7 @@ pub mod system;
 mod time;
 pub(crate) mod txlog_util;
 pub mod types;
+pub(crate) mod usb_identity;
 pub(crate) mod utf16;
 mod value;
 
@@ -35,8 +36,8 @@ pub use shellbags::extract_shellbags_from_usrclass_hive;
 pub use software::{
     extract_appcompat_layers_from_software_hive, extract_installed_software,
     extract_machine_run_keys_from_software_hive, extract_network_profiles_from_software_hive,
-    extract_software_hive_fields, extract_software_hive_fields_with_txlog,
-    extract_winlogon_fields_from_software_hive,
+    extract_portable_devices_from_software_hive, extract_software_hive_fields,
+    extract_software_hive_fields_with_txlog, extract_winlogon_fields_from_software_hive,
 };
 pub use system::{
     extract_lsa_packages_from_system_hive, extract_mounted_devices_from_system_hive,

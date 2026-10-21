@@ -85,6 +85,7 @@ export function createRegistryColumns(t: Translate) {
     { key: 'deviceName', title: t('analysis.registry.columns.deviceName'), className: 'min-w-[200px]', render: (row) => suspiciousLabel(row.deviceName, row.isSuspicious) },
     { key: 'serialNumber', title: t('analysis.registry.columns.serialNumber'), className: 'w-[180px] font-mono text-[10px]', render: (row) => row.serialNumber },
     { key: 'driveLetter', title: t('analysis.registry.columns.driveLetter'), className: 'w-[60px]', render: (row) => row.driveLetter ?? emptyValue },
+    { key: 'volumeLabel', title: t('analysis.registry.columns.volumeLabel'), className: 'min-w-[120px]', render: (row) => row.volumeLabel ?? emptyValue },
     { key: 'fileSystem', title: t('analysis.registry.columns.fileSystem'), className: 'w-[80px]', render: (row) => row.fileSystem ?? emptyValue },
     { key: 'capacity', title: t('analysis.registry.columns.capacity'), className: 'w-[70px] text-right', render: (row) => row.capacity ?? emptyValue },
     { key: 'firstConnect', title: t('analysis.registry.columns.firstConnected'), className: 'w-[160px] font-mono text-[10px]', render: (row) => row.firstConnect ? row.firstConnect.replace('T', ' ').replace('Z', '') : emptyValue },

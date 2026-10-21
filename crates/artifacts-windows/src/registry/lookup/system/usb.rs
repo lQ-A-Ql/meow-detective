@@ -19,10 +19,11 @@ pub fn extract_usb_devices_from_system_hive(
         .collect::<Vec<_>>();
     prefixes.push(vec!["Enum"]);
 
+    let mappings = super::usb_mapping::UsbMappings::new(&hive, &prefixes);
     for prefix in prefixes {
-        extract_usb_storage_tree(&hive, &prefix, &mut entries)?;
+        extract_usb_storage_tree(&hive, &prefix, &mappings, &mut entries)?;
         enrich_usb_devices_from_enum_usb(&hive, &prefix, &mut entries)?;
-        extract_usb_enum_storage_devices(&hive, &prefix, &mut entries)?;
+        extract_usb_enum_storage_devices(&hive, &prefix, &mappings, &mut entries)?;
     }
 
     Ok(entries)
@@ -31,6 +32,7 @@ pub fn extract_usb_devices_from_system_hive(
 fn extract_usb_enum_storage_devices(
     hive: &RegistryHiveReader<'_>,
     prefix: &[&str],
+    mappings: &super::usb_mapping::UsbMappings,
     entries: &mut Vec<UsbDeviceHistoryEntry>,
 ) -> Result<(), String> {
     let scsi_names = extract_scsi_usb_names(hive, prefix);
@@ -83,7 +85,7 @@ fn extract_usb_enum_storage_devices(
             let candidate = UsbDeviceHistoryEntry {
                 device_name,
                 serial_number: strip_usb_instance_suffix(&raw_serial),
-                raw_serial_number: raw_serial,
+                raw_serial_number: raw_serial.clone(),
                 vendor: vendor.clone(),
                 product: product.clone(),
                 revision,
@@ -91,6 +93,12 @@ fn extract_usb_enum_storage_devices(
                 last_connect: instance_nk
                     .last_write_time
                     .and_then(windows_filetime_to_rfc3339),
+                instance_id: format!(r"USB\{instance_identity}"),
+                source_key_path: instance_path.join("\\"),
+                volumes: mappings.volumes(
+                    &format!(r"USB\{instance_identity}"),
+                    &instance_path.join("\\"),
+                ),
             };
             if !entries
                 .iter()
@@ -266,6 +274,7 @@ fn same_usb_identity(left: &UsbDeviceHistoryEntry, right: &UsbDeviceHistoryEntry
 fn extract_usb_storage_tree(
     hive: &RegistryHiveReader<'_>,
     prefix: &[&str],
+    mappings: &super::usb_mapping::UsbMappings,
     entries: &mut Vec<UsbDeviceHistoryEntry>,
 ) -> Result<(), String> {
     let mut usbstor_path = prefix.to_vec();
@@ -316,12 +325,18 @@ fn extract_usb_storage_tree(
             let candidate = UsbDeviceHistoryEntry {
                 device_name,
                 serial_number,
-                raw_serial_number: raw_serial,
+                raw_serial_number: raw_serial.clone(),
                 vendor: vendor.clone(),
                 product: product.clone(),
                 revision: revision.clone(),
                 first_connect: first_connect.clone(),
                 last_connect,
+                instance_id: format!(r"USBSTOR\{class_name}\{raw_serial}"),
+                source_key_path: serial_path.join("\\"),
+                volumes: mappings.volumes(
+                    &format!(r"USBSTOR\{class_name}\{raw_serial}"),
+                    &serial_path.join("\\"),
+                ),
             };
             if !entries.iter().any(|entry| {
                 entry.raw_serial_number == candidate.raw_serial_number

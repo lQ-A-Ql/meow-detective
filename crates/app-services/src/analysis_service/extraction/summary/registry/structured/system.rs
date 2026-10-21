@@ -114,20 +114,51 @@ fn load_system_services(conn: &Connection) -> Result<Vec<SystemServiceDto>, Anal
 }
 
 fn load_usb_devices(conn: &Connection) -> Result<Vec<UsbDeviceHistoryDto>, AnalysisServiceError> {
+    let labels = query_artifact_rows(conn, &["RegistryPortableDevice"], 0, 10_000)?
+        .into_iter()
+        .filter_map(|row| {
+            let source = optional_string_attr(&row.attrs, "dataSourceId")?;
+            let identity = optional_string_attr(&row.attrs, "volumeIdentity")?;
+            let label = optional_string_attr(&row.attrs, "volumeLabel")?;
+            Some((
+                source,
+                optional_u32_attr(&row.attrs, "partitionIndex"),
+                identity,
+                label,
+            ))
+        })
+        .collect::<Vec<_>>();
     Ok(
         query_artifact_rows(conn, &["RegistryUsbDevice"], 0, 10_000)?
             .into_iter()
-            .map(|row| UsbDeviceHistoryDto {
-                device_name: string_attr(&row.attrs, "deviceName"),
-                serial_number: string_attr(&row.attrs, "serialNumber"),
-                first_connect: optional_string_attr(&row.attrs, "firstConnect"),
-                last_connect: optional_string_attr(&row.attrs, "lastConnect"),
-                volume_label: optional_string_attr(&row.attrs, "volumeLabel"),
-                drive_letter: optional_string_attr(&row.attrs, "driveLetter"),
-                file_system: optional_string_attr(&row.attrs, "fileSystem"),
-                capacity: optional_string_attr(&row.attrs, "capacity"),
-                is_suspicious: None,
-                suspicious_reason: None,
+            .map(|row| {
+                let source = optional_string_attr(&row.attrs, "dataSourceId");
+                let partition = optional_u32_attr(&row.attrs, "partitionIndex");
+                let identity = optional_string_attr(&row.attrs, "volumeIdentity");
+                let volume_label =
+                    source
+                        .as_ref()
+                        .zip(identity.as_ref())
+                        .and_then(|(source, identity)| {
+                            labels
+                                .iter()
+                                .find(|(s, p, i, _)| {
+                                    s == source && *p == partition && i == identity
+                                })
+                                .map(|(_, _, _, label)| label.clone())
+                        });
+                UsbDeviceHistoryDto {
+                    device_name: string_attr(&row.attrs, "deviceName"),
+                    serial_number: string_attr(&row.attrs, "serialNumber"),
+                    first_connect: optional_string_attr(&row.attrs, "firstConnect"),
+                    last_connect: optional_string_attr(&row.attrs, "lastConnect"),
+                    volume_label,
+                    drive_letter: optional_string_attr(&row.attrs, "driveLetter"),
+                    file_system: optional_string_attr(&row.attrs, "fileSystem"),
+                    capacity: optional_string_attr(&row.attrs, "capacity"),
+                    is_suspicious: None,
+                    suspicious_reason: None,
+                }
             })
             .collect(),
     )

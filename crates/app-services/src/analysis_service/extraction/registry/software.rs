@@ -132,6 +132,42 @@ pub(super) fn installed_software_artifacts(
         .collect()
 }
 
+pub(super) fn portable_device_artifacts(
+    candidate: &EvidenceCandidate,
+    entries: &[artifacts_windows::PortableDeviceEntry],
+) -> Vec<Artifact> {
+    entries
+        .iter()
+        .map(|entry| {
+            let mut attrs = base_attrs(candidate);
+            attrs.insert(
+                "volumeIdentity".to_string(),
+                Value::String(entry.volume_identity.clone()),
+            );
+            attrs.insert(
+                "volumeLabel".to_string(),
+                Value::String(entry.volume_label.clone()),
+            );
+            attrs.insert(
+                "sourceKeyPath".to_string(),
+                Value::String(entry.source_key_path.clone()),
+            );
+            attrs.insert(
+                "parser".to_string(),
+                Value::String("registry.software.portable-device".to_string()),
+            );
+            make_artifact(
+                "RegistryPortableDevice",
+                format!("Portable volume: {}", entry.volume_label),
+                entry.volume_label.clone(),
+                candidate,
+                "registry.software.portable-device.v1",
+                attrs,
+            )
+        })
+        .collect()
+}
+
 pub(super) fn machine_run_key_artifacts(
     candidate: &EvidenceCandidate,
     entries: &[artifacts_windows::RegistryRunKey],

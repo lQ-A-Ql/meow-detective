@@ -729,7 +729,13 @@ fn extract_lsa_packages_from_fixture() {
 
 fn usbstor_hive() -> Vec<u8> {
     let mut data = empty_hive("SYSTEM");
-    write_nk(&mut data, 0x20, "SYSTEM", &[("Enum", 0x200)], &[]);
+    write_nk(
+        &mut data,
+        0x20,
+        "SYSTEM",
+        &[("Enum", 0x200), ("MountedDevices", 0x600)],
+        &[],
+    );
     write_nk(&mut data, 0x200, "Enum", &[("USBSTOR", 0x300)], &[]);
     write_nk(
         &mut data,
@@ -752,6 +758,19 @@ fn usbstor_hive() -> Vec<u8> {
         "FriendlyName",
         "Kingston DT101 USB Device",
         0x3000,
+    );
+    write_nk(&mut data, 0x600, "MountedDevices", &[], &[0x1300]);
+    let mounted_target = r"USBSTOR#Ven_Kingston&Prod_DT101#A1B2C3D4E5F6";
+    let mounted_target_bytes = mounted_target
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect::<Vec<_>>();
+    write_binary_value(
+        &mut data,
+        0x1300,
+        r"\DosDevices\F:",
+        &mounted_target_bytes,
+        0x3400,
     );
 
     // Non-zero FILETIMEs for class (first connect) and serial (last connect).
@@ -780,6 +799,14 @@ fn extract_usb_devices_from_system_hive_parses_class_and_serial() {
     assert_eq!(entry.vendor.as_deref(), Some("Kingston"));
     assert_eq!(entry.product.as_deref(), Some("DT101"));
     assert_eq!(entry.revision.as_deref(), Some("1.00"));
+    assert_eq!(
+        entry
+            .volumes
+            .iter()
+            .flat_map(|v| v.drive_letters.iter())
+            .collect::<Vec<_>>(),
+        vec![&"F:".to_string()]
+    );
     assert!(entry
         .first_connect
         .as_deref()
