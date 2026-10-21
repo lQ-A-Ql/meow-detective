@@ -17,6 +17,22 @@ RAW/E01 导入采用作业级 SourceRuntime、独立 reader 与共享 E01 OpenPl
 > 修改的启动类型。应用不会自动安装 Dokan 或 iSCSI 组件，也不会强制停止可能被其他程序
 > 使用的 `MSiSCSI` 服务。详细边界见下文 [Windows 权限与系统服务](#windows-权限与系统服务)。
 
+
+
+## UI展示
+
+|                          案件导入页                          |                          镜像导入页                          |
+| :----------------------------------------------------------: | :----------------------------------------------------------: |
+| ![image-20261021220435665](https://raw.githubusercontent.com/lQ-A-Ql/blog-image/main/image-20261021220435665.png) | ![image-20261021220512877](https://raw.githubusercontent.com/lQ-A-Ql/blog-image/main/image-20261021220512877.png) |
+|                        **文件树预览**                        |                        **数据源分析**                        |
+| ![image-20261021220611664](https://raw.githubusercontent.com/lQ-A-Ql/blog-image/main/image-20261021220611664.png) | ![image-20261021220943464](https://raw.githubusercontent.com/lQ-A-Ql/blog-image/main/image-20261021220943464.png) |
+|                           **搜索**                           |                         **TIMELINE**                         |
+| ![image-20261021221114880](https://raw.githubusercontent.com/lQ-A-Ql/blog-image/main/image-20261021221114880.png) | ![image-20261021221153786](https://raw.githubusercontent.com/lQ-A-Ql/blog-image/main/image-20261021221153786.png) |
+
+
+
+
+
 ## 功能简介
 
 ### 证据导入与文件浏览
