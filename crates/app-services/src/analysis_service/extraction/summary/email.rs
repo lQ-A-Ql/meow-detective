@@ -8,7 +8,7 @@ use crate::analysis_service::extraction::attr_mapping::{
 };
 use chrono::Utc;
 use rusqlite::Connection;
-use transport::dto::{EmailExtractionSummaryDto, EmailMessageDto};
+use transport::dto::{EmailAccountDto, EmailExtractionSummaryDto, EmailMessageDto};
 
 pub fn get_email_extraction_summary(
     conn: &Connection,
@@ -17,6 +17,7 @@ pub fn get_email_extraction_summary(
 ) -> Result<EmailExtractionSummaryDto, AnalysisServiceError> {
     let total = count_artifacts_by_type(conn, "EmailMessage")?;
     let rows = query_artifact_rows(conn, &["EmailMessage"], offset, limit)?;
+    let account_rows = query_artifact_rows(conn, &["EmailAccount"], 0, 100)?;
     let messages = rows
         .into_iter()
         .map(|row| EmailMessageDto {
@@ -47,14 +48,38 @@ pub fn get_email_extraction_summary(
             container_path: optional_string_attr(&row.attrs, "containerPath"),
             message_index: optional_u64_attr(&row.attrs, "messageIndex"),
             message_class: optional_string_attr(&row.attrs, "messageClass"),
+            content_status: optional_string_attr(&row.attrs, "contentStatus"),
             attachment_count: u64_attr(&row.attrs, "attachmentCount"),
             is_deleted: optional_bool_attr(&row.attrs, "isDeleted"),
+        })
+        .collect::<Vec<_>>();
+    let accounts = account_rows
+        .into_iter()
+        .map(|row| EmailAccountDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            account: optional_string_attr(&row.attrs, "account"),
+            email: optional_string_attr(&row.attrs, "email"),
+            incoming_server: optional_string_attr(&row.attrs, "incomingServer"),
+            outgoing_server: optional_string_attr(&row.attrs, "outgoingServer"),
+            incoming_port: optional_u64_attr(&row.attrs, "incomingPort")
+                .and_then(|value| u16::try_from(value).ok()),
+            outgoing_port: optional_u64_attr(&row.attrs, "outgoingPort")
+                .and_then(|value| u16::try_from(value).ok()),
+            incoming_ssl: optional_bool_attr(&row.attrs, "incomingSsl"),
+            outgoing_ssl: optional_bool_attr(&row.attrs, "outgoingSsl"),
+            password: optional_string_attr(&row.attrs, "password"),
+            password_status: optional_string_attr(&row.attrs, "passwordStatus"),
+            password_algorithm: optional_string_attr(&row.attrs, "passwordAlgorithm"),
+            mail_client: string_attr(&row.attrs, "mailClient"),
         })
         .collect::<Vec<_>>();
     Ok(EmailExtractionSummaryDto {
         status: status_from_total(total),
         total,
         messages,
+        accounts,
         generated_at: Utc::now().to_rfc3339(),
         warnings: Vec::new(),
     })

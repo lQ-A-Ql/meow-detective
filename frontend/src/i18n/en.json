@@ -2873,7 +2873,16 @@
         "subject": "Subject",
         "client": "Mail client"
       },
-      "messageCount": "Message count"
+      "messageCount": "Message count",
+      "accountCount": "Accounts",
+      "accountsTitle": "Email accounts",
+      "unknownAccount": "Unknown account",
+      "accountEmail": "Email address",
+      "accountPassword": "Email password",
+      "incomingServer": "Incoming server",
+      "outgoingServer": "Outgoing server",
+      "passwordAlgorithm": "Password algorithm",
+      "source": "Source"
     },
     "bootLabels": {
       "operatingSystemStarted": "Operating system started",

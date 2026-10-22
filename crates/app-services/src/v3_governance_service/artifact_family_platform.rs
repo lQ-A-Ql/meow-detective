@@ -47,6 +47,7 @@ const WINDOWS_FAMILIES: &[&str] = &[
     "BrowserSessionTab",
     "BrowserPassword",
     "EmailMessage",
+    "EmailAccount",
 ];
 
 const LINUX_FAMILIES: &[&str] = &[

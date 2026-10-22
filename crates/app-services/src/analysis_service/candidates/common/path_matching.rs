@@ -5,6 +5,8 @@ pub(crate) enum EvidencePathPattern {
     ContainsAndSuffix(&'static str, &'static str),
     ContainsBoth(&'static str, &'static str),
     FoxmailBox,
+    FoxmailIndex,
+    FoxmailAccount,
 }
 
 pub(crate) fn normalize_evidence_path(path: &str) -> String {
@@ -122,6 +124,8 @@ pub(crate) fn evidence_path_matches(path: &str, patterns: &[EvidencePathPattern]
             path.contains(first) && path.contains(second)
         }
         EvidencePathPattern::FoxmailBox => is_foxmail_box_path(path),
+        EvidencePathPattern::FoxmailIndex => is_foxmail_index_path(path),
+        EvidencePathPattern::FoxmailAccount => is_foxmail_account_path(path),
     })
 }
 
@@ -149,4 +153,22 @@ fn is_foxmail_box_path(path: &str) -> bool {
         || path.contains("/data/mails/")
         || (path.contains("/storage/") && path.contains("/mails/"))
         || (path.contains("/mail/") && known_mailbox_name)
+}
+
+fn is_foxmail_index_path(path: &str) -> bool {
+    if !path.ends_with("/mails/index") {
+        return false;
+    }
+    path.split('/')
+        .any(|component| component.starts_with("foxmail"))
+        || (path.contains("/storage/") && path.contains("/mails/index"))
+}
+
+fn is_foxmail_account_path(path: &str) -> bool {
+    if !path.ends_with("/accounts/account.rec0") {
+        return false;
+    }
+    path.split('/')
+        .any(|component| component.starts_with("foxmail"))
+        || path.contains("/storage/")
 }

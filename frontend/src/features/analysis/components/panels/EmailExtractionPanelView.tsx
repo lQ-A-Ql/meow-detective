@@ -3,6 +3,7 @@ import type { useEmailExtractionModel } from '../../use-email-extraction-model';
 import { useTranslation } from 'react-i18next';
 import type {
   EmailAttachment,
+  EmailAccount,
   EmailHeader,
   EmailMessage,
 } from '@/types/models';
@@ -116,12 +117,16 @@ export function EmailExtractionPanelView({ model }: { model: ReturnType<typeof u
       stats={[
         [t('analysisPanels.email.total'), info.total.toString()],
         [t('analysisPanels.email.messageCount'), info.messages.length.toString()],
+        [t('analysisPanels.email.accountCount'), (info.accounts?.length ?? 0).toString()],
         [
           t('analysisPanels.email.withAttachments'),
           attachmentCount.toString(),
         ],
       ]}
     >
+      {info.accounts && info.accounts.length > 0 ? (
+        <EmailAccountsSection accounts={info.accounts} />
+      ) : null}
       <DenseDataTableFrame rowCount={info.messages.length}>
         <DenseDataTable
           rows={info.messages}
@@ -142,6 +147,39 @@ export function EmailExtractionPanelView({ model }: { model: ReturnType<typeof u
       ) : null}
     </ExtractionTableSection>
   );
+}
+
+function EmailAccountsSection({ accounts }: { accounts: EmailAccount[] }) {
+  const { t } = useTranslation();
+  return (
+    <div className="mb-4 space-y-2">
+      <div className="text-[12px] font-light text-forensics-text">
+        {t('analysisPanels.email.accountsTitle')}
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {accounts.map((account) => (
+          <div key={account.artifactId} className="border border-forensics-divider p-3">
+            <div className="mb-2 text-[12px] text-forensics-text">
+              {account.account ?? account.email ?? t('analysisPanels.email.unknownAccount')}
+            </div>
+            <div className="grid grid-cols-1 gap-y-1 text-[11px] text-forensics-text-tertiary md:grid-cols-2 md:gap-x-5">
+              <KeyValueField layout="inline" label={t('analysisPanels.email.accountEmail')} value={account.email ?? '-'} />
+              <KeyValueField layout="inline" label={t('analysisPanels.email.accountPassword')} value={account.password ?? '-'} mono />
+              <KeyValueField layout="inline" label={t('analysisPanels.email.incomingServer')} value={formatEndpoint(account.incomingServer, account.incomingPort)} />
+              <KeyValueField layout="inline" label={t('analysisPanels.email.outgoingServer')} value={formatEndpoint(account.outgoingServer, account.outgoingPort)} />
+              <KeyValueField layout="inline" label={t('analysisPanels.email.passwordAlgorithm')} value={account.passwordAlgorithm ?? '-'} />
+              <KeyValueField layout="inline" label={t('analysisPanels.email.source')} value={account.sourcePath} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatEndpoint(server?: string, port?: number) {
+  if (!server) return '-';
+  return port ? `${server}:${port}` : server;
 }
 
 function EmailDetailCard({

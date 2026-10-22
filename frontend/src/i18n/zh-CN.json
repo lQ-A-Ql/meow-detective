@@ -2873,7 +2873,16 @@
         "subject": "主题",
         "client": "邮件客户端"
       },
-      "messageCount": "消息数"
+      "messageCount": "消息数",
+      "accountCount": "账号数",
+      "accountsTitle": "邮箱账号",
+      "unknownAccount": "未知账号",
+      "accountEmail": "邮箱地址",
+      "accountPassword": "邮箱密码",
+      "incomingServer": "接收服务器",
+      "outgoingServer": "发送服务器",
+      "passwordAlgorithm": "密码算法",
+      "source": "来源"
     },
     "bootLabels": {
       "operatingSystemStarted": "操作系统启动完成",

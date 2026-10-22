@@ -9,6 +9,10 @@ pub(in crate::analysis_service::extraction) fn extract_email_candidate(
     let path_lower = candidate.path.to_lowercase();
     if path_lower.ends_with(".mbox") {
         mbox::extract_mbox_candidate(candidate, bytes)
+    } else if path_lower.ends_with("/accounts/account.rec0") {
+        foxmail::extract_foxmail_account_candidate(candidate, bytes)
+    } else if path_lower.ends_with("/mails/index") {
+        foxmail::extract_foxmail_index_candidate(candidate, bytes)
     } else if path_lower.ends_with(".box") {
         foxmail::extract_foxmail_candidate(candidate, bytes)
     } else if path_lower.ends_with(".pst") || path_lower.ends_with(".ost") {

@@ -30,12 +30,14 @@ pub(super) const EMAIL_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
     display_name: "电子邮件",
     evidence_kind: "email",
     parser: "email",
-    artifact_families: &["EmailMessage"],
+    artifact_families: &["EmailMessage", "EmailAccount"],
     patterns: &[
         EvidencePathPattern::Suffix(".eml"),
         EvidencePathPattern::Suffix(".emlx"),
         EvidencePathPattern::Suffix(".mbox"),
         EvidencePathPattern::FoxmailBox,
+        EvidencePathPattern::FoxmailIndex,
+        EvidencePathPattern::FoxmailAccount,
         EvidencePathPattern::Suffix(".pst"),
         EvidencePathPattern::Suffix(".ost"),
     ],
@@ -396,6 +398,18 @@ fn email_kind_and_parser(normalized: &str) -> (String, String) {
         return (
             "email_foxmail_box".to_string(),
             "email.foxmail_box".to_string(),
+        );
+    }
+    if normalized.ends_with("/mails/index") {
+        return (
+            "email_foxmail_index".to_string(),
+            "email.foxmail_index".to_string(),
+        );
+    }
+    if normalized.ends_with("/accounts/account.rec0") {
+        return (
+            "email_foxmail_account".to_string(),
+            "email.foxmail_account".to_string(),
         );
     }
     if normalized.ends_with(".pst") {

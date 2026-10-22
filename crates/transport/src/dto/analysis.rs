@@ -18,7 +18,7 @@ pub use crate::dto::analysis_classification::{
     FileClassificationBoardDto,
 };
 pub use crate::dto::analysis_email::{
-    EmailAttachmentDto, EmailExtractionSummaryDto, EmailHeaderDto, EmailMessageDto,
+    EmailAccountDto, EmailAttachmentDto, EmailExtractionSummaryDto, EmailHeaderDto, EmailMessageDto,
 };
 pub use crate::dto::analysis_evtx::{
     EvtxApplicationEventDto, EvtxBootEventDto, EvtxEventSummaryDto, EvtxEventViewDto,

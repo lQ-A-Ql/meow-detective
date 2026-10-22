@@ -8,8 +8,40 @@ pub struct EmailExtractionSummaryDto {
     pub status: AnalysisParseStatusDto,
     pub total: u64,
     pub messages: Vec<EmailMessageDto>,
+    pub accounts: Vec<EmailAccountDto>,
     pub generated_at: String,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailAccountDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub incoming_server: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outgoing_server: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub incoming_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outgoing_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub incoming_ssl: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outgoing_ssl: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_algorithm: Option<String>,
+    pub mail_client: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +106,8 @@ pub struct EmailMessageDto {
     pub message_index: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message_class: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_status: Option<String>,
     pub attachment_count: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_deleted: Option<bool>,

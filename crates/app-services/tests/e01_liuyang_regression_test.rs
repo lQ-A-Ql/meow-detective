@@ -2438,7 +2438,17 @@ fn liuyang_e01_email_extraction_regression() {
                     let boxed: Box<dyn EvidenceReader> =
                         Box::new(E01Reader::open(&fixture_for_reader).map_err(|e| e.to_string())?);
                     let fs = fs_ntfs::NtfsReader::open(boxed, offset).map_err(|e| e.to_string())?;
-                    let reader = fs.open_file(&path).map_err(|e| e.to_string())?;
+                    // Catalog paths carry the display-only partition marker.
+                    // Mirror the production image reader's path candidates:
+                    // try the raw filesystem path, then the inode-local id.
+                    let raw_path = path
+                        .strip_prefix("[P0]/")
+                        .or_else(|| path.strip_prefix("[P0]\\"))
+                        .unwrap_or(&path);
+                    let reader = fs
+                        .open_file(raw_path)
+                        .or_else(|_| fs.open_file(&file_id.0))
+                        .map_err(|e| e.to_string())?;
                     let mut bytes = Vec::new();
                     reader
                         .take(read_limit as u64)

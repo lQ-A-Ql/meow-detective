@@ -36,6 +36,7 @@ fn all_current_windows_capability_families_are_classified_as_windows() {
         "BrowserHistory",
         "BrowserPassword",
         "EmailMessage",
+        "EmailAccount",
     ] {
         assert_eq!(
             classify_artifact_family(family),
