@@ -1,6 +1,9 @@
 #[path = "support/synthetic.rs"]
 mod synthetic;
 
+#[path = "foxmail.rs"]
+mod foxmail;
+
 pub(crate) fn build_synthetic_unicode_pst() -> Vec<u8> {
     synthetic::build_synthetic_pst_with_messages(1)
 }

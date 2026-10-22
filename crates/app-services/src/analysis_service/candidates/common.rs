@@ -35,6 +35,7 @@ pub(super) const EMAIL_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
         EvidencePathPattern::Suffix(".eml"),
         EvidencePathPattern::Suffix(".emlx"),
         EvidencePathPattern::Suffix(".mbox"),
+        EvidencePathPattern::FoxmailBox,
         EvidencePathPattern::Suffix(".pst"),
         EvidencePathPattern::Suffix(".ost"),
     ],
@@ -390,6 +391,12 @@ fn email_kind_and_parser(normalized: &str) -> (String, String) {
     }
     if normalized.ends_with(".mbox") {
         return ("email_mbox".to_string(), "email.mbox".to_string());
+    }
+    if normalized.ends_with(".box") {
+        return (
+            "email_foxmail_box".to_string(),
+            "email.foxmail_box".to_string(),
+        );
     }
     if normalized.ends_with(".pst") {
         return ("email_pst".to_string(), "email.pst".to_string());

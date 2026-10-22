@@ -46,6 +46,7 @@ export interface EmailMessage {
   mailClient?: string;
   xOriginatingIp?: string;
   containerPath?: string;
+  messageIndex?: number;
   messageClass?: string;
   attachmentCount: number;
   isDeleted?: boolean;

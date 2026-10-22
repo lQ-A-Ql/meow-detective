@@ -28,8 +28,16 @@ pub(super) fn extract_eml_candidate(
             return outcome;
         }
     };
+    extract_parsed_email(candidate, parsed, EMAIL_EXTRACTOR_ID)
+}
+
+pub(super) fn extract_parsed_email(
+    candidate: &EvidenceCandidate,
+    parsed: ParsedEmail,
+    extractor_id: &str,
+) -> ExtractionOutcome {
     let attrs = build_eml_attrs(candidate, &parsed);
-    build_eml_outcome(candidate, parsed, attrs)
+    build_eml_outcome(candidate, parsed, attrs, extractor_id)
 }
 
 fn build_eml_attrs(candidate: &EvidenceCandidate, parsed: &ParsedEmail) -> BTreeMap<String, Value> {
@@ -124,6 +132,7 @@ fn build_eml_outcome(
     candidate: &EvidenceCandidate,
     parsed: ParsedEmail,
     attrs: BTreeMap<String, Value>,
+    extractor_id: &str,
 ) -> ExtractionOutcome {
     let mut outcome = ExtractionOutcome::default();
     let event_time = parsed.sent_at.or(parsed.received_at);
@@ -135,7 +144,7 @@ fn build_eml_outcome(
             format!("Email: {}", title_or_url(&parsed.subject, &candidate.path)),
             parsed.from.clone(),
             attrs.clone(),
-            EMAIL_EXTRACTOR_ID,
+            extractor_id,
         ));
     }
     outcome.artifacts.push(make_artifact(
@@ -143,7 +152,7 @@ fn build_eml_outcome(
         format!("Email: {}", title_or_url(&parsed.subject, &candidate.path)),
         parsed.from,
         candidate,
-        EMAIL_EXTRACTOR_ID,
+        extractor_id,
         attrs,
     ));
     outcome

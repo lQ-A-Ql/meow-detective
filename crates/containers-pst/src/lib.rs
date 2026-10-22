@@ -4,6 +4,7 @@ mod reader;
 mod types;
 
 pub mod error;
+pub mod foxmail;
 pub mod mbox;
 pub mod ost;
 pub mod pst;

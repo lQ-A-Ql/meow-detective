@@ -71,6 +71,8 @@ pub struct EmailMessageDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_index: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub message_class: Option<String>,
     pub attachment_count: u64,
     #[serde(skip_serializing_if = "Option::is_none")]

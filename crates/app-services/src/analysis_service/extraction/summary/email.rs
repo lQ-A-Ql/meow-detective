@@ -3,8 +3,8 @@ use crate::analysis_service::extraction::artifact_query::{
     count_artifacts_by_type, query_artifact_rows, status_from_total,
 };
 use crate::analysis_service::extraction::attr_mapping::{
-    attachment_details_attr, header_attr, optional_bool_attr, optional_string_attr, string_attr,
-    string_vec_attr, u64_attr,
+    attachment_details_attr, header_attr, optional_bool_attr, optional_string_attr,
+    optional_u64_attr, string_attr, string_vec_attr, u64_attr,
 };
 use chrono::Utc;
 use rusqlite::Connection;
@@ -45,6 +45,7 @@ pub fn get_email_extraction_summary(
             mail_client: optional_string_attr(&row.attrs, "mailClient"),
             x_originating_ip: optional_string_attr(&row.attrs, "xOriginatingIp"),
             container_path: optional_string_attr(&row.attrs, "containerPath"),
+            message_index: optional_u64_attr(&row.attrs, "messageIndex"),
             message_class: optional_string_attr(&row.attrs, "messageClass"),
             attachment_count: u64_attr(&row.attrs, "attachmentCount"),
             is_deleted: optional_bool_attr(&row.attrs, "isDeleted"),
