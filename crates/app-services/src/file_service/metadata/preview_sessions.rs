@@ -64,16 +64,28 @@ fn open_preview_session_internal(
             .encode()
             .0;
 
-    let prepared_file = prepare_local_preview_file(
-        bitlocker_runtime,
-        &source_conn,
-        case_conn,
-        case_root,
-        case_id,
-        &global_id.data_source_id,
-        &descriptor,
-    )?;
-    let session = if let Some(file) = prepared_file {
+    let prepared_file = if descriptor.size == 0 {
+        None
+    } else {
+        prepare_local_preview_file(
+            bitlocker_runtime,
+            &source_conn,
+            case_conn,
+            case_root,
+            case_id,
+            &global_id.data_source_id,
+            &descriptor,
+        )?
+    };
+    let session = if descriptor.size == 0 {
+        PreviewSession::routed(
+            case_id.0.clone(),
+            global_id.data_source_id.0,
+            global_file_id,
+            descriptor.size,
+            descriptor.mime.clone(),
+        )
+    } else if let Some(file) = prepared_file {
         PreviewSession::prepared_file(
             case_id.0.clone(),
             global_id.data_source_id.0.clone(),
@@ -292,6 +304,17 @@ fn read_preview_session_range_internal(
     let mut request = request.clone();
     request.validate().map_err(FileServiceError::InvalidInput)?;
     let session = registry.get_session(&case_id.0, &request.handle_id)?;
+    if request.offset >= session.size() {
+        return Ok(ViewerRangeResponseDto {
+            offset: request.offset,
+            bytes_read: 0,
+            eof: true,
+            raw_bytes: Some(Vec::new()),
+            kind: "hex".to_string(),
+            lines: Vec::new(),
+            encoding: None,
+        });
+    }
     let length = (request.length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
     match session.read_prepared_range(request.offset, length) {
         Ok(Some(bytes)) => {
