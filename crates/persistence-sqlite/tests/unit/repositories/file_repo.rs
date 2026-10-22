@@ -186,6 +186,32 @@ fn legacy_capitalized_entry_type_is_treated_as_directory() {
 }
 
 #[test]
+fn orphan_directory_is_exposed_as_browse_root() {
+    let tmp = TempDir::new().unwrap();
+    let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+    runner::run_all(&conn).unwrap();
+    let ds_id = DataSourceId("ds-orphan-root".to_string());
+    insert_data_source(&conn, &ds_id);
+    conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
+    conn.execute(
+        "INSERT INTO file_entries
+         (id, parent_id, data_source_id, path, name, entry_type, size)
+         VALUES ('orphan-dir', 'missing-parent', ?1, 'lost/child', 'child', 'directory', 0)",
+        params![ds_id.0],
+    )
+    .unwrap();
+
+    let roots = FileRepo::new(&conn).find_root_directories().unwrap();
+    assert_eq!(
+        roots
+            .iter()
+            .map(|entry| entry.id.0.as_str())
+            .collect::<Vec<_>>(),
+        ["orphan-dir"]
+    );
+}
+
+#[test]
 fn reads_and_assigns_partition_index_by_file_id() {
     let conn = open_in_memory().unwrap();
     runner::run_source_all(&conn).unwrap();

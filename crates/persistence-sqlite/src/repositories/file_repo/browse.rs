@@ -301,7 +301,13 @@ impl FileRepo<'_> {
 
     pub fn find_root_directories(&self) -> DbResult<Vec<FileEntry>> {
         let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC",
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries AS entry
+             WHERE (entry.parent_id IS NULL OR entry.parent_id = entry.id OR NOT EXISTS (
+                 SELECT 1 FROM file_entries AS parent
+                 WHERE parent.id = entry.parent_id AND parent.data_source_id = entry.data_source_id
+             ))
+               AND entry.entry_type = 'directory' COLLATE NOCASE
+             ORDER BY entry.name ASC",
         );
         let mut statement = self.conn.prepare(&sql)?;
         let rows = statement.query_map([], row_to_file_entry)?;
@@ -313,9 +319,14 @@ impl FileRepo<'_> {
             return self.find_root_directories();
         }
         let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
-             WHERE parent_id IS NULL AND entry_type = 'directory' COLLATE NOCASE AND hidden = 0 AND system = 0
-             ORDER BY name ASC",
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries AS entry
+             WHERE (entry.parent_id IS NULL OR entry.parent_id = entry.id OR NOT EXISTS (
+                 SELECT 1 FROM file_entries AS parent
+                 WHERE parent.id = entry.parent_id AND parent.data_source_id = entry.data_source_id
+             ))
+               AND entry.entry_type = 'directory' COLLATE NOCASE
+               AND entry.hidden = 0 AND entry.system = 0
+             ORDER BY entry.name ASC",
         );
         let mut statement = self.conn.prepare(&sql)?;
         let rows = statement.query_map([], row_to_file_entry)?;

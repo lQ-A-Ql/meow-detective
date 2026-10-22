@@ -321,6 +321,8 @@ fn read_preview_session_range_internal(
     };
     routed.map_err(|error| match error {
         FileServiceError::InvalidInput(_)
+        | FileServiceError::Db(_)
+        | FileServiceError::Io(_)
         | FileServiceError::NotFound(_)
         | FileServiceError::Security(_)
         | FileServiceError::PathTraversal(_)

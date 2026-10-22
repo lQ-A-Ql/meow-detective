@@ -25,12 +25,10 @@ pub fn get_file_tree_real_with_visibility(
     let mut roots = repo.find_root_directories_visible(show_hidden)?;
     sort_directories_for_tree(&mut roots);
 
-    let child_counts = repo
-        .count_child_directories_batch_visible(
-            &roots.iter().map(|r| &r.id).collect::<Vec<_>>(),
-            show_hidden,
-        )
-        .unwrap_or_default();
+    let child_counts = repo.count_child_directories_batch_visible(
+        &roots.iter().map(|r| &r.id).collect::<Vec<_>>(),
+        show_hidden,
+    )?;
 
     let mut partitions_by_ds: PartitionRecordsByDataSource = std::collections::HashMap::new();
     let partition_repo = PartitionRepo::new(conn);
@@ -138,12 +136,10 @@ pub fn get_file_children_lazy_with_visibility(
     sort_directories_for_tree(&mut children);
     let child_depth = directory_depth(&parent).saturating_add(1);
 
-    let child_counts = repo
-        .count_child_directories_batch_visible(
-            &children.iter().map(|c| &c.id).collect::<Vec<_>>(),
-            show_hidden,
-        )
-        .unwrap_or_default();
+    let child_counts = repo.count_child_directories_batch_visible(
+        &children.iter().map(|c| &c.id).collect::<Vec<_>>(),
+        show_hidden,
+    )?;
 
     let child_nodes = children
         .iter()

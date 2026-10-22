@@ -21,6 +21,35 @@ impl transport::ServiceErrorCategory for DbError {
             Self::Migration(_) | Self::System(_) => transport::ErrorCategory::Internal,
         }
     }
+
+    fn code(&self) -> Option<&'static str> {
+        matches!(self, Self::Sqlite(error) if sqlite_error_is_busy(error)).then_some("DB_BUSY")
+    }
+
+    fn user_message(&self) -> Option<&'static str> {
+        matches!(self, Self::Sqlite(error) if sqlite_error_is_busy(error))
+            .then_some("数据库正在被其他任务占用，请稍后重试")
+    }
+
+    fn recoverable(&self) -> Option<bool> {
+        matches!(self, Self::Sqlite(error) if sqlite_error_is_busy(error)).then_some(true)
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        matches!(self, Self::Sqlite(error) if sqlite_error_is_busy(error))
+            .then_some("请等待导入、索引或分析任务完成后重试")
+    }
+}
+
+fn sqlite_error_is_busy(error: &rusqlite::Error) -> bool {
+    matches!(
+        error,
+        rusqlite::Error::SqliteFailure(sqlite_error, _)
+            if sqlite_error.extended_code == rusqlite::ffi::SQLITE_BUSY
+                || sqlite_error.extended_code == rusqlite::ffi::SQLITE_LOCKED
+                || sqlite_error.extended_code & 0xff == rusqlite::ffi::SQLITE_BUSY
+                || sqlite_error.extended_code & 0xff == rusqlite::ffi::SQLITE_LOCKED
+    )
 }
 
 pub type DbResult<T> = Result<T, DbError>;

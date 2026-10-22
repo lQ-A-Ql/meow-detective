@@ -133,6 +133,9 @@ impl transport::ServiceErrorCategory for FileServiceError {
     }
 
     fn code(&self) -> Option<&'static str> {
+        if let Self::Db(error) = self {
+            return transport::ServiceErrorCategory::code(error);
+        }
         match self {
             Self::NotFound(message) if message.contains("Preview handle") => {
                 Some("PREVIEW_HANDLE_EXPIRED")
@@ -149,6 +152,9 @@ impl transport::ServiceErrorCategory for FileServiceError {
     }
 
     fn recoverable(&self) -> Option<bool> {
+        if let Self::Db(error) = self {
+            return transport::ServiceErrorCategory::recoverable(error);
+        }
         self.code().map(|code| {
             matches!(
                 code,
@@ -158,5 +164,19 @@ impl transport::ServiceErrorCategory for FileServiceError {
                     | "PREVIEW_READ_FAILED"
             )
         })
+    }
+
+    fn user_message(&self) -> Option<&'static str> {
+        if let Self::Db(error) = self {
+            return transport::ServiceErrorCategory::user_message(error);
+        }
+        None
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        if let Self::Db(error) = self {
+            return transport::ServiceErrorCategory::suggestion(error);
+        }
+        None
     }
 }
