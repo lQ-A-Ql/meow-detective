@@ -17,6 +17,7 @@ rusqlite = { workspace = true, features = ["chrono"] }
 uuid.workspace = true
 sha2.workspace = true
 hex.workspace = true
+r2d2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -8,7 +8,7 @@ use transport::{
 
 use crate::state::AppState;
 
-use super::support::run_active_case_command;
+use super::support::run_read_case_command;
 
 /// Open a file handle for preview (returns handle ID and metadata).
 async fn open_file_handle(
@@ -18,7 +18,7 @@ async fn open_file_handle(
     let app_state = state.inner().clone();
     let preview_runtime = app_state.preview_runtime.clone();
     let bitlocker_runtime = app_state.bitlocker_runtime.clone();
-    run_active_case_command(app_state, move |connection, active| {
+    run_read_case_command(app_state, move |connection, active| {
         file_service::open_preview_session_for_case_with_bitlocker(
             &bitlocker_runtime,
             &preview_runtime,
@@ -77,7 +77,7 @@ pub(super) fn read_file_range_for_state(
     state: &AppState,
     request: &ViewerRangeRequestDto,
 ) -> Result<ViewerRangeResponseDto, CommandError> {
-    let connection = crate::commands::command_support::get_case_connection(state)?;
+    let connection = crate::commands::command_support::get_case_read_connection(state)?;
     let active = crate::commands::command_support::require_active_case(state)?;
     file_service::read_preview_session_range_for_case_with_bitlocker(
         &state.bitlocker_runtime,

@@ -14,7 +14,7 @@ pub async fn get_text_preview(
 ) -> Result<TextPreviewDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let connection = crate::commands::command_support::get_case_connection(&app_state)?;
+        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
         text_preview_for_file(&app_state, &connection, &file_id, max_bytes)
     })
     .await
@@ -28,7 +28,7 @@ pub async fn get_image_preview(
 ) -> Result<ImagePreviewDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let connection = crate::commands::command_support::get_case_connection(&app_state)?;
+        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
         image_preview_for_file(&app_state, &connection, &file_id)
     })
     .await
@@ -42,7 +42,7 @@ pub async fn get_image_metadata(
 ) -> Result<transport::dto::ImageMetadataDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let connection = crate::commands::command_support::get_case_connection(&app_state)?;
+        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
         let active = crate::commands::command_support::require_active_case(&app_state)?;
         file_service::image_metadata_for_source_case_with_bitlocker(
             &app_state.bitlocker_runtime,
@@ -64,7 +64,7 @@ pub async fn get_document_preview(
 ) -> Result<DocumentPreviewDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let connection = crate::commands::command_support::get_case_connection(&app_state)?;
+        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
         let active = crate::commands::command_support::require_active_case(&app_state)?;
         file_service::document_preview_for_source_case_with_bitlocker(
             &app_state.bitlocker_runtime,

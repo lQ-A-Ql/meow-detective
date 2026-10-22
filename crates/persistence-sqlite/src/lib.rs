@@ -1,5 +1,6 @@
 pub mod connection;
 pub mod migrations;
+pub mod read_pool;
 pub mod repositories;
 pub mod sql_builder;
 pub mod util;

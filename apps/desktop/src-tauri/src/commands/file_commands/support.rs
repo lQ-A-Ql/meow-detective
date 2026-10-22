@@ -23,14 +23,39 @@ where
     .map_err(CommandError::from_join_error)?
 }
 
-pub(super) async fn run_optional_active_case_command<T, F>(
+pub(super) async fn run_read_case_command<T, F>(
+    app_state: AppState,
+    operation: F,
+) -> Result<T, CommandError>
+where
+    T: Send + 'static,
+    F: FnOnce(
+            &persistence_sqlite::read_pool::ReadOnlyDbConnection,
+            &ActiveCaseSnapshot,
+        ) -> Result<T, CommandError>
+        + Send
+        + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        let active = require_active_case(&app_state)?;
+        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
+        operation(&connection, &active)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+pub(super) async fn run_optional_read_case_command<T, F>(
     app_state: AppState,
     empty: T,
     operation: F,
 ) -> Result<T, CommandError>
 where
     T: Send + 'static,
-    F: FnOnce(&rusqlite::Connection, &ActiveCaseSnapshot) -> Result<T, CommandError>
+    F: FnOnce(
+            &persistence_sqlite::read_pool::ReadOnlyDbConnection,
+            &ActiveCaseSnapshot,
+        ) -> Result<T, CommandError>
         + Send
         + 'static,
 {
@@ -38,8 +63,8 @@ where
         if snapshot_active_case(&app_state)?.is_none() {
             return Ok(empty);
         }
-        let connection = get_case_connection(&app_state)?;
         let active = require_active_case(&app_state)?;
+        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
         operation(&connection, &active)
     })
     .await

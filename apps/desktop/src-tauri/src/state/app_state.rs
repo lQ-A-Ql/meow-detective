@@ -29,6 +29,9 @@ pub struct AppState {
     pub(crate) app_update: Arc<crate::app_update::UpdateRuntime>,
     /// Currently active case (if any).
     pub active_case: Arc<Mutex<Option<ActiveCase>>>,
+    /// Bounded read-only pool for case metadata queries and previews.
+    pub read_pool:
+        Arc<Mutex<Option<(PathBuf, Arc<persistence_sqlite::read_pool::ReadOnlyDbPool>)>>>,
     /// Serializes create/open/close/delete transitions across the active case.
     pub case_lifecycle: Arc<AsyncMutex<()>>,
     /// Manager for background tasks.
@@ -74,6 +77,7 @@ impl Default for AppState {
         Self {
             app_update: Arc::new(crate::app_update::UpdateRuntime::default()),
             active_case: Arc::new(Mutex::new(None)),
+            read_pool: Arc::new(Mutex::new(None)),
             case_lifecycle: Arc::new(AsyncMutex::new(())),
             task_manager: Arc::new(TaskManager::new()),
             mcp_clients: Arc::new(RwLock::new(HashMap::new())),
@@ -173,9 +177,8 @@ impl AppState {
         Ok(())
     }
 
-    /// Get a fresh connection to the active case's database.
-    /// Opens a new connection each time — cheap in WAL mode, eliminates all
-    /// shared-state and lock-contention issues from the old r2d2 pool.
+    /// Get a fresh writable connection to the active case's database.
+    /// Read-only browsing and preview commands use `get_read_connection`.
     pub fn get_connection(&self) -> Result<rusqlite::Connection, String> {
         let guard = self
             .active_case
@@ -197,6 +200,38 @@ impl AppState {
         Ok(conn)
     }
 
+    /// Acquire a pooled read-only case connection. The pool is replaced when
+    /// the active case path changes, so a closed case cannot retain its DB.
+    pub fn get_read_connection(
+        &self,
+    ) -> Result<persistence_sqlite::read_pool::ReadOnlyDbConnection, String> {
+        let db_path = {
+            let guard = self
+                .active_case
+                .lock()
+                .map_err(|e| format!("Lock poisoned: {e}"))?;
+            guard
+                .as_ref()
+                .ok_or("No active case — open or create a case first")?
+                .db_path()
+        };
+        let mut pool_guard = self
+            .read_pool
+            .lock()
+            .map_err(|e| format!("Lock poisoned: {e}"))?;
+        if pool_guard.as_ref().is_none_or(|(path, _)| path != &db_path) {
+            let pool = persistence_sqlite::read_pool::ReadOnlyDbPool::open(&db_path)
+                .map_err(|error| error.to_string())?;
+            *pool_guard = Some((db_path.clone(), Arc::new(pool)));
+        }
+        pool_guard
+            .as_ref()
+            .expect("read pool initialized")
+            .1
+            .get()
+            .map_err(|error| error.to_string())
+    }
+
     /// Clear the database state on case close.
     pub fn clear_db_state(&self) -> Result<(), String> {
         let mut guard = self
@@ -204,6 +239,11 @@ impl AppState {
             .lock()
             .map_err(|e| format!("Lock poisoned: {}", e))?;
         *guard = None;
+        let mut read_pool = self
+            .read_pool
+            .lock()
+            .map_err(|e| format!("Lock poisoned: {}", e))?;
+        *read_pool = None;
         Ok(())
     }
 

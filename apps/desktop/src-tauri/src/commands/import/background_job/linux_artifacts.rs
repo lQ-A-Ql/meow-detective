@@ -3,7 +3,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use app_services::analysis_service::run_source_analysis_extraction_with_cancel;
-use app_services::cluster_service::{collect_linux_evidence_facts, persist_linux_evidence_facts};
 use domain::{CaseId, DataSourceId};
 use tauri::AppHandle;
 use transport::CommandError;
@@ -118,16 +117,6 @@ fn run_linux_artifact_analysis(
     );
     match result {
         Ok(run) => {
-            let facts =
-                collect_linux_evidence_facts(&connection, case_root, case_id, data_source_id);
-            let source = app_services::source_db::open_registered_source_db(
-                &connection,
-                case_root,
-                data_source_id,
-            )
-            .map_err(|error| error.to_string())?;
-            persist_linux_evidence_facts(&source, data_source_id, &facts)
-                .map_err(|error| error.to_string())?;
             let detail = format!(
                 "Linux artifact analysis completed: artifacts={} timeline={}",
                 run.artifact_count, run.timeline_event_count

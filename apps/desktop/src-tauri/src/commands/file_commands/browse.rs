@@ -10,7 +10,7 @@ use transport::{
 
 use crate::state::AppState;
 
-use super::support::{run_active_case_command, run_optional_active_case_command};
+use super::support::{run_optional_read_case_command, run_read_case_command};
 
 #[tauri::command]
 pub async fn list_local_disks() -> Result<Vec<LocalDiskDto>, CommandError> {
@@ -47,7 +47,7 @@ pub async fn get_file_children_request(
         truncated: Some(false),
     };
 
-    run_optional_active_case_command(state.inner().clone(), empty, move |connection, active| {
+    run_optional_read_case_command(state.inner().clone(), empty, move |connection, active| {
         file_service::get_file_children_for_case(
             connection,
             &active.case_root,
@@ -68,7 +68,7 @@ pub async fn get_file_tree_request(
     state: State<'_, AppState>,
     request: GetFileTreeRequest,
 ) -> Result<Vec<FileTreeNodeDto>, CommandError> {
-    run_optional_active_case_command(state.inner().clone(), vec![], move |connection, active| {
+    run_optional_read_case_command(state.inner().clone(), vec![], move |connection, active| {
         file_service::get_file_tree_for_case(
             connection,
             &active.case_root,
@@ -95,7 +95,7 @@ pub async fn get_file_rows_request(
         truncated: false,
     };
 
-    run_optional_active_case_command(state.inner().clone(), empty, move |connection, active| {
+    run_optional_read_case_command(state.inner().clone(), empty, move |connection, active| {
         file_service::get_file_rows_for_case(
             connection,
             &active.case_root,
@@ -115,7 +115,7 @@ pub async fn get_file_jump_context(
 ) -> Result<FileJumpContextDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
 
-    run_active_case_command(state.inner().clone(), move |connection, active| {
+    run_read_case_command(state.inner().clone(), move |connection, active| {
         file_service::get_file_jump_context_for_case(
             connection,
             &active.case_root,

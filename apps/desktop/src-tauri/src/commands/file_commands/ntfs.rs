@@ -15,7 +15,7 @@ pub async fn inspect_ntfs_file(
     }
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let connection = crate::commands::command_support::get_case_connection(&app_state)?;
+        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
         let active = crate::commands::command_support::require_active_case(&app_state)?;
         file_service::inspect_ntfs_file_for_case(
             &app_state.bitlocker_runtime,

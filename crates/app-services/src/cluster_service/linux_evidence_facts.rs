@@ -43,6 +43,9 @@ pub fn persist_linux_evidence_facts(
     data_source_id: &DataSourceId,
     facts: &LinuxEvidenceFacts,
 ) -> Result<(), rusqlite::Error> {
+    // This cache is written only from the import publication lease, before the
+    // source transitions to ready. Post-ready analysis must remain read-only
+    // against the published source catalog.
     source_connection.execute(
         "INSERT INTO linux_evidence_facts (data_source_id, schema_version, facts_json) VALUES (?1, 1, ?2)
          ON CONFLICT(data_source_id) DO UPDATE SET facts_json = excluded.facts_json, updated_at = datetime('now')",

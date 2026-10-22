@@ -69,6 +69,18 @@ pub(crate) fn get_case_connection(state: &AppState) -> Result<rusqlite::Connecti
     })
 }
 
+pub(crate) fn get_case_read_connection(
+    state: &AppState,
+) -> Result<persistence_sqlite::read_pool::ReadOnlyDbConnection, CommandError> {
+    state.get_read_connection().map_err(|error| {
+        if error.contains("No active case") {
+            CommandError::no_active_case()
+        } else {
+            CommandError::from_service_error(error)
+        }
+    })
+}
+
 /// Get the case ID from the active case (if any).
 /// Get the case ID from the active case (if any).
 pub fn current_case_id(state: &AppState) -> Option<String> {

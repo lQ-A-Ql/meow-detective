@@ -15,7 +15,7 @@ pub async fn get_media_url(
 ) -> Result<MediaUrlDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let connection = crate::commands::command_support::get_case_connection(&app_state)?;
+        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
         media_data_url_for_file(&app_state, &connection, &file_id)
     })
     .await
@@ -31,7 +31,7 @@ pub async fn read_media_range(
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let connection = crate::commands::command_support::get_case_connection(&app_state)?;
+        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
         media_range_for_file(&app_state, &connection, &request)
     })
     .await
