@@ -138,6 +138,28 @@ fn open_or_create_wal_mode() {
 }
 
 #[test]
+fn read_pool_connections_are_read_only() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let path = tmp.path().join("read-pool.db");
+    {
+        let connection = open_or_create(&path).unwrap();
+        connection
+            .execute_batch("CREATE TABLE marker(value TEXT); INSERT INTO marker VALUES ('ok');")
+            .unwrap();
+    }
+    let pool = crate::read_pool::ReadOnlyDbPool::open(&path).unwrap();
+    let connection = pool.get().unwrap();
+    let query_only: i64 = connection
+        .query_row("PRAGMA query_only", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(query_only, 1);
+    let error = connection
+        .execute("UPDATE marker SET value = 'changed'", [])
+        .unwrap_err();
+    assert_sqlite_read_only(&error);
+}
+
+#[test]
 fn writable_connections_wait_for_concurrent_writers() {
     let tmp = tempfile::TempDir::new().unwrap();
     let connection = open_or_create(&tmp.path().join("busy-timeout.db")).unwrap();
