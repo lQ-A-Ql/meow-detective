@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::{Duration, Instant};
+use zeroize::Zeroizing;
 
 use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
@@ -24,6 +25,7 @@ use super::runtime::AnalysisSourceReadRuntime;
 pub struct AnalysisExtractionProgressContext<'a> {
     pub source_runtime: &'a AnalysisSourceReadRuntime,
     pub run_id: &'a str,
+    pub browser_password: Option<Zeroizing<String>>,
 }
 
 impl<'a> AnalysisExtractionProgressContext<'a> {
@@ -32,7 +34,13 @@ impl<'a> AnalysisExtractionProgressContext<'a> {
         Self {
             source_runtime,
             run_id,
+            browser_password: None,
         }
+    }
+
+    pub fn with_browser_password(mut self, password: String) -> Self {
+        self.browser_password = Some(Zeroizing::new(password));
+        self
     }
 }
 
@@ -40,6 +48,7 @@ struct AnalysisExecutionControl<'a> {
     cancel_token: Arc<AtomicBool>,
     source_runtime: &'a AnalysisSourceReadRuntime,
     progress: &'a mut dyn FnMut(ExtractionProgressUpdate),
+    browser_password: Option<&'a str>,
 }
 
 pub fn run_source_analysis_extraction(
@@ -114,6 +123,7 @@ pub fn run_source_analysis_extraction_with_progress(
         cancel_token,
         source_runtime: context.source_runtime,
         progress: &mut emit,
+        browser_password: context.browser_password.as_deref().map(String::as_str),
     };
     run_source_analysis_extraction_execution_with_progress(
         case_conn,
@@ -140,6 +150,7 @@ pub(crate) fn run_source_analysis_extraction_execution_with_cancel(
         cancel_token,
         source_runtime: &runtime,
         progress: &mut ignore_progress,
+        browser_password: None,
     };
     run_source_analysis_extraction_execution_with_progress(
         case_conn,
@@ -207,6 +218,7 @@ fn run_source_analysis_extraction_execution_with_progress(
         source.platform,
         categories,
         control.cancel_token.as_ref(),
+        control.browser_password,
         control.progress,
         |candidate, read_limit| -> Result<CandidateSource, FileServiceError> {
             if let Some(warning) = encrypted_candidate_warning(candidate) {
@@ -284,6 +296,7 @@ pub(crate) fn run_import_source_extraction(
             cancel_token,
             source_runtime: runtime,
             progress: &mut ignore,
+            browser_password: None,
         },
     )
     .map(|execution| execution.dto)

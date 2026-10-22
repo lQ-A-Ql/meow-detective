@@ -65,6 +65,8 @@ pub struct EmailMessageDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub x_mailer: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub mail_client: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub x_originating_ip: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container_path: Option<String>,

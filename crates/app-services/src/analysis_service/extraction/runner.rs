@@ -33,7 +33,6 @@ use std::io::Read;
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 use transport::dto::AnalysisExtractionRunDto;
-
 pub(crate) struct AnalysisExtractionExecution {
     pub(crate) dto: AnalysisExtractionRunDto,
     pub(crate) retryable_failure_count: u64,
@@ -51,7 +50,6 @@ pub(crate) struct AnalysisExtractionExecution {
     /// Plugin extraction failures (audit: `plugin.extract_failed`).
     pub(crate) plugin_extract_failures: Vec<PluginExtractFailure>,
 }
-
 pub fn run_analysis_extraction<E: std::fmt::Display>(
     conn: &Connection,
     case_id: &str,
@@ -69,7 +67,6 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
         |file_id, _read_limit| file_reader(file_id),
     )
 }
-
 pub fn run_analysis_extraction_with_reader_limits<E: std::fmt::Display>(
     conn: &Connection,
     case_id: &str,
@@ -87,7 +84,6 @@ pub fn run_analysis_extraction_with_reader_limits<E: std::fmt::Display>(
         file_reader,
     )
 }
-
 pub fn run_analysis_extraction_with_cancel<E: std::fmt::Display>(
     conn: &Connection,
     case_id: &str,
@@ -113,25 +109,29 @@ pub fn run_analysis_extraction_with_cancel<E: std::fmt::Display>(
     .map(|execution| execution.dto)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_analysis_extraction_with_source_and_progress<E: std::fmt::Display>(
     conn: &Connection,
     case_id: &str,
     platform: DataSourcePlatform,
     categories: &[&str],
     cancel_token: &AtomicBool,
+    browser_password: Option<&str>,
     progress: &mut dyn FnMut(ExtractionProgressUpdate),
     mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, E>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
-    run_analysis_extraction_with_source(
+    run_analysis_extraction_with_plugin_loader_with_password(
         conn,
         case_id,
         platform,
         categories,
         cancel_token,
+        browser_password,
         progress,
         |candidate, read_limit| {
             file_reader(candidate, read_limit).map_err(|error| error.to_string())
         },
+        &crate::plugin_loader::load_all_report,
     )
 }
 
@@ -155,11 +155,7 @@ fn run_analysis_extraction_with_source(
         &crate::plugin_loader::load_all_report,
     )
 }
-
-/// Full extraction run with an injectable plugin loader. The loader is only
-/// invoked when the `PluginArtifacts` capability is selected, so runs that
-/// stay on built-in capabilities never touch plugin discovery; an empty or
-/// disabled plugin set drops the capability before any candidate work.
+/// Full extraction run with an injectable plugin loader.
 #[allow(clippy::too_many_arguments)]
 fn run_analysis_extraction_with_plugin_loader(
     conn: &Connection,
@@ -167,6 +163,30 @@ fn run_analysis_extraction_with_plugin_loader(
     platform: DataSourcePlatform,
     categories: &[&str],
     cancel_token: &AtomicBool,
+    progress: &mut dyn FnMut(ExtractionProgressUpdate),
+    file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    plugin_loader: &dyn Fn() -> PluginLoadReport,
+) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
+    run_analysis_extraction_with_plugin_loader_with_password(
+        conn,
+        case_id,
+        platform,
+        categories,
+        cancel_token,
+        None,
+        progress,
+        file_reader,
+        plugin_loader,
+    )
+}
+#[allow(clippy::too_many_arguments)]
+fn run_analysis_extraction_with_plugin_loader_with_password(
+    conn: &Connection,
+    case_id: &str,
+    platform: DataSourcePlatform,
+    categories: &[&str],
+    cancel_token: &AtomicBool,
+    browser_password: Option<&str>,
     progress: &mut dyn FnMut(ExtractionProgressUpdate),
     mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
     plugin_loader: &dyn Fn() -> PluginLoadReport,
@@ -219,12 +239,12 @@ fn run_analysis_extraction_with_plugin_loader(
         &selected,
         &checkpoints,
         cancel_token,
+        browser_password,
         &mut guarded_file_reader,
     )?;
     preloads.systemd.annotate(&mut candidates);
     ensure_not_cancelled(cancel_token)?;
     progress_reporter.begin_extraction();
-    let discovery_elapsed_ms = elapsed_millis(discovery_started);
     let mut state = ExtractionState::new(&selected);
     record_preload_warnings(&selected, &preloads, &mut state);
     let processing_started = Instant::now();
@@ -244,7 +264,6 @@ fn run_analysis_extraction_with_plugin_loader(
         &mut state,
         &mut progress_reporter,
     )?;
-    let processing_elapsed_ms = elapsed_millis(processing_started);
     ensure_not_cancelled(cancel_token)?;
     progress_reporter.begin_persisting();
     let result = finalize_run(
@@ -252,8 +271,8 @@ fn run_analysis_extraction_with_plugin_loader(
         case_id,
         state,
         &mut progress_reporter,
-        discovery_elapsed_ms,
-        processing_elapsed_ms,
+        elapsed_millis(discovery_started),
+        elapsed_millis(processing_started),
         plugin_loads,
         plugin_rejections,
     )?;
@@ -299,8 +318,7 @@ fn finalize_run(
     })
 }
 
-/// Keep only plugins whose declared evidence platform matches the run
-/// platform (design doc §4.1: Windows modules appear under Windows sources).
+/// Keep plugins whose declared evidence platform matches the run platform.
 fn plugins_for_platform(
     plugins: Vec<PluginExtractor>,
     platform: DataSourcePlatform,
@@ -322,9 +340,7 @@ fn plugins_for_platform(
         .collect()
 }
 
-/// Load the plugin set for one run (only when the `PluginArtifacts`
-/// capability was selected), drop the capability when no platform-matching
-/// plugin loaded, and collect the load/reject audit records.
+/// Load matching plugins for one run and collect load/reject audit records.
 fn load_run_plugins(
     platform: DataSourcePlatform,
     selected: &mut Vec<AnalysisCapability>,
@@ -374,8 +390,8 @@ impl RunPreloads {
     }
 }
 
-/// Build the registry/browser preload contexts and resolve the host timezone
-/// for Linux log parsing (non-Linux runs use UTC).
+/// Build registry/browser preloads and resolve Linux log timezone.
+#[allow(clippy::too_many_arguments)]
 fn prepare_run_preloads(
     conn: &Connection,
     platform: DataSourcePlatform,
@@ -383,6 +399,7 @@ fn prepare_run_preloads(
     selected: &[AnalysisCapability],
     checkpoints: &ExistingCheckpoints<'_>,
     cancel_token: &AtomicBool,
+    browser_password: Option<&str>,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> Result<RunPreloads, AnalysisServiceError> {
     let registry = prepare_registry_preload(
@@ -393,7 +410,13 @@ fn prepare_run_preloads(
         cancel_token,
         file_reader,
     )?;
-    let browser = prepare_browser_preload(conn, candidates, cancel_token, file_reader)?;
+    let browser = prepare_browser_preload(
+        conn,
+        candidates,
+        cancel_token,
+        browser_password,
+        file_reader,
+    )?;
     let systemd = if platform == DataSourcePlatform::Linux {
         super::systemd_preload::prepare(conn, candidates, cancel_token, file_reader)?
     } else {

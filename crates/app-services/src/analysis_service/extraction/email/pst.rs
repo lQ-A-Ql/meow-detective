@@ -1,7 +1,7 @@
 //! PST/OST container extraction.
 
 use super::super::ExtractionOutcome;
-use super::shared::build_body_preview;
+use super::shared::{build_body_preview, identify_mail_client};
 use crate::analysis_service::artifact_builders::{
     base_attrs, make_artifact, make_timeline_event, string_array_value, title_or_url,
 };
@@ -202,6 +202,9 @@ fn build_pst_attrs(
     );
     insert_message_content(&mut attrs, msg);
     insert_message_metadata(&mut attrs, msg);
+    if let Some(client) = identify_mail_client(&msg.x_mailer, &candidate.path) {
+        attrs.insert("mailClient".to_string(), Value::String(client));
+    }
     attrs.insert(
         "containerPath".to_string(),
         Value::String(folder_path.to_string()),

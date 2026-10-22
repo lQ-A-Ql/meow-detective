@@ -1,7 +1,7 @@
 //! Single-message EML/EMLX parsing and extraction.
 
 use super::super::ExtractionOutcome;
-use super::shared::build_body_preview;
+use super::shared::{build_body_preview, identify_mail_client};
 use crate::analysis_service::artifact_builders::{
     base_attrs, make_artifact, make_timeline_event, string_array_value, title_or_url,
 };
@@ -63,6 +63,12 @@ fn build_eml_attrs(candidate: &EvidenceCandidate, parsed: &ParsedEmail) -> BTree
         attrs.insert("bodyHtml".to_string(), Value::String(body_html.clone()));
     }
     insert_eml_metadata(&mut attrs, parsed);
+    if let Some(client) = identify_mail_client(
+        parsed.x_mailer.as_deref().unwrap_or_default(),
+        &candidate.path,
+    ) {
+        attrs.insert("mailClient".to_string(), Value::String(client));
+    }
     attrs.insert(
         "attachmentCount".to_string(),
         Value::Number(serde_json::Number::from(parsed.attachments.len())),

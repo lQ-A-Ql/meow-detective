@@ -372,6 +372,29 @@ export function useAnalysisWorkspaceModel() {
     });
   }
 
+  async function runBrowserPasswordExtraction(password: string) {
+    if (!selectedDataSource || selectedDataSource.platform !== 'windows' || !password) {
+      return;
+    }
+    await runSelectedSourceExtraction({
+      source: selectedDataSource,
+      sourceContextKey: selectedSourceContextKey,
+      sourceEpoch,
+      categories: ['BrowserHistory'],
+      browserPassword: password,
+      execute: extractionRun.mutateAsync,
+      updateProgress: updateExtractionProgress,
+      resetProgress: resetExtractionProgress,
+      setExtractionRunning,
+      setDrawerOpen,
+      setRefreshError: setAnalysisRefreshError,
+      setActiveOperation: (operation) => {
+        extractionOperationRef.current = operation;
+      },
+      isActiveOperation: (operation) => extractionOperationRef.current === operation,
+    });
+  }
+
   async function runAndroidAnalysis() {
     if (!selectedDataSource || selectedDataSource.platform !== 'android') {
       return;
@@ -468,6 +491,7 @@ export function useAnalysisWorkspaceModel() {
     activeAndroidTab,
     extractionPending: extractionRun.isPending || extractionRunning,
     extractionRunning,
+    runBrowserPasswordExtraction,
     androidAnalysisRunning,
     androidAnalysisLastRun,
     windowsError,

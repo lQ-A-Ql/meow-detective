@@ -1,6 +1,5 @@
 use super::browser_lsa::{
-    derive_sam_prekeys, extend_prekeys_from_lsa_secrets, read_cng_chromekey_file,
-    read_elevation_service, PrekeySeed,
+    extend_prekeys_from_lsa_secrets, read_cng_chromekey_file, read_elevation_service, PrekeySeed,
 };
 use super::candidate_processing::{read_candidate_bytes_with_progress, CandidateSource};
 use super::reader::CandidateExtractionError;
@@ -51,6 +50,7 @@ pub(super) fn prepare_browser_preload(
     conn: &Connection,
     candidates: &[EvidenceCandidate],
     cancel_token: &AtomicBool,
+    manual_password: Option<&str>,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> Result<BrowserPreloadContext, AnalysisServiceError> {
     let roots = browser_roots(candidates);
@@ -73,6 +73,7 @@ pub(super) fn prepare_browser_preload(
                 .map(|((_, root), _)| root.clone())
                 .collect(),
             cancel_token,
+            manual_password,
             file_reader,
             &mut context,
         ) {
@@ -89,6 +90,7 @@ fn prepare_source_context(
     data_source_id: &str,
     roots: Vec<String>,
     cancel_token: &AtomicBool,
+    manual_password: Option<&str>,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
     context: &mut BrowserPreloadContext,
 ) -> Result<(), AnalysisServiceError> {
@@ -105,7 +107,8 @@ fn prepare_source_context(
         AnalysisServiceError::Other("SAM user hashes could not be derived".to_string())
     })?;
 
-    let (mut prekeys, user_nt_hashes) = derive_sam_prekeys(sam_info);
+    let (mut prekeys, user_nt_hashes) =
+        super::browser_lsa::derive_sam_prekeys_with_password(sam_info, manual_password);
     extend_prekeys_from_lsa_secrets(
         conn,
         data_source_id,

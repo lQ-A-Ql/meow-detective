@@ -55,6 +55,7 @@ export interface WindowsAnalysisViewProps {
   registrySummary: QueryState<RegistryExtractionSummary>;
   registryStructured?: RegistryStructuredSummary;
   browserSummary: QueryState<BrowserHistorySummary>;
+  onRunBrowserPasswordExtraction: (password: string) => Promise<void>;
   emailSummary: QueryState<EmailExtractionSummary>;
   eventLogSummary: InfiniteQueryState<EvtxEventSummary>;
   eventLogView: EvtxEventView;
@@ -82,6 +83,7 @@ export function WindowsAnalysisView({
   registrySummary,
   registryStructured,
   browserSummary,
+  onRunBrowserPasswordExtraction,
   emailSummary,
   eventLogSummary,
   eventLogView,
@@ -143,6 +145,7 @@ export function WindowsAnalysisView({
               ) : (
                 <BrowserHistoryPanel
                   summary={browserSummary.data}
+                  onRunBrowserPasswordExtraction={onRunBrowserPasswordExtraction}
                 />
               )}
             </TabsContent>

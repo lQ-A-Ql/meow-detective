@@ -43,6 +43,7 @@ export interface EmailMessage {
   bodyPlain?: string;
   bodyHtml?: string;
   xMailer?: string;
+  mailClient?: string;
   xOriginatingIp?: string;
   containerPath?: string;
   messageClass?: string;

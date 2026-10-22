@@ -93,6 +93,12 @@ function emailColumns(t: Translate): DenseColumn<EmailMessage>[] {
     className: 'min-w-[140px]',
     render: (row) => row.containerPath || '-',
   },
+  {
+    key: 'mailClient',
+    title: t('analysisPanels.email.columns.client'),
+    className: 'min-w-[150px]',
+    render: (row) => row.mailClient || '-',
+  },
   ];
 }
 

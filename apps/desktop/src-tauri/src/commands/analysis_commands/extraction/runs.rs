@@ -55,6 +55,7 @@ pub async fn run_analysis_extraction(
     );
     let data_source_id = DataSourceId(request.data_source_id);
     let requested_categories = request.categories;
+    let browser_password = request.browser_password;
     let run_id = uuid::Uuid::new_v4().to_string();
 
     run_active_case_command(app_state, move |case_conn, active| {
@@ -62,13 +63,18 @@ pub async fn run_analysis_extraction(
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>();
+        let mut progress_context =
+            analysis_service::AnalysisExtractionProgressContext::new(&source_runtime, &run_id);
+        if let Some(password) = browser_password {
+            progress_context = progress_context.with_browser_password(password);
+        }
         let result = analysis_service::run_source_analysis_extraction_with_progress(
             case_conn,
             &active.case_root,
             &active.meta.id,
             &data_source_id,
             &categories,
-            analysis_service::AnalysisExtractionProgressContext::new(&source_runtime, &run_id),
+            progress_context,
             |progress| event_bridge::emit_analysis_extraction_progress(&app, &progress),
         );
         if let Err(error) = &result {

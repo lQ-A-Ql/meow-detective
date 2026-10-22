@@ -42,6 +42,7 @@ pub fn get_email_extraction_summary(
             body_plain: optional_string_attr(&row.attrs, "bodyPlain"),
             body_html: optional_string_attr(&row.attrs, "bodyHtml"),
             x_mailer: optional_string_attr(&row.attrs, "xMailer"),
+            mail_client: optional_string_attr(&row.attrs, "mailClient"),
             x_originating_ip: optional_string_attr(&row.attrs, "xOriginatingIp"),
             container_path: optional_string_attr(&row.attrs, "containerPath"),
             message_class: optional_string_attr(&row.attrs, "messageClass"),

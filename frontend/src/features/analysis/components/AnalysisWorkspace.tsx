@@ -68,6 +68,7 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
             registrySummary={model.registrySummary}
             registryStructured={model.registryStructured}
             browserSummary={model.browserSummary}
+            onRunBrowserPasswordExtraction={model.runBrowserPasswordExtraction}
             emailSummary={model.emailSummary}
             eventLogSummary={model.eventLogSummary}
             eventLogView={model.eventLogView}

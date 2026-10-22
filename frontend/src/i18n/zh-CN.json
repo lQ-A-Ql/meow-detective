@@ -383,6 +383,12 @@
   "browser": {
     "title": "浏览器记录",
     "unavailable": "浏览器记录暂不可用。",
+    "manualPasswordHint": "离线 DPAPI 密钥不可用时，可输入 Windows 账户密码重试一次。",
+    "manualPasswordAction": "使用账户密码重试",
+    "manualPasswordTitle": "解密浏览器密码",
+    "manualPasswordDescription": "密码仅用于本次提取，不会写入案件库或日志。",
+    "manualPasswordPlaceholder": "Windows 账户密码",
+    "manualPasswordSubmit": "解密并重试",
     "stats": {
       "visits": "访问记录",
       "downloads": "下载记录",
@@ -2853,7 +2859,7 @@
       "total": "邮件数",
       "withAttachments": "含附件",
       "emptyTitle": "暂无邮件信息",
-      "emptyDescription": "支持 EML/EMLX/MBOX/PST/OST 邮件解析：头字段、正文、附件、Cc/Bcc、Message-ID、References、容器路径与文件夹路径。",
+      "emptyDescription": "支持 EML/EMLX/MBOX/PST/OST 解析，包括网易邮箱大师 MBOX 与 Microsoft Outlook 数据文件。",
       "attachmentsTitle": "附件 ({{count}})",
       "tabPlain": "纯文本",
       "rawHeaders": "原始头字段 ({{count}})",
@@ -2864,7 +2870,8 @@
         "to": "收件人",
         "cc": "抄送",
         "bcc": "密送",
-        "subject": "主题"
+        "subject": "主题",
+        "client": "邮件客户端"
       },
       "messageCount": "消息数"
     },

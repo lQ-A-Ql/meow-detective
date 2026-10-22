@@ -124,6 +124,7 @@ export interface EvidenceSource {
 export interface AnalysisExtractionRequest {
   dataSourceId: string;
   categories: string[];
+  browserPassword?: string;
 }
 
 export type AnalysisExtractionPhase =

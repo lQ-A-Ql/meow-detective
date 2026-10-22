@@ -12,6 +12,7 @@ use artifacts_windows::dpapi::{
 use artifacts_windows::{decrypt_lsa_secrets, DpapiSystemKeys, LsaDecryptedSecrets, TbalSecret};
 use persistence_sqlite::repositories::file_repo::file_encryption_status_from_row;
 use rusqlite::{params, Connection};
+use sha1::{Digest, Sha1};
 use std::sync::atomic::AtomicBool;
 
 /// Inputs needed to seed DPAPI prekeys from offline LSA secrets.
@@ -25,10 +26,20 @@ pub(super) type SamPrekeys = (Vec<[u8; 20]>, Vec<(String, [u8; 16])>);
 
 /// Derive NT-hash prekeys for every SAM user, keeping the SID/hash pairs for
 /// TBAL cross-checking.
-pub(super) fn derive_sam_prekeys(sam_info: artifacts_windows::SamInfo) -> SamPrekeys {
+pub(super) fn derive_sam_prekeys_with_password(
+    sam_info: artifacts_windows::SamInfo,
+    manual_password: Option<&str>,
+) -> SamPrekeys {
     let mut prekeys = Vec::new();
     let mut user_nt_hashes = Vec::new();
+    let password_sha1 = manual_password.map(password_sha1_utf16le);
     for user in sam_info.users {
+        if let Some(password_sha1) = password_sha1.as_ref() {
+            prekeys.extend(derive_user_prekeys_from_password_sha1(
+                &user.sid,
+                password_sha1,
+            ));
+        }
         let Some(password_hash) = user.password_hash else {
             continue;
         };
@@ -45,6 +56,14 @@ pub(super) fn derive_sam_prekeys(sam_info: artifacts_windows::SamInfo) -> SamPre
         user_nt_hashes.push((user.sid.clone(), nt_hash));
     }
     (prekeys, user_nt_hashes)
+}
+
+fn password_sha1_utf16le(password: &str) -> [u8; 20] {
+    let mut hasher = Sha1::new();
+    for unit in password.encode_utf16() {
+        hasher.update(unit.to_le_bytes());
+    }
+    hasher.finalize().into()
 }
 
 /// Extend user prekeys with offline LSA secrets: `DPAPI_SYSTEM` machine/user

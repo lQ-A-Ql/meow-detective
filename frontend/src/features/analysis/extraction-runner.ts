@@ -30,6 +30,8 @@ interface RunSelectedSourceExtractionOptions {
   setRefreshError: (error: unknown) => void;
   setActiveOperation: (operation?: AnalysisOperationToken) => void;
   isActiveOperation: (operation: AnalysisOperationToken) => boolean;
+  categories?: readonly ExtractionCategory[];
+  browserPassword?: string;
 }
 
 export async function runSelectedSourceExtraction(
@@ -46,11 +48,16 @@ export async function runSelectedSourceExtraction(
   options.setDrawerOpen(true);
   options.resetProgress();
   try {
-    for (const category of EXTRACTION_CATEGORIES_BY_PLATFORM[source.platform]) {
+    const categories = options.categories ?? EXTRACTION_CATEGORIES_BY_PLATFORM[source.platform];
+    for (const category of categories) {
       if (!sourceEpoch.isCurrent(operation)) return;
       markRunning(category, options.updateProgress);
       try {
-        const run = await options.execute({ dataSourceId: source.id, categories: [category] });
+        const run = await options.execute({
+          dataSourceId: source.id,
+          categories: [category],
+          browserPassword: category === 'BrowserHistory' ? options.browserPassword : undefined,
+        });
         if (!sourceEpoch.isCurrent(operation)) return;
         applyRun(category, run, options.updateProgress);
       } catch (error) {

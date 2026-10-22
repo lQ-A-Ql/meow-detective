@@ -125,7 +125,7 @@ fn liuyang_preload_builds_app_bound_decryptor_via_service_path() {
         Ok(CandidateSource::Bytes(read_ntfs(path)))
     };
     let cancel_token = AtomicBool::new(false);
-    let context = prepare_browser_preload(&conn, &candidates, &cancel_token, &mut reader)
+    let context = prepare_browser_preload(&conn, &candidates, &cancel_token, None, &mut reader)
         .expect("browser preload");
     eprintln!("preload warnings: {:?}", context.warnings);
 

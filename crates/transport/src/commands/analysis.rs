@@ -37,11 +37,22 @@ pub struct RunAnalysisExtractionRequest {
     pub data_source_id: String,
     #[serde(default)]
     pub categories: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser_password: Option<String>,
 }
 
 impl RunAnalysisExtractionRequest {
     pub fn validate(&self) -> Result<(), String> {
-        validate_required_data_source_id(&self.data_source_id)
+        validate_required_data_source_id(&self.data_source_id)?;
+        if let Some(password) = &self.browser_password {
+            if password.is_empty() {
+                return Err("browser password cannot be empty".to_string());
+            }
+            if password.chars().count() > 512 {
+                return Err("browser password is too long".to_string());
+            }
+        }
+        Ok(())
     }
 }
 

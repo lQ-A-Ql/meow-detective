@@ -14,3 +14,18 @@ pub(super) fn build_body_preview(text: &str) -> String {
         .take(BODY_PREVIEW_MAX_LEN)
         .collect()
 }
+
+pub(super) fn identify_mail_client(x_mailer: &str, source_path: &str) -> Option<String> {
+    let haystack = format!("{} {}", x_mailer, source_path).to_ascii_lowercase();
+    [
+        ("mailmasterpc", "NetEase Mail Master"),
+        ("网易邮箱大师", "NetEase Mail Master"),
+        ("microsoft outlook", "Microsoft Outlook"),
+        ("microsoft office outlook", "Microsoft Outlook"),
+        ("outlook", "Microsoft Outlook"),
+        ("foxmail", "Foxmail"),
+        ("thunderbird", "Mozilla Thunderbird"),
+    ]
+    .into_iter()
+    .find_map(|(needle, client)| haystack.contains(needle).then(|| client.to_string()))
+}
