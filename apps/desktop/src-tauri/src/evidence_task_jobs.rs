@@ -80,12 +80,6 @@ pub(crate) fn start(
     }
     Ok(task)
 }
-pub(crate) fn get(state: &AppState, id: &str) -> Result<EvidenceTaskDto, CommandError> {
-    let active = require_active_case(state)?;
-    let conn = app_services::connection::open_existing_case_db(&active.case_root.join("app.db"))
-        .map_err(CommandError::from_typed_service_error)?;
-    evidence_tasks::get(&conn, &domain::CaseId(active.case_id), id)
-}
 pub(crate) fn cancel(state: &AppState, id: &str) -> Result<EvidenceTaskDto, CommandError> {
     let active = require_active_case(state)?;
     let case = domain::CaseId(active.case_id);

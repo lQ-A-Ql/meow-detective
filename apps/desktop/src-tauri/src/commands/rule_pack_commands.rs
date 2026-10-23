@@ -11,7 +11,7 @@ use transport::dto::rule_pack::{
 };
 use transport::CommandError;
 
-use super::command_support::{get_case_connection, snapshot_active_case};
+use super::command_support::snapshot_active_case;
 use crate::state::AppState;
 
 // ── Request DTOs ────────────────────────────────────────────────────────────
@@ -41,7 +41,6 @@ pub async fn list_loaded_rule_packs(
         if snapshot_active_case(&app_state)?.is_none() {
             return Ok(vec![]);
         }
-        let _conn = get_case_connection(&app_state)?;
         Ok(vec![])
     })
     .await
@@ -59,8 +58,6 @@ pub async fn load_rule_pack(
         if snapshot_active_case(&app_state)?.is_none() {
             return Err(CommandError::no_active_case());
         }
-        let _conn = get_case_connection(&app_state)?;
-
         let id = request
             .path
             .rsplit_once(['\\', '/'])
@@ -96,8 +93,6 @@ pub async fn validate_rule_pack(
         if snapshot_active_case(&app_state)?.is_none() {
             return Err(CommandError::no_active_case());
         }
-        let _conn = get_case_connection(&app_state)?;
-
         Ok(RulePackValidationResultDto {
             pack_id: request.pack_id,
             valid: false,

@@ -1,7 +1,7 @@
 use tauri::State;
 use transport::CommandError;
 
-use crate::commands::command_support::{get_case_connection, require_active_case};
+use crate::commands::command_support::{get_case_read_connection, require_active_case};
 use crate::commands::emulation_commands::worker::run_emulation_blocking;
 use crate::state::AppState;
 
@@ -16,7 +16,7 @@ pub async fn get_emulation_preflight(
     let app_state = state.inner().clone();
     run_emulation_blocking("preflight", move || {
         let active = require_active_case(&app_state)?;
-        let connection = get_case_connection(&app_state)?;
+        let connection = get_case_read_connection(&app_state)?;
         let mut preflight = app_services::mount_service::emulation_preflight(
             &connection,
             &active.case_root,

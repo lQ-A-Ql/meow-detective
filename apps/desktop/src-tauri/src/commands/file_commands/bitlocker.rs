@@ -6,7 +6,7 @@ use volume_bitlocker::Passphrase;
 
 use crate::state::AppState;
 
-use super::support::run_active_case_command;
+use super::support::{run_active_case_command, run_read_case_command};
 
 mod dictionary;
 mod memory;
@@ -29,7 +29,7 @@ pub async fn inspect_bitlocker_volume(
     let preview_runtime = app_state.preview_runtime.clone();
     let runtime = app_state.bitlocker_runtime.clone();
     let key_store = app_state.bitlocker_key_store.clone();
-    run_active_case_command(app_state, move |connection, active| {
+    run_read_case_command(app_state, move |connection, active| {
         let runtimes = bitlocker_service::BitLockerRuntimeContext::new(
             &preview_runtime,
             &runtime,

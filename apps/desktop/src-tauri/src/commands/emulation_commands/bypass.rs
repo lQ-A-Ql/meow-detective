@@ -2,7 +2,8 @@ use tauri::State;
 use transport::CommandError;
 
 use crate::commands::command_support::{
-    get_case_connection, require_active_case, write_emulation_edit_audit_log, EmulationAuditEvent,
+    get_case_connection, get_case_read_connection, require_active_case,
+    write_emulation_edit_audit_log, EmulationAuditEvent,
 };
 use crate::commands::emulation_commands::worker::run_emulation_blocking;
 use crate::state::AppState;
@@ -19,7 +20,7 @@ pub async fn get_emulation_bypass_accounts(
     let app_state = state.inner().clone();
     run_emulation_blocking("list-windows-accounts", move || {
         let active = require_active_case(&app_state)?;
-        let connection = get_case_connection(&app_state)?;
+        let connection = get_case_read_connection(&app_state)?;
         app_services::emulation_bypass::list_bypass_accounts(
             &app_services::emulation_bypass::BypassCaseContext {
                 case_conn: &connection,
@@ -132,7 +133,7 @@ pub async fn get_emulation_linux_accounts(
     let app_state = state.inner().clone();
     run_emulation_blocking("list-linux-accounts", move || {
         let active = require_active_case(&app_state)?;
-        let connection = get_case_connection(&app_state)?;
+        let connection = get_case_read_connection(&app_state)?;
         app_services::emulation_linux_bypass::list_linux_accounts(
             &app_services::emulation_bypass::BypassCaseContext {
                 case_conn: &connection,

@@ -1,6 +1,7 @@
 use tauri::{AppHandle, State};
 use transport::{commands::CalculateEvidenceDigestRequest, dto::EvidenceTaskDto, CommandError};
 
+use super::command_support::run_case_read_command;
 use crate::state::AppState;
 
 #[tauri::command]
@@ -8,21 +9,17 @@ pub async fn list_evidence_digests(
     state: State<'_, AppState>,
     request: transport::dto::DigestResultsRequestDto,
 ) -> Result<Vec<transport::dto::DigestResultDto>, CommandError> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let active = crate::commands::command_support::require_active_case(&state)?;
-        let conn = app_services::connection::open_case_db(&active.case_root.join("app.db"))
-            .map_err(CommandError::from_typed_service_error)?;
+    let app_state = state.inner().clone();
+    run_case_read_command(app_state, move |conn, active| {
         app_services::digest_service::results::list(
-            &conn,
+            conn,
             &active.case_root,
-            &domain::CaseId(active.case_id),
+            &active.meta.id,
             request,
         )
         .map_err(CommandError::from_typed_service_error)
     })
     .await
-    .map_err(CommandError::from_join_error)?
 }
 
 /// Every command calculation enters the shared persistent task lifecycle.

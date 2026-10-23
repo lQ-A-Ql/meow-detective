@@ -202,3 +202,30 @@ fn search_request_uses_offset_path_for_later_pages() {
     assert_eq!(params["cursorContinuation"], false);
     assert_eq!(params["totalHits"], 2);
 }
+
+#[test]
+fn search_result_survives_a_best_effort_audit_open_failure() {
+    let tmp = TempDir::new().unwrap();
+    let fixture = setup_indexed_case(&tmp);
+    let page = search_files_request_for_case(
+        &fixture.case_conn,
+        &fixture.case_root,
+        &fixture.case_id,
+        &request("report", 0, 20),
+        |_report| {},
+    )
+    .expect("search must complete before the optional audit runs");
+    let missing_case_root = tmp.path().join("missing-audit-case");
+
+    record_search_step(
+        &missing_case_root,
+        &fixture.case_id,
+        &request("report", 0, 20),
+        page.total,
+        page.took_ms as u32,
+    );
+
+    assert_eq!(page.total, 2);
+    assert_eq!(page.items.len(), 2);
+    assert!(!missing_case_root.join("app.db").exists());
+}

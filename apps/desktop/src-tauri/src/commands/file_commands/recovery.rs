@@ -17,7 +17,7 @@ use transport::{
     CommandError,
 };
 
-use super::support::{run_active_case_command, write_file_extract_audit};
+use super::support::{run_active_case_command, run_read_case_command, write_file_extract_audit};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -29,7 +29,7 @@ pub async fn list_deleted_recoveries(
     let app_state = state.inner().clone();
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         deleted_recovery::list_deleted_recoveries(
             case_conn,
             &active.case_root,
@@ -55,7 +55,7 @@ pub async fn search_deleted_recoveries_by_hash(
     let data_source_id = DataSourceId(request.data_source_id);
     let normalized_hash = request.hash;
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         deleted_recovery::search_deleted_recoveries_by_hash(
             case_conn,
             &active.case_root,
@@ -103,7 +103,7 @@ pub async fn read_deleted_recovery_range(
     let bitlocker_runtime = app_state.bitlocker_runtime.clone();
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         deleted_recovery::DeletedRecoveryContext::new(
             case_conn,
             &active.case_root,
