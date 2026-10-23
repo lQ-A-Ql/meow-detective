@@ -4,6 +4,7 @@ use crate::analysis_service::provenance::{
     file_classification_provenance, metadata_classification_provenance,
 };
 use domain::{FileEntry, FileEntryId};
+use infrastructure::file_magic::{detect as detect_magic, MagicMatch};
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use std::path::Path;
@@ -11,138 +12,6 @@ use transport::dto::analysis::AnalysisProvenanceDto;
 use transport::dto::{
     AnalysisClassifiedFileDto, AnalysisFileClassificationDto, AnalysisParseStatusDto,
 };
-
-/// Magic bytes signature.
-struct MagicSignature {
-    offset: usize,
-    bytes: &'static [u8],
-    file_type: &'static str,
-    description: &'static str,
-    category: &'static str,
-}
-
-/// Known magic signatures.
-const MAGIC_SIGNATURES: &[MagicSignature] = &[
-    MagicSignature {
-        offset: 0,
-        bytes: b"MZ",
-        file_type: "PE",
-        description: "Windows Executable",
-        category: "Executables",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"\x7fELF",
-        file_type: "ELF",
-        description: "Linux Executable",
-        category: "Executables",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"%PDF",
-        file_type: "PDF",
-        description: "PDF Document",
-        category: "Documents",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",
-        file_type: "OLE2",
-        description: "Office Document",
-        category: "Documents",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"\xff\xd8\xff",
-        file_type: "JPEG",
-        description: "JPEG Image",
-        category: "Images",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"\x89PNG\r\n\x1a\n",
-        file_type: "PNG",
-        description: "PNG Image",
-        category: "Images",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"GIF87a",
-        file_type: "GIF",
-        description: "GIF Image",
-        category: "Images",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"GIF89a",
-        file_type: "GIF",
-        description: "GIF Image",
-        category: "Images",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"BM",
-        file_type: "BMP",
-        description: "Bitmap Image",
-        category: "Images",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"RIFF",
-        file_type: "WEBP",
-        description: "WebP Image",
-        category: "Images",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"PK\x03\x04",
-        file_type: "ZIP",
-        description: "ZIP Archive",
-        category: "Archives",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"Rar!\x1a\x07",
-        file_type: "RAR",
-        description: "RAR Archive",
-        category: "Archives",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"\x37\x7a\xbc\xaf\x27\x1c",
-        file_type: "7Z",
-        description: "7-Zip Archive",
-        category: "Archives",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"SQLite format 3",
-        file_type: "SQLite",
-        description: "SQLite Database",
-        category: "Databases",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"EVF\x09\x0d\x0a\xff\x00",
-        file_type: "E01",
-        description: "EnCase Image",
-        category: "Forensics",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"LF\x09\x0d\x0a\xff\x00",
-        file_type: "AFF",
-        description: "AFF Image",
-        category: "Forensics",
-    },
-    MagicSignature {
-        offset: 0,
-        bytes: b"regf",
-        file_type: "REG",
-        description: "Registry Hive",
-        category: "System",
-    },
-];
 
 pub fn classify_files_by_metadata(
     conn: &Connection,
@@ -394,14 +263,8 @@ fn detect_file_type(
     path: &str,
     header: Option<&[u8]>,
 ) -> Option<(&'static str, &'static str, &'static str)> {
-    if let Some(data) = header {
-        for sig in MAGIC_SIGNATURES {
-            if data.len() >= sig.offset + sig.bytes.len()
-                && &data[sig.offset..sig.offset + sig.bytes.len()] == sig.bytes
-            {
-                return Some((sig.file_type, sig.category, sig.description));
-            }
-        }
+    if let Some(magic) = header.and_then(|data| detect_magic(data, "")) {
+        return Some(describe_magic(magic));
     }
 
     let ext = Path::new(path)
@@ -431,4 +294,49 @@ fn detect_file_type(
     } else {
         None
     }
+}
+
+fn describe_magic(magic: MagicMatch) -> (&'static str, &'static str, &'static str) {
+    let category = match magic.family {
+        "executables" => "Executables",
+        "documents" => "Documents",
+        "images" => "Images",
+        "media" => "Media",
+        "databases" => "Databases",
+        "archives" => "Archives",
+        "system" => "System",
+        "forensics" => "Forensics",
+        _ => "Other",
+    };
+    let description = match magic.file_type {
+        "PE" => "Windows Executable",
+        "ELF" => "Linux Executable",
+        "PDF" => "PDF Document",
+        "OLE2" => "Office Document",
+        "JPEG" => "JPEG Image",
+        "PNG" => "PNG Image",
+        "GIF" => "GIF Image",
+        "BMP" => "Bitmap Image",
+        "WEBP" => "WebP Image",
+        "ZIP" => "ZIP Archive",
+        "RAR" => "RAR Archive",
+        "7Z" => "7-Zip Archive",
+        "SQLite" => "SQLite Database",
+        "E01" => "EnCase Image",
+        "AFF" => "AFF Image",
+        "REG" => "Registry Hive",
+        "WAV" => "WAV Audio",
+        "AVI" => "AVI Video",
+        "MP4" => "MP4 Video",
+        "MKV" => "Matroska Video",
+        "MP3" => "MP3 Audio",
+        "FLAC" => "FLAC Audio",
+        "OGG" => "OGG Audio",
+        "EVTX" => "Windows Event Log",
+        "PST" => "PST Mailbox",
+        "LNK" => "Windows Shortcut",
+        "PF" => "Prefetch File",
+        _ => "Recognized File",
+    };
+    (magic.file_type, category, description)
 }

@@ -29,17 +29,20 @@ where
         &FileEntryId(file_id.to_string()),
         crate::analysis_service::MAGIC_HEADER_LIMIT,
     )?;
-    let Some((file_type, mime)) = crate::analysis_service::detect_preview_magic(&bytes) else {
+    let Some(magic) = infrastructure::file_magic::detect_preview(&bytes) else {
         return Ok(None);
     };
-    let kind = match file_type {
+    let kind = match magic.file_type {
         "JPEG" | "PNG" | "GIF" | "BMP" | "WEBP" | "ICO" => ViewerPreviewKindDto::Image,
         "MP4" | "MKV" | "AVI" => ViewerPreviewKindDto::Video,
         "MP3" | "M4A" | "WAV" | "FLAC" | "OGG" => ViewerPreviewKindDto::Audio,
         "PDF" | "DOCX" | "XLSX" | "PPTX" | "SQLite" => ViewerPreviewKindDto::Document,
         _ => return Ok(None),
     };
-    Ok(Some(DetectedPreview { kind, mime }))
+    Ok(Some(DetectedPreview {
+        kind,
+        mime: magic.mime,
+    }))
 }
 
 pub fn open_file_handle_real<C>(

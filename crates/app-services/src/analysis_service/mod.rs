@@ -35,7 +35,6 @@ pub use extraction::{
     ExtractionOutcome,
 };
 pub use file_classification::build_file_classification_board;
-pub(crate) use file_classification_taxonomy::detect_preview_magic;
 pub use platforms::{
     resolve_data_source_platform, select_evidence_scan_categories, validate_analysis_categories,
     validate_data_source_analysis_categories,

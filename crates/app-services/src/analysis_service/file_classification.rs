@@ -4,12 +4,11 @@
 //! Rows classified from actual header bytes are marked `magic`; the remainder
 //! falls back to extension/path inference and is marked `metadata`.
 
-use super::file_classification_taxonomy::{
-    detect_magic, family_of, file_type_from_ext, is_office_ext,
-};
+use super::file_classification_taxonomy::{family_of, file_type_from_ext};
 use crate::analysis_service::candidates::row_to_file_entry_for_analysis;
 use crate::analysis_service::error::AnalysisServiceError;
 use domain::{FileEntry, FileEntryId};
+use infrastructure::file_magic::{detect as detect_magic, is_office_extension as is_office_ext};
 use rusqlite::Connection;
 use std::collections::HashMap;
 use transport::dto::{
@@ -235,7 +234,9 @@ fn classify_entry(entry: &FileEntry, header: Option<&[u8]>) -> Classification {
     let path = entry.path.replace('\\', "/").to_ascii_lowercase();
 
     if let Some(data) = header {
-        if let Some((file_type, family)) = detect_magic(data, &ext) {
+        if let Some(magic) = detect_magic(data, &ext) {
+            let file_type = magic.file_type;
+            let family = magic.family;
             let family = if file_type == "ZIP" && is_office_ext(&ext) {
                 "documents"
             } else {
