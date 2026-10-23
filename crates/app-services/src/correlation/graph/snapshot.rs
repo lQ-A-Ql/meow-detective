@@ -50,6 +50,25 @@ pub fn get_correlation_snapshot_for_case(
     Ok(merged)
 }
 
+pub fn get_correlation_snapshot_read_only_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<CorrelationSnapshotDto, CorrelationError> {
+    let mut merged = empty_snapshot();
+    for (source_id, source_conn) in
+        crate::source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
+    {
+        merge_source_snapshot(
+            &mut merged,
+            compute_correlation_snapshot_read_only(&source_conn)?,
+            &source_id,
+        );
+    }
+    finalize_snapshot_counts(&mut merged);
+    Ok(merged)
+}
+
 pub fn get_correlation_snapshot_incremental(
     conn: &Connection,
 ) -> Result<CorrelationSnapshotDto, CorrelationError> {
@@ -127,6 +146,14 @@ fn compute_correlation_snapshot(
     build_snapshot_from(conn, &artifacts, &timelines)
 }
 
+fn compute_correlation_snapshot_read_only(
+    conn: &Connection,
+) -> Result<CorrelationSnapshotDto, CorrelationError> {
+    let artifacts = load_artifacts(conn)?;
+    let timelines = load_timelines(conn)?;
+    build_snapshot_from_read_only(conn, &artifacts, &timelines)
+}
+
 fn load_artifacts(conn: &Connection) -> Result<Vec<ArtifactRowDto>, CorrelationError> {
     load_artifact_rows(conn).map(|rows| rows.into_iter().take(MAX_CORRELATION_ARTIFACTS).collect())
 }
@@ -178,6 +205,19 @@ fn build_snapshot_from(
     append_groups(&mut snapshot, source_groups, rule_groups);
     super::ordering::finalize_local_snapshot(&mut snapshot);
     let _ = persist_correlation_edges(conn, &snapshot.leads);
+    Ok(snapshot)
+}
+
+fn build_snapshot_from_read_only(
+    conn: &Connection,
+    artifacts: &[ArtifactRowDto],
+    timelines: &[TimelineEventDto],
+) -> Result<CorrelationSnapshotDto, CorrelationError> {
+    let source_groups = build_source_groups(conn, artifacts.to_vec(), timelines.to_vec())?;
+    let rule_groups = build_rule_groups(conn, artifacts, timelines)?;
+    let mut snapshot = empty_snapshot();
+    append_groups(&mut snapshot, source_groups, rule_groups);
+    super::ordering::finalize_local_snapshot(&mut snapshot);
     Ok(snapshot)
 }
 

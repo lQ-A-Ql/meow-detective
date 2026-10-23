@@ -50,7 +50,7 @@ fn run_progress_reporter(
     app: Option<&AppHandle>,
     receiver: mpsc::Receiver<ProgressUpdate>,
 ) {
-    let Ok(connection) = app_services::connection::open_case_db(&db_path) else {
+    let Ok(connection) = app_services::connection::open_existing_case_db(&db_path) else {
         return;
     };
     let mut last_percent = 2;

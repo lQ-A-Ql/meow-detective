@@ -24,8 +24,12 @@ pub fn update_progress(
     JobRepo::new(connection).update_progress(job_id, progress, detail)
 }
 
+pub fn start(connection: &Connection, job_id: &JobId) -> DbResult<bool> {
+    JobRepo::new(connection).start(job_id)
+}
+
 pub fn complete(connection: &Connection, job_id: &JobId, detail: &str) -> DbResult<()> {
-    JobRepo::new(connection).complete(job_id, detail)
+    JobRepo::new(connection).complete_committed(job_id, detail)
 }
 
 pub fn fail(connection: &Connection, job_id: &JobId, detail: &str) -> DbResult<()> {

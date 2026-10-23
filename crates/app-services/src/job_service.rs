@@ -226,8 +226,8 @@ pub fn cancel_job(conn: &Connection, job_id: &JobId, reason: &str) -> Result<(),
     Ok(())
 }
 
-/// On app restart, detect jobs that were left in `running` or `cancelling`
-/// state and mark them as `failed` with reason `interrupted`.
+/// On app restart, detect jobs that were left in `pending`, `running`, or
+/// `cancelling` state and mark them as `failed` with reason `interrupted`.
 ///
 /// This prevents stale jobs from appearing active after a crash or unexpected
 /// shutdown.  Partial results (warning/skipped/failed counts) are preserved
@@ -244,10 +244,10 @@ pub fn recover_interrupted_jobs(conn: &Connection) -> Result<RecoveryResult, Job
     let recovered_job_ids: Vec<String> = interrupted_ids
         .into_iter()
         .map(|id| {
-            let _ = repo.fail(&id, "Interrupted — application exited unexpectedly");
-            id.0
+            repo.fail_interrupted(&id, "Interrupted — application exited unexpectedly")?;
+            Ok(id.0)
         })
-        .collect();
+        .collect::<Result<_, persistence_sqlite::DbError>>()?;
 
     Ok(RecoveryResult { recovered_job_ids })
 }

@@ -29,7 +29,7 @@ pub(super) fn schedule_linux_evidence_set_import_for_active_case(
     let db_path = active.db_path();
     let import_set_name = plan.import_set_name.clone();
     let member_count = plan.members.len();
-    let connection = app_services::connection::open_case_db(&db_path)
+    let connection = app_services::connection::open_existing_case_db(&db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let job_repo = JobRepo::new(&connection);
     let job_id = job_repo

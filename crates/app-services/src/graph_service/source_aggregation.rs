@@ -53,6 +53,47 @@ pub fn get_graph_snapshot_for_case(
     Ok(merged)
 }
 
+pub fn get_graph_snapshot_for_case_read_only(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<GraphSnapshotDto, GraphServiceError> {
+    let mut merged = empty_snapshot();
+    for (_, source_conn) in source_db::open_ready_source_connections_read_only(
+        case_conn,
+        case_root,
+        &CaseId(case_id.to_string()),
+    )? {
+        merge_snapshot(&mut merged, get_graph_snapshot(&source_conn, case_id)?);
+    }
+    if let Some(case_graph) =
+        super::case_graph::open_case_graph_if_current(case_conn, case_root, case_id)?
+    {
+        let projection = case_graph.projection;
+        merged.total_nodes = merged
+            .total_nodes
+            .saturating_add(projection.cross_source_entity_count);
+        merged.total_edges = merged
+            .total_edges
+            .saturating_add(projection.cross_source_edge_count);
+        *merged
+            .node_count_by_type
+            .entry("entity".into())
+            .or_default() += projection.cross_source_entity_count;
+        *merged
+            .edge_count_by_type
+            .entry("correlates_with".into())
+            .or_default() += projection.cross_source_edge_count;
+        merged.data_source_count = projection.source_count;
+        merged.cross_source_entity_count = projection.cross_source_entity_count;
+        merged.cross_source_edge_count = projection.cross_source_edge_count;
+        merged.seed_ids = projection.seed_ids;
+        merged.projection_built_at = Some(projection.built_at);
+    }
+    merged.density = graph_density(merged.total_nodes, merged.total_edges);
+    Ok(merged)
+}
+
 pub fn query_graph_for_case(
     case_conn: &Connection,
     case_root: &Path,
@@ -60,6 +101,15 @@ pub fn query_graph_for_case(
     query: GraphQueryDto,
 ) -> Result<GraphQueryResultDto, GraphServiceError> {
     query_case_graph(case_conn, case_root, case_id, query)
+}
+
+pub fn query_graph_for_case_read_only(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    query: GraphQueryDto,
+) -> Result<GraphQueryResultDto, GraphServiceError> {
+    super::case_graph::query_case_graph_read_only(case_conn, case_root, case_id, query)
 }
 
 pub fn get_node_neighborhood_for_case(
@@ -84,6 +134,28 @@ pub fn get_node_neighborhood_for_case(
     )
 }
 
+pub fn get_node_neighborhood_for_case_read_only(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    node_id: &str,
+    depth: u32,
+) -> Result<GraphQueryResultDto, GraphServiceError> {
+    super::case_graph::query_case_graph_read_only(
+        case_conn,
+        case_root,
+        case_id,
+        GraphQueryDto {
+            start_ids: vec![node_id.to_string()],
+            edge_types: Vec::new(),
+            max_depth: depth,
+            confidence_floor: None,
+            limit: 200,
+            edge_limit: 600,
+        },
+    )
+}
+
 pub fn get_provenance_chain_for_case(
     case_conn: &Connection,
     case_root: &Path,
@@ -92,6 +164,34 @@ pub fn get_provenance_chain_for_case(
 ) -> Result<Vec<GraphProvenanceEntryDto>, GraphServiceError> {
     if edge_id.starts_with("case:edge:") {
         let case_graph = ensure_case_graph(case_conn, case_root, case_id)?;
+        return get_provenance_chain(&case_graph.connection, edge_id);
+    }
+    let (source_id, local_id) = parse_scoped_id("Graph edge id", edge_id, "graph edges")?;
+    let source = source_db::open_ready_source_read_only_by_id(
+        case_conn,
+        case_root,
+        &CaseId(case_id.to_string()),
+        &source_id,
+    )?;
+    let mut entries = get_provenance_chain(&source.connection, &local_id)?;
+    for entry in &mut entries {
+        entry.edge_id = encode_source_scoped_id(&source_id, &entry.edge_id);
+    }
+    Ok(entries)
+}
+
+pub fn get_provenance_chain_for_case_read_only(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    edge_id: &str,
+) -> Result<Vec<GraphProvenanceEntryDto>, GraphServiceError> {
+    if edge_id.starts_with("case:edge:") {
+        let Some(case_graph) =
+            super::case_graph::open_case_graph_if_current(case_conn, case_root, case_id)?
+        else {
+            return Ok(Vec::new());
+        };
         return get_provenance_chain(&case_graph.connection, edge_id);
     }
     let (source_id, local_id) = parse_scoped_id("Graph edge id", edge_id, "graph edges")?;

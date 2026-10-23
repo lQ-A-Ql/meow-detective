@@ -8,7 +8,7 @@ use transport::{
     CommandError,
 };
 
-use super::command_support::{get_case_connection, require_active_case};
+use super::command_support::{get_case_connection, get_case_read_connection, require_active_case};
 use crate::state::AppState;
 
 // ── Notebook entry commands ──────────────────────────────────────────────
@@ -72,7 +72,7 @@ pub async fn list_notebook_entries(
     tauri::async_runtime::spawn_blocking(move || {
         let active = require_active_case(&app_state)?;
         let case_id = active.case_id;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
 
         app_services::notebook_service::list_entries_for_request(&conn, &case_id, request)
             .map_err(CommandError::from_typed_service_error)
@@ -89,7 +89,7 @@ pub async fn get_notebook_thread(
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
         app_services::notebook_service::get_thread(&conn, &request.entry_id)
             .map_err(CommandError::from_typed_service_error)
     })
@@ -133,7 +133,7 @@ pub async fn list_investigation_steps(
     tauri::async_runtime::spawn_blocking(move || {
         let active = require_active_case(&app_state)?;
         let case_id = active.case_id;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
 
         app_services::notebook_service::list_steps_for_request(&conn, &case_id, request)
             .map_err(CommandError::from_typed_service_error)

@@ -1,7 +1,7 @@
 use tauri::State;
 use transport::{dto::InfrastructureGraphDto, CommandError};
 
-use super::command_support::{get_case_connection, require_active_case};
+use super::command_support::{get_case_read_connection, require_active_case};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -11,8 +11,8 @@ pub async fn get_infrastructure_graph(
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let active = require_active_case(&app_state)?;
-        let connection = get_case_connection(&app_state)?;
-        app_services::infrastructure_graph_service::get_infrastructure_graph(
+        let connection = get_case_read_connection(&app_state)?;
+        app_services::infrastructure_graph_service::get_infrastructure_graph_read_only(
             &connection,
             &active.case_root,
             &domain::CaseId(active.case_id.clone()),

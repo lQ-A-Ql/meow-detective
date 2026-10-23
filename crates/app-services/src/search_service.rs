@@ -18,7 +18,7 @@ pub use instrumented::{
     search_files_for_case_cursor_instrumented, search_files_for_case_instrumented,
     InstrumentedFileSearchResult,
 };
-pub use search_request::search_files_request_for_case;
+pub use search_request::{record_search_step, search_files_request_for_case};
 
 #[derive(Debug, Clone)]
 pub struct IndexStats {

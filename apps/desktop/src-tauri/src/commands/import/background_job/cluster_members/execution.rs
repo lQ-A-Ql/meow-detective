@@ -98,6 +98,12 @@ fn run_member_import(
     let connection = app_services::connection::open_existing_case_db(&execution.db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let member_job_repo = JobRepo::new(&connection);
+    if !member_job_repo
+        .start(&job_id)
+        .map_err(CommandError::from_typed_service_error)?
+    {
+        return Err(CommandError::cancelled("Member cancelled before execution"));
+    }
     let snapshot = admission.snapshot();
     let started_detail = format!(
         "Started member import: activeSources={} cpuWeight={}/{} memoryMb={}/{}",

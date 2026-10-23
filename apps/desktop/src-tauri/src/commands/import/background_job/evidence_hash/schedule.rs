@@ -34,7 +34,7 @@ fn schedule_pending_evidence_hashes_internal(
     excluded_source_id: Option<&str>,
 ) -> Result<Vec<String>, CommandError> {
     let db_path = case_root.join("app.db");
-    let connection = app_services::connection::open_case_db(&db_path)
+    let connection = app_services::connection::open_existing_case_db(&db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let case_id = CaseId(case_id.to_string());
     let sources = list_pending_hash_sources(&connection, &case_id)

@@ -38,13 +38,19 @@ pub(crate) fn run_background_evidence_hash(
     app: Option<&AppHandle>,
     cancel_token: Arc<AtomicBool>,
 ) -> Result<(), CommandError> {
-    let connection = app_services::connection::open_case_db(&db_path)
+    let connection = app_services::connection::open_existing_case_db(&db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let case_root = db_path
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_else(|| std::path::PathBuf::from("."));
     if cancel_token.load(Ordering::Acquire) {
+        cancel_hash(&connection, &case_root, &data_source_id, &job_id, app)?;
+        return Ok(());
+    }
+    if !app_services::hash_service::evidence_jobs::start_hash_job(&connection, &job_id)
+        .map_err(CommandError::from_typed_service_error)?
+    {
         cancel_hash(&connection, &case_root, &data_source_id, &job_id, app)?;
         return Ok(());
     }

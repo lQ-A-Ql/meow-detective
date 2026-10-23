@@ -25,7 +25,7 @@ pub(crate) fn schedule_linux_artifact_analysis(
     task_manager: Arc<TaskManager>,
 ) -> Result<bool, CommandError> {
     let db_path = case_root.join("app.db");
-    let connection = app_services::connection::open_case_db(&db_path)
+    let connection = app_services::connection::open_existing_case_db(&db_path)
         .map_err(CommandError::from_typed_service_error)?;
     if !app_services::linux_artifact_job::source_is_ready_linux(&connection, data_source_id)
         .map_err(CommandError::from_typed_service_error)?
@@ -75,7 +75,7 @@ pub(crate) fn schedule_linux_artifact_analysis(
                 "Linux artifact analysis task registration failed: {other}"
             )),
         };
-        if let Ok(connection) = app_services::connection::open_case_db(&db_path) {
+        if let Ok(connection) = app_services::connection::open_existing_case_db(&db_path) {
             let _ = app_services::linux_artifact_job::fail(&connection, &job_id, &detail.message);
         }
         detail
@@ -89,17 +89,20 @@ fn run_linux_artifact_analysis(
     data_source_id: &DataSourceId,
     app: Option<&AppHandle>,
     cancel_token: Arc<AtomicBool>,
-    task_id: &str,
+    _task_id: &str,
     job_id: &str,
 ) -> Result<(), String> {
     if let Some(app) = app {
         event_bridge::emit_job_created(app, job_id, "Linux artifact analysis");
-        event_bridge::emit_job_started(app, task_id, "Linux artifact analysis started");
-        event_bridge::emit_job_progress(app, task_id, 1, "Linux artifact analysis queued");
     }
-    let connection = app_services::connection::open_case_db(&case_root.join("app.db"))
+    let connection = app_services::connection::open_existing_case_db(&case_root.join("app.db"))
         .map_err(|error| error.to_string())?;
     let job_id = domain::JobId(job_id.to_string());
+    if !app_services::linux_artifact_job::start(&connection, &job_id)
+        .map_err(|error| error.to_string())?
+    {
+        return Ok(());
+    }
     app_services::linux_artifact_job::update_progress(
         &connection,
         &job_id,
@@ -107,6 +110,10 @@ fn run_linux_artifact_analysis(
         "Linux artifact analysis started",
     )
     .map_err(|error| error.to_string())?;
+    if let Some(app) = app {
+        event_bridge::emit_job_started(app, &job_id.0, "Linux artifact analysis started");
+        event_bridge::emit_job_progress(app, &job_id.0, 5, "Linux artifact analysis started");
+    }
     let result = run_source_analysis_extraction_with_cancel(
         &connection,
         case_root,
@@ -121,20 +128,21 @@ fn run_linux_artifact_analysis(
                 "Linux artifact analysis completed: artifacts={} timeline={}",
                 run.artifact_count, run.timeline_event_count
             );
-            if let Some(app) = app {
-                event_bridge::emit_job_progress(app, task_id, 100, &detail);
-                event_bridge::emit_job_completed(app, task_id, &detail);
-            }
             app_services::linux_artifact_job::complete(&connection, &job_id, &detail)
                 .map_err(|error| error.to_string())?;
+            if let Some(app) = app {
+                event_bridge::emit_job_progress(app, &job_id.0, 100, &detail);
+                event_bridge::emit_job_completed(app, &job_id.0, &detail);
+            }
             Ok(())
         }
         Err(error) => {
             let detail = error.to_string();
+            app_services::linux_artifact_job::fail(&connection, &job_id, &detail)
+                .map_err(|error| error.to_string())?;
             if let Some(app) = app {
-                event_bridge::emit_job_failed(app, task_id, &detail);
+                event_bridge::emit_job_failed(app, &job_id.0, &detail);
             }
-            let _ = app_services::linux_artifact_job::fail(&connection, &job_id, &detail);
             Err(detail)
         }
     }

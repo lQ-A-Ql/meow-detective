@@ -96,6 +96,27 @@ pub(crate) fn ensure_case_graph(
     ))
 }
 
+/// Open the current case graph generation without creating or replacing it.
+pub(crate) fn open_case_graph_if_current(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<Option<CaseGraphHandle>, GraphServiceError> {
+    let path = case_graph_path(case_root);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let manifest = collect_case_graph_manifest(case_conn, case_root, case_id)?;
+    let connection = persistence_sqlite::open_existing_case_graph_read_only(&path)?;
+    let Some(projection) = current_projection(&connection, case_id, &manifest.digest)? else {
+        return Ok(None);
+    };
+    Ok(Some(CaseGraphHandle {
+        connection,
+        projection,
+    }))
+}
+
 fn case_graph_path(case_root: &Path) -> PathBuf {
     case_root.join(CASE_GRAPH_DB_RELATIVE_PATH)
 }

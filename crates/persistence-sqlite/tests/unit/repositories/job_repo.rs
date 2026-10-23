@@ -153,12 +153,48 @@ fn list_recent_returns_jobs_ordered() {
     let jobs = repo.list_recent(10).unwrap();
     assert_eq!(jobs.len(), 2);
     // Running/pending jobs come before completed ones
-    assert_eq!(jobs[0].status, "running");
+    assert_eq!(jobs[0].status, "pending");
     assert_eq!(jobs[1].status, "completed");
 }
 
 #[test]
-fn find_interrupted_returns_only_running_and_cancelling() {
+fn queued_job_stays_pending_until_admitted_and_cancelled_job_cannot_start() {
+    let conn = setup_db();
+    let repo = JobRepo::new(&conn);
+    let job = repo.create("case-1", "test").unwrap();
+    repo.update_progress(&job, 1, "queued").unwrap();
+    assert_eq!(repo.list_recent(1).unwrap()[0].status, "pending");
+    assert!(repo.start(&job).unwrap());
+    assert!(!repo.start(&job).unwrap());
+    assert_eq!(repo.list_recent(1).unwrap()[0].status, "running");
+    assert!(repo.mark_cancelling(&job, "cancel").unwrap());
+    assert!(!repo.start(&job).unwrap());
+    assert!(repo.complete(&job, "not published").is_err());
+    repo.complete_committed(&job, "published").unwrap();
+    assert!(!repo.cancel(&job, "late cancellation").unwrap());
+    assert!(repo.complete_committed(&job, "duplicate").is_err());
+    repo.update_progress(&job, 3, "late progress").unwrap();
+    repo.update_outcome_counts(&job, 9, 9, 9, true).unwrap();
+    repo.update_partition_progress(&job, "late", 9, 9, 99)
+        .unwrap();
+    let stored = repo.list_recent(1).unwrap();
+    assert_eq!(stored[0].status, "completed");
+    assert_eq!(stored[0].progress, 100);
+    assert_eq!(stored[0].detail, "published");
+    assert_eq!(stored[0].warning_count, 0);
+    assert_eq!(stored[0].total_partitions, 0);
+}
+
+#[test]
+fn pending_jobs_are_recovered_after_restart() {
+    let conn = setup_db();
+    let repo = JobRepo::new(&conn);
+    let pending = repo.create("case-1", "queued").unwrap();
+    assert!(repo.find_interrupted().unwrap().contains(&pending));
+}
+
+#[test]
+fn find_interrupted_returns_pending_running_and_cancelling() {
     let conn = setup_db();
     let repo = JobRepo::new(&conn);
 

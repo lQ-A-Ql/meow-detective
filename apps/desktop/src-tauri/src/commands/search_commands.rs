@@ -1,7 +1,7 @@
 use tauri::{AppHandle, State};
 use transport::{commands::SearchFilesRequest, dto::SearchFileResultPageDto, CommandError};
 
-use crate::commands::command_support::snapshot_active_case;
+use crate::commands::command_support::{get_case_read_connection, snapshot_active_case};
 use crate::events::event_bridge;
 use crate::state::AppState;
 
@@ -19,16 +19,24 @@ pub async fn search_files_request(
         let Some(active) = snapshot_active_case(&app_state)? else {
             return Ok(empty_search_result_page());
         };
-        let connection = app_services::connection::open_case_db(&active.case_root.join("app.db"))
-            .map_err(CommandError::from_typed_service_error)?;
-        app_services::search_service::search_files_request_for_case(
+        let connection = get_case_read_connection(&app_state)?;
+        let page = app_services::search_service::search_files_request_for_case(
             &connection,
             &active.case_root,
             &active.meta.id,
             &request,
             |report| event_bridge::emit_performance_report_ready(&app, report),
         )
-        .map_err(CommandError::from_typed_service_error)
+        .map_err(CommandError::from_typed_service_error)?;
+        drop(connection);
+        app_services::search_service::record_search_step(
+            &active.case_root,
+            &active.meta.id,
+            &request,
+            page.total,
+            page.took_ms as u32,
+        );
+        Ok(page)
     })
     .await
     .map_err(CommandError::from_join_error)?

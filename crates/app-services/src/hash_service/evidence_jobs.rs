@@ -94,6 +94,13 @@ pub fn update_hash_progress(
     Ok(())
 }
 
+pub fn start_hash_job(
+    connection: &Connection,
+    job_id: &JobId,
+) -> Result<bool, EvidenceHashJobError> {
+    Ok(JobRepo::new(connection).start(job_id)?)
+}
+
 pub fn complete_hash_job(
     connection: &Connection,
     data_source_id: &DataSourceId,
@@ -113,7 +120,7 @@ pub fn complete_hash_job(
         result.worker_threads,
         result.acceleration
     );
-    JobRepo::new(&transaction).complete(job_id, &detail)?;
+    JobRepo::new(&transaction).complete_committed(job_id, &detail)?;
     transaction.commit()?;
     Ok(detail)
 }

@@ -2,7 +2,7 @@ use tauri::State;
 use transport::dto::batch::BatchJobDto;
 use transport::CommandError;
 
-use crate::commands::command_support::{get_case_connection, require_active_case};
+use crate::commands::command_support::{get_case_read_connection, require_active_case};
 use crate::state::AppState;
 
 fn validate_batch_id(batch_id: &str) -> Result<(), CommandError> {
@@ -28,7 +28,7 @@ pub(super) async fn get_batch_job_impl(
     let app_state = app_state.clone();
     tauri::async_runtime::spawn_blocking(move || {
         require_active_case(&app_state)?;
-        let connection = get_case_connection(&app_state)?;
+        let connection = get_case_read_connection(&app_state)?;
         app_services::batch_service::get_batch_status(&connection, &batch_id)
             .map_err(CommandError::from_typed_service_error)
     })
@@ -47,7 +47,7 @@ pub(super) async fn list_batch_jobs_impl(
     let app_state = app_state.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let active = require_active_case(&app_state)?;
-        let connection = get_case_connection(&app_state)?;
+        let connection = get_case_read_connection(&app_state)?;
         app_services::batch_service::list_batch_jobs(&connection, &active.case_id)
             .map_err(CommandError::from_typed_service_error)
     })

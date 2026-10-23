@@ -8,7 +8,7 @@ use transport::{
     CommandError,
 };
 
-use super::command_support::{get_case_connection, require_active_case};
+use super::command_support::{get_case_read_connection, require_active_case};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -18,8 +18,8 @@ pub async fn get_graph_snapshot(
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let snapshot = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
-        app_services::graph_service::get_graph_snapshot_for_case(
+        let conn = get_case_read_connection(&app_state)?;
+        app_services::graph_service::get_graph_snapshot_for_case_read_only(
             &conn,
             &snapshot.case_root,
             &snapshot.case_id,
@@ -38,8 +38,8 @@ pub async fn query_graph(
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let snapshot = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
-        app_services::graph_service::query_graph_for_case(
+        let conn = get_case_read_connection(&app_state)?;
+        app_services::graph_service::query_graph_for_case_read_only(
             &conn,
             &snapshot.case_root,
             &snapshot.case_id,
@@ -59,7 +59,7 @@ pub async fn list_graph_nodes(
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let snapshot = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
         app_services::graph_service::list_graph_nodes_for_case(
             &conn,
             &snapshot.case_root,
@@ -80,8 +80,8 @@ pub async fn get_node_neighborhood(
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let snapshot = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
-        app_services::graph_service::get_node_neighborhood_for_case(
+        let conn = get_case_read_connection(&app_state)?;
+        app_services::graph_service::get_node_neighborhood_for_case_read_only(
             &conn,
             &snapshot.case_root,
             &snapshot.case_id,
@@ -102,8 +102,8 @@ pub async fn get_provenance_chain(
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let snapshot = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
-        app_services::graph_service::get_provenance_chain_for_case(
+        let conn = get_case_read_connection(&app_state)?;
+        app_services::graph_service::get_provenance_chain_for_case_read_only(
             &conn,
             &snapshot.case_root,
             &snapshot.case_id,

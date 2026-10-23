@@ -30,8 +30,8 @@ pub(super) fn run(
     ctx: TaskContext,
     cancel: Arc<AtomicBool>,
 ) -> crate::state::task_manager::TaskResult {
-    let conn =
-        app_services::connection::open_case_db(&ctx.db_path).map_err(|error| error.to_string())?;
+    let conn = app_services::connection::open_existing_case_db(&ctx.db_path)
+        .map_err(|error| error.to_string())?;
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         execute(&ctx, &conn, &cancel)
     }))
@@ -78,6 +78,14 @@ fn execute(
             "Evidence changed while task was queued",
         ));
     }
+    if !persistence_sqlite::repositories::job_repo::JobRepo::new(conn)
+        .start(&domain::JobId(ctx.plan.task.task_id.clone()))
+        .map_err(CommandError::from_typed_service_error)?
+    {
+        return Err(CommandError::cancelled(
+            "Evidence task cancelled before execution",
+        ));
+    }
     let clock = Mutex::new(Instant::now() - Duration::from_secs(1));
     let progress = |bytes, total| {
         let mut last = clock.lock().unwrap_or_else(|error| error.into_inner());
@@ -85,7 +93,7 @@ fn execute(
             return;
         }
         *last = Instant::now();
-        if let Ok(conn) = app_services::connection::open_case_db(&ctx.db_path) {
+        if let Ok(conn) = app_services::connection::open_existing_case_db(&ctx.db_path) {
             if let Ok(percent) =
                 evidence_tasks::progress(&conn, &ctx.case, &ctx.plan.task.task_id, bytes, total)
             {

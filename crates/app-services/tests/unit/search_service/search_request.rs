@@ -1,4 +1,5 @@
 use super::*;
+use crate::search_service::record_search_step;
 
 use chrono::Utc;
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
@@ -150,6 +151,13 @@ fn search_request_reports_performance_and_records_step_for_first_page() {
 
     assert_eq!(page.total, 2);
     assert_eq!(reported, 1);
+    record_search_step(
+        &fixture.case_root,
+        &fixture.case_id,
+        &request("report", 0, 20),
+        page.total,
+        page.took_ms as u32,
+    );
 
     let params = recorded_search_params(&fixture.case_root);
     assert_eq!(params.len(), 1);
@@ -179,6 +187,13 @@ fn search_request_uses_offset_path_for_later_pages() {
     assert_eq!(page.total, 2);
     assert_eq!(page.items.len(), 1);
     assert_eq!(reported, 1);
+    record_search_step(
+        &fixture.case_root,
+        &fixture.case_id,
+        &request("report", 1, 20),
+        page.total,
+        page.took_ms as u32,
+    );
 
     let params = recorded_search_params(&fixture.case_root);
     assert_eq!(params.len(), 1);

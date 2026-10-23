@@ -24,14 +24,10 @@ pub(crate) fn run_background_import_job(
     cancel_token: Arc<AtomicBool>,
     task_manager: Arc<TaskManager>,
 ) -> Result<(), CommandError> {
-    let connection = app_services::connection::open_case_db(&job.db_path)
+    let connection = app_services::connection::open_existing_case_db(&job.db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let job_repo = JobRepo::new(&connection);
 
-    if let Some(app) = app {
-        event_bridge::emit_job_started(app, &job.job_id.0, "Import started");
-        event_bridge::emit_job_progress(app, &job.job_id.0, 5, "Import started");
-    }
     if cancel_token.load(Ordering::Relaxed) {
         cancel_job(&job_repo, &job.job_id, app, "Import cancelled by user");
         return Ok(());
@@ -60,6 +56,9 @@ pub(crate) fn run_background_import_job(
             return Ok(());
         }
     };
+    if !start_import_job(&job_repo, &job.job_id, app)? {
+        return Ok(());
+    }
     let snapshot = admission.snapshot();
     let event_sink = app.map(TauriImportEventSink::new);
     tracing::info!(
@@ -93,7 +92,7 @@ pub(crate) fn run_background_import_job(
     ) {
         Ok(message) => {
             job_repo
-                .complete(&job.job_id, &message)
+                .complete_committed(&job.job_id, &message)
                 .map_err(CommandError::from_typed_service_error)?;
             if let Some(app) = app {
                 event_bridge::emit_job_completed(app, &job.job_id.0, &message);
@@ -114,4 +113,23 @@ pub(crate) fn run_background_import_job(
         }
         Err(error) => fail_job(&job_repo, &job.job_id, app, error),
     }
+}
+
+fn start_import_job(
+    job_repo: &JobRepo<'_>,
+    job_id: &domain::JobId,
+    app: Option<&AppHandle>,
+) -> Result<bool, CommandError> {
+    let started = job_repo
+        .start(job_id)
+        .map_err(CommandError::from_typed_service_error)?;
+    if !started {
+        cancel_job(job_repo, job_id, app, "Import cancelled before execution");
+        return Ok(false);
+    }
+    if let Some(app) = app {
+        event_bridge::emit_job_started(app, &job_id.0, "Import started");
+        event_bridge::emit_job_progress(app, &job_id.0, 5, "Import started");
+    }
+    Ok(true)
 }

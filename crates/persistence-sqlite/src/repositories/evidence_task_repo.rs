@@ -63,7 +63,10 @@ impl<'a> EvidenceTaskRepo<'a> {
         result: Option<&str>,
         error: Option<&str>,
     ) -> DbResult<()> {
-        self.conn.execute("UPDATE evidence_tasks SET state=?3,result_json=?4,error_code=?5,updated_at=datetime('now') WHERE case_id=?1 AND task_id=?2",params![case_id,task_id,state,result,error])?;
+        let updated = self.conn.execute("UPDATE evidence_tasks SET state=?3,result_json=?4,error_code=?5,updated_at=datetime('now') WHERE case_id=?1 AND task_id=?2 AND state IN ('queued','running','cancelling')",params![case_id,task_id,state,result,error])?;
+        if updated != 1 {
+            return Err(DbError::System("Evidence task transition rejected".into()));
+        }
         Ok(())
     }
     pub fn recover(&self, case_id: &str) -> DbResult<()> {

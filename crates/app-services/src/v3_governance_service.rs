@@ -24,6 +24,7 @@ use transport::dto::{BatchStatusDto, GraphStatsDto, NotebookStatsDto, V3Governan
 
 pub use error::V3GovernanceError;
 pub use overview::get_case_overview_snapshot_for_case;
+pub use overview::get_case_overview_snapshot_for_case_read_only;
 use platform_coverage::{
     apply_platform_integrity_gate, build_platform_coverage, build_platform_coverage_for_case,
 };
@@ -86,6 +87,34 @@ pub fn get_v3_governance_snapshot_for_case(
     })
 }
 
+pub fn get_v3_governance_snapshot_for_case_read_only(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<V3GovernanceSnapshotDto, V3GovernanceError> {
+    let mut v2 = crate::v2_governance_service::get_v2_governance_snapshot_for_case_read_only(
+        conn, case_root, case_id,
+    )?;
+
+    let graph_statistics = build_graph_stats_for_case_read_only(conn, case_root, case_id)?;
+    let platform_assessment =
+        build_platform_coverage_for_case(conn, case_root, &domain::CaseId(case_id.to_string()))?;
+    apply_platform_integrity_gate(&mut v2, &platform_assessment);
+    let platform_coverage = platform_assessment.coverage;
+    let rule_pack_coverage = build_rule_pack_status();
+    let batch_status = build_batch_status(conn, case_id)?;
+    let notebook_stats = build_notebook_stats(conn, case_id)?;
+
+    Ok(V3GovernanceSnapshotDto {
+        v2,
+        graph_statistics,
+        platform_coverage,
+        rule_pack_coverage,
+        batch_status,
+        notebook_stats,
+    })
+}
+
 // ── Graph Statistics ───────────────────────────────────────────────────────
 
 fn build_graph_stats(conn: &Connection, case_id: &str) -> Result<GraphStatsDto, V3GovernanceError> {
@@ -107,6 +136,23 @@ fn build_graph_stats_for_case(
 ) -> Result<GraphStatsDto, V3GovernanceError> {
     let graph_snapshot =
         crate::graph_service::get_graph_snapshot_for_case(conn, case_root, case_id)?;
+    Ok(GraphStatsDto {
+        node_count_by_type: graph_snapshot.node_count_by_type,
+        edge_count_by_type: graph_snapshot.edge_count_by_type,
+        total_nodes: graph_snapshot.total_nodes,
+        total_edges: graph_snapshot.total_edges,
+        density: graph_snapshot.density,
+        largest_component_size: graph_snapshot.largest_component_size,
+    })
+}
+
+fn build_graph_stats_for_case_read_only(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<GraphStatsDto, V3GovernanceError> {
+    let graph_snapshot =
+        crate::graph_service::get_graph_snapshot_for_case_read_only(conn, case_root, case_id)?;
     Ok(GraphStatsDto {
         node_count_by_type: graph_snapshot.node_count_by_type,
         edge_count_by_type: graph_snapshot.edge_count_by_type,

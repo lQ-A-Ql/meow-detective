@@ -1,4 +1,4 @@
-use crate::connection::DbResult;
+use crate::connection::{DbError, DbResult};
 use domain::JobId;
 use rusqlite::{params, Connection};
 use uuid::Uuid;
@@ -34,15 +34,24 @@ impl<'a> JobRepo<'a> {
     pub fn create(&self, case_id: &str, kind: &str) -> DbResult<JobId> {
         let id = JobId(Uuid::new_v4().to_string());
         self.conn.execute(
-            "INSERT INTO jobs (id, case_id, kind, status, progress, detail) VALUES (?1, ?2, ?3, 'running', 0, '')",
+            "INSERT INTO jobs (id, case_id, kind, status, progress, detail) VALUES (?1, ?2, ?3, 'pending', 0, '')",
             params![id.0, case_id, kind],
         )?;
         Ok(id)
     }
 
+    /// Admission has completed and the worker is about to execute.
+    pub fn start(&self, id: &JobId) -> DbResult<bool> {
+        Ok(self.conn.execute(
+            "UPDATE jobs SET status='running', started_at=COALESCE(started_at,datetime('now'))
+             WHERE id=?1 AND status='pending'",
+            [&id.0],
+        )? == 1)
+    }
+
     pub fn update_progress(&self, id: &JobId, progress: u32, detail: &str) -> DbResult<()> {
         self.conn.execute(
-            "UPDATE jobs SET progress = ?1, detail = ?2 WHERE id = ?3",
+            "UPDATE jobs SET progress = ?1, detail = ?2 WHERE id = ?3 AND status IN ('pending','running')",
             params![progress, detail, id.0],
         )?;
         Ok(())
@@ -75,7 +84,8 @@ impl<'a> JobRepo<'a> {
         partial: bool,
     ) -> DbResult<()> {
         self.conn.execute(
-            "UPDATE jobs SET warning_count = ?1, skipped_count = ?2, failed_count = ?3, partial = ?4 WHERE id = ?5",
+            "UPDATE jobs SET warning_count = ?1, skipped_count = ?2, failed_count = ?3, partial = ?4
+             WHERE id = ?5 AND status IN ('pending','running','cancelling')",
             params![
                 warning_count,
                 skipped_count,
@@ -96,21 +106,21 @@ impl<'a> JobRepo<'a> {
         partition_pct: u32,
     ) -> DbResult<()> {
         self.conn.execute(
-            "UPDATE jobs SET current_partition = ?1, completed_partitions = ?2, total_partitions = ?3, partition_progress = ?4 WHERE id = ?5",
+            "UPDATE jobs SET current_partition = ?1, completed_partitions = ?2, total_partitions = ?3, partition_progress = ?4
+             WHERE id = ?5 AND status IN ('pending','running','cancelling')",
             params![current_partition, completed, total, partition_pct, id.0],
         )?;
         Ok(())
     }
 
     pub fn complete(&self, id: &JobId, detail: &str) -> DbResult<()> {
-        self.complete_if_active(id, detail)?;
-        Ok(())
+        require_transition(self.complete_if_active(id, detail)?)
     }
 
     /// A committed result wins a cancellation requested after publication.
     pub fn complete_committed(&self, id: &JobId, detail: &str) -> DbResult<()> {
-        self.conn.execute("UPDATE jobs SET status='completed',progress=100,detail=?1,finished_at=datetime('now') WHERE id=?2 AND status IN ('running','pending','cancelling')", params![detail,id.0])?;
-        Ok(())
+        let updated = self.conn.execute("UPDATE jobs SET status='completed',progress=100,detail=?1,finished_at=datetime('now') WHERE id=?2 AND status IN ('running','pending','cancelling')", params![detail,id.0])?;
+        require_transition(updated == 1)
     }
 
     pub fn complete_if_active(&self, id: &JobId, detail: &str) -> DbResult<bool> {
@@ -124,6 +134,17 @@ impl<'a> JobRepo<'a> {
     }
 
     pub fn fail(&self, id: &JobId, detail: &str) -> DbResult<()> {
+        self.conn.execute(
+            "UPDATE jobs
+             SET status = 'failed', detail = ?1, finished_at = datetime('now')
+             WHERE id = ?2 AND status IN ('running', 'pending')",
+            params![detail, id.0],
+        )?;
+        Ok(())
+    }
+
+    /// Recover a job whose worker disappeared while cancellation was draining.
+    pub fn fail_interrupted(&self, id: &JobId, detail: &str) -> DbResult<()> {
         self.conn.execute(
             "UPDATE jobs
              SET status = 'failed', detail = ?1, finished_at = datetime('now')
@@ -153,11 +174,11 @@ impl<'a> JobRepo<'a> {
         Ok(updated > 0)
     }
 
-    /// Find jobs left in a running or cancelling state (interrupted by crash/shutdown).
+    /// Pending jobs have no live worker after a process restart either.
     pub fn find_interrupted(&self) -> DbResult<Vec<JobId>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id FROM jobs WHERE status IN ('running', 'cancelling')")?;
+            .prepare("SELECT id FROM jobs WHERE status IN ('pending', 'running', 'cancelling')")?;
         let rows = stmt.query_map([], |row| {
             let raw: String = row.get(0)?;
             Ok(JobId(raw))
@@ -210,6 +231,16 @@ impl<'a> JobRepo<'a> {
             result.push(r?);
         }
         Ok(result)
+    }
+}
+
+fn require_transition(changed: bool) -> DbResult<()> {
+    if changed {
+        Ok(())
+    } else {
+        Err(DbError::System(
+            "Job transition rejected: job is missing or already terminal".into(),
+        ))
     }
 }
 

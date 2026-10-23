@@ -86,7 +86,7 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
         message: String,
     ) -> Result<(), super::CommandError> {
         self.job_repo
-            .complete(&member_job_id, &message)
+            .complete_committed(&member_job_id, &message)
             .map_err(super::CommandError::from_typed_service_error)?;
         if let Some(app) = self.app {
             event_bridge::emit_job_completed(app, &member_job_id.0, &message);

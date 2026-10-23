@@ -19,12 +19,17 @@ pub(crate) fn complete_browseable_evidence_set_job(
     outcome: &BrowseableEvidenceSetImport,
     app: Option<&AppHandle>,
 ) -> Result<(), CommandError> {
-    let connection = app_services::connection::open_case_db(&outcome.processing.db_path)
+    let connection = app_services::connection::open_existing_case_db(&outcome.processing.db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let completed = JobRepo::new(&connection)
         .complete_if_active(&outcome.parent_job_id, &outcome.completion_detail)
         .map_err(CommandError::from_typed_service_error)?;
     if !completed {
+        cancel_browseable_evidence_set_job(
+            outcome,
+            app,
+            "Cancelled before evidence-set completion",
+        );
         return Err(CommandError::conflict(
             "Evidence-set import job became terminal before derived processing was admitted",
         ));
@@ -40,7 +45,7 @@ pub(crate) fn fail_browseable_evidence_set_job(
     app: Option<&AppHandle>,
     detail: &str,
 ) {
-    match app_services::connection::open_case_db(&outcome.processing.db_path) {
+    match app_services::connection::open_existing_case_db(&outcome.processing.db_path) {
         Ok(connection) => {
             if let Err(error) = JobRepo::new(&connection).fail(&outcome.parent_job_id, detail) {
                 tracing::error!(
@@ -66,7 +71,7 @@ pub(crate) fn cancel_browseable_evidence_set_job(
     app: Option<&AppHandle>,
     detail: &str,
 ) {
-    match app_services::connection::open_case_db(&outcome.processing.db_path) {
+    match app_services::connection::open_existing_case_db(&outcome.processing.db_path) {
         Ok(connection) => cancel_job(
             &JobRepo::new(&connection),
             &outcome.parent_job_id,
@@ -149,7 +154,7 @@ pub(crate) fn continue_ceph_rbd_processing(
     job: &BackgroundDerivedSourceProcessingJob,
     cancel_token: &Arc<AtomicBool>,
 ) -> Result<(), CommandError> {
-    let connection = app_services::connection::open_case_db(&job.db_path)
+    let connection = app_services::connection::open_existing_case_db(&job.db_path)
         .map_err(CommandError::from_typed_service_error)?;
     for data_source_id in &job.source_ids {
         if cancel_token.load(Ordering::Relaxed) {

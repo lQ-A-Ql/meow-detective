@@ -1,6 +1,6 @@
 //! Orchestration for the `search_files_request` use case: pick the cursor or
-//! offset search path, report the performance sample, and record the
-//! investigation step for provenance.
+//! offset search path and report the performance sample. Investigation-step
+//! persistence is an explicit best-effort audit operation.
 
 use rusqlite::Connection;
 use std::path::Path;
@@ -17,9 +17,8 @@ use crate::step_recorder;
 ///
 /// Cursor continuations and first pages (`offset == 0`) use the cursor search
 /// path; later offsets use the plain offset path. The performance report is
-/// handed to `on_performance_report` after a successful search, and the search
-/// is recorded as an investigation step. Step-recording failures are ignored
-/// so a provenance hiccup never fails a completed search.
+/// handed to `on_performance_report` after a successful search. The query is
+/// read-only; call [`record_search_step`] separately for optional audit data.
 pub fn search_files_request_for_case(
     case_conn: &Connection,
     case_root: &Path,
@@ -27,26 +26,23 @@ pub fn search_files_request_for_case(
     request: &SearchFilesRequest,
     on_performance_report: impl FnOnce(&PerformanceReportDto),
 ) -> Result<SearchFileResultPageDto, SearchError> {
-    let start = std::time::Instant::now();
     let result = if request.cursor.is_some() || request.offset == 0 {
         search_files_for_case_cursor_instrumented(case_conn, case_root, case_id, request)
     } else {
         search_files_for_case_instrumented(case_conn, case_root, case_id, request)
     }?;
-    let elapsed_ms = start.elapsed().as_millis() as u32;
     on_performance_report(&result.performance_report);
-    record_search_step(case_root, case_id, request, result.page.total, elapsed_ms);
     Ok(result.page)
 }
 
-fn record_search_step(
+pub fn record_search_step(
     case_root: &Path,
     case_id: &domain::CaseId,
     request: &SearchFilesRequest,
     total_hits: u64,
     elapsed_ms: u32,
 ) {
-    if let Ok(conn) = crate::connection::open_case_db(&case_root.join("app.db")) {
+    if let Ok(conn) = crate::connection::open_existing_case_db(&case_root.join("app.db")) {
         let params_json = serde_json::json!({
             "query": &request.query,
             "offset": request.offset,

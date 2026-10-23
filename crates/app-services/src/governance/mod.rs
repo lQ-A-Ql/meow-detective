@@ -30,6 +30,17 @@ pub fn get_v2_governance_snapshot_for_case(
     builder::build_v2_governance_snapshot_with_runtime(conn, case_id, runtime_signals)
 }
 
+pub fn get_v2_governance_snapshot_for_case_read_only(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<V2GovernanceSnapshotDto, GovernanceError> {
+    let runtime_signals = crate::governance::runtime::build_runtime_signals_for_case_read_only(
+        conn, case_root, case_id,
+    )?;
+    builder::build_v2_governance_snapshot_with_runtime(conn, case_id, runtime_signals)
+}
+
 #[cfg(test)]
 #[path = "../../tests/unit/governance/mod.rs"]
 mod tests;

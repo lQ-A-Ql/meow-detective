@@ -28,8 +28,29 @@ pub(super) fn refresh_network_facts(
     case_root: &std::path::Path,
     case_id: &CaseId,
 ) -> DbResult<Vec<String>> {
+    let (facts, diagnostics) = collect_network_facts(case_conn, case_root, case_id)?;
     let repo = InfrastructureNetworkFactRepo::new(case_conn);
+    let mut by_source = std::collections::BTreeMap::<String, Vec<Fact>>::new();
+    for fact in facts {
+        by_source
+            .entry(fact.data_source_id.clone())
+            .or_default()
+            .push(fact);
+    }
+    for (source_id, facts) in by_source {
+        repo.replace_for_source(&case_id.0, &source_id, &facts)?;
+    }
+    Ok(diagnostics)
+}
+
+pub(super) fn collect_network_facts(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+) -> DbResult<(Vec<Fact>, Vec<String>)> {
+    let mut all_facts = Vec::new();
     let mut diagnostics = Vec::new();
+    let repo = InfrastructureNetworkFactRepo::new(case_conn);
     for (host_id, source_id) in repo.list_host_sources(&case_id.0)? {
         let source = DataSourceId(source_id.clone());
         let source_conn =
@@ -80,9 +101,9 @@ pub(super) fn refresh_network_facts(
         );
         facts.extend(kubernetes_facts);
         diagnostics.extend(kubernetes_diagnostics);
-        repo.replace_for_source(&case_id.0, &source_id, &facts)?;
+        all_facts.extend(facts);
     }
-    Ok(diagnostics)
+    Ok((all_facts, diagnostics))
 }
 
 #[allow(clippy::too_many_arguments)]

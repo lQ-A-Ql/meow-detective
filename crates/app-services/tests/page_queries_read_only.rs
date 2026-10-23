@@ -1,5 +1,9 @@
 //! Query entry points must preserve source files even when no WAL exists yet.
-use app_services::{analysis_service as analysis, case_service, source_db, timeline_service};
+use app_services::{
+    analysis_service as analysis, case_service, correlation, graph_service,
+    infrastructure_graph_service, source_db, timeline_service, v2_governance_service,
+    v3_governance_service,
+};
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
 use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
@@ -210,4 +214,96 @@ fn timeline_pages_facets_and_detail_are_read_only() {
         .unwrap();
         assert_eq!(facets.total_events, 1);
     });
+}
+
+#[test]
+fn dashboard_graph_correlation_and_infrastructure_queries_do_not_build_or_replace() {
+    let temp = tempfile::tempdir().unwrap();
+    let active = case_service::create_case(temp.path(), "dashboard-read", None).unwrap();
+    let id = active
+        .with_conn(|db| {
+            Ok(source(
+                db,
+                &active.case_root,
+                &active.meta.id,
+                "dashboard",
+                "linux",
+            ))
+        })
+        .unwrap();
+    let case_path = active.db_path();
+    let case_before = std::fs::read(&case_path).unwrap();
+    let graph_path = active.case_root.join("indexes/case-graph.db");
+    assert!(!graph_path.exists());
+    let case = persistence_sqlite::open_existing_source_read_only(&case_path).unwrap();
+
+    assert_source_unchanged(&active.case_root, &id, || {
+        correlation::get_correlation_snapshot_read_only_for_case(
+            &case,
+            &active.case_root,
+            &active.meta.id,
+        )
+        .unwrap();
+        graph_service::get_graph_snapshot_for_case_read_only(
+            &case,
+            &active.case_root,
+            &active.meta.id.0,
+        )
+        .unwrap();
+        graph_service::query_graph_for_case_read_only(
+            &case,
+            &active.case_root,
+            &active.meta.id.0,
+            transport::dto::GraphQueryDto {
+                start_ids: Vec::new(),
+                edge_types: Vec::new(),
+                max_depth: 1,
+                confidence_floor: None,
+                limit: 10,
+                edge_limit: 10,
+            },
+        )
+        .unwrap();
+        graph_service::get_node_neighborhood_for_case_read_only(
+            &case,
+            &active.case_root,
+            &active.meta.id.0,
+            "ds:dashboard:file",
+            1,
+        )
+        .unwrap();
+        graph_service::get_provenance_chain_for_case_read_only(
+            &case,
+            &active.case_root,
+            &active.meta.id.0,
+            "ds:dashboard:edge-missing",
+        )
+        .unwrap_err();
+        v2_governance_service::get_v2_governance_snapshot_for_case_read_only(
+            &case,
+            &active.case_root,
+            &active.meta.id.0,
+        )
+        .unwrap();
+        v3_governance_service::get_v3_governance_snapshot_for_case_read_only(
+            &case,
+            &active.case_root,
+            &active.meta.id.0,
+        )
+        .unwrap();
+        v3_governance_service::get_case_overview_snapshot_for_case_read_only(
+            &case,
+            &active.case_root,
+            &active.meta.id.0,
+        )
+        .unwrap();
+        infrastructure_graph_service::get_infrastructure_graph_read_only(
+            &case,
+            &active.case_root,
+            &active.meta.id,
+        )
+        .unwrap();
+    });
+    assert_eq!(std::fs::read(&case_path).unwrap(), case_before);
+    assert!(!graph_path.exists());
 }

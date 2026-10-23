@@ -34,7 +34,7 @@ pub fn close_case_drain(conn: &Connection, _case_id: &str, timeout_ms: u64) -> R
 
     for job_id in &interrupted {
         let detail = format!("interrupted_during_close (drain timeout {}ms)", timeout_ms);
-        match repo.fail(job_id, &detail) {
+        match repo.fail_interrupted(job_id, &detail) {
             Ok(()) => {
                 warnings.push(format!(
                     "Job {} was still running after {}ms drain timeout — marked as failed",

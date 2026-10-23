@@ -20,7 +20,7 @@ pub(crate) fn start(
     let active = require_active_case(&state)?;
     let case = domain::CaseId(active.case_id.clone());
     let db_path = active.case_root.join("app.db");
-    let conn = app_services::connection::open_case_db(&db_path)
+    let conn = app_services::connection::open_existing_case_db(&db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let plan = evidence_tasks::plan(&conn, &active.case_root, &case, request)?;
     let task = plan.task.clone();
@@ -82,14 +82,14 @@ pub(crate) fn start(
 }
 pub(crate) fn get(state: &AppState, id: &str) -> Result<EvidenceTaskDto, CommandError> {
     let active = require_active_case(state)?;
-    let conn = app_services::connection::open_case_db(&active.case_root.join("app.db"))
+    let conn = app_services::connection::open_existing_case_db(&active.case_root.join("app.db"))
         .map_err(CommandError::from_typed_service_error)?;
     evidence_tasks::get(&conn, &domain::CaseId(active.case_id), id)
 }
 pub(crate) fn cancel(state: &AppState, id: &str) -> Result<EvidenceTaskDto, CommandError> {
     let active = require_active_case(state)?;
     let case = domain::CaseId(active.case_id);
-    let conn = app_services::connection::open_case_db(&active.case_root.join("app.db"))
+    let conn = app_services::connection::open_existing_case_db(&active.case_root.join("app.db"))
         .map_err(CommandError::from_typed_service_error)?;
     let task = evidence_tasks::get(&conn, &case, id)?;
     if matches!(task.state.as_str(), "queued" | "running" | "cancelling") {

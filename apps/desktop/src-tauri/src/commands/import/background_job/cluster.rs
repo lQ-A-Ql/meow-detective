@@ -28,13 +28,9 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
     cancel_token: Arc<AtomicBool>,
     task_manager: Option<Arc<TaskManager>>,
 ) -> Result<Option<BrowseableEvidenceSetImport>, CommandError> {
-    let connection = app_services::connection::open_case_db(&job.db_path)
+    let connection = app_services::connection::open_existing_case_db(&job.db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let job_repo = JobRepo::new(&connection);
-    if let Some(app) = app {
-        event_bridge::emit_job_started(app, &job.job_id.0, "Linux evidence-set import started");
-        event_bridge::emit_job_progress(app, &job.job_id.0, 5, "Linux evidence-set import started");
-    }
     if cancel_token.load(Ordering::Relaxed) {
         cancel_job(
             &job_repo,
@@ -45,6 +41,10 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
         return Ok(None);
     }
     let _import_slot = acquire_import_slot(&job_repo, &job.job_id, app, &cancel_token)?;
+    if !start_cluster_job(&job_repo, &job.job_id, app)? {
+        return Ok(None);
+    }
+    emit_cluster_started(app, &job.job_id);
     if let Err(error) = initialize_evidence_set(&connection, &job_repo, &job, app) {
         record_cluster_phase(
             &connection,
@@ -119,6 +119,32 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
             );
             Err(error)
         }
+    }
+}
+
+fn start_cluster_job(
+    job_repo: &JobRepo<'_>,
+    job_id: &domain::JobId,
+    app: Option<&AppHandle>,
+) -> Result<bool, CommandError> {
+    let started = job_repo
+        .start(job_id)
+        .map_err(CommandError::from_typed_service_error)?;
+    if !started {
+        cancel_job(
+            job_repo,
+            job_id,
+            app,
+            "Evidence-set import cancelled before execution",
+        );
+    }
+    Ok(started)
+}
+
+fn emit_cluster_started(app: Option<&AppHandle>, job_id: &domain::JobId) {
+    if let Some(app) = app {
+        event_bridge::emit_job_started(app, &job_id.0, "Linux evidence-set import started");
+        event_bridge::emit_job_progress(app, &job_id.0, 5, "Linux evidence-set import started");
     }
 }
 

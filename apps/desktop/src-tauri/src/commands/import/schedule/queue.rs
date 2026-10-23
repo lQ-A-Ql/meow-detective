@@ -23,7 +23,7 @@ pub fn schedule_import_for_active_case(
     let case_root = active.case_root.clone();
     let db_path = active.db_path();
     let source_name = import_config.source_name.clone();
-    let connection = app_services::connection::open_case_db(&db_path)
+    let connection = app_services::connection::open_existing_case_db(&db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let job_repo = JobRepo::new(&connection);
     let job_id = job_repo

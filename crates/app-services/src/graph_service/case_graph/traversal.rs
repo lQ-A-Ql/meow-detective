@@ -27,6 +27,39 @@ pub(crate) fn query_case_graph(
 ) -> Result<GraphQueryResultDto, GraphServiceError> {
     let settings = QuerySettings::validate(query)?;
     let overlay = ensure_case_graph(case_conn, case_root, case_id)?;
+    query_with_overlay(case_conn, case_root, case_id, settings, overlay)
+}
+
+pub(crate) fn query_case_graph_read_only(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    query: GraphQueryDto,
+) -> Result<GraphQueryResultDto, GraphServiceError> {
+    let settings = QuerySettings::validate(query)?;
+    let Some(overlay) =
+        super::projection::open_case_graph_if_current(case_conn, case_root, case_id)?
+    else {
+        return Ok(GraphQueryResultDto {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            node_count: 0,
+            edge_count: 0,
+            truncated: false,
+            max_depth_reached: 0,
+            data_source_ids: Vec::new(),
+        });
+    };
+    query_with_overlay(case_conn, case_root, case_id, settings, overlay)
+}
+
+fn query_with_overlay(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    settings: QuerySettings,
+    overlay: super::projection::CaseGraphHandle,
+) -> Result<GraphQueryResultDto, GraphServiceError> {
     let source_connections = source_db::open_ready_source_connections_read_only(
         case_conn,
         case_root,
