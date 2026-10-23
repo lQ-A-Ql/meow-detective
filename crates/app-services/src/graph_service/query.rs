@@ -136,6 +136,7 @@ fn to_query_result(mut nodes: Vec<GraphNode>, mut edges: Vec<GraphEdge>) -> Grap
         truncated: false,
         max_depth_reached: 0,
         data_source_ids: Vec::new(),
+        projection_status: "source".to_string(),
     }
 }
 
@@ -148,6 +149,7 @@ fn empty_query_result() -> GraphQueryResultDto {
         truncated: false,
         max_depth_reached: 0,
         data_source_ids: Vec::new(),
+        projection_status: "missing".to_string(),
     }
 }
 

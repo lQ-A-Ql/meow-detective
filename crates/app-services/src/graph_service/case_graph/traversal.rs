@@ -48,6 +48,11 @@ pub(crate) fn query_case_graph_read_only(
             truncated: false,
             max_depth_reached: 0,
             data_source_ids: Vec::new(),
+            projection_status: if super::projection::case_graph_exists(case_root) {
+                "stale".to_string()
+            } else {
+                "missing".to_string()
+            },
         });
     };
     query_with_overlay(case_conn, case_root, case_id, settings, overlay)
@@ -307,6 +312,7 @@ impl TraversalState {
             truncated: self.truncated,
             max_depth_reached: self.max_depth_reached,
             data_source_ids,
+            projection_status: "ready".to_string(),
         }
     }
 }

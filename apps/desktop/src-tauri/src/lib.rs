@@ -2,6 +2,7 @@ mod analysis_task_jobs;
 mod app_update;
 mod bitlocker_key_store;
 mod cache_invalidation;
+mod case_projection_jobs;
 mod command_registry;
 mod commands;
 #[cfg(windows)]

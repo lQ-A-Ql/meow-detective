@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path, sync::atomic::AtomicBool};
 
 use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
@@ -14,6 +14,25 @@ use super::{
     snapshot::{get_graph_snapshot, graph_density},
     GraphServiceError,
 };
+
+pub fn rebuild_case_graph_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    cancel_token: &AtomicBool,
+) -> Result<(), GraphServiceError> {
+    ensure_not_cancelled(cancel_token)?;
+    ensure_case_graph(case_conn, case_root, case_id)?;
+    ensure_not_cancelled(cancel_token)
+}
+
+fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<(), GraphServiceError> {
+    if cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
+        Err(GraphServiceError::Cancelled)
+    } else {
+        Ok(())
+    }
+}
 
 pub fn get_graph_snapshot_for_case(
     case_conn: &Connection,
@@ -50,6 +69,7 @@ pub fn get_graph_snapshot_for_case(
     merged.cross_source_edge_count = projection.cross_source_edge_count;
     merged.seed_ids = projection.seed_ids;
     merged.projection_built_at = Some(projection.built_at);
+    merged.projection_status = "ready".to_string();
     Ok(merged)
 }
 
@@ -66,6 +86,11 @@ pub fn get_graph_snapshot_for_case_read_only(
     )? {
         merge_snapshot(&mut merged, get_graph_snapshot(&source_conn, case_id)?);
     }
+    let mut projection_status = if super::case_graph::case_graph_exists(case_root) {
+        "stale"
+    } else {
+        "missing"
+    };
     if let Some(case_graph) =
         super::case_graph::open_case_graph_if_current(case_conn, case_root, case_id)?
     {
@@ -89,8 +114,10 @@ pub fn get_graph_snapshot_for_case_read_only(
         merged.cross_source_edge_count = projection.cross_source_edge_count;
         merged.seed_ids = projection.seed_ids;
         merged.projection_built_at = Some(projection.built_at);
+        projection_status = "ready";
     }
     merged.density = graph_density(merged.total_nodes, merged.total_edges);
+    merged.projection_status = projection_status.to_string();
     Ok(merged)
 }
 
@@ -254,5 +281,6 @@ fn empty_snapshot() -> GraphSnapshotDto {
         cross_source_edge_count: 0,
         seed_ids: Vec::new(),
         projection_built_at: None,
+        projection_status: "missing".to_string(),
     }
 }

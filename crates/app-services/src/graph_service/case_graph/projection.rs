@@ -121,6 +121,10 @@ fn case_graph_path(case_root: &Path) -> PathBuf {
     case_root.join(CASE_GRAPH_DB_RELATIVE_PATH)
 }
 
+pub(crate) fn case_graph_exists(case_root: &Path) -> bool {
+    case_graph_path(case_root).is_file()
+}
+
 fn current_projection(
     connection: &Connection,
     case_id: &str,

@@ -12,6 +12,7 @@ mod timeline_context;
 pub use snapshot::{
     get_correlation_snapshot, get_correlation_snapshot_for_case,
     get_correlation_snapshot_incremental, get_correlation_snapshot_read_only_for_case,
+    rebuild_correlation_snapshot_for_case,
 };
 
 pub use cache::invalidate_correlation_cache;

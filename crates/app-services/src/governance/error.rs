@@ -33,6 +33,9 @@ impl From<crate::correlation::CorrelationError> for GovernanceError {
                 Self::Unsupported(message)
             }
             crate::correlation::CorrelationError::Other(message) => Self::Internal(message),
+            crate::correlation::CorrelationError::Cancelled => {
+                Self::Internal("Correlation projection cancelled".to_string())
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 use domain::CaseId;
 use persistence_sqlite::repositories::infrastructure_graph_repo::InfrastructureGraphRepo;
+use std::sync::atomic::{AtomicBool, Ordering};
 use transport::dto::{
     InfrastructureGraphDto, InfrastructureGraphEdgeDto, InfrastructureGraphNodeDto,
     InfrastructureNetworkFactDto,
@@ -8,6 +9,42 @@ use transport::dto::{
 mod kubernetes_network_facts;
 mod network_facts;
 mod platform_facts;
+
+#[derive(Debug, thiserror::Error)]
+pub enum InfrastructureProjectionError {
+    #[error("database error: {0}")]
+    Db(#[from] persistence_sqlite::DbError),
+    #[error("infrastructure projection cancelled")]
+    Cancelled,
+}
+
+impl transport::ServiceErrorCategory for InfrastructureProjectionError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::Cancelled => transport::ErrorCategory::Cancelled,
+        }
+    }
+}
+
+pub fn rebuild_infrastructure_graph_for_case(
+    connection: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    cancel_token: &AtomicBool,
+) -> Result<(), InfrastructureProjectionError> {
+    ensure_not_cancelled(cancel_token)?;
+    get_infrastructure_graph(connection, case_root, case_id)?;
+    ensure_not_cancelled(cancel_token)
+}
+
+fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<(), InfrastructureProjectionError> {
+    if cancel_token.load(Ordering::Relaxed) {
+        Err(InfrastructureProjectionError::Cancelled)
+    } else {
+        Ok(())
+    }
+}
 
 pub fn get_infrastructure_graph(
     connection: &rusqlite::Connection,

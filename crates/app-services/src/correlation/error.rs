@@ -8,6 +8,8 @@ pub enum CorrelationError {
     InvalidInput(String),
     #[error("unsupported: {0}")]
     Unsupported(String),
+    #[error("correlation projection cancelled")]
+    Cancelled,
     #[error("{0}")]
     Other(String),
 }
@@ -25,6 +27,7 @@ impl transport::ServiceErrorCategory for CorrelationError {
             Self::Json(_) => transport::ErrorCategory::Parser,
             Self::InvalidInput(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
+            Self::Cancelled => transport::ErrorCategory::Cancelled,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
     }

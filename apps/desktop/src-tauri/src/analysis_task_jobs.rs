@@ -67,18 +67,26 @@ where
             worker_token,
             operation,
         );
-        let _ = result_tx.send(result);
-        Ok(())
+        result_tx
+            .send(result)
+            .map_err(|_| "Analysis task result receiver closed".to_string())
     });
     if let Err(error) = registration {
-        settle_registration_failure(&db_path, &job_id, &error);
+        settle_registration_failure(&db_path, &job_id, &error)?;
         return Err(registration_error(error));
     }
 
     event_bridge::emit_job_created(app, &task_id, request.kind);
-    result_rx
+    let result = result_rx
         .recv()
-        .map_err(|_| CommandError::internal("Analysis task ended without a result"))?
+        .map_err(|_| CommandError::internal("Analysis task ended without a result"))??;
+    crate::case_projection_jobs::schedule(
+        &state.task_manager,
+        app,
+        request.case_id,
+        request.case_root,
+    )?;
+    Ok(result)
 }
 
 fn execute<T, F>(
@@ -122,7 +130,8 @@ where
         }
         Err(error) if error.category == "cancelled" => {
             let detail = error.message.clone();
-            let _ = repo.cancel(&job, &detail);
+            repo.cancel(&job, &detail)
+                .map_err(CommandError::from_typed_service_error)?;
             if let Some(app) = app {
                 event_bridge::emit_job_cancelled(app, job_id, &detail);
             }
@@ -130,7 +139,8 @@ where
         }
         Err(error) => {
             let detail = error.message.clone();
-            let _ = repo.fail(&job, &detail);
+            repo.fail(&job, &detail)
+                .map_err(CommandError::from_typed_service_error)?;
             if let Some(app) = app {
                 event_bridge::emit_job_failed(app, job_id, &detail);
             }
@@ -150,12 +160,13 @@ fn settle_registration_failure(
     db_path: &Path,
     job_id: &domain::JobId,
     error: &TaskRegistrationError,
-) {
-    let Ok(connection) = app_services::connection::open_existing_case_db(db_path) else {
-        return;
-    };
+) -> Result<(), CommandError> {
+    let connection = app_services::connection::open_existing_case_db(db_path)
+        .map_err(CommandError::from_typed_service_error)?;
     let detail = format!("Analysis task registration failed: {error}");
-    let _ = JobRepo::new(&connection).fail(job_id, &detail);
+    JobRepo::new(&connection)
+        .fail(job_id, &detail)
+        .map_err(CommandError::from_typed_service_error)
 }
 
 fn registration_error(error: TaskRegistrationError) -> CommandError {

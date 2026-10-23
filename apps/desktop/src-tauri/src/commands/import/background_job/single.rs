@@ -96,6 +96,12 @@ pub(crate) fn run_background_import_job(
                 .map_err(CommandError::from_typed_service_error)?;
             if let Some(app) = app {
                 event_bridge::emit_job_completed(app, &job.job_id.0, &message);
+                crate::case_projection_jobs::schedule(
+                    &task_manager,
+                    app,
+                    &job.case_id.0,
+                    &job.case_root,
+                )?;
             }
             if let Err(error) = super::evidence_hash::schedule_pending_evidence_hashes(
                 &job.case_root,

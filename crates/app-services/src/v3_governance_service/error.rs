@@ -51,6 +51,9 @@ impl From<crate::graph_service::GraphServiceError> for V3GovernanceError {
                 Self::Unsupported(message)
             }
             crate::graph_service::GraphServiceError::Other(message) => Self::Other(message),
+            crate::graph_service::GraphServiceError::Cancelled => {
+                Self::Other("Case graph projection cancelled".to_string())
+            }
         }
     }
 }

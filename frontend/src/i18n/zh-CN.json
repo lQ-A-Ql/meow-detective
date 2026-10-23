@@ -276,7 +276,11 @@
       "notCalculated": "未计算",
       "nodeTypes": "节点类型数",
       "byNodeType": "按节点类型",
-      "byEdgeType": "按边类型"
+      "byEdgeType": "按边类型",
+      "projection": {
+        "missing": "案件图谱投影尚未生成，导入或分析完成后会自动构建。",
+        "stale": "案件图谱投影已过期，正在显示上一完整世代；后台会按当前证据集重建。"
+      }
     },
     "metricsHidden": "其余 {{count}} 项均为 0"
   },

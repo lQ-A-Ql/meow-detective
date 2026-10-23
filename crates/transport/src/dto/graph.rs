@@ -81,6 +81,10 @@ fn default_edge_limit() -> u32 {
     400
 }
 
+fn default_projection_status() -> String {
+    "missing".to_string()
+}
+
 /// Query parameters for traversing the investigative graph.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -124,6 +128,9 @@ pub struct GraphQueryResultDto {
     /// Data sources represented by returned source-scoped nodes.
     #[serde(default)]
     pub data_source_ids: Vec<String>,
+    /// Current projection state: ready, stale, missing, or source.
+    #[serde(default = "default_projection_status")]
+    pub projection_status: String,
 }
 
 /// Request DTO for listing graph nodes without requiring a traversal seed.
@@ -170,6 +177,9 @@ pub struct GraphSnapshotDto {
     /// ISO 8601 timestamp of the current case graph projection.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub projection_built_at: Option<String>,
+    /// Current projection state: ready, stale, missing, or source.
+    #[serde(default = "default_projection_status")]
+    pub projection_status: String,
 }
 
 /// Request DTO for `get_node_neighborhood`.

@@ -13,7 +13,7 @@ pub use source_aggregation::{
     get_graph_snapshot_for_case, get_graph_snapshot_for_case_read_only,
     get_node_neighborhood_for_case, get_node_neighborhood_for_case_read_only,
     get_provenance_chain_for_case, get_provenance_chain_for_case_read_only, query_graph_for_case,
-    query_graph_for_case_read_only,
+    query_graph_for_case_read_only, rebuild_case_graph_for_case,
 };
 
 #[cfg(test)]

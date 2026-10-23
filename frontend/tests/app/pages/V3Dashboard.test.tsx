@@ -184,6 +184,29 @@ describe('V3Dashboard', () => {
     expect(screen.getByText('parentChild')).toBeDefined();
   });
 
+  it('reports a stale graph projection without hiding the last generation', () => {
+    mocks.useGraphSnapshot.mockReturnValue(
+      queryState({
+        nodeCountByType: { file: 150, artifact: 42, timeline: 255 },
+        edgeCountByType: { pathMatch: 38 },
+        totalNodes: 392,
+        totalEdges: 277,
+        density: 0.0026,
+        largestComponentSize: 180,
+        dataSourceCount: 2,
+        crossSourceEntityCount: 1,
+        crossSourceEdgeCount: 2,
+        seedIds: ['case:entity:alice'],
+        projectionStatus: 'stale',
+      }),
+    );
+
+    render(<V3Dashboard />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('上一完整世代');
+    expect(screen.getAllByText('392').length).toBeGreaterThanOrEqual(1);
+  });
+
   it('uses backend-selected case graph seeds and reports a bounded result', () => {
     render(<V3Dashboard />);
 

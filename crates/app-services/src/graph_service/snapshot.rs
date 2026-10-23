@@ -24,6 +24,7 @@ pub fn get_graph_snapshot(
         cross_source_edge_count: 0,
         seed_ids: Vec::new(),
         projection_built_at: None,
+        projection_status: "source".to_string(),
     })
 }
 

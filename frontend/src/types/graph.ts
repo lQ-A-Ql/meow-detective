@@ -47,6 +47,7 @@ export interface GraphQueryResult {
   truncated: boolean;
   maxDepthReached: number;
   dataSourceIds: string[];
+  projectionStatus?: 'ready' | 'stale' | 'missing' | 'source';
 }
 
 export interface GraphSnapshot {
@@ -61,6 +62,7 @@ export interface GraphSnapshot {
   crossSourceEdgeCount: number;
   seedIds: string[];
   projectionBuiltAt?: string;
+  projectionStatus?: 'ready' | 'stale' | 'missing' | 'source';
 }
 
 export interface GraphStats {

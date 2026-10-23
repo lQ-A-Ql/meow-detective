@@ -52,7 +52,7 @@ pub(crate) fn schedule_linux_artifact_analysis(
     let case_id = case_id.clone();
     let data_source_id = data_source_id.clone();
     let app = app.cloned();
-    let worker_task_id = task_id.clone();
+    let worker_task_manager = Arc::clone(&task_manager);
     let cancel_token = Arc::new(AtomicBool::new(false));
     let worker_cancel = Arc::clone(&cancel_token);
     let registration = task_manager.spawn_scoped(task_id.clone(), scope, cancel_token, move || {
@@ -62,8 +62,8 @@ pub(crate) fn schedule_linux_artifact_analysis(
             &data_source_id,
             app.as_ref(),
             worker_cancel,
-            &worker_task_id,
             &job_id_value,
+            &worker_task_manager,
         )
     });
     registration.map_err(|error| {
@@ -89,8 +89,8 @@ fn run_linux_artifact_analysis(
     data_source_id: &DataSourceId,
     app: Option<&AppHandle>,
     cancel_token: Arc<AtomicBool>,
-    _task_id: &str,
     job_id: &str,
+    task_manager: &Arc<TaskManager>,
 ) -> Result<(), String> {
     if let Some(app) = app {
         event_bridge::emit_job_created(app, job_id, "Linux artifact analysis");
@@ -133,6 +133,11 @@ fn run_linux_artifact_analysis(
             if let Some(app) = app {
                 event_bridge::emit_job_progress(app, &job_id.0, 100, &detail);
                 event_bridge::emit_job_completed(app, &job_id.0, &detail);
+                if let Err(error) =
+                    crate::case_projection_jobs::schedule(task_manager, app, &case_id.0, case_root)
+                {
+                    return Err(error.message);
+                }
             }
             Ok(())
         }

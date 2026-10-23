@@ -12,6 +12,8 @@ pub enum GraphServiceError {
     InvalidInput(String),
     #[error("unsupported: {0}")]
     Unsupported(String),
+    #[error("case graph projection cancelled")]
+    Cancelled,
     #[error("{0}")]
     Other(String),
 }
@@ -46,6 +48,7 @@ impl transport::ServiceErrorCategory for GraphServiceError {
             Self::Json(_) => transport::ErrorCategory::Parser,
             Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
+            Self::Cancelled => transport::ErrorCategory::Cancelled,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
     }

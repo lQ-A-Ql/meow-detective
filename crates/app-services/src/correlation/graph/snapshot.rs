@@ -11,6 +11,7 @@ use chrono::Utc;
 use rusqlite::Connection;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 use transport::dto::{
     ArtifactRowDto, CorrelationEdgeDto, CorrelationNodeDto, CorrelationSnapshotDto,
     TimelineEventDto,
@@ -67,6 +68,25 @@ pub fn get_correlation_snapshot_read_only_for_case(
     }
     finalize_snapshot_counts(&mut merged);
     Ok(merged)
+}
+
+pub fn rebuild_correlation_snapshot_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    cancel_token: &AtomicBool,
+) -> Result<(), CorrelationError> {
+    ensure_not_cancelled(cancel_token)?;
+    get_correlation_snapshot_for_case(case_conn, case_root, case_id)?;
+    ensure_not_cancelled(cancel_token)
+}
+
+fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<(), CorrelationError> {
+    if cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
+        Err(CorrelationError::Cancelled)
+    } else {
+        Ok(())
+    }
 }
 
 pub fn get_correlation_snapshot_incremental(

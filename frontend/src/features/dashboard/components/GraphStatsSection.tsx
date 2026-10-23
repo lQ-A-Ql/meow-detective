@@ -28,6 +28,14 @@ export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined })
           </>
         ) : null}
       </StatGrid>
+      {data && data.projectionStatus !== 'ready' && data.projectionStatus !== 'source' ? (
+        <div
+          role="status"
+          className="mt-3 border border-forensics-warning-border bg-forensics-warning-bg px-3 py-2 text-[11px] text-forensics-warning-text"
+        >
+          {t(`dashboard.graph.projection.${data.projectionStatus ?? 'missing'}`)}
+        </div>
+      ) : null}
       {data ? (
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>

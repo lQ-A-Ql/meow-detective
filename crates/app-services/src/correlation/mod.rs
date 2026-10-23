@@ -14,7 +14,7 @@ pub use error::CorrelationError;
 pub use self::graph::{
     get_correlation_snapshot, get_correlation_snapshot_for_case,
     get_correlation_snapshot_incremental, get_correlation_snapshot_read_only_for_case,
-    invalidate_correlation_cache,
+    invalidate_correlation_cache, rebuild_correlation_snapshot_for_case,
 };
 
 pub(crate) use helpers::{

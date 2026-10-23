@@ -51,6 +51,9 @@ impl From<crate::correlation::CorrelationError> for ReportError {
                 Self::Unsupported(message)
             }
             crate::correlation::CorrelationError::Other(message) => Self::Other(message),
+            crate::correlation::CorrelationError::Cancelled => {
+                Self::Other("Correlation projection cancelled".to_string())
+            }
         }
     }
 }

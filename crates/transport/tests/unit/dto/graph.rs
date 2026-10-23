@@ -150,6 +150,7 @@ fn graph_query_result_dto_serializes_camel_case() {
         truncated: true,
         max_depth_reached: 2,
         data_source_ids: vec!["source-1".to_string()],
+        projection_status: "ready".to_string(),
     };
 
     let json = serde_json::to_value(result).unwrap();
@@ -205,6 +206,7 @@ fn graph_snapshot_dto_serializes_camel_case() {
         cross_source_edge_count: 6,
         seed_ids: vec!["case:entity:one".to_string()],
         projection_built_at: Some("2026-08-02T00:00:00Z".to_string()),
+        projection_status: "ready".to_string(),
     };
 
     let json = serde_json::to_value(snapshot).unwrap();
@@ -217,6 +219,7 @@ fn graph_snapshot_dto_serializes_camel_case() {
     assert_eq!(json["crossSourceEntityCount"], 3);
     assert_eq!(json["crossSourceEdgeCount"], 6);
     assert_eq!(json["seedIds"][0], "case:entity:one");
+    assert_eq!(json["projectionStatus"], "ready");
     assert_eq!(json["nodeCountByType"]["file"], 42);
     assert_eq!(json["nodeCountByType"]["artifact"], 15);
     assert_eq!(json["edgeCountByType"]["references"], 30);

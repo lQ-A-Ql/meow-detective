@@ -276,7 +276,11 @@
       "notCalculated": "Not calculated",
       "nodeTypes": "Node types",
       "byNodeType": "By node type",
-      "byEdgeType": "By edge type"
+      "byEdgeType": "By edge type",
+      "projection": {
+        "missing": "The case graph projection has not been built yet. It will be scheduled after import or analysis completes.",
+        "stale": "The case graph projection is stale. The last complete generation is shown while the current evidence set is rebuilt."
+      }
     },
     "metricsHidden": "{{count}} remaining metrics are zero"
   },

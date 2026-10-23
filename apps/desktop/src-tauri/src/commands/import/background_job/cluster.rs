@@ -31,6 +31,7 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
     let connection = app_services::connection::open_existing_case_db(&job.db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let job_repo = JobRepo::new(&connection);
+    let projection_task_manager = task_manager.as_ref().cloned();
     if cancel_token.load(Ordering::Relaxed) {
         cancel_job(
             &job_repo,
@@ -104,6 +105,14 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
                     job.plan.members.len() as u32,
                     0,
                 );
+                if let (Some(task_manager), Some(app)) = (projection_task_manager.as_ref(), app) {
+                    crate::case_projection_jobs::schedule(
+                        task_manager,
+                        app,
+                        &job.case_id.0,
+                        &job.case_root,
+                    )?;
+                }
             }
             Ok(outcome)
         }

@@ -1,16 +1,18 @@
 //! Query entry points must preserve source files even when no WAL exists yet.
 use app_services::{
-    analysis_service as analysis, case_service, correlation, graph_service,
-    infrastructure_graph_service, source_db, timeline_service, v2_governance_service,
-    v3_governance_service,
+    analysis_service as analysis, case_projection_service, case_service, correlation,
+    graph_service, infrastructure_graph_service, source_db, timeline_service,
+    v2_governance_service, v3_governance_service,
 };
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
 use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
+    graph_repo::GraphRepo,
     timeline_repo::TimelineRepo,
 };
 use rusqlite::Connection;
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 
 fn source(
     case: &Connection,
@@ -306,4 +308,82 @@ fn dashboard_graph_correlation_and_infrastructure_queries_do_not_build_or_replac
     });
     assert_eq!(std::fs::read(&case_path).unwrap(), case_before);
     assert!(!graph_path.exists());
+}
+
+#[test]
+fn projection_builder_publishes_ready_then_reports_stale_generation() {
+    let temp = tempfile::tempdir().unwrap();
+    let active = case_service::create_case(temp.path(), "projection-builder", None).unwrap();
+    let id = active
+        .with_conn(|db| {
+            Ok(source(
+                db,
+                &active.case_root,
+                &active.meta.id,
+                "projection",
+                "linux",
+            ))
+        })
+        .unwrap();
+    let case_path = active.db_path();
+    let write_case = app_services::connection::open_existing_case_db(&case_path).unwrap();
+    let report = case_projection_service::rebuild_case_projections(
+        &write_case,
+        &active.case_root,
+        &active.meta.id.0,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert!(report.graph_rebuilt && report.correlation_rebuilt && report.infrastructure_rebuilt);
+    assert!(active.case_root.join("indexes/case-graph.db").is_file());
+
+    let read_case = persistence_sqlite::open_existing_source_read_only(&case_path).unwrap();
+    let ready = graph_service::get_graph_snapshot_for_case_read_only(
+        &read_case,
+        &active.case_root,
+        &active.meta.id.0,
+    )
+    .unwrap();
+    assert_eq!(ready.projection_status, "ready");
+
+    let source_conn = source_db::open_source_db(&active.case_root, &id).unwrap();
+    GraphRepo::new(&source_conn)
+        .insert_nodes_batch(&[domain::GraphNode {
+            id: "projection-new-node".to_string(),
+            case_id: active.meta.id.0.clone(),
+            node_type: domain::NodeType::Artifact,
+            label: "new artifact".to_string(),
+            summary: "forces a new source manifest".to_string(),
+            tags: vec!["fixture".to_string()],
+            created_at: "2026-10-23T00:00:00Z".to_string(),
+        }])
+        .unwrap();
+
+    let stale = graph_service::get_graph_snapshot_for_case_read_only(
+        &read_case,
+        &active.case_root,
+        &active.meta.id.0,
+    )
+    .unwrap();
+    assert_eq!(stale.projection_status, "stale");
+}
+
+#[test]
+fn projection_builder_honors_pre_cancelled_work() {
+    let temp = tempfile::tempdir().unwrap();
+    let active = case_service::create_case(temp.path(), "projection-cancel", None).unwrap();
+    let case_path = active.db_path();
+    let connection = app_services::connection::open_existing_case_db(&case_path).unwrap();
+    let error = case_projection_service::rebuild_case_projections(
+        &connection,
+        &active.case_root,
+        &active.meta.id.0,
+        &AtomicBool::new(true),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        case_projection_service::CaseProjectionError::Cancelled
+    ));
+    assert!(!active.case_root.join("indexes/case-graph.db").exists());
 }

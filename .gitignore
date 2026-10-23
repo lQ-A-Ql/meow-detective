@@ -108,3 +108,6 @@ apps/desktop/src-tauri/resources/tools/
 /experiments/jfs-4-9/
 /论文/
 /软著申请资料/
+
+# Workspace-local temporary verification artifacts.
+/.codex-tmp/
