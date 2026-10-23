@@ -46,6 +46,7 @@ pub use kubeconfig_parser::{
 };
 pub use kubernetes_analysis::{
     get_source_kubernetes_cluster_summary, run_kubernetes_cluster_analysis,
+    run_kubernetes_cluster_analysis_with_cancel,
 };
 pub use kubernetes_dispatch::{parse_kubernetes_artifact, KubernetesParsedArtifact};
 pub use kubernetes_inventory::{
@@ -102,6 +103,8 @@ pub enum ClusterServiceError {
     Json(#[from] serde_json::Error),
     #[error("CephFS presence assessment failed: {0}")]
     CephFsPresence(#[from] crate::ceph_reconstruction::CephFsPresenceError),
+    #[error("analysis cancelled")]
+    Cancelled,
 }
 
 impl From<rusqlite::Error> for ClusterServiceError {
@@ -126,6 +129,7 @@ impl transport::ServiceErrorCategory for ClusterServiceError {
             Self::Notebook(error) => error.category(),
             Self::Json(_) => transport::ErrorCategory::Internal,
             Self::CephFsPresence(error) => error.category(),
+            Self::Cancelled => transport::ErrorCategory::Cancelled,
         }
     }
 }

@@ -1,6 +1,6 @@
 use app_services::analysis_service;
 use domain::DataSourceId;
-use tauri::State;
+use tauri::{AppHandle, State};
 use transport::{
     commands::{GetAnalysisSourceRequest, GetAndroidPackagesRequest},
     dto::{
@@ -10,7 +10,9 @@ use transport::{
     CommandError,
 };
 
-use super::support::{run_active_case_command, run_read_case_command, validate_source_request};
+use super::support::{run_read_case_command, validate_source_request};
+use crate::analysis_task_jobs::{self, AnalysisTaskRequest};
+use crate::commands::command_support::require_active_case;
 use crate::state::AppState;
 
 #[tauri::command]
@@ -61,6 +63,7 @@ pub async fn get_kubernetes_cluster_summary(
 
 #[tauri::command]
 pub async fn run_android_analysis(
+    app: AppHandle,
     state: State<'_, AppState>,
     request: GetAnalysisSourceRequest,
 ) -> Result<AndroidAnalysisRunDto, CommandError> {
@@ -71,17 +74,37 @@ pub async fn run_android_analysis(
     );
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
-        analysis_service::run_source_android_analysis(
-            case_conn,
-            &active.case_root,
-            &active.meta.id,
-            &data_source_id,
-            &source_runtime,
+    tauri::async_runtime::spawn_blocking(move || {
+        let active = require_active_case(&app_state)?;
+        let case_id = active.meta.id.0.clone();
+        let case_root = active.case_root.clone();
+        let worker_case_id = case_id.clone();
+        let worker_case_root = case_root.clone();
+        let worker_data_source_id = data_source_id.clone();
+        analysis_task_jobs::run(
+            &app_state,
+            &app,
+            AnalysisTaskRequest {
+                case_id: &case_id,
+                case_root: &case_root,
+                data_source_id: Some(&data_source_id.0),
+                kind: "Android analysis",
+            },
+            move |case_conn, cancel_token| {
+                analysis_service::run_source_android_analysis_with_cancel(
+                    case_conn,
+                    &worker_case_root,
+                    &domain::CaseId(worker_case_id),
+                    &worker_data_source_id,
+                    &source_runtime,
+                    &cancel_token,
+                )
+                .map_err(CommandError::from_typed_service_error)
+            },
         )
-        .map_err(CommandError::from_typed_service_error)
     })
     .await
+    .map_err(CommandError::from_join_error)?
 }
 
 #[tauri::command]

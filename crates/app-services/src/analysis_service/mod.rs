@@ -51,8 +51,11 @@ pub use use_cases::{
     get_source_linux_summary, get_source_plugin_family_entries, get_source_plugin_modules,
     get_source_registry_structured_summary, get_source_registry_summary, get_source_system_info,
     run_source_analysis_extraction, run_source_analysis_extraction_with_cancel,
-    run_source_analysis_extraction_with_progress, run_source_android_analysis,
-    run_source_evidence_scan, AnalysisExtractionProgressContext, AnalysisSourceReadRuntime,
+    run_source_analysis_extraction_with_progress,
+    run_source_analysis_extraction_with_progress_and_cancel, run_source_android_analysis,
+    run_source_android_analysis_with_cancel, run_source_evidence_scan,
+    run_source_evidence_scan_with_cancel, AnalysisExtractionProgressContext,
+    AnalysisSourceReadRuntime,
 };
 
 pub const DEFAULT_SAMPLE_SIZE: u32 = 1000;

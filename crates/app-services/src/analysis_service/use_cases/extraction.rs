@@ -95,9 +95,35 @@ pub fn run_source_analysis_extraction_with_progress(
     data_source_id: &DataSourceId,
     categories: &[&str],
     context: AnalysisExtractionProgressContext<'_>,
+    progress: impl FnMut(AnalysisExtractionProgressDto),
+) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
+    run_source_analysis_extraction_with_progress_and_cancel(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        categories,
+        context,
+        &AtomicBool::new(false),
+        progress,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_source_analysis_extraction_with_progress_and_cancel(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    categories: &[&str],
+    context: AnalysisExtractionProgressContext<'_>,
+    cancel_token: &AtomicBool,
     mut progress: impl FnMut(AnalysisExtractionProgressDto),
 ) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
-    let cancel_token = Arc::new(AtomicBool::new(false));
+    super::super::cancellation::ensure_not_cancelled(cancel_token)?;
+    let cancel_token = Arc::new(AtomicBool::new(
+        cancel_token.load(std::sync::atomic::Ordering::Relaxed),
+    ));
     let mut emit = |update: ExtractionProgressUpdate| {
         progress(AnalysisExtractionProgressDto {
             run_id: context.run_id.to_string(),
@@ -120,7 +146,7 @@ pub fn run_source_analysis_extraction_with_progress(
         });
     };
     let control = AnalysisExecutionControl {
-        cancel_token,
+        cancel_token: Arc::clone(&cancel_token),
         source_runtime: context.source_runtime,
         progress: &mut emit,
         browser_password: context.browser_password.as_deref().map(String::as_str),
@@ -133,7 +159,10 @@ pub fn run_source_analysis_extraction_with_progress(
         categories,
         control,
     )
-    .map(|execution| execution.dto)
+    .and_then(|execution| {
+        super::super::cancellation::ensure_not_cancelled(&cancel_token)?;
+        Ok(execution.dto)
+    })
 }
 
 pub(crate) fn run_source_analysis_extraction_execution_with_cancel(

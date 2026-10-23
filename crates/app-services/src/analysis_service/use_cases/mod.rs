@@ -9,15 +9,19 @@ mod summary;
 mod system_info;
 
 pub use android::{
-    get_source_android_device_info, get_source_android_package_summary, run_source_android_analysis,
+    get_source_android_device_info, get_source_android_package_summary,
+    run_source_android_analysis, run_source_android_analysis_with_cancel,
 };
 pub use classification::{classify_source_files, get_file_classification_board};
-pub use evidence::{get_source_evidence_summary, run_source_evidence_scan};
+pub use evidence::{
+    get_source_evidence_summary, run_source_evidence_scan, run_source_evidence_scan_with_cancel,
+};
 pub(crate) use extraction::run_import_source_extraction;
 pub(crate) use extraction::run_source_analysis_extraction_execution_with_cancel;
 pub use extraction::{
     run_source_analysis_extraction, run_source_analysis_extraction_with_cancel,
-    run_source_analysis_extraction_with_progress, AnalysisExtractionProgressContext,
+    run_source_analysis_extraction_with_progress,
+    run_source_analysis_extraction_with_progress_and_cancel, AnalysisExtractionProgressContext,
 };
 pub use queries::{
     get_source_browser_summary, get_source_email_summary, get_source_evtx_summary,

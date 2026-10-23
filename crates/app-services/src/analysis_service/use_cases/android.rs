@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 
 use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
@@ -17,6 +18,25 @@ pub fn run_source_android_analysis(
     data_source_id: &DataSourceId,
     runtime: &AnalysisSourceReadRuntime,
 ) -> Result<AndroidAnalysisRunDto, AnalysisServiceError> {
+    run_source_android_analysis_with_cancel(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        runtime,
+        &AtomicBool::new(false),
+    )
+}
+
+pub fn run_source_android_analysis_with_cancel(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    runtime: &AnalysisSourceReadRuntime,
+    cancel_token: &AtomicBool,
+) -> Result<AndroidAnalysisRunDto, AnalysisServiceError> {
+    super::super::cancellation::ensure_not_cancelled(cancel_token)?;
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
     validate_analysis_categories(source.platform, &["AndroidDevice", "AndroidPackages"])?;
     let mut reader = runtime.bind(SourceReadContext::new(
@@ -26,7 +46,10 @@ pub fn run_source_android_analysis(
         case_id,
         data_source_id,
     ));
-    android::run_android_source_analysis(&source.connection, &mut reader, data_source_id)
+    let result =
+        android::run_android_source_analysis(&source.connection, &mut reader, data_source_id)?;
+    super::super::cancellation::ensure_not_cancelled(cancel_token)?;
+    Ok(result)
 }
 
 pub fn get_source_android_device_info(

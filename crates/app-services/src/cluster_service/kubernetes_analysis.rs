@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use domain::{CaseId, DataSourceId, KubernetesScopeId};
 use persistence_sqlite::repositories::{
@@ -166,6 +167,23 @@ pub fn run_kubernetes_cluster_analysis(
     case_id: &CaseId,
     import_set_id: &str,
 ) -> Result<transport::dto::KubernetesAnalysisRunDto> {
+    run_kubernetes_cluster_analysis_with_cancel(
+        case_connection,
+        case_root,
+        case_id,
+        import_set_id,
+        &AtomicBool::new(false),
+    )
+}
+
+pub fn run_kubernetes_cluster_analysis_with_cancel(
+    case_connection: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    import_set_id: &str,
+    cancel_token: &AtomicBool,
+) -> Result<transport::dto::KubernetesAnalysisRunDto> {
+    ensure_not_cancelled(cancel_token)?;
     let scope = LinuxTopologyScopeRepo::new(case_connection)
         .find_for_import_set(
             &case_id.0,
@@ -202,8 +220,25 @@ pub fn run_kubernetes_cluster_analysis(
         ],
     )?;
 
-    let (parsed_count, failed_count, diagnostics) =
-        process_kubernetes_sources(case_connection, case_root, case_id, source_ids, &run_id)?;
+    let processed = process_kubernetes_sources(
+        case_connection,
+        case_root,
+        case_id,
+        source_ids,
+        &run_id,
+        cancel_token,
+    );
+    let (parsed_count, failed_count, diagnostics) = match processed {
+        Ok(result) => result,
+        Err(super::ClusterServiceError::Cancelled) => {
+            mark_run_cancelled(case_connection, &run_id)?;
+            return Err(super::ClusterServiceError::Cancelled);
+        }
+        Err(error) => {
+            mark_run_failed(case_connection, &run_id, &error.to_string())?;
+            return Err(error);
+        }
+    };
     let state = if failed_count > 0 {
         "failed"
     } else {
@@ -244,11 +279,13 @@ fn process_kubernetes_sources(
     case_id: &CaseId,
     source_ids: Vec<DataSourceId>,
     run_id: &str,
+    cancel_token: &AtomicBool,
 ) -> Result<(u32, u32, Vec<String>)> {
     let mut parsed_count = 0u32;
     let mut failed_count = 0u32;
     let mut diagnostics = Vec::new();
     for source_id in source_ids {
+        ensure_not_cancelled(cancel_token)?;
         let source = crate::source_db::open_ready_source_read_only_by_id(
             case_connection,
             case_root,
@@ -266,6 +303,7 @@ fn process_kubernetes_sources(
             &source_id,
         );
         for artifact in inventory.artifacts {
+            ensure_not_cancelled(cancel_token)?;
             let max_bytes = artifact.size.min(16 * 1024 * 1024) as u32;
             let parsed = crate::file_service::read_file_bytes_for_case(
                 &mut read_context,
@@ -309,4 +347,35 @@ fn process_kubernetes_sources(
         }
     }
     Ok((parsed_count, failed_count, diagnostics))
+}
+
+fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<()> {
+    if cancel_token.load(Ordering::Relaxed) {
+        Err(super::ClusterServiceError::Cancelled)
+    } else {
+        Ok(())
+    }
+}
+
+fn mark_run_cancelled(connection: &Connection, run_id: &str) -> Result<()> {
+    connection.execute(
+        "UPDATE kubernetes_analysis_runs
+         SET state='cancelled', diagnostics_json='[\"analysis cancelled\"]',
+             finished_at=?1 WHERE id=?2",
+        rusqlite::params![chrono::Utc::now().to_rfc3339(), run_id],
+    )?;
+    Ok(())
+}
+
+fn mark_run_failed(connection: &Connection, run_id: &str, detail: &str) -> Result<()> {
+    connection.execute(
+        "UPDATE kubernetes_analysis_runs
+         SET state='failed', diagnostics_json=?1, finished_at=?2 WHERE id=?3",
+        rusqlite::params![
+            serde_json::json!([detail]).to_string(),
+            chrono::Utc::now().to_rfc3339(),
+            run_id
+        ],
+    )?;
+    Ok(())
 }

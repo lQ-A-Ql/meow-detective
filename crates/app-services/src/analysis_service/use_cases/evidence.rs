@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 
 use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
@@ -31,6 +32,27 @@ pub fn run_source_evidence_scan(
     requested_categories: &[&str],
     runtime: &AnalysisSourceReadRuntime,
 ) -> Result<EvidenceClassificationSummaryDto, AnalysisServiceError> {
+    run_source_evidence_scan_with_cancel(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        requested_categories,
+        runtime,
+        &AtomicBool::new(false),
+    )
+}
+
+pub fn run_source_evidence_scan_with_cancel(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    requested_categories: &[&str],
+    runtime: &AnalysisSourceReadRuntime,
+    cancel_token: &AtomicBool,
+) -> Result<EvidenceClassificationSummaryDto, AnalysisServiceError> {
+    super::super::cancellation::ensure_not_cancelled(cancel_token)?;
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
     let categories = select_evidence_scan_categories(source.platform, requested_categories)?;
     let mut source_reader = runtime.bind(file_service::SourceReadContext::new(
@@ -56,5 +78,6 @@ pub fn run_source_evidence_scan(
         },
     )
     .map_err(|error| AnalysisServiceError::Extraction(error.to_string()))?;
+    super::super::cancellation::ensure_not_cancelled(cancel_token)?;
     get_evidence_classification_summary(&source.connection, source.platform)
 }
