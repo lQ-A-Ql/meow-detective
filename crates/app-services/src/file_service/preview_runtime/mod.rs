@@ -6,6 +6,7 @@ mod registry;
 mod session;
 
 pub(crate) use prepared_file::PreparedFile;
+pub(crate) use registry::PreviewScopeToken;
 pub use registry::{PreviewRuntimeRegistry, PreviewRuntimeStats};
 pub(crate) use session::PreviewSession;
 

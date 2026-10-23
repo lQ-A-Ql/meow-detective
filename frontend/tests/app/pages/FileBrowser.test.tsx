@@ -311,6 +311,7 @@ describe('FileBrowser media preview', () => {
         handleId: 'file:video-1',
         size: videoFile.size,
         mime: 'video/mp4',
+        previewKind: 'video',
       }),
     );
     mocks.fileViewer.mockReturnValue(
@@ -395,7 +396,7 @@ describe('FileBrowser media preview', () => {
     expect(mocks.textPreview).toHaveBeenCalledWith('video-1', false);
     expect(mocks.imagePreview).toHaveBeenCalledWith('video-1', false);
     expect(mocks.mediaUrl).toHaveBeenCalledWith('video-1', true);
-    expect(mocks.fileHandle).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.fileHandle).toHaveBeenCalledWith('video-1', true);
   });
 
   it('shows large media controlled chunk fallback text and keeps extract available', () => {
