@@ -16,6 +16,7 @@ use thiserror::Error;
 use super::file_query::normalize;
 use super::file_schema::{build_search_schema, register_file_tokenizers};
 use super::index_identity::SearchIndexIdentity;
+use super::retry_directory::RetryMmapDirectory;
 
 #[derive(Debug, Error)]
 pub enum IndexError {
@@ -63,7 +64,7 @@ impl SearchIndex {
         let schema = build_search_schema();
 
         std::fs::create_dir_all(path)?;
-        let directory = tantivy::directory::MmapDirectory::open(path)
+        let directory = RetryMmapDirectory::open(path)
             .map_err(|e| IndexError::Io(std::io::Error::other(e.to_string())))?;
         let index_exists = Index::exists(&directory)
             .map_err(|error| IndexError::Io(std::io::Error::other(error.to_string())))?;
@@ -87,7 +88,9 @@ impl SearchIndex {
     }
 
     pub fn open(path: &Path) -> Result<Self> {
-        let index = Index::open_in_dir(path)?;
+        let directory = RetryMmapDirectory::open(path)
+            .map_err(|e| IndexError::Io(std::io::Error::other(e.to_string())))?;
+        let index = Index::open(directory)?;
         register_file_tokenizers(&index)?;
         let schema = index.schema();
         let identity = SearchIndexIdentity::load(path)?;

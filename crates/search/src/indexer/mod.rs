@@ -6,6 +6,7 @@ mod file_schema;
 mod file_search_after;
 mod index_identity;
 mod query_session;
+mod retry_directory;
 mod search_after;
 pub mod tantivy_writer;
 
