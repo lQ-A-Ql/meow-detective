@@ -25,10 +25,11 @@ fn open_media_session(
 
 #[test]
 fn media_preview_returns_data_url_without_host_path() {
+    let content = support::wav_fixture(64);
     support::with_logical_case_file(
         "media",
-        "clip.mp4",
-        b"tiny media bytes",
+        "clip.wav",
+        &content,
         |connection, case_id, file_id, evidence_dir, case_root| {
             let state = support::test_state_with_case(&case_id, case_root.clone());
             let media = media_data_url_for_file(&state, connection, &file_id)
@@ -47,10 +48,11 @@ fn media_preview_returns_data_url_without_host_path() {
 
 #[test]
 fn media_preview_logical_directory_reads_direct_without_service_fallback() {
+    let content = support::wav_fixture(64);
     support::with_logical_case_file(
         "media-inline-logical",
-        "clip.mp4",
-        b"tiny media bytes",
+        "clip.wav",
+        &content,
         |connection, case_id, file_id, _, case_root| {
             let state = support::test_state_with_case(&case_id, case_root.clone());
             let media = media_data_url_for_file(&state, connection, &file_id)
@@ -67,7 +69,7 @@ fn media_preview_logical_directory_reads_direct_without_service_fallback() {
                 base64::engine::general_purpose::STANDARD
                     .decode(encoded.as_bytes())
                     .unwrap(),
-                b"tiny media bytes"
+                content
             );
 
             Ok(())
@@ -79,7 +81,7 @@ fn media_preview_logical_directory_reads_direct_without_service_fallback() {
 fn media_preview_raw_image_reads_via_bytes_only_service_path() {
     support::with_raw_exfat_case_file(
         "media-raw-inline",
-        "mp4",
+        "wav",
         |connection, case_id, file_id, case_root| {
             let state = support::test_state_with_case(&case_id, case_root.clone());
             let media = media_data_url_for_file(&state, connection, &file_id)
@@ -96,9 +98,7 @@ fn media_preview_raw_image_reads_via_bytes_only_service_path() {
                 .decode(encoded.as_bytes())
                 .unwrap();
             assert_eq!(decoded.len(), 1536);
-            assert_eq!(&decoded[0..512], vec![b'A'; 512].as_slice());
-            assert_eq!(&decoded[512..1024], vec![b'B'; 512].as_slice());
-            assert_eq!(&decoded[1024..1536], vec![b'C'; 512].as_slice());
+            assert_eq!(decoded, support::wav_fixture(1536));
 
             Ok(())
         },
@@ -107,11 +107,12 @@ fn media_preview_raw_image_reads_via_bytes_only_service_path() {
 
 #[test]
 fn oversized_media_preview_returns_scoped_handle_and_range_reads() {
-    let oversized =
-        vec![b'A'; infrastructure::constants::MAX_INLINE_MEDIA_PREVIEW_BYTES as usize + 1];
+    let oversized = support::wav_fixture(
+        infrastructure::constants::MAX_INLINE_MEDIA_PREVIEW_BYTES as usize + 1,
+    );
     support::with_logical_case_file(
         "large-media",
-        "large.mp4",
+        "large.wav",
         &oversized,
         |connection, case_id, file_id, _, case_root| {
             let state = support::test_state_with_case(&case_id, case_root.clone());
@@ -126,7 +127,7 @@ fn oversized_media_preview_returns_scoped_handle_and_range_reads() {
             assert!(!media.url.as_deref().unwrap_or_default().contains("file:"));
             let media_json = serde_json::to_string(&media)
                 .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-            assert!(!media_json.contains("large.mp4"));
+            assert!(!media_json.contains("large.wav"));
             assert!(media.can_read_ranges);
             assert!(media.handle_id.is_some());
             assert_ne!(
@@ -145,7 +146,12 @@ fn oversized_media_preview_returns_scoped_handle_and_range_reads() {
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.message))?;
             assert_eq!(range.bytes_read, 4);
-            assert_eq!(range.bytes_base64, "QUFBQQ==");
+            assert_eq!(
+                base64::engine::general_purpose::STANDARD
+                    .decode(range.bytes_base64)
+                    .unwrap(),
+                b"RIFF"
+            );
             assert!(!range.eof);
 
             Ok(())

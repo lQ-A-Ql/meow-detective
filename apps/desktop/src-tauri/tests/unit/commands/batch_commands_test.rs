@@ -44,6 +44,7 @@ fn batch_plan_roundtrip_persists_job() {
     assert_eq!(job.phases.len(), 2);
     let listed = app_services::batch_service::list_batch_jobs(&connection, &case_id).unwrap();
     assert_eq!(listed.len(), 1);
+    drop(connection);
 
     state.clear_db_state().unwrap();
     std::fs::remove_dir_all(root).ok();

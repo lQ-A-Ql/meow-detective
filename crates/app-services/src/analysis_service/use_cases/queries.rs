@@ -10,7 +10,7 @@ use transport::dto::{
     RegistryStructuredSummaryDto,
 };
 
-use super::source::open_ready_analysis_source;
+use super::source::open_ready_analysis_source_read_only;
 use crate::analysis_service::capability::PLUGIN_CAPABILITY_KEY;
 use crate::analysis_service::extraction::{get_plugin_family_entries, list_plugin_modules};
 use crate::analysis_service::{
@@ -27,7 +27,8 @@ fn open_for_capability(
     data_source_id: &DataSourceId,
     capability: &str,
 ) -> Result<super::source::AnalysisSource, AnalysisServiceError> {
-    let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
+    let source =
+        open_ready_analysis_source_read_only(case_conn, case_root, case_id, data_source_id)?;
     validate_analysis_categories(source.platform, &[capability])?;
     Ok(source)
 }

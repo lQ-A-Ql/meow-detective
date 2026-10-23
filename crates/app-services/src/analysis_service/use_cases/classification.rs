@@ -4,7 +4,7 @@ use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
 use transport::dto::{AnalysisFileClassificationDto, FileClassificationBoardDto};
 
-use super::source::open_ready_analysis_source;
+use super::source::open_ready_analysis_source_read_only;
 use crate::analysis_service::file_classification::{
     build_file_classification_board, MAGIC_HEADER_BYTES,
 };
@@ -20,7 +20,8 @@ pub fn classify_source_files(
     data_source_id: &DataSourceId,
     sample_size: u32,
 ) -> Result<Vec<AnalysisFileClassificationDto>, AnalysisServiceError> {
-    let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
+    let source =
+        open_ready_analysis_source_read_only(case_conn, case_root, case_id, data_source_id)?;
     classify_files_by_metadata(&source.connection, sample_size)
 }
 
@@ -38,7 +39,8 @@ pub fn get_file_classification_board(
     magic_read_limit: u32,
     runtime: &AnalysisSourceReadRuntime,
 ) -> Result<FileClassificationBoardDto, AnalysisServiceError> {
-    let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
+    let source =
+        open_ready_analysis_source_read_only(case_conn, case_root, case_id, data_source_id)?;
     let mut source_reader = runtime.bind(SourceReadContext::new(
         &source.connection,
         case_conn,
@@ -50,11 +52,6 @@ pub fn get_file_classification_board(
         build_file_classification_board(&source.connection, magic_read_limit, |file_id| {
             source_reader.read_file_header_by_id(file_id, MAGIC_HEADER_BYTES)
         })?;
-    if let Err(error) = source_reader.flush_derived_filesystem_locators() {
-        board.warnings.push(format!(
-            "derived filesystem locator hints could not be persisted: {error}"
-        ));
-    }
     for group in &mut board.groups {
         for subcategory in &mut group.subcategories {
             for file in &mut subcategory.files {

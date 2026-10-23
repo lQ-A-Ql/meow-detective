@@ -18,7 +18,7 @@ pub async fn create_case(
 ) -> Result<CaseSummaryDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
-    let _lifecycle = app_state.case_lifecycle.lock().await;
+    let _lifecycle = app_state.case_transition().await?;
     let root = PathBuf::from(&request.case_root);
     let name = request.name;
     let examiner = request.examiner;

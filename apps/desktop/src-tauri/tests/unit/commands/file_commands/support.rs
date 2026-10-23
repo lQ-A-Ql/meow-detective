@@ -140,7 +140,7 @@ pub(super) fn with_raw_exfat_case_file(
 ) {
     let temporary = TempDir::new().unwrap();
     let raw_path = temporary.path().join("exfat.raw");
-    write_exfat_raw_fixture(&raw_path).unwrap();
+    write_exfat_raw_fixture(&raw_path, extension).unwrap();
 
     let active =
         case_service::create_case(&temporary.path().join("cases"), case_name, Some("tester"))
@@ -210,7 +210,7 @@ pub(super) fn with_raw_exfat_case_file(
         .unwrap();
 }
 
-fn write_exfat_raw_fixture(path: &Path) -> std::io::Result<()> {
+fn write_exfat_raw_fixture(path: &Path, extension: &str) -> std::io::Result<()> {
     const SECTOR_SIZE: usize = 512;
     const FAT_SECTOR: usize = 24;
     const CLUSTER_HEAP_SECTOR: usize = 32;
@@ -277,6 +277,13 @@ fn write_exfat_raw_fixture(path: &Path) -> std::io::Result<()> {
         data[offset..offset + CLUSTER_SIZE].fill(value);
     }
 
+    let file_offset = CLUSTER_HEAP_SECTOR * SECTOR_SIZE + CLUSTER_SIZE;
+    if extension == "png" {
+        data[file_offset..file_offset + PNG_BYTES.len()].copy_from_slice(PNG_BYTES);
+    } else if extension == "wav" {
+        data[file_offset..file_offset + FILE_SIZE].copy_from_slice(&wav_fixture(FILE_SIZE));
+    }
+
     seal_exfat_boot_regions(&mut data, SECTOR_SIZE);
     std::fs::write(path, data)
 }
@@ -295,4 +302,30 @@ fn seal_exfat_boot_regions(data: &mut [u8], sector_size: usize) {
         word.copy_from_slice(&checksum.to_le_bytes());
     }
     data.copy_within(..12 * sector_size, 12 * sector_size);
+}
+
+// A complete synthetic one-pixel PNG, with CRCs and compressed RGBA data.
+pub(super) const PNG_BYTES: &[u8] = &[
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0,
+    0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 120, 156, 99, 96, 0, 2, 0, 0, 5, 0, 1,
+    122, 94, 171, 63, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+];
+
+/// Valid PCM WAV bytes for transport tests; no decoder or workstation fixture needed.
+pub(super) fn wav_fixture(size: usize) -> Vec<u8> {
+    assert!(size >= 44);
+    let mut data = vec![b'A'; size];
+    data[..4].copy_from_slice(b"RIFF");
+    data[4..8].copy_from_slice(&((size - 8) as u32).to_le_bytes());
+    data[8..16].copy_from_slice(b"WAVEfmt ");
+    data[16..20].copy_from_slice(&16u32.to_le_bytes());
+    data[20..22].copy_from_slice(&1u16.to_le_bytes());
+    data[22..24].copy_from_slice(&1u16.to_le_bytes());
+    data[24..28].copy_from_slice(&8000u32.to_le_bytes());
+    data[28..32].copy_from_slice(&8000u32.to_le_bytes());
+    data[32..34].copy_from_slice(&1u16.to_le_bytes());
+    data[34..36].copy_from_slice(&8u16.to_le_bytes());
+    data[36..40].copy_from_slice(b"data");
+    data[40..44].copy_from_slice(&((size - 44) as u32).to_le_bytes());
+    data
 }

@@ -1,5 +1,5 @@
 use crate::commands::command_support::{
-    get_case_connection, require_active_case, snapshot_active_case, ActiveCaseSnapshot,
+    get_case_connection, require_active_case, ActiveCaseSnapshot,
 };
 use crate::state::AppState;
 use transport::CommandError;
@@ -23,53 +23,10 @@ where
     .map_err(CommandError::from_join_error)?
 }
 
-pub(super) async fn run_read_case_command<T, F>(
-    app_state: AppState,
-    operation: F,
-) -> Result<T, CommandError>
-where
-    T: Send + 'static,
-    F: FnOnce(
-            &persistence_sqlite::read_pool::ReadOnlyDbConnection,
-            &ActiveCaseSnapshot,
-        ) -> Result<T, CommandError>
-        + Send
-        + 'static,
-{
-    tauri::async_runtime::spawn_blocking(move || {
-        let active = require_active_case(&app_state)?;
-        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
-        operation(&connection, &active)
-    })
-    .await
-    .map_err(CommandError::from_join_error)?
-}
-
-pub(super) async fn run_optional_read_case_command<T, F>(
-    app_state: AppState,
-    empty: T,
-    operation: F,
-) -> Result<T, CommandError>
-where
-    T: Send + 'static,
-    F: FnOnce(
-            &persistence_sqlite::read_pool::ReadOnlyDbConnection,
-            &ActiveCaseSnapshot,
-        ) -> Result<T, CommandError>
-        + Send
-        + 'static,
-{
-    tauri::async_runtime::spawn_blocking(move || {
-        if snapshot_active_case(&app_state)?.is_none() {
-            return Ok(empty);
-        }
-        let active = require_active_case(&app_state)?;
-        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
-        operation(&connection, &active)
-    })
-    .await
-    .map_err(CommandError::from_join_error)?
-}
+pub(super) use crate::commands::command_support::{
+    run_case_read_command as run_read_case_command,
+    run_optional_case_read_command as run_optional_read_case_command,
+};
 
 pub(super) fn write_file_extract_audit(
     state: &AppState,

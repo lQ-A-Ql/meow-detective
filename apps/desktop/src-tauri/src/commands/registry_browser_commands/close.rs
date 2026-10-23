@@ -8,7 +8,7 @@ pub async fn close_registry_hive(
     state: State<'_, AppState>,
     request: RegistryHiveCloseRequestDto,
 ) -> Result<(), CommandError> {
-    let _lifecycle = state.case_lifecycle.lock().await;
+    let _lifecycle = state.case_lifecycle.clone().read_owned().await;
     let case_id = state
         .active_case
         .lock()

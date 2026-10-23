@@ -5,7 +5,7 @@ use transport::{
     CommandError,
 };
 
-use super::command_support::{get_case_connection, require_active_case};
+use super::command_support::{get_case_connection, get_case_read_connection, require_active_case};
 use crate::state::AppState;
 
 /// Get available report templates (static data, no DB access).
@@ -22,7 +22,7 @@ pub async fn get_report_history(
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let active = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
         Ok(app_services::report::get_report_history(
             &conn,
             &active.case_id,

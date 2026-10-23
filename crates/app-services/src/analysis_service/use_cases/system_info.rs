@@ -4,7 +4,7 @@ use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
 use transport::dto::AnalysisSystemInfoDto;
 
-use super::source::open_ready_analysis_source;
+use super::source::open_ready_analysis_source_read_only;
 use crate::analysis_service::{
     extract_system_info_for_case, validate_analysis_categories, AnalysisServiceError,
 };
@@ -19,7 +19,8 @@ pub fn get_source_system_info(
     data_source_id: &DataSourceId,
     runtime: &AnalysisSourceReadRuntime,
 ) -> Result<AnalysisSystemInfoDto, AnalysisServiceError> {
-    let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
+    let source =
+        open_ready_analysis_source_read_only(case_conn, case_root, case_id, data_source_id)?;
     validate_analysis_categories(source.platform, &["Registry"])?;
     let mut source_reader = runtime.bind(SourceReadContext::new(
         &source.connection,

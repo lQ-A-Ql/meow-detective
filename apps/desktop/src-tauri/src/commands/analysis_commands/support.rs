@@ -6,6 +6,8 @@ use crate::commands::command_support::{
 };
 use crate::state::AppState;
 
+pub(super) use crate::commands::command_support::run_case_read_command as run_read_case_command;
+
 pub(super) fn resolve_sample_size(request: &ClassifyFilesRequest) -> Result<u32, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let sample_size = request

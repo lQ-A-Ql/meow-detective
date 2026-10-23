@@ -3,7 +3,7 @@ use domain::DataSourceId;
 use tauri::State;
 use transport::{commands::GetAnalysisSourceRequest, CommandError};
 
-use super::super::support::{run_active_case_command, validate_source_request};
+use super::super::support::{run_read_case_command, validate_source_request};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -18,7 +18,7 @@ pub async fn generate_analysis_summary(
     );
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::generate_source_analysis_summary(
             case_conn,
             &active.case_root,

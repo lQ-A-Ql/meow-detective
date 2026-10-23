@@ -29,7 +29,7 @@ pub async fn delete_case(
 ) -> Result<String, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
-    let _lifecycle = app_state.case_lifecycle.lock().await;
+    let _lifecycle = app_state.case_transition().await?;
     let root = PathBuf::from(&request.case_root);
     let active_snapshot = active_case_identity(&app_state)?;
     let deleting_active_case = active_snapshot
@@ -61,8 +61,13 @@ pub async fn delete_case(
         }
     }
 
+    if deleting_active_case {
+        app_state.clear_case_read_pool()?;
+    }
     let root_clone = root.clone();
+    let worker_lifecycle = _lifecycle.clone();
     let delete_result = tauri::async_runtime::spawn_blocking(move || {
+        let _lifecycle = worker_lifecycle;
         case_service::delete_case_in(&root_clone).map_err(CommandError::from_typed_service_error)
     })
     .await
@@ -118,21 +123,20 @@ pub async fn delete_data_source(
 ) -> Result<String, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
-    let _lifecycle = app_state.case_lifecycle.lock().await;
+    let _lifecycle = app_state.case_transition().await?;
     let worker_state = app_state.clone();
+    let worker_lifecycle = _lifecycle.clone();
     let data_source_id = request.data_source_id.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let (db_path, case_root) = {
+        let _lifecycle = worker_lifecycle;
+        let (db_path, case_root, case_id) = {
             let guard = worker_state
                 .active_case
                 .lock()
                 .map_err(|e| CommandError::from_lock_error("Case", e))?;
             let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            (active.db_path(), active.case_root.clone())
+            (active.db_path(), active.case_root.clone(), active.meta.id.clone())
         };
-        let case_id = crate::commands::command_support::require_active_case(&worker_state)?
-            .meta
-            .id;
         let case_wide_tasks = worker_state
             .task_manager
             .task_count_for_case_wide(&case_id.0);

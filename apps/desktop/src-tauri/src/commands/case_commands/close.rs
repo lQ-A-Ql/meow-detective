@@ -20,7 +20,7 @@ pub(super) fn drain_active_case_jobs(
         )));
     }
 
-    match state.get_connection() {
+    match state.get_transition_connection() {
         Ok(conn) => {
             let drain = case_service::close_case_drain(&conn, case_id, timeout.as_millis() as u64)
                 .map_err(CommandError::from_typed_service_error)?;
@@ -59,7 +59,7 @@ fn log_degraded_close(drain: &app_services::case_service::DrainResult, timeout: 
 #[tauri::command]
 pub async fn close_case(state: State<'_, AppState>, app: AppHandle) -> Result<(), CommandError> {
     let app_state = state.inner().clone();
-    let _lifecycle = app_state.case_lifecycle.lock().await;
+    let _lifecycle = app_state.case_transition().await?;
     let timeout = Duration::from_secs(5);
     let Some(identity) = active_case_identity(&app_state)? else {
         return Ok(());

@@ -6,7 +6,7 @@ use transport::{
     CommandError,
 };
 
-use super::command_support::{get_case_connection, require_active_case, snapshot_active_case};
+use super::command_support::{get_case_read_connection, require_active_case, snapshot_active_case};
 use crate::events::event_bridge;
 use crate::state::AppState;
 
@@ -29,7 +29,7 @@ pub async fn get_timeline_events(
             });
         }
         let active = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
 
         let query = app_services::timeline_service::TimelineQuery {
             offset: req.offset,
@@ -79,7 +79,7 @@ pub async fn get_timeline_facets(
             });
         }
         let active = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
         app_services::timeline_service::get_timeline_facets_for_case(
             &conn,
             &active.case_root,
@@ -108,7 +108,7 @@ pub async fn get_timeline_event_by_id(
             return Err(CommandError::no_active_case());
         }
         let active = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
         app_services::timeline_service::get_timeline_event_by_id_for_case(
             &conn,
             &active.case_root,

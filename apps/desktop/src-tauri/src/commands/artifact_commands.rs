@@ -6,7 +6,7 @@ use transport::{
     CommandError,
 };
 
-use super::command_support::{get_case_connection, require_active_case, snapshot_active_case};
+use super::command_support::{get_case_read_connection, require_active_case, snapshot_active_case};
 use crate::state::AppState;
 
 const LEGACY_ARTIFACT_ROWS_LIMIT: u32 = 1_000;
@@ -22,7 +22,7 @@ pub async fn get_artifact_families(
             return Ok(vec![]);
         }
         let active = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
         app_services::artifact_service::get_artifact_families_for_case(
             &conn,
             &active.case_root,
@@ -46,7 +46,7 @@ pub async fn get_artifact_rows(
             return Ok(vec![]);
         }
         let active = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
         app_services::artifact_service::get_artifact_rows_page_for_case(
             &conn,
             &active.case_root,
@@ -79,7 +79,7 @@ pub async fn get_artifact_rows_request(
             });
         }
         let active = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
         app_services::artifact_service::get_artifact_rows_page_with_cursor_for_case(
             &conn,
             &active.case_root,
@@ -106,7 +106,7 @@ pub async fn get_artifact_family_counts(
             return Ok(vec![]);
         }
         let active = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
         app_services::artifact_service::get_artifact_family_counts_for_case(
             &conn,
             &active.case_root,
@@ -131,7 +131,7 @@ pub async fn get_artifact_by_id(
             return Err(CommandError::no_active_case());
         }
         let active = require_active_case(&app_state)?;
-        let conn = get_case_connection(&app_state)?;
+        let conn = get_case_read_connection(&app_state)?;
         app_services::artifact_service::get_artifact_row_by_id_for_case(
             &conn,
             &active.case_root,

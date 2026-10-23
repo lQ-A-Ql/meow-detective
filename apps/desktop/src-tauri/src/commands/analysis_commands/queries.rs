@@ -10,7 +10,7 @@ use transport::{
     CommandError,
 };
 
-use super::support::{run_active_case_command, validate_source_request};
+use super::support::{run_active_case_command, run_read_case_command, validate_source_request};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -25,7 +25,7 @@ pub async fn get_system_info(
     );
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_system_info(
             case_conn,
             &active.case_root,
@@ -47,7 +47,7 @@ pub async fn get_kubernetes_cluster_summary(
     let app_state = state.inner().clone();
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         app_services::cluster_service::get_source_kubernetes_cluster_summary(
             case_conn,
             &active.case_root,
@@ -93,7 +93,7 @@ pub async fn get_android_device_info(
     let app_state = state.inner().clone();
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_android_device_info(
             case_conn,
             &active.case_root,
@@ -117,7 +117,7 @@ pub async fn get_android_package_summary(
     );
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_android_package_summary(
             case_conn,
             &active.case_root,
@@ -141,7 +141,7 @@ pub async fn get_evidence_classification_summary(
     let app_state = state.inner().clone();
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_evidence_summary(
             case_conn,
             &active.case_root,

@@ -30,3 +30,26 @@ pub(super) fn open_ready_analysis_source(
         platform: source.platform,
     })
 }
+
+pub(super) fn open_ready_analysis_source_read_only(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> Result<AnalysisSource, AnalysisServiceError> {
+    if DataSourceRepo::new(case_conn).source_kind(data_source_id)? == DataSourceKind::CephFs {
+        return Err(AnalysisServiceError::Unsupported(
+            "CephFS does not run host-platform artifact extraction".to_string(),
+        ));
+    }
+    let source = source_db::open_ready_source_read_only_by_id(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+    )?;
+    Ok(AnalysisSource {
+        connection: source.connection,
+        platform: source.platform,
+    })
+}

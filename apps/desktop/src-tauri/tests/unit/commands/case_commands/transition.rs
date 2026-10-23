@@ -56,6 +56,22 @@ fn conditional_clear_does_not_remove_a_different_case() {
     std::fs::remove_dir_all(parent).ok();
 }
 
+#[tokio::test]
+async fn conditional_clear_releases_the_case_read_pool() {
+    let parent = test_parent("read-pool-clear");
+    let active = case_service::create_case(&parent, "pool", None).unwrap();
+    let state = AppState::default();
+    *state.active_case.lock().unwrap() = Some(active);
+    let identity = active_case_identity(&state).unwrap().unwrap();
+    drop(state.get_read_connection().unwrap());
+    assert!(state.read_pool.lock().unwrap().is_some());
+    let _access = state.case_transition().await.unwrap();
+    assert!(clear_active_case_if_matches(&state, &identity).unwrap());
+    assert!(state.read_pool.lock().unwrap().is_none());
+    assert!(state.active_case.lock().unwrap().is_none());
+    std::fs::remove_dir_all(parent).ok();
+}
+
 fn test_parent(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
         "Meow_Detective-case-transition-{label}-{}",

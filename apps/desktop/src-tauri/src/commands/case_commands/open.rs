@@ -20,7 +20,7 @@ pub async fn open_case(
 ) -> Result<CaseSummaryDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
-    let _lifecycle = app_state.case_lifecycle.lock().await;
+    let _lifecycle = app_state.case_transition().await?;
     let root = PathBuf::from(&request.case_root);
     let open_root = root.clone();
     let active = tauri::async_runtime::spawn_blocking(move || {
@@ -34,7 +34,7 @@ pub async fn open_case(
         transition.rollback(&app_state, Duration::from_secs(5));
         return Err(error);
     }
-    restore_enabled_bitlocker_volumes(&app_state, &root, &dto).await;
+    restore_enabled_bitlocker_volumes(&app_state, &root, &dto, _lifecycle.clone()).await;
     transition.commit(&app_state);
     recover_interrupted_jobs(&app_state);
     if let Err(error) = crate::commands::import::background_job::schedule_pending_evidence_hashes(

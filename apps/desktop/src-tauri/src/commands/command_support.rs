@@ -5,11 +5,15 @@ use transport::CommandError;
 
 use crate::state::AppState;
 
+mod query;
+pub(crate) use query::{run_case_read_command, run_optional_case_read_command};
+
 #[derive(Clone, Debug)]
 pub(crate) struct ActiveCaseSnapshot {
     pub case_id: String,
     pub case_root: PathBuf,
     pub meta: domain::CaseMeta,
+    pub(crate) _access: crate::state::case_database::CaseAccess,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -42,6 +46,7 @@ impl EmulationAuditEvent {
 pub(crate) fn snapshot_active_case(
     state: &AppState,
 ) -> Result<Option<ActiveCaseSnapshot>, CommandError> {
+    let access = state.case_access()?;
     let guard = state
         .active_case
         .lock()
@@ -51,6 +56,7 @@ pub(crate) fn snapshot_active_case(
         case_id: active.meta.id.0.clone(),
         case_root: active.case_root.clone(),
         meta: active.meta.clone(),
+        _access: access.clone(),
     }))
 }
 
@@ -59,7 +65,9 @@ pub(crate) fn require_active_case(state: &AppState) -> Result<ActiveCaseSnapshot
 }
 
 /// Get a fresh connection to the active case's database.
-pub(crate) fn get_case_connection(state: &AppState) -> Result<rusqlite::Connection, CommandError> {
+pub(crate) fn get_case_connection(
+    state: &AppState,
+) -> Result<crate::state::case_database::CaseWriteConnection, CommandError> {
     state.get_connection().map_err(|error| {
         if error.contains("No active case") {
             CommandError::no_active_case()
@@ -71,7 +79,7 @@ pub(crate) fn get_case_connection(state: &AppState) -> Result<rusqlite::Connecti
 
 pub(crate) fn get_case_read_connection(
     state: &AppState,
-) -> Result<persistence_sqlite::read_pool::ReadOnlyDbConnection, CommandError> {
+) -> Result<crate::state::case_database::CaseReadConnection, CommandError> {
     state.get_read_connection().map_err(|error| {
         if error.contains("No active case") {
             CommandError::no_active_case()
@@ -98,9 +106,9 @@ pub fn write_audit_log(
     resource_id: Option<&str>,
     details: serde_json::Value,
 ) {
-    let case_id = current_case_id(state);
     let details_str = serde_json::to_string(&details).unwrap_or_else(|_| "{}".to_string());
     if let Ok(conn) = state.get_connection() {
+        let case_id = current_case_id(state);
         let _ = AuditRepo::new(&conn).log(
             case_id.as_deref(),
             "system",

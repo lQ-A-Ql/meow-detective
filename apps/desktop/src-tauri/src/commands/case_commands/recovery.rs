@@ -12,7 +12,7 @@ use crate::{
 
 pub(super) fn recover_interrupted_jobs(state: &AppState) {
     // Recovery is best-effort so a stale job cannot prevent the case from opening.
-    match state.get_connection() {
+    match state.get_transition_connection() {
         Ok(conn) => {
             recover_jobs(&conn);
             recover_processing_phases(&conn);

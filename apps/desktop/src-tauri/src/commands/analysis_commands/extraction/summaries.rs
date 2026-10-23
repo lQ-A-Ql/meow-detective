@@ -1,4 +1,4 @@
-use super::super::support::{run_active_case_command, validate_source_request};
+use super::super::support::{run_read_case_command, validate_source_request};
 use crate::state::AppState;
 use app_services::analysis_service;
 use domain::DataSourceId;
@@ -24,7 +24,7 @@ pub async fn get_registry_extraction_summary(
     request.validate().map_err(CommandError::invalid_input)?;
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_registry_summary(
             case_conn,
             &active.case_root,
@@ -47,7 +47,7 @@ pub async fn get_registry_structured_summary(
     let app_state = state.inner().clone();
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_registry_structured_summary(
             case_conn,
             &active.case_root,
@@ -69,7 +69,7 @@ pub async fn get_browser_history_summary(
     let data_source_id = DataSourceId(request.data_source_id);
     let app_state = state.inner().clone();
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_browser_summary(
             case_conn,
             &active.case_root,
@@ -93,7 +93,7 @@ pub async fn get_email_extraction_summary(
     let data_source_id = DataSourceId(request.data_source_id);
     let app_state = state.inner().clone();
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_email_summary(
             case_conn,
             &active.case_root,
@@ -117,7 +117,7 @@ pub async fn get_evtx_event_summary(
     let data_source_id = DataSourceId(request.data_source_id);
     let app_state = state.inner().clone();
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_evtx_summary(
             case_conn,
             &active.case_root,
@@ -142,7 +142,7 @@ pub async fn get_linux_artifact_summary(
     let data_source_id = DataSourceId(request.data_source_id);
     let app_state = state.inner().clone();
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_linux_summary(
             case_conn,
             &active.case_root,

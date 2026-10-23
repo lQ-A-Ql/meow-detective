@@ -16,7 +16,7 @@ pub(crate) async fn install(
         .map_err(|_| failure("UPDATE_BUSY"))?;
     let _lifecycle = state
         .case_lifecycle
-        .try_lock()
+        .try_write()
         .map_err(|_| failure("UPDATE_CASE_BUSY"))?;
     if state
         .active_case

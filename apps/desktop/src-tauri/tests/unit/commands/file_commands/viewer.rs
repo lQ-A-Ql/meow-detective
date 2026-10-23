@@ -25,7 +25,7 @@ fn image_preview_logical_directory_reads_direct_without_service_fallback() {
     support::with_logical_case_file(
         "image-inline-logical",
         "tiny.png",
-        b"tiny image bytes",
+        support::PNG_BYTES,
         |connection, case_id, file_id, _, case_root| {
             let state = support::test_state_with_case(&case_id, case_root);
             let image = image_preview_for_file(&state, connection, &file_id)
@@ -37,7 +37,7 @@ fn image_preview_logical_directory_reads_direct_without_service_fallback() {
                 base64::engine::general_purpose::STANDARD
                     .decode(encoded.as_bytes())
                     .unwrap(),
-                b"tiny image bytes"
+                support::PNG_BYTES
             );
 
             Ok(())
@@ -61,7 +61,10 @@ fn image_preview_raw_image_reads_via_bytes_only_service_path() {
                 .decode(encoded.as_bytes())
                 .unwrap();
             assert_eq!(decoded.len(), 1536);
-            assert_eq!(&decoded[0..512], vec![b'A'; 512].as_slice());
+            assert_eq!(&decoded[..support::PNG_BYTES.len()], support::PNG_BYTES);
+            assert!(decoded[support::PNG_BYTES.len()..512]
+                .iter()
+                .all(|byte| *byte == b'A'));
             assert_eq!(&decoded[512..1024], vec![b'B'; 512].as_slice());
             assert_eq!(&decoded[1024..1536], vec![b'C'; 512].as_slice());
 

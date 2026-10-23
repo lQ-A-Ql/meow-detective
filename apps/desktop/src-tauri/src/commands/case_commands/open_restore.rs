@@ -9,12 +9,16 @@ pub(super) async fn restore_enabled_bitlocker_volumes(
     state: &AppState,
     case_root: &Path,
     case: &CaseSummaryDto,
+    access: std::sync::Arc<tokio::sync::OwnedRwLockWriteGuard<()>>,
 ) {
     let state = state.clone();
     let case_root = case_root.to_path_buf();
     let case_id = CaseId(case.id.clone());
     let restore = tauri::async_runtime::spawn_blocking(move || {
-        let connection = state.get_connection().map_err(|error| error.to_string())?;
+        let _access = access;
+        let connection = state
+            .get_transition_connection()
+            .map_err(|error| error.to_string())?;
         let context = app_services::bitlocker_service::BitLockerRuntimeContext::new(
             &state.preview_runtime,
             &state.bitlocker_runtime,

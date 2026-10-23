@@ -13,11 +13,12 @@ pub(super) async fn run<R: Send + 'static>(
         + Send
         + 'static,
 ) -> Result<R, CommandError> {
-    let _lifecycle = state.case_lifecycle.lock().await;
+    let _lifecycle = state.case_lifecycle.clone().read_owned().await;
     let worker = state.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let _lifecycle = _lifecycle;
         let active = crate::commands::command_support::require_active_case(&worker)?;
-        let conn = crate::commands::command_support::get_case_connection(&worker)?;
+        let conn = crate::commands::command_support::get_case_read_connection(&worker)?;
         let context = RegistryBrowserContext {
             case_conn: &conn,
             case_root: &active.case_root,

@@ -7,7 +7,7 @@ use transport::{
     CommandError,
 };
 
-use super::support::{resolve_sample_size, run_active_case_command};
+use super::support::{resolve_sample_size, run_read_case_command};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -19,7 +19,7 @@ pub async fn classify_files(
     let app_state = state.inner().clone();
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::classify_source_files(
             case_conn,
             &active.case_root,
@@ -44,7 +44,7 @@ pub async fn get_file_classification_board(
     );
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_file_classification_board(
             case_conn,
             &active.case_root,

@@ -5,7 +5,7 @@ use transport::{
     CommandError,
 };
 
-use super::support::run_active_case_command;
+use super::support::{run_active_case_command, run_read_case_command};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -15,7 +15,7 @@ pub async fn get_linux_evidence_set_summary(
 ) -> Result<LinuxEvidenceSetSummaryDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         app_services::cluster_service::get_linux_evidence_set_summary(
             case_conn,
             &active.case_root,
@@ -33,7 +33,7 @@ pub async fn list_linux_evidence_sets(
     _request: ListLinuxEvidenceSetsRequest,
 ) -> Result<Vec<LinuxEvidenceSetListItemDto>, CommandError> {
     let app_state = state.inner().clone();
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         app_services::cluster_service::list_linux_evidence_sets(case_conn, &active.meta.id)
             .map_err(CommandError::from_typed_service_error)
     })

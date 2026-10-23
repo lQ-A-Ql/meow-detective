@@ -1,7 +1,7 @@
 //! Plugin analysis module commands (M2.5): generic per-plugin module listing
 //! and paged family entries. Thin wrappers over `analysis_service`.
 
-use super::super::support::{run_active_case_command, validate_source_request};
+use super::super::support::{run_read_case_command, validate_source_request};
 use crate::state::AppState;
 use app_services::analysis_service;
 use domain::DataSourceId;
@@ -21,7 +21,7 @@ pub async fn list_plugin_modules(
     let app_state = state.inner().clone();
     let data_source_id = DataSourceId(request.data_source_id);
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_plugin_modules(
             case_conn,
             &active.case_root,
@@ -43,7 +43,7 @@ pub async fn get_plugin_family_entries(
     let data_source_id = DataSourceId(request.data_source_id);
     let app_state = state.inner().clone();
 
-    run_active_case_command(app_state, move |case_conn, active| {
+    run_read_case_command(app_state, move |case_conn, active| {
         analysis_service::get_source_plugin_family_entries(
             case_conn,
             &active.case_root,

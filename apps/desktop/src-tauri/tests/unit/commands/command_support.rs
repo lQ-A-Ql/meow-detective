@@ -19,6 +19,7 @@ fn active_case_snapshot_and_pool_connection_stay_in_sync() {
     let snapshot = require_active_case(&state).unwrap();
     assert_eq!(snapshot.case_root.parent(), Some(root.as_path()));
     get_case_connection(&state).unwrap();
+    drop(snapshot);
 
     *state.active_case.lock().unwrap() = None;
     let err = require_active_case(&state).unwrap_err();

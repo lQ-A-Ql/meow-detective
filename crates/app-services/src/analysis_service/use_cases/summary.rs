@@ -3,7 +3,7 @@ use std::path::Path;
 use domain::{CaseId, DataSourceId};
 use rusqlite::Connection;
 
-use super::source::open_ready_analysis_source;
+use super::source::open_ready_analysis_source_read_only;
 use crate::analysis_service::{
     classify_files_by_metadata, extract_system_info_for_case, generate_analysis_summary,
     validate_analysis_categories, AnalysisServiceError, DEFAULT_SAMPLE_SIZE,
@@ -19,7 +19,8 @@ pub fn generate_source_analysis_summary(
     data_source_id: &DataSourceId,
     runtime: &AnalysisSourceReadRuntime,
 ) -> Result<String, AnalysisServiceError> {
-    let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
+    let source =
+        open_ready_analysis_source_read_only(case_conn, case_root, case_id, data_source_id)?;
     validate_analysis_categories(source.platform, &["Registry"])?;
     let mut source_reader = runtime.bind(SourceReadContext::new(
         &source.connection,

@@ -30,10 +30,9 @@ pub struct AppState {
     /// Currently active case (if any).
     pub active_case: Arc<Mutex<Option<ActiveCase>>>,
     /// Bounded read-only pool for case metadata queries and previews.
-    pub read_pool:
-        Arc<Mutex<Option<(PathBuf, Arc<persistence_sqlite::read_pool::ReadOnlyDbPool>)>>>,
+    pub read_pool: super::case_database::SharedCaseReadPool,
     /// Serializes create/open/close/delete transitions across the active case.
-    pub case_lifecycle: Arc<AsyncMutex<()>>,
+    pub case_lifecycle: Arc<RwLock<()>>,
     /// Manager for background tasks.
     pub task_manager: Arc<TaskManager>,
     /// MCP clients (server_id -> client)
@@ -78,7 +77,7 @@ impl Default for AppState {
             app_update: Arc::new(crate::app_update::UpdateRuntime::default()),
             active_case: Arc::new(Mutex::new(None)),
             read_pool: Arc::new(Mutex::new(None)),
-            case_lifecycle: Arc::new(AsyncMutex::new(())),
+            case_lifecycle: Arc::new(RwLock::new(())),
             task_manager: Arc::new(TaskManager::new()),
             mcp_clients: Arc::new(RwLock::new(HashMap::new())),
             mcp_config: Arc::new(Mutex::new(McpConfig::default())),
@@ -161,89 +160,6 @@ impl AppState {
             }
         }
 
-        Ok(())
-    }
-
-    /// Initialize database pragmas on the active case connection.
-    pub fn init_db_pragmas(&self) -> Result<(), String> {
-        let conn = self.get_connection()?;
-        conn.execute_batch(
-            "PRAGMA journal_mode=WAL;
-             PRAGMA foreign_keys=ON;
-             PRAGMA busy_timeout=30000;
-             PRAGMA synchronous=NORMAL;",
-        )
-        .map_err(|e| format!("Failed to set pragmas: {}", e))?;
-        Ok(())
-    }
-
-    /// Get a fresh writable connection to the active case's database.
-    /// Read-only browsing and preview commands use `get_read_connection`.
-    pub fn get_connection(&self) -> Result<rusqlite::Connection, String> {
-        let guard = self
-            .active_case
-            .lock()
-            .map_err(|e| format!("Lock poisoned: {}", e))?;
-        let active = guard
-            .as_ref()
-            .ok_or("No active case — open or create a case first")?;
-        let db_path = active.db_path();
-        drop(guard);
-        let conn = rusqlite::Connection::open(&db_path)
-            .map_err(|e| format!("Failed to open database: {}", e))?;
-        // Each new connection needs its own busy timeout. WAL mode is persistent,
-        // but a generous timeout is required so concurrent readers/writers
-        // (e.g. parallel governance/timeline queries that lazily project MACB
-        // events) queue instead of failing immediately with "database is locked".
-        conn.execute_batch("PRAGMA busy_timeout=30000;")
-            .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
-        Ok(conn)
-    }
-
-    /// Acquire a pooled read-only case connection. The pool is replaced when
-    /// the active case path changes, so a closed case cannot retain its DB.
-    pub fn get_read_connection(
-        &self,
-    ) -> Result<persistence_sqlite::read_pool::ReadOnlyDbConnection, String> {
-        let db_path = {
-            let guard = self
-                .active_case
-                .lock()
-                .map_err(|e| format!("Lock poisoned: {e}"))?;
-            guard
-                .as_ref()
-                .ok_or("No active case — open or create a case first")?
-                .db_path()
-        };
-        let mut pool_guard = self
-            .read_pool
-            .lock()
-            .map_err(|e| format!("Lock poisoned: {e}"))?;
-        if pool_guard.as_ref().is_none_or(|(path, _)| path != &db_path) {
-            let pool = persistence_sqlite::read_pool::ReadOnlyDbPool::open(&db_path)
-                .map_err(|error| error.to_string())?;
-            *pool_guard = Some((db_path.clone(), Arc::new(pool)));
-        }
-        pool_guard
-            .as_ref()
-            .expect("read pool initialized")
-            .1
-            .get()
-            .map_err(|error| error.to_string())
-    }
-
-    /// Clear the database state on case close.
-    pub fn clear_db_state(&self) -> Result<(), String> {
-        let mut guard = self
-            .active_case
-            .lock()
-            .map_err(|e| format!("Lock poisoned: {}", e))?;
-        *guard = None;
-        let mut read_pool = self
-            .read_pool
-            .lock()
-            .map_err(|e| format!("Lock poisoned: {}", e))?;
-        *read_pool = None;
         Ok(())
     }
 

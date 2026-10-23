@@ -61,6 +61,7 @@ pub(super) fn begin_active_case_transition(
             return Err(CommandError::from_lock_error("Case", error));
         }
     };
+    state.clear_case_read_pool()?;
 
     Ok(ActiveCaseTransition {
         previous,
@@ -105,6 +106,9 @@ impl ActiveCaseTransition {
                 tracing::error!("Failed to restore the previous active case: {error}");
             }
         }
+        if let Err(error) = state.clear_case_read_pool() {
+            tracing::error!(%error, "Failed to clear replacement case read pool during rollback");
+        }
 
         let _ = state.clear_runtime_cache_for_case(&self.next_identity.case_id);
         app_services::file_service::clear_e01_reader_cache_for_case(&self.next_identity.case_id);
@@ -121,6 +125,7 @@ pub(super) fn clear_active_case_if_matches(
         .lock()
         .map_err(|error| CommandError::from_lock_error("Case", error))?;
     if matches_identity(guard.as_ref(), Some(expected)) {
+        state.clear_case_read_pool()?;
         *guard = None;
         return Ok(true);
     }

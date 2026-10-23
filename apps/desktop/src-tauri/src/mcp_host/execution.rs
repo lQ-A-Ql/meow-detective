@@ -32,6 +32,7 @@ fn execute_for_active_case(
     state: &AppState,
     request: McpHostToolCallRequestDto,
 ) -> Result<McpHostToolCallResultDto, CommandError> {
+    let _access = state.case_access()?;
     // Holding the lifecycle lock until the read completes prevents a response
     // or audit entry from being attributed to a newly opened case.
     let guard = state

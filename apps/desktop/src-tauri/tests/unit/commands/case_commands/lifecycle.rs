@@ -53,6 +53,7 @@ fn command_support_helpers_follow_active_case_lifecycle() {
     let snapshot = require_active_case(&state).expect("snapshot available");
     assert_eq!(snapshot.case_root, case_root);
     get_case_connection(&state).expect("connection available");
+    drop(snapshot);
 
     *state.active_case.lock().expect("active case lock") = None;
     let no_case_again = get_case_connection(&state).expect_err("connection requires case");
