@@ -1,6 +1,6 @@
 use app_services::import_scheduler::{
-    resolve_analysis_worker_count_for_memory, ImportAdmission, ImportAdmissionRequest,
-    ImportSchedulingPolicy, ImportWorkload,
+    resolve_analysis_worker_count_for_memory, ImportAdmission, ImportAdmissionError,
+    ImportAdmissionRequest, ImportSchedulingPolicy, ImportWorkload,
 };
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -163,6 +163,31 @@ fn admission_wait_is_cancelable() {
     waiting_cancel.store(true, Ordering::Release);
     assert!(waiter.join().expect("waiter should not panic").is_err());
     drop(first);
+}
+
+#[test]
+fn admission_wait_has_a_bounded_timeout() {
+    let admission = ImportAdmission::new(1, 1024);
+    let cancel = AtomicBool::new(false);
+    let request = ImportAdmissionRequest {
+        cpu_weight: 1,
+        memory_mb: 1024,
+    };
+    let first = admission
+        .acquire(request, &cancel)
+        .expect("first permit should be admitted");
+
+    let Err(error) = admission.acquire_with_timeout(request, &cancel, Duration::from_millis(20))
+    else {
+        panic!("a saturated scheduler must not admit the second request");
+    };
+
+    assert_eq!(error, ImportAdmissionError::TimedOut);
+    drop(first);
+    let snapshot = admission.snapshot();
+    assert_eq!(snapshot.active_sources, 0);
+    assert_eq!(snapshot.cpu_in_use, 0);
+    assert_eq!(snapshot.memory_in_use_mb, 0);
 }
 
 #[test]

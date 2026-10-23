@@ -1,6 +1,6 @@
 use app_services::{
     evidence_tasks,
-    import_scheduler::{global_import_admission, ImportAdmissionRequest},
+    import_scheduler::{global_import_admission, ImportAdmissionError, ImportAdmissionRequest},
 };
 use std::{
     path::PathBuf,
@@ -67,7 +67,12 @@ fn execute(
             },
             cancel,
         )
-        .map_err(|_| CommandError::cancelled("Evidence task cancelled"))?;
+        .map_err(|error| match error {
+            ImportAdmissionError::Cancelled => CommandError::cancelled("Evidence task cancelled"),
+            ImportAdmissionError::TimedOut => {
+                CommandError::timeout("Evidence task admission timed out")
+            }
+        })?;
     if cancel.load(Ordering::Acquire) {
         return Err(CommandError::cancelled("Evidence task cancelled"));
     }

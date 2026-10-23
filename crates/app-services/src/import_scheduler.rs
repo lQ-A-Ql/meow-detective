@@ -9,6 +9,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
 
+pub use crate::import_group_gate::{
+    global_import_group_gate, ImportGroupGateError, ImportGroupLease,
+};
+
 const DEFAULT_CPU_CAP: usize = 6;
 // E01 members are independent disk-backed sources. Allow two members in
 // flight by default; each member still has a bounded worker budget and the
@@ -19,6 +23,7 @@ const MEMORY_CAPACITY_MB: u64 = 1536;
 const SINGLE_SOURCE_MEMORY_RESERVATION_MB: u64 = 1536;
 const ANALYSIS_WORKER_MEMORY_RESERVATION_MB: u64 = 192;
 const ADMISSION_WAIT: Duration = Duration::from_millis(100);
+const ADMISSION_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Work topology used to derive a bounded import policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,6 +138,7 @@ pub struct ImportAdmissionSnapshot {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportAdmissionError {
     Cancelled,
+    TimedOut,
 }
 
 impl std::fmt::Display for ImportAdmissionError {
@@ -141,6 +147,7 @@ impl std::fmt::Display for ImportAdmissionError {
             Self::Cancelled => {
                 formatter.write_str("Import cancelled while waiting for scheduler admission")
             }
+            Self::TimedOut => formatter.write_str("Import scheduler admission timed out"),
         }
     }
 }
@@ -193,6 +200,16 @@ impl ImportAdmission {
         request: ImportAdmissionRequest,
         cancel_token: &AtomicBool,
     ) -> Result<ImportPermit, ImportAdmissionError> {
+        self.acquire_with_timeout(request, cancel_token, ADMISSION_WAIT_TIMEOUT)
+    }
+
+    pub fn acquire_with_timeout(
+        &self,
+        request: ImportAdmissionRequest,
+        cancel_token: &AtomicBool,
+        timeout: Duration,
+    ) -> Result<ImportPermit, ImportAdmissionError> {
+        let started = std::time::Instant::now();
         let request = self.normalize_request(request);
         let mut state = self
             .inner
@@ -216,10 +233,14 @@ impl ImportAdmission {
                     request,
                 });
             }
+            if started.elapsed() >= timeout {
+                return Err(ImportAdmissionError::TimedOut);
+            }
+            let wait = ADMISSION_WAIT.min(timeout.saturating_sub(started.elapsed()));
             state = self
                 .inner
                 .changed
-                .wait_timeout(state, ADMISSION_WAIT)
+                .wait_timeout(state, wait)
                 .unwrap_or_else(|error| error.into_inner())
                 .0;
         }

@@ -50,10 +50,22 @@ pub(crate) fn run_background_import_job(
     let admission = app_services::import_scheduler::global_import_admission();
     let _admission = match admission.acquire(scheduling.admission_request(), &cancel_token) {
         Ok(permit) => permit,
-        Err(error) => {
-            let message = error.to_string();
-            cancel_job(&job_repo, &job.job_id, app, &message);
+        Err(app_services::import_scheduler::ImportAdmissionError::Cancelled) => {
+            cancel_job(
+                &job_repo,
+                &job.job_id,
+                app,
+                "Import cancelled while waiting for scheduler admission",
+            );
             return Ok(());
+        }
+        Err(app_services::import_scheduler::ImportAdmissionError::TimedOut) => {
+            return fail_job(
+                &job_repo,
+                &job.job_id,
+                app,
+                CommandError::timeout("Import scheduler admission timed out"),
+            );
         }
     };
     if !start_import_job(&job_repo, &job.job_id, app)? {

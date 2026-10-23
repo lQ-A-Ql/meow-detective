@@ -46,6 +46,7 @@ pub mod governance;
 pub mod graph_service;
 pub mod hash_service;
 pub mod import_analysis;
+pub mod import_group_gate;
 pub mod import_pipeline;
 pub mod import_precheck;
 pub mod import_scheduler;

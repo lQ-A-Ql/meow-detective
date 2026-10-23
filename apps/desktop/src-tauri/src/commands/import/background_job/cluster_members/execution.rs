@@ -94,7 +94,14 @@ fn run_member_import(
             execution.scheduling.admission_request(),
             execution.cancel_token.as_ref(),
         )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
+        .map_err(|error| match error {
+            import_scheduler::ImportAdmissionError::Cancelled => {
+                CommandError::cancelled("Linux evidence-set member import cancelled")
+            }
+            import_scheduler::ImportAdmissionError::TimedOut => {
+                CommandError::timeout("Linux evidence-set member admission timed out")
+            }
+        })?;
     let connection = app_services::connection::open_existing_case_db(&execution.db_path)
         .map_err(CommandError::from_typed_service_error)?;
     let member_job_repo = JobRepo::new(&connection);
