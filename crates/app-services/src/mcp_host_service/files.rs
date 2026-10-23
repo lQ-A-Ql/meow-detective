@@ -36,7 +36,10 @@ pub fn execute_file_tool(
                 &context.query.case_meta.id,
                 &request.file_id,
             )
-            .map_err(McpHostServiceError::File)?;
+            .map_err(|source| McpHostServiceError::FileRead {
+                file_id: request.file_id.clone(),
+                source,
+            })?;
             Ok(serde_json::to_value(metadata)?)
         }
         "forensics.read_file" => {

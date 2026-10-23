@@ -60,8 +60,13 @@ fn timeline_event(
         &context.case_meta.id,
         &request.event_id,
     )
-    .map_err(McpHostServiceError::Timeline)?
-    .ok_or(McpHostServiceError::NotFound)?;
+    .map_err(|source| McpHostServiceError::TimelineRead {
+        event_id: request.event_id.clone(),
+        source,
+    })?
+    .ok_or_else(|| {
+        McpHostServiceError::NotFoundDetail(format!("时间线事件 {}", request.event_id))
+    })?;
     serde_json::to_value(result).map_err(McpHostServiceError::from)
 }
 

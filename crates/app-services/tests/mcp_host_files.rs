@@ -149,7 +149,7 @@ fn eof_empty_files_and_split_utf8_have_lossless_behavior_and_no_leaked_handles()
             "forensics.read_file",
             json!({"fileId":fixture.id("binary.bin"), "offset":fixture.binary.len() + 1})
         ),
-        Err(McpHostServiceError::InvalidInput)
+        Err(McpHostServiceError::Invalid(_))
     ));
     assert!(matches!(
         fixture.call(
@@ -207,7 +207,7 @@ fn input_limits_host_paths_and_case_source_ownership_are_enforced() {
             .extend(extra.as_object().unwrap().clone());
         assert!(matches!(
             fixture.call("forensics.read_file", args),
-            Err(McpHostServiceError::InvalidInput)
+            Err(McpHostServiceError::Invalid(_))
         ));
     }
     for extra in [

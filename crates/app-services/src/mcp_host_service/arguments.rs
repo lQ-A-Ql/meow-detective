@@ -5,17 +5,18 @@ use serde_json::Value;
 pub(super) fn parse_arguments<T: DeserializeOwned>(
     arguments: &Value,
 ) -> Result<T, McpHostServiceError> {
-    serde_json::from_value(arguments.clone()).map_err(|_| McpHostServiceError::InvalidInput)
+    serde_json::from_value(arguments.clone())
+        .map_err(|_| McpHostServiceError::Invalid("字段类型或取值与工具 schema 不匹配".to_string()))
 }
 
 pub(super) fn validate_arguments(name: &str, arguments: &Value) -> Result<(), McpHostServiceError> {
     let tool = tool_catalog()
         .into_iter()
         .find(|tool| tool.name == name)
-        .ok_or(McpHostServiceError::InvalidInput)?;
+        .ok_or_else(|| McpHostServiceError::NotFoundDetail(format!("工具 {name}")))?;
     let fields = arguments
         .as_object()
-        .ok_or(McpHostServiceError::InvalidInput)?;
+        .ok_or_else(|| McpHostServiceError::Invalid("arguments 必须是 JSON 对象".to_string()))?;
     let properties = &tool.input_schema["properties"];
     for key in tool.input_schema["required"]
         .as_array()
@@ -23,15 +24,20 @@ pub(super) fn validate_arguments(name: &str, arguments: &Value) -> Result<(), Mc
         .flatten()
     {
         if key.as_str().and_then(|key| fields.get(key)).is_none() {
-            return Err(McpHostServiceError::InvalidInput);
+            return Err(McpHostServiceError::Invalid(format!(
+                "缺少必填字段 {}",
+                key.as_str().unwrap_or("unknown")
+            )));
         }
     }
     for (key, value) in fields {
         let schema = properties
             .get(key)
-            .ok_or(McpHostServiceError::InvalidInput)?;
+            .ok_or_else(|| McpHostServiceError::Invalid(format!("不支持字段 {key}")))?;
         if !valid_field(value, schema) {
-            return Err(McpHostServiceError::InvalidInput);
+            return Err(McpHostServiceError::Invalid(format!(
+                "字段 {key} 的值不符合 schema"
+            )));
         }
     }
     Ok(())
@@ -45,7 +51,7 @@ pub(super) fn required_string<'a>(
         .get(key)
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty() && value.len() <= 256)
-        .ok_or(McpHostServiceError::InvalidInput)
+        .ok_or_else(|| McpHostServiceError::Invalid(format!("字段 {key} 必须是非空字符串")))
 }
 
 fn valid_field(value: &Value, schema: &Value) -> bool {

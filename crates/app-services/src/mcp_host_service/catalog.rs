@@ -203,8 +203,8 @@ fn case_analysis_tools() -> Vec<McpHostToolDto> {
         ),
         (
             "forensics.get_correlation_snapshot",
-            "读取当前案件的关联分析快照。",
-            json!({}),
+            "分页读取当前案件的关联分析快照；节点、边、簇和线索使用同一 offset/limit。",
+            json!({"offset":non_negative_integer(), "limit":page_limit(100, 50)}),
             vec![],
         ),
     ]
@@ -245,7 +245,7 @@ fn index_tools() -> Vec<McpHostToolDto> {
     [
         (
             "forensics.search_files",
-            "搜索当前案件全局文件索引；支持路径匹配、条目类型、扩展名、数据源和排序。空 query 可浏览索引。",
+            "搜索当前案件全局文件索引；支持路径匹配、条目类型、扩展名、数据源和排序。空 query 可浏览索引，使用 nextCursor 遍历完整结果集。",
             json!({"query":{"type":"string","minLength":0,"maxLength":1000}, "matchPath":{"type":"boolean"}, "entryType":{"type":"string","enum":["any","file","directory"]}, "extensions":{"type":"array","maxItems":32,"items":{"type":"string","minLength":1,"maxLength":32}}, "dataSourceIds":{"type":"array","maxItems":64,"items":identifier()}, "sortKey":{"type":"string","enum":["name","path","size","modifiedAt"]}, "sortDirection":{"type":"string","enum":["asc","desc"]}, "offset":non_negative_integer(), "limit":page_limit(500, 50), "cursor":{"type":"string","minLength":1,"maxLength":16384}}),
             vec!["query"],
         ),

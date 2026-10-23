@@ -73,7 +73,10 @@ impl ServerHandler for HostHandler {
             Ok(result) => CallToolResult::error(vec![ContentBlock::text(
                 result.error.unwrap_or_else(|| "工具调用失败".into()),
             )]),
-            Err(_) => CallToolResult::error(vec![ContentBlock::text("工具调用失败")]),
+            Err(error) => CallToolResult::error(vec![ContentBlock::text(format!(
+                "工具调用失败：{}",
+                error.message
+            ))]),
         };
         Ok(result.into())
     }

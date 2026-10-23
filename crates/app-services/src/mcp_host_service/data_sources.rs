@@ -23,7 +23,7 @@ pub(super) fn get_data_source(
         .into_iter()
         .find(|source| source.id == id)
         .map(source_summary)
-        .ok_or(McpHostServiceError::NotFound)
+        .ok_or_else(|| McpHostServiceError::NotFoundDetail(format!("数据源 {id}")))
 }
 
 fn load_sources(

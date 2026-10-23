@@ -1,5 +1,6 @@
 use domain::DataSourceId;
-use serde_json::Value;
+use serde::Deserialize;
+use serde_json::{json, Value};
 use transport::commands::{
     ClassifyFilesRequest, GetAnalysisExtractionRequest, GetAnalysisSourceRequest,
     GetAndroidPackagesRequest, GetEvtxEventSummaryRequest, GetPluginFamilyEntriesRequest,
@@ -10,6 +11,21 @@ use super::{McpHostQueryContext, McpHostServiceError};
 use crate::analysis_service::{AnalysisSourceReadRuntime, MAX_SAMPLE_SIZE};
 
 const MCP_CLASSIFICATION_SAMPLE_SIZE: u32 = 300;
+const CORRELATION_PAGE_DEFAULT: u32 = 50;
+const CORRELATION_PAGE_MAX: u32 = 100;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CorrelationSnapshotRequest {
+    #[serde(default)]
+    offset: u64,
+    #[serde(default = "default_correlation_limit")]
+    limit: u32,
+}
+
+fn default_correlation_limit() -> u32 {
+    CORRELATION_PAGE_DEFAULT
+}
 
 pub struct McpHostAnalysisQueryContext<'a> {
     pub query: McpHostQueryContext<'a>,
@@ -35,9 +51,10 @@ pub fn execute_analysis_tool(
         | "forensics.get_android_device_info"
         | "forensics.get_android_package_summary"
         | "forensics.get_plugin_family_entries"
-        | "forensics.get_analysis_report" => execute_source_tool(&context, name, arguments),
+        | "forensics.get_analysis_report" => execute_source_tool(&context, name, arguments)
+            .map_err(|error| add_source_context(arguments, error)),
         "forensics.get_case_overview" => case_overview(&context),
-        "forensics.get_correlation_snapshot" => correlation_snapshot(&context),
+        "forensics.get_correlation_snapshot" => correlation_snapshot(&context, arguments),
         _ => Err(McpHostServiceError::InvalidInput),
     }
 }
@@ -277,14 +294,52 @@ fn case_overview(context: &McpHostAnalysisQueryContext<'_>) -> Result<Value, Mcp
 
 fn correlation_snapshot(
     context: &McpHostAnalysisQueryContext<'_>,
+    arguments: &Value,
 ) -> Result<Value, McpHostServiceError> {
-    crate::correlation::get_correlation_snapshot_read_only_for_case(
+    let request: CorrelationSnapshotRequest = parse_arguments(arguments)?;
+    if !(1..=CORRELATION_PAGE_MAX).contains(&request.limit) {
+        return Err(McpHostServiceError::Invalid(format!(
+            "limit 必须在 1 到 {CORRELATION_PAGE_MAX} 之间"
+        )));
+    }
+    let offset = usize::try_from(request.offset)
+        .map_err(|_| McpHostServiceError::Invalid("offset 超出平台范围".to_string()))?;
+    let limit = request.limit as usize;
+    let snapshot = crate::correlation::get_correlation_snapshot_read_only_for_case(
         context.query.connection,
         context.query.case_root,
         &context.query.case_meta.id,
     )
-    .map_err(|_| McpHostServiceError::Correlation)
-    .and_then(|value| serde_json::to_value(value).map_err(McpHostServiceError::from))
+    .map_err(|_| McpHostServiceError::Correlation)?;
+    let end = request.offset.saturating_add(u64::from(request.limit));
+    let has_more = u64::from(snapshot.node_count) > end
+        || u64::from(snapshot.edge_count) > end
+        || u64::from(snapshot.cluster_count) > end
+        || u64::from(snapshot.lead_count) > end;
+    let nodes = take_page(snapshot.nodes, offset, limit);
+    let edges = take_page(snapshot.edges, offset, limit);
+    let clusters = take_page(snapshot.clusters, offset, limit);
+    let leads = take_page(snapshot.leads, offset, limit);
+    Ok(json!({
+        "generatedAt": snapshot.generated_at,
+        "nodeCount": snapshot.node_count,
+        "edgeCount": snapshot.edge_count,
+        "clusterCount": snapshot.cluster_count,
+        "leadCount": snapshot.lead_count,
+        "familyCoverage": snapshot.family_coverage,
+        "offset": request.offset,
+        "limit": request.limit,
+        "hasMore": has_more,
+        "nextOffset": has_more.then_some(end),
+        "nodes": nodes,
+        "edges": edges,
+        "clusters": clusters,
+        "leads": leads,
+    }))
+}
+
+fn take_page<T>(items: Vec<T>, offset: usize, limit: usize) -> Vec<T> {
+    items.into_iter().skip(offset).take(limit).collect()
 }
 
 fn source_request(arguments: &Value) -> Result<GetAnalysisSourceRequest, McpHostServiceError> {
@@ -350,6 +405,45 @@ fn classification_request(arguments: &Value) -> Result<ClassifyFilesRequest, Mcp
 fn to_value<T: serde::Serialize>(
     result: Result<T, crate::analysis_service::AnalysisServiceError>,
 ) -> Result<Value, McpHostServiceError> {
-    let value = result.map_err(McpHostServiceError::Analysis)?;
+    let value = result.map_err(analysis_error)?;
     serde_json::to_value(value).map_err(McpHostServiceError::from)
 }
+
+fn analysis_error(error: crate::analysis_service::AnalysisServiceError) -> McpHostServiceError {
+    use crate::analysis_service::AnalysisServiceError;
+    match error {
+        AnalysisServiceError::Unsupported(message) => {
+            McpHostServiceError::UnsupportedPlatform(message)
+        }
+        AnalysisServiceError::NotFound(kind, id) => {
+            McpHostServiceError::NotFoundDetail(format!("{kind} {id}"))
+        }
+        AnalysisServiceError::InvalidInput(message) => McpHostServiceError::Invalid(message),
+        error => McpHostServiceError::Analysis(error),
+    }
+}
+
+fn add_source_context(arguments: &Value, error: McpHostServiceError) -> McpHostServiceError {
+    let Some(source_id) = arguments
+        .get("dataSourceId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+    else {
+        return error;
+    };
+    if matches!(
+        &error,
+        McpHostServiceError::Invalid(_) | McpHostServiceError::InvalidInput
+    ) || error.to_string().contains(source_id)
+    {
+        return error;
+    }
+    McpHostServiceError::SourceRead {
+        data_source_id: source_id.to_string(),
+        source: Box::new(error),
+    }
+}
+
+#[cfg(test)]
+#[path = "../../tests/unit/mcp_host_service/analysis.rs"]
+mod tests;

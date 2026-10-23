@@ -35,6 +35,14 @@ pub fn get_correlation_snapshot(
 pub fn get_correlation_snapshot_read_only(
     conn: &Connection,
 ) -> Result<CorrelationSnapshotDto, CorrelationError> {
+    if let Some(case_id) = resolve_case_id(conn)? {
+        let artifact_hash = compute_artifact_hash(conn)?;
+        if let Some(cached) = get_cached_snapshot(conn, &case_id)? {
+            if cached.artifact_hash == artifact_hash {
+                return deserialize_cached(&cached);
+            }
+        }
+    }
     compute_correlation_snapshot_read_only(conn)
 }
 

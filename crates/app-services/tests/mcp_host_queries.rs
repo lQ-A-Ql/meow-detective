@@ -48,14 +48,13 @@ fn current_case_sources_and_details_share_real_service_queries_with_no_host_path
     )
     .unwrap();
     assert_eq!(detail, sources[0]);
-    assert!(matches!(
-        execute_tool(
-            context(),
-            "forensics.get_data_source",
-            &json!({"dataSourceId":"outside-case"})
-        ),
-        Err(McpHostServiceError::NotFound)
-    ));
+    let missing = execute_tool(
+        context(),
+        "forensics.get_data_source",
+        &json!({"dataSourceId":"outside-case"}),
+    )
+    .unwrap_err();
+    assert!(matches!(missing, McpHostServiceError::NotFoundDetail(_)));
     for (name, args) in [
         ("forensics.list_plugin_modules", json!({})),
         (
@@ -70,7 +69,7 @@ fn current_case_sources_and_details_share_real_service_queries_with_no_host_path
     ] {
         assert!(matches!(
             execute_tool(context(), name, &args),
-            Err(McpHostServiceError::InvalidInput)
+            Err(McpHostServiceError::Invalid(_))
         ));
     }
     let error = execute_tool(
@@ -168,6 +167,23 @@ fn timeline_search_and_empty_case_analysis_use_real_read_only_services() {
         &json!({})
     )
     .is_ok());
+    let correlation = execute_analysis_tool(
+        analysis_context(),
+        "forensics.get_correlation_snapshot",
+        &json!({"offset":0,"limit":25}),
+    )
+    .unwrap();
+    assert_eq!(correlation["offset"], 0);
+    assert_eq!(correlation["limit"], 25);
+    assert_eq!(correlation["hasMore"], false);
+    assert!(matches!(
+        execute_analysis_tool(
+            analysis_context(),
+            "forensics.get_correlation_snapshot",
+            &json!({"limit":101})
+        ),
+        Err(McpHostServiceError::Invalid(_))
+    ));
 }
 
 #[test]
@@ -201,15 +217,13 @@ fn source_analysis_routes_share_validation_without_accepting_host_paths() {
     for name in source_tools {
         let result =
             execute_analysis_tool(context(), name, &json!({"dataSourceId":"outside-case"}));
-        assert!(
-            matches!(result, Err(McpHostServiceError::Analysis(_))),
-            "{name}"
-        );
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("outside-case"), "{name}");
     }
     let invalid = execute_analysis_tool(
         context(),
         "forensics.get_analysis_system_info",
         &json!({"dataSourceId":"outside-case","hostPath":"C:\\private"}),
     );
-    assert!(matches!(invalid, Err(McpHostServiceError::InvalidInput)));
+    assert!(matches!(invalid, Err(McpHostServiceError::Invalid(_))));
 }

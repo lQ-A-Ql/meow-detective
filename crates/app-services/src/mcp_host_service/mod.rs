@@ -23,10 +23,20 @@ pub use queries::{execute_tool, McpHostQueryContext};
 pub enum McpHostServiceError {
     #[error("工具名称或参数无效")]
     InvalidInput,
+    #[error("工具参数无效：{0}")]
+    Invalid(String),
     #[error("未找到指定数据源、插件或文件")]
     NotFound,
+    #[error("未找到：{0}")]
+    NotFoundDetail(String),
     #[error("读取文件失败")]
     File(#[source] crate::file_service::FileServiceError),
+    #[error("读取文件 {file_id} 失败：{source}")]
+    FileRead {
+        file_id: String,
+        #[source]
+        source: crate::file_service::FileServiceError,
+    },
     #[error("读取结果未包含文件字节")]
     MissingBytes,
     #[error("文件读取不完整，请检查数据源状态")]
@@ -39,8 +49,22 @@ pub enum McpHostServiceError {
     DataSource(#[from] crate::file_service::FileServiceError),
     #[error("读取分析数据失败")]
     Analysis(#[source] crate::analysis_service::AnalysisServiceError),
+    #[error("读取数据源 {data_source_id} 失败：{source}")]
+    SourceRead {
+        data_source_id: String,
+        #[source]
+        source: Box<McpHostServiceError>,
+    },
+    #[error("当前数据源平台不支持该工具：{0}")]
+    UnsupportedPlatform(String),
     #[error("读取时间线失败")]
     Timeline(#[source] crate::timeline_service::TimelineServiceError),
+    #[error("读取时间线事件 {event_id} 失败：{source}")]
+    TimelineRead {
+        event_id: String,
+        #[source]
+        source: crate::timeline_service::TimelineServiceError,
+    },
     #[error("读取全局索引失败")]
     Search(#[source] crate::search_service::SearchError),
     #[error("读取内容索引状态失败")]
@@ -51,17 +75,26 @@ pub enum McpHostServiceError {
     Correlation,
     #[error("无法生成工具结果")]
     Json(#[from] serde_json::Error),
+    #[error("工具结果超过 1 MiB，请使用分页参数缩小结果")]
+    ResultTooLarge,
 }
 
 impl transport::ServiceErrorCategory for McpHostServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
-            Self::InvalidInput | Self::NotFound | Self::InvalidUtf8 => {
-                transport::ErrorCategory::Validation
-            }
+            Self::InvalidInput
+            | Self::Invalid(_)
+            | Self::NotFound
+            | Self::NotFoundDetail(_)
+            | Self::InvalidUtf8
+            | Self::ResultTooLarge => transport::ErrorCategory::Validation,
             Self::File(error) => error.category(),
+            Self::FileRead { source, .. } => source.category(),
             Self::Analysis(error) => error.category(),
+            Self::SourceRead { source, .. } => source.category(),
+            Self::UnsupportedPlatform(_) => transport::ErrorCategory::Unsupported,
             Self::Timeline(error) => error.category(),
+            Self::TimelineRead { source, .. } => source.category(),
             Self::Search(error) => error.category(),
             Self::IncompleteRead => transport::ErrorCategory::Parser,
             Self::UnsupportedFile => transport::ErrorCategory::Unsupported,

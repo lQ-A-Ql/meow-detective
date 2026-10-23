@@ -16,6 +16,12 @@ pub(crate) struct ActiveCaseSnapshot {
     pub(crate) _access: crate::state::case_database::CaseAccess,
 }
 
+impl ActiveCaseSnapshot {
+    pub(crate) fn db_path(&self) -> PathBuf {
+        self.case_root.join("app.db")
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum EmulationAuditEvent {
     Prepare,

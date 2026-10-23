@@ -4,6 +4,9 @@ use app_services::{case_service, file_service, search_service};
 use evidence_core::LogicalFsReader;
 use std::collections::HashMap;
 use tempfile::TempDir;
+use transport::commands::{
+    FileSortDirectionDto, SearchEntryTypeDto, SearchFilesRequest, SearchSortKeyDto,
+};
 
 fn setup_test_case() -> (TempDir, app_services::active_case::ActiveCase) {
     let tmp = TempDir::new().unwrap();
@@ -379,4 +382,32 @@ fn reindex_keeps_existing_documents_for_unmodified_files() {
             Ok(())
         })
         .unwrap();
+}
+
+#[test]
+fn deep_search_offsets_require_a_cursor() {
+    let (_tmp, active) = setup_test_case();
+    let connection = app_services::connection::open_existing_case_db(&active.db_path()).unwrap();
+    let request = SearchFilesRequest {
+        query: String::new(),
+        match_path: false,
+        entry_type: SearchEntryTypeDto::Any,
+        extensions: Vec::new(),
+        data_source_ids: Vec::new(),
+        sort_key: SearchSortKeyDto::Name,
+        sort_direction: FileSortDirectionDto::Asc,
+        offset: 100_001,
+        limit: 50,
+        cursor: None,
+    };
+
+    let error = search_service::search_files_for_case(
+        &connection,
+        &active.case_root,
+        &active.meta.id,
+        &request,
+    )
+    .unwrap_err();
+
+    assert!(error.to_string().contains("nextCursor"));
 }

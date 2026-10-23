@@ -720,6 +720,7 @@ fn cached_snapshot_matches_recomputed() {
     let first = get_correlation_snapshot(&conn).unwrap();
 
     let second = get_correlation_snapshot(&conn).unwrap();
+    let read_only = get_correlation_snapshot_read_only(&conn).unwrap();
 
     assert_eq!(first.nodes.len(), second.nodes.len());
     assert_eq!(first.edges.len(), second.edges.len());
@@ -729,6 +730,10 @@ fn cached_snapshot_matches_recomputed() {
     assert_eq!(first.edge_count, second.edge_count);
     assert_eq!(first.cluster_count, second.cluster_count);
     assert_eq!(first.lead_count, second.lead_count);
+    assert_eq!(first.node_count, read_only.node_count);
+    assert_eq!(first.edge_count, read_only.edge_count);
+    assert_eq!(first.cluster_count, read_only.cluster_count);
+    assert_eq!(first.lead_count, read_only.lead_count);
 
     let first_ids: BTreeSet<_> = first.nodes.iter().map(|n| n.id.clone()).collect();
     let second_ids: BTreeSet<_> = second.nodes.iter().map(|n| n.id.clone()).collect();

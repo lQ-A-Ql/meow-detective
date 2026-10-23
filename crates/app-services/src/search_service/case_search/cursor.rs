@@ -14,7 +14,6 @@ use transport::paging::{decode_opaque_cursor, encode_opaque_cursor};
 
 use super::{
     current_sources, file_hit_to_dto, file_search_options, search_rank_order, SearchSource,
-    MAX_CASE_SEARCH_WINDOW,
 };
 use crate::search_service::SearchError;
 use crate::source_db::encode_source_scoped_id;
@@ -49,7 +48,7 @@ pub(super) fn search_files_for_case_cursor(
         .iter()
         .map(|source| source.state.total_count)
         .fold(0u64, u64::saturating_add);
-    let available = total.min(MAX_CASE_SEARCH_WINDOW);
+    let available = total;
     let consumed = decoded.as_ref().map_or(0, |payload| payload.consumed);
     validate_window(decoded.as_ref(), total, available, consumed)?;
     let mut items = Vec::with_capacity(fetch_limit);
@@ -334,3 +333,7 @@ fn index_error(error: search::indexer::tantivy_writer::IndexError) -> SearchErro
 fn stale_cursor(reason: &str) -> SearchError {
     SearchError::InvalidInput(format!("stale search cursor: {reason}; restart the search"))
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/search_service/case_search_cursor.rs"]
+mod tests;

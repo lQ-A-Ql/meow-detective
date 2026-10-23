@@ -37,9 +37,12 @@ pub(super) fn read_file(
         &query.case_meta.id,
         &request.file_id,
     )
-    .map_err(file_read_error)?;
+    .map_err(|error| file_read_error(&request.file_id, error))?;
     if metadata.entry_type != "file" {
-        return Err(McpHostServiceError::InvalidInput);
+        return Err(McpHostServiceError::Invalid(format!(
+            "文件 {} 不是普通文件",
+            request.file_id
+        )));
     }
     let handle = file_service::open_preview_session_for_case_with_bitlocker(
         context.bitlocker_runtime,
@@ -49,14 +52,17 @@ pub(super) fn read_file(
         &query.case_meta.id,
         &request.file_id,
     )
-    .map_err(file_read_error)?;
+    .map_err(|error| file_read_error(&request.file_id, error))?;
     let session = ReadSession {
         registry: context.preview_runtime,
         case_id: &query.case_meta.id,
         handle_id: handle.handle_id,
     };
     if request.offset > handle.size {
-        return Err(McpHostServiceError::InvalidInput);
+        return Err(McpHostServiceError::Invalid(format!(
+            "offset {} 超过文件大小 {}",
+            request.offset, handle.size
+        )));
     }
     let expected_length = (handle.size - request.offset).min(u64::from(request.length)) as u32;
     let bytes = if expected_length == 0 {
@@ -74,7 +80,7 @@ pub(super) fn read_file(
                 length: expected_length,
             },
         )
-        .map_err(file_read_error)?
+        .map_err(|error| file_read_error(&request.file_id, error))?
         .raw_bytes
         .ok_or(McpHostServiceError::MissingBytes)?
     };
@@ -96,8 +102,8 @@ pub(super) fn read_file(
     })
 }
 
-fn file_read_error(error: file_service::FileServiceError) -> McpHostServiceError {
-    match &error {
+fn file_read_error(file_id: &str, error: file_service::FileServiceError) -> McpHostServiceError {
+    let mapped = match &error {
         file_service::FileServiceError::Unsupported(_) => McpHostServiceError::UnsupportedFile,
         file_service::FileServiceError::Io(error)
             if error.kind() == std::io::ErrorKind::Unsupported =>
@@ -105,6 +111,13 @@ fn file_read_error(error: file_service::FileServiceError) -> McpHostServiceError
             McpHostServiceError::UnsupportedFile
         }
         _ => McpHostServiceError::File(error),
+    };
+    match mapped {
+        McpHostServiceError::File(source) => McpHostServiceError::FileRead {
+            file_id: file_id.to_string(),
+            source,
+        },
+        other => other,
     }
 }
 

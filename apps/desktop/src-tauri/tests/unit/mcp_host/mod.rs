@@ -88,6 +88,37 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
         .count_by_action("mcp.tool.call")
         .unwrap();
     assert_eq!(count, 2);
+    for (name, arguments, expected) in [
+        (
+            "forensics.get_data_source",
+            json!({}),
+            "缺少必填字段 dataSourceId",
+        ),
+        (
+            "forensics.get_data_source",
+            json!({"dataSourceId":"missing-source"}),
+            "missing-source",
+        ),
+        (
+            "forensics.get_timeline_event",
+            json!({"eventId":"missing-event"}),
+            "missing-event",
+        ),
+    ] {
+        let result: Value = request(
+            &endpoint,
+            json!({"jsonrpc":"2.0","id":"invalid-call","method":"tools/call","params":{"name":name,"arguments":arguments}}),
+        )
+        .await
+        .json()
+        .await
+        .unwrap();
+        assert_eq!(result["result"]["isError"], true);
+        assert!(result["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains(expected));
+    }
     *state.active_case.lock().unwrap() = Some(
         app_services::case_service::create_case(temporary.path(), "Second Case", None).unwrap(),
     );
@@ -215,4 +246,33 @@ async fn tools_require_active_case_and_disabled_calls_cannot_bypass_the_ui() {
     let result = call_tool(state, request).await.unwrap();
     assert!(!result.success);
     assert!(result.error.unwrap().contains("打开案件"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_tool_calls_queue_instead_of_returning_busy() {
+    let temporary = tempfile::tempdir().unwrap();
+    let state = AppState::default();
+    let active =
+        app_services::case_service::create_case(temporary.path(), "Concurrent MCP", None).unwrap();
+    *state.active_case.lock().unwrap() = Some(active);
+
+    let mut tasks = Vec::new();
+    for _ in 0..10 {
+        let state = state.clone();
+        tasks.push(tokio::spawn(async move {
+            call_tool(
+                state,
+                McpHostToolCallRequestDto {
+                    name: "forensics.get_current_case".into(),
+                    arguments: json!({}),
+                },
+            )
+            .await
+            .unwrap()
+        }));
+    }
+    for task in tasks {
+        let result = task.await.unwrap();
+        assert!(result.success);
+    }
 }

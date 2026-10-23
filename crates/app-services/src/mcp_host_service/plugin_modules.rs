@@ -25,7 +25,7 @@ pub(super) fn get_plugin_module(
         .into_iter()
         .find(|module| module.plugin_id == plugin_id)
         .map(plugin_summary)
-        .ok_or(McpHostServiceError::NotFound)
+        .ok_or_else(|| McpHostServiceError::NotFoundDetail(format!("插件 {plugin_id}")))
 }
 
 fn load_modules(

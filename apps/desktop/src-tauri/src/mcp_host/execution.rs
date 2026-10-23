@@ -1,3 +1,4 @@
+use crate::commands::command_support::snapshot_active_case;
 use crate::state::AppState;
 use app_services::mcp_host_service::{
     execute_analysis_tool, execute_file_tool, execute_tool, tool_catalog,
@@ -10,6 +11,8 @@ use transport::{
     CommandError,
 };
 
+const REQUEST_QUEUE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+
 pub async fn call_tool(
     state: AppState,
     request: McpHostToolCallRequestDto,
@@ -17,9 +20,20 @@ pub async fn call_tool(
     if !tool_catalog().iter().any(|tool| tool.name == request.name) {
         return Ok(failure("未知的内置工具"));
     }
-    let permit = match state.mcp_host.requests.clone().try_acquire_owned() {
-        Ok(permit) => permit,
-        Err(_) => return Ok(failure("工具正在忙，请稍后重试")),
+    let permit = match tokio::time::timeout(
+        REQUEST_QUEUE_TIMEOUT,
+        state.mcp_host.requests.clone().acquire_owned(),
+    )
+    .await
+    {
+        Ok(Ok(permit)) => permit,
+        Ok(Err(_)) => return Ok(failure("MCP 请求队列不可用")),
+        Err(_) => {
+            return Ok(failure(&format!(
+                "工具调用排队超过 {} 秒",
+                REQUEST_QUEUE_TIMEOUT.as_secs()
+            )))
+        }
     };
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
@@ -33,14 +47,9 @@ fn execute_for_active_case(
     state: &AppState,
     request: McpHostToolCallRequestDto,
 ) -> Result<McpHostToolCallResultDto, CommandError> {
-    let _access = state.case_access()?;
-    // Holding the lifecycle lock until the read completes prevents a response
-    // or audit entry from being attributed to a newly opened case.
-    let guard = state
-        .active_case
-        .lock()
-        .map_err(|error| CommandError::from_lock_error("Case", error))?;
-    let Some(active) = guard.as_ref() else {
+    // The snapshot owns a shared lifecycle access until the response and audit
+    // are complete, without blocking unrelated tool calls on active_case lock.
+    let Some(active) = snapshot_active_case(state)? else {
         return Ok(failure("请先在应用中打开案件"));
     };
     let conn = rusqlite::Connection::open_with_flags(
@@ -69,7 +78,9 @@ fn execute_for_active_case(
                 data: Some(data),
                 error: None,
             },
-            Ok(_) => failure("工具结果过大，请缩小查询范围"),
+            Ok(_) => failure(
+                &app_services::mcp_host_service::McpHostServiceError::ResultTooLarge.to_string(),
+            ),
             Err(error) => failure(&error.to_string()),
         }
     };

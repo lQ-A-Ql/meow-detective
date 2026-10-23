@@ -20,7 +20,7 @@ use crate::source_db::{
 
 mod cursor;
 
-pub(super) const MAX_CASE_SEARCH_WINDOW: u64 = 100_000;
+pub(super) const MAX_LEGACY_OFFSET_WINDOW: u64 = 100_000;
 
 pub(super) fn search_files_for_case(
     case_conn: &Connection,
@@ -28,6 +28,12 @@ pub(super) fn search_files_for_case(
     case_id: &domain::CaseId,
     request: &SearchFilesRequest,
 ) -> Result<SearchFileResultPageDto, SearchError> {
+    if request.limit > 0 && request.offset >= MAX_LEGACY_OFFSET_WINDOW {
+        return Err(SearchError::InvalidInput(format!(
+            "offset {0} 超过无游标分页窗口，请使用 nextCursor 继续",
+            request.offset
+        )));
+    }
     let start = std::time::Instant::now();
     let source_set = current_sources(case_conn, case_root, case_id, request)?;
     let options = file_search_options(request);
@@ -39,7 +45,7 @@ pub(super) fn search_files_for_case(
         total = total.saturating_add(cursor.total_count);
         sources.push(cursor);
     }
-    let available = total.min(MAX_CASE_SEARCH_WINDOW);
+    let available = total.min(MAX_LEGACY_OFFSET_WINDOW);
     let mut items = Vec::with_capacity(request.limit as usize);
     if request.limit > 0 && request.offset < available {
         let merge_end = (scan_end as u64).min(available);
@@ -286,12 +292,12 @@ pub(super) fn file_hit_to_dto(
 }
 
 pub(super) fn bounded_scan_end(offset: u64, limit: u32) -> usize {
-    if limit == 0 || offset >= MAX_CASE_SEARCH_WINDOW {
+    if limit == 0 || offset >= MAX_LEGACY_OFFSET_WINDOW {
         return 0;
     }
     offset
         .saturating_add(u64::from(limit))
-        .min(MAX_CASE_SEARCH_WINDOW) as usize
+        .min(MAX_LEGACY_OFFSET_WINDOW) as usize
 }
 
 fn next_search_source(
