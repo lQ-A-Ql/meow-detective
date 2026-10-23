@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import {
   useFileHandle, useFileViewer, useImagePreview, useImageMetadata, useMediaUrl,
   useTextPreview, useDocumentPreview,
@@ -7,20 +6,16 @@ import i18n from '@/i18n';
 import type { ApiErrorDto, FileEntryRow } from '@/types/models';
 import type { FilePreviewKind, PreviewViewerTab } from '@/components/preview/FilePreviewTabs';
 import { errorMessage, isApiErrorDto } from '@/lib/errors';
-import { getFilePreviewKind } from '@/features/files/preview-file-kind';
-
-function getPreviewKindFromMime(mime?: unknown): FilePreviewKind | undefined {
-  // The transport is untrusted at runtime: a malformed handle must not crash the preview pane.
-  const normalized = typeof mime === 'string' ? mime.toLowerCase() : '';
-  if (normalized.startsWith('image/')) return 'image';
-  if (normalized.startsWith('video/')) return 'video';
-  if (normalized.startsWith('audio/')) return 'audio';
-  return undefined;
-}
 
 interface UseFilePreviewOptions {
   selectedFile: FileEntryRow | undefined;
   viewerTab: PreviewViewerTab;
+}
+
+function getPreviewKindFromHandle(value: unknown): FilePreviewKind | undefined {
+  return value === 'image' || value === 'video' || value === 'audio' || value === 'document'
+    ? value
+    : undefined;
 }
 
 function normalizePreviewError(error: unknown): ApiErrorDto | null {
@@ -38,13 +33,9 @@ export function useFilePreview({
   selectedFile,
   viewerTab,
 }: UseFilePreviewOptions) {
-  const selectedFilePreviewKind = useMemo(() => {
-    return selectedFile ? getFilePreviewKind(selectedFile) : undefined;
-  }, [selectedFile]);
   const needsPreviewHandle =
     viewerTab === 'preview' &&
-    Boolean(selectedFile?.id) &&
-    selectedFilePreviewKind === undefined;
+    Boolean(selectedFile?.id);
   const needsMetadataHandle =
     viewerTab === 'metadata' && Boolean(selectedFile?.id);
   const handleQuery = useFileHandle(
@@ -52,9 +43,10 @@ export function useFilePreview({
     needsPreviewHandle || needsMetadataHandle
   );
   const fileHandle = handleQuery.data;
+  const detectedPreviewKind = getPreviewKindFromHandle(fileHandle?.previewKind);
   const previewKind =
     viewerTab === 'preview'
-      ? selectedFilePreviewKind ?? getPreviewKindFromMime(fileHandle?.mime)
+      ? detectedPreviewKind
       : undefined;
   const hexPreviewEnabled = viewerTab === 'hex' && Boolean(selectedFile?.id);
   const textPreviewEnabled = viewerTab === 'text' && Boolean(selectedFile?.id);
@@ -78,7 +70,7 @@ export function useFilePreview({
   const imageQuery = useImagePreview(selectedFile?.id, imagePreviewEnabled);
   const imageMetadataQuery = useImageMetadata(
     selectedFile?.id,
-    Boolean(selectedFile?.id) && selectedFilePreviewKind === 'image',
+    Boolean(selectedFile?.id) && detectedPreviewKind === 'image',
   );
   const mediaQuery = useMediaUrl(selectedFile?.id, mediaPreviewEnabled);
   const documentQuery = useDocumentPreview(selectedFile?.id, documentPreviewEnabled);

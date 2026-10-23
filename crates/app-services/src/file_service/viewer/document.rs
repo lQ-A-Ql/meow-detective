@@ -4,7 +4,9 @@
 
 use rusqlite::{serialize::OwnedData, Connection, DatabaseName};
 use std::ptr::NonNull;
-use transport::dto::{DocumentPreviewDto, DocumentSectionDto, DocumentTableDto};
+use transport::dto::{
+    DocumentPreviewDto, DocumentSectionDto, DocumentTableDto, ViewerPreviewKindDto,
+};
 
 use super::office_preview::{office_docx_lines, preview_office_part, preview_pptx, preview_xlsx};
 use super::{
@@ -64,6 +66,11 @@ where
     C: PreviewReadContext,
 {
     let handle = open_file_handle_real(&mut context, file_id)?;
+    if handle.preview_kind != Some(ViewerPreviewKindDto::Document) {
+        return Err(FileServiceError::invalid_input(
+            "Not a document-like file (PDF, Office, or SQLite)",
+        ));
+    }
     let kind = DocumentKind::from_mime(handle.mime.as_deref().unwrap_or("")).ok_or_else(|| {
         FileServiceError::invalid_input("Not a document-like file (PDF, Office, or SQLite)")
     })?;

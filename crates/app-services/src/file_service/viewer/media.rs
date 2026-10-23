@@ -1,6 +1,7 @@
 use base64::Engine;
 use transport::dto::{
     MediaPreviewModeDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto,
+    ViewerPreviewKindDto,
 };
 
 use crate::file_service::FileServiceError;
@@ -29,6 +30,12 @@ where
     C: PreviewReadContext,
 {
     let handle = open_file_handle_real(&mut context, file_id)?;
+    if !matches!(
+        handle.preview_kind,
+        Some(ViewerPreviewKindDto::Video | ViewerPreviewKindDto::Audio)
+    ) {
+        return Err(FileServiceError::invalid_input("Not a media file"));
+    }
     let mime = handle
         .mime
         .clone()

@@ -9,7 +9,38 @@ use domain::FileEntryId;
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use std::path::PathBuf;
-use transport::dto::ViewerHandleDto;
+use transport::dto::{ViewerHandleDto, ViewerPreviewKindDto};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DetectedPreview {
+    pub(crate) kind: ViewerPreviewKindDto,
+    pub(crate) mime: &'static str,
+}
+
+pub(crate) fn detect_preview_for_file<C>(
+    context: &mut C,
+    file_id: &str,
+) -> Result<Option<DetectedPreview>, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    let bytes = super::read_file_header_with_context(
+        context,
+        &FileEntryId(file_id.to_string()),
+        crate::analysis_service::MAGIC_HEADER_LIMIT,
+    )?;
+    let Some((file_type, mime)) = crate::analysis_service::detect_preview_magic(&bytes) else {
+        return Ok(None);
+    };
+    let kind = match file_type {
+        "JPEG" | "PNG" | "GIF" | "BMP" | "WEBP" | "ICO" => ViewerPreviewKindDto::Image,
+        "MP4" | "MKV" | "AVI" => ViewerPreviewKindDto::Video,
+        "MP3" | "M4A" | "WAV" | "FLAC" | "OGG" => ViewerPreviewKindDto::Audio,
+        "PDF" | "DOCX" | "XLSX" | "PPTX" | "SQLite" => ViewerPreviewKindDto::Document,
+        _ => return Ok(None),
+    };
+    Ok(Some(DetectedPreview { kind, mime }))
+}
 
 pub fn open_file_handle_real<C>(
     mut context: C,
@@ -24,11 +55,19 @@ where
 
     let descriptor =
         descriptor_for_file_with_cache(&mut context, &FileEntryId(file_id.to_string()))?;
+    let detected = detect_preview_for_file(&mut context, file_id)
+        .ok()
+        .flatten();
+    let mime = detected
+        .as_ref()
+        .map(|value| value.mime.to_string())
+        .or(descriptor.mime);
 
     Ok(ViewerHandleDto {
         handle_id: format!("{FILE_HANDLE_PREFIX}{}", descriptor.file_id),
         size: descriptor.size,
-        mime: descriptor.mime,
+        mime,
+        preview_kind: detected.as_ref().map(|value| value.kind),
     })
 }
 
@@ -42,11 +81,20 @@ pub(crate) fn open_file_handle_uncached(
         .ok_or_else(|| FileServiceError::not_found("File not found"))?;
 
     validate_readable_file_entry(conn, &entry)?;
+    let mut read_conn = conn;
+    let detected = detect_preview_for_file(&mut read_conn, file_id)
+        .ok()
+        .flatten();
+    let mime = detected
+        .as_ref()
+        .map(|value| value.mime.to_string())
+        .or_else(|| mime_for_entry(&entry));
 
     Ok(ViewerHandleDto {
         handle_id: format!("{FILE_HANDLE_PREFIX}{}", entry.id.0),
         size: entry.size.unwrap_or(0),
-        mime: mime_for_entry(&entry),
+        mime,
+        preview_kind: detected.as_ref().map(|value| value.kind),
     })
 }
 

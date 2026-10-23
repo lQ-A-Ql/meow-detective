@@ -82,6 +82,59 @@ pub(crate) fn detect_magic(data: &[u8], ext: &str) -> Option<(&'static str, &'st
     }
     None
 }
+
+/// Map the shared classification signature result to a preview MIME. This
+/// deliberately reuses `detect_magic`; preview code must not maintain a second
+/// signature table. Office Open XML is refined from the ZIP member names that
+/// are present in the bounded header, rather than from the file extension.
+pub(crate) fn detect_preview_magic(data: &[u8]) -> Option<(&'static str, &'static str)> {
+    if data.starts_with(b"PK\x03\x04") {
+        if data.windows(5).any(|window| window == b"word/") {
+            return Some((
+                "DOCX",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ));
+        }
+        if data.windows(3).any(|window| window == b"xl/") {
+            return Some((
+                "XLSX",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ));
+        }
+        if data.windows(4).any(|window| window == b"ppt/") {
+            return Some((
+                "PPTX",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ));
+        }
+        return None;
+    }
+
+    if data.len() >= 12 && &data[4..8] == b"ftyp" && matches!(&data[8..12], b"M4A " | b"M4B ") {
+        return Some(("M4A", "audio/mp4"));
+    }
+
+    let (file_type, _) = detect_magic(data, "")?;
+    let mime = match file_type {
+        "PDF" => "application/pdf",
+        "SQLite" => "application/x-sqlite3",
+        "JPEG" => "image/jpeg",
+        "PNG" => "image/png",
+        "GIF" => "image/gif",
+        "BMP" => "image/bmp",
+        "WEBP" => "image/webp",
+        "ICO" => "image/x-icon",
+        "MP4" => "video/mp4",
+        "MKV" => "video/x-matroska",
+        "AVI" => "video/x-msvideo",
+        "MP3" => "audio/mpeg",
+        "WAV" => "audio/wav",
+        "FLAC" => "audio/flac",
+        "OGG" => "audio/ogg",
+        _ => return None,
+    };
+    Some((file_type, mime))
+}
 pub(crate) fn is_office_ext(ext: &str) -> bool {
     matches!(ext, "docx" | "xlsx" | "pptx")
 }

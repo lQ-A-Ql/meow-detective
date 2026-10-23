@@ -68,30 +68,27 @@ fn text_preview_assembles_dto_from_service_bytes() {
 
 #[test]
 fn image_preview_uses_direct_logical_path_without_range_fallback() {
-    with_logical_case_file(
-        "image-preview",
-        "tiny.png",
-        b"tiny image bytes",
-        |conn, file_id| {
-            let image = image_preview_for_file(conn, &file_id)
-                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-            assert_eq!(image.mime_type, "image/png");
-            let (_, encoded) = image.data_url.split_once(',').expect("data URL payload");
-            assert_eq!(
-                base64::engine::general_purpose::STANDARD
-                    .decode(encoded.as_bytes())
-                    .unwrap(),
-                b"tiny image bytes"
-            );
-            Ok(())
-        },
-    );
+    let content = b"\x89PNG\r\n\x1a\ntiny image bytes";
+    with_logical_case_file("image-preview", "tiny.png", content, |conn, file_id| {
+        let image = image_preview_for_file(conn, &file_id)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        assert_eq!(image.mime_type, "image/png");
+        let (_, encoded) = image.data_url.split_once(',').expect("data URL payload");
+        assert_eq!(
+            base64::engine::general_purpose::STANDARD
+                .decode(encoded.as_bytes())
+                .unwrap(),
+            content
+        );
+        Ok(())
+    });
 }
 
 #[test]
 fn oversized_media_preview_returns_protocol_plan_without_host_path() {
-    let oversized =
+    let mut oversized =
         vec![b'A'; infrastructure::constants::MAX_INLINE_MEDIA_PREVIEW_BYTES as usize + 1];
+    oversized[..12].copy_from_slice(b"\0\0\0\0ftypisom");
     with_logical_case_file(
         "large-media-preview",
         "large.mp4",

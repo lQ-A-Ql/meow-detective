@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 
 pub const MAX_VIEWER_RANGE_LENGTH: u32 = 1024 * 1024;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ViewerPreviewKindDto {
+    Image,
+    Video,
+    Audio,
+    Document,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ViewerHandleDto {
@@ -9,6 +18,8 @@ pub struct ViewerHandleDto {
     pub size: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mime: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview_kind: Option<ViewerPreviewKindDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

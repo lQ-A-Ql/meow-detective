@@ -47,6 +47,7 @@ pub(crate) use filesystem::{
     is_linux_filesystem_kind, is_preview_image_filesystem_kind, looks_like_exfat_boot_sector,
     mft_file_locator_from_entry_id, resolve_partition_index_for_entry,
 };
+pub(crate) use handle::detect_preview_for_file;
 pub(crate) use image_open::{
     open_android_sparse_file, open_candidate_block_reader_with_lvm_cache,
     open_descriptor_image_file, open_descriptor_image_file_with_context, open_e01_file,

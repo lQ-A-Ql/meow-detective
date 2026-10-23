@@ -6,6 +6,7 @@ fn test_viewer_handle_dto_serialization() {
         handle_id: "file:123".to_string(),
         size: 1024,
         mime: Some("text/plain".to_string()),
+        preview_kind: None,
     };
     let json = serde_json::to_string(&dto).unwrap();
     assert!(json.contains("handleId"));
@@ -19,6 +20,7 @@ fn test_viewer_handle_dto_no_mime() {
         handle_id: "file:123".to_string(),
         size: 1024,
         mime: None,
+        preview_kind: None,
     };
     let json = serde_json::to_string(&dto).unwrap();
     assert!(!json.contains("mime"));

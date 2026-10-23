@@ -1,5 +1,5 @@
 use base64::Engine;
-use transport::dto::ImagePreviewDto;
+use transport::dto::{ImagePreviewDto, ViewerPreviewKindDto};
 
 use crate::file_service::FileServiceError;
 
@@ -16,7 +16,7 @@ where
 {
     let handle = open_file_handle_real(&mut context, file_id)?;
     let mime = handle.mime.as_deref().unwrap_or("");
-    if !mime.starts_with("image/") {
+    if handle.preview_kind != Some(ViewerPreviewKindDto::Image) {
         return Err(FileServiceError::invalid_input("Not an image file"));
     }
     if handle.size > infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES {

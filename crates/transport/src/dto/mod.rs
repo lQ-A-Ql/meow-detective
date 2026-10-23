@@ -195,6 +195,6 @@ pub use v3_governance::{
 pub use viewer::{
     DocumentPreviewDto, DocumentSectionDto, DocumentTableDto, ImageMetadataDto,
     ImageMetadataStatusDto, ImagePreviewDto, MediaPreviewModeDto, MediaRangeRequestDto,
-    MediaRangeResponseDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto, ViewerRangeRequestDto,
-    ViewerRangeResponseDto, MAX_VIEWER_RANGE_LENGTH,
+    MediaRangeResponseDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto, ViewerPreviewKindDto,
+    ViewerRangeRequestDto, ViewerRangeResponseDto, MAX_VIEWER_RANGE_LENGTH,
 };

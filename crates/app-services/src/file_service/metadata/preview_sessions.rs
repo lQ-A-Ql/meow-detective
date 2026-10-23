@@ -59,6 +59,27 @@ fn open_preview_session_internal(
     let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     let scope = registry.begin_session(case_id, &global_id.data_source_id)?;
     let descriptor = preview_descriptor_for_case(&source_conn, &case_id.0, &global_id.local_id)?;
+    let detected = {
+        let context = SourceReadContext::new(
+            &source_conn,
+            case_conn,
+            case_root,
+            case_id,
+            &global_id.data_source_id,
+        );
+        let mut context = if let Some(runtime) = bitlocker_runtime {
+            context.with_bitlocker_runtime(runtime.clone())
+        } else {
+            context
+        };
+        crate::file_service::viewer::detect_preview_for_file(&mut context, &global_id.local_id.0)
+            .ok()
+            .flatten()
+    };
+    let effective_mime = detected
+        .as_ref()
+        .map(|value| value.mime.to_string())
+        .or_else(|| descriptor.mime.clone());
     let global_file_id =
         crate::source_db::GlobalFileId::new(global_id.data_source_id.clone(), global_id.local_id)
             .encode()
@@ -83,7 +104,7 @@ fn open_preview_session_internal(
             global_id.data_source_id.0,
             global_file_id,
             descriptor.size,
-            descriptor.mime.clone(),
+            effective_mime.clone(),
         )
     } else if let Some(file) = prepared_file {
         PreviewSession::prepared_file(
@@ -91,7 +112,7 @@ fn open_preview_session_internal(
             global_id.data_source_id.0.clone(),
             global_file_id,
             descriptor.size,
-            descriptor.mime.clone(),
+            effective_mime.clone(),
             file,
         )
     } else if descriptor.source_kind == "ceph_rbd" {
@@ -114,7 +135,7 @@ fn open_preview_session_internal(
             case_id.0.clone(),
             global_file_id,
             descriptor.size,
-            descriptor.mime.clone(),
+            effective_mime.clone(),
             runtime.lineage_fingerprint().to_string(),
             filesystem,
             &descriptor,
@@ -131,7 +152,7 @@ fn open_preview_session_internal(
             case_id.0.clone(),
             global_file_id,
             descriptor.size,
-            descriptor.mime.clone(),
+            effective_mime.clone(),
             &descriptor,
             reader,
         )
@@ -141,14 +162,15 @@ fn open_preview_session_internal(
             global_id.data_source_id.0,
             global_file_id,
             descriptor.size,
-            descriptor.mime.clone(),
+            effective_mime.clone(),
         )
     };
     let handle_id = registry.insert_session(&scope, session)?;
     Ok(ViewerHandleDto {
         handle_id,
         size: descriptor.size,
-        mime: descriptor.mime,
+        mime: effective_mime,
+        preview_kind: detected.as_ref().map(|value| value.kind),
     })
 }
 

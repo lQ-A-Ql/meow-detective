@@ -2,6 +2,7 @@ export interface ViewerHandle {
   handleId: string;
   size: number;
   mime?: string;
+  previewKind?: 'image' | 'video' | 'audio' | 'document';
 }
 
 export interface ViewerRangeRequest {
