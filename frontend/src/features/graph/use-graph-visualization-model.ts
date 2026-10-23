@@ -29,15 +29,22 @@ export function useGraphVisualizationModel() {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string>();
   const [expandTarget, setExpandTarget] = useState<{ nodeId: string; depth: number }>();
   const hasSelectedEdgeTypes = selectedEdgeTypes.length > 0;
-  const initialQuery = useGraphQuery({
-    startIds: hasSelectedEdgeTypes ? seedIds : [],
-    edgeTypes: selectedEdgeTypes,
-    maxDepth,
-    limit: 150,
-    edgeLimit: 600,
-  });
-  const neighborhood = useNodeNeighborhood(expandTarget?.nodeId ?? '', expandTarget?.depth ?? 1);
-  const provenance = useProvenanceChain(selectedEdgeId);
+  const initialQuery = useGraphQuery(
+    {
+      startIds: hasSelectedEdgeTypes ? seedIds : [],
+      edgeTypes: selectedEdgeTypes,
+      maxDepth,
+      limit: 150,
+      edgeLimit: 600,
+    },
+    caseId,
+  );
+  const neighborhood = useNodeNeighborhood(
+    expandTarget?.nodeId ?? '',
+    expandTarget?.depth ?? 1,
+    caseId,
+  );
+  const provenance = useProvenanceChain(selectedEdgeId, caseId);
 
   useEffect(() => {
     setSeedIds([]);

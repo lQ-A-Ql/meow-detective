@@ -12,8 +12,11 @@ export function useReportTemplates() {
   return useQuery({ queryKey: ['reports', 'templates'], queryFn: getReportTemplates });
 }
 
-export function useReportHistory() {
-  return useQuery({ queryKey: ['reports', 'history'], queryFn: getReportHistory });
+export function useReportHistory(caseId?: string) {
+  return useQuery({
+    queryKey: ['reports', 'history', caseId ?? null],
+    queryFn: getReportHistory,
+  });
 }
 
 export type ReportExportFormat = 'html' | 'csv' | 'json';

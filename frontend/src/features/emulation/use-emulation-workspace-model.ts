@@ -167,7 +167,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   }, [selectedSourceId, sourceOptions]);
 
   const preflightQuery = useQuery({
-    queryKey: ['emulation', 'preflight', selectedSourceId],
+    queryKey: ['emulation', 'preflight', currentCase.data?.id ?? null, selectedSourceId],
     queryFn: () => getEmulationPreflight(selectedSourceId),
     enabled: Boolean(selectedSourceId),
     retry: false,
@@ -176,13 +176,13 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     (install) => install.partitionIndex === bypassPartition,
   )?.platform === 'linux';
   const bypassAccountsQuery = useQuery({
-    queryKey: ['emulation', 'bypass-accounts', selectedSourceId, bypassPartition],
+    queryKey: ['emulation', 'bypass-accounts', currentCase.data?.id ?? null, selectedSourceId, bypassPartition],
     queryFn: () => getEmulationBypassAccounts(selectedSourceId, bypassPartition!),
     enabled: Boolean(selectedSourceId) && bypassPartition !== undefined && !bypassIsLinux,
     retry: false,
   });
   const linuxAccountsQuery = useQuery({
-    queryKey: ['emulation', 'linux-accounts', selectedSourceId, bypassPartition],
+    queryKey: ['emulation', 'linux-accounts', currentCase.data?.id ?? null, selectedSourceId, bypassPartition],
     queryFn: () => getEmulationLinuxAccounts(selectedSourceId, bypassPartition!),
     enabled: Boolean(selectedSourceId) && bypassPartition !== undefined && bypassIsLinux,
     retry: false,

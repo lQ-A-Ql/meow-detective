@@ -17,18 +17,18 @@ export function useGraphSnapshot(caseId: string) {
   });
 }
 
-export function useGraphQuery(query: GraphQuery) {
+export function useGraphQuery(query: GraphQuery, caseId?: string) {
   return useQuery({
-    queryKey: ['graph', 'query', query],
+    queryKey: ['graph', 'query', caseId ?? null, query],
     queryFn: () => queryGraph(query),
     enabled: query.startIds.length > 0,
     retry: false,
   });
 }
 
-export function useNodeNeighborhood(nodeId: string, depth: number = 1) {
+export function useNodeNeighborhood(nodeId: string, depth: number = 1, caseId?: string) {
   return useQuery({
-    queryKey: ['graph', 'neighborhood', nodeId, depth],
+    queryKey: ['graph', 'neighborhood', caseId ?? null, nodeId, depth],
     queryFn: () => getNodeNeighborhood(nodeId, depth),
     enabled: Boolean(nodeId),
     retry: false,
@@ -68,9 +68,9 @@ export function useGraphCitationNodes(caseId: string, seedNodeIds: string[]) {
   });
 }
 
-export function useProvenanceChain(edgeId?: string) {
+export function useProvenanceChain(edgeId?: string, caseId?: string) {
   return useQuery({
-    queryKey: ['graph', 'provenance', edgeId ?? ''],
+    queryKey: ['graph', 'provenance', caseId ?? null, edgeId ?? ''],
     queryFn: () => getProvenanceChain(edgeId!),
     enabled: Boolean(edgeId),
     retry: false,

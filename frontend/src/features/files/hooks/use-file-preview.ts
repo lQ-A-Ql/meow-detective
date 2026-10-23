@@ -10,6 +10,7 @@ import { errorMessage, isApiErrorDto } from '@/lib/errors';
 interface UseFilePreviewOptions {
   selectedFile: FileEntryRow | undefined;
   viewerTab: PreviewViewerTab;
+  caseId?: string;
 }
 
 function getPreviewKindFromHandle(value: unknown): FilePreviewKind | undefined {
@@ -32,6 +33,7 @@ function normalizePreviewError(error: unknown): ApiErrorDto | null {
 export function useFilePreview({
   selectedFile,
   viewerTab,
+  caseId,
 }: UseFilePreviewOptions) {
   const needsPreviewHandle =
     viewerTab === 'preview' &&
@@ -40,7 +42,8 @@ export function useFilePreview({
     viewerTab === 'metadata' && Boolean(selectedFile?.id);
   const handleQuery = useFileHandle(
     selectedFile?.id,
-    needsPreviewHandle || needsMetadataHandle
+    needsPreviewHandle || needsMetadataHandle,
+    caseId,
   );
   const fileHandle = handleQuery.data;
   const detectedPreviewKind = getPreviewKindFromHandle(fileHandle?.previewKind);
@@ -58,7 +61,7 @@ export function useFilePreview({
     Boolean(selectedFile?.id);
   const documentPreviewEnabled =
     viewerTab === 'preview' && previewKind === 'document' && Boolean(selectedFile?.id);
-  const viewerQuery = useFileViewer(selectedFile?.id, hexPreviewEnabled);
+  const viewerQuery = useFileViewer(selectedFile?.id, hexPreviewEnabled, caseId);
   const {
     data: viewer,
     setJumpOffsetInput,
@@ -66,14 +69,15 @@ export function useFilePreview({
     loadNextRange,
     loadPreviousRange,
   } = viewerQuery;
-  const textQuery = useTextPreview(selectedFile?.id, textPreviewEnabled);
-  const imageQuery = useImagePreview(selectedFile?.id, imagePreviewEnabled);
+  const textQuery = useTextPreview(selectedFile?.id, textPreviewEnabled, caseId);
+  const imageQuery = useImagePreview(selectedFile?.id, imagePreviewEnabled, caseId);
   const imageMetadataQuery = useImageMetadata(
     selectedFile?.id,
     Boolean(selectedFile?.id) && detectedPreviewKind === 'image',
+    caseId,
   );
-  const mediaQuery = useMediaUrl(selectedFile?.id, mediaPreviewEnabled);
-  const documentQuery = useDocumentPreview(selectedFile?.id, documentPreviewEnabled);
+  const mediaQuery = useMediaUrl(selectedFile?.id, mediaPreviewEnabled, caseId);
+  const documentQuery = useDocumentPreview(selectedFile?.id, documentPreviewEnabled, caseId);
   const activePreviewQuery =
     viewerTab === 'hex'
       ? viewerQuery

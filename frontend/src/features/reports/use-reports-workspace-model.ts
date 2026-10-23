@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { useDataSources } from '@/features/case/hooks';
+import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import {
   deriveEvidenceHashStatus,
   getEvidenceHashCaveatText,
@@ -25,7 +25,8 @@ function isReportExportFormat(value: string): value is ReportExportFormat {
 /** Owns report queries, export scope state, and export feedback. */
 export function useReportsWorkspaceModel() {
   const templatesQuery = useReportTemplates();
-  const historyQuery = useReportHistory();
+  const currentCase = useCurrentCase();
+  const historyQuery = useReportHistory(currentCase.data?.id);
   const dataSourcesQuery = useDataSources();
   const importSignals = useImportEventState();
   const exportMutation = useExportReport();

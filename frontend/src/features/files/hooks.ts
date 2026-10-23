@@ -28,6 +28,7 @@ import {
 } from '@/types/models';
 import type { FileSortKey, FileSortDirection } from '@/lib/file-sort';
 import { expectJobsSnapshotActivity } from '@/features/jobs/hooks';
+import { useCurrentCase } from '@/features/case/hooks';
 import { invalidateImportProjectionQueries } from '@/features/cache-invalidation';
 import { parseOffsetInput } from '@/lib/hex-offset-parser';
 import { fileJumpQuery } from './hooks/file-jump-query';
@@ -73,18 +74,18 @@ function invalidateImportQueries(qc: ReturnType<typeof useQueryClient>) {
   invalidateImportProjectionQueries(qc);
 }
 
-export function useFileTree(showHidden = false) {
+export function useFileTree(showHidden = false, caseId?: string) {
   return useQuery({
-    queryKey: ['files', 'tree', showHidden],
+    queryKey: ['files', 'tree', caseId ?? null, showHidden],
     queryFn: () => getFileTree(showHidden),
     staleTime: 10_000, // reduced from Infinity to pick up post-import tree updates
     placeholderData: keepPreviousData,
   });
 }
 
-export function useFileRows(parentId?: string, showHidden = false) {
+export function useFileRows(parentId?: string, showHidden = false, caseId?: string) {
   return useQuery({
-    queryKey: ['files', 'rows', parentId ?? null, showHidden],
+    queryKey: ['files', 'rows', caseId ?? null, parentId ?? null, showHidden],
     queryFn: () => getFileRows(parentId, showHidden),
     enabled: parentId !== undefined,
   });
@@ -97,9 +98,10 @@ export function useFileRowsPage(
   showHidden = false,
   sortKey: FileSortKey = 'name',
   sortDirection: FileSortDirection = 'asc',
+  caseId?: string,
 ) {
   return useQuery({
-    queryKey: ['files', 'rows-page', parentId ?? null, offset, limit, showHidden, sortKey, sortDirection],
+    queryKey: ['files', 'rows-page', caseId ?? null, parentId ?? null, offset, limit, showHidden, sortKey, sortDirection],
     queryFn: () => getFileRowsPage(parentId, offset, limit, showHidden, sortKey, sortDirection),
     enabled: parentId !== undefined,
   });
@@ -116,18 +118,24 @@ export function useFileJumpContext(
   return useQuery(fileJumpQuery(caseId, fileId, showHidden, pageLimit, sortKey, sortDirection));
 }
 
-export function useFileChildren(parentId?: string, showHidden = false) {
+export function useFileChildren(parentId?: string, showHidden = false, caseId?: string) {
   return useQuery({
-    queryKey: ['files', 'children', parentId, showHidden],
+    queryKey: ['files', 'children', caseId ?? null, parentId, showHidden],
     queryFn: () => getFileChildren(parentId!, showHidden),
     enabled: Boolean(parentId),
     staleTime: 60_000,
   });
 }
 
-export function useFileChildrenPage(parentId?: string, offset = 0, limit = 500, showHidden = false) {
+export function useFileChildrenPage(
+  parentId?: string,
+  offset = 0,
+  limit = 500,
+  showHidden = false,
+  caseId?: string,
+) {
   return useQuery({
-    queryKey: ['files', 'children-page', parentId, offset, limit, showHidden],
+    queryKey: ['files', 'children-page', caseId ?? null, parentId, offset, limit, showHidden],
     queryFn: () => getFileChildrenPage(parentId!, offset, limit, showHidden),
     enabled: Boolean(parentId),
     staleTime: 60_000,
@@ -153,10 +161,11 @@ export function useFileChildrenBranches(
   branches: readonly FileChildrenBranchRequest[],
   limit = 500,
   showHidden = false,
+  caseId?: string,
 ) {
   return useQueries({
     queries: branches.map((branch) => ({
-      queryKey: ['files', 'children-page', branch.parentId, branch.offset, limit, showHidden],
+      queryKey: ['files', 'children-page', caseId ?? null, branch.parentId, branch.offset, limit, showHidden],
       queryFn: () => getFileChildrenPage(branch.parentId, branch.offset, limit, showHidden),
       enabled: Boolean(branch.parentId),
       staleTime: 60_000,
@@ -166,24 +175,26 @@ export function useFileChildrenBranches(
 
 export function useImportDataSource() {
   const qc = useQueryClient();
+  const currentCase = useCurrentCase();
+  const jobsQueryKey = ['jobs', 'snapshot', currentCase.data?.id ?? null];
   return useMutation({
     mutationFn: (request: ImportDataSourceRequest) => importDataSource(request),
     onMutate: () => {
-      expectJobsSnapshotActivity(qc.getQueryData(['jobs', 'snapshot']));
-      qc.invalidateQueries({ queryKey: ['jobs', 'snapshot'] });
+      expectJobsSnapshotActivity(qc.getQueryData(jobsQueryKey));
+      qc.invalidateQueries({ queryKey: jobsQueryKey });
     },
     onSuccess: () => {
       expectJobsSnapshotActivity();
       invalidateImportQueries(qc);
-      qc.invalidateQueries({ queryKey: ['jobs', 'snapshot'] });
+      qc.invalidateQueries({ queryKey: jobsQueryKey });
     },
   });
 }
 
-export function useFileHandle(fileId?: string, enabled = true) {
+export function useFileHandle(fileId?: string, enabled = true, caseId?: string) {
   const owner = usePreviewHandleOwner(`${fileId ?? ''}:handle`);
   const query = useQuery({
-    queryKey: ['files', 'handle', fileId ?? null],
+    queryKey: ['files', 'handle', caseId ?? null, fileId ?? null],
     enabled: Boolean(fileId) && enabled,
     retry: false,
     staleTime: PREVIEW_STALE_TIME,
@@ -260,7 +271,7 @@ function isStalePreviewHandleError(error: unknown) {
       || message.includes('unavailable'));
 }
 
-export function useFileViewer(fileId?: string, enabled = true) {
+export function useFileViewer(fileId?: string, enabled = true, caseId?: string) {
   const preview = useMemo(() => getPreviewSettings(), []);
   const owner = usePreviewHandleOwner(`${fileId ?? ''}:viewer`);
   const [loadedRanges, setLoadedRanges] = useState<HexLoadedRange[]>([]);
@@ -290,7 +301,7 @@ export function useFileViewer(fileId?: string, enabled = true) {
   }, [fileId]);
 
   const baseQuery = useQuery({
-    queryKey: ['files', 'viewer', fileId ?? null],
+    queryKey: ['files', 'viewer', caseId ?? null, fileId ?? null],
     enabled: Boolean(fileId) && enabled,
     retry: false,
     staleTime: PREVIEW_STALE_TIME,
@@ -499,9 +510,9 @@ export function useFileViewer(fileId?: string, enabled = true) {
  * Hook to get text preview for a file.
  * Returns text content with encoding detection.
  */
-export function useTextPreview(fileId?: string, enabled = true) {
+export function useTextPreview(fileId?: string, enabled = true, caseId?: string) {
   return useQuery({
-    queryKey: ['files', 'text', fileId],
+    queryKey: ['files', 'text', caseId ?? null, fileId],
     enabled: Boolean(fileId) && enabled,
     retry: false,
     staleTime: PREVIEW_STALE_TIME,
@@ -517,9 +528,9 @@ export function useTextPreview(fileId?: string, enabled = true) {
  * Hook to get image preview for a file.
  * Returns an inline data URL for bounded image previews.
  */
-export function useImagePreview(fileId?: string, enabled = true) {
+export function useImagePreview(fileId?: string, enabled = true, caseId?: string) {
   return useQuery({
-    queryKey: ['files', 'image', fileId],
+    queryKey: ['files', 'image', caseId ?? null, fileId],
     enabled: Boolean(fileId) && enabled,
     retry: false,
     staleTime: PREVIEW_STALE_TIME,
@@ -532,9 +543,9 @@ export function useImagePreview(fileId?: string, enabled = true) {
 }
 
 /** Load bounded EXIF/GPS metadata through the source-bound backend reader. */
-export function useImageMetadata(fileId?: string, enabled = true) {
+export function useImageMetadata(fileId?: string, enabled = true, caseId?: string) {
   return useQuery({
-    queryKey: ['files', 'image-metadata', fileId],
+    queryKey: ['files', 'image-metadata', caseId ?? null, fileId],
     enabled: Boolean(fileId) && enabled,
     retry: false,
     staleTime: PREVIEW_STALE_TIME,
@@ -549,9 +560,9 @@ export function useImageMetadata(fileId?: string, enabled = true) {
 /**
  * Hook for structured document preview (PDF, Office Open XML, SQLite).
  */
-export function useDocumentPreview(fileId?: string, enabled = true) {
+export function useDocumentPreview(fileId?: string, enabled = true, caseId?: string) {
   return useQuery({
-    queryKey: ['files', 'document', fileId],
+    queryKey: ['files', 'document', caseId ?? null, fileId],
     enabled: Boolean(fileId) && enabled,
     retry: false,
     staleTime: PREVIEW_STALE_TIME,
@@ -567,11 +578,11 @@ export function useDocumentPreview(fileId?: string, enabled = true) {
  * Hook to get media URL for video/audio playback.
  * Returns an inline data URL for bounded media previews.
  */
-export function useMediaUrl(fileId?: string, enabled = true) {
+export function useMediaUrl(fileId?: string, enabled = true, caseId?: string) {
   const preview = useMemo(() => getPreviewSettings(), []);
   const owner = usePreviewHandleOwner(`${fileId ?? ''}:media`);
   const query = useQuery<MediaPreview | null, Error>({
-    queryKey: ['files', 'media', fileId],
+    queryKey: ['files', 'media', caseId ?? null, fileId],
     enabled: Boolean(fileId) && enabled,
     retry: false,
     staleTime: PREVIEW_STALE_TIME,

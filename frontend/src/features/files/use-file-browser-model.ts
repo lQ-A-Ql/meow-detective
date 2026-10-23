@@ -97,6 +97,7 @@ export function useFileBrowserModel() {
     activeDirectoryId: tree.activeDirectoryIsDataSource ? undefined : tree.activeDirectoryId,
     pageLimit: FILE_BROWSER_PAGE_LIMIT,
     showHidden,
+    caseId: currentCase?.id,
   });
 
   useEffect(() => {
@@ -216,6 +217,7 @@ export function useFileBrowserModel() {
   const preview = useFilePreview({
     selectedFile,
     viewerTab,
+    caseId: currentCase?.id,
   });
   const ntfsTechnicalQuery = useNtfsTechnicalFile(currentCase?.id, selectedFile?.id, selectedFile?.entryType === 'file');
   const digestSource = dataSources?.find((source) => source.id === (parseSourceScopedFileId(selectedFile?.id)?.sourceId ?? activePartitionContext?.dataSourceId ?? tree.activeRootNode?.dataSourceId));

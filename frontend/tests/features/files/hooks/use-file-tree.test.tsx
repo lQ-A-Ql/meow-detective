@@ -193,6 +193,7 @@ describe('useFileTree branch materialization', () => {
       ]),
       500,
       false,
+      'case-a',
     );
   });
 

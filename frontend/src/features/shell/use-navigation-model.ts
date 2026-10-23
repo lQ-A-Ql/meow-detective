@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router';
+import { useCurrentCase } from '@/features/case/hooks';
 import { useJobsSnapshot } from '@/features/jobs/hooks';
 import { isDevOrAuditMode } from '@/lib/env';
 import { useUiStore, type PageKey } from '@/stores/ui-store';
@@ -24,7 +25,8 @@ const productionLinks: NavigationLink[] = [
 /** Navigation destinations and job status for the activity rail. */
 export function useNavigationModel() {
   const navigate = useNavigate();
-  const { data: jobs } = useJobsSnapshot();
+  const currentCase = useCurrentCase();
+  const { data: jobs } = useJobsSnapshot(currentCase.data?.id);
   const toggleDrawer = useUiStore((state) => state.toggleDrawer);
   const setCurrentPage = useUiStore((state) => state.setCurrentPage);
   const links = isDevOrAuditMode()

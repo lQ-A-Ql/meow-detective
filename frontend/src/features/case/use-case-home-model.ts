@@ -33,7 +33,7 @@ export function useCaseHomeModel() {
   const currentCaseQuery = useCurrentCase();
   const dataSourcesQuery = useDataSources();
   const recentCasesQuery = useRecentCases();
-  const jobsQuery = useJobsSnapshot();
+  const jobsQuery = useJobsSnapshot(currentCaseQuery.data?.id);
   const appSettingsQuery = useAppSettings();
   const importMutation = useImportDataSource();
   const logicalDiskDigestTask = useEvidenceTask(currentCaseQuery.data?.id, 'source-digest');

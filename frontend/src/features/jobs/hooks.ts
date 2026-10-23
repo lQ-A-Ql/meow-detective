@@ -70,10 +70,10 @@ function refreshWhenObservedJobsSettle(queryClient: QueryClient, jobs?: JobSnaps
   }
 }
 
-export function useJobsSnapshot() {
+export function useJobsSnapshot(caseId?: string) {
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: ['jobs', 'snapshot'],
+    queryKey: ['jobs', 'snapshot', caseId ?? null],
     queryFn: getJobsSnapshot,
     refetchInterval: (activeQuery) => (shouldPollJobs(activeQuery.state.data as JobSnapshot[] | undefined) ? JOB_POLL_INTERVAL_MS : false),
     refetchIntervalInBackground: true,
@@ -86,10 +86,10 @@ export function useJobsSnapshot() {
   return query;
 }
 
-export function useWarnings() {
-  return useQuery({ queryKey: ['jobs', 'warnings'], queryFn: getWarnings });
+export function useWarnings(caseId?: string) {
+  return useQuery({ queryKey: ['jobs', 'warnings', caseId ?? null], queryFn: getWarnings });
 }
 
-export function useTraceItems() {
-  return useQuery({ queryKey: ['jobs', 'trace'], queryFn: getTraceItems });
+export function useTraceItems(caseId?: string) {
+  return useQuery({ queryKey: ['jobs', 'trace', caseId ?? null], queryFn: getTraceItems });
 }

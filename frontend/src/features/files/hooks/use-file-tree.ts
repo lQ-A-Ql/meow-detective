@@ -129,7 +129,7 @@ export function useFileTree({
     [expansionScope],
   );
 
-  const { data: rootTree, isFetching: rootTreeFetching } = useFileTreeQuery(showHidden);
+  const { data: rootTree, isFetching: rootTreeFetching } = useFileTreeQuery(showHidden, caseId);
 
   const showHiddenMountedRef = useRef(false);
   useEffect(() => {
@@ -279,7 +279,7 @@ export function useFileTree({
     treeChildOffsets,
   ]);
 
-  const branchQueries = useFileChildrenBranches(branchRequests, pageLimit, showHidden);
+  const branchQueries = useFileChildrenBranches(branchRequests, pageLimit, showHidden, caseId);
 
   const jumpPathChildren = useMemo(() => {
     const result = new Map<string, FileTreeNode>();

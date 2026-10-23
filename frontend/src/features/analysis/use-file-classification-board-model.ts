@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { PreviewViewerTab } from '@/components/preview/FilePreviewTabs';
+import { useCurrentCase } from '@/features/case/hooks';
 import { useFilePreview } from '@/features/files/hooks/use-file-preview';
 import { getDefaultFilePreviewTab } from '@/features/files/preview-file-kind';
 import type { ClassifiedFileRow, FileEntryRow } from '@/types/models';
@@ -29,6 +30,7 @@ function defaultPreviewTab(row: ClassifiedFileRow, file: FileEntryRow): PreviewV
 }
 
 export function useFileClassificationBoardModel() {
+  const currentCase = useCurrentCase();
   const [selected, setSelected] = useState<ClassifiedFileRow>();
   const [viewerTab, setViewerTab] = useState<PreviewViewerTab>('hex');
   const selectedFile = useMemo(
@@ -38,6 +40,7 @@ export function useFileClassificationBoardModel() {
   const preview = useFilePreview({
     selectedFile,
     viewerTab,
+    caseId: currentCase.data?.id,
   });
 
   const selectRow = useCallback((row: ClassifiedFileRow) => {

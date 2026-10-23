@@ -6,12 +6,14 @@ interface UseFilePaginationOptions {
   activeDirectoryId?: string;
   pageLimit: number;
   showHidden: boolean;
+  caseId?: string;
 }
 
 export function useFilePagination({
   activeDirectoryId,
   pageLimit,
   showHidden,
+  caseId,
 }: UseFilePaginationOptions) {
   const fileSortKey = useUiStore((s) => s.fileSortKey);
   const fileSortDirection = useUiStore((s) => s.fileSortDirection);
@@ -25,7 +27,8 @@ export function useFilePagination({
     pageLimit,
     showHidden,
     fileSortKey,
-    fileSortDirection
+    fileSortDirection,
+    caseId,
   );
   const rows = rowsPage?.rows;
 

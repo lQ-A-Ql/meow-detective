@@ -78,7 +78,7 @@ export function useOpenCase() {
       // database takes seconds, and prefetching here lets the user reach the
       // file browser with the tree already cached (same key as useFileTree).
       void qc.prefetchQuery({
-        queryKey: ['files', 'tree', false],
+        queryKey: ['files', 'tree', summary.id, false],
         queryFn: () => getFileTree(false),
         staleTime: 10_000,
       });

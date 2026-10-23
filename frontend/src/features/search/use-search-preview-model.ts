@@ -35,6 +35,7 @@ export function useSearchPreviewModel(caseId?: string) {
   const preview = useFilePreview({
     selectedFile: previewableFile,
     viewerTab,
+    caseId,
   });
 
   const openHit = useCallback((hit: SearchFileHit) => {
