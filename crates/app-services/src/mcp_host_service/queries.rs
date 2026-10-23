@@ -26,6 +26,15 @@ pub fn execute_tool(
         "forensics.get_plugin_module" => {
             super::plugin_modules::get_plugin_module(&context, arguments)
         }
+        "forensics.get_timeline_events"
+        | "forensics.get_timeline_event"
+        | "forensics.get_timeline_facets" => {
+            super::timeline::execute_timeline_tool(&context, name, arguments)
+        }
+        "forensics.search_files" => super::search::execute_search_tool(&context, arguments),
+        "forensics.get_content_index_coverage" => {
+            super::content_index::get_content_index_coverage(&context, arguments)
+        }
         _ => Err(McpHostServiceError::InvalidInput),
     }
 }

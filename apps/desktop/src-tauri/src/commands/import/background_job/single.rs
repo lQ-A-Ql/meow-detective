@@ -102,35 +102,48 @@ pub(crate) fn run_background_import_job(
         &job.job_id,
         options,
     ) {
-        Ok(message) => {
-            job_repo
-                .complete_committed(&job.job_id, &message)
-                .map_err(CommandError::from_typed_service_error)?;
-            if let Some(app) = app {
-                event_bridge::emit_job_completed(app, &job.job_id.0, &message);
-                crate::case_projection_jobs::schedule(
-                    &task_manager,
-                    app,
-                    &job.case_id.0,
-                    &job.case_root,
-                )?;
-            }
-            if let Err(error) = super::evidence_hash::schedule_pending_evidence_hashes(
-                &job.case_root,
-                &job.case_id.0,
-                app,
-                task_manager,
-            ) {
-                tracing::warn!(error = %error.message, "Failed to schedule evidence hash jobs after import");
-            }
-            Ok(())
-        }
+        Ok(message) => complete_import(
+            &job_repo,
+            &job.job_id,
+            &job.case_id,
+            &job.case_root,
+            app,
+            &task_manager,
+            message,
+        ),
         Err(error) if is_import_cancelled_message(&error.message) => {
             cancel_job(&job_repo, &job.job_id, app, &error.message);
             Ok(())
         }
         Err(error) => fail_job(&job_repo, &job.job_id, app, error),
     }
+}
+
+fn complete_import(
+    job_repo: &JobRepo<'_>,
+    job_id: &domain::JobId,
+    case_id: &domain::CaseId,
+    case_root: &std::path::Path,
+    app: Option<&AppHandle>,
+    task_manager: &Arc<TaskManager>,
+    message: String,
+) -> Result<(), CommandError> {
+    job_repo
+        .complete_committed(job_id, &message)
+        .map_err(CommandError::from_typed_service_error)?;
+    if let Some(app) = app {
+        event_bridge::emit_job_completed(app, &job_id.0, &message);
+        crate::case_projection_jobs::schedule(task_manager, app, &case_id.0, case_root)?;
+    }
+    if let Err(error) = super::evidence_hash::schedule_pending_evidence_hashes(
+        case_root,
+        &case_id.0,
+        app,
+        task_manager.clone(),
+    ) {
+        tracing::warn!(error = %error.message, "Failed to schedule evidence hash jobs after import");
+    }
+    Ok(())
 }
 
 fn start_import_job(

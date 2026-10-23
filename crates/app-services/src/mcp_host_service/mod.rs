@@ -1,6 +1,8 @@
 //! Read-only tool catalog and use cases shared by desktop UI and MCP clients.
+mod analysis;
 mod arguments;
 mod catalog;
+mod content_index;
 mod current_case;
 mod data_sources;
 mod files;
@@ -9,7 +11,10 @@ mod plugin_modules;
 mod queries;
 mod read_file;
 mod sanitization;
+mod search;
+mod timeline;
 
+pub use analysis::{execute_analysis_tool, McpHostAnalysisQueryContext};
 pub use catalog::{tool_catalog, validate_settings};
 pub use files::{execute_file_tool, McpHostFileQueryContext};
 pub use queries::{execute_tool, McpHostQueryContext};
@@ -32,8 +37,18 @@ pub enum McpHostServiceError {
     InvalidUtf8,
     #[error("读取数据源信息失败")]
     DataSource(#[from] crate::file_service::FileServiceError),
-    #[error("读取插件信息失败")]
-    Plugin(#[from] crate::analysis_service::AnalysisServiceError),
+    #[error("读取分析数据失败")]
+    Analysis(#[source] crate::analysis_service::AnalysisServiceError),
+    #[error("读取时间线失败")]
+    Timeline(#[source] crate::timeline_service::TimelineServiceError),
+    #[error("读取全局索引失败")]
+    Search(#[source] crate::search_service::SearchError),
+    #[error("读取内容索引状态失败")]
+    ContentIndex,
+    #[error("读取案件概览失败")]
+    Overview,
+    #[error("读取关联分析失败")]
+    Correlation,
     #[error("无法生成工具结果")]
     Json(#[from] serde_json::Error),
 }
@@ -45,6 +60,9 @@ impl transport::ServiceErrorCategory for McpHostServiceError {
                 transport::ErrorCategory::Validation
             }
             Self::File(error) => error.category(),
+            Self::Analysis(error) => error.category(),
+            Self::Timeline(error) => error.category(),
+            Self::Search(error) => error.category(),
             Self::IncompleteRead => transport::ErrorCategory::Parser,
             Self::UnsupportedFile => transport::ErrorCategory::Unsupported,
             _ => transport::ErrorCategory::Internal,

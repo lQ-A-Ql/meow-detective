@@ -1,9 +1,9 @@
 mod completion;
+mod execution;
 mod failures;
 mod ledger;
 
 use super::{
-    cluster_members::import_evidence_set_members,
     gate::acquire_import_slot,
     status::{cancel_job, fail_linux_evidence_set_job},
     types::{BackgroundLinuxEvidenceSetImportJob, BrowseableEvidenceSetImport},
@@ -19,7 +19,6 @@ use std::sync::{
 use tauri::AppHandle;
 use transport::CommandError;
 
-use completion::complete_evidence_set_import;
 use ledger::record_cluster_phase;
 
 pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
@@ -59,28 +58,16 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
         return Err(error);
     }
     record_cluster_phase(&connection, &job, "initialize", true, None, 0, 0);
-    let summary = match import_evidence_set_members(
+    let Some(summary) = execution::import_members(
         &connection,
         &job_repo,
         &job,
         app,
         &cancel_token,
         task_manager,
-    ) {
-        Ok(Some(summary)) => summary,
-        Ok(None) => return Ok(None),
-        Err(error) => {
-            record_cluster_phase(
-                &connection,
-                &job,
-                "member_import",
-                false,
-                Some(&error.message),
-                0,
-                0,
-            );
-            return Err(error);
-        }
+    )?
+    else {
+        return Ok(None);
     };
     record_cluster_phase(
         &connection,
@@ -91,44 +78,15 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
         summary.ready_count,
         summary.failed_count,
     );
-    let result =
-        complete_evidence_set_import(&connection, &job_repo, &job, app, summary, cancel_token);
-    match result {
-        Ok(outcome) => {
-            if outcome.is_some() {
-                record_cluster_phase(
-                    &connection,
-                    &job,
-                    "publish",
-                    true,
-                    None,
-                    job.plan.members.len() as u32,
-                    0,
-                );
-                if let (Some(task_manager), Some(app)) = (projection_task_manager.as_ref(), app) {
-                    crate::case_projection_jobs::schedule(
-                        task_manager,
-                        app,
-                        &job.case_id.0,
-                        &job.case_root,
-                    )?;
-                }
-            }
-            Ok(outcome)
-        }
-        Err(error) => {
-            record_cluster_phase(
-                &connection,
-                &job,
-                "publish",
-                false,
-                Some(&error.message),
-                0,
-                1,
-            );
-            Err(error)
-        }
-    }
+    execution::publish_evidence_set(
+        &connection,
+        &job_repo,
+        &job,
+        app,
+        summary,
+        cancel_token,
+        projection_task_manager,
+    )
 }
 
 fn start_cluster_job(

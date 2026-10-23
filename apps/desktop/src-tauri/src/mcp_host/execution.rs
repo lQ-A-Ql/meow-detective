@@ -1,6 +1,7 @@
 use crate::state::AppState;
 use app_services::mcp_host_service::{
-    execute_file_tool, execute_tool, tool_catalog, McpHostFileQueryContext, McpHostQueryContext,
+    execute_analysis_tool, execute_file_tool, execute_tool, tool_catalog,
+    McpHostAnalysisQueryContext, McpHostFileQueryContext, McpHostQueryContext,
 };
 use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
 use serde_json::json;
@@ -61,20 +62,7 @@ fn execute_for_active_case(
             case_root: &active.case_root,
             case_meta: &active.meta,
         };
-        let result = match request.name.as_str() {
-            "forensics.list_files" | "forensics.get_file_metadata" | "forensics.read_file" => {
-                execute_file_tool(
-                    McpHostFileQueryContext {
-                        query: context,
-                        preview_runtime: &state.preview_runtime,
-                        bitlocker_runtime: &state.bitlocker_runtime,
-                    },
-                    &request.name,
-                    &request.arguments,
-                )
-            }
-            _ => execute_tool(context, &request.name, &request.arguments),
-        };
+        let result = dispatch_tool(state, context, &request);
         match result {
             Ok(data) if data.to_string().len() <= 1024 * 1024 => McpHostToolCallResultDto {
                 success: true,
@@ -98,6 +86,63 @@ fn execute_for_active_case(
         )
         .map_err(CommandError::from_typed_service_error)?;
     Ok(response)
+}
+
+fn dispatch_tool(
+    state: &AppState,
+    context: McpHostQueryContext<'_>,
+    request: &McpHostToolCallRequestDto,
+) -> Result<serde_json::Value, app_services::mcp_host_service::McpHostServiceError> {
+    if matches!(
+        request.name.as_str(),
+        "forensics.list_files" | "forensics.get_file_metadata" | "forensics.read_file"
+    ) {
+        return execute_file_tool(
+            McpHostFileQueryContext {
+                query: context,
+                preview_runtime: &state.preview_runtime,
+                bitlocker_runtime: &state.bitlocker_runtime,
+            },
+            &request.name,
+            &request.arguments,
+        );
+    }
+    if is_analysis_tool(&request.name) {
+        let runtime =
+            app_services::analysis_service::AnalysisSourceReadRuntime::with_bitlocker_runtime(
+                state.bitlocker_runtime.clone(),
+            );
+        return execute_analysis_tool(
+            McpHostAnalysisQueryContext {
+                query: context,
+                runtime: &runtime,
+            },
+            &request.name,
+            &request.arguments,
+        );
+    }
+    execute_tool(context, &request.name, &request.arguments)
+}
+
+fn is_analysis_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "forensics.get_analysis_system_info"
+            | "forensics.get_evidence_classification_summary"
+            | "forensics.get_file_classification_board"
+            | "forensics.get_registry_summary"
+            | "forensics.get_registry_structured_summary"
+            | "forensics.get_browser_history_summary"
+            | "forensics.get_email_summary"
+            | "forensics.get_event_log_events"
+            | "forensics.get_linux_artifact_summary"
+            | "forensics.get_android_device_info"
+            | "forensics.get_android_package_summary"
+            | "forensics.get_plugin_family_entries"
+            | "forensics.get_analysis_report"
+            | "forensics.get_case_overview"
+            | "forensics.get_correlation_snapshot"
+    )
 }
 
 fn failure(message: &str) -> McpHostToolCallResultDto {

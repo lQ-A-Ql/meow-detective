@@ -39,5 +39,5 @@ fn load_modules(
         &context.case_meta.id,
         &id,
     )
-    .map_err(McpHostServiceError::Plugin)
+    .map_err(McpHostServiceError::Analysis)
 }

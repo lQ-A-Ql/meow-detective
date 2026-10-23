@@ -25,7 +25,7 @@ impl ServerHandler for HostHandler {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("Meow_Detective", env!("CARGO_PKG_VERSION")))
-            .with_instructions("Read-only tools for the case currently open in Meow~Detective. Use dataSourceId from list_data_sources for source and plugin queries.")
+            .with_instructions("Read-only tools for the case currently open in Meow~Detective. Start with list_data_sources for dataSourceId values, use search_files or list_files to obtain fileId values, and use the timeline, data-source analysis, and content-index coverage tools for investigator-facing views.")
     }
 
     async fn list_tools(
