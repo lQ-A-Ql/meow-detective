@@ -304,6 +304,7 @@ fn report_exports_persist_history_for_active_case_only() {
     assert!(history.iter().any(|item| item.file_name.ends_with(".html")));
     assert!(history.iter().any(|item| item.file_name.ends_with(".csv")));
     assert!(history.iter().any(|item| item.file_name.ends_with(".json")));
+    assert!(history.iter().all(|item| item.status == "completed"));
     assert!(get_report_history(&conn, "case-other").is_empty());
 }
 
@@ -316,6 +317,12 @@ fn report_export_returns_error_when_history_insert_fails() {
         generate_html_report(&conn, &case, tmp.path(), &ExportScopeDto::default()).unwrap_err();
 
     assert!(error.to_string().contains("reports"));
+    assert!(!tmp
+        .path()
+        .read_dir()
+        .unwrap()
+        .flatten()
+        .any(|entry| entry.path().extension().is_some_and(|ext| ext == "html")));
 }
 
 #[test]

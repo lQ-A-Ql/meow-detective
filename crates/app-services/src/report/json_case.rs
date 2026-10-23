@@ -1,5 +1,5 @@
 use super::{
-    current_analysis_for_case, current_correlation_for_case, persist_report_record,
+    current_analysis_for_case, current_correlation_for_case, execute_report_export,
     prepare_report_output, write_report_atomically, BitLockerReportContext, ReportError,
 };
 use domain::CaseMeta;
@@ -80,37 +80,42 @@ fn generate_json_export_for_case_with_context(
     });
 
     let file_name = format!("export-{}.json", Uuid::new_v4());
-    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
-    let raw_bundle = if scope.raw_file_extraction {
-        Some(export_raw_file_bundle_for_case(
+    execute_report_export(conn, &case.id.0, "report-summary", &file_name, || {
+        let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+        let raw_bundle = if scope.raw_file_extraction {
+            Some(export_raw_file_bundle_for_case(
+                conn,
+                case_root,
+                output_dir,
+                &case.id.0,
+                &file_name,
+                scope.overwrite,
+                bitlocker_context.map(BitLockerReportContext::unlock_registry),
+            )?)
+        } else {
+            None
+        };
+        let warnings = super::report_warnings_for_case(
             conn,
             case_root,
-            output_dir,
             &case.id.0,
-            &file_name,
-            scope.overwrite,
-            bitlocker_context.map(BitLockerReportContext::unlock_registry),
-        )?)
-    } else {
-        None
-    };
-    let warnings =
-        super::report_warnings_for_case(conn, case_root, &case.id.0, scope, raw_bundle.as_ref());
-    write_report_atomically(&path, scope.overwrite, |file| {
-        if let Some(bundle) = &raw_bundle {
-            json_val["rawExport"] = serde_json::json!({
-                "bundleDirectory": bundle.bundle_dir_name,
-                "manifestFile": bundle.manifest_file_name,
-                "hashesFile": bundle.hashes_file_name,
-                "exportedCount": bundle.exported_count,
-                "skippedCount": bundle.skipped_count,
-            });
-        }
-        json_val["warnings"] =
-            serde_json::to_value(&warnings).map_err(|e| ReportError::Other(e.to_string()))?;
-        JsonExporter::export(file, &json_val).map_err(|e| ReportError::Other(e.to_string()))
+            scope,
+            raw_bundle.as_ref(),
+        );
+        write_report_atomically(&path, scope.overwrite, |file| {
+            if let Some(bundle) = &raw_bundle {
+                json_val["rawExport"] = serde_json::json!({
+                    "bundleDirectory": bundle.bundle_dir_name,
+                    "manifestFile": bundle.manifest_file_name,
+                    "hashesFile": bundle.hashes_file_name,
+                    "exportedCount": bundle.exported_count,
+                    "skippedCount": bundle.skipped_count,
+                });
+            }
+            json_val["warnings"] =
+                serde_json::to_value(&warnings).map_err(|e| ReportError::Other(e.to_string()))?;
+            JsonExporter::export(file, &json_val).map_err(|e| ReportError::Other(e.to_string()))
+        })
     })?;
-
-    persist_report_record(conn, &case.id.0, "report-summary", &file_name, "completed")?;
     Ok(file_name)
 }

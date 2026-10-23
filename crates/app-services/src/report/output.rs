@@ -65,22 +65,33 @@ pub(crate) fn write_report_atomically(
     })
 }
 
-pub(crate) fn persist_report_record(
+pub(crate) fn execute_report_export<T>(
     conn: &Connection,
     case_id: &str,
     template_id: &str,
     file_name: &str,
-    status: &str,
-) -> Result<(), ReportError> {
-    ReportRepo::new(conn).insert(&ReportRecord {
-        id: Uuid::new_v4().to_string(),
+    export: impl FnOnce() -> Result<T, ReportError>,
+) -> Result<T, ReportError> {
+    let export_id = Uuid::new_v4().to_string();
+    let repo = ReportRepo::new(conn);
+    repo.insert(&ReportRecord {
+        id: export_id.clone(),
         case_id: case_id.to_string(),
         template_id: template_id.to_string(),
         file_name: file_name.to_string(),
         created_by: String::new(),
-        status: status.to_string(),
-        progress: None,
+        status: "exporting".to_string(),
+        progress: Some(0),
         created_at: chrono::Utc::now().to_rfc3339(),
     })?;
-    Ok(())
+    match export() {
+        Ok(value) => {
+            repo.update_status(&export_id, "completed", Some(100))?;
+            Ok(value)
+        }
+        Err(error) => {
+            repo.update_status(&export_id, "failed", Some(100))?;
+            Err(error)
+        }
+    }
 }

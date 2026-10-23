@@ -30,7 +30,7 @@ pub use html_export::{
 pub use json::generate_json_export;
 pub use json_case::{generate_json_export_for_case, generate_json_export_for_case_with_bitlocker};
 
-pub(crate) use output::{persist_report_record, prepare_report_output, write_report_atomically};
+pub(crate) use output::{execute_report_export, prepare_report_output, write_report_atomically};
 pub(crate) use snapshot::{
     correlation_confidence_str, current_analysis, current_correlation,
     current_correlation_for_case, current_governance, current_governance_for_case,

@@ -32,6 +32,12 @@ pub fn get_correlation_snapshot(
     compute_and_store(conn, &case_id, &artifact_hash, collect_artifact_ids(conn)?)
 }
 
+pub fn get_correlation_snapshot_read_only(
+    conn: &Connection,
+) -> Result<CorrelationSnapshotDto, CorrelationError> {
+    compute_correlation_snapshot_read_only(conn)
+}
+
 pub fn get_correlation_snapshot_for_case(
     case_conn: &Connection,
     case_root: &Path,

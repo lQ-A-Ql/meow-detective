@@ -1,5 +1,5 @@
 use super::{
-    current_analysis, current_correlation, current_governance, persist_report_record,
+    current_analysis, current_correlation, current_governance, execute_report_export,
     prepare_report_output, write_report_atomically, ReportCorrelation, ReportError,
     ReportGovernance,
 };
@@ -45,36 +45,36 @@ pub fn generate_json_export(
     });
 
     let file_name = format!("export-{}.json", Uuid::new_v4());
-    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
-    let raw_bundle = if scope.raw_file_extraction {
-        Some(export_raw_file_bundle(
-            conn,
-            output_dir,
-            case_id,
-            &file_name,
-            scope.overwrite,
-        )?)
-    } else {
-        None
-    };
-    let warnings = super::report_warnings(conn, case_id, scope, raw_bundle.as_ref());
-    write_report_atomically(&path, scope.overwrite, |file| {
-        let mut payload = json_val;
-        if let Some(bundle) = &raw_bundle {
-            payload["rawExport"] = serde_json::json!({
-                "bundleDirectory": bundle.bundle_dir_name,
-                "manifestFile": bundle.manifest_file_name,
-                "hashesFile": bundle.hashes_file_name,
-                "exportedCount": bundle.exported_count,
-                "skippedCount": bundle.skipped_count,
-            });
-        }
-        payload["warnings"] =
-            serde_json::to_value(&warnings).map_err(|e| ReportError::Other(e.to_string()))?;
-        JsonExporter::export(file, &payload).map_err(|e| ReportError::Other(e.to_string()))
+    execute_report_export(conn, case_id, "report-summary", &file_name, || {
+        let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+        let raw_bundle = if scope.raw_file_extraction {
+            Some(export_raw_file_bundle(
+                conn,
+                output_dir,
+                case_id,
+                &file_name,
+                scope.overwrite,
+            )?)
+        } else {
+            None
+        };
+        let warnings = super::report_warnings(conn, case_id, scope, raw_bundle.as_ref());
+        write_report_atomically(&path, scope.overwrite, |file| {
+            let mut payload = json_val;
+            if let Some(bundle) = &raw_bundle {
+                payload["rawExport"] = serde_json::json!({
+                    "bundleDirectory": bundle.bundle_dir_name,
+                    "manifestFile": bundle.manifest_file_name,
+                    "hashesFile": bundle.hashes_file_name,
+                    "exportedCount": bundle.exported_count,
+                    "skippedCount": bundle.skipped_count,
+                });
+            }
+            payload["warnings"] =
+                serde_json::to_value(&warnings).map_err(|e| ReportError::Other(e.to_string()))?;
+            JsonExporter::export(file, &payload).map_err(|e| ReportError::Other(e.to_string()))
+        })
     })?;
-
-    persist_report_record(conn, case_id, "report-summary", &file_name, "completed")?;
     Ok(file_name)
 }
 

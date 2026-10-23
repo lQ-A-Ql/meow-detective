@@ -32,6 +32,14 @@ pub(crate) fn build_runtime_signals(
     build_runtime_signals_with_correlation(conn, case_id, correlation)
 }
 
+pub(crate) fn build_runtime_signals_read_only(
+    conn: &Connection,
+    case_id: &str,
+) -> Result<GovernanceRuntimeSignalsDto, GovernanceError> {
+    let correlation = correlation_runtime_snapshot_read_only(conn)?;
+    build_runtime_signals_with_correlation(conn, case_id, correlation)
+}
+
 pub(crate) fn build_runtime_signals_for_case(
     conn: &Connection,
     case_root: &Path,
@@ -167,6 +175,14 @@ pub(crate) fn correlation_runtime_snapshot(
         high_confidence_family_count,
         family_coverage,
     })
+}
+
+pub(crate) fn correlation_runtime_snapshot_read_only(
+    conn: &Connection,
+) -> Result<CorrelationRuntimeSnapshot, GovernanceError> {
+    let snapshot = crate::correlation::get_correlation_snapshot_read_only(conn)
+        .map_err(|error| GovernanceError::Internal(error.to_string()))?;
+    correlation_runtime_from_snapshot(snapshot)
 }
 
 pub(crate) fn correlation_runtime_snapshot_for_case(

@@ -1,6 +1,6 @@
 use super::{
     correlation_confidence_str, current_analysis, current_analysis_for_case, current_correlation,
-    current_correlation_for_case, current_governance, html, persist_report_record,
+    current_correlation_for_case, current_governance, execute_report_export, html,
     prepare_report_output, write_report_atomically, ReportError,
 };
 use reports::CsvExporter;
@@ -65,13 +65,13 @@ pub fn generate_csv_artifacts(
     );
 
     let file_name = format!("artifacts-{}.csv", Uuid::new_v4());
-    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
-    write_report_atomically(&path, scope.overwrite, |file| {
-        CsvExporter::export_artifacts(file, ARTIFACT_HEADERS, &rows_data)
-            .map_err(|e| ReportError::Other(e.to_string()))
+    execute_report_export(conn, case_id, "report-files", &file_name, || {
+        let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+        write_report_atomically(&path, scope.overwrite, |file| {
+            CsvExporter::export_artifacts(file, ARTIFACT_HEADERS, &rows_data)
+                .map_err(|e| ReportError::Other(e.to_string()))
+        })
     })?;
-
-    persist_report_record(conn, case_id, "report-files", &file_name, "completed")?;
     Ok(file_name)
 }
 
@@ -99,13 +99,13 @@ pub fn generate_csv_artifacts_for_case(
     );
 
     let file_name = format!("artifacts-{}.csv", Uuid::new_v4());
-    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
-    write_report_atomically(&path, scope.overwrite, |file| {
-        CsvExporter::export_artifacts(file, ARTIFACT_HEADERS, &rows_data)
-            .map_err(|e| ReportError::Other(e.to_string()))
+    execute_report_export(conn, &case.id.0, "report-files", &file_name, || {
+        let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+        write_report_atomically(&path, scope.overwrite, |file| {
+            CsvExporter::export_artifacts(file, ARTIFACT_HEADERS, &rows_data)
+                .map_err(|e| ReportError::Other(e.to_string()))
+        })
     })?;
-
-    persist_report_record(conn, &case.id.0, "report-files", &file_name, "completed")?;
     Ok(file_name)
 }
 
@@ -200,13 +200,13 @@ pub fn generate_csv_correlation(
         .collect();
 
     let file_name = format!("correlation-{}.csv", Uuid::new_v4());
-    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
-    write_report_atomically(&path, scope.overwrite, |file| {
-        CsvExporter::export_correlation_leads(file, &rows)
-            .map_err(|e| ReportError::Other(e.to_string()))
+    execute_report_export(conn, case_id, "report-correlation", &file_name, || {
+        let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+        write_report_atomically(&path, scope.overwrite, |file| {
+            CsvExporter::export_correlation_leads(file, &rows)
+                .map_err(|e| ReportError::Other(e.to_string()))
+        })
     })?;
-
-    persist_report_record(conn, case_id, "report-correlation", &file_name, "completed")?;
     Ok(file_name)
 }
 
@@ -264,12 +264,12 @@ fn write_correlation_csv(
         .collect();
 
     let file_name = format!("correlation-{}.csv", Uuid::new_v4());
-    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
-    write_report_atomically(&path, scope.overwrite, |file| {
-        CsvExporter::export_correlation_leads(file, &rows)
-            .map_err(|e| ReportError::Other(e.to_string()))
+    execute_report_export(conn, case_id, "report-correlation", &file_name, || {
+        let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+        write_report_atomically(&path, scope.overwrite, |file| {
+            CsvExporter::export_correlation_leads(file, &rows)
+                .map_err(|e| ReportError::Other(e.to_string()))
+        })
     })?;
-
-    persist_report_record(conn, case_id, "report-correlation", &file_name, "completed")?;
     Ok(file_name)
 }

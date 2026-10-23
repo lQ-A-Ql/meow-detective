@@ -10,13 +10,21 @@ use rusqlite::Connection;
 use std::path::Path;
 use transport::dto::V2GovernanceSnapshotDto;
 
-use crate::governance::runtime::build_runtime_signals;
+use crate::governance::runtime::{build_runtime_signals, build_runtime_signals_read_only};
 
 pub fn get_v2_governance_snapshot(
     conn: &Connection,
     case_id: &str,
 ) -> Result<V2GovernanceSnapshotDto, GovernanceError> {
     let runtime_signals = build_runtime_signals(conn, case_id)?;
+    builder::build_v2_governance_snapshot_with_runtime(conn, case_id, runtime_signals)
+}
+
+pub fn get_v2_governance_snapshot_read_only(
+    conn: &Connection,
+    case_id: &str,
+) -> Result<V2GovernanceSnapshotDto, GovernanceError> {
+    let runtime_signals = build_runtime_signals_read_only(conn, case_id)?;
     builder::build_v2_governance_snapshot_with_runtime(conn, case_id, runtime_signals)
 }
 

@@ -1,7 +1,7 @@
 use super::{
     analysis_rows, current_analysis, current_analysis_for_case, current_correlation,
-    current_correlation_for_case, current_governance, current_governance_for_case, html,
-    persist_report_record, prepare_report_output, source_analysis, write_report_atomically,
+    current_correlation_for_case, current_governance, current_governance_for_case,
+    execute_report_export, html, prepare_report_output, source_analysis, write_report_atomically,
     BitLockerReportContext, ReportAnalysis, ReportError,
 };
 use domain::CaseMeta;
@@ -137,21 +137,22 @@ fn write_html_report(
     let correlation_rows = html::report_correlation_rows(correlation, scope);
     let correlation_leads = html::report_correlation_lead_sections(correlation, scope);
     let file_name = format!("report-{}.html", Uuid::new_v4());
-    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
-    write_report_atomically(&path, scope.overwrite, |file| {
-        HtmlReportExporter::export_with_structured_sections(
-            file,
-            case,
-            &files,
-            &artifacts,
-            &analysis_rows,
-            &governance_rows,
-            &correlation_rows,
-            &correlation_leads,
-        )
-        .map_err(|err| ReportError::Other(err.to_string()))
+    execute_report_export(conn, &case.id.0, "report-summary", &file_name, || {
+        let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+        write_report_atomically(&path, scope.overwrite, |file| {
+            HtmlReportExporter::export_with_structured_sections(
+                file,
+                case,
+                &files,
+                &artifacts,
+                &analysis_rows,
+                &governance_rows,
+                &correlation_rows,
+                &correlation_leads,
+            )
+            .map_err(|err| ReportError::Other(err.to_string()))
+        })
     })?;
-    persist_report_record(conn, &case.id.0, "report-summary", &file_name, "completed")?;
     Ok(file_name)
 }
 

@@ -42,7 +42,7 @@ pub(crate) fn open_ready_source_connections(
 
 pub(crate) fn current_correlation(conn: &Connection) -> Result<ReportCorrelation, ReportError> {
     Ok(ReportCorrelation {
-        snapshot: crate::correlation::get_correlation_snapshot(conn)?,
+        snapshot: crate::correlation::get_correlation_snapshot_read_only(conn)?,
     })
 }
 
@@ -52,7 +52,7 @@ pub(crate) fn current_correlation_for_case(
     case_id: &domain::CaseId,
 ) -> Result<ReportCorrelation, ReportError> {
     Ok(ReportCorrelation {
-        snapshot: crate::correlation::get_correlation_snapshot_for_case(
+        snapshot: crate::correlation::get_correlation_snapshot_read_only_for_case(
             case_conn, case_root, case_id,
         )?,
     })
@@ -63,7 +63,9 @@ pub(crate) fn current_governance(
     case_id: &str,
 ) -> Result<ReportGovernance, ReportError> {
     Ok(ReportGovernance {
-        snapshot: crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)?,
+        snapshot: crate::v2_governance_service::get_v2_governance_snapshot_read_only(
+            conn, case_id,
+        )?,
     })
 }
 
@@ -73,7 +75,7 @@ pub(crate) fn current_governance_for_case(
     case_id: &str,
 ) -> Result<ReportGovernance, ReportError> {
     Ok(ReportGovernance {
-        snapshot: crate::v2_governance_service::get_v2_governance_snapshot_for_case(
+        snapshot: crate::v2_governance_service::get_v2_governance_snapshot_for_case_read_only(
             conn, case_root, case_id,
         )?,
     })
