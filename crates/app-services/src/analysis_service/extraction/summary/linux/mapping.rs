@@ -7,6 +7,8 @@ use crate::analysis_service::extraction::attr_mapping::{
     bool_attr, i32_attr, optional_bool_attr, optional_string_attr, optional_u32_attr, string_attr,
     u64_attr,
 };
+use crate::source_db::encode_source_scoped_id;
+use domain::DataSourceId;
 use rusqlite::Connection;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -281,38 +283,53 @@ fn map_sudo_events(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxSudoEventDto> {
 
 fn map_system_configs(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxSystemConfigDto> {
     rows.into_iter()
-        .map(|row| LinuxSystemConfigDto {
-            artifact_id: row.id,
-            file_id: row.source_object_id.unwrap_or_default(),
-            source_path: string_attr(&row.attrs, "sourcePath"),
-            config_kind: string_attr(&row.attrs, "configKind"),
-            line: string_attr(&row.attrs, "line"),
-            line_number: u64_attr(&row.attrs, "lineNumber"),
-            key: optional_string_attr(&row.attrs, "key"),
-            value: optional_string_attr(&row.attrs, "value"),
-            username: optional_string_attr(&row.attrs, "username"),
-            uid: optional_u32_attr(&row.attrs, "uid"),
-            gid: optional_u32_attr(&row.attrs, "gid"),
-            home: optional_string_attr(&row.attrs, "home"),
-            shell: optional_string_attr(&row.attrs, "shell"),
-            name: optional_string_attr(&row.attrs, "name"),
-            description: optional_string_attr(&row.attrs, "description"),
-            state: optional_string_attr(&row.attrs, "state"),
-            enabled: optional_bool_attr(&row.attrs, "enabled"),
-            masked: optional_bool_attr(&row.attrs, "masked"),
-            static_unit: optional_bool_attr(&row.attrs, "static"),
-            unit_file: optional_string_attr(&row.attrs, "unitFile"),
-            exec_start: string_vec_attr(&row.attrs, "execStart"),
-            exec_stop: string_vec_attr(&row.attrs, "execStop"),
-            user: optional_string_attr(&row.attrs, "user"),
-            group: optional_string_attr(&row.attrs, "group"),
-            working_directory: optional_string_attr(&row.attrs, "workingDirectory"),
-            restart: optional_string_attr(&row.attrs, "restart"),
-            wanted_by: string_vec_attr(&row.attrs, "wantedBy"),
-            required_by: string_vec_attr(&row.attrs, "requiredBy"),
-            enablement_symlink: optional_string_attr(&row.attrs, "enablementSymlink"),
+        .map(|row| {
+            let file_id = source_scoped_file_id(&row);
+            LinuxSystemConfigDto {
+                artifact_id: row.id,
+                file_id,
+                source_path: string_attr(&row.attrs, "sourcePath"),
+                config_kind: string_attr(&row.attrs, "configKind"),
+                line: string_attr(&row.attrs, "line"),
+                line_number: u64_attr(&row.attrs, "lineNumber"),
+                key: optional_string_attr(&row.attrs, "key"),
+                value: optional_string_attr(&row.attrs, "value"),
+                username: optional_string_attr(&row.attrs, "username"),
+                uid: optional_u32_attr(&row.attrs, "uid"),
+                gid: optional_u32_attr(&row.attrs, "gid"),
+                home: optional_string_attr(&row.attrs, "home"),
+                shell: optional_string_attr(&row.attrs, "shell"),
+                name: optional_string_attr(&row.attrs, "name"),
+                description: optional_string_attr(&row.attrs, "description"),
+                state: optional_string_attr(&row.attrs, "state"),
+                enabled: optional_bool_attr(&row.attrs, "enabled"),
+                masked: optional_bool_attr(&row.attrs, "masked"),
+                static_unit: optional_bool_attr(&row.attrs, "static"),
+                unit_file: optional_string_attr(&row.attrs, "unitFile"),
+                exec_start: string_vec_attr(&row.attrs, "execStart"),
+                exec_stop: string_vec_attr(&row.attrs, "execStop"),
+                user: optional_string_attr(&row.attrs, "user"),
+                group: optional_string_attr(&row.attrs, "group"),
+                working_directory: optional_string_attr(&row.attrs, "workingDirectory"),
+                restart: optional_string_attr(&row.attrs, "restart"),
+                wanted_by: string_vec_attr(&row.attrs, "wantedBy"),
+                required_by: string_vec_attr(&row.attrs, "requiredBy"),
+                enablement_symlink: optional_string_attr(&row.attrs, "enablementSymlink"),
+            }
         })
         .collect()
+}
+
+fn source_scoped_file_id(row: &AnalysisArtifactRow) -> String {
+    let file_id = row.source_object_id.clone().unwrap_or_default();
+    if file_id.starts_with("ds:") {
+        return file_id;
+    }
+    let data_source_id = string_attr(&row.attrs, "dataSourceId");
+    if data_source_id.is_empty() || file_id.is_empty() {
+        return file_id;
+    }
+    encode_source_scoped_id(&DataSourceId(data_source_id), &file_id)
 }
 
 fn map_web_sites(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxWebSiteDto> {

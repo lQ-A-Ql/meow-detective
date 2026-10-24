@@ -5,6 +5,8 @@ import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { ExtractionTableSection } from './helpers';
 import { useLinuxColumns } from './linuxColumns';
 import { LinuxOverviewSection } from './LinuxOverviewSection';
+import { LinuxServicesPanel } from './LinuxServicesPanel';
+import { LinuxDockerPanel } from './LinuxDockerPanel';
 
 export type LinuxArtifactTabKey =
   | 'overview'
@@ -16,7 +18,9 @@ export type LinuxArtifactTabKey =
   | 'sudo'
   | 'systemConfig'
   | 'webServices'
-  | 'mysqlServices';
+  | 'mysqlServices'
+  | 'services'
+  | 'docker';
 
 const TABS: LinuxArtifactTabKey[] = [
   'overview',
@@ -29,6 +33,8 @@ const TABS: LinuxArtifactTabKey[] = [
   'systemConfig',
   'webServices',
   'mysqlServices',
+  'services',
+  'docker',
 ];
 
 interface LinuxFamilyProgress {
@@ -311,6 +317,8 @@ export function LinuxArtifactsPanel({
         )}
       </div>
     ),
+    services: <LinuxServicesPanel rows={info.systemConfigs} />,
+    docker: <LinuxDockerPanel rows={info.systemConfigs} />,
   };
   return (
     <ExtractionTableSection

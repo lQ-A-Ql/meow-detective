@@ -47,6 +47,8 @@ export type LinuxAnalysisTabKey =
   | 'systemConfig'
   | 'webServices'
   | 'mysqlServices'
+  | 'services'
+  | 'docker'
   | 'deletedRecovery'
   | 'plugin';
 

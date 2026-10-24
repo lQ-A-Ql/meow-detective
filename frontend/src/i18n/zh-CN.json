@@ -1978,6 +1978,8 @@
       "linuxSystemConfig": "系统配置",
       "linuxWebServices": "Web 服务",
       "linuxMysqlServices": "MySQL 服务",
+      "linuxServices": "服务运行情况",
+      "linuxDocker": "Docker",
       "androidOverview": "Android 分析"
     },
     "kubernetes": {
@@ -2364,6 +2366,8 @@
       "coverage": "覆盖率",
       "truncated": "截断",
       "mysqlServices": "MySQL 服务"
+      ,"services": "服务运行情况",
+      "docker": "Docker"
     },
     "tabs": {
       "overview": "概览",
@@ -2437,6 +2441,11 @@
       "locked": "锁定",
       "hasPassword": "有密码",
       "statusCode": "状态码"
+      ,"service": "服务"
+      ,"image": "镜像"
+      ,"repository": "仓库"
+      ,"tag": "标签"
+      ,"digest": "摘要"
     },
     "values": {
       "yes": "是",
@@ -2456,6 +2465,34 @@
       "kernelVersions": "内核版本",
       "accountsTitle": "用户账户",
       "unavailable": "已发现 Linux 痕迹，但未解析到系统基本信息（os-release/主机名/账户）。"
+    },
+    "services": {
+      "name": "服务名称",
+      "state": "运行状态",
+      "enabled": "已配置启动",
+      "unitFile": "Unit 文件",
+      "preview": "预览",
+      "open": "打开 .service",
+      "configured": "已配置服务",
+      "running": "已启动服务",
+      "empty": "暂无 systemd 服务",
+      "emptyDescription": "尚未解析到 systemd service unit 文件。",
+      "loading": "正在读取 service 文件…",
+      "failed": "service 文件读取失败。",
+      "emptyPreview": "文件内容为空。"
+    },
+    "docker": {
+      "containers": "容器",
+      "images": "镜像",
+      "container": "容器名称",
+      "image": "镜像",
+      "state": "状态",
+      "repository": "仓库",
+      "tag": "标签",
+      "digest": "摘要",
+      "empty": "暂无 Docker 容器",
+      "emptyImages": "暂无 Docker 镜像",
+      "emptyDescription": "尚未从 Docker 宿主目录发现可解析的容器或镜像信息。"
     },
     "empty": {
       "overview": {

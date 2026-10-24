@@ -1978,6 +1978,8 @@
       "linuxSystemConfig": "System configuration",
       "linuxWebServices": "Web services",
       "linuxMysqlServices": "MySQL services",
+      "linuxServices": "Service runtime",
+      "linuxDocker": "Docker",
       "androidOverview": "Android analysis"
     },
     "kubernetes": {
@@ -2364,6 +2366,8 @@
       "coverage": "Coverage",
       "truncated": "Truncated",
       "mysqlServices": "MySQL Services"
+      ,"services": "Service runtime",
+      "docker": "Docker"
     },
     "tabs": {
       "overview": "Overview",
@@ -2437,6 +2441,11 @@
       "locked": "Locked",
       "hasPassword": "Has Password",
       "statusCode": "Status code"
+      ,"service": "Service"
+      ,"image": "Image"
+      ,"repository": "Repository"
+      ,"tag": "Tag"
+      ,"digest": "Digest"
     },
     "values": {
       "yes": "Yes",
@@ -2456,6 +2465,34 @@
       "kernelVersions": "Kernel Versions",
       "accountsTitle": "User Accounts",
       "unavailable": "Linux artifacts were found, but no system identity (os-release/hostname/accounts) could be derived."
+    },
+    "services": {
+      "name": "Service name",
+      "state": "Runtime state",
+      "enabled": "Enabled",
+      "unitFile": "Unit file",
+      "preview": "Preview",
+      "open": "Open .service",
+      "configured": "Configured services",
+      "running": "Running services",
+      "empty": "No systemd services",
+      "emptyDescription": "No systemd service unit files were parsed.",
+      "loading": "Reading service file…",
+      "failed": "Unable to read service file.",
+      "emptyPreview": "The file is empty."
+    },
+    "docker": {
+      "containers": "Containers",
+      "images": "Images",
+      "container": "Container",
+      "image": "Image",
+      "state": "State",
+      "repository": "Repository",
+      "tag": "Tag",
+      "digest": "Digest",
+      "empty": "No Docker containers",
+      "emptyImages": "No Docker images",
+      "emptyDescription": "No parseable Docker host container or image metadata was found."
     },
     "empty": {
       "overview": {
