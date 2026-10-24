@@ -79,9 +79,10 @@ if (Test-Path -LiteralPath $analysisCommandPath -PathType Leaf) {
     }
   }
   foreach ($required in @(
-    'run_active_case_command(',
+    'require_active_case(',
+    'analysis_task_jobs::run(',
     'analysis_service::get_source_system_info(',
-    'analysis_service::run_source_evidence_scan(',
+    'analysis_service::run_source_evidence_scan',
     'analysis_service::generate_source_analysis_summary('
   )) {
     if (-not $analysisCommand.Contains($required)) {
@@ -90,7 +91,8 @@ if (Test-Path -LiteralPath $analysisCommandPath -PathType Leaf) {
   }
   $extractionDelegations = @(
     'analysis_service::run_source_analysis_extraction(',
-    'analysis_service::run_source_analysis_extraction_with_progress('
+    'analysis_service::run_source_analysis_extraction_with_progress(',
+    'analysis_service::run_source_analysis_extraction_with_progress_and_cancel('
   )
   if (-not ($extractionDelegations | Where-Object { $analysisCommand.Contains($_) })) {
     $errors.Add('analysis command is missing a thin service delegation: source analysis extraction')

@@ -20,7 +20,8 @@ import {
   DialogTitle,
 } from '@/app/components/ui/dialog';
 import { Input } from '@/app/components/ui/input';
-import { Button } from '@/app/components/ui/button';
+import { ActionIcon } from '@/components/controls/ActionIcon';
+import { IconButton } from '@/components/controls/IconButton';
 import {
   ExtractionTableSection,
   formatSize,
@@ -169,13 +170,13 @@ export function BrowserHistoryPanel({
         <>
           <div className="mb-4 flex items-center justify-between gap-3 border-b border-forensics-divider pb-3">
             <div className="text-[11px] text-forensics-muted">{t('browser.manualPasswordHint')}</div>
-            <Button
+            <IconButton
+              label={t('browser.manualPasswordAction')}
               variant="forensicsOutline"
-              size="sm"
               onClick={() => setPasswordDialogOpen(true)}
             >
-              {t('browser.manualPasswordAction')}
-            </Button>
+              <ActionIcon name="key" />
+            </IconButton>
           </div>
           <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
             <DialogContent>
@@ -191,13 +192,14 @@ export function BrowserHistoryPanel({
                 autoFocus
               />
               <DialogFooter>
-                <Button
+                <IconButton
+                  label={t('browser.manualPasswordSubmit')}
                   variant="forensicsPrimary"
                   disabled={!password || passwordSubmitting}
                   onClick={() => void submitPassword()}
                 >
-                  {t('browser.manualPasswordSubmit')}
-                </Button>
+                  <ActionIcon name="unlock" />
+                </IconButton>
               </DialogFooter>
             </DialogContent>
           </Dialog>
