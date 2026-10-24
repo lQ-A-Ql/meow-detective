@@ -19,6 +19,7 @@ impl<'a> SourceReadContext<'a> {
             partition_candidates: HashMap::new(),
             derived_runtime: None,
             derived_reads: DerivedSourceReadCache::default(),
+            native_filesystems: HashMap::new(),
             cephfs_readers: HashMap::new(),
             bitlocker_runtime: None,
         }
@@ -43,6 +44,9 @@ impl<'a> SourceReadContext<'a> {
                 &descriptor,
                 max_bytes,
             );
+        }
+        if let Some(bytes) = self.read_native_header(&descriptor, max_bytes)? {
+            return Ok(bytes);
         }
         read_file_header_with_context(self, file_id, max_bytes)
     }
@@ -83,7 +87,12 @@ impl<'a> SourceReadContext<'a> {
     }
 
     pub(crate) fn filesystem_read_metrics(&self) -> evidence_core::FileSystemReadMetrics {
-        self.derived_reads.filesystem_read_metrics()
+        let mut metrics = self.derived_reads.filesystem_read_metrics();
+        metrics.filesystem_open_operations += self.native_filesystems.len() as u64;
+        for filesystem in self.native_filesystems.values() {
+            metrics.merge(filesystem.read_metrics());
+        }
+        metrics
     }
 
     pub(crate) fn rados_read_metrics(

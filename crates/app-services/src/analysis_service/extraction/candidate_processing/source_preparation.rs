@@ -28,6 +28,13 @@ pub(super) fn estimated_input_weight(item: &CandidateWorkItem) -> usize {
 }
 
 fn candidate_read_limit(candidate: &EvidenceCandidate, capability: AnalysisCapability) -> usize {
+    if capability.read_policy == CandidateReadPolicy::LinuxPathAware
+        && crate::analysis_service::extraction::containerd_images::is_metadata_path(
+            &normalize_evidence_path(&candidate.path),
+        )
+    {
+        return 32 * 1024 * 1024;
+    }
     match capability.read_policy {
         CandidateReadPolicy::Bounded(limit) => limit,
         CandidateReadPolicy::Full => usize::try_from(candidate.size)
@@ -69,6 +76,22 @@ where
             bytes.len()
         );
         return Ok(ready_warning(candidate, capability, warning));
+    }
+    if capability.read_policy == CandidateReadPolicy::LinuxPathAware
+        && crate::analysis_service::extraction::containerd_images::is_metadata_path(
+            &normalize_evidence_path(&candidate.path),
+        )
+    {
+        let outcome = crate::analysis_service::extraction::containerd_images::extract(
+            coordinator.context.conn,
+            &candidate,
+            &bytes,
+        )?;
+        return Ok(PreparedWork::Ready(CandidateCompletion {
+            candidate,
+            capability,
+            kind: CandidateCompletionKind::Outcome(outcome),
+        }));
     }
     let input = if capability.key == PLUGIN_CAPABILITY_KEY {
         let companions = match read_plugin_companions(coordinator, &candidate, capability) {

@@ -123,6 +123,7 @@ containers-pst = { path = "crates/containers-pst" }
 ceph-wire = { path = "crates/ceph-wire" }
 rocksdb-wire = { path = "crates/rocksdb-wire" }
 rusqlite = { version = "0.31", features = ["bundled", "serialize", "hooks"] }
+bolt-lite = "0.1.0"
 r2d2 = "0.8"
 r2d2_sqlite = "0.24"
 tempfile = "3"

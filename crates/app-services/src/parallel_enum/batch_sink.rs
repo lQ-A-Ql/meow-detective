@@ -143,8 +143,8 @@ fn prepare_insert(conn: &Connection) -> Result<CachedStatement<'_>, String> {
         "INSERT INTO file_entries
          (id, parent_id, data_source_id, path, name, entry_type,
           size, ext, deleted, hidden, system, read_only, archive, encrypted, created_at, modified_at, accessed_at, changed_at, hash_sha256,
-          partition_index)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+          partition_index, unix_mode)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
     )
     .map_err(|error| format!("Prepare error: {error}"))
 }
@@ -180,6 +180,7 @@ fn insert_node(
             node.changed_at.as_ref().map(|value| value.to_rfc3339()),
             None::<String>,
             partition_index as i64,
+            node.unix_mode,
         ])
         .map_err(|error| format!("Insert error: {error}"))?;
     Ok(())
@@ -244,3 +245,7 @@ pub(super) fn extension_from_name(name: &str) -> Option<String> {
         .filter(|extension| *extension != name)
         .map(str::to_string)
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/parallel_enum/batch_sink.rs"]
+mod tests;

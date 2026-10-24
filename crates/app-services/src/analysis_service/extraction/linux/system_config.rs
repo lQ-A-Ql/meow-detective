@@ -27,6 +27,7 @@ pub(in crate::analysis_service::extraction) fn is_system_config_path(normalized:
         || normalized.contains("/etc/cron.monthly/")
         || is_container_metadata_path(normalized)
         || is_repository_metadata_path(normalized)
+        || super::super::containerd_images::is_metadata_path(normalized)
 }
 pub(in crate::analysis_service::extraction) fn is_sudoers_path(normalized: &str) -> bool {
     normalized.ends_with("/etc/sudoers") || normalized.contains("/etc/sudoers.d/")

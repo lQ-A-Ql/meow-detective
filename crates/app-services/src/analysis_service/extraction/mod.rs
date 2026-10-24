@@ -6,6 +6,7 @@ mod browser_preload;
 mod candidate_order;
 mod candidate_processing;
 mod checkpoint_validation;
+mod containerd_images;
 pub(crate) mod email;
 pub(crate) mod evtx;
 mod evtx_persistence;

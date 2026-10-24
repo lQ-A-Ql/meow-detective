@@ -23,6 +23,7 @@ mod context;
 mod derived_cache;
 mod hint;
 mod metadata;
+mod native_cache;
 mod parallel;
 mod prepared;
 mod preview_context;
@@ -63,6 +64,7 @@ pub(crate) struct SourceReadContext<'a> {
         HashMap<usize, Vec<crate::file_service::viewer::PreviewPartitionCandidate>>,
     derived_runtime: Option<Arc<DerivedRbdRuntime>>,
     derived_reads: DerivedSourceReadCache,
+    native_filesystems: HashMap<String, Box<dyn evidence_core::FileSystemReader + Send>>,
     cephfs_readers: HashMap<String, PreparedCephFsFileReader>,
     bitlocker_runtime: Option<Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>>,
 }

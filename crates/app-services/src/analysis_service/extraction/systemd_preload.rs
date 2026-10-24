@@ -204,6 +204,8 @@ fn prepare_scope(
         fingerprint.update(path.as_bytes());
         fingerprint.update(row.file_id.as_bytes());
         fingerprint.update(row.size.to_le_bytes());
+        fingerprint.update(row.unix_mode.unwrap_or(0).to_le_bytes());
+        fingerprint.update([u8::from(row.encrypted)]);
     }
     let revision = hex::encode(fingerprint.finalize());
     for row in rows.values() {

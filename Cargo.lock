@@ -134,6 +134,7 @@ dependencies = [
  "artifacts-linux",
  "artifacts-windows",
  "base64 0.22.1",
+ "bolt-lite",
  "ceph-wire",
  "chrono",
  "chrono-tz",
@@ -500,6 +501,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5"
 dependencies = [
  "objc2",
+]
+
+[[package]]
+name = "bolt-lite"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a01ad4d9b7e221d768402830e1fc9f6ca0f042db7dcf11ea1b53e03d788022ae"
+dependencies = [
+ "thiserror 2.0.21",
 ]
 
 [[package]]
