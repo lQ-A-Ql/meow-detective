@@ -1,6 +1,7 @@
 mod common;
 mod cron;
 mod dispatch;
+mod docker;
 mod git;
 mod journal;
 mod login;

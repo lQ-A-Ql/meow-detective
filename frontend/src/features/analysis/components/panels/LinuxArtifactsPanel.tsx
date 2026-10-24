@@ -317,8 +317,32 @@ export function LinuxArtifactsPanel({
         )}
       </div>
     ),
-    services: <LinuxServicesPanel rows={info.systemConfigs} />,
-    docker: <LinuxDockerPanel rows={info.systemConfigs} />,
+    services: (
+      <LinuxServicesPanel
+        rows={info.systemConfigs}
+        total={families.systemConfig.total}
+        hasMore={hasMore && families.systemConfig.loaded < families.systemConfig.total}
+        loadingMore={loadingMore}
+        loadMoreFailed={loadMoreFailed}
+        onLoadMore={onLoadMore}
+        onRetryLoadMore={onRetryLoadMore}
+        loadContextKey={tableLoadContextKey}
+        loadStateKey={loadStateKey}
+      />
+    ),
+    docker: (
+      <LinuxDockerPanel
+        rows={info.systemConfigs}
+        total={families.systemConfig.total}
+        hasMore={hasMore && families.systemConfig.loaded < families.systemConfig.total}
+        loadingMore={loadingMore}
+        loadMoreFailed={loadMoreFailed}
+        onLoadMore={onLoadMore}
+        onRetryLoadMore={onRetryLoadMore}
+        loadContextKey={tableLoadContextKey}
+        loadStateKey={loadStateKey}
+      />
+    ),
   };
   return (
     <ExtractionTableSection

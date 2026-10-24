@@ -4,7 +4,27 @@ import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable'
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import type { LinuxSystemConfig } from '@/types/models';
 
-export function LinuxDockerPanel({ rows }: { rows: LinuxSystemConfig[] }) {
+export function LinuxDockerPanel({
+  rows,
+  total,
+  hasMore = false,
+  loadingMore = false,
+  loadMoreFailed = false,
+  onLoadMore,
+  onRetryLoadMore,
+  loadContextKey,
+  loadStateKey,
+}: {
+  rows: LinuxSystemConfig[];
+  total: number;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  loadMoreFailed?: boolean;
+  onLoadMore?: () => void;
+  onRetryLoadMore?: () => unknown;
+  loadContextKey?: string;
+  loadStateKey?: string | number;
+}) {
   const { t } = useTranslation();
   const containers = useMemo(() => rows.filter((row) => row.configKind === 'dockerContainer'), [rows]);
   const images = useMemo(() => rows.filter((row) => row.configKind === 'dockerImage'), [rows]);
@@ -19,14 +39,24 @@ export function LinuxDockerPanel({ rows }: { rows: LinuxSystemConfig[] }) {
     { key: 'tag', title: t('linuxArtifacts.docker.tag'), render: (row) => row.key ?? '-', text: (row) => row.key ?? '' },
     { key: 'digest', title: t('linuxArtifacts.docker.digest'), className: 'min-w-[260px]', render: (row) => row.value ?? '-', text: (row) => row.value ?? '' },
   ];
+  const canLoadMore = hasMore && rows.length < total;
+  const tablePaging = {
+    loadContextKey,
+    loadStateKey,
+    hasMore: canLoadMore,
+    loadingMore,
+    loadMoreFailed,
+    onReachEnd: onLoadMore,
+    onRetryLoadMore,
+  };
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
         <div className="rounded-none border border-forensics-border bg-forensics-surface p-3"><div className="text-[10px] text-forensics-muted">{t('linuxArtifacts.docker.containers')}</div><div className="mt-1 font-mono text-lg">{containers.length}</div></div>
         <div className="rounded-none border border-forensics-border bg-forensics-surface p-3"><div className="text-[10px] text-forensics-muted">{t('linuxArtifacts.docker.images')}</div><div className="mt-1 font-mono text-lg">{images.length}</div></div>
       </div>
-      <section className="space-y-2"><h3 className="font-serif text-sm">{t('linuxArtifacts.docker.containers')}</h3><DenseDataTableFrame rowCount={containers.length}><DenseDataTable rows={containers} columns={containerColumns} getRowKey={(row) => row.artifactId} filterable emptyTitle={t('linuxArtifacts.docker.empty')} emptyDescription={t('linuxArtifacts.docker.emptyDescription')} /></DenseDataTableFrame></section>
-      <section className="space-y-2"><h3 className="font-serif text-sm">{t('linuxArtifacts.docker.images')}</h3><DenseDataTableFrame rowCount={images.length}><DenseDataTable rows={images} columns={imageColumns} getRowKey={(row) => row.artifactId} filterable emptyTitle={t('linuxArtifacts.docker.emptyImages')} emptyDescription={t('linuxArtifacts.docker.emptyDescription')} /></DenseDataTableFrame></section>
+      <section className="space-y-2"><h3 className="font-serif text-sm">{t('linuxArtifacts.docker.containers')}</h3><DenseDataTableFrame rowCount={containers.length}><DenseDataTable rows={containers} columns={containerColumns} getRowKey={(row) => row.artifactId} filterable emptyTitle={t('linuxArtifacts.docker.empty')} emptyDescription={t('linuxArtifacts.docker.emptyDescription')} {...tablePaging} /></DenseDataTableFrame></section>
+      <section className="space-y-2"><h3 className="font-serif text-sm">{t('linuxArtifacts.docker.images')}</h3><DenseDataTableFrame rowCount={images.length}><DenseDataTable rows={images} columns={imageColumns} getRowKey={(row) => row.artifactId} filterable emptyTitle={t('linuxArtifacts.docker.emptyImages')} emptyDescription={t('linuxArtifacts.docker.emptyDescription')} {...tablePaging} /></DenseDataTableFrame></section>
     </div>
   );
 }

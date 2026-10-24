@@ -2474,7 +2474,7 @@
       "preview": "预览",
       "open": "打开 .service",
       "configured": "已配置服务",
-      "running": "已启动服务",
+      "enabledCount": "已配置启动服务",
       "empty": "暂无 systemd 服务",
       "emptyDescription": "尚未解析到 systemd service unit 文件。",
       "loading": "正在读取 service 文件…",

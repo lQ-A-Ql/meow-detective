@@ -8,7 +8,27 @@ import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { getTextPreview } from '@/lib/api/files';
 import type { LinuxSystemConfig } from '@/types/models';
 
-export function LinuxServicesPanel({ rows }: { rows: LinuxSystemConfig[] }) {
+export function LinuxServicesPanel({
+  rows,
+  total,
+  hasMore = false,
+  loadingMore = false,
+  loadMoreFailed = false,
+  onLoadMore,
+  onRetryLoadMore,
+  loadContextKey,
+  loadStateKey,
+}: {
+  rows: LinuxSystemConfig[];
+  total: number;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  loadMoreFailed?: boolean;
+  onLoadMore?: () => void;
+  onRetryLoadMore?: () => unknown;
+  loadContextKey?: string;
+  loadStateKey?: string | number;
+}) {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<LinuxSystemConfig>();
   const preview = useQuery({
@@ -19,7 +39,7 @@ export function LinuxServicesPanel({ rows }: { rows: LinuxSystemConfig[] }) {
   });
   const services = rows.filter((row) => row.configKind === 'systemdServiceUnit');
   const configured = services.length;
-  const running = services.filter((row) => ['active', 'running'].includes((row.state ?? '').toLowerCase())).length;
+  const enabled = services.filter((row) => row.enabled === true).length;
   const columns: DenseColumn<LinuxSystemConfig>[] = [
     { key: 'name', title: t('linuxArtifacts.services.name'), render: (row) => row.name ?? row.line, text: (row) => row.name ?? row.line },
     { key: 'state', title: t('linuxArtifacts.services.state'), render: (row) => row.state ?? '-', text: (row) => row.state ?? '' },
@@ -31,10 +51,24 @@ export function LinuxServicesPanel({ rows }: { rows: LinuxSystemConfig[] }) {
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
         <div className="rounded-none border border-forensics-border bg-forensics-surface p-3"><div className="text-[10px] text-forensics-muted">{t('linuxArtifacts.services.configured')}</div><div className="mt-1 font-mono text-lg">{configured}</div></div>
-        <div className="rounded-none border border-forensics-border bg-forensics-surface p-3"><div className="text-[10px] text-forensics-muted">{t('linuxArtifacts.services.running')}</div><div className="mt-1 font-mono text-lg">{running}</div></div>
+        <div className="rounded-none border border-forensics-border bg-forensics-surface p-3"><div className="text-[10px] text-forensics-muted">{t('linuxArtifacts.services.enabledCount')}</div><div className="mt-1 font-mono text-lg">{enabled}</div></div>
       </div>
       <DenseDataTableFrame rowCount={services.length}>
-        <DenseDataTable rows={services} columns={columns} getRowKey={(row) => row.artifactId} filterable emptyTitle={t('linuxArtifacts.services.empty')} emptyDescription={t('linuxArtifacts.services.emptyDescription')} />
+        <DenseDataTable
+          rows={services}
+          columns={columns}
+          getRowKey={(row) => row.artifactId}
+          filterable
+          emptyTitle={t('linuxArtifacts.services.empty')}
+          emptyDescription={t('linuxArtifacts.services.emptyDescription')}
+          loadContextKey={loadContextKey}
+          loadStateKey={loadStateKey}
+          hasMore={hasMore && rows.length < total}
+          loadingMore={loadingMore}
+          loadMoreFailed={loadMoreFailed}
+          onReachEnd={onLoadMore}
+          onRetryLoadMore={onRetryLoadMore}
+        />
       </DenseDataTableFrame>
       <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(undefined); }}>
         <DialogContent className="max-h-[80vh] max-w-4xl overflow-hidden">

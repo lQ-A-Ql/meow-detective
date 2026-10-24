@@ -2474,7 +2474,7 @@
       "preview": "Preview",
       "open": "Open .service",
       "configured": "Configured services",
-      "running": "Running services",
+      "enabledCount": "Enabled services",
       "empty": "No systemd services",
       "emptyDescription": "No systemd service unit files were parsed.",
       "loading": "Reading service file…",

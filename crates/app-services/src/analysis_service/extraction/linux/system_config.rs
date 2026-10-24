@@ -1,4 +1,5 @@
 use super::common::{insert_opt, truncate, MAX_TEXT_LOG_EVENTS_PER_SOURCE};
+use super::docker::{is_container_metadata_path, is_repository_metadata_path};
 use super::systemd_projection::append_resolved_unit;
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact};
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
@@ -24,9 +25,8 @@ pub(in crate::analysis_service::extraction) fn is_system_config_path(normalized:
         || normalized.contains("/etc/cron.daily/")
         || normalized.contains("/etc/cron.weekly/")
         || normalized.contains("/etc/cron.monthly/")
-        || (normalized.contains("/var/lib/docker/containers/")
-            && normalized.ends_with("/config.v2.json"))
-        || normalized.ends_with("/var/lib/docker/image/overlay2/repositories.json")
+        || is_container_metadata_path(normalized)
+        || is_repository_metadata_path(normalized)
 }
 pub(in crate::analysis_service::extraction) fn is_sudoers_path(normalized: &str) -> bool {
     normalized.ends_with("/etc/sudoers") || normalized.contains("/etc/sudoers.d/")
@@ -70,11 +70,8 @@ pub(super) fn extract(
 ) {
     let normalized = normalize_evidence_path(&candidate.path);
     let text = String::from_utf8_lossy(bytes);
-    if normalized.contains("/var/lib/docker/containers/") && normalized.ends_with("/config.v2.json")
-    {
-        extract_docker_container(candidate, bytes, outcome);
-    } else if normalized.ends_with("/var/lib/docker/image/overlay2/repositories.json") {
-        extract_docker_repositories(candidate, bytes, outcome);
+    if is_container_metadata_path(&normalized) || is_repository_metadata_path(&normalized) {
+        super::docker::extract(candidate, bytes, outcome);
     } else if normalized.ends_with("/etc/os-release") || normalized.ends_with("/usr/lib/os-release")
     {
         extract_os_release(candidate, &text, outcome);
@@ -86,105 +83,6 @@ pub(super) fn extract(
         extract_single_value_config(candidate, &text, outcome);
     } else {
         extract_key_value_or_lines(candidate, &text, "linux.system_config", outcome);
-    }
-}
-
-fn extract_docker_container(
-    candidate: &EvidenceCandidate,
-    bytes: &[u8],
-    outcome: &mut ExtractionOutcome,
-) {
-    let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
-        outcome.warnings.push(format!(
-            "{} Docker container metadata is not valid JSON",
-            candidate.path
-        ));
-        return;
-    };
-    let name = value["Name"]
-        .as_str()
-        .map(|name| name.trim_start_matches('/').to_string());
-    let image = value["Config"]["Image"].as_str().map(str::to_string);
-    let state = value["State"]["Status"].as_str().map(str::to_string);
-    let command = value["Config"]["Cmd"].as_array().map(|items| {
-        items
-            .iter()
-            .filter_map(Value::as_str)
-            .collect::<Vec<_>>()
-            .join(" ")
-    });
-    let mut attrs = base_attrs(candidate);
-    attrs.insert(
-        "configKind".to_string(),
-        Value::String("dockerContainer".to_string()),
-    );
-    insert_opt(&mut attrs, "name", name.clone());
-    insert_opt(&mut attrs, "state", state);
-    insert_opt(&mut attrs, "key", Some("image".to_string()));
-    insert_opt(&mut attrs, "value", image.clone());
-    insert_opt(&mut attrs, "description", command);
-    attrs.insert(
-        "line".to_string(),
-        Value::String(name.unwrap_or_else(|| candidate.path.clone())),
-    );
-    attrs.insert("lineNumber".to_string(), Value::Number(1.into()));
-    outcome.artifacts.push(make_artifact(
-        "LinuxSystemConfig",
-        format!(
-            "Docker container: {}",
-            image.unwrap_or_else(|| "unknown image".to_string())
-        ),
-        candidate.path.clone(),
-        candidate,
-        "linux.docker_container",
-        attrs,
-    ));
-}
-
-fn extract_docker_repositories(
-    candidate: &EvidenceCandidate,
-    bytes: &[u8],
-    outcome: &mut ExtractionOutcome,
-) {
-    let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
-        outcome.warnings.push(format!(
-            "{} Docker repository metadata is not valid JSON",
-            candidate.path
-        ));
-        return;
-    };
-    let Some(repositories) = value.as_object() else {
-        return;
-    };
-    for (repository, tags) in repositories {
-        let Some(tags) = tags.as_object() else {
-            continue;
-        };
-        for (tag, digest) in tags {
-            let mut attrs = base_attrs(candidate);
-            attrs.insert(
-                "configKind".to_string(),
-                Value::String("dockerImage".to_string()),
-            );
-            attrs.insert("name".to_string(), Value::String(repository.clone()));
-            attrs.insert("key".to_string(), Value::String(tag.clone()));
-            if let Some(digest) = digest.as_str() {
-                attrs.insert("value".to_string(), Value::String(digest.to_string()));
-            }
-            attrs.insert(
-                "line".to_string(),
-                Value::String(format!("{repository}:{tag}")),
-            );
-            attrs.insert("lineNumber".to_string(), Value::Number(1.into()));
-            outcome.artifacts.push(make_artifact(
-                "LinuxSystemConfig",
-                format!("Docker image: {repository}:{tag}"),
-                candidate.path.clone(),
-                candidate,
-                "linux.docker_image",
-                attrs,
-            ));
-        }
     }
 }
 
