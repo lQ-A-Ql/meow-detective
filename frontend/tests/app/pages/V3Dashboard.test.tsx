@@ -215,6 +215,7 @@ describe('V3Dashboard', () => {
         startIds: ['case:entity:alice'],
         edgeLimit: 600,
       }),
+      'case-1',
     );
     expect(screen.getByText('跨源实体')).toBeDefined();
     expect(screen.getByText('跨源关系')).toBeDefined();
@@ -228,6 +229,7 @@ describe('V3Dashboard', () => {
 
     expect(mocks.useGraphQuery).toHaveBeenLastCalledWith(
       expect.objectContaining({ startIds: [], edgeTypes: [] }),
+      'case-1',
     );
     expect(screen.getByText('暂无确定性的跨数据源实体关联。')).toBeDefined();
   });

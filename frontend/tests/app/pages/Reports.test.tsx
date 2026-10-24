@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   templates: vi.fn(),
   history: vi.fn(),
   exportReport: vi.fn(),
+  currentCase: vi.fn(),
   dataSources: vi.fn(),
   importSignals: vi.fn(),
 }));
@@ -18,6 +19,7 @@ vi.mock('@/features/reports/hooks', () => ({
 }));
 
 vi.mock('@/features/case/hooks', () => ({
+  useCurrentCase: mocks.currentCase,
   useDataSources: mocks.dataSources,
 }));
 
@@ -58,6 +60,8 @@ function renderReports() {
 
 describe('Reports hash caveat visibility', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.currentCase.mockReturnValue(queryState({ id: 'case-1' }));
     mocks.exportReport.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
@@ -87,6 +91,7 @@ describe('Reports hash caveat visibility', () => {
     expect(screen.getByText('证据哈希: pending')).toBeDefined();
     expect(screen.getByText('hash caveat pending')).toBeDefined();
     expect(screen.queryByText('D:/private/evidence.raw')).toBeNull();
+    expect(mocks.history).toHaveBeenCalledWith('case-1');
   });
 
   it('updates export summary when raw file extraction is enabled', () => {

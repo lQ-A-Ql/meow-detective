@@ -94,7 +94,8 @@ vi.mock('@/features/files/hooks', async (importOriginal) => {
       branches: Array<{ parentId: string; offset: number }>,
       limit: number,
       showHidden: boolean,
-    ) => branches.map((branch) => mocks.fileChildren(branch.parentId, branch.offset, limit, showHidden)),
+      caseId?: string,
+    ) => branches.map((branch) => mocks.fileChildren(branch.parentId, branch.offset, limit, showHidden, caseId)),
     useFileJumpContext: mocks.fileJumpContext,
     useFileRowsPage: mocks.fileRows,
     useFileTree: mocks.fileTree,
@@ -368,11 +369,11 @@ describe('FileBrowser media preview', () => {
 
     renderPage();
 
-    expect(mocks.fileViewer).toHaveBeenCalledWith('video-1', true);
-    expect(mocks.textPreview).toHaveBeenCalledWith('video-1', false);
-    expect(mocks.imagePreview).toHaveBeenCalledWith('video-1', false);
-    expect(mocks.mediaUrl).toHaveBeenCalledWith('video-1', false);
-    expect(mocks.fileHandle).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.fileViewer).toHaveBeenCalledWith('video-1', true, 'case-1');
+    expect(mocks.textPreview).toHaveBeenCalledWith('video-1', false, 'case-1');
+    expect(mocks.imagePreview).toHaveBeenCalledWith('video-1', false, 'case-1');
+    expect(mocks.mediaUrl).toHaveBeenCalledWith('video-1', false, 'case-1');
+    expect(mocks.fileHandle).toHaveBeenCalledWith('video-1', false, 'case-1');
   });
 
   it('enables only the text preview chain on the text tab', () => {
@@ -382,21 +383,21 @@ describe('FileBrowser media preview', () => {
 
     renderPage();
 
-    expect(mocks.fileViewer).toHaveBeenCalledWith('video-1', false);
-    expect(mocks.textPreview).toHaveBeenCalledWith('video-1', true);
-    expect(mocks.imagePreview).toHaveBeenCalledWith('video-1', false);
-    expect(mocks.mediaUrl).toHaveBeenCalledWith('video-1', false);
-    expect(mocks.fileHandle).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.fileViewer).toHaveBeenCalledWith('video-1', false, 'case-1');
+    expect(mocks.textPreview).toHaveBeenCalledWith('video-1', true, 'case-1');
+    expect(mocks.imagePreview).toHaveBeenCalledWith('video-1', false, 'case-1');
+    expect(mocks.mediaUrl).toHaveBeenCalledWith('video-1', false, 'case-1');
+    expect(mocks.fileHandle).toHaveBeenCalledWith('video-1', false, 'case-1');
   });
 
   it('enables only the matching media preview chain on the preview tab', () => {
     renderPage();
 
-    expect(mocks.fileViewer).toHaveBeenCalledWith('video-1', false);
-    expect(mocks.textPreview).toHaveBeenCalledWith('video-1', false);
-    expect(mocks.imagePreview).toHaveBeenCalledWith('video-1', false);
-    expect(mocks.mediaUrl).toHaveBeenCalledWith('video-1', true);
-    expect(mocks.fileHandle).toHaveBeenCalledWith('video-1', true);
+    expect(mocks.fileViewer).toHaveBeenCalledWith('video-1', false, 'case-1');
+    expect(mocks.textPreview).toHaveBeenCalledWith('video-1', false, 'case-1');
+    expect(mocks.imagePreview).toHaveBeenCalledWith('video-1', false, 'case-1');
+    expect(mocks.mediaUrl).toHaveBeenCalledWith('video-1', true, 'case-1');
+    expect(mocks.fileHandle).toHaveBeenCalledWith('video-1', true, 'case-1');
   });
 
   it('shows large media controlled chunk fallback text and keeps extract available', () => {
@@ -529,15 +530,15 @@ describe('FileBrowser media preview', () => {
 
     renderPage();
 
-    expect(mocks.fileTree).toHaveBeenCalledWith(true);
-    expect(mocks.fileRows).toHaveBeenCalledWith('root', 0, 500, true, 'name', 'asc');
+    expect(mocks.fileTree).toHaveBeenCalledWith(true, 'case-1');
+    expect(mocks.fileRows).toHaveBeenCalledWith('root', 0, 500, true, 'name', 'asc', 'case-1');
     expect(screen.getByText('System Volume Information')).toBeDefined();
 
     fireEvent.click(screen.getByTestId('file-visibility-toggle'));
 
-    await waitFor(() => expect(mocks.fileTree).toHaveBeenLastCalledWith(false));
+    await waitFor(() => expect(mocks.fileTree).toHaveBeenLastCalledWith(false, 'case-1'));
     await waitFor(() =>
-      expect(mocks.fileRows).toHaveBeenLastCalledWith('root', 0, 500, false, 'name', 'asc'),
+      expect(mocks.fileRows).toHaveBeenLastCalledWith('root', 0, 500, false, 'name', 'asc', 'case-1'),
     );
     expect(screen.queryByText('System Volume Information')).toBeNull();
   });
@@ -598,13 +599,13 @@ describe('FileBrowser media preview', () => {
 
     renderPage();
 
-    await waitFor(() => expect(mocks.fileChildren).toHaveBeenCalledWith('root', 0, 500, true));
+    await waitFor(() => expect(mocks.fileChildren).toHaveBeenCalledWith('root', 0, 500, true, 'case-1'));
     expect(screen.queryByText('System Volume Information')).toBeNull();
 
     fireEvent.click(screen.getByTestId('load-more-tree-children'));
 
     await waitFor(() =>
-      expect(mocks.fileChildren).toHaveBeenLastCalledWith('root', 500, 500, true),
+      expect(mocks.fileChildren).toHaveBeenLastCalledWith('root', 500, 500, true, 'case-1'),
     );
     const treeViewport = document.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
     treeViewport.scrollTop = 501 * 28;
@@ -756,7 +757,7 @@ describe('FileBrowser media preview', () => {
     // ds-1 (Windows Source) auto-expands first; only its own root should show.
     await waitFor(() => expect(screen.getByText('分区1（NTFS）')).toBeDefined());
     expect(screen.queryByText('分区2（FAT）')).toBeNull();
-    expect(mocks.fileRows).toHaveBeenCalledWith(undefined, 0, 500, true, 'name', 'asc');
+    expect(mocks.fileRows).toHaveBeenCalledWith(undefined, 0, 500, true, 'name', 'asc', 'case-1');
 
     fireEvent.click(windowsTreeNode); // collapse ds-1
     fireEvent.click(linuxTreeNode); // expand ds-2
@@ -925,7 +926,7 @@ describe('FileBrowser media preview', () => {
         'case-1',
       ),
     );
-    await waitFor(() => expect(mocks.fileTree).toHaveBeenLastCalledWith(true));
+    await waitFor(() => expect(mocks.fileTree).toHaveBeenLastCalledWith(true, 'case-1'));
     await waitFor(() =>
       expect(mocks.selectionState.setSelectedDirectoryId).toHaveBeenCalledWith('dir-hidden'),
     );
@@ -937,6 +938,7 @@ describe('FileBrowser media preview', () => {
         true,
         'name',
         'asc',
+        'case-1',
       ),
     );
     expect(screen.getAllByText('secret.dat').length).toBeGreaterThan(0);
