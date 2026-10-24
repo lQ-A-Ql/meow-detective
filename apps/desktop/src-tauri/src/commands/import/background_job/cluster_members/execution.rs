@@ -6,10 +6,9 @@ use std::sync::{Arc, Mutex};
 use app_services::import_scheduler;
 
 use super::super::super::events::TauriImportEventSink;
-use super::super::super::pipeline::{execute_import_job, ImportJobOptions};
 use super::super::status::fail_linux_evidence_set_job;
 use super::types::{MemberCoordinator, MemberExecutionContext, MemberResult, MemberWork};
-use super::{CommandError, JobRepo};
+use super::CommandError;
 use crate::events::event_bridge;
 
 pub(super) fn run_member_workers(
@@ -88,73 +87,34 @@ fn run_member_import(
     execution: &MemberExecutionContext,
 ) -> Result<String, CommandError> {
     let MemberWork { config, job_id, .. } = member;
-    let admission = import_scheduler::global_import_admission();
-    let _permit = admission
-        .acquire(
-            execution.scheduling.admission_request(),
-            execution.cancel_token.as_ref(),
-        )
-        .map_err(|error| match error {
-            import_scheduler::ImportAdmissionError::Cancelled => {
-                CommandError::cancelled("Linux evidence-set member import cancelled")
-            }
-            import_scheduler::ImportAdmissionError::TimedOut => {
-                CommandError::timeout("Linux evidence-set member admission timed out")
-            }
-        })?;
     let connection = app_services::connection::open_existing_case_db(&execution.db_path)
         .map_err(CommandError::from_typed_service_error)?;
-    let member_job_repo = JobRepo::new(&connection);
-    if !member_job_repo
-        .start(&job_id)
-        .map_err(CommandError::from_typed_service_error)?
-    {
-        return Err(CommandError::cancelled("Member cancelled before execution"));
-    }
-    let snapshot = admission.snapshot();
-    let started_detail = format!(
-        "Started member import: activeSources={} cpuWeight={}/{} memoryMb={}/{}",
-        snapshot.active_sources,
-        snapshot.cpu_in_use,
-        snapshot.cpu_capacity,
-        snapshot.memory_in_use_mb,
-        snapshot.memory_capacity_mb
-    );
-    member_job_repo
-        .update_progress(&job_id, 5, &started_detail)
-        .map_err(CommandError::from_typed_service_error)?;
-    tracing::info!(
-        job_id = %job_id.0,
-        active_sources = snapshot.active_sources,
-        cpu_in_use = snapshot.cpu_in_use,
-        memory_in_use_mb = snapshot.memory_in_use_mb,
-        peak_active_sources = snapshot.peak_active_sources,
-        peak_cpu_in_use = snapshot.peak_cpu_in_use,
-        peak_memory_in_use_mb = snapshot.peak_memory_in_use_mb,
-        "Linux evidence-set member admitted by import scheduler"
-    );
-    if let Some(app) = execution.app.as_ref() {
-        event_bridge::emit_job_started(app, &job_id.0, "Linux evidence-set member import started");
-        event_bridge::emit_job_progress(app, &job_id.0, 5, &started_detail);
-    }
     let event_sink = execution.app.as_ref().map(TauriImportEventSink::new);
-    let options = ImportJobOptions {
-        projection_policy: Default::default(),
-        event_sink: event_sink
-            .as_ref()
-            .map(|sink| sink as &dyn app_services::import_pipeline::ImportEventSink),
-        cancel_token: &execution.cancel_token,
-        max_import_workers: Some(execution.scheduling.import_workers),
-        max_analysis_workers: Some(execution.scheduling.analysis_workers),
-        analysis_mode: execution.analysis_mode,
-        defer_linux_artifacts: execution.defer_linux_artifacts,
-    };
-    execute_import_job(
-        &connection,
-        &execution.case_id,
-        &execution.case_root,
-        config,
-        &job_id,
-        options,
-    )
+    match app_services::import_job_coordinator::run_member_import(
+        app_services::import_job_coordinator::MemberImportRequest {
+            connection: &connection,
+            case_id: &execution.case_id,
+            case_root: &execution.case_root,
+            job_id: &job_id,
+            import_config: config,
+            scheduling: execution.scheduling,
+            analysis_mode: execution.analysis_mode,
+            defer_linux_artifacts: execution.defer_linux_artifacts,
+            cancel_token: &execution.cancel_token,
+            event_sink: event_sink
+                .as_ref()
+                .map(|sink| sink as &dyn app_services::import_pipeline::ImportEventSink),
+        },
+    ) {
+        Ok(app_services::import_job_coordinator::MemberImportOutcome::Completed(message)) => {
+            if let Some(app) = execution.app.as_ref() {
+                event_bridge::emit_job_completed(app, &job_id.0, &message);
+            }
+            Ok(message)
+        }
+        Ok(app_services::import_job_coordinator::MemberImportOutcome::Cancelled(message)) => {
+            Err(CommandError::cancelled(message))
+        }
+        Err(error) => Err(error),
+    }
 }

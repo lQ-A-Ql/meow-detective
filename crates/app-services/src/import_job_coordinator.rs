@@ -27,6 +27,96 @@ pub enum SingleImportOutcome {
     Cancelled(String),
 }
 
+pub type MemberImportOutcome = SingleImportOutcome;
+
+pub struct MemberImportRequest<'a> {
+    pub connection: &'a rusqlite::Connection,
+    pub case_id: &'a domain::CaseId,
+    pub case_root: &'a std::path::Path,
+    pub job_id: &'a domain::JobId,
+    pub import_config: ImportSourceConfig,
+    pub scheduling: crate::import_scheduler::ImportSchedulingPolicy,
+    pub analysis_mode: ImportAnalysisMode,
+    pub defer_linux_artifacts: bool,
+    pub cancel_token: &'a Arc<AtomicBool>,
+    pub event_sink: Option<&'a dyn ImportEventSink>,
+}
+
+pub fn run_member_import(
+    request: MemberImportRequest<'_>,
+) -> Result<MemberImportOutcome, CommandError> {
+    let MemberImportRequest {
+        connection,
+        case_id,
+        case_root,
+        job_id,
+        import_config,
+        scheduling,
+        analysis_mode,
+        defer_linux_artifacts,
+        cancel_token,
+        event_sink,
+    } = request;
+    let repo = JobRepo::new(connection);
+    let _admission = crate::import_scheduler::global_import_admission()
+        .acquire(scheduling.admission_request(), cancel_token.as_ref())
+        .map_err(|error| match error {
+            crate::import_scheduler::ImportAdmissionError::Cancelled => {
+                CommandError::cancelled("Linux evidence-set member import cancelled")
+            }
+            crate::import_scheduler::ImportAdmissionError::TimedOut => {
+                CommandError::timeout("Linux evidence-set member admission timed out")
+            }
+        })?;
+    if !repo
+        .start(job_id)
+        .map_err(CommandError::from_typed_service_error)?
+    {
+        return Ok(MemberImportOutcome::Cancelled(
+            "Member cancelled before execution".to_string(),
+        ));
+    }
+    if let Some(event_sink) = event_sink {
+        event_sink.job_progress(&job_id.0, 5, "Linux evidence-set member import started");
+    }
+    let options = ImportJobOptions {
+        projection_policy: Default::default(),
+        event_sink,
+        cancel_token,
+        max_import_workers: Some(scheduling.import_workers),
+        max_analysis_workers: Some(scheduling.analysis_workers),
+        analysis_mode,
+        defer_linux_artifacts,
+    };
+    match execute_import_job(
+        connection,
+        case_id,
+        case_root,
+        import_config,
+        job_id,
+        options,
+    ) {
+        Ok(message) => {
+            repo.complete_committed(job_id, &message)
+                .map_err(CommandError::from_typed_service_error)?;
+            Ok(MemberImportOutcome::Completed(message))
+        }
+        Err(error)
+            if error.category == "cancelled"
+                || cancel_token.load(std::sync::atomic::Ordering::Acquire) =>
+        {
+            repo.cancel(job_id, &error.message)
+                .map_err(CommandError::from_typed_service_error)?;
+            Ok(MemberImportOutcome::Cancelled(error.message))
+        }
+        Err(error) => {
+            repo.fail(job_id, &error.message)
+                .map_err(CommandError::from_typed_service_error)?;
+            Err(error)
+        }
+    }
+}
+
 pub struct SingleImportRequest<'a> {
     pub connection: &'a rusqlite::Connection,
     pub case_id: &'a domain::CaseId,

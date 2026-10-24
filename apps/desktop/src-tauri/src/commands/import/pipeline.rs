@@ -29,6 +29,7 @@ pub async fn cancel_import(
 }
 
 // Re-export the import pipeline API used by sibling command modules.
+#[cfg(test)]
 pub use app_services::import_pipeline::{execute_import_job, ImportJobOptions};
 
 #[cfg(test)]
