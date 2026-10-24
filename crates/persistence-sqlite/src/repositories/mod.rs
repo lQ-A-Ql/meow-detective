@@ -67,6 +67,7 @@ pub mod staging_repo;
 pub mod storage_object_repo;
 pub mod systemd_unit_repo;
 pub mod timeline_facets_repo;
+pub mod timeline_projection_repo;
 pub mod timeline_repo;
 
 pub use staging_repo::StagingRepo;

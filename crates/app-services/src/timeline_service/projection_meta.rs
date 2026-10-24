@@ -4,7 +4,8 @@
 //! `projection.rs` to keep both modules under the size budget.
 
 use domain::DataSourcePlatform;
-use rusqlite::{params, Connection, OptionalExtension};
+use persistence_sqlite::repositories::timeline_projection_repo::TimelineProjectionRepo;
+use rusqlite::Connection;
 
 use super::TimelineServiceError;
 
@@ -82,15 +83,7 @@ pub(super) fn timeline_graph_tables_present(
 }
 
 pub(super) fn ensure_projection_meta_table(conn: &Connection) -> Result<(), TimelineServiceError> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS timeline_projection_meta (
-            projection_key TEXT PRIMARY KEY NOT NULL,
-            status TEXT NOT NULL,
-            inserted_count INTEGER NOT NULL DEFAULT 0,
-            input_identity TEXT NOT NULL,
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );",
-    )?;
+    TimelineProjectionRepo::new(conn).ensure_meta_table()?;
     Ok(())
 }
 
@@ -99,15 +92,7 @@ pub(super) fn is_projection_done(
     key: &str,
     input_identity: &str,
 ) -> Result<bool, TimelineServiceError> {
-    let status = conn
-        .query_row(
-            "SELECT status, input_identity FROM timeline_projection_meta
-             WHERE projection_key = ?1",
-            [key],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-        )
-        .optional()?;
-    Ok(status.is_some_and(|(status, identity)| status == "done" && identity == input_identity))
+    Ok(TimelineProjectionRepo::new(conn).is_done(key, input_identity)?)
 }
 
 pub(super) fn mark_projection_done(
@@ -116,16 +101,6 @@ pub(super) fn mark_projection_done(
     inserted_count: u64,
     input_identity: &str,
 ) -> Result<(), TimelineServiceError> {
-    conn.execute(
-        "INSERT INTO timeline_projection_meta
-         (projection_key, status, inserted_count, input_identity, updated_at)
-         VALUES (?1, 'done', ?2, ?3, datetime('now'))
-         ON CONFLICT(projection_key) DO UPDATE SET
-            status = excluded.status,
-            inserted_count = excluded.inserted_count,
-            input_identity = excluded.input_identity,
-            updated_at = excluded.updated_at",
-        params![key, inserted_count as i64, input_identity],
-    )?;
+    TimelineProjectionRepo::new(conn).mark_done(key, inserted_count, input_identity)?;
     Ok(())
 }

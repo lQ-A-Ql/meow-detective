@@ -1,6 +1,7 @@
 use domain::{DataSourcePlatform, FileEntry};
 use persistence_sqlite::repositories::{
     source_meta_repo::{SourceMetaRepo, TIMELINE_CURSOR_REVISION_KEY},
+    timeline_projection_repo::TimelineProjectionRepo,
     timeline_repo::{with_deferred_empty_indexes, TimelineRepo},
 };
 use rayon::prelude::*;
@@ -346,34 +347,8 @@ fn file_policy_sql(
 }
 
 fn clear_previous_file_projection(conn: &Connection) -> Result<(), TimelineServiceError> {
-    if timeline_graph_tables_present(conn)? {
-        conn.execute_batch(
-            "DELETE FROM graph_edges
-             WHERE source_id IN (
-                 SELECT id FROM timeline_events
-                 WHERE parser_id IN (
-                    'timeline.macb', 'timeline.file_created', 'timeline.file_modified',
-                    'timeline.file_accessed', 'timeline.file_deleted'
-                 )
-             );
-             DELETE FROM graph_nodes
-             WHERE id IN (
-                 SELECT id FROM timeline_events
-                 WHERE parser_id IN (
-                    'timeline.macb', 'timeline.file_created', 'timeline.file_modified',
-                    'timeline.file_accessed', 'timeline.file_deleted'
-                 )
-             );",
-        )?;
-    }
-    conn.execute(
-        "DELETE FROM timeline_events
-         WHERE parser_id IN (
-            'timeline.macb', 'timeline.file_created', 'timeline.file_modified',
-            'timeline.file_accessed', 'timeline.file_deleted'
-         )",
-        [],
-    )?;
+    TimelineProjectionRepo::new(conn)
+        .clear_file_activity_projection(timeline_graph_tables_present(conn)?)?;
     Ok(())
 }
 
