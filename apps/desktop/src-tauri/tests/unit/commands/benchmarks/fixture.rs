@@ -7,7 +7,7 @@ use domain::DataSourceId;
 use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
 use tempfile::TempDir;
 
-use crate::commands::import::pipeline::{execute_import_job, ImportJobOptions};
+use app_services::import_pipeline::{execute_import_job, ImportJobOptions};
 
 fn prefetch_fixture(exe_name: &str, run_count: u32, last_run: chrono::DateTime<Utc>) -> Vec<u8> {
     let mut data = Vec::new();
