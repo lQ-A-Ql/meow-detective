@@ -147,7 +147,8 @@ export function useAnalysisWorkspaceModel() {
         mysqlServices: summary.mysqlConfigCount
           + summary.mysqlLogCount
           + summary.mysqlFindingCount,
-        services: summary.systemConfigs.filter((row) => row.configKind === 'systemdServiceUnit').length,
+        services: summary.systemConfigs.filter((row) => row.configKind === 'systemdServiceUnit'
+          && (row.name ?? row.line).endsWith('.service')).length,
         docker: summary.systemConfigs.filter((row) => row.configKind === 'dockerContainer' || row.configKind === 'dockerImage').length,
       });
     }

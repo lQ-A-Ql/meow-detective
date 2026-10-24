@@ -2468,7 +2468,7 @@
     },
     "services": {
       "name": "服务名称",
-      "state": "运行状态",
+      "state": "配置状态",
       "enabled": "已配置启动",
       "unitFile": "Unit 文件",
       "preview": "预览",

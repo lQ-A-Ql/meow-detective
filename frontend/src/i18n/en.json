@@ -2468,7 +2468,7 @@
     },
     "services": {
       "name": "Service name",
-      "state": "Runtime state",
+      "state": "Configuration state",
       "enabled": "Enabled",
       "unitFile": "Unit file",
       "preview": "Preview",
