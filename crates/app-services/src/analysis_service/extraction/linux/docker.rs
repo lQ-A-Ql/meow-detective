@@ -37,7 +37,7 @@ fn extract_container(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut 
         .as_str()
         .map(|name| name.trim_start_matches('/').to_string());
     let image = value["Config"]["Image"].as_str().map(str::to_string);
-    let state = value["State"]["Status"].as_str().map(str::to_string);
+    let state = container_state(&value["State"]);
     let command = value["Config"]["Cmd"].as_array().map(|items| {
         items
             .iter()
@@ -73,6 +73,33 @@ fn extract_container(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut 
     ));
 }
 
+fn container_state(state: &Value) -> Option<String> {
+    if let Some(status) = state["Status"].as_str() {
+        return Some(status.to_string());
+    }
+    let status = if state["Running"].as_bool()? {
+        if state["Paused"].as_bool() == Some(true) {
+            "paused"
+        } else if state["Restarting"].as_bool() == Some(true) {
+            "restarting"
+        } else {
+            "running"
+        }
+    } else if state["RemovalInProgress"].as_bool() == Some(true) {
+        "removing"
+    } else if state["Dead"].as_bool() == Some(true) {
+        "dead"
+    } else {
+        let started = chrono::DateTime::parse_from_rfc3339(state["StartedAt"].as_str()?).ok()?;
+        if started == chrono::DateTime::parse_from_rfc3339("0001-01-01T00:00:00Z").ok()? {
+            "created"
+        } else {
+            "exited"
+        }
+    };
+    Some(status.to_string())
+}
+
 fn extract_repositories(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
@@ -101,21 +128,29 @@ fn extract_repositories(
                 continue;
             };
             let mut attrs = base_attrs(candidate);
+            let label = tag
+                .strip_prefix(repository)
+                .and_then(|suffix| suffix.strip_prefix(':'))
+                .unwrap_or(tag);
+            let reference = if tag.starts_with(&format!("{repository}:"))
+                || tag.starts_with(&format!("{repository}@"))
+            {
+                tag.clone()
+            } else {
+                format!("{repository}:{tag}")
+            };
             attrs.insert(
                 "configKind".to_string(),
                 Value::String("dockerImage".to_string()),
             );
             attrs.insert("name".to_string(), Value::String(repository.clone()));
-            attrs.insert("key".to_string(), Value::String(tag.clone()));
+            attrs.insert("key".to_string(), Value::String(label.to_string()));
             attrs.insert("value".to_string(), Value::String(digest.to_string()));
-            attrs.insert(
-                "line".to_string(),
-                Value::String(format!("{repository}:{tag}")),
-            );
+            attrs.insert("line".to_string(), Value::String(reference.clone()));
             attrs.insert("lineNumber".to_string(), Value::Number(1.into()));
             outcome.artifacts.push(make_artifact(
                 "LinuxSystemConfig",
-                format!("Docker image: {repository}:{tag}"),
+                format!("Docker image: {reference}"),
                 candidate.path.clone(),
                 candidate,
                 "linux.docker_image",

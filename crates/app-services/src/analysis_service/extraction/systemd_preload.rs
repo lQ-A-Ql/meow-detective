@@ -228,7 +228,7 @@ fn prepare_scope(
     Ok(())
 }
 fn unit_path(row: &SystemdCatalogRow) -> String {
-    crate::analysis_service::candidates::normalize_evidence_path(&row.path)
+    crate::analysis_service::candidates::evidence_relative_path(&row.path)
 }
 fn reader_candidate(row: &SystemdCatalogRow) -> EvidenceCandidate {
     EvidenceCandidate {

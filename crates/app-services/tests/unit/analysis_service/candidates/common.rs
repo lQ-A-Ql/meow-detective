@@ -29,6 +29,20 @@ fn normalization_preserves_windows_paths_after_partition_marker_removal() {
 }
 
 #[test]
+fn evidence_relative_paths_preserve_linux_case_after_removing_catalog_roots() {
+    for path in [
+        "Partition 4 (EXT4) - ubuntu-vg/ubuntu-lv/etc/systemd/system/Worker.service",
+        "[P4]/ubuntu-vg/ubuntu-lv/etc/systemd/system/Worker.service",
+        "/etc/systemd/system/Worker.service",
+    ] {
+        assert_eq!(
+            evidence_relative_path(path),
+            "/etc/systemd/system/Worker.service"
+        );
+    }
+}
+
+#[test]
 fn linux_category_selection_excludes_windows_definitions_before_scan() {
     let definitions = selected_evidence_category_defs(&["LinuxArtifacts"]);
     let categories = definitions

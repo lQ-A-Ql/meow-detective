@@ -10,7 +10,11 @@ pub(crate) enum EvidencePathPattern {
 }
 
 pub(crate) fn normalize_evidence_path(path: &str) -> String {
-    let normalized = strip_synthetic_root_prefix(&path.replace('\\', "/")).to_ascii_lowercase();
+    evidence_relative_path(path).to_ascii_lowercase()
+}
+
+pub(crate) fn evidence_relative_path(path: &str) -> String {
+    let normalized = strip_synthetic_root_prefix(&path.replace('\\', "/"));
     if normalized.starts_with('/') {
         normalized
     } else {

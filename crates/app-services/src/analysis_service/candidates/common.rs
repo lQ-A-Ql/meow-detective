@@ -11,6 +11,7 @@ use std::sync::atomic::AtomicBool;
 mod path_matching;
 
 pub(crate) use path_matching::evidence_path_matches;
+pub(crate) use path_matching::evidence_relative_path;
 pub(crate) use path_matching::normalize_evidence_path;
 pub(super) use path_matching::EvidencePathPattern;
 

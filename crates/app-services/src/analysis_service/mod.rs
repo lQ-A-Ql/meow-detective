@@ -63,9 +63,8 @@ pub const MAX_SAMPLE_SIZE: u32 = 5000;
 pub const MAGIC_HEADER_LIMIT: usize = 8 * 1024;
 pub const MAX_REGISTRY_ANALYSIS_BYTES: usize = 256 * 1024 * 1024;
 pub const MAX_ANALYSIS_SOURCE_BYTES: usize = 128 * 1024 * 1024;
-// Candidate routing and systemd path normalization changed: re-read Linux
-// candidates instead of replaying checkpoints produced by the previous logic.
-pub(crate) const ANALYSIS_EXTRACTOR_VERSION: &str = "1.3.2";
+// Preserve case-sensitive systemd paths and project Docker on-disk states.
+pub(crate) const ANALYSIS_EXTRACTOR_VERSION: &str = "1.3.3";
 
 #[cfg(test)]
 #[path = "../../tests/unit/analysis_service/mod.rs"]

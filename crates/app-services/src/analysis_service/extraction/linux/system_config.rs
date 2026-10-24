@@ -101,8 +101,8 @@ pub(super) fn extract_systemd_unit_config(
     bytes: &[u8],
     outcome: &mut ExtractionOutcome,
 ) {
-    let normalized = normalize_evidence_path(&candidate.path);
-    match artifacts_linux::parse_systemd_unit(&normalized, bytes) {
+    let path = crate::analysis_service::candidates::evidence_relative_path(&candidate.path);
+    match artifacts_linux::parse_systemd_unit(&path, bytes) {
         Ok(unit) => {
             append_resolved_unit(candidate, &unit, outcome);
         }
