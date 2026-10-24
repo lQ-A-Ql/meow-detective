@@ -176,7 +176,7 @@ describe('case hooks', () => {
 
     expect(prefetchSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        queryKey: ['files', 'tree', false],
+        queryKey: ['files', 'tree', 'case-1', false],
         staleTime: 10_000,
       }),
     );

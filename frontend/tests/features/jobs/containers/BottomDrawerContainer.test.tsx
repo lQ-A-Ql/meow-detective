@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BottomDrawerContainer as BottomDrawer } from '@/features/jobs/containers/BottomDrawerContainer';
 
 const mocks = vi.hoisted(() => ({
+  currentCase: vi.fn(),
   jobs: vi.fn(),
   dataSources: vi.fn(),
   warnings: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('@/features/jobs/hooks', () => ({
 }));
 
 vi.mock('@/features/case/hooks', () => ({
+  useCurrentCase: mocks.currentCase,
   useDataSources: mocks.dataSources,
 }));
 
@@ -51,6 +53,8 @@ vi.mock('@/features/jobs/import-event-state', () => ({
 
 describe('BottomDrawer jobs panel', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.currentCase.mockReturnValue({ data: { id: 'case-1' } });
     mocks.jobs.mockReturnValue({
       data: [
         {
@@ -100,6 +104,9 @@ describe('BottomDrawer jobs panel', () => {
   it('renders partial badge and outcome counts', () => {
     render(<BottomDrawer />);
 
+    expect(mocks.jobs).toHaveBeenCalledWith('case-1');
+    expect(mocks.warnings).toHaveBeenCalledWith('case-1');
+    expect(mocks.trace).toHaveBeenCalledWith('case-1');
     expect(screen.getAllByText('部分完成').length).toBeGreaterThan(0);
     expect(screen.getByText('警告 2')).toBeDefined();
     expect(screen.getByText('跳过 3')).toBeDefined();
