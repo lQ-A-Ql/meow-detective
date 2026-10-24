@@ -16,9 +16,10 @@
     4. unsafe_code must stay forbidden.
     5. docs/bitlocker-dependency-decision.md must keep naming the pinned
        upstream commit, so a silent upstream refresh cannot pass.
-    6. Transport DTOs must not contain password, recovery-password,
+    6. Transport DTOs must not contain BitLocker password, recovery-password,
        credential, or passphrase fields, except the exact optional reveal field
-       on RecoveryPasswordReconstructionDto.
+       on RecoveryPasswordReconstructionDto. The product-visible
+       EmailAccountDto.password field is an explicit non-BitLocker exception.
     7. The retired whole-image credential reconstruction command, scanner, DTO,
        and frontend state must not return.
     8. The production BitLocker service must use exact profiled object traversal.
@@ -267,7 +268,11 @@ function Find-SerializedSecretContractViolations {
         $match.Groups['field'].Value -eq 'password' -and
         $prefix -match '(?ms)pub\s+struct\s+RecoveryPasswordReconstructionDto\s*\{(?:(?!^\}).)*$' -and
         $fieldLine -match '^\s*pub\s+password\s*:\s*Option<String>\s*,'
-      if ($authorizedReveal) {
+      $authorizedEmailAccountPassword = $relative -eq 'crates/transport/src/dto/analysis_email.rs' -and
+        $match.Groups['field'].Value -eq 'password' -and
+        $prefix -match '(?ms)pub\s+struct\s+EmailAccountDto\s*\{(?:(?!^\}).)*$' -and
+        $fieldLine -match '^\s*pub\s+password\s*:\s*Option<String>\s*,'
+      if ($authorizedReveal -or $authorizedEmailAccountPassword) {
         continue
       }
       $line = Get-LineNumber -Text $source -Index $match.Index
@@ -639,6 +644,16 @@ pub fn dump(plaintext: &[u8]) -> std::io::Result<()> {
     }
 
     [System.IO.File]::WriteAllText(
+      (Join-Path $dtoRoot 'analysis_email.rs'),
+      "pub struct EmailAccountDto {`n    pub password: Option<String>,`n}`n",
+      [System.Text.UTF8Encoding]::new($false)
+    )
+    $emailAccountPassword = @(Find-BitLockerCredentialViolations -Root $temp)
+    if ($emailAccountPassword -match '^\[secret-dto\]') {
+      throw 'Self-test rejected the EmailAccountDto password field required by the email analysis view'
+    }
+
+    [System.IO.File]::WriteAllText(
       (Join-Path $dtoRoot 'bitlocker.rs'),
       "pub struct RecoveryPasswordReconstructionDto {`n    pub password: String,`n}`n",
       [System.Text.UTF8Encoding]::new($false)
@@ -681,6 +696,7 @@ pub fn dump(plaintext: &[u8]) -> std::io::Result<()> {
     )
     Remove-Item -LiteralPath (Join-Path $memorySource 'credential.rs') -Force
     Remove-Item -LiteralPath (Join-Path $dtoRoot 'bitlocker.rs') -Force
+    Remove-Item -LiteralPath (Join-Path $dtoRoot 'analysis_email.rs') -Force
     $structural = @(Find-BitLockerCredentialViolations -Root $temp)
     if ($structural.Count -ne 0) {
       throw "Self-test rejected the structural memory recovery boundary: $($structural -join '; ')"
