@@ -228,19 +228,7 @@ fn prepare_scope(
     Ok(())
 }
 fn unit_path(row: &SystemdCatalogRow) -> String {
-    let parent = row
-        .path
-        .strip_suffix(&row.name)
-        .unwrap_or("")
-        .replace('\\', "/");
-    let path = format!("{parent}{}", row.name);
-    let path = path.trim_start_matches('/');
-    let path = if path.starts_with("[P") {
-        path.split_once('/').map(|(_, path)| path).unwrap_or(path)
-    } else {
-        path
-    };
-    format!("/{path}")
+    crate::analysis_service::candidates::normalize_evidence_path(&row.path)
 }
 fn reader_candidate(row: &SystemdCatalogRow) -> EvidenceCandidate {
     EvidenceCandidate {

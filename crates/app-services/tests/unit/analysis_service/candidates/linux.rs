@@ -49,3 +49,20 @@ fn docker_overlay_paths_still_match_host_layout_candidates() {
         "/var/lib/docker/overlay2/abc123/diff/etc/cron.d/container-job"
     ));
 }
+
+#[test]
+fn docker_runtime_metadata_paths_are_linux_artifact_candidates() {
+    for path in [
+        "/var/lib/docker/containers/0123/config.v2.json",
+        "/var/lib/docker/image/overlay2/repositories.json",
+        "/var/lib/docker/image/btrfs/repositories.json",
+    ] {
+        assert!(
+            matches_linux_candidate_patterns(path),
+            "{path} should match Docker metadata candidate patterns"
+        );
+    }
+    assert!(!matches_linux_candidate_patterns(
+        "/var/lib/docker/image/overlay2/imagedb/content/sha256/0123"
+    ));
+}

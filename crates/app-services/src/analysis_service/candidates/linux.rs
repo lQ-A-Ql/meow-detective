@@ -120,6 +120,8 @@ pub(super) const LINUX_ARTIFACTS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCat
         EvidencePathPattern::Contains("/usr/local/lib/systemd/system/"),
         EvidencePathPattern::Contains("/lib/systemd/system/"),
         EvidencePathPattern::Contains("/usr/lib/systemd/system/"),
+        EvidencePathPattern::ContainsAndSuffix("/var/lib/docker/containers/", "/config.v2.json"),
+        EvidencePathPattern::ContainsAndSuffix("/var/lib/docker/image/", "/repositories.json"),
         EvidencePathPattern::Contains("/etc/init.d/"),
         EvidencePathPattern::Suffix("/etc/rc.local"),
         EvidencePathPattern::Contains("/etc/profile.d/"),
