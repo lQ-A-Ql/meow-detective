@@ -63,13 +63,8 @@ pub fn remove_partition_placeholder_root(
     partition_index: usize,
 ) -> DbResult<usize> {
     let pattern = format!("{PARTITION_PLACEHOLDER_PREFIX}{partition_index}/*");
-    let deleted = conn.execute(
-        "DELETE FROM file_entries
-         WHERE data_source_id = ?1
-           AND parent_id IS NULL
-           AND path GLOB ?2",
-        rusqlite::params![data_source_id.0, pattern],
-    )?;
+    let deleted =
+        FileRepo::new(conn).remove_partition_placeholder_root(&data_source_id.0, &pattern)?;
     Ok(deleted)
 }
 
@@ -127,22 +122,7 @@ pub fn replace_placeholder_root_with_real_and_cancel(
                 ))
             })?;
 
-        tx.execute(
-            "UPDATE file_entries
-             SET path = ?1, name = ?2, created_at = ?3, modified_at = ?4, accessed_at = ?5,
-                 hidden = ?6, system = ?7
-             WHERE id = ?8",
-            rusqlite::params![
-                root_entry.path,
-                root_entry.name,
-                root_entry.created_at.map(|dt| dt.to_rfc3339()),
-                root_entry.modified_at.map(|dt| dt.to_rfc3339()),
-                root_entry.accessed_at.map(|dt| dt.to_rfc3339()),
-                root_entry.hidden as i32,
-                root_entry.system as i32,
-                root_entry.id.0,
-            ],
-        )?;
+        FileRepo::new(&tx).update_root_metadata(&root_entry)?;
 
         let stats = super::enumeration::walk_and_insert_children(
             &repo,

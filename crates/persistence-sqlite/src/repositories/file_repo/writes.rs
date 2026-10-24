@@ -7,6 +7,35 @@ use std::collections::HashMap;
 use super::FileRepo;
 
 impl FileRepo<'_> {
+    pub fn remove_partition_placeholder_root(
+        &self,
+        data_source_id: &str,
+        path_pattern: &str,
+    ) -> DbResult<usize> {
+        Ok(self.conn.execute(
+            "DELETE FROM file_entries WHERE data_source_id = ?1 AND parent_id IS NULL AND path GLOB ?2",
+            params![data_source_id, path_pattern],
+        )?)
+    }
+
+    pub fn update_root_metadata(&self, entry: &FileEntry) -> DbResult<()> {
+        self.conn.execute(
+            "UPDATE file_entries SET path = ?1, name = ?2, created_at = ?3, modified_at = ?4,
+             accessed_at = ?5, hidden = ?6, system = ?7 WHERE id = ?8",
+            params![
+                entry.path,
+                entry.name,
+                entry.created_at.map(|value| value.to_rfc3339()),
+                entry.modified_at.map(|value| value.to_rfc3339()),
+                entry.accessed_at.map(|value| value.to_rfc3339()),
+                entry.hidden as i32,
+                entry.system as i32,
+                entry.id.0,
+            ],
+        )?;
+        Ok(())
+    }
+
     pub fn insert_batch(&self, entries: &[FileEntry]) -> DbResult<()> {
         let transaction = self.conn.unchecked_transaction()?;
         FileRepo::new(&transaction).insert_batch_unchecked(entries)?;
