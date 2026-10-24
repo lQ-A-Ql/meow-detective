@@ -83,7 +83,7 @@ pub(super) fn prepare_derived_runtime_for_source(
         return Ok(None);
     }
 
-    let case_conn = crate::connection::open_case_db(&case_root.join("app.db"))
+    let case_conn = crate::connection::open_existing_case_db(&case_root.join("app.db"))
         .map_err(|error| format!("Open case database for derived analysis: {error}"))?;
     crate::ceph_reconstruction::build_derived_rbd_runtime(
         &case_conn,

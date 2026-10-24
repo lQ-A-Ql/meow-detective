@@ -72,7 +72,12 @@ pub fn recover_wechat_keys(
     restrict_acl: impl FnOnce(&Path) -> std::io::Result<()>,
 ) -> Result<WeChatKeyRecoveryResultDto, PluginActionError> {
     validate_dump_path(dump_path)?;
-    let source = source_db::open_ready_source_by_id(case_conn, case_root, case_id, data_source_id)?;
+    let source = source_db::open_ready_source_read_only_by_id(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+    )?;
     let db_pages = collect_db_pages(
         &source.connection,
         case_conn,

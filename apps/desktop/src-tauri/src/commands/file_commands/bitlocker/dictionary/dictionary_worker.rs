@@ -49,14 +49,15 @@ pub(super) fn run_dictionary_attack(
         },
         None,
     );
-    let connection = match app_services::connection::open_case_db(&case_root.join("app.db")) {
-        Ok(connection) => connection,
-        Err(_) => {
-            let code = "BITLOCKER_DICTIONARY_CASE_DB_FAILED";
-            set_failure(&app_state, &registry_key, task_id, code);
-            return Err(code.to_string());
-        }
-    };
+    let connection =
+        match app_services::connection::open_existing_case_db(&case_root.join("app.db")) {
+            Ok(connection) => connection,
+            Err(_) => {
+                let code = "BITLOCKER_DICTIONARY_CASE_DB_FAILED";
+                set_failure(&app_state, &registry_key, task_id, code);
+                return Err(code.to_string());
+            }
+        };
     let preview_runtime = app_state.preview_runtime.clone();
     let bitlocker_runtime = app_state.bitlocker_runtime.clone();
     let key_store = app_state.bitlocker_key_store.clone();

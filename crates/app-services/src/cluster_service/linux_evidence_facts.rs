@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
 
 use domain::{CaseId, DataSourceId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::{
+    file_repo::FileRepo, linux_evidence_facts_repo::LinuxEvidenceFactsRepo,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -28,13 +30,9 @@ pub fn load_persisted_linux_evidence_facts(
     source_connection: &rusqlite::Connection,
     data_source_id: &DataSourceId,
 ) -> Option<LinuxEvidenceFacts> {
-    let facts_json = source_connection
-        .query_row(
-            "SELECT facts_json FROM linux_evidence_facts WHERE data_source_id = ?1 AND schema_version = 1",
-            [data_source_id.0.as_str()],
-            |row| row.get::<_, String>(0),
-        )
-        .ok()?;
+    let facts_json = LinuxEvidenceFactsRepo::new(source_connection)
+        .find_json(data_source_id)
+        .ok()??;
     serde_json::from_str(&facts_json).ok()
 }
 
@@ -42,16 +40,12 @@ pub fn persist_linux_evidence_facts(
     source_connection: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     facts: &LinuxEvidenceFacts,
-) -> Result<(), rusqlite::Error> {
+) -> persistence_sqlite::DbResult<()> {
     // This cache is written only from the import publication lease, before the
     // source transitions to ready. Post-ready analysis must remain read-only
     // against the published source catalog.
-    source_connection.execute(
-        "INSERT INTO linux_evidence_facts (data_source_id, schema_version, facts_json) VALUES (?1, 1, ?2)
-         ON CONFLICT(data_source_id) DO UPDATE SET facts_json = excluded.facts_json, updated_at = datetime('now')",
-        rusqlite::params![data_source_id.0, serde_json::to_string(facts).unwrap_or_else(|_| "{}".to_string())],
-    )?;
-    Ok(())
+    let facts_json = serde_json::to_string(facts).unwrap_or_else(|_| "{}".to_string());
+    LinuxEvidenceFactsRepo::new(source_connection).replace_json(data_source_id, &facts_json)
 }
 
 pub fn collect_linux_evidence_facts(

@@ -85,8 +85,10 @@ pub(super) fn open_ready_source_connections(
     sources
         .into_iter()
         .map(|(source, _)| {
-            crate::source_db::open_ready_source_by_id(case_conn, case_root, case_id, &source.id)
-                .map_err(ReportError::from)
+            crate::source_db::open_ready_source_read_only_by_id(
+                case_conn, case_root, case_id, &source.id,
+            )
+            .map_err(ReportError::from)
         })
         .collect()
 }

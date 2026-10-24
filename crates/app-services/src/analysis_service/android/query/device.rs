@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use domain::DataSourceId;
+use persistence_sqlite::repositories::android_analysis_repo::AndroidAnalysisRepo;
 use rusqlite::Connection;
 use transport::dto::{AnalysisParseStatusDto, AndroidDeviceFactDto, AndroidDeviceInfoDto};
 
@@ -10,25 +11,19 @@ pub(crate) fn get_android_device_info(
     connection: &Connection,
     data_source_id: &DataSourceId,
 ) -> Result<AndroidDeviceInfoDto, AnalysisServiceError> {
-    let mut statement = connection.prepare(
-        "SELECT field_key, field_value, confidence, source_file_id, source_path, parser, warning
-         FROM android_system_facts
-         WHERE data_source_id = ?1
-         ORDER BY source_rank ASC, field_key ASC",
-    )?;
-    let facts = statement
-        .query_map([data_source_id.0.as_str()], |row| {
-            Ok(AndroidDeviceFactDto {
-                field: row.get(0)?,
-                value: row.get(1)?,
-                confidence: row.get(2)?,
-                source_file_id: row.get(3)?,
-                source_path: row.get(4)?,
-                parser: row.get(5)?,
-                warning: row.get(6)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
+    let facts = AndroidAnalysisRepo::new(connection)
+        .list_facts(data_source_id)?
+        .into_iter()
+        .map(|fact| AndroidDeviceFactDto {
+            field: fact.field,
+            value: fact.value,
+            confidence: fact.confidence,
+            source_file_id: fact.source_file_id,
+            source_path: fact.source_path,
+            parser: fact.parser,
+            warning: fact.warning,
+        })
+        .collect::<Vec<_>>();
     let values = facts
         .iter()
         .map(|fact| (fact.field.as_str(), fact.value.clone()))

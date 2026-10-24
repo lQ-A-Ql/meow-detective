@@ -194,9 +194,12 @@ fn protocol_mid_raw_image_range_reads_expected_bytes() {
             &file_id,
         )
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        let read_conn =
+            persistence_sqlite::open_existing_source_read_only(&case_root.join("case.db"))
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
         let bytes = read_media_protocol_bytes(
             state,
-            conn,
+            &read_conn,
             case_root,
             &case_id,
             &handle.handle_id,
@@ -206,6 +209,9 @@ fn protocol_mid_raw_image_range_reads_expected_bytes() {
         .map_err(|(_, message)| persistence_sqlite::DbError::System(message))?;
 
         assert_eq!(bytes, vec![b'B'; 9]);
+        assert!(read_conn
+            .execute("UPDATE cases SET name='forbidden'", [])
+            .is_err());
         Ok(())
     });
 }

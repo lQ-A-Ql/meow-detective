@@ -1,4 +1,6 @@
-use app_services::source_db::{open_ready_source_by_id, ReadySourceError};
+use app_services::source_db::{
+    open_ready_source_by_id, open_ready_source_read_only_by_id, ReadySourceError,
+};
 use domain::{
     CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, DataSourcePlatform,
     DataSourceProvenance,
@@ -151,4 +153,26 @@ fn ready_source_route_enforces_case_state_and_platform_before_opening() {
         .expect("open ready source");
     assert_eq!(opened.data_source_id, ready);
     assert_eq!(opened.platform, DataSourcePlatform::Linux);
+
+    let read_only =
+        open_ready_source_read_only_by_id(&case_conn, case_root.path(), &current_case, &ready)
+            .expect("open ready source read-only");
+    assert_eq!(
+        read_only
+            .connection
+            .pragma_query_value(None, "query_only", |row| row.get::<_, i64>(0))
+            .expect("query_only pragma"),
+        1
+    );
+    assert_eq!(
+        read_only
+            .connection
+            .execute(
+                "UPDATE source_meta SET value='forbidden' WHERE key='source_id'",
+                [],
+            )
+            .expect_err("source read route must reject writes")
+            .sqlite_error_code(),
+        Some(rusqlite::ErrorCode::ReadOnly)
+    );
 }

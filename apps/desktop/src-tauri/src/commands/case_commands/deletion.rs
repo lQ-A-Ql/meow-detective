@@ -162,7 +162,7 @@ pub async fn delete_data_source(
                 "Timed out waiting for {running_tasks} background task(s) for the data source to stop"
             )));
         }
-        let conn = app_services::connection::open_case_db(&db_path)
+        let conn = app_services::connection::open_existing_case_db(&db_path)
             .map_err(CommandError::from_typed_service_error)?;
         let drained = worker_state
             .retire_preview_source(&case_id.0, &data_source_id, timeout)

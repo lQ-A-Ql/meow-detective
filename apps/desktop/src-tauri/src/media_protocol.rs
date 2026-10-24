@@ -164,13 +164,15 @@ fn handle_media_protocol_request_inner(
         .map(str::to_string);
 
     let app_state = app_state.inner().clone();
-    let (case_id, case_root, db_path) = active_media_case(&app_state)?;
-    let conn = persistence_sqlite::open_or_create(&db_path).map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "media backend unavailable".to_string(),
-        )
+    let connection = app_state.get_read_connection().map_err(|error| {
+        let status = if error.contains("No active case") {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        };
+        (status, "media backend unavailable".to_string())
     })?;
+    let (case_id, case_root) = active_media_case(&app_state)?;
 
     let case_id = domain::CaseId(case_id);
     let (size, mime) = preview_session_metadata(&app_state, &case_id, &handle_id)?;
@@ -185,7 +187,7 @@ fn handle_media_protocol_request_inner(
 
     let bytes = read_media_protocol_bytes(
         &app_state,
-        &conn,
+        &connection,
         &case_root,
         &case_id,
         &handle_id,
@@ -230,7 +232,7 @@ fn handle_media_protocol_request_inner(
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
 }
 
-fn active_media_case(state: &AppState) -> Result<(String, PathBuf, PathBuf), ProtocolError> {
+fn active_media_case(state: &AppState) -> Result<(String, PathBuf), ProtocolError> {
     let guard = state.active_case.lock().map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -243,11 +245,7 @@ fn active_media_case(state: &AppState) -> Result<(String, PathBuf, PathBuf), Pro
             "media handle unavailable".to_string(),
         )
     })?;
-    Ok((
-        active.meta.id.0.clone(),
-        active.case_root.clone(),
-        active.db_path(),
-    ))
+    Ok((active.meta.id.0.clone(), active.case_root.clone()))
 }
 
 fn preview_session_metadata(

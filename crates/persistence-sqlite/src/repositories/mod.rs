@@ -1,4 +1,5 @@
 pub mod analysis_scan_repo;
+pub mod android_analysis_repo;
 pub mod artifact_repo;
 pub mod audit_repo;
 pub mod batch_repo;
@@ -41,6 +42,7 @@ pub mod infrastructure_network_fact_repo;
 pub mod job_repo;
 mod ledger_batch_repo;
 pub mod ledger_repo;
+pub mod linux_evidence_facts_repo;
 pub mod linux_import_set_repo;
 pub mod linux_topology_artifact_repo;
 pub mod linux_topology_edge_repo;
