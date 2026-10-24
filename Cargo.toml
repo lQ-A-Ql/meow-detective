@@ -133,7 +133,7 @@ byteorder = "1"
 encoding_rs = "0.8"
 csv = "1"
 reqwest = { version = "0.12", default-features = false }
-tokio = { version = "1" }
+tokio = { version = "1.53.3" }
 axum = { version = "~0.8", default-features = false, features = ["http1", "tokio"] }
 rmcp = { version = "~3.5", default-features = false, features = ["server", "transport-streamable-http-server"] }
 tokio-util = { version = "~0.7", features = ["rt"] }
