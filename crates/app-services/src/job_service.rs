@@ -226,6 +226,14 @@ pub fn cancel_job(conn: &Connection, job_id: &JobId, reason: &str) -> Result<(),
     Ok(())
 }
 
+pub fn request_cancellation(
+    conn: &Connection,
+    job_id: &JobId,
+    reason: &str,
+) -> Result<bool, JobServiceError> {
+    Ok(JobRepo::new(conn).mark_cancelling(job_id, reason)?)
+}
+
 /// On app restart, detect jobs that were left in `pending`, `running`, or
 /// `cancelling` state and mark them as `failed` with reason `interrupted`.
 ///

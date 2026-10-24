@@ -1,6 +1,5 @@
 //! Import cancellation command and shared cancellation state helpers.
 
-use persistence_sqlite::repositories::job_repo::JobRepo;
 use tauri::{AppHandle, State};
 use transport::{dto::CancellationStateDto, dto::JobCancellationDto, CommandError};
 
@@ -22,9 +21,12 @@ pub async fn cancel_import(
         if !app_state.task_manager.is_running(&job_id) {
             return Err(CommandError::not_found("Job"));
         }
-        let changed = JobRepo::new(&conn)
-            .mark_cancelling(&domain::JobId(job_id.clone()), "Cancel requested by user")
-            .map_err(CommandError::from_typed_service_error)?;
+        let changed = app_services::job_service::request_cancellation(
+            &conn,
+            &domain::JobId(job_id.clone()),
+            "Cancel requested by user",
+        )
+        .map_err(CommandError::from_typed_service_error)?;
         if !changed {
             return Ok("Job already settled".into());
         }
