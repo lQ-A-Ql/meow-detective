@@ -40,7 +40,8 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
         );
         return Ok(None);
     }
-    let _import_slot = acquire_import_slot(&job_repo, &job.job_id, app, &cancel_token)?;
+    let _import_slot =
+        acquire_import_slot(&job_repo, &job.job_id, &job.case_id.0, app, &cancel_token)?;
     if !start_cluster_job(&job_repo, &job.job_id, app)? {
         return Ok(None);
     }

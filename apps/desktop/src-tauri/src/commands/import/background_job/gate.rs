@@ -1,24 +1,21 @@
+use app_services::import_job_coordinator::{
+    acquire_import_group_slot, ImportGroupGateError, ImportGroupLease,
+};
+use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use std::time::Duration;
-
-use app_services::import_scheduler::{
-    global_import_group_gate, ImportGroupGateError, ImportGroupLease,
-};
-use persistence_sqlite::repositories::job_repo::JobRepo;
 use tauri::AppHandle;
 use transport::CommandError;
 
 use super::status::cancel_job;
 use crate::events::event_bridge;
 
-const IMPORT_GROUP_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
-
 pub(super) fn acquire_import_slot(
     job_repo: &JobRepo<'_>,
     job_id: &domain::JobId,
+    group: &str,
     app: Option<&AppHandle>,
     cancel_token: &Arc<AtomicBool>,
 ) -> Result<ImportGroupLease, CommandError> {
@@ -39,7 +36,7 @@ pub(super) fn acquire_import_slot(
     if let Some(app) = app {
         event_bridge::emit_job_progress(app, &job_id.0, 2, "Waiting for import slot");
     }
-    match global_import_group_gate().acquire(cancel_token, IMPORT_GROUP_WAIT_TIMEOUT) {
+    match acquire_import_group_slot(group, cancel_token) {
         Ok(lease) => {
             job_repo
                 .update_progress(job_id, 5, "Import slot acquired")
@@ -61,10 +58,7 @@ pub(super) fn acquire_import_slot(
             ))
         }
         Err(ImportGroupGateError::TimedOut) => {
-            let detail = format!(
-                "Import admission timed out after {} seconds",
-                IMPORT_GROUP_WAIT_TIMEOUT.as_secs()
-            );
+            let detail = "Import admission timed out after 300 seconds";
             job_repo
                 .fail(job_id, &detail)
                 .map_err(CommandError::from_typed_service_error)?;

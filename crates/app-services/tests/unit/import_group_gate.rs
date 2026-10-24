@@ -26,17 +26,19 @@ fn wait_until_queued(gate: &ImportGroupGate, expected: usize) {
 #[test]
 fn gate_releases_next_waiter_and_remains_process_global() {
     let first = global_import_group_gate()
-        .acquire(&AtomicBool::new(false), Duration::from_secs(1))
+        .acquire("case-a", &AtomicBool::new(false), Duration::from_secs(1))
         .unwrap();
-    let Err(error) =
-        global_import_group_gate().acquire(&AtomicBool::new(false), Duration::from_millis(20))
-    else {
+    let Err(error) = global_import_group_gate().acquire(
+        "case-a",
+        &AtomicBool::new(false),
+        Duration::from_millis(20),
+    ) else {
         panic!("global gate should reject the second holder");
     };
     assert_eq!(error, ImportGroupGateError::TimedOut);
     drop(first);
     global_import_group_gate()
-        .acquire(&AtomicBool::new(false), Duration::from_secs(1))
+        .acquire("case-a", &AtomicBool::new(false), Duration::from_secs(1))
         .unwrap();
 }
 
@@ -44,7 +46,7 @@ fn gate_releases_next_waiter_and_remains_process_global() {
 fn gate_honours_cancellation_before_grant() {
     let gate = ImportGroupGate::new();
     let cancel = Arc::new(AtomicBool::new(true));
-    let Err(error) = gate.acquire(cancel.as_ref(), Duration::from_secs(1)) else {
+    let Err(error) = gate.acquire("case-a", cancel.as_ref(), Duration::from_secs(1)) else {
         panic!("pre-cancelled waiter should not acquire the gate");
     };
     assert_eq!(error, ImportGroupGateError::Cancelled);
@@ -54,13 +56,14 @@ fn gate_honours_cancellation_before_grant() {
 fn gate_honours_cancellation_while_waiting() {
     let gate = ImportGroupGate::new();
     let owner = gate
-        .acquire(&AtomicBool::new(false), Duration::from_secs(1))
+        .acquire("case-a", &AtomicBool::new(false), Duration::from_secs(1))
         .expect("owner should acquire the gate");
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_for_waiter = Arc::clone(&cancel);
     let gate_for_waiter = gate.clone();
-    let waiter =
-        thread::spawn(move || gate_for_waiter.acquire(&cancel_for_waiter, Duration::from_secs(1)));
+    let waiter = thread::spawn(move || {
+        gate_for_waiter.acquire("case-a", &cancel_for_waiter, Duration::from_secs(1))
+    });
     wait_until_queued(&gate, 1);
 
     cancel.store(true, Ordering::Release);
@@ -71,7 +74,7 @@ fn gate_honours_cancellation_while_waiting() {
     assert_eq!(error, ImportGroupGateError::Cancelled);
     assert_eq!(gate.inner.state.lock().unwrap().queue.len(), 0);
     drop(owner);
-    gate.acquire(&AtomicBool::new(false), Duration::from_secs(1))
+    gate.acquire("case-a", &AtomicBool::new(false), Duration::from_secs(1))
         .expect("cancelled waiter must not keep the gate occupied");
 }
 
@@ -79,7 +82,7 @@ fn gate_honours_cancellation_while_waiting() {
 fn gate_grants_waiters_in_arrival_order() {
     let gate = ImportGroupGate::new();
     let owner = gate
-        .acquire(&AtomicBool::new(false), Duration::from_secs(1))
+        .acquire("case-a", &AtomicBool::new(false), Duration::from_secs(1))
         .expect("owner should acquire the gate");
     let (acquired_tx, acquired_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
@@ -87,7 +90,7 @@ fn gate_grants_waiters_in_arrival_order() {
     let first_acquired = acquired_tx.clone();
     let first = thread::spawn(move || {
         let _lease = first_gate
-            .acquire(&AtomicBool::new(false), Duration::from_secs(1))
+            .acquire("case-a", &AtomicBool::new(false), Duration::from_secs(1))
             .expect("first waiter should acquire the gate");
         first_acquired.send(1).unwrap();
         release_rx.recv().unwrap();
@@ -97,7 +100,7 @@ fn gate_grants_waiters_in_arrival_order() {
     let second_gate = gate.clone();
     let second = thread::spawn(move || {
         let _lease = second_gate
-            .acquire(&AtomicBool::new(false), Duration::from_secs(1))
+            .acquire("case-a", &AtomicBool::new(false), Duration::from_secs(1))
             .expect("second waiter should acquire the gate");
         acquired_tx.send(2).unwrap();
     });
@@ -110,4 +113,17 @@ fn gate_grants_waiters_in_arrival_order() {
     assert_eq!(acquired_rx.recv().unwrap(), 2);
     first.join().expect("first waiter should not panic");
     second.join().expect("second waiter should not panic");
+}
+
+#[test]
+fn gate_allows_independent_case_groups_to_run_concurrently() {
+    let gate = ImportGroupGate::new();
+    let first = gate
+        .acquire("case-a", &AtomicBool::new(false), Duration::from_secs(1))
+        .expect("first group should acquire");
+    let second = gate
+        .acquire("case-b", &AtomicBool::new(false), Duration::from_secs(1))
+        .expect("independent group should acquire");
+    drop(second);
+    drop(first);
 }

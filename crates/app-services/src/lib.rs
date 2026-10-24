@@ -6,9 +6,6 @@
 //! command layer and the domain/infrastructure crates, and owns the SQLite
 //! case database schema through `persistence-sqlite`.
 
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 pub mod active_case;
 pub mod analysis_service;
 pub mod artifact_service;
@@ -47,6 +44,7 @@ pub mod graph_service;
 pub mod hash_service;
 pub mod import_analysis;
 pub mod import_group_gate;
+pub mod import_job_coordinator;
 pub mod import_pipeline;
 pub mod import_precheck;
 pub mod import_scheduler;

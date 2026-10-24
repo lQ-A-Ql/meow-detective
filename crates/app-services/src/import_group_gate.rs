@@ -1,5 +1,5 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Condvar, Mutex, OnceLock,
@@ -14,8 +14,8 @@ pub enum ImportGroupGateError {
 }
 
 struct GateState {
-    queue: VecDeque<u64>,
-    owner: Option<u64>,
+    queue: VecDeque<(String, u64)>,
+    owners: HashMap<String, u64>,
     next_ticket: u64,
 }
 
@@ -35,7 +35,7 @@ impl ImportGroupGate {
             inner: Arc::new(GateInner {
                 state: Mutex::new(GateState {
                     queue: VecDeque::new(),
-                    owner: None,
+                    owners: HashMap::new(),
                     next_ticket: 0,
                 }),
                 changed: Condvar::new(),
@@ -45,6 +45,7 @@ impl ImportGroupGate {
 
     pub fn acquire(
         &self,
+        group: &str,
         cancel_token: &AtomicBool,
         timeout: Duration,
     ) -> Result<ImportGroupLease, ImportGroupGateError> {
@@ -56,24 +57,34 @@ impl ImportGroupGate {
             .unwrap_or_else(|error| error.into_inner());
         let ticket = state.next_ticket;
         state.next_ticket = state.next_ticket.wrapping_add(1);
-        state.queue.push_back(ticket);
+        state.queue.push_back((group.to_string(), ticket));
         loop {
             if cancel_token.load(Ordering::Acquire) {
-                state.queue.retain(|candidate| *candidate != ticket);
+                state.queue.retain(|(_, candidate)| *candidate != ticket);
                 self.inner.changed.notify_all();
                 return Err(ImportGroupGateError::Cancelled);
             }
-            if state.owner.is_none() && state.queue.front() == Some(&ticket) {
-                state.queue.pop_front();
-                state.owner = Some(ticket);
+            let group_is_free = !state.owners.contains_key(group);
+            let ticket_position = state
+                .queue
+                .iter()
+                .position(|(candidate_group, _)| candidate_group == group);
+            if group_is_free
+                && ticket_position.is_some_and(|position| state.queue[position].1 == ticket)
+            {
+                state
+                    .queue
+                    .remove(ticket_position.expect("ticket position exists"));
+                state.owners.insert(group.to_string(), ticket);
                 return Ok(ImportGroupLease {
                     inner: Arc::clone(&self.inner),
+                    group: group.to_string(),
                     ticket,
                 });
             }
             let remaining = timeout.saturating_sub(started.elapsed());
             if remaining.is_zero() {
-                state.queue.retain(|candidate| *candidate != ticket);
+                state.queue.retain(|(_, candidate)| *candidate != ticket);
                 self.inner.changed.notify_all();
                 return Err(ImportGroupGateError::TimedOut);
             }
@@ -95,6 +106,7 @@ impl Default for ImportGroupGate {
 
 pub struct ImportGroupLease {
     inner: Arc<GateInner>,
+    group: String,
     ticket: u64,
 }
 
@@ -105,8 +117,8 @@ impl Drop for ImportGroupLease {
             .state
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if state.owner == Some(self.ticket) {
-            state.owner = None;
+        if state.owners.get(&self.group) == Some(&self.ticket) {
+            state.owners.remove(&self.group);
             self.inner.changed.notify_all();
         }
     }

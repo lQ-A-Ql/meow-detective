@@ -81,6 +81,8 @@ pub(super) fn open_ready_source_connections(
     case_root: &Path,
     case_id: &CaseId,
 ) -> Result<Vec<crate::source_db::ReadySourceConnection>, ReportError> {
+    // The shared source/platform boundary is source_db::open_ready_source_by_id;
+    // report queries use its read-only sibling after the same validation.
     let sources = crate::source_db::ready_data_sources(case_conn, case_id)?;
     sources
         .into_iter()

@@ -33,7 +33,8 @@ pub(crate) fn run_background_import_job(
         return Ok(());
     }
 
-    let _import_slot = acquire_import_slot(&job_repo, &job.job_id, app, &cancel_token)?;
+    let _import_slot =
+        acquire_import_slot(&job_repo, &job.job_id, &job.case_id.0, app, &cancel_token)?;
     let scheduling = app_services::import_scheduler::ImportSchedulingPolicy::for_workload(
         app_services::import_scheduler::ImportWorkload::SingleSource,
         job.max_import_workers,

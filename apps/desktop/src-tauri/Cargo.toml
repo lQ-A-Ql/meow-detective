@@ -50,6 +50,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 mcp-client = { path = "../../../crates/mcp-client" }
 runtime-cache.workspace = true
+mimalloc.workspace = true
 tokio = { workspace = true, features = ["full"] }
 dirs.workspace = true
 base64.workspace = true
