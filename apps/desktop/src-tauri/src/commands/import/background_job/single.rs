@@ -48,31 +48,11 @@ pub(crate) fn run_background_import_job(
         memory_reservation_mb = scheduling.memory_reservation_mb,
         "Ordinary import scheduling policy selected"
     );
-    let admission = app_services::import_scheduler::global_import_admission();
-    let _admission = match admission.acquire(scheduling.admission_request(), &cancel_token) {
-        Ok(permit) => permit,
-        Err(app_services::import_scheduler::ImportAdmissionError::Cancelled) => {
-            cancel_job(
-                &job_repo,
-                &job.job_id,
-                app,
-                "Import cancelled while waiting for scheduler admission",
-            );
-            return Ok(());
-        }
-        Err(app_services::import_scheduler::ImportAdmissionError::TimedOut) => {
-            return fail_job(
-                &job_repo,
-                &job.job_id,
-                app,
-                CommandError::timeout("Import scheduler admission timed out"),
-            );
-        }
-    };
+    let _admission = admit_import(&job_repo, &job.job_id, app, &cancel_token, &scheduling)?;
     if !start_import_job(&job_repo, &job.job_id, app)? {
         return Ok(());
     }
-    let snapshot = admission.snapshot();
+    let snapshot = app_services::import_scheduler::global_import_admission().snapshot();
     let event_sink = app.map(TauriImportEventSink::new);
     tracing::info!(
         job_id = %job.job_id.0,
@@ -117,6 +97,38 @@ pub(crate) fn run_background_import_job(
             Ok(())
         }
         Err(error) => fail_job(&job_repo, &job.job_id, app, error),
+    }
+}
+
+fn admit_import(
+    job_repo: &JobRepo<'_>,
+    job_id: &domain::JobId,
+    app: Option<&AppHandle>,
+    cancel_token: &Arc<AtomicBool>,
+    scheduling: &app_services::import_scheduler::ImportSchedulingPolicy,
+) -> Result<app_services::import_scheduler::ImportPermit, CommandError> {
+    match app_services::import_scheduler::global_import_admission()
+        .acquire(scheduling.admission_request(), cancel_token)
+    {
+        Ok(permit) => Ok(permit),
+        Err(app_services::import_scheduler::ImportAdmissionError::Cancelled) => {
+            cancel_job(
+                job_repo,
+                job_id,
+                app,
+                "Import cancelled while waiting for scheduler admission",
+            );
+            Err(CommandError::cancelled(
+                "Import cancelled while waiting for scheduler admission",
+            ))
+        }
+        Err(app_services::import_scheduler::ImportAdmissionError::TimedOut) => {
+            let error = CommandError::timeout("Import scheduler admission timed out");
+            match fail_job(job_repo, job_id, app, error) {
+                Err(error) => Err(error),
+                Ok(()) => unreachable!("fail_job must return the original error"),
+            }
+        }
     }
 }
 

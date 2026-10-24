@@ -60,10 +60,10 @@ pub(super) fn acquire_import_slot(
         Err(ImportGroupGateError::TimedOut) => {
             let detail = "Import admission timed out after 300 seconds";
             job_repo
-                .fail(job_id, &detail)
+                .fail(job_id, detail)
                 .map_err(CommandError::from_typed_service_error)?;
             if let Some(app) = app {
-                event_bridge::emit_job_failed(app, &job_id.0, &detail);
+                event_bridge::emit_job_failed(app, &job_id.0, detail);
             }
             Err(CommandError::timeout(detail))
         }
