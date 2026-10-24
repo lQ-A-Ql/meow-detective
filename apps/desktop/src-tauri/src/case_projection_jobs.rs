@@ -99,40 +99,28 @@ fn run_worker(
     let job = domain::JobId(job_id.to_string());
     let connection = app_services::connection::open_existing_case_db(db_path)
         .map_err(|error| error.to_string())?;
-    let repo = JobRepo::new(&connection);
-    if !repo.start(&job).map_err(|error| error.to_string())? {
-        return Err("Case projection job was cancelled before execution".to_string());
-    }
-    repo.update_progress(&job, 5, "Building case projections")
-        .map_err(|error| error.to_string())?;
     event_bridge::emit_job_started(app, job_id, "Building case projections");
-    match app_services::case_projection_service::rebuild_case_projections(
+    match app_services::case_projection_service::run_case_projection_job(
         &connection,
         case_root,
         case_id,
+        &job,
         cancel,
     ) {
-        Ok(report) => {
-            let detail = format!("Case projections ready at {}", report.completed_at);
-            repo.complete_committed(&job, &detail)
-                .map_err(|error| error.to_string())?;
+        Ok(app_services::case_projection_service::CaseProjectionJobOutcome::Completed(detail)) => {
             event_bridge::emit_job_progress(app, job_id, 100, &detail);
             event_bridge::emit_job_completed(app, job_id, &detail);
             Ok(())
         }
-        Err(app_services::case_projection_service::CaseProjectionError::Cancelled) => {
-            repo.cancel(&job, "Case projection build cancelled")
-                .map_err(|error| error.to_string())?;
+        Ok(app_services::case_projection_service::CaseProjectionJobOutcome::Cancelled) => {
             event_bridge::emit_job_cancelled(app, job_id, "Case projection build cancelled");
             Err("Case projection build cancelled".to_string())
         }
-        Err(error) => {
-            let detail = error.to_string();
-            repo.fail(&job, &detail)
-                .map_err(|db_error| db_error.to_string())?;
+        Ok(app_services::case_projection_service::CaseProjectionJobOutcome::Failed(detail)) => {
             event_bridge::emit_job_failed(app, job_id, &detail);
             Err(detail)
         }
+        Err(error) => Err(error.to_string()),
     }
 }
 

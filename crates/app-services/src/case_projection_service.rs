@@ -23,6 +23,13 @@ pub enum CaseProjectionError {
     Cancelled,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CaseProjectionJobOutcome {
+    Completed(String),
+    Cancelled,
+    Failed(String),
+}
+
 impl transport::ServiceErrorCategory for CaseProjectionError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
@@ -62,6 +69,36 @@ pub fn rebuild_case_projections(
         infrastructure_rebuilt: true,
         completed_at: chrono::Utc::now().to_rfc3339(),
     })
+}
+
+pub fn run_case_projection_job(
+    connection: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &str,
+    job_id: &domain::JobId,
+    cancel_token: &AtomicBool,
+) -> Result<CaseProjectionJobOutcome, crate::job_service::JobServiceError> {
+    let repo = persistence_sqlite::repositories::job_repo::JobRepo::new(connection);
+    if !repo.start(job_id)? {
+        return Ok(CaseProjectionJobOutcome::Cancelled);
+    }
+    repo.update_progress(job_id, 5, "Building case projections")?;
+    match rebuild_case_projections(connection, case_root, case_id, cancel_token) {
+        Ok(report) => {
+            let detail = format!("Case projections ready at {}", report.completed_at);
+            repo.complete_committed(job_id, &detail)?;
+            Ok(CaseProjectionJobOutcome::Completed(detail))
+        }
+        Err(CaseProjectionError::Cancelled) => {
+            repo.cancel(job_id, "Case projection build cancelled")?;
+            Ok(CaseProjectionJobOutcome::Cancelled)
+        }
+        Err(error) => {
+            let detail = error.to_string();
+            repo.fail(job_id, &detail)?;
+            Ok(CaseProjectionJobOutcome::Failed(detail))
+        }
+    }
 }
 
 fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<(), CaseProjectionError> {
