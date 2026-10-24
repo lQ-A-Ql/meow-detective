@@ -23,9 +23,7 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
             cancelled |= self.cancel_token.load(Ordering::Acquire);
             match result.outcome {
                 Ok(message) => {
-                    if let Err(error) =
-                        self.record_member_success(summary, result.index, result.job_id, message)
-                    {
+                    if let Err(error) = self.record_member_success(summary, result.index, message) {
                         tracing::error!(
                             member_index = result.index,
                             error = %error.message,
@@ -82,15 +80,10 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
         &self,
         summary: &mut EvidenceSetImportSummary,
         member_index: usize,
-        member_job_id: domain::JobId,
         message: String,
     ) -> Result<(), super::CommandError> {
-        self.job_repo
-            .complete_committed(&member_job_id, &message)
-            .map_err(super::CommandError::from_typed_service_error)?;
-        if let Some(app) = self.app {
-            event_bridge::emit_job_completed(app, &member_job_id.0, &message);
-        }
+        // `run_member_import` commits the member job before returning
+        // `Completed`; this coordinator only records the aggregate result.
         summary.ready_count = summary.ready_count.saturating_add(1);
         summary
             .member_messages
