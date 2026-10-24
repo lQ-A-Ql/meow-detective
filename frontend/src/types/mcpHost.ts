@@ -16,6 +16,8 @@ export interface McpHostTool {
   name: string;
   description: string;
   inputSchema: JsonSchema;
+  readOnly: boolean;
+  destructive: boolean;
 }
 
 export interface McpHostToolCallResult {
@@ -41,6 +43,11 @@ export interface McpHostReadFileRequest extends McpHostFileRequest {
   offset?: number;
   length?: number;
   encoding?: McpHostFileEncoding;
+}
+
+export interface McpHostExtractFileRequest extends McpHostFileRequest {
+  destinationPath: string;
+  overwrite?: boolean;
 }
 
 export interface McpHostFileChunk {

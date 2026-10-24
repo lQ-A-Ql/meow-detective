@@ -55,11 +55,20 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     .await
     .unwrap();
     assert_eq!(result["id"], "tool-list");
-    assert_eq!(result["result"]["tools"].as_array().unwrap().len(), 28);
-    assert_eq!(
-        result["result"]["tools"][0]["annotations"]["readOnlyHint"],
-        true
-    );
+    let tools = result["result"]["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), 29);
+    let extractor = tools
+        .iter()
+        .find(|tool| tool["name"] == "forensics.extract_file")
+        .unwrap();
+    assert_eq!(extractor["annotations"]["readOnlyHint"], false);
+    assert_eq!(extractor["annotations"]["destructiveHint"], true);
+    let reader = tools
+        .iter()
+        .find(|tool| tool["name"] == "forensics.read_file")
+        .unwrap();
+    assert_eq!(reader["annotations"]["readOnlyHint"], true);
+    assert_eq!(reader["annotations"]["destructiveHint"], false);
 
     let active =
         app_services::case_service::create_case(temporary.path(), "MCP Case", None).unwrap();

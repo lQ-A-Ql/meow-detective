@@ -52,37 +52,35 @@ fn execute_for_active_case(
     let Some(active) = snapshot_active_case(state)? else {
         return Ok(failure("请先在应用中打开案件"));
     };
-    let conn = rusqlite::Connection::open_with_flags(
-        active.db_path(),
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .map_err(|_| CommandError::internal("无法读取当前案件"))?;
-    conn.busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|_| CommandError::internal("无法读取当前案件"))?;
     let enabled = state
         .mcp_host
         .tool_enabled(&request.name)
         .map_err(CommandError::from_typed_service_error)?;
     let response = if !enabled {
         failure("工具或 MCP 服务已禁用")
-    } else {
+    } else if request.name == "forensics.extract_file" {
+        let conn = app_services::connection::open_existing_case_db(&active.db_path())
+            .map_err(CommandError::from_typed_service_error)?;
         let context = McpHostQueryContext {
             connection: &conn,
             case_root: &active.case_root,
             case_meta: &active.meta,
         };
-        let result = dispatch_tool(state, context, &request);
-        match result {
-            Ok(data) if data.to_string().len() <= 1024 * 1024 => McpHostToolCallResultDto {
-                success: true,
-                data: Some(data),
-                error: None,
-            },
-            Ok(_) => failure(
-                &app_services::mcp_host_service::McpHostServiceError::ResultTooLarge.to_string(),
-            ),
-            Err(error) => failure(&error.to_string()),
-        }
+        tool_response(dispatch_tool(state, context, &request))
+    } else {
+        let conn = rusqlite::Connection::open_with_flags(
+            active.db_path(),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .map_err(|_| CommandError::internal("无法读取当前案件"))?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(|_| CommandError::internal("无法读取当前案件"))?;
+        let context = McpHostQueryContext {
+            connection: &conn,
+            case_root: &active.case_root,
+            case_meta: &active.meta,
+        };
+        tool_response(dispatch_tool(state, context, &request))
     };
     let audit_conn = app_services::connection::open_existing_case_db(&active.db_path())
         .map_err(CommandError::from_typed_service_error)?;
@@ -99,6 +97,22 @@ fn execute_for_active_case(
     Ok(response)
 }
 
+fn tool_response(
+    result: Result<serde_json::Value, app_services::mcp_host_service::McpHostServiceError>,
+) -> McpHostToolCallResultDto {
+    match result {
+        Ok(data) if data.to_string().len() <= 1024 * 1024 => McpHostToolCallResultDto {
+            success: true,
+            data: Some(data),
+            error: None,
+        },
+        Ok(_) => failure(
+            &app_services::mcp_host_service::McpHostServiceError::ResultTooLarge.to_string(),
+        ),
+        Err(error) => failure(&error.to_string()),
+    }
+}
+
 fn dispatch_tool(
     state: &AppState,
     context: McpHostQueryContext<'_>,
@@ -106,7 +120,10 @@ fn dispatch_tool(
 ) -> Result<serde_json::Value, app_services::mcp_host_service::McpHostServiceError> {
     if matches!(
         request.name.as_str(),
-        "forensics.list_files" | "forensics.get_file_metadata" | "forensics.read_file"
+        "forensics.list_files"
+            | "forensics.get_file_metadata"
+            | "forensics.read_file"
+            | "forensics.extract_file"
     ) {
         return execute_file_tool(
             McpHostFileQueryContext {

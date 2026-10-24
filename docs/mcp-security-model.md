@@ -8,13 +8,13 @@ MCP 在取证工具中天然敏感。本项目里的 MCP 必须是“最小权�
 
 - 应用内置 Streamable HTTP MCP 服务，默认启用，只监听 `127.0.0.1:3001/mcp`；设置页可停止、重新启动、复制地址及逐项禁用工具。退出应用会停止服务并释放端口。
 - 服务与外部 MCP 客户端配置独立，设置保存在应用配置目录的 `mcp-host.json`，使用临时文件与原子替换；配置解析失败不会启动监听。
-- 当前提供 28 个只读工具，按能力分为：
+- 当前提供 29 个工具：28 个只读查询工具和 1 个默认禁用的文件提取工具，按能力分为：
   - 案件与数据源：`get_current_case`、`list_data_sources`、`get_data_source`、`list_plugin_modules`、`get_plugin_module`。
-  - 文件：`list_files`、`get_file_metadata`、`read_file`。
+  - 文件：`list_files`、`get_file_metadata`、`read_file`；显式写入工具 `extract_file` 默认禁用。
   - 数据源分析：`get_analysis_system_info`、`get_evidence_classification_summary`、`get_file_classification_board`、`get_registry_summary`、`get_registry_structured_summary`、`get_browser_history_summary`、`get_email_summary`、`get_event_log_events`、`get_linux_artifact_summary`、`get_android_device_info`、`get_android_package_summary`、`get_plugin_family_entries`、`get_analysis_report`、`get_case_overview`、`get_correlation_snapshot`。
   - Timeline：`get_timeline_events`、`get_timeline_event`、`get_timeline_facets`。
   - 全局索引：`search_files`、`get_content_index_coverage`。
-  以上工具名均带 `forensics.` 前缀。重新提取、重新构建内容索引、分类扫描、删除、导出等有副作用动作不进入内置 MCP 工具目录。
+  以上工具名均带 `forensics.` 前缀。`extract_file` 只允许将当前案件中的普通文件提取到案件工作区和证据源目录之外的绝对路径，默认 `overwrite=false`，发布前校验目标存在性、符号链接、Windows ADS 和设备路径；成功、失败均写入文件提取审计，工具调用另写 MCP 审计。重新分析、重建内容索引、分类扫描、删除和其他导出动作不进入内置 MCP 工具目录。
 - HTTP 与设置页调用复用同一工具目录和应用服务。每次读取绑定当前案件，原始证据和源数据库保持只读；摘要不返回主机源路径、内部存储路径、凭据或原始插件诊断，插件告警仅返回数量。文件内容工具按用户选择返回证据原始字节，可能包含证据中的敏感内容。
 - 案件级关联快照使用 `offset`/`limit` 分页，默认每类返回 50 项、最多 100 项，响应保留总计数、`hasMore` 和 `nextOffset`。轻量概览读取匹配的关联缓存；平台不适用的工具返回明确的 unsupported 错误。
 - 文件列表按 `dataSourceId` 查询根目录，或用源内目录的 `parentId` 继续浏览；默认每页 100 条，最多 200 条，包含隐藏、系统及已删除条目，分页由数据库执行。`get_file_metadata` 和 `read_file` 仅接受列表返回的全局 `fileId`，验证当前案件及数据源归属，不接受主机路径。
@@ -45,7 +45,7 @@ MCP 在取证工具中天然敏感。本项目里的 MCP 必须是“最小权�
 私有 E01 测试位于 `crates/app-services/tests/mcp_host_real_file.rs`，默认忽略，运行需显式提供 `FORENSICS_MCP_CASE_ROOT`、`FORENSICS_MCP_FILE_ID` 和 `FORENSICS_MCP_EXPECTED_PREFIX_HEX`；WOF 内容测试另需 `FORENSICS_MCP_WOF_FILE_ID` 和来自独立解码器的 `FORENSICS_MCP_WOF_EXPECTED_SHA256`。测试不包含工作站路径回退。独立验证需要压缩原流时，可显式设置 `FORENSICS_WOF_ORACLE_EXPORT_DIR`，运行 `wof_real_oracle_export` 的忽略测试；导出使用独立临时子目录并保持源镜像只读。
 
 WOF 文件将压缩内容保存在替代数据流或外部 WIM 中，由 Windows 过滤驱动提供逻辑内容；参见 [微软对 WofCompressedData 的说明](https://devblogs.microsoft.com/oldnewthing/20190618-00/?p=102597)及[四种文件压缩算法](https://learn.microsoft.com/en-us/windows/win32/api/wofapi/ns-wofapi-wof_file_compression_info_v1)。LZX 格式交叉验证依据 [Microsoft go-winio 的 WIM-LZX 实现](https://github.com/Microsoft/go-winio/tree/v0.6.2/wim/lzx)，许可声明保留于 `crates/fs-ntfs/NOTICE`。
-- 工具发现始终返回完整目录，被禁用工具的实际调用在后端拒绝。成功和失败调用在其绑定案件中记录工具名和结果状态，不记录参数或结果正文。
+- 工具发现始终返回完整目录，`readOnlyHint` 和 `destructiveHint` 按工具能力声明；`extract_file` 返回 `readOnlyHint=false`、`destructiveHint=true`，并在设置中默认禁用。被禁用工具的实际调用在后端拒绝。成功和失败调用在其绑定案件中记录工具名和结果状态，不记录参数或结果正文。
 - 校验 Host，拒绝携带浏览器 Origin 的请求，不提供 CORS；每个请求最多 64 KiB，最多两个同时执行的案件查询，额外请求按到达顺序排队并在 300 秒后超时，单个结果上限 1 MiB。工具能力限定为只读查询，不提供任意 IPC、SQL、路径读取或插件执行入口。
 
 V2 安全治理与发布门禁总计划见：

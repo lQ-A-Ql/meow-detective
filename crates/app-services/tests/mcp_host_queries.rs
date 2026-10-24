@@ -84,7 +84,7 @@ fn current_case_sources_and_details_share_real_service_queries_with_no_host_path
 #[test]
 fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
     let catalog = tool_catalog();
-    assert_eq!(catalog.len(), 28);
+    assert_eq!(catalog.len(), 29);
     for name in [
         "forensics.get_analysis_system_info",
         "forensics.get_file_classification_board",
@@ -98,12 +98,25 @@ fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
         "forensics.get_timeline_facets",
         "forensics.search_files",
         "forensics.get_content_index_coverage",
+        "forensics.extract_file",
     ] {
         assert!(catalog.iter().any(|tool| tool.name == name), "{name}");
     }
     for tool in &catalog {
         assert_eq!(tool.input_schema["additionalProperties"], false);
     }
+    let extractor = catalog
+        .iter()
+        .find(|tool| tool.name == "forensics.extract_file")
+        .unwrap();
+    assert!(!extractor.read_only);
+    assert!(extractor.destructive);
+    let reader = catalog
+        .iter()
+        .find(|tool| tool.name == "forensics.read_file")
+        .unwrap();
+    assert!(reader.read_only);
+    assert!(!reader.destructive);
     let mut settings = McpHostSettingsDto {
         enabled: true,
         disabled_tools: vec![catalog[0].name.clone(), catalog[0].name.clone()],

@@ -189,6 +189,58 @@ fn eof_empty_files_and_split_utf8_have_lossless_behavior_and_no_leaked_handles()
 }
 
 #[test]
+fn extract_file_writes_only_to_an_external_absolute_path_and_audits_the_result() {
+    let fixture = Fixture::new();
+    let destination = fixture.temporary.path().join("mcp-extracted.txt");
+    let result = fixture
+        .call(
+            "forensics.extract_file",
+            json!({
+                "fileId":fixture.id("text.txt"),
+                "destinationPath":destination
+            }),
+        )
+        .unwrap();
+
+    assert_eq!(result["bytesWritten"], 23);
+    assert_eq!(result["sizeVerified"], true);
+    assert_eq!(result["auditPersisted"], true);
+    assert_eq!(
+        std::fs::read(&destination).unwrap(),
+        "证据内容\nHello MCP\n".as_bytes()
+    );
+    assert_eq!(
+        std::fs::read(fixture.temporary.path().join("evidence/text.txt")).unwrap(),
+        "证据内容\nHello MCP\n".as_bytes()
+    );
+    let error = fixture
+        .call(
+            "forensics.extract_file",
+            json!({
+                "fileId":fixture.id("text.txt"),
+                "destinationPath":destination
+            }),
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("already exists"));
+    fixture
+        .call(
+            "forensics.extract_file",
+            json!({
+                "fileId":fixture.id("text.txt"),
+                "destinationPath":destination,
+                "overwrite":true
+            }),
+        )
+        .unwrap();
+    let conn = fixture.case.connection().unwrap();
+    let audit_count = persistence_sqlite::repositories::audit_repo::AuditRepo::new(&conn)
+        .count_by_action("file.extract")
+        .unwrap();
+    assert_eq!(audit_count, 3);
+}
+
+#[test]
 fn input_limits_host_paths_and_case_source_ownership_are_enforced() {
     let fixture = Fixture::new();
     for extra in [

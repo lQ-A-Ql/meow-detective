@@ -43,9 +43,9 @@ impl ServerHandler for HostHandler {
                 )
                 .with_annotations(ToolAnnotations::from_raw(
                     None,
-                    Some(true),
-                    Some(false),
-                    Some(true),
+                    Some(tool.read_only),
+                    Some(tool.destructive),
+                    Some(tool.read_only),
                     Some(false),
                 ))
             })

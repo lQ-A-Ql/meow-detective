@@ -74,10 +74,20 @@ fn file_tools() -> Vec<McpHostToolDto> {
             json!({"fileId":identifier(), "offset":offset, "length":{"type":"integer", "minimum":1, "maximum":MCP_FILE_CHUNK_LIMIT, "default":MCP_FILE_CHUNK_LIMIT}, "encoding":{"type":"string", "enum":["auto","utf8","base64"], "default":"auto"}}),
             vec!["fileId"],
         ),
+        (
+            "forensics.extract_file",
+            "将当前案件中的普通文件提取到外部绝对路径，默认拒绝覆盖，返回文件大小、SHA-256 和审计状态。该工具写入本机文件系统。",
+            json!({"fileId":identifier(), "destinationPath":{"type":"string","minLength":1,"maxLength":32767}, "overwrite":{"type":"boolean","default":false}}),
+            vec!["fileId", "destinationPath"],
+        ),
     ]
     .into_iter()
     .map(|(name, description, properties, required)| {
-        tool(name, description, properties, required)
+        if name == "forensics.extract_file" {
+            tool_with_access(name, description, properties, required, false, true)
+        } else {
+            tool(name, description, properties, required)
+        }
     })
     .collect()
 }
@@ -264,6 +274,17 @@ fn index_tools() -> Vec<McpHostToolDto> {
 }
 
 fn tool(name: &str, description: &str, properties: Value, required: Vec<&str>) -> McpHostToolDto {
+    tool_with_access(name, description, properties, required, true, false)
+}
+
+fn tool_with_access(
+    name: &str,
+    description: &str,
+    properties: Value,
+    required: Vec<&str>,
+    read_only: bool,
+    destructive: bool,
+) -> McpHostToolDto {
     McpHostToolDto {
         name: name.into(),
         description: description.into(),
@@ -273,6 +294,8 @@ fn tool(name: &str, description: &str, properties: Value, required: Vec<&str>) -
             "required":required,
             "additionalProperties":false
         }),
+        read_only,
+        destructive,
     }
 }
 

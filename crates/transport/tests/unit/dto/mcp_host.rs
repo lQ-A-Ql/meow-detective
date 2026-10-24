@@ -21,7 +21,9 @@ fn host_contract_round_trips_camel_case_and_omits_absent_errors() {
     assert!(value.get("lastError").is_none());
     let decoded: McpHostStatusDto = serde_json::from_value(value).unwrap();
     assert!(decoded.running);
-    assert!(McpHostSettingsDto::default().enabled);
+    let defaults = McpHostSettingsDto::default();
+    assert!(defaults.enabled);
+    assert_eq!(defaults.disabled_tools, vec!["forensics.extract_file"]);
     assert!(
         serde_json::from_value::<McpHostSettingsDto>(json!({"enabled":true,"host":"0.0.0.0"}))
             .is_err()
@@ -34,9 +36,13 @@ fn tools_and_calls_preserve_schema_and_arguments() {
         name: "forensics.get_data_source".into(),
         description: "Read source".into(),
         input_schema: json!({"type":"object"}),
+        read_only: true,
+        destructive: false,
     };
     let value = serde_json::to_value(tool).unwrap();
     assert!(value.get("inputSchema").is_some());
+    assert_eq!(value["readOnly"], true);
+    assert_eq!(value["destructive"], false);
     let _: McpHostToolDto = serde_json::from_value(value).unwrap();
     let request: McpHostToolCallRequestDto =
         serde_json::from_value(json!({"name":"forensics.list_data_sources"})).unwrap();
@@ -76,6 +82,15 @@ fn file_requests_and_chunks_round_trip_defaults_encodings_and_camel_case() {
     assert_eq!(read.encoding, McpHostFileEncodingDto::Auto);
     let _: McpHostReadFileRequestDto =
         serde_json::from_value(serde_json::to_value(read).unwrap()).unwrap();
+    let extract: McpHostExtractFileRequestDto = serde_json::from_value(json!({
+        "fileId":"ds:source:file",
+        "destinationPath":"C:\\Exports\\file.bin"
+    }))
+    .unwrap();
+    assert!(!extract.overwrite);
+    extract.validate().unwrap();
+    let _: McpHostExtractFileRequestDto =
+        serde_json::from_value(serde_json::to_value(extract).unwrap()).unwrap();
     for encoding in [
         McpHostFileEncodingDto::Auto,
         McpHostFileEncodingDto::Utf8,

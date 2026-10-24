@@ -1,4 +1,4 @@
-//! Embedded MCP server settings and read-only tool contracts.
+//! Embedded MCP server settings and tool contracts.
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -13,7 +13,7 @@ impl Default for McpHostSettingsDto {
     fn default() -> Self {
         Self {
             enabled: true,
-            disabled_tools: Vec::new(),
+            disabled_tools: vec!["forensics.extract_file".into()],
         }
     }
 }
@@ -34,6 +34,8 @@ pub struct McpHostToolDto {
     pub name: String,
     pub description: String,
     pub input_schema: serde_json::Value,
+    pub read_only: bool,
+    pub destructive: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,6 +105,52 @@ pub struct McpHostReadFileRequestDto {
     pub length: u32,
     #[serde(default)]
     pub encoding: McpHostFileEncodingDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct McpHostExtractFileRequestDto {
+    pub file_id: String,
+    pub destination_path: String,
+    #[serde(default)]
+    pub overwrite: bool,
+}
+
+impl McpHostExtractFileRequestDto {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.file_id.trim().is_empty() || self.file_id.len() > 2048 {
+            return Err("fileId is invalid".to_string());
+        }
+        if self.destination_path.trim().is_empty() || self.destination_path.len() > 32_767 {
+            return Err("destinationPath is invalid".to_string());
+        }
+        if self.destination_path.contains('\0') {
+            return Err("destinationPath contains a null byte".to_string());
+        }
+        let destination = std::path::Path::new(&self.destination_path);
+        if !destination.is_absolute() {
+            return Err("destinationPath must be an absolute path".to_string());
+        }
+        if destination.file_name().is_none() {
+            return Err("destinationPath must include a file name".to_string());
+        }
+        let normalized = self.destination_path.replace('/', "\\");
+        let upper = normalized.to_ascii_uppercase();
+        if upper.starts_with("\\\\.\\") || upper.starts_with("\\\\?\\") {
+            return Err("device destination paths are not supported".to_string());
+        }
+        #[cfg(windows)]
+        for component in destination.components() {
+            if matches!(component, std::path::Component::Normal(_))
+                && component.as_os_str().to_string_lossy().contains(':')
+            {
+                return Err(
+                    "destinationPath must not use a Windows alternate data stream".to_string(),
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 fn default_file_chunk_length() -> u32 {

@@ -77,6 +77,8 @@ pub enum McpHostServiceError {
     Json(#[from] serde_json::Error),
     #[error("工具结果超过 1 MiB，请使用分页参数缩小结果")]
     ResultTooLarge,
+    #[error("文件提取失败：{0}")]
+    Extraction(String),
 }
 
 impl transport::ServiceErrorCategory for McpHostServiceError {
@@ -88,6 +90,7 @@ impl transport::ServiceErrorCategory for McpHostServiceError {
             | Self::NotFoundDetail(_)
             | Self::InvalidUtf8
             | Self::ResultTooLarge => transport::ErrorCategory::Validation,
+            Self::Extraction(_) => transport::ErrorCategory::Io,
             Self::File(error) => error.category(),
             Self::FileRead { source, .. } => source.category(),
             Self::Analysis(error) => error.category(),

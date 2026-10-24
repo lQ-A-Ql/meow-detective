@@ -87,6 +87,39 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
     assert_eq!(content["structuredContent"]["content"], "MCP byte proof");
     assert_eq!(content["structuredContent"]["eof"], true);
     assert_eq!(state.preview_runtime.stats().unwrap().session_count, 0);
+    let disabled_extract = call(
+        &endpoint,
+        "forensics.extract_file",
+        json!({
+            "fileId":file_id,
+            "destinationPath":temporary.path().join("disabled.txt").display().to_string()
+        }),
+    )
+    .await;
+    assert_eq!(disabled_extract["isError"], true);
+    state
+        .mcp_host
+        .configure(
+            state.clone(),
+            McpHostSettingsDto {
+                enabled: true,
+                disabled_tools: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+    let extracted_path = temporary.path().join("http-extracted.txt");
+    let extracted = call(
+        &endpoint,
+        "forensics.extract_file",
+        json!({
+            "fileId":file_id,
+            "destinationPath":extracted_path.display().to_string()
+        }),
+    )
+    .await;
+    assert_eq!(extracted["isError"], false);
+    assert_eq!(std::fs::read(&extracted_path).unwrap(), b"MCP byte proof");
     let bad = call(
         &endpoint,
         "forensics.read_file",
@@ -112,7 +145,7 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
     let count = persistence_sqlite::repositories::audit_repo::AuditRepo::new(&conn)
         .count_by_action("mcp.tool.call")
         .unwrap();
-    assert_eq!(count, 6);
+    assert_eq!(count, 8);
     state
         .mcp_host
         .configure(state.clone(), McpHostSettingsDto::default())
