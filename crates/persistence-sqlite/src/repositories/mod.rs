@@ -40,6 +40,7 @@ pub mod graph_repo;
 pub mod infrastructure_graph_repo;
 pub mod infrastructure_network_fact_repo;
 pub mod job_repo;
+pub mod kubernetes_analysis_repo;
 mod ledger_batch_repo;
 pub mod ledger_repo;
 pub mod linux_evidence_facts_repo;

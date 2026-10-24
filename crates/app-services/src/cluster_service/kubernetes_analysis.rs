@@ -3,7 +3,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use domain::{CaseId, DataSourceId, KubernetesScopeId};
 use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, linux_topology_scope_repo::LinuxTopologyScopeRepo,
+    datasource_repo::DataSourceRepo,
+    kubernetes_analysis_repo::{
+        KubernetesAnalysisArtifactRecord, KubernetesAnalysisRepo, KubernetesAnalysisRunRecord,
+    },
+    linux_topology_scope_repo::LinuxTopologyScopeRepo,
 };
 use rusqlite::Connection;
 use transport::dto::{
@@ -196,29 +200,19 @@ pub fn run_kubernetes_cluster_analysis_with_cancel(
     let expected_member_count = source_ids.len() as u32;
     let run_id = uuid::Uuid::new_v4().to_string();
     let started_at = chrono::Utc::now().to_rfc3339();
-    let attempt: u32 = case_connection
-        .query_row(
-            "SELECT COALESCE(MAX(attempt), 0) + 1 FROM kubernetes_analysis_runs
-             WHERE case_id = ?1 AND import_set_id = ?2 AND scope_id = ?3",
-            rusqlite::params![case_id.0, import_set_id, scope.id],
-            |row| row.get::<_, i64>(0),
-        )
-        .unwrap_or(1)
-        .max(1) as u32;
-    case_connection.execute(
-        "INSERT INTO kubernetes_analysis_runs
-         (id, case_id, import_set_id, scope_id, state, attempt, expected_member_count, started_at)
-         VALUES (?1, ?2, ?3, ?4, 'running', ?5, ?6, ?7)",
-        rusqlite::params![
-            run_id,
-            case_id.0,
-            import_set_id,
-            scope.id,
-            attempt,
-            source_ids.len() as u32,
-            started_at
-        ],
-    )?;
+    let repository = KubernetesAnalysisRepo::new(case_connection);
+    let attempt = repository
+        .next_attempt(&case_id.0, import_set_id, &scope.id)
+        .unwrap_or(1);
+    repository.insert_run(KubernetesAnalysisRunRecord {
+        id: &run_id,
+        case_id: &case_id.0,
+        import_set_id,
+        scope_id: &scope.id,
+        attempt,
+        expected_member_count: source_ids.len() as u32,
+        started_at: &started_at,
+    })?;
 
     let processed = process_kubernetes_sources(
         case_connection,
@@ -231,11 +225,21 @@ pub fn run_kubernetes_cluster_analysis_with_cancel(
     let (parsed_count, failed_count, diagnostics) = match processed {
         Ok(result) => result,
         Err(super::ClusterServiceError::Cancelled) => {
-            mark_run_cancelled(case_connection, &run_id)?;
+            KubernetesAnalysisRepo::new(case_connection).mark_terminal(
+                &run_id,
+                "cancelled",
+                "[\"analysis cancelled\"]",
+                &chrono::Utc::now().to_rfc3339(),
+            )?;
             return Err(super::ClusterServiceError::Cancelled);
         }
         Err(error) => {
-            mark_run_failed(case_connection, &run_id, &error.to_string())?;
+            KubernetesAnalysisRepo::new(case_connection).mark_terminal(
+                &run_id,
+                "failed",
+                &serde_json::json!([error.to_string()]).to_string(),
+                &chrono::Utc::now().to_rfc3339(),
+            )?;
             return Err(error);
         }
     };
@@ -245,18 +249,13 @@ pub fn run_kubernetes_cluster_analysis_with_cancel(
         "completed"
     };
     let finished_at = chrono::Utc::now().to_rfc3339();
-    case_connection.execute(
-        "UPDATE kubernetes_analysis_runs
-         SET state = ?1, parsed_artifact_count = ?2, failed_artifact_count = ?3,
-             diagnostics_json = ?4, finished_at = ?5 WHERE id = ?6",
-        rusqlite::params![
-            state,
-            parsed_count,
-            failed_count,
-            serde_json::to_string(&diagnostics)?,
-            finished_at,
-            run_id
-        ],
+    KubernetesAnalysisRepo::new(case_connection).finish(
+        &run_id,
+        state,
+        parsed_count,
+        failed_count,
+        &serde_json::to_string(&diagnostics)?,
+        &finished_at,
     )?;
     Ok(transport::dto::KubernetesAnalysisRunDto {
         run_id,
@@ -330,19 +329,16 @@ fn process_kubernetes_sources(
                     ("failed", serde_json::json!([error]).to_string(), None)
                 }
             };
-            case_connection.execute(
-                "INSERT OR REPLACE INTO kubernetes_analysis_artifacts
-                 (run_id, data_source_id, file_id, kind, status, diagnostics_json, content_digest)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                rusqlite::params![
+            KubernetesAnalysisRepo::new(case_connection).replace_artifact(
+                KubernetesAnalysisArtifactRecord {
                     run_id,
-                    source_id.0,
-                    artifact.file_id.0,
-                    artifact.kind.as_str(),
+                    source_id: &source_id.0,
+                    file_id: &artifact.file_id.0,
+                    kind: artifact.kind.as_str(),
                     status,
-                    diagnostics_json,
-                    digest
-                ],
+                    diagnostics: &diagnostics_json,
+                    digest: digest.as_deref(),
+                },
             )?;
         }
     }
@@ -355,27 +351,4 @@ fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<()> {
     } else {
         Ok(())
     }
-}
-
-fn mark_run_cancelled(connection: &Connection, run_id: &str) -> Result<()> {
-    connection.execute(
-        "UPDATE kubernetes_analysis_runs
-         SET state='cancelled', diagnostics_json='[\"analysis cancelled\"]',
-             finished_at=?1 WHERE id=?2",
-        rusqlite::params![chrono::Utc::now().to_rfc3339(), run_id],
-    )?;
-    Ok(())
-}
-
-fn mark_run_failed(connection: &Connection, run_id: &str, detail: &str) -> Result<()> {
-    connection.execute(
-        "UPDATE kubernetes_analysis_runs
-         SET state='failed', diagnostics_json=?1, finished_at=?2 WHERE id=?3",
-        rusqlite::params![
-            serde_json::json!([detail]).to_string(),
-            chrono::Utc::now().to_rfc3339(),
-            run_id
-        ],
-    )?;
-    Ok(())
 }
