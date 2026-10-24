@@ -85,9 +85,13 @@ fn extract_repositories(
         ));
         return;
     };
-    let Some(repositories) = value.as_object() else {
+    let Some(root) = value.as_object() else {
         return;
     };
+    let repositories = root
+        .get("Repositories")
+        .and_then(Value::as_object)
+        .unwrap_or(root);
     for (repository, tags) in repositories {
         let Some(tags) = tags.as_object() else {
             continue;

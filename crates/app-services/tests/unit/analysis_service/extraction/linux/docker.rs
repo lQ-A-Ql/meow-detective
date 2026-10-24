@@ -43,7 +43,7 @@ fn docker_container_and_image_metadata_are_projected_as_structured_rows() {
     let mut outcome = ExtractionOutcome::default();
     extract(
         &images,
-        br#"{"nginx":{"latest":"sha256:abc"}}"#,
+        br#"{"Repositories":{"nginx":{"latest":"sha256:abc"}}}"#,
         &mut outcome,
     );
     assert_eq!(outcome.artifacts.len(), 1);
