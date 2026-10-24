@@ -3,6 +3,7 @@ import type { JsonSchema } from '@/lib/api/mcp-protocol';
 export interface McpHostSettings {
   enabled: boolean;
   disabledTools: string[];
+  policyVersion?: number;
 }
 
 export interface McpHostStatus {

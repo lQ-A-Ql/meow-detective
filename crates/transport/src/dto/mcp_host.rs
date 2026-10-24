@@ -1,12 +1,16 @@
 //! Embedded MCP server settings and tool contracts.
 use serde::{Deserialize, Serialize};
 
+pub const MCP_HOST_POLICY_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct McpHostSettingsDto {
     pub enabled: bool,
     #[serde(default)]
     pub disabled_tools: Vec<String>,
+    #[serde(default)]
+    pub policy_version: u32,
 }
 
 impl Default for McpHostSettingsDto {
@@ -14,6 +18,7 @@ impl Default for McpHostSettingsDto {
         Self {
             enabled: true,
             disabled_tools: vec!["forensics.extract_file".into()],
+            policy_version: MCP_HOST_POLICY_VERSION,
         }
     }
 }

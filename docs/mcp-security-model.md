@@ -45,7 +45,7 @@ MCP 在取证工具中天然敏感。本项目里的 MCP 必须是“最小权�
 私有 E01 测试位于 `crates/app-services/tests/mcp_host_real_file.rs`，默认忽略，运行需显式提供 `FORENSICS_MCP_CASE_ROOT`、`FORENSICS_MCP_FILE_ID` 和 `FORENSICS_MCP_EXPECTED_PREFIX_HEX`；WOF 内容测试另需 `FORENSICS_MCP_WOF_FILE_ID` 和来自独立解码器的 `FORENSICS_MCP_WOF_EXPECTED_SHA256`。测试不包含工作站路径回退。独立验证需要压缩原流时，可显式设置 `FORENSICS_WOF_ORACLE_EXPORT_DIR`，运行 `wof_real_oracle_export` 的忽略测试；导出使用独立临时子目录并保持源镜像只读。
 
 WOF 文件将压缩内容保存在替代数据流或外部 WIM 中，由 Windows 过滤驱动提供逻辑内容；参见 [微软对 WofCompressedData 的说明](https://devblogs.microsoft.com/oldnewthing/20190618-00/?p=102597)及[四种文件压缩算法](https://learn.microsoft.com/en-us/windows/win32/api/wofapi/ns-wofapi-wof_file_compression_info_v1)。LZX 格式交叉验证依据 [Microsoft go-winio 的 WIM-LZX 实现](https://github.com/Microsoft/go-winio/tree/v0.6.2/wim/lzx)，许可声明保留于 `crates/fs-ntfs/NOTICE`。
-- 工具发现始终返回完整目录，`readOnlyHint` 和 `destructiveHint` 按工具能力声明；`extract_file` 返回 `readOnlyHint=false`、`destructiveHint=true`，并在设置中默认禁用。被禁用工具的实际调用在后端拒绝。成功和失败调用在其绑定案件中记录工具名和结果状态，不记录参数或结果正文。
+- 工具发现始终返回完整目录，`readOnlyHint` 和 `destructiveHint` 按工具能力声明；`extract_file` 返回 `readOnlyHint=false`、`destructiveHint=true`，并在设置中默认禁用。旧版 `mcp-host.json` 通过 `policyVersion` 升级时也会自动加入该禁用项，用户可在设置页显式启用。被禁用工具的实际调用在后端拒绝。成功和失败调用在其绑定案件中记录工具名和结果状态，不记录参数或结果正文。
 - 校验 Host，拒绝携带浏览器 Origin 的请求，不提供 CORS；每个请求最多 64 KiB，最多两个同时执行的案件查询，额外请求按到达顺序排队并在 300 秒后超时，单个结果上限 1 MiB。工具能力限定为只读查询，不提供任意 IPC、SQL、路径读取或插件执行入口。
 
 V2 安全治理与发布门禁总计划见：

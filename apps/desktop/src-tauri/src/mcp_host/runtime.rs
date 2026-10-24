@@ -9,7 +9,7 @@ use std::{
 };
 use tokio::{net::TcpListener, sync::Semaphore, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
-use transport::dto::mcp_host::{McpHostSettingsDto, McpHostStatusDto};
+use transport::dto::mcp_host::{McpHostSettingsDto, McpHostStatusDto, MCP_HOST_POLICY_VERSION};
 
 const ADDRESS: &str = "127.0.0.1:3001";
 
@@ -109,6 +109,7 @@ impl McpHostRuntime {
         mut settings: McpHostSettingsDto,
     ) -> Result<McpHostStatusDto, McpHostError> {
         let _operation = self.operation.lock().await;
+        settings.policy_version = MCP_HOST_POLICY_VERSION;
         app_services::mcp_host_service::validate_settings(&mut settings)?;
         let was_running = self.live.load(Ordering::Acquire);
         if settings.enabled && !was_running {
@@ -227,7 +228,20 @@ fn load_settings(state: &AppState) -> Result<McpHostSettingsDto, McpHostError> {
     if bytes.len() > 32 * 1024 {
         return Err(McpHostError::SettingsTooLarge);
     }
-    Ok(serde_json::from_slice(&bytes)?)
+    let mut settings: McpHostSettingsDto = serde_json::from_slice(&bytes)?;
+    if settings.policy_version < MCP_HOST_POLICY_VERSION {
+        if !settings
+            .disabled_tools
+            .iter()
+            .any(|tool| tool == "forensics.extract_file")
+        {
+            settings
+                .disabled_tools
+                .push("forensics.extract_file".into());
+        }
+        settings.policy_version = MCP_HOST_POLICY_VERSION;
+    }
+    Ok(settings)
 }
 
 fn persist_settings(state: &AppState, settings: &McpHostSettingsDto) -> Result<(), McpHostError> {

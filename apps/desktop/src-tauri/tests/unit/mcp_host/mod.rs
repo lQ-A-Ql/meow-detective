@@ -80,6 +80,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     let settings = transport::dto::mcp_host::McpHostSettingsDto {
         enabled: true,
         disabled_tools: vec!["forensics.get_current_case".into()],
+        policy_version: 1,
     };
     state
         .mcp_host
@@ -154,6 +155,7 @@ async fn persisted_stop_loads_without_listening_and_corrupt_settings_fail_closed
     let settings = transport::dto::mcp_host::McpHostSettingsDto {
         enabled: false,
         disabled_tools: vec!["forensics.get_current_case".into()],
+        policy_version: 1,
     };
     state
         .mcp_host
@@ -187,6 +189,28 @@ async fn persisted_stop_loads_without_listening_and_corrupt_settings_fail_closed
 }
 
 #[tokio::test]
+async fn legacy_host_policy_defaults_new_write_tool_to_disabled() {
+    let temporary = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temporary.path().join("mcp-host.json"),
+        br#"{"enabled":false,"disabledTools":["forensics.get_current_case"]}"#,
+    )
+    .unwrap();
+    let state = AppState {
+        mcp_config_path: temporary.path().join("mcp-config.json"),
+        ..Default::default()
+    };
+
+    state.mcp_host.initialize(state.clone()).await;
+
+    let settings = state.mcp_host.status().unwrap().settings;
+    assert_eq!(settings.policy_version, 1);
+    assert!(settings
+        .disabled_tools
+        .contains(&"forensics.extract_file".to_string()));
+}
+
+#[tokio::test]
 async fn occupied_port_and_persistence_failure_leave_the_listener_and_policy_consistent() {
     let (mut state, _endpoint, temporary) = server().await;
     let bound = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -204,6 +228,7 @@ async fn occupied_port_and_persistence_failure_leave_the_listener_and_policy_con
     let changed = transport::dto::mcp_host::McpHostSettingsDto {
         enabled: true,
         disabled_tools: vec!["forensics.get_current_case".into()],
+        policy_version: 1,
     };
     assert!(state
         .mcp_host

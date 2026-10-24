@@ -6,6 +6,7 @@ fn host_contract_round_trips_camel_case_and_omits_absent_errors() {
     let settings = McpHostSettingsDto {
         enabled: true,
         disabled_tools: vec!["forensics.get_current_case".into()],
+        policy_version: 1,
     };
     let status = McpHostStatusDto {
         settings,
@@ -24,6 +25,10 @@ fn host_contract_round_trips_camel_case_and_omits_absent_errors() {
     let defaults = McpHostSettingsDto::default();
     assert!(defaults.enabled);
     assert_eq!(defaults.disabled_tools, vec!["forensics.extract_file"]);
+    let legacy =
+        serde_json::from_value::<McpHostSettingsDto>(json!({"enabled":false,"disabledTools":[]}))
+            .unwrap();
+    assert_eq!(legacy.policy_version, 0);
     assert!(
         serde_json::from_value::<McpHostSettingsDto>(json!({"enabled":true,"host":"0.0.0.0"}))
             .is_err()

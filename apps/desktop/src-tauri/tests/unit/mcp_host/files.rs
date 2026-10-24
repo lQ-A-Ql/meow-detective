@@ -104,6 +104,7 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
             McpHostSettingsDto {
                 enabled: true,
                 disabled_tools: Vec::new(),
+                policy_version: 1,
             },
         )
         .await
@@ -135,6 +136,7 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
             McpHostSettingsDto {
                 enabled: true,
                 disabled_tools: vec!["forensics.read_file".into()],
+                policy_version: 1,
             },
         )
         .await

@@ -120,6 +120,7 @@ fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
     let mut settings = McpHostSettingsDto {
         enabled: true,
         disabled_tools: vec![catalog[0].name.clone(), catalog[0].name.clone()],
+        policy_version: 1,
     };
     validate_settings(&mut settings).unwrap();
     assert_eq!(settings.disabled_tools.len(), 1);
