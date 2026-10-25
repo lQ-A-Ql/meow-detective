@@ -32,8 +32,7 @@ fn build_f_record(disabled: bool, failed_logons: u16) -> Vec<u8> {
     data
 }
 
-/// The shared `write_binary_value` helper hardcodes a 128-byte data cell,
-/// which cannot hold a full V record; write the cell with its real size.
+/// Store an external binary value in an allocated fixture cell.
 fn write_large_binary_value(
     data: &mut [u8],
     vk_offset: u32,
@@ -42,18 +41,14 @@ fn write_large_binary_value(
     data_offset: u32,
 ) {
     let absolute = 0x1000 + data_offset as usize;
-    let cell_size = (value.len() + 4).next_multiple_of(8) as i32;
-    data[absolute..absolute + 4].copy_from_slice(&(-cell_size).to_le_bytes());
+    testing::builders::registry::cells::allocate(data, data_offset, value.len() + 4);
     data[absolute + 4..absolute + 4 + value.len()].copy_from_slice(value);
     write_vk(data, vk_offset, name, 3, value.len() as u32, data_offset);
 }
 
 fn build_hive(with_hashes: bool) -> Vec<u8> {
     let mut data = vec![0u8; 0x8000];
-    data[0..4].copy_from_slice(b"regf");
-    data[0x24..0x28].copy_from_slice(&0x20u32.to_le_bytes());
-    data[0x1000..0x1004].copy_from_slice(b"hbin");
-    data[0x1008..0x100c].copy_from_slice(&0x7000u32.to_le_bytes());
+    testing::builders::registry::cells::initialize(&mut data, 0x20);
     write_nk(&mut data, 0x20, "ROOT", &[("SAM", 0x80)], &[]);
     write_nk(&mut data, 0x80, "SAM", &[("Domains", 0x100)], &[]);
     write_nk(&mut data, 0x100, "Domains", &[("Account", 0x180)], &[]);
@@ -134,7 +129,7 @@ fn enable_and_clear_unlocks_the_account_flags() {
 #[test]
 fn a_dirty_hive_is_refused() {
     let mut hive = build_hive(true);
-    hive[8..12].copy_from_slice(&1u32.to_le_bytes());
+    hive[8..12].copy_from_slice(&2u32.to_le_bytes());
     let hbootkey = Zeroizing::new([0x42; 32]);
     assert!(apply_bypass(&mut hive, 500, SamBypassAction::ClearPassword, &hbootkey).is_err());
 }

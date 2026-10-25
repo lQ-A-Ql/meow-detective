@@ -2,7 +2,7 @@ use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::MAX_REGISTRY_ANALYSIS_BYTES;
-use artifacts_windows::registry::RegistrySnapshot;
+use artifacts_windows::registry::{RegistryHiveSource, RegistrySnapshot};
 use domain::FileEntryId;
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
@@ -83,7 +83,7 @@ pub(super) fn preload_registry_context<E: std::fmt::Display>(
         if is_system {
             boot_keys.insert(
                 (candidate.data_source_id.clone(), candidate.partition_index),
-                artifacts_windows::extract_boot_key(snapshot.bytes()),
+                artifacts_windows::extract_boot_key(&snapshot),
             );
         }
         snapshots.insert(registry_key(candidate), snapshot);
@@ -159,7 +159,12 @@ fn load_snapshot<E: std::fmt::Display>(
         logs.push(Some(bytes));
     }
     ensure_not_cancelled(cancel_token)?;
-    match RegistrySnapshot::from_owned(bytes, logs[0].as_deref(), logs[1].as_deref()) {
+    let snapshot = RegistrySnapshot::from_owned(bytes, logs[0].as_deref(), logs[1].as_deref())
+        .and_then(|snapshot| {
+            snapshot.registry_view()?;
+            Ok(snapshot)
+        });
+    match snapshot {
         Ok(snapshot) => Ok(Some(snapshot)),
         Err(error) => {
             warnings.push(read_warning(&candidate.path, None, &error));

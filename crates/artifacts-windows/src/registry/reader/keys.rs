@@ -29,6 +29,8 @@ impl HiveSnapshot {
             value_count: u32_at(cell, 36)?,
             values: u32_at(cell, 40)?,
             parent: u32_at(cell, 16)?,
+            class_data: u32_at(cell, 48)?,
+            class_length: u16_at(cell, 74)?,
             overlay_source: self.overlay_for_cell(offset, 76 + length),
         })
     }
@@ -110,7 +112,7 @@ impl HiveSnapshot {
         })
     }
 
-    pub(super) fn key_offsets(
+    pub(crate) fn key_offsets(
         &self,
         key: &BrowserKey,
     ) -> Result<(Vec<u32>, Option<BrowserError>), BrowserError> {

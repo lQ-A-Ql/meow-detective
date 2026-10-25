@@ -7,13 +7,11 @@ const REG_MULTI_SZ: u32 = 7;
 const REG_QWORD: u32 = 11;
 const USER_ASSIST_ENTRY_SIZE: usize = 72;
 const SAM_ACCOUNT_DISABLED: u32 = 0x0001;
+use testing::builders::registry::cells::{allocate, initialize};
 
 pub(crate) fn empty_hive(root_name: &str) -> Vec<u8> {
     let mut data = vec![0u8; 0x8000];
-    data[0..4].copy_from_slice(b"regf");
-    data[0x24..0x28].copy_from_slice(&0x20u32.to_le_bytes());
-    data[0x1000..0x1004].copy_from_slice(b"hbin");
-    data[0x1008..0x100c].copy_from_slice(&0x2000u32.to_le_bytes());
+    initialize(&mut data, 0x20);
     write_nk(&mut data, 0x20, root_name, &[], &[]);
     data
 }
@@ -27,7 +25,9 @@ pub(crate) fn write_nk(
 ) {
     let absolute = BASE_BLOCK_SIZE + offset as usize;
     let name_bytes = name.as_bytes();
-    data[absolute..absolute + 4].copy_from_slice(&(-256i32).to_le_bytes());
+    let parent = data[absolute + 0x14..absolute + 0x18].to_vec();
+    allocate(data, offset, 0x50 + name_bytes.len());
+    data[absolute + 0x14..absolute + 0x18].copy_from_slice(&parent);
     data[absolute + 4..absolute + 6].copy_from_slice(b"nk");
     data[absolute + 6..absolute + 8].copy_from_slice(&0x20u16.to_le_bytes());
     data[absolute + 0x18..absolute + 0x1c].copy_from_slice(&(subkeys.len() as u32).to_le_bytes());
@@ -56,8 +56,7 @@ pub(crate) fn write_nk(
 
     if !values.is_empty() {
         let list_absolute = BASE_BLOCK_SIZE + value_list_offset as usize;
-        data[list_absolute..list_absolute + 4]
-            .copy_from_slice(&(-((values.len() as i32 * 4) + 4)).to_le_bytes());
+        allocate(data, value_list_offset, values.len() * 4 + 4);
         for (index, value_offset) in values.iter().enumerate() {
             let entry = list_absolute + 4 + index * 4;
             data[entry..entry + 4].copy_from_slice(&value_offset.to_le_bytes());
@@ -65,6 +64,10 @@ pub(crate) fn write_nk(
     }
     if !subkeys.is_empty() {
         write_hashed_subkey_list(data, subkey_list_offset, b"lf", subkeys);
+        for (_, child) in subkeys {
+            let parent_field = BASE_BLOCK_SIZE + *child as usize + 0x14;
+            data[parent_field..parent_field + 4].copy_from_slice(&offset.to_le_bytes());
+        }
     }
 }
 
@@ -74,7 +77,9 @@ pub(crate) fn write_nk_utf16_name(data: &mut [u8], offset: u32, name: &str) {
         .encode_utf16()
         .flat_map(u16::to_le_bytes)
         .collect::<Vec<_>>();
-    data[absolute..absolute + 4].copy_from_slice(&(-256i32).to_le_bytes());
+    let parent = data[absolute + 0x14..absolute + 0x18].to_vec();
+    allocate(data, offset, 0x50 + name_bytes.len());
+    data[absolute + 0x14..absolute + 0x18].copy_from_slice(&parent);
     data[absolute + 4..absolute + 6].copy_from_slice(b"nk");
     data[absolute + 6..absolute + 8].copy_from_slice(&0u16.to_le_bytes());
     data[absolute + 0x20..absolute + 0x24].copy_from_slice(&INVALID_OFFSET.to_le_bytes());
@@ -91,7 +96,7 @@ pub(crate) fn write_hashed_subkey_list(
     subkeys: &[(&str, u32)],
 ) {
     let absolute = BASE_BLOCK_SIZE + offset as usize;
-    data[absolute..absolute + 4].copy_from_slice(&(-256i32).to_le_bytes());
+    allocate(data, offset, 8 + subkeys.len() * 8);
     data[absolute + 4..absolute + 6].copy_from_slice(signature);
     data[absolute + 6..absolute + 8].copy_from_slice(&(subkeys.len() as u16).to_le_bytes());
     for (index, (name, child_offset)) in subkeys.iter().enumerate() {
@@ -100,8 +105,8 @@ pub(crate) fn write_hashed_subkey_list(
         for (hash_index, byte) in name.as_bytes().iter().take(4).enumerate() {
             hash[hash_index] = *byte;
         }
-        data[entry..entry + 4].copy_from_slice(&hash);
-        data[entry + 4..entry + 8].copy_from_slice(&child_offset.to_le_bytes());
+        data[entry..entry + 4].copy_from_slice(&child_offset.to_le_bytes());
+        data[entry + 4..entry + 8].copy_from_slice(&hash);
     }
 }
 
@@ -112,7 +117,7 @@ pub(crate) fn write_flat_subkey_list(
     subkeys: &[u32],
 ) {
     let absolute = BASE_BLOCK_SIZE + offset as usize;
-    data[absolute..absolute + 4].copy_from_slice(&(-256i32).to_le_bytes());
+    allocate(data, offset, 8 + subkeys.len() * 4);
     data[absolute + 4..absolute + 6].copy_from_slice(signature);
     data[absolute + 6..absolute + 8].copy_from_slice(&(subkeys.len() as u16).to_le_bytes());
     for (index, child_offset) in subkeys.iter().enumerate() {
@@ -209,7 +214,7 @@ pub(crate) fn write_vk(
 ) {
     let absolute = BASE_BLOCK_SIZE + offset as usize;
     let name_bytes = name.as_bytes();
-    data[absolute..absolute + 4].copy_from_slice(&(-128i32).to_le_bytes());
+    allocate(data, offset, 0x18 + name_bytes.len());
     data[absolute + 4..absolute + 6].copy_from_slice(b"vk");
     data[absolute + 6..absolute + 8].copy_from_slice(&(name_bytes.len() as u16).to_le_bytes());
     data[absolute + 8..absolute + 12].copy_from_slice(&data_len.to_le_bytes());
@@ -239,7 +244,7 @@ pub(crate) fn write_binary_value(
 
 fn write_external_value_data(data: &mut [u8], data_offset: u32, value: &[u8]) {
     let absolute = BASE_BLOCK_SIZE + data_offset as usize;
-    data[absolute..absolute + 4].copy_from_slice(&(-128i32).to_le_bytes());
+    allocate(data, data_offset, 4 + value.len());
     data[absolute + 4..absolute + 4 + value.len()].copy_from_slice(value);
 }
 
@@ -366,10 +371,7 @@ pub(crate) fn encode_utf16le(value: &str) -> Vec<u8> {
 
 pub(crate) fn synthetic_sam_hive() -> Vec<u8> {
     let mut data = vec![0u8; 0x8000];
-    data[0..4].copy_from_slice(b"regf");
-    data[0x24..0x28].copy_from_slice(&0x20u32.to_le_bytes());
-    data[0x1000..0x1004].copy_from_slice(b"hbin");
-    data[0x1008..0x100c].copy_from_slice(&0x7000u32.to_le_bytes());
+    initialize(&mut data, 0x20);
     write_nk(&mut data, 0x020, "ROOT", &[("SAM", 0x080)], &[]);
     write_nk(&mut data, 0x080, "SAM", &[("Domains", 0x100)], &[]);
     write_nk(

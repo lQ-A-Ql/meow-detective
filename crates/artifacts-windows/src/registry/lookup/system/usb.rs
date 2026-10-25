@@ -3,7 +3,7 @@ use crate::registry::lookup::*;
 
 /// Extract USB device history from `SYSTEM\Enum\USBSTOR`.
 pub fn extract_usb_devices_from_system_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<UsbDeviceHistoryEntry>, String> {
     let hive = RegistryHiveReader::new(bytes)?;

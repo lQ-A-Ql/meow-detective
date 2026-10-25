@@ -17,7 +17,10 @@ pub(crate) use recent_files::decode_pidl_path;
 
 // ── NTUSER.DAT field extraction ──────────────────────────────────────────────
 
-pub fn extract_ntuser_fields(bytes: &[u8], hive_path: &str) -> Result<NtuserInfo, RegistryError> {
+pub fn extract_ntuser_fields(
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
+    hive_path: &str,
+) -> Result<NtuserInfo, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;
     let mut info = NtuserInfo::default();
     let parser = "registry.ntuser";
@@ -50,7 +53,7 @@ pub fn extract_ntuser_fields_with_txlog(
     txlog_data: &[u8],
 ) -> Result<NtuserInfo, RegistryError> {
     let snapshot = crate::registry::RegistrySnapshot::prepare(bytes, Some(txlog_data), None)?;
-    let mut info = extract_ntuser_fields(snapshot.bytes(), hive_path)?;
+    let mut info = extract_ntuser_fields(&snapshot, hive_path)?;
     info.txlog_applied = snapshot.logs_applied();
     Ok(info)
 }

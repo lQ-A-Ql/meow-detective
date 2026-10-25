@@ -75,7 +75,8 @@ fn committed_software_fixture_remains_compatible() {
 
 #[test]
 fn invalid_transaction_log_is_rejected() {
-    let data = software_current_version_hive();
+    let mut data = software_current_version_hive();
+    data[4..8].copy_from_slice(&2u32.to_le_bytes());
     assert!(extract_software_hive_fields_with_txlog(
         &data,
         "Windows/System32/config/SOFTWARE",

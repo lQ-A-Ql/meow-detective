@@ -2,7 +2,7 @@ use super::super::usb_identity::{utf16_text, volume_identity};
 use super::super::{MountedDeviceEntry, RegistryHiveReader, RegistryValue};
 
 pub fn extract_mounted_devices_from_system_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<MountedDeviceEntry>, String> {
     let hive = RegistryHiveReader::new(bytes)?;

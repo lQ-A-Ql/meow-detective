@@ -22,7 +22,10 @@ pub struct RegistryBrowserKey {
     pub subkeys: Vec<String>,
 }
 
-pub fn browse_registry_hive(bytes: &[u8], key_path: &str) -> Result<RegistryBrowserKey, String> {
+pub fn browse_registry_hive(
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
+    key_path: &str,
+) -> Result<RegistryBrowserKey, String> {
     let reader = RegistryHiveReader::new(bytes)?;
     let segments: Vec<&str> = key_path
         .split('\\')

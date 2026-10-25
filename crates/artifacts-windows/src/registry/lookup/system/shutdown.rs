@@ -6,7 +6,7 @@ use crate::registry::lookup::*;
 /// The value may be stored as `REG_BINARY` (8-byte FILETIME) or `REG_QWORD`; both are
 /// accepted and converted to an RFC 3339 timestamp.
 pub fn extract_shutdown_time_from_system_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<ShutdownTimeEntry>, String> {
     let hive = RegistryHiveReader::new(bytes)?;

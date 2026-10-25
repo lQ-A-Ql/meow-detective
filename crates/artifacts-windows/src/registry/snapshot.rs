@@ -1,8 +1,17 @@
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    sync::{Arc, OnceLock},
+};
+
+mod storage;
+use storage::SnapshotBytes;
 
 use super::{
     browser::ProvenanceSpan,
-    log_replay::{prepare_log_replay, HiveLog, LogReplayReport, LogSlot, RecoveryState},
+    log_replay::{
+        prepare_log_replay, HiveLog, LogReplayReport, LogSlot, RecoveryState, ReplayedHive,
+    },
+    reader::{BrowserError, HiveView},
     RegistryError,
 };
 
@@ -10,9 +19,11 @@ const MAX_HIVE_BYTES: usize = 256 * 1024 * 1024;
 
 /// Immutable input used by registry queries after optional page-log recovery.
 pub struct RegistrySnapshot<'a> {
-    bytes: Cow<'a, [u8]>,
+    bytes: SnapshotBytes<'a>,
     report: Option<LogReplayReport>,
     provenance: Vec<ProvenanceSpan>,
+    view: OnceLock<Result<HiveView, BrowserError>>,
+    allocation_map: Option<Arc<Vec<u64>>>,
 }
 
 impl<'a> RegistrySnapshot<'a> {
@@ -51,18 +62,22 @@ impl<'a> RegistrySnapshot<'a> {
             .collect();
         if logs.is_empty() {
             return Ok(Self {
-                bytes,
+                bytes: bytes.into(),
                 report: None,
                 provenance: Vec::new(),
+                view: OnceLock::new(),
+                allocation_map: None,
             });
         }
         let plan = prepare_log_replay(&bytes, &logs, MAX_HIVE_BYTES)
             .map_err(|failure| RegistryError::Recovery(failure.error))?;
         if plan.report().state == RecoveryState::NotNeeded {
             return Ok(Self {
-                bytes,
+                bytes: bytes.into(),
                 report: Some(plan.report().clone()),
                 provenance: Vec::new(),
+                view: OnceLock::new(),
+                allocation_map: None,
             });
         }
         let mut copy = bytes.into_owned();
@@ -73,15 +88,11 @@ impl<'a> RegistrySnapshot<'a> {
         let recovered = plan
             .apply(copy)
             .map_err(|failure| RegistryError::Recovery(failure.error))?;
-        Ok(Self {
-            bytes: Cow::Owned(recovered.bytes),
-            report: Some(recovered.report),
-            provenance: recovered.provenance,
-        })
+        Ok(Self::from_replayed(recovered))
     }
 
     pub fn bytes(&self) -> &[u8] {
-        &self.bytes
+        self.bytes.bytes()
     }
 
     pub fn report(&self) -> Option<&LogReplayReport> {
@@ -92,6 +103,40 @@ impl<'a> RegistrySnapshot<'a> {
         &self.provenance
     }
 
+    pub fn view(&self) -> Result<&HiveView, RegistryError> {
+        self.view
+            .get_or_init(|| {
+                HiveView::from_prepared(
+                    self.bytes.shared(),
+                    self.allocation_map.clone(),
+                    self.provenance.clone(),
+                )
+            })
+            .as_ref()
+            .map_err(|error| RegistryError::from(*error))
+    }
+
+    pub fn from_replayed(recovered: ReplayedHive) -> RegistrySnapshot<'static> {
+        RegistrySnapshot {
+            bytes: SnapshotBytes::Shared(Arc::new(recovered.bytes)),
+            report: Some(recovered.report),
+            provenance: recovered.provenance,
+            allocation_map: recovered.allocation_map,
+            view: OnceLock::new(),
+        }
+    }
+
+    pub fn into_view(self) -> Result<HiveView, BrowserError> {
+        match self.view.into_inner() {
+            Some(view) => view,
+            None => HiveView::from_prepared(
+                self.bytes.into_shared(),
+                self.allocation_map,
+                self.provenance,
+            ),
+        }
+    }
+
     pub fn logs_applied(&self) -> bool {
         self.report
             .as_ref()
@@ -100,9 +145,11 @@ impl<'a> RegistrySnapshot<'a> {
 
     pub fn into_owned(self) -> RegistrySnapshot<'static> {
         RegistrySnapshot {
-            bytes: Cow::Owned(self.bytes.into_owned()),
+            bytes: self.bytes.into_owned(),
             report: self.report,
             provenance: self.provenance,
+            view: self.view,
+            allocation_map: self.allocation_map,
         }
     }
 }

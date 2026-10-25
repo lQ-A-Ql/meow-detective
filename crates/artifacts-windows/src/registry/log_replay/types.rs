@@ -111,6 +111,7 @@ pub struct ReplayedHive {
     pub bytes: Vec<u8>,
     pub report: LogReplayReport,
     pub provenance: Vec<crate::registry::browser::ProvenanceSpan>,
+    pub(crate) allocation_map: Option<std::sync::Arc<Vec<u64>>>,
 }
 
 pub struct LogReplayPlan<'a> {

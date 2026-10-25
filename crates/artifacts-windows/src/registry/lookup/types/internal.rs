@@ -13,7 +13,5 @@ pub(crate) struct NkRecord {
     pub(crate) name: String,
     pub(crate) last_write_time: Option<u64>,
     pub(crate) num_subkeys: u32,
-    pub(crate) subkeys_list_offset: u32,
     pub(crate) num_values: u32,
-    pub(crate) values_list_offset: u32,
 }

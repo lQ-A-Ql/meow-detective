@@ -9,7 +9,7 @@ use crate::registry::RegistryError;
 pub use types::{RegistryHardwareInfo, RegistryHardwareRecord};
 
 pub(crate) fn extract_system_hardware(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     read_smbios: impl FnOnce(&str) -> Result<Option<Vec<u8>>, RegistryError>,
 ) -> Result<RegistryHardwareInfo, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;

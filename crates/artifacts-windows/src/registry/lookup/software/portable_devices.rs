@@ -5,7 +5,7 @@ use crate::registry::RegistryError;
 
 /// WPD FriendlyName is a cached display/volume name, not a filesystem probe.
 pub fn extract_portable_devices_from_software_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<PortableDeviceEntry>, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;

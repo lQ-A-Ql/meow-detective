@@ -3,6 +3,9 @@ use thiserror::Error;
 /// Typed error for registry parsing, recovery, and SAM decryption.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum RegistryError {
+    #[error("registry hive read failed: {0}")]
+    Read(#[from] super::reader::BrowserError),
+
     #[error("registry recovery failed: {0}")]
     Recovery(super::log_replay::LogReplayError),
 

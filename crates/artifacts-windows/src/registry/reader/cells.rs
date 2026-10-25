@@ -1,13 +1,13 @@
-use super::{BrowserError, BrowserOverlaySource, HiveSnapshot, ProvenanceSpan};
+use super::{BrowserError, HiveSnapshot, ProvenanceSpan};
 use std::sync::Arc;
 
-pub(super) fn u16_at(data: &[u8], at: usize) -> Result<u16, BrowserError> {
+pub(crate) fn u16_at(data: &[u8], at: usize) -> Result<u16, BrowserError> {
     Ok(u16::from_le_bytes(array(data, at)?))
 }
-pub(super) fn u32_at(data: &[u8], at: usize) -> Result<u32, BrowserError> {
+pub(crate) fn u32_at(data: &[u8], at: usize) -> Result<u32, BrowserError> {
     Ok(u32::from_le_bytes(array(data, at)?))
 }
-pub(super) fn array<const N: usize>(data: &[u8], at: usize) -> Result<[u8; N], BrowserError> {
+pub(crate) fn array<const N: usize>(data: &[u8], at: usize) -> Result<[u8; N], BrowserError> {
     data.get(at..at.checked_add(N).ok_or(BrowserError::Corrupt)?)
         .and_then(|v| v.try_into().ok())
         .ok_or(BrowserError::Corrupt)
@@ -15,6 +15,14 @@ pub(super) fn array<const N: usize>(data: &[u8], at: usize) -> Result<[u8; N], B
 
 impl HiveSnapshot {
     pub fn open(bytes: Arc<Vec<u8>>) -> Result<Self, BrowserError> {
+        Self::from_prepared(bytes, None, Vec::new())
+    }
+
+    pub(crate) fn from_prepared(
+        bytes: Arc<Vec<u8>>,
+        allocation_map: Option<Arc<Vec<u64>>>,
+        provenance: Vec<ProvenanceSpan>,
+    ) -> Result<Self, BrowserError> {
         if bytes.len() < 8192 || bytes.get(..4) != Some(b"regf") {
             return Err(BrowserError::Corrupt);
         }
@@ -37,17 +45,27 @@ impl HiveSnapshot {
         }
         let root = u32_at(&bytes, 0x24)?;
         let dirty = u32_at(&bytes, 4)? != u32_at(&bytes, 8)?;
+        let provenance = super::provenance::normalize(provenance, bytes.len())?;
+        let prepared = allocation_map.is_some();
+        if allocation_map
+            .as_ref()
+            .is_some_and(|map| map.len() != length.div_ceil(512))
+        {
+            return Err(BrowserError::Corrupt);
+        }
         let mut hive = Self {
             bytes,
-            cells: vec![0; length.div_ceil(512)],
+            cells: allocation_map.unwrap_or_else(|| Arc::new(vec![0; length.div_ceil(512)])),
             root,
             end,
             minor,
             partial: false,
             dirty,
-            provenance: Vec::new(),
+            provenance,
         };
-        hive.index_cells()?;
+        if !prepared {
+            hive.index_cells()?
+        }
         hive.key(root, String::new())?;
         Ok(hive)
     }
@@ -56,44 +74,7 @@ impl HiveSnapshot {
         bytes: Arc<Vec<u8>>,
         provenance: Vec<ProvenanceSpan>,
     ) -> Result<Self, BrowserError> {
-        let mut hive = Self::open(bytes)?;
-        hive.provenance = provenance;
-        Ok(hive)
-    }
-
-    pub(super) fn overlay_for_range(&self, start: usize, end: usize) -> BrowserOverlaySource {
-        let mut recovered = false;
-        let mut base = false;
-        for span in &self.provenance {
-            if span.start < end && span.end > start {
-                recovered = true;
-            }
-        }
-        if start < end {
-            let mut cursor = start;
-            for span in &self.provenance {
-                if span.start > cursor {
-                    base = true;
-                }
-                if span.start <= cursor && span.end > cursor {
-                    cursor = span.end.min(end);
-                }
-            }
-            if cursor < end {
-                base = true;
-            }
-        }
-        match (base, recovered) {
-            (false, true) => BrowserOverlaySource::Recovered,
-            (true, false) => BrowserOverlaySource::Base,
-            (true, true) => BrowserOverlaySource::Merged,
-            (false, false) => BrowserOverlaySource::Base,
-        }
-    }
-
-    pub(super) fn overlay_for_cell(&self, offset: u32, length: usize) -> BrowserOverlaySource {
-        let start = 4096usize.saturating_add(offset as usize);
-        self.overlay_for_range(start, start.saturating_add(length.saturating_add(4)))
+        Self::from_prepared(bytes, None, provenance)
     }
 
     fn index_cells(&mut self) -> Result<(), BrowserError> {
@@ -122,7 +103,7 @@ impl HiveSnapshot {
                 }
                 if raw < 0 {
                     let slot = (at - 4096) / 8;
-                    self.cells[slot / 64] |= 1 << (slot % 64);
+                    Arc::make_mut(&mut self.cells)[slot / 64] |= 1 << (slot % 64);
                 }
                 at += length;
             }
@@ -131,7 +112,7 @@ impl HiveSnapshot {
         Ok(())
     }
 
-    pub(super) fn cell(&self, offset: u32) -> Result<&[u8], BrowserError> {
+    pub(crate) fn cell(&self, offset: u32) -> Result<&[u8], BrowserError> {
         let offset = offset as usize;
         if !offset.is_multiple_of(8) {
             return Err(BrowserError::Corrupt);

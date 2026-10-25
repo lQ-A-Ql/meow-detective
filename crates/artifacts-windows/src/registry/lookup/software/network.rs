@@ -8,7 +8,7 @@ use super::values::{
 use crate::registry::RegistryError;
 
 pub fn extract_network_profiles_from_software_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<NetworkProfileEntry>, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;

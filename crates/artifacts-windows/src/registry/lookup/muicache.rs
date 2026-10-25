@@ -14,7 +14,7 @@ const MUICACHE_PATH: &[&str] = &[
 
 /// Extract friendly program names from the `MuiCache` key in a `UsrClass.dat` hive.
 pub fn extract_muicache_from_usrclass_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<MuiCacheEntry>, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;

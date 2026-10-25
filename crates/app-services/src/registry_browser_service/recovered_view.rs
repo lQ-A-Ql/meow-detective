@@ -7,6 +7,7 @@ use super::{
 };
 use crate::file_service::SourceReadContext;
 use artifacts_windows::registry::log_replay::{prepare_log_replay, HiveLog, LogSlot};
+use artifacts_windows::registry::{reader::HiveView, RegistrySnapshot};
 use domain::FileEntry;
 use sha2::{Digest, Sha256};
 use transport::dto::{RegistryLogSlotDto, RegistryRecoveryDto};
@@ -18,14 +19,7 @@ pub(super) fn load(
     entry: &FileEntry,
     size: usize,
     companions: Vec<FileEntry>,
-) -> Result<
-    (
-        Vec<u8>,
-        RegistryRecoveryDto,
-        Vec<artifacts_windows::registry::browser::ProvenanceSpan>,
-    ),
-    RegistryBrowserError,
-> {
+) -> Result<(HiveView, RegistryRecoveryDto), RegistryBrowserError> {
     let mut logs = companion_logs::sources(companions, &entry.name);
     let log_bytes = companion_logs::sizes(context, &mut logs);
     state.reserve(reservation(size, log_bytes))?;
@@ -70,7 +64,8 @@ pub(super) fn load(
         Some(result_hash),
         logs.into_iter().map(|l| l.metadata).collect(),
     );
-    Ok((recovered.bytes, summary, recovered.provenance))
+    let hive = RegistrySnapshot::from_replayed(recovered).into_view()?;
+    Ok((hive, summary))
 }
 fn reservation(snapshot: usize, log_bytes: usize) -> usize {
     snapshot + snapshot.div_ceil(64) + log_bytes + METADATA_BUDGET + REPLAY_WORK_BYTES

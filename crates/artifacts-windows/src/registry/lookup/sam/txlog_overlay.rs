@@ -10,7 +10,7 @@ pub fn extract_sam_fields_with_txlog(
     txlog2: Option<&[u8]>,
 ) -> Result<super::super::SamInfo, RegistryError> {
     let snapshot = RegistrySnapshot::prepare(bytes, txlog1, txlog2)?;
-    let mut info = extract_sam_fields(snapshot.bytes(), hive_path, boot_key)?;
+    let mut info = extract_sam_fields(&snapshot, hive_path, boot_key)?;
     info.txlog_applied = snapshot.logs_applied();
     Ok(info)
 }

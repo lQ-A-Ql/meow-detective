@@ -6,7 +6,7 @@ use crate::registry::RegistryError;
 /// `Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers` in
 /// an NTUSER.DAT hive.
 pub fn extract_appcompat_layers_from_ntuser_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     hive_path: &str,
 ) -> Result<Vec<AppCompatLayerEntry>, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;

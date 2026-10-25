@@ -5,7 +5,7 @@ use super::values::read_optional_string_value;
 use crate::registry::RegistryError;
 
 pub fn extract_machine_run_keys_from_software_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<RegistryRunKey>, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;
@@ -55,7 +55,7 @@ pub fn extract_machine_run_keys_from_software_hive(
 }
 
 pub fn extract_winlogon_fields_from_software_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<WinlogonConfig, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;

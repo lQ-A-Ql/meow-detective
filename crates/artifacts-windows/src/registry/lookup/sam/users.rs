@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::super::{
     filetime_to_utc, RegistryHiveReader, RegistryValue, SamUser, REG_DWORD, SAM_ACCOUNT_DISABLED,
-    SAM_ACCOUNT_LOCKED, VK_SIGNATURE,
+    SAM_ACCOUNT_LOCKED,
 };
 use super::records::parse_sam_f_record;
 
@@ -87,31 +87,14 @@ pub(super) fn find_rid_in_sam_key(
 }
 
 fn read_inline_rid(hive: &RegistryHiveReader<'_>, value_offset: u32) -> Option<u32> {
-    let absolute = hive.abs(value_offset).ok()?;
-    if absolute + 0x14 > hive.bytes.len() || &hive.bytes[absolute + 4..absolute + 6] != VK_SIGNATURE
-    {
-        return None;
-    }
-    let data_type = u32::from_le_bytes(
-        hive.bytes[absolute + 0x10..absolute + 0x14]
-            .try_into()
-            .ok()?,
-    );
+    let value = hive.view.value_metadata(value_offset).ok()?;
+    let data_type = value.type_code;
     if (500..2000).contains(&data_type) {
         return Some(data_type);
     }
-    let data_len_raw = u32::from_le_bytes(
-        hive.bytes[absolute + 0x08..absolute + 0x0c]
-            .try_into()
-            .ok()?,
-    );
-    let raw_data_offset = u32::from_le_bytes(
-        hive.bytes[absolute + 0x0c..absolute + 0x10]
-            .try_into()
-            .ok()?,
-    );
+    let raw_data_offset = value.data;
     ((data_type == 0 || data_type == REG_DWORD)
-        && (data_len_raw & 0x7fff_ffff) <= 4
+        && value.byte_length <= 4
         && raw_data_offset > 0
         && raw_data_offset < 0xffff)
         .then_some(raw_data_offset)

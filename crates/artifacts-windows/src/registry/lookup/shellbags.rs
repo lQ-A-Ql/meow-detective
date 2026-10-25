@@ -16,7 +16,7 @@ const BAGMRU_PATH: &[&str] = &[
 
 /// Extract Shellbag entries from the `BagMRU` tree in a `UsrClass.dat` hive.
 pub fn extract_shellbags_from_usrclass_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<ShellbagEntry>, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;

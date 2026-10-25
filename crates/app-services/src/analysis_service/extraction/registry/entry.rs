@@ -60,7 +60,7 @@ pub(in crate::analysis_service::extraction) fn extract_snapshot_candidate(
         &normalized,
         RegistryExtractionContext {
             candidate,
-            bytes,
+            bytes: snapshot,
             boot_key,
             outcome: &mut outcome,
             warnings: &mut raw_warnings,

@@ -14,7 +14,7 @@ pub struct AmcacheInfo {
 /// Parse `Amcache.hve` and extract installed application inventory and
 /// application-file execution evidence.
 pub fn extract_amcache_entries(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<AmcacheInfo, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;

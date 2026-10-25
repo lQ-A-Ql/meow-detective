@@ -6,7 +6,7 @@ use crate::registry::RegistryError;
 
 /// Extract non-sensitive local security policy metadata from the SECURITY hive.
 pub fn extract_security_policy_from_security_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
     _boot_key: Option<[u8; 16]>,
 ) -> Result<SecurityPolicyEntry, RegistryError> {
@@ -45,8 +45,7 @@ pub fn extract_security_policy_from_security_hive_with_txlog(
     txlog2: Option<&[u8]>,
 ) -> Result<SecurityPolicyEntry, RegistryError> {
     let snapshot = crate::registry::RegistrySnapshot::prepare(bytes, txlog1, txlog2)?;
-    let mut entry =
-        extract_security_policy_from_security_hive(snapshot.bytes(), hive_path, boot_key)?;
+    let mut entry = extract_security_policy_from_security_hive(&snapshot, hive_path, boot_key)?;
     entry.txlog_applied = snapshot.logs_applied();
     Ok(entry)
 }
@@ -56,7 +55,7 @@ pub fn extract_security_policy_from_security_hive_with_txlog(
 /// source key paths, and last-write timestamps are returned. Decryption is
 /// intentionally not performed.
 pub fn extract_lsa_secrets_from_security_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
     _boot_key: Option<[u8; 16]>,
 ) -> Result<Vec<LsaSecretEntry>, RegistryError> {
@@ -99,7 +98,7 @@ pub fn extract_lsa_secrets_from_security_hive(
 /// SECURITY hive. Only entry names, encrypted blob hex, source key paths, and
 /// last-write timestamps are returned. Decryption is intentionally not performed.
 pub fn extract_cached_credentials_from_security_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
     _boot_key: Option<[u8; 16]>,
 ) -> Result<Vec<CachedCredentialEntry>, RegistryError> {

@@ -1,15 +1,12 @@
 use chrono::{DateTime, Utc};
 
 pub(crate) const BASE_BLOCK_SIZE: usize = 0x1000;
-pub(crate) const NK_SIGNATURE: &[u8; 2] = b"nk";
-pub(crate) const VK_SIGNATURE: &[u8; 2] = b"vk";
 pub(crate) const REG_SZ: u32 = 1;
 pub(crate) const REG_EXPAND_SZ: u32 = 2;
 pub(crate) const REG_DWORD: u32 = 4;
 pub(crate) const REG_MULTI_SZ: u32 = 7;
 pub(crate) const REG_QWORD: u32 = 11;
 pub(crate) const INVALID_OFFSET: u32 = 0xffff_ffff;
-pub(crate) const HBIN_MAGIC: &[u8; 4] = b"hbin";
 pub(crate) const MAX_KEY_LOOKUP_DEPTH: usize = 64;
 pub(crate) const USER_ASSIST_ENTRY_SIZE: usize = 72;
 pub(crate) const SAM_ACCOUNT_DISABLED: u32 = 0x0001;

@@ -5,7 +5,7 @@ use super::super::{
 use crate::registry::RegistryError;
 
 pub fn extract_software_hive_fields(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     hive_path: &str,
 ) -> Result<SoftwareHiveInfo, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;
@@ -102,7 +102,7 @@ pub fn extract_software_hive_fields_with_txlog(
     txlog_data: &[u8],
 ) -> Result<SoftwareHiveInfo, RegistryError> {
     let snapshot = crate::registry::RegistrySnapshot::prepare(bytes, Some(txlog_data), None)?;
-    let mut info = extract_software_hive_fields(snapshot.bytes(), hive_path)?;
+    let mut info = extract_software_hive_fields(&snapshot, hive_path)?;
     info.txlog_applied = snapshot.logs_applied();
     Ok(info)
 }

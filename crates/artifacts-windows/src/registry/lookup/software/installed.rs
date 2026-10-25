@@ -3,7 +3,7 @@ use super::values::{read_optional_dword_value, read_optional_string_value};
 use crate::registry::RegistryError;
 
 pub fn extract_installed_software(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<InstalledSoftwareInfo>, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;

@@ -2,7 +2,9 @@ use crate::registry::lookup::RegistryHiveReader;
 
 const BOOT_KEY_PERMUTATION: [usize; 16] = [8, 5, 4, 2, 11, 9, 13, 3, 0, 6, 1, 12, 14, 10, 15, 7];
 
-pub fn extract_boot_key(system_hive: &[u8]) -> Option<[u8; 16]> {
+pub fn extract_boot_key(
+    system_hive: &(impl crate::registry::RegistryHiveSource + ?Sized),
+) -> Option<[u8; 16]> {
     let hive = RegistryHiveReader::new(system_hive).ok()?;
     let control_sets = hive.control_set_candidates(&mut Vec::new());
 

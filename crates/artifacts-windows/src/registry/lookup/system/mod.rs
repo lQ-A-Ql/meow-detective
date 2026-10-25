@@ -25,7 +25,7 @@ pub use usb::extract_usb_devices_from_system_hive;
 // ── SYSTEM hive field extraction ──────────────────────────────────────────────
 
 pub fn extract_system_hive_fields(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     hive_path: &str,
 ) -> Result<SystemHiveInfo, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;
@@ -82,7 +82,7 @@ pub fn extract_system_hive_fields(
 /// Extract LSA authentication, notification and security packages from the
 /// SYSTEM hive for each control set candidate.
 pub fn extract_lsa_packages_from_system_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<LsaPackages>, String> {
     let hive = RegistryHiveReader::new(bytes)?;
@@ -129,7 +129,7 @@ pub fn extract_system_hive_fields_with_txlog(
     txlog_data: &[u8],
 ) -> Result<SystemHiveInfo, RegistryError> {
     let snapshot = crate::registry::RegistrySnapshot::prepare(bytes, Some(txlog_data), None)?;
-    let mut info = extract_system_hive_fields(snapshot.bytes(), hive_path)?;
+    let mut info = extract_system_hive_fields(&snapshot, hive_path)?;
     info.txlog_applied = snapshot.logs_applied();
     Ok(info)
 }

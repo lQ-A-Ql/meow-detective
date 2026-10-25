@@ -7,7 +7,7 @@ use crate::registry::{
 impl HiveSnapshot {
     /// Analyze exactly this session's immutable base/recovered evidence bytes.
     pub fn hardware_inventory(&self) -> Result<RegistryHardwareInfo, RegistryError> {
-        extract_system_hardware(&self.bytes, |path| self.read_smbios_cache(path))
+        extract_system_hardware(self, |path| self.read_smbios_cache(path))
     }
 
     fn read_smbios_cache(&self, path: &str) -> Result<Option<Vec<u8>>, RegistryError> {

@@ -4,6 +4,7 @@
 //! Analysis system-info tests. They are not full Windows registry samples.
 
 const BASE_BLOCK_SIZE: usize = 0x1000;
+pub mod cells;
 const INVALID_OFFSET: u32 = 0xFFFF_FFFF;
 const REG_SZ: u32 = 1;
 const REG_DWORD: u32 = 4;
@@ -144,10 +145,7 @@ pub fn synthetic_software_hive() -> Vec<u8> {
 
 fn empty_hive(root_name: &str) -> Vec<u8> {
     let mut data = vec![0u8; 0x8000];
-    data[0..4].copy_from_slice(b"regf");
-    data[0x24..0x28].copy_from_slice(&0x20u32.to_le_bytes());
-    data[0x1000..0x1004].copy_from_slice(b"hbin");
-    data[0x1008..0x100c].copy_from_slice(&0x7000u32.to_le_bytes());
+    cells::initialize(&mut data, 0x20);
     write_nk(&mut data, 0x20, root_name, &[], &[]);
     data
 }
@@ -157,7 +155,9 @@ fn write_nk(data: &mut [u8], offset: u32, name: &str, subkeys: &[(&str, u32)], v
     let name_bytes = name.as_bytes();
     let subkey_list_offset = 0x2000 + offset;
     let value_list_offset = 0x4000 + offset;
-    data[abs..abs + 4].copy_from_slice(&(-256i32).to_le_bytes());
+    let parent = data[abs + 0x14..abs + 0x18].to_vec();
+    cells::allocate(data, offset, 0x50 + name_bytes.len());
+    data[abs + 0x14..abs + 0x18].copy_from_slice(&parent);
     data[abs + 4..abs + 6].copy_from_slice(b"nk");
     data[abs + 6..abs + 8].copy_from_slice(&0x20u16.to_le_bytes());
     data[abs + 0x18..abs + 0x1c].copy_from_slice(&(subkeys.len() as u32).to_le_bytes());
@@ -183,11 +183,14 @@ fn write_nk(data: &mut [u8], offset: u32, name: &str, subkeys: &[(&str, u32)], v
 
     if !subkeys.is_empty() {
         write_lf(data, subkey_list_offset, subkeys);
+        for (_, child) in subkeys {
+            let at = BASE_BLOCK_SIZE + *child as usize + 0x14;
+            data[at..at + 4].copy_from_slice(&offset.to_le_bytes());
+        }
     }
     if !values.is_empty() {
         let list_abs = BASE_BLOCK_SIZE + value_list_offset as usize;
-        data[list_abs..list_abs + 4]
-            .copy_from_slice(&(-((values.len() as i32 * 4) + 4)).to_le_bytes());
+        cells::allocate(data, value_list_offset, 4 + values.len() * 4);
         for (index, value_offset) in values.iter().enumerate() {
             let entry = list_abs + 4 + index * 4;
             data[entry..entry + 4].copy_from_slice(&value_offset.to_le_bytes());
@@ -197,7 +200,7 @@ fn write_nk(data: &mut [u8], offset: u32, name: &str, subkeys: &[(&str, u32)], v
 
 fn write_lf(data: &mut [u8], offset: u32, subkeys: &[(&str, u32)]) {
     let abs = BASE_BLOCK_SIZE + offset as usize;
-    data[abs..abs + 4].copy_from_slice(&(-256i32).to_le_bytes());
+    cells::allocate(data, offset, 8 + subkeys.len() * 8);
     data[abs + 4..abs + 6].copy_from_slice(b"lf");
     data[abs + 6..abs + 8].copy_from_slice(&(subkeys.len() as u16).to_le_bytes());
     for (index, (name, child_offset)) in subkeys.iter().enumerate() {
@@ -206,15 +209,15 @@ fn write_lf(data: &mut [u8], offset: u32, subkeys: &[(&str, u32)]) {
         for (idx, byte) in name.as_bytes().iter().take(4).enumerate() {
             hash[idx] = *byte;
         }
-        data[entry..entry + 4].copy_from_slice(&hash);
-        data[entry + 4..entry + 8].copy_from_slice(&child_offset.to_le_bytes());
+        data[entry..entry + 4].copy_from_slice(&child_offset.to_le_bytes());
+        data[entry + 4..entry + 8].copy_from_slice(&hash);
     }
 }
 
 fn write_string_value(data: &mut [u8], offset: u32, name: &str, value: &str, data_offset: u32) {
     let encoded: Vec<u8> = value.encode_utf16().flat_map(u16::to_le_bytes).collect();
     let data_abs = BASE_BLOCK_SIZE + data_offset as usize;
-    data[data_abs..data_abs + 4].copy_from_slice(&(-128i32).to_le_bytes());
+    cells::allocate(data, data_offset, 4 + encoded.len());
     data[data_abs + 4..data_abs + 4 + encoded.len()].copy_from_slice(&encoded);
     write_vk(
         data,
@@ -240,7 +243,7 @@ fn write_vk(
 ) {
     let abs = BASE_BLOCK_SIZE + offset as usize;
     let name_bytes = name.as_bytes();
-    data[abs..abs + 4].copy_from_slice(&(-128i32).to_le_bytes());
+    cells::allocate(data, offset, 0x18 + name_bytes.len());
     data[abs + 4..abs + 6].copy_from_slice(b"vk");
     data[abs + 6..abs + 8].copy_from_slice(&(name_bytes.len() as u16).to_le_bytes());
     data[abs + 8..abs + 12].copy_from_slice(&data_len.to_le_bytes());

@@ -17,7 +17,7 @@ pub(super) fn type_name(code: u32) -> String {
     name.to_string()
 }
 
-pub(super) fn decode(code: u32, bytes: &[u8], offset: usize, partial: bool) -> Option<String> {
+pub(crate) fn decode(code: u32, bytes: &[u8], offset: usize, partial: bool) -> Option<String> {
     match code {
         1 | 2 | 6 | 7 if offset.is_multiple_of(2) => {
             if !bytes.len().is_multiple_of(2) && !partial {

@@ -7,7 +7,7 @@ use super::users::{build_sam_name_to_rid, extract_sam_user, recover_users_from_r
 use crate::registry::RegistryError;
 
 pub fn extract_sam_fields(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     hive_path: &str,
     boot_key: Option<[u8; 16]>,
 ) -> Result<SamInfo, RegistryError> {

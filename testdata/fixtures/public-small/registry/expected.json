@@ -3,7 +3,7 @@
     "file": "../logical/Windows/System32/config/SYSTEM",
     "description": "Tiny synthetic SYSTEM hive used by public-small logical fixture.",
     "expected": {
-      "baseline": "testing::fixtures::registry::synthetic_system_hive; canonical lookup extraction via extract_registry_candidate",
+      "baseline": "testing::builders::registry::synthetic_system_hive; shared hive extraction via extract_registry_candidate",
       "assertions": {
         "warningsCount": 0,
         "artifactCount": 3,
@@ -84,7 +84,7 @@
     "file": "../logical/Windows/System32/config/SOFTWARE",
     "description": "Tiny synthetic SOFTWARE hive used by public-small logical fixture.",
     "expected": {
-      "baseline": "testing::fixtures::registry::synthetic_software_hive; canonical lookup extraction via extract_registry_candidate",
+      "baseline": "testing::builders::registry::synthetic_software_hive; shared hive extraction via extract_registry_candidate",
       "assertions": {
         "warningsCount": 0,
         "artifactCount": 7,

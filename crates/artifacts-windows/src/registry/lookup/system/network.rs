@@ -5,7 +5,7 @@ use crate::registry::lookup::*;
 /// Reads `Services\Tcpip\Parameters\Interfaces` for each control set and
 /// enriches the entries with friendly names and MAC addresses when possible.
 pub fn extract_network_adapters_from_system_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<NetworkAdapterInfo>, String> {
     let hive = RegistryHiveReader::new(bytes)?;

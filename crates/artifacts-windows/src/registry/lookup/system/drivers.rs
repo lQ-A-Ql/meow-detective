@@ -9,7 +9,7 @@ use crate::registry::lookup::*;
 /// scanning for embedded UTF-16LE paths when the structured parser cannot make
 /// progress.
 pub fn extract_shimcache_from_system_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<Vec<ShimCacheEntry>, String> {
     let hive = RegistryHiveReader::new(bytes)?;

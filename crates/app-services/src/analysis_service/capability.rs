@@ -8,7 +8,7 @@ pub(crate) const PLUGIN_CAPABILITY_KEY: &str = "PluginArtifacts";
 const ANDROID_DEVICE_KEY: &str = "AndroidDevice";
 const ANDROID_PACKAGES_KEY: &str = "AndroidPackages";
 const RETIRED_MACOS_KEY: &str = "MacArtifacts";
-pub(crate) const REGISTRY_EXTRACTOR_VERSION: &str = "1.3.4";
+pub(crate) const REGISTRY_EXTRACTOR_VERSION: &str = "1.3.5";
 
 pub(crate) fn producer_version(producer: &str) -> &'static str {
     if producer.starts_with("registry.") {

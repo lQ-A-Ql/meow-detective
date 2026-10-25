@@ -4,7 +4,7 @@ use super::super::{
 use crate::registry::RegistryError;
 
 pub fn extract_appcompat_layers_from_software_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     hive_path: &str,
 ) -> Result<Vec<AppCompatLayerEntry>, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;

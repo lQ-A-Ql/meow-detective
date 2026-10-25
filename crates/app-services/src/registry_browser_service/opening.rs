@@ -63,7 +63,7 @@ pub fn open_hive(
         .registry_log_companions(&global.data_source_id, &entry.path)
         .map_err(|_| RegistryBrowserError::SourceUnavailable)?;
     let has_logs = !companions.is_empty();
-    let (bytes, recovery, provenance) = load_view(
+    let (hive, recovery) = load_view(
         &mut state,
         &mut context,
         &entry,
@@ -71,7 +71,6 @@ pub fn open_hive(
         &request.view,
         companions,
     )?;
-    let hive = HiveSnapshot::open_with_provenance(Arc::new(bytes), provenance)?;
     if ctx.revision(&global.data_source_id)? != revision {
         return Err(RegistryBrowserError::ExpiredSession);
     }
@@ -97,11 +96,7 @@ pub fn open_hive(
     }
     Ok(result)
 }
-type HiveViewLoad = (
-    Vec<u8>,
-    Option<RegistryRecoveryDto>,
-    Vec<artifacts_windows::registry::browser::ProvenanceSpan>,
-);
+type HiveViewLoad = (HiveSnapshot, Option<RegistryRecoveryDto>);
 
 fn load_view(
     state: &mut super::registry::RegistryState,
@@ -115,12 +110,12 @@ fn load_view(
         RegistryHiveViewDto::Base => {
             let bytes = read_snapshot(context, &entry.id, size, size)?;
             state.reads += 1;
-            Ok((bytes, None, Vec::new()))
+            Ok((HiveSnapshot::open(Arc::new(bytes))?, None))
         }
         RegistryHiveViewDto::Recovered => {
-            let (bytes, recovery, provenance) =
+            let (hive, recovery) =
                 super::recovered_view::load(state, context, entry, size, companions)?;
-            Ok((bytes, Some(recovery), provenance))
+            Ok((hive, Some(recovery)))
         }
     }
 }

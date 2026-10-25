@@ -85,7 +85,6 @@ fn empty_hive_is_nonfatal_and_warns() {
 fn short_v_record_is_reported_without_panic() {
     let mut data = synthetic_sam_hive();
     let value_absolute = 0x1000 + 0x5000;
-    data[value_absolute..value_absolute + 4].copy_from_slice(&(-8i32).to_le_bytes());
     data[value_absolute + 4..value_absolute + 8].fill(0);
     let value_record_absolute = 0x1000 + 0x1140;
     data[value_record_absolute + 8..value_record_absolute + 12]
@@ -105,8 +104,10 @@ fn short_v_record_is_reported_without_panic() {
 
 #[test]
 fn corrupt_txlog_is_rejected() {
+    let mut data = synthetic_sam_hive();
+    data[4..8].copy_from_slice(&2u32.to_le_bytes());
     assert!(extract_sam_fields_with_txlog(
-        &synthetic_sam_hive(),
+        &data,
         "Windows/System32/config/SAM",
         None,
         Some(b"bad"),

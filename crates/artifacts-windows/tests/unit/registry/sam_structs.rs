@@ -156,88 +156,30 @@ fn write_u32(data: &mut [u8], offset: usize, value: u32) {
 }
 
 fn write_node(data: &mut [u8], offset: u32, name: &str, subkeys: &[(&str, u32)], values: &[u32]) {
-    let absolute = BASE + offset as usize;
-    data[absolute..absolute + 4].copy_from_slice(&(-256i32).to_le_bytes());
-    data[absolute + 4..absolute + 6].copy_from_slice(b"nk");
-    write_u16(data, absolute + 6, 0x20);
-    write_u32(data, absolute + 0x18, subkeys.len() as u32);
-    write_u32(
-        data,
-        absolute + 0x20,
-        if subkeys.is_empty() {
-            INVALID
-        } else {
-            0x3000 + offset
-        },
-    );
-    write_u32(data, absolute + 0x28, values.len() as u32);
-    write_u32(
-        data,
-        absolute + 0x2c,
-        if values.is_empty() {
-            INVALID
-        } else {
-            0x4000 + offset
-        },
-    );
-    write_u32(data, absolute + 0x34, INVALID);
-    write_u16(data, absolute + 0x4c, name.len() as u16);
-    data[absolute + 0x50..absolute + 0x50 + name.len()].copy_from_slice(name.as_bytes());
-    if !subkeys.is_empty() {
-        let list = BASE + 0x3000 + offset as usize;
-        data[list..list + 4].copy_from_slice(&(-256i32).to_le_bytes());
-        data[list + 4..list + 6].copy_from_slice(b"lf");
-        write_u16(data, list + 6, subkeys.len() as u16);
-        for (index, (child_name, child_offset)) in subkeys.iter().enumerate() {
-            let entry = list + 8 + index * 8;
-            let mut hash = [0u8; 4];
-            for (hash_index, byte) in child_name.as_bytes().iter().take(4).enumerate() {
-                hash[hash_index] = *byte;
-            }
-            data[entry..entry + 4].copy_from_slice(&hash);
-            write_u32(data, entry + 4, *child_offset);
-        }
-    }
-    if !values.is_empty() {
-        let list = BASE + 0x4000 + offset as usize;
-        data[list..list + 4].copy_from_slice(&(-((values.len() as i32 * 4) + 4)).to_le_bytes());
-        for (index, value) in values.iter().enumerate() {
-            write_u32(data, list + 4 + index * 4, *value);
-        }
-    }
+    crate::registry::tests::write_nk(data, offset, name, subkeys, values);
 }
 
 fn set_class(data: &mut [u8], offset: u32, class_name: &str) {
     let absolute = BASE + offset as usize;
-    let name_length =
-        u16::from_le_bytes(data[absolute + 0x4c..absolute + 0x4e].try_into().unwrap()) as usize;
     let encoded = class_name
         .encode_utf16()
         .flat_map(u16::to_le_bytes)
         .collect::<Vec<_>>();
-    data[absolute + 0x50 + name_length..absolute + 0x50 + name_length + encoded.len()]
-        .copy_from_slice(&encoded);
+    let class_offset = 0x9000 + offset;
+    testing::builders::registry::cells::allocate(data, class_offset, 4 + encoded.len());
+    let at = BASE + class_offset as usize + 4;
+    data[at..at + encoded.len()].copy_from_slice(&encoded);
+    write_u32(data, absolute + 0x34, class_offset);
     write_u16(data, absolute + 0x4e, encoded.len() as u16);
 }
 
 fn write_dword(data: &mut [u8], offset: u32, name: &str, value: u32) {
-    let absolute = BASE + offset as usize;
-    data[absolute..absolute + 4].copy_from_slice(&(-128i32).to_le_bytes());
-    data[absolute + 4..absolute + 6].copy_from_slice(b"vk");
-    write_u16(data, absolute + 6, name.len() as u16);
-    write_u32(data, absolute + 8, 0x8000_0004);
-    write_u32(data, absolute + 12, value);
-    write_u32(data, absolute + 16, 4);
-    write_u16(data, absolute + 20, 1);
-    data[absolute + 0x18..absolute + 0x18 + name.len()].copy_from_slice(name.as_bytes());
+    crate::registry::tests::write_dword_value(data, offset, name, value);
 }
 
 fn boot_key_hive(current: Option<u32>, class_name: &str) -> Vec<u8> {
     let mut data = vec![0u8; 0x10000];
-    data[0..4].copy_from_slice(b"regf");
-    data[0x24..0x28].copy_from_slice(&0x20u32.to_le_bytes());
-    data[0x1000..0x1004].copy_from_slice(b"hbin");
-    data[0x1008..0x100c].copy_from_slice(&0xf000u32.to_le_bytes());
+    testing::builders::registry::cells::initialize(&mut data, 0x20);
     write_node(
         &mut data,
         0x20,
@@ -291,7 +233,7 @@ fn boot_key_hive(current: Option<u32>, class_name: &str) -> Vec<u8> {
 fn extracts_permuted_boot_key() {
     let mut data = boot_key_hive(Some(1), "aa,aa,aa,aa");
     assert_eq!(extract_boot_key(&data), Some([0xaa; 16]));
-    data[BASE + 0x680 + 0x50 + "Skew1".len()] = b'z';
+    data[BASE + 0x9000 + 0x680 + 4] = b'z';
     assert!(extract_boot_key(&data).is_none());
 }
 

@@ -11,6 +11,13 @@ by `crates/testing/src/builders/registry.rs`:
 These hives are deliberately minimal and only contain keys required by the
 analysis system-info tests.
 
+The files contain aligned allocated/free cells and native offset-first subkey
+lists. Regenerate both files with:
+
+```powershell
+cargo run -p testing --example write_registry_fixtures
+```
+
 ## Visibility
 
 public-small — suitable for default CI.

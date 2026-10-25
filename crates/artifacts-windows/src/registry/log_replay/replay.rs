@@ -17,6 +17,7 @@ impl LogReplayPlan<'_> {
                 bytes,
                 report: self.report,
                 provenance: Vec::new(),
+                allocation_map: None,
             });
         }
         let mut expected = None;
@@ -88,12 +89,7 @@ impl LogReplayPlan<'_> {
         bytes[..512].copy_from_slice(&header);
         // Validate a compact allocated-cell map before exposing a derived view.
         let shared = Arc::new(bytes);
-        let hive = HiveSnapshot::open(shared.clone())
-            .map_err(|_| failure(LogReplayError::InvalidHive, self.report.clone()))?;
-        if hive.is_partial() {
-            return Err(failure(LogReplayError::InvalidHive, self.report));
-        }
-        drop(hive);
+        let allocation_map = Some(validated_allocation_map(&shared, &self.report)?);
         let bytes = Arc::try_unwrap(shared).expect("validation lease dropped");
         self.report.result_sequence = Some(sequence);
         self.report.state = if self.report.diagnostics.is_empty() {
@@ -105,6 +101,19 @@ impl LogReplayPlan<'_> {
             bytes,
             report: self.report,
             provenance,
+            allocation_map,
         })
     }
+}
+
+fn validated_allocation_map(
+    bytes: &Arc<Vec<u8>>,
+    report: &super::LogReplayReport,
+) -> Result<Arc<Vec<u64>>, LogReplayFailure> {
+    let hive = HiveSnapshot::open(bytes.clone())
+        .map_err(|_| failure(LogReplayError::InvalidHive, report.clone()))?;
+    if hive.is_partial() {
+        return Err(failure(LogReplayError::InvalidHive, report.clone()));
+    }
+    Ok(hive.cells.clone())
 }

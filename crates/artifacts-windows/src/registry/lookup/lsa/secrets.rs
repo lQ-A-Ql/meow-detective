@@ -34,7 +34,7 @@ impl LsaDecryptedSecrets {
 /// Derive the LSA key and decrypt all current `Policy\Secrets\*` values from
 /// an offline SECURITY hive. Only the NT6 (Vista+) format is supported.
 pub fn decrypt_lsa_secrets(
-    security_hive: &[u8],
+    security_hive: &(impl crate::registry::RegistryHiveSource + ?Sized),
     boot_key: &[u8; 16],
 ) -> Result<LsaDecryptedSecrets, RegistryError> {
     let hive = RegistryHiveReader::new(security_hive)?;

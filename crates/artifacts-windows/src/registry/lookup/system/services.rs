@@ -3,7 +3,7 @@ use crate::registry::lookup::*;
 
 /// Extract all services and drivers from `SYSTEM\<ControlSet>\Services`.
 pub fn extract_services_from_system_hive(
-    bytes: &[u8],
+    bytes: &(impl crate::registry::RegistryHiveSource + ?Sized),
     _hive_path: &str,
 ) -> Result<SystemServiceInfo, String> {
     let hive = RegistryHiveReader::new(bytes)?;

@@ -25,9 +25,11 @@ pub struct BrowserKey {
     pub filetime: Option<u64>,
     pub subkey_count: u32,
     pub value_count: u32,
-    pub(super) subkeys: u32,
-    pub(super) values: u32,
-    pub(super) parent: u32,
+    pub(crate) subkeys: u32,
+    pub(crate) values: u32,
+    pub(crate) parent: u32,
+    pub(crate) class_data: u32,
+    pub(crate) class_length: u16,
     pub overlay_source: BrowserOverlaySource,
 }
 
@@ -41,8 +43,8 @@ pub struct BrowserValue {
     pub data_error: Option<BrowserError>,
     pub overlay_source: BrowserOverlaySource,
     pub data_overlay_source: BrowserOverlaySource,
-    pub(super) inline: bool,
-    pub(super) data: u32,
+    pub(crate) inline: bool,
+    pub(crate) data: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,14 +102,14 @@ pub struct BrowserSearchPage {
 /// reference must identify an allocated cell start, never bytes within another.
 #[derive(Debug, Clone)]
 pub struct HiveSnapshot {
-    pub(super) bytes: Arc<Vec<u8>>,
-    pub(super) cells: Vec<u64>,
-    pub(super) root: u32,
-    pub(super) end: usize,
-    pub(super) minor: u32,
-    pub(super) partial: bool,
-    pub(super) dirty: bool,
-    pub(super) provenance: Vec<ProvenanceSpan>,
+    pub(crate) bytes: Arc<Vec<u8>>,
+    pub(crate) cells: Arc<Vec<u64>>,
+    pub(crate) root: u32,
+    pub(crate) end: usize,
+    pub(crate) minor: u32,
+    pub(crate) partial: bool,
+    pub(crate) dirty: bool,
+    pub(crate) provenance: Vec<ProvenanceSpan>,
 }
 
 #[derive(Debug, Clone, Copy)]

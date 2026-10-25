@@ -50,13 +50,27 @@ impl HiveSnapshot {
     }
 
     pub fn value(&self, offset: u32) -> Result<BrowserValue, BrowserError> {
+        let mut value = self.value_metadata(offset)?;
+        match self.value_range(&value, 0, 256) {
+            Ok(range) => {
+                value.data_overlay_source = range.overlay_source;
+                value.preview = range
+                    .decoded
+                    .unwrap_or_else(|| hex::encode(&range.bytes[..range.bytes.len().min(32)]));
+            }
+            Err(error) => value.data_error = Some(error),
+        }
+        Ok(value)
+    }
+
+    pub(crate) fn value_metadata(&self, offset: u32) -> Result<BrowserValue, BrowserError> {
         let cell = self.cell(offset)?;
         if cell.len() < 20 || cell.get(..2) != Some(b"vk") {
             return Err(BrowserError::Corrupt);
         }
         let length = u16_at(cell, 2)? as usize;
         let raw = u32_at(cell, 4)?;
-        let mut value = BrowserValue {
+        Ok(BrowserValue {
             offset,
             name: name(
                 cell.get(20..20 + length).ok_or(BrowserError::Corrupt)?,
@@ -70,17 +84,23 @@ impl HiveSnapshot {
             data_error: None,
             overlay_source: self.overlay_for_cell(offset, 20 + length),
             data_overlay_source: self.overlay_for_cell(offset, 20 + length),
-        };
-        match self.value_range(&value, 0, 256) {
-            Ok(range) => {
-                value.data_overlay_source = range.overlay_source;
-                value.preview = range
-                    .decoded
-                    .unwrap_or_else(|| hex::encode(&range.bytes[..range.bytes.len().min(32)]));
-            }
-            Err(error) => value.data_error = Some(error),
+        })
+    }
+
+    pub(crate) fn value_offsets(&self, key: &BrowserKey) -> Result<Vec<u32>, BrowserError> {
+        if key.value_count == 0 {
+            return Ok(Vec::new());
         }
-        Ok(value)
+        if key.value_count > 100_000 {
+            return Err(BrowserError::Limit);
+        }
+        let list = self.cell(key.values)?;
+        if list.len() / 4 < key.value_count as usize {
+            return Err(BrowserError::Corrupt);
+        }
+        (0..key.value_count as usize)
+            .map(|index| u32_at(list, index * 4))
+            .collect()
     }
 
     pub fn value_type_name(code: u32) -> String {
