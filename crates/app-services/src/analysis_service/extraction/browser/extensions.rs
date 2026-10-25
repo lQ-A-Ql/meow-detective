@@ -12,7 +12,7 @@ pub(super) fn extract_firefox_extensions(
     bytes: &[u8],
     profile: &str,
 ) -> Result<ExtractionOutcome, AnalysisServiceError> {
-    let extensions = parse_firefox_extensions(bytes).map_err(AnalysisServiceError::Extraction)?;
+    let extensions = parse_firefox_extensions(bytes)?;
     let mut outcome = ExtractionOutcome::default();
     for extension in extensions {
         outcome

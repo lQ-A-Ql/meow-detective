@@ -41,6 +41,7 @@ search.workspace = true
 artifacts-core.workspace = true
 artifacts-android.workspace = true
 artifacts-windows.workspace = true
+artifacts-browser.workspace = true
 artifacts-linux.workspace = true
 flate2.workspace = true
 kamadak-exif.workspace = true

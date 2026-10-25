@@ -16,13 +16,22 @@ pub(super) fn extract_browser_cookies(
     profile: &str,
     decryptor: Option<&artifacts_windows::dpapi::ChromiumDecryptor>,
 ) -> Result<ExtractionOutcome, AnalysisServiceError> {
-    let mut outcome = ExtractionOutcome::default();
     let cookies: Vec<BrowserCookie> = if browser == "Firefox" {
-        parse_firefox_cookies(bytes).unwrap_or_default()
+        parse_firefox_cookies(bytes)?
     } else {
         parse_chrome_cookies_with_decryptor(bytes, browser, Some(profile), decryptor)
-            .map_err(AnalysisServiceError::Extraction)?
+            .map_err(AnalysisServiceError::from)?
     };
+    Ok(project_cookies(candidate, browser, profile, cookies))
+}
+
+fn project_cookies(
+    candidate: &EvidenceCandidate,
+    browser: &str,
+    profile: &str,
+    cookies: Vec<BrowserCookie>,
+) -> ExtractionOutcome {
+    let mut outcome = ExtractionOutcome::default();
     for cookie in cookies {
         let mut attrs = browser_attrs(candidate, browser, profile);
         attrs.insert("domain".to_string(), Value::String(cookie.domain.clone()));
@@ -57,7 +66,16 @@ pub(super) fn extract_browser_cookies(
             attrs,
         ));
     }
-    Ok(outcome)
+    outcome
+}
+
+pub(super) fn project_cookie(
+    candidate: &EvidenceCandidate,
+    browser: &str,
+    profile: &str,
+    cookie: BrowserCookie,
+) -> ExtractionOutcome {
+    project_cookies(candidate, browser, profile, vec![cookie])
 }
 
 pub(super) fn extract_browser_passwords(
@@ -67,13 +85,22 @@ pub(super) fn extract_browser_passwords(
     profile: &str,
     decryptor: Option<&artifacts_windows::dpapi::ChromiumDecryptor>,
 ) -> Result<ExtractionOutcome, AnalysisServiceError> {
-    let mut outcome = ExtractionOutcome::default();
     let passwords: Vec<BrowserPassword> = if browser == "Firefox" {
-        parse_firefox_passwords(bytes).unwrap_or_default()
+        parse_firefox_passwords(bytes)?
     } else {
         parse_chrome_passwords_with_decryptor(bytes, browser, Some(profile), decryptor)
-            .map_err(AnalysisServiceError::Extraction)?
+            .map_err(AnalysisServiceError::from)?
     };
+    Ok(project_passwords(candidate, browser, profile, passwords))
+}
+
+fn project_passwords(
+    candidate: &EvidenceCandidate,
+    browser: &str,
+    profile: &str,
+    passwords: Vec<BrowserPassword>,
+) -> ExtractionOutcome {
+    let mut outcome = ExtractionOutcome::default();
     for password in passwords {
         let mut attrs = browser_attrs(candidate, browser, profile);
         attrs.insert("url".to_string(), Value::String(password.url.clone()));
@@ -116,7 +143,16 @@ pub(super) fn extract_browser_passwords(
             attrs,
         ));
     }
-    Ok(outcome)
+    outcome
+}
+
+pub(super) fn project_password(
+    candidate: &EvidenceCandidate,
+    browser: &str,
+    profile: &str,
+    password: BrowserPassword,
+) -> ExtractionOutcome {
+    project_passwords(candidate, browser, profile, vec![password])
 }
 
 pub(super) fn extract_browser_sessions(
@@ -127,9 +163,9 @@ pub(super) fn extract_browser_sessions(
 ) -> Result<ExtractionOutcome, AnalysisServiceError> {
     let mut outcome = ExtractionOutcome::default();
     let sessions: Vec<BrowserSessionTab> = if browser == "Firefox" {
-        parse_firefox_session(bytes).unwrap_or_default()
+        parse_firefox_session(bytes)?
     } else {
-        parse_chrome_session(bytes).unwrap_or_default()
+        parse_chrome_session(bytes)?
     };
     for session in sessions {
         let mut attrs = browser_attrs(candidate, browser, profile);

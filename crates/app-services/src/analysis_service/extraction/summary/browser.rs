@@ -117,6 +117,11 @@ fn map_visits(rows: Vec<AnalysisArtifactRow>) -> Vec<BrowserVisitDto> {
             title: string_attr(&row.attrs, "title"),
             visit_time: optional_string_attr(&row.attrs, "visitTime"),
             visit_count: u64_attr(&row.attrs, "visitCount"),
+            record_kind: optional_string_attr(&row.attrs, "historyRecordKind"),
+            row_id: optional_string_attr(&row.attrs, "rowId"),
+            visit_id: optional_string_attr(&row.attrs, "visitId"),
+            raw_timestamp: optional_string_attr(&row.attrs, "rawTimestamp"),
+            raw_time_basis: optional_string_attr(&row.attrs, "rawTimeBasis"),
         })
         .collect()
 }

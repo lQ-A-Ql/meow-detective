@@ -385,6 +385,11 @@
     }
   },
   "browser": {
+    "recordKind": "记录类型",
+    "recordKinds": {
+      "visit": "访问事件",
+      "urlSummary": "网址汇总"
+    },
     "title": "浏览器记录",
     "unavailable": "浏览器记录暂不可用。",
     "manualPasswordHint": "离线 DPAPI 密钥不可用时，可输入 Windows 账户密码重试一次。",
@@ -394,7 +399,7 @@
     "manualPasswordPlaceholder": "Windows 账户密码",
     "manualPasswordSubmit": "解密并重试",
     "stats": {
-      "visits": "访问记录",
+      "visits": "浏览历史",
       "downloads": "下载记录",
       "cookies": "Cookie",
       "sessions": "会话标签",
@@ -403,7 +408,7 @@
       "browsers": "浏览器"
     },
     "sections": {
-      "visits": "访问历史",
+      "visits": "浏览历史",
       "downloads": "下载记录",
       "cookies": "Cookies",
       "sessions": "会话 / 标签页",

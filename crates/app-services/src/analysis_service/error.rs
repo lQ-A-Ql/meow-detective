@@ -30,6 +30,18 @@ impl From<rusqlite::Error> for AnalysisServiceError {
     }
 }
 
+impl From<artifacts_browser::BrowserError> for AnalysisServiceError {
+    fn from(error: artifacts_browser::BrowserError) -> Self {
+        match error {
+            artifacts_browser::BrowserError::Cancelled => Self::Cancelled,
+            artifacts_browser::BrowserError::Io(error) => Self::Io(error),
+            error @ (artifacts_browser::BrowserError::Unsupported(_)
+            | artifacts_browser::BrowserError::InputLimit) => Self::Unsupported(error.to_string()),
+            error => Self::Extraction(error.to_string()),
+        }
+    }
+}
+
 impl From<crate::source_db::ReadySourceError> for AnalysisServiceError {
     fn from(error: crate::source_db::ReadySourceError) -> Self {
         match error {

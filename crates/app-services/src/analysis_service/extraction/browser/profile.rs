@@ -1,5 +1,3 @@
-use chrono::{DateTime, TimeZone, Utc};
-
 pub(super) fn browser_profile_from_path(normalized: &str) -> (String, String) {
     let browser = if normalized.contains("/microsoft/edge/user data/") {
         "Edge"
@@ -44,21 +42,4 @@ fn capitalise_words(input: &str) -> String {
         }
     }
     result
-}
-
-pub(super) fn chromium_time_to_dt(value: i64) -> Option<DateTime<Utc>> {
-    if value <= 0 {
-        return None;
-    }
-    let seconds = value / 1_000_000 - 11_644_473_600;
-    let nanos = ((value % 1_000_000) * 1_000) as u32;
-    Utc.timestamp_opt(seconds, nanos).single()
-}
-
-pub(super) fn unix_microseconds_to_dt(value: i64) -> Option<DateTime<Utc>> {
-    if value <= 0 {
-        return None;
-    }
-    Utc.timestamp_opt(value / 1_000_000, ((value % 1_000_000) * 1_000) as u32)
-        .single()
 }

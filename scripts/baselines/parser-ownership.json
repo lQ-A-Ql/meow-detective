@@ -1,0 +1,62 @@
+{
+  "formats": [
+    {
+      "id": "D01", "name": "Registry page logs",
+      "owners": ["crates/artifacts-windows/src/registry/log_replay/mod.rs", "crates/artifacts-windows/src/registry/snapshot.rs"],
+      "retired": ["crates/artifacts-windows/src/registry/txlog.rs", "crates/artifacts-windows/src/registry/txlog/parser.rs", "crates/artifacts-windows/src/registry/lookup/txlog_util.rs"]
+    },
+    {
+      "id": "D02", "name": "Bolt database",
+      "owners": ["crates/containers-bolt/src/read.rs", "crates/containers-bolt/src/walk.rs"],
+      "references": [
+        {"path":"crates/app-services/src/cluster_service/etcd_bolt.rs","marker":"crate::bolt_reader_service"},
+        {"path":"crates/app-services/src/analysis_service/extraction/containerd_images.rs","marker":"bolt_reader_service"}
+      ]
+    },
+    {
+      "id": "D03", "name": "NTFS record and runs",
+      "owners": ["crates/fs-ntfs/src/data_run_decoder.rs", "crates/fs-ntfs/src/data_runs.rs", "crates/fs-ntfs/src/utils.rs", "crates/fs-ntfs/src/record.rs"],
+      "retired": ["crates/app-services/src/parallel_enum/ntfs/run_numbers.rs"],
+      "references": [
+        {"path":"crates/app-services/src/file_service/mft/stream.rs","marker":"fs_ntfs"},
+        {"path":"crates/app-services/src/parallel_enum/ntfs/mft_scan.rs","marker":"fs_ntfs"}
+      ]
+    },
+    {
+      "id": "D04", "name": "Registry hive",
+      "owners": ["crates/artifacts-windows/src/registry/reader/mod.rs", "crates/artifacts-windows/src/registry/reader/keys.rs", "crates/artifacts-windows/src/registry/reader/values.rs"],
+      "retired": ["crates/artifacts-windows/src/registry/browser/cells.rs", "crates/artifacts-windows/src/registry/browser/keys.rs", "crates/artifacts-windows/src/registry/browser/values.rs"]
+    },
+    {
+      "id": "D05", "name": "Browser database",
+      "owners": ["crates/artifacts-browser/src/history/schema.rs", "crates/artifacts-browser/src/history/visit.rs", "crates/artifacts-browser/src/sqlite.rs"],
+      "retired": ["crates/artifacts-windows/src/browser/chromium/history.rs", "crates/artifacts-windows/src/browser/firefox/history.rs", "crates/artifacts-windows/src/browser/chromium/sqlite.rs", "crates/artifacts-windows/src/browser/firefox/sqlite.rs"],
+      "references": [
+        {"path":"crates/app-services/src/analysis_service/extraction/browser/history.rs","marker":"artifacts_browser"},
+        {"path":"crates/app-services/src/analysis_service/extraction/browser/chromium.rs","marker":"artifacts_browser"}
+      ]
+    },
+    {
+      "id": "D06", "name": "RFC 5322 message",
+      "owners": ["crates/containers-pst/src/message.rs", "crates/containers-pst/src/message/fields.rs", "crates/containers-pst/src/message/parts.rs"],
+      "retired": ["crates/containers-pst/src/mbox/mime.rs", "crates/containers-pst/src/mbox/header.rs", "crates/containers-pst/src/mbox/framing.rs"],
+      "references": [{"path":"crates/app-services/src/analysis_service/extraction/email/eml/parser.rs","marker":"containers_pst"}]
+    },
+    {
+      "id": "D07", "name": "OS release",
+      "owners": ["crates/artifacts-linux/src/os_release.rs"],
+      "references": [
+        {"path":"crates/app-services/src/mount_service/emulation_linux.rs","marker":"linux_identity_service"},
+        {"path":"crates/app-services/src/cluster_service/linux_evidence_facts.rs","marker":"linux_identity_service"}
+      ]
+    },
+    {
+      "id": "D08", "name": "SST internal key",
+      "owners": ["crates/rocksdb-wire/src/sst/internal_key.rs"],
+      "references": [
+        {"path":"crates/rocksdb-wire/src/sst/data.rs","marker":"super::internal_key::decode_internal_key"},
+        {"path":"crates/rocksdb-wire/src/sst/visitor.rs","marker":"internal_key"}
+      ]
+    }
+  ]
+}

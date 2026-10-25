@@ -197,6 +197,7 @@ name = "app-services"
 version = "0.1.0"
 dependencies = [
  "artifacts-android",
+ "artifacts-browser",
  "artifacts-core",
  "artifacts-linux",
  "artifacts-windows",
@@ -290,6 +291,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "artifacts-browser"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "lz4_flex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
 name = "artifacts-core"
 version = "0.1.0"
 dependencies = [
@@ -326,6 +341,7 @@ dependencies = [
  "aes 0.8.4",
  "aes-gcm",
  "anyhow",
+ "artifacts-browser",
  "artifacts-core",
  "base64 0.22.1",
  "binread",

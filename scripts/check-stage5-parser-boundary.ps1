@@ -67,10 +67,17 @@ $facadeGroups = @(
     )
   },
   @{
+    Capability = 'Chromium artifact parser'
+    Candidates = @(
+      'crates/artifacts-browser/src/chromium.rs',
+      'crates/artifacts-browser/src/chromium/mod.rs'
+    )
+  },
+  @{
     Capability = 'Firefox artifact parser'
     Candidates = @(
-      'crates/artifacts-windows/src/browser/firefox.rs',
-      'crates/artifacts-windows/src/browser/firefox/mod.rs'
+      'crates/artifacts-browser/src/firefox.rs',
+      'crates/artifacts-browser/src/firefox/mod.rs'
     )
   },
   @{
@@ -124,8 +131,10 @@ $crateRoots = @(
   'crates/fs-xfs/src',
   'crates/fs-lvm/src',
   'crates/artifacts-windows/src',
+  'crates/artifacts-browser/src',
   'crates/artifacts-linux/src',
-  'crates/containers-pst/src'
+  'crates/containers-pst/src',
+  'crates/containers-bolt/src'
 )
 
 $allSources = New-Object System.Collections.Generic.List[string]

@@ -50,6 +50,7 @@ function browserOrder(a: string, b: string): number {
 // from re-rendering whenever panel state changes above the tables.
 function browserColumns(t: ReturnType<typeof useTranslation>['t']) {
 const visitColumns: DenseColumn<BrowserVisit>[] = [
+  { key: 'recordKind', title: t('browser.recordKind'), className: 'w-[110px]', render: (row) => row.recordKind ? t('browser.recordKinds.' + row.recordKind) : t('common.unknown') },
   { key: 'visitTime', title: t('browser.columns.time'), className: 'w-[170px]', render: (row) => row.visitTime ?? '-' },
   { key: 'profile', title: t('browser.columns.profile'), className: 'w-[130px]', render: (row) => row.profile || '-' },
   { key: 'title', title: t('browser.columns.title'), className: 'min-w-[220px]', render: (row) => row.title || '-' },

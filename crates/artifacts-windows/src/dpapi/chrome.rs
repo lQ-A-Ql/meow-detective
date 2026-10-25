@@ -21,16 +21,7 @@ const GCM_TAG_LEN: usize = 16;
 const COOKIE_HOST_DIGEST_LEN: usize = 32;
 const MAX_PREVIEW_CHARS: usize = 512;
 
-/// Decryption state exposed to artifact projection without exposing key bytes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BrowserDecryption {
-    Plaintext,
-    Decrypted,
-    Encrypted,
-    Unsupported,
-    Failed,
-    Unavailable,
-}
+pub(crate) use artifacts_browser::BrowserDecryptionStatus as BrowserDecryption;
 
 /// Identifies which Chromium encoding was observed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

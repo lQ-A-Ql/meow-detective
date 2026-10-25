@@ -27,12 +27,13 @@ pub struct BrowserExtension {
 }
 
 /// Parse a Firefox `extensions.json` registry with a strict input bound.
-pub fn parse_firefox_extensions(data: &[u8]) -> Result<Vec<BrowserExtension>, String> {
+pub fn parse_firefox_extensions(data: &[u8]) -> crate::Result<Vec<BrowserExtension>> {
     if data.len() > MAX_EXTENSIONS_JSON_BYTES {
         return Err(format!(
             "firefox extensions.json exceeds {} byte limit",
             MAX_EXTENSIONS_JSON_BYTES
-        ));
+        )
+        .into());
     }
     let root: Value = serde_json::from_slice(data)
         .map_err(|error| format!("parse firefox extensions.json: {error}"))?;

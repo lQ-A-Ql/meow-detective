@@ -7,6 +7,8 @@ use crate::analysis_service::candidates::{
 mod chromium;
 mod extensions;
 mod firefox;
+mod history;
+pub(super) mod persistence;
 mod profile;
 mod records;
 mod sqlite;
@@ -16,7 +18,7 @@ use extensions::extract_firefox_extensions;
 use firefox::extract_firefox_history;
 use profile::browser_profile_from_path;
 use records::{extract_browser_cookies, extract_browser_passwords, extract_browser_sessions};
-use sqlite::with_temp_sqlite;
+use sqlite::with_database;
 
 pub(super) fn extract_browser_candidate(
     candidate: &EvidenceCandidate,
@@ -49,11 +51,11 @@ pub(super) fn extract_browser_candidate(
     }
     let decryptor = browser_preload.decryptor_for(candidate);
     let parse_result = if normalized.ends_with("/places.sqlite") {
-        with_temp_sqlite(bytes, "browser-history", |db| {
+        with_database(bytes, "browser-history", |db| {
             extract_firefox_history(db, candidate, &browser, &profile)
         })
     } else if normalized.ends_with("/history") || normalized.ends_with("/archived history") {
-        with_temp_sqlite(bytes, "browser-history", |db| {
+        with_database(bytes, "browser-history", |db| {
             extract_chromium_history(db, candidate, &browser, &profile)
         })
     } else if normalized.ends_with("/cookies") || normalized.ends_with("/cookies.sqlite") {
@@ -71,6 +73,16 @@ pub(super) fn extract_browser_candidate(
             ..ExtractionOutcome::default()
         },
     }
+}
+
+pub(super) fn is_sqlite_path(path: &str) -> bool {
+    let path = normalize_evidence_path(path);
+    path.ends_with("/history")
+        || path.ends_with("/archived history")
+        || path.ends_with("/places.sqlite")
+        || path.ends_with("/cookies")
+        || path.ends_with("/cookies.sqlite")
+        || path.ends_with("/login data")
 }
 
 #[cfg(test)]

@@ -1,10 +1,10 @@
 use super::sqlite::{open_sqlite_from_bytes, table_exists};
 use super::time::{firefox_time_to_dt, parse_iso_or_millis, unix_millis_to_dt};
-use crate::browser::chromium::BrowserDownload;
+use crate::chromium::BrowserDownload;
 use rusqlite::params;
 use serde_json::Value;
 
-pub fn parse_firefox_downloads(data: &[u8]) -> Result<Vec<BrowserDownload>, String> {
+pub fn parse_firefox_downloads(data: &[u8]) -> crate::Result<Vec<BrowserDownload>> {
     if data.len() >= 16 && &data[..16] == b"SQLite format 3\0" {
         parse_from_sqlite(data)
     } else {
@@ -12,9 +12,9 @@ pub fn parse_firefox_downloads(data: &[u8]) -> Result<Vec<BrowserDownload>, Stri
     }
 }
 
-fn parse_from_sqlite(data: &[u8]) -> Result<Vec<BrowserDownload>, String> {
-    let (conn, _tmp) = open_sqlite_from_bytes(data)?;
-    if !table_exists(&conn, "moz_annos") || !table_exists(&conn, "moz_anno_attributes") {
+fn parse_from_sqlite(data: &[u8]) -> crate::Result<Vec<BrowserDownload>> {
+    let conn = open_sqlite_from_bytes(data)?;
+    if !table_exists(&conn, "moz_annos")? || !table_exists(&conn, "moz_anno_attributes")? {
         return Ok(Vec::new());
     }
 
@@ -56,15 +56,12 @@ fn parse_from_sqlite(data: &[u8]) -> Result<Vec<BrowserDownload>, String> {
 
     let mut results = Vec::new();
     for row in rows {
-        match row {
-            Ok(download) => results.push(download),
-            Err(err) => tracing::warn!("skipping firefox download row: {}", err),
-        }
+        results.push(row?);
     }
     Ok(results)
 }
 
-fn parse_from_json(data: &[u8]) -> Result<Vec<BrowserDownload>, String> {
+fn parse_from_json(data: &[u8]) -> crate::Result<Vec<BrowserDownload>> {
     let text =
         std::str::from_utf8(data).map_err(|e| format!("downloads.json is not UTF-8: {}", e))?;
     let root: Value =

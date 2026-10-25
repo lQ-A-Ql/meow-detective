@@ -12,6 +12,7 @@ pub(crate) const REGISTRY_EXTRACTOR_VERSION: &str = "1.3.5";
 pub(crate) const CONTAINERD_EXTRACTOR_VERSION: &str = "1.3.6";
 pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "1.3.7";
 pub(crate) const EMAIL_EXTRACTOR_VERSION: &str = "1.3.8";
+pub(crate) const BROWSER_EXTRACTOR_VERSION: &str = "1.3.9";
 
 pub(crate) fn producer_version(producer: &str) -> &'static str {
     if producer.starts_with("registry.") {
@@ -25,6 +26,8 @@ pub(crate) fn producer_version(producer: &str) -> &'static str {
         "email.eml_emlx" | "email.mbox" | "email.foxmail_box"
     ) {
         EMAIL_EXTRACTOR_VERSION
+    } else if producer.starts_with("browser.") {
+        BROWSER_EXTRACTOR_VERSION
     } else {
         super::ANALYSIS_EXTRACTOR_VERSION
     }
@@ -35,6 +38,7 @@ pub(crate) const CHECKPOINT_VERSIONS: &[&str] = &[
     REGISTRY_EXTRACTOR_VERSION,
     LINUX_SYSTEM_CONFIG_VERSION,
     EMAIL_EXTRACTOR_VERSION,
+    BROWSER_EXTRACTOR_VERSION,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +64,7 @@ impl AnalysisCapability {
             "Registry" => REGISTRY_EXTRACTOR_VERSION,
             "LinuxSystemConfig" => LINUX_SYSTEM_CONFIG_VERSION,
             "Email" => EMAIL_EXTRACTOR_VERSION,
+            "BrowserHistory" => BROWSER_EXTRACTOR_VERSION,
             _ => super::ANALYSIS_EXTRACTOR_VERSION,
         }
     }

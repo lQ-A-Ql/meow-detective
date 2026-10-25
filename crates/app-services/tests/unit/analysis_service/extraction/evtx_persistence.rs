@@ -1,5 +1,6 @@
 use super::*;
 use domain::FileEntryId;
+use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use rusqlite::{params, Connection};
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::sync::atomic::AtomicBool;

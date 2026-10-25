@@ -1,0 +1,26 @@
+pub mod chromium;
+mod decryption;
+mod error;
+pub mod firefox;
+pub mod history;
+pub mod profile_detect;
+pub mod sqlite;
+pub use decryption::BrowserSecretDecryptor;
+pub use error::{BrowserError, Result};
+
+// Re-export all public types
+pub use chromium::{
+    BrowserCookie, BrowserDecryptionStatus, BrowserDownload, BrowserPassword, BrowserSessionTab,
+    BrowserVisit,
+};
+pub use firefox::{
+    parse_firefox_cookies, parse_firefox_downloads, parse_firefox_extensions,
+    parse_firefox_history, parse_firefox_passwords, parse_firefox_session, BrowserExtension,
+};
+pub use profile_detect::{detect_browser_profiles, BrowserProfile};
+
+// Re-export chromium parser functions
+pub use chromium::{
+    parse_chrome_cookies, parse_chrome_cookies_with_decryptor, parse_chrome_history,
+    parse_chrome_passwords, parse_chrome_passwords_with_decryptor, parse_chrome_session,
+};

@@ -1,8 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::dpapi::BrowserDecryption;
-
 /// Auditable status for a browser secret value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -28,19 +26,6 @@ impl BrowserDecryptionStatus {
     }
 }
 
-impl From<BrowserDecryption> for BrowserDecryptionStatus {
-    fn from(value: BrowserDecryption) -> Self {
-        match value {
-            BrowserDecryption::Plaintext => Self::Plaintext,
-            BrowserDecryption::Decrypted => Self::Decrypted,
-            BrowserDecryption::Encrypted => Self::Encrypted,
-            BrowserDecryption::Unsupported => Self::Unsupported,
-            BrowserDecryption::Failed => Self::Failed,
-            BrowserDecryption::Unavailable => Self::Unavailable,
-        }
-    }
-}
-
 /// A single browser history visit (navigation record).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserVisit {
@@ -50,6 +35,18 @@ pub struct BrowserVisit {
     pub visit_count: i64,
     pub browser: String,
     pub profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visit_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_time: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_basis: Option<crate::history::HistoryClock>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record_kind: Option<crate::history::HistoryKind>,
 }
 
 /// A browser download record.

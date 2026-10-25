@@ -4,9 +4,9 @@
 //! the original `analysis_service::candidates::*` API surface.
 
 mod common;
+mod companion_index;
 mod linux;
 mod plugin;
-mod registry_companions;
 mod summary;
 mod windows;
 

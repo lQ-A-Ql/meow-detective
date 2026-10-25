@@ -58,6 +58,16 @@ pub struct BrowserVisitDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visit_time: Option<String>,
     pub visit_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub record_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub row_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visit_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_timestamp: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_time_basis: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -385,6 +385,11 @@
     }
   },
   "browser": {
+    "recordKind": "Record type",
+    "recordKinds": {
+      "visit": "Visit event",
+      "urlSummary": "URL summary"
+    },
     "title": "Browser records",
     "unavailable": "Browser records unavailable.",
     "manualPasswordHint": "If offline DPAPI keys are unavailable, enter the Windows account password for a one-time retry.",
@@ -394,7 +399,7 @@
     "manualPasswordPlaceholder": "Windows account password",
     "manualPasswordSubmit": "Decrypt and retry",
     "stats": {
-      "visits": "Visits",
+      "visits": "Browsing history",
       "downloads": "Downloads",
       "cookies": "Cookies",
       "sessions": "Sessions",
@@ -403,7 +408,7 @@
       "browsers": "Browsers"
     },
     "sections": {
-      "visits": "Visit history",
+      "visits": "Browsing history",
       "downloads": "Downloads",
       "cookies": "Cookies",
       "sessions": "Sessions / tabs",

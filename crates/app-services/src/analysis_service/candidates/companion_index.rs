@@ -1,17 +1,19 @@
 use super::common::{normalize_evidence_path, EvidenceCandidate, EvidenceCompanion};
-use crate::analysis_service::error::AnalysisServiceError;
+use crate::analysis_service::AnalysisServiceError;
 use sha2::{Digest, Sha256};
 use std::collections::{hash_map::Entry, HashMap};
 
-type CompanionKey = (String, Option<usize>, String);
-
 #[derive(Default)]
-pub(super) struct RegistryCompanions(HashMap<CompanionKey, Option<EvidenceCompanion>>);
+pub(super) struct CompanionIndex(
+    HashMap<(String, Option<usize>, String), Option<EvidenceCompanion>>,
+);
 
-impl RegistryCompanions {
+impl CompanionIndex {
     pub(super) fn matches(path: &str) -> bool {
         let path = normalize_evidence_path(path);
-        path.ends_with(".log1") || path.ends_with(".log2")
+        [".log1", ".log2", "-wal", "-shm"]
+            .iter()
+            .any(|suffix| path.ends_with(suffix))
     }
 
     pub(super) fn insert(
@@ -21,7 +23,7 @@ impl RegistryCompanions {
         companion: EvidenceCompanion,
     ) {
         let key = (
-            source.into(),
+            source.to_string(),
             partition,
             normalize_evidence_path(&companion.path),
         );
@@ -39,10 +41,15 @@ impl RegistryCompanions {
         &self,
         candidate: &mut EvidenceCandidate,
     ) -> Result<(), AnalysisServiceError> {
+        let (domain, suffixes): (&[u8], &[&str]) = match candidate.category.as_str() {
+            "Registry" => (b"registry-page-log-input-v1", &[".log1", ".log2"]),
+            "BrowserHistory" => (b"browser-sqlite-input-v1", &["-wal", "-shm"]),
+            _ => return Ok(()),
+        };
         let mut identity = Sha256::new();
-        identity.update(b"registry-page-log-input-v1");
+        identity.update(domain);
         identity.update(candidate.content_identity.as_bytes());
-        for suffix in [".log1", ".log2"] {
+        for suffix in suffixes {
             let key = (
                 candidate.data_source_id.clone(),
                 candidate.partition_index,
@@ -52,7 +59,7 @@ impl RegistryCompanions {
                 continue;
             };
             let companion = companion.as_ref().ok_or_else(|| {
-                AnalysisServiceError::InvalidInput("registry companion path is ambiguous".into())
+                AnalysisServiceError::InvalidInput("analysis companion path is ambiguous".into())
             })?;
             identity.update(suffix.as_bytes());
             identity.update(companion.content_identity.as_bytes());

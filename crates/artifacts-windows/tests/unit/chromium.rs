@@ -158,8 +158,10 @@ fn parse_chrome_history_two_visits() {
     let db = make_test_history_db_two_visits();
     let visits = parse_chrome_history(&db, "Chrome", Some("Default")).expect("parse history");
     assert_eq!(visits.len(), 2);
-    assert_eq!(visits[0].url, "https://rust-lang.org");
-    assert_eq!(visits[1].url, "https://example.com");
+    assert_eq!(visits[0].url, "https://example.com");
+    assert_eq!(visits[1].url, "https://rust-lang.org");
+    assert_eq!(visits[0].visit_id, Some(1));
+    assert_eq!(visits[1].visit_id, Some(2));
     assert!(visits[0].visit_time.is_some());
     assert!(visits[1].visit_time.is_some());
     assert_eq!(visits[0].browser, "Chrome");

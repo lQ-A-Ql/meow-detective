@@ -1,9 +1,9 @@
 use super::time::unix_millis_to_dt;
-use crate::browser::chromium::BrowserSessionTab;
+use crate::chromium::BrowserSessionTab;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
-pub fn parse_firefox_session(data: &[u8]) -> Result<Vec<BrowserSessionTab>, String> {
+pub fn parse_firefox_session(data: &[u8]) -> crate::Result<Vec<BrowserSessionTab>> {
     let json_bytes = if data.len() >= 8 && &data[..8] == b"mozLz40\0" {
         decompress_mozlz4(data)?
     } else {
@@ -93,19 +93,16 @@ fn parse_session_tab_entry(
     })
 }
 
-pub(super) fn decompress_mozlz4(data: &[u8]) -> Result<Vec<u8>, String> {
+pub(super) fn decompress_mozlz4(data: &[u8]) -> crate::Result<Vec<u8>> {
     if data.len() < 12 {
-        return Err("data too short for mozLz4 header".to_string());
+        return Err("data too short for mozLz4 header".to_string().into());
     }
     if &data[..8] != b"mozLz40\0" {
-        return Err("not a mozLz4 stream".to_string());
+        return Err("not a mozLz4 stream".to_string().into());
     }
     let size = u32::from_le_bytes([data[8], data[9], data[10], data[11]]) as usize;
     if size > 512 * 1024 * 1024 {
-        return Err(format!(
-            "mozLz4 uncompressed size {} exceeds safety limit",
-            size
-        ));
+        return Err(format!("mozLz4 uncompressed size {} exceeds safety limit", size).into());
     }
     let mut decompressed = vec![0; size];
     lz4_flex::block::decompress_into(&data[12..], &mut decompressed)

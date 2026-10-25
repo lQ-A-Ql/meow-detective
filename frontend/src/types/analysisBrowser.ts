@@ -48,6 +48,11 @@ export interface BrowserVisit {
   title: string;
   visitTime?: string;
   visitCount: number;
+  recordKind?: 'visit' | 'urlSummary';
+  rowId?: string;
+  visitId?: string;
+  rawTimestamp?: string;
+  rawTimeBasis?: 'webkitMicroseconds1601' | 'unixMicroseconds';
 }
 
 export interface BrowserDownload {

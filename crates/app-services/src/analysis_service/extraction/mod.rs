@@ -4,6 +4,7 @@ pub(crate) mod browser;
 mod browser_lsa;
 mod browser_preload;
 mod candidate_order;
+mod candidate_persistence;
 mod candidate_processing;
 mod checkpoint_validation;
 mod containerd_images;

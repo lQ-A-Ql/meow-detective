@@ -1,40 +1,46 @@
-use super::sqlite::with_temp_sqlite;
+use super::sqlite::with_database;
 use super::ExtractionOutcome;
-fn temp_files(prefix: &str) -> Vec<std::path::PathBuf> {
-    let expected_prefix = format!("forensics-{prefix}-");
-    std::fs::read_dir(std::env::temp_dir())
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with(&expected_prefix) && name.ends_with(".sqlite"))
-        })
-        .collect()
+
+fn database() -> Vec<u8> {
+    let connection = rusqlite::Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE records(id INTEGER PRIMARY KEY); INSERT INTO records VALUES(1);",
+        )
+        .unwrap();
+    connection
+        .serialize(rusqlite::DatabaseName::Main)
+        .unwrap()
+        .to_vec()
 }
 
 #[test]
-fn temporary_sqlite_is_removed_after_successful_parse() {
-    let prefix = format!("browser-cleanup-success-{}", uuid::Uuid::new_v4());
-    let result = with_temp_sqlite(b"not-a-database", &prefix, |_| {
+fn browser_database_uses_real_sqlite_and_rejects_writes() {
+    let bytes = database();
+    let result = with_database(&bytes, "browser", |connection| {
+        let count: i64 =
+            connection.query_row("SELECT count(*) FROM records", [], |row| row.get(0))?;
+        assert_eq!(count, 1);
+        assert!(connection
+            .execute("INSERT INTO records VALUES(2)", [])
+            .is_err());
         Ok(ExtractionOutcome::default())
     });
-
     assert!(result.is_ok());
-    assert!(temp_files(&prefix).is_empty());
 }
 
 #[test]
-fn temporary_sqlite_is_removed_after_parse_failure() {
-    let prefix = format!("browser-cleanup-failure-{}", uuid::Uuid::new_v4());
-    let result = with_temp_sqlite(b"not-a-database", &prefix, |_| {
-        Err(crate::analysis_service::error::AnalysisServiceError::Other(
-            "expected parse failure".to_string(),
+fn browser_database_rejects_invalid_bytes_and_propagates_callback_errors() {
+    assert!(with_database(b"invalid", "browser", |_| Ok(ExtractionOutcome::default())).is_err());
+    let error = with_database(&database(), "browser", |_| {
+        Err(crate::analysis_service::AnalysisServiceError::InvalidInput(
+            "callback failure".into(),
         ))
-    });
-
-    assert!(result.is_err());
-    assert!(temp_files(&prefix).is_empty());
+    })
+    .err()
+    .unwrap();
+    assert!(matches!(
+        error,
+        crate::analysis_service::AnalysisServiceError::InvalidInput(_)
+    ));
 }

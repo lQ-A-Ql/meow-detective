@@ -28,6 +28,10 @@ pub(super) fn estimated_input_weight(item: &CandidateWorkItem) -> usize {
 }
 
 fn candidate_read_limit(candidate: &EvidenceCandidate, capability: AnalysisCapability) -> usize {
+    if capability.key == "BrowserHistory" && super::super::browser::is_sqlite_path(&candidate.path)
+    {
+        return artifacts_browser::sqlite::MAX_DATABASE_BYTES;
+    }
     if capability.read_policy == CandidateReadPolicy::LinuxPathAware
         && crate::analysis_service::extraction::containerd_images::is_metadata_path(
             &normalize_evidence_path(&candidate.path),
@@ -93,6 +97,10 @@ where
             capability,
             kind: CandidateCompletionKind::Outcome(outcome),
         }));
+    }
+    if capability.key == "BrowserHistory" && super::super::browser::is_sqlite_path(&candidate.path)
+    {
+        return super::browser_preparation::prepare(coordinator, candidate, capability, bytes);
     }
     let input = if capability.key == PLUGIN_CAPABILITY_KEY {
         let companions = match read_plugin_companions(coordinator, &candidate, capability) {
@@ -305,7 +313,7 @@ fn ready_outcome(
     })
 }
 
-fn ready_persisted(
+pub(super) fn ready_persisted(
     candidate: EvidenceCandidate,
     capability: AnalysisCapability,
     outcome: PersistedExtractionOutcome,
@@ -317,7 +325,7 @@ fn ready_persisted(
     })
 }
 
-fn ready_deferred(
+pub(super) fn ready_deferred(
     candidate: EvidenceCandidate,
     capability: AnalysisCapability,
     warning: String,

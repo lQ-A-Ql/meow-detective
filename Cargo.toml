@@ -25,6 +25,7 @@ members = [
   "crates/artifacts-core",
   "crates/artifacts-android",
   "crates/artifacts-windows",
+    "crates/artifacts-browser",
   "crates/artifacts-linux",
   "crates/reports",
   "crates/transport",
@@ -111,6 +112,7 @@ timeline = { path = "crates/timeline" }
 artifacts-core = { path = "crates/artifacts-core" }
 artifacts-android = { path = "crates/artifacts-android" }
 artifacts-windows = { path = "crates/artifacts-windows" }
+artifacts-browser = { path = "crates/artifacts-browser" }
 artifacts-linux = { path = "crates/artifacts-linux" }
 reports = { path = "crates/reports" }
 testing = { path = "crates/testing" }

@@ -1,7 +1,7 @@
 use super::sqlite::open_sqlite_from_bytes;
 use super::time::webkit_time_to_dt;
 use super::types::{BrowserDecryptionStatus, BrowserPassword};
-use crate::dpapi::ChromiumDecryptor;
+use crate::BrowserSecretDecryptor;
 use rusqlite::params;
 
 /// Parse a Chromium `Login Data` SQLite database.
@@ -12,7 +12,7 @@ pub fn parse_chrome_passwords(
     data: &[u8],
     browser: &str,
     profile: Option<&str>,
-) -> Result<Vec<BrowserPassword>, String> {
+) -> crate::Result<Vec<BrowserPassword>> {
     parse_chrome_passwords_with_decryptor(data, browser, profile, None)
 }
 
@@ -21,10 +21,18 @@ pub fn parse_chrome_passwords_with_decryptor(
     data: &[u8],
     browser: &str,
     profile: Option<&str>,
-    decryptor: Option<&ChromiumDecryptor>,
-) -> Result<Vec<BrowserPassword>, String> {
-    let (conn, _tmp) = open_sqlite_from_bytes(data)?;
+    decryptor: Option<&dyn BrowserSecretDecryptor>,
+) -> crate::Result<Vec<BrowserPassword>> {
+    let conn = open_sqlite_from_bytes(data)?;
+    parse_chrome_passwords_from_connection(&conn, browser, profile, decryptor)
+}
 
+pub fn parse_chrome_passwords_from_connection(
+    conn: &rusqlite::Connection,
+    browser: &str,
+    profile: Option<&str>,
+    decryptor: Option<&dyn BrowserSecretDecryptor>,
+) -> crate::Result<Vec<BrowserPassword>> {
     let mut stmt = conn
         .prepare(
             "SELECT origin_url, username_value, password_value,
@@ -60,10 +68,7 @@ pub fn parse_chrome_passwords_with_decryptor(
 
     let mut results = Vec::new();
     for row in rows {
-        match row {
-            Ok(password) => results.push(password),
-            Err(e) => tracing::warn!("skipping password row: {}", e),
-        }
+        results.push(row?);
     }
 
     Ok(results)
@@ -71,7 +76,7 @@ pub fn parse_chrome_passwords_with_decryptor(
 
 fn password_preview(
     encrypted: Option<&[u8]>,
-    decryptor: Option<&ChromiumDecryptor>,
+    decryptor: Option<&dyn BrowserSecretDecryptor>,
 ) -> (Option<String>, BrowserDecryptionStatus, Option<String>) {
     let Some(bytes) = encrypted.filter(|bytes| !bytes.is_empty()) else {
         return (None, BrowserDecryptionStatus::Plaintext, None);
@@ -84,5 +89,5 @@ fn password_preview(
         );
     };
     let (status, preview, detail) = decryptor.decrypt_value(bytes, None);
-    (preview, status.into(), detail)
+    (preview, status, detail)
 }

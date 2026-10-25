@@ -22,6 +22,7 @@ thiserror.workspace = true
 anyhow.workspace = true
 domain.workspace = true
 artifacts-core.workspace = true
+artifacts-browser.workspace = true
 tracing.workspace = true
 byteorder.workspace = true
 evtx.workspace = true

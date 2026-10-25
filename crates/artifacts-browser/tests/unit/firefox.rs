@@ -85,18 +85,15 @@ fn parse_firefox_history_empty_db() {
 
 #[test]
 fn parse_firefox_history_not_a_db() {
-    assert!(parse_firefox_history(b"not sqlite")
-        .expect("parse")
-        .is_empty());
+    assert!(parse_firefox_history(b"not sqlite").is_err());
 }
 
 #[test]
 fn parse_firefox_history_no_moz_places() {
-    assert!(
-        parse_firefox_history(&sqlite_bytes("CREATE TABLE unrelated (id INTEGER);"))
-            .expect("parse")
-            .is_empty()
-    );
+    assert!(matches!(
+        parse_firefox_history(&sqlite_bytes("CREATE TABLE unrelated (id INTEGER);")),
+        Err(crate::BrowserError::Unsupported(_))
+    ));
 }
 
 #[test]
@@ -243,11 +240,10 @@ fn parse_firefox_cookies_basic() {
 
 #[test]
 fn parse_firefox_cookies_no_table() {
-    assert!(
-        parse_firefox_cookies(&sqlite_bytes("CREATE TABLE unrelated (id INTEGER);"))
-            .expect("parse")
-            .is_empty()
-    );
+    assert!(matches!(
+        parse_firefox_cookies(&sqlite_bytes("CREATE TABLE unrelated (id INTEGER);")),
+        Err(crate::BrowserError::Unsupported(_))
+    ));
 }
 
 #[test]

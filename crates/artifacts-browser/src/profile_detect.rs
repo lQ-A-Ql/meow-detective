@@ -210,5 +210,5 @@ fn insert_if_new(profiles: &mut Vec<BrowserProfile>, profile: BrowserProfile) {
 }
 
 #[cfg(test)]
-#[path = "../../tests/unit/browser_profile_detect.rs"]
+#[path = "../tests/unit/browser_profile_detect.rs"]
 mod tests;

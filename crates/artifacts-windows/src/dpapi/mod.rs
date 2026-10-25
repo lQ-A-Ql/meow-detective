@@ -7,6 +7,7 @@
 mod algorithms;
 mod app_bound;
 mod blob;
+mod browser_provider;
 mod chrome;
 mod error;
 mod master_key;
@@ -15,7 +16,6 @@ pub use app_bound::{
     parse_chrome_key_blob, parse_cng_system_key_file, ChromeKeyBlob, CngSystemKeyFile,
 };
 pub use blob::{parse_dpapi_blob, DpapiBlob};
-pub(crate) use chrome::BrowserDecryption;
 pub use chrome::{ChromiumDecryptor, ChromiumFamily};
 pub use error::DpapiError;
 pub use master_key::{

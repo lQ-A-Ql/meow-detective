@@ -2,7 +2,7 @@ use super::time::webkit_time_to_dt;
 use super::types::BrowserSessionTab;
 
 /// Parse a Chromium session restore JSON file.
-pub fn parse_chrome_session(data: &[u8]) -> Result<Vec<BrowserSessionTab>, String> {
+pub fn parse_chrome_session(data: &[u8]) -> crate::Result<Vec<BrowserSessionTab>> {
     let text =
         std::str::from_utf8(data).map_err(|e| format!("session file is not valid UTF-8: {}", e))?;
     let root: serde_json::Value =

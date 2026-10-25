@@ -1,6 +1,6 @@
 use chrono::{DateTime, TimeZone, Utc};
 
-pub(super) fn firefox_time_to_dt(microseconds: i64) -> Option<DateTime<Utc>> {
+pub fn firefox_time_to_dt(microseconds: i64) -> Option<DateTime<Utc>> {
     if microseconds <= 0 {
         return None;
     }

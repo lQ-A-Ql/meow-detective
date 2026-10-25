@@ -1,24 +1,34 @@
-//! Chromium-based browser artifact parsers (Chrome, Edge, Brave, Opera, etc.).
-//!
-//! Each stable artifact family owns its parser while SQLite and timestamp
-//! handling remain shared implementation details.
+use crate::dpapi::ChromiumDecryptor;
+pub use artifacts_browser::chromium::*;
+use artifacts_browser::BrowserSecretDecryptor;
 
-mod cookies;
-mod history;
-mod passwords;
-mod session;
-mod sqlite;
-mod time;
-mod types;
+pub fn parse_chrome_cookies_with_decryptor(
+    bytes: &[u8],
+    browser: &str,
+    profile: Option<&str>,
+    decryptor: Option<&ChromiumDecryptor>,
+) -> artifacts_browser::Result<Vec<BrowserCookie>> {
+    artifacts_browser::parse_chrome_cookies_with_decryptor(
+        bytes,
+        browser,
+        profile,
+        decryptor.map(|value| value as &dyn BrowserSecretDecryptor),
+    )
+}
 
-pub use cookies::parse_chrome_cookies;
-pub use cookies::parse_chrome_cookies_with_decryptor;
-pub use history::parse_chrome_history;
-pub use passwords::parse_chrome_passwords;
-pub use passwords::parse_chrome_passwords_with_decryptor;
-pub use session::parse_chrome_session;
-pub use types::BrowserDecryptionStatus;
-pub use types::{BrowserCookie, BrowserDownload, BrowserPassword, BrowserSessionTab, BrowserVisit};
+pub fn parse_chrome_passwords_with_decryptor(
+    bytes: &[u8],
+    browser: &str,
+    profile: Option<&str>,
+    decryptor: Option<&ChromiumDecryptor>,
+) -> artifacts_browser::Result<Vec<BrowserPassword>> {
+    artifacts_browser::parse_chrome_passwords_with_decryptor(
+        bytes,
+        browser,
+        profile,
+        decryptor.map(|value| value as &dyn BrowserSecretDecryptor),
+    )
+}
 
 #[cfg(test)]
 #[path = "../../tests/unit/chromium.rs"]

@@ -1,7 +1,7 @@
 use chrono::{DateTime, TimeZone, Utc};
 
 /// Convert WebKit/Chrome microseconds since 1601-01-01 UTC to UTC.
-pub(super) fn webkit_time_to_dt(microseconds: i64) -> Option<DateTime<Utc>> {
+pub fn webkit_time_to_dt(microseconds: i64) -> Option<DateTime<Utc>> {
     if microseconds <= 0 {
         return None;
     }

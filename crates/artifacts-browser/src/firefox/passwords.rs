@@ -1,8 +1,8 @@
 use super::time::unix_millis_to_dt;
-use crate::browser::chromium::{BrowserDecryptionStatus, BrowserPassword};
+use crate::chromium::{BrowserDecryptionStatus, BrowserPassword};
 use serde_json::Value;
 
-pub fn parse_firefox_passwords(data: &[u8]) -> Result<Vec<BrowserPassword>, String> {
+pub fn parse_firefox_passwords(data: &[u8]) -> crate::Result<Vec<BrowserPassword>> {
     let text =
         std::str::from_utf8(data).map_err(|e| format!("logins.json is not valid UTF-8: {}", e))?;
     let root: Value =

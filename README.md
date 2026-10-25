@@ -4,7 +4,7 @@
 
 ## 项目介绍
 
-Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 42 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
+Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 43 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
 当前工程事实快照：12 frontend pages（其中 `/v2` V2 workbench 仅在 dev/audit 模式注册，生产路由 11 个）、179 Tauri commands、50 source modules、migration scripts (105)、143 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
@@ -321,6 +321,8 @@ pnpm --dir frontend dev:mock
 ```powershell
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
+cargo build -p containers-bolt --bin meow-bolt-worker
+$env:FORENSICS_BOLT_READER_EXE = (Resolve-Path target/debug/meow-bolt-worker.exe).Path
 cargo test --workspace
 cargo check -p forensics-desktop
 ```
@@ -359,6 +361,8 @@ cargo build --release
 | `crates/fs-*/`、`fs-lvm/` | NTFS/FAT/exFAT/ext4/XFS/Btrfs 与 LVM 文件系统能力。 |
 | `crates/image-android/`、`artifacts-android/` | Android sparse 镜像读取，以及 build.prop、SettingsProvider、packages.xml/list 与 APK 标签/图标解析。 |
 | `crates/artifacts-windows/`、`artifacts-linux/` | Windows 和 Linux 取证制品解析。 |
+| `crates/artifacts-browser/` | 共用的浏览器格式读取、SQLite 查询与 WAL 快照。 |
+| `crates/containers-bolt/`、`containers-pst/` | Rust Bolt 数据库与邮件容器读取。 |
 | `crates/search/`、`timeline/`、`reports/` | 检索、时间线和报告能力。 |
 | `crates/ceph-wire/`、`rocksdb-wire/` | 只读 Ceph/BlueStore/RocksDB 低层解析原语。 |
 | `crates/evidence-emulation/`、`winpe-maintenance/` | COW 虚拟磁盘、VMDK/VMX/ISO9660 材料生成，以及维护引导 ISO 的 guest 侧工具。 |

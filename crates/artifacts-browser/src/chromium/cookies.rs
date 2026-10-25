@@ -1,7 +1,7 @@
 use super::sqlite::open_sqlite_from_bytes;
 use super::time::webkit_time_to_dt;
 use super::types::{BrowserCookie, BrowserDecryptionStatus};
-use crate::dpapi::ChromiumDecryptor;
+use crate::BrowserSecretDecryptor;
 use rusqlite::params;
 
 /// Parse a Chromium `Cookies` SQLite database.
@@ -12,7 +12,7 @@ pub fn parse_chrome_cookies(
     data: &[u8],
     browser: &str,
     profile: Option<&str>,
-) -> Result<Vec<BrowserCookie>, String> {
+) -> crate::Result<Vec<BrowserCookie>> {
     parse_chrome_cookies_with_decryptor(data, browser, profile, None)
 }
 
@@ -22,10 +22,16 @@ pub fn parse_chrome_cookies_with_decryptor(
     data: &[u8],
     _browser: &str,
     _profile: Option<&str>,
-    decryptor: Option<&ChromiumDecryptor>,
-) -> Result<Vec<BrowserCookie>, String> {
-    let (conn, _tmp) = open_sqlite_from_bytes(data)?;
+    decryptor: Option<&dyn BrowserSecretDecryptor>,
+) -> crate::Result<Vec<BrowserCookie>> {
+    let conn = open_sqlite_from_bytes(data)?;
+    parse_chrome_cookies_from_connection(&conn, decryptor)
+}
 
+pub fn parse_chrome_cookies_from_connection(
+    conn: &rusqlite::Connection,
+    decryptor: Option<&dyn BrowserSecretDecryptor>,
+) -> crate::Result<Vec<BrowserCookie>> {
     let mut stmt = conn
         .prepare(
             "SELECT host_key, name, value, encrypted_value, expires_utc,
@@ -68,10 +74,7 @@ pub fn parse_chrome_cookies_with_decryptor(
 
     let mut results = Vec::new();
     for row in rows {
-        match row {
-            Ok(cookie) => results.push(cookie),
-            Err(e) => tracing::warn!("skipping cookie row: {}", e),
-        }
+        results.push(row?);
     }
 
     Ok(results)
@@ -81,7 +84,7 @@ fn cookie_value_preview(
     raw_value: Option<&str>,
     encrypted_value: Option<&[u8]>,
     domain: &str,
-    decryptor: Option<&ChromiumDecryptor>,
+    decryptor: Option<&dyn BrowserSecretDecryptor>,
 ) -> (Option<String>, BrowserDecryptionStatus, Option<String>) {
     match raw_value {
         Some("") => encrypted_cookie_preview(encrypted_value, domain, decryptor),
@@ -102,7 +105,7 @@ fn cookie_value_preview(
 fn encrypted_cookie_preview(
     encrypted_value: Option<&[u8]>,
     domain: &str,
-    decryptor: Option<&ChromiumDecryptor>,
+    decryptor: Option<&dyn BrowserSecretDecryptor>,
 ) -> (Option<String>, BrowserDecryptionStatus, Option<String>) {
     let Some(bytes) = encrypted_value.filter(|bytes| !bytes.is_empty()) else {
         return (None, BrowserDecryptionStatus::Plaintext, None);
@@ -115,10 +118,10 @@ fn encrypted_cookie_preview(
         );
     };
     let (status, preview, detail) = decryptor.decrypt_value(bytes, Some(domain));
-    (preview, status.into(), detail)
+    (preview, status, detail)
 }
 
-pub(super) fn is_likely_encrypted(value: &str) -> bool {
+pub fn is_likely_encrypted(value: &str) -> bool {
     if value.len() < 8 {
         return false;
     }

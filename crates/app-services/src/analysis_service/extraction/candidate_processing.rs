@@ -37,6 +37,7 @@ use std::time::{Duration, Instant};
 
 const SCHEDULER_LOG_INTERVAL: Duration = Duration::from_secs(1);
 
+mod browser_preparation;
 mod checkpoint;
 mod panic_diagnostics;
 mod routing;
