@@ -1,5 +1,7 @@
 #[derive(Debug, thiserror::Error)]
 pub enum V3GovernanceError {
+    #[error("{0}")]
+    Bolt(#[from] crate::bolt_reader_service::BoltReadError),
     #[error("database error: {0}")]
     Db(#[from] rusqlite::Error),
     #[error("I/O error: {0}")]
@@ -17,6 +19,7 @@ pub enum V3GovernanceError {
 impl transport::ServiceErrorCategory for V3GovernanceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::Bolt(error) => error.category(),
             Self::Db(_) | Self::Io(_) => transport::ErrorCategory::Io,
             Self::Parser(_) => transport::ErrorCategory::Parser,
             Self::Validation(_) => transport::ErrorCategory::Validation,
@@ -61,6 +64,7 @@ impl From<crate::graph_service::GraphServiceError> for V3GovernanceError {
 impl From<crate::artifact_service::ArtifactServiceError> for V3GovernanceError {
     fn from(error: crate::artifact_service::ArtifactServiceError) -> Self {
         match error {
+            crate::artifact_service::ArtifactServiceError::Bolt(error) => Self::Bolt(error),
             crate::artifact_service::ArtifactServiceError::Db(error) => Self::Io(error.to_string()),
             crate::artifact_service::ArtifactServiceError::Io(error) => Self::Io(error.to_string()),
             crate::artifact_service::ArtifactServiceError::Extractor(message) => {

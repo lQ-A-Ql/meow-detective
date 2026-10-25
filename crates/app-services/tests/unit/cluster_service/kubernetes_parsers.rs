@@ -100,32 +100,31 @@ fn audit_parser_flags_security_relevant_events_without_retaining_request_values(
 
 #[test]
 fn etcd_bolt_parser_reads_bucket_geometry_and_redacts_values() {
-    let page_size = 4096usize;
-    let mut image = vec![0u8; page_size * 3];
-    for (offset, txid) in [(0usize, 1u64), (page_size, 2u64)] {
-        image[offset..offset + 4].copy_from_slice(&0xED0C_DAEDu32.to_le_bytes());
-        image[offset + 8..offset + 12].copy_from_slice(&(page_size as u32).to_le_bytes());
-        image[offset + 16..offset + 24].copy_from_slice(&2u64.to_le_bytes());
-        image[offset + 48..offset + 56].copy_from_slice(&txid.to_le_bytes());
-    }
-    let page = page_size * 2;
-    image[page..page + 8].copy_from_slice(&2u64.to_le_bytes());
-    image[page + 8..page + 10].copy_from_slice(&2u16.to_le_bytes());
-    image[page + 10..page + 12].copy_from_slice(&1u16.to_le_bytes());
-    image[page + 16..page + 20].copy_from_slice(&0u32.to_le_bytes());
-    image[page + 20..page + 24].copy_from_slice(&64u32.to_le_bytes());
-    image[page + 24..page + 28].copy_from_slice(&3u32.to_le_bytes());
-    image[page + 28..page + 32].copy_from_slice(&2u32.to_le_bytes());
-    image[page + 64..page + 67].copy_from_slice(b"foo");
-    image[page + 67..page + 69].copy_from_slice(b"{}");
-
-    let summary = parse_etcd_bolt_metadata(&image).expect("bolt");
-
-    assert_eq!(summary.txid, 2);
-    assert_eq!(summary.root_page, 2);
-    assert_eq!(summary.key_count, 1);
-    assert_eq!(summary.entries[0].key, "foo");
-    assert!(summary.entries[0].value_redacted);
+    let _guard = BOLT_TEST_LOCK.lock().unwrap();
+    let image = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../containers-bolt/tests/fixtures/go-bbolt.db"
+    ))
+    .unwrap();
+    let workspace = tempfile::tempdir().unwrap();
+    let summary = parse_etcd_bolt_metadata(
+        workspace.path(),
+        &image,
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+    .expect("Go bbolt");
+    assert_eq!(summary.txid, 3);
+    assert_eq!(summary.root_page, None);
+    assert!(summary.checksum_verified);
+    assert_eq!(summary.key_count, 2058);
+    let key = summary
+        .entries
+        .iter()
+        .find(|entry| entry.key == "foo")
+        .unwrap();
+    assert_eq!(key.bucket_path, "key");
+    assert_eq!(key.value_length, Some(9));
+    assert!(key.value_redacted);
 }
 
 #[test]
@@ -148,9 +147,18 @@ fn etcd_wal_parser_validates_frame_and_protobuf_shape() {
 
 #[test]
 fn parsers_reject_unsafe_yaml_and_corrupt_bolt_input() {
+    let _guard = BOLT_TEST_LOCK.lock().unwrap();
     assert!(parse_kubeconfig("a: &anchor value\n").is_err());
-    assert!(parse_etcd_bolt_metadata(&[0u8; 8192]).is_err());
+    let workspace = tempfile::tempdir().unwrap();
+    assert!(parse_etcd_bolt_metadata(
+        workspace.path(),
+        &[0u8; 8192],
+        &std::sync::atomic::AtomicBool::new(false)
+    )
+    .is_err());
 }
+
+static BOLT_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[test]
 fn audit_parser_reports_bounded_invalid_lines_and_wal_tail() {

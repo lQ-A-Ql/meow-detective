@@ -3,6 +3,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ArtifactServiceError {
+    #[error("{0}")]
+    Bolt(#[from] crate::bolt_reader_service::BoltReadError),
     #[error("database error: {0}")]
     Db(#[from] persistence_sqlite::DbError),
     #[error("I/O error: {0}")]
@@ -24,6 +26,7 @@ pub enum ArtifactServiceError {
 impl transport::ServiceErrorCategory for ArtifactServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::Bolt(error) => error.category(),
             Self::Db(_) | Self::Io(_) => transport::ErrorCategory::Io,
             Self::Extractor(_) => transport::ErrorCategory::Parser,
             Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
@@ -34,7 +37,10 @@ impl transport::ServiceErrorCategory for ArtifactServiceError {
     }
 
     fn recoverable(&self) -> Option<bool> {
-        matches!(self, Self::Cancelled).then_some(true)
+        match self {
+            Self::Bolt(error) => error.recoverable(),
+            _ => matches!(self, Self::Cancelled).then_some(true),
+        }
     }
 }
 
@@ -75,6 +81,7 @@ impl From<FileServiceError> for ArtifactServiceError {
 impl From<AnalysisServiceError> for ArtifactServiceError {
     fn from(error: AnalysisServiceError) -> Self {
         match error {
+            AnalysisServiceError::Bolt(error) => Self::Bolt(error),
             AnalysisServiceError::Db(error) => Self::Db(error),
             AnalysisServiceError::Io(error) => Self::Io(error),
             AnalysisServiceError::Read(message)

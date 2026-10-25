@@ -9,10 +9,13 @@ const ANDROID_DEVICE_KEY: &str = "AndroidDevice";
 const ANDROID_PACKAGES_KEY: &str = "AndroidPackages";
 const RETIRED_MACOS_KEY: &str = "MacArtifacts";
 pub(crate) const REGISTRY_EXTRACTOR_VERSION: &str = "1.3.5";
+pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "1.3.6";
 
 pub(crate) fn producer_version(producer: &str) -> &'static str {
     if producer.starts_with("registry.") {
         REGISTRY_EXTRACTOR_VERSION
+    } else if producer == "linux.docker_image" {
+        LINUX_SYSTEM_CONFIG_VERSION
     } else {
         super::ANALYSIS_EXTRACTOR_VERSION
     }
@@ -21,6 +24,7 @@ pub(crate) fn producer_version(producer: &str) -> &'static str {
 pub(crate) const CHECKPOINT_VERSIONS: &[&str] = &[
     super::ANALYSIS_EXTRACTOR_VERSION,
     REGISTRY_EXTRACTOR_VERSION,
+    LINUX_SYSTEM_CONFIG_VERSION,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,7 +46,11 @@ pub(crate) struct AnalysisCapability {
 
 impl AnalysisCapability {
     pub(crate) fn extractor_version(self) -> &'static str {
-        producer_version(self.producer_prefix())
+        match self.key {
+            "Registry" => REGISTRY_EXTRACTOR_VERSION,
+            "LinuxSystemConfig" => LINUX_SYSTEM_CONFIG_VERSION,
+            _ => super::ANALYSIS_EXTRACTOR_VERSION,
+        }
     }
 
     pub(crate) fn producer_prefix(self) -> &'static str {

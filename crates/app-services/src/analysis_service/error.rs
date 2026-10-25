@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AnalysisServiceError {
+    #[error("{0}")]
+    Bolt(#[from] crate::bolt_reader_service::BoltReadError),
     #[error("database error: {0}")]
     Db(#[from] persistence_sqlite::DbError),
     #[error("io error: {0}")]
@@ -64,6 +66,7 @@ impl AnalysisServiceError {
 impl transport::ServiceErrorCategory for AnalysisServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::Bolt(error) => error.category(),
             Self::Db(_) | Self::Io(_) | Self::Read(_) => transport::ErrorCategory::Io,
             Self::Extraction(_) => transport::ErrorCategory::Parser,
             Self::NotFound(_, _) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
@@ -74,6 +77,9 @@ impl transport::ServiceErrorCategory for AnalysisServiceError {
     }
 
     fn recoverable(&self) -> Option<bool> {
+        if let Self::Bolt(error) = self {
+            return error.recoverable();
+        }
         matches!(self, Self::Cancelled).then_some(true)
     }
 }

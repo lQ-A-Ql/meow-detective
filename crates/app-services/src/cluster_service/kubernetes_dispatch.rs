@@ -21,6 +21,27 @@ pub fn parse_kubernetes_artifact(
     kind: KubernetesArtifactKind,
     bytes: &[u8],
 ) -> Result<Option<KubernetesParsedArtifact>> {
+    parse_with_bolt(kind, bytes, || {
+        Err(KubernetesParserError::WorkspaceRequired)
+    })
+}
+
+pub fn parse_kubernetes_artifact_in_workspace(
+    kind: KubernetesArtifactKind,
+    bytes: &[u8],
+    workspace: &std::path::Path,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<Option<KubernetesParsedArtifact>> {
+    parse_with_bolt(kind, bytes, || {
+        parse_etcd_bolt_metadata(workspace, bytes, cancel)
+    })
+}
+
+fn parse_with_bolt(
+    kind: KubernetesArtifactKind,
+    bytes: &[u8],
+    bolt: impl FnOnce() -> Result<EtcdBoltSummary>,
+) -> Result<Option<KubernetesParsedArtifact>> {
     match kind {
         KubernetesArtifactKind::Kubeconfig => Ok(Some(KubernetesParsedArtifact::Kubeconfig(
             parse_kubeconfig(text(bytes)?)?,
@@ -31,9 +52,9 @@ pub fn parse_kubernetes_artifact(
         KubernetesArtifactKind::AuditLog => Ok(Some(KubernetesParsedArtifact::AuditLog(
             parse_kubernetes_audit_log(text(bytes)?)?,
         ))),
-        KubernetesArtifactKind::EtcdBackend => Ok(Some(KubernetesParsedArtifact::EtcdBackend(
-            parse_etcd_bolt_metadata(bytes)?,
-        ))),
+        KubernetesArtifactKind::EtcdBackend => {
+            Ok(Some(KubernetesParsedArtifact::EtcdBackend(bolt()?)))
+        }
         KubernetesArtifactKind::EtcdWal => Ok(Some(KubernetesParsedArtifact::EtcdWal(
             parse_etcd_wal(bytes)?,
         ))),

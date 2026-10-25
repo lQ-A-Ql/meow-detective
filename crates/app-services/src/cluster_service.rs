@@ -48,7 +48,9 @@ pub use kubernetes_analysis::{
     get_source_kubernetes_cluster_summary, run_kubernetes_cluster_analysis,
     run_kubernetes_cluster_analysis_with_cancel,
 };
-pub use kubernetes_dispatch::{parse_kubernetes_artifact, KubernetesParsedArtifact};
+pub use kubernetes_dispatch::{
+    parse_kubernetes_artifact, parse_kubernetes_artifact_in_workspace, KubernetesParsedArtifact,
+};
 pub use kubernetes_inventory::{
     discover_kubernetes_cluster_artifacts, discover_kubernetes_member_artifacts,
     KubernetesClusterArtifactInventory, KubernetesMemberArtifact,
@@ -75,6 +77,10 @@ pub use summary::{get_linux_evidence_set_summary, list_linux_evidence_sets};
 
 #[derive(Debug, Error)]
 pub enum ClusterServiceError {
+    #[error("Kubernetes artifact parsing failed: {0}")]
+    KubernetesParser(#[from] KubernetesParserError),
+    #[error("Kubernetes artifact could not be read: {0}")]
+    FileRead(#[from] crate::file_service::FileServiceError),
     #[error("cluster parsing is planned but not implemented in this milestone")]
     Unsupported,
     #[error("at least two evidence sources are required for cluster parsing")]
@@ -116,6 +122,8 @@ impl From<rusqlite::Error> for ClusterServiceError {
 impl transport::ServiceErrorCategory for ClusterServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::KubernetesParser(error) => error.category(),
+            Self::FileRead(error) => error.category(),
             Self::Unsupported => transport::ErrorCategory::Unsupported,
             Self::InsufficientSources
             | Self::IncompleteImportSet

@@ -30,6 +30,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 chrono.workspace = true
 transport.workspace = true
+containers-bolt = { workspace = true, features = ["worker"] }
 app-services.workspace = true
 evidence-block.workspace = true
 evidence-mount.workspace = true

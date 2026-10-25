@@ -86,6 +86,7 @@ where
             coordinator.context.conn,
             &candidate,
             &bytes,
+            coordinator.context.cancel_token,
         )?;
         return Ok(PreparedWork::Ready(CandidateCompletion {
             candidate,

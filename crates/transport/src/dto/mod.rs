@@ -1,5 +1,6 @@
 pub mod analysis;
 mod app_update;
+pub mod bolt_reader;
 pub use app_update::*;
 mod analysis_android;
 mod analysis_base;
@@ -137,10 +138,7 @@ pub use import::{
     PartialResultDto, PartialResultKindDto, PerformanceMetricDto, PerformanceReportDto,
     PerformanceReportSummaryDto, ResultFreshnessDto,
 };
-pub use infrastructure_graph::{
-    InfrastructureGraphDto, InfrastructureGraphEdgeDto, InfrastructureGraphNodeDto,
-    InfrastructureNetworkFactDto,
-};
+pub use infrastructure_graph::*;
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 pub use ledger::{
     GetLedgerProofRequest, GetLedgerRequest, LedgerBatchDto, LedgerBatchVerificationDto,

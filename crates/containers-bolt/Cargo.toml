@@ -1,0 +1,32 @@
+[package]
+name = "containers-bolt"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[features]
+default = ["worker"]
+worker = ["dep:transport", "dep:serde_json", "dep:sha2", "dep:hex", "dep:libc", "dep:windows-sys"]
+
+[dependencies]
+bbolt-rs.workspace = true
+thiserror.workspace = true
+transport = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bin]]
+name = "meow-bolt-worker"
+path = "src/main.rs"
+required-features = ["worker"]

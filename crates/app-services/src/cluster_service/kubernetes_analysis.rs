@@ -16,7 +16,7 @@ use transport::dto::{
 };
 
 use super::kubernetes_inventory::discover_kubernetes_cluster_artifacts;
-use super::{parse_kubernetes_artifact, Result, TopologyScopeKind};
+use super::{parse_kubernetes_artifact_in_workspace, Result, TopologyScopeKind};
 
 pub fn get_source_kubernetes_cluster_summary(
     case_connection: &Connection,
@@ -303,20 +303,7 @@ fn process_kubernetes_sources(
         );
         for artifact in inventory.artifacts {
             ensure_not_cancelled(cancel_token)?;
-            let max_bytes = artifact.size.min(16 * 1024 * 1024) as u32;
-            let parsed = crate::file_service::read_file_bytes_for_case(
-                &mut read_context,
-                &artifact.file_id,
-                0,
-                max_bytes,
-            )
-            .map_err(|error| error.to_string())
-            .and_then(|bytes| {
-                let digest = infrastructure::hashing::sha256_bytes(&bytes);
-                parse_kubernetes_artifact(artifact.kind, &bytes)
-                    .map(|parsed| (parsed, digest))
-                    .map_err(|error| error.to_string())
-            });
+            let parsed = read_and_parse(&mut read_context, case_root, &artifact, cancel_token);
             let (status, diagnostics_json, digest) = match parsed {
                 Ok((Some(_), digest)) => {
                     parsed_count = parsed_count.saturating_add(1);
@@ -326,7 +313,11 @@ fn process_kubernetes_sources(
                 Err(error) => {
                     failed_count = failed_count.saturating_add(1);
                     diagnostics.push(format!("{}: {}", artifact.path, error));
-                    ("failed", serde_json::json!([error]).to_string(), None)
+                    (
+                        "failed",
+                        serde_json::json!([error.to_string()]).to_string(),
+                        None,
+                    )
                 }
             };
             KubernetesAnalysisRepo::new(case_connection).replace_artifact(
@@ -343,6 +334,45 @@ fn process_kubernetes_sources(
         }
     }
     Ok((parsed_count, failed_count, diagnostics))
+}
+
+fn read_and_parse(
+    context: &mut crate::file_service::SourceReadContext<'_>,
+    case_root: &std::path::Path,
+    artifact: &super::KubernetesMemberArtifact,
+    cancel: &AtomicBool,
+) -> Result<(Option<super::KubernetesParsedArtifact>, String)> {
+    let limit = if artifact.kind == super::KubernetesArtifactKind::EtcdBackend {
+        512 * 1024 * 1024
+    } else {
+        16 * 1024 * 1024
+    };
+    if artifact.size > limit {
+        return Err(super::KubernetesParserError::Limit {
+            kind: "artifact bytes",
+            actual: artifact.size as usize,
+            max: limit as usize,
+        }
+        .into());
+    }
+    let bytes =
+        crate::file_service::read_file_bytes_for_case(context, &artifact.file_id, 0, limit as u32)?;
+    if bytes.len() as u64 != artifact.size {
+        return Err(super::KubernetesParserError::Truncated {
+            offset: bytes.len() as u64,
+            context: "Kubernetes artifact",
+        }
+        .into());
+    }
+    let digest = infrastructure::hashing::sha256_bytes(&bytes);
+    let parsed = parse_kubernetes_artifact_in_workspace(
+        artifact.kind,
+        &bytes,
+        &case_root.join("derived/parser-inputs/bolt"),
+        cancel,
+    );
+    ensure_not_cancelled(cancel)?;
+    Ok((parsed?, digest))
 }
 
 fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<()> {

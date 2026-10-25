@@ -78,3 +78,29 @@ fn unknown_capability_is_still_rejected() {
     );
     assert!(matches!(result, Err(AnalysisServiceError::InvalidInput(_))));
 }
+
+#[test]
+fn bolt_upgrade_invalidates_only_system_config_checkpoints_and_image_outputs() {
+    assert_eq!(
+        find_capability("LinuxSystemConfig")
+            .unwrap()
+            .extractor_version(),
+        LINUX_SYSTEM_CONFIG_VERSION
+    );
+    assert_eq!(
+        find_capability("LinuxJournal").unwrap().extractor_version(),
+        super::super::ANALYSIS_EXTRACTOR_VERSION
+    );
+    assert_eq!(
+        producer_version("linux.docker_image"),
+        LINUX_SYSTEM_CONFIG_VERSION
+    );
+    assert_eq!(
+        producer_version("linux.passwd"),
+        super::super::ANALYSIS_EXTRACTOR_VERSION
+    );
+    assert_eq!(
+        producer_version("registry.system"),
+        REGISTRY_EXTRACTOR_VERSION
+    );
+}

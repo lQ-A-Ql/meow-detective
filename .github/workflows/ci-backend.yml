@@ -14,6 +14,7 @@ on:
       - 'deny.toml'
       - 'scripts/**'
       - 'testdata/**'
+      - 'vendor/bbolt-rs/**'
       - '.github/workflows/ci-backend.yml'
   pull_request:
     branches: [master]
@@ -78,7 +79,11 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
-        run: cargo test --workspace
+        env:
+          FORENSICS_BOLT_READER_EXE: ${{ github.workspace }}\target\debug\meow-bolt-worker.exe
+        run: |
+          cargo build -p containers-bolt --bin meow-bolt-worker
+          cargo test --workspace
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -96,6 +101,8 @@ jobs:
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
       - name: Rust coverage
+        env:
+          FORENSICS_BOLT_READER_EXE: ${{ github.workspace }}\target\debug\meow-bolt-worker.exe
         run: cargo llvm-cov --workspace --all-targets --lcov --output-path rust-lcov.info
       - name: Upload Rust coverage
         uses: actions/upload-artifact@v4

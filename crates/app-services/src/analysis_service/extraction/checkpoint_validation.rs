@@ -9,7 +9,7 @@ use rusqlite::Connection;
 
 use super::output_digest::OutputDigestAccumulator;
 use crate::analysis_service::{
-    capability::{find_capability, AnalysisCapability, CHECKPOINT_VERSIONS},
+    capability::{find_capability, producer_version, AnalysisCapability, CHECKPOINT_VERSIONS},
     error::AnalysisServiceError,
 };
 
@@ -71,12 +71,7 @@ fn validate_checkpoint_batch(
         .collect::<Vec<_>>();
     let mut output_states = scans
         .iter()
-        .map(|scan| {
-            (
-                scan.source_object_id.clone(),
-                CheckpointOutputState::new(&scan.extractor_version),
-            )
-        })
+        .map(|scan| (scan.source_object_id.clone(), CheckpointOutputState::new()))
         .collect::<HashMap<_, _>>();
     ArtifactRepo::new(conn).visit_analysis_outputs_for_sources(
         &source_ids,
@@ -104,7 +99,7 @@ fn validate_checkpoint_batch(
     for scan in scans {
         let output_state = output_states
             .remove(&scan.source_object_id)
-            .unwrap_or_else(|| CheckpointOutputState::new(&scan.extractor_version));
+            .unwrap_or_else(CheckpointOutputState::new);
         if output_state.matches(scan) {
             valid.insert(
                 (
@@ -131,7 +126,6 @@ fn log_invalid_checkpoint(scan: &CompleteAnalysisCandidateScan) {
 }
 
 struct CheckpointOutputState {
-    expected_version: String,
     artifact_count: u64,
     timeline_event_count: u64,
     artifact_versions_match: bool,
@@ -140,9 +134,8 @@ struct CheckpointOutputState {
 }
 
 impl CheckpointOutputState {
-    fn new(expected_version: &str) -> Self {
+    fn new() -> Self {
         Self {
-            expected_version: expected_version.to_owned(),
             artifact_count: 0,
             timeline_event_count: 0,
             artifact_versions_match: true,
@@ -156,8 +149,8 @@ impl CheckpointOutputState {
             return;
         }
         self.artifact_count = self.artifact_count.saturating_add(1);
-        self.artifact_versions_match &=
-            artifact.extractor_version.as_deref() == Some(self.expected_version.as_str());
+        self.artifact_versions_match &= artifact.extractor_version.as_deref()
+            == artifact.extractor_id.as_deref().map(producer_version);
         self.digest.record_artifact(artifact);
     }
 
@@ -171,7 +164,7 @@ impl CheckpointOutputState {
         }
         self.timeline_event_count = self.timeline_event_count.saturating_add(1);
         self.timeline_versions_match &=
-            event.parser_version.as_deref() == Some(self.expected_version.as_str());
+            event.parser_version.as_deref() == event.parser_id.as_deref().map(producer_version);
         self.digest.record_timeline_event(event);
     }
 
