@@ -65,8 +65,5 @@ pub use registry::recovery::{
     scan_deleted_registry_cells, RecoverResult, RecoveredKey, RecoveredValue,
 };
 pub use registry::sam_structs::{extract_boot_key, SamPasswordPolicy};
-pub use registry::txlog::{
-    parse_transaction_log, RegistryTransaction, RegistryTransactionOperation, TxLogParseResult,
-};
 pub use sru::SruExtractor;
 pub use thumbcache::ThumbcacheExtractor;

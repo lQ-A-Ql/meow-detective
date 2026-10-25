@@ -12,7 +12,6 @@ pub mod shellbags;
 pub mod software;
 pub mod system;
 mod time;
-pub(crate) mod txlog_util;
 pub mod types;
 pub(crate) mod usb_identity;
 pub(crate) mod utf16;
@@ -48,7 +47,6 @@ pub use system::{
 };
 pub use types::*;
 
-pub(crate) use crate::registry::txlog::parse_transaction_log;
 pub(crate) use fields::{
     lookup_install_date_field, lookup_optional_dword_field, lookup_optional_string_field,
     lookup_string_field,

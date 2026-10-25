@@ -9,9 +9,8 @@ use rusqlite::Connection;
 
 use super::output_digest::OutputDigestAccumulator;
 use crate::analysis_service::{
-    capability::{find_capability, AnalysisCapability},
+    capability::{find_capability, AnalysisCapability, CHECKPOINT_VERSIONS},
     error::AnalysisServiceError,
-    ANALYSIS_EXTRACTOR_VERSION,
 };
 
 type CompleteScanKey = (String, String, u64, String);
@@ -20,8 +19,14 @@ const CHECKPOINT_VALIDATION_BATCH_SIZE: usize = 128;
 pub(super) fn existing_complete_scan_keys(
     conn: &Connection,
 ) -> Result<HashMap<CompleteScanKey, CompleteAnalysisCandidateScan>, AnalysisServiceError> {
-    let scans =
-        AnalysisScanRepo::new(conn).list_complete_for_version(ANALYSIS_EXTRACTOR_VERSION)?;
+    let mut scans = Vec::new();
+    for version in CHECKPOINT_VERSIONS {
+        scans.extend(AnalysisScanRepo::new(conn).list_complete_for_version(version)?);
+    }
+    scans.retain(|scan| {
+        find_capability(&scan.capability_key)
+            .is_some_and(|capability| capability.extractor_version() == scan.extractor_version)
+    });
     if scans.is_empty() {
         return Ok(HashMap::new());
     }

@@ -6,6 +6,7 @@
 mod common;
 mod linux;
 mod plugin;
+mod registry_companions;
 mod summary;
 mod windows;
 

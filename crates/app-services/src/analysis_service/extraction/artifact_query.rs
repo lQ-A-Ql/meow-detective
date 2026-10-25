@@ -86,14 +86,24 @@ pub(super) fn already_has_v1_artifacts(
         .map(|index| format!("?{}", index + 1))
         .collect::<Vec<_>>()
         .join(", ");
+    let version_clause = if candidate.category == "Registry" {
+        format!(" AND extractor_version = ?{}", families.len() + 2)
+    } else {
+        String::new()
+    };
     let sql = format!(
         "SELECT COUNT(*) FROM artifacts
-         WHERE source_object_id = ?1 AND artifact_type IN ({placeholders})"
+         WHERE source_object_id = ?1 AND artifact_type IN ({placeholders}){version_clause}"
     );
     let mut params_values: Vec<Box<dyn rusqlite::types::ToSql>> =
         vec![Box::new(candidate.file_id.0.clone())];
     for family in families {
         params_values.push(Box::new((*family).to_string()));
+    }
+    if candidate.category == "Registry" {
+        params_values.push(Box::new(
+            crate::analysis_service::capability::REGISTRY_EXTRACTOR_VERSION,
+        ));
     }
     let params_refs = params_values
         .iter()

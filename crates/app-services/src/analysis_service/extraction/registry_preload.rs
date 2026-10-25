@@ -1,129 +1,171 @@
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
 use crate::analysis_service::error::AnalysisServiceError;
-use crate::analysis_service::MAX_ANALYSIS_SOURCE_BYTES;
+use crate::analysis_service::MAX_REGISTRY_ANALYSIS_BYTES;
+use artifacts_windows::registry::RegistrySnapshot;
 use domain::FileEntryId;
-use rusqlite::{Connection, OptionalExtension};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::sync::atomic::AtomicBool;
 
-type TxlogBytes = (Option<Vec<u8>>, Option<Vec<u8>>);
 const READ_BUFFER_BYTES: usize = 64 * 1024;
 
 pub(super) struct RegistryPreloadContext {
-    registry_bytes: HashMap<(String, String), Vec<u8>>,
-    txlog_bytes: HashMap<(String, String), TxlogBytes>,
-    boot_keys: HashMap<String, Option<[u8; 16]>>,
+    snapshots: HashMap<(String, String), RegistrySnapshot<'static>>,
+    boot_keys: HashMap<(String, Option<usize>), Option<[u8; 16]>>,
     pub(super) warnings: Vec<String>,
 }
 
 impl RegistryPreloadContext {
-    pub(super) fn registry_bytes(&self, candidate: &EvidenceCandidate) -> Option<&[u8]> {
+    pub(super) fn snapshot(
+        &self,
+        candidate: &EvidenceCandidate,
+    ) -> Option<&RegistrySnapshot<'static>> {
         let key = registry_key(candidate);
-        self.registry_bytes.get(&key).map(Vec::as_slice)
+        self.snapshots.get(&key)
     }
 
     pub(super) fn boot_key(&self, candidate: &EvidenceCandidate) -> Option<[u8; 16]> {
         self.boot_keys
-            .get(&candidate.data_source_id)
+            .get(&(candidate.data_source_id.clone(), candidate.partition_index))
             .copied()
             .flatten()
-    }
-
-    pub(super) fn txlogs(&self, candidate: &EvidenceCandidate) -> (Option<&[u8]>, Option<&[u8]>) {
-        let key = registry_key(candidate);
-        self.txlog_bytes
-            .get(&key)
-            .map(|(a, b)| (a.as_deref(), b.as_deref()))
-            .unwrap_or((None, None))
     }
 }
 
 pub(super) fn preload_registry_context<E: std::fmt::Display>(
-    conn: &Connection,
     candidates: &[EvidenceCandidate],
     cancel_token: &AtomicBool,
     mut file_reader: impl FnMut(&FileEntryId, usize) -> Result<Box<dyn Read>, E>,
     already_extracted: impl Fn(&EvidenceCandidate) -> Result<bool, AnalysisServiceError>,
 ) -> Result<RegistryPreloadContext, AnalysisServiceError> {
     ensure_not_cancelled(cancel_token)?;
-    let mut registry_bytes = HashMap::new();
-    let mut txlog_bytes = HashMap::new();
+    let mut snapshots = HashMap::new();
     let mut boot_keys = HashMap::new();
     let mut warnings = Vec::new();
+    let mut pending = HashSet::new();
+    let mut boot_key_scopes = HashSet::new();
+    for candidate in candidates
+        .iter()
+        .filter(|candidate| candidate.category == "Registry")
+    {
+        ensure_not_cancelled(cancel_token)?;
+        if !already_extracted(candidate)? {
+            pending.insert(registry_key(candidate));
+            let path = normalize_evidence_path(&candidate.path);
+            if path.ends_with("/windows/system32/config/sam")
+                || path.ends_with("/windows/system32/config/security")
+            {
+                boot_key_scopes
+                    .insert((candidate.data_source_id.clone(), candidate.partition_index));
+            }
+        }
+    }
 
     for candidate in candidates {
         ensure_not_cancelled(cancel_token)?;
         if candidate.category != "Registry" {
             continue;
         }
-        if already_extracted(candidate)? {
+        let is_system =
+            normalize_evidence_path(&candidate.path).ends_with("/windows/system32/config/system");
+        let needs_boot_key = is_system
+            && boot_key_scopes
+                .contains(&(candidate.data_source_id.clone(), candidate.partition_index));
+        if !pending.contains(&registry_key(candidate)) && !needs_boot_key {
             continue;
         }
-        let bytes = match read_file_entry_bytes(
-            &mut file_reader,
-            &candidate.file_id,
-            &candidate.path,
-            None,
-            cancel_token,
-            &mut warnings,
-        )? {
-            Some(bytes) => bytes,
-            None => continue,
+        let Some(snapshot) =
+            load_snapshot(candidate, cancel_token, &mut file_reader, &mut warnings)?
+        else {
+            continue;
         };
-        ensure_not_cancelled(cancel_token)?;
-        let normalized = normalize_evidence_path(&candidate.path);
-        if normalized.ends_with("/windows/system32/config/system") {
+        if is_system {
             boot_keys.insert(
-                candidate.data_source_id.clone(),
-                artifacts_windows::extract_boot_key(&bytes),
+                (candidate.data_source_id.clone(), candidate.partition_index),
+                artifacts_windows::extract_boot_key(snapshot.bytes()),
             );
         }
-        registry_bytes.insert(
-            (candidate.data_source_id.clone(), normalized.clone()),
-            bytes,
-        );
-
-        let log1_path = format!("{}.log1", normalized);
-        let log2_path = format!("{}.log2", normalized);
-        let log1_id = find_file_entry_id_by_path(conn, &candidate.data_source_id, &log1_path);
-        let log2_id = find_file_entry_id_by_path(conn, &candidate.data_source_id, &log2_path);
-        let log1_bytes = match log1_id {
-            Some(id) => read_file_entry_bytes(
-                &mut file_reader,
-                &id,
-                &candidate.path,
-                Some("LOG1"),
-                cancel_token,
-                &mut warnings,
-            )?,
-            None => None,
-        };
-        let log2_bytes = match log2_id {
-            Some(id) => read_file_entry_bytes(
-                &mut file_reader,
-                &id,
-                &candidate.path,
-                Some("LOG2"),
-                cancel_token,
-                &mut warnings,
-            )?,
-            None => None,
-        };
-        txlog_bytes.insert(
-            (candidate.data_source_id.clone(), normalized),
-            (log1_bytes, log2_bytes),
-        );
+        snapshots.insert(registry_key(candidate), snapshot);
     }
 
     ensure_not_cancelled(cancel_token)?;
     Ok(RegistryPreloadContext {
-        registry_bytes,
-        txlog_bytes,
+        snapshots,
         boot_keys,
         warnings,
     })
+}
+
+fn load_snapshot<E: std::fmt::Display>(
+    candidate: &EvidenceCandidate,
+    cancel_token: &AtomicBool,
+    file_reader: &mut impl FnMut(&FileEntryId, usize) -> Result<Box<dyn Read>, E>,
+    warnings: &mut Vec<String>,
+) -> Result<Option<RegistrySnapshot<'static>>, AnalysisServiceError> {
+    let Some(bytes) = read_file_entry_bytes(
+        file_reader,
+        &candidate.file_id,
+        &candidate.path,
+        None,
+        cancel_token,
+        warnings,
+    )?
+    else {
+        return Ok(None);
+    };
+    if bytes.len() as u64 != candidate.size {
+        warnings.push(read_warning(
+            &candidate.path,
+            None,
+            &"registry hive was truncated",
+        ));
+        return Ok(None);
+    }
+    let mut logs = Vec::with_capacity(2);
+    for label in ["LOG1", "LOG2"] {
+        let path = format!(
+            "{}.{}",
+            normalize_evidence_path(&candidate.path),
+            label.to_ascii_lowercase()
+        );
+        let companion = candidate
+            .companions
+            .iter()
+            .find(|item| normalize_evidence_path(&item.path) == path);
+        let Some(companion) = companion else {
+            logs.push(None);
+            continue;
+        };
+        let Some(bytes) = read_file_entry_bytes(
+            file_reader,
+            &companion.file_id,
+            &candidate.path,
+            Some(label),
+            cancel_token,
+            warnings,
+        )?
+        else {
+            return Ok(None);
+        };
+        if bytes.len() as u64 != companion.size {
+            warnings.push(read_warning(
+                &candidate.path,
+                Some(label),
+                &"registry log was truncated",
+            ));
+            return Ok(None);
+        }
+        logs.push(Some(bytes));
+    }
+    ensure_not_cancelled(cancel_token)?;
+    match RegistrySnapshot::from_owned(bytes, logs[0].as_deref(), logs[1].as_deref()) {
+        Ok(snapshot) => Ok(Some(snapshot)),
+        Err(error) => {
+            warnings.push(read_warning(&candidate.path, None, &error));
+            Ok(None)
+        }
+    }
 }
 
 fn read_file_entry_bytes<E: std::fmt::Display>(
@@ -135,7 +177,7 @@ fn read_file_entry_bytes<E: std::fmt::Display>(
     warnings: &mut Vec<String>,
 ) -> Result<Option<Vec<u8>>, AnalysisServiceError> {
     ensure_not_cancelled(cancel_token)?;
-    let mut reader = match file_reader(file_id, MAX_ANALYSIS_SOURCE_BYTES) {
+    let mut reader = match file_reader(file_id, MAX_REGISTRY_ANALYSIS_BYTES) {
         Ok(reader) => reader,
         Err(err) => {
             warnings.push(read_warning(hive_path, label, &err));
@@ -145,7 +187,7 @@ fn read_file_entry_bytes<E: std::fmt::Display>(
     ensure_not_cancelled(cancel_token)?;
     let mut bytes = Vec::with_capacity(READ_BUFFER_BYTES);
     let mut buffer = [0u8; READ_BUFFER_BYTES];
-    let mut limited = reader.by_ref().take(MAX_ANALYSIS_SOURCE_BYTES as u64);
+    let mut limited = reader.by_ref().take(MAX_REGISTRY_ANALYSIS_BYTES as u64 + 1);
     loop {
         ensure_not_cancelled(cancel_token)?;
         let read = match limited.read(&mut buffer) {
@@ -159,6 +201,14 @@ fn read_file_entry_bytes<E: std::fmt::Display>(
             break;
         }
         bytes.extend_from_slice(&buffer[..read]);
+        if bytes.len() > MAX_REGISTRY_ANALYSIS_BYTES {
+            warnings.push(read_warning(
+                hive_path,
+                label,
+                &"registry input exceeds the byte limit",
+            ));
+            return Ok(None);
+        }
     }
     ensure_not_cancelled(cancel_token)?;
     Ok(Some(bytes))
@@ -174,25 +224,6 @@ fn read_warning(hive_path: &str, label: Option<&str>, error: &impl std::fmt::Dis
 fn registry_key(candidate: &EvidenceCandidate) -> (String, String) {
     (
         candidate.data_source_id.clone(),
-        normalize_evidence_path(&candidate.path),
+        candidate.file_id.0.clone(),
     )
-}
-
-/// Locate a file entry by its normalized (lower-case, forward-slash) path.
-fn find_file_entry_id_by_path(
-    conn: &Connection,
-    data_source_id: &str,
-    normalized_path: &str,
-) -> Option<FileEntryId> {
-    conn.query_row(
-        "SELECT id FROM file_entries \
-         WHERE data_source_id = ?1 \
-           AND REPLACE(LOWER(path), '\\', '/') = ?2 \
-           AND entry_type = 'file' COLLATE NOCASE",
-        [data_source_id, normalized_path],
-        |row| Ok(FileEntryId(row.get(0)?)),
-    )
-    .optional()
-    .ok()
-    .flatten()
 }

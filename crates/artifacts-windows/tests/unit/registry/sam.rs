@@ -1,5 +1,4 @@
 use super::*;
-use crate::registry::tests::txlog_fixture::{build_synthetic_log1, SyntheticEntry};
 use crate::registry::tests::*;
 
 #[test]
@@ -105,46 +104,15 @@ fn short_v_record_is_reported_without_panic() {
 }
 
 #[test]
-fn txlog_overrides_password_policy() {
-    let data = synthetic_sam_hive();
-    let replacement = make_domain_account_f_blob(90, 2, 14, 30, 3, 60, 45);
-    let log = build_synthetic_log1(&[SyntheticEntry {
-        operation: 2,
-        sequence_number: 50,
-        timestamp: Some(0x01db_a000_0000_0000),
-        key_path: r"SAM\Domains\Account".to_string(),
-        value_name: Some("F".to_string()),
-        data_before: None,
-        data_after: Some(replacement),
-    }]);
-    let info =
-        extract_sam_fields_with_txlog(&data, "Windows/System32/config/SAM", None, Some(&log), None)
-            .unwrap();
-    let policy = info.password_policy.unwrap();
-    assert_eq!(policy.max_password_age_days, 90);
-    assert_eq!(policy.min_password_length, 14);
-    assert!(info.txlog_applied);
-    assert!(info
-        .txlog_timestamps
-        .iter()
-        .any(|timestamp| timestamp.field_name == "passwordPolicy" && timestamp.txlog_used));
-}
-
-#[test]
-fn corrupt_txlog_is_nonfatal() {
-    let info = extract_sam_fields_with_txlog(
+fn corrupt_txlog_is_rejected() {
+    assert!(extract_sam_fields_with_txlog(
         &synthetic_sam_hive(),
         "Windows/System32/config/SAM",
         None,
         Some(b"bad"),
         None,
     )
-    .unwrap();
-    assert_eq!(info.users.len(), 2);
-    assert!(info
-        .warnings
-        .iter()
-        .any(|warning| warning.contains("LOG1 parse failed")));
+    .is_err());
 }
 
 #[test]

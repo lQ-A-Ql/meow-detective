@@ -200,6 +200,7 @@ fn discover_evidence_candidates_with_definitions(
     );
     let mut statement = conn.prepare(&sql)?;
     let mut rows = statement.query([])?;
+    let mut registry_companions = super::registry_companions::RegistryCompanions::default();
 
     while let Some(row) = rows.next()? {
         ensure_not_cancelled(cancel_token)?;
@@ -226,6 +227,19 @@ fn discover_evidence_candidates_with_definitions(
             ],
         );
         let modified_at = parse_timestamp(row.get::<_, Option<String>>(6)?);
+        if super::registry_companions::RegistryCompanions::matches(&path) {
+            registry_companions.insert(
+                &data_source_id,
+                partition_index,
+                EvidenceCompanion {
+                    file_id: FileEntryId(file_id.clone()),
+                    path: path.clone(),
+                    size,
+                    encrypted,
+                    content_identity: content_identity.clone(),
+                },
+            );
+        }
         add_matching_candidates(
             &mut candidates,
             definitions,
@@ -243,6 +257,12 @@ fn discover_evidence_candidates_with_definitions(
         )?;
     }
 
+    if let Some(registry) = candidates.get_mut("Registry") {
+        for candidate in registry {
+            ensure_not_cancelled(cancel_token)?;
+            registry_companions.attach(candidate)?;
+        }
+    }
     ensure_not_cancelled(cancel_token)?;
     Ok(candidates)
 }

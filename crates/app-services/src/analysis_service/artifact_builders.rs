@@ -1,5 +1,5 @@
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
-use crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION;
+use crate::analysis_service::capability::producer_version;
 use chrono::{DateTime, Utc};
 use domain::{Artifact, ArtifactId, FileEntryId, TimelineEvent, TimelineEventId};
 use serde_json::Value;
@@ -21,7 +21,7 @@ pub(crate) fn make_artifact(
         summary,
         source_object_id: Some(candidate.file_id.clone()),
         extractor_id: Some(extractor_id.to_string()),
-        extractor_version: Some(ANALYSIS_EXTRACTOR_VERSION.to_string()),
+        extractor_version: Some(producer_version(extractor_id).to_string()),
         confidence: Some(0.85),
         source_attribution: Some(candidate.path.clone()),
         created_at: Utc::now(),
@@ -46,7 +46,7 @@ pub(crate) fn make_timeline_event(
         title,
         description,
         parser_id: Some(parser_id.to_string()),
-        parser_version: Some(ANALYSIS_EXTRACTOR_VERSION.to_string()),
+        parser_version: Some(producer_version(parser_id).to_string()),
         confidence: Some(0.85),
         source_attribution: None,
         attrs,

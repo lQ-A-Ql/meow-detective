@@ -1,4 +1,5 @@
 use super::*;
+use crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION;
 use chrono::Utc;
 use domain::{Artifact, ArtifactId, FileEntryId};
 use rusqlite::Connection;
@@ -169,4 +170,50 @@ fn retryable_source_read_failure_does_not_create_a_checkpoint() {
     assert!(state.diagnostic_scans.is_empty());
     assert!(state.complete_scans.is_empty());
     assert!(!state.has_pending_outputs());
+}
+
+#[test]
+fn registry_parser_upgrade_expires_only_registry_checkpoints() {
+    let conn = Connection::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_source_all(&conn).unwrap();
+    let registry = find_capability("Registry").unwrap();
+    let browser = find_capability("BrowserHistory").unwrap();
+    let mut clean = Vec::new();
+    let mut diagnostics = Vec::new();
+    for (id, capability, version) in [
+        ("old-registry", registry, ANALYSIS_EXTRACTOR_VERSION),
+        ("new-registry", registry, registry.extractor_version()),
+        ("browser", browser, browser.extractor_version()),
+    ] {
+        clean.push(CleanAnalysisCandidateScan {
+            source_object_id: format!("clean-{id}"),
+            capability_key: capability.key.into(),
+            extractor_version: version.into(),
+            source_size: 8192,
+            content_identity: id.into(),
+        });
+        diagnostics.push(DiagnosticAnalysisCandidateScan {
+            source_object_id: format!("diagnostic-{id}"),
+            capability_key: capability.key.into(),
+            extractor_version: version.into(),
+            source_size: 8192,
+            content_identity: id.into(),
+            warnings: vec!["format diagnostic".into()],
+        });
+    }
+    AnalysisScanRepo::new(&conn)
+        .insert_checkpoint_batch(&clean, &diagnostics)
+        .unwrap();
+    let clean_keys = existing_clean_scan_keys(&conn).unwrap();
+    let diagnostic_keys = existing_diagnostic_scan_keys(&conn).unwrap();
+    assert_eq!(clean_keys.len(), 2);
+    assert_eq!(diagnostic_keys.len(), 2);
+    assert!(clean_keys.iter().any(|key| key.0 == "clean-new-registry"));
+    assert!(clean_keys.iter().any(|key| key.0 == "clean-browser"));
+    assert!(diagnostic_keys
+        .keys()
+        .any(|key| key.0 == "diagnostic-new-registry"));
+    assert!(diagnostic_keys
+        .keys()
+        .any(|key| key.0 == "diagnostic-browser"));
 }

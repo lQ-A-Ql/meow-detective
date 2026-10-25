@@ -3,9 +3,10 @@ use super::output_digest::output_digest_for_outputs;
 use super::plugin::PluginCandidateOutcome;
 use super::{ExtractionOutcome, PluginExtractFailure};
 use crate::analysis_service::candidates::EvidenceCandidate;
-use crate::analysis_service::capability::AnalysisCapability;
+use crate::analysis_service::capability::{
+    find_capability, AnalysisCapability, CHECKPOINT_VERSIONS,
+};
 use crate::analysis_service::error::AnalysisServiceError;
-use crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION;
 use persistence_sqlite::repositories::analysis_scan_repo::{
     AnalysisScanRepo, CleanAnalysisCandidateScan, CompleteAnalysisCandidateScan,
     DiagnosticAnalysisCandidateScan,
@@ -157,7 +158,7 @@ impl ExtractionState {
             self.clean_scans.push(CleanAnalysisCandidateScan {
                 source_object_id: candidate.file_id.0.clone(),
                 capability_key: capability.key.to_string(),
-                extractor_version: ANALYSIS_EXTRACTOR_VERSION.to_string(),
+                extractor_version: capability.extractor_version().to_string(),
                 source_size: candidate.size,
                 content_identity: candidate.content_identity.clone(),
             });
@@ -168,7 +169,7 @@ impl ExtractionState {
             self.diagnostic_scans.push(DiagnosticAnalysisCandidateScan {
                 source_object_id: candidate.file_id.0.clone(),
                 capability_key: capability.key.to_string(),
-                extractor_version: ANALYSIS_EXTRACTOR_VERSION.to_string(),
+                extractor_version: capability.extractor_version().to_string(),
                 source_size: candidate.size,
                 content_identity: candidate.content_identity.clone(),
                 warnings: outcome.warnings.clone(),
@@ -177,7 +178,7 @@ impl ExtractionState {
             self.complete_scans.push(CompleteAnalysisCandidateScan {
                 source_object_id: candidate.file_id.0.clone(),
                 capability_key: capability.key.to_string(),
-                extractor_version: ANALYSIS_EXTRACTOR_VERSION.to_string(),
+                extractor_version: capability.extractor_version().to_string(),
                 source_size: candidate.size,
                 content_identity: candidate.content_identity.clone(),
                 artifact_count: outcome.artifacts.len() as u64,
@@ -366,7 +367,16 @@ pub(super) fn existing_clean_scan_keys(
     conn: &Connection,
 ) -> Result<CleanScanKeys, AnalysisServiceError> {
     let mut valid = HashSet::new();
-    for scan in AnalysisScanRepo::new(conn).list_clean_for_version(ANALYSIS_EXTRACTOR_VERSION)? {
+    let mut scans = Vec::new();
+    for version in CHECKPOINT_VERSIONS {
+        scans.extend(AnalysisScanRepo::new(conn).list_clean_for_version(version)?);
+    }
+    for scan in scans {
+        if !find_capability(&scan.capability_key)
+            .is_some_and(|capability| capability.extractor_version() == scan.extractor_version)
+        {
+            continue;
+        }
         if scan_has_no_outputs(conn, &scan.source_object_id, &scan.capability_key)? {
             valid.insert((
                 scan.source_object_id,
@@ -383,9 +393,16 @@ pub(super) fn existing_diagnostic_scan_keys(
     conn: &Connection,
 ) -> Result<DiagnosticScanKeys, AnalysisServiceError> {
     let mut valid = HashMap::new();
-    for scan in
-        AnalysisScanRepo::new(conn).list_diagnostics_for_version(ANALYSIS_EXTRACTOR_VERSION)?
-    {
+    let mut scans = Vec::new();
+    for version in CHECKPOINT_VERSIONS {
+        scans.extend(AnalysisScanRepo::new(conn).list_diagnostics_for_version(version)?);
+    }
+    for scan in scans {
+        if !find_capability(&scan.capability_key)
+            .is_some_and(|capability| capability.extractor_version() == scan.extractor_version)
+        {
+            continue;
+        }
         if scan_has_no_outputs(conn, &scan.source_object_id, &scan.capability_key)? {
             valid.insert(
                 (

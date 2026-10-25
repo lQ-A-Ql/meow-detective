@@ -1,5 +1,4 @@
 use crate::registry::lookup::*;
-use crate::registry::tests::txlog_fixture::{build_synthetic_log1, SyntheticEntry};
 use crate::registry::tests::*;
 
 #[test]
@@ -541,49 +540,6 @@ fn extract_ntuser_handles_missing_keys() {
     assert!(info.typed_urls.is_empty());
     assert!(info.word_wheel_query.is_empty());
     assert!(info.mount_points.is_empty());
-}
-
-#[test]
-fn ntuser_hive_with_txlog_overrides_run_key_command() {
-    // Build an NTUSER hive with a single Run key.
-    let mut data = empty_hive("NTUSER");
-    write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
-    write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
-    write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
-    write_nk(
-        &mut data,
-        0x400,
-        "Windows",
-        &[("CurrentVersion", 0x500)],
-        &[],
-    );
-    write_nk(&mut data, 0x500, "CurrentVersion", &[("Run", 0x600)], &[]);
-    write_nk(&mut data, 0x600, "Run", &[], &[0x700]);
-    write_string_value(&mut data, 0x700, "Malware", "C:\\temp\\old.exe", 0x1000);
-
-    let txlog_bytes = build_synthetic_log1(&[SyntheticEntry {
-        operation: 2, // SetValue
-        sequence_number: 200,
-        timestamp: Some(0x01DB_A100_0000_0000),
-        key_path:
-            "\\Registry\\User\\S-1-5-21-123\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
-                .to_string(),
-        value_name: Some("Malware".to_string()),
-        data_before: Some(encode_utf16le("C:\\temp\\old.exe")),
-        data_after: Some(encode_utf16le("C:\\temp\\new.exe")),
-    }]);
-
-    let info =
-        extract_ntuser_fields_with_txlog(&data, "Users/Test/NTUSER.DAT", &txlog_bytes).unwrap();
-
-    assert_eq!(info.run_keys.len(), 1);
-    assert_eq!(info.run_keys[0].value_name, "Malware");
-    assert_eq!(info.run_keys[0].command, "C:\\temp\\new.exe");
-    assert!(
-        info.run_keys[0].timestamp.is_some(),
-        "Run key should have timestamp from txlog"
-    );
-    assert!(info.txlog_applied);
 }
 
 #[test]

@@ -22,14 +22,29 @@ pub(super) fn prepare_registry_preload(
         .filter(|candidate| !candidate.encrypted)
         .cloned()
         .collect::<Vec<_>>();
-    let candidates_by_id = readable_candidates
+    let mut candidates_by_id = readable_candidates
         .iter()
-        .map(|candidate| (candidate.file_id.0.as_str(), candidate))
+        .map(|candidate| (candidate.file_id.0.clone(), candidate.clone()))
         .collect::<HashMap<_, _>>();
+    for primary in &readable_candidates {
+        for companion in &primary.companions {
+            let mut candidate = primary.clone();
+            candidate.file_id = companion.file_id.clone();
+            candidate.path = companion.path.clone();
+            candidate.size = companion.size;
+            candidate.encrypted = companion.encrypted;
+            candidate.content_identity = companion.content_identity.clone();
+            candidate.companions.clear();
+            candidates_by_id.insert(candidate.file_id.0.clone(), candidate);
+        }
+    }
     let mut registry_reader = |file_id: &FileEntryId, read_limit: usize| {
         let candidate = candidates_by_id
             .get(file_id.0.as_str())
             .ok_or_else(|| format!("analysis candidate '{}' was not discovered", file_id.0))?;
+        if candidate.encrypted {
+            return Err("registry companion content is encrypted or its status is unknown".into());
+        }
         file_reader(candidate, read_limit).map(|source| match source {
             CandidateSource::Seekable(reader) => reader as Box<dyn Read>,
             CandidateSource::Reader(reader) => reader,
@@ -37,7 +52,6 @@ pub(super) fn prepare_registry_preload(
         })
     };
     preload_registry_context(
-        conn,
         &readable_candidates,
         cancel_token,
         &mut registry_reader,

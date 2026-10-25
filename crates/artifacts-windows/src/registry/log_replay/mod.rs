@@ -1,4 +1,4 @@
-//! Read-only REGF dirty-page recovery, independent of semantic txlog records.
+//! Read-only REGF dirty-page recovery.
 mod hash;
 mod header;
 mod new_format;

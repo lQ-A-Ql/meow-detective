@@ -7,7 +7,7 @@ pub mod lookup;
 pub mod recovery;
 pub mod sam_edit;
 pub mod sam_structs;
-pub mod txlog;
+pub mod snapshot;
 pub mod util;
 
 #[cfg(test)]
@@ -16,6 +16,4 @@ mod tests;
 
 pub use error::RegistryError;
 pub use recovery::{scan_deleted_registry_cells, RecoverResult, RecoveredKey, RecoveredValue};
-pub use txlog::{
-    parse_transaction_log, RegistryTransaction, RegistryTransactionOperation, TxLogParseResult,
-};
+pub use snapshot::RegistrySnapshot;

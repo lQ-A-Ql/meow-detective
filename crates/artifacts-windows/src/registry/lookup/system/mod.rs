@@ -1,5 +1,4 @@
 use super::reader::RegistryHiveReader;
-use super::txlog_util::apply_single_txlog_override;
 use super::*;
 use crate::registry::RegistryError;
 
@@ -123,32 +122,14 @@ pub fn extract_lsa_packages_from_system_hive(
     Ok(result)
 }
 
-/// Extract mounted-device mappings from `SYSTEM\MountedDevices`.
-/// Like [`extract_system_hive_fields`], but after standard extraction checks a
-/// transaction log for more recent writes.  When a txlog entry holds a newer
-/// value (higher sequence number), the field's value is overwritten.
+/// Extract fields from the page-recovered SYSTEM hive.
 pub fn extract_system_hive_fields_with_txlog(
     bytes: &[u8],
     hive_path: &str,
     txlog_data: &[u8],
 ) -> Result<SystemHiveInfo, RegistryError> {
-    let mut info = extract_system_hive_fields(bytes, hive_path)?;
-    let txlog = parse_transaction_log(txlog_data)?;
-    let mut txlog_applied = false;
-    let mut ts_infos: Vec<TxlogTimestampInfo> = Vec::new();
-
-    if let Some(ref mut field) = info.computer_name {
-        let ts = apply_single_txlog_override(field, &txlog.transactions);
-        txlog_applied = txlog_applied || ts.txlog_used;
-        ts_infos.push(ts);
-    }
-    if let Some(ref mut field) = info.timezone {
-        let ts = apply_single_txlog_override(field, &txlog.transactions);
-        txlog_applied = txlog_applied || ts.txlog_used;
-        ts_infos.push(ts);
-    }
-
-    info.txlog_applied = txlog_applied;
-    info.txlog_timestamps = ts_infos;
+    let snapshot = crate::registry::RegistrySnapshot::prepare(bytes, Some(txlog_data), None)?;
+    let mut info = extract_system_hive_fields(snapshot.bytes(), hive_path)?;
+    info.txlog_applied = snapshot.logs_applied();
     Ok(info)
 }

@@ -1,9 +1,7 @@
-use super::txlog_util::find_best_txlog_match;
 use super::{
     windows_filetime_to_rfc3339, CachedCredentialEntry, LsaSecretEntry, RegistryHiveReader,
-    RegistryValue, SecurityPolicyEntry, TxlogTimestampInfo,
+    RegistryValue, SecurityPolicyEntry,
 };
-use crate::registry::txlog::parse_and_merge_txlogs;
 use crate::registry::RegistryError;
 
 /// Extract non-sensitive local security policy metadata from the SECURITY hive.
@@ -38,11 +36,7 @@ pub fn extract_security_policy_from_security_hive(
     })
 }
 
-/// Like [`extract_security_policy_from_security_hive`], but overlays newer
-/// values from .LOG1/.LOG2 transaction-log entries before returning.
-///
-/// Corrupt or missing transaction logs are treated as non-fatal warnings; the
-/// base hive result is still returned.
+/// Extract policy metadata from the page-recovered SECURITY hive.
 pub fn extract_security_policy_from_security_hive_with_txlog(
     bytes: &[u8],
     hive_path: &str,
@@ -50,87 +44,10 @@ pub fn extract_security_policy_from_security_hive_with_txlog(
     txlog1: Option<&[u8]>,
     txlog2: Option<&[u8]>,
 ) -> Result<SecurityPolicyEntry, RegistryError> {
-    let mut entry = extract_security_policy_from_security_hive(bytes, hive_path, boot_key)?;
-    let (transactions, _txlog_warnings) = parse_and_merge_txlogs(txlog1, txlog2);
-    if transactions.is_empty() {
-        entry.txlog_applied = false;
-        entry.txlog_timestamps = Vec::new();
-        return Ok(entry);
-    }
-
-    let mut txlog_applied = false;
-    let mut ts_infos: Vec<TxlogTimestampInfo> = Vec::new();
-
-    if let Some(txn) = find_best_txlog_match(&transactions, r"Policy", "PolPrDmS") {
-        if let Some(data) = txn.data_after.as_deref() {
-            if let Some(new_value) = decode_policy_string(data) {
-                if entry.domain_name.as_deref() != Some(new_value.as_str()) {
-                    entry.domain_name = Some(new_value);
-                    txlog_applied = true;
-                }
-            }
-        }
-        ts_infos.push(TxlogTimestampInfo {
-            field_name: "domainName".to_string(),
-            hive_timestamp: None,
-            txlog_timestamp: txn.timestamp,
-            txlog_used: txn.data_after.is_some(),
-        });
-    }
-
-    if let Some(txn) = find_best_txlog_match(&transactions, r"Policy", "PolAcDmS") {
-        if let Some(data) = txn.data_after.as_deref() {
-            if let Some(new_value) = decode_policy_string(data) {
-                if entry.account_domain_name.as_deref() != Some(new_value.as_str()) {
-                    entry.account_domain_name = Some(new_value);
-                    txlog_applied = true;
-                }
-            }
-        }
-        ts_infos.push(TxlogTimestampInfo {
-            field_name: "accountDomainName".to_string(),
-            hive_timestamp: None,
-            txlog_timestamp: txn.timestamp,
-            txlog_used: txn.data_after.is_some(),
-        });
-    }
-
-    if let Some(txn) = find_best_txlog_match(&transactions, r"Policy", "PolMachineAccountS") {
-        if let Some(data) = txn.data_after.as_deref() {
-            if let Some(new_sid) = parse_sid_to_string(data) {
-                if entry.machine_sid.as_deref() != Some(new_sid.as_str()) {
-                    entry.machine_sid = Some(new_sid);
-                    txlog_applied = true;
-                }
-            }
-        }
-        ts_infos.push(TxlogTimestampInfo {
-            field_name: "machineSid".to_string(),
-            hive_timestamp: None,
-            txlog_timestamp: txn.timestamp,
-            txlog_used: txn.data_after.is_some(),
-        });
-    }
-
-    if let Some(txn) = find_best_txlog_match(&transactions, r"Policy", "PolAdtEv") {
-        if let Some(data) = txn.data_after.as_deref() {
-            let new_hex = hex::encode(data);
-            if entry.audit_policy_hex.as_deref() != Some(new_hex.as_str()) {
-                entry.audit_policy_hex = Some(new_hex);
-                txlog_applied = true;
-            }
-        }
-        ts_infos.push(TxlogTimestampInfo {
-            field_name: "auditPolicyHex".to_string(),
-            hive_timestamp: None,
-            txlog_timestamp: txn.timestamp,
-            txlog_used: txn.data_after.is_some(),
-        });
-    }
-
-    entry.txlog_applied = txlog_applied;
-    entry.txlog_timestamps = ts_infos;
-
+    let snapshot = crate::registry::RegistrySnapshot::prepare(bytes, txlog1, txlog2)?;
+    let mut entry =
+        extract_security_policy_from_security_hive(snapshot.bytes(), hive_path, boot_key)?;
+    entry.txlog_applied = snapshot.logs_applied();
     Ok(entry)
 }
 

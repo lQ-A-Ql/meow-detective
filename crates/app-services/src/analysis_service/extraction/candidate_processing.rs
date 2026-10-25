@@ -12,7 +12,7 @@ pub(super) use super::reader::read_candidate_bytes_with_progress;
 pub(super) use super::reader::{
     encrypted_candidate_warning, CandidateExtractionError, CandidateSource,
 };
-use super::registry::extract_registry_candidate;
+use super::registry::extract_snapshot_candidate;
 use super::registry_preload::RegistryPreloadContext;
 use super::scheduler::{
     run_bounded_ordered, ExtractionSchedulingPolicy, PreparedWork, SchedulerSnapshot,
@@ -313,12 +313,11 @@ fn parse_candidate(
     }
     let kind =
         match input {
-            PreparedCandidateInput::Registry => match preload.registry_bytes(&candidate) {
-                Some(bytes) => {
+            PreparedCandidateInput::Registry => match preload.snapshot(&candidate) {
+                Some(snapshot) => {
                     let boot_key = preload.boot_key(&candidate);
-                    let (txlog1, txlog2) = preload.txlogs(&candidate);
-                    CandidateCompletionKind::Outcome(extract_registry_candidate(
-                        &candidate, bytes, boot_key, txlog1, txlog2,
+                    CandidateCompletionKind::Outcome(extract_snapshot_candidate(
+                        &candidate, snapshot, boot_key,
                     ))
                 }
                 None => CandidateCompletionKind::Warning(format!(

@@ -12,21 +12,11 @@ pub(in crate::analysis_service::extraction::registry) fn extract(
 }
 
 fn extract_policy(context: &mut RegistryExtractionContext<'_>) {
-    let result = if context.txlog1.is_some() || context.txlog2.is_some() {
-        artifacts_windows::extract_security_policy_from_security_hive_with_txlog(
-            context.bytes,
-            &context.candidate.path,
-            context.boot_key,
-            context.txlog1,
-            context.txlog2,
-        )
-    } else {
-        artifacts_windows::extract_security_policy_from_security_hive(
-            context.bytes,
-            &context.candidate.path,
-            context.boot_key,
-        )
-    };
+    let result = artifacts_windows::extract_security_policy_from_security_hive(
+        context.bytes,
+        &context.candidate.path,
+        context.boot_key,
+    );
     match result {
         Ok(entry) => context
             .outcome

@@ -3,6 +3,9 @@ use thiserror::Error;
 /// Typed error for registry parsing, recovery, and SAM decryption.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum RegistryError {
+    #[error("registry recovery failed: {0}")]
+    Recovery(super::log_replay::LogReplayError),
+
     #[error("invalid hive: {0}")]
     InvalidHive(String),
 

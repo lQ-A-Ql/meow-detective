@@ -1,5 +1,4 @@
 use super::*;
-use crate::registry::tests::txlog_fixture::{build_synthetic_log1, SyntheticEntry};
 use crate::registry::tests::*;
 
 #[test]
@@ -60,75 +59,6 @@ fn extract_security_policy_from_fixture() {
 #[test]
 fn missing_policy_key_returns_error() {
     assert!(extract_security_policy_from_security_hive(&empty_hive("ROOT"), "", None).is_err());
-}
-
-#[test]
-fn extract_security_policy_with_txlog_overrides_domain_name() {
-    let mut data = empty_hive("ROOT");
-    write_nk(&mut data, 0x20, "ROOT", &[("Policy", 0x200)], &[]);
-    write_nk(
-        &mut data,
-        0x200,
-        "Policy",
-        &[],
-        &[0x400, 0x480, 0x500, 0x580],
-    );
-    let domain = encode_utf16le("CORP");
-    let mut domain_data = Vec::new();
-    domain_data.extend_from_slice(&(domain.len() as u32).to_le_bytes());
-    domain_data.extend_from_slice(&domain);
-    write_binary_value(&mut data, 0x400, "PolPrDmS", &domain_data, 0x5000);
-    write_binary_value(
-        &mut data,
-        0x480,
-        "PolAcDmS",
-        &encode_utf16le("ACCT"),
-        0x5100,
-    );
-    write_binary_value(
-        &mut data,
-        0x500,
-        "PolMachineAccountS",
-        &make_sid(&[21, 123_456_789, 123_456_789, 123_456_789, 1000]),
-        0x5200,
-    );
-    write_binary_value(
-        &mut data,
-        0x580,
-        "PolAdtEv",
-        &[0x01, 0x02, 0x03, 0x04],
-        0x5300,
-    );
-
-    let txlog_domain = encode_utf16le("TXLOG-CORP");
-    let mut txlog_domain_data = Vec::new();
-    txlog_domain_data.extend_from_slice(&(txlog_domain.len() as u32).to_le_bytes());
-    txlog_domain_data.extend_from_slice(&txlog_domain);
-    let txlog_bytes = build_synthetic_log1(&[SyntheticEntry {
-        operation: 2,
-        sequence_number: 200,
-        timestamp: Some(0x01DB_A100_0000_0000),
-        key_path: r"\Registry\Machine\SECURITY\Policy".to_string(),
-        value_name: Some("PolPrDmS".to_string()),
-        data_before: None,
-        data_after: Some(txlog_domain_data),
-    }]);
-
-    let result = extract_security_policy_from_security_hive_with_txlog(
-        &data,
-        "",
-        None,
-        Some(&txlog_bytes),
-        None,
-    )
-    .unwrap();
-    assert_eq!(result.domain_name.as_deref(), Some("TXLOG-CORP"));
-    assert_eq!(result.account_domain_name.as_deref(), Some("ACCT"));
-    assert!(result.txlog_applied);
-    assert!(result
-        .txlog_timestamps
-        .iter()
-        .any(|ts| ts.field_name == "domainName"));
 }
 
 #[test]

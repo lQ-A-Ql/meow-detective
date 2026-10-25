@@ -1,6 +1,3 @@
-#[path = "txlog_fixture.rs"]
-pub(crate) mod txlog_fixture;
-
 const BASE_BLOCK_SIZE: usize = 0x1000;
 const INVALID_OFFSET: u32 = 0xffff_ffff;
 const REG_SZ: u32 = 1;

@@ -1,10 +1,7 @@
-use super::super::txlog_util::{apply_single_txlog_dword_override, apply_single_txlog_override};
 use super::super::{
     lookup_install_date_field, lookup_optional_dword_field, lookup_optional_string_field,
-    lookup_string_field, ParsedRegistryField, RegistryHiveReader, SoftwareHiveInfo,
-    TxlogTimestampInfo,
+    lookup_string_field, RegistryHiveReader, SoftwareHiveInfo,
 };
-use crate::registry::txlog::parse_transaction_log;
 use crate::registry::RegistryError;
 
 pub fn extract_software_hive_fields(
@@ -104,31 +101,8 @@ pub fn extract_software_hive_fields_with_txlog(
     hive_path: &str,
     txlog_data: &[u8],
 ) -> Result<SoftwareHiveInfo, RegistryError> {
-    let mut info = extract_software_hive_fields(bytes, hive_path)?;
-    let txlog = parse_transaction_log(txlog_data)?;
-    let mut txlog_applied = false;
-    let mut timestamps: Vec<TxlogTimestampInfo> = Vec::new();
-    let fields: [&mut Option<ParsedRegistryField>; 8] = [
-        &mut info.product_name,
-        &mut info.current_build,
-        &mut info.current_version,
-        &mut info.display_version,
-        &mut info.install_date,
-        &mut info.registered_owner,
-        &mut info.registered_organization,
-        &mut info.product_id,
-    ];
-    for field in fields.into_iter().flatten() {
-        let timestamp = apply_single_txlog_override(field, &txlog.transactions);
-        txlog_applied |= timestamp.txlog_used;
-        timestamps.push(timestamp);
-    }
-    if let Some(revision) = &mut info.update_build_revision {
-        let timestamp = apply_single_txlog_dword_override(revision, &txlog.transactions);
-        txlog_applied |= timestamp.txlog_used;
-        timestamps.push(timestamp);
-    }
-    info.txlog_applied = txlog_applied;
-    info.txlog_timestamps = timestamps;
+    let snapshot = crate::registry::RegistrySnapshot::prepare(bytes, Some(txlog_data), None)?;
+    let mut info = extract_software_hive_fields(snapshot.bytes(), hive_path)?;
+    info.txlog_applied = snapshot.logs_applied();
     Ok(info)
 }
