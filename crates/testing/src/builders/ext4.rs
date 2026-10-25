@@ -59,6 +59,36 @@ pub fn linux_root_ext4_image_usr_lib_os_release() -> Vec<u8> {
     build_linux_root(true, false, true)
 }
 
+pub fn linux_root_ext4_image_os_release_files(primary: &[u8], vendor: &[u8]) -> Vec<u8> {
+    assert!(primary.len() <= BLOCK_SIZE && vendor.len() <= BLOCK_SIZE);
+    let mut image = build_linux_root(true, true, true);
+    write_extent_inode(&mut image, 4, 0x81a4, primary.len() as u64, 5);
+    write_extent_inode(&mut image, 13, 0x81a4, vendor.len() as u64, 14);
+    image[5 * BLOCK_SIZE..5 * BLOCK_SIZE + primary.len()].copy_from_slice(primary);
+    image[14 * BLOCK_SIZE..15 * BLOCK_SIZE].fill(0);
+    image[14 * BLOCK_SIZE..14 * BLOCK_SIZE + vendor.len()].copy_from_slice(vendor);
+    write_dir(
+        &mut image[4 * BLOCK_SIZE..5 * BLOCK_SIZE],
+        3,
+        2,
+        &[(4, 1, "os-release"), (5, 1, "fstab"), (10, 1, "shadow")],
+    );
+    image
+}
+
+pub fn linux_root_ext4_image_os_release_symlink(target: &[u8]) -> Vec<u8> {
+    assert!(target.len() <= 60);
+    let mut image = build_linux_root(true, true, true);
+    write_fast_symlink(&mut image, 4, target);
+    write_dir(
+        &mut image[4 * BLOCK_SIZE..5 * BLOCK_SIZE],
+        3,
+        2,
+        &[(4, 7, "os-release"), (5, 1, "fstab"), (10, 1, "shadow")],
+    );
+    image
+}
+
 fn build_linux_root(
     include_boot: bool,
     include_fstab: bool,

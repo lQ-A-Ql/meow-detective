@@ -3,6 +3,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum MountServiceError {
+    #[error("OS identity could not be read: {0}")]
+    OsRelease(#[from] artifacts_linux::LinuxArtifactError),
     #[error("emulation parent view failed: {0}")]
     DerivedVolume(#[from] evidence_emulation::EmulationError),
     #[error("emulation block reader failed: {0}")]
@@ -38,6 +40,13 @@ pub enum MountServiceError {
 impl transport::ServiceErrorCategory for MountServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::OsRelease(artifacts_linux::LinuxArtifactError::Io(_)) => {
+                transport::ErrorCategory::Io
+            }
+            Self::OsRelease(artifacts_linux::LinuxArtifactError::Unsupported { .. }) => {
+                transport::ErrorCategory::Unsupported
+            }
+            Self::OsRelease(_) => transport::ErrorCategory::Parser,
             Self::DerivedVolume(evidence_emulation::EmulationError::InvalidDerivedVolume(_)) => {
                 transport::ErrorCategory::Unsupported
             }

@@ -6,6 +6,7 @@ use persistence_sqlite::repositories::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+const IDENTITY_PARSER_VERSION: &str = "1.3.7";
 
 use crate::{
     file_service::{read_file_bytes_for_case, SourceReadContext},
@@ -33,7 +34,12 @@ pub fn load_persisted_linux_evidence_facts(
     let facts_json = LinuxEvidenceFactsRepo::new(source_connection)
         .find_json(data_source_id)
         .ok()??;
-    serde_json::from_str(&facts_json).ok()
+    let value: Value = serde_json::from_str(&facts_json).ok()?;
+    if value.get("osReleaseParserVersion").and_then(Value::as_str) != Some(IDENTITY_PARSER_VERSION)
+    {
+        return None;
+    }
+    serde_json::from_value(value).ok()
 }
 
 pub fn persist_linux_evidence_facts(
@@ -44,7 +50,19 @@ pub fn persist_linux_evidence_facts(
     // This cache is written only from the import publication lease, before the
     // source transitions to ready. Post-ready analysis must remain read-only
     // against the published source catalog.
-    let facts_json = serde_json::to_string(facts).unwrap_or_else(|_| "{}".to_string());
+    let mut value = serde_json::to_value(facts)
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let Value::Object(ref mut object) = value else {
+        return Err(persistence_sqlite::DbError::System(
+            "Linux facts must be an object".into(),
+        ));
+    };
+    object.insert(
+        "osReleaseParserVersion".into(),
+        IDENTITY_PARSER_VERSION.into(),
+    );
+    let facts_json = serde_json::to_string(&value)
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
     LinuxEvidenceFactsRepo::new(source_connection).replace_json(data_source_id, &facts_json)
 }
 
@@ -97,12 +115,15 @@ pub fn collect_linux_evidence_facts(
     if let Some(entry) = find_entry(&entries, &["etc/hostname"]) {
         facts.hostname = read_entry(entry, &mut context).and_then(|bytes| clean_text(&bytes));
     }
-    if let Some(entry) = find_entry(&entries, &["usr/lib/os-release", "etc/os-release"]) {
-        if let Some(text) = read_entry(entry, &mut context).and_then(|bytes| clean_text(&bytes)) {
-            facts.operating_system =
-                key_value(&text, "PRETTY_NAME").or_else(|| key_value(&text, "NAME"));
-            facts.os_version = key_value(&text, "VERSION_ID");
+    match crate::linux_identity_service::from_catalog(&entries, &mut context) {
+        Ok(Some(info)) => {
+            facts.operating_system = info
+                .pretty_name
+                .or_else(|| info.fields.get("NAME").cloned());
+            facts.os_version = info.version_id;
         }
+        Ok(None) => {}
+        Err(error) => facts.diagnostics.push(error.to_string()),
     }
     if let Some(entry) = find_entry(&entries, &["etc/hosts"]) {
         if let Some(text) = read_entry(entry, &mut context).and_then(|bytes| clean_text(&bytes)) {
@@ -241,16 +262,7 @@ fn collect_artifact_facts(
         let path = attrs["sourcePath"].as_str().unwrap_or_default();
         let kind = attrs["configKind"].as_str().unwrap_or_default();
         let line = attrs["line"].as_str().unwrap_or_default().trim();
-        if kind == "osRelease" && is_root_identity_path(path) {
-            facts.operating_system = attrs["prettyName"]
-                .as_str()
-                .map(str::to_string)
-                .or_else(|| facts.operating_system.clone());
-            facts.os_version = attrs["versionId"]
-                .as_str()
-                .map(str::to_string)
-                .or_else(|| facts.os_version.clone());
-        } else if kind == "textConfig" && path_matches(path, "etc/hostname") {
+        if kind == "textConfig" && path_matches(path, "etc/hostname") {
             if !line.is_empty() {
                 facts.hostname = facts.hostname.clone().or_else(|| Some(line.to_string()));
             }
@@ -273,11 +285,6 @@ fn path_matches(path: &str, suffix: &str) -> bool {
     path == suffix || path.ends_with(&format!("/{suffix}"))
 }
 
-fn is_root_identity_path(path: &str) -> bool {
-    let path = normalized(path);
-    path == "etc/os-release" || path == "usr/lib/os-release"
-}
-
 fn find_entry<'a>(
     entries: &'a [domain::FileEntry],
     suffixes: &[&str],
@@ -298,13 +305,6 @@ fn normalized(path: &str) -> String {
 fn clean_text(bytes: &[u8]) -> Option<String> {
     let text = String::from_utf8_lossy(bytes).trim().to_string();
     (!text.is_empty()).then_some(text)
-}
-
-fn key_value(text: &str, key: &str) -> Option<String> {
-    text.lines()
-        .find_map(|line| line.strip_prefix(&format!("{key}=")))
-        .map(|value| value.trim_matches('"').trim().to_string())
-        .filter(|value| !value.is_empty())
 }
 
 fn parse_hosts_addresses(text: &str, hostname: Option<&str>) -> Vec<String> {

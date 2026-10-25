@@ -308,10 +308,12 @@ name = "artifacts-linux"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "etc-os-release",
  "flate2",
  "lz4_flex",
  "serde",
  "serde_json",
+ "shlex",
  "tempfile",
  "thiserror 2.0.21",
  "xz2",
@@ -1720,6 +1722,16 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "etc-os-release"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5bb34d25272a56dd40b5397182de049d19e8a2145313a606b7112e7f9343c51"
+dependencies = [
+ "indexmap 2.14.0",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

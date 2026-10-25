@@ -9,6 +9,7 @@ mod gitlab;
 pub mod journal;
 mod lastlog;
 mod mysql;
+mod os_release;
 mod shadow_edit;
 mod stats;
 mod sudo;
@@ -32,12 +33,15 @@ pub use mysql::{
     detect_mysql_config_findings, detect_mysql_log_findings, parse_mysql_config, parse_mysql_log,
     parse_mysql_log_with_stats, MysqlConfigEntry, MysqlFinding, MysqlLogEntry,
 };
+pub use os_release::{
+    parse_os_release, parse_os_release_bytes, OsReleaseInfo, MAX_OS_RELEASE_BYTES, OS_RELEASE_PATHS,
+};
 pub use shadow_edit::{
     parse_shadow_accounts, set_shadow_login_password, set_shadow_password_hash, ShadowAccount,
 };
 pub use stats::{LogLineStats, WebAccessLogStats};
 pub use sudo::{parse_auth_log_sudo, SudoEvent};
-pub use system::{parse_os_release, parse_passwd, OsReleaseInfo, PasswdAccount};
+pub use system::{parse_passwd, PasswdAccount};
 pub use systemd::catalog::{SystemdUnitCatalog, SystemdUnitFile, SystemdUnitLinks};
 pub use systemd::{
     parse_systemd_unit, parse_systemd_unit_with_drop_ins, LinuxServiceUnit, SystemdDropIn,

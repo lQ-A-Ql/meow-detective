@@ -54,6 +54,7 @@ pub mod infrastructure_graph_service;
 pub mod job_service;
 pub mod ledger_service;
 pub mod linux_artifact_job;
+pub(crate) mod linux_identity_service;
 pub mod mcp_host_service;
 pub mod mount_service;
 pub mod nested_evidence_service;

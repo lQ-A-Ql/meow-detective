@@ -101,17 +101,20 @@ pub(crate) fn enrich_linux_installs_from_fs(
             data_source_id,
             install.partition_index,
         ) {
-            Some(probe) => {
+            Ok(Some(probe)) => {
                 install.os_release_pretty_name = probe.pretty_name;
                 install.kernel_present = Some(probe.kernel_present);
                 install.fstab_present = Some(probe.fstab_present);
                 install.boot_risk_notes = probe.risk_notes;
             }
-            None => {
+            Ok(None) => {
                 tracing::warn!(
                     partition_index = install.partition_index,
                     "linux install fs probe: partition could not be opened"
                 );
+            }
+            Err(error) => {
+                tracing::warn!(%error, partition_index = install.partition_index, "Linux installation probe failed")
             }
         }
     }
@@ -167,11 +170,15 @@ fn probe_linux_install(
     partitions: &PartitionRepo<'_>,
     data_source_id: &DataSourceId,
     partition_index: u32,
-) -> Option<LinuxFsProbe> {
-    let record = partitions
-        .find_by_data_source_and_index(&data_source_id.0, partition_index as usize)
-        .ok()??;
-    let fs = open_linux_fs(context, &record)?;
+) -> Result<Option<LinuxFsProbe>, MountServiceError> {
+    let Some(record) =
+        partitions.find_by_data_source_and_index(&data_source_id.0, partition_index as usize)?
+    else {
+        return Ok(None);
+    };
+    let Some(fs) = open_linux_fs(context, &record) else {
+        return Ok(None);
+    };
     probe_linux_fs_root(fs.as_ref(), record.filesystem.as_deref().unwrap_or(""))
 }
 
@@ -180,15 +187,20 @@ fn probe_linux_install(
 pub(crate) fn probe_linux_fs_root(
     fs: &dyn FileSystemReader,
     fs_label: &str,
-) -> Option<LinuxFsProbe> {
-    let etc = fs.list_children("etc").ok()?;
+) -> Result<Option<LinuxFsProbe>, MountServiceError> {
+    let etc = match fs.list_children("etc") {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(MountServiceError::SourceMetadata(error)),
+    };
     // /sbin/init is a symlink chain on usrmerge/systemd layouts; check the
     // physical target too in case the reader does not follow symlinks.
     let has_init = has_file(fs, "sbin/init")
         || has_file(fs, "lib/systemd/systemd")
         || has_file(fs, "usr/lib/systemd/systemd")
         || has_file(fs, "bin/init");
-    let pretty_name = read_os_release_pretty_name(fs);
+    let pretty_name =
+        crate::linux_identity_service::from_filesystem(fs)?.and_then(|info| info.pretty_name);
     let kernel_present = fs
         .list_children("boot")
         .map(|children| {
@@ -213,68 +225,16 @@ pub(crate) fn probe_linux_fs_root(
         risk_notes.push("btrfs-root".to_string());
     }
     super::emulation_linux_services::annotate_service_risks(fs, &mut risk_notes);
-    Some(LinuxFsProbe {
+    Ok(Some(LinuxFsProbe {
         pretty_name,
         kernel_present,
         fstab_present,
         risk_notes,
-    })
+    }))
 }
 
 fn has_file(fs: &dyn FileSystemReader, path: &str) -> bool {
     fs.open_file(path).is_ok()
-}
-
-fn read_os_release_pretty_name(fs: &dyn FileSystemReader) -> Option<String> {
-    for path in ["etc/os-release", "usr/lib/os-release"] {
-        if let Ok(content) = fs.read_file_range(path, 0, 64 * 1024) {
-            if let Some(name) = parse_os_release_pretty_name(&content) {
-                return Some(name);
-            }
-        }
-    }
-    None
-}
-
-/// Parse `PRETTY_NAME` out of os-release content (shell-like `KEY="value"`
-/// lines per the freedesktop specification).
-pub(crate) fn parse_os_release_pretty_name(content: &[u8]) -> Option<String> {
-    let text = String::from_utf8_lossy(content);
-    for line in text.lines() {
-        let line = line.trim();
-        if line.starts_with('#') {
-            continue;
-        }
-        if let Some(value) = line.strip_prefix("PRETTY_NAME=") {
-            let value = value.trim();
-            let unquoted = value
-                .strip_prefix('"')
-                .and_then(|inner| inner.strip_suffix('"'))
-                .unwrap_or(value);
-            if !unquoted.is_empty() {
-                return Some(unquoted.to_string());
-            }
-        }
-    }
-    None
-}
-
-/// Parse the os-release `ID` field (unquoted lowercase token).
-pub(crate) fn parse_os_release_id(content: &[u8]) -> Option<String> {
-    let text = String::from_utf8_lossy(content);
-    for line in text.lines() {
-        let line = line.trim();
-        if line.starts_with('#') {
-            continue;
-        }
-        if let Some(value) = line.strip_prefix("ID=") {
-            let value = value.trim().trim_matches('"');
-            if !value.is_empty() {
-                return Some(value.to_string());
-            }
-        }
-    }
-    None
 }
 
 /// Map an os-release `ID` to the VMware guestid. Unknown or missing distros
@@ -407,14 +367,8 @@ pub fn linux_guest_profile(
         let current_evidence = super::emulation_linux_controller::inspect_filesystem(fs.as_ref());
         controller_evidence.merge(current_evidence);
         if distro_id.is_none() {
-            for path in ["etc/os-release", "usr/lib/os-release"] {
-                if let Ok(content) = fs.read_file_range(path, 0, 64 * 1024) {
-                    distro_id = parse_os_release_id(&content);
-                    if distro_id.is_some() {
-                        break;
-                    }
-                }
-            }
+            distro_id = crate::linux_identity_service::from_filesystem(fs.as_ref())?
+                .and_then(|info| info.id);
         }
         if network_pci_slot.is_none() {
             network_pci_slot = linux_network_pci_slot(fs.as_ref());

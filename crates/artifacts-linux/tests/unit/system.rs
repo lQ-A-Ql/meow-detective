@@ -1,4 +1,5 @@
 use super::*;
+use crate::parse_os_release;
 use crate::parse_systemd_unit;
 
 #[test]

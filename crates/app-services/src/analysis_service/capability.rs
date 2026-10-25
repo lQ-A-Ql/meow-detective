@@ -9,12 +9,15 @@ const ANDROID_DEVICE_KEY: &str = "AndroidDevice";
 const ANDROID_PACKAGES_KEY: &str = "AndroidPackages";
 const RETIRED_MACOS_KEY: &str = "MacArtifacts";
 pub(crate) const REGISTRY_EXTRACTOR_VERSION: &str = "1.3.5";
-pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "1.3.6";
+pub(crate) const CONTAINERD_EXTRACTOR_VERSION: &str = "1.3.6";
+pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "1.3.7";
 
 pub(crate) fn producer_version(producer: &str) -> &'static str {
     if producer.starts_with("registry.") {
         REGISTRY_EXTRACTOR_VERSION
     } else if producer == "linux.docker_image" {
+        CONTAINERD_EXTRACTOR_VERSION
+    } else if producer == "linux.os_release" {
         LINUX_SYSTEM_CONFIG_VERSION
     } else {
         super::ANALYSIS_EXTRACTOR_VERSION

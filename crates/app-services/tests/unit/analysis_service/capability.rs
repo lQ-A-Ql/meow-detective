@@ -93,7 +93,7 @@ fn bolt_upgrade_invalidates_only_system_config_checkpoints_and_image_outputs() {
     );
     assert_eq!(
         producer_version("linux.docker_image"),
-        LINUX_SYSTEM_CONFIG_VERSION
+        CONTAINERD_EXTRACTOR_VERSION
     );
     assert_eq!(
         producer_version("linux.passwd"),

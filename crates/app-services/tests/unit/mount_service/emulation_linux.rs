@@ -70,13 +70,30 @@ fn parses_os_release_fields() {
     let content =
         b"NAME=\"CentOS Linux\"\nID=\"centos\"\nPRETTY_NAME=\"CentOS Linux 7 (Core)\"\n# comment\n";
     assert_eq!(
-        parse_os_release_pretty_name(content).as_deref(),
+        artifacts_linux::parse_os_release_bytes(content)
+            .unwrap()
+            .pretty_name
+            .as_deref(),
         Some("CentOS Linux 7 (Core)")
     );
-    assert_eq!(parse_os_release_id(content).as_deref(), Some("centos"));
-    assert_eq!(parse_os_release_pretty_name(b"ID=ubuntu\n"), None);
     assert_eq!(
-        parse_os_release_id(b"ID=debian\n").as_deref(),
+        artifacts_linux::parse_os_release_bytes(content)
+            .unwrap()
+            .id
+            .as_deref(),
+        Some("centos")
+    );
+    assert_eq!(
+        artifacts_linux::parse_os_release_bytes(b"ID=ubuntu\n")
+            .unwrap()
+            .pretty_name,
+        None
+    );
+    assert_eq!(
+        artifacts_linux::parse_os_release_bytes(b"ID=debian\n")
+            .unwrap()
+            .id
+            .as_deref(),
         Some("debian")
     );
 }
@@ -95,7 +112,9 @@ fn maps_distro_ids_to_vmware_guestids() {
 #[test]
 fn probes_a_synthetic_linux_root() {
     let fs = open_fs(testing::builders::ext4::linux_root_ext4_image());
-    let probe = probe_linux_fs_root(&fs, "Ext4").expect("probe succeeds");
+    let probe = probe_linux_fs_root(&fs, "Ext4")
+        .expect("probe succeeds")
+        .expect("Linux root");
     assert_eq!(probe.pretty_name.as_deref(), Some("CentOS Linux 7 (Core)"));
     assert!(probe.kernel_present);
     assert!(probe.fstab_present);
@@ -105,18 +124,22 @@ fn probes_a_synthetic_linux_root() {
 #[test]
 fn flags_btrfs_roots_and_missing_boot_assets() {
     let fs = open_fs(testing::builders::ext4::linux_root_ext4_image());
-    let probe = probe_linux_fs_root(&fs, "Btrfs").expect("probe succeeds");
+    let probe = probe_linux_fs_root(&fs, "Btrfs")
+        .expect("probe succeeds")
+        .expect("Linux root");
     assert!(probe.risk_notes.iter().any(|note| note == "btrfs-root"));
 
     let fs = open_fs(testing::builders::ext4::minimal_ext4_image());
-    let probe = probe_linux_fs_root(&fs, "Ext4");
+    let probe = probe_linux_fs_root(&fs, "Ext4").unwrap();
     assert!(probe.is_none(), "a root without /etc is not a system root");
 }
 
 #[test]
 fn flags_missing_kernel_and_fstab() {
     let fs = open_fs(testing::builders::ext4::linux_root_ext4_image_without_boot_assets());
-    let probe = probe_linux_fs_root(&fs, "Ext4").expect("probe succeeds");
+    let probe = probe_linux_fs_root(&fs, "Ext4")
+        .expect("probe succeeds")
+        .expect("Linux root");
     assert!(!probe.kernel_present);
     assert!(!probe.fstab_present);
     assert!(probe.risk_notes.iter().any(|note| note == "no-kernel"));
@@ -127,7 +150,9 @@ fn flags_missing_kernel_and_fstab() {
 #[test]
 fn reads_os_release_from_the_usr_lib_fallback() {
     let fs = open_fs(testing::builders::ext4::linux_root_ext4_image_usr_lib_os_release());
-    let probe = probe_linux_fs_root(&fs, "Ext4").expect("probe succeeds");
+    let probe = probe_linux_fs_root(&fs, "Ext4")
+        .expect("probe succeeds")
+        .expect("Linux root");
     assert_eq!(probe.pretty_name.as_deref(), Some("CentOS Linux 7 (Core)"));
     assert!(probe.kernel_present);
     assert!(!probe.fstab_present);

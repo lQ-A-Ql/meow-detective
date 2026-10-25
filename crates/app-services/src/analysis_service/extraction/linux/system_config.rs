@@ -75,7 +75,7 @@ pub(super) fn extract(
         super::docker::extract(candidate, bytes, outcome);
     } else if normalized.ends_with("/etc/os-release") || normalized.ends_with("/usr/lib/os-release")
     {
-        extract_os_release(candidate, &text, outcome);
+        extract_os_release(candidate, bytes, outcome);
     } else if normalized.ends_with("/etc/passwd") {
         extract_passwd(candidate, &text, outcome);
     } else if normalized.ends_with("/etc/shadow") || normalized.ends_with("/etc/gshadow") {
@@ -164,16 +164,20 @@ fn is_ini_section_header(line: &str) -> bool {
     !inner.contains('[') && !inner.contains(']')
 }
 
-fn extract_os_release(candidate: &EvidenceCandidate, text: &str, outcome: &mut ExtractionOutcome) {
+fn extract_os_release(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
     // On XFS/ext4 systems /etc/os-release is usually a symlink to
     // ../usr/lib/os-release; some readers surface the raw symlink target as
     // the file content (a single bare path line). That is not os-release
     // data: skip it silently instead of logging a parse warning — the real
     // key=value content arrives via the /usr/lib/os-release candidate.
-    if looks_like_symlink_target(text) {
+    if std::str::from_utf8(bytes).is_ok_and(looks_like_symlink_target) {
         return;
     }
-    match artifacts_linux::parse_os_release(text) {
+    match artifacts_linux::parse_os_release_bytes(bytes) {
         Ok(info) => {
             let mut attrs = base_attrs(candidate);
             attrs.insert(
