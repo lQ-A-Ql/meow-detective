@@ -1,3 +1,6 @@
+#[path = "mft_metadata.rs"]
+mod mft_metadata;
+
 pub fn resident(
     record: &mut [u8],
     position: usize,
@@ -76,5 +79,6 @@ pub fn bytes(algorithm: u32, logical_size: u64, compressed: &[u8]) -> Vec<u8> {
     position = resident(record, position, 0xc0, "", &reparse);
     record[position..position + 4].copy_from_slice(&u32::MAX.to_le_bytes());
     image[32768..32768 + compressed.len()].copy_from_slice(compressed);
+    mft_metadata::initialize(&mut image);
     image
 }

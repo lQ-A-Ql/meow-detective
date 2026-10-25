@@ -1,3 +1,4 @@
+use support::mft_metadata;
 #[path = "support/initialized_data.rs"]
 #[allow(dead_code)]
 mod support;
@@ -78,6 +79,7 @@ fn build_fixture() -> Vec<u8> {
     rec5[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
     rec5[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes()); // fix length
 
+    mft_metadata::initialize(&mut data);
     data
 }
 
@@ -234,6 +236,7 @@ fn build_nested_fixture() -> Vec<u8> {
         &[("ntdll.dll", 100)],
     );
 
+    mft_metadata::initialize(&mut data);
     data
 }
 
@@ -303,6 +306,7 @@ fn later_file_name_parent_match_resolves_directory() {
     off += 4;
     rec6[attr_off + 4..attr_off + 8].copy_from_slice(&((off - attr_off) as u32).to_le_bytes());
 
+    mft_metadata::initialize(&mut data);
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let nodes = ntfs
@@ -512,6 +516,7 @@ fn build_index_alloc_fixture() -> Vec<u8> {
     // Write INDX record at the data run target
     data[indx_offset..indx_offset + indx_rec.len()].copy_from_slice(&indx_rec);
 
+    mft_metadata::initialize(&mut data);
     data
 }
 
@@ -614,6 +619,7 @@ fn data_run_parse_zero_length_run_is_rejected() {
 
     data[indx_offset..indx_offset + indx_rec.len()].copy_from_slice(&indx_rec);
 
+    mft_metadata::initialize(&mut data);
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let error = ntfs
@@ -705,6 +711,7 @@ fn build_resident_data_fixture() -> Vec<u8> {
     rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
     write_resident_data(rec6, 0x68, b"Hello NTFS!");
 
+    mft_metadata::initialize(&mut data);
     data
 }
 
@@ -768,6 +775,7 @@ fn build_nonresident_data_fixture() -> Vec<u8> {
     // Write file content at the data cluster
     data[data_offset..data_offset + file_content.len()].copy_from_slice(file_content);
 
+    mft_metadata::initialize(&mut data);
     data
 }
 
@@ -859,6 +867,7 @@ fn build_attribute_list_external_data_fixture() -> Vec<u8> {
 
     data[data_offset..data_offset + file_content.len()].copy_from_slice(file_content);
 
+    mft_metadata::initialize(&mut data);
     data
 }
 
@@ -949,6 +958,7 @@ fn build_external_index_allocation_fixture() -> Vec<u8> {
         .copy_from_slice(&((run + 4 - allocation) as u32).to_le_bytes());
     write_resident_index_bitmap(extension, run + 4, Some("$I30"), 1);
     data[index_offset..index_offset + index_record.len()].copy_from_slice(&index_record);
+    mft_metadata::initialize(&mut data);
     data
 }
 
@@ -1216,6 +1226,7 @@ fn open_file_nested_path() {
     rec8[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
     write_resident_data(rec8, 0x68, b"MZ\x90\x00");
 
+    mft_metadata::initialize(&mut data);
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let mut file = ntfs.open_file("\\Windows\\System32\\ntdll.dll").unwrap();
@@ -1306,6 +1317,7 @@ fn list_children_returns_files_and_dirs() {
     rec7[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
     write_resident_data(rec7, 0x68, b"file content here");
 
+    mft_metadata::initialize(&mut data);
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
 
@@ -1395,6 +1407,7 @@ fn par_ref_mismatch_returns_none() {
     let end = write_resident_file_name(rec6, 0x68, 99, "DirA");
     rec6[end..end + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
 
+    mft_metadata::initialize(&mut data);
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     // resolve_path should detect the par_ref mismatch and return None
@@ -1478,6 +1491,7 @@ fn build_efs_fixture() -> Vec<u8> {
     rec5[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
     rec5[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
 
+    mft_metadata::initialize(&mut data);
     data
 }
 

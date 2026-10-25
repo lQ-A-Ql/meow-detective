@@ -20,6 +20,7 @@ mod mft_stream;
 mod namespace_edit;
 mod path;
 mod reader;
+mod record;
 mod recovery;
 mod technical;
 mod utils;
@@ -27,16 +28,20 @@ mod wof;
 mod write_map;
 
 pub use attribute::{AttributeListEntry, DataAttributeExtent};
-pub use data_runs::DataRun;
+pub use data_runs::{
+    parse_data_runs_bytes, parse_data_runs_ext, parse_mft_data_attribute,
+    parse_mft_data_runs_from_record, DataRun, MftDataAttribute,
+};
 pub use directory::NtfsDirectoryEntry;
 pub use file_stream::NtfsFileReader;
 pub use mft::{NtfsPreviewFile, NtfsReader};
 pub use namespace_edit::{DirectoryEntryRemoval, PlannedDiskEdit};
+pub use record::ValidatedRecord;
 pub use recovery::{NtfsAllocationState, NtfsDataExtent, NtfsDeletedFileRecord};
 pub use technical::{
     ForensicDataRun, NtfsRecordSourceRange, NtfsTechnicalAttribute, NtfsTechnicalFile,
 };
-pub use utils::parse_mft_data_real_size;
+pub use utils::{apply_record_fixup, mft_record_bytes, parse_mft_data_real_size};
 pub use write_map::NtfsFileExtent;
 
 pub(crate) use evidence_core::filesystem::{

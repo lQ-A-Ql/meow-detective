@@ -60,6 +60,9 @@ impl EvidenceReader for MemoryReader {
     }
 }
 
+#[path = "support/mft_metadata.rs"]
+mod mft_metadata;
+
 fn ntfs_fixture(sequence: u16, flags: u16) -> Vec<u8> {
     let cluster_size = 512usize;
     let mft_offset = 2 * cluster_size;
@@ -78,6 +81,7 @@ fn ntfs_fixture(sequence: u16, flags: u16) -> Vec<u8> {
     record[0..4].copy_from_slice(b"FILE");
     record[0x10..0x12].copy_from_slice(&sequence.to_le_bytes());
     record[0x16..0x18].copy_from_slice(&flags.to_le_bytes());
+    mft_metadata::initialize(&mut image);
     image
 }
 

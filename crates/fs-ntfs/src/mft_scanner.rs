@@ -1,7 +1,6 @@
 use crate::file_name::FileNameNamespace;
+use crate::ValidatedRecord;
 use chrono::{DateTime, TimeZone, Utc};
-use evidence_core::filesystem::invalid_fs_data;
-use std::io;
 
 const FILE_ATTRIBUTE_ENCRYPTED: u32 = 0x0000_4000;
 const FILE_ATTRIBUTE_READ_ONLY: u32 = 0x0000_0001;
@@ -60,21 +59,22 @@ impl MftRecordParser {
         if record.len() == 1024 {
             let mut rec = [0u8; 1024];
             rec.copy_from_slice(record);
-            if apply_record_fixup(&mut rec, self.bytes_per_sector as usize).is_err() {
-                return None;
-            }
-            return parse_mft_record(&rec, record_number);
+            let rec = ValidatedRecord::new(&mut rec, self.bytes_per_sector as usize).ok()?;
+            return parse_mft_record(rec.bytes(), record_number);
         }
 
         self.buf.clear();
         self.buf.extend_from_slice(record);
-        if apply_record_fixup(&mut self.buf, self.bytes_per_sector as usize).is_err() {
-            return None;
-        }
-        parse_mft_record(&self.buf, record_number)
+        let rec = ValidatedRecord::new(&mut self.buf, self.bytes_per_sector as usize).ok()?;
+        parse_mft_record(rec.bytes(), record_number)
     }
 
-    pub(crate) fn parse_fixed(&mut self, record: &[u8], record_number: u64) -> Option<MftRecord> {
+    pub(crate) fn parse_fixed(
+        &mut self,
+        validated: &ValidatedRecord<'_>,
+        record_number: u64,
+    ) -> Option<MftRecord> {
+        let record = validated.bytes();
         if record.len() < 42 || &record[0..4] != b"FILE" {
             return None;
         }
@@ -385,38 +385,6 @@ fn ntfs_to_datetime(ntfs_time: u64) -> Option<DateTime<Utc>> {
     let unix_secs = (unix_100ns / 10_000_000) as i64;
     let unix_nanos = ((unix_100ns % 10_000_000) * 100) as u32;
     Utc.timestamp_opt(unix_secs, unix_nanos).single()
-}
-
-/// Apply NTFS update sequence array fixup to a record.
-fn apply_record_fixup(record: &mut [u8], sector_size: usize) -> io::Result<()> {
-    if record.len() < 8 || sector_size < 2 {
-        return Ok(());
-    }
-    let usa_offset = u16::from_le_bytes([record[4], record[5]]) as usize;
-    let usa_count = u16::from_le_bytes([record[6], record[7]]) as usize;
-    if usa_offset == 0 || usa_count < 2 {
-        return Ok(());
-    }
-    let usa_bytes = usa_count * 2;
-    if usa_offset + usa_bytes > record.len() {
-        return Err(invalid_fs_data(
-            "update sequence array exceeds record length",
-        ));
-    }
-    let expected = [record[usa_offset], record[usa_offset + 1]];
-    for i in 1..usa_count {
-        let fixup_pos = i * sector_size - 2;
-        if fixup_pos + 2 > record.len() {
-            break;
-        }
-        if record[fixup_pos..fixup_pos + 2] != expected {
-            return Err(invalid_fs_data("update sequence signature mismatch"));
-        }
-        let replacement = usa_offset + i * 2;
-        record[fixup_pos] = record[replacement];
-        record[fixup_pos + 1] = record[replacement + 1];
-    }
-    Ok(())
 }
 
 #[cfg(test)]

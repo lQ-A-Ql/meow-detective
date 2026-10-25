@@ -1,5 +1,7 @@
 use super::*;
 use crate::NtfsReader;
+#[path = "../support/mft_metadata.rs"]
+mod mft_metadata;
 use evidence_core::EvidenceReader;
 use std::io::{self, Read, Seek, SeekFrom};
 
@@ -160,6 +162,7 @@ fn build_ads_fixture() -> Vec<u8> {
         b"[ZoneTransfer]\r\nZoneId=3",
     );
 
+    mft_metadata::initialize(&mut data);
     data
 }
 
@@ -248,6 +251,7 @@ fn list_ads_no_streams_returns_empty() {
         rec6[0x80 + i] = b;
     });
 
+    mft_metadata::initialize(&mut data);
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
 
@@ -314,6 +318,7 @@ fn list_ads_multiple_streams() {
 
     write_named_data_attr(rec6, next, "stream-two", b"BBBB");
 
+    mft_metadata::initialize(&mut data);
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
 

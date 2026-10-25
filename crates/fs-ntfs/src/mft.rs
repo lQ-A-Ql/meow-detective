@@ -66,7 +66,7 @@ impl NtfsReader {
         let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
         let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap_or([0; 8]));
         let _root_dir = root_dir_frn(&boot);
-        let mft_record_size = mft_record_bytes(&boot);
+        let mft_record_size = mft_record_bytes(&boot)?;
         let index_record_size = index_record_bytes(&boot, cluster_size as u32, mft_record_size);
 
         let mft_record0 = read_contiguous_mft_record(
@@ -78,9 +78,9 @@ impl NtfsReader {
             bytes_per_sector,
             0,
         )?;
-        let mft_data_runs =
-            crate::data_runs::parse_mft_data_runs_from_record(&mft_record0).unwrap_or_default();
-        let mft_data_size = crate::utils::parse_mft_data_real_size(&mft_record0).unwrap_or(0);
+        let mft_data = crate::data_runs::parse_mft_data_attribute(&mft_record0)?;
+        let mft_data_runs = mft_data.runs;
+        let mft_data_size = mft_data.real_size;
         let mft_record_count = if mft_record_size == 0 {
             0
         } else {

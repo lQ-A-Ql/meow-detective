@@ -1,6 +1,8 @@
 use evidence_core::{filesystem::FileSystemReader, image::raw_reader::RawImageReader};
 use fs_ntfs::NtfsReader;
 use std::io;
+#[path = "support/mft_metadata.rs"]
+mod mft_metadata;
 
 fn resident(record: &mut [u8], position: usize, kind: u32, content: &[u8]) -> usize {
     let length = (24 + content.len() + 7) & !7;
@@ -28,6 +30,7 @@ fn filesystem(tag: Option<&[u8]>) -> (NtfsReader, tempfile::TempDir) {
         position = resident(record, position, 0xc0, tag);
     }
     record[position..position + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+    mft_metadata::initialize(&mut image);
     let path = temporary.path().join("ntfs.raw");
     std::fs::write(&path, image).unwrap();
     (

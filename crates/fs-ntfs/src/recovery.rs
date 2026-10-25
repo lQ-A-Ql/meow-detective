@@ -79,11 +79,11 @@ impl crate::NtfsReader {
                     continue;
                 }
                 let mut fixed = raw.to_vec();
-                if crate::utils::apply_record_fixup(&mut fixed, self.bytes_per_sector as usize)
-                    .is_err()
-                {
+                let Ok(fixed) =
+                    crate::ValidatedRecord::new(&mut fixed, self.bytes_per_sector as usize)
+                else {
                     continue;
-                }
+                };
                 let record_source_offset = self.mft_record_source_offset(record_number)?;
                 if let Some(record) = deleted_record(
                     &mut parser,
@@ -215,12 +215,13 @@ impl crate::NtfsReader {
 
 fn deleted_record(
     parser: &mut MftRecordParser,
-    record: &[u8],
+    validated: &crate::ValidatedRecord<'_>,
     record_number: u64,
     record_source_offset: u64,
     record_size: u32,
     cluster_size: u64,
 ) -> io::Result<Option<NtfsDeletedFileRecord>> {
+    let record = validated.bytes();
     if record.len() < 0x18 || &record[0..4] != b"FILE" {
         return Ok(None);
     }
@@ -228,7 +229,7 @@ fn deleted_record(
     if flags & 0x01 != 0 {
         return Ok(None);
     }
-    let Some(metadata) = parser.parse_fixed(record, record_number) else {
+    let Some(metadata) = parser.parse_fixed(validated, record_number) else {
         return Ok(None);
     };
     let sequence_number = u16::from_le_bytes([record[0x10], record[0x11]]);

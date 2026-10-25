@@ -7,7 +7,6 @@ use std::io::{Read, Seek, SeekFrom};
 use transport::dto::import_benchmark::ImportBenchmarkPhaseDto as Phase;
 
 pub(super) const MFT_READ_CHUNK_RECORDS: u64 = 10_000;
-const MFT_FALLBACK_SIZE: u64 = 100 * 1024 * 1024;
 
 pub(in crate::parallel_enum) struct MftScan {
     reader: Option<Box<dyn EvidenceReader>>,
@@ -222,19 +221,22 @@ pub(in crate::parallel_enum) fn read_ntfs_mft_parameters_at(
     let sectors_per_cluster = boot[13];
     let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
     let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap_or([0; 8]));
-    let record_size = mft_record_size_from_boot(&boot);
+    let record_size = fs_ntfs::mft_record_bytes(&boot)?;
     if record_size > 16 * 1024 * 1024 {
         return Err(ParallelEnumError::MftResourceLimit(
             "MFT parameter record exceeds 16 MiB",
         ));
     }
-    let mut record = read_mft_record_zero(
-        reader,
-        volume_offset + mft_cluster * cluster_size,
-        record_size,
-    )?;
-    apply_ntfs_record_fixup(&mut record, bytes_per_sector as usize)
+    let offset = mft_cluster
+        .checked_mul(cluster_size)
+        .and_then(|offset| volume_offset.checked_add(offset))
+        .ok_or_else(|| invalid_data("MFT record offset overflow"))?;
+    let mut record = read_mft_record_zero(reader, offset, record_size)?;
+    let record = fs_ntfs::ValidatedRecord::new(&mut record, bytes_per_sector as usize)
         .map_err(|error| format!("Fix up MFT record 0: {error}"))?;
+    let data = record
+        .mft_data()
+        .map_err(|error| format!("Parse MFT stream: {error}"))?;
 
     Ok(NtfsMftParams {
         volume_offset,
@@ -242,9 +244,8 @@ pub(in crate::parallel_enum) fn read_ntfs_mft_parameters_at(
         cluster_size,
         record_size,
         bytes_per_sector,
-        mft_data_size: parse_mft_data_size(&record).unwrap_or(MFT_FALLBACK_SIZE),
-        mft_data_runs: parse_mft_data_runs_from_record(&record)
-            .map_err(|error| format!("Parse MFT data runs: {error}"))?,
+        mft_data_size: data.real_size,
+        mft_data_runs: data.runs,
     })
 }
 
@@ -279,152 +280,6 @@ fn read_mft_record_zero(
 
 pub(in crate::parallel_enum) use super::reader_open::open_partition_evidence_reader;
 
-fn mft_record_size_from_boot(boot: &[u8]) -> u32 {
-    let raw = boot[0x40] as i8;
-    if raw > 0 {
-        1024
-    } else if raw < 0 {
-        let shift = (raw as i16).unsigned_abs();
-        if shift < 32 {
-            (1u32 << shift).max(512)
-        } else {
-            1024
-        }
-    } else {
-        1024
-    }
-}
-
-fn parse_mft_data_size(record: &[u8]) -> Option<u64> {
-    if record.len() < 4 || &record[0..4] != b"FILE" {
-        return None;
-    }
-    let mut position = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
-    while position + 8 < record.len() {
-        let attribute_type = u32::from_le_bytes(record[position..position + 4].try_into().ok()?);
-        if attribute_type == 0xFFFF_FFFF {
-            break;
-        }
-        let length =
-            u32::from_le_bytes(record[position + 4..position + 8].try_into().ok()?) as usize;
-        if length < 4 || position + length > record.len() {
-            break;
-        }
-        if attribute_type == 0x80
-            && position + 0x38 <= record.len()
-            && record[position + 8] & 1 != 0
-        {
-            return Some(u64::from_le_bytes(
-                record[position + 0x30..position + 0x38].try_into().ok()?,
-            ));
-        }
-        position += length;
-    }
-    None
-}
-
-fn apply_ntfs_record_fixup(record: &mut [u8], sector_size: usize) -> Result<(), String> {
-    if record.len() < 8 || sector_size < 2 {
-        return Ok(());
-    }
-    let usa_offset = u16::from_le_bytes([record[4], record[5]]) as usize;
-    let usa_count = u16::from_le_bytes([record[6], record[7]]) as usize;
-    if usa_offset == 0 || usa_count < 2 {
-        return Ok(());
-    }
-    let usa_bytes = usa_count
-        .checked_mul(2)
-        .ok_or_else(|| "invalid update sequence".to_string())?;
-    if usa_offset + usa_bytes > record.len() {
-        return Err("update sequence array exceeds record length".to_string());
-    }
-    let expected = [record[usa_offset], record[usa_offset + 1]];
-    for index in 1..usa_count {
-        let position = index
-            .checked_mul(sector_size)
-            .and_then(|value| value.checked_sub(2))
-            .ok_or_else(|| "invalid fixup position".to_string())?;
-        if position + 2 > record.len() {
-            return Err("record too short for update sequence fixup".to_string());
-        }
-        if record[position..position + 2] != expected {
-            return Err("update sequence signature mismatch".to_string());
-        }
-        let replacement = usa_offset + index * 2;
-        record[position] = record[replacement];
-        record[position + 1] = record[replacement + 1];
-    }
-    Ok(())
-}
-
-fn parse_mft_data_runs_from_record(record: &[u8]) -> Result<Vec<(i64, u64)>, String> {
-    if record.len() < 0x18 || &record[0..4] != b"FILE" {
-        return Err("MFT record 0 is not a valid FILE record".to_string());
-    }
-    let mut position = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
-    while position + 8 < record.len() {
-        let attribute_type = u32::from_le_bytes(
-            record[position..position + 4]
-                .try_into()
-                .map_err(|_| "Invalid MFT attribute type".to_string())?,
-        );
-        if attribute_type == 0xFFFF_FFFF {
-            break;
-        }
-        let length = u32::from_le_bytes(
-            record[position + 4..position + 8]
-                .try_into()
-                .map_err(|_| "Invalid MFT attribute length".to_string())?,
-        ) as usize;
-        if length == 0 || position + length > record.len() {
-            break;
-        }
-        if attribute_type == 0x80
-            && position + 0x40 <= record.len()
-            && record[position + 8] & 1 != 0
-        {
-            let run_offset =
-                u16::from_le_bytes([record[position + 0x20], record[position + 0x21]]) as usize;
-            if run_offset == 0 || run_offset >= length {
-                return Ok(Vec::new());
-            }
-            return parse_ntfs_data_runs(&record[position + run_offset..position + length]);
-        }
-        position += length;
-    }
-    Ok(Vec::new())
-}
-
-fn parse_ntfs_data_runs(mut data: &[u8]) -> Result<Vec<(i64, u64)>, String> {
-    const MAX_DATA_RUNS: usize = 100_000;
-    let mut runs = Vec::new();
-    let mut previous_lcn = 0;
-    while !data.is_empty() && data[0] != 0 {
-        if runs.len() >= MAX_DATA_RUNS {
-            return Err(format!("too many data runs (limit: {MAX_DATA_RUNS})"));
-        }
-        let size_bytes = (data[0] & 0x0F) as usize;
-        let offset_bytes = ((data[0] >> 4) & 0x0F) as usize;
-        if size_bytes > 8 || offset_bytes > 8 {
-            break;
-        }
-        data = &data[1..];
-        if data.len() < size_bytes + offset_bytes {
-            break;
-        }
-        let cluster_count = read_sized_le(&data[..size_bytes]);
-        data = &data[size_bytes..];
-        let lcn_offset = read_sized_le_signed(&data[..offset_bytes]);
-        data = &data[offset_bytes..];
-        let lcn = previous_lcn + lcn_offset;
-        previous_lcn = lcn;
-        if cluster_count > 0 {
-            runs.push((lcn, cluster_count));
-        }
-    }
-    Ok(runs)
-}
-
 pub(in crate::parallel_enum) fn read_ntfs_mft_stream(
     reader: &mut dyn EvidenceReader,
     volume_offset: u64,
@@ -437,7 +292,9 @@ pub(in crate::parallel_enum) fn read_ntfs_mft_stream(
     let mut run_start = 0u64;
     for (lcn, cluster_count) in runs {
         let run_bytes = checked_run_bytes(*lcn, *cluster_count, cluster_size)?;
-        let run_end = run_start.saturating_add(run_bytes);
+        let run_end = run_start
+            .checked_add(run_bytes)
+            .ok_or_else(|| invalid_data("MFT stream range overflow"))?;
         if stream_offset >= run_end {
             run_start = run_end;
             continue;
@@ -446,8 +303,9 @@ pub(in crate::parallel_enum) fn read_ntfs_mft_stream(
         let to_read = run_bytes
             .saturating_sub(offset_in_run)
             .min((output.len() - written) as u64) as usize;
-        let disk_offset = volume_offset
-            .checked_add((*lcn as u64).saturating_mul(cluster_size))
+        let disk_offset = (*lcn as u64)
+            .checked_mul(cluster_size)
+            .and_then(|offset| volume_offset.checked_add(offset))
             .and_then(|base| base.checked_add(offset_in_run))
             .ok_or_else(|| invalid_data("MFT disk offset overflow"))?;
         reader.seek(SeekFrom::Start(disk_offset))?;
@@ -482,5 +340,3 @@ fn checked_run_bytes(lcn: i64, clusters: u64, cluster_size: u64) -> std::io::Res
 fn invalid_data(message: impl Into<String>) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::InvalidData, message.into())
 }
-
-use super::run_numbers::{read_sized_le, read_sized_le_signed};

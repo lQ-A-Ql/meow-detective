@@ -1,4 +1,6 @@
 use fs_ntfs::NtfsReader;
+#[path = "mft_metadata.rs"]
+pub(crate) mod mft_metadata;
 
 pub const RECORD_OFFSET: usize = 7168;
 pub const ATTRIBUTE_OFFSET: usize = RECORD_OFFSET + 56;
@@ -29,6 +31,7 @@ pub fn image(real_size: u64, initialized_size: u64, split: bool) -> Vec<u8> {
     image[DATA_OFFSET..DATA_OFFSET + 512].fill(b'A');
     image[DATA_OFFSET + 512..DATA_OFFSET + 1024].fill(b'B');
     image[40 * 512..41 * 512].fill(b'B');
+    mft_metadata::initialize(&mut image);
     image
 }
 

@@ -9,16 +9,20 @@ pub struct DataRun {
     pub cluster_count: u64,
 }
 
-/// Parse data runs and return only non-sparse runs as `(lcn, cluster_count)` pairs.
-pub(crate) fn parse_data_runs_bytes(data: &[u8]) -> io::Result<Vec<(i64, u64)>> {
-    Ok(parse_data_runs_ext(data)?
+/// Parse allocated runs; metadata streams cannot discard sparse logical ranges.
+pub fn parse_data_runs_bytes(data: &[u8]) -> io::Result<Vec<(i64, u64)>> {
+    parse_data_runs_ext(data)?
         .into_iter()
-        .filter_map(|run| run.lcn.map(|lcn| (lcn, run.cluster_count)))
-        .collect())
+        .map(|run| {
+            run.lcn
+                .map(|lcn| (lcn, run.cluster_count))
+                .ok_or_else(|| invalid_fs_data("sparse NTFS metadata stream is unsupported"))
+        })
+        .collect()
 }
 
 /// Parse NTFS data runs into a sequence of lightweight values.
-pub(crate) fn parse_data_runs_ext(data: &[u8]) -> io::Result<Vec<DataRun>> {
+pub fn parse_data_runs_ext(data: &[u8]) -> io::Result<Vec<DataRun>> {
     let mut runs = Vec::new();
     crate::data_run_decoder::decode_data_runs(data, |run| {
         runs.push(DataRun {
@@ -119,13 +123,22 @@ pub(crate) fn read_sized_le_signed(bytes: &[u8]) -> i64 {
     val as i64
 }
 
-/// Parse the $DATA data runs from MFT record 0.
-pub(crate) fn parse_mft_data_runs_from_record(record: &[u8]) -> io::Result<Vec<(i64, u64)>> {
+#[derive(Debug)]
+pub struct MftDataAttribute {
+    pub real_size: u64,
+    pub runs: Vec<(i64, u64)>,
+}
+
+/// Read the unnamed, VCN-zero MFT stream through the common attribute decoder.
+pub fn parse_mft_data_attribute(record: &[u8]) -> io::Result<MftDataAttribute> {
     if record.len() < 0x18 || &record[0..4] != b"FILE" {
         return Err(invalid_fs_data("MFT record 0 is not a valid FILE record"));
     }
 
     let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
+    if attr_off < 0x18 || attr_off >= record.len() {
+        return Err(invalid_fs_data("invalid MFT attribute offset"));
+    }
     let mut pos = attr_off;
     while pos + 8 < record.len() {
         let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().unwrap_or([0; 4]));
@@ -134,18 +147,42 @@ pub(crate) fn parse_mft_data_runs_from_record(record: &[u8]) -> io::Result<Vec<(
         }
         let len =
             u32::from_le_bytes(record[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
-        if len == 0 || pos + len > record.len() {
-            break;
+        if len < 0x18 || pos + len > record.len() {
+            return Err(invalid_fs_data("invalid MFT attribute length"));
         }
 
-        if typ == 0x80 && pos + 0x40 <= record.len() && (record[pos + 8] & 1) != 0 {
-            let run_off = u16::from_le_bytes([record[pos + 0x20], record[pos + 0x21]]) as usize;
-            if run_off == 0 || run_off >= len {
-                return Ok(Vec::new());
+        if typ == crate::ATTR_TYPE_DATA && record[pos + 9] == 0 {
+            let extent = crate::attribute::parse_data_attribute_extent(record, pos, len)?;
+            let Some(crate::DataAttributeExtent::NonResident {
+                lowest_vcn: 0,
+                real_size,
+                attr_flags: 0,
+                runs,
+                ..
+            }) = extent
+            else {
+                return Err(invalid_fs_data(
+                    "MFT requires an allocated, nonresident VCN-zero stream",
+                ));
+            };
+            let runs = runs
+                .into_iter()
+                .map(|run| {
+                    run.lcn
+                        .map(|lcn| (lcn, run.cluster_count))
+                        .ok_or_else(|| invalid_fs_data("sparse MFT stream is unsupported"))
+                })
+                .collect::<io::Result<Vec<_>>>()?;
+            if runs.is_empty() {
+                return Err(invalid_fs_data("MFT stream has no data runs"));
             }
-            return parse_data_runs_bytes(&record[pos + run_off..pos + len]);
+            return Ok(MftDataAttribute { real_size, runs });
         }
         pos += len;
     }
-    Ok(Vec::new())
+    Err(invalid_fs_data("MFT record has no unnamed data stream"))
+}
+
+pub fn parse_mft_data_runs_from_record(record: &[u8]) -> io::Result<Vec<(i64, u64)>> {
+    Ok(parse_mft_data_attribute(record)?.runs)
 }

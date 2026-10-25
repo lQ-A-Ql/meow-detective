@@ -29,7 +29,9 @@ fn deleted_record_without_efs_flags_remains_clear() {
 
 fn parse_deleted_record(record: &[u8]) -> NtfsDeletedFileRecord {
     let mut parser = MftRecordParser::new(1024, 512);
-    deleted_record(&mut parser, record, 42, 4096, 1024, 4096)
+    let mut bytes = record.to_vec();
+    let record = crate::ValidatedRecord::new(&mut bytes, 512).unwrap();
+    deleted_record(&mut parser, &record, 42, 4096, 1024, 4096)
         .unwrap()
         .unwrap()
 }
