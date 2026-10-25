@@ -220,7 +220,7 @@ $moduleManifest = @(
   @('crates/app-services/src/analysis_service/extraction/registry/mod.rs', 'context', 'crates/app-services/src/analysis_service/extraction/registry/context.rs'),
   @('crates/app-services/src/analysis_service/extraction/registry/mod.rs', 'dispatch', 'crates/app-services/src/analysis_service/extraction/registry/dispatch.rs'),
   @('crates/app-services/src/analysis_service/extraction/registry/mod.rs', 'extractors', 'crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/mod.rs', 'txlog', 'crates/app-services/src/analysis_service/extraction/registry/txlog.rs'),
+  @('crates/app-services/src/analysis_service/extraction/mod.rs', 'registry_preload', 'crates/app-services/src/analysis_service/extraction/registry_preload.rs'),
   @('crates/app-services/src/analysis_service/extraction/registry/mod.rs', 'warnings', 'crates/app-services/src/analysis_service/extraction/registry/warnings.rs'),
   @('crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs', 'amcache', 'crates/app-services/src/analysis_service/extraction/registry/extractors/amcache.rs'),
   @('crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs', 'ntuser', 'crates/app-services/src/analysis_service/extraction/registry/extractors/ntuser.rs'),

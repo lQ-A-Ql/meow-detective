@@ -32,7 +32,7 @@ describe('BrowserHistoryPanel', () => {
 
   it('renders visit and download sections', () => {
     render(createElement(BrowserHistoryPanel, {}));
-    expect(screen.getAllByText('访问历史').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('浏览历史').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('下载记录').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('暂无浏览历史')).toBeDefined();
     expect(screen.getByText('暂无下载记录')).toBeDefined();
