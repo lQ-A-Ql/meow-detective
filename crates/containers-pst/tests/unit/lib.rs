@@ -104,7 +104,7 @@ Some body text.
 >From: Original <original@example.com>
 >Subject: Original
 ";
-    let variant = crate::mbox::detect_variant(data);
+    let variant = crate::mbox::detect_variant(data).unwrap();
     assert_eq!(variant, crate::mbox::MboxVariant::MboxRd);
 }
 
@@ -119,7 +119,7 @@ Date: Mon, 16 Jun 2025 10:00:00 +0200
 
 Plain text body without any escaped From lines.
 ";
-    let variant = crate::mbox::detect_variant(data);
+    let variant = crate::mbox::detect_variant(data).unwrap();
     assert_eq!(variant, crate::mbox::MboxVariant::MboxO);
 }
 
@@ -127,13 +127,13 @@ Plain text body without any escaped From lines.
 fn detect_variant_mboxcl_by_content_length() {
     let data = "\
 From sender@example.com Mon Jun 16 12:00:00 2025
-Content-Length: 42
+Content-Length: 33
 From: Sender <sender@example.com>
 Subject: CL test
 
 Body with content-length header.
 ";
-    let variant = crate::mbox::detect_variant(data);
+    let variant = crate::mbox::detect_variant(data).unwrap();
     assert_eq!(variant, crate::mbox::MboxVariant::MboxCl);
 }
 
@@ -141,7 +141,7 @@ Body with content-length header.
 fn detect_variant_mboxcl2_by_status_headers() {
     let data = "\
 From sender@example.com Mon Jun 16 14:00:00 2025
-Content-Length: 50
+Content-Length: 26
 Status: RO
 X-Status: F
 From: Sender <sender@example.com>
@@ -149,7 +149,7 @@ Subject: CL2 test
 
 Body with status headers.
 ";
-    let variant = crate::mbox::detect_variant(data);
+    let variant = crate::mbox::detect_variant(data).unwrap();
     assert_eq!(variant, crate::mbox::MboxVariant::MboxCl2);
 }
 
@@ -163,15 +163,13 @@ Subject: Discussion about Content-Length
 We were discussing the Content-Length header in RFC 4155.
 It is an important part of the mboxcl format.
 ";
-    let variant = crate::mbox::detect_variant(data);
+    let variant = crate::mbox::detect_variant(data).unwrap();
     assert_eq!(variant, crate::mbox::MboxVariant::MboxO);
 }
 
 #[test]
-fn empty_data_defaults_to_mboxo() {
-    let data = "";
-    let variant = crate::mbox::detect_variant(data);
-    assert_eq!(variant, crate::mbox::MboxVariant::MboxO);
+fn empty_data_has_no_variant() {
+    assert!(crate::mbox::detect_variant("").is_err());
 }
 
 #[test]

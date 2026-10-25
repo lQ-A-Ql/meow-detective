@@ -39,6 +39,8 @@ pub(crate) fn extract_parsed_email(
 
 fn build_eml_attrs(candidate: &EvidenceCandidate, parsed: &ParsedEmail) -> BTreeMap<String, Value> {
     let mut attrs = base_attrs(candidate);
+    attrs.insert("messageInputOffset".into(), parsed.source_offset.into());
+    attrs.insert("messageInputLength".into(), parsed.source_length.into());
     attrs.insert("from".to_string(), Value::String(parsed.from.clone()));
     attrs.insert("to".to_string(), string_array_value(&parsed.to));
     attrs.insert("cc".to_string(), string_array_value(&parsed.cc));

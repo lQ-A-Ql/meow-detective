@@ -51,7 +51,7 @@ Content-Type: text/html\n\
 <html><body>HTML body</body></html>\n\
 --alt--\n";
 
-const EMLX_SIZE_PREFIX: &str = "1234\nFrom: a@example.com\nTo: b@example.com\nSubject: Emlx\nDate: Wed, 18 Jun 2025 09:00:00 +0000\n\nBody.\n";
+const EMLX_MESSAGE: &str = "From: a@example.com\nTo: b@example.com\nSubject: Emlx\nDate: Wed, 18 Jun 2025 09:00:00 +0000\n\nBody.\n";
 
 const ENCODED_HEADERS: &str = "\
 From: =?UTF-8?B?5p2O5aic?= <a@example.com>\n\
@@ -116,7 +116,8 @@ fn parses_html_alternative() {
 
 #[test]
 fn strips_emlx_size_prefix() {
-    let parsed = parse_email_message(EMLX_SIZE_PREFIX.as_bytes()).expect("should parse emlx email");
+    let bytes = format!("{}\n{EMLX_MESSAGE}", EMLX_MESSAGE.len());
+    let parsed = parse_email_message(bytes.as_bytes()).expect("should parse emlx email");
     assert_eq!(parsed.subject, "Emlx");
     assert!(parsed
         .body_plain

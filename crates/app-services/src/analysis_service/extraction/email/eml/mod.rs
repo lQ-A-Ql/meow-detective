@@ -1,6 +1,7 @@
 //! Single-message EML/EMLX parsing and extraction.
 
 mod extract;
+mod model;
 mod parser;
 
 pub(crate) use extract::{extract_eml_candidate, extract_parsed_email};

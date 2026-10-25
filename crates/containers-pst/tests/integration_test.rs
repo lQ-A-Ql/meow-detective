@@ -264,7 +264,7 @@ Alice
 
 #[test]
 fn detect_variant_mboxo_from_sample() {
-    let v = detect_variant(SAMPLE_MBOXO);
+    let v = detect_variant(SAMPLE_MBOXO).unwrap();
     assert_eq!(v, MboxVariant::MboxO);
 }
 
@@ -275,10 +275,8 @@ fn parse_mboxo_single_message_fields() {
 
     let msg = &messages[0];
     assert_eq!(msg.subject, "Hello");
-    // sender_email derived from the "From " separator line (not headers)
     assert_eq!(msg.sender_email, "alice@example.com");
-    // sender_name is empty because the "From " line only has an email address
-    assert_eq!(msg.sender_name, "");
+    assert_eq!(msg.sender_name, "Alice");
     assert_eq!(msg.recipients.len(), 1);
     assert_eq!(msg.recipients[0], "Bob <bob@example.com>");
     assert!(msg.body_plain.contains("Hello Bob"));
@@ -308,7 +306,7 @@ Original message content here.
 
 #[test]
 fn detect_variant_mboxrd_from_sample() {
-    let v = detect_variant(SAMPLE_MBOXRD);
+    let v = detect_variant(SAMPLE_MBOXRD).unwrap();
     assert_eq!(v, MboxVariant::MboxRd);
 }
 
@@ -319,7 +317,7 @@ fn parse_mboxrd_unescaping_works() {
     let msg = &messages[0];
     // The ">From " escape should be removed
     assert!(!msg.body_plain.contains(">From "));
-    assert!(!msg.body_plain.contains(">From:"));
+    assert!(msg.body_plain.contains(">From:"));
     assert!(msg.body_plain.contains("From charlie@example.com"));
     assert!(msg.body_plain.contains("Original message content here."));
 }
@@ -328,7 +326,7 @@ fn parse_mboxrd_unescaping_works() {
 
 const SAMPLE_MBOXCL: &str = "\
 From sender@example.com Mon Jun 16 12:00:00 2025
-Content-Length: 120
+Content-Length: 34
 From: Sender <sender@example.com>
 To: Recipient <recipient@example.com>
 Subject: CL test
@@ -337,7 +335,7 @@ Date: Mon, 16 Jun 2025 12:00:00 +0200
 This message uses Content-Length.
 
 From sender2@example.com Mon Jun 16 13:00:00 2025
-Content-Length: 110
+Content-Length: 32
 From: Sender2 <sender2@example.com>
 To: Recipient <recipient@example.com>
 Subject: Second CL test
@@ -348,7 +346,7 @@ Another Content-Length message.
 
 #[test]
 fn detect_variant_mboxcl_from_sample() {
-    let v = detect_variant(SAMPLE_MBOXCL);
+    let v = detect_variant(SAMPLE_MBOXCL).unwrap();
     assert_eq!(v, MboxVariant::MboxCl);
 }
 
@@ -364,7 +362,7 @@ fn parse_mboxcl_two_messages() {
 
 const SAMPLE_MBOXCL2: &str = "\
 From sender@example.com Mon Jun 16 14:00:00 2025
-Content-Length: 145
+Content-Length: 54
 Status: RO
 X-Status: F
 From: Sender <sender@example.com>
@@ -377,7 +375,7 @@ This message uses Content-Length with Status headers.
 
 #[test]
 fn detect_variant_mboxcl2_from_sample() {
-    let v = detect_variant(SAMPLE_MBOXCL2);
+    let v = detect_variant(SAMPLE_MBOXCL2).unwrap();
     assert_eq!(v, MboxVariant::MboxCl2);
 }
 

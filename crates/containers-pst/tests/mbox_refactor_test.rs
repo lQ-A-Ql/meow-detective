@@ -31,7 +31,7 @@ Original message content here.
 
 const SAMPLE_MBOXCL2: &str = "\
 From sender@example.com Mon Jun 16 14:00:00 2025
-Content-Length: 145
+Content-Length: 54
 Status: RO
 X-Status: F
 From: Sender <sender@example.com>
@@ -87,9 +87,12 @@ Body text.
 
 #[test]
 fn detect_variant_covers_common_mbox_flavors() {
-    assert_eq!(detect_variant(SAMPLE_MBOXO), MboxVariant::MboxO);
-    assert_eq!(detect_variant(SAMPLE_MBOXRD), MboxVariant::MboxRd);
-    assert_eq!(detect_variant(SAMPLE_MBOXCL2), MboxVariant::MboxCl2);
+    assert_eq!(detect_variant(SAMPLE_MBOXO).unwrap(), MboxVariant::MboxO);
+    assert_eq!(detect_variant(SAMPLE_MBOXRD).unwrap(), MboxVariant::MboxRd);
+    assert_eq!(
+        detect_variant(SAMPLE_MBOXCL2).unwrap(),
+        MboxVariant::MboxCl2
+    );
 }
 
 #[test]
@@ -98,7 +101,7 @@ fn parse_mbox_preserves_header_fields() {
     assert_eq!(messages.len(), 1);
 
     let msg = &messages[0];
-    assert_eq!(msg.sender_name, "");
+    assert_eq!(msg.sender_name, "Sender Name");
     assert_eq!(msg.sender_email, "sender@example.com");
     assert_eq!(
         msg.recipients,
@@ -167,5 +170,5 @@ fn parse_mbox_handles_empty_and_invalid_inputs() {
     assert!(empty.is_empty());
 
     let err = parse_mbox(&[0xff, 0xfe, 0xfd]).expect_err("invalid utf-8 should fail");
-    assert!(matches!(err, containers_pst::error::PstError::MboxError(_)));
+    assert!(matches!(err, containers_pst::error::PstError::Message(_)));
 }

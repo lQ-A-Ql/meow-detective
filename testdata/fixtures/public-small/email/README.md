@@ -32,7 +32,7 @@ public-small
 | `plain.eml` | 374 | `13193586867d00da0bff4257903eccc96bf4140e707956b706b3758f2df2757f` |
 | `multipart.eml` | 1165 | `e79175cac04e448a130183cceb43e25d27c6657dc73e452d198caaf517a93403` |
 | `encoded.eml` | 384 | `fc9fd4df24f58a191ccafe660fb77ffaf6fde89e54054909c3e99312b0ce4112` |
-| `apple.emlx` | 381 | `b7cc9ab33f4e7f1efd32a821e27ed1495c84ede4f60af039466867abd31a74fe` |
+| `apple.emlx` | 380 | `36734c68d06c16724264adca8a456717f13066c91c3efcee0017ad6747100165` |
 | `simple.mbox` | 778 | `ca0fd8abf072917d6d7c976767dbafd3db10ecb93355697d8b7bcad12bb94386` |
 | `multipart.mbox` | 954 | `c01a365c5a33894a1b8933b1a16cc3bfad900c5ffb0884470a7b3317087588d8` |
 | `mboxrd_escaped.mbox` | 470 | `a0c6fe23a3325993c3c1fa38e3b8b248cec3ae3d82b5b73d0f150dd9162887d8` |

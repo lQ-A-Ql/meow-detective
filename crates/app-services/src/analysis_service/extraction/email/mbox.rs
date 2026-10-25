@@ -18,18 +18,22 @@ pub(super) fn extract_mbox_candidate(
     bytes: &[u8],
 ) -> ExtractionOutcome {
     let mut outcome = ExtractionOutcome::default();
-    let messages = match containers_pst::mbox::parse_mbox(bytes) {
-        Ok(msgs) => msgs,
-        Err(err) => {
-            outcome
-                .warnings
-                .push(format!("mbox parse error for {}: {}", candidate.path, err));
-            return outcome;
-        }
-    };
     let container_path = container_name(&candidate.path);
-    for msg in messages {
-        append_mbox_message(&mut outcome, candidate, &container_path, msg);
+    let parsed = containers_pst::mbox::visit_mbox(bytes, false, |record| {
+        append_mbox_message(
+            &mut outcome,
+            candidate,
+            &container_path,
+            record.message.into(),
+            &record.source,
+        );
+        Ok(())
+    });
+    if let Err(error) = parsed {
+        return ExtractionOutcome {
+            warnings: vec![format!("mbox parse error for {}: {error}", candidate.path)],
+            ..Default::default()
+        };
     }
     outcome
 }
@@ -39,9 +43,21 @@ fn append_mbox_message(
     candidate: &EvidenceCandidate,
     container_path: &str,
     msg: MboxMessage,
+    source: &containers_pst::mbox::MboxSource,
 ) {
     let from = format_sender(&msg.sender_name, &msg.sender_email);
-    let attrs = build_mbox_attrs(candidate, container_path, &msg, &from);
+    let mut attrs = build_mbox_attrs(candidate, container_path, &msg, &from);
+    attrs.insert(
+        "messageSourceOffset".into(),
+        source.source_range.start.into(),
+    );
+    attrs.insert(
+        "messageSourceLength".into(),
+        (source.source_range.end - source.source_range.start).into(),
+    );
+    attrs.insert("mboxVariant".into(), source.variant.to_string().into());
+    attrs.insert("mboxVariantInferred".into(), source.variant_inferred.into());
+    attrs.insert("mboxBodyUnescaped".into(), source.unescaped.into());
     let event_time = msg.sent_time.or(msg.received_time);
     let title = format!("Email: {}", title_or_url(&msg.subject, &candidate.path));
     if let Some(event_time) = event_time {
