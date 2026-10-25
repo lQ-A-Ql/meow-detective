@@ -42,6 +42,15 @@ jobs:
           pnpm --dir frontend build
       - name: Format
         run: cargo fmt --all -- --check
+      - name: Documentation drift guard
+        shell: pwsh
+        run: ./scripts/check-doc-drift.ps1
+      - name: Documentation archive guard
+        shell: pwsh
+        run: ./scripts/check-doc-archive.ps1
+      - name: Import optimization guard
+        shell: pwsh
+        run: ./scripts/check-import-optimization-guard.ps1
       - name: Stage 0 backend structure guards
         shell: powershell
         env:
@@ -104,12 +113,6 @@ jobs:
       - name: Command SQL boundary guard
         shell: pwsh
         run: ./scripts/check-command-sql-boundary.ps1
-      - name: Documentation drift guard
-        shell: pwsh
-        run: ./scripts/check-doc-drift.ps1
-      - name: Documentation archive guard
-        shell: pwsh
-        run: ./scripts/check-doc-archive.ps1
       - name: Dependency exception guard
         shell: pwsh
         run: ./scripts/check-deny-exceptions.ps1
@@ -124,9 +127,6 @@ jobs:
       - name: Stage 5 regression guard
         shell: pwsh
         run: ./scripts/check-stage5-regression-guard.ps1
-      - name: Import optimization guard
-        shell: pwsh
-        run: ./scripts/check-import-optimization-guard.ps1
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
       - name: Dependency policy

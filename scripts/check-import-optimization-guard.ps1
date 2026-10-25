@@ -4,6 +4,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+. (Join-Path $PSScriptRoot 'lib/RustGuard.Common.ps1')
 # The real import profile test lives under the crate's physical tests tree and
 # is linked by the test-only bridge in app-services.
 $e01PipelineTestPath = Join-Path $repoRoot "crates/app-services/tests/unit/import_pipeline/mod.rs"
@@ -20,6 +21,7 @@ $timelineProjectionPath = Join-Path $repoRoot "crates/app-services/src/timeline_
 # Post-import skip logging lives in the analysis worker pool.
 $workerPoolPath = Join-Path $repoRoot "crates/app-services/src/import_analysis/worker_pool.rs"
 $appStatePath = Join-Path $repoRoot "apps/desktop/src-tauri/src/state/app_state.rs"
+$caseDatabasePath = Join-Path $repoRoot "apps/desktop/src-tauri/src/state/case_database.rs"
 $persistenceConnectionPath = Join-Path $repoRoot "crates/persistence-sqlite/src/connection.rs"
 $profileScriptPath = Join-Path $repoRoot "scripts/run-e01-import-profile.ps1"
 $performanceGatePath = Join-Path $repoRoot "scripts/check-e01-import-performance.ps1"
@@ -34,6 +36,7 @@ foreach ($path in @(
     $timelineProjectionPath,
     $workerPoolPath,
     $appStatePath,
+    $caseDatabasePath,
     $persistenceConnectionPath,
     $profileScriptPath,
     $performanceGatePath
@@ -52,6 +55,7 @@ $pipelineFinalize = Get-Content -LiteralPath $pipelineFinalizePath -Raw -Encodin
 $timelineProjection = Get-Content -LiteralPath $timelineProjectionPath -Raw -Encoding UTF8
 $workerPool = Get-Content -LiteralPath $workerPoolPath -Raw -Encoding UTF8
 $appState = Get-Content -LiteralPath $appStatePath -Raw -Encoding UTF8
+$caseDatabase = Get-Content -LiteralPath $caseDatabasePath -Raw -Encoding UTF8
 $persistenceConnection = Get-Content -LiteralPath $persistenceConnectionPath -Raw -Encoding UTF8
 $profileScript = Get-Content -LiteralPath $profileScriptPath -Raw -Encoding UTF8
 $performanceGate = Get-Content -LiteralPath $performanceGatePath -Raw -Encoding UTF8
@@ -108,13 +112,29 @@ if ($staging -notmatch 'ntfs_staging_merge::merge_completed_numeric\(' -or
   throw "numeric staging merge must project lowercase entry_type through its referenced SQL"
 }
 
-foreach ($mainDbSource in @($appState, $persistenceConnection)) {
+foreach ($mainDbSource in @($appState, $caseDatabase, $persistenceConnection)) {
   if ($mainDbSource -match 'PRAGMA\s+synchronous\s*=\s*OFF') {
     throw "main app.db path must not use synchronous=OFF"
   }
 }
-if ($appState -notmatch 'PRAGMA\s+synchronous\s*=\s*NORMAL') {
-  throw "desktop app.db connection should keep synchronous=NORMAL"
+$caseDatabaseCode = [Stage0.RustGuardLexicalMasker]::Mask($caseDatabase)
+$transitionConnection = [regex]::Match(
+  $caseDatabaseCode,
+  '(?ms)^    pub\(crate\) fn get_transition_connection\b.*?^    \}'
+)
+if (-not $transitionConnection.Success -or
+    $transitionConnection.Value -notmatch 'persistence_sqlite::connection::open_existing\s*\(\s*&db_path\s*\)') {
+  throw "desktop app.db connections must use the canonical persistence open_existing policy"
+}
+foreach ($method in @('init_db_pragmas', 'get_connection')) {
+  $methodBody = [regex]::Match(
+    $caseDatabaseCode,
+    "(?ms)^    pub fn $method\b.*?^    \}"
+  )
+  if (-not $methodBody.Success -or
+      $methodBody.Value -notmatch 'self\.get_transition_connection\s*\(') {
+    throw "desktop $method must delegate to the canonical writer connection"
+  }
 }
 if ($persistenceConnection -notmatch 'PRAGMA\s+synchronous\s*=\s*NORMAL') {
   throw "persistence app.db connection should keep synchronous=NORMAL"
