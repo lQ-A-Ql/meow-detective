@@ -1,6 +1,7 @@
 use crate::{Result, RocksDbWireError};
 
 use super::census::CensusBuilder;
+use super::internal_key::decode_internal_key;
 use super::restart::{visit_restart_block, ValueEncoding};
 use super::{BlockCompression, BlockHandle, DataBlockStats, EntryTypeCounts, SstReadOptions};
 
@@ -91,31 +92,5 @@ pub(crate) fn parse_range_deletion_block(
         raw_value_size,
         smallest_sequence,
         largest_sequence,
-    })
-}
-
-struct InternalKeyMetadata<'a> {
-    user_key: &'a [u8],
-    sequence: u64,
-    value_type: u8,
-}
-
-fn decode_internal_key(key: &[u8]) -> Result<InternalKeyMetadata<'_>> {
-    if key.len() < 8 {
-        return Err(RocksDbWireError::InternalKeyTooShort {
-            context: "SST data entry",
-            length: key.len(),
-        });
-    }
-    let trailer = u64::from_le_bytes(key[key.len() - 8..].try_into().map_err(|_| {
-        RocksDbWireError::InvalidField {
-            context: "SST internal key trailer",
-            reason: "fixed64 width",
-        }
-    })?);
-    Ok(InternalKeyMetadata {
-        user_key: &key[..key.len() - 8],
-        sequence: trailer >> 8,
-        value_type: trailer as u8,
     })
 }
