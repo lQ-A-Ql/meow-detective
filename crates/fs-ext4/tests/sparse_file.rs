@@ -66,3 +66,31 @@ fn leaf_file_preserves_head_interior_tail_holes_and_unwritten_extents() {
 fn indexed_file_preserves_head_interior_tail_holes_and_unwritten_extents() {
     verify_sparse_file(true);
 }
+
+#[test]
+fn overlapping_extents_are_rejected_by_full_and_range_reads() {
+    for indexed in [false, true] {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("overlap.raw");
+        let mut image = sparse_image(indexed);
+        let leaf = if indexed {
+            7 * BLOCK
+        } else {
+            2 * BLOCK + 2 * 256 + 0x28
+        };
+        image[leaf + 24..leaf + 28].copy_from_slice(&1u32.to_le_bytes());
+        std::fs::write(&path, &image).unwrap();
+        let reader = Ext4Reader::open(Box::new(RawImageReader::open(&path).unwrap()), 0).unwrap();
+        let error = reader.open_file("test.txt").err().unwrap();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        let range_error = reader
+            .read_file_range("test.txt", 0, 5 * BLOCK + 13)
+            .unwrap_err();
+        assert_eq!(range_error.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(
+            range_error.to_string(),
+            "overlapping or unordered ext4 extents"
+        );
+        assert_eq!(std::fs::read(path).unwrap(), image);
+    }
+}

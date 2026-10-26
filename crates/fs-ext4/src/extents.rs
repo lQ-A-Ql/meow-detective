@@ -85,6 +85,9 @@ impl Ext4Reader {
         if overlap_start >= overlap_end {
             return Ok(());
         }
+        if overlap_start < *next_offset {
+            return Err(invalid_fs_data("overlapping or unordered ext4 extents"));
+        }
         if *next_offset < overlap_start {
             append_zeroes(data, overlap_start - *next_offset)?;
         }
