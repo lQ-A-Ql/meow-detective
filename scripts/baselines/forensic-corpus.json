@@ -33,7 +33,7 @@
       "source": "scripts/generate-tiny-fixtures.ps1",
       "private": false,
       "maxBytes": 16777216,
-      "sha256": "69d8ca8530e978f7e9503cc21878f2cac4e1fb906c8c5ffe7fc29b2e17ae1ba6"
+      "sha256": "624d0e15f656ffde34183747916a88748e7cb141248779aa2109d22c42c5cb04"
     }
   ],
   "generators": [
