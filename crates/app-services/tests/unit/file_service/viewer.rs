@@ -133,6 +133,29 @@ fn write_large_ntfs_raw_fixture(
     boot[510] = 0x55;
     boot[511] = 0xAA;
 
+    let rec0 = &mut data[MFT_CLUSTER * CLUSTER_SIZE..MFT_CLUSTER * CLUSTER_SIZE + MFT_RECORD_SIZE];
+    rec0[..4].copy_from_slice(b"FILE");
+    rec0[4..6].copy_from_slice(&48u16.to_le_bytes());
+    rec0[6..8].copy_from_slice(&3u16.to_le_bytes());
+    rec0[20..22].copy_from_slice(&56u16.to_le_bytes());
+    rec0[22..24].copy_from_slice(&1u16.to_le_bytes());
+    rec0[28..32].copy_from_slice(&(MFT_RECORD_SIZE as u32).to_le_bytes());
+    let attr = 56;
+    rec0[attr..attr + 4].copy_from_slice(&0x80u32.to_le_bytes());
+    rec0[attr + 4..attr + 8].copy_from_slice(&72u32.to_le_bytes());
+    rec0[attr + 8] = 1;
+    rec0[attr + 24..attr + 32].copy_from_slice(&13u64.to_le_bytes());
+    rec0[attr + 32..attr + 34].copy_from_slice(&64u16.to_le_bytes());
+    for offset in [40, 48, 56] {
+        rec0[attr + offset..attr + offset + 8].copy_from_slice(&7168u64.to_le_bytes());
+    }
+    rec0[attr + 64..attr + 68].copy_from_slice(&[0x11, 14, MFT_CLUSTER as u8, 0]);
+    rec0[attr + 72..attr + 76].copy_from_slice(&u32::MAX.to_le_bytes());
+    rec0[24..28].copy_from_slice(&132u32.to_le_bytes());
+    rec0[48..50].copy_from_slice(&[0x55, 0xaa]);
+    rec0[510..512].copy_from_slice(&[0x55, 0xaa]);
+    rec0[1022..1024].copy_from_slice(&[0x55, 0xaa]);
+
     let rec5 = &mut data[rec5_off..rec5_off + MFT_RECORD_SIZE];
     rec5[0..4].copy_from_slice(b"FILE");
     rec5[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());

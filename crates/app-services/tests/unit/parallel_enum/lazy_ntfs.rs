@@ -129,7 +129,7 @@ fn prefixed_volume_keeps_its_read_offset_and_only_builds_the_backfill_reader() {
 }
 
 #[test]
-fn unusable_mft_parameters_build_one_fallback_reader_and_clear_old_rows() {
+fn invalid_mft_stream_is_rejected_after_clearing_stale_staging() {
     let temp = tempfile::TempDir::new().unwrap();
     let path = temp.path().join("fallback.E01");
     let mut bytes = fixture::image(96);
@@ -153,7 +153,14 @@ fn unusable_mft_parameters_build_one_fallback_reader_and_clear_old_rows() {
         Some(profiler.clone()),
     );
     let conn = staging::open_partition_staging(temp.path(), "fallback-source", 1).unwrap();
-    assert!(result.error.is_none(), "{:?}", result.error);
+    assert!(
+        result
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("NTFS initialized size exceeds stream size")),
+        "{:?}",
+        result.error
+    );
     assert_eq!(result.warnings.len(), 1);
     assert_eq!(
         conn.query_row(
@@ -174,7 +181,8 @@ fn unusable_mft_parameters_build_one_fallback_reader_and_clear_old_rows() {
         .iter()
         .find(|sample| sample.phase == Phase::FallbackReaderBuild)
         .unwrap();
-    assert_eq!(fallback.filesystem_builds, 1);
+    assert_eq!(fallback.state, State::Failed);
+    assert_eq!(fallback.filesystem_builds, 0);
 }
 
 fn fake_ntfs(path: PathBuf, active: Arc<AtomicUsize>, max: Arc<AtomicUsize>) -> PartitionWork {

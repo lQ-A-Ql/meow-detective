@@ -221,12 +221,13 @@ pub(in crate::parallel_enum) fn read_ntfs_mft_parameters_at(
     let sectors_per_cluster = boot[13];
     let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
     let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap_or([0; 8]));
-    let record_size = fs_ntfs::mft_record_bytes(&boot)?;
-    if record_size > 16 * 1024 * 1024 {
-        return Err(ParallelEnumError::MftResourceLimit(
-            "MFT parameter record exceeds 16 MiB",
-        ));
-    }
+    let record_size = fs_ntfs::mft_record_bytes(&boot).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::OutOfMemory {
+            ParallelEnumError::MftResourceLimit("MFT parameter record exceeds 16 MiB")
+        } else {
+            ParallelEnumError::Io(error)
+        }
+    })?;
     let offset = mft_cluster
         .checked_mul(cluster_size)
         .and_then(|offset| volume_offset.checked_add(offset))

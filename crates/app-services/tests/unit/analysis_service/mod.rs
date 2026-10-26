@@ -365,7 +365,7 @@ fn firefox_places_bytes() -> Vec<u8> {
 }
 
 fn sample_email_bytes() -> Vec<u8> {
-    b"Date: Tue, 02 Jan 2024 03:04:05 +0000\r\nFrom: alice@example.com\r\nTo: bob@example.com, carol@example.com\r\nSubject: Quarterly evidence note\r\nMessage-ID: <msg-1@example.com>\r\nContent-Disposition: attachment; filename=\"evidence.txt\"\r\n\r\nThis is the first line of the message body.\r\nThis is the second line.\r\n".to_vec()
+    b"Date: Tue, 02 Jan 2024 03:04:05 +0000\r\nFrom: alice@example.com\r\nTo: bob@example.com, carol@example.com\r\nSubject: Quarterly evidence note\r\nMessage-ID: <msg-1@example.com>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=evidence-message\r\n\r\n--evidence-message\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nThis is the first line of the message body.\r\nThis is the second line.\r\n--evidence-message\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=\"evidence.txt\"\r\n\r\nAttachment content.\r\n--evidence-message--\r\n".to_vec()
 }
 
 #[derive(Clone)]
@@ -507,7 +507,7 @@ fn malformed_registry_hive_presence_keeps_system_fields_empty_with_provenance() 
             && item
                 .warnings
                 .iter()
-                .any(|warning| warning.contains("registry hive shorter than base block"))
+                .any(|warning| warning.contains("registry cell is corrupt"))
     }));
 }
 

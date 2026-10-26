@@ -109,9 +109,15 @@ pub fn mft_record_bytes(boot: &[u8]) -> io::Result<u32> {
     } else {
         None
     };
-    bytes
-        .filter(|size| (512..=16 * 1024 * 1024).contains(size) && size.is_power_of_two())
-        .ok_or_else(|| invalid_fs_data("invalid NTFS MFT record size"))
+    let bytes = bytes
+        .filter(|size| *size >= 512 && size.is_power_of_two())
+        .ok_or_else(|| invalid_fs_data("invalid NTFS MFT record size"))?;
+    if bytes > 16 * 1024 * 1024 {
+        return Err(evidence_core::filesystem::fs_out_of_memory(
+            "NTFS MFT record exceeds 16 MiB",
+        ));
+    }
+    Ok(bytes)
 }
 
 pub(crate) fn index_record_bytes(boot: &[u8], cluster_size: u32, fallback: u32) -> u32 {

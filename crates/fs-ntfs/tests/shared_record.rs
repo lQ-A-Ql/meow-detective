@@ -83,5 +83,10 @@ fn record_size_uses_volume_geometry_and_checks_invalid_encodings() {
     assert_eq!(fs_ntfs::mft_record_bytes(&bytes).unwrap(), 1024);
     bytes[64] = 0;
     assert!(fs_ntfs::mft_record_bytes(&bytes).is_err());
+    bytes[64] = (-31i8) as u8;
+    assert_eq!(
+        fs_ntfs::mft_record_bytes(&bytes).unwrap_err().kind(),
+        std::io::ErrorKind::OutOfMemory
+    );
     assert!(fs_ntfs::mft_record_bytes(&[]).is_err());
 }
