@@ -10,5 +10,11 @@ provider is `fnv 1.0.7`, replacing `fnv_rs` and its unmaintained `paste`
 dependency. The checksum input and algorithm remain unchanged; Go bbolt
 fixtures verify both metadata pages and checksum rejection.
 
+Read-only opening without freelist preloading also accepts NoFreelistSync
+databases. Metadata validation and transaction selection remain unchanged;
+read transactions traverse only live bucket pages. Writable opening and explicit
+freelist preloading reject the absent-freelist sentinel before dereferencing it.
+This follows upstream bbolt's read-only opening path in db.go.
+
 Upstream: https://github.com/ambaxter/bbolt-rs
 License: MIT, retained in LICENSE.

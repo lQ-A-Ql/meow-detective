@@ -9,8 +9,8 @@ const ANDROID_DEVICE_KEY: &str = "AndroidDevice";
 const ANDROID_PACKAGES_KEY: &str = "AndroidPackages";
 const RETIRED_MACOS_KEY: &str = "MacArtifacts";
 pub(crate) const REGISTRY_EXTRACTOR_VERSION: &str = "1.3.5";
-pub(crate) const CONTAINERD_EXTRACTOR_VERSION: &str = "1.3.6";
-pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "1.3.7";
+pub(crate) const CONTAINERD_EXTRACTOR_VERSION: &str = "1.3.10";
+pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "1.3.10";
 pub(crate) const EMAIL_EXTRACTOR_VERSION: &str = "1.3.8";
 pub(crate) const BROWSER_EXTRACTOR_VERSION: &str = "1.3.9";
 

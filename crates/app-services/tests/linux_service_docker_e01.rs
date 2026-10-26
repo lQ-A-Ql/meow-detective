@@ -111,6 +111,9 @@ fn linux_e01_service_docker_acceptance_and_performance() {
         let source = app_services::source_db::open_registered_source_db(connection, &active.case_root, &source_id)
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
         acceptance::write_json(&output.join("catalog.json"), &acceptance::catalog(&source));
+        if std::env::var_os("FORENSICS_LINUX_SERVICE_DUMP_CONTAINERD").is_some() {
+            dump_containerd_input(connection, &source, &active.case_root, &active.meta.id, &source_id, &output);
+        }
         let mut trials = Vec::new();
         let mut expected_digest = std::env::var("FORENSICS_LINUX_SERVICE_EXPECTED_DIGEST").ok();
         for trial in 0..=5 {
@@ -167,6 +170,54 @@ fn linux_e01_service_docker_acceptance_and_performance() {
     let after = std::fs::metadata(&fixture).unwrap();
     assert_eq!(original.len(), after.len());
     assert_eq!(original.modified().unwrap(), after.modified().unwrap());
+}
+
+fn dump_containerd_input(
+    case: &Connection,
+    source: &Connection,
+    root: &Path,
+    case_id: &CaseId,
+    source_id: &DataSourceId,
+    output: &Path,
+) {
+    let entries = persistence_sqlite::repositories::file_repo::FileRepo::new(source)
+        .find_by_path_fragments(source_id, &["io.containerd.metadata.v1.bolt/meta.db"])
+        .unwrap();
+    for (index, entry) in entries.into_iter().enumerate() {
+        assert!(entry.size.unwrap() <= 32 * 1024 * 1024);
+        let path = output.join(format!("containerd-{index}.db"));
+        let id = format!("ds:{}:{}", source_id.0, entry.id.0);
+        let mut bytes = Vec::new();
+        while (bytes.len() as u64) < entry.size.unwrap() {
+            let count = (entry.size.unwrap() - bytes.len() as u64).min(1024 * 1024) as u32;
+            let part = file_service::read_preview_bytes_for_source_case(
+                case,
+                root,
+                case_id,
+                &id,
+                bytes.len() as u64,
+                count,
+            )
+            .unwrap();
+            assert!(!part.is_empty());
+            bytes.extend(part);
+        }
+        assert_eq!(bytes.len() as u64, entry.size.unwrap());
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .unwrap();
+        use std::io::Write;
+        file.write_all(&bytes).unwrap();
+        drop(file);
+        let full_path = output.join(format!("containerd-{index}.full.db"));
+        file_service::extract_file_to_destination_for_case(
+            case, root, case_id, &id, &full_path, false,
+        )
+        .unwrap();
+        assert_eq!(std::fs::read(full_path).unwrap(), bytes);
+    }
 }
 
 fn verify_views(

@@ -1800,15 +1800,15 @@ impl Bolt {
     db_path: DbPath, bolt_options: BoltOptions, backend: Box<dyn DBBackend>,
   ) -> crate::Result<Self> {
     backend.validate_meta()?;
+    let meta = backend.meta();
+    if meta.free_list() == PGID_NO_FREE_LIST && bolt_options.preload_freelist() {
+      return Err(Error::Other(anyhow!(
+        "PGID_NO_FREE_LIST requires read-only mode without freelist preloading"
+      )));
+    }
     let mut free_count = 0u64;
     if bolt_options.preload_freelist() {
       free_count = backend.freelist().free_count();
-    }
-    let meta = backend.meta();
-    if meta.free_list() == PGID_NO_FREE_LIST {
-      return Err(Error::Other(anyhow!(
-        "PGID_NO_FREE_LIST not currently supported"
-      )));
     }
     let db_state = Arc::new(Mutex::new(DbState::new(meta)));
     let stats = DbStats {

@@ -5,6 +5,32 @@ fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/go-bbolt.db")
 }
 
+#[test]
+#[ignore = "requires FORENSICS_BOLT_NO_FREELIST_FIXTURE"]
+fn no_freelist_containerd_database_preserves_images_and_source_bytes() {
+    let path = PathBuf::from(std::env::var_os("FORENSICS_BOLT_NO_FREELIST_FIXTURE").unwrap());
+    let before = std::fs::read(&path).unwrap();
+    let mut options = options();
+    options.max_file_bytes = 32 * 1024 * 1024;
+    options.prefix = vec![b"v1".to_vec(), b"moby".to_vec(), b"images".to_vec()];
+    options.parent_depth = Some(2);
+    options.bucket_parent_depth = Some(0);
+    options.parent_suffix = vec![b"target".to_vec()];
+    options.record_keys = vec![b"digest".to_vec()];
+    options.value_keys = options.record_keys.clone();
+    let report = read_bolt(&path, &options).unwrap();
+    assert!(report.metadata.metadata_checksum_verified);
+    assert_eq!(
+        report
+            .entries
+            .iter()
+            .filter(|entry| entry.value.is_some())
+            .count(),
+        19
+    );
+    assert_eq!(std::fs::read(path).unwrap(), before);
+}
+
 fn options() -> BoltReadOptions {
     BoltReadOptions {
         prefix: Vec::new(),
