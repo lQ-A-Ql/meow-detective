@@ -7,7 +7,7 @@ use app_services::analysis_service::{
     get_evidence_classification_summary, resolve_data_source_platform, run_analysis_extraction,
     run_analysis_extraction_with_cancel, select_evidence_scan_categories,
     validate_analysis_categories, validate_data_source_analysis_categories, AnalysisServiceError,
-    MAX_ANALYSIS_SOURCE_BYTES,
+    MAX_REGISTRY_ANALYSIS_BYTES,
 };
 use domain::{
     CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, DataSourcePlatform,
@@ -539,7 +539,7 @@ fn registry_preload_warnings_are_attributed_once_to_registry_section() {
     .expect("return failed Registry extraction status");
 
     let preload_warning = "Windows/System32/config/SYSTEM read failed: preload failure";
-    assert_eq!(observed_limit.get(), MAX_ANALYSIS_SOURCE_BYTES);
+    assert_eq!(observed_limit.get(), MAX_REGISTRY_ANALYSIS_BYTES);
     assert_eq!(run.status, AnalysisParseStatusDto::Failed);
     assert_eq!(run.sections.len(), 1);
     assert_eq!(run.sections[0].status, AnalysisParseStatusDto::Failed);
