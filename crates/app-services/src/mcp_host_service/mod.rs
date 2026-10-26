@@ -1,4 +1,5 @@
-//! Read-only tool catalog and use cases shared by desktop UI and MCP clients.
+//! Tool catalog and use cases shared by the desktop and embedded MCP server.
+pub mod access;
 mod analysis;
 mod arguments;
 mod catalog;

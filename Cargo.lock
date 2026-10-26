@@ -241,6 +241,7 @@ dependencies = [
  "persistence-sqlite",
  "plugin-api",
  "quick-xml",
+ "rand 0.8.7",
  "rayon",
  "regex",
  "reports",
@@ -251,6 +252,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2 0.10.9",
+ "subtle",
  "tempfile",
  "testing",
  "thiserror 2.0.21",
@@ -1997,6 +1999,7 @@ dependencies = [
  "evidence-mount",
  "fs-fat",
  "fs-ntfs",
+ "headers",
  "image-e01",
  "infrastructure",
  "mimalloc",
@@ -2633,6 +2636,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ba4ff7128dee98c7dc9794b6a411377e1404dba1c97deb8d1a55297bd25d8af"
 dependencies = [
  "hashbrown 0.14.5",
+]
+
+[[package]]
+name = "headers"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc2700e3fe555c3310aa7286cac6167449f2c87e0eb58769c9208a1c58a1d106"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "headers-core",
+ "http",
+ "httpdate",
+ "mime",
+ "sha1",
+]
+
+[[package]]
+name = "headers-core"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54b4a22553d4242c49fddb9ba998a99962b5cc6f22cb5a3482bec22522403ce4"
+dependencies = [
+ "http",
 ]
 
 [[package]]

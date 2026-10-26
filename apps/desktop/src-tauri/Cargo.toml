@@ -56,6 +56,7 @@ dirs.workspace = true
 base64.workspace = true
 reqwest.workspace = true
 axum.workspace = true
+headers.workspace = true
 rmcp.workspace = true
 tokio-util.workspace = true
 tempfile.workspace = true

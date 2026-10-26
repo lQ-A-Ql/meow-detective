@@ -1,4 +1,4 @@
-use super::{request, server};
+use super::{grant, request, server};
 use crate::state::AppState;
 use app_services::{
     case_service, file_service,
@@ -48,8 +48,8 @@ fn attach_evidence(state: &AppState, temporary: &tempfile::TempDir) -> String {
     file_id
 }
 
-async fn call(endpoint: &str, tool: &str, arguments: Value) -> Value {
-    let response = request(endpoint, json!({"jsonrpc":"2.0", "id":1, "method":"tools/call", "params":{"name":tool,"arguments":arguments}})).await;
+async fn call(endpoint: &str, token: &str, tool: &str, arguments: Value) -> Value {
+    let response = request(endpoint, token, json!({"jsonrpc":"2.0", "id":1, "method":"tools/call", "params":{"name":tool,"arguments":arguments}})).await;
     assert_eq!(response.status(), 200);
     response.json::<Value>().await.unwrap()["result"].clone()
 }
@@ -58,10 +58,13 @@ async fn call(endpoint: &str, tool: &str, arguments: Value) -> Value {
 async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_case_switch() {
     let (state, endpoint, temporary) = server().await;
     let file_id = attach_evidence(&state, &temporary);
-    let initialize = request(&endpoint, json!({"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"file-regression","version":"1"}}})).await;
+    let created = grant(&state, true);
+    let token = &created.token;
+    let initialize = request(&endpoint, token, json!({"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"file-regression","version":"1"}}})).await;
     assert_eq!(initialize.status(), 200);
     let roots = call(
         &endpoint,
+        token,
         "forensics.list_files",
         json!({"dataSourceId":"mcp-http-files"}),
     )
@@ -70,6 +73,7 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
     let directory = roots["structuredContent"]["rows"][0]["id"].clone();
     let children = call(
         &endpoint,
+        token,
         "forensics.list_files",
         json!({"dataSourceId":"mcp-http-files", "parentId":directory}),
     )
@@ -77,18 +81,26 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
     assert_eq!(children["structuredContent"]["rows"][0]["id"], file_id);
     let metadata = call(
         &endpoint,
+        token,
         "forensics.get_file_metadata",
         json!({"fileId":file_id}),
     )
     .await;
     assert_eq!(metadata["structuredContent"]["size"], 14);
-    let content = call(&endpoint, "forensics.read_file", json!({"fileId":file_id})).await;
+    let content = call(
+        &endpoint,
+        token,
+        "forensics.read_file",
+        json!({"fileId":file_id}),
+    )
+    .await;
     assert_eq!(content["isError"], false);
     assert_eq!(content["structuredContent"]["content"], "MCP byte proof");
     assert_eq!(content["structuredContent"]["eof"], true);
     assert_eq!(state.preview_runtime.stats().unwrap().session_count, 0);
     let disabled_extract = call(
         &endpoint,
+        token,
         "forensics.extract_file",
         json!({
             "fileId":file_id,
@@ -112,6 +124,7 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
     let extracted_path = temporary.path().join("http-extracted.txt");
     let extracted = call(
         &endpoint,
+        token,
         "forensics.extract_file",
         json!({
             "fileId":file_id,
@@ -119,10 +132,22 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
         }),
     )
     .await;
-    assert_eq!(extracted["isError"], false);
+    assert_eq!(extracted["isError"], true);
+    assert!(!extracted_path.exists());
+    let desktop = crate::mcp_host::call_tool(
+        state.clone(),
+        transport::dto::mcp_host::McpHostToolCallRequestDto {
+            name: "forensics.extract_file".into(),
+            arguments: json!({"fileId":file_id,"destinationPath":extracted_path}),
+        },
+    )
+    .await
+    .unwrap();
+    assert!(desktop.success);
     assert_eq!(std::fs::read(&extracted_path).unwrap(), b"MCP byte proof");
     let bad = call(
         &endpoint,
+        token,
         "forensics.read_file",
         json!({"fileId":file_id, "path":"C:\\private.txt"}),
     )
@@ -141,13 +166,19 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
         )
         .await
         .unwrap();
-    let blocked = call(&endpoint, "forensics.read_file", json!({"fileId":file_id})).await;
+    let blocked = call(
+        &endpoint,
+        token,
+        "forensics.read_file",
+        json!({"fileId":file_id}),
+    )
+    .await;
     assert_eq!(blocked["isError"], true);
     let conn = state.get_connection().unwrap();
     let count = persistence_sqlite::repositories::audit_repo::AuditRepo::new(&conn)
         .count_by_action("mcp.tool.call")
         .unwrap();
-    assert_eq!(count, 8);
+    assert_eq!(count, 9);
     state
         .mcp_host
         .configure(state.clone(), McpHostSettingsDto::default())
@@ -156,9 +187,8 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
     *state.active_case.lock().unwrap() = Some(
         case_service::create_case(&temporary.path().join("cases"), "Other Case", None).unwrap(),
     );
-    let stale = call(&endpoint, "forensics.read_file", json!({"fileId":file_id})).await;
-    assert_eq!(stale["isError"], true);
-    assert!(!stale.to_string().contains("MCP byte proof"));
+    let stale = request(&endpoint, token, json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"forensics.read_file","arguments":{"fileId":file_id}}})).await;
+    assert_eq!(stale.status(), 403);
     assert_eq!(
         std::fs::read(temporary.path().join("evidence/proof.txt")).unwrap(),
         b"MCP byte proof"

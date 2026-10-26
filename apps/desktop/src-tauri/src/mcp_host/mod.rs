@@ -1,6 +1,10 @@
 //! Application-owned loopback MCP server and desktop access to its tools.
+mod access;
+mod admission;
+mod authorization;
 mod execution;
 mod handler;
+mod invocation;
 mod runtime;
 
 pub use execution::call_tool;
@@ -8,6 +12,8 @@ pub use runtime::McpHostRuntime;
 
 #[derive(Debug, thiserror::Error)]
 pub enum McpHostError {
+    #[error(transparent)]
+    Access(#[from] app_services::mcp_host_service::access::McpAccessError),
     #[error("本机 MCP 状态不可用")]
     State,
     #[error("无法监听本机 MCP 端口 3001，请检查端口是否被占用")]
@@ -25,6 +31,7 @@ pub enum McpHostError {
 impl transport::ServiceErrorCategory for McpHostError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::Access(error) => transport::ServiceErrorCategory::category(error),
             Self::Bind(_) | Self::Io(_) => transport::ErrorCategory::Io,
             Self::Json(_) | Self::Policy(_) | Self::SettingsTooLarge => {
                 transport::ErrorCategory::Validation

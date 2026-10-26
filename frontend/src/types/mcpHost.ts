@@ -6,6 +6,26 @@ export interface JsonSchema {
   description?: string;
 }
 
+export interface McpHostClient {
+  id: string;
+  name: string;
+  caseId: string;
+  caseSessionId: string;
+  expiresAt: number;
+  readEvidence: boolean;
+}
+
+export interface McpHostCreateClientRequest {
+  name: string;
+  expiresAfterHours: number;
+  readEvidence: boolean;
+}
+
+export interface McpHostCreatedClient {
+  client: McpHostClient;
+  token: string;
+}
+
 export interface McpHostSettings {
   enabled: boolean;
   disabledTools: string[];

@@ -6,7 +6,7 @@
 
 Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 42 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
-当前工程事实快照：12 frontend pages（其中 `/v2` V2 workbench 仅在 dev/audit 模式注册，生产路由 11 个）、167 Tauri commands、50 source modules、migration scripts (105)、140 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+当前工程事实快照：12 frontend pages（其中 `/v2` V2 workbench 仅在 dev/audit 模式注册，生产路由 11 个）、170 Tauri commands、50 source modules、migration scripts (105)、141 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
 RAW/E01 导入采用作业级 SourceRuntime、独立 reader 与共享 E01 OpenPlan，默认 worker 数为 `min(CPU 数, 2)`；并发由 1536 MB 软限的估算资源准入与独立的 2048 MB RSS 硬限共同约束。来源元数据身份用于续导绑定和失效检查，证据内容摘要仍由字节校验路径生成。
 
@@ -99,7 +99,7 @@ RAW/E01 导入采用作业级 SourceRuntime、独立 reader 与共享 E01 OpenPl
 
 - 全文检索、时间线、实体归并、关联图、Notebook 调查记录、规则包（加载/校验/覆盖度）与批处理计划。批处理执行控制（启动/暂停/恢复/取消）当前返回 typed unsupported，仅创建与查询可用。
 - HTML、CSV、JSON 与证据包报告导出；报告和错误信息遵循脱敏规则。
-- 内置本机 MCP 服务端，随应用启动并监听 `http://127.0.0.1:3001/mcp`，支持设置页启停、连接地址复制及逐项禁用工具。提供 29 个工具，覆盖案件、数据源、插件模块、目录分页、文件元数据、文件内容读取、分析摘要、时间线、搜索和内容索引；文件内容每块最多 64 KiB，UTF-8/Base64。`forensics.extract_file` 默认禁用，启用后可将当前案件普通文件提取到案件工作区和证据源目录之外的绝对路径，默认拒绝覆盖。工具调用使用当前打开案件并记录审计，原始证据保持只读。
+- 内置本机 MCP 服务端监听 `http://127.0.0.1:3001/mcp`，设置页管理启停、客户端授权与撤销、地址复制及工具开关。HTTP 请求使用绑定当前案件会话的 Bearer 凭据，可单独授权文件内容读取；工具发现按权限过滤。完整目录包括 29 个工具，覆盖案件、数据源、插件结果、文件、分析摘要、时间线、搜索和内容索引；文件内容每块最多 64 KiB，支持 UTF-8/Base64。执行并行数为两个，最多等待 16 个请求，每个外部客户端最多四个等待调用。`forensics.extract_file` 保留为默认禁用的桌面调试工具，外部客户端无法调用。工具调用记录主体身份与访问入口，原始证据保持只读。
 - NTFS WOF 文件压缩支持 XPRESS 4K/8K/16K 与 LZX 32K 的按需解压，适用于预览、导出、流式读取及 MCP；大文件按块定位并限制缓存。外置 WIM 提供器需要关联 WIM 数据源，当前明确返回不支持。
 
 ### 制品查询与分页

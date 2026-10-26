@@ -1,6 +1,8 @@
 //! Embedded MCP server settings and tool contracts.
 use serde::{Deserialize, Serialize};
 
+pub mod access;
+
 pub const MCP_HOST_POLICY_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

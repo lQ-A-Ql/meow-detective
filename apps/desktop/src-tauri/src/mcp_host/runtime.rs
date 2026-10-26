@@ -20,6 +20,9 @@ struct RunningServer {
 }
 
 pub struct McpHostRuntime {
+    pub(super) admission: Arc<super::admission::Admission>,
+    pub(super) execution_cancel: Mutex<CancellationToken>,
+    pub(super) access: Mutex<app_services::mcp_host_service::access::McpAccessRegistry>,
     settings: Mutex<McpHostSettingsDto>,
     running: Mutex<Option<RunningServer>>,
     last_error: Mutex<Option<String>>,
@@ -31,6 +34,9 @@ pub struct McpHostRuntime {
 impl Default for McpHostRuntime {
     fn default() -> Self {
         Self {
+            admission: Arc::new(Default::default()),
+            execution_cancel: Mutex::new(CancellationToken::new()),
+            access: Mutex::new(Default::default()),
             settings: Mutex::new(McpHostSettingsDto::default()),
             running: Mutex::new(None),
             last_error: Mutex::new(None),
@@ -75,6 +81,11 @@ impl McpHostRuntime {
 
     pub async fn initialize(&self, state: AppState) {
         let _operation = self.operation.lock().await;
+        if let Err(error) = self.load_access(&state) {
+            self.fail_closed();
+            self.record_error(error.to_string());
+            return;
+        }
         let settings = load_settings(&state);
         match settings {
             Ok(mut settings) => {
@@ -149,6 +160,10 @@ impl McpHostRuntime {
             .map_err(McpHostError::Bind)?;
         let address = listener.local_addr()?;
         let cancel = CancellationToken::new();
+        *self
+            .execution_cancel
+            .lock()
+            .map_err(|_| McpHostError::State)? = CancellationToken::new();
         let app = router(state, cancel.clone());
         let shutdown = cancel.clone();
         let live = self.live.clone();
@@ -168,11 +183,13 @@ impl McpHostRuntime {
     }
 
     pub fn shutdown(&self) {
+        self.cancel_execution();
         self.live.store(false, Ordering::Release);
         self.abort_task();
     }
 
     async fn stop(&self) {
+        self.cancel_execution();
         self.live.store(false, Ordering::Release);
         if let Some(task) = self.abort_task() {
             let _ = task.await;
@@ -188,6 +205,12 @@ impl McpHostRuntime {
             }
         }
         None
+    }
+
+    fn cancel_execution(&self) {
+        if let Ok(cancel) = self.execution_cancel.lock() {
+            cancel.cancel();
+        }
     }
 
     fn record_error(&self, error: String) {

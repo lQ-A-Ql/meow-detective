@@ -78,6 +78,20 @@
     "loading": "加载中…"
   },
   "mcpUi": {
+    "access": {
+      "title": "客户端授权",
+      "name": "客户端名称",
+      "hours": "有效期（小时）",
+      "readEvidence": "允许读取文件内容",
+      "create": "授权当前案件",
+      "queryScope": "案件查询",
+      "contentScope": "案件查询与文件读取",
+      "expires": "到期时间：{{value}}",
+      "revoke": "撤销 {{name}} 的授权",
+      "credential": "连接凭据",
+      "credentialDescription": "凭据仅展示一次。客户端连接时在 Authorization 请求头中填写 Bearer 和此凭据。关闭或重新打开案件后需要重新授权。",
+      "copy": "复制连接凭据"
+    },
     "host": {
       "enable": "启用本机 MCP 服务",
       "running": "运行中",
@@ -92,8 +106,8 @@
     "tools": {
       "title": "可用 Tools",
       "enabled": "已启用 {{enabled}}/{{total}}",
-      "enableAll": "全部启用",
-      "disableAll": "全部禁用",
+      "enableAll": "启用全部查询工具",
+      "disableAll": "禁用全部查询工具",
       "enable": "启用工具",
       "disable": "禁用工具",
       "refresh": "刷新工具",

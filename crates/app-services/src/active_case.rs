@@ -9,6 +9,7 @@ pub struct ActiveCase {
     pub meta: CaseMeta,
     pub case_root: PathBuf,
     pub opened_at: DateTime<Utc>,
+    pub session_id: String,
     conn: Mutex<Connection>,
 }
 
@@ -18,6 +19,7 @@ impl ActiveCase {
             meta,
             case_root,
             opened_at: Utc::now(),
+            session_id: uuid::Uuid::new_v4().to_string(),
             conn: Mutex::new(conn),
         }
     }

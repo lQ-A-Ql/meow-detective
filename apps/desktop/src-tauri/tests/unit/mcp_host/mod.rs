@@ -3,7 +3,25 @@ use crate::state::AppState;
 use serde_json::{json, Value};
 use transport::dto::mcp_host::McpHostToolCallRequestDto;
 
+mod access;
 mod files;
+
+pub(super) fn grant(
+    state: &AppState,
+    read_evidence: bool,
+) -> transport::dto::mcp_host::access::McpHostCreatedClientDto {
+    state
+        .mcp_host
+        .create_client(
+            state,
+            transport::dto::mcp_host::access::McpHostCreateClientRequestDto {
+                name: "HTTP regression".into(),
+                expires_after_hours: 24,
+                read_evidence,
+            },
+        )
+        .unwrap()
+}
 
 async fn server() -> (AppState, String, tempfile::TempDir) {
     let temporary = tempfile::tempdir().unwrap();
@@ -20,9 +38,10 @@ async fn server() -> (AppState, String, tempfile::TempDir) {
     (state, endpoint, temporary)
 }
 
-async fn request(endpoint: &str, value: Value) -> reqwest::Response {
+async fn request(endpoint: &str, token: &str, value: Value) -> reqwest::Response {
     reqwest::Client::new()
         .post(endpoint)
+        .bearer_auth(token)
         .header("Accept", "application/json, text/event-stream")
         .header("MCP-Protocol-Version", "2025-03-26")
         .json(&value)
@@ -34,7 +53,12 @@ async fn request(endpoint: &str, value: Value) -> reqwest::Response {
 #[tokio::test]
 async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     let (state, endpoint, temporary) = server().await;
-    let response = request(&endpoint, json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"regression","version":"1"}}})).await;
+    let active =
+        app_services::case_service::create_case(temporary.path(), "MCP Case", None).unwrap();
+    *state.active_case.lock().unwrap() = Some(active);
+    let created = grant(&state, true);
+    let token = &created.token;
+    let response = request(&endpoint, token, json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"regression","version":"1"}}})).await;
     assert_eq!(response.status(), 200);
     assert!(response.headers().get("MCP-Session-Id").is_none());
     let result: Value = response.json().await.unwrap();
@@ -42,12 +66,14 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     assert_eq!(result["result"]["protocolVersion"], "2025-03-26");
     let notification = request(
         &endpoint,
+        token,
         json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
     )
     .await;
     assert_eq!(notification.status(), 202);
     let result: Value = request(
         &endpoint,
+        token,
         json!({"jsonrpc":"2.0","id":"tool-list","method":"tools/list"}),
     )
     .await
@@ -56,13 +82,10 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     .unwrap();
     assert_eq!(result["id"], "tool-list");
     let tools = result["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 29);
-    let extractor = tools
+    assert_eq!(tools.len(), 28);
+    assert!(!tools
         .iter()
-        .find(|tool| tool["name"] == "forensics.extract_file")
-        .unwrap();
-    assert_eq!(extractor["annotations"]["readOnlyHint"], false);
-    assert_eq!(extractor["annotations"]["destructiveHint"], true);
+        .any(|tool| tool["name"] == "forensics.extract_file"));
     let reader = tools
         .iter()
         .find(|tool| tool["name"] == "forensics.read_file")
@@ -70,11 +93,12 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     assert_eq!(reader["annotations"]["readOnlyHint"], true);
     assert_eq!(reader["annotations"]["destructiveHint"], false);
 
-    let active =
-        app_services::case_service::create_case(temporary.path(), "MCP Case", None).unwrap();
-    *state.active_case.lock().unwrap() = Some(active);
     let call = json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"forensics.get_current_case","arguments":{}}});
-    let result: Value = request(&endpoint, call.clone()).await.json().await.unwrap();
+    let result: Value = request(&endpoint, token, call.clone())
+        .await
+        .json()
+        .await
+        .unwrap();
     assert_eq!(result["result"]["isError"], false);
     assert_eq!(result["result"]["structuredContent"]["name"], "MCP Case");
     let settings = transport::dto::mcp_host::McpHostSettingsDto {
@@ -87,7 +111,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
         .configure(state.clone(), settings)
         .await
         .unwrap();
-    let result: Value = request(&endpoint, call).await.json().await.unwrap();
+    let result: Value = request(&endpoint, token, call).await.json().await.unwrap();
     assert_eq!(result["result"]["isError"], true);
     let stored: Value =
         serde_json::from_slice(&std::fs::read(temporary.path().join("mcp-host.json")).unwrap())
@@ -117,6 +141,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     ] {
         let result: Value = request(
             &endpoint,
+            token,
             json!({"jsonrpc":"2.0","id":"invalid-call","method":"tools/call","params":{"name":name,"arguments":arguments}}),
         )
         .await
@@ -132,8 +157,8 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     *state.active_case.lock().unwrap() = Some(
         app_services::case_service::create_case(temporary.path(), "Second Case", None).unwrap(),
     );
-    let result: Value = request(&endpoint, json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"forensics.list_data_sources","arguments":{}}})).await.json().await.unwrap();
-    assert_eq!(result["result"]["structuredContent"], json!([]));
+    let result = request(&endpoint, token, json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"forensics.list_data_sources","arguments":{}}})).await;
+    assert_eq!(result.status(), 403);
     state.mcp_host.shutdown();
     tokio::task::yield_now().await;
     assert!(!state.mcp_host.status().unwrap().running);
@@ -242,7 +267,11 @@ async fn occupied_port_and_persistence_failure_leave_the_listener_and_policy_con
 
 #[tokio::test]
 async fn localhost_server_rejects_browser_origins_wrong_hosts_and_oversized_bodies() {
-    let (state, endpoint, _temporary) = server().await;
+    let (state, endpoint, temporary) = server().await;
+    *state.active_case.lock().unwrap() = Some(
+        app_services::case_service::create_case(temporary.path(), "HTTP boundaries", None).unwrap(),
+    );
+    let created = grant(&state, false);
     let client = reqwest::Client::new();
     for (header, value) in [
         ("Origin", "https://evil.example"),
@@ -250,6 +279,7 @@ async fn localhost_server_rejects_browser_origins_wrong_hosts_and_oversized_bodi
     ] {
         let response = client
             .post(&endpoint)
+            .bearer_auth(&created.token)
             .header(header, value)
             .header("Accept", "application/json, text/event-stream")
             .json(&json!({"jsonrpc":"2.0","id":1,"method":"ping"}))
@@ -260,6 +290,7 @@ async fn localhost_server_rejects_browser_origins_wrong_hosts_and_oversized_bodi
     }
     let response = client
         .post(&endpoint)
+        .bearer_auth(&created.token)
         .header("Accept", "application/json, text/event-stream")
         .header("Content-Type", "application/json")
         .body("x".repeat(65 * 1024))
@@ -279,7 +310,7 @@ async fn tools_require_active_case_and_disabled_calls_cannot_bypass_the_ui() {
     };
     let result = call_tool(state, request).await.unwrap();
     assert!(!result.success);
-    assert!(result.error.unwrap().contains("打开案件"));
+    assert!(result.error.unwrap().contains("case"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

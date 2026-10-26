@@ -56,6 +56,8 @@ pub enum AuditAction {
     ArtifactView,
     TimelineView,
     McpToolCall,
+    McpAccessGrant,
+    McpAccessRevoke,
     PluginLoad,
     PluginReject,
     PluginExtractFailed,
@@ -97,6 +99,8 @@ impl AuditAction {
             Self::ArtifactView => "artifact.view",
             Self::TimelineView => "timeline.view",
             Self::McpToolCall => "mcp.tool.call",
+            Self::McpAccessGrant => "mcp.access.grant",
+            Self::McpAccessRevoke => "mcp.access.revoke",
             Self::PluginLoad => "plugin.load",
             Self::PluginReject => "plugin.reject",
             Self::PluginExtractFailed => "plugin.extract_failed",
@@ -131,7 +135,7 @@ impl AuditAction {
             Self::ReportGenerate | Self::ReportExport => "report",
             Self::ArtifactView => "artifact",
             Self::TimelineView => "timeline",
-            Self::McpToolCall => "mcp",
+            Self::McpToolCall | Self::McpAccessGrant | Self::McpAccessRevoke => "mcp",
             Self::PluginLoad
             | Self::PluginReject
             | Self::PluginExtractFailed

@@ -50,17 +50,17 @@ invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请�
 | 事实 | 当前值 |
 |---|---:|
 | Rust workspace crate | 42 |
-| Tauri commands | 167 |
+| Tauri commands | 170 |
 | app-services source modules | 50 |
 | SQLite repositories | 67 logical repositories |
 | SQLite migration scripts | 105 |
-| frontend test files | 140 |
+| frontend test files | 141 |
 
 | 路径 | 数量 |
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 12 |
-| `frontend/tests/**/*.{test,spec}.{ts,tsx}` | 140 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 167 |
+| `frontend/tests/**/*.{test,spec}.{ts,tsx}` | 141 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 170 |
 
 治理事实源：
 

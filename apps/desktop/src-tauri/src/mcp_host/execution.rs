@@ -1,43 +1,61 @@
+use super::invocation::Invocation;
 use crate::commands::command_support::snapshot_active_case;
 use crate::state::AppState;
+use app_services::mcp_host_service::access::McpPrincipal;
 use app_services::mcp_host_service::{
     execute_analysis_tool, execute_file_tool, execute_tool, tool_catalog,
     McpHostAnalysisQueryContext, McpHostFileQueryContext, McpHostQueryContext,
 };
 use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
 use serde_json::json;
+use tokio_util::sync::CancellationToken;
 use transport::{
     dto::mcp_host::{McpHostToolCallRequestDto, McpHostToolCallResultDto},
     CommandError,
 };
 
-const REQUEST_QUEUE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
-
 pub async fn call_tool(
     state: AppState,
     request: McpHostToolCallRequestDto,
 ) -> Result<McpHostToolCallResultDto, CommandError> {
+    call_tool_as(state, request, None, CancellationToken::new()).await
+}
+
+pub(super) async fn call_tool_as(
+    state: AppState,
+    request: McpHostToolCallRequestDto,
+    principal: Option<McpPrincipal>,
+    cancel: CancellationToken,
+) -> Result<McpHostToolCallResultDto, CommandError> {
     if !tool_catalog().iter().any(|tool| tool.name == request.name) {
         return Ok(failure("未知的内置工具"));
     }
-    let permit = match tokio::time::timeout(
-        REQUEST_QUEUE_TIMEOUT,
-        state.mcp_host.requests.clone().acquire_owned(),
-    )
-    .await
+    let invocation = match Invocation::new(
+        &state,
+        principal,
+        cancel,
+        request.name == "forensics.read_file",
+    ) {
+        Ok(invocation) => invocation,
+        Err(error) => return Ok(failure(&error.message)),
+    };
+    let permit = match state
+        .mcp_host
+        .admission
+        .acquire(
+            state.mcp_host.requests.clone(),
+            &invocation.actor,
+            &invocation.cancel,
+            invocation.principal.is_none(),
+        )
+        .await
     {
-        Ok(Ok(permit)) => permit,
-        Ok(Err(_)) => return Ok(failure("MCP 请求队列不可用")),
-        Err(_) => {
-            return Ok(failure(&format!(
-                "工具调用排队超过 {} 秒",
-                REQUEST_QUEUE_TIMEOUT.as_secs()
-            )))
-        }
+        Ok(permit) => permit,
+        Err(error) => return Ok(failure(&error.message)),
     };
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        execute_for_active_case(&state, request)
+        execute_for_active_case(&state, request, &invocation)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -46,17 +64,23 @@ pub async fn call_tool(
 fn execute_for_active_case(
     state: &AppState,
     request: McpHostToolCallRequestDto,
+    invocation: &Invocation,
 ) -> Result<McpHostToolCallResultDto, CommandError> {
     // The snapshot owns a shared lifecycle access until the response and audit
     // are complete, without blocking unrelated tool calls on active_case lock.
     let Some(active) = snapshot_active_case(state)? else {
         return Ok(failure("请先在应用中打开案件"));
     };
+    if active.case_id != invocation.case_id || active.session_id != invocation.session_id {
+        return Ok(failure("案件上下文已失效"));
+    }
     let enabled = state
         .mcp_host
         .tool_enabled(&request.name)
         .map_err(CommandError::from_typed_service_error)?;
-    let response = if !enabled {
+    let response = if let Err(error) = invocation.check(&request.name) {
+        failure(&error.message)
+    } else if !enabled {
         failure("工具或 MCP 服务已禁用")
     } else if request.name == "forensics.extract_file" {
         let conn = app_services::connection::open_existing_case_db(&active.db_path())
@@ -75,23 +99,29 @@ fn execute_for_active_case(
         .map_err(|_| CommandError::internal("无法读取当前案件"))?;
         conn.busy_timeout(std::time::Duration::from_secs(5))
             .map_err(|_| CommandError::internal("无法读取当前案件"))?;
+        let _interrupt = invocation.interrupt_sql(&conn);
         let context = McpHostQueryContext {
             connection: &conn,
             case_root: &active.case_root,
             case_meta: &active.meta,
         };
-        tool_response(dispatch_tool(state, context, &request))
+        let result = dispatch_tool(state, context, &request);
+        match invocation.check(&request.name) {
+            Ok(()) => tool_response(result),
+            Err(error) => failure(&error.message),
+        }
     };
     let audit_conn = app_services::connection::open_existing_case_db(&active.db_path())
         .map_err(CommandError::from_typed_service_error)?;
     AuditRepo::new(&audit_conn)
         .log(
             Some(&active.meta.id.0),
-            "mcp-client",
+            &invocation.actor,
             &AuditAction::McpToolCall,
             Some(&request.name),
-            &json!({"serverId":"embedded", "toolName":request.name, "success":response.success})
-                .to_string(),
+            &json!({"serverId":"embedded", "toolName":request.name, "success":response.success,
+                "entryPoint":if invocation.principal.is_some() { "http" } else { "desktop" }})
+            .to_string(),
         )
         .map_err(CommandError::from_typed_service_error)?;
     Ok(response)

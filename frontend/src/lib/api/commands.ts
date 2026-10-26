@@ -180,6 +180,9 @@ export const COMMANDS = {
     SET_MCP_HOST_SETTINGS: 'set_mcp_host_settings',
     LIST_MCP_HOST_TOOLS: 'list_mcp_host_tools',
     CALL_MCP_HOST_TOOL: 'call_mcp_host_tool',
+    LIST_MCP_HOST_CLIENTS: 'list_mcp_host_clients',
+    CREATE_MCP_HOST_CLIENT: 'create_mcp_host_client',
+    REVOKE_MCP_HOST_CLIENT: 'revoke_mcp_host_client',
   },
   batch: {
     CREATE_BATCH_PLAN: 'create_batch_plan',

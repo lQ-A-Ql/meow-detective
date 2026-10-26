@@ -1,4 +1,4 @@
-use super::execution::call_tool;
+use super::{authorization, execution::call_tool_as};
 use crate::state::AppState;
 use rmcp::transport::streamable_http_server::{
     session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
@@ -31,10 +31,12 @@ impl ServerHandler for HostHandler {
     async fn list_tools(
         &self,
         _request: Option<PaginatedRequestParams>,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
+        let principal = authorization::principal(&context)?;
         let tools = app_services::mcp_host_service::tool_catalog()
             .into_iter()
+            .filter(|tool| principal.allows(tool))
             .map(|tool| {
                 Tool::new(
                     tool.name,
@@ -59,13 +61,14 @@ impl ServerHandler for HostHandler {
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
+        let principal = authorization::principal(&context)?;
         let request = McpHostToolCallRequestDto {
             name: request.name.into_owned(),
             arguments: serde_json::Value::Object(request.arguments.unwrap_or_default()),
         };
-        let result = call_tool(self.state.clone(), request).await;
+        let result = call_tool_as(self.state.clone(), request, Some(principal), context.ct).await;
         let result = match result {
             Ok(result) if result.success => {
                 CallToolResult::structured(result.data.unwrap_or_default())
@@ -83,6 +86,7 @@ impl ServerHandler for HostHandler {
 }
 
 pub(super) fn router(state: AppState, cancel: CancellationToken) -> axum::Router {
+    let authorization_state = state.clone();
     let mut config = StreamableHttpServerConfig::default().enforce_origin_validation();
     config.legacy_session_mode = false;
     config.json_response = true;
@@ -98,5 +102,10 @@ pub(super) fn router(state: AppState, cancel: CancellationToken) -> axum::Router
         Arc::new(LocalSessionManager::default()),
         config,
     );
-    axum::Router::new().route_service("/mcp", service)
+    axum::Router::new()
+        .route_service("/mcp", service)
+        .layer(axum::middleware::from_fn_with_state(
+            authorization_state,
+            authorization::authenticate,
+        ))
 }

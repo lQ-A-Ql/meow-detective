@@ -16,9 +16,10 @@ interface Props {
   onCopy: () => void;
   onRetry: () => void;
   toolList: ReactNode;
+  access?: ReactNode;
 }
 
-export function McpHostToolsPanelView({ t, status, loading, copied, copyError, onEnable, onCopy, onRetry, toolList }: Props) {
+export function McpHostToolsPanelView({ t, status, loading, copied, copyError, onEnable, onCopy, onRetry, toolList, access }: Props) {
   const settings = status?.settings;
   return (
     <div className="space-y-4">
@@ -43,6 +44,7 @@ export function McpHostToolsPanelView({ t, status, loading, copied, copyError, o
         </div>
       </div>
       {copyError ? <div role="alert" className="text-[11px] text-forensics-error-text">{t('mcpUi.host.copyFailed')}</div> : null}
+      {access}
       {toolList}
     </div>
   );

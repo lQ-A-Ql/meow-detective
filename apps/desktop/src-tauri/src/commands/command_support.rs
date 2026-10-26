@@ -11,6 +11,7 @@ pub(crate) use query::{run_case_read_command, run_optional_case_read_command};
 #[derive(Clone, Debug)]
 pub(crate) struct ActiveCaseSnapshot {
     pub case_id: String,
+    pub session_id: String,
     pub case_root: PathBuf,
     pub meta: domain::CaseMeta,
     pub(crate) _access: crate::state::case_database::CaseAccess,
@@ -60,6 +61,7 @@ pub(crate) fn snapshot_active_case(
 
     Ok(guard.as_ref().map(|active| ActiveCaseSnapshot {
         case_id: active.meta.id.0.clone(),
+        session_id: active.session_id.clone(),
         case_root: active.case_root.clone(),
         meta: active.meta.clone(),
         _access: access.clone(),

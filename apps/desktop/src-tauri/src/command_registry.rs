@@ -64,7 +64,8 @@ pub(crate) use crate::commands::{
     job_commands::{get_jobs_snapshot, get_trace_items, get_warnings},
     ledger_commands::{get_ledger_proof, get_ledger_snapshot, seal_ledger_batch},
     mcp_commands::{
-        call_mcp_host_tool, get_mcp_host_status, list_mcp_host_tools, set_mcp_host_settings,
+        call_mcp_host_tool, create_mcp_host_client, get_mcp_host_status, list_mcp_host_clients,
+        list_mcp_host_tools, revoke_mcp_host_client, set_mcp_host_settings,
     },
     mount_commands::{
         get_mount_status, list_mounts, mount_image, mount_physical_image, unmount_image,
