@@ -639,6 +639,7 @@
       "noData": "无数据源"
     },
     "parentDirectory": "返回上级目录",
+    "navigationTargetMismatch": "无法定位所选文件，请重试。",
     "filter": {
       "label": "过滤:",
       "placeholder": "*"

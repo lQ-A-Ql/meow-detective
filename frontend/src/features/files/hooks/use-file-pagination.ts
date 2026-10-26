@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState, type SetStateAction } from 'react';
 import { useFileRowsPage } from '@/features/files/hooks';
 import { useUiStore } from '@/stores/ui-store';
 
@@ -19,9 +19,21 @@ export function useFilePagination({
   const fileSortDirection = useUiStore((s) => s.fileSortDirection);
   const setFileSortKey = useUiStore((s) => s.setFileSortKey);
   const toggleFileSortDirection = useUiStore((s) => s.toggleFileSortDirection);
-  const [rowsOffset, setRowsOffset] = useState(0);
+  const scope = JSON.stringify([caseId, activeDirectoryId, pageLimit, showHidden, fileSortKey, fileSortDirection]);
+  const owner = useRef({ scope });
+  if (owner.current.scope !== scope) owner.current = { scope };
+  const currentOwner = owner.current;
+  const [page, setPage] = useState({ owner: currentOwner, offset: 0 });
+  const rowsOffset = page.owner === currentOwner ? page.offset : 0;
+  const setRowsOffset = useCallback((value: SetStateAction<number>) => {
+    setPage((current) => {
+      if (owner.current !== currentOwner) return current;
+      const previous = current.owner === currentOwner ? current.offset : 0;
+      return { owner: currentOwner, offset: typeof value === 'function' ? value(previous) : value };
+    });
+  }, [currentOwner]);
 
-  const { data: rowsPage } = useFileRowsPage(
+  const { data: rowsPage, isSuccess: rowsReady, error: rowsError, refetch: retryRows } = useFileRowsPage(
     activeDirectoryId,
     rowsOffset,
     pageLimit,
@@ -31,14 +43,6 @@ export function useFilePagination({
     caseId,
   );
   const rows = rowsPage?.rows;
-
-  useEffect(() => {
-    setRowsOffset(0);
-  }, [showHidden]);
-
-  useEffect(() => {
-    setRowsOffset(0);
-  }, [activeDirectoryId, fileSortKey, fileSortDirection]);
 
   const handleSort = useCallback(
     (key: string) => {
@@ -67,7 +71,7 @@ export function useFilePagination({
   );
   const goToPreviousRows = useCallback(
     () => setRowsOffset((current) => Math.max(0, current - pageLimit)),
-    [pageLimit]
+    [pageLimit, setRowsOffset]
   );
   const goToNextRows = useCallback(() => {
     if (!rowsPage) return;
@@ -76,12 +80,16 @@ export function useFilePagination({
         ? current + pageLimit
         : current
     );
-  }, [rowsPage, pageLimit]);
+  }, [rowsPage, pageLimit, setRowsOffset]);
 
   return {
     rowsOffset,
+    rowsContextKey: `${scope}:${rowsOffset}`,
     setRowsOffset,
     rowsPage,
+    rowsReady,
+    rowsError,
+    retryRows,
     rows,
     sortedRows,
     executableCount,

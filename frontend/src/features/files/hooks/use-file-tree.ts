@@ -5,6 +5,7 @@ import {
   type FileChildrenBranchRequest,
 } from '@/features/files/hooks';
 import { useFileTreeKeyboard } from '@/hooks/use-file-tree-keyboard';
+import { useFileTreeReveal } from './use-file-tree-reveal';
 import { useResizablePanel } from '@/hooks/use-resizable-panel';
 import { formatPartitionRootDisplayName } from '@/lib/partition-display';
 import {
@@ -15,6 +16,9 @@ import {
   mergeTreeNodePages,
   rebaseTreeNodeDepths,
   sameTreeNodeList,
+  dataSourceNodeId,
+  isDataSourceTreeNodeId,
+  mergeFileTreePath,
 } from '@/features/files/file-tree-utils';
 import {
   DEFAULT_FILE_TREE_SCOPE,
@@ -28,15 +32,6 @@ import type {
 } from '@/types/models';
 
 const MAX_TREE_CACHE_SIZE = 100;
-const DATA_SOURCE_NODE_PREFIX = 'data-source:';
-
-function dataSourceNodeId(dsId: string): string {
-  return `${DATA_SOURCE_NODE_PREFIX}${dsId}`;
-}
-
-export function isDataSourceTreeNodeId(nodeId: string | undefined): boolean {
-  return Boolean(nodeId?.startsWith(DATA_SOURCE_NODE_PREFIX));
-}
 
 function rootsForDataSource(
   rootTree: FileTreeNode[] | undefined,
@@ -80,6 +75,7 @@ interface UseFileTreeOptions {
   revealDirectoryIds?: readonly string[];
   /** Backend-proven path nodes for a jump; avoids guessing ancestor pages. */
   jumpPathNodes?: readonly FileTreeNode[];
+  deferInitialSelection?: boolean;
 }
 
 export function useFileTree({
@@ -93,6 +89,7 @@ export function useFileTree({
   caseId,
   revealDirectoryIds,
   jumpPathNodes,
+  deferInitialSelection = false,
 }: UseFileTreeOptions) {
   const expansionScope = caseId ?? DEFAULT_FILE_TREE_SCOPE;
   const [expandedDirectoryIds, setExpandedDirectoryIdsState] = useState<string[]>(
@@ -200,24 +197,7 @@ export function useFileTree({
 
   useEffect(() => {
     if (!jumpPathNodes?.length) return;
-    setTreeChildren((current) => {
-      const next = { ...current };
-      const first = jumpPathNodes[0];
-      const dataSourceId = first.dataSourceId;
-      if (dataSourceId && dataSources?.some((source) => source.id === dataSourceId)) {
-        const sourceNodeId = dataSourceNodeId(dataSourceId);
-        const parent = wrappedRootTree.find((node) => node.id === sourceNodeId);
-        if (parent) {
-          next[sourceNodeId] = normalizeChildrenForParent([first], parent);
-        }
-      }
-      for (let index = 0; index < jumpPathNodes.length - 1; index += 1) {
-        const parent = jumpPathNodes[index];
-        const child = jumpPathNodes[index + 1];
-        next[parent.id] = normalizeChildrenForParent([child], parent);
-      }
-      return next;
-    });
+    setTreeChildren((current) => mergeFileTreePath(current, wrappedRootTree, jumpPathNodes));
   }, [dataSources, jumpPathNodes, showHidden, wrappedRootTree]);
 
   const rootNodes = wrappedRootTree.length > 0 ? wrappedRootTree : (rootTree ?? []);
@@ -302,7 +282,8 @@ export function useFileTree({
           findTreeNode(request.parentId, rootNodes, next)
           ?? findTreeNode(request.parentId, rootNodes, current);
         const normalized = normalizeChildrenForParent(page.children, parent);
-        const jumpChild = jumpPathChildren.get(request.parentId);
+        const pathChild = jumpPathChildren.get(request.parentId);
+        const jumpChild = pathChild ? normalizeChildrenForParent([pathChild], parent)[0] : undefined;
         const normalizedWithJumpChild = jumpChild && !normalized.some((node) => node.id === jumpChild.id)
           ? [...normalized, jumpChild]
           : normalized;
@@ -344,7 +325,7 @@ export function useFileTree({
   ]);
 
   useEffect(() => {
-    if (!selectedDirectoryId && rootNodes[0]?.id) {
+    if (!selectedDirectoryId && !deferInitialSelection && rootNodes[0]?.id) {
       setSelectedDirectoryId(rootNodes[0].id);
       setExpandedDirectoryIds((current) =>
         current.includes(rootNodes[0].id)
@@ -352,7 +333,7 @@ export function useFileTree({
           : [...current, rootNodes[0].id]
       );
     }
-  }, [rootNodes, selectedDirectoryId, setExpandedDirectoryIds, setSelectedDirectoryId]);
+  }, [deferInitialSelection, rootNodes, selectedDirectoryId, setExpandedDirectoryIds, setSelectedDirectoryId]);
 
   const activeBranchIndex = useMemo(
     () => branchRequests.findIndex((request) => request.parentId === activeDirectoryId),
@@ -420,15 +401,26 @@ export function useFileTree({
   const handleNodeOpen = useCallback(
     (nodeId: string) => {
       const node = flatTree.find((n) => n.id === nodeId);
-      if (node?.hasChildren) toggleDirectory(node);
-      else if (node) setSelectedFileId(node.id);
+      if (node?.entryType === 'file') setSelectedFileId(node.id);
+      else if (node?.hasChildren) toggleDirectory(node);
+      else if (node) {
+        setSelectedDirectoryId(node.id);
+        setSelectedFileId(undefined);
+      }
     },
-    [flatTree, toggleDirectory, setSelectedFileId]
+    [flatTree, toggleDirectory, setSelectedDirectoryId, setSelectedFileId]
   );
+  const keyboardNodes = useMemo(() => filteredTreeNodes.map((node) => ({
+    ...node, expanded: expandedIdSet.has(node.id),
+  })), [expandedIdSet, filteredTreeNodes]);
+  useFileTreeReveal(filteredTreeNodes, activeDirectoryId, treeContainerRef);
   useFileTreeKeyboard({
-    nodes: filteredTreeNodes,
+    nodes: keyboardNodes,
     activeNodeId: activeDirectoryId,
-    onNodeSelect: setSelectedDirectoryId,
+    onNodeSelect: (id) => {
+      setSelectedDirectoryId(id);
+      setSelectedFileId(undefined);
+    },
     onNodeToggle: (id) =>
       setExpandedDirectoryIds((current) =>
         current.includes(id)

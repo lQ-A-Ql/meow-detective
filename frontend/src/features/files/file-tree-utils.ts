@@ -2,6 +2,41 @@ import type { FileTreeNode } from '@/types/models';
 
 type TreeChildrenById = Readonly<Record<string, readonly FileTreeNode[]>>;
 
+const DATA_SOURCE_NODE_PREFIX = 'data-source:';
+
+export function dataSourceNodeId(id: string) {
+  return `${DATA_SOURCE_NODE_PREFIX}${id}`;
+}
+
+export function isDataSourceTreeNodeId(id?: string) {
+  return Boolean(id?.startsWith(DATA_SOURCE_NODE_PREFIX));
+}
+
+export function mergeFileTreePath(
+  current: Record<string, FileTreeNode[]>,
+  roots: readonly FileTreeNode[],
+  path: readonly FileTreeNode[],
+) {
+  if (!path.length) return current;
+  const source = path[0].dataSourceId
+    ? roots.find((node) => node.id === dataSourceNodeId(path[0].dataSourceId!))
+    : undefined;
+  const firstDepth = source ? source.depth + 1 : path[0].depth;
+  let next = current;
+  for (let index = 0; index < path.length; index += 1) {
+    const parentId = index === 0 ? source?.id : path[index - 1].id;
+    if (!parentId) continue;
+    const node = path[index].depth === firstDepth + index
+      ? path[index] : { ...path[index], depth: firstDepth + index };
+    const previous = next[parentId] ?? [];
+    const merged = mergeTreeNodePages(previous, [node]);
+    if (merged === previous) continue;
+    if (next === current) next = { ...current };
+    next[parentId] = merged;
+  }
+  return next;
+}
+
 export function sameTreeNode(left: FileTreeNode, right: FileTreeNode) {
   return (
     left.id === right.id &&

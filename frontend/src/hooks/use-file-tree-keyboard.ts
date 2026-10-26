@@ -10,7 +10,7 @@
  * - End: 跳转到最后一个
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { FileTreeNode } from '@/types/models';
 import { TREE_NODE_HEIGHT } from '@/lib/constants';
 
@@ -40,6 +40,7 @@ export function useFileTreeKeyboard({
   scrollContainerRef,
   enabled = true,
 }: UseFileTreeKeyboardOptions) {
+  const focusFrame = useRef<number>();
   // 滚动到指定索引的节点
   const scrollToNode = useCallback(
     (index: number) => {
@@ -57,18 +58,31 @@ export function useFileTreeKeyboard({
       } else if (nodeBottom > containerBottom) {
         container.scrollTop = nodeBottom - container.clientHeight;
       }
+      if (focusFrame.current !== undefined) window.cancelAnimationFrame(focusFrame.current);
+      const nodeId = nodes[index]?.id;
+      focusFrame.current = window.requestAnimationFrame(() => {
+        if (scrollContainerRef.current !== container || !container.isConnected) return;
+        const row = [...container.querySelectorAll<HTMLElement>('[role="treeitem"], [data-file-tree-node]')]
+          .find((element) => (element.dataset.fileTreeNode ?? element.id) === nodeId);
+        row?.focus({ preventScroll: true });
+      });
     },
-    [scrollContainerRef]
+    [nodes, scrollContainerRef]
   );
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (!enabled) return;
+      if (!enabled || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target instanceof Element ? e.target : undefined;
+      if (target?.closest('input, textarea, select, [contenteditable="true"], [data-tree-toggle]')) return;
+      if (!['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Enter', ' ', 'Home', 'End'].includes(e.key)) return;
 
       const currentIndex = nodes.findIndex((n) => n.id === activeNodeId);
       if (currentIndex === -1 && nodes.length === 0) return;
 
       const currentNode = nodes[currentIndex];
+      e.preventDefault();
+      e.stopPropagation();
 
       switch (e.key) {
         case 'ArrowDown':
@@ -88,20 +102,30 @@ export function useFileTreeKeyboard({
           break;
 
         case 'ArrowRight':
-          e.preventDefault();
           if (currentNode?.hasChildren && !currentNode.expanded) {
             onNodeToggle(currentNode.id);
+          } else if (currentNode?.expanded && nodes[currentIndex + 1]?.depth > currentNode.depth) {
+            onNodeSelect(nodes[currentIndex + 1].id);
+            scrollToNode(currentIndex + 1);
           }
           break;
 
         case 'ArrowLeft':
-          e.preventDefault();
           if (currentNode?.expanded) {
             onNodeToggle(currentNode.id);
+          } else if (currentNode) {
+            for (let index = currentIndex - 1; index >= 0; index -= 1) {
+              if (nodes[index].depth < currentNode.depth) {
+                onNodeSelect(nodes[index].id);
+                scrollToNode(index);
+                break;
+              }
+            }
           }
           break;
 
         case 'Enter':
+        case ' ':
           e.preventDefault();
           if (currentNode) {
             onNodeOpen(currentNode.id);
@@ -128,13 +152,26 @@ export function useFileTreeKeyboard({
     [nodes, activeNodeId, onNodeSelect, onNodeToggle, onNodeOpen, scrollToNode, enabled]
   );
 
+  const handleFocus = useCallback((event: FocusEvent) => {
+    const target = event.target instanceof Element ? event.target : undefined;
+    const row = target?.closest<HTMLElement>('[role="treeitem"], [data-file-tree-node]');
+    const id = row?.dataset.fileTreeNode ?? row?.id;
+    if (id && id !== activeNodeId && nodes.some((node) => node.id === id)) onNodeSelect(id);
+  }, [activeNodeId, nodes, onNodeSelect]);
+
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container || !enabled) return;
 
     container.addEventListener('keydown', handleKeyDown);
+    container.addEventListener('focusin', handleFocus);
     return () => {
       container.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('focusin', handleFocus);
     };
-  }, [handleKeyDown, scrollContainerRef, enabled]);
+  }, [handleFocus, handleKeyDown, scrollContainerRef, enabled]);
+
+  useEffect(() => () => {
+    if (focusFrame.current !== undefined) window.cancelAnimationFrame(focusFrame.current);
+  }, []);
 }

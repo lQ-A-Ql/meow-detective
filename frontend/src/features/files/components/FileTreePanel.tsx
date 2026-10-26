@@ -60,6 +60,8 @@ const TreeNodeRow = memo(function TreeNodeRow({
   const handleClick = useCallback(() => onToggle(node), [onToggle, node]);
   return (
     <TreeRow
+      id={node.id}
+      compositeNavigation
       depth={node.depth}
       active={active}
       expanded={expanded}
@@ -121,6 +123,7 @@ export function FileTreePanel({
     const isDataSourceNode = node.depth === 0 && node.id.startsWith('data-source:');
     if (isDataSourceNode) {
       return <FileTreeDataSourceNode
+        compositeNavigation
         node={node}
         expanded={Boolean(node.expanded)}
         dataSource={sourceMap.get(dataSourceIdFromNodeId(node.id))}

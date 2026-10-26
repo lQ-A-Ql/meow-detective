@@ -8,6 +8,7 @@ export interface FileTreeDataSourceNodeProps {
   expanded: boolean;
   dataSource: DataSourceSummary | undefined;
   onClick: () => void;
+  compositeNavigation?: boolean;
 }
 
 export const FileTreeDataSourceNode = memo(function FileTreeDataSourceNode({
@@ -15,6 +16,7 @@ export const FileTreeDataSourceNode = memo(function FileTreeDataSourceNode({
   expanded,
   dataSource,
   onClick,
+  compositeNavigation = false,
 }: FileTreeDataSourceNodeProps) {
   const Icon = dataSource ? sourceKindIcon(dataSource.kind) : Monitor;
   const kind = dataSource?.kind ?? '';
@@ -25,9 +27,11 @@ export const FileTreeDataSourceNode = memo(function FileTreeDataSourceNode({
       style={{ paddingLeft: 8 }}
       onClick={onClick}
       role="button"
+      data-file-tree-node={node.id}
       aria-expanded={node.hasChildren ? expanded : undefined}
       tabIndex={0}
       onKeyDown={(e) => {
+        if (compositeNavigation) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onClick();

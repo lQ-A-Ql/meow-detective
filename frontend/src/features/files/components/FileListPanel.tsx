@@ -60,9 +60,10 @@ export interface FileListPanelProps {
   fileSortKey: string;
   fileSortDirection: 'asc' | 'desc';
   handleSort: (key: string) => void;
-  setSelectedDirectoryId: (id: string) => void;
-  setSelectedFileId: (id: string | undefined) => void;
-  setExpandedDirectoryIds: (updater: (prev: string[]) => string[]) => void;
+  onActivateEntry: (row: FileEntryRow) => void;
+  loadErrorText?: string;
+  onRetryLoad?: () => unknown;
+  loadContextKey?: string;
   parentDirectory?: { id: string; name: string };
   goToParentDirectory?: () => void;
   /** Controls rendered in the list toolbar, next to the parent-directory button. */
@@ -83,9 +84,10 @@ export function FileListPanel({
   fileSortKey,
   fileSortDirection,
   handleSort,
-  setSelectedDirectoryId,
-  setSelectedFileId,
-  setExpandedDirectoryIds,
+  onActivateEntry,
+  loadErrorText,
+  onRetryLoad,
+  loadContextKey,
   parentDirectory,
   goToParentDirectory,
   visibilityToggle,
@@ -155,22 +157,6 @@ export function FileListPanel({
     ],
     [t],
   );
-  const handleRowClick = useCallback(
-    (row: FileEntryRow) => {
-      if (row.entryType === 'directory') {
-        setSelectedDirectoryId(row.id);
-        setSelectedFileId(undefined);
-        setExpandedDirectoryIds((current) =>
-          current.includes(row.id)
-            ? current
-            : [...current, row.id]
-        );
-        return;
-      }
-      setSelectedFileId(row.id);
-    },
-    [setSelectedDirectoryId, setSelectedFileId, setExpandedDirectoryIds],
-  );
   const renderRowContextMenu = useCallback(
     (row: FileEntryRow, trigger: ReactElement) => (
       <FileEntryContextMenu
@@ -181,7 +167,7 @@ export function FileListPanel({
         {trigger}
       </FileEntryContextMenu>
     ),
-    [onExtractFile, setSelectedFileId],
+    [onExtractFile, onOpenNested],
   );
 
   return (
@@ -229,7 +215,11 @@ export function FileListPanel({
         rows={sortedRows}
         getRowKey={(row) => row.id}
         selectedRowKey={selectedFile?.id}
-        onRowClick={handleRowClick}
+        onRowClick={onActivateEntry}
+        loadContextKey={loadContextKey}
+        initialLoadFailed={Boolean(loadErrorText)}
+        initialLoadErrorText={loadErrorText}
+        onRetryInitialLoad={onRetryLoad ? () => { void onRetryLoad(); } : undefined}
         renderRowContextMenu={renderRowContextMenu}
         emptyTitle={t('fileBrowser.list.emptyTitle')}
         emptyAction={parentDirectory ? (

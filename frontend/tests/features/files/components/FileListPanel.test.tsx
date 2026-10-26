@@ -48,9 +48,7 @@ function renderPanel(
       fileSortKey="name"
       fileSortDirection="asc"
       handleSort={vi.fn()}
-      setSelectedDirectoryId={vi.fn()}
-      setSelectedFileId={setSelectedFileId}
-      setExpandedDirectoryIds={vi.fn()}
+      onActivateEntry={setSelectedFileId}
       rowsPage={{ offset: 0, limit: 500, totalCount: rows.length, rows, truncated: false }}
       canGoToPreviousRows={pagination.canGoToPreviousRows ?? false}
       canGoToNextRows={pagination.canGoToNextRows ?? false}

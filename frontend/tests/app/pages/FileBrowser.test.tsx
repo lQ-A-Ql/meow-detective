@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FileBrowser } from '@/app/pages/FileBrowser';
 import { resetFileTreeExpansion } from '@/features/files/file-tree-expansion-store';
+import { useFileNavigationStore } from '@/stores/file-navigation-store';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
@@ -265,6 +266,7 @@ describe('FileBrowser media preview', () => {
     // The expansion store is shared by every remount of the page, so each test starts
     // from a collapsed tree unless it exercises persistence explicitly.
     resetFileTreeExpansion();
+    useFileNavigationStore.getState().cancel();
     mocks.selectionState.setSelectedDirectoryId.mockImplementation((id?: string) => {
       mocks.selectionState.selectedDirectoryId = id;
     });
@@ -928,7 +930,7 @@ describe('FileBrowser media preview', () => {
     );
     await waitFor(() => expect(mocks.fileTree).toHaveBeenLastCalledWith(true, 'case-1'));
     await waitFor(() =>
-      expect(mocks.selectionState.setSelectedDirectoryId).toHaveBeenCalledWith('dir-hidden'),
+      expect(mocks.selectionState.selectedDirectoryId).toBe('dir-hidden'),
     );
     await waitFor(() =>
       expect(mocks.fileRows).toHaveBeenLastCalledWith(
@@ -991,7 +993,7 @@ describe('FileBrowser media preview', () => {
 
     await waitFor(() => expect(screen.getAllByText('deep-branch').length).toBeGreaterThan(0));
     await waitFor(() =>
-      expect(mocks.selectionState.setSelectedDirectoryId).toHaveBeenCalledWith('dir-deep'),
+      expect(mocks.selectionState.selectedDirectoryId).toBe('dir-deep'),
     );
     expect(mocks.selectionState.setSelectedDirectoryId).not.toHaveBeenCalledWith('root');
     expect(screen.getAllByText('secret.dat').length).toBeGreaterThan(0);

@@ -639,6 +639,7 @@
       "noData": "No data source"
     },
     "parentDirectory": "Parent directory",
+    "navigationTargetMismatch": "Unable to locate the selected file. Try again.",
     "filter": {
       "label": "Filter:",
       "placeholder": "*"

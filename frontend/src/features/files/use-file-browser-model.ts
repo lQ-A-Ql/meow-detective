@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
-import { useFileJumpContext, useNtfsTechnicalFile } from '@/features/files/hooks';
+import { useNtfsTechnicalFile } from '@/features/files/hooks';
 import { useFilePagination } from '@/features/files/hooks/use-file-pagination';
 import { useFilePreview } from '@/features/files/hooks/use-file-preview';
 import { useFileSelection } from '@/features/files/hooks/use-file-selection';
@@ -12,9 +12,12 @@ import { useFileExtractionModel } from '@/features/files/hooks/use-file-extracti
 import { useUiStore } from '@/stores/ui-store';
 import { partitionIndexFromRootName } from '@/lib/partition-display';
 import type { DataSourcePartition } from '@/types/models';
+import { errorMessage } from '@/lib/errors';
 import { parseSourceScopedFileId } from './source-scoped-file-id';
 import { useNestedEvidenceModel } from './hooks/use-nested-evidence-model';
 import { useEvidenceDigestModel } from './hooks/use-evidence-digest-model';
+import { useFileBrowserLocation } from './hooks/use-file-browser-location';
+import { useFileBrowserCoordinator } from './hooks/use-file-browser-coordinator';
 
 const FILE_BROWSER_PAGE_LIMIT = 500;
 
@@ -41,13 +44,11 @@ export function useFileBrowserModel() {
   const { data: dataSources } = useDataSources();
   const viewerTab = useUiStore((s) => s.viewerTab);
   const setViewerTab = useUiStore((s) => s.setViewerTab);
-  const [showHidden, setShowHidden] = useState(true);
+  const [showHidden, setShowHiddenState] = useState(true);
 
   const {
     selectedDirectoryId,
-    setSelectedDirectoryId,
     selectedFileId,
-    setSelectedFileId,
     setSelectedTimelineId,
   } = useFileSelection();
 
@@ -58,27 +59,10 @@ export function useFileBrowserModel() {
   const fileSortKey = useUiStore((s) => s.fileSortKey);
   const fileSortDirection = useUiStore((s) => s.fileSortDirection);
 
-  // The jump context is resolved (and cached) before the router navigates here, so it
-  // is available on the first render of the browser and can drive the tree reveal.
-  const {
-    data: jumpContext,
-    isLoading: jumpContextLoading,
-    isFetching: jumpContextFetching,
-  } = useFileJumpContext(
-    selectedFileId,
-    showHidden,
-    FILE_BROWSER_PAGE_LIMIT,
-    fileSortKey,
-    fileSortDirection,
-    currentCase?.id,
-  );
-
-  const revealDirectoryIds = useMemo(() => {
-    if (!jumpContext || !selectedFileId || jumpContext.target.id !== selectedFileId) {
-      return undefined;
-    }
-    return [...jumpContext.ancestorDirectoryIds, jumpContext.directory.id];
-  }, [jumpContext, selectedFileId]);
+  const location = useFileBrowserLocation({ caseId: currentCase?.id, showHidden,
+    pageLimit: FILE_BROWSER_PAGE_LIMIT, sortKey: fileSortKey, sortDirection: fileSortDirection });
+  const setSelectedDirectoryId = location.selectDirectory;
+  const setSelectedFileId = location.selectFile;
 
   const tree = useFileTree({
     showHidden,
@@ -89,8 +73,9 @@ export function useFileBrowserModel() {
     partitions,
     dataSources,
     caseId: currentCase?.id,
-    revealDirectoryIds,
-    jumpPathNodes: jumpContext?.ancestorNodes,
+    revealDirectoryIds: location.revealDirectoryIds,
+    jumpPathNodes: location.pathNodes,
+    deferInitialSelection: location.deferInitialSelection,
   });
 
   const pagination = useFilePagination({
@@ -100,81 +85,10 @@ export function useFileBrowserModel() {
     caseId: currentCase?.id,
   });
 
-  useEffect(() => {
-    // Never reset the selection while the tree is still materializing: a jumped-to
-    // directory is expanded but its ancestor levels are still being fetched, and
-    // resetting during that window would throw the jump away. `tree.treeNodes` is the
-    // rendered (visible) tree, so cached-but-collapsed branches do not count.
-    if (!tree.treeSettled) return;
-    const visibleIds = new Set(tree.treeNodes.map((node) => node.id));
-    if (revealDirectoryIds) {
-      for (const id of revealDirectoryIds) visibleIds.add(id);
-    }
-    if (selectedDirectoryId && !visibleIds.has(selectedDirectoryId)) {
-      setSelectedDirectoryId(tree.rootTree?.[0]?.id);
-      setSelectedFileId(undefined);
-    }
-  }, [
-    revealDirectoryIds,
-    selectedDirectoryId,
-    setSelectedDirectoryId,
-    setSelectedFileId,
-    tree.rootTree,
-    tree.treeNodes,
-    tree.treeSettled,
-  ]);
-
-  useEffect(() => {
-    if (
-      selectedFileId &&
-      (!pagination.rows || !pagination.rows.some((row) => row.id === selectedFileId))
-    ) {
-      if (!jumpContext && !jumpContextLoading && !jumpContextFetching) {
-        setSelectedFileId(undefined);
-      }
-    }
-  }, [
-    jumpContext,
-    jumpContextFetching,
-    jumpContextLoading,
-    pagination.rows,
-    selectedFileId,
-    setSelectedFileId,
-  ]);
-
-  useEffect(() => {
-    if (
-      !jumpContext ||
-      !selectedFileId ||
-      jumpContext.target.id !== selectedFileId
-    ) {
-      return;
-    }
-    if (jumpContext.requiresShowHidden && !showHidden) {
-      setShowHidden(true);
-      return;
-    }
-    if (selectedDirectoryId !== jumpContext.directory.id) {
-      setSelectedDirectoryId(jumpContext.directory.id);
-    }
-    tree.setExpandedDirectoryIds((current) => {
-      const next = new Set(current);
-      for (const id of jumpContext.ancestorDirectoryIds) next.add(id);
-      return next.size === current.length ? current : Array.from(next);
-    });
-    if (pagination.rowsOffset !== jumpContext.rowOffset) {
-      pagination.setRowsOffset(jumpContext.rowOffset);
-    }
-  }, [
-    jumpContext,
-    pagination.rowsOffset,
-    pagination.setRowsOffset,
-    selectedDirectoryId,
-    selectedFileId,
-    setSelectedDirectoryId,
-    showHidden,
-    tree.setExpandedDirectoryIds,
-  ]);
+  const { setShowHidden, handleSort, goToPreviousRows, goToNextRows, activateEntry } = useFileBrowserCoordinator({
+    caseId: currentCase?.id, selectedDirectoryId, selectedFileId, showHidden,
+    onShowHidden: setShowHiddenState, location, tree, pagination,
+  });
 
   const selectedFile = pagination.rows?.find((row) => row.id === selectedFileId);
 
@@ -252,19 +166,24 @@ export function useFileBrowserModel() {
     setShowHidden,
     treeNodes: tree.treeNodes,
     sortedRows: pagination.sortedRows,
+    activateEntry,
+    directoryLoadErrorText: pagination.rowsError || location.directoryError
+      ? errorMessage(pagination.rowsError ?? location.directoryError) : undefined,
+    retryDirectoryLoad: () => location.directoryError ? location.retryDirectory() : pagination.retryRows(),
     selectedFileId,
     viewerTab,
     fileSortKey: pagination.fileSortKey,
     fileSortDirection: pagination.fileSortDirection,
-    handleSort: pagination.handleSort,
+    handleSort,
     setSelectedDirectoryId,
     setSelectedFileId,
     setExpandedDirectoryIds: tree.setExpandedDirectoryIds,
     rowsPage: pagination.rowsPage,
+    rowsContextKey: pagination.rowsContextKey,
     canGoToPreviousRows: pagination.canGoToPreviousRows,
     canGoToNextRows: pagination.canGoToNextRows,
-    goToPreviousRows: pagination.goToPreviousRows,
-    goToNextRows: pagination.goToNextRows,
+    goToPreviousRows,
+    goToNextRows,
     hexPreviewEnabled: preview.hexPreviewEnabled,
     viewer: preview.viewer,
     fileHandle: preview.fileHandle,
@@ -298,7 +217,7 @@ export function useFileBrowserModel() {
     bitLockerPartition: bitLockerTarget ? activePartition : undefined,
     bitLockerTargetKey: bitLockerTarget ? JSON.stringify([currentCase?.id, bitLockerTarget]) : undefined,
     bitLocker,
-    activeDirectoryPath: pagination.activeDirectoryPath,
+    activeDirectoryPath: location.directoryContext?.directory.path || pagination.activeDirectoryPath,
     currentDirectory: tree.currentDirectory,
     parentDirectory: tree.parentDirectory,
     goToParentDirectory: tree.goToParentDirectory,

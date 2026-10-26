@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getFileChildren,
@@ -79,7 +79,7 @@ export function useFileTree(showHidden = false, caseId?: string) {
     queryKey: ['files', 'tree', caseId ?? null, showHidden],
     queryFn: () => getFileTree(showHidden),
     staleTime: 10_000, // reduced from Infinity to pick up post-import tree updates
-    placeholderData: keepPreviousData,
+    placeholderData: (previous, query) => query?.queryKey[2] === (caseId ?? null) ? previous : undefined,
   });
 }
 
