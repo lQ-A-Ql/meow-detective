@@ -76,13 +76,17 @@ fn query_by_action_filters_entries() {
         .unwrap();
     repo.log_simple(None, &AuditAction::CaseOpen, Some("case-1"))
         .unwrap();
-    repo.log_simple(None, &AuditAction::McpConnect, Some("srv-1"))
-        .unwrap();
+    repo.log_simple(
+        None,
+        &AuditAction::McpToolCall,
+        Some("forensics.get_current_case"),
+    )
+    .unwrap();
 
     let entries = repo.query(None, Some("case.create"), 10, 0).unwrap();
     assert_eq!(entries.len(), 1);
 
-    let mcp_entries = repo.query(None, Some("mcp.connect"), 10, 0).unwrap();
+    let mcp_entries = repo.query(None, Some("mcp.tool.call"), 10, 0).unwrap();
     assert_eq!(mcp_entries.len(), 1);
     assert_eq!(mcp_entries[0].resource_type, "mcp");
 }

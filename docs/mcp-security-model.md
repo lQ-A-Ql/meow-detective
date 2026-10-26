@@ -1,152 +1,90 @@
 # MCP 安全模型
 
-## 1. 目标
+## 服务边界
 
-MCP 在取证工具中天然敏感。本项目里的 MCP 必须是“最小权限、可审计、可解释”的受控扩展边界。
+应用通过内置 Rust `rmcp` 服务向外部调查客户端提供取证能力。Streamable HTTP 地址为 `http://127.0.0.1:3001/mcp`，桌面启动时初始化，退出时停止。设置页面管理服务启停、地址复制、工具发现、逐项开关和工具调试。
 
-## 内置本机服务端
+应用配置目录中的 `mcp-host.json` 独立保存 `enabled`、`disabledTools` 和 `policyVersion`。默认启用服务，默认禁用 `forensics.extract_file`。缺少配置时使用默认值；读取失败、格式无效或超过 32 KiB 时停止服务。保存采用同目录中间文件、同步写入与原子替换。旧版配置升级会加入文件提取禁用项。
 
-- 应用内置 Streamable HTTP MCP 服务，默认启用，只监听 `127.0.0.1:3001/mcp`；设置页可停止、重新启动、复制地址及逐项禁用工具。退出应用会停止服务并释放端口。
-- 服务与外部 MCP 客户端配置独立，设置保存在应用配置目录的 `mcp-host.json`，使用临时文件与原子替换；配置解析失败不会启动监听。
-- 当前提供 29 个工具：28 个只读查询工具和 1 个默认禁用的文件提取工具，按能力分为：
-  - 案件与数据源：`get_current_case`、`list_data_sources`、`get_data_source`、`list_plugin_modules`、`get_plugin_module`。
-  - 文件：`list_files`、`get_file_metadata`、`read_file`；显式写入工具 `extract_file` 默认禁用。
-  - 数据源分析：`get_analysis_system_info`、`get_evidence_classification_summary`、`get_file_classification_board`、`get_registry_summary`、`get_registry_structured_summary`、`get_browser_history_summary`、`get_email_summary`、`get_event_log_events`、`get_linux_artifact_summary`、`get_android_device_info`、`get_android_package_summary`、`get_plugin_family_entries`、`get_analysis_report`、`get_case_overview`、`get_correlation_snapshot`。
-  - Timeline：`get_timeline_events`、`get_timeline_event`、`get_timeline_facets`。
-  - 全局索引：`search_files`、`get_content_index_coverage`。
-  以上工具名均带 `forensics.` 前缀。`extract_file` 只允许将当前案件中的普通文件提取到案件工作区和证据源目录之外的绝对路径，默认 `overwrite=false`，发布前校验目标存在性、符号链接、Windows ADS 和设备路径；成功、失败均写入文件提取审计，工具调用另写 MCP 审计。重新分析、重建内容索引、分类扫描、删除和其他导出动作不进入内置 MCP 工具目录。
-- HTTP 与设置页调用复用同一工具目录和应用服务。每次读取绑定当前案件，原始证据和源数据库保持只读；摘要不返回主机源路径、内部存储路径、凭据或原始插件诊断，插件告警仅返回数量。文件内容工具按用户选择返回证据原始字节，可能包含证据中的敏感内容。
-- 案件级关联快照使用 `offset`/`limit` 分页，默认每类返回 50 项、最多 100 项，响应保留总计数、`hasMore` 和 `nextOffset`。轻量概览读取匹配的关联缓存；平台不适用的工具返回明确的 unsupported 错误。
-- 文件列表按 `dataSourceId` 查询根目录，或用源内目录的 `parentId` 继续浏览；默认每页 100 条，最多 200 条，包含隐藏、系统及已删除条目，分页由数据库执行。`get_file_metadata` 和 `read_file` 仅接受列表返回的全局 `fileId`，验证当前案件及数据源归属，不接受主机路径。
-- `read_file` 复用证据预览读取器及当前 BitLocker 解锁状态，单次最多 64 KiB。`offset`/`nextOffset` 是字节偏移；返回 `bytesRead`、`eof` 和该块的 `chunkSha256`。`encoding=auto` 对有效且不含 NUL 的 UTF-8 块返回文本，其他字节以 Base64 返回；显式 `utf8` 不做有损替换，多字节字符被分块截断时应改用 `auto`/`base64`。哈希只针对当前块，不代表整份文件已校验。读取结束或失败均释放临时预览句柄。
-- `search_files` 的 `nextCursor` 可以遍历完整元数据结果集；无游标的 offset 路径保留 100,000 项窗口，超过窗口时应继续使用 `nextCursor`。内容索引进度由 `get_content_index_coverage` 单独报告。
-- NTFS WOF 文件提供器支持 XPRESS 4K、8K、16K 及 LZX 32K；按块索引定位 `WofCompressedData`，只解码读取范围涉及的块，流式读取最多缓存一个解压块。支持跨块读取、seek、原样存储块及 4 GiB 以上文件的 64 位块索引。外置 WIM 提供器仍返回不支持，需要另行关联 WIM 数据源。损坏的重解析点、块索引、Huffman 表或越界匹配返回错误，不回退到稀疏占位流。
+当前生产代码包括四个桌面命令：`get_mcp_host_status`、`set_mcp_host_settings`、`list_mcp_host_tools`、`call_mcp_host_tool`。HTTP 与桌面调试共享目录、权限检查和执行器。
 
-### 文件工具使用与回归
+## 工具目录
 
-先调用 `forensics.list_data_sources` 获取数据源 ID，再调用 `forensics.list_files`：
+当前提供 29 个 `forensics.` 工具，其中 28 个查询工具和一个文件提取工具。
 
-```json
-{"dataSourceId":"数据源ID","limit":100}
-```
+| 功能 | 工具名称，省略 `forensics.` |
+|---|---|
+| 案件与数据源 | `get_current_case`、`list_data_sources`、`get_data_source` |
+| 文件目录与内容 | `list_files`、`get_file_metadata`、`read_file`、`extract_file` |
+| 文件分类 | `get_evidence_classification_summary`、`get_file_classification_board` |
+| Windows 分析 | `get_analysis_system_info`、`get_registry_summary`、`get_registry_structured_summary`、`get_browser_history_summary`、`get_email_summary`、`get_event_log_events`、`get_analysis_report` |
+| Linux 分析 | `get_linux_artifact_summary` |
+| Android 分析 | `get_android_device_info`、`get_android_package_summary` |
+| 插件结果 | `list_plugin_modules`、`get_plugin_module`、`get_plugin_family_entries` |
+| 案件聚合 | `get_case_overview`、`get_correlation_snapshot` |
+| 时间线 | `get_timeline_events`、`get_timeline_event`、`get_timeline_facets` |
+| 搜索与索引 | `search_files`、`get_content_index_coverage` |
 
-用返回目录的 `id` 作为 `parentId` 浏览子目录；用文件的 `id` 调用 `forensics.get_file_metadata` 或 `forensics.read_file`：
+工具发现返回完整目录。每个工具声明 `readOnlyHint` 和 `destructiveHint`；`extract_file` 分别为 `false`、`true`。工具提示属于元数据，实际权限由后端检查。
 
-```json
-{"fileId":"ds:数据源ID:文件局部ID","offset":0,"length":65536,"encoding":"auto"}
-```
+Linux 服务和 Docker 信息目前通过 `get_linux_artifact_summary` 的 `systemConfigs` 返回，使用 `configKind` 区分服务、容器与镜像。它们描述证据中的配置和状态记录。服务与容器的实际控制操作未进入目录。
 
-读取后用响应的 `nextOffset` 继续，直到 `eof=true`。每块分别依据响应的 `encoding` 解码，按字节拼接；不要把 Base64 字符串直接拼接后再解码。
+## 案件和证据访问
 
-2026-10-07 回归验证：逻辑目录中的 UTF-8、空文件及 130,001 字节二进制；真实 HTTP 工具发现、内容读取、审计、禁用策略和切换案件；已导入 E01 的 `$MFT`（262,144 字节，4 块）和 `Windows/win.ini`（92 字节，1 块），以及带 WOF 标记的 `ntdll.dll` 明确拒绝。E01 读取校验独立文件头预期、字节总数、块哈希、EOF、句柄释放和原镜像大小/修改时间；文件数据库和镜像均只读打开。
+执行器取得当前案件快照，在查询和审计完成前持有生命周期访问许可。源文件 ID 使用包含数据源身份的全局 ID；文件工具验证当前案件、数据源和文件归属。目录遍历与证据读取复用应用服务、源数据库及证据读取器。
 
-2026-10-08 WOF 回归验证：真实 E01 的 XPRESS8K `ntdll.dll` 恢复 2,174,872 字节、34 个 MCP 数据块，SHA-256 为 `abb30adf05bd71ae8283d8a44e55268de3c408421ec059c626b92b9168adc0f9`，与 Windows Cabinet 原生解码器逐块解码得到的完整文件哈希一致。LZX 的 verbatim、aligned、raw 与 E8 变换样本也使用微软公开参考解码器交叉验证；正式程序和自动回归测试均使用 Rust，无 Go 运行依赖。
+查询连接以 SQLite 只读模式打开。原始证据、源数据库保持只读；案件数据库接收审计记录。文件提取另行通过案件写入连接记录提取过程。摘要清理主机源路径、内部存储路径、凭据及原始插件诊断；文件内容工具按请求返回证据字节。
 
-私有 E01 测试位于 `crates/app-services/tests/mcp_host_real_file.rs`，默认忽略，运行需显式提供 `FORENSICS_MCP_CASE_ROOT`、`FORENSICS_MCP_FILE_ID` 和 `FORENSICS_MCP_EXPECTED_PREFIX_HEX`；WOF 内容测试另需 `FORENSICS_MCP_WOF_FILE_ID` 和来自独立解码器的 `FORENSICS_MCP_WOF_EXPECTED_SHA256`。测试不包含工作站路径回退。独立验证需要压缩原流时，可显式设置 `FORENSICS_WOF_ORACLE_EXPORT_DIR`，运行 `wof_real_oracle_export` 的忽略测试；导出使用独立临时子目录并保持源镜像只读。
+| 边界 | 当前限制 |
+|---|---|
+| HTTP Host | `127.0.0.1`、`localhost` |
+| 浏览器来源 | 使用 SDK Origin 验证，当前拒绝携带 Origin 的请求，不开放 CORS |
+| 请求大小 | 64 KiB |
+| 并行执行 | 两个调用；其余等待许可，排队超时 300 秒 |
+| 工具结果 | JSON 序列化后最多 1 MiB |
+| 文件目录 | 默认每页 100 条，最多 200 条 |
+| 文件读取 | 每块最多 64 KiB |
+| 关联快照 | 每类默认 50 条，最多 100 条，提供继续读取信息 |
 
-WOF 文件将压缩内容保存在替代数据流或外部 WIM 中，由 Windows 过滤驱动提供逻辑内容；参见 [微软对 WofCompressedData 的说明](https://devblogs.microsoft.com/oldnewthing/20190618-00/?p=102597)及[四种文件压缩算法](https://learn.microsoft.com/en-us/windows/win32/api/wofapi/ns-wofapi-wof_file_compression_info_v1)。LZX 格式交叉验证依据 [Microsoft go-winio 的 WIM-LZX 实现](https://github.com/Microsoft/go-winio/tree/v0.6.2/wim/lzx)，许可声明保留于 `crates/fs-ntfs/NOTICE`。
-- 工具发现始终返回完整目录，`readOnlyHint` 和 `destructiveHint` 按工具能力声明；`extract_file` 返回 `readOnlyHint=false`、`destructiveHint=true`，并在设置中默认禁用。旧版 `mcp-host.json` 通过 `policyVersion` 升级时也会自动加入该禁用项，用户可在设置页显式启用。被禁用工具的实际调用在后端拒绝。成功和失败调用在其绑定案件中记录工具名和结果状态，不记录参数或结果正文。
-- 校验 Host，拒绝携带浏览器 Origin 的请求，不提供 CORS；每个请求最多 64 KiB，最多两个同时执行的案件查询，额外请求按到达顺序排队并在 300 秒后超时，单个结果上限 1 MiB。工具能力限定为只读查询，不提供任意 IPC、SQL、路径读取或插件执行入口。
+查询接口不接收任意 SQL、桌面命令名称或主机文件读取路径。平台能力不足时返回错误。
 
-V2 安全治理与发布门禁总计划见：
+## 文件内容与提取
 
-- `docs/documentation-index.md`
-- `docs/documentation-index.md`
+调用 `list_data_sources` 获取数据源 ID，然后通过 `list_files` 获取目录和文件 ID。目录 ID 作为 `parentId` 继续浏览。`read_file` 接收 `fileId`、字节 `offset`、`length` 和 `encoding`。
 
-## 2. 默认权限模型
+读取结果包括 `nextOffset`、`bytesRead`、`eof` 和当前块的 `chunkSha256`。`auto` 对有效且不含 NUL 的 UTF-8 块返回文本，其他内容返回 Base64。客户端逐块解码并按字节连接，继续读取直至 `eof=true`。显式 `utf8` 遇到无效 UTF-8 返回错误。块哈希仅验证该块内容。
 
-默认权限：
+内容读取复用预览读取器和已验证的 BitLocker 运行状态，结束或失败均释放预览句柄。NTFS WOF 支持 XPRESS 4K/8K/16K 与 LZX 32K 的范围读取；外置 WIM 提供器返回不支持。
 
-- `resourceAccess = readOnly`
-- `toolAccess = allowAll`
-- `promptAccess = readOnly`
-- `networkPolicy = localhostOnly`
-- `allowedTools = []`
-- `deniedTools = []`
-- `allowedCommands = []`
+`extract_file` 需要工具已启用，将当前案件普通文件写入明确的外部绝对路径。路径必须位于案件工作区与注册证据源目录之外。默认 `overwrite=false`；验证目标存在性、符号链接、Windows ADS 和设备路径，记录输出大小与 SHA-256。原始证据始终只读。
 
-对于 stdio：
+## 审计
 
-- 若 `allowedCommands` 为空，默认补入当前 command
-- 若显式 allowlist 不包含当前 command，则拒绝
+案件执行阶段会记录工具名称和成功状态，文件提取另写提取审计。审计不保存工具参数、令牌、凭据或结果正文。数据库中的既有审计记录使用字符串读取，能够继续读取历史操作名称。
 
-## 3. 传输安全
+当前审计调用者字段为 `mcp-client`，表示请求取证工具的调用方。HTTP 请求和桌面调试暂时共用该调用者标识。未知工具、案件未打开、排队失败以及执行器提前返回的部分错误尚未形成统一审计事件。
 
-### 3.1 SSE
+## 当前能力限制
 
-- 仅允许 `http/https`
-- 禁止 embedded credentials
-- 受 `networkPolicy` 约束：
-  - `localhostOnly`
-  - `privateLanAllowed`
-  - `anyHost`
+| 项目 | 当前行为 |
+|---|---|
+| 客户端身份 | 本机监听与请求来源检查；未提供逐客户端身份认证 |
+| 授权 | 服务开关与全局工具禁用列表；未提供案件绑定的客户端权限 |
+| 批量启用 | 清空禁用列表，包含文件提取工具 |
+| 请求取消 | 队列超时；执行阶段尚未接入请求取消与统一截止时间 |
+| 队列容量 | 执行并行数受限；等待调用数量没有独立容量限制 |
+| 输出定义 | 输入 JSON Schema、结构化结果；未声明工具输出 JSON Schema |
+| 协议资源 | 当前仅声明工具能力；Resources、Prompts 与协议任务未提供 |
+| 长任务 | 尚未暴露分析、索引建立、报告导出任务的查询和取消接口 |
 
-### 3.2 Stdio
+这些项目属于服务端后续设计范围。对应的权限与验收条件需要在增加接口之前确定。
 
-- command 必须是可执行名，不是路径
-- command 和 args 禁止 NUL
-- command 必须满足 allow list
+## 验证入口
 
-## 4. 能力访问控制
+- `apps/desktop/src-tauri/tests/unit/mcp_host/`：真实 HTTP 初始化、工具发现、内容读取、权限、案件切换、请求来源和设置持久化。
+- `crates/app-services/tests/mcp_host_files.rs`、`mcp_host_queries.rs`：应用服务读取、查询边界及结果。
+- `crates/transport/tests/unit/dto/mcp_host.rs`：字段序列化、默认权限、参数约束及字节块结果。
+- `frontend/tests/features/mcp/components/`：本机服务和工具操作界面。
+- `scripts/check-stage5-regression-guard.ps1`：HTTP 安全设置、共享执行器及 DTO 边界。
 
-### 4.1 Resources
-
-- `disabled` 时拒绝
-- `readOnly` 时仅允许 list / read
-
-### 4.2 Tools
-
-- 默认允许发现和调用
-- 前端连接后列出工具，用户可以逐项加入 `deniedTools`
-- 被禁用的工具仍然显示在列表中，便于重新启用
-- `allowList` 作为高级模式，仅允许 `allowedTools`
-- `disabled` 作为显式全禁用模式
-
-### 4.3 Prompts
-
-- `disabled` 时拒绝
-- `readOnly` 时允许 list / get
-
-## 5. 审计要求
-
-以下动作必须写审计日志：
-
-- connect
-- disconnect
-- test
-- resource list / read
-- tool list / call
-- prompt list / get
-
-建议记录：
-
-- server id
-- transport 类型
-- host 或 command 名称
-- tool / prompt / resource 摘要
-- success / failed
-
-禁止记录：
-
-- 完整凭据
-- 原始敏感响应
-- 不必要的本地绝对路径
-
-## 6. 前端约束
-
-- 前端必须显式承接权限配置，并在工具列表提供逐项禁用/启用
-- 未声明权限的 server 配置自动回落到最小权限
-- UI 文案不得暗示 MCP 是任意执行通道
-
-## 7. 后续增强建议
-
-- case-scope 审计过滤视图
-- MCP 权限模板
-- tool call 参数脱敏策略
-- 更强的 host allowlist / denylist
-
-## 8. V2 期间的新增实施要求
-
-- connect、disconnect、test、resource、tool、prompt 都必须纳入统一审计记录模型
-- MCP 的权限、能力、审计结果必须能进入发布评分卡
-- 未经说明的权限提升不得进入候选发布
+私有 E01 内容测试位于 `crates/app-services/tests/mcp_host_real_file.rs`，默认忽略，需显式提供 `FORENSICS_MCP_CASE_ROOT`、`FORENSICS_MCP_FILE_ID` 和 `FORENSICS_MCP_EXPECTED_PREFIX_HEX`。WOF 校验还需要 `FORENSICS_MCP_WOF_FILE_ID` 与独立来源的 `FORENSICS_MCP_WOF_EXPECTED_SHA256`。

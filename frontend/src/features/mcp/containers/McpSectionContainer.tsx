@@ -1,6 +1,11 @@
-import { McpSectionController } from './McpSectionController';
-import { McpResourceListContainer } from './McpResourceListContainer';
-import { McpToolListContainer } from './McpToolListContainer';
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { McpSectionView } from '../components/McpSectionView';
 import { McpHostToolsPanelContainer } from './McpHostToolsPanelContainer';
-import { useMcpStore } from '@/stores/mcp-store';
-export function McpSectionContainer() { const servers=useMcpStore((s)=>s.servers); const selectedServerId=useMcpStore((s)=>s.selectedServerId); const loading=useMcpStore((s)=>s.loading); const error=useMcpStore((s)=>s.error); const addServer=useMcpStore((s)=>s.addServer); const removeServer=useMcpStore((s)=>s.removeServer); const connectServer=useMcpStore((s)=>s.connectServer); const disconnectServer=useMcpStore((s)=>s.disconnectServer); const testConnection=useMcpStore((s)=>s.testConnection); const selectServer=useMcpStore((s)=>s.selectServer); const selected=servers.find((s)=>s.id===selectedServerId); return <McpSectionController servers={servers} selectedServerId={selectedServerId} loading={loading} error={error} onAdd={addServer} onConnect={(id)=>void connectServer(id)} onDisconnect={(id)=>void disconnectServer(id)} onRemove={(id)=>void removeServer(id)} onSelect={selectServer} testConnection={testConnection} hostToolList={<McpHostToolsPanelContainer/>} resourceList={selected?<McpResourceListContainer serverId={selected.id}/>:undefined} toolList={selected?<McpToolListContainer serverId={selected.id}/>:undefined}/>; }
+
+export function McpSectionContainer() {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(true);
+  return <McpSectionView t={t} expanded={expanded} onToggle={() => setExpanded((value) => !value)}
+    hostToolList={<McpHostToolsPanelContainer />} />;
+}

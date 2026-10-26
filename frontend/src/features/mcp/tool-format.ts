@@ -1,4 +1,4 @@
-import type { JsonSchema } from '@/lib/api/mcp-protocol';
+import type { JsonSchema } from '@/types/mcpHost';
 
 /** Result of a single MCP tool invocation, as returned by the host bridge. */
 export interface McpToolResult { toolName: string; success: boolean; data?: unknown; error?: string }

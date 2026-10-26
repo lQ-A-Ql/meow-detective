@@ -1,6 +1,5 @@
 import caseHome from './case-home.json';
 import * as caseSession from './case-session';
-import { handlesMcpCommand, invokeMcpCommand } from './mcp';
 import importDialog from './import-dialog.json';
 import tree from './tree.json';
 import timelineData from './data.json';
@@ -87,7 +86,6 @@ const emulationSessions = [
 /** Commands whose real payload is a bare array, so an empty array is a valid empty answer. */
 const emptyByDefault = [
   'list_loaded_rule_packs', 'list_notebook_entries', 'list_batch_jobs',
-  'list_mcp_resources', 'list_mcp_tools', 'list_mcp_prompts',
 ];
 
 /**
@@ -138,7 +136,6 @@ function tolerantMockValue(): unknown {
 /** Browser-only Tauri command replacement. It is aliased by Vite only in mock mode. */
 export async function invoke<T>(command: string, payload?: MockCommandPayload): Promise<T> {
   await Promise.resolve();
-  if (handlesMcpCommand(command)) return invokeMcpCommand(command, payload) as T;
   switch (command) {
     case 'get_current_case': return caseSession.currentCase() as T;
     case 'get_case_metrics': return caseHome.metrics as T;

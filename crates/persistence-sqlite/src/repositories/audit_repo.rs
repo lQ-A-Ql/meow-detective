@@ -55,15 +55,7 @@ pub enum AuditAction {
     ReportExport,
     ArtifactView,
     TimelineView,
-    McpConnect,
-    McpDisconnect,
-    McpTest,
-    McpResourceList,
-    McpResourceRead,
-    McpToolList,
     McpToolCall,
-    McpPromptList,
-    McpPromptGet,
     PluginLoad,
     PluginReject,
     PluginExtractFailed,
@@ -104,15 +96,7 @@ impl AuditAction {
             Self::ReportExport => "report.export",
             Self::ArtifactView => "artifact.view",
             Self::TimelineView => "timeline.view",
-            Self::McpConnect => "mcp.connect",
-            Self::McpDisconnect => "mcp.disconnect",
-            Self::McpTest => "mcp.test",
-            Self::McpResourceList => "mcp.resource.list",
-            Self::McpResourceRead => "mcp.resource.read",
-            Self::McpToolList => "mcp.tool.list",
             Self::McpToolCall => "mcp.tool.call",
-            Self::McpPromptList => "mcp.prompt.list",
-            Self::McpPromptGet => "mcp.prompt.get",
             Self::PluginLoad => "plugin.load",
             Self::PluginReject => "plugin.reject",
             Self::PluginExtractFailed => "plugin.extract_failed",
@@ -147,15 +131,7 @@ impl AuditAction {
             Self::ReportGenerate | Self::ReportExport => "report",
             Self::ArtifactView => "artifact",
             Self::TimelineView => "timeline",
-            Self::McpConnect
-            | Self::McpDisconnect
-            | Self::McpTest
-            | Self::McpResourceList
-            | Self::McpResourceRead
-            | Self::McpToolList
-            | Self::McpToolCall
-            | Self::McpPromptList
-            | Self::McpPromptGet => "mcp",
+            Self::McpToolCall => "mcp",
             Self::PluginLoad
             | Self::PluginReject
             | Self::PluginExtractFailed

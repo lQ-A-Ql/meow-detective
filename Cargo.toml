@@ -19,7 +19,6 @@ members = [
   "crates/image-e01",
   "crates/image-android",
   "crates/volume-android",
-  "crates/mcp-client",
   "crates/search",
   "crates/timeline",
   "crates/artifacts-core",

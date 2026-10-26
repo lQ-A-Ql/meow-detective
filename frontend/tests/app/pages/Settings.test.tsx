@@ -9,44 +9,11 @@ const mocks = vi.hoisted(() => ({
     isPending: false,
     mutateAsync: vi.fn(),
   },
-  mcpState: {
-    servers: [],
-    selectedServerId: null,
-    loading: false,
-    error: null,
-    loadConfig: vi.fn(),
-    addServer: vi.fn(),
-    removeServer: vi.fn(),
-    connectServer: vi.fn(),
-    disconnectServer: vi.fn(),
-    testConnection: vi.fn(),
-    selectServer: vi.fn(),
-  },
 }));
 
 vi.mock('@/features/settings/hooks', () => ({
   useAppSettings: mocks.appSettings,
   useSaveAppSettings: mocks.saveAppSettings,
-}));
-
-vi.mock('@/stores/mcp-store', () => ({
-  useMcpStore: (selector: (state: typeof mocks.mcpState) => unknown) => selector(mocks.mcpState),
-}));
-
-vi.mock('@/features/mcp/components/McpServerItem', () => ({
-  McpServerItem: () => <div data-testid="mcp-server-item" />,
-}));
-
-vi.mock('@/features/mcp/components/McpServerDialog', () => ({
-  McpServerDialog: () => <div data-testid="mcp-server-dialog" />,
-}));
-
-vi.mock('@/features/mcp/components/McpResourceList', () => ({
-  McpResourceList: () => <div data-testid="mcp-resource-list" />,
-}));
-
-vi.mock('@/features/mcp/components/McpToolList', () => ({
-  McpToolList: () => <div data-testid="mcp-tool-list" />,
 }));
 
 vi.mock('@/features/mcp/containers/McpHostToolsPanelContainer', () => ({
@@ -101,7 +68,6 @@ describe('Settings page', () => {
       'D:\\Images; E:\\Evidence',
     );
     expect(screen.getByLabelText('事件调试日志').getAttribute('data-state')).toBe('checked');
-    expect(mocks.mcpState.loadConfig).toHaveBeenCalledTimes(1);
   });
 
   it('saves settings through the API wrapper and mirrors lightweight UI state locally', async () => {

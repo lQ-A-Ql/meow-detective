@@ -61,7 +61,11 @@ fn ledger_chains_are_isolated_by_case_and_global_scope() {
         .log_simple(Some("case-2"), &AuditAction::CaseCreate, Some("case-2"))
         .unwrap();
     audit
-        .log_simple(None, &AuditAction::McpConnect, Some("server-1"))
+        .log_simple(
+            None,
+            &AuditAction::McpToolCall,
+            Some("forensics.get_current_case"),
+        )
         .unwrap();
 
     assert_eq!(

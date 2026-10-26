@@ -6,8 +6,9 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $mcpCommandsPath = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/mcp_commands.rs"
 $mcpCommandsDir = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/mcp_commands"
-$mcpDtoPath = Join-Path $repoRoot "crates/transport/src/dto/mcp.rs"
-$mcpDtoTestPath = Join-Path $repoRoot "crates/transport/tests/unit/dto/mcp.rs"
+$mcpDtoPath = Join-Path $repoRoot "crates/transport/src/dto/mcp_host.rs"
+$mcpDtoTestPath = Join-Path $repoRoot "crates/transport/tests/unit/dto/mcp_host.rs"
+$mcpHandlerPath = Join-Path $repoRoot "apps/desktop/src-tauri/src/mcp_host/handler.rs"
 $stagingDir = Join-Path $repoRoot "crates/app-services/src/staging"
 $importPipelineDir = Join-Path $repoRoot "crates/app-services/src/import_pipeline"
 $importPipelineModPath = Join-Path $importPipelineDir "mod.rs"
@@ -26,6 +27,7 @@ foreach ($path in @(
     $mcpCommandsDir,
     $mcpDtoPath,
     $mcpDtoTestPath,
+    $mcpHandlerPath,
     $stagingDir,
     $importPipelineDir,
     $importPipelineModPath,
@@ -64,6 +66,7 @@ $mcpCommands = Read-RustCommandTree `
   -FacadePath $mcpCommandsPath `
   -ModuleDirectory $mcpCommandsDir
 $mcpDto = Get-Content -LiteralPath $mcpDtoPath -Raw -Encoding UTF8
+$mcpHandler = Get-Content -LiteralPath $mcpHandlerPath -Raw -Encoding UTF8
 $mcpDtoContract = $mcpDto + "`n" + (
   Get-Content -LiteralPath $mcpDtoTestPath -Raw -Encoding UTF8
 )
@@ -123,58 +126,61 @@ function Assert-NotMatchesCaseSensitive {
   }
 }
 
-# MCP transport validation must reject unknown transports everywhere the command
-# layer converts DTOs into concrete MCP transports. In particular, save_mcp_config
-# must not silently default an invalid transport to an empty SSE endpoint.
+# MCP exposes the embedded host through the same execution and settings paths.
+$workspaceManifest = Get-Content -LiteralPath (Join-Path $repoRoot 'Cargo.toml') -Raw -Encoding UTF8
+$desktopManifest = Get-Content -LiteralPath (Join-Path $repoRoot 'apps/desktop/src-tauri/Cargo.toml') -Raw -Encoding UTF8
 Assert-NotMatches `
-  -Content $mcpCommands `
-  -Pattern '_\s*=>\s*McpTransport::Sse\s*\{\s*url:\s*String::new\(\)\s*\}' `
-  -Message "MCP save/config conversion must not silently default invalid transports to empty SSE"
+  -Content ($workspaceManifest + "`n" + $desktopManifest) `
+  -Pattern 'mcp-client' `
+  -Message "The application dependency graph must contain only the embedded MCP host"
 
-Assert-Matches `
-  -Content $mcpCommands `
-  -Pattern 'fn\s+transport_from_dto[\s\S]{0,800}_\s*=>\s*(?:return\s*)?Err\([\s\S]{0,160}Invalid transport type' `
-  -Message "transport_from_dto must reject invalid MCP transport types"
-
-Assert-Matches `
-  -Content $mcpCommands `
-  -Pattern 'pub\s+async\s+fn\s+save_mcp_config[\s\S]{0,700}config_from_dto\(config\)\?' `
-  -Message "save_mcp_config must use validating MCP config conversion"
-
-Assert-Matches `
-  -Content $mcpCommands `
-  -Pattern 'pub\s+async\s+fn\s+add_mcp_server[\s\S]{0,700}server_config_from_dto\(&server\)\?' `
-  -Message "add_mcp_server must use validating MCP server conversion"
-
-Assert-Matches `
-  -Content $mcpCommands `
-  -Pattern 'pub\s+async\s+fn\s+test_mcp_connection[\s\S]{0,700}Invalid transport type' `
-  -Message "test_mcp_connection must validate and report invalid MCP transport types"
-
-foreach ($pattern in @(
-    '"sse"\s*=>\s*(?:Ok\()?McpTransport::Sse',
-    '"stdio"\s*=>\s*(?:Ok\()?McpTransport::Stdio'
-  )) {
-  Assert-Matches `
-    -Content $mcpCommands `
-    -Pattern $pattern `
-    -Message "MCP command transport conversion is missing expected arm: $pattern"
+$hostCommandNames = @(
+  [regex]::Matches($mcpCommands, '#\[tauri::command\]\s*pub\s+async\s+fn\s+(\w+)') |
+    ForEach-Object { $_.Groups[1].Value } | Sort-Object
+)
+$expectedHostCommands = @('call_mcp_host_tool', 'get_mcp_host_status', 'list_mcp_host_tools', 'set_mcp_host_settings')
+if (($hostCommandNames -join ',') -cne ($expectedHostCommands -join ',')) {
+  throw "MCP command surface must match the four embedded host commands"
 }
 
-# Transport DTOs currently serialize as snake_case nested payloads. Guard this
-# boundary because the frontend/Tauri command envelope is camelCase, while these
-# nested MCP DTOs are not.
+Assert-NotMatches `
+  -Content $mcpCommands `
+  -Pattern '\b(?:McpTransport|mcp_client|get_mcp_config|save_mcp_config|connect_mcp_server)\b' `
+  -Message "MCP commands must expose only the embedded host"
+
+Assert-Matches `
+  -Content $mcpCommands `
+  -Pattern 'crate::mcp_host::call_tool\(state.inner\(\).clone\(\), request\)' `
+  -Message "Desktop MCP calls must use the embedded host executor"
+
+Assert-Matches `
+  -Content $mcpCommands `
+  -Pattern '\.configure\(state.inner\(\).clone\(\), settings\)' `
+  -Message "Desktop MCP settings must use the host configuration lifecycle"
+
 foreach ($pattern in @(
-    'server_config_serializes_current_snake_case_response_fields',
-    'tool_call_request_documents_camel_case_boundary_is_top_level_only',
-    'transport_type:\s*String',
-    'server_id:\s*String',
-    'tool_name:\s*String'
+    'host_contract_round_trips_camel_case_and_omits_absent_errors',
+    'tools_and_calls_preserve_schema_and_arguments',
+    'rename_all\s*=\s*"camelCase",\s*deny_unknown_fields',
+    'disabled_tools:\s*vec!\["forensics.extract_file"\.into\(\)\]',
+    'pub\s+input_schema:\s*serde_json::Value'
   )) {
   Assert-Matches `
     -Content $mcpDtoContract `
     -Pattern $pattern `
-    -Message "MCP transport DTO regression check is missing expected contract marker: $pattern"
+    -Message "MCP host DTO regression check is missing expected marker: $pattern"
+}
+
+foreach ($pattern in @(
+    'enforce_origin_validation\(\)',
+    'allowed_hosts\s*=\s*vec!\["127.0.0.1".into\(\),\s*"localhost".into\(\)\]',
+    'max_request_body_bytes\s*=\s*64\s*\*\s*1024',
+    'legacy_session_mode\s*=\s*false'
+  )) {
+  Assert-Matches `
+    -Content $mcpHandler `
+    -Pattern $pattern `
+    -Message "MCP HTTP host boundary is missing expected marker: $pattern"
 }
 
 # Staging merges must not use INSERT OR IGNORE in the merge-to-main path. Silent
@@ -371,4 +377,4 @@ foreach ($pattern in @(
     -Message "parser support matrix is missing expected Linux Stage 0 baseline marker: $pattern"
 }
 
-Write-Host "Stage 5 regression guard passed: MCP transport validation, nested MCP DTO contract, staging conflict visibility, modular service boundaries, and Linux support contracts are locked"
+Write-Host "Stage 5 regression guard passed: MCP host HTTP and DTO boundaries, staging conflict visibility, modular service boundaries, and Linux support contracts are locked"

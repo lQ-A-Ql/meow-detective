@@ -9,7 +9,6 @@ import {
   writeLocalSettings,
 } from '@/lib/settings';
 import { useAppSettings, useSaveAppSettings } from '@/features/settings/hooks';
-import { useMcpStore } from '@/stores/mcp-store';
 
 function parseOptionalPositiveInt(value: string): number | undefined {
   const trimmed = value.trim();
@@ -41,11 +40,6 @@ export function useSettingsPageModel() {
   const [settingsMessage, setSettingsMessage] = useState('');
   const appSettings = useAppSettings();
   const saveAppSettings = useSaveAppSettings();
-  const loadConfig = useMcpStore((state) => state.loadConfig);
-
-  useEffect(() => {
-    loadConfig();
-  }, [loadConfig]);
 
   useEffect(() => {
     const remote = appSettings.data;

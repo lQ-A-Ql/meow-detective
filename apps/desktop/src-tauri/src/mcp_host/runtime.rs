@@ -211,7 +211,7 @@ impl McpHostRuntime {
 }
 
 fn settings_path(state: &AppState) -> std::path::PathBuf {
-    state.mcp_config_path.with_file_name("mcp-host.json")
+    state.mcp_host_settings_path.clone()
 }
 
 fn load_settings(state: &AppState) -> Result<McpHostSettingsDto, McpHostError> {

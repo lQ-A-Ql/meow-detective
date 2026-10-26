@@ -35,7 +35,6 @@ pub mod import_benchmark;
 pub mod infrastructure_graph;
 pub mod jobs;
 pub mod ledger;
-pub mod mcp;
 pub mod mcp_host;
 pub mod mount;
 pub mod notebook;
@@ -143,11 +142,6 @@ pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 pub use ledger::{
     GetLedgerProofRequest, GetLedgerRequest, LedgerBatchDto, LedgerBatchVerificationDto,
     LedgerEntryDto, LedgerProofDto, LedgerProofStepDto, LedgerSnapshotDto, LedgerVerificationDto,
-};
-pub use mcp::{
-    McpCapabilitiesDto, McpConfigDto, McpPromptArgumentDto, McpPromptDto, McpResourceDto,
-    McpServerConfigDto, McpServerStatusDto, McpTestConnectionRequestDto,
-    McpTestConnectionResultDto, McpToolCallRequestDto, McpToolCallResultDto, McpToolDto,
 };
 pub use mount::{
     MountImageRequestDto, MountModeDto, MountPhysicalImageRequestDto, MountStateDto,

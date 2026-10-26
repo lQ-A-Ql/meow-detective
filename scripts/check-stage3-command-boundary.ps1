@@ -83,11 +83,6 @@ $approvedRepositoryReferences = @{
   'apps/desktop/src-tauri/src/commands/import/background_job/status.rs' = @('job_repo')
   'apps/desktop/src-tauri/src/commands/import/schedule/cluster_queue.rs' = @('job_repo')
   'apps/desktop/src-tauri/src/commands/import/schedule/queue.rs' = @('job_repo')
-  'apps/desktop/src-tauri/src/commands/mcp_commands/config.rs' = @('audit_repo')
-  'apps/desktop/src-tauri/src/commands/mcp_commands/lifecycle.rs' = @('audit_repo')
-  'apps/desktop/src-tauri/src/commands/mcp_commands/prompts.rs' = @('audit_repo')
-  'apps/desktop/src-tauri/src/commands/mcp_commands/resources.rs' = @('audit_repo')
-  'apps/desktop/src-tauri/src/commands/mcp_commands/tools.rs' = @('audit_repo')
 }
 
 function Find-UnapprovedRepositoryReference(

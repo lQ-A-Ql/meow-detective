@@ -1,4 +1,10 @@
-import type { JsonSchema } from '@/lib/api/mcp-protocol';
+export interface JsonSchema {
+  type: string;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  items?: JsonSchema;
+  description?: string;
+}
 
 export interface McpHostSettings {
   enabled: boolean;

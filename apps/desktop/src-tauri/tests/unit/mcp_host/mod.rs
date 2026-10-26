@@ -8,7 +8,7 @@ mod files;
 async fn server() -> (AppState, String, tempfile::TempDir) {
     let temporary = tempfile::tempdir().unwrap();
     let state = AppState {
-        mcp_config_path: temporary.path().join("mcp-config.json"),
+        mcp_host_settings_path: temporary.path().join("mcp-host.json"),
         ..Default::default()
     };
     state
@@ -149,7 +149,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
 async fn persisted_stop_loads_without_listening_and_corrupt_settings_fail_closed() {
     let temporary = tempfile::tempdir().unwrap();
     let state = AppState {
-        mcp_config_path: temporary.path().join("mcp-config.json"),
+        mcp_host_settings_path: temporary.path().join("mcp-host.json"),
         ..Default::default()
     };
     let settings = transport::dto::mcp_host::McpHostSettingsDto {
@@ -163,7 +163,7 @@ async fn persisted_stop_loads_without_listening_and_corrupt_settings_fail_closed
         .await
         .unwrap();
     let reloaded = AppState {
-        mcp_config_path: state.mcp_config_path.clone(),
+        mcp_host_settings_path: state.mcp_host_settings_path.clone(),
         ..Default::default()
     };
     reloaded.mcp_host.initialize(reloaded.clone()).await;
@@ -197,7 +197,7 @@ async fn legacy_host_policy_defaults_new_write_tool_to_disabled() {
     )
     .unwrap();
     let state = AppState {
-        mcp_config_path: temporary.path().join("mcp-config.json"),
+        mcp_host_settings_path: temporary.path().join("mcp-host.json"),
         ..Default::default()
     };
 
@@ -223,7 +223,7 @@ async fn occupied_port_and_persistence_failure_leave_the_listener_and_policy_con
     assert!(!other.mcp_host.status().unwrap().running);
     let blocker = temporary.path().join("not-a-directory");
     std::fs::write(&blocker, b"blocker").unwrap();
-    state.mcp_config_path = blocker.join("config.json");
+    state.mcp_host_settings_path = blocker.join("mcp-host.json");
     let before = state.mcp_host.status().unwrap().settings;
     let changed = transport::dto::mcp_host::McpHostSettingsDto {
         enabled: true,

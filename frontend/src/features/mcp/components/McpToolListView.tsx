@@ -30,8 +30,8 @@ interface ViewProps extends McpToolListProps {
 
 export function McpToolListView(p: ViewProps) {
   const { t, tools, loading, error, onRefresh, filteredTools, selectedTool, argumentsText, onArguments, argumentError,
-    testingTool, testResult, disabledCount, isToolDisabled, selectTool, runTool, toolAccess = 'allowAll',
-    onToggleTool, onToggleAll, onEnableAll } = p;
+    testingTool, testResult, disabledCount, isToolDisabled, selectTool, runTool, enabled = true,
+    onToggleTool, onToggleAll } = p;
   return (
     <div className="min-w-0 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -41,15 +41,10 @@ export function McpToolListView(p: ViewProps) {
         <span className="text-[11px] text-forensics-muted">
           {t('mcpUi.tools.enabled', { enabled: Math.max(0, tools.length - disabledCount), total: tools.length })}
         </span>
-        {toolAccess === 'allowAll' && onToggleAll && tools.length > 0 ? <>
+        {enabled && onToggleAll && tools.length > 0 ? <>
           <IconButton label={t('mcpUi.tools.enableAll')} disabled={loading} onClick={() => onToggleAll(false)}><ActionIcon name="check" /></IconButton>
           <IconButton label={t('mcpUi.tools.disableAll')} disabled={loading} onClick={() => onToggleAll(true)}><ActionIcon name="pause" /></IconButton>
         </> : null}
-        {toolAccess !== 'allowAll' && onEnableAll ? (
-          <IconButton label={t(toolAccess === 'disabled' ? 'mcpUi.tools.enable' : 'mcpUi.tools.allTools')} onClick={onEnableAll}>
-            <ActionIcon name="play" />
-          </IconButton>
-        ) : null}
         <IconButton label={t('mcpUi.tools.refresh')} onClick={onRefresh} disabled={loading}>
           <ActionIcon name="refresh" className={loading ? 'size-[15px] animate-spin' : 'size-[15px]'} />
         </IconButton>

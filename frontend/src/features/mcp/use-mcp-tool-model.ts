@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { McpTool } from '@/lib/api/mcp-protocol';
+import type { McpTool } from './model/mcp-tool-list';
 export { formatMcpArguments, formatMcpResult, type McpToolResult } from './tool-format';
 import { formatMcpArguments } from './tool-format';
 import type { McpToolResult as McpToolResultType } from './tool-format';
 
-export function useMcpToolModel(tools: McpTool[], loading: boolean, onTestTool: (name: string, args: unknown) => Promise<{ success: boolean; data?: unknown; error?: string }>, disabledTools: string[], toolAccess: 'allowAll' | 'disabled' | 'allowList') {
+export function useMcpToolModel(tools: McpTool[], loading: boolean, onTestTool: (name: string, args: unknown) => Promise<{ success: boolean; data?: unknown; error?: string }>, disabledTools: string[], enabled: boolean) {
   const [query, setQuery] = useState('');
   const [selectedToolName, setSelectedToolName] = useState<string>();
   const [argumentsText, setArgumentsText] = useState('');
@@ -13,7 +13,7 @@ export function useMcpToolModel(tools: McpTool[], loading: boolean, onTestTool: 
   const [testResult, setTestResult] = useState<McpToolResultType>();
   const filteredTools = useMemo(() => { const value = query.trim().toLowerCase(); return value ? tools.filter((tool) => `${tool.name} ${tool.description}`.toLowerCase().includes(value)) : tools; }, [query, tools]);
   const selectedTool = tools.find((tool) => tool.name === selectedToolName) ?? filteredTools[0];
-  const isToolDisabled = (name: string) => toolAccess === 'disabled' || disabledTools.some((item) => item.toLowerCase() === name.toLowerCase());
+  const isToolDisabled = (name: string) => !enabled || disabledTools.some((item) => item.toLowerCase() === name.toLowerCase());
   const disabledCount = tools.filter((tool) => isToolDisabled(tool.name)).length;
   useEffect(() => { if (selectedToolName && !tools.some((tool) => tool.name === selectedToolName)) { setSelectedToolName(undefined); setArgumentsText(''); setArgumentError(undefined); } }, [selectedToolName, tools]);
   const selectTool = (tool: McpTool) => { setSelectedToolName(tool.name); setArgumentsText(formatMcpArguments(tool.inputSchema)); setArgumentError(undefined); setTestResult(undefined); };
