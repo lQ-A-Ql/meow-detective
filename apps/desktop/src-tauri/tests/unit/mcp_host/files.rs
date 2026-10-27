@@ -98,6 +98,18 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
     assert_eq!(content["structuredContent"]["content"], "MCP byte proof");
     assert_eq!(content["structuredContent"]["eof"], true);
     assert_eq!(state.preview_runtime.stats().unwrap().session_count, 0);
+    let wrong_source = call(
+        &endpoint,
+        token,
+        "forensics.read_file",
+        json!({"fileId":"ds:other-source:file-1"}),
+    )
+    .await;
+    assert_eq!(wrong_source["isError"], true);
+    assert_eq!(
+        wrong_source["structuredContent"]["error"]["category"],
+        "security"
+    );
     let disabled_extract = call(
         &endpoint,
         token,
@@ -178,7 +190,7 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
     let count = persistence_sqlite::repositories::audit_repo::AuditRepo::new(&conn)
         .count_by_action("mcp.tool.call")
         .unwrap();
-    assert_eq!(count, 9);
+    assert_eq!(count, 10);
     state
         .mcp_host
         .configure(state.clone(), McpHostSettingsDto::default())

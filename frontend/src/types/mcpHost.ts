@@ -13,12 +13,14 @@ export interface McpHostClient {
   caseSessionId: string;
   expiresAt: number;
   readEvidence: boolean;
+  allowedDataSourceIds: string[];
 }
 
 export interface McpHostCreateClientRequest {
   name: string;
   expiresAfterHours: number;
   readEvidence: boolean;
+  allowedDataSourceIds: string[];
 }
 
 export interface McpHostCreatedClient {

@@ -6,6 +6,7 @@ fn request(name: &str, hours: u32) -> McpHostCreateClientRequestDto {
         name: name.into(),
         expires_after_hours: hours,
         read_evidence: false,
+        allowed_data_source_ids: vec![],
     }
 }
 

@@ -15,6 +15,8 @@ interface Props {
   setHours: (value: string) => void;
   readEvidence: boolean;
   setReadEvidence: (value: boolean) => void;
+  dataSourceIds: string;
+  setDataSourceIds: (value: string) => void;
   created?: McpHostCreatedClient;
   closeCreated: () => void;
   busy: boolean;
@@ -42,12 +44,16 @@ export function McpHostAccessView(p: Props) {
         <Checkbox checked={p.readEvidence} onCheckedChange={(value) => p.setReadEvidence(value === true)} disabled={p.busy} />
         {t('mcpUi.access.readEvidence')}
       </label>
+      {p.readEvidence ? <label className="min-w-64 flex-1 text-forensics-muted">{t('mcpUi.access.dataSources')}
+        <Input value={p.dataSourceIds} placeholder={t('mcpUi.access.dataSourcesPlaceholder')} onChange={(event) => p.setDataSourceIds(event.target.value)} disabled={p.busy} />
+      </label> : null}
       <IconButton label={t('mcpUi.access.create')} disabled={p.busy || !p.canCreate} onClick={p.create}><ActionIcon name="plus" /></IconButton>
     </div>
     {p.error ? <div role="alert" className="text-forensics-error-text">{p.error}</div> : null}
     {p.clients.map((client) => <div key={client.id} className="flex items-center gap-3 text-forensics-muted">
       <span className="min-w-0 flex-1 truncate text-forensics-ink">{client.name}</span>
       <span>{t(client.readEvidence ? 'mcpUi.access.contentScope' : 'mcpUi.access.queryScope')}</span>
+      {client.readEvidence ? <span>{t('mcpUi.access.dataSourceCount', { count: client.allowedDataSourceIds.length })}</span> : null}
       <span>{t('mcpUi.access.expires', { value: client.expiry })}</span>
       <IconButton label={t('mcpUi.access.revoke', { name: client.name })} onClick={() => p.revoke(client.id)} disabled={p.busy}><ActionIcon name="close" /></IconButton>
     </div>)}

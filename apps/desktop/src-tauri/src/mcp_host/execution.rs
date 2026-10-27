@@ -63,7 +63,7 @@ pub(super) async fn call_tool_as(
         )
         .await;
     }
-    if let Err(error) = invocation.check(&request.name) {
+    if let Err(error) = invocation.check(&request.name, &request.arguments) {
         return reject(state, Some(invocation), actor, safe_name, error).await;
     }
     let permit = match state
@@ -197,7 +197,7 @@ fn query_active_case(
     invocation: &Invocation,
     active: &ActiveCaseSnapshot,
 ) -> Result<McpHostToolCallResultDto, CommandError> {
-    invocation.check(&request.name)?;
+    invocation.check(&request.name, &request.arguments)?;
     if !state
         .mcp_host
         .tool_enabled(&request.name)
@@ -239,7 +239,7 @@ fn query_active_case(
         },
         request,
     );
-    invocation.check(&request.name)?;
+    invocation.check(&request.name, &request.arguments)?;
     Ok(tool_response(result))
 }
 

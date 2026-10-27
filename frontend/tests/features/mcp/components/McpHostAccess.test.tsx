@@ -19,7 +19,7 @@ describe('MCP host access', () => {
     let evidence = false;
     let submissions = 0;
     render(<McpHostAccessView t={i18n.t} clients={[]} name="" setName={(value) => { name = value; }}
-      hours="24" setHours={() => {}} readEvidence={false} setReadEvidence={(value) => { evidence = value; }}
+      hours="24" setHours={() => {}} readEvidence={false} setReadEvidence={(value) => { evidence = value; }} dataSourceIds="" setDataSourceIds={() => {}}
       closeCreated={() => {}} busy={false} canCreate create={() => { submissions += 1; }} revoke={() => {}}
       onCopy={() => {}} copied={false} copyError={false} />);
     fireEvent.change(screen.getByLabelText('客户端名称'), { target: { value: 'Investigation' } });

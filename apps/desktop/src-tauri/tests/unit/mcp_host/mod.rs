@@ -18,6 +18,11 @@ pub(super) fn grant(
                 name: "HTTP regression".into(),
                 expires_after_hours: 24,
                 read_evidence,
+                allowed_data_source_ids: if read_evidence {
+                    vec!["mcp-http-files".into()]
+                } else {
+                    vec![]
+                },
             },
         )
         .unwrap()

@@ -9,6 +9,8 @@ pub struct McpHostClientDto {
     pub case_session_id: String,
     pub expires_at: i64,
     pub read_evidence: bool,
+    #[serde(default)]
+    pub allowed_data_source_ids: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -24,6 +26,8 @@ pub struct McpHostCreateClientRequestDto {
     pub name: String,
     pub expires_after_hours: u32,
     pub read_evidence: bool,
+    #[serde(default)]
+    pub allowed_data_source_ids: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

@@ -10,6 +10,7 @@ export function useMcpAccessModel() {
   const [name, setName] = useState('');
   const [hours, setHours] = useState('24');
   const [readEvidence, setReadEvidence] = useState(false);
+  const [dataSourceIds, setDataSourceIds] = useState('');
   const [created, setCreated] = useState<McpHostCreatedClient>();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<unknown>();
@@ -19,8 +20,10 @@ export function useMcpAccessModel() {
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: key }); },
   });
   const expiresAfterHours = Number(hours);
+  const allowedDataSourceIds = dataSourceIds.split(/[\s,;]+/).map((value) => value.trim()).filter(Boolean);
   return {
     clients: clients.data ?? [], name, setName, hours, setHours, readEvidence, setReadEvidence,
+    dataSourceIds, setDataSourceIds,
     created, closeCreated: () => setCreated(undefined),
     busy: clients.isLoading || creating || revoke.isPending,
     error: createError ?? revoke.error ?? clients.error,
@@ -30,8 +33,8 @@ export function useMcpAccessModel() {
       if (creating) return;
       setCreating(true); setCreateError(undefined);
       try {
-        const result = await createMcpHostClient({ name, expiresAfterHours, readEvidence });
-        setCreated(result); setName('');
+        const result = await createMcpHostClient({ name, expiresAfterHours, readEvidence, allowedDataSourceIds });
+        setCreated(result); setName(''); setDataSourceIds('');
         void queryClient.invalidateQueries({ queryKey: key });
       } catch (error) { setCreateError(error); }
       finally { setCreating(false); }

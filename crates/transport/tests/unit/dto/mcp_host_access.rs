@@ -4,7 +4,7 @@ use serde_json::json;
 #[test]
 fn authorization_types_round_trip_and_reject_unknown_fields() {
     let request: McpHostCreateClientRequestDto = serde_json::from_value(json!({
-        "name":"Investigation", "expiresAfterHours":24, "readEvidence":false,
+        "name":"Investigation", "expiresAfterHours":24, "readEvidence":false, "allowedDataSourceIds":[],
     }))
     .unwrap();
     let value = serde_json::to_value(request).unwrap();
@@ -22,6 +22,7 @@ fn authorization_types_round_trip_and_reject_unknown_fields() {
         case_session_id: "session-id".into(),
         expires_at: 123,
         read_evidence: false,
+        allowed_data_source_ids: vec![],
     };
     let record = McpHostCredentialRecordDto {
         client: client.clone(),

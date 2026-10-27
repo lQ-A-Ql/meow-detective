@@ -89,7 +89,7 @@ impl Invocation {
         })
     }
 
-    pub fn check(&self, name: &str) -> Result<(), CommandError> {
+    pub fn check(&self, name: &str, arguments: &serde_json::Value) -> Result<(), CommandError> {
         if self.cancel.is_cancelled() {
             self.reads.cancel();
         }
@@ -106,7 +106,7 @@ impl Invocation {
             !app_services::mcp_host_service::tool_catalog()
                 .iter()
                 .find(|tool| tool.name == name)
-                .is_some_and(|tool| p.allows(tool))
+                .is_some_and(|tool| p.allows_arguments(tool, arguments))
         }) {
             return Err(CommandError::security("客户端没有此项工具的访问权限"));
         }
