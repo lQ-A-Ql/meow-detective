@@ -1562,9 +1562,9 @@
     "dataSources": {
       "title": "Data sources",
       "sha256": "Evidence SHA-256",
-      "physicalDiskHash": "Original physical disk hash",
-      "physicalDiskHashHint": "Reads original physical disk sectors directly; this does not hash an E01 image file.",
-      "physicalDiskHashRunning": "Reading original physical disk…",
+      "physicalDiskHash": "Original disk hash",
+      "physicalDiskHashHint": "Reads validated original-disk logical bytes; container file bytes are excluded.",
+      "physicalDiskHashRunning": "Reading original disk…",
       "objects": "objects",
       "partitions": "Partition structure",
       "gptDiskGuid": "GPT disk GUID: {{value}}",

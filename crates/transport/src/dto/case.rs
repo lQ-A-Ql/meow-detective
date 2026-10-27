@@ -65,6 +65,10 @@ pub struct DataSourceSummaryDto {
     pub source_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hash_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_disk_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_disk_hash_status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub canonical_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

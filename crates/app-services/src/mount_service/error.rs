@@ -13,6 +13,8 @@ pub enum MountServiceError {
     DirectVolumeRecoveryRequired,
     #[error("database error: {0}")]
     Database(#[from] DbError),
+    #[error("original-disk fingerprint lookup failed: {0}")]
+    Digest(#[from] crate::digest_service::DigestServiceError),
     #[error("source metadata could not be read: {0}")]
     SourceMetadata(#[from] std::io::Error),
     #[error("source identity changed: expected {expected} bytes, found {actual} bytes")]
@@ -54,6 +56,7 @@ impl transport::ServiceErrorCategory for MountServiceError {
             Self::Database(_) | Self::SourceMetadata(_) | Self::Reader(_) | Self::Catalog(_) => {
                 transport::ErrorCategory::Io
             }
+            Self::Digest(error) => error.category(),
             Self::SourceIdentityMismatch { .. }
             | Self::InvalidSourceFingerprint
             | Self::SourceHashMismatch { .. } => transport::ErrorCategory::Security,

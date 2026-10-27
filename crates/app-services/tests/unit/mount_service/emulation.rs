@@ -3,7 +3,11 @@ use std::sync::atomic::AtomicBool;
 use domain::{
     CaseId, CaseMeta, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourcePlatform,
 };
-use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
+use persistence_sqlite::repositories::{
+    case_repo::CaseRepo,
+    datasource_repo::DataSourceRepo,
+    evidence_digest_repo::{EvidenceDigestRecord, EvidenceDigestRepo},
+};
 use tempfile::TempDir;
 use transport::ServiceErrorCategory;
 
@@ -21,7 +25,13 @@ fn emulation_parent_binding_requires_an_exact_sha256() {
 fn prepare_emulation_source_verifies_the_parent_hash() {
     let (_tmp, connection, source_id, digest) = setup_ready_source(b"emulation evidence bytes");
 
-    let prepared = prepare_emulation_source(&connection, &source_id).unwrap();
+    let prepared = prepare_emulation_source(
+        &connection,
+        _tmp.path(),
+        &CaseId("case-emulation-prepare".into()),
+        &source_id,
+    )
+    .unwrap();
 
     assert_eq!(
         prepared.parent_sha256,
@@ -91,6 +101,7 @@ fn verified_direct_volume_parent_preserves_source_hash_and_records_generated_lay
     let (_tmp, connection, source_id, digest) = setup_ready_source(&bytes);
     let parent = crate::mount_service::prepare_emulation_parent(
         &connection,
+        _tmp.path(),
         &CaseId("case-emulation-prepare".into()),
         &source_id,
         true,
@@ -116,11 +127,17 @@ fn prepare_emulation_source_fails_closed_on_same_length_tampering() {
     tampered[0] ^= 0xff;
     std::fs::write(tmp.path().join("evidence.raw"), tampered).unwrap();
 
-    let error = prepare_emulation_source(&connection, &source_id).unwrap_err();
+    let error = prepare_emulation_source(
+        &connection,
+        tmp.path(),
+        &CaseId("case-emulation-prepare".into()),
+        &source_id,
+    )
+    .unwrap_err();
 
     assert!(matches!(
         error,
-        MountServiceError::SourceHashMismatch { .. }
+        MountServiceError::InvalidSourceFingerprint | MountServiceError::SourceHashMismatch { .. }
     ));
     assert!(matches!(
         error.category(),
@@ -134,8 +151,20 @@ fn prepare_emulation_source_fails_closed_without_a_persisted_hash() {
     DataSourceRepo::new(&connection)
         .update_source_hash(&source_id, None, DataSourceHashStatus::Pending)
         .unwrap();
+    connection
+        .execute(
+            "DELETE FROM evidence_digests WHERE data_source_id = ?1",
+            rusqlite::params![source_id.0],
+        )
+        .unwrap();
 
-    let error = prepare_emulation_source(&connection, &source_id).unwrap_err();
+    let error = prepare_emulation_source(
+        &connection,
+        _tmp.path(),
+        &CaseId("case-emulation-prepare".into()),
+        &source_id,
+    )
+    .unwrap_err();
 
     assert!(matches!(error, MountServiceError::InvalidSourceFingerprint));
     assert!(matches!(
@@ -155,9 +184,18 @@ fn prepare_emulation_source_fails_closed_when_the_source_is_unreadable() {
         .unwrap();
     std::fs::remove_file(tmp.path().join("evidence.raw")).unwrap();
 
-    let error = prepare_emulation_source(&connection, &source_id).unwrap_err();
+    let error = prepare_emulation_source(
+        &connection,
+        tmp.path(),
+        &CaseId("case-emulation-prepare".into()),
+        &source_id,
+    )
+    .unwrap_err();
 
-    assert!(matches!(error, MountServiceError::SourceHashVerify(_)));
+    assert!(matches!(
+        error,
+        MountServiceError::Digest(_) | MountServiceError::SourceHashVerify(_)
+    ));
     assert!(matches!(error.category(), transport::ErrorCategory::Io));
 }
 
@@ -196,7 +234,30 @@ fn setup_ready_source(bytes: &[u8]) -> (TempDir, rusqlite::Connection, DataSourc
     )
     .unwrap()
     .digest;
-    repo.update_source_hash(&source.id, Some(&digest), DataSourceHashStatus::Hashed)
+    let identity = crate::digest_service::identity::snapshot(
+        &connection,
+        temporary.path(),
+        &case.id,
+        &crate::digest_service::DigestTarget {
+            data_source_id: Some(&source.id.0),
+            file_id: None,
+            partition_index: None,
+        },
+    )
+    .unwrap();
+    EvidenceDigestRepo::new(&connection)
+        .upsert(&EvidenceDigestRecord {
+            case_id: case.id.0.clone(),
+            scope: "LogicalDisk".to_string(),
+            algorithm: "sha256".to_string(),
+            data_source_id: Some(source.id.0.clone()),
+            file_id: None,
+            partition_index: None,
+            value: digest.clone(),
+            byte_length: bytes.len() as u64,
+            status: "completed".to_string(),
+            source_revision: identity.revision,
+        })
         .unwrap();
     (temporary, connection, source.id, digest)
 }

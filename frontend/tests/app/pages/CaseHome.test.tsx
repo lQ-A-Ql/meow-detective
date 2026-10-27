@@ -483,7 +483,7 @@ describe('CaseHome page', () => {
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('shows evidence hash progress on the matching data source', async () => {
+  it('does not show automatic evidence hash progress after import', async () => {
     mocks.currentCase.mockReturnValue(mockQueryState({
       data: {
         id: 'case-001',
@@ -510,25 +510,12 @@ describe('CaseHome page', () => {
     }));
     mocks.recentCases.mockReturnValue(mockQueryState({ data: [] }));
     mocks.recentObjects.mockReturnValue(mockQueryState({ data: [] }));
-    mocks.jobsSnapshot.mockReturnValue(mockQueryState({
-      data: [{
-        id: 'hash-job-1',
-        name: 'Evidence SHA-256',
-        scope: 'data source ds-1',
-        progress: 42,
-        status: 'running',
-        detail: 'source=ds-1; hashing 42%',
-        warningCount: 0,
-        skippedCount: 0,
-        failedCount: 0,
-        partial: false,
-      }],
-    }));
+    mocks.jobsSnapshot.mockReturnValue(mockQueryState({ data: [] }));
     mocks.warnings.mockReturnValue(mockQueryState({ data: [] }));
 
     await renderPageAsync();
 
-    expect(screen.getByText('后台计算中')).toBeDefined();
-    expect(screen.getAllByText('42%').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('后台计算中')).toBeNull();
+    expect(screen.queryByText('42%')).toBeNull();
   });
 });

@@ -90,25 +90,6 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
             .push(format!("member {}: {message}", member_index + 1));
         update_cluster_progress(self.connection, self.job, summary)?;
         self.schedule_linux_artifacts(member_index);
-        if let Some(task_manager) = self.task_manager.as_ref() {
-            match super::super::schedule_pending_evidence_hashes(
-                &self.job.case_root,
-                &self.job.case_id.0,
-                self.app,
-                Arc::clone(task_manager),
-            ) {
-                Ok(job_ids) => tracing::info!(
-                    member_index,
-                    scheduled_hash_jobs = job_ids.len(),
-                    "Evidence hash scheduling triggered after Linux member became ready"
-                ),
-                Err(error) => tracing::warn!(
-                    member_index,
-                    error = %error.message,
-                    "Failed to schedule evidence hash after Linux member became ready"
-                ),
-            }
-        }
         Ok(())
     }
 

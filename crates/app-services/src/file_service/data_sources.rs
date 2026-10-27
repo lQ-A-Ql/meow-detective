@@ -33,6 +33,7 @@ pub fn get_data_sources_real(
             let processing = crate::processing_phase_service::get_data_source_processing_summary(
                 conn, &source.id,
             )?;
+            let original_disk_sha256 = original_disk_sha256(conn, case_id, &source.id.0)?;
             let (partitions, gpt_disk_guid) =
                 super::partition_identity::summaries(conn, &source.id.0)?;
             let linux_root_mounts = if platform == "linux" {
@@ -64,6 +65,15 @@ pub fn get_data_sources_real(
                 hash_status: Some(data_source_hash_status_label(
                     &source.provenance.hash_status,
                 )),
+                original_disk_hash_status: Some(
+                    if original_disk_sha256.is_some() {
+                        "ready"
+                    } else {
+                        "unknown"
+                    }
+                    .to_string(),
+                ),
+                original_disk_sha256,
                 canonical_path: source
                     .provenance
                     .canonical_source_path
@@ -80,6 +90,24 @@ pub fn get_data_sources_real(
             })
         })
         .collect()
+}
+
+fn original_disk_sha256(
+    conn: &Connection,
+    case_id: &domain::CaseId,
+    source_id: &str,
+) -> Result<Option<String>, FileServiceError> {
+    Ok(
+        persistence_sqlite::repositories::evidence_digest_repo::EvidenceDigestRepo::new(conn)
+            .list(&case_id.0, source_id, None, None)?
+            .into_iter()
+            .find(|record| {
+                record.scope == "LogicalDisk"
+                    && record.algorithm == "sha256"
+                    && record.status == "completed"
+            })
+            .map(|record| record.value),
+    )
 }
 
 pub(crate) fn required_data_source_platform(

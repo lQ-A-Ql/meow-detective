@@ -17,13 +17,14 @@ pub struct PreparedEmulationParent {
 
 pub fn prepare_emulation_parent(
     conn: &Connection,
+    case_root: &std::path::Path,
     case: &CaseId,
     source: &DataSourceId,
     recovery_media_available: bool,
 ) -> Result<PreparedEmulationParent, MountServiceError> {
     let geometry =
         super::prepare_emulation_disk_layout(conn, case, source, recovery_media_available)?;
-    let prepared = super::prepare_emulation_source(conn, source)?;
+    let prepared = super::prepare_emulation_source(conn, case_root, case, source)?;
     let kind = match prepared.image_kind {
         PreparedPhysicalImageKind::E01 => EvidenceImageKind::E01,
         PreparedPhysicalImageKind::Raw => EvidenceImageKind::Raw,

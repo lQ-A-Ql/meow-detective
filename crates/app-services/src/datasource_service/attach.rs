@@ -52,7 +52,7 @@ fn build_attach_provenance(source_path: &Path, kind: &DataSourceKind) -> DataSou
         return match evidence_core::LocalDiskReader::open(source_path) {
             Ok(reader) => DataSourceProvenance {
                 source_hash_sha256: None,
-                hash_status: DataSourceHashStatus::Pending,
+                hash_status: DataSourceHashStatus::Unknown,
                 canonical_source_path: Some(source_path.to_path_buf()),
                 evidence_size: Some(reader.len()),
                 reader_kind: Some(kind.to_string()),
@@ -98,7 +98,7 @@ fn build_attach_provenance(source_path: &Path, kind: &DataSourceKind) -> DataSou
         .filter(|metadata| metadata.is_file())
         .map(|metadata| metadata.len());
     let hash_status = if metadata.as_ref().is_some_and(|metadata| metadata.is_file()) {
-        DataSourceHashStatus::Pending
+        DataSourceHashStatus::Unknown
     } else if metadata.as_ref().is_some_and(|metadata| metadata.is_dir()) {
         DataSourceHashStatus::Unavailable
     } else {

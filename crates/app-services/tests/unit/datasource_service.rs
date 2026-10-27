@@ -48,7 +48,7 @@ fn attach_data_source_records_file_provenance() {
         .find(|source| source.id == attached.id)
         .unwrap();
     assert_eq!(stored.provenance.source_hash_sha256, None);
-    assert_eq!(stored.provenance.hash_status, DataSourceHashStatus::Pending);
+    assert_eq!(stored.provenance.hash_status, DataSourceHashStatus::Unknown);
     assert_eq!(stored.provenance.evidence_size, Some(15));
     assert_eq!(stored.provenance.reader_kind.as_deref(), Some("raw"));
     assert_eq!(

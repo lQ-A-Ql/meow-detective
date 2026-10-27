@@ -1562,9 +1562,9 @@
     "dataSources": {
       "title": "已有数据源",
       "sha256": "证据 SHA-256",
-      "physicalDiskHash": "原始物理磁盘哈希",
-      "physicalDiskHashHint": "直接读取原始物理磁盘扇区，不计算 E01 镜像文件。",
-      "physicalDiskHashRunning": "正在读取原始物理磁盘…",
+      "physicalDiskHash": "原始磁盘哈希",
+      "physicalDiskHashHint": "读取经过验证的原始磁盘逻辑字节，不计算容器文件字节。",
+      "physicalDiskHashRunning": "正在读取原始磁盘…",
       "objects": "对象",
       "partitions": "分区结构",
       "gptDiskGuid": "GPT 磁盘 GUID：{{value}}",

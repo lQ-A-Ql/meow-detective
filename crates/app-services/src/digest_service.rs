@@ -109,9 +109,8 @@ pub fn calculate_evidence_digest(
     )
 }
 /// Calculates a digest while allowing a task manager to cancel the read and
-/// observe byte progress.  The `LogicalDisk` scope is intentionally restricted
-/// to `DataSourceKind::LocalDisk`; image containers must use `ContainerSet` so
-/// their container bytes are never confused with physical-disk bytes.
+/// observe byte progress. The `LogicalDisk` scope hashes the validated logical
+/// reader bytes; container bytes remain available through `ContainerSet`.
 pub fn calculate_evidence_digest_with_cancel(
     case_conn: &Connection,
     case_root: &Path,
@@ -121,11 +120,6 @@ pub fn calculate_evidence_digest_with_cancel(
     target: DigestTarget<'_>,
     execution: DigestExecution<'_>,
 ) -> Result<EvidenceDigestDto, DigestServiceError> {
-    if scope == DigestScopeDto::LogicalDisk
-        && load_source(case_conn, case_id, target.data_source_id)?.kind == DataSourceKind::E01
-    {
-        return Err(DigestServiceError::Unsupported);
-    }
     let identity = identity::snapshot(case_conn, case_root, case_id, &target)?;
     let algorithm = map_algorithm(algorithm);
     let result = match scope {
@@ -196,6 +190,30 @@ pub fn calculate_evidence_digest_with_cancel(
         })?;
     }
     result
+}
+
+pub fn current_logical_disk_sha256(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &str,
+) -> Result<Option<String>, DigestServiceError> {
+    let target = DigestTarget {
+        data_source_id: Some(data_source_id),
+        file_id: None,
+        partition_index: None,
+    };
+    let identity = identity::snapshot(case_conn, case_root, case_id, &target)?;
+    let record = EvidenceDigestRepo::new(case_conn)
+        .list(case_id.0.as_str(), data_source_id, None, None)?
+        .into_iter()
+        .find(|record| {
+            record.scope == "LogicalDisk"
+                && record.algorithm == "sha256"
+                && record.status == "completed"
+        });
+    Ok(record
+        .and_then(|record| (record.source_revision == identity.revision).then_some(record.value)))
 }
 fn digest_container_file(
     case_conn: &Connection,
@@ -286,9 +304,6 @@ fn digest_logical_disk(
     execution: DigestExecution<'_>,
 ) -> Result<EvidenceDigestDto, DigestServiceError> {
     let source = load_source(case_conn, case_id, data_source_id)?;
-    if source.kind == DataSourceKind::E01 {
-        return Err(DigestServiceError::Unsupported);
-    }
     let result = HashService::hash_logical_evidence(
         Path::new(&source.source_path),
         &source.kind,

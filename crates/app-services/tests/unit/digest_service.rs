@@ -65,7 +65,7 @@ fn unsupported_partition_scope_fails_closed() {
 }
 
 #[test]
-fn logical_disk_scope_rejects_e01_container() {
+fn logical_disk_scope_rejects_unreadable_e01() {
     let (connection, case_id) = case_with_source(DataSourceKind::E01, "sample.E01");
     let result = calculate_evidence_digest(
         &connection,
@@ -79,7 +79,7 @@ fn logical_disk_scope_rejects_e01_container() {
             partition_index: None,
         },
     );
-    assert!(matches!(result, Err(DigestServiceError::Unsupported)));
+    assert!(matches!(result, Err(DigestServiceError::Hash(_))));
 }
 
 #[test]

@@ -44,11 +44,10 @@ describe('DataSourcesPanel', () => {
     expect(screen.getByText('延后 1')).toBeTruthy();
   });
 
-  it('shows live evidence hash progress for the matching data source', () => {
+  it('does not render an automatic evidence hash progress row', () => {
     render(
       <DataSourcesPanel
         dataSources={[{ ...dataSource, hashStatus: 'pending' }]}
-        hashJobs={[{ dataSourceId: dataSource.id, status: 'running', progress: 42 }]}
         editingDataSourceId={undefined}
         editingDataSourceName=""
         setEditingDataSourceId={vi.fn()}
@@ -58,49 +57,15 @@ describe('DataSourcesPanel', () => {
       />,
     );
 
-    expect(screen.getByText('后台计算中')).toBeTruthy();
-    expect(screen.getByText('42%')).toBeTruthy();
+    expect(screen.queryByText('后台计算中')).toBeNull();
+    expect(screen.queryByText('42%')).toBeNull();
   });
 
-  it('shows the complete evidence hash after the background job finishes', () => {
-    const digest = 'a'.repeat(64);
-    render(
-      <DataSourcesPanel
-        dataSources={[{ ...dataSource, hashStatus: 'hashed', sourceHash: digest }]}
-        editingDataSourceId={undefined}
-        editingDataSourceName=""
-        setEditingDataSourceId={vi.fn()}
-        setEditingDataSourceName={vi.fn()}
-        onRename={vi.fn()}
-        onRequestDelete={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText('已完成')).toBeTruthy();
-    expect(screen.getByTestId(`source-hash-${dataSource.id}`).textContent).toBe(digest);
-  });
-
-  it('shows a failed evidence hash state', () => {
-    render(
-      <DataSourcesPanel
-        dataSources={[{ ...dataSource, hashStatus: 'failed' }]}
-        editingDataSourceId={undefined}
-        editingDataSourceName=""
-        setEditingDataSourceId={vi.fn()}
-        setEditingDataSourceName={vi.fn()}
-        onRename={vi.fn()}
-        onRequestDelete={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText('计算失败')).toBeTruthy();
-  });
-
-  it('offers original physical disk hashing only for local disks', async () => {
+  it('offers original disk hashing for image and physical disk sources', async () => {
     const onCalculate = vi.fn();
     render(
       <DataSourcesPanel
-        dataSources={[{ ...dataSource, id: 'physical-0', kind: 'local_disk', sourcePath: '\\\\.\\PhysicalDrive0' }]}
+        dataSources={[{ ...dataSource, id: 'physical-0', kind: 'raw', sourcePath: 'disk.raw' }]}
         editingDataSourceId={undefined}
         editingDataSourceName=""
         setEditingDataSourceId={vi.fn()}
@@ -110,7 +75,7 @@ describe('DataSourcesPanel', () => {
         onCalculateLogicalDiskDigest={onCalculate}
       />,
     );
-    expect(screen.getByText('原始物理磁盘哈希')).toBeTruthy();
+    expect(screen.getByText('原始磁盘哈希')).toBeTruthy();
     screen.getByRole('button', { name: 'SHA256' }).click();
     expect(onCalculate).toHaveBeenCalledWith('physical-0', 'sha256');
   });

@@ -13,7 +13,6 @@ use super::{
     prepare_physical_mount_source, MountServiceError, PreparedPhysicalImageKind,
     PreparedPhysicalMountSource,
 };
-use crate::hash_service::HashService;
 use crate::source_db::{self, ReadySourceError};
 
 /// Upper bound for the partition scan; real images have a handful of
@@ -29,11 +28,20 @@ pub struct PreparedEmulationSource {
 
 pub fn prepare_emulation_source(
     case_conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
     data_source_id: &DataSourceId,
 ) -> Result<PreparedEmulationSource, MountServiceError> {
     let prepared = prepare_physical_mount_source(case_conn, data_source_id)?;
-    let parent_sha256 = parse_source_sha256(&prepared.source_binding)?;
-    verify_parent_hash(case_conn, data_source_id, &prepared)?;
+    let expected = crate::digest_service::current_logical_disk_sha256(
+        case_conn,
+        case_root,
+        case_id,
+        &data_source_id.0,
+    )?
+    .ok_or(MountServiceError::InvalidSourceFingerprint)?;
+    let parent_sha256 = parse_source_sha256(&expected)?;
+    verify_parent_hash(case_conn, data_source_id, &prepared, parent_sha256)?;
     Ok(PreparedEmulationSource {
         source_path: prepared.source_path,
         image_kind: prepared.image_kind,
@@ -41,30 +49,29 @@ pub fn prepare_emulation_source(
     })
 }
 
-/// Session start is fail-closed on evidence integrity: the container bytes
-/// are re-hashed with the exact import-time algorithm and compared against
-/// the fingerprint persisted at import. A same-length modification is the
+/// Session start is fail-closed on evidence integrity: logical disk bytes are
+/// re-hashed and compared against the persisted
+/// original-disk fingerprint. A same-length modification is the
 /// case this catches — the size probe in `validate_source_identity` cannot.
 /// Any mismatch or recompute failure aborts before a COW workspace exists.
 fn verify_parent_hash(
     case_conn: &Connection,
     data_source_id: &DataSourceId,
     prepared: &PreparedPhysicalMountSource,
+    expected_sha256: [u8; 32],
 ) -> Result<(), MountServiceError> {
     let kind = DataSourceRepo::new(case_conn).source_kind(data_source_id)?;
-    let recomputed = HashService::hash_evidence(
+    let recomputed = crate::hash_service::HashService::hash_logical_evidence(
         &prepared.source_path,
         &kind,
+        infrastructure::hashing::HashAlgorithm::Sha256,
         &AtomicBool::new(false),
         &|_, _| {},
     )
     .map_err(|error| MountServiceError::SourceHashVerify(error.to_string()))?;
-    if !recomputed
-        .digest
-        .eq_ignore_ascii_case(&prepared.source_binding)
-    {
+    if parse_source_sha256(&recomputed.digest)? != expected_sha256 {
         return Err(MountServiceError::SourceHashMismatch {
-            expected: prepared.source_binding.clone(),
+            expected: hex::encode(expected_sha256),
             actual: recomputed.digest,
         });
     }

@@ -24,6 +24,8 @@ export interface DataSourceSummary {
   processing?: DataSourceProcessingSummary;
   sourceHash?: string;
   hashStatus?: string;
+  originalDiskSha256?: string;
+  originalDiskHashStatus?: string;
   canonicalPath?: string;
   evidenceSize?: number;
   readerKind?: string;

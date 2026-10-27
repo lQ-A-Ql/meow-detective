@@ -457,7 +457,8 @@ fn prepare_session_fails_closed_when_the_evidence_hash_changed() {
     assert!(matches!(
         error,
         EmulationRegistryError::Source(
-            app_services::mount_service::MountServiceError::SourceHashMismatch { .. }
+            app_services::mount_service::MountServiceError::InvalidSourceFingerprint
+                | app_services::mount_service::MountServiceError::SourceHashMismatch { .. }
         )
     ));
     assert!(matches!(
@@ -522,5 +523,36 @@ fn ready_case_with_source(
     };
     repo.update_source_hash(&source.id, stored_hash, status)
         .unwrap();
+    if let Some(value) = stored_hash {
+        let identity = app_services::digest_service::identity::snapshot(
+            &connection,
+            &active.case_root,
+            &active.meta.id,
+            &app_services::digest_service::DigestTarget {
+                data_source_id: Some(&source.id.0),
+                file_id: None,
+                partition_index: None,
+            },
+        )
+        .unwrap();
+        persistence_sqlite::repositories::evidence_digest_repo::EvidenceDigestRepo::new(
+            &connection,
+        )
+        .upsert(
+            &persistence_sqlite::repositories::evidence_digest_repo::EvidenceDigestRecord {
+                case_id: active.meta.id.0.clone(),
+                scope: "LogicalDisk".to_string(),
+                algorithm: "sha256".to_string(),
+                data_source_id: Some(source.id.0.clone()),
+                file_id: None,
+                partition_index: None,
+                value: value.to_string(),
+                byte_length: b"emulation evidence bytes".len() as u64,
+                status: "completed".to_string(),
+                source_revision: identity.revision,
+            },
+        )
+        .unwrap();
+    }
     (temporary, active, connection, source.id)
 }

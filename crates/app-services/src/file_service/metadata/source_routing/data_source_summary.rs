@@ -34,6 +34,13 @@ pub fn get_data_sources_for_case(
         let processing = crate::processing_phase_service::get_data_source_processing_summary(
             case_conn, &source.id,
         )?;
+        let original_disk_sha256 = crate::digest_service::current_logical_disk_sha256(
+            case_conn,
+            case_root,
+            case_id,
+            &source.id.0,
+        )
+        .map_err(|error| FileServiceError::other(error.to_string()))?;
         let source_conn =
             open_source_for_data_source(case_conn, case_root, case_id, &source.id).ok();
         let (file_count, partitions, gpt_disk_guid, linux_root_mounts) = if let Some(source_conn) =
@@ -84,6 +91,15 @@ pub fn get_data_sources_for_case(
             hash_status: Some(data_source_hash_status_label(
                 &source.provenance.hash_status,
             )),
+            original_disk_hash_status: Some(
+                if original_disk_sha256.is_some() {
+                    "ready"
+                } else {
+                    "unknown"
+                }
+                .to_string(),
+            ),
+            original_disk_sha256,
             canonical_path: source
                 .provenance
                 .canonical_source_path

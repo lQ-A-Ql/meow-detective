@@ -1,14 +1,12 @@
-import { CheckCircle2, PencilLine, Trash2, XCircle } from 'lucide-react';
+import { PencilLine, Trash2 } from 'lucide-react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { InlineProgressRow } from '@/components/status/InlineProgressRow';
 import { formatPartitionDisplayName, partitionDisplayLabel } from '@/lib/partition-display';
 import type { DataSourceSummary, DataSourcePartition } from '@/types/models';
-import type { EvidenceHashJobView } from '../types';
 import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
 import { LinuxRootMounts } from './LinuxRootMounts';
 import { createLinuxRootMountViewModel } from '../linux-root-mount-view-model';
@@ -23,7 +21,6 @@ const processingStateTone = {
 
 export interface DataSourcesPanelProps {
   dataSources: DataSourceSummary[] | undefined;
-  hashJobs?: EvidenceHashJobView[];
   editingDataSourceId: string | undefined;
   editingDataSourceName: string;
   setEditingDataSourceId: (id: string | undefined) => void;
@@ -41,7 +38,6 @@ export interface DataSourcesPanelProps {
 
 export function DataSourcesPanel({
   dataSources,
-  hashJobs = [],
   editingDataSourceId,
   editingDataSourceName,
   setEditingDataSourceId,
@@ -68,8 +64,6 @@ export function DataSourcesPanel({
           dataSources.map((source) => {
             const isEditing = editingDataSourceId === source.id;
             const partitionCount = source.partitions?.length ?? 0;
-            const hashJob = hashJobs.find((job) => job.dataSourceId === source.id);
-            const hashStatus = source.hashStatus?.toLowerCase();
             return (
               <div key={source.id} className="border-b border-forensics-line px-4 py-3 last:border-b-0">
                 <div className="flex items-start justify-between gap-3">
@@ -133,41 +127,7 @@ export function DataSourcesPanel({
                       </div>
                     ) : null}
                     <LinuxRootMounts model={createLinuxRootMountViewModel(source, t)} />
-                    <div className="mt-2 py-2">
-                      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-forensics-muted-light">
-                        <span>{t('caseHome.dataSources.sha256')}</span>
-                      </div>
-                      {hashJob ? (
-                        <div className="mt-2">
-                          <InlineProgressRow
-                            title={hashJob.status === 'pending' ? t('caseHome.hash.waiting') : t('caseHome.hash.running')}
-                            subtitle={t('caseHome.hash.auto')}
-                            detail={`${hashJob.progress}%`}
-                            progress={hashJob.progress}
-                          />
-                        </div>
-                      ) : ['hashed', 'recorded', 'ready'].includes(hashStatus ?? '') && source.sourceHash ? (
-                        <div className="mt-1.5">
-                          <div className="flex items-center gap-1 text-[10px] text-forensics-success-text">
-                            <CheckCircle2 size={11} />
-                            <span>{t('caseHome.hash.completed')}</span>
-                          </div>
-                          <div className="mt-1 break-all font-mono text-[10px] leading-4 text-forensics-text" data-testid={`source-hash-${source.id}`}>
-                            {source.sourceHash}
-                          </div>
-                        </div>
-                      ) : hashStatus === 'failed' ? (
-                        <div className="mt-1.5 flex items-center gap-1 text-[10px] text-forensics-error-text">
-                          <XCircle size={11} />
-                          <span>{t('caseHome.hash.failed')}</span>
-                        </div>
-                      ) : hashStatus === 'unavailable' ? (
-                        <div className="mt-1.5 text-[10px] text-forensics-muted">{t('caseHome.hash.unavailable')}</div>
-                      ) : (
-                        <div className="mt-1.5 text-[10px] text-forensics-muted">{t('caseHome.hash.waiting')}</div>
-                      )}
-                    </div>
-                    {source.kind === 'local_disk' ? (
+                    {['e01', 'raw', 'local_disk'].includes(source.kind) ? (
                       <div className="mt-2 border border-forensics-warning-border bg-forensics-warning-bg px-2.5 py-2" data-testid={`physical-disk-hash-${source.id}`}>
                         <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-forensics-warning-text">
                           <span>{t('caseHome.dataSources.physicalDiskHash')}</span>
@@ -182,6 +142,7 @@ export function DataSourcesPanel({
                         </div>
                         {logicalDiskDigestTask && logicalDiskDigestSourceId === source.id ? <EvidenceTaskStatus model={logicalDiskDigestTask} /> : null}
                         {logicalDiskDigestError && logicalDiskDigestSourceId === source.id ? <div className="mt-1.5 text-[10px] text-forensics-error-text">{logicalDiskDigestError}</div> : null}
+                        {source.originalDiskSha256 ? <div className="mt-1.5 space-y-1 font-mono text-[10px]"><div>SHA256</div><div className="break-all text-forensics-text">{source.originalDiskSha256}</div></div> : null}
                         {logicalDiskDigest && logicalDiskDigestSourceId === source.id ? <div className="mt-1.5 space-y-1 font-mono text-[10px]"><div>{logicalDiskDigest.algorithm.toUpperCase()} · {logicalDiskDigest.byteLength} bytes</div><div className="break-all text-forensics-text" data-testid={`physical-disk-digest-${source.id}`}>{logicalDiskDigest.value}</div></div> : null}
                       </div>
                     ) : null}

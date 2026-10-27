@@ -7,7 +7,6 @@ use std::io::{self, Read};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-pub mod evidence_jobs;
 pub(crate) mod volumes;
 
 #[derive(Debug, thiserror::Error)]
@@ -193,6 +192,10 @@ impl HashService {
             return hash_local_disk(path, algorithm, cancelled, progress);
         }
         let mut reader: Box<dyn evidence_core::EvidenceReader> = match kind {
+            DataSourceKind::E01 => Box::new(
+                image_e01::E01Reader::open(path)
+                    .map_err(|error| io_error("open logical E01 image", error))?,
+            ),
             DataSourceKind::Raw => Box::new(
                 evidence_core::RawImageReader::open(path)
                     .map_err(|error| io_error("open logical raw image", error))?,
