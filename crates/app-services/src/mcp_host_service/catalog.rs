@@ -172,6 +172,24 @@ fn extraction_analysis_tools() -> Vec<McpHostToolDto> {
             vec!["dataSourceId"],
         ),
         (
+            "forensics.list_linux_services",
+            "分页读取 Linux systemd 服务配置、启用状态和 source-scoped 服务文件 ID。",
+            source_page.clone(),
+            vec!["dataSourceId"],
+        ),
+        (
+            "forensics.list_docker_containers",
+            "分页读取 Docker 容器元数据和 source-scoped 配置文件 ID。",
+            source_page.clone(),
+            vec!["dataSourceId"],
+        ),
+        (
+            "forensics.list_docker_images",
+            "分页读取 Docker 镜像元数据和来源文件 ID。",
+            source_page.clone(),
+            vec!["dataSourceId"],
+        ),
+        (
             "forensics.get_android_device_info",
             "读取 Android 设备信息。",
             source_id(),

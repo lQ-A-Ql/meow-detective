@@ -40,7 +40,8 @@ pub fn get_data_sources_for_case(
             case_id,
             &source.id.0,
         )
-        .map_err(|error| FileServiceError::other(error.to_string()))?;
+        .ok()
+        .flatten();
         let source_conn =
             open_source_for_data_source(case_conn, case_root, case_id, &source.id).ok();
         let (file_count, partitions, gpt_disk_guid, linux_root_mounts) = if let Some(source_conn) =

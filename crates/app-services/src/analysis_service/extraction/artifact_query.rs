@@ -388,6 +388,36 @@ pub(super) fn query_linux_system_config_by_kind(
     )
 }
 
+pub(super) fn count_linux_system_config_by_kind_paged(
+    conn: &Connection,
+    config_kind: &str,
+) -> Result<u64, AnalysisServiceError> {
+    count_linux_system_config_by_kind(conn, config_kind)
+}
+
+pub(super) fn query_linux_system_config_by_kind_paged(
+    conn: &Connection,
+    config_kind: &str,
+    offset: u64,
+    limit: u32,
+) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
+    let sql = "SELECT id, source_object_id, extractor_id, created_at, attrs
+         FROM artifacts
+         WHERE artifact_type = 'LinuxSystemConfig'
+           AND json_extract(attrs, '$.configKind') = ?1
+           AND json_extract(attrs, '$.overlayContext') IS NULL
+         ORDER BY id ASC LIMIT ?2 OFFSET ?3";
+    query_artifact_rows_with_statement(
+        conn,
+        sql,
+        &[
+            &config_kind as &dyn rusqlite::types::ToSql,
+            &(limit as i64),
+            &(offset as i64),
+        ],
+    )
+}
+
 /// Fetch passwdAccount and shadowAccount rows for the merged account list.
 /// Unpaged on purpose: local account counts are in the low hundreds at most.
 pub(super) fn query_linux_account_rows(

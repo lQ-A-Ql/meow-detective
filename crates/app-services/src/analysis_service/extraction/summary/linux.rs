@@ -4,12 +4,37 @@ mod system_info;
 use self::mapping::{LinuxCounts, LinuxEntries};
 use self::system_info::load_linux_system_info;
 use crate::analysis_service::error::AnalysisServiceError;
+use crate::analysis_service::extraction::artifact_query::{
+    count_linux_system_config_by_kind_paged, query_linux_system_config_by_kind_paged,
+};
 use crate::analysis_service::extraction::observability::{
     linux_summary_observability, linux_summary_status,
 };
 use chrono::Utc;
 use rusqlite::Connection;
-use transport::dto::LinuxArtifactSummaryDto;
+use transport::dto::{LinuxArtifactSummaryDto, LinuxSystemConfigPageDto};
+
+pub fn get_linux_system_config_page(
+    conn: &Connection,
+    config_kind: &str,
+    offset: u64,
+    limit: u32,
+) -> Result<LinuxSystemConfigPageDto, AnalysisServiceError> {
+    let total = count_linux_system_config_by_kind_paged(conn, config_kind)?;
+    let rows = mapping::map_system_configs(query_linux_system_config_by_kind_paged(
+        conn,
+        config_kind,
+        offset,
+        limit,
+    )?);
+    Ok(LinuxSystemConfigPageDto {
+        has_more: offset.saturating_add(rows.len() as u64) < total,
+        rows,
+        total,
+        offset,
+        limit,
+    })
+}
 
 /// Get Linux artifact summary (systemd journal, text-log fallback lines,
 /// wtmp/btmp logins, bash history, apt/dpkg/yum/dnf package events, cron jobs,

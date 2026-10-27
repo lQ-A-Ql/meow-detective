@@ -42,8 +42,8 @@ pub(crate) use self::runner::{
 };
 pub use self::summary::{
     get_browser_history_summary, get_email_extraction_summary, get_evtx_event_summary,
-    get_linux_artifact_summary, get_plugin_family_entries, get_registry_extraction_summary,
-    get_registry_structured_summary, list_plugin_modules,
+    get_linux_artifact_summary, get_linux_system_config_page, get_plugin_family_entries,
+    get_registry_extraction_summary, get_registry_structured_summary, list_plugin_modules,
 };
 use domain::{Artifact, TimelineEvent};
 

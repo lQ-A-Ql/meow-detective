@@ -87,7 +87,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     .unwrap();
     assert_eq!(result["id"], "tool-list");
     let tools = result["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 29);
+    assert_eq!(tools.len(), 32);
     assert!(tools
         .iter()
         .any(|tool| tool["name"] == "forensics.extract_file"));
@@ -130,10 +130,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
         .unwrap();
     assert_eq!(count, 2);
     for (name, arguments) in [
-        (
-            "forensics.get_data_source",
-            json!({}),
-        ),
+        ("forensics.get_data_source", json!({})),
         (
             "forensics.get_data_source",
             json!({"dataSourceId":"missing-source"}),

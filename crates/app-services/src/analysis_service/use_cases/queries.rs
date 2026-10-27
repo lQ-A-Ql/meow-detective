@@ -15,8 +15,8 @@ use crate::analysis_service::capability::PLUGIN_CAPABILITY_KEY;
 use crate::analysis_service::extraction::{get_plugin_family_entries, list_plugin_modules};
 use crate::analysis_service::{
     get_browser_history_summary, get_email_extraction_summary, get_evtx_event_summary,
-    get_linux_artifact_summary, get_registry_extraction_summary, get_registry_structured_summary,
-    validate_analysis_categories, AnalysisServiceError,
+    get_linux_artifact_summary, get_linux_system_config_page, get_registry_extraction_summary,
+    get_registry_structured_summary, validate_analysis_categories, AnalysisServiceError,
 };
 use crate::plugin_loader::PluginModuleMeta;
 
@@ -102,6 +102,25 @@ paged_summary!(
     LinuxArtifactSummaryDto,
     get_linux_artifact_summary
 );
+
+pub fn get_source_linux_system_config_page(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    config_kind: &str,
+    offset: u64,
+    limit: u32,
+) -> Result<transport::dto::LinuxSystemConfigPageDto, AnalysisServiceError> {
+    let source = open_for_capability(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        "LinuxArtifacts",
+    )?;
+    get_linux_system_config_page(&source.connection, config_kind, offset, limit)
+}
 
 /// Cap on how many historical extraction-failure audit entries are folded
 /// into one module's warnings.

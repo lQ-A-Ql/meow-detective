@@ -54,6 +54,16 @@ pub struct LinuxArtifactSummaryDto {
     pub coverage_notes: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxSystemConfigPageDto {
+    pub rows: Vec<LinuxSystemConfigDto>,
+    pub total: u64,
+    pub offset: u64,
+    pub limit: u32,
+    pub has_more: bool,
+}
+
 /// Derived Linux host overview: os-release identity, hostname, and account
 /// statistics from passwd/shadow records.
 #[derive(Debug, Clone, Serialize, Deserialize)]

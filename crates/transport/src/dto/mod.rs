@@ -85,6 +85,7 @@ pub use analysis::{
     V2GovernanceSnapshotDto, VerificationChainStatusDto, VerificationGuaranteeLevelDto,
     VerificationResultDto, WeChatKeyRecoveryResultDto, WeChatRecoveredKeyDto, WinlogonConfigDto,
 };
+pub use analysis_linux::LinuxSystemConfigPageDto;
 pub use analysis_linux_cluster::{
     LinuxDerivedSourceSummaryDto, LinuxEvidenceSetListItemDto, LinuxEvidenceSetMemberSummaryDto,
     LinuxEvidenceSetSummaryDto, LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto,

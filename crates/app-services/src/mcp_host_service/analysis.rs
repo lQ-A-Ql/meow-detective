@@ -48,6 +48,9 @@ pub fn execute_analysis_tool(
         | "forensics.get_email_summary"
         | "forensics.get_event_log_events"
         | "forensics.get_linux_artifact_summary"
+        | "forensics.list_linux_services"
+        | "forensics.list_docker_containers"
+        | "forensics.list_docker_images"
         | "forensics.get_android_device_info"
         | "forensics.get_android_package_summary"
         | "forensics.get_plugin_family_entries"
@@ -223,6 +226,28 @@ fn execute_paged_tool(
                 context.query.case_root,
                 &context.query.case_meta.id,
                 &source_id,
+                request.offset,
+                request.limit,
+            );
+            to_value(result)
+        }
+        "forensics.list_linux_services"
+        | "forensics.list_docker_containers"
+        | "forensics.list_docker_images" => {
+            let request = extraction_request(arguments)?;
+            let source_id = DataSourceId(request.data_source_id);
+            let config_kind = match name {
+                "forensics.list_linux_services" => "systemdServiceUnit",
+                "forensics.list_docker_containers" => "dockerContainer",
+                "forensics.list_docker_images" => "dockerImage",
+                _ => unreachable!(),
+            };
+            let result = crate::analysis_service::get_source_linux_system_config_page(
+                context.query.connection,
+                context.query.case_root,
+                &context.query.case_meta.id,
+                &source_id,
+                config_kind,
                 request.offset,
                 request.limit,
             );

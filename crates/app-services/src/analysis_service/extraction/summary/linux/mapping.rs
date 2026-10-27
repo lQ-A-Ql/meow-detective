@@ -281,7 +281,7 @@ fn map_sudo_events(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxSudoEventDto> {
         .collect()
 }
 
-fn map_system_configs(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxSystemConfigDto> {
+pub(super) fn map_system_configs(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxSystemConfigDto> {
     rows.into_iter()
         .map(|row| {
             let file_id = source_scoped_file_id(&row);
