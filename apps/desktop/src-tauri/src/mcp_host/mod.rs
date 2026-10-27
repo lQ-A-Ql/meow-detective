@@ -1,10 +1,12 @@
 //! Application-owned loopback MCP server and desktop access to its tools.
 mod access;
 mod admission;
+mod audit;
 mod authorization;
 mod execution;
 mod handler;
 mod invocation;
+mod result;
 mod runtime;
 
 pub use execution::call_tool;

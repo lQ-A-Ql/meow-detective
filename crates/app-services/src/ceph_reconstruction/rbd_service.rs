@@ -99,6 +99,8 @@ fn discover_rbd_descriptors(
 
 fn source_db_error_detail(error: &persistence_sqlite::DbError) -> String {
     match error {
+        persistence_sqlite::DbError::ReadCancelled => "read cancelled".into(),
+        persistence_sqlite::DbError::ReadTimedOut => "read timed out".into(),
         persistence_sqlite::DbError::Sqlite(error) => format!("sqlite error: {error}"),
         persistence_sqlite::DbError::Io(error) => {
             format!("io error of kind {:?}", error.kind())

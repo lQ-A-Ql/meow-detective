@@ -1,14 +1,18 @@
 use crate::state::AppState;
 use app_services::mcp_host_service::access::McpPrincipal;
+use persistence_sqlite::read_operation::{ReadCancellation, ReadStopReason};
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use transport::CommandError;
 
 pub(super) struct Invocation {
+    pub request_id: String,
     pub case_id: String,
     pub session_id: String,
     pub actor: String,
     pub principal: Option<McpPrincipal>,
     pub cancel: CancellationToken,
+    pub reads: Arc<ReadCancellation>,
     monitor: tokio::task::JoinHandle<()>,
 }
 
@@ -51,6 +55,8 @@ impl Invocation {
             .map_err(|_| CommandError::internal("MCP 状态不可用"))?
             .clone();
         let cancel = request_cancel.child_token();
+        let reads = Arc::new(ReadCancellation::default());
+        let monitor_reads = reads.clone();
         let monitor_cancel = cancel.clone();
         let grant = principal.clone();
         let monitor = tokio::spawn(async move {
@@ -62,28 +68,39 @@ impl Invocation {
             tokio::pin!(deadline);
             loop {
                 tokio::select! {
-                    _ = monitor_cancel.cancelled() => break,
-                    _ = shutdown.cancelled() => { monitor_cancel.cancel(); break; },
-                    _ = &mut deadline => { monitor_cancel.cancel(); break; },
+                    _ = monitor_cancel.cancelled() => { monitor_reads.cancel(); break; },
+                    _ = shutdown.cancelled() => { monitor_reads.cancel(); monitor_cancel.cancel(); break; },
+                    _ = &mut deadline => { monitor_reads.time_out(); monitor_cancel.cancel(); break; },
                     _ = tokio::time::sleep(std::time::Duration::from_millis(20)) => {
-                        if grant.as_ref().is_some_and(|p| !p.active()) { monitor_cancel.cancel(); break; }
+                        if grant.as_ref().is_some_and(|p| !p.active()) { monitor_reads.cancel(); monitor_cancel.cancel(); break; }
                     }
                 }
             }
         });
         Ok(Self {
+            request_id: uuid::Uuid::new_v4().to_string(),
             case_id,
             session_id,
             actor,
             principal,
             cancel,
+            reads,
             monitor,
         })
     }
 
     pub fn check(&self, name: &str) -> Result<(), CommandError> {
         if self.cancel.is_cancelled() {
-            return Err(CommandError::cancelled("MCP 请求已取消或超过执行时间"));
+            self.reads.cancel();
+        }
+        match self.reads.reason() {
+            Some(ReadStopReason::TimedOut) => {
+                return Err(CommandError::timeout("MCP 请求超过执行时间"))
+            }
+            Some(ReadStopReason::Cancelled) => {
+                return Err(CommandError::cancelled("MCP 请求已取消"))
+            }
+            None => {}
         }
         if self.principal.as_ref().is_some_and(|p| {
             !app_services::mcp_host_service::tool_catalog()
@@ -110,6 +127,7 @@ impl Invocation {
 
 impl Drop for Invocation {
     fn drop(&mut self) {
+        self.reads.cancel();
         self.cancel.cancel();
         self.monitor.abort();
     }

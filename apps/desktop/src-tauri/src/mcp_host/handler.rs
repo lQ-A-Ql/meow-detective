@@ -70,19 +70,28 @@ impl ServerHandler for HostHandler {
         };
         let result = call_tool_as(self.state.clone(), request, Some(principal), context.ct).await;
         let result = match result {
-            Ok(result) if result.success => {
-                CallToolResult::structured(result.data.unwrap_or_default())
-            }
-            Ok(result) => CallToolResult::error(vec![ContentBlock::text(
-                result.error.unwrap_or_else(|| "工具调用失败".into()),
-            )]),
-            Err(error) => CallToolResult::error(vec![ContentBlock::text(format!(
-                "工具调用失败：{}",
-                error.message
-            ))]),
+            Ok(result) if result.success => CallToolResult::structured(
+                result
+                    .data
+                    .expect("successful MCP calls must provide structured data"),
+            ),
+            Ok(result) => error_response(result),
+            Err(error) => error_response(super::result::failure(error)),
         };
         Ok(result.into())
     }
+}
+
+fn error_response(result: transport::dto::mcp_host::McpHostToolCallResultDto) -> CallToolResult {
+    let mut response = CallToolResult::error(vec![ContentBlock::text(
+        result
+            .error
+            .expect("failed MCP calls must provide a message"),
+    )]);
+    response.structured_content = Some(serde_json::json!({
+        "error":result.error_details.expect("failed MCP calls must provide typed error details")
+    }));
+    response
 }
 
 pub(super) fn router(state: AppState, cancel: CancellationToken) -> axum::Router {

@@ -1,13 +1,17 @@
-use super::invocation::Invocation;
-use crate::commands::command_support::snapshot_active_case;
-use crate::state::AppState;
-use app_services::mcp_host_service::access::McpPrincipal;
+use super::{
+    audit,
+    invocation::Invocation,
+    result::{coded, failure, tool_response},
+};
+use crate::{
+    commands::command_support::{snapshot_active_case, ActiveCaseSnapshot},
+    state::AppState,
+};
 use app_services::mcp_host_service::{
-    execute_analysis_tool, execute_file_tool, execute_tool, tool_catalog,
+    access::McpPrincipal, execute_analysis_tool, execute_file_tool, execute_tool, tool_catalog,
     McpHostAnalysisQueryContext, McpHostFileQueryContext, McpHostQueryContext,
 };
-use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
-use serde_json::json;
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use transport::{
     dto::mcp_host::{McpHostToolCallRequestDto, McpHostToolCallResultDto},
@@ -27,18 +31,41 @@ pub(super) async fn call_tool_as(
     principal: Option<McpPrincipal>,
     cancel: CancellationToken,
 ) -> Result<McpHostToolCallResultDto, CommandError> {
-    if !tool_catalog().iter().any(|tool| tool.name == request.name) {
-        return Ok(failure("未知的内置工具"));
-    }
+    let known = tool_catalog().iter().any(|tool| tool.name == request.name);
+    let safe_name = if known {
+        request.name.clone()
+    } else {
+        "unknown".into()
+    };
+    let actor = principal
+        .as_ref()
+        .map(|p| p.client.id.clone())
+        .unwrap_or_else(|| "desktop".into());
     let invocation = match Invocation::new(
         &state,
         principal,
         cancel,
         request.name == "forensics.read_file",
     ) {
-        Ok(invocation) => invocation,
-        Err(error) => return Ok(failure(&error.message)),
+        Ok(invocation) => Arc::new(invocation),
+        Err(error) => return reject(state, None, actor, safe_name, error).await,
     };
+    if !known {
+        return reject(
+            state,
+            Some(invocation),
+            actor,
+            safe_name,
+            coded(
+                CommandError::invalid_input("未知的内置工具"),
+                "MCP_UNKNOWN_TOOL",
+            ),
+        )
+        .await;
+    }
+    if let Err(error) = invocation.check(&request.name) {
+        return reject(state, Some(invocation), actor, safe_name, error).await;
+    }
     let permit = match state
         .mcp_host
         .admission
@@ -51,11 +78,76 @@ pub(super) async fn call_tool_as(
         .await
     {
         Ok(permit) => permit,
-        Err(error) => return Ok(failure(&error.message)),
+        Err(error) => {
+            let error = match error.code.as_str() {
+                "CONFLICT" => coded(error, "MCP_QUEUE_FULL"),
+                "TIMEOUT" => coded(error, "MCP_QUEUE_TIMEOUT"),
+                _ => error,
+            };
+            return reject(state, Some(invocation), actor, safe_name, error).await;
+        }
     };
+    let (worker_state, worker_invocation) = (state.clone(), invocation.clone());
+    match tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        execute_for_active_case(&worker_state, &request, &worker_invocation)
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(error) => {
+            reject(
+                state,
+                Some(invocation),
+                actor,
+                safe_name,
+                CommandError::from_join_error(error),
+            )
+            .await
+        }
+    }
+}
+
+async fn reject(
+    state: AppState,
+    invocation: Option<Arc<Invocation>>,
+    actor: String,
+    tool: String,
+    error: CommandError,
+) -> Result<McpHostToolCallResultDto, CommandError> {
+    let waiting = match state.mcp_host.audit_waiters.clone().try_acquire_owned() {
+        Ok(waiting) => waiting,
+        Err(_) => {
+            let response = failure(coded(
+                CommandError::conflict("MCP 审计请求容量已满，请稍后重试"),
+                "MCP_AUDIT_BUSY",
+            ));
+            audit::record_detached(invocation.as_deref(), &actor, &tool, &response);
+            return Ok(response);
+        }
+    };
+    let permit = match tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        state.mcp_host.audit_requests.clone().acquire_owned(),
+    )
+    .await
+    {
+        Ok(Ok(permit)) => permit,
+        _ => {
+            let response = failure(coded(
+                CommandError::conflict("MCP 审计请求容量已满，请稍后重试"),
+                "MCP_AUDIT_BUSY",
+            ));
+            audit::record_detached(invocation.as_deref(), &actor, &tool, &response);
+            return Ok(response);
+        }
+    };
+    drop(waiting);
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        execute_for_active_case(&state, request, &invocation)
+        let response = failure(error);
+        audit::record(&state, invocation.as_deref(), &actor, &tool, &response)?;
+        Ok(response)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -63,84 +155,92 @@ pub(super) async fn call_tool_as(
 
 fn execute_for_active_case(
     state: &AppState,
-    request: McpHostToolCallRequestDto,
+    request: &McpHostToolCallRequestDto,
     invocation: &Invocation,
 ) -> Result<McpHostToolCallResultDto, CommandError> {
-    // The snapshot owns a shared lifecycle access until the response and audit
-    // are complete, without blocking unrelated tool calls on active_case lock.
-    let Some(active) = snapshot_active_case(state)? else {
-        return Ok(failure("请先在应用中打开案件"));
-    };
-    if active.case_id != invocation.case_id || active.session_id != invocation.session_id {
-        return Ok(failure("案件上下文已失效"));
-    }
-    let enabled = state
-        .mcp_host
-        .tool_enabled(&request.name)
-        .map_err(CommandError::from_typed_service_error)?;
-    let response = if let Err(error) = invocation.check(&request.name) {
-        failure(&error.message)
-    } else if !enabled {
-        failure("工具或 MCP 服务已禁用")
-    } else if request.name == "forensics.extract_file" {
-        let conn = app_services::connection::open_existing_case_db(&active.db_path())
-            .map_err(CommandError::from_typed_service_error)?;
-        let context = McpHostQueryContext {
-            connection: &conn,
-            case_root: &active.case_root,
-            case_meta: &active.meta,
-        };
-        tool_response(dispatch_tool(state, context, &request))
-    } else {
-        let conn = rusqlite::Connection::open_with_flags(
-            active.db_path(),
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .map_err(|_| CommandError::internal("无法读取当前案件"))?;
-        conn.busy_timeout(std::time::Duration::from_secs(5))
-            .map_err(|_| CommandError::internal("无法读取当前案件"))?;
-        let _interrupt = invocation.interrupt_sql(&conn);
-        let context = McpHostQueryContext {
-            connection: &conn,
-            case_root: &active.case_root,
-            case_meta: &active.meta,
-        };
-        let result = dispatch_tool(state, context, &request);
-        match invocation.check(&request.name) {
-            Ok(()) => tool_response(result),
-            Err(error) => failure(&error.message),
+    let active = match snapshot_active_case(state) {
+        Ok(Some(active))
+            if active.case_id == invocation.case_id
+                && active.session_id == invocation.session_id =>
+        {
+            active
+        }
+        result => {
+            let error = match result {
+                Err(error) => error,
+                _ => coded(
+                    CommandError::conflict("案件上下文已失效"),
+                    "MCP_CASE_CHANGED",
+                ),
+            };
+            let response = failure(error);
+            audit::record_detached(
+                Some(invocation),
+                &invocation.actor,
+                &request.name,
+                &response,
+            );
+            return Ok(response);
         }
     };
-    let audit_conn = app_services::connection::open_existing_case_db(&active.db_path())
-        .map_err(CommandError::from_typed_service_error)?;
-    AuditRepo::new(&audit_conn)
-        .log(
-            Some(&active.meta.id.0),
-            &invocation.actor,
-            &AuditAction::McpToolCall,
-            Some(&request.name),
-            &json!({"serverId":"embedded", "toolName":request.name, "success":response.success,
-                "entryPoint":if invocation.principal.is_some() { "http" } else { "desktop" }})
-            .to_string(),
-        )
-        .map_err(CommandError::from_typed_service_error)?;
+    let response = match query_active_case(state, request, invocation, &active) {
+        Ok(response) => response,
+        Err(error) => failure(error),
+    };
+    audit::record_for_active(&active, invocation, &request.name, &response)?;
     Ok(response)
 }
 
-fn tool_response(
-    result: Result<serde_json::Value, app_services::mcp_host_service::McpHostServiceError>,
-) -> McpHostToolCallResultDto {
-    match result {
-        Ok(data) if data.to_string().len() <= 1024 * 1024 => McpHostToolCallResultDto {
-            success: true,
-            data: Some(data),
-            error: None,
-        },
-        Ok(_) => failure(
-            &app_services::mcp_host_service::McpHostServiceError::ResultTooLarge.to_string(),
-        ),
-        Err(error) => failure(&error.to_string()),
+fn query_active_case(
+    state: &AppState,
+    request: &McpHostToolCallRequestDto,
+    invocation: &Invocation,
+    active: &ActiveCaseSnapshot,
+) -> Result<McpHostToolCallResultDto, CommandError> {
+    invocation.check(&request.name)?;
+    if !state
+        .mcp_host
+        .tool_enabled(&request.name)
+        .map_err(CommandError::from_typed_service_error)?
+    {
+        return Err(coded(
+            CommandError::security("工具或 MCP 服务已禁用"),
+            "MCP_TOOL_DISABLED",
+        ));
     }
+    if request.name == "forensics.extract_file" {
+        let conn = app_services::connection::open_existing_case_db(&active.db_path())
+            .map_err(CommandError::from_typed_service_error)?;
+        return Ok(tool_response(dispatch_tool(
+            state,
+            McpHostQueryContext {
+                connection: &conn,
+                case_root: &active.case_root,
+                case_meta: &active.meta,
+            },
+            request,
+        )));
+    }
+    let _scope = invocation.reads.enter();
+    let conn = rusqlite::Connection::open_with_flags(
+        active.db_path(),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .map_err(|_| CommandError::internal("无法读取当前案件"))?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|_| CommandError::internal("无法读取当前案件"))?;
+    let _interrupt = invocation.interrupt_sql(&conn);
+    let result = dispatch_tool(
+        state,
+        McpHostQueryContext {
+            connection: &conn,
+            case_root: &active.case_root,
+            case_meta: &active.meta,
+        },
+        request,
+    );
+    invocation.check(&request.name)?;
+    Ok(tool_response(result))
 }
 
 fn dispatch_tool(
@@ -201,12 +301,4 @@ fn is_analysis_tool(name: &str) -> bool {
             | "forensics.get_case_overview"
             | "forensics.get_correlation_snapshot"
     )
-}
-
-fn failure(message: &str) -> McpHostToolCallResultDto {
-    McpHostToolCallResultDto {
-        success: false,
-        data: None,
-        error: Some(message.into()),
-    }
 }

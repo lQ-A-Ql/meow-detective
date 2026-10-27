@@ -29,6 +29,8 @@ pub struct McpHostRuntime {
     operation: tokio::sync::Mutex<()>,
     live: Arc<AtomicBool>,
     pub(super) requests: Arc<Semaphore>,
+    pub(super) audit_requests: Arc<Semaphore>,
+    pub(super) audit_waiters: Arc<Semaphore>,
 }
 
 impl Default for McpHostRuntime {
@@ -43,6 +45,8 @@ impl Default for McpHostRuntime {
             operation: tokio::sync::Mutex::new(()),
             live: Arc::new(AtomicBool::new(false)),
             requests: Arc::new(Semaphore::new(2)),
+            audit_requests: Arc::new(Semaphore::new(2)),
+            audit_waiters: Arc::new(Semaphore::new(16)),
         }
     }
 }

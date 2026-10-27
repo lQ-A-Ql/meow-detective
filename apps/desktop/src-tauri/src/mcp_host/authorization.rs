@@ -25,23 +25,29 @@ pub(super) async fn authenticate(
     if headers.contains_key("origin")
         || !host.is_some_and(|h| matches!(h.host(), "127.0.0.1" | "localhost"))
     {
-        return StatusCode::FORBIDDEN.into_response();
+        return deny(StatusCode::FORBIDDEN, "MCP_HTTP_SOURCE_REJECTED");
     }
     let Some(bearer) = headers.typed_get::<Authorization<Bearer>>() else {
-        return (StatusCode::UNAUTHORIZED, [("www-authenticate", "Bearer")]).into_response();
+        return deny(StatusCode::UNAUTHORIZED, "MCP_AUTH_REQUIRED");
     };
     let principal = {
         let Ok(access) = state.mcp_host.access.lock() else {
-            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            return deny(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "MCP_AUTH_STATE_UNAVAILABLE",
+            );
         };
         access.authenticate(bearer.token())
     };
     let Ok(principal) = principal else {
-        return (StatusCode::UNAUTHORIZED, [("www-authenticate", "Bearer")]).into_response();
+        return deny(StatusCode::UNAUTHORIZED, "MCP_AUTH_INVALID");
     };
     let valid_case = {
         let Ok(active) = state.active_case.lock() else {
-            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            return deny(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "MCP_CASE_STATE_UNAVAILABLE",
+            );
         };
         active.as_ref().is_some_and(|active| {
             active.meta.id.0 == principal.client.case_id
@@ -49,13 +55,24 @@ pub(super) async fn authenticate(
         })
     };
     if !valid_case {
-        return StatusCode::FORBIDDEN.into_response();
+        return deny(StatusCode::FORBIDDEN, "MCP_CASE_CHANGED");
     }
+    let principal_id = principal.client.id.clone();
     request.extensions_mut().insert(principal);
     request
         .headers_mut()
         .remove(axum::http::header::AUTHORIZATION);
-    next.run(request).await
+    let response = next.run(request).await;
+    if response.status().is_client_error() || response.status().is_server_error() {
+        tracing::info!(
+            action = "mcp.http.reject",
+            status = response.status().as_u16(),
+            principal_id,
+            code = "MCP_PROTOCOL_REJECTED",
+            "MCP HTTP audit"
+        );
+    }
+    response
 }
 
 pub(super) fn principal(context: &RequestContext<RoleServer>) -> Result<McpPrincipal, ErrorData> {
@@ -65,4 +82,18 @@ pub(super) fn principal(context: &RequestContext<RoleServer>) -> Result<McpPrinc
         .and_then(|parts| parts.extensions.get::<McpPrincipal>())
         .cloned()
         .ok_or_else(|| ErrorData::invalid_request("客户端授权不可用", None))
+}
+
+fn deny(status: StatusCode, code: &'static str) -> Response {
+    tracing::info!(
+        action = "mcp.http.reject",
+        status = status.as_u16(),
+        code,
+        "MCP HTTP audit"
+    );
+    if status == StatusCode::UNAUTHORIZED {
+        (status, [("www-authenticate", "Bearer")]).into_response()
+    } else {
+        status.into_response()
+    }
 }

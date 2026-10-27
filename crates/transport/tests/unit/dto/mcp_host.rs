@@ -58,14 +58,34 @@ fn tools_and_calls_preserve_schema_and_arguments() {
         success: true,
         data: Some(json!([])),
         error: None,
+        error_details: None,
     };
     let value = serde_json::to_value(result).unwrap();
     assert!(value.get("error").is_none());
+    assert!(value.get("errorDetails").is_none());
     assert!(
         serde_json::from_value::<McpHostToolCallResultDto>(value)
             .unwrap()
             .success
     );
+}
+
+#[test]
+fn tool_errors_preserve_error_code_category_and_recovery_state() {
+    let mut error = crate::ApiErrorDto::new("CANCELLED", "读取已取消", true);
+    error.category = Some("cancelled".into());
+    let response = McpHostToolCallResultDto {
+        success: false,
+        data: None,
+        error: Some(error.message.clone()),
+        error_details: Some(error),
+    };
+    let value = serde_json::to_value(response).unwrap();
+    assert_eq!(value["errorDetails"]["category"], "cancelled");
+    let decoded: McpHostToolCallResultDto = serde_json::from_value(value).unwrap();
+    let error = decoded.error_details.unwrap();
+    assert_eq!(error.code, "CANCELLED");
+    assert!(error.recoverable);
 }
 
 #[test]

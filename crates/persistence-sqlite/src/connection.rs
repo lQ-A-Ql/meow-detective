@@ -4,6 +4,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum DbError {
+    #[error("读取操作已取消")]
+    ReadCancelled,
+    #[error("读取操作超过执行时间")]
+    ReadTimedOut,
     #[error("SQLite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
     #[error("IO error: {0}")]
@@ -17,6 +21,8 @@ pub enum DbError {
 impl transport::ServiceErrorCategory for DbError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::ReadCancelled => transport::ErrorCategory::Cancelled,
+            Self::ReadTimedOut => transport::ErrorCategory::Timeout,
             Self::Sqlite(_) | Self::Io(_) => transport::ErrorCategory::Io,
             Self::Migration(_) | Self::System(_) => transport::ErrorCategory::Internal,
         }
@@ -91,6 +97,7 @@ pub fn open_existing_source(path: &Path) -> DbResult<Connection> {
 }
 
 pub fn open_existing_source_read_only(path: &Path) -> DbResult<Connection> {
+    crate::read_operation::ensure_active()?;
     if !path.exists() {
         return Err(DbError::Io(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -103,6 +110,7 @@ pub fn open_existing_source_read_only(path: &Path) -> DbResult<Connection> {
          PRAGMA foreign_keys=ON;
          PRAGMA busy_timeout=30000;",
     )?;
+    crate::read_operation::configure_connection(&conn)?;
     Ok(conn)
 }
 

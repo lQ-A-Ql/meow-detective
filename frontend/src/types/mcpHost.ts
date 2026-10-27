@@ -51,6 +51,7 @@ export interface McpHostToolCallResult {
   success: boolean;
   data?: unknown;
   error?: string;
+  errorDetails?: import('./common').ApiErrorDto;
 }
 
 export interface McpHostListFilesRequest {

@@ -65,6 +65,8 @@ pub struct McpHostToolCallResultDto {
     pub data: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_details: Option<crate::errors::ApiErrorDto>,
 }
 
 pub const MCP_FILE_PAGE_LIMIT: u32 = 200;

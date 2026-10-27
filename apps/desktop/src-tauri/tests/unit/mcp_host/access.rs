@@ -35,6 +35,10 @@ async fn http_credentials_enforce_scope_expiry_revocation_and_case_session() {
         "jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"forensics.read_file","arguments":{"fileId":"unknown"}}
     })).await.json().await.unwrap();
     assert_eq!(result["result"]["isError"], true);
+    assert_eq!(
+        result["result"]["structuredContent"]["error"]["category"],
+        "security"
+    );
     assert_eq!(state.preview_runtime.stats().unwrap().session_count, 0);
     state
         .mcp_host
