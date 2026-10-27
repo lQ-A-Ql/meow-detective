@@ -16,8 +16,8 @@ describe('McpToolList', () => {
     const onTestTool = vi.fn().mockResolvedValue({ success: true, data: { ok: true } });
     render(<McpToolList
       tools={[
-        { name: 'queryTimeline', description: 'Query timeline', inputSchema: { type: 'object', properties: { limit: { type: 'number' } }, required: ['limit'] } },
-        { name: 'searchFiles', description: 'Search files', inputSchema: { type: 'object' } },
+        { name: 'queryTimeline', description: 'Query timeline', inputSchema: { type: 'object', properties: { limit: { type: 'number' } }, required: ['limit'] }, outputSchema: { type: 'object' } },
+        { name: 'searchFiles', description: 'Search files', inputSchema: { type: 'object' }, outputSchema: { type: 'object' } },
       ]}
       loading={false}
       onRefresh={vi.fn()}
@@ -40,7 +40,7 @@ describe('McpToolList', () => {
 
   it('shows invalid JSON without calling the tool', async () => {
     const onTestTool = vi.fn();
-    render(<McpToolList tools={[{ name: 'lookup', description: '', inputSchema: { type: 'object' } }]} loading={false} onRefresh={vi.fn()} onTestTool={onTestTool} />);
+    render(<McpToolList tools={[{ name: 'lookup', description: '', inputSchema: { type: 'object' }, outputSchema: { type: 'object' } }]} loading={false} onRefresh={vi.fn()} onTestTool={onTestTool} />);
     fireEvent.click(screen.getByRole('button', { name: /lookup/ }));
     fireEvent.change(screen.getByRole('textbox', { name: 'lookup 参数' }), { target: { value: '{broken' } });
     fireEvent.click(screen.getByRole('button', { name: '测试工具' }));

@@ -41,11 +41,13 @@ fn tools_and_calls_preserve_schema_and_arguments() {
         name: "forensics.get_data_source".into(),
         description: "Read source".into(),
         input_schema: json!({"type":"object"}),
+        output_schema: json!({"type":["object","array"]}),
         read_only: true,
         destructive: false,
     };
     let value = serde_json::to_value(tool).unwrap();
     assert!(value.get("inputSchema").is_some());
+    assert!(value.get("outputSchema").is_some());
     assert_eq!(value["readOnly"], true);
     assert_eq!(value["destructive"], false);
     let _: McpHostToolDto = serde_json::from_value(value).unwrap();

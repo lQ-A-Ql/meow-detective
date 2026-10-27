@@ -294,9 +294,17 @@ fn tool_with_access(
             "required":required,
             "additionalProperties":false
         }),
+        output_schema: output_schema(),
         read_only,
         destructive,
     }
+}
+
+fn output_schema() -> Value {
+    json!({
+        "type":["object","array","string","number","boolean","null"],
+        "description":"结构化工具结果；具体字段随工具版本保持稳定。"
+    })
 }
 
 fn identifier() -> Value {

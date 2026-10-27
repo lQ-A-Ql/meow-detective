@@ -43,6 +43,7 @@ export interface McpHostTool {
   name: string;
   description: string;
   inputSchema: JsonSchema;
+  outputSchema: JsonSchema;
   readOnly: boolean;
   destructive: boolean;
 }

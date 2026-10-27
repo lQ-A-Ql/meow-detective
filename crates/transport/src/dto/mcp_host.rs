@@ -41,6 +41,7 @@ pub struct McpHostToolDto {
     pub name: String,
     pub description: String,
     pub input_schema: serde_json::Value,
+    pub output_schema: serde_json::Value,
     pub read_only: bool,
     pub destructive: bool,
 }

@@ -92,6 +92,8 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
         .unwrap();
     assert_eq!(reader["annotations"]["readOnlyHint"], true);
     assert_eq!(reader["annotations"]["destructiveHint"], false);
+    assert_eq!(reader["outputSchema"]["type"][0], "object");
+    assert_eq!(reader["outputSchema"]["type"][1], "array");
 
     let call = json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"forensics.get_current_case","arguments":{}}});
     let result: Value = request(&endpoint, token, call.clone())

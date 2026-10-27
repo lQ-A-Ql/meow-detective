@@ -1,6 +1,6 @@
 import type { McpHostTool, McpHostToolCallResult } from '@/types/mcpHost';
 
-export type McpTool = Pick<McpHostTool, 'name' | 'description' | 'inputSchema'>;
+export type McpTool = Pick<McpHostTool, 'name' | 'description' | 'inputSchema' | 'outputSchema'>;
 
 export interface McpToolListProps {
   tools: McpTool[];

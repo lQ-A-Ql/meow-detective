@@ -7,8 +7,8 @@ import i18n from '@/i18n';
 describe('MCP host access', () => {
   it('keeps write tool policy unchanged when query tools are enabled or disabled', () => {
     const tools = [
-      { name: 'forensics.read_file', description: '', inputSchema: { type: 'object' }, readOnly: true, destructive: false },
-      { name: 'forensics.extract_file', description: '', inputSchema: { type: 'object' }, readOnly: false, destructive: true },
+      { name: 'forensics.read_file', description: '', inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, readOnly: true, destructive: false },
+      { name: 'forensics.extract_file', description: '', inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, readOnly: false, destructive: true },
     ];
     expect(toggleQueryTools(tools.map((tool) => tool.name), tools, false)).toEqual(['forensics.extract_file']);
     expect(toggleQueryTools([], tools, true)).toEqual(['forensics.read_file']);

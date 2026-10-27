@@ -38,11 +38,14 @@ impl ServerHandler for HostHandler {
             .into_iter()
             .filter(|tool| principal.allows(tool))
             .map(|tool| {
+                let output_schema =
+                    Arc::new(tool.output_schema.as_object().cloned().unwrap_or_default());
                 Tool::new(
                     tool.name,
                     tool.description,
                     tool.input_schema.as_object().cloned().unwrap_or_default(),
                 )
+                .with_raw_output_schema(output_schema)
                 .with_annotations(ToolAnnotations::from_raw(
                     None,
                     Some(tool.read_only),
