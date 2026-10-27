@@ -165,7 +165,7 @@ foreach ($pattern in @(
     'host_contract_round_trips_camel_case_and_omits_absent_errors',
     'tools_and_calls_preserve_schema_and_arguments',
     'rename_all\s*=\s*"camelCase",\s*deny_unknown_fields',
-    'disabled_tools:\s*vec!\["forensics.extract_file"\.into\(\)\]',
+    'disabled_tools:\s*Vec::new\(\)',
     'pub\s+input_schema:\s*serde_json::Value'
   )) {
   Assert-Matches `
