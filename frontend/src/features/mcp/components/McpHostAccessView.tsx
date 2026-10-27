@@ -1,6 +1,5 @@
 import type { TFunction } from 'i18next';
 import { Input } from '@/app/components/ui/input';
-import { Checkbox } from '@/app/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { IconButton } from '@/components/controls/IconButton';
 import { ActionIcon } from '@/components/controls/ActionIcon';
@@ -14,7 +13,6 @@ interface Props {
   hours: string;
   setHours: (value: string) => void;
   readEvidence: boolean;
-  setReadEvidence: (value: boolean) => void;
   dataSourceIds: string;
   setDataSourceIds: (value: string) => void;
   created?: McpHostCreatedClient;
@@ -40,10 +38,6 @@ export function McpHostAccessView(p: Props) {
       <label className="w-28 text-forensics-muted">{t('mcpUi.access.hours')}
         <Input type="number" min={1} max={720} value={p.hours} onChange={(event) => p.setHours(event.target.value)} disabled={p.busy} />
       </label>
-      <label className="flex items-center gap-2 text-forensics-muted">
-        <Checkbox checked={p.readEvidence} onCheckedChange={(value) => p.setReadEvidence(value === true)} disabled={p.busy} />
-        {t('mcpUi.access.readEvidence')}
-      </label>
       {p.readEvidence ? <label className="min-w-64 flex-1 text-forensics-muted">{t('mcpUi.access.dataSources')}
         <Input value={p.dataSourceIds} placeholder={t('mcpUi.access.dataSourcesPlaceholder')} onChange={(event) => p.setDataSourceIds(event.target.value)} disabled={p.busy} />
       </label> : null}
@@ -54,6 +48,7 @@ export function McpHostAccessView(p: Props) {
       <span className="min-w-0 flex-1 truncate text-forensics-ink">{client.name}</span>
       <span>{t(client.readEvidence ? 'mcpUi.access.contentScope' : 'mcpUi.access.queryScope')}</span>
       {client.readEvidence ? <span>{t('mcpUi.access.dataSourceCount', { count: client.allowedDataSourceIds.length })}</span> : null}
+      {client.exportGrants.length > 0 ? <span>{t('mcpUi.access.exportCount', { count: client.exportGrants.length })}</span> : null}
       <span>{t('mcpUi.access.expires', { value: client.expiry })}</span>
       <IconButton label={t('mcpUi.access.revoke', { name: client.name })} onClick={() => p.revoke(client.id)} disabled={p.busy}><ActionIcon name="close" /></IconButton>
     </div>)}

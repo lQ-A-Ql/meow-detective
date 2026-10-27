@@ -6,6 +6,11 @@ export interface JsonSchema {
   description?: string;
 }
 
+export interface McpHostExportGrant {
+  grantId: string;
+  displayName: string;
+}
+
 export interface McpHostClient {
   id: string;
   name: string;
@@ -14,6 +19,7 @@ export interface McpHostClient {
   expiresAt: number;
   readEvidence: boolean;
   allowedDataSourceIds: string[];
+  exportGrants: McpHostExportGrant[];
 }
 
 export interface McpHostCreateClientRequest {

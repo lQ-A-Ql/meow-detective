@@ -1,4 +1,5 @@
 use app_services::mcp_host_service::access::McpAccessRegistry;
+use std::fs;
 use transport::dto::mcp_host::access::McpHostCreateClientRequestDto;
 
 fn request(name: &str, hours: u32) -> McpHostCreateClientRequestDto {
@@ -34,11 +35,42 @@ fn credentials_are_unique_bounded_and_revocation_invalidates_existing_principals
         |name: &str| principal.allows(catalog.iter().find(|tool| tool.name == name).unwrap());
     assert!(allowed("forensics.get_current_case"));
     assert!(!allowed("forensics.read_file"));
-    assert!(!allowed("forensics.extract_file"));
+    assert!(allowed("forensics.extract_file"));
     assert!(registry.authenticate(&second.token).is_err());
     registry.revoke(&first.client.id);
     assert!(!principal.active());
     assert!(registry.authenticate(&first.token).is_err());
     assert!(registry.records().is_empty());
     assert!(registry.clients().is_empty());
+}
+
+#[test]
+fn source_scoped_exports_require_an_authorized_data_source() {
+    let temporary = tempfile::tempdir().unwrap();
+    let export_root = temporary.path().join("exports");
+    fs::create_dir(&export_root).unwrap();
+    let request = McpHostCreateClientRequestDto {
+        name: "exporter".into(),
+        expires_after_hours: 24,
+        read_evidence: true,
+        allowed_data_source_ids: vec!["allowed-source".into()],
+    };
+    let mut registry = McpAccessRegistry::default();
+    let (created, record) = registry.prepare(request, "case", "session").unwrap();
+    registry.insert(record);
+    let principal = registry.authenticate(&created.token).unwrap();
+    let extract = app_services::mcp_host_service::tool_catalog()
+        .into_iter()
+        .find(|tool| tool.name == "forensics.extract_file")
+        .unwrap();
+    let arguments = serde_json::json!({
+        "fileId":"ds:allowed-source:file-1",
+        "relativePath":"nested/output.bin"
+    });
+    fs::create_dir(export_root.join("nested")).unwrap();
+    assert!(principal.allows_arguments(&extract, &arguments));
+    assert!(!principal.allows_arguments(
+        &extract,
+        &serde_json::json!({"fileId":"ds:other-source:file-1","relativePath":"nested/output.bin"})
+    ));
 }

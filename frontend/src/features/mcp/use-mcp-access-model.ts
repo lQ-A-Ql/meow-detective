@@ -9,7 +9,7 @@ export function useMcpAccessModel() {
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [hours, setHours] = useState('24');
-  const [readEvidence, setReadEvidence] = useState(false);
+  const [readEvidence] = useState(true);
   const [dataSourceIds, setDataSourceIds] = useState('');
   const [created, setCreated] = useState<McpHostCreatedClient>();
   const [creating, setCreating] = useState(false);
@@ -22,7 +22,7 @@ export function useMcpAccessModel() {
   const expiresAfterHours = Number(hours);
   const allowedDataSourceIds = dataSourceIds.split(/[\s,;]+/).map((value) => value.trim()).filter(Boolean);
   return {
-    clients: clients.data ?? [], name, setName, hours, setHours, readEvidence, setReadEvidence,
+    clients: clients.data ?? [], name, setName, hours, setHours, readEvidence,
     dataSourceIds, setDataSourceIds,
     created, closeCreated: () => setCreated(undefined),
     busy: clients.isLoading || creating || revoke.isPending,

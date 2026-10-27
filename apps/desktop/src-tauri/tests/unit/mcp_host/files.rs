@@ -10,6 +10,7 @@ use persistence_sqlite::repositories::{
     file_repo::FileRepo,
 };
 use serde_json::{json, Value};
+use transport::dto::mcp_host::access::McpHostCreateClientRequestDto;
 use transport::dto::mcp_host::McpHostSettingsDto;
 
 fn attach_evidence(state: &AppState, temporary: &tempfile::TempDir) -> String {
@@ -205,5 +206,62 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
         std::fs::read(temporary.path().join("evidence/proof.txt")).unwrap(),
         b"MCP byte proof"
     );
+    state.mcp_host.shutdown();
+}
+
+#[tokio::test]
+async fn http_extract_uses_granted_relative_path_and_rejects_escape() {
+    let (state, endpoint, temporary) = server().await;
+    let file_id = attach_evidence(&state, &temporary);
+    let created = state
+        .mcp_host
+        .create_client(
+            &state,
+            McpHostCreateClientRequestDto {
+                name: "HTTP exporter".into(),
+                expires_after_hours: 24,
+                read_evidence: true,
+                allowed_data_source_ids: vec!["mcp-http-files".into()],
+            },
+        )
+        .unwrap();
+    state
+        .mcp_host
+        .configure(
+            state.clone(),
+            McpHostSettingsDto {
+                enabled: true,
+                disabled_tools: Vec::new(),
+                policy_version: 1,
+            },
+        )
+        .await
+        .unwrap();
+    let extracted = call(
+        &endpoint,
+        &created.token,
+        "forensics.extract_file",
+        json!({"fileId":file_id,"relativePath":"nested/proof.txt"}),
+    )
+    .await;
+    assert_eq!(extracted["isError"], false);
+    assert_eq!(
+        std::fs::read(
+            temporary
+                .path()
+                .join("Meow_Detective_Exports/mcp-http-files/nested/proof.txt")
+        )
+        .unwrap(),
+        b"MCP byte proof"
+    );
+    let rejected = call(
+        &endpoint,
+        &created.token,
+        "forensics.extract_file",
+        json!({"fileId":file_id,"relativePath":"../outside.txt"}),
+    )
+    .await;
+    assert_eq!(rejected["isError"], true);
+    assert!(!temporary.path().join("outside.txt").exists());
     state.mcp_host.shutdown();
 }

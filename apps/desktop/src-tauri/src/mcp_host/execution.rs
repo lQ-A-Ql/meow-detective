@@ -211,6 +211,27 @@ fn query_active_case(
     if request.name == "forensics.extract_file" {
         let conn = app_services::connection::open_existing_case_db(&active.db_path())
             .map_err(CommandError::from_typed_service_error)?;
+        let mut effective = request.clone();
+        if let Some(principal) = invocation.principal.as_ref() {
+            let destination = principal
+                .resolve_export_destination(
+                    &conn,
+                    &active.case_root,
+                    &active.meta.id,
+                    &request.arguments,
+                )
+                .map_err(|_| CommandError::security("导出目录授权无效"))?;
+            let arguments = effective
+                .arguments
+                .as_object_mut()
+                .ok_or_else(|| CommandError::invalid_input("工具参数必须是对象"))?;
+            arguments.remove("destinationGrantId");
+            arguments.remove("relativePath");
+            arguments.insert(
+                "destinationPath".into(),
+                serde_json::Value::String(destination.to_string_lossy().into_owned()),
+            );
+        }
         return Ok(tool_response(dispatch_tool(
             state,
             McpHostQueryContext {
@@ -218,7 +239,7 @@ fn query_active_case(
                 case_root: &active.case_root,
                 case_meta: &active.meta,
             },
-            request,
+            &effective,
         )));
     }
     let _scope = invocation.reads.enter();

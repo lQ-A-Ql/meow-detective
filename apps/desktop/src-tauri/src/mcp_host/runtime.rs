@@ -257,15 +257,6 @@ fn load_settings(state: &AppState) -> Result<McpHostSettingsDto, McpHostError> {
     }
     let mut settings: McpHostSettingsDto = serde_json::from_slice(&bytes)?;
     if settings.policy_version < MCP_HOST_POLICY_VERSION {
-        if !settings
-            .disabled_tools
-            .iter()
-            .any(|tool| tool == "forensics.extract_file")
-        {
-            settings
-                .disabled_tools
-                .push("forensics.extract_file".into());
-        }
         settings.policy_version = MCP_HOST_POLICY_VERSION;
     }
     Ok(settings)

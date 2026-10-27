@@ -19,7 +19,7 @@ impl Default for McpHostSettingsDto {
     fn default() -> Self {
         Self {
             enabled: true,
-            disabled_tools: vec!["forensics.extract_file".into()],
+            disabled_tools: Vec::new(),
             policy_version: MCP_HOST_POLICY_VERSION,
         }
     }
@@ -121,7 +121,12 @@ pub struct McpHostReadFileRequestDto {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct McpHostExtractFileRequestDto {
     pub file_id: String,
-    pub destination_path: String,
+    #[serde(default)]
+    pub destination_path: Option<String>,
+    #[serde(default)]
+    pub destination_grant_id: Option<String>,
+    #[serde(default)]
+    pub relative_path: Option<String>,
     #[serde(default)]
     pub overwrite: bool,
 }
@@ -131,20 +136,29 @@ impl McpHostExtractFileRequestDto {
         if self.file_id.trim().is_empty() || self.file_id.len() > 2048 {
             return Err("fileId is invalid".to_string());
         }
-        if self.destination_path.trim().is_empty() || self.destination_path.len() > 32_767 {
+        let Some(destination_path) = self.destination_path.as_deref() else {
+            if self.destination_grant_id.is_some() {
+                return Err("destinationGrantId is no longer accepted".to_string());
+            }
+            if self.relative_path.as_deref().is_some_and(str::is_empty) {
+                return Err("relativePath is invalid".to_string());
+            }
+            return Ok(());
+        };
+        if destination_path.trim().is_empty() || destination_path.len() > 32_767 {
             return Err("destinationPath is invalid".to_string());
         }
-        if self.destination_path.contains('\0') {
+        if destination_path.contains('\0') {
             return Err("destinationPath contains a null byte".to_string());
         }
-        let destination = std::path::Path::new(&self.destination_path);
+        let destination = std::path::Path::new(destination_path);
         if !destination.is_absolute() {
             return Err("destinationPath must be an absolute path".to_string());
         }
         if destination.file_name().is_none() {
             return Err("destinationPath must include a file name".to_string());
         }
-        let normalized = self.destination_path.replace('/', "\\");
+        let normalized = destination_path.replace('/', "\\");
         let upper = normalized.to_ascii_uppercase();
         if upper.starts_with("\\\\.\\") || upper.starts_with("\\\\?\\") {
             return Err("device destination paths are not supported".to_string());

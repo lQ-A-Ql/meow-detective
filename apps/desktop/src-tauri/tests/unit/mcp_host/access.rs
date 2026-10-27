@@ -72,6 +72,10 @@ async fn credential_storage_contains_digests_and_expired_records_cannot_authenti
         .contains(&created.token));
     let mut records: Vec<McpHostCredentialRecordDto> = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(records[0].client, created.client);
+    assert!(records[0]
+        .export_grants
+        .iter()
+        .all(|grant| !grant.root_path.is_empty()));
     let connection = state.get_connection().unwrap();
     let events = persistence_sqlite::repositories::audit_repo::AuditRepo::new(&connection)
         .query(None, Some("mcp.access.grant"), 10, 0)

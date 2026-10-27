@@ -76,9 +76,9 @@ fn file_tools() -> Vec<McpHostToolDto> {
         ),
         (
             "forensics.extract_file",
-            "将当前案件中的普通文件提取到外部绝对路径，默认拒绝覆盖，返回文件大小、SHA-256 和审计状态。该工具写入本机文件系统。",
-            json!({"fileId":identifier(), "destinationPath":{"type":"string","minLength":1,"maxLength":32767}, "overwrite":{"type":"boolean","default":false}}),
-            vec!["fileId", "destinationPath"],
+            "将当前案件中的普通文件提取到数据源对应的受控 exports 目录；relativePath 为空时使用原文件名。桌面调试可使用已验证的绝对路径。默认拒绝覆盖。",
+            json!({"fileId":identifier(), "destinationPath":{"type":"string","minLength":1,"maxLength":32767}, "relativePath":{"type":"string","minLength":1,"maxLength":32767}, "overwrite":{"type":"boolean","default":false}}),
+            vec!["fileId"],
         ),
     ]
     .into_iter()

@@ -52,7 +52,11 @@ pub fn execute_file_tool(
         "forensics.extract_file" => {
             let request: McpHostExtractFileRequestDto = serde_json::from_value(arguments.clone())?;
             request.validate().map_err(McpHostServiceError::Invalid)?;
-            let destination = PathBuf::from(&request.destination_path);
+            let destination_path = request
+                .destination_path
+                .as_deref()
+                .ok_or_else(|| McpHostServiceError::Invalid("导出目录授权尚未解析".into()))?;
+            let destination = PathBuf::from(destination_path);
             let mut progress = |_| {};
             let result = crate::file_service::extract_file_for_case_with_audit(
                 context.bitlocker_runtime,
