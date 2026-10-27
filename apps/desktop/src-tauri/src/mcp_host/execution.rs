@@ -273,6 +273,7 @@ fn dispatch_tool(
         request.name.as_str(),
         "forensics.list_files"
             | "forensics.get_file_metadata"
+            | "forensics.browse_registry_key"
             | "forensics.read_file"
             | "forensics.extract_file"
     ) {

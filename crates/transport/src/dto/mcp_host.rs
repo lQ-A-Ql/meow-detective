@@ -96,6 +96,14 @@ pub struct McpHostFileRequestDto {
     pub file_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct McpHostRegistryBrowseRequestDto {
+    pub file_id: String,
+    #[serde(default)]
+    pub key_path: String,
+}
+
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum McpHostFileEncodingDto {

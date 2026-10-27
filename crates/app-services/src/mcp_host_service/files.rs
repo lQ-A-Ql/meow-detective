@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use serde_json::Value;
 use transport::dto::mcp_host::{
     McpHostExtractFileRequestDto, McpHostFileRequestDto, McpHostListFilesRequestDto,
-    McpHostReadFileRequestDto,
+    McpHostReadFileRequestDto, McpHostRegistryBrowseRequestDto,
 };
 
 use super::{arguments::validate_arguments, McpHostQueryContext, McpHostServiceError};
@@ -42,6 +42,23 @@ pub fn execute_file_tool(
                 source,
             })?;
             Ok(serde_json::to_value(metadata)?)
+        }
+        "forensics.browse_registry_key" => {
+            let request: McpHostRegistryBrowseRequestDto =
+                serde_json::from_value(arguments.clone())?;
+            let result = crate::file_service::browse_registry_key_for_case(
+                context.bitlocker_runtime,
+                context.query.connection,
+                context.query.case_root,
+                &context.query.case_meta.id,
+                &request.file_id,
+                &request.key_path,
+            )
+            .map_err(|source| McpHostServiceError::FileRead {
+                file_id: request.file_id.clone(),
+                source,
+            })?;
+            Ok(serde_json::to_value(result)?)
         }
         "forensics.read_file" => {
             let request: McpHostReadFileRequestDto = serde_json::from_value(arguments.clone())?;

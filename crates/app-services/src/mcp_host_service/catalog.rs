@@ -69,6 +69,12 @@ fn file_tools() -> Vec<McpHostToolDto> {
             vec!["fileId"],
         ),
         (
+            "forensics.browse_registry_key",
+            "读取 source-scoped Registry hive 的指定键，返回键元数据、值和子键。",
+            json!({"fileId":identifier(), "keyPath":{"type":"string","maxLength":4096,"default":""}}),
+            vec!["fileId"],
+        ),
+        (
             "forensics.read_file",
             "只读获取文件字节，单次最多 64 KiB；auto 自动返回 UTF-8 或 Base64，nextOffset 用于继续读取。",
             json!({"fileId":identifier(), "offset":offset, "length":{"type":"integer", "minimum":1, "maximum":MCP_FILE_CHUNK_LIMIT, "default":MCP_FILE_CHUNK_LIMIT}, "encoding":{"type":"string", "enum":["auto","utf8","base64"], "default":"auto"}}),
