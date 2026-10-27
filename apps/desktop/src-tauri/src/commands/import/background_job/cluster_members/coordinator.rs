@@ -1,6 +1,5 @@
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::Receiver;
-use std::sync::Arc;
 
 use super::super::super::cancellation::is_import_cancelled_message;
 use super::super::status::cancel_job;

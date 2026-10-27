@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use transport::dto::{DigestAlgorithmDto, DigestScopeDto, DigestStatusDto, EvidenceDigestDto};
 use transport::{ErrorCategory, ServiceErrorCategory};
-pub(crate) mod identity;
+pub mod identity;
 pub mod results;
 #[derive(Debug, thiserror::Error)]
 pub enum DigestServiceError {

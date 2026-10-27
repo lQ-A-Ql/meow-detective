@@ -6,13 +6,13 @@ use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_rep
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
-pub(crate) struct DigestIdentity {
+pub struct DigestIdentity {
     pub source_id: String,
     pub file_id: Option<String>,
     pub revision: String,
 }
 
-pub(crate) fn snapshot(
+pub fn snapshot(
     conn: &rusqlite::Connection,
     root: &Path,
     case: &CaseId,
