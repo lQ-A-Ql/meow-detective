@@ -332,5 +332,7 @@ fn is_analysis_tool(name: &str) -> bool {
             | "forensics.get_analysis_report"
             | "forensics.get_case_overview"
             | "forensics.get_correlation_snapshot"
+            | "forensics.query_graph"
+            | "forensics.get_provenance_chain"
     )
 }

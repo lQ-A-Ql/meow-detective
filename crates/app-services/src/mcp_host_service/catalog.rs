@@ -277,6 +277,18 @@ fn case_analysis_tools() -> Vec<McpHostToolDto> {
             json!({"offset":non_negative_integer(), "limit":page_limit(100, 50)}),
             vec![],
         ),
+        (
+            "forensics.query_graph",
+            "按类型化起始节点和边条件查询当前案件图关系。",
+            json!({"startIds":{"type":"array","maxItems":64,"items":identifier()}, "edgeTypes":{"type":"array","maxItems":16,"items":identifier()}, "maxDepth":{"type":"integer","minimum":0,"maximum":8,"default":3}, "confidenceFloor":{"type":"number","minimum":0,"maximum":1}, "limit":{"type":"integer","minimum":1,"maximum":200,"default":100}, "edgeLimit":{"type":"integer","minimum":1,"maximum":600,"default":400}}),
+            vec!["startIds"],
+        ),
+        (
+            "forensics.get_provenance_chain",
+            "读取指定图边的来源规则、解析器和提取版本链。",
+            json!({"edgeId":identifier()}),
+            vec!["edgeId"],
+        ),
     ]
     .into_iter()
     .map(|(name, description, properties, required)| tool(name, description, properties, required))

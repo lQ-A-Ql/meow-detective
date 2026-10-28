@@ -5,6 +5,7 @@ use transport::commands::{
     ClassifyFilesRequest, GetAnalysisExtractionRequest, GetAnalysisSourceRequest,
     GetAndroidPackagesRequest, GetEvtxEventSummaryRequest, GetPluginFamilyEntriesRequest,
 };
+use transport::dto::{GetProvenanceChainRequest, GraphQueryDto};
 
 use super::arguments::{parse_arguments, validate_arguments};
 use super::{McpHostQueryContext, McpHostServiceError};
@@ -58,6 +59,8 @@ pub fn execute_analysis_tool(
             .map_err(|error| add_source_context(arguments, error)),
         "forensics.get_case_overview" => case_overview(&context),
         "forensics.get_correlation_snapshot" => correlation_snapshot(&context, arguments),
+        "forensics.query_graph" => query_graph(&context, arguments),
+        "forensics.get_provenance_chain" => provenance_chain(&context, arguments),
         _ => Err(McpHostServiceError::InvalidInput),
     }
 }
@@ -361,6 +364,36 @@ fn correlation_snapshot(
         "clusters": clusters,
         "leads": leads,
     }))
+}
+
+fn query_graph(
+    context: &McpHostAnalysisQueryContext<'_>,
+    arguments: &Value,
+) -> Result<Value, McpHostServiceError> {
+    let request: GraphQueryDto = parse_arguments(arguments)?;
+    let result = crate::graph_service::query_graph_for_case_read_only(
+        context.query.connection,
+        context.query.case_root,
+        &context.query.case_meta.id.0,
+        request,
+    )
+    .map_err(|_| McpHostServiceError::Correlation)?;
+    serde_json::to_value(result).map_err(McpHostServiceError::from)
+}
+
+fn provenance_chain(
+    context: &McpHostAnalysisQueryContext<'_>,
+    arguments: &Value,
+) -> Result<Value, McpHostServiceError> {
+    let request: GetProvenanceChainRequest = parse_arguments(arguments)?;
+    let result = crate::graph_service::get_provenance_chain_for_case_read_only(
+        context.query.connection,
+        context.query.case_root,
+        &context.query.case_meta.id.0,
+        &request.edge_id,
+    )
+    .map_err(|_| McpHostServiceError::Correlation)?;
+    serde_json::to_value(result).map_err(McpHostServiceError::from)
 }
 
 fn take_page<T>(items: Vec<T>, offset: usize, limit: usize) -> Vec<T> {

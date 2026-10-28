@@ -20,7 +20,7 @@
 
 ## 工具目录
 
-当前提供 39 个 `forensics.` 工具，其中 38 个查询工具和一个文件提取工具。
+当前提供 41 个 `forensics.` 工具，其中 40 个查询工具和一个文件提取工具。
 
 | 功能 | 工具名称，省略 `forensics.` |
 |---|---|
@@ -31,7 +31,7 @@
 | Linux 分析 | `get_linux_artifact_summary`、`list_linux_services`、`list_docker_containers`、`list_docker_images` |
 | Android 分析 | `get_android_device_info`、`get_android_package_summary` |
 | 插件结果 | `list_plugin_modules`、`get_plugin_module`、`get_plugin_family_entries` |
-| 案件聚合 | `get_case_overview`、`get_correlation_snapshot` |
+| 案件聚合 | `get_case_overview`、`get_correlation_snapshot`、`query_graph`、`get_provenance_chain` |
 | 时间线 | `get_timeline_events`、`get_timeline_event`、`get_timeline_facets` |
 | 搜索与索引 | `search_files`、`get_content_index_coverage` |
 
