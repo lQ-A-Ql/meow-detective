@@ -75,6 +75,42 @@ fn file_tools() -> Vec<McpHostToolDto> {
             vec!["fileId"],
         ),
         (
+            "forensics.open_registry_hive",
+            "打开 source-scoped Registry hive 只读会话。",
+            json!({"fileId":identifier(), "view":{"type":"string","enum":["base","recovered"],"default":"base"}}),
+            vec!["fileId", "view"],
+        ),
+        (
+            "forensics.resolve_registry_key",
+            "在 Registry 会话中解析键路径。",
+            json!({"sessionId":identifier(), "keyPath":{"type":"string","maxLength":4096}}),
+            vec!["sessionId", "keyPath"],
+        ),
+        (
+            "forensics.list_registry_subkeys",
+            "分页列出 Registry 键的子键。",
+            json!({"sessionId":identifier(), "keyId":identifier(), "limit":{"type":"integer","minimum":1,"maximum":200,"default":100}, "cursor":identifier()}),
+            vec!["sessionId", "keyId"],
+        ),
+        (
+            "forensics.list_registry_values",
+            "分页列出 Registry 键的值元数据。",
+            json!({"sessionId":identifier(), "keyId":identifier(), "limit":{"type":"integer","minimum":1,"maximum":200,"default":100}, "cursor":identifier()}),
+            vec!["sessionId", "keyId"],
+        ),
+        (
+            "forensics.read_registry_value_range",
+            "读取 Registry 值的受限字节范围。",
+            json!({"sessionId":identifier(), "keyId":identifier(), "valueId":identifier(), "offset":non_negative_integer(), "length":{"type":"integer","minimum":1,"maximum":65536,"default":65536}}),
+            vec!["sessionId", "keyId", "valueId"],
+        ),
+        (
+            "forensics.close_registry_hive",
+            "关闭 Registry 只读会话并释放内存。",
+            json!({"sessionId":identifier()}),
+            vec!["sessionId"],
+        ),
+        (
             "forensics.read_file",
             "只读获取文件字节，单次最多 64 KiB；auto 自动返回 UTF-8 或 Base64，nextOffset 用于继续读取。",
             json!({"fileId":identifier(), "offset":offset, "length":{"type":"integer", "minimum":1, "maximum":MCP_FILE_CHUNK_LIMIT, "default":MCP_FILE_CHUNK_LIMIT}, "encoding":{"type":"string", "enum":["auto","utf8","base64"], "default":"auto"}}),

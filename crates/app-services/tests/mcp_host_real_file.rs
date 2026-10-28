@@ -5,6 +5,7 @@ use app_services::{
     bitlocker_runtime::BitLockerUnlockRegistry,
     file_service::PreviewRuntimeRegistry,
     mcp_host_service::{execute_file_tool, McpHostFileQueryContext, McpHostQueryContext},
+    registry_browser_service::RegistryBrowserRegistry,
     source_db::GlobalFileId,
 };
 use base64::Engine;
@@ -47,6 +48,7 @@ fn imported_e01_file_is_read_losslessly_through_mcp_in_bounded_chunks() {
     let before = std::fs::metadata(&source.source_path).unwrap();
     let registry = PreviewRuntimeRegistry::default();
     let bitlocker = Arc::new(BitLockerUnlockRegistry::default());
+    let registry_browser = RegistryBrowserRegistry::default();
     let call = |name, args: Value| {
         execute_file_tool(
             McpHostFileQueryContext {
@@ -57,6 +59,7 @@ fn imported_e01_file_is_read_losslessly_through_mcp_in_bounded_chunks() {
                 },
                 preview_runtime: &registry,
                 bitlocker_runtime: &bitlocker,
+                registry_browser: &registry_browser,
             },
             name,
             &args,
@@ -132,6 +135,7 @@ fn imported_wof_file_matches_independent_plaintext_oracle() {
     .unwrap();
     let registry = PreviewRuntimeRegistry::default();
     let bitlocker = Arc::new(BitLockerUnlockRegistry::default());
+    let registry_browser = RegistryBrowserRegistry::default();
     let mut plaintext = Vec::new();
     let mut blocks = 0;
     loop {
@@ -144,6 +148,7 @@ fn imported_wof_file_matches_independent_plaintext_oracle() {
                 },
                 preview_runtime: &registry,
                 bitlocker_runtime: &bitlocker,
+                registry_browser: &registry_browser,
             },
             "forensics.read_file",
             &json!({"fileId":file_id,"offset":plaintext.len(),"encoding":"base64"}),

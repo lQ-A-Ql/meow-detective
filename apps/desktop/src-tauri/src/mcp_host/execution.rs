@@ -274,6 +274,12 @@ fn dispatch_tool(
         "forensics.list_files"
             | "forensics.get_file_metadata"
             | "forensics.browse_registry_key"
+            | "forensics.open_registry_hive"
+            | "forensics.resolve_registry_key"
+            | "forensics.list_registry_subkeys"
+            | "forensics.list_registry_values"
+            | "forensics.read_registry_value_range"
+            | "forensics.close_registry_hive"
             | "forensics.read_file"
             | "forensics.extract_file"
     ) {
@@ -282,6 +288,7 @@ fn dispatch_tool(
                 query: context,
                 preview_runtime: &state.preview_runtime,
                 bitlocker_runtime: &state.bitlocker_runtime,
+                registry_browser: &state.registry_browser,
             },
             &request.name,
             &request.arguments,

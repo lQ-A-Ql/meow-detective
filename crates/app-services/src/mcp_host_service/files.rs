@@ -7,12 +7,17 @@ use transport::dto::mcp_host::{
 };
 
 use super::{arguments::validate_arguments, McpHostQueryContext, McpHostServiceError};
-use crate::{bitlocker_runtime::BitLockerUnlockRegistry, file_service::PreviewRuntimeRegistry};
+use crate::{
+    bitlocker_runtime::BitLockerUnlockRegistry,
+    file_service::PreviewRuntimeRegistry,
+    registry_browser_service::{RegistryBrowserContext, RegistryBrowserRegistry},
+};
 
 pub struct McpHostFileQueryContext<'a> {
     pub query: McpHostQueryContext<'a>,
     pub preview_runtime: &'a PreviewRuntimeRegistry,
     pub bitlocker_runtime: &'a Arc<BitLockerUnlockRegistry>,
+    pub registry_browser: &'a RegistryBrowserRegistry,
 }
 
 pub fn execute_file_tool(
@@ -59,6 +64,107 @@ pub fn execute_file_tool(
                 source,
             })?;
             Ok(serde_json::to_value(result)?)
+        }
+        "forensics.open_registry_hive" => {
+            let request: transport::dto::RegistryHiveOpenRequestDto =
+                serde_json::from_value(arguments.clone())?;
+            let registry_context = RegistryBrowserContext {
+                case_conn: context.query.connection,
+                case_root: context.query.case_root,
+                case_id: &context.query.case_meta.id,
+                bitlocker: context.bitlocker_runtime,
+                preview: context.preview_runtime,
+            };
+            let result = crate::registry_browser_service::open_hive(
+                context.registry_browser,
+                &registry_context,
+                request,
+            )
+            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            Ok(serde_json::to_value(result)?)
+        }
+        "forensics.resolve_registry_key" => {
+            let request: transport::dto::RegistryKeyResolveRequestDto =
+                serde_json::from_value(arguments.clone())?;
+            let registry_context = RegistryBrowserContext {
+                case_conn: context.query.connection,
+                case_root: context.query.case_root,
+                case_id: &context.query.case_meta.id,
+                bitlocker: context.bitlocker_runtime,
+                preview: context.preview_runtime,
+            };
+            let result = crate::registry_browser_service::resolve_key(
+                context.registry_browser,
+                &registry_context,
+                request,
+            )
+            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            Ok(serde_json::to_value(result)?)
+        }
+        "forensics.list_registry_subkeys" => {
+            let request: transport::dto::RegistrySubkeysRequestDto =
+                serde_json::from_value(arguments.clone())?;
+            let registry_context = RegistryBrowserContext {
+                case_conn: context.query.connection,
+                case_root: context.query.case_root,
+                case_id: &context.query.case_meta.id,
+                bitlocker: context.bitlocker_runtime,
+                preview: context.preview_runtime,
+            };
+            let result = crate::registry_browser_service::list_subkeys(
+                context.registry_browser,
+                &registry_context,
+                request,
+            )
+            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            Ok(serde_json::to_value(result)?)
+        }
+        "forensics.list_registry_values" => {
+            let request: transport::dto::RegistryValuesRequestDto =
+                serde_json::from_value(arguments.clone())?;
+            let registry_context = RegistryBrowserContext {
+                case_conn: context.query.connection,
+                case_root: context.query.case_root,
+                case_id: &context.query.case_meta.id,
+                bitlocker: context.bitlocker_runtime,
+                preview: context.preview_runtime,
+            };
+            let result = crate::registry_browser_service::list_values(
+                context.registry_browser,
+                &registry_context,
+                request,
+            )
+            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            Ok(serde_json::to_value(result)?)
+        }
+        "forensics.read_registry_value_range" => {
+            let request: transport::dto::RegistryValueRangeRequestDto =
+                serde_json::from_value(arguments.clone())?;
+            let registry_context = RegistryBrowserContext {
+                case_conn: context.query.connection,
+                case_root: context.query.case_root,
+                case_id: &context.query.case_meta.id,
+                bitlocker: context.bitlocker_runtime,
+                preview: context.preview_runtime,
+            };
+            let result = crate::registry_browser_service::read_value_range(
+                context.registry_browser,
+                &registry_context,
+                request,
+            )
+            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            Ok(serde_json::to_value(result)?)
+        }
+        "forensics.close_registry_hive" => {
+            let request: transport::dto::RegistryHiveCloseRequestDto =
+                serde_json::from_value(arguments.clone())?;
+            crate::registry_browser_service::close_hive(
+                context.registry_browser,
+                &context.query.case_meta.id.0,
+                request,
+            )
+            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            Ok(serde_json::json!({"closed":true}))
         }
         "forensics.read_file" => {
             let request: McpHostReadFileRequestDto = serde_json::from_value(arguments.clone())?;

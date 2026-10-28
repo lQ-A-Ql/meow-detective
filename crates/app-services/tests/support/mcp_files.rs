@@ -7,6 +7,7 @@ use app_services::{
     mcp_host_service::{
         execute_file_tool, McpHostFileQueryContext, McpHostQueryContext, McpHostServiceError,
     },
+    registry_browser_service::RegistryBrowserRegistry,
     source_db::{self, GlobalFileId},
 };
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
@@ -21,6 +22,7 @@ pub struct Fixture {
     pub case: ActiveCase,
     pub registry: file_service::PreviewRuntimeRegistry,
     bitlocker: Arc<BitLockerUnlockRegistry>,
+    registry_browser: RegistryBrowserRegistry,
     ids: HashMap<String, String>,
     pub binary: Vec<u8>,
 }
@@ -73,6 +75,7 @@ impl Fixture {
             case,
             registry: Default::default(),
             bitlocker: Arc::default(),
+            registry_browser: RegistryBrowserRegistry::default(),
             ids,
             binary,
         }
@@ -93,6 +96,7 @@ impl Fixture {
                 },
                 preview_runtime: &self.registry,
                 bitlocker_runtime: &self.bitlocker,
+                registry_browser: &self.registry_browser,
             },
             name,
             &args,
