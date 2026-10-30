@@ -47,6 +47,18 @@ fn core_tools() -> Vec<McpHostToolDto> {
             json!({"dataSourceId":identifier(), "pluginId":identifier()}),
             vec!["dataSourceId", "pluginId"],
         ),
+        (
+            "forensics.list_jobs",
+            "读取当前案件最近任务的状态、进度和结果摘要。",
+            json!({}),
+            vec![],
+        ),
+        (
+            "forensics.get_job",
+            "读取当前案件指定任务的状态和进度。",
+            json!({"jobId":identifier()}),
+            vec!["jobId"],
+        ),
     ]
     .into_iter()
     .map(|(name, description, properties, required)| tool(name, description, properties, required))
@@ -366,7 +378,14 @@ fn tool_with_access(
             "required":required,
             "additionalProperties":false
         }),
-        output_schema: output_schema(),
+        output_schema: match name {
+            "forensics.list_jobs" => json!({
+                "type":"array",
+                "items":job_snapshot_schema()
+            }),
+            "forensics.get_job" => job_snapshot_schema(),
+            _ => output_schema(),
+        },
         read_only,
         destructive,
     }
@@ -376,6 +395,29 @@ fn output_schema() -> Value {
     json!({
         "type":["object","array","string","number","boolean","null"],
         "description":"结构化工具结果；具体字段随工具版本保持稳定。"
+    })
+}
+
+fn job_snapshot_schema() -> Value {
+    json!({
+        "type":"object",
+        "properties": {
+            "id":{"type":"string"},
+            "name":{"type":"string"},
+            "scope":{"type":"string"},
+            "progress":{"type":"integer","minimum":0,"maximum":100},
+            "status":{"type":"string"},
+            "detail":{"type":"string"},
+            "warningCount":{"type":"integer","minimum":0},
+            "skippedCount":{"type":"integer","minimum":0},
+            "failedCount":{"type":"integer","minimum":0},
+            "partial":{"type":"boolean"},
+            "currentPartition":{"type":["string","null"]},
+            "completedPartitions":{"type":["integer","null"],"minimum":0},
+            "totalPartitions":{"type":["integer","null"],"minimum":0},
+            "partitionProgress":{"type":["integer","null"],"minimum":0}
+        },
+        "required":["id","name","scope","progress","status","detail","warningCount","skippedCount","failedCount","partial"]
     })
 }
 

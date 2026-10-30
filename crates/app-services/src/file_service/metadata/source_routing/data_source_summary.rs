@@ -12,6 +12,13 @@ use crate::file_service::{
 
 use super::shared::{open_source_for_data_source, scoped_context};
 
+type SourceInventory = (
+    Option<u64>,
+    Vec<transport::dto::DataSourcePartitionDto>,
+    Option<String>,
+    Vec<transport::dto::LinuxRootMountDto>,
+);
+
 /// Build sanitized summaries for every data source in a case.
 pub fn get_data_sources_for_case(
     case_conn: &Connection,
@@ -42,34 +49,8 @@ pub fn get_data_sources_for_case(
         )
         .ok()
         .flatten();
-        let source_conn =
-            open_source_for_data_source(case_conn, case_root, case_id, &source.id).ok();
-        let (file_count, partitions, gpt_disk_guid, linux_root_mounts) = if let Some(source_conn) =
-            source_conn.as_ref()
-        {
-            let file_count = FileRepo::new(source_conn)
-                .count_by_data_source(&source.id)
-                .ok();
-            let (partitions, disk_guid) =
-                crate::file_service::partition_identity::summaries(source_conn, &source.id.0)?;
-            let roots = if platform == "linux" {
-                let mut context =
-                    scoped_context(source_conn, case_conn, case_root, case_id, &source.id);
-                crate::file_service::linux_root_mounts::collect(
-                    source_conn,
-                    &source.id,
-                    &partitions,
-                    |id, length| {
-                        crate::file_service::read_file_bytes_for_case(&mut context, id, 0, length)
-                    },
-                )?
-            } else {
-                Vec::new()
-            };
-            (file_count, partitions, disk_guid, roots)
-        } else {
-            (None, Vec::new(), None, Vec::new())
-        };
+        let (file_count, partitions, gpt_disk_guid, linux_root_mounts) =
+            source_inventory(case_conn, case_root, case_id, &source, &platform)?;
 
         summaries.push(DataSourceSummaryDto {
             id: source.id.0.clone(),
@@ -118,4 +99,35 @@ pub fn get_data_sources_for_case(
     }
 
     Ok(summaries)
+}
+
+fn source_inventory(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    source: &domain::DataSource,
+    platform: &str,
+) -> Result<SourceInventory, FileServiceError> {
+    let Some(source_conn) =
+        open_source_for_data_source(case_conn, case_root, case_id, &source.id).ok()
+    else {
+        return Ok((None, Vec::new(), None, Vec::new()));
+    };
+    let file_count = FileRepo::new(&source_conn)
+        .count_by_data_source(&source.id)
+        .ok();
+    let (partitions, disk_guid) =
+        crate::file_service::partition_identity::summaries(&source_conn, &source.id.0)?;
+    let roots = if platform == "linux" {
+        let mut context = scoped_context(&source_conn, case_conn, case_root, case_id, &source.id);
+        crate::file_service::linux_root_mounts::collect(
+            &source_conn,
+            &source.id,
+            &partitions,
+            |id, length| crate::file_service::read_file_bytes_for_case(&mut context, id, 0, length),
+        )?
+    } else {
+        Vec::new()
+    };
+    Ok((file_count, partitions, disk_guid, roots))
 }

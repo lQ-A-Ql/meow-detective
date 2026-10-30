@@ -29,73 +29,73 @@ impl transport::ServiceErrorCategory for JobServiceError {
 pub fn get_jobs_from_db(conn: &Connection) -> Result<Vec<JobSnapshotDto>, JobServiceError> {
     let repo = JobRepo::new(conn);
     let jobs = repo.list_recent(infrastructure::constants::JOB_LIST_LIMIT)?;
-    let dtos = jobs
-        .into_iter()
-        .map(|job| {
-            // Use DB columns for partition progress if available, fall back to parsing detail
-            let has_db_partition = job.total_partitions > 0;
-            let meta = if has_db_partition {
-                None // DB columns are authoritative
-            } else {
-                parse_partition_progress(&job.detail)
-            };
-
-            let current_partition = if has_db_partition {
-                job.current_partition.clone()
-            } else {
-                meta.as_ref()
-                    .and_then(|item| item.current_partition.clone())
-            };
-            let completed_partitions = if has_db_partition {
-                Some(job.completed_partitions)
-            } else {
-                meta.as_ref().map(|item| item.completed_partitions)
-            };
-            let total_partitions = if has_db_partition {
-                Some(job.total_partitions)
-            } else {
-                meta.as_ref().map(|item| item.total_partitions)
-            };
-            let partition_progress = if has_db_partition {
-                Some(job.partition_progress)
-            } else {
-                meta.as_ref().map(|item| item.partition_progress)
-            };
-
-            JobSnapshotDto {
-                id: job.id.0,
-                name: job.kind,
-                scope: meta
-                    .as_ref()
-                    .and_then(|item| item.scope.clone())
-                    .unwrap_or_else(|| {
-                        if job.detail.is_empty() {
-                            "Case ingest".to_string()
-                        } else {
-                            job.detail.clone()
-                        }
-                    }),
-                progress: job.progress,
-                status: job.status,
-                detail: meta
-                    .as_ref()
-                    .map(|item| item.detail.clone())
-                    .unwrap_or(job.detail),
-                warning_count: job.warning_count,
-                skipped_count: job.skipped_count,
-                failed_count: job.failed_count,
-                partial: job.partial
-                    || job.warning_count > 0
-                    || job.skipped_count > 0
-                    || job.failed_count > 0,
-                current_partition,
-                completed_partitions,
-                total_partitions,
-                partition_progress,
-            }
-        })
-        .collect();
+    let dtos = jobs.into_iter().map(job_snapshot).collect();
     Ok(dtos)
+}
+
+pub fn get_job_from_db(
+    conn: &Connection,
+    job_id: &JobId,
+) -> Result<JobSnapshotDto, JobServiceError> {
+    JobRepo::new(conn)
+        .find_by_id(job_id)?
+        .map(job_snapshot)
+        .ok_or_else(|| JobServiceError::NotFound(job_id.0.clone()))
+}
+
+fn job_snapshot(job: JobSummaryRow) -> JobSnapshotDto {
+    let has_db_partition = job.total_partitions > 0;
+    let meta = (!has_db_partition)
+        .then(|| parse_partition_progress(&job.detail))
+        .flatten();
+    let current_partition = has_db_partition
+        .then(|| job.current_partition.clone())
+        .flatten()
+        .or_else(|| {
+            meta.as_ref()
+                .and_then(|item| item.current_partition.clone())
+        });
+    let completed_partitions = has_db_partition
+        .then_some(job.completed_partitions)
+        .or_else(|| meta.as_ref().map(|item| item.completed_partitions));
+    let total_partitions = has_db_partition
+        .then_some(job.total_partitions)
+        .or_else(|| meta.as_ref().map(|item| item.total_partitions));
+    let partition_progress = has_db_partition
+        .then_some(job.partition_progress)
+        .or_else(|| meta.as_ref().map(|item| item.partition_progress));
+
+    JobSnapshotDto {
+        id: job.id.0,
+        name: job.kind,
+        scope: meta
+            .as_ref()
+            .and_then(|item| item.scope.clone())
+            .unwrap_or_else(|| {
+                if job.detail.is_empty() {
+                    "Case ingest".to_string()
+                } else {
+                    job.detail.clone()
+                }
+            }),
+        progress: job.progress,
+        status: job.status,
+        detail: meta
+            .as_ref()
+            .map(|item| item.detail.clone())
+            .unwrap_or(job.detail),
+        warning_count: job.warning_count,
+        skipped_count: job.skipped_count,
+        failed_count: job.failed_count,
+        partial: job.partial
+            || job.warning_count > 0
+            || job.skipped_count > 0
+            || job.failed_count > 0,
+        current_partition,
+        completed_partitions,
+        total_partitions,
+        partition_progress,
+    }
 }
 
 #[derive(Debug, Clone)]

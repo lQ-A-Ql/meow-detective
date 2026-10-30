@@ -27,7 +27,7 @@ async fn http_credentials_enforce_scope_expiry_revocation_and_case_session() {
         .await
         .unwrap();
     let tools = response["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 40);
+    assert_eq!(tools.len(), 42);
     assert!(!tools
         .iter()
         .any(|tool| tool["name"] == "forensics.read_file"));

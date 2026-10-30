@@ -7,7 +7,10 @@ use app_services::{
     },
 };
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
-use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
+use persistence_sqlite::repositories::{
+    datasource_repo::{DataSourceRepo, DataSourceStorage},
+    job_repo::JobRepo,
+};
 use serde_json::json;
 use transport::dto::mcp_host::McpHostSettingsDto;
 
@@ -84,7 +87,7 @@ fn current_case_sources_and_details_share_real_service_queries_with_no_host_path
 #[test]
 fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
     let catalog = tool_catalog();
-    assert_eq!(catalog.len(), 41);
+    assert_eq!(catalog.len(), 43);
     for name in [
         "forensics.get_analysis_system_info",
         "forensics.get_file_classification_board",
@@ -102,6 +105,8 @@ fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
         "forensics.browse_registry_key",
         "forensics.query_graph",
         "forensics.get_provenance_chain",
+        "forensics.list_jobs",
+        "forensics.get_job",
         "forensics.list_linux_services",
         "forensics.list_docker_containers",
         "forensics.list_docker_images",
@@ -111,6 +116,19 @@ fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
     for tool in &catalog {
         assert_eq!(tool.input_schema["additionalProperties"], false);
     }
+    let jobs = catalog
+        .iter()
+        .find(|tool| tool.name == "forensics.list_jobs")
+        .unwrap();
+    assert_eq!(jobs.output_schema["type"], "array");
+    assert_eq!(
+        catalog
+            .iter()
+            .find(|tool| tool.name == "forensics.get_job")
+            .unwrap()
+            .output_schema["type"],
+        "object"
+    );
     let extractor = catalog
         .iter()
         .find(|tool| tool.name == "forensics.extract_file")
@@ -134,6 +152,38 @@ fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
         .disabled_tools
         .push("forensics.arbitrary_execute".into());
     assert!(validate_settings(&mut settings).is_err());
+}
+
+#[test]
+fn job_queries_read_exact_case_job_and_redact_host_detail() {
+    let temporary = tempfile::tempdir().unwrap();
+    let case = case_service::create_case(temporary.path(), "MCP Jobs", None).unwrap();
+    let conn = case.connection().unwrap();
+    let job_id = JobRepo::new(&conn)
+        .create(&case.meta.id.0, "Content index")
+        .unwrap();
+    JobRepo::new(&conn)
+        .update_progress(&job_id, 45, r"reading C:\private\evidence")
+        .unwrap();
+    let context = || McpHostQueryContext {
+        connection: &conn,
+        case_root: &case.case_root,
+        case_meta: &case.meta,
+    };
+
+    let list = execute_tool(context(), "forensics.list_jobs", &json!({})).unwrap();
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    assert_eq!(list[0]["id"], job_id.0);
+    assert_eq!(list[0]["progress"], 45);
+    assert_eq!(list[0]["detail"], "任务详情包含受保护路径");
+
+    let detail = execute_tool(context(), "forensics.get_job", &json!({"jobId":job_id.0})).unwrap();
+    assert_eq!(detail["id"], job_id.0);
+    assert_eq!(detail["detail"], "任务详情包含受保护路径");
+    assert!(matches!(
+        execute_tool(context(), "forensics.get_job", &json!({"jobId":"missing"})),
+        Err(McpHostServiceError::NotFound)
+    ));
 }
 
 #[test]

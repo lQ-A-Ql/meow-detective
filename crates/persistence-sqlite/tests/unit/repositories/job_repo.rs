@@ -63,6 +63,21 @@ fn update_progress_changes_progress() {
 }
 
 #[test]
+fn find_by_id_returns_a_single_job_without_recent_list_limits() {
+    let conn = setup_db();
+    let repo = JobRepo::new(&conn);
+    let first = repo.create("case-1", "first").unwrap();
+    let second = repo.create("case-1", "second").unwrap();
+
+    let found = repo.find_by_id(&first).unwrap().unwrap();
+
+    assert_eq!(found.id, first);
+    assert_eq!(found.kind, "first");
+    assert_eq!(repo.find_by_id(&second).unwrap().unwrap().id, second);
+    assert!(repo.find_by_id(&JobId("missing".into())).unwrap().is_none());
+}
+
+#[test]
 fn active_kind_detail_prefix_prevents_duplicate_hash_jobs() {
     let conn = setup_db();
     let repo = JobRepo::new(&conn);

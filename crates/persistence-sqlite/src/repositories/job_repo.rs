@@ -1,6 +1,6 @@
 use crate::connection::{DbError, DbResult};
 use domain::JobId;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use uuid::Uuid;
 
 pub struct JobRepo<'a> {
@@ -231,6 +231,39 @@ impl<'a> JobRepo<'a> {
             result.push(r?);
         }
         Ok(result)
+    }
+
+    pub fn find_by_id(&self, id: &JobId) -> DbResult<Option<JobSummaryRow>> {
+        self.conn
+            .query_row(
+                "SELECT id, kind, status, progress, detail,
+                        warning_count, skipped_count, failed_count, partial,
+                        current_partition, completed_partitions, total_partitions, partition_progress,
+                        created_at, finished_at
+                 FROM jobs WHERE id = ?1",
+                [&id.0],
+                |row| {
+                    Ok(JobSummaryRow {
+                        id: JobId(row.get(0)?),
+                        kind: row.get(1)?,
+                        status: row.get(2)?,
+                        progress: row.get(3)?,
+                        detail: row.get(4)?,
+                        warning_count: row.get::<_, Option<u32>>(5)?.unwrap_or(0),
+                        skipped_count: row.get::<_, Option<u32>>(6)?.unwrap_or(0),
+                        failed_count: row.get::<_, Option<u32>>(7)?.unwrap_or(0),
+                        partial: row.get::<_, Option<bool>>(8)?.unwrap_or(false),
+                        current_partition: row.get(9)?,
+                        completed_partitions: row.get::<_, Option<u32>>(10)?.unwrap_or(0),
+                        total_partitions: row.get::<_, Option<u32>>(11)?.unwrap_or(0),
+                        partition_progress: row.get::<_, Option<u32>>(12)?.unwrap_or(0),
+                        created_at: row.get(13)?,
+                        finished_at: row.get(14)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
     }
 }
 

@@ -48,6 +48,40 @@ pub fn execute_file_tool(
             })?;
             Ok(serde_json::to_value(metadata)?)
         }
+        "forensics.browse_registry_key"
+        | "forensics.open_registry_hive"
+        | "forensics.resolve_registry_key"
+        | "forensics.list_registry_subkeys"
+        | "forensics.list_registry_values"
+        | "forensics.read_registry_value_range"
+        | "forensics.close_registry_hive" => execute_registry_tool(&context, name, arguments),
+        "forensics.read_file" => {
+            let request: McpHostReadFileRequestDto = serde_json::from_value(arguments.clone())?;
+            Ok(serde_json::to_value(super::read_file::read_file(
+                &context, &request,
+            )?)?)
+        }
+        "forensics.extract_file" => {
+            let request: McpHostExtractFileRequestDto = serde_json::from_value(arguments.clone())?;
+            extract_file(&context, &request)
+        }
+        _ => Err(McpHostServiceError::InvalidInput),
+    }
+}
+
+fn execute_registry_tool(
+    context: &McpHostFileQueryContext<'_>,
+    name: &str,
+    arguments: &Value,
+) -> Result<Value, McpHostServiceError> {
+    let registry_context = RegistryBrowserContext {
+        case_conn: context.query.connection,
+        case_root: context.query.case_root,
+        case_id: &context.query.case_meta.id,
+        bitlocker: context.bitlocker_runtime,
+        preview: context.preview_runtime,
+    };
+    match name {
         "forensics.browse_registry_key" => {
             let request: McpHostRegistryBrowseRequestDto =
                 serde_json::from_value(arguments.clone())?;
@@ -68,13 +102,6 @@ pub fn execute_file_tool(
         "forensics.open_registry_hive" => {
             let request: transport::dto::RegistryHiveOpenRequestDto =
                 serde_json::from_value(arguments.clone())?;
-            let registry_context = RegistryBrowserContext {
-                case_conn: context.query.connection,
-                case_root: context.query.case_root,
-                case_id: &context.query.case_meta.id,
-                bitlocker: context.bitlocker_runtime,
-                preview: context.preview_runtime,
-            };
             let result = crate::registry_browser_service::open_hive(
                 context.registry_browser,
                 &registry_context,
@@ -86,13 +113,6 @@ pub fn execute_file_tool(
         "forensics.resolve_registry_key" => {
             let request: transport::dto::RegistryKeyResolveRequestDto =
                 serde_json::from_value(arguments.clone())?;
-            let registry_context = RegistryBrowserContext {
-                case_conn: context.query.connection,
-                case_root: context.query.case_root,
-                case_id: &context.query.case_meta.id,
-                bitlocker: context.bitlocker_runtime,
-                preview: context.preview_runtime,
-            };
             let result = crate::registry_browser_service::resolve_key(
                 context.registry_browser,
                 &registry_context,
@@ -104,13 +124,6 @@ pub fn execute_file_tool(
         "forensics.list_registry_subkeys" => {
             let request: transport::dto::RegistrySubkeysRequestDto =
                 serde_json::from_value(arguments.clone())?;
-            let registry_context = RegistryBrowserContext {
-                case_conn: context.query.connection,
-                case_root: context.query.case_root,
-                case_id: &context.query.case_meta.id,
-                bitlocker: context.bitlocker_runtime,
-                preview: context.preview_runtime,
-            };
             let result = crate::registry_browser_service::list_subkeys(
                 context.registry_browser,
                 &registry_context,
@@ -122,13 +135,6 @@ pub fn execute_file_tool(
         "forensics.list_registry_values" => {
             let request: transport::dto::RegistryValuesRequestDto =
                 serde_json::from_value(arguments.clone())?;
-            let registry_context = RegistryBrowserContext {
-                case_conn: context.query.connection,
-                case_root: context.query.case_root,
-                case_id: &context.query.case_meta.id,
-                bitlocker: context.bitlocker_runtime,
-                preview: context.preview_runtime,
-            };
             let result = crate::registry_browser_service::list_values(
                 context.registry_browser,
                 &registry_context,
@@ -140,13 +146,6 @@ pub fn execute_file_tool(
         "forensics.read_registry_value_range" => {
             let request: transport::dto::RegistryValueRangeRequestDto =
                 serde_json::from_value(arguments.clone())?;
-            let registry_context = RegistryBrowserContext {
-                case_conn: context.query.connection,
-                case_root: context.query.case_root,
-                case_id: &context.query.case_meta.id,
-                bitlocker: context.bitlocker_runtime,
-                preview: context.preview_runtime,
-            };
             let result = crate::registry_browser_service::read_value_range(
                 context.registry_browser,
                 &registry_context,
@@ -166,36 +165,33 @@ pub fn execute_file_tool(
             .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
             Ok(serde_json::json!({"closed":true}))
         }
-        "forensics.read_file" => {
-            let request: McpHostReadFileRequestDto = serde_json::from_value(arguments.clone())?;
-            Ok(serde_json::to_value(super::read_file::read_file(
-                &context, &request,
-            )?)?)
-        }
-        "forensics.extract_file" => {
-            let request: McpHostExtractFileRequestDto = serde_json::from_value(arguments.clone())?;
-            request.validate().map_err(McpHostServiceError::Invalid)?;
-            let destination_path = request
-                .destination_path
-                .as_deref()
-                .ok_or_else(|| McpHostServiceError::Invalid("导出目录授权尚未解析".into()))?;
-            let destination = PathBuf::from(destination_path);
-            let mut progress = |_| {};
-            let result = crate::file_service::extract_file_for_case_with_audit(
-                context.bitlocker_runtime,
-                crate::file_service::CaseFileExtractionRequest {
-                    case_conn: context.query.connection,
-                    case_root: context.query.case_root,
-                    case_id: &context.query.case_meta.id,
-                    file_id: &request.file_id,
-                    destination_path: &destination,
-                    overwrite: request.overwrite,
-                },
-                &mut progress,
-            )
-            .map_err(|error| McpHostServiceError::Extraction(error.message))?;
-            Ok(serde_json::to_value(result)?)
-        }
         _ => Err(McpHostServiceError::InvalidInput),
     }
+}
+
+fn extract_file(
+    context: &McpHostFileQueryContext<'_>,
+    request: &McpHostExtractFileRequestDto,
+) -> Result<Value, McpHostServiceError> {
+    request.validate().map_err(McpHostServiceError::Invalid)?;
+    let destination_path = request
+        .destination_path
+        .as_deref()
+        .ok_or_else(|| McpHostServiceError::Invalid("导出目录授权尚未解析".into()))?;
+    let destination = PathBuf::from(destination_path);
+    let mut progress = |_| {};
+    let result = crate::file_service::extract_file_for_case_with_audit(
+        context.bitlocker_runtime,
+        crate::file_service::CaseFileExtractionRequest {
+            case_conn: context.query.connection,
+            case_root: context.query.case_root,
+            case_id: &context.query.case_meta.id,
+            file_id: &request.file_id,
+            destination_path: &destination,
+            overwrite: request.overwrite,
+        },
+        &mut progress,
+    )
+    .map_err(|error| McpHostServiceError::Extraction(error.message))?;
+    Ok(serde_json::to_value(result)?)
 }

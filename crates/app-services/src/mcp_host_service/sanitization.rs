@@ -27,6 +27,30 @@ pub(super) fn plugin_summary(module: PluginModuleDto) -> Value {
     })
 }
 
+pub(super) fn job_snapshot(mut snapshot: Value) -> Value {
+    if let Some(object) = snapshot.as_object_mut() {
+        for field in ["scope", "detail"] {
+            let Some(value) = object.get_mut(field) else {
+                continue;
+            };
+            let Some(text) = value.as_str() else {
+                continue;
+            };
+            if contains_host_path(text) {
+                *value = Value::String("任务详情包含受保护路径".into());
+            }
+        }
+    }
+    snapshot
+}
+
+fn contains_host_path(text: &str) -> bool {
+    text.contains(":\\")
+        || text.contains(":/")
+        || text.contains("\\\\")
+        || text.split_whitespace().any(|part| part.starts_with('/'))
+}
+
 #[cfg(test)]
 #[path = "../../tests/unit/mcp_host_service/sanitization.rs"]
 mod tests;

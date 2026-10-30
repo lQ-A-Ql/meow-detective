@@ -4,7 +4,7 @@
 
 应用通过内置 Rust `rmcp` 服务向外部调查客户端提供取证能力。Streamable HTTP 地址为 `http://127.0.0.1:3001/mcp`，桌面启动时初始化，退出时停止。设置页面管理服务启停、地址复制、工具发现、逐项开关和工具调试。
 
-应用配置目录中的 `mcp-host.json` 独立保存 `enabled`、`disabledTools` 和 `policyVersion`。默认启用服务，默认禁用 `forensics.extract_file`。缺少配置时使用默认值；读取失败、格式无效或超过 32 KiB 时停止服务。保存采用同目录中间文件、同步写入与原子替换。旧版配置升级会加入文件提取禁用项。
+应用配置目录中的 `mcp-host.json` 独立保存 `enabled`、`disabledTools` 和 `policyVersion`。默认启用服务，工具默认全部允许；管理员可以通过 `disabledTools` 单独关闭工具。缺少配置时使用默认值；读取失败、格式无效或超过 32 KiB 时停止服务。保存采用同目录中间文件、同步写入与原子替换。
 
 当前生产代码包括七个桌面命令：`get_mcp_host_status`、`set_mcp_host_settings`、`list_mcp_host_tools`、`call_mcp_host_tool`、`list_mcp_host_clients`、`create_mcp_host_client`、`revoke_mcp_host_client`。HTTP 与桌面调试共享目录、工具开关检查和执行器。
 
@@ -20,11 +20,11 @@
 
 ## 工具目录
 
-当前提供 41 个 `forensics.` 工具，其中 40 个查询工具和一个文件提取工具。
+当前提供 43 个 `forensics.` 工具，其中 42 个查询工具和一个文件提取工具。
 
 | 功能 | 工具名称，省略 `forensics.` |
 |---|---|
-| 案件与数据源 | `get_current_case`、`list_data_sources`、`get_data_source` |
+| 案件与数据源 | `get_current_case`、`list_data_sources`、`get_data_source`、`list_jobs`、`get_job` |
 | 文件目录与内容 | `list_files`、`get_file_metadata`、`browse_registry_key`、`read_file`、`extract_file` |
 | 文件分类 | `get_evidence_classification_summary`、`get_file_classification_board` |
 | Windows 分析 | `get_analysis_system_info`、`get_registry_summary`、`get_registry_structured_summary`、`get_browser_history_summary`、`get_email_summary`、`get_event_log_events`、`get_analysis_report` |
@@ -37,7 +37,7 @@
 
 桌面工具发现返回完整目录；HTTP 工具发现按授权过滤。每个工具声明 `readOnlyHint` 和 `destructiveHint`；`extract_file` 分别为 `false`、`true`。工具提示属于元数据，实际权限由后端检查。
 
-Linux 服务和 Docker 信息目前通过 `get_linux_artifact_summary` 的 `systemConfigs` 返回，使用 `configKind` 区分服务、容器与镜像。它们描述证据中的配置和状态记录。服务与容器的实际控制操作未进入目录。
+Linux 服务和 Docker 信息通过专用分页工具返回：`list_linux_services`、`list_docker_containers` 和 `list_docker_images`。它们描述证据中的配置和状态记录，并返回可继续读取的 source-scoped 文件标识。服务与容器的实际控制操作未进入目录。
 
 ## 案件和证据访问
 
@@ -96,9 +96,9 @@ HTTP 审计调用者为客户端 ID，桌面调用者为 `desktop`。工具执�
 | 批量开关 | 仅修改查询工具，保留写入工具的独立状态 |
 | 请求取消 | 队列、案件 SQL、源数据库 SQL 与锁等待接入取消；底层证据 I/O 待继续接入 |
 | 队列容量 | 两个执行、16 个等待；每个外部客户端最多四个等待调用 |
-| 输出定义 | 输入 JSON Schema、基础输出 JSON Schema、结构化数据与分类错误；具体工具字段 Schema 待细化 |
+| 输出定义 | 输入 JSON Schema、基础输出 JSON Schema、结构化数据与分类错误；任务状态工具已发布字段级输出 Schema，其余工具字段 Schema 待细化 |
 | 协议资源 | 当前仅声明工具能力；Resources、Prompts 与协议任务未提供 |
-| 长任务 | 尚未暴露分析、索引建立、报告导出任务的查询和取消接口 |
+| 长任务 | `list_jobs` 和 `get_job` 已暴露现有任务记录的只读状态查询；分析、索引建立、报告导出任务的创建、幂等、结果引用和取消接口仍需实现 |
 
 这些项目属于服务端后续设计范围。对应的权限与验收条件需要在增加接口之前确定。
 

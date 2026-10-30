@@ -24,7 +24,7 @@ fn host_contract_round_trips_camel_case_and_omits_absent_errors() {
     assert!(decoded.running);
     let defaults = McpHostSettingsDto::default();
     assert!(defaults.enabled);
-    assert_eq!(defaults.disabled_tools, vec!["forensics.extract_file"]);
+    assert!(defaults.disabled_tools.is_empty());
     let legacy =
         serde_json::from_value::<McpHostSettingsDto>(json!({"enabled":false,"disabledTools":[]}))
             .unwrap();

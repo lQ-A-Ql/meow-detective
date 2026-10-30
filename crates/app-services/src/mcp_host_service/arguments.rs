@@ -64,6 +64,10 @@ fn valid_field(value: &Value, schema: &Value) -> bool {
             number >= schema["minimum"].as_u64().unwrap_or(0)
                 && number <= schema["maximum"].as_u64().unwrap_or(u64::MAX)
         }),
+        Some("number") => value.as_f64().is_some_and(|number| {
+            number >= schema["minimum"].as_f64().unwrap_or(f64::MIN)
+                && number <= schema["maximum"].as_f64().unwrap_or(f64::MAX)
+        }),
         Some("boolean") => value.is_boolean(),
         Some("array") => value.as_array().is_some_and(|items| {
             items.len() as u64 <= schema["maxItems"].as_u64().unwrap_or(u64::MAX)

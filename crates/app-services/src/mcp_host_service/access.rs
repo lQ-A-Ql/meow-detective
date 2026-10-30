@@ -58,15 +58,14 @@ impl McpPrincipal {
         if !self.allows(tool) {
             return false;
         }
-        if tool.name == "forensics.extract_file" {
-            if arguments.get("destinationPath").is_some()
+        if tool.name == "forensics.extract_file"
+            && (arguments.get("destinationPath").is_some()
                 || arguments.get("destinationGrantId").is_some()
                 || arguments
                     .get("relativePath")
-                    .is_some_and(|value| !value.is_string())
-            {
-                return false;
-            }
+                    .is_some_and(|value| !value.is_string()))
+        {
+            return false;
         }
         let source_id = arguments
             .get("dataSourceId")
