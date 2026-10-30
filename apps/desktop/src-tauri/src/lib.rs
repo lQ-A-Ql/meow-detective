@@ -12,6 +12,7 @@ mod emulation_registry;
 pub mod events;
 mod evidence_task_jobs;
 mod mcp_host;
+mod mcp_report_task;
 mod media_protocol;
 mod mount_backend;
 mod mount_registry;

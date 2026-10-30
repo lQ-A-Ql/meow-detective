@@ -217,6 +217,9 @@ fn query_active_case(
     if request.name == "forensics.start_analysis" {
         return start_analysis(state, active, request, invocation);
     }
+    if request.name == "forensics.start_report_export" {
+        return start_report_export(state, active, request, invocation);
+    }
     if request.name == "forensics.extract_file" {
         let conn = app_services::connection::open_existing_case_db(&active.db_path())
             .map_err(CommandError::from_typed_service_error)?;
@@ -527,6 +530,36 @@ fn analysis_argument_hash(
     }))
     .map_err(|_| CommandError::invalid_input("分析任务参数无效"))?;
     Ok(infrastructure::hashing::sha256_bytes(&arguments))
+}
+
+fn start_report_export(
+    state: &AppState,
+    active: &ActiveCaseSnapshot,
+    request: &McpHostToolCallRequestDto,
+    invocation: &Invocation,
+) -> Result<McpHostToolCallResultDto, CommandError> {
+    let input: transport::dto::mcp_host::McpHostStartReportExportRequestDto =
+        serde_json::from_value(request.arguments.clone())
+            .map_err(|_| CommandError::invalid_input("报告导出参数无效"))?;
+    let task_id = crate::mcp_report_task::start(
+        state,
+        &active.meta,
+        &active.meta.id.0,
+        &active.case_root,
+        &input.template_id,
+        &input.format,
+    )?;
+    if let Some(principal) = invocation.principal.as_ref() {
+        let _ = state
+            .mcp_host
+            .register_task_owner(&task_id, &principal.client.id)
+            .map_err(CommandError::from_typed_service_error)?;
+    }
+    Ok(tool_response(Ok(serde_json::json!({
+        "jobId": task_id,
+        "kind": "Report export",
+        "status": "pending",
+    }))))
 }
 
 fn dispatch_tool(

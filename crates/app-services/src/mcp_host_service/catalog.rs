@@ -95,6 +95,12 @@ fn core_tools() -> Vec<McpHostToolDto> {
             json!({}),
             vec![],
         ),
+        (
+            "forensics.start_report_export",
+            "创建报告导出任务并返回任务标识。",
+            json!({"templateId":identifier(), "format":{"type":"string","enum":["html","csv","json"]}, "idempotencyKey":{"type":"string","minLength":1,"maxLength":128}}),
+            vec!["templateId", "format"],
+        ),
     ]
     .into_iter()
     .map(|(name, description, properties, required)| tool(name, description, properties, required))
@@ -179,6 +185,7 @@ fn file_tools() -> Vec<McpHostToolDto> {
                 | "forensics.cancel_job"
                 | "forensics.start_content_index"
                 | "forensics.start_analysis"
+                | "forensics.start_report_export"
         ) {
             tool_with_access(name, description, properties, required, false, true)
         } else {
