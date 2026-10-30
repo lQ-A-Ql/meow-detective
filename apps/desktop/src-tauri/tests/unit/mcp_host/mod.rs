@@ -18,6 +18,7 @@ pub(super) fn grant(
                 name: "HTTP regression".into(),
                 expires_after_hours: 24,
                 read_evidence,
+                run_derived: true,
                 allowed_data_source_ids: if read_evidence {
                     vec!["mcp-http-files".into()]
                 } else {
@@ -87,7 +88,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     .unwrap();
     assert_eq!(result["id"], "tool-list");
     let tools = result["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 43);
+    assert_eq!(tools.len(), 44);
     assert!(tools
         .iter()
         .any(|tool| tool["name"] == "forensics.extract_file"));

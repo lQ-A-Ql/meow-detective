@@ -22,6 +22,7 @@ fn authorization_types_round_trip_and_reject_unknown_fields() {
         case_session_id: "session-id".into(),
         expires_at: 123,
         read_evidence: false,
+        run_derived: true,
         allowed_data_source_ids: vec![],
         export_grants: vec![],
     };

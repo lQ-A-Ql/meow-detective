@@ -208,6 +208,9 @@ fn query_active_case(
             "MCP_TOOL_DISABLED",
         ));
     }
+    if request.name == "forensics.cancel_job" {
+        return cancel_job(state, active, request, invocation);
+    }
     if request.name == "forensics.extract_file" {
         let conn = app_services::connection::open_existing_case_db(&active.db_path())
             .map_err(CommandError::from_typed_service_error)?;
@@ -262,6 +265,45 @@ fn query_active_case(
     );
     invocation.check(&request.name, &request.arguments)?;
     Ok(tool_response(result))
+}
+
+fn cancel_job(
+    state: &AppState,
+    active: &ActiveCaseSnapshot,
+    request: &McpHostToolCallRequestDto,
+    invocation: &Invocation,
+) -> Result<McpHostToolCallResultDto, CommandError> {
+    let input: transport::dto::mcp_host::McpHostJobRequestDto =
+        serde_json::from_value(request.arguments.clone())
+            .map_err(|_| CommandError::invalid_input("任务标识无效"))?;
+    let connection = app_services::connection::open_existing_case_db(&active.db_path())
+        .map_err(CommandError::from_typed_service_error)?;
+    let job_id = domain::JobId(input.job_id.clone());
+    if let Some(principal) = invocation.principal.as_ref() {
+        let owns_task = state
+            .mcp_host
+            .owns_task(&input.job_id, &principal.client.id)
+            .map_err(CommandError::from_typed_service_error)?;
+        if !owns_task {
+            return Err(CommandError::security("任务未授权给当前 MCP 客户端"));
+        }
+    }
+    let changed = app_services::job_service::request_cancellation(
+        &connection,
+        &job_id,
+        "Cancellation requested by MCP client",
+    )
+    .map_err(CommandError::from_typed_service_error)?;
+    if changed {
+        state.task_manager.cancel(&input.job_id);
+    }
+    let job = app_services::job_service::get_job_from_db(&connection, &job_id)
+        .map_err(CommandError::from_typed_service_error)?;
+    Ok(tool_response(Ok(serde_json::json!({
+        "jobId": input.job_id,
+        "cancelRequested": changed,
+        "status": job.status,
+    }))))
 }
 
 fn dispatch_tool(

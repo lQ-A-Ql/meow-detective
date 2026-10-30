@@ -221,6 +221,7 @@ async fn http_extract_uses_granted_relative_path_and_rejects_escape() {
                 name: "HTTP exporter".into(),
                 expires_after_hours: 24,
                 read_evidence: true,
+                run_derived: true,
                 allowed_data_source_ids: vec!["mcp-http-files".into()],
             },
         )

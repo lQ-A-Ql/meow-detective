@@ -1,4 +1,5 @@
 use super::{grant, request, server};
+use persistence_sqlite::repositories::job_repo::JobRepo;
 use serde_json::{json, Value};
 use transport::dto::mcp_host::access::McpHostCredentialRecordDto;
 
@@ -27,7 +28,7 @@ async fn http_credentials_enforce_scope_expiry_revocation_and_case_session() {
         .await
         .unwrap();
     let tools = response["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 42);
+    assert_eq!(tools.len(), 43);
     assert!(!tools
         .iter()
         .any(|tool| tool["name"] == "forensics.read_file"));
@@ -54,6 +55,50 @@ async fn http_credentials_enforce_scope_expiry_revocation_and_case_session() {
     let reopened = app_services::case_service::open_case(&case_root).unwrap();
     *state.active_case.lock().unwrap() = Some(reopened);
     assert_eq!(request(&endpoint, &new.token, list).await.status(), 403);
+    state.mcp_host.shutdown();
+}
+
+#[tokio::test]
+async fn http_cancel_job_updates_the_case_job_and_returns_status() {
+    let (state, endpoint, temporary) = server().await;
+    let case =
+        app_services::case_service::create_case(temporary.path(), "Cancel case", None).unwrap();
+    let case_id = case.meta.id.0.clone();
+    *state.active_case.lock().unwrap() = Some(case);
+    let job_id = {
+        let connection = state.get_connection().unwrap();
+        JobRepo::new(&connection)
+            .create(&case_id, "Content index")
+            .unwrap()
+    };
+    let created = grant(&state, true);
+    state
+        .mcp_host
+        .register_task_owner(&job_id.0, &created.client.id)
+        .unwrap();
+    let response: Value = request(
+        &endpoint,
+        &created.token,
+        json!({
+            "jsonrpc":"2.0",
+            "id":1,
+            "method":"tools/call",
+            "params":{"name":"forensics.cancel_job","arguments":{"jobId":job_id.0}}
+        }),
+    )
+    .await
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(response["result"]["isError"], false);
+    assert_eq!(
+        response["result"]["structuredContent"]["cancelRequested"],
+        true
+    );
+    assert_eq!(
+        response["result"]["structuredContent"]["status"],
+        "cancelling"
+    );
     state.mcp_host.shutdown();
 }
 

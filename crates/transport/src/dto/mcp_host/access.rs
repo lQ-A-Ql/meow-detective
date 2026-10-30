@@ -25,6 +25,8 @@ pub struct McpHostClientDto {
     pub expires_at: i64,
     #[serde(default = "default_read_evidence")]
     pub read_evidence: bool,
+    #[serde(default = "default_run_derived")]
+    pub run_derived: bool,
     #[serde(default)]
     pub allowed_data_source_ids: Vec<String>,
     #[serde(default)]
@@ -45,11 +47,17 @@ pub struct McpHostCreateClientRequestDto {
     pub expires_after_hours: u32,
     #[serde(default = "default_read_evidence")]
     pub read_evidence: bool,
+    #[serde(default = "default_run_derived")]
+    pub run_derived: bool,
     #[serde(default)]
     pub allowed_data_source_ids: Vec<String>,
 }
 
 fn default_read_evidence() -> bool {
+    true
+}
+
+fn default_run_derived() -> bool {
     true
 }
 
@@ -77,6 +85,8 @@ impl<'de> Deserialize<'de> for McpHostCredentialRecordDto {
             expires_at: i64,
             #[serde(default = "default_read_evidence")]
             read_evidence: bool,
+            #[serde(default = "default_run_derived")]
+            run_derived: bool,
             #[serde(default)]
             allowed_data_source_ids: Vec<String>,
             #[serde(default)]
@@ -116,6 +126,7 @@ impl<'de> Deserialize<'de> for McpHostCredentialRecordDto {
             case_session_id: record.client.case_session_id,
             expires_at: record.client.expires_at,
             read_evidence: record.client.read_evidence,
+            run_derived: record.client.run_derived,
             allowed_data_source_ids: record.client.allowed_data_source_ids,
             export_grants: record
                 .client

@@ -49,9 +49,11 @@ impl McpPrincipal {
     }
 
     pub fn allows(&self, tool: &McpHostToolDto) -> bool {
+        let derived_tool = matches!(tool.name.as_str(), "forensics.cancel_job");
         self.active()
             && (tool.read_only && (tool.name != "forensics.read_file" || self.client.read_evidence)
-                || tool.name == "forensics.extract_file")
+                || tool.name == "forensics.extract_file"
+                || (derived_tool && self.client.run_derived))
     }
 
     pub fn allows_arguments(&self, tool: &McpHostToolDto, arguments: &serde_json::Value) -> bool {
@@ -261,6 +263,7 @@ impl McpAccessRegistry {
             expires_at: chrono::Utc::now().timestamp()
                 + i64::from(request.expires_after_hours) * 3600,
             read_evidence: request.read_evidence,
+            run_derived: request.run_derived,
             allowed_data_source_ids: request.allowed_data_source_ids,
             export_grants: public_export_grants,
         };

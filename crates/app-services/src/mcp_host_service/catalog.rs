@@ -59,6 +59,12 @@ fn core_tools() -> Vec<McpHostToolDto> {
             json!({"jobId":identifier()}),
             vec!["jobId"],
         ),
+        (
+            "forensics.cancel_job",
+            "请求取消当前案件中的后台任务，并返回取消请求是否已写入任务状态。",
+            json!({"jobId":identifier()}),
+            vec!["jobId"],
+        ),
     ]
     .into_iter()
     .map(|(name, description, properties, required)| tool(name, description, properties, required))
@@ -137,7 +143,7 @@ fn file_tools() -> Vec<McpHostToolDto> {
     ]
     .into_iter()
     .map(|(name, description, properties, required)| {
-        if name == "forensics.extract_file" {
+        if name == "forensics.extract_file" || name == "forensics.cancel_job" {
             tool_with_access(name, description, properties, required, false, true)
         } else {
             tool(name, description, properties, required)

@@ -7,6 +7,7 @@ fn request(name: &str, hours: u32) -> McpHostCreateClientRequestDto {
         name: name.into(),
         expires_after_hours: hours,
         read_evidence: false,
+        run_derived: true,
         allowed_data_source_ids: vec![],
     }
 }
@@ -53,6 +54,7 @@ fn source_scoped_exports_require_an_authorized_data_source() {
         name: "exporter".into(),
         expires_after_hours: 24,
         read_evidence: true,
+        run_derived: true,
         allowed_data_source_ids: vec!["allowed-source".into()],
     };
     let mut registry = McpAccessRegistry::default();

@@ -1,6 +1,7 @@
 use super::{handler::router, McpHostError};
 use crate::state::AppState;
 use std::{
+    collections::HashMap,
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -31,6 +32,7 @@ pub struct McpHostRuntime {
     pub(super) requests: Arc<Semaphore>,
     pub(super) audit_requests: Arc<Semaphore>,
     pub(super) audit_waiters: Arc<Semaphore>,
+    task_owners: Mutex<HashMap<String, String>>,
 }
 
 impl Default for McpHostRuntime {
@@ -47,11 +49,34 @@ impl Default for McpHostRuntime {
             requests: Arc::new(Semaphore::new(2)),
             audit_requests: Arc::new(Semaphore::new(2)),
             audit_waiters: Arc::new(Semaphore::new(16)),
+            task_owners: Mutex::new(HashMap::new()),
         }
     }
 }
 
 impl McpHostRuntime {
+    pub fn register_task_owner(
+        &self,
+        task_id: &str,
+        principal_id: &str,
+    ) -> Result<(), McpHostError> {
+        let mut owners = self.task_owners.lock().map_err(|_| McpHostError::State)?;
+        if owners.len() >= 128 && !owners.contains_key(task_id) {
+            return Err(McpHostError::State);
+        }
+        owners.insert(task_id.to_owned(), principal_id.to_owned());
+        Ok(())
+    }
+
+    pub fn owns_task(&self, task_id: &str, principal_id: &str) -> Result<bool, McpHostError> {
+        Ok(self
+            .task_owners
+            .lock()
+            .map_err(|_| McpHostError::State)?
+            .get(task_id)
+            .is_some_and(|owner| owner == principal_id))
+    }
+
     pub fn status(&self) -> Result<McpHostStatusDto, McpHostError> {
         let running = self.running.lock().map_err(|_| McpHostError::State)?;
         let endpoint = running
