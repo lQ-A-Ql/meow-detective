@@ -77,6 +77,12 @@ fn core_tools() -> Vec<McpHostToolDto> {
             json!({"dataSourceId":identifier(), "idempotencyKey":{"type":"string","minLength":1,"maxLength":128}}),
             vec!["dataSourceId"],
         ),
+        (
+            "forensics.start_analysis",
+            "为指定数据源创建证据分类分析任务并返回任务标识。",
+            json!({"dataSourceId":identifier(), "categories":{"type":"array","maxItems":32,"items":identifier()}, "idempotencyKey":{"type":"string","minLength":1,"maxLength":128}}),
+            vec!["dataSourceId"],
+        ),
     ]
     .into_iter()
     .map(|(name, description, properties, required)| tool(name, description, properties, required))
@@ -160,6 +166,7 @@ fn file_tools() -> Vec<McpHostToolDto> {
             "forensics.extract_file"
                 | "forensics.cancel_job"
                 | "forensics.start_content_index"
+                | "forensics.start_analysis"
         ) {
             tool_with_access(name, description, properties, required, false, true)
         } else {

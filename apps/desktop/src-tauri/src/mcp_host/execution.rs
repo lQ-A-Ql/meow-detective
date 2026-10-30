@@ -214,6 +214,9 @@ fn query_active_case(
     if request.name == "forensics.start_content_index" {
         return start_content_index(state, active, request, invocation);
     }
+    if request.name == "forensics.start_analysis" {
+        return start_analysis(state, active, request, invocation);
+    }
     if request.name == "forensics.extract_file" {
         let conn = app_services::connection::open_existing_case_db(&active.db_path())
             .map_err(CommandError::from_typed_service_error)?;
@@ -411,6 +414,119 @@ fn serialize_task(
     let value =
         serde_json::to_value(task).map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(tool_response(Ok(value)))
+}
+
+fn start_analysis(
+    state: &AppState,
+    active: &ActiveCaseSnapshot,
+    request: &McpHostToolCallRequestDto,
+    invocation: &Invocation,
+) -> Result<McpHostToolCallResultDto, CommandError> {
+    let input: transport::dto::mcp_host::McpHostStartAnalysisRequestDto =
+        serde_json::from_value(request.arguments.clone())
+            .map_err(|_| CommandError::invalid_input("分析任务参数无效"))?;
+    let principal = invocation.principal.as_ref();
+    let arguments_sha256 = analysis_argument_hash(&input.data_source_id, &input.categories)?;
+    let binding_connection = if principal.is_some() && input.idempotency_key.is_some() {
+        Some(
+            app_services::connection::open_existing_case_db(&active.db_path())
+                .map_err(CommandError::from_typed_service_error)?,
+        )
+    } else {
+        None
+    };
+    if let (Some(principal), Some(key), Some(connection)) = (
+        principal,
+        input.idempotency_key.as_deref(),
+        binding_connection.as_ref(),
+    ) {
+        let repo = persistence_sqlite::repositories::mcp_task_binding_repo::McpTaskBindingRepo::new(
+            connection,
+        );
+        if let Some(binding) = repo
+            .find(
+                &active.meta.id.0,
+                &principal.client.id,
+                "start_analysis",
+                key,
+            )
+            .map_err(CommandError::from_typed_service_error)?
+        {
+            if binding.arguments_sha256 != arguments_sha256 {
+                return Err(CommandError::conflict("幂等键已用于其他分析请求"));
+            }
+            let job = app_services::job_service::get_job_from_db(
+                connection,
+                &domain::JobId(binding.task_id),
+            )
+            .map_err(CommandError::from_typed_service_error)?;
+            return Ok(tool_response(Ok(serde_json::to_value(job)
+                .map_err(|error| CommandError::internal(error.to_string()))?)));
+        }
+    }
+    let app = state
+        .app_handle()
+        .ok_or_else(|| CommandError::internal("桌面应用句柄尚未初始化"))?;
+    let source_id = input.data_source_id.clone();
+    let categories = input.categories.clone();
+    let runtime = app_services::analysis_service::AnalysisSourceReadRuntime::with_bitlocker_runtime(
+        state.bitlocker_runtime.clone(),
+    );
+    let task_id = crate::analysis_task_jobs::start_evidence_classification(
+        state,
+        &app,
+        crate::analysis_task_jobs::AnalysisTaskRequest {
+            case_id: &active.meta.id.0,
+            case_root: &active.case_root,
+            data_source_id: Some(&source_id),
+            kind: "Evidence classification",
+        },
+        categories,
+        runtime,
+    )?;
+    if let Some(principal) = principal {
+        let _ = state
+            .mcp_host
+            .register_task_owner(&task_id, &principal.client.id)
+            .map_err(CommandError::from_typed_service_error)?;
+        if let (Some(key), Some(connection)) = (
+            input.idempotency_key.as_deref(),
+            binding_connection.as_ref(),
+        ) {
+            let binding = persistence_sqlite::repositories::mcp_task_binding_repo::McpTaskBinding {
+                case_id: active.meta.id.0.clone(),
+                case_session_id: active.session_id.clone(),
+                principal_id: principal.client.id.clone(),
+                operation: "start_analysis".into(),
+                idempotency_key: key.into(),
+                arguments_sha256,
+                task_id: task_id.clone(),
+            };
+            let _ =
+                persistence_sqlite::repositories::mcp_task_binding_repo::McpTaskBindingRepo::new(
+                    connection,
+                )
+                .insert_or_get(&binding)
+                .map_err(CommandError::from_typed_service_error)?;
+        }
+    }
+    Ok(tool_response(Ok(serde_json::json!({
+        "jobId": task_id,
+        "kind": "Evidence classification",
+        "status": "pending",
+    }))))
+}
+
+fn analysis_argument_hash(
+    data_source_id: &str,
+    categories: &[String],
+) -> Result<String, CommandError> {
+    let arguments = serde_json::to_vec(&serde_json::json!({
+        "dataSourceId": data_source_id,
+        "categories": categories,
+    }))
+    .map_err(|_| CommandError::invalid_input("分析任务参数无效"))?;
+    Ok(infrastructure::hashing::sha256_bytes(&arguments))
 }
 
 fn dispatch_tool(
