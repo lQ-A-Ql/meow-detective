@@ -333,9 +333,9 @@ fn start_content_index(
             .register_task_owner(&task.task_id, &principal.client.id)
             .map_err(CommandError::from_typed_service_error)?;
     }
-    Ok(tool_response(serde_json::to_value(task).map_err(|error| {
-        CommandError::internal(error.to_string())
-    })))
+    let value = serde_json::to_value(task)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    Ok(tool_response(Ok(value)))
 }
 
 fn dispatch_tool(
