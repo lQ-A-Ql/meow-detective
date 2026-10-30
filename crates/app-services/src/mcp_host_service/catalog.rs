@@ -60,6 +60,12 @@ fn core_tools() -> Vec<McpHostToolDto> {
             vec!["jobId"],
         ),
         (
+            "forensics.get_task",
+            "读取当前案件证据任务的状态、进度和已发布结果。",
+            json!({"taskId":identifier()}),
+            vec!["taskId"],
+        ),
+        (
             "forensics.cancel_job",
             "请求取消当前案件中的后台任务，并返回取消请求是否已写入任务状态。",
             json!({"jobId":identifier()}),

@@ -87,7 +87,7 @@ fn current_case_sources_and_details_share_real_service_queries_with_no_host_path
 #[test]
 fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
     let catalog = tool_catalog();
-    assert_eq!(catalog.len(), 45);
+    assert_eq!(catalog.len(), 46);
     for name in [
         "forensics.get_analysis_system_info",
         "forensics.get_file_classification_board",
@@ -107,6 +107,7 @@ fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
         "forensics.get_provenance_chain",
         "forensics.list_jobs",
         "forensics.get_job",
+        "forensics.get_task",
         "forensics.cancel_job",
         "forensics.start_content_index",
         "forensics.list_linux_services",
@@ -186,6 +187,13 @@ fn job_queries_read_exact_case_job_and_redact_host_detail() {
         execute_tool(context(), "forensics.get_job", &json!({"jobId":"missing"})),
         Err(McpHostServiceError::NotFound)
     ));
+    let task_error = execute_tool(
+        context(),
+        "forensics.get_task",
+        &json!({"taskId":"missing"}),
+    )
+    .unwrap_err();
+    assert!(matches!(task_error, McpHostServiceError::NotFound));
 }
 
 #[test]

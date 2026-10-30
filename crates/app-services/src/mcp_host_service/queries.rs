@@ -51,6 +51,23 @@ pub fn execute_tool(
                 .map(super::sanitization::job_snapshot)
                 .map_err(McpHostServiceError::from)
         }
+        "forensics.get_task" => {
+            let request: transport::dto::mcp_host::McpHostTaskRequestDto =
+                serde_json::from_value(arguments.clone())?;
+            let task = crate::evidence_tasks::get(
+                context.connection,
+                &context.case_meta.id,
+                &request.task_id,
+            )
+            .map_err(|error| {
+                if error.code == "NOT_FOUND" {
+                    McpHostServiceError::NotFound
+                } else {
+                    McpHostServiceError::Invalid(error.message)
+                }
+            })?;
+            serde_json::to_value(task).map_err(McpHostServiceError::from)
+        }
         "forensics.list_data_sources" => super::data_sources::list_data_sources(&context),
         "forensics.get_data_source" => super::data_sources::get_data_source(&context, arguments),
         "forensics.list_plugin_modules" => {
