@@ -74,7 +74,7 @@ fn core_tools() -> Vec<McpHostToolDto> {
         (
             "forensics.start_content_index",
             "为指定数据源创建内容索引任务并返回任务标识。",
-            json!({"dataSourceId":identifier()}),
+            json!({"dataSourceId":identifier(), "idempotencyKey":{"type":"string","minLength":1,"maxLength":128}}),
             vec!["dataSourceId"],
         ),
     ]

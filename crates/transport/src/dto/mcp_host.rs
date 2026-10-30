@@ -64,6 +64,8 @@ pub struct McpHostJobRequestDto {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct McpHostStartContentIndexRequestDto {
     pub data_source_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

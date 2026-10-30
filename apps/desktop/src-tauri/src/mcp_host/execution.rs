@@ -212,7 +212,7 @@ fn query_active_case(
         return cancel_job(state, active, request, invocation);
     }
     if request.name == "forensics.start_content_index" {
-        return start_content_index(state, request, invocation);
+        return start_content_index(state, active, request, invocation);
     }
     if request.name == "forensics.extract_file" {
         let conn = app_services::connection::open_existing_case_db(&active.db_path())
@@ -311,12 +311,52 @@ fn cancel_job(
 
 fn start_content_index(
     state: &AppState,
+    active: &ActiveCaseSnapshot,
     request: &McpHostToolCallRequestDto,
     invocation: &Invocation,
 ) -> Result<McpHostToolCallResultDto, CommandError> {
     let input: transport::dto::mcp_host::McpHostStartContentIndexRequestDto =
         serde_json::from_value(request.arguments.clone())
             .map_err(|_| CommandError::invalid_input("内容索引数据源无效"))?;
+    let principal = invocation.principal.as_ref();
+    let arguments_sha256 = infrastructure::hashing::sha256_bytes(input.data_source_id.as_bytes());
+    let binding_connection = if principal.is_some() && input.idempotency_key.is_some() {
+        Some(
+            app_services::connection::open_existing_case_db(&active.db_path())
+                .map_err(CommandError::from_typed_service_error)?,
+        )
+    } else {
+        None
+    };
+    if let (Some(principal), Some(idempotency_key), Some(connection)) = (
+        principal,
+        input.idempotency_key.as_deref(),
+        binding_connection.as_ref(),
+    ) {
+        let repo = persistence_sqlite::repositories::mcp_task_binding_repo::McpTaskBindingRepo::new(
+            connection,
+        );
+        if let Some(binding) = repo
+            .find(
+                &active.meta.id.0,
+                &principal.client.id,
+                "start_content_index",
+                idempotency_key,
+            )
+            .map_err(CommandError::from_typed_service_error)?
+        {
+            if binding.arguments_sha256 != arguments_sha256 {
+                return Err(CommandError::conflict("幂等键已用于其他内容索引请求"));
+            }
+            let task =
+                app_services::evidence_tasks::get(connection, &active.meta.id, &binding.task_id)?;
+            let _ = state
+                .mcp_host
+                .register_task_owner(&task.task_id, &principal.client.id)
+                .map_err(CommandError::from_typed_service_error)?;
+            return serialize_task(task);
+        }
+    }
     let app = state
         .app_handle()
         .ok_or_else(|| CommandError::internal("桌面应用句柄尚未初始化"))?;
@@ -324,15 +364,50 @@ fn start_content_index(
         state.clone(),
         app,
         transport::dto::EvidenceTaskRequestDto::ContentIndex {
-            data_source_id: input.data_source_id,
+            data_source_id: input.data_source_id.clone(),
         },
     )?;
-    if let Some(principal) = invocation.principal.as_ref() {
+    if let Some(principal) = principal {
         let _ = state
             .mcp_host
             .register_task_owner(&task.task_id, &principal.client.id)
             .map_err(CommandError::from_typed_service_error)?;
+        if let (Some(idempotency_key), Some(connection)) = (
+            input.idempotency_key.as_deref(),
+            binding_connection.as_ref(),
+        ) {
+            let binding = persistence_sqlite::repositories::mcp_task_binding_repo::McpTaskBinding {
+                case_id: active.meta.id.0.clone(),
+                case_session_id: active.session_id.clone(),
+                principal_id: principal.client.id.clone(),
+                operation: "start_content_index".into(),
+                idempotency_key: idempotency_key.into(),
+                arguments_sha256,
+                task_id: task.task_id.clone(),
+            };
+            let selected =
+                persistence_sqlite::repositories::mcp_task_binding_repo::McpTaskBindingRepo::new(
+                    connection,
+                )
+                .insert_or_get(&binding)
+                .map_err(CommandError::from_typed_service_error)?;
+            if selected.task_id != task.task_id {
+                let _ = crate::evidence_task_jobs::cancel(state, &task.task_id);
+                let existing = app_services::evidence_tasks::get(
+                    connection,
+                    &active.meta.id,
+                    &selected.task_id,
+                )?;
+                return serialize_task(existing);
+            }
+        }
     }
+    serialize_task(task)
+}
+
+fn serialize_task(
+    task: transport::dto::EvidenceTaskDto,
+) -> Result<McpHostToolCallResultDto, CommandError> {
     let value =
         serde_json::to_value(task).map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(tool_response(Ok(value)))
