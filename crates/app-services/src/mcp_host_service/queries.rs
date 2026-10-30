@@ -85,6 +85,15 @@ pub fn execute_tool(
         "forensics.get_content_index_coverage" => {
             super::content_index::get_content_index_coverage(&context, arguments)
         }
+        "forensics.list_report_templates" => {
+            serde_json::to_value(crate::report::get_report_templates())
+                .map_err(McpHostServiceError::from)
+        }
+        "forensics.get_report_history" => serde_json::to_value(crate::report::get_report_history(
+            context.connection,
+            &context.case_meta.id.0,
+        ))
+        .map_err(McpHostServiceError::from),
         _ => Err(McpHostServiceError::InvalidInput),
     }
 }

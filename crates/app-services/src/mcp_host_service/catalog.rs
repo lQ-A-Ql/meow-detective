@@ -83,6 +83,18 @@ fn core_tools() -> Vec<McpHostToolDto> {
             json!({"dataSourceId":identifier(), "categories":{"type":"array","maxItems":32,"items":identifier()}, "idempotencyKey":{"type":"string","minLength":1,"maxLength":128}}),
             vec!["dataSourceId"],
         ),
+        (
+            "forensics.list_report_templates",
+            "读取当前版本支持的报告模板。",
+            json!({}),
+            vec![],
+        ),
+        (
+            "forensics.get_report_history",
+            "读取当前案件已生成报告的历史记录。",
+            json!({}),
+            vec![],
+        ),
     ]
     .into_iter()
     .map(|(name, description, properties, required)| tool(name, description, properties, required))
