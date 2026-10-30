@@ -65,6 +65,12 @@ fn core_tools() -> Vec<McpHostToolDto> {
             json!({"jobId":identifier()}),
             vec!["jobId"],
         ),
+        (
+            "forensics.start_content_index",
+            "为指定数据源创建内容索引任务并返回任务标识。",
+            json!({"dataSourceId":identifier()}),
+            vec!["dataSourceId"],
+        ),
     ]
     .into_iter()
     .map(|(name, description, properties, required)| tool(name, description, properties, required))
@@ -143,7 +149,12 @@ fn file_tools() -> Vec<McpHostToolDto> {
     ]
     .into_iter()
     .map(|(name, description, properties, required)| {
-        if name == "forensics.extract_file" || name == "forensics.cancel_job" {
+        if matches!(
+            name,
+            "forensics.extract_file"
+                | "forensics.cancel_job"
+                | "forensics.start_content_index"
+        ) {
             tool_with_access(name, description, properties, required, false, true)
         } else {
             tool(name, description, properties, required)

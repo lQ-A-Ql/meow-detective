@@ -24,6 +24,9 @@ pub(crate) fn builder() -> tauri::Builder<tauri::Wry> {
             crate::app_update::startup::acknowledge_boot();
             cache_invalidation::register(app.handle().clone());
             let state = app.state::<AppState>().inner().clone();
+            state
+                .set_app_handle(app.handle().clone())
+                .map_err(std::io::Error::other)?;
             tauri::async_runtime::spawn(async move {
                 state.mcp_host.clone().initialize(state).await;
             });

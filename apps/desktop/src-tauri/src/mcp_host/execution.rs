@@ -211,6 +211,9 @@ fn query_active_case(
     if request.name == "forensics.cancel_job" {
         return cancel_job(state, active, request, invocation);
     }
+    if request.name == "forensics.start_content_index" {
+        return start_content_index(state, request, invocation);
+    }
     if request.name == "forensics.extract_file" {
         let conn = app_services::connection::open_existing_case_db(&active.db_path())
             .map_err(CommandError::from_typed_service_error)?;
@@ -304,6 +307,35 @@ fn cancel_job(
         "cancelRequested": changed,
         "status": job.status,
     }))))
+}
+
+fn start_content_index(
+    state: &AppState,
+    request: &McpHostToolCallRequestDto,
+    invocation: &Invocation,
+) -> Result<McpHostToolCallResultDto, CommandError> {
+    let input: transport::dto::mcp_host::McpHostStartContentIndexRequestDto =
+        serde_json::from_value(request.arguments.clone())
+            .map_err(|_| CommandError::invalid_input("内容索引数据源无效"))?;
+    let app = state
+        .app_handle()
+        .ok_or_else(|| CommandError::internal("桌面应用句柄尚未初始化"))?;
+    let task = crate::evidence_task_jobs::start(
+        state.clone(),
+        app,
+        transport::dto::EvidenceTaskRequestDto::ContentIndex {
+            data_source_id: input.data_source_id,
+        },
+    )?;
+    if let Some(principal) = invocation.principal.as_ref() {
+        let _ = state
+            .mcp_host
+            .register_task_owner(&task.task_id, &principal.client.id)
+            .map_err(CommandError::from_typed_service_error)?;
+    }
+    Ok(tool_response(serde_json::to_value(task).map_err(|error| {
+        CommandError::internal(error.to_string())
+    })))
 }
 
 fn dispatch_tool(

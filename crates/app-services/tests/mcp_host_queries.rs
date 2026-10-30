@@ -87,7 +87,7 @@ fn current_case_sources_and_details_share_real_service_queries_with_no_host_path
 #[test]
 fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
     let catalog = tool_catalog();
-    assert_eq!(catalog.len(), 44);
+    assert_eq!(catalog.len(), 45);
     for name in [
         "forensics.get_analysis_system_info",
         "forensics.get_file_classification_board",
@@ -108,6 +108,7 @@ fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
         "forensics.list_jobs",
         "forensics.get_job",
         "forensics.cancel_job",
+        "forensics.start_content_index",
         "forensics.list_linux_services",
         "forensics.list_docker_containers",
         "forensics.list_docker_images",

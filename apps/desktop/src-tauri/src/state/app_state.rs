@@ -3,8 +3,9 @@ use app_services::bitlocker_runtime::BitLockerUnlockRegistry;
 use app_services::bitlocker_service::BitLockerKeyStore;
 use runtime_cache::RuntimeCache;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
+use tauri::AppHandle;
 use tokio::sync::RwLock;
 
 use super::bitlocker_dictionary::BitLockerDictionaryAttackRegistry;
@@ -19,6 +20,7 @@ const APP_CODE_NAME: &str = "Meow_Detective";
 /// Application state shared across Tauri commands.
 #[derive(Clone)]
 pub struct AppState {
+    pub(crate) app_handle: Arc<OnceLock<AppHandle>>,
     pub(crate) app_update: Arc<crate::app_update::UpdateRuntime>,
     /// Currently active case (if any).
     pub active_case: Arc<Mutex<Option<ActiveCase>>>,
@@ -63,6 +65,7 @@ impl Default for AppState {
         let runtime_cache = RuntimeCache::open_in_memory().expect("runtime cache must initialize");
 
         Self {
+            app_handle: Arc::new(OnceLock::new()),
             app_update: Arc::new(crate::app_update::UpdateRuntime::default()),
             active_case: Arc::new(Mutex::new(None)),
             read_pool: Arc::new(Mutex::new(None)),
@@ -87,6 +90,16 @@ impl Default for AppState {
 }
 
 impl AppState {
+    pub fn set_app_handle(&self, app: AppHandle) -> Result<(), String> {
+        self.app_handle
+            .set(app)
+            .map_err(|_| "application handle is already initialized".to_string())
+    }
+
+    pub fn app_handle(&self) -> Option<AppHandle> {
+        self.app_handle.get().cloned()
+    }
+
     pub fn clear_runtime_cache_for_case(&self, case_id: &str) -> Result<u64, String> {
         let cache = self
             .runtime_cache

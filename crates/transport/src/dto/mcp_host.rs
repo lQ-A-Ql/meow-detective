@@ -60,6 +60,12 @@ pub struct McpHostJobRequestDto {
     pub job_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct McpHostStartContentIndexRequestDto {
+    pub data_source_id: String,
+}
+
 fn empty_arguments() -> serde_json::Value {
     serde_json::json!({})
 }

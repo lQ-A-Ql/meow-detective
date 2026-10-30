@@ -88,7 +88,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     .unwrap();
     assert_eq!(result["id"], "tool-list");
     let tools = result["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 44);
+    assert_eq!(tools.len(), 45);
     assert!(tools
         .iter()
         .any(|tool| tool["name"] == "forensics.extract_file"));

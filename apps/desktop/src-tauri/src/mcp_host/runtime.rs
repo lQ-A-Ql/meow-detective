@@ -59,13 +59,16 @@ impl McpHostRuntime {
         &self,
         task_id: &str,
         principal_id: &str,
-    ) -> Result<(), McpHostError> {
+    ) -> Result<bool, McpHostError> {
         let mut owners = self.task_owners.lock().map_err(|_| McpHostError::State)?;
+        if let Some(owner) = owners.get(task_id) {
+            return Ok(owner == principal_id);
+        }
         if owners.len() >= 128 && !owners.contains_key(task_id) {
-            return Err(McpHostError::State);
+            return Ok(false);
         }
         owners.insert(task_id.to_owned(), principal_id.to_owned());
-        Ok(())
+        Ok(true)
     }
 
     pub fn owns_task(&self, task_id: &str, principal_id: &str) -> Result<bool, McpHostError> {

@@ -49,7 +49,10 @@ impl McpPrincipal {
     }
 
     pub fn allows(&self, tool: &McpHostToolDto) -> bool {
-        let derived_tool = matches!(tool.name.as_str(), "forensics.cancel_job");
+        let derived_tool = matches!(
+            tool.name.as_str(),
+            "forensics.cancel_job" | "forensics.start_content_index"
+        );
         self.active()
             && (tool.read_only && (tool.name != "forensics.read_file" || self.client.read_evidence)
                 || tool.name == "forensics.extract_file"
