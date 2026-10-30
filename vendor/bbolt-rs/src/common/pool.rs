@@ -1,6 +1,9 @@
 use parking_lot::Mutex;
-use std::mem::{forget, ManuallyDrop};
+#[cfg(test)]
+use std::mem::forget;
+use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
+#[cfg(test)]
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -28,6 +31,7 @@ impl<T> SyncPool<T> {
     })
   }
 
+  #[cfg(test)]
   pub fn with_capacity<I: Fn() -> T + 'static, R: Fn(&mut T) + 'static>(
     cap: usize, init: I, reset: R,
   ) -> Arc<SyncPool<T>> {
@@ -44,10 +48,12 @@ impl<T> SyncPool<T> {
     })
   }
 
+  #[cfg(test)]
   pub fn len(&self) -> usize {
     self.objects.lock().len()
   }
 
+  #[cfg(test)]
   pub fn is_empty(&self) -> bool {
     self.objects.lock().is_empty()
   }
@@ -71,6 +77,7 @@ impl<T> SyncPool<T>
 where
   T: Default,
 {
+  #[cfg(test)]
   pub fn pin_default() -> Arc<SyncPool<Pin<Box<T>>>> {
     Arc::new(SyncPool {
       objects: Mutex::new(Vec::new()),
@@ -108,6 +115,7 @@ impl<T> SyncReusable<T> {
     }
   }
 
+  #[cfg(test)]
   pub fn detach(mut self) -> T {
     let (pool, object) = unsafe { self.take() };
     drop(pool);

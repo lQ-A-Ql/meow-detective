@@ -20,6 +20,7 @@ pub struct MappedLeafPage {
 }
 
 impl MappedLeafPage {
+  #[cfg(test)]
   pub unsafe fn new(bytes: *mut u8) -> MappedLeafPage {
     MappedLeafPage {
       bytes,
@@ -48,6 +49,7 @@ impl CoerciblePage for MappedLeafPage {
     LEAF_PAGE_FLAG
   }
 
+  #[cfg(test)]
   fn own(bytes: *mut u8) -> MappedLeafPage {
     let mut page = unsafe { Self::new(bytes) };
     page.set_leaf();
@@ -75,6 +77,7 @@ pub struct LeafPageElement {
 }
 
 impl LeafPageElement {
+  #[cfg(test)]
   pub(crate) fn new(flags: u32, pos: u32, key_size: u32, value_size: u32) -> LeafPageElement {
     LeafPageElement {
       flags,

@@ -29,20 +29,20 @@ pub type HashSet<'tx, K> = hashbrown::HashSet<K, DefaultHashBuilder, &'tx Bump>;
 
 pub(crate) trait SplitRef<R, B, W>: Copy + Clone {
   /// Access the read section of the struct
-  fn split_r(&self) -> cell::Ref<R>;
+  fn split_r(&self) -> cell::Ref<'_, R>;
 
   /// Access the read and optional write section of the struct
-  fn split_ref(&self) -> (cell::Ref<R>, cell::Ref<Option<W>>);
+  fn split_ref(&self) -> (cell::Ref<'_, R>, cell::Ref<'_, Option<W>>);
 
   /// Access the option write section of the struct
-  fn split_ow(&self) -> cell::Ref<Option<W>>;
+  fn split_ow(&self) -> cell::Ref<'_, Option<W>>;
 
   /// Access the bound section of the struct
   fn split_bound(&self) -> B;
 
   /// Mutably access the read section of the struct
-  fn split_r_mut(&self) -> cell::RefMut<R>;
+  fn split_r_mut(&self) -> cell::RefMut<'_, R>;
 
   /// Mutably access the option write section of the struct
-  fn split_ow_mut(&self) -> cell::RefMut<Option<W>>;
+  fn split_ow_mut(&self) -> cell::RefMut<'_, Option<W>>;
 }

@@ -26,11 +26,12 @@ use parking_lot::{Mutex, RwLockReadGuard, RwLockUpgradableReadGuard};
 use std::alloc::Layout;
 use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
-use std::io::Write;
 use std::marker::PhantomData;
 use std::mem;
 use std::mem::MaybeUninit;
-use std::ops::{Deref, SubAssign};
+use std::ops::Deref;
+#[cfg(test)]
+use std::ops::SubAssign;
 use std::pin::Pin;
 use std::ptr::{addr_of, addr_of_mut};
 use std::slice::from_raw_parts_mut;
@@ -633,12 +634,14 @@ impl TxStats {
     self.inc_write_time(rhs.write_time());
   }
 
+  #[cfg(test)]
   pub(crate) fn add(&self, rhs: &TxStats) -> TxStats {
     let add = self.clone();
     add.add_assign(rhs);
     add
   }
 
+  #[cfg(test)]
   pub(crate) fn sub_assign(&self, rhs: &TxStats) {
     self.inc_page_count(-rhs.page_count());
     self.inc_page_alloc(-rhs.page_alloc());
@@ -654,6 +657,7 @@ impl TxStats {
     self.write_time.lock().sub_assign(rhs.write_time());
   }
 
+  #[cfg(test)]
   pub(crate) fn sub(&self, rhs: &TxStats) -> TxStats {
     let sub = self.clone();
     sub.sub_assign(rhs);
@@ -816,6 +820,7 @@ pub(crate) trait TxIApi<'tx> {
 pub(crate) trait TxRwIApi<'tx>: TxIApi<'tx> + TxICheck<'tx> {
   fn freelist_free_page(self, txid: TxId, p: &PageHeader);
 
+  #[cfg(test)]
   fn root_bucket_mut(self) -> BucketCell<'tx>;
 
   fn allocate(
@@ -873,16 +878,16 @@ pub struct TxCell<'tx> {
 }
 
 impl<'tx> SplitRef<TxR<'tx>, BucketCell<'tx>, TxW<'tx>> for TxCell<'tx> {
-  fn split_r(&self) -> Ref<TxR<'tx>> {
+  fn split_r(&self) -> Ref<'_, TxR<'tx>> {
     Ref::map(self.cell.borrow(), |c| &c.r)
   }
 
-  fn split_ref(&self) -> (Ref<TxR<'tx>>, Ref<Option<TxW<'tx>>>) {
+  fn split_ref(&self) -> (Ref<'_, TxR<'tx>>, Ref<'_, Option<TxW<'tx>>>) {
     let (r, w) = Ref::map_split(self.cell.borrow(), |b| (&b.r, &b.w));
     (r, w)
   }
 
-  fn split_ow(&self) -> Ref<Option<TxW<'tx>>> {
+  fn split_ow(&self) -> Ref<'_, Option<TxW<'tx>>> {
     Ref::map(self.cell.borrow(), |c| &c.w)
   }
 
@@ -891,11 +896,11 @@ impl<'tx> SplitRef<TxR<'tx>, BucketCell<'tx>, TxW<'tx>> for TxCell<'tx> {
     self.cell.bound()
   }
 
-  fn split_r_mut(&self) -> RefMut<TxR<'tx>> {
+  fn split_r_mut(&self) -> RefMut<'_, TxR<'tx>> {
     RefMut::map(self.cell.borrow_mut(), |c| &mut c.r)
   }
 
-  fn split_ow_mut(&self) -> RefMut<Option<TxW<'tx>>> {
+  fn split_ow_mut(&self) -> RefMut<'_, Option<TxW<'tx>>> {
     RefMut::map(self.cell.borrow_mut(), |c| &mut c.w)
   }
 }
@@ -1062,6 +1067,7 @@ impl<'tx> TxRwIApi<'tx> for TxCell<'tx> {
     self.cell.borrow().r.db.free_page(txid, p)
   }
 
+  #[cfg(test)]
   fn root_bucket_mut(self) -> BucketCell<'tx> {
     self.split_bound()
   }
@@ -1834,14 +1840,15 @@ pub(crate) mod check {
   use crate::common::refstack::RefStack;
   use crate::common::{BVec, HashMap, HashSet, PgId, SplitRef, ZERO_PGID};
   use crate::db::DbIApi;
-  use crate::tx::{TxCell, TxIApi, TxImpl, TxR, TxRef, TxRwIApi, TxRwImpl, TxRwRef, TxW};
+  use crate::tx::{TxCell, TxIApi, TxImpl, TxR, TxRef, TxRwImpl, TxRwRef, TxW};
 
   pub(crate) trait UnsealTx<'tx> {
     fn unseal(&self) -> impl TxIApi<'tx> + TxICheck<'tx>;
   }
 
+  #[cfg(test)]
   pub(crate) trait UnsealRwTx<'tx>: UnsealTx<'tx> {
-    fn unseal_rw(&self) -> impl TxRwIApi<'tx>;
+    fn unseal_rw(&self) -> impl crate::tx::TxRwIApi<'tx>;
   }
 
   impl<'tx> UnsealTx<'tx> for TxImpl<'tx> {
@@ -1872,16 +1879,18 @@ pub(crate) mod check {
     }
   }
 
+  #[cfg(test)]
   impl<'tx> UnsealRwTx<'tx> for TxRwImpl<'tx> {
     #[inline]
-    fn unseal_rw(&self) -> impl TxRwIApi<'tx> {
+    fn unseal_rw(&self) -> impl crate::tx::TxRwIApi<'tx> {
       TxCell { cell: self.tx.cell }
     }
   }
 
+  #[cfg(test)]
   impl<'tx> UnsealRwTx<'tx> for TxRwRef<'tx> {
     #[inline]
-    fn unseal_rw(&self) -> impl TxRwIApi<'tx> {
+    fn unseal_rw(&self) -> impl crate::tx::TxRwIApi<'tx> {
       self.tx
     }
   }

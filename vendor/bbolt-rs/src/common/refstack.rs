@@ -11,10 +11,11 @@ impl<'a, T> RefStack<'a, T> {
     RefStack::Root(value)
   }
 
-  pub fn push(&self, value: T) -> RefStack<T> {
+  pub fn push(&self, value: T) -> RefStack<'_, T> {
     RefStack::Extend(self, value)
   }
 
+  #[cfg(test)]
   pub fn len(&self) -> usize {
     match self {
       RefStack::Root(_) => 1,
@@ -22,6 +23,7 @@ impl<'a, T> RefStack<'a, T> {
     }
   }
 
+  #[cfg(test)]
   pub fn get(&self) -> &T {
     match self {
       RefStack::Root(value) => value,

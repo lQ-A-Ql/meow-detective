@@ -83,7 +83,7 @@ where
   ///   Ok(())
   /// }
   /// ```
-  fn begin(&self) -> crate::Result<impl TxApi>;
+  fn begin(&self) -> crate::Result<impl TxApi<'_>>;
 
   #[cfg(feature = "try-begin")]
   fn try_begin(&self) -> crate::Result<Option<impl TxApi>>;
@@ -219,7 +219,7 @@ pub trait DbRwAPI: DbApi {
   ///   Ok(())
   /// }
   /// ```
-  fn begin_rw(&mut self) -> crate::Result<impl TxRwApi>;
+  fn begin_rw(&mut self) -> crate::Result<impl TxRwApi<'_>>;
 
   #[cfg(feature = "try-begin")]
   fn try_begin_rw(&self) -> crate::Result<Option<impl TxRwApi>>;
@@ -408,6 +408,7 @@ impl DbStats {
     self.open_tx_n.load(Ordering::Acquire)
   }
 
+  #[cfg(test)]
   pub(crate) fn sub(&self, rhs: &DbStats) -> DbStats {
     let diff = self.clone();
     diff.inc_tx_n(-rhs.tx_n());
@@ -545,7 +546,7 @@ pub(crate) trait DBBackend: Send + Sync {
   fn fsync(&self) -> crate::Result<()>;
   fn write_all_at(&self, buffer: &[u8], offset: u64) -> crate::Result<usize>;
 
-  fn freelist(&self) -> MutexGuard<Freelist>;
+  fn freelist(&self) -> MutexGuard<'_, Freelist>;
 }
 
 struct ClosedBackend {}
@@ -587,7 +588,7 @@ impl DBBackend for ClosedBackend {
     unreachable!()
   }
 
-  fn freelist(&self) -> MutexGuard<Freelist> {
+  fn freelist(&self) -> MutexGuard<'_, Freelist> {
     unreachable!()
   }
 }
@@ -596,9 +597,6 @@ struct MemBackend {
   mmap: Mutex<AlignedBytes<alignment::Page>>,
   freelist: OnceLock<Mutex<Freelist>>,
   page_size: usize,
-  alloc_size: u64,
-  /// current on disk file size
-  file_size: u64,
   data_size: u64,
 }
 
@@ -669,7 +667,7 @@ impl DBBackend for MemBackend {
     Ok(written)
   }
 
-  fn freelist(&self) -> MutexGuard<Freelist> {
+  fn freelist(&self) -> MutexGuard<'_, Freelist> {
     self
       .freelist
       .get_or_init(|| {
@@ -705,33 +703,20 @@ impl DerefMut for FileState {
 }
 
 pub struct FileBackend {
-  path: Arc<PathBuf>,
   file: Mutex<FileState>,
   page_size: usize,
   mmap: Option<MmapRaw>,
   freelist: OnceLock<Mutex<Freelist>>,
   alloc_size: u64,
   data_size: u64,
+  #[cfg(mlock_supported)]
   use_mlock: bool,
   grow_async: bool,
   read_only: bool,
 }
 
 impl FileBackend {
-  fn invalidate(&mut self) {
-    self.data_size = 0;
-  }
-
-  fn munmap(&mut self) -> crate::Result<()> {
-    self.mmap = None;
-    self.invalidate();
-    Ok(())
-  }
-
-  fn has_synced_free_list(&self) -> bool {
-    self.meta().free_list() != PGID_NO_FREE_LIST
-  }
-
+  #[cfg(mlock_supported)]
   fn mmap_unlock(&mut self) -> crate::Result<()> {
     #[cfg(mlock_supported)]
     if let Some(mmap) = &mut self.mmap {
@@ -740,6 +725,7 @@ impl FileBackend {
     Ok(())
   }
 
+  #[cfg(mlock_supported)]
   fn mmap_lock(&mut self) -> crate::Result<()> {
     #[cfg(mlock_supported)]
     if let Some(mmap) = &mut self.mmap {
@@ -748,6 +734,7 @@ impl FileBackend {
     Ok(())
   }
 
+  #[cfg(mlock_supported)]
   fn mmap_relock(&mut self) -> crate::Result<()> {
     self.mmap_unlock()?;
     self.mmap_lock()?;
@@ -922,7 +909,7 @@ impl DBBackend for FileBackend {
     let mut size = file_size.max(min_size);
 
     size = mmap_size(self.page_size, size)?;
-    if let Some(mmap) = self.mmap.take() {
+    if let Some(_mmap) = self.mmap.take() {
       #[cfg(mlock_supported)]
       if self.use_mlock {
         mmap.unlock()?;
@@ -968,7 +955,7 @@ impl DBBackend for FileBackend {
       .map(|_| buffer.len())
   }
 
-  fn freelist(&self) -> MutexGuard<Freelist> {
+  fn freelist(&self) -> MutexGuard<'_, Freelist> {
     self
       .freelist
       .get_or_init(|| {
@@ -1414,25 +1401,8 @@ pub struct BoltOptions {
 
 impl BoltOptions {
   #[inline]
-  pub(crate) fn timeout(&self) -> Option<Duration> {
-    #[cfg(timeout_supported)]
-    {
-      self.timeout
-    }
-    #[cfg(not(timeout_supported))]
-    {
-      None
-    }
-  }
-
-  #[inline]
   pub(crate) fn no_grow_sync(&self) -> bool {
     self.no_grow_sync
-  }
-
-  #[inline]
-  pub(crate) fn no_freelist_sync(&self) -> bool {
-    self.no_freelist_sync
   }
 
   #[inline]
@@ -1459,16 +1429,10 @@ impl BoltOptions {
     self.no_sync
   }
 
+  #[cfg(mlock_supported)]
   #[inline]
   pub(crate) fn mlock(&self) -> bool {
-    #[cfg(mlock_supported)]
-    {
-      self.mlock
-    }
-    #[cfg(not(mlock_supported))]
-    {
-      false
-    }
+    self.mlock
   }
 
   #[inline]
@@ -1589,15 +1553,6 @@ struct Batcher {
 }
 
 impl Batcher {
-  fn new(db: Weak<InnerDB>, max_batch_delay: Duration, max_batch_size: u32) -> Arc<Batcher> {
-    Arc::new(Batcher {
-      inner: Default::default(),
-      db,
-      max_batch_delay,
-      max_batch_size,
-    })
-  }
-
   fn inner<'a>(self: &'a Arc<Batcher>) -> &'a InnerBatcher {
     self.inner.get_or_init(move || InnerBatcher::new(self))
   }
@@ -1749,13 +1704,13 @@ impl Bolt {
     mmap.advise(Advice::Random)?;
 
     let backend = FileBackend {
-      path: Arc::new(path.into()),
       file: Mutex::new(FileState { file, file_size }),
       page_size,
       mmap: Some(mmap),
       freelist: OnceLock::new(),
       alloc_size: DEFAULT_ALLOC_SIZE.bytes() as u64,
       data_size,
+      #[cfg(mlock_supported)]
       use_mlock: bolt_options.mlock(),
       grow_async: !bolt_options.no_grow_sync(),
       read_only,
@@ -1788,8 +1743,6 @@ impl Bolt {
       mmap: Mutex::new(mmap),
       freelist: OnceLock::new(),
       page_size,
-      alloc_size: DEFAULT_ALLOC_SIZE.bytes() as u64,
-      file_size,
       data_size,
     };
     let backend = Box::new(backend);
@@ -1892,7 +1845,7 @@ impl Bolt {
     buffer
   }
 
-  fn init(path: &Path, db: &mut File, page_size: usize) -> io::Result<usize> {
+  fn init(_path: &Path, db: &mut File, page_size: usize) -> io::Result<usize> {
     let buffer = Bolt::init_page(page_size);
     #[cfg(unix)]
     {
@@ -1914,7 +1867,7 @@ impl Bolt {
     Ok(())
   }
 
-  pub(crate) fn begin_tx(&self) -> crate::Result<TxImpl> {
+  pub(crate) fn begin_tx(&self) -> crate::Result<TxImpl<'_>> {
     let mut state = self.inner.db_state.lock();
     Bolt::require_open(&state)?;
     let lock = self.inner.db.read();
@@ -1955,7 +1908,7 @@ impl Bolt {
     }
   }
 
-  pub(crate) fn begin_rw_tx(&mut self) -> crate::Result<TxRwImpl> {
+  pub(crate) fn begin_rw_tx(&mut self) -> crate::Result<TxRwImpl<'_>> {
     let lock = self.inner.db.upgradable_read();
     let mut state = self.inner.db_state.lock();
     Bolt::require_open(&state)?;
@@ -1990,7 +1943,7 @@ impl Bolt {
 }
 
 impl DbApi for Bolt {
-  fn begin(&self) -> crate::Result<impl TxApi> {
+  fn begin(&self) -> crate::Result<impl TxApi<'_>> {
     self.begin_tx()
   }
 
@@ -2049,7 +2002,7 @@ impl DbApi for Bolt {
 }
 
 impl DbRwAPI for Bolt {
-  fn begin_rw(&mut self) -> crate::Result<impl TxRwApi> {
+  fn begin_rw(&mut self) -> crate::Result<impl TxRwApi<'_>> {
     self.begin_rw_tx()
   }
 

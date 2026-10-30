@@ -1078,16 +1078,16 @@ impl<'tx> PartialEq for BucketCell<'tx> {
 impl<'tx> Eq for BucketCell<'tx> {}
 
 impl<'tx> SplitRef<BucketR<'tx>, TxCell<'tx>, BucketW<'tx>> for BucketCell<'tx> {
-  fn split_r(&self) -> Ref<BucketR<'tx>> {
+  fn split_r(&self) -> Ref<'_, BucketR<'tx>> {
     Ref::map(self.cell.borrow(), |b| &b.r)
   }
 
-  fn split_ref(&self) -> (Ref<BucketR<'tx>>, Ref<Option<BucketW<'tx>>>) {
+  fn split_ref(&self) -> (Ref<'_, BucketR<'tx>>, Ref<'_, Option<BucketW<'tx>>>) {
     let (r, w) = Ref::map_split(self.cell.borrow(), |b| (&b.r, &b.w));
     (r, w)
   }
 
-  fn split_ow(&self) -> Ref<Option<BucketW<'tx>>> {
+  fn split_ow(&self) -> Ref<'_, Option<BucketW<'tx>>> {
     Ref::map(self.cell.borrow(), |b| &b.w)
   }
 
@@ -1095,11 +1095,11 @@ impl<'tx> SplitRef<BucketR<'tx>, TxCell<'tx>, BucketW<'tx>> for BucketCell<'tx> 
     self.cell.bound()
   }
 
-  fn split_r_mut(&self) -> RefMut<BucketR<'tx>> {
+  fn split_r_mut(&self) -> RefMut<'_, BucketR<'tx>> {
     RefMut::map(self.cell.borrow_mut(), |b| &mut b.r)
   }
 
-  fn split_ow_mut(&self) -> RefMut<Option<BucketW<'tx>>> {
+  fn split_ow_mut(&self) -> RefMut<'_, Option<BucketW<'tx>>> {
     RefMut::map(self.cell.borrow_mut(), |b| &mut b.w)
   }
 }
@@ -2737,7 +2737,11 @@ mod tests {
 
       //TODO: Fails if page_size != 4096? Db.Info?
       assert_eq!(0, stats.branch_alloc, "unexpected BranchAlloc");
-      assert_eq!((page_size::get() * 2) as i64, stats.leaf_alloc, "unexpected LeafAlloc");
+      assert_eq!(
+        (page_size::get() * 2) as i64,
+        stats.leaf_alloc,
+        "unexpected LeafAlloc"
+      );
 
       assert_eq!(3, stats.bucket_n, "unexpected BucketN");
       assert_eq!(1, stats.inline_bucket_n, "unexpected InlineBucketN");

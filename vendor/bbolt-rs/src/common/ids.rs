@@ -81,6 +81,7 @@ id!(
 );
 
 /// Create a PgId
+#[cfg(test)]
 pub(crate) const fn pd(id: u64) -> PgId {
   PgId(id)
 }

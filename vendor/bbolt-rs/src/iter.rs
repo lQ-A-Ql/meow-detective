@@ -3,7 +3,6 @@ use crate::common::page::tree::leaf::BUCKET_LEAF_FLAG;
 use crate::cursor::{CursorIApi, InnerCursor};
 use crate::tx::TxIApi;
 use crate::{BucketApi, BucketImpl, BucketRwImpl, TxImpl, TxRef, TxRwImpl, TxRwRef};
-use itertools::rev;
 use std::marker::PhantomData;
 
 #[derive(Clone)]

@@ -21,6 +21,7 @@ pub struct MappedBranchPage {
 }
 
 impl MappedBranchPage {
+  #[cfg(test)]
   pub unsafe fn new(bytes: *mut u8) -> MappedBranchPage {
     MappedBranchPage {
       bytes,
@@ -49,6 +50,7 @@ impl CoerciblePage for MappedBranchPage {
     BRANCH_PAGE_FLAG
   }
 
+  #[cfg(test)]
   fn own(bytes: *mut u8) -> MappedBranchPage {
     let mut page = unsafe { Self::new(bytes) };
     page.set_branch();

@@ -31,6 +31,7 @@ pub trait CoerciblePage {
   /// Take "ownership" of page pointer.
   // TODO: Rename because we're not owning the pointer in the memory sense,
   // but rather as a type
+  #[cfg(test)]
   fn own(bytes: *mut u8) -> Self;
 
   /// Const cast a [RefPage] into a specific page type
@@ -76,6 +77,7 @@ pub trait CoerciblePage {
 
   /// Mut cast a [MutPage] into a specific page type if the type matches
   #[inline]
+  #[cfg(test)]
   fn coerce_mut<'a>(mapped_page: &'a mut MutPage<'_>) -> Option<&'a mut Self>
   where
     Self: Sized,
@@ -188,11 +190,13 @@ impl Eq for PageHeader {}
 
 impl PageHeader {
   #[inline]
+  #[cfg(test)]
   pub fn set_branch(&mut self) {
     self.flags = BRANCH_PAGE_FLAG;
   }
 
   #[inline]
+  #[cfg(test)]
   pub fn set_leaf(&mut self) {
     self.flags = LEAF_PAGE_FLAG;
   }
@@ -203,6 +207,7 @@ impl PageHeader {
   }
 
   #[inline]
+  #[cfg(test)]
   pub fn set_free_list(&mut self) {
     self.flags = FREE_LIST_PAGE_FLAG;
   }

@@ -114,6 +114,7 @@ impl CoerciblePage for MappedMetaPage {
     META_PAGE_FLAG
   }
 
+  #[cfg(test)]
   fn own(bytes: *mut u8) -> MappedMetaPage {
     let mut page = unsafe { Self::new(bytes) };
     page.page.set_meta();

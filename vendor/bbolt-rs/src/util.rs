@@ -1,12 +1,21 @@
-use crate::common::page::meta::{MappedMetaPage, MetaPage};
+#[cfg(test)]
+use crate::common::page::meta::MappedMetaPage;
+#[cfg(test)]
 use crate::common::page::{CoerciblePage, MutPage};
+#[cfg(test)]
 use crate::common::SplitRef;
 use crate::iter::{DbWalker, ValueBucketSeq};
-use crate::tx::{TxCell, TxIApi};
-use crate::{Bolt, BucketRwApi, DbApi, DbPath, PgId, TxRwApi, TxRwRefApi};
+#[cfg(test)]
+use crate::tx::TxCell;
+use crate::tx::TxIApi;
+#[cfg(test)]
+use crate::PgId;
+use crate::{Bolt, BucketRwApi, DbApi, DbPath, TxRwApi, TxRwRefApi};
+#[cfg(test)]
 use aligners::{alignment, AlignedBytes};
+#[cfg(test)]
 use std::fs::OpenOptions;
-use std::ops::Deref;
+#[cfg(test)]
 use std::path::Path;
 
 #[cfg(test)]

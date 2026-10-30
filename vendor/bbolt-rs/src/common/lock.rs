@@ -56,7 +56,7 @@ pub enum LockGuard<'a, T> {
 }
 
 impl<'a, T> LockGuard<'a, T> {
-  pub fn get_mut(&self) -> Option<RefMut<T>> {
+  pub fn get_mut(&self) -> Option<RefMut<'_, T>> {
     match self {
       LockGuard::R(_) => None,
       LockGuard::U(cell) => Some(RefMut::map(cell.borrow_mut(), |guard| guard.deref_mut())),

@@ -23,6 +23,7 @@ pub struct MappedFreeListPage {
 }
 
 impl MappedFreeListPage {
+  #[cfg(test)]
   pub unsafe fn new(bytes: *mut u8) -> MappedFreeListPage {
     MappedFreeListPage {
       bytes,
@@ -30,6 +31,7 @@ impl MappedFreeListPage {
     }
   }
 
+  #[cfg(test)]
   pub fn init(bytes: *mut u8) -> MappedFreeListPage {
     let mut page = unsafe { Self::new(bytes) };
     page.set_free_list();
@@ -57,6 +59,7 @@ impl CoerciblePage for MappedFreeListPage {
     FREE_LIST_PAGE_FLAG
   }
 
+  #[cfg(test)]
   fn own(bytes: *mut u8) -> Self {
     let mut page = unsafe { Self::new(bytes) };
     page.set_free_list();

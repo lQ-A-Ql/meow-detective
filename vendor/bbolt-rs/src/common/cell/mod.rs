@@ -1,8 +1,14 @@
+#[cfg(feature = "allgasnobrakes")]
 use std::cell::UnsafeCell;
+#[cfg(feature = "allgasnobrakes")]
 use std::cmp::Ordering;
+#[cfg(feature = "allgasnobrakes")]
 use std::fmt;
+#[cfg(feature = "allgasnobrakes")]
 use std::marker::PhantomData;
+#[cfg(feature = "allgasnobrakes")]
 use std::ops::{Deref, DerefMut};
+#[cfg(feature = "allgasnobrakes")]
 use std::ptr::NonNull;
 
 #[cfg(not(feature = "allgasnobrakes"))]
@@ -11,10 +17,12 @@ pub use std::cell::{Ref, RefCell, RefMut};
 #[cfg(feature = "allgasnobrakes")]
 pub use {UnsafeRef as Ref, UnsafeRefCell as RefCell, UnsafeRefMut as RefMut};
 
+#[cfg(feature = "allgasnobrakes")]
 pub struct UnsafeRefCell<T: ?Sized> {
   value: UnsafeCell<T>,
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T> UnsafeRefCell<T> {
   #[inline]
   pub const fn new(value: T) -> UnsafeRefCell<T> {
@@ -24,6 +32,7 @@ impl<T> UnsafeRefCell<T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: ?Sized> UnsafeRefCell<T> {
   #[inline]
   pub fn borrow(&self) -> UnsafeRef<'_, T> {
@@ -42,8 +51,10 @@ impl<T: ?Sized> UnsafeRefCell<T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 unsafe impl<T: ?Sized> Send for UnsafeRefCell<T> where T: Send {}
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: Clone> Clone for UnsafeRefCell<T> {
   #[inline]
   fn clone(&self) -> Self {
@@ -51,6 +62,7 @@ impl<T: Clone> Clone for UnsafeRefCell<T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: Default> Default for UnsafeRefCell<T> {
   #[inline]
   fn default() -> Self {
@@ -58,6 +70,7 @@ impl<T: Default> Default for UnsafeRefCell<T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: ?Sized + PartialEq> PartialEq for UnsafeRefCell<T> {
   #[inline]
   fn eq(&self, other: &Self) -> bool {
@@ -65,8 +78,10 @@ impl<T: ?Sized + PartialEq> PartialEq for UnsafeRefCell<T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: ?Sized + Eq> Eq for UnsafeRefCell<T> {}
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: ?Sized + PartialOrd> PartialOrd for UnsafeRefCell<T> {
   #[inline]
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -94,6 +109,7 @@ impl<T: ?Sized + PartialOrd> PartialOrd for UnsafeRefCell<T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: ?Sized + Ord> Ord for UnsafeRefCell<T> {
   #[inline]
   fn cmp(&self, other: &Self) -> Ordering {
@@ -101,17 +117,20 @@ impl<T: ?Sized + Ord> Ord for UnsafeRefCell<T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T> From<T> for UnsafeRefCell<T> {
   fn from(value: T) -> Self {
     UnsafeRefCell::new(value)
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 pub struct UnsafeRef<'b, T: ?Sized> {
   value: NonNull<T>,
   marker: PhantomData<&'b T>,
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: ?Sized> Deref for UnsafeRef<'_, T> {
   type Target = T;
 
@@ -120,6 +139,7 @@ impl<T: ?Sized> Deref for UnsafeRef<'_, T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<'b, T: ?Sized> UnsafeRef<'b, T> {
   #[inline]
   pub fn map<U: ?Sized, F>(orig: UnsafeRef<'b, T>, f: F) -> UnsafeRef<'b, U>
@@ -153,16 +173,19 @@ impl<'b, T: ?Sized> UnsafeRef<'b, T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: ?Sized + fmt::Display> fmt::Display for UnsafeRef<'_, T> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     (**self).fmt(f)
   }
 }
+#[cfg(feature = "allgasnobrakes")]
 pub struct UnsafeRefMut<'b, T: ?Sized> {
   value: NonNull<T>,
   marker: PhantomData<&'b mut T>,
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: ?Sized> Deref for UnsafeRefMut<'_, T> {
   type Target = T;
 
@@ -172,6 +195,7 @@ impl<T: ?Sized> Deref for UnsafeRefMut<'_, T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: ?Sized> DerefMut for UnsafeRefMut<'_, T> {
   #[inline]
   fn deref_mut(&mut self) -> &mut Self::Target {
@@ -179,6 +203,7 @@ impl<T: ?Sized> DerefMut for UnsafeRefMut<'_, T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<'b, T: ?Sized> UnsafeRefMut<'b, T> {
   #[inline]
   pub fn map<U: ?Sized, F>(mut orig: UnsafeRefMut<'b, T>, f: F) -> UnsafeRefMut<'b, U>
@@ -213,6 +238,7 @@ impl<'b, T: ?Sized> UnsafeRefMut<'b, T> {
   }
 }
 
+#[cfg(feature = "allgasnobrakes")]
 impl<T: ?Sized + fmt::Display> fmt::Display for UnsafeRefMut<'_, T> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     (**self).fmt(f)
