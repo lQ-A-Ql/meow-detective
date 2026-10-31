@@ -1,6 +1,7 @@
 mod diagnostics;
 mod discovery;
 mod expansion;
+mod mdraid;
 mod model;
 pub(super) mod source_identity;
 mod unsupported;

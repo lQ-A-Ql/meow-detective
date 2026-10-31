@@ -3213,6 +3213,43 @@ fn pve_cluster_multi_pv_lvm_expands_across_members() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real multi-PV Linux E01 sample directory"]
+fn pve_cluster_nested_mdraid_members_are_reported() {
+    let root = pve_cluster_root();
+    let plan = plan_linux_evidence_set_import(&root, Some("mdraid".to_string()))
+        .expect("MD RAID evidence set should be planned");
+    let mut diagnostics = Vec::new();
+    for (member, config) in plan.members.iter().zip(plan.member_import_configs()) {
+        let mut reader = E01Reader::open(&member.source_path).expect("open E01 member");
+        let mut probe = detect_image_filesystem(&mut reader).expect("probe E01 member");
+        expand_lvm_pool_candidates_with_sources(
+            &mut probe,
+            &member.source_path,
+            &member.source_kind,
+            &config.lvm_extra_sources,
+        );
+        diagnostics.extend(
+            probe
+                .warnings
+                .into_iter()
+                .filter(|warning| warning.contains("nested MD RAID candidate detected")),
+        );
+    }
+    assert!(
+        diagnostics
+            .iter()
+            .any(|warning| warning.contains("member=0/2")),
+        "MD RAID member 0 should be reported: {diagnostics:?}"
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|warning| warning.contains("member=1/2")),
+        "MD RAID member 1 should be reported: {diagnostics:?}"
+    );
+}
+
+#[test]
 #[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real PVE cluster E01 sample directory"]
 fn pve_cluster_e01_lvm_probe_has_explicit_diagnostics() {
     let root = pve_cluster_root();

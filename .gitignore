@@ -86,6 +86,8 @@ AGENTS.md
 !/docs/export-and-media-safety.md
 !/docs/ipc-event-contract.md
 !/docs/known-unsupported-formats.md
+!/docs/lv-mapping-and-mdraid-development.md
+!/docs/lv-raid-evidence-analysis.md
 !/docs/mcp-security-model.md
 !/docs/parser-support-matrix.md
 !/docs/plugin-development-contract.md

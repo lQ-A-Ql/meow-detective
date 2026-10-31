@@ -11,6 +11,14 @@ pub(super) fn classify_unsupported_logical_volume(
     logical_volume: &fs_lvm::LvInfo,
     expanded: &ExpandedPoolSources,
 ) {
+    if let Some(superblock) = super::mdraid::probe_nested_mdraid(lv_reader) {
+        probe.warnings.push(format!(
+            "LVM expand: nested MD RAID candidate detected; {}; {}",
+            lvm_lv_diagnostic_context(volume_group, logical_volume, &expanded.sources),
+            super::mdraid::format_mdraid_candidate(&superblock)
+        ));
+        return;
+    }
     match super::super::has_bluestore_label(lv_reader) {
         Ok(true) => record_bluestore_volume(probe, volume_group, logical_volume, expanded),
         Ok(false) => record_unknown_volume(probe, volume_group, logical_volume, expanded),

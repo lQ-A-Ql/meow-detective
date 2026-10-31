@@ -4,6 +4,7 @@ pub mod crc;
 pub mod error;
 pub mod label;
 pub mod lv_reader;
+pub mod mdraid;
 pub mod metadata;
 mod pool;
 mod pool_thin;
