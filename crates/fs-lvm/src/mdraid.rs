@@ -132,16 +132,25 @@ pub fn read_superblock<R: Read + Seek + ?Sized>(
 
 pub struct MdRaid0Reader {
     members: Vec<MdRaidMember>,
-    by_number: Vec<usize>,
+    zones: Vec<Raid0Zone>,
     info: ReaderInfo,
     chunk_bytes: u64,
+    layout: u32,
     logical_size: u64,
     position: u64,
+}
+
+struct Raid0Zone {
+    logical_start: u64,
+    logical_end: u64,
+    device_start: u64,
+    members: Vec<usize>,
 }
 
 impl MdRaid0Reader {
     pub fn open(members: Vec<MdRaidMember>) -> Result<Self, MdRaidError> {
         let first = members.first().ok_or(MdRaidError::EmptyMembers)?;
+        let first_layout = first.superblock.layout;
         if first.superblock.raid_disks == 0 {
             return Err(MdRaidError::EmptyMembers);
         }
@@ -153,7 +162,7 @@ impl MdRaid0Reader {
         }
         let chunk_bytes = first.superblock.chunk_bytes()?;
         let mut by_number = vec![usize::MAX; members.len()];
-        let mut member_data_size = u64::MAX;
+        let mut member_sizes = vec![0u64; members.len()];
         for (index, member) in members.iter().enumerate() {
             let sb = &member.superblock;
             if !sb.is_raid0() {
@@ -174,7 +183,8 @@ impl MdRaid0Reader {
                 return Err(MdRaidError::NonContiguousMembers);
             }
             by_number[number] = index;
-            member_data_size = member_data_size.min(sb.data_size_sectors);
+            member_sizes[number] =
+                sb.data_size_sectors / u64::from(sb.chunk_sectors) * u64::from(sb.chunk_sectors);
             let data_end = sb
                 .data_offset_sectors
                 .checked_add(sb.data_size_sectors)
@@ -185,23 +195,25 @@ impl MdRaid0Reader {
                 return Err(MdRaidError::InvalidDataRange);
             }
         }
-        if by_number.contains(&usize::MAX) || member_data_size == 0 {
+        if by_number.contains(&usize::MAX) || member_sizes.contains(&0) {
             return Err(MdRaidError::NonContiguousMembers);
         }
-        let logical_size = member_data_size
-            .checked_mul(u64::from(first.superblock.raid_disks))
-            .and_then(|sectors| sectors.checked_mul(SECTOR_SIZE))
-            .ok_or(MdRaidError::SizeOverflow)?;
+        let zones = build_zones(&member_sizes, chunk_bytes, &by_number)?;
+        let logical_size = zones
+            .last()
+            .map(|zone| zone.logical_end)
+            .ok_or(MdRaidError::EmptyMembers)?;
         let array_id = format_hex(&first.superblock.array_uuid);
         Ok(Self {
             members,
-            by_number,
+            zones,
             info: ReaderInfo {
                 path: PathBuf::from(format!("mdraid0://{array_id}")),
                 size: logical_size,
                 kind: "Linux MD RAID0".to_string(),
             },
             chunk_bytes,
+            layout: first_layout,
             logical_size,
             position: 0,
         })
@@ -214,16 +226,28 @@ impl MdRaid0Reader {
     fn read_at_inner(&mut self, mut logical: u64, mut output: &mut [u8]) -> std::io::Result<usize> {
         let mut total = 0usize;
         while !output.is_empty() && logical < self.logical_size {
-            let stripe = logical / self.chunk_bytes;
-            let within = logical % self.chunk_bytes;
-            let member_number = (stripe % self.by_number.len() as u64) as usize;
-            let member_index = self.by_number[member_number];
+            let zone = self
+                .zones
+                .iter()
+                .find(|zone| logical < zone.logical_end)
+                .ok_or_else(|| std::io::Error::other("MD RAID logical offset is outside zones"))?;
+            let zone_logical = logical - zone.logical_start;
+            let stripe = zone_logical / self.chunk_bytes;
+            let within = zone_logical % self.chunk_bytes;
+            let global_stripe = logical / self.chunk_bytes;
+            let member_number = if self.layout_is_original() {
+                (global_stripe as usize) % zone.members.len()
+            } else {
+                (stripe as usize) % zone.members.len()
+            };
+            let member_index = zone.members[member_number];
             let member = &mut self.members[member_index];
-            let member_chunk = stripe / self.by_number.len() as u64;
+            let member_chunk = stripe / zone.members.len() as u64;
             let member_offset = member
                 .superblock
                 .data_offset_sectors
                 .checked_mul(SECTOR_SIZE)
+                .and_then(|base| base.checked_add(zone.device_start))
                 .and_then(|base| base.checked_add(member_chunk.checked_mul(self.chunk_bytes)?))
                 .and_then(|base| base.checked_add(within))
                 .ok_or_else(|| std::io::Error::other("MD RAID offset overflow"))?;
@@ -238,6 +262,54 @@ impl MdRaid0Reader {
         }
         Ok(total)
     }
+
+    fn layout_is_original(&self) -> bool {
+        self.layout == 1
+    }
+}
+
+fn build_zones(
+    member_sizes: &[u64],
+    chunk_bytes: u64,
+    by_number: &[usize],
+) -> Result<Vec<Raid0Zone>, MdRaidError> {
+    let mut thresholds = member_sizes.to_vec();
+    thresholds.sort_unstable();
+    thresholds.dedup();
+    let mut zones = Vec::new();
+    let mut device_start_sectors = 0u64;
+    let mut logical_start = 0u64;
+    let chunk_sectors = chunk_bytes / SECTOR_SIZE;
+    for threshold in thresholds {
+        let members = member_sizes
+            .iter()
+            .enumerate()
+            .filter_map(|(number, size)| (*size >= threshold).then_some(by_number[number]))
+            .collect::<Vec<_>>();
+        if members.is_empty() || threshold <= device_start_sectors || chunk_sectors == 0 {
+            continue;
+        }
+        let zone_sectors = threshold
+            .checked_sub(device_start_sectors)
+            .and_then(|length| length.checked_mul(members.len() as u64))
+            .ok_or(MdRaidError::SizeOverflow)?;
+        let logical_end = logical_start
+            .checked_add(
+                zone_sectors
+                    .checked_mul(SECTOR_SIZE)
+                    .ok_or(MdRaidError::SizeOverflow)?,
+            )
+            .ok_or(MdRaidError::SizeOverflow)?;
+        zones.push(Raid0Zone {
+            logical_start,
+            logical_end,
+            device_start: device_start_sectors * SECTOR_SIZE,
+            members,
+        });
+        logical_start = logical_end;
+        device_start_sectors = threshold;
+    }
+    Ok(zones)
 }
 
 impl Read for MdRaid0Reader {
