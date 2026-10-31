@@ -3316,6 +3316,14 @@ fn pve_cluster_mdraid_reader_exposes_btrfs_root() {
         .expect("reassembled @rootfs /etc/passwd should be readable");
     assert!(!passwd.is_empty());
     assert!(passwd.windows(5).any(|window| window == b"root:"));
+    for path in ["@rootfs/etc/os-release", "@rootfs/etc/hostname"] {
+        assert!(
+            !fs.read_file_range(path, 0, 512)
+                .expect("Linux identity file should be readable")
+                .is_empty(),
+            "{path} should return bytes"
+        );
+    }
 }
 
 #[test]
