@@ -21,9 +21,9 @@ struct RunningServer {
 }
 
 pub struct McpHostRuntime {
+    pub(super) access: Mutex<app_services::mcp_host_service::access::McpAccessRegistry>,
     pub(super) admission: Arc<super::admission::Admission>,
     pub(super) execution_cancel: Mutex<CancellationToken>,
-    pub(super) access: Mutex<app_services::mcp_host_service::access::McpAccessRegistry>,
     settings: Mutex<McpHostSettingsDto>,
     running: Mutex<Option<RunningServer>>,
     last_error: Mutex<Option<String>>,
@@ -45,9 +45,9 @@ pub struct McpHostRuntime {
 impl Default for McpHostRuntime {
     fn default() -> Self {
         Self {
+            access: Mutex::new(Default::default()),
             admission: Arc::new(Default::default()),
             execution_cancel: Mutex::new(CancellationToken::new()),
-            access: Mutex::new(Default::default()),
             settings: Mutex::new(McpHostSettingsDto::default()),
             running: Mutex::new(None),
             last_error: Mutex::new(None),
@@ -176,11 +176,6 @@ impl McpHostRuntime {
 
     pub async fn initialize(&self, state: AppState) {
         let _operation = self.operation.lock().await;
-        if let Err(error) = self.load_access(&state) {
-            self.fail_closed();
-            self.record_error(error.to_string());
-            return;
-        }
         let settings = load_settings(&state);
         match settings {
             Ok(mut settings) => {

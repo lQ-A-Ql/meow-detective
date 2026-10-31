@@ -78,26 +78,6 @@
     "loading": "Loading…"
   },
   "mcpUi": {
-    "access": {
-      "title": "Client access",
-      "name": "Client name",
-      "hours": "Lifetime (hours)",
-      "readEvidence": "Allow file content reads",
-      "dataSources": "Allowed data source IDs",
-      "dataSourcesPlaceholder": "Separate with commas or spaces",
-      "dataSourceCount": "{{count}} data source(s)",
-      "exportDirectories": "Authorized export directories",
-      "exportDirectoriesPlaceholder": "One directory per line, up to 8",
-      "exportCount": "{{count}} export directorie(s)",
-      "create": "Grant access to current case",
-      "queryScope": "Case queries",
-      "contentScope": "Case queries and file reads",
-      "expires": "Expires: {{value}}",
-      "revoke": "Revoke access for {{name}}",
-      "credential": "Connection credential",
-      "credentialDescription": "This credential is displayed once. Configure the client's Authorization header with Bearer followed by this credential. Closing or reopening the case requires a new grant.",
-      "copy": "Copy connection credential"
-    },
     "host": {
       "enable": "Enable local MCP service",
       "running": "Running",

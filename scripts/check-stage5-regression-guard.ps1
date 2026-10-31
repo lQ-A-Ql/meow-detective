@@ -141,9 +141,9 @@ $hostCommandNames = @(
   [regex]::Matches($mcpCommands, '#\[tauri::command\]\s*pub\s+async\s+fn\s+(\w+)') |
     ForEach-Object { $_.Groups[1].Value } | Sort-Object
 )
-$expectedHostCommands = @('call_mcp_host_tool', 'create_mcp_host_client', 'get_mcp_host_status', 'list_mcp_host_clients', 'list_mcp_host_tools', 'revoke_mcp_host_client', 'set_mcp_host_settings')
+$expectedHostCommands = @('call_mcp_host_tool', 'get_mcp_host_status', 'list_mcp_host_tools', 'set_mcp_host_settings')
 if (($hostCommandNames -join ',') -cne ($expectedHostCommands -join ',')) {
-  throw "MCP command surface must match the embedded host and client-access commands"
+  throw "MCP command surface must match the embedded host commands"
 }
 
 Assert-NotMatches `
@@ -187,10 +187,8 @@ foreach ($pattern in @(
 }
 
 foreach ($pattern in @(
-    'typed_get::<Authorization<Bearer>>\(\)',
-    'access\.authenticate\(bearer\.token\(\)\)',
-    'principal\.client\.case_session_id',
-    'headers_mut\(\)[\s\S]{0,80}remove\(axum::http::header::AUTHORIZATION\)'
+    'active_case',
+    'McpPrincipal'
   )) {
   Assert-Matches `
     -Content $mcpAuthorization `
@@ -201,12 +199,12 @@ foreach ($pattern in @(
 Assert-Matches `
   -Content $mcpHandler `
   -Pattern 'from_fn_with_state\([\s\S]{0,100}authorization::authenticate' `
-  -Message "MCP HTTP requests must pass through client authentication"
+  -Message "MCP HTTP requests must pass through the local case boundary"
 
 Assert-Matches `
   -Content $mcpHandler `
   -Pattern '\.filter\(\|tool\| principal\.allows\(tool\)\)' `
-  -Message "MCP tool discovery must respect client permissions"
+  -Message "MCP tool discovery must respect local client policy"
 
 # Staging merges must not use INSERT OR IGNORE in the merge-to-main path. Silent
 # conflict suppression hides missing/duplicate rows and lets staging partitions be

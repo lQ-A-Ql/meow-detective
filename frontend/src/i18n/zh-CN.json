@@ -78,26 +78,6 @@
     "loading": "加载中…"
   },
   "mcpUi": {
-    "access": {
-      "title": "客户端授权",
-      "name": "客户端名称",
-      "hours": "有效期（小时）",
-      "readEvidence": "允许读取文件内容",
-      "dataSources": "允许的数据源 ID",
-      "dataSourcesPlaceholder": "用逗号或空格分隔",
-      "dataSourceCount": "{{count}} 个数据源",
-      "exportDirectories": "授权导出目录",
-      "exportDirectoriesPlaceholder": "每行一个目录，最多 8 个",
-      "exportCount": "{{count}} 个导出目录",
-      "create": "授权当前案件",
-      "queryScope": "案件查询",
-      "contentScope": "案件查询与文件读取",
-      "expires": "到期时间：{{value}}",
-      "revoke": "撤销 {{name}} 的授权",
-      "credential": "连接凭据",
-      "credentialDescription": "凭据仅展示一次。客户端连接时在 Authorization 请求头中填写 Bearer 和此凭据。关闭或重新打开案件后需要重新授权。",
-      "copy": "复制连接凭据"
-    },
     "host": {
       "enable": "启用本机 MCP 服务",
       "running": "运行中",

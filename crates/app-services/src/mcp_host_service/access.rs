@@ -43,6 +43,23 @@ pub struct McpPrincipal {
 }
 
 impl McpPrincipal {
+    pub fn open_case(case_id: String, session_id: String) -> Self {
+        Self {
+            client: McpHostClientDto {
+                id: "anonymous".into(),
+                name: "本机 MCP 客户端".into(),
+                case_id,
+                case_session_id: session_id,
+                expires_at: i64::MAX,
+                read_evidence: true,
+                run_derived: true,
+                allowed_data_source_ids: Vec::new(),
+                export_grants: Vec::new(),
+            },
+            revoked: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
     pub fn active(&self) -> bool {
         !self.revoked.load(Ordering::Acquire)
             && self.client.expires_at > chrono::Utc::now().timestamp()

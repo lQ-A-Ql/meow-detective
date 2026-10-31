@@ -4,7 +4,6 @@ use serde_json::{json, Value};
 use std::time::Instant;
 use transport::dto::mcp_host::McpHostToolCallRequestDto;
 
-mod access;
 mod files;
 
 #[tokio::test]
@@ -298,7 +297,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
         app_services::case_service::create_case(temporary.path(), "Second Case", None).unwrap(),
     );
     let result = request(&endpoint, token, json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"forensics.list_data_sources","arguments":{}}})).await;
-    assert_eq!(result.status(), 403);
+    assert_eq!(result.status(), 200);
     state.mcp_host.shutdown();
     tokio::task::yield_now().await;
     assert!(!state.mcp_host.status().unwrap().running);

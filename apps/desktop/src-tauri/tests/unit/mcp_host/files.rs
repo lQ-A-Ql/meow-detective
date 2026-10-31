@@ -109,7 +109,7 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
     assert_eq!(wrong_source["isError"], true);
     assert_eq!(
         wrong_source["structuredContent"]["error"]["category"],
-        "security"
+        "validation"
     );
     let disabled_extract = call(
         &endpoint,
@@ -201,7 +201,7 @@ async fn http_files_return_evidence_bytes_audit_calls_and_enforce_policy_and_cas
         case_service::create_case(&temporary.path().join("cases"), "Other Case", None).unwrap(),
     );
     let stale = request(&endpoint, token, json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"forensics.read_file","arguments":{"fileId":file_id}}})).await;
-    assert_eq!(stale.status(), 403);
+    assert_eq!(stale.status(), 200);
     assert_eq!(
         std::fs::read(temporary.path().join("evidence/proof.txt")).unwrap(),
         b"MCP byte proof"
