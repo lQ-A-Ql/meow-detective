@@ -66,7 +66,10 @@ fn execute_source_tool(
         | "forensics.get_browser_history_summary"
         | "forensics.get_email_summary"
         | "forensics.get_event_log_events"
-        | "forensics.get_linux_artifact_summary" => execute_paged_tool(context, name, arguments),
+        | "forensics.get_linux_artifact_summary"
+        | "forensics.list_linux_services"
+        | "forensics.list_docker_containers"
+        | "forensics.list_docker_images" => execute_paged_tool(context, name, arguments),
         "forensics.get_android_device_info"
         | "forensics.get_android_package_summary"
         | "forensics.get_plugin_family_entries" => {

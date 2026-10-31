@@ -63,6 +63,18 @@ export interface McpHostToolCallResult {
   errorDetails?: import('./common').ApiErrorDto;
 }
 
+export interface McpHostMetrics {
+  activeRequests: number;
+  queuedRequests: number;
+  totalCalls: number;
+  successfulCalls: number;
+  failedCalls: number;
+  cancelledCalls: number;
+  averageDurationMs: number;
+  currentRssMb: number;
+  peakRssMb: number;
+}
+
 export interface McpHostListFilesRequest {
   dataSourceId: string;
   parentId?: string;

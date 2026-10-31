@@ -109,6 +109,18 @@
       "retry": "重试启动",
       "title": "内置取证工具"
     },
+    "activity": {
+      "title": "任务和调用状态",
+      "refresh": "刷新任务和调用状态",
+      "unavailable": "无法读取任务或调用状态，请检查当前案件和工具设置。",
+      "active": "执行中：{{count}}",
+      "queued": "等待中：{{count}}",
+      "calls": "调用次数：{{count}}",
+      "failed": "失败次数：{{count}}",
+      "average": "平均耗时：{{value}} 毫秒",
+      "rss": "内存：{{current}}/{{peak}} MiB",
+      "empty": "当前案件暂无任务"
+    },
     "tools": {
       "title": "可用 Tools",
       "enabled": "已启用 {{enabled}}/{{total}}",

@@ -106,6 +106,8 @@ impl McpHostRuntime {
             average_duration_ms: total_duration_ms
                 .checked_div(total_calls)
                 .unwrap_or_default(),
+            current_rss_mb: app_services::runtime_resources::current_rss_mb(),
+            peak_rss_mb: app_services::runtime_resources::peak_rss_mb(),
         }
     }
 

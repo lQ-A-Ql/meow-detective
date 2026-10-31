@@ -122,6 +122,8 @@ pub struct McpHostMetricsDto {
     pub cancelled_calls: u64,
     pub total_duration_ms: u64,
     pub average_duration_ms: u64,
+    pub current_rss_mb: u64,
+    pub peak_rss_mb: u64,
 }
 
 pub const MCP_FILE_PAGE_LIMIT: u32 = 200;

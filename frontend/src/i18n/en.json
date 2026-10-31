@@ -109,6 +109,18 @@
       "retry": "Retry start",
       "title": "Built-in forensic tools"
     },
+    "activity": {
+      "title": "Tasks and calls",
+      "refresh": "Refresh tasks and calls",
+      "unavailable": "Unable to read tasks or call status. Check the current case and tool settings.",
+      "active": "Active: {{count}}",
+      "queued": "Queued: {{count}}",
+      "calls": "Calls: {{count}}",
+      "failed": "Failed: {{count}}",
+      "average": "Average duration: {{value}} ms",
+      "rss": "RSS: {{current}}/{{peak}} MiB",
+      "empty": "No tasks in the current case"
+    },
     "tools": {
       "title": "Available tools",
       "enabled": "Enabled {{enabled}}/{{total}}",
