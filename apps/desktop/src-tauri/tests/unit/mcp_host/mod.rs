@@ -1,10 +1,54 @@
 use super::*;
 use crate::state::AppState;
 use serde_json::{json, Value};
+use std::time::Instant;
 use transport::dto::mcp_host::McpHostToolCallRequestDto;
 
 mod access;
 mod files;
+
+#[tokio::test]
+async fn http_query_performance_records_p95_and_runtime_metrics() {
+    let (state, endpoint, temporary) = server().await;
+    let active =
+        app_services::case_service::create_case(temporary.path(), "MCP performance", None).unwrap();
+    *state.active_case.lock().unwrap() = Some(active);
+    let created = grant(&state, true);
+    let mut samples = Vec::new();
+    for request_id in 0..20 {
+        let started = Instant::now();
+        let response = request(
+            &endpoint,
+            &created.token,
+            json!({"jsonrpc":"2.0","id":request_id,"method":"tools/call","params":{"name":"forensics.get_current_case","arguments":{}}}),
+        )
+        .await;
+        assert_eq!(response.status(), 200);
+        let payload: Value = response.json().await.unwrap();
+        assert_eq!(payload["result"]["isError"], false);
+        samples.push(started.elapsed().as_millis() as u64);
+    }
+    samples.sort_unstable();
+    let p95 = samples[(samples.len() * 95 / 100).saturating_sub(1)];
+    let metrics: Value = request(
+        &endpoint,
+        &created.token,
+        json!({"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"forensics.get_mcp_metrics","arguments":{}}}),
+    )
+    .await
+    .json()
+    .await
+    .unwrap();
+    println!(
+        "MCP_PERF samples={} p95_ms={} average_ms={} total_calls={}",
+        samples.len(),
+        p95,
+        metrics["result"]["structuredContent"]["averageDurationMs"],
+        metrics["result"]["structuredContent"]["totalCalls"]
+    );
+    assert!(p95 < 5_000);
+    state.mcp_host.shutdown();
+}
 
 pub(super) fn grant(
     state: &AppState,
