@@ -3282,7 +3282,7 @@ fn pve_cluster_mdraid_plan_groups_members_across_vgs() {
 
 #[test]
 #[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real multi-PV Linux E01 sample directory"]
-fn pve_cluster_mdraid_reader_exposes_btrfs_superblock_before_multidevice_mapping() {
+fn pve_cluster_mdraid_reader_exposes_btrfs_root() {
     let root = pve_cluster_root();
     let plan = plan_linux_evidence_set_import(&root, Some("mdraid-btrfs".to_string()))
         .expect("MD RAID evidence set should be planned");
