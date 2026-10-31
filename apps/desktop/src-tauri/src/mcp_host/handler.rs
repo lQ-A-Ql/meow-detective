@@ -9,14 +9,19 @@ use rmcp::{
         CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock,
         GetPromptRequestParams, GetPromptResponse, Implementation, ListPromptsResult,
         ListResourceTemplatesResult, ListResourcesResult, ListToolsResult, PaginatedRequestParams,
-        Prompt, PromptMessage, ReadResourceRequestParams, ReadResourceResponse, Resource,
-        ResourceContents, ResourceTemplate, Role, ServerCapabilities, ServerConfig, Tool,
+        Prompt, PromptArgument, PromptMessage, ReadResourceRequestParams, ReadResourceResponse,
+        Resource, ResourceContents, ResourceTemplate, Role, ServerCapabilities, ServerConfig, Tool,
         ToolAnnotations,
     },
     service::{RequestContext, RoleServer},
     ErrorData, ServerHandler,
 };
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+mod task_monitor;
+use task_monitor::wait_for_background_task;
 use tokio_util::sync::CancellationToken;
 use transport::dto::mcp_host::McpHostToolCallRequestDto;
 
@@ -24,8 +29,8 @@ use transport::dto::mcp_host::McpHostToolCallRequestDto;
 struct HostHandler {
     state: AppState,
     tasks: Arc<TaskManager>,
+    task_owners: Arc<Mutex<HashMap<String, String>>>,
 }
-
 impl ServerHandler for HostHandler {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(
@@ -86,6 +91,7 @@ impl ServerHandler for HostHandler {
         if supports_tasks(&request.name, &context) {
             let state = self.state.clone();
             let principal_for_task = principal.clone();
+            let principal_for_monitor = principal.clone();
             let request_for_task = request.clone();
             let task = self
                 .tasks
@@ -93,7 +99,7 @@ impl ServerHandler for HostHandler {
                     Box::pin(async move {
                         let cancellation = CancellationToken::new();
                         let worker = call_tool_as(
-                            state,
+                            state.clone(),
                             request_for_task,
                             Some(principal_for_task),
                             cancellation.clone(),
@@ -109,6 +115,13 @@ impl ServerHandler for HostHandler {
                         };
                         match result {
                             Ok(result) if result.success => {
+                                let result = wait_for_background_task(
+                                    &state,
+                                    &principal_for_monitor,
+                                    result,
+                                    &task_context,
+                                )
+                                .await?;
                                 Ok(CallToolResult::structured(result.data.expect(
                                     "successful MCP calls must provide structured data",
                                 )))
@@ -118,6 +131,11 @@ impl ServerHandler for HostHandler {
                         }
                     })
                 });
+            let task_id = task.task_id.clone();
+            self.task_owners
+                .lock()
+                .map_err(|_| ErrorData::internal_error("任务授权状态不可用", None))?
+                .insert(task_id, principal.client.id.clone());
             return Ok(rmcp::model::CallToolResponse::from(
                 rmcp::model::CreateTaskResult::new(task),
             ));
@@ -138,118 +156,265 @@ impl ServerHandler for HostHandler {
     fn get_task(
         &self,
         request: rmcp::model::GetTaskParams,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<rmcp::model::GetTaskResult, ErrorData>> + '_ {
-        std::future::ready(
-            self.tasks
-                .get_task(&request.task_id)
-                .map(rmcp::model::GetTaskResult::new),
-        )
+        let result = self
+            .authorize_task(&request.task_id, &context)
+            .and_then(|_| {
+                self.tasks
+                    .get_task(&request.task_id)
+                    .map(rmcp::model::GetTaskResult::new)
+            });
+        if let Ok(principal) = authorization::principal(&context) {
+            super::audit::record_protocol(&self.state, &principal, "mcp.tasks.get", result.is_ok());
+        }
+        std::future::ready(result)
     }
 
     fn update_task(
         &self,
         request: rmcp::model::UpdateTaskParams,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<(), ErrorData>> + '_ {
-        std::future::ready(
-            self.tasks
-                .update_task(&request.task_id, request.input_responses)
-                .map(|_| ()),
-        )
+        let result = self
+            .authorize_task(&request.task_id, &context)
+            .and_then(|_| {
+                self.tasks
+                    .update_task(&request.task_id, request.input_responses)
+                    .map(|_| ())
+            });
+        if let Ok(principal) = authorization::principal(&context) {
+            super::audit::record_protocol(
+                &self.state,
+                &principal,
+                "mcp.tasks.update",
+                result.is_ok(),
+            );
+        }
+        std::future::ready(result)
     }
 
     fn cancel_task(
         &self,
         request: rmcp::model::CancelTaskParams,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<(), ErrorData>> + '_ {
-        std::future::ready(self.tasks.cancel_task(&request.task_id))
+        let result = self.authorize_task(&request.task_id, &context);
+        let result = result.and_then(|_| self.tasks.cancel_task(&request.task_id));
+        if let Ok(principal) = authorization::principal(&context) {
+            super::audit::record_protocol(
+                &self.state,
+                &principal,
+                "mcp.tasks.cancel",
+                result.is_ok(),
+            );
+        }
+        std::future::ready(result)
     }
 
     fn list_resources(
         &self,
         _request: Option<PaginatedRequestParams>,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListResourcesResult, ErrorData>> + '_ {
-        std::future::ready(Ok(ListResourcesResult::with_all_items(vec![
-            Resource::new("forensics://cases/current/overview", "case-overview")
+        let result = authorization::principal(&context).map(|principal| {
+            super::audit::record_protocol(&self.state, &principal, "mcp.resources.list", true);
+            let uri = format!("forensics://cases/{}/overview", principal.client.case_id);
+            ListResourcesResult::with_all_items(vec![Resource::new(uri, "case-overview")
                 .with_title("当前案件概览")
-                .with_description("当前案件的摘要入口，详细数据继续通过工具读取"),
-        ])))
+                .with_description("当前案件概览，只返回当前授权案件的数据")])
+        });
+        std::future::ready(result)
     }
 
     fn list_resource_templates(
         &self,
         _request: Option<PaginatedRequestParams>,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListResourceTemplatesResult, ErrorData>> + '_
     {
-        std::future::ready(Ok(ListResourceTemplatesResult::with_all_items(vec![
-            ResourceTemplate::new(
+        let result = authorization::principal(&context).map(|_| {
+            ListResourceTemplatesResult::with_all_items(vec![ResourceTemplate::new(
                 "forensics://cases/{caseId}/overview",
                 "case-overview-template",
             )
-            .with_title("案件概览资源"),
-        ])))
+            .with_title("案件概览资源")])
+        });
+        if let Ok(principal) = authorization::principal(&context) {
+            super::audit::record_protocol(
+                &self.state,
+                &principal,
+                "mcp.resources.templates",
+                result.is_ok(),
+            );
+        }
+        std::future::ready(result)
     }
 
     fn read_resource(
         &self,
         request: ReadResourceRequestParams,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ReadResourceResponse, ErrorData>> + '_ {
-        let result = if request.uri == "forensics://cases/current/overview"
-            || request.uri.starts_with("forensics://cases/")
-        {
-            Ok(ReadResourceResponse::from(rmcp::model::ReadResourceResult::new(vec![
-                ResourceContents::TextResourceContents {
-                    uri: request.uri,
-                    mime_type: Some("text/plain".into()),
-                    text: "请使用 get_current_case、list_data_sources 和 get_case_overview 获取当前案件数据。".into(),
-                    meta: None,
-                },
-            ])))
-        } else {
-            Err(ErrorData::resource_not_found(request.uri, None))
-        };
-        std::future::ready(result)
+        let state = self.state.clone();
+        let uri = request.uri;
+        let principal = authorization::principal(&context);
+        let cancel = context.ct;
+        Box::pin(async move {
+            let principal = principal?;
+            if !resource_matches_case(&uri, &principal.client.case_id) {
+                super::audit::record_protocol(&state, &principal, "mcp.resources.read", false);
+                return Err(ErrorData::resource_not_found("资源不存在", None));
+            }
+            let request = McpHostToolCallRequestDto {
+                name: "forensics.get_case_overview".into(),
+                arguments: serde_json::json!({}),
+            };
+            let result = call_tool_as(state.clone(), request, Some(principal.clone()), cancel)
+                .await
+                .map_err(|error| ErrorData::internal_error(error.message, None))?;
+            super::audit::record_protocol(&state, &principal, "mcp.resources.read", result.success);
+            if !result.success {
+                return Err(ErrorData::invalid_request(
+                    result.error.unwrap_or_else(|| "资源读取失败".into()),
+                    None,
+                ));
+            }
+            let text = serde_json::to_string(&result.data.unwrap_or_default())
+                .map_err(|_| ErrorData::internal_error("资源编码失败", None))?;
+            Ok(ReadResourceResponse::from(
+                rmcp::model::ReadResourceResult::new(vec![
+                    ResourceContents::TextResourceContents {
+                        uri,
+                        mime_type: Some("application/json".into()),
+                        text,
+                        meta: None,
+                    },
+                ]),
+            ))
+        })
     }
 
     fn list_prompts(
         &self,
         _request: Option<PaginatedRequestParams>,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListPromptsResult, ErrorData>> + '_ {
-        std::future::ready(Ok(ListPromptsResult::with_all_items(vec![
-            Prompt::new("case-overview", Some("案件概览调查模板"), None),
-            Prompt::new(
-                "linux-services-docker",
-                Some("Linux 服务与 Docker 检查模板"),
-                None,
-            ),
-            Prompt::new("timeline-investigation", Some("时间线调查模板"), None),
-        ])))
+        let result = authorization::principal(&context).map(|principal| {
+            super::audit::record_protocol(&self.state, &principal, "mcp.prompts.list", true);
+            ListPromptsResult::with_all_items(vec![
+                Prompt::new(
+                    "case-overview",
+                    Some("案件概览调查模板"),
+                    Some(vec![PromptArgument::new("dataSourceId")]),
+                ),
+                Prompt::new(
+                    "linux-services-docker",
+                    Some("Linux 服务与 Docker 检查模板"),
+                    Some(vec![PromptArgument::new("dataSourceId").with_required(true)]),
+                ),
+                Prompt::new(
+                    "timeline-investigation",
+                    Some("时间线调查模板"),
+                    Some(vec![
+                        PromptArgument::new("dataSourceId"),
+                        PromptArgument::new("from"),
+                        PromptArgument::new("to"),
+                    ]),
+                ),
+            ])
+        });
+        std::future::ready(result)
     }
 
     fn get_prompt(
         &self,
         request: GetPromptRequestParams,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<GetPromptResponse, ErrorData>> + '_ {
-        let description = match request.name.as_str() {
-            "case-overview" => "先读取案件概览和数据源，再根据来源继续调查。",
-            "linux-services-docker" => "读取 Linux 服务、Docker 容器和镜像，再预览来源文件。",
-            "timeline-investigation" => "从时间线、搜索和来源链逐步建立调查线索。",
-            _ => return std::future::ready(Err(ErrorData::invalid_params("未知 Prompt", None))),
-        };
-        std::future::ready(Ok(GetPromptResponse::from(
-            rmcp::model::GetPromptResult::new(vec![PromptMessage::new_text(
-                Role::User,
-                description,
-            )]),
-        )))
+        let principal = authorization::principal(&context);
+        let result = principal
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|principal| {
+                let arguments = request.arguments.unwrap_or_default();
+                validate_prompt_arguments(&request.name, &arguments, principal)?;
+                let uri = format!("forensics://cases/{}/overview", principal.client.case_id);
+                let description = match request.name.as_str() {
+                    "case-overview" => "先读取案件概览和数据源，再根据来源继续调查。",
+                    "linux-services-docker" => {
+                        "读取 Linux 服务、Docker 容器和镜像，再预览来源文件。"
+                    }
+                    "timeline-investigation" => "从时间线、搜索和来源链逐步建立调查线索。",
+                    _ => return Err(ErrorData::invalid_params("未知 Prompt", None)),
+                };
+                Ok(GetPromptResponse::from(rmcp::model::GetPromptResult::new(
+                    vec![
+                        PromptMessage::new_text(Role::User, description),
+                        PromptMessage::new_resource_link(
+                            Role::User,
+                            Resource::new(uri, "case-overview"),
+                        ),
+                    ],
+                )))
+            });
+        if let Ok(principal) = principal {
+            super::audit::record_protocol(
+                &self.state,
+                &principal,
+                "mcp.prompts.get",
+                result.is_ok(),
+            );
+        }
+        std::future::ready(result)
     }
+}
+
+fn resource_matches_case(uri: &str, case_id: &str) -> bool {
+    let expected = format!("forensics://cases/{case_id}/overview");
+    uri == expected || uri == "forensics://cases/current/overview"
+}
+
+fn validate_prompt_arguments(
+    name: &str,
+    arguments: &rmcp::model::JsonObject,
+    principal: &app_services::mcp_host_service::access::McpPrincipal,
+) -> Result<(), ErrorData> {
+    let allowed = match name {
+        "case-overview" => ["dataSourceId"].as_slice(),
+        "linux-services-docker" => ["dataSourceId"].as_slice(),
+        "timeline-investigation" => ["dataSourceId", "from", "to"].as_slice(),
+        _ => return Err(ErrorData::invalid_params("未知 Prompt", None)),
+    };
+    if arguments.keys().any(|key| !allowed.contains(&key.as_str())) {
+        return Err(ErrorData::invalid_params("Prompt 参数无效", None));
+    }
+    let source_id = arguments.get("dataSourceId");
+    if name == "linux-services-docker" && !source_id.is_some_and(serde_json::Value::is_string) {
+        return Err(ErrorData::invalid_params("缺少数据源标识", None));
+    }
+    if source_id.is_some_and(|value| {
+        value
+            .as_str()
+            .is_none_or(|id| id.is_empty() || id.len() > 256)
+    }) {
+        return Err(ErrorData::invalid_params("数据源标识无效", None));
+    }
+    if let Some(source_id) = source_id.and_then(serde_json::Value::as_str) {
+        if !principal.allows_data_source_id(source_id) {
+            return Err(ErrorData::invalid_request("数据源未获授权", None));
+        }
+    }
+    for key in ["from", "to"] {
+        if arguments.get(key).is_some_and(|value| {
+            value.as_str().is_none_or(|text| {
+                text.len() > 64 || chrono::DateTime::parse_from_rfc3339(text).is_err()
+            })
+        }) {
+            return Err(ErrorData::invalid_params("时间范围参数无效", None));
+        }
+    }
+    Ok(())
 }
 
 fn supports_tasks(name: &str, context: &RequestContext<RoleServer>) -> bool {
@@ -278,6 +443,7 @@ fn error_response(result: transport::dto::mcp_host::McpHostToolCallResultDto) ->
 pub(super) fn router(state: AppState, cancel: CancellationToken) -> axum::Router {
     let authorization_state = state.clone();
     let tasks = Arc::new(TaskManager::new());
+    let task_owners = Arc::new(Mutex::new(HashMap::new()));
     let mut config = StreamableHttpServerConfig::default().enforce_origin_validation();
     config.legacy_session_mode = false;
     config.json_response = true;
@@ -289,6 +455,7 @@ pub(super) fn router(state: AppState, cancel: CancellationToken) -> axum::Router
             Ok(HostHandler {
                 state: state.clone(),
                 tasks: tasks.clone(),
+                task_owners: task_owners.clone(),
             })
         },
         Arc::new(LocalSessionManager::default()),
@@ -300,4 +467,22 @@ pub(super) fn router(state: AppState, cancel: CancellationToken) -> axum::Router
             authorization_state,
             authorization::authenticate,
         ))
+}
+
+impl HostHandler {
+    fn authorize_task(
+        &self,
+        task_id: &str,
+        context: &RequestContext<RoleServer>,
+    ) -> Result<app_services::mcp_host_service::access::McpPrincipal, ErrorData> {
+        let principal = authorization::principal(context)?;
+        let owners = self
+            .task_owners
+            .lock()
+            .map_err(|_| ErrorData::internal_error("任务授权状态不可用", None))?;
+        if owners.get(task_id) != Some(&principal.client.id) {
+            return Err(ErrorData::invalid_request("任务不可用", None));
+        }
+        Ok(principal)
+    }
 }

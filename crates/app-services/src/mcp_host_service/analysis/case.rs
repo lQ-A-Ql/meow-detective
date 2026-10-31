@@ -23,13 +23,15 @@ fn default_correlation_limit() -> u32 {
 pub(super) fn case_overview(
     context: &McpHostAnalysisQueryContext<'_>,
 ) -> Result<Value, McpHostServiceError> {
-    crate::v3_governance_service::get_case_overview_snapshot_for_case_read_only(
+    let overview = crate::v3_governance_service::get_case_overview_snapshot_for_case_read_only(
         context.query.connection,
         context.query.case_root,
         &context.query.case_meta.id.0,
     )
-    .map_err(|_| McpHostServiceError::Overview)
-    .and_then(|value| serde_json::to_value(value).map_err(McpHostServiceError::from))
+    .map_err(|_| McpHostServiceError::Overview)?;
+    let mut value = serde_json::to_value(overview)?;
+    value["dataSources"] = super::super::data_sources::list_data_sources(&context.query)?;
+    Ok(value)
 }
 
 pub(super) fn correlation_snapshot(

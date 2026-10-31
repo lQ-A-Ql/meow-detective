@@ -48,6 +48,15 @@ impl McpPrincipal {
             && self.client.expires_at > chrono::Utc::now().timestamp()
     }
 
+    pub fn allows_data_source_id(&self, data_source_id: &str) -> bool {
+        self.client.allowed_data_source_ids.is_empty()
+            || self
+                .client
+                .allowed_data_source_ids
+                .iter()
+                .any(|allowed| allowed == data_source_id)
+    }
+
     pub fn allows(&self, tool: &McpHostToolDto) -> bool {
         let derived_tool = matches!(
             tool.name.as_str(),
@@ -56,8 +65,20 @@ impl McpPrincipal {
                 | "forensics.start_analysis"
                 | "forensics.start_report_export"
         );
+        let evidence_tool = matches!(
+            tool.name.as_str(),
+            "forensics.read_file"
+                | "forensics.get_file_metadata"
+                | "forensics.browse_registry_key"
+                | "forensics.open_registry_hive"
+                | "forensics.resolve_registry_key"
+                | "forensics.list_registry_subkeys"
+                | "forensics.list_registry_values"
+                | "forensics.read_registry_value_range"
+                | "forensics.close_registry_hive"
+        );
         self.active()
-            && (tool.read_only && (tool.name != "forensics.read_file" || self.client.read_evidence)
+            && (tool.read_only && (!evidence_tool || self.client.read_evidence)
                 || tool.name == "forensics.extract_file"
                 || (derived_tool && self.client.run_derived))
     }
@@ -65,6 +86,42 @@ impl McpPrincipal {
     pub fn allows_arguments(&self, tool: &McpHostToolDto, arguments: &serde_json::Value) -> bool {
         if !self.allows(tool) {
             return false;
+        }
+        if !self.client.allowed_data_source_ids.is_empty() {
+            if matches!(
+                tool.name.as_str(),
+                "forensics.get_case_overview"
+                    | "forensics.get_correlation_snapshot"
+                    | "forensics.query_graph"
+                    | "forensics.get_provenance_chain"
+                    | "forensics.get_timeline_events"
+                    | "forensics.get_timeline_event"
+                    | "forensics.get_timeline_facets"
+                    | "forensics.get_report_history"
+                    | "forensics.start_report_export"
+                    | "forensics.resolve_registry_key"
+                    | "forensics.list_registry_subkeys"
+                    | "forensics.list_registry_values"
+                    | "forensics.read_registry_value_range"
+                    | "forensics.close_registry_hive"
+            ) {
+                return false;
+            }
+            if tool.name == "forensics.search_files" {
+                let Some(ids) = arguments
+                    .get("dataSourceIds")
+                    .and_then(serde_json::Value::as_array)
+                else {
+                    return false;
+                };
+                if ids.is_empty()
+                    || ids
+                        .iter()
+                        .any(|id| !id.as_str().is_some_and(|id| self.allows_data_source_id(id)))
+                {
+                    return false;
+                }
+            }
         }
         if tool.name == "forensics.extract_file"
             && (arguments.get("destinationPath").is_some()
@@ -91,14 +148,7 @@ impl McpPrincipal {
                         .map(|id| id.data_source_id.0)
                     })
             });
-        source_id.is_none_or(|id| {
-            self.client.allowed_data_source_ids.is_empty()
-                || self
-                    .client
-                    .allowed_data_source_ids
-                    .iter()
-                    .any(|allowed| allowed == &id)
-        })
+        source_id.is_none_or(|id| self.allows_data_source_id(&id))
     }
 
     pub fn resolve_export_destination(

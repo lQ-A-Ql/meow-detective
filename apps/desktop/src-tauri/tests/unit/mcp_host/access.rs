@@ -28,10 +28,13 @@ async fn http_credentials_enforce_scope_expiry_revocation_and_case_session() {
         .await
         .unwrap();
     let tools = response["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 50);
+    assert_eq!(tools.len(), 42);
     assert!(!tools
         .iter()
         .any(|tool| tool["name"] == "forensics.read_file"));
+    assert!(!tools
+        .iter()
+        .any(|tool| tool["name"] == "forensics.open_registry_hive"));
     let result: Value = request(&endpoint, &created.token, json!({
         "jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"forensics.read_file","arguments":{"fileId":"unknown"}}
     })).await.json().await.unwrap();

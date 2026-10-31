@@ -201,8 +201,37 @@ fn execute_for_active_case(
         Ok(response) => response,
         Err(error) => failure(error),
     };
+    let response = filter_data_source_list(invocation, request, response);
     audit::record_for_active(&active, invocation, &request.name, &response)?;
     Ok(response)
+}
+
+fn filter_data_source_list(
+    invocation: &Invocation,
+    request: &McpHostToolCallRequestDto,
+    mut response: McpHostToolCallResultDto,
+) -> McpHostToolCallResultDto {
+    if request.name != "forensics.list_data_sources" {
+        return response;
+    }
+    let Some(principal) = invocation.principal.as_ref() else {
+        return response;
+    };
+    if principal.client.allowed_data_source_ids.is_empty() {
+        return response;
+    }
+    if let Some(data) = response
+        .data
+        .as_mut()
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        data.retain(|item| {
+            item.get("id")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|id| principal.allows_data_source_id(id))
+        });
+    }
+    response
 }
 
 fn query_active_case(
@@ -234,6 +263,9 @@ fn query_active_case(
     if request.name == "forensics.start_content_index" {
         return start_content_index(state, active, request, invocation);
     }
+    if request.name == "forensics.get_task" {
+        authorize_task_access(state, active, request, invocation)?;
+    }
     if request.name == "forensics.start_analysis" {
         return start_analysis(state, active, request, invocation);
     }
@@ -241,38 +273,7 @@ fn query_active_case(
         return start_report_export(state, active, request, invocation);
     }
     if request.name == "forensics.extract_file" {
-        let conn = app_services::connection::open_existing_case_db(&active.db_path())
-            .map_err(CommandError::from_typed_service_error)?;
-        let mut effective = request.clone();
-        if let Some(principal) = invocation.principal.as_ref() {
-            let destination = principal
-                .resolve_export_destination(
-                    &conn,
-                    &active.case_root,
-                    &active.meta.id,
-                    &request.arguments,
-                )
-                .map_err(|_| CommandError::security("导出目录授权无效"))?;
-            let arguments = effective
-                .arguments
-                .as_object_mut()
-                .ok_or_else(|| CommandError::invalid_input("工具参数必须是对象"))?;
-            arguments.remove("destinationGrantId");
-            arguments.remove("relativePath");
-            arguments.insert(
-                "destinationPath".into(),
-                serde_json::Value::String(destination.to_string_lossy().into_owned()),
-            );
-        }
-        return Ok(tool_response(dispatch_tool(
-            state,
-            McpHostQueryContext {
-                connection: &conn,
-                case_root: &active.case_root,
-                case_meta: &active.meta,
-            },
-            &effective,
-        )));
+        return dispatch_extract_file(state, active, request, invocation);
     }
     let _scope = invocation.reads.enter();
     let conn = rusqlite::Connection::open_with_flags(
@@ -294,6 +295,81 @@ fn query_active_case(
     );
     invocation.check(&request.name, &request.arguments)?;
     Ok(tool_response(result))
+}
+
+fn authorize_task_access(
+    state: &AppState,
+    active: &ActiveCaseSnapshot,
+    request: &McpHostToolCallRequestDto,
+    invocation: &Invocation,
+) -> Result<(), CommandError> {
+    let Some(principal) = invocation.principal.as_ref() else {
+        return Ok(());
+    };
+    let input: transport::dto::mcp_host::McpHostTaskRequestDto =
+        serde_json::from_value(request.arguments.clone())
+            .map_err(|_| CommandError::invalid_input("任务标识无效"))?;
+    let connection = app_services::connection::open_existing_case_db(&active.db_path())
+        .map_err(CommandError::from_typed_service_error)?;
+    let binding_owned =
+        persistence_sqlite::repositories::mcp_task_binding_repo::McpTaskBindingRepo::new(
+            &connection,
+        )
+        .find_owned_task(
+            &active.meta.id.0,
+            &active.session_id,
+            &principal.client.id,
+            &input.task_id,
+        )
+        .map_err(CommandError::from_typed_service_error)?;
+    let memory_owned = state
+        .mcp_host
+        .owns_task(&input.task_id, &principal.client.id)
+        .map_err(CommandError::from_typed_service_error)?;
+    if !binding_owned && !memory_owned {
+        return Err(CommandError::security("任务未授权给当前 MCP 客户端"));
+    }
+    Ok(())
+}
+
+fn dispatch_extract_file(
+    state: &AppState,
+    active: &ActiveCaseSnapshot,
+    request: &McpHostToolCallRequestDto,
+    invocation: &Invocation,
+) -> Result<McpHostToolCallResultDto, CommandError> {
+    let conn = app_services::connection::open_existing_case_db(&active.db_path())
+        .map_err(CommandError::from_typed_service_error)?;
+    let mut effective = request.clone();
+    if let Some(principal) = invocation.principal.as_ref() {
+        let destination = principal
+            .resolve_export_destination(
+                &conn,
+                &active.case_root,
+                &active.meta.id,
+                &request.arguments,
+            )
+            .map_err(|_| CommandError::security("导出目录授权无效"))?;
+        let arguments = effective
+            .arguments
+            .as_object_mut()
+            .ok_or_else(|| CommandError::invalid_input("工具参数必须是对象"))?;
+        arguments.remove("destinationGrantId");
+        arguments.remove("relativePath");
+        arguments.insert(
+            "destinationPath".into(),
+            serde_json::Value::String(destination.to_string_lossy().into_owned()),
+        );
+    }
+    Ok(tool_response(dispatch_tool(
+        state,
+        McpHostQueryContext {
+            connection: &conn,
+            case_root: &active.case_root,
+            case_meta: &active.meta,
+        },
+        &effective,
+    )))
 }
 
 struct CallMetricsGuard {

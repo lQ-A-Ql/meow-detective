@@ -2,8 +2,8 @@ use super::McpHostServiceError;
 mod schema;
 
 use schema::{
-    identifier, job_snapshot_schema, non_negative_integer, output_schema, page_limit, source_id,
-    timestamp,
+    file_chunk_schema, identifier, job_snapshot_schema, metrics_schema, non_negative_integer,
+    output_schema, page_limit, source_id, timestamp,
 };
 use serde_json::{json, Value};
 use transport::dto::mcp_host::{
@@ -444,6 +444,8 @@ fn tool_with_access(
                 "items":job_snapshot_schema()
             }),
             "forensics.get_job" => job_snapshot_schema(),
+            "forensics.get_mcp_metrics" => metrics_schema(),
+            "forensics.read_file" => file_chunk_schema(),
             _ => output_schema(),
         },
         read_only,

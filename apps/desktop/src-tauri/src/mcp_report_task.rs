@@ -5,6 +5,17 @@ use transport::{commands::ExportScopeDto, CommandError};
 
 use crate::state::{AppState, TaskScope};
 
+struct ReportWorker {
+    state: AppState,
+    db_path: std::path::PathBuf,
+    case: domain::CaseMeta,
+    case_root: std::path::PathBuf,
+    template_id: String,
+    format: String,
+    task_id: String,
+    cancel_token: Arc<AtomicBool>,
+}
+
 pub(crate) fn start(
     state: &AppState,
     case: &domain::CaseMeta,
@@ -44,42 +55,16 @@ pub(crate) fn start(
     let registration = state
         .task_manager
         .spawn_scoped(task_id.clone(), scope, token, move || {
-            let connection = match app_services::connection::open_existing_case_db(&worker_db_path)
-            {
-                Ok(connection) => connection,
-                Err(error) => return Err(error.to_string()),
-            };
-            let repo = JobRepo::new(&connection);
-            let job = domain::JobId(worker_task_id.clone());
-            if !repo.start(&job).map_err(|error| error.to_string())? {
-                return Err("report job was cancelled before execution".into());
-            }
-            let result = generate(
-                &worker_state,
-                &connection,
-                &worker_case,
-                &worker_case_root,
-                &worker_template,
-                &worker_format,
-                &worker_token,
-            );
-            match result {
-                Ok(file_name) => {
-                    repo.complete_committed(&job, &format!("Report completed: {file_name}"))
-                        .map_err(|error| error.to_string())?;
-                    Ok(())
-                }
-                Err(error) if error.category == "cancelled" => {
-                    repo.cancel(&job, &error.message)
-                        .map_err(|value| value.to_string())?;
-                    Err(error.to_string())
-                }
-                Err(error) => {
-                    repo.fail(&job, &error.message)
-                        .map_err(|value| value.to_string())?;
-                    Err(error.to_string())
-                }
-            }
+            run_report_worker(ReportWorker {
+                state: worker_state,
+                db_path: worker_db_path,
+                case: worker_case,
+                case_root: worker_case_root,
+                template_id: worker_template,
+                format: worker_format,
+                task_id: worker_task_id,
+                cancel_token: worker_token,
+            })
         });
     if let Err(error) = registration {
         let connection = app_services::connection::open_existing_case_db(&db_path)
@@ -95,6 +80,54 @@ pub(crate) fn start(
         )));
     }
     Ok(task_id)
+}
+
+fn run_report_worker(worker: ReportWorker) -> Result<(), String> {
+    let connection = app_services::connection::open_existing_case_db(&worker.db_path)
+        .map_err(|error| error.to_string())?;
+    let repo = JobRepo::new(&connection);
+    let job = domain::JobId(worker.task_id);
+    if !repo.start(&job).map_err(|error| error.to_string())? {
+        return Err("report job was cancelled before execution".into());
+    }
+    match generate(
+        &worker.state,
+        &connection,
+        &worker.case,
+        &worker.case_root,
+        &worker.template_id,
+        &worker.format,
+        &worker.cancel_token,
+    ) {
+        Ok(file_name) => finish_report_worker(
+            &repo,
+            &job,
+            &worker.case_root,
+            &file_name,
+            &worker.cancel_token,
+        ),
+        Err(error) if error.category == "cancelled" => {
+            repo.cancel(&job, &error.message)
+                .map_err(|value| value.to_string())?;
+            Err(error.to_string())
+        }
+        Err(error) => {
+            repo.fail(&job, &error.message)
+                .map_err(|value| value.to_string())?;
+            Err(error.to_string())
+        }
+    }
+}
+
+fn finish_report_worker(
+    repo: &JobRepo<'_>,
+    job: &domain::JobId,
+    _case_root: &std::path::Path,
+    file_name: &str,
+    _cancel_token: &AtomicBool,
+) -> Result<(), String> {
+    repo.complete_committed(job, &format!("Report completed: {file_name}"))
+        .map_err(|error| error.to_string())
 }
 
 fn generate(

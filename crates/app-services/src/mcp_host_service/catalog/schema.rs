@@ -31,6 +31,45 @@ pub(super) fn job_snapshot_schema() -> Value {
     })
 }
 
+pub(super) fn metrics_schema() -> Value {
+    json!({
+        "type":"object",
+        "properties": {
+            "running":{"type":"boolean"},
+            "activeRequests":{"type":"integer","minimum":0},
+            "queuedRequests":{"type":"integer","minimum":0},
+            "taskOwnerCount":{"type":"integer","minimum":0},
+            "totalCalls":{"type":"integer","minimum":0},
+            "successfulCalls":{"type":"integer","minimum":0},
+            "failedCalls":{"type":"integer","minimum":0},
+            "cancelledCalls":{"type":"integer","minimum":0},
+            "totalDurationMs":{"type":"integer","minimum":0},
+            "averageDurationMs":{"type":"integer","minimum":0},
+            "currentRssMb":{"type":"integer","minimum":0},
+            "peakRssMb":{"type":"integer","minimum":0}
+        },
+        "required":["running","activeRequests","queuedRequests","taskOwnerCount","totalCalls","successfulCalls","failedCalls","cancelledCalls","totalDurationMs","averageDurationMs","currentRssMb","peakRssMb"]
+    })
+}
+
+pub(super) fn file_chunk_schema() -> Value {
+    json!({
+        "type":"object",
+        "properties": {
+            "fileId":{"type":"string"},
+            "size":{"type":"integer","minimum":0},
+            "offset":{"type":"integer","minimum":0},
+            "bytesRead":{"type":"integer","minimum":0},
+            "nextOffset":{"type":"integer","minimum":0},
+            "eof":{"type":"boolean"},
+            "encoding":{"type":"string","enum":["auto","utf8","base64"]},
+            "content":{"type":"string"},
+            "chunkSha256":{"type":"string","minLength":64,"maxLength":64}
+        },
+        "required":["fileId","size","offset","bytesRead","nextOffset","eof","encoding","content","chunkSha256"]
+    })
+}
+
 pub(super) fn identifier() -> Value {
     json!({"type":"string", "minLength":1, "maxLength":256})
 }

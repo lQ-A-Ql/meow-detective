@@ -33,6 +33,7 @@ pub struct McpHostRuntime {
     pub(super) audit_requests: Arc<Semaphore>,
     pub(super) audit_waiters: Arc<Semaphore>,
     task_owners: Mutex<HashMap<String, String>>,
+    pub(super) task_binding_lock: Mutex<()>,
     active_requests: AtomicU64,
     total_calls: AtomicU64,
     successful_calls: AtomicU64,
@@ -56,6 +57,7 @@ impl Default for McpHostRuntime {
             audit_requests: Arc::new(Semaphore::new(2)),
             audit_waiters: Arc::new(Semaphore::new(16)),
             task_owners: Mutex::new(HashMap::new()),
+            task_binding_lock: Mutex::new(()),
             active_requests: AtomicU64::new(0),
             total_calls: AtomicU64::new(0),
             successful_calls: AtomicU64::new(0),
@@ -67,6 +69,11 @@ impl Default for McpHostRuntime {
 }
 
 impl McpHostRuntime {
+    pub(super) fn lock_task_bindings(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.task_binding_lock
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+    }
     pub fn begin_request(&self) {
         self.active_requests.fetch_add(1, Ordering::AcqRel);
     }

@@ -137,6 +137,22 @@ fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
             .output_schema["type"],
         "object"
     );
+    assert_eq!(
+        catalog
+            .iter()
+            .find(|tool| tool.name == "forensics.get_mcp_metrics")
+            .unwrap()
+            .output_schema["properties"]["peakRssMb"]["type"],
+        "integer"
+    );
+    assert_eq!(
+        catalog
+            .iter()
+            .find(|tool| tool.name == "forensics.read_file")
+            .unwrap()
+            .output_schema["properties"]["chunkSha256"]["minLength"],
+        64
+    );
     let extractor = catalog
         .iter()
         .find(|tool| tool.name == "forensics.extract_file")

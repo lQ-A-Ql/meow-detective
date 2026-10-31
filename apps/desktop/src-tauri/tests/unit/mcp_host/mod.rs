@@ -142,8 +142,78 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
         .unwrap();
     assert_eq!(reader["annotations"]["readOnlyHint"], true);
     assert_eq!(reader["annotations"]["destructiveHint"], false);
-    assert_eq!(reader["outputSchema"]["type"][0], "object");
-    assert_eq!(reader["outputSchema"]["type"][1], "array");
+    assert_eq!(reader["outputSchema"]["type"], "object");
+
+    let overview_client = state
+        .mcp_host
+        .create_client(
+            &state,
+            transport::dto::mcp_host::access::McpHostCreateClientRequestDto {
+                name: "Overview regression".into(),
+                expires_after_hours: 24,
+                read_evidence: true,
+                run_derived: true,
+                allowed_data_source_ids: vec![],
+            },
+        )
+        .unwrap();
+    let overview_token = &overview_client.token;
+    let resources: Value = request(
+        &endpoint,
+        overview_token,
+        json!({"jsonrpc":"2.0","id":"resources","method":"resources/list"}),
+    )
+    .await
+    .json()
+    .await
+    .unwrap();
+    let resource_uri = resources["result"]["resources"][0]["uri"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(resource_uri.starts_with("forensics://cases/"));
+    let resource: Value = request(
+        &endpoint,
+        overview_token,
+        json!({"jsonrpc":"2.0","id":"resource-read","method":"resources/read","params":{"uri":resource_uri}}),
+    )
+    .await
+    .json()
+    .await
+    .unwrap();
+    let resource_text = resource["result"]["contents"][0]["text"].as_str().unwrap();
+    let resource_data: Value = serde_json::from_str(resource_text).unwrap();
+    assert!(resource_data["dataSources"].is_array());
+    let prompts: Value = request(
+        &endpoint,
+        token,
+        json!({"jsonrpc":"2.0","id":"prompts","method":"prompts/list"}),
+    )
+    .await
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(prompts["result"]["prompts"].as_array().unwrap().len(), 3);
+    let prompt: Value = request(
+        &endpoint,
+        token,
+        json!({"jsonrpc":"2.0","id":"prompt","method":"prompts/get","params":{"name":"case-overview","arguments":{}}}),
+    )
+    .await
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(prompt["result"]["messages"].as_array().unwrap().len(), 2);
+    let invalid_prompt: Value = request(
+        &endpoint,
+        token,
+        json!({"jsonrpc":"2.0","id":"invalid-prompt","method":"prompts/get","params":{"name":"linux-services-docker","arguments":{}}}),
+    )
+    .await
+    .json()
+    .await
+    .unwrap();
+    assert!(invalid_prompt["error"].is_object());
 
     let call = json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"forensics.get_current_case","arguments":{}}});
     let result: Value = request(&endpoint, token, call.clone())
@@ -197,7 +267,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     let count = persistence_sqlite::repositories::audit_repo::AuditRepo::new(&conn)
         .count_by_action("mcp.tool.call")
         .unwrap();
-    assert_eq!(count, 4);
+    assert_eq!(count, 10);
     for (name, arguments) in [
         ("forensics.get_data_source", json!({})),
         (

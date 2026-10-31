@@ -6,6 +6,38 @@ use crate::{
 use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
 use transport::{dto::mcp_host::McpHostToolCallResultDto, CommandError};
 
+pub(super) fn record_protocol(
+    state: &AppState,
+    principal: &app_services::mcp_host_service::access::McpPrincipal,
+    operation: &str,
+    success: bool,
+) {
+    let Ok(Some(active)) = snapshot_active_case(state) else {
+        return;
+    };
+    if active.case_id != principal.client.case_id
+        || active.session_id != principal.client.case_session_id
+    {
+        return;
+    }
+    let Ok(connection) = app_services::connection::open_existing_case_db(&active.db_path()) else {
+        return;
+    };
+    let details = serde_json::json!({
+        "serverId":"embedded",
+        "operation":operation,
+        "success":success,
+        "entryPoint":"http"
+    });
+    let _ = AuditRepo::new(&connection).log(
+        Some(&active.case_id),
+        &principal.client.id,
+        &AuditAction::McpToolCall,
+        Some(operation),
+        &details.to_string(),
+    );
+}
+
 pub(super) fn record(
     state: &AppState,
     invocation: Option<&Invocation>,
