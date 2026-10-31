@@ -3300,8 +3300,10 @@ fn pve_cluster_mdraid_reader_exposes_btrfs_superblock_before_multidevice_mapping
         .read_exact(&mut magic)
         .expect("read Btrfs superblock magic");
     assert_eq!(&magic, b"_BHRfS_M");
-    let error = fs_btrfs::BtrfsReader::open(Box::new(reader), 0)
-        .expect_err("multi-device Btrfs chunk mapping should remain explicit");
+    let error = match fs_btrfs::BtrfsReader::open(Box::new(reader), 0) {
+        Ok(_) => panic!("multi-device Btrfs chunk mapping should remain explicit"),
+        Err(error) => error,
+    };
     assert!(error.to_string().contains("not covered by any chunk"));
 }
 

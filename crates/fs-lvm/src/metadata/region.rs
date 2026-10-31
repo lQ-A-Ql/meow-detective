@@ -16,7 +16,7 @@ const RAW_LOCATION_BASE: usize = 40;
 const RAW_LOCATION_SIZE: usize = 24;
 
 /// Parse metadata from one metadata area region.
-pub fn parse_metadata<R: Read + Seek>(
+pub fn parse_metadata<R: Read + Seek + ?Sized>(
     reader: &mut R,
     mda_region: &DataRegion,
     pv_offset: u64,
@@ -31,7 +31,7 @@ pub fn parse_metadata<R: Read + Seek>(
     }
 }
 
-pub(crate) fn parse_metadata_from_regions<R: Read + Seek>(
+pub(crate) fn parse_metadata_from_regions<R: Read + Seek + ?Sized>(
     reader: &mut R,
     mda_regions: &[DataRegion],
     pv_offset: u64,
@@ -70,7 +70,7 @@ pub(crate) fn parse_metadata_from_regions<R: Read + Seek>(
     })
 }
 
-fn parse_metadata_region<R: Read + Seek>(
+fn parse_metadata_region<R: Read + Seek + ?Sized>(
     reader: &mut R,
     mda_region: &DataRegion,
     pv_offset: u64,
@@ -243,7 +243,7 @@ impl RawLocation {
     }
 }
 
-fn read_raw_location<R: Read + Seek>(
+fn read_raw_location<R: Read + Seek + ?Sized>(
     reader: &mut R,
     pv_offset: u64,
     mda_base: u64,
