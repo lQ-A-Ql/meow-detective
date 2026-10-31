@@ -75,9 +75,6 @@ describe('useEmulationWorkspaceModel', () => {
       kind: 'e01',
       platform: 'windows',
       importState: 'ready',
-      sourceHash: 'a'.repeat(64),
-      originalDiskHashStatus: 'ready',
-      originalDiskSha256: 'a'.repeat(64),
       sourcePath: 'E:\\evidence.E01',
       importedAt: '2026-08-06T00:00:00Z',
       partitions: [],
@@ -98,6 +95,15 @@ describe('useEmulationWorkspaceModel', () => {
       dataSourceId: 'source-1',
       items: [{ partitionIndex: 2, state: 'dirty', repaired: true, logBytes: 10_485_760 }],
     });
+  });
+
+  it('admits a ready imported source without persisted hash state', async () => {
+    const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.selectedSourceId).toBe('source-1'));
+    await waitFor(() => expect(result.current.canStart).toBe(true));
+    expect(result.current.metrics.sourceCount).toBe(1);
+    expect(result.current.selectedSource?.id).toBe('source-1');
   });
 
   it('owns direct-boot confirmation and sends explicit authorization after approval', async () => {
@@ -228,9 +234,6 @@ describe('useEmulationWorkspaceModel', () => {
         kind: 'e01',
         platform: 'windows',
         importState: 'ready',
-        sourceHash: 'a'.repeat(64),
-        originalDiskHashStatus: 'ready',
-        originalDiskSha256: 'a'.repeat(64),
         sourcePath: 'E:\\evidence.E01',
         importedAt: '2026-08-06T00:00:00Z',
         partitions: [],
@@ -241,9 +244,6 @@ describe('useEmulationWorkspaceModel', () => {
         kind: 'raw',
         platform: 'windows',
         importState: 'ready',
-        sourceHash: 'b'.repeat(64),
-        originalDiskHashStatus: 'ready',
-        originalDiskSha256: 'b'.repeat(64),
         sourcePath: 'E:\\second.dd',
         importedAt: '2026-08-06T00:00:00Z',
         partitions: [],
@@ -266,9 +266,6 @@ describe('useEmulationWorkspaceModel', () => {
       kind: 'e01',
       platform: 'linux',
       importState: 'ready',
-      sourceHash: 'c'.repeat(64),
-      originalDiskHashStatus: 'ready',
-      originalDiskSha256: 'c'.repeat(64),
       sourcePath: 'E:\\kali.E01',
       importedAt: '2026-08-06T00:00:00Z',
       partitions: [],

@@ -17,21 +17,20 @@ pub struct PreparedEmulationParent {
 
 pub fn prepare_emulation_parent(
     conn: &Connection,
-    case_root: &std::path::Path,
     case: &CaseId,
     source: &DataSourceId,
     recovery_media_available: bool,
 ) -> Result<PreparedEmulationParent, MountServiceError> {
     let geometry =
         super::prepare_emulation_disk_layout(conn, case, source, recovery_media_available)?;
-    let prepared = super::prepare_emulation_source(conn, case_root, case, source)?;
+    let prepared = super::prepare_emulation_source(conn, case, source)?;
     let kind = match prepared.image_kind {
         PreparedPhysicalImageKind::E01 => EvidenceImageKind::E01,
         PreparedPhysicalImageKind::Raw => EvidenceImageKind::Raw,
     };
     let backing = open_block_provider(&prepared.source_path, kind)?;
     let mut parent = PreparedEmulationParent {
-        identity: ParentIdentity::new(backing.len(), prepared.parent_sha256)?,
+        identity: ParentIdentity::new(backing.len(), prepared.source_identity_sha256)?,
         provider: backing,
         source_volume: None,
         derived_ntfs: None,
@@ -40,8 +39,12 @@ pub fn prepare_emulation_parent(
         let length = volume
             .verified_extent_bytes
             .ok_or(MountServiceError::DirectVolumeRecoveryRequired)?;
-        let signature =
-            u32::from_le_bytes(prepared.parent_sha256[..4].try_into().unwrap_or([1; 4])).max(1);
+        let signature = u32::from_le_bytes(
+            prepared.source_identity_sha256[..4]
+                .try_into()
+                .unwrap_or([1; 4]),
+        )
+        .max(1);
         let selected = NtfsBootDisk::new(parent.provider.clone(), length, signature)?;
         let mapping = selected.mapping();
         parent.derived_ntfs = Some(DerivedNtfsDiskDto {
@@ -60,7 +63,7 @@ pub fn prepare_emulation_parent(
             boot_repair_required: true,
         });
         parent.source_volume = Some(mapping);
-        parent.identity = ParentIdentity::new(selected.len(), prepared.parent_sha256)?;
+        parent.identity = ParentIdentity::new(selected.len(), prepared.source_identity_sha256)?;
         parent.provider = Arc::new(selected);
     }
     Ok(parent)

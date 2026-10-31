@@ -13,20 +13,10 @@ pub enum MountServiceError {
     DirectVolumeRecoveryRequired,
     #[error("database error: {0}")]
     Database(#[from] DbError),
-    #[error("original-disk fingerprint lookup failed: {0}")]
-    Digest(#[from] crate::digest_service::DigestServiceError),
     #[error("source metadata could not be read: {0}")]
     SourceMetadata(#[from] std::io::Error),
     #[error("source identity changed: expected {expected} bytes, found {actual} bytes")]
     SourceIdentityMismatch { expected: u64, actual: u64 },
-    #[error("evidence emulation requires a valid persisted SHA-256 source fingerprint")]
-    InvalidSourceFingerprint,
-    #[error(
-        "source content does not match the persisted import SHA-256 (expected {expected}, recomputed {actual})"
-    )]
-    SourceHashMismatch { expected: String, actual: String },
-    #[error("source SHA-256 could not be recomputed for integrity verification: {0}")]
-    SourceHashVerify(String),
     #[error("source is not ready: {0}")]
     SourceNotReady(String),
     #[error("mount target was not found: {0}")]
@@ -56,11 +46,7 @@ impl transport::ServiceErrorCategory for MountServiceError {
             Self::Database(_) | Self::SourceMetadata(_) | Self::Reader(_) | Self::Catalog(_) => {
                 transport::ErrorCategory::Io
             }
-            Self::Digest(error) => error.category(),
-            Self::SourceIdentityMismatch { .. }
-            | Self::InvalidSourceFingerprint
-            | Self::SourceHashMismatch { .. } => transport::ErrorCategory::Security,
-            Self::SourceHashVerify(_) => transport::ErrorCategory::Io,
+            Self::SourceIdentityMismatch { .. } => transport::ErrorCategory::Security,
             Self::SourceNotReady(_) | Self::NotFound(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) | Self::DirectVolumeRecoveryRequired => {
                 transport::ErrorCategory::Unsupported

@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 
 use domain::{CaseId, DataSourceId};
 use evidence_core::FileSystemReader;
@@ -7,12 +6,10 @@ use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo, file_repo::FileRepo, partition_repo::PartitionRepo,
 };
 use rusqlite::Connection;
+use sha2::{Digest, Sha256};
 use transport::dto::{EmulationBootRouteDto, EmulationInstallDto, EmulationPreflightDto};
 
-use super::{
-    prepare_physical_mount_source, MountServiceError, PreparedPhysicalImageKind,
-    PreparedPhysicalMountSource,
-};
+use super::{prepare_physical_mount_source, MountServiceError, PreparedPhysicalImageKind};
 use crate::source_db::{self, ReadySourceError};
 
 /// Upper bound for the partition scan; real images have a handful of
@@ -23,59 +20,46 @@ const MAX_PREFLIGHT_PARTITIONS: usize = 64;
 pub struct PreparedEmulationSource {
     pub source_path: PathBuf,
     pub image_kind: PreparedPhysicalImageKind,
-    pub parent_sha256: [u8; 32],
+    pub source_identity_sha256: [u8; 32],
 }
 
 pub fn prepare_emulation_source(
     case_conn: &Connection,
-    case_root: &std::path::Path,
     case_id: &CaseId,
     data_source_id: &DataSourceId,
 ) -> Result<PreparedEmulationSource, MountServiceError> {
     let prepared = prepare_physical_mount_source(case_conn, data_source_id)?;
-    let expected = crate::digest_service::current_logical_disk_sha256(
-        case_conn,
-        case_root,
-        case_id,
-        &data_source_id.0,
-    )?
-    .ok_or(MountServiceError::InvalidSourceFingerprint)?;
-    let parent_sha256 = parse_source_sha256(&expected)?;
-    verify_parent_hash(case_conn, data_source_id, &prepared, parent_sha256)?;
+    let source_identity_sha256 =
+        source_identity_sha256(case_id, data_source_id, prepared.image_kind);
     Ok(PreparedEmulationSource {
         source_path: prepared.source_path,
         image_kind: prepared.image_kind,
-        parent_sha256,
+        source_identity_sha256,
     })
 }
 
-/// Session start is fail-closed on evidence integrity: logical disk bytes are
-/// re-hashed and compared against the persisted
-/// original-disk fingerprint. A same-length modification is the
-/// case this catches — the size probe in `validate_source_identity` cannot.
-/// Any mismatch or recompute failure aborts before a COW workspace exists.
-fn verify_parent_hash(
-    case_conn: &Connection,
+fn source_identity_sha256(
+    case_id: &CaseId,
     data_source_id: &DataSourceId,
-    prepared: &PreparedPhysicalMountSource,
-    expected_sha256: [u8; 32],
-) -> Result<(), MountServiceError> {
-    let kind = DataSourceRepo::new(case_conn).source_kind(data_source_id)?;
-    let recomputed = crate::hash_service::HashService::hash_logical_evidence(
-        &prepared.source_path,
-        &kind,
-        infrastructure::hashing::HashAlgorithm::Sha256,
-        &AtomicBool::new(false),
-        &|_, _| {},
-    )
-    .map_err(|error| MountServiceError::SourceHashVerify(error.to_string()))?;
-    if parse_source_sha256(&recomputed.digest)? != expected_sha256 {
-        return Err(MountServiceError::SourceHashMismatch {
-            expected: hex::encode(expected_sha256),
-            actual: recomputed.digest,
-        });
-    }
-    Ok(())
+    image_kind: PreparedPhysicalImageKind,
+) -> [u8; 32] {
+    let mut digest = Sha256::new();
+    update_identity_field(&mut digest, b"meow-detective-emulation-source-identity-v1");
+    update_identity_field(&mut digest, case_id.0.as_bytes());
+    update_identity_field(&mut digest, data_source_id.0.as_bytes());
+    update_identity_field(
+        &mut digest,
+        match image_kind {
+            PreparedPhysicalImageKind::E01 => b"e01",
+            PreparedPhysicalImageKind::Raw => b"raw",
+        },
+    );
+    digest.finalize().into()
+}
+
+fn update_identity_field(digest: &mut Sha256, value: &[u8]) {
+    digest.update((value.len() as u64).to_le_bytes());
+    digest.update(value);
 }
 
 /// Read-only pre-flight: locates the operating system installations and
@@ -398,16 +382,6 @@ fn preflight_source_error(error: ReadySourceError) -> MountServiceError {
         ReadySourceError::NotFound { .. } => MountServiceError::NotFound("data source".to_string()),
         other => MountServiceError::SourceNotReady(other.to_string()),
     }
-}
-
-fn parse_source_sha256(value: &str) -> Result<[u8; 32], MountServiceError> {
-    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(MountServiceError::InvalidSourceFingerprint);
-    }
-    let decoded = hex::decode(value).map_err(|_| MountServiceError::InvalidSourceFingerprint)?;
-    decoded
-        .try_into()
-        .map_err(|_| MountServiceError::InvalidSourceFingerprint)
 }
 
 #[cfg(test)]

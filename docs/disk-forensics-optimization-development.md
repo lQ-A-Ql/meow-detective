@@ -714,3 +714,83 @@ BitLocker 字典是 CPU 密集任务，使用专用 `ResourceClass::Cpu` 预算�
 5. 增加资源预算、排队等待和吞吐指标的回归测试。
 6. 最后接入 GPU 作为可选资源类，保持 CPU 回退路径和相同结果校验。
 
+## 16. 哈希任务与仿真完整性修补计划
+
+### 16.1 当前政策
+
+- 导入完成的数据源视为可信来源。仿真准入只检查 E01/RAW 类型、导入就绪状态、来源可访问性以及当前大小与导入记录是否一致。
+- 仿真父盘绑定使用 `caseDataSourceIdentity` 范围的身份令牌。令牌由案件 ID、数据源 ID 和镜像类型确定性生成，用于 COW overlay 与 VMDK CID 的身份区分，不作为内容哈希声明。
+- 仿真会话 provenance 写入 `sourceTrustPolicy=importTrusted`，明确记录启动依据是导入来源可信政策。
+- 原始磁盘摘要仍是用户显式发起的独立任务。摘要任务用于调查记录、导出和复核，不参与仿真是否允许启动的判定。
+- provenance 明确区分 `sourceIdentitySha256` 与逻辑磁盘内容摘要，避免在报告中将来源身份令牌描述为内容指纹。
+
+### 16.2 算法与测试缺口
+
+| 编号 | 优先级 | 当前缺口 | 修补动作 | 验收条件 |
+|---|---|---|---|---|
+| HASH-01 | P1 | `hash_logical_evidence` 将读取器声明长度直接写入结果，没有核对 EOF 前的实际读取量 | 增加受控计数读取器，摘要结束后强制核对 `processed == declaredLength` | 截断读取、提前 EOF 和正常 EOF 均有测试；提前 EOF 必须返回 I/O 错误 |
+| HASH-02 | P1 | 多分段 `ContainerSet` 对每个分段记录声明长度，读取完成后没有统一核对实际长度 | 为每个分段保留实际读取计数，并在生成 manifest 前逐段比对 | 任一分段截断时任务失败；分段顺序、长度和摘要同时进入确定性 manifest |
+| HASH-03 | P1 | SHA-256 流水线缺少直接回归，现有测试只通过小文件间接覆盖 | 增加跨 reader lane、非整块尾段、空文件、中途取消、读取失败和缓冲区回收测试 | 流水线结果与单流 SHA-256 对每个边界样本完全一致；取消不泄漏线程 |
+| REV-01 | P1 | 来源版本由路径、大小和修改时间组成，内容同长度改写且时间恢复后无法区分 | 引入显式 `forceRecompute`，并在摘要完成后提供内容摘要作为后续缓存身份 | 已完成任务允许强制重算；任务复用和 `stale` 展示语义有明确测试 |
+| SEG-01 | P1 | E01 分段发现与容器集合测试覆盖了连续分段，未覆盖缺段、末端变动和读取期间长度变化 | 增加缺段、末段截断、追加和替换测试，明确容器集合失败边界 | 缺段或读取长度不一致时失败；完整集合结果稳定 |
+| SM3-01 | P2 | 自实现 SM3 只有 `abc` 单块已知向量 | 增加空输入、55 字节、56 字节、64 字节、跨块和长输入标准向量 | 所有分块边界与公开标准结果一致 |
+| DIR-01 | P2 | 目录证据枚举阶段没有取消检查，也没有与来源版本同等规模的条目上限 | 在目录枚举循环中检查取消，并设置与 `hash_tree` 一致的有界清单 | 深度和条目数量超限时返回显式错误；取消可在枚举阶段生效 |
+| FILE-01 | P2 | 文件摘要写入 `evidence_digests` 后没有同步 `file_entries.hash_sha256` 或文件取证指纹 | 摘要成功后同步文件记录与指纹表，或明确将顶部摘要标为历史记录值 | 摘要完成后文件列表摘要、取证指纹和摘要历史显示一致 |
+| REPORT-01 | P2 | 报告后端按 `data_sources.hash_status` 统计，前端会优先采用 `originalDiskHashStatus` | 统一定义“来源哈希”和“原始磁盘摘要”两个报告字段与状态汇总 | 后端报告告警、治理计数和前端状态使用同一事实来源 |
+| TASK-01 | P2 | 已完成 digest 任务在同一请求与版本下直接复用，用户没有强制重新读取入口 | 增加显式强制重算参数，普通重复提交继续复用完成结果 | 点击普通算法按钮复用结果；强制重算创建新任务并保留旧结果历史 |
+| EMU-01 | P2 | 删除强制内容校验后，导入来源后续被外部修改不会被仿真准入发现 | 在仿真审计和会话 provenance 中明确记录“信任导入来源”政策 | 报告和 UI 不将仿真启动描述为内容指纹验证通过 |
+
+### 16.3 执行清单
+
+#### 本轮策略调整
+
+- [x] 移除仿真来源筛选对 `originalDiskHashStatus` 和 `originalDiskSha256` 的依赖。
+- [x] 移除仿真准备阶段的逻辑磁盘摘要查询、重新计算和摘要不一致拒绝。
+- [x] 使用案件、数据源与镜像类型派生稳定来源身份令牌。
+- [x] 将仿真 provenance 升级到 schema 3，字段改为 `sourceIdentitySha256` 与 `sourceIdentityScope=caseDataSourceIdentity`。
+- [x] 在仿真 provenance 中写入 `sourceTrustPolicy=importTrusted`。
+- [x] 更新仿真空来源文案和数据源哈希验收表。
+- [x] 增加“无持久化摘要仍可准备来源”和“同长度来源变化遵循导入信任政策”的回归用例。
+
+#### 第一修补批次
+
+- [ ] HASH-01：逻辑磁盘与 LocalDisk 摘要增加实际读取长度核对。
+- [ ] HASH-02：多分段容器集合增加逐段读取长度核对。
+- [ ] HASH-03：补齐 SHA-256 流水线边界、取消和失败回归。
+- [ ] REV-01：设计并实现摘要任务强制重算。
+- [ ] SEG-01：补齐 E01 分段缺失、截断和读取期间变化测试。
+
+#### 第二修补批次
+
+- [ ] FILE-01：统一文件摘要、文件记录和文件取证指纹。
+- [ ] REPORT-01：统一报告后端、治理统计与前端状态字段。
+- [ ] TASK-01：在任务 DTO、SQLite 指纹和前端交互中加入强制重算语义。
+- [ ] EMU-01：在仿真审计、报告文案和 provenance 中固定导入信任声明。
+
+#### 独立算法与规模验证
+
+- [ ] SM3-01：补齐 SM3 标准分块边界向量。
+- [ ] DIR-01：为目录证据哈希增加取消检查和条目上限。
+- [ ] 使用真实 E01、RAW、VHDX 和 LocalDisk 分别完成四种摘要验证。
+- [ ] 完成一次无预先摘要的 E01 与 RAW 仿真启动验收。
+- [ ] 记录仿真准备、布局探测和 VM 启动的耗时、RSS 与失败状态。
+
+### 16.4 回归门禁
+
+每次修补至少执行以下命令：
+
+```powershell
+cargo fmt --all -- --check
+cargo test -p app-services mount_service::emulation --lib
+cargo test -p app-services digest_service --lib
+cargo test -p infrastructure hashing
+cargo clippy -p app-services -p infrastructure -p forensics-desktop --all-targets -- -D warnings
+pnpm --dir frontend typecheck
+pnpm --dir frontend test -- tests/features/emulation tests/features/files
+powershell -ExecutionPolicy Bypass -File scripts/check-rust-function-size.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-rust-test-layout.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1
+```
+
+真实验收必须保留样本环境变量、提交版本、命令、日志和结果。缺少私有 E01、LocalDisk 或 VMware 条件时保持 `NOT-RUN` 或 `BLOCKED`，不能转写为通过。
+

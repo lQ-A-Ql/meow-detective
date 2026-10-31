@@ -54,7 +54,7 @@ fn provenance_records_the_selected_disk_adapter_and_reason() {
 }
 
 #[test]
-fn derived_provenance_distinguishes_source_hash_selected_volume_and_guest_view() {
+fn derived_provenance_distinguishes_source_identity_selected_volume_and_guest_view() {
     let derived = transport::dto::case::DerivedNtfsDiskDto {
         layout_version: 1,
         source_media_bytes: 2_000_396_321_280,
@@ -90,9 +90,10 @@ fn derived_provenance_distinguishes_source_hash_selected_volume_and_guest_view()
         None,
     ))
     .unwrap();
-    assert_eq!(json["schemaVersion"], 2);
-    assert_eq!(json["parentHashScope"], "importSourceFingerprint");
-    assert_eq!(json["parentSha256"], "12".repeat(32));
+    assert_eq!(json["schemaVersion"], 3);
+    assert_eq!(json["sourceIdentityScope"], "caseDataSourceIdentity");
+    assert_eq!(json["sourceIdentitySha256"], "12".repeat(32));
+    assert_eq!(json["sourceTrustPolicy"], "importTrusted");
     assert_eq!(json["logicalLength"], derived.guest_disk_bytes);
     let selection = &json["derivedNtfs"];
     assert_eq!(selection["sourceMediaBytes"], derived.source_media_bytes);

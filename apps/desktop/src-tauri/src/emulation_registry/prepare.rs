@@ -14,7 +14,6 @@ impl EmulationRegistry {
         let recovery_media = open_recovery_media(recovery_iso)?;
         let parent = prepare_parent_with_timing(
             case_conn,
-            case_root,
             case_id,
             data_source_id,
             recovery_media.is_some(),
@@ -104,7 +103,6 @@ impl EmulationRegistry {
 
 fn prepare_parent_with_timing(
     case_conn: &rusqlite::Connection,
-    case_root: &Path,
     case_id: &CaseId,
     data_source_id: &DataSourceId,
     recovery_media_available: bool,
@@ -112,7 +110,6 @@ fn prepare_parent_with_timing(
     let started_at = std::time::Instant::now();
     let parent = app_services::mount_service::prepare_emulation_parent(
         case_conn,
-        case_root,
         case_id,
         data_source_id,
         recovery_media_available,

@@ -249,11 +249,9 @@ fn validate_config(
     {
         return Err(EmulationError::InvalidClusterSize(config.cluster_size));
     }
-    // Length is the only parent-identity half this crate can enforce: the
-    // recorded SHA-256 covers the evidence container bytes (E01 segment
-    // files), which are not observable through `BlockProvider`. The
-    // session-preparation path re-hashes the container against the persisted
-    // import fingerprint and fails closed before `CowDisk::create`.
+    // Length is the only parent-identity value this crate can enforce. The
+    // digest is an opaque session binding; source admission and availability
+    // remain the application service's responsibility.
     if parent.len() != identity.logical_length() {
         return Err(EmulationError::ParentMismatch);
     }

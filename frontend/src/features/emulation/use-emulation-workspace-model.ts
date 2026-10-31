@@ -111,9 +111,7 @@ function isActiveSession(session: EmulationSessionStatus): boolean {
 
 function isEmulationSource(source: DataSourceSummary): boolean {
   return (source.kind === 'e01' || source.kind === 'raw')
-    && (source.importState === 'ready' || source.importState === 'ready_metadata')
-    && source.originalDiskHashStatus === 'ready'
-    && Boolean(source.originalDiskSha256);
+    && (source.importState === 'ready' || source.importState === 'ready_metadata');
 }
 
 function toSourceView(source: DataSourceSummary): EmulationSourceView {

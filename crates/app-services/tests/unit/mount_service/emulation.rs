@@ -1,41 +1,54 @@
-use std::sync::atomic::AtomicBool;
-
-use domain::{
-    CaseId, CaseMeta, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourcePlatform,
-};
-use persistence_sqlite::repositories::{
-    case_repo::CaseRepo,
-    datasource_repo::DataSourceRepo,
-    evidence_digest_repo::{EvidenceDigestRecord, EvidenceDigestRepo},
-};
+use domain::{CaseId, CaseMeta, DataSourceId, DataSourceKind, DataSourcePlatform};
+use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
 use tempfile::TempDir;
 use transport::ServiceErrorCategory;
 
-use super::{parse_source_sha256, prepare_emulation_source, MountServiceError};
+use super::{
+    prepare_emulation_source, source_identity_sha256, MountServiceError, PreparedPhysicalImageKind,
+};
 
 #[test]
-fn emulation_parent_binding_requires_an_exact_sha256() {
-    assert_eq!(parse_source_sha256(&"ab".repeat(32)).unwrap(), [0xab; 32]);
-    assert!(parse_source_sha256("data-source-id:source-1").is_err());
-    assert!(parse_source_sha256(&"z".repeat(64)).is_err());
-    assert!(parse_source_sha256(&"a".repeat(62)).is_err());
+fn source_identity_is_stable_and_scoped_to_the_case_and_source() {
+    let case = CaseId("case-emulation-prepare".into());
+    let source = DataSourceId("source-1".into());
+    let identity = source_identity_sha256(&case, &source, PreparedPhysicalImageKind::Raw);
+
+    assert_eq!(
+        identity,
+        source_identity_sha256(&case, &source, PreparedPhysicalImageKind::Raw)
+    );
+    assert_ne!(
+        identity,
+        source_identity_sha256(
+            &CaseId("other-case".into()),
+            &source,
+            PreparedPhysicalImageKind::Raw
+        )
+    );
+    assert_ne!(
+        identity,
+        source_identity_sha256(&case, &source, PreparedPhysicalImageKind::E01)
+    );
 }
 
 #[test]
-fn prepare_emulation_source_verifies_the_parent_hash() {
-    let (_tmp, connection, source_id, digest) = setup_ready_source(b"emulation evidence bytes");
+fn prepare_emulation_source_accepts_a_ready_import_without_a_persisted_digest() {
+    let (_tmp, connection, source_id) = setup_ready_source(&[0u8; 512]);
 
     let prepared = prepare_emulation_source(
         &connection,
-        _tmp.path(),
         &CaseId("case-emulation-prepare".into()),
         &source_id,
     )
     .unwrap();
 
     assert_eq!(
-        prepared.parent_sha256,
-        parse_source_sha256(&digest).unwrap()
+        prepared.source_identity_sha256,
+        source_identity_sha256(
+            &CaseId("case-emulation-prepare".into()),
+            &source_id,
+            PreparedPhysicalImageKind::Raw,
+        )
     );
 }
 
@@ -48,7 +61,7 @@ fn direct_ntfs_volume_requires_a_derived_boot_layout_and_correct_case_scope() {
     bytes[40..48].copy_from_slice(&64u64.to_le_bytes());
     bytes[48..56].copy_from_slice(&2u64.to_le_bytes());
     bytes[510..512].copy_from_slice(&[0x55, 0xaa]);
-    let (_tmp, connection, source_id, _) = setup_ready_source(&bytes);
+    let (_tmp, connection, source_id) = setup_ready_source(&bytes);
     let error = crate::mount_service::prepare_emulation_disk_layout(
         &connection,
         &CaseId("case-emulation-prepare".into()),
@@ -76,7 +89,7 @@ fn direct_ntfs_volume_requires_a_derived_boot_layout_and_correct_case_scope() {
 
 #[test]
 fn disk_layout_admission_does_not_misclassify_an_ordinary_raw_disk() {
-    let (_tmp, connection, source_id, _) = setup_ready_source(&[0; 1024]);
+    let (_tmp, connection, source_id) = setup_ready_source(&[0; 1024]);
     crate::mount_service::prepare_emulation_disk_layout(
         &connection,
         &CaseId("case-emulation-prepare".into()),
@@ -87,7 +100,7 @@ fn disk_layout_admission_does_not_misclassify_an_ordinary_raw_disk() {
 }
 
 #[test]
-fn verified_direct_volume_parent_preserves_source_hash_and_records_generated_layout() {
+fn verified_direct_volume_parent_preserves_source_identity_and_records_generated_layout() {
     let mut bytes = vec![0; 128 * 512];
     bytes[3..11].copy_from_slice(b"NTFS    ");
     bytes[11..13].copy_from_slice(&512u16.to_le_bytes());
@@ -98,16 +111,22 @@ fn verified_direct_volume_parent_preserves_source_hash_and_records_generated_lay
     bytes[510..512].copy_from_slice(&[0x55, 0xaa]);
     let backup = bytes[..512].to_vec();
     bytes[64 * 512..65 * 512].copy_from_slice(&backup);
-    let (_tmp, connection, source_id, digest) = setup_ready_source(&bytes);
+    let (_tmp, connection, source_id) = setup_ready_source(&bytes);
     let parent = crate::mount_service::prepare_emulation_parent(
         &connection,
-        _tmp.path(),
         &CaseId("case-emulation-prepare".into()),
         &source_id,
         true,
     )
     .unwrap();
-    assert_eq!(hex::encode(parent.identity.sha256()), digest);
+    assert_eq!(
+        parent.identity.sha256(),
+        &source_identity_sha256(
+            &CaseId("case-emulation-prepare".into()),
+            &source_id,
+            PreparedPhysicalImageKind::Raw,
+        )
+    );
     assert_eq!(parent.provider.len(), 1024 * 1024 + 65 * 512);
     let provenance = parent.derived_ntfs.unwrap();
     assert_eq!(provenance.source_media_bytes, bytes.len() as u64);
@@ -121,72 +140,29 @@ fn verified_direct_volume_parent_preserves_source_hash_and_records_generated_lay
 }
 
 #[test]
-fn prepare_emulation_source_fails_closed_on_same_length_tampering() {
-    let (tmp, connection, source_id, _) = setup_ready_source(b"emulation evidence bytes");
-    let mut tampered = b"emulation evidence bytes".to_vec();
+fn prepare_emulation_source_trusts_the_imported_source_after_same_length_change() {
+    let original = vec![0x31u8; 512];
+    let (tmp, connection, source_id) = setup_ready_source(&original);
+    let mut tampered = original;
     tampered[0] ^= 0xff;
     std::fs::write(tmp.path().join("evidence.raw"), tampered).unwrap();
 
-    let error = prepare_emulation_source(
+    let prepared = prepare_emulation_source(
         &connection,
-        tmp.path(),
         &CaseId("case-emulation-prepare".into()),
         &source_id,
     )
-    .unwrap_err();
-
-    assert!(matches!(
-        error,
-        MountServiceError::InvalidSourceFingerprint | MountServiceError::SourceHashMismatch { .. }
-    ));
-    assert!(matches!(
-        error.category(),
-        transport::ErrorCategory::Security
-    ));
-}
-
-#[test]
-fn prepare_emulation_source_fails_closed_without_a_persisted_hash() {
-    let (_tmp, connection, source_id, _) = setup_ready_source(b"emulation evidence bytes");
-    DataSourceRepo::new(&connection)
-        .update_source_hash(&source_id, None, DataSourceHashStatus::Pending)
-        .unwrap();
-    connection
-        .execute(
-            "DELETE FROM evidence_digests WHERE data_source_id = ?1",
-            rusqlite::params![source_id.0],
-        )
-        .unwrap();
-
-    let error = prepare_emulation_source(
-        &connection,
-        _tmp.path(),
-        &CaseId("case-emulation-prepare".into()),
-        &source_id,
-    )
-    .unwrap_err();
-
-    assert!(matches!(error, MountServiceError::InvalidSourceFingerprint));
-    assert!(matches!(
-        error.category(),
-        transport::ErrorCategory::Security
-    ));
+    .unwrap();
+    assert_eq!(prepared.source_path, tmp.path().join("evidence.raw"));
 }
 
 #[test]
 fn prepare_emulation_source_fails_closed_when_the_source_is_unreadable() {
-    let (tmp, connection, source_id, _) = setup_ready_source(b"emulation evidence bytes");
-    connection
-        .execute(
-            "UPDATE data_sources SET evidence_size = NULL WHERE id = ?1",
-            rusqlite::params![source_id.0],
-        )
-        .unwrap();
+    let (tmp, connection, source_id) = setup_ready_source(&[0u8; 512]);
     std::fs::remove_file(tmp.path().join("evidence.raw")).unwrap();
 
     let error = prepare_emulation_source(
         &connection,
-        tmp.path(),
         &CaseId("case-emulation-prepare".into()),
         &source_id,
     )
@@ -194,12 +170,12 @@ fn prepare_emulation_source_fails_closed_when_the_source_is_unreadable() {
 
     assert!(matches!(
         error,
-        MountServiceError::Digest(_) | MountServiceError::SourceHashVerify(_)
+        MountServiceError::SourceMetadata(_) | MountServiceError::Reader(_)
     ));
     assert!(matches!(error.category(), transport::ErrorCategory::Io));
 }
 
-fn setup_ready_source(bytes: &[u8]) -> (TempDir, rusqlite::Connection, DataSourceId, String) {
+fn setup_ready_source(bytes: &[u8]) -> (TempDir, rusqlite::Connection, DataSourceId) {
     let connection = persistence_sqlite::connection::open_in_memory().unwrap();
     persistence_sqlite::runner::run_all(&connection).unwrap();
     let case = CaseMeta {
@@ -226,38 +202,5 @@ fn setup_ready_source(bytes: &[u8]) -> (TempDir, rusqlite::Connection, DataSourc
     .unwrap();
     let repo = DataSourceRepo::new(&connection);
     repo.update_import_state(&source.id, "ready", None).unwrap();
-    let digest = crate::hash_service::HashService::hash_evidence(
-        &source_path,
-        &DataSourceKind::Raw,
-        &AtomicBool::new(false),
-        &|_, _| {},
-    )
-    .unwrap()
-    .digest;
-    let identity = crate::digest_service::identity::snapshot(
-        &connection,
-        temporary.path(),
-        &case.id,
-        &crate::digest_service::DigestTarget {
-            data_source_id: Some(&source.id.0),
-            file_id: None,
-            partition_index: None,
-        },
-    )
-    .unwrap();
-    EvidenceDigestRepo::new(&connection)
-        .upsert(&EvidenceDigestRecord {
-            case_id: case.id.0.clone(),
-            scope: "LogicalDisk".to_string(),
-            algorithm: "sha256".to_string(),
-            data_source_id: Some(source.id.0.clone()),
-            file_id: None,
-            partition_index: None,
-            value: digest.clone(),
-            byte_length: bytes.len() as u64,
-            status: "completed".to_string(),
-            source_revision: identity.revision,
-        })
-        .unwrap();
-    (temporary, connection, source.id, digest)
+    (temporary, connection, source.id)
 }

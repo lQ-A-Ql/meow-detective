@@ -150,8 +150,9 @@ pub(super) struct EmulationProvenance<'a> {
     session_id: &'a str,
     case_id: &'a str,
     data_source_id: &'a str,
-    parent_sha256: String,
-    parent_hash_scope: &'static str,
+    source_identity_sha256: String,
+    source_identity_scope: &'static str,
+    source_trust_policy: &'static str,
     logical_length: u64,
     firmware: &'static str,
     created_at: String,
@@ -203,12 +204,13 @@ impl<'a> EmulationProvenance<'a> {
         recovery_media: Option<RecoveryMediaProvenance<'a>>,
     ) -> Self {
         Self {
-            schema_version: 2,
+            schema_version: 3,
             session_id: ids.session_id,
             case_id: ids.case_id,
             data_source_id: ids.data_source_id,
-            parent_sha256: encode_hex(identity.sha256()),
-            parent_hash_scope: "importSourceFingerprint",
+            source_identity_sha256: encode_hex(identity.sha256()),
+            source_identity_scope: "caseDataSourceIdentity",
+            source_trust_policy: "importTrusted",
             logical_length: identity.logical_length(),
             firmware: match guest.firmware {
                 VmwareFirmware::Bios => "bios",
