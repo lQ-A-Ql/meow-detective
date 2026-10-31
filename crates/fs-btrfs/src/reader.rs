@@ -1,4 +1,6 @@
-use crate::format::{BTRFS_MAGIC, BTRFS_SUPERBLOCK_OFFSET, CHUNK_ITEM_KEY, KEY_SIZE};
+use crate::format::{
+    BLOCK_GROUP_RAID1, BTRFS_MAGIC, BTRFS_SUPERBLOCK_OFFSET, CHUNK_ITEM_KEY, KEY_SIZE,
+};
 use crate::types::BtrfsChunk;
 use crate::BtrfsReader;
 use evidence_core::filesystem::invalid_fs_data;
@@ -102,6 +104,11 @@ impl BtrfsReader {
                 continue;
             };
             if delta < chunk.length {
+                if chunk.stripe_count > 1 && chunk.profile & BLOCK_GROUP_RAID1 == 0 {
+                    return Err(invalid_fs_data(
+                        "btrfs multi-stripe chunk mapping requires device map",
+                    ));
+                }
                 return chunk
                     .physical
                     .checked_add(delta)
@@ -129,6 +136,11 @@ impl BtrfsReader {
                     .try_into()
                     .map_err(|_| invalid_fs_data("disk parse error"))?,
             );
+            let profile = u64::from_le_bytes(
+                data[pos + 0x18..pos + 0x20]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("btrfs chunk profile parse error"))?,
+            );
             let num_stripes = u16::from_le_bytes(
                 data[pos + 0x2C..pos + 0x2E]
                     .try_into()
@@ -145,6 +157,8 @@ impl BtrfsReader {
                     logical: key.offset,
                     length,
                     physical: phys,
+                    profile,
+                    stripe_count: num_stripes,
                 });
             }
             pos += 0x30 + num_stripes as usize * 0x20;

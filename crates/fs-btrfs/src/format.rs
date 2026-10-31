@@ -12,6 +12,7 @@ pub(crate) const EXTENT_DATA_KEY: u8 = 108;
 pub(crate) const ROOT_ITEM_KEY: u8 = 132;
 pub(crate) const ROOT_BACKREF_KEY: u8 = 144;
 pub(crate) const CHUNK_ITEM_KEY: u8 = 228;
+pub(crate) const BLOCK_GROUP_RAID1: u64 = 1 << 5;
 
 pub(crate) const FS_TREE_OBJECTID: u64 = 5;
 pub(crate) const FIRST_FREE_OBJECTID: u64 = 256;

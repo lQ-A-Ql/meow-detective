@@ -48,6 +48,11 @@ impl BtrfsReader {
                 .try_into()
                 .map_err(|_| invalid_fs_data("btrfs chunk length parse error"))?,
         );
+        let profile = u64::from_le_bytes(
+            data[0x18..0x20]
+                .try_into()
+                .map_err(|_| invalid_fs_data("btrfs chunk profile parse error"))?,
+        );
         let num_stripes = u16::from_le_bytes(
             data[0x2c..0x2e]
                 .try_into()
@@ -70,6 +75,8 @@ impl BtrfsReader {
             logical,
             length,
             physical,
+            profile,
+            stripe_count: num_stripes,
         });
         Ok(())
     }

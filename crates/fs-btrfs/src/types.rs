@@ -75,6 +75,8 @@ pub(crate) struct BtrfsChunk {
     pub(crate) logical: u64,
     pub(crate) length: u64,
     pub(crate) physical: u64,
+    pub(crate) profile: u64,
+    pub(crate) stripe_count: u16,
 }
 
 #[derive(Debug, Clone)]
