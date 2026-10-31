@@ -84,7 +84,7 @@ FC 4E 2B A9 01 00 00 00 00 10 00 00 00 00 00 00
 - total bytes：`124568731648`。
 - bytes used：`26126225408`。
 
-这证明 `LV → MD RAID0 → Btrfs` 的读取路径具备可行性。当前 Btrfs chunk tree 已支持递归遍历，真实检材的重组 reader 已能打开 Btrfs、枚举 `@rootfs` 子卷、读取 `/etc/passwd`。Btrfs 的 total bytes 大于当前按两个成员 data zone 计算的阵列逻辑容量，仍需继续核对 Btrfs chunk tree 的多设备条带和完整文件范围，不能直接宣称文件树完整可读。
+这证明 `LV → MD RAID0 → Btrfs` 的读取路径具备可行性。当前 Btrfs chunk tree 已支持递归遍历，真实检材的重组 reader 已能打开 Btrfs、枚举 `@rootfs` 子卷、读取 `/etc/passwd`、`/etc/os-release` 和 `/etc/hostname`，并枚举 `etc`、`var`、`usr`、`root`、`home` 目录。Btrfs 的 total bytes 大于当前按两个成员 data zone 计算的阵列逻辑容量，仍需继续核对 Btrfs chunk tree 的多设备条带和完整文件范围，不能直接宣称文件树完整可读。
 
 ### 2.5 文件系统状态
 
