@@ -2,7 +2,7 @@ use crate::format::{
     BTRFS_HEADER_SIZE, CHUNK_ITEM_KEY, INTERNAL_ITEM_SIZE, KEY_SIZE, LEAF_ITEM_SIZE,
     MAX_TREE_LEVEL, ROOT_BACKREF_KEY, ROOT_ITEM_KEY,
 };
-use crate::types::{BtrfsHeader, BtrfsKey, InternalItem, LeafItem};
+use crate::types::{BtrfsChunk, BtrfsHeader, BtrfsKey, InternalItem, LeafItem};
 use crate::BtrfsReader;
 use evidence_core::filesystem::invalid_fs_data;
 use std::collections::HashMap;
@@ -33,9 +33,44 @@ impl BtrfsReader {
         for item in Self::parse_leaf_items(data, nritems)? {
             if item.key.ty == CHUNK_ITEM_KEY {
                 let chunk_data = Self::get_item_data(data, &item);
-                self.parse_chunks(chunk_data)?;
+                self.parse_chunk_item(item.key.offset, chunk_data)?;
             }
         }
+        Ok(())
+    }
+
+    fn parse_chunk_item(&mut self, logical: u64, data: &[u8]) -> io::Result<()> {
+        if data.len() < 0x30 {
+            return Err(invalid_fs_data("btrfs chunk item too short"));
+        }
+        let length = u64::from_le_bytes(
+            data[0..8]
+                .try_into()
+                .map_err(|_| invalid_fs_data("btrfs chunk length parse error"))?,
+        );
+        let num_stripes = u16::from_le_bytes(
+            data[0x2c..0x2e]
+                .try_into()
+                .map_err(|_| invalid_fs_data("btrfs stripe count parse error"))?,
+        );
+        let stripe_bytes = 0x20usize;
+        let required = 0x30usize
+            .checked_add(num_stripes as usize * stripe_bytes)
+            .ok_or_else(|| invalid_fs_data("btrfs stripe count overflow"))?;
+        if num_stripes == 0 || data.len() < required {
+            return Ok(());
+        }
+        let stripe_offset = 0x30usize;
+        let physical = u64::from_le_bytes(
+            data[stripe_offset + 8..stripe_offset + 16]
+                .try_into()
+                .map_err(|_| invalid_fs_data("btrfs stripe physical parse error"))?,
+        );
+        self.chunk_map.push(BtrfsChunk {
+            logical,
+            length,
+            physical,
+        });
         Ok(())
     }
 
