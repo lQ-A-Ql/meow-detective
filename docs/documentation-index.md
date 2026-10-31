@@ -20,6 +20,8 @@ benchmark 输出、release drill、roadmap、runbook、walkthrough 和编辑器�
 | PST/OST/mbox 支持契约 | `docs/pst-ost-mbox-support.md` |
 | Expected JSON | `docs/expected-json-contract.md` |
 | 插件开发契约 | `docs/plugin-development-contract.md` |
+| LV 映射与 MD RAID 开发 | `docs/lv-mapping-and-mdraid-development.md` |
+| 检材3 LV/RAID 分析结论 | `docs/lv-raid-evidence-analysis.md` |
 
 镜像适配器的公开口径集中在 Parser 支持矩阵：它说明 E01/EWF、单文件 RAW/dd/img、
 ISO9660/Joliet 和受限 flat VMDK 的输入路由、验证等级、组合方式与 fail-closed 边界。
@@ -50,17 +52,17 @@ invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请�
 | 事实 | 当前值 |
 |---|---:|
 | Rust workspace crate | 42 |
-| Tauri commands | 170 |
+| Tauri commands | 167 |
 | app-services source modules | 50 |
 | SQLite repositories | 68 logical repositories |
 | SQLite migration scripts | 106 |
-| frontend test files | 142 |
+| frontend test files | 141 |
 
 | 路径 | 数量 |
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 12 |
-| `frontend/tests/**/*.{test,spec}.{ts,tsx}` | 142 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 170 |
+| `frontend/tests/**/*.{test,spec}.{ts,tsx}` | 141 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 167 |
 
 治理事实源：
 
