@@ -18,6 +18,7 @@ mod kubernetes_yaml;
 mod linux_evidence_facts;
 mod linux_import;
 mod manifest_parser;
+mod mdraid;
 mod member_binding;
 mod network_parser;
 mod phase_ledger;
@@ -65,6 +66,10 @@ pub use linux_import::{
 };
 pub use manifest_parser::{
     parse_static_pod_manifests, ManifestContainer, StaticPodManifestSummary,
+};
+pub use mdraid::{
+    discover_linux_evidence_set_mdraid, open_mdraid0_reader, MdRaidArrayPlan, MdRaidMemberPlan,
+    MdRaidPlanError,
 };
 pub use member_binding::get_linux_import_member_source_id;
 pub use network_parser::{
