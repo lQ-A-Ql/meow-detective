@@ -3306,6 +3306,11 @@ fn pve_cluster_mdraid_reader_exposes_btrfs_root() {
         .list_children("")
         .expect("reassembled Btrfs root should enumerate");
     assert!(!children.is_empty());
+    let root_children = fs
+        .list_children("@rootfs")
+        .expect("reassembled @rootfs subvolume should enumerate");
+    assert!(!root_children.is_empty());
+    assert!(root_children.iter().any(|child| child.name == "etc"));
 }
 
 #[test]
