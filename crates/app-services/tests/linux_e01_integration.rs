@@ -3311,6 +3311,11 @@ fn pve_cluster_mdraid_reader_exposes_btrfs_root() {
         .expect("reassembled @rootfs subvolume should enumerate");
     assert!(!root_children.is_empty());
     assert!(root_children.iter().any(|child| child.name == "etc"));
+    let passwd = fs
+        .read_file_range("@rootfs/etc/passwd", 0, 256)
+        .expect("reassembled @rootfs /etc/passwd should be readable");
+    assert!(!passwd.is_empty());
+    assert!(passwd.windows(5).any(|window| window == b"root:"));
 }
 
 #[test]
