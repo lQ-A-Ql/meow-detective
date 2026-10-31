@@ -106,6 +106,12 @@ fn core_tools() -> Vec<McpHostToolDto> {
             json!({"templateId":identifier(), "format":{"type":"string","enum":["html","csv","json"]}, "idempotencyKey":{"type":"string","minLength":1,"maxLength":128}}),
             vec!["templateId", "format"],
         ),
+        (
+            "forensics.get_mcp_metrics",
+            "读取 MCP 服务运行、队列、调用计数和平均耗时指标。",
+            json!({}),
+            vec![],
+        ),
     ]
     .into_iter()
     .map(|(name, description, properties, required)| tool(name, description, properties, required))

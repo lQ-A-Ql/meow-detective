@@ -109,6 +109,21 @@ pub struct McpHostToolCallResultDto {
     pub error_details: Option<crate::errors::ApiErrorDto>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpHostMetricsDto {
+    pub running: bool,
+    pub active_requests: u32,
+    pub queued_requests: u32,
+    pub task_owner_count: u32,
+    pub total_calls: u64,
+    pub successful_calls: u64,
+    pub failed_calls: u64,
+    pub cancelled_calls: u64,
+    pub total_duration_ms: u64,
+    pub average_duration_ms: u64,
+}
+
 pub const MCP_FILE_PAGE_LIMIT: u32 = 200;
 pub const MCP_FILE_CHUNK_LIMIT: u32 = 64 * 1024;
 pub const MCP_MAX_SAFE_OFFSET: u64 = 9_007_199_254_740_991;

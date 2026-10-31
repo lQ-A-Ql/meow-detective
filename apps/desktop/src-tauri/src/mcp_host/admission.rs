@@ -34,6 +34,13 @@ impl Drop for Waiting {
 }
 
 impl Admission {
+    pub(super) fn pending_total(&self) -> u32 {
+        self.pending
+            .lock()
+            .map(|pending| pending.values().sum::<usize>() as u32)
+            .unwrap_or_default()
+    }
+
     pub(super) async fn acquire(
         self: &Arc<Self>,
         requests: Arc<Semaphore>,

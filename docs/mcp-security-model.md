@@ -20,11 +20,11 @@
 
 ## 工具目录
 
-当前提供 50 个 `forensics.` 工具，其中 45 个查询工具、四个任务工具和一个文件提取工具。
+当前提供 51 个 `forensics.` 工具，其中 46 个查询工具、四个任务工具和一个文件提取工具。
 
 | 功能 | 工具名称，省略 `forensics.` |
 |---|---|
-| 案件与数据源 | `get_current_case`、`list_data_sources`、`get_data_source`、`list_jobs`、`get_job`、`get_task`、`cancel_job`、`start_content_index`、`start_analysis`、`list_report_templates`、`get_report_history`、`start_report_export` |
+| 案件与数据源 | `get_current_case`、`list_data_sources`、`get_data_source`、`list_jobs`、`get_job`、`get_task`、`cancel_job`、`start_content_index`、`start_analysis`、`list_report_templates`、`get_report_history`、`start_report_export`、`get_mcp_metrics` |
 | 文件目录与内容 | `list_files`、`get_file_metadata`、`browse_registry_key`、`read_file`、`extract_file` |
 | 文件分类 | `get_evidence_classification_summary`、`get_file_classification_board` |
 | Windows 分析 | `get_analysis_system_info`、`get_registry_summary`、`get_registry_structured_summary`、`get_browser_history_summary`、`get_email_summary`、`get_event_log_events`、`get_analysis_report` |
@@ -98,7 +98,7 @@ HTTP 审计调用者为客户端 ID，桌面调用者为 `desktop`。工具执�
 | 队列容量 | 两个执行、16 个等待；每个外部客户端最多四个等待调用 |
 | 输出定义 | 输入 JSON Schema、基础输出 JSON Schema、结构化数据与分类错误；任务状态工具已发布字段级输出 Schema，其余工具字段 Schema 待细化 |
 | 协议资源 | 已声明 Tools、Resources、ResourceTemplates、Prompts 与 Tasks；案件概览资源和三类 Prompt 已提供，资源权限与真实客户端协商验收继续执行 |
-| 长任务 | `list_jobs`、`get_job`、`get_task` 和 `cancel_job` 已暴露现有任务状态、结果与取消请求；内容索引、分析和报告导出任务均复用案件任务表；rmcp Tasks 已接入长任务工具 |
+| 长任务 | `list_jobs`、`get_job`、`get_task` 和 `cancel_job` 已暴露现有任务状态、结果与取消请求；内容索引、分析和报告导出任务均复用案件任务表；rmcp Tasks 与 `get_mcp_metrics` 已接入长任务管理 |
 
 这些项目属于服务端后续设计范围。对应的权限与验收条件需要在增加接口之前确定。
 

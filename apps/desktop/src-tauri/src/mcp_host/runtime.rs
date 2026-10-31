@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
 };
@@ -33,6 +33,12 @@ pub struct McpHostRuntime {
     pub(super) audit_requests: Arc<Semaphore>,
     pub(super) audit_waiters: Arc<Semaphore>,
     task_owners: Mutex<HashMap<String, String>>,
+    active_requests: AtomicU64,
+    total_calls: AtomicU64,
+    successful_calls: AtomicU64,
+    failed_calls: AtomicU64,
+    cancelled_calls: AtomicU64,
+    total_duration_ms: AtomicU64,
 }
 
 impl Default for McpHostRuntime {
@@ -50,11 +56,59 @@ impl Default for McpHostRuntime {
             audit_requests: Arc::new(Semaphore::new(2)),
             audit_waiters: Arc::new(Semaphore::new(16)),
             task_owners: Mutex::new(HashMap::new()),
+            active_requests: AtomicU64::new(0),
+            total_calls: AtomicU64::new(0),
+            successful_calls: AtomicU64::new(0),
+            failed_calls: AtomicU64::new(0),
+            cancelled_calls: AtomicU64::new(0),
+            total_duration_ms: AtomicU64::new(0),
         }
     }
 }
 
 impl McpHostRuntime {
+    pub fn begin_request(&self) {
+        self.active_requests.fetch_add(1, Ordering::AcqRel);
+    }
+
+    pub fn finish_request(&self, success: bool, cancelled: bool, duration_ms: u64) {
+        self.active_requests.fetch_sub(1, Ordering::AcqRel);
+        self.total_calls.fetch_add(1, Ordering::AcqRel);
+        self.total_duration_ms
+            .fetch_add(duration_ms, Ordering::AcqRel);
+        if success {
+            self.successful_calls.fetch_add(1, Ordering::AcqRel);
+        } else {
+            self.failed_calls.fetch_add(1, Ordering::AcqRel);
+        }
+        if cancelled {
+            self.cancelled_calls.fetch_add(1, Ordering::AcqRel);
+        }
+    }
+
+    pub fn metrics(&self) -> transport::dto::mcp_host::McpHostMetricsDto {
+        let total_calls = self.total_calls.load(Ordering::Acquire);
+        let total_duration_ms = self.total_duration_ms.load(Ordering::Acquire);
+        transport::dto::mcp_host::McpHostMetricsDto {
+            running: self.live.load(Ordering::Acquire),
+            active_requests: self.active_requests.load(Ordering::Acquire) as u32,
+            queued_requests: self.admission.pending_total(),
+            task_owner_count: self
+                .task_owners
+                .lock()
+                .map(|owners| owners.len() as u32)
+                .unwrap_or_default(),
+            total_calls,
+            successful_calls: self.successful_calls.load(Ordering::Acquire),
+            failed_calls: self.failed_calls.load(Ordering::Acquire),
+            cancelled_calls: self.cancelled_calls.load(Ordering::Acquire),
+            total_duration_ms,
+            average_duration_ms: total_duration_ms
+                .checked_div(total_calls)
+                .unwrap_or_default(),
+        }
+    }
+
     pub fn register_task_owner(
         &self,
         task_id: &str,

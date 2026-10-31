@@ -90,10 +90,21 @@ pub(super) async fn call_tool_as(
             return reject(state, Some(invocation), actor, safe_name, error).await;
         }
     };
+    let metrics = CallMetricsGuard::new(state.mcp_host.clone());
     let (worker_state, worker_invocation) = (state.clone(), invocation.clone());
     match tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        execute_for_active_case(&worker_state, &request, &worker_invocation)
+        let result = execute_for_active_case(&worker_state, &request, &worker_invocation);
+        if let Ok(response) = &result {
+            metrics.finish(
+                response.success,
+                response
+                    .error_details
+                    .as_ref()
+                    .is_some_and(|error| error.category.as_deref() == Some("cancelled")),
+            );
+        }
+        result
     })
     .await
     {
@@ -214,6 +225,12 @@ fn query_active_case(
     if request.name == "forensics.cancel_job" {
         return cancel_job(state, active, request, invocation);
     }
+    if request.name == "forensics.get_mcp_metrics" {
+        return Ok(tool_response(Ok(serde_json::to_value(
+            state.mcp_host.metrics(),
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?)));
+    }
     if request.name == "forensics.start_content_index" {
         return start_content_index(state, active, request, invocation);
     }
@@ -277,6 +294,41 @@ fn query_active_case(
     );
     invocation.check(&request.name, &request.arguments)?;
     Ok(tool_response(result))
+}
+
+struct CallMetricsGuard {
+    runtime: Arc<crate::mcp_host::McpHostRuntime>,
+    started: std::time::Instant,
+    finished: bool,
+}
+
+impl CallMetricsGuard {
+    fn new(runtime: Arc<crate::mcp_host::McpHostRuntime>) -> Self {
+        runtime.begin_request();
+        Self {
+            runtime,
+            started: std::time::Instant::now(),
+            finished: false,
+        }
+    }
+
+    fn finish(mut self, success: bool, cancelled: bool) {
+        self.finished = true;
+        self.runtime.finish_request(
+            success,
+            cancelled,
+            self.started.elapsed().as_millis() as u64,
+        );
+    }
+}
+
+impl Drop for CallMetricsGuard {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.runtime
+                .finish_request(false, false, self.started.elapsed().as_millis() as u64);
+        }
+    }
 }
 
 fn dispatch_tool(
