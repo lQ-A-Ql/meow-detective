@@ -112,3 +112,34 @@ fn raid0_reader_rejects_missing_member() {
     )]);
     assert!(matches!(result, Err(MdRaidError::MemberCount { .. })));
 }
+
+#[test]
+fn raid0_reader_uses_unequal_member_tail_zone() {
+    let mut first = vec![0; 512 + 2048];
+    let mut second = vec![0; 512 + 3072];
+    first[512..1024].fill(b'A');
+    first[1024..1536].fill(b'C');
+    second[512..1024].fill(b'B');
+    second[1024..1536].fill(b'D');
+    second[2560..3072].fill(b'E');
+    second[3072..3584].fill(b'F');
+    let mut reader = MdRaid0Reader::open(vec![
+        MdRaidMember::new(superblock(0), Box::new(MemoryReader::new(first))),
+        MdRaidMember::new(
+            MdRaidSuperblock {
+                data_size_sectors: 6,
+                ..superblock(1)
+            },
+            Box::new(MemoryReader::new(second)),
+        ),
+    ])
+    .unwrap();
+    let mut output = vec![0; 5120];
+    reader.read_exact(&mut output).unwrap();
+    assert_eq!(&output[0..512], vec![b'A'; 512].as_slice());
+    assert_eq!(&output[512..1024], vec![b'B'; 512].as_slice());
+    assert_eq!(&output[1024..1536], vec![b'C'; 512].as_slice());
+    assert_eq!(&output[1536..2048], vec![b'D'; 512].as_slice());
+    assert_eq!(&output[4096..4608], vec![b'E'; 512].as_slice());
+    assert_eq!(&output[4608..5120], vec![b'F'; 512].as_slice());
+}
