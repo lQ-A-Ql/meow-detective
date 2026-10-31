@@ -11,17 +11,20 @@ use std::io;
 impl BtrfsReader {
     pub(crate) fn read_chunk_tree(&mut self) -> io::Result<()> {
         let node_data = self.read_logical_block(self.chunk_tree_logical)?;
-        let header = Self::parse_header(&node_data)?;
+        self.read_chunk_node(&node_data)
+    }
+
+    fn read_chunk_node(&mut self, node_data: &[u8]) -> io::Result<()> {
+        let header = Self::parse_header(node_data)?;
         if header.level == 0 {
-            self.read_chunk_leaf(&node_data, header.nritems)?;
-        } else {
-            for item in Self::parse_internal_items(&node_data, header.nritems)? {
-                let child = self.read_logical_block(item.blockptr)?;
-                let child_header = Self::parse_header(&child)?;
-                if child_header.level == 0 {
-                    self.read_chunk_leaf(&child, child_header.nritems)?;
-                }
-            }
+            return self.read_chunk_leaf(node_data, header.nritems);
+        }
+        if header.level > MAX_TREE_LEVEL {
+            return Err(invalid_fs_data("btrfs chunk tree level exceeds limit"));
+        }
+        for item in Self::parse_internal_items(node_data, header.nritems)? {
+            let child = self.read_logical_block(item.blockptr)?;
+            self.read_chunk_node(&child)?;
         }
         Ok(())
     }
