@@ -80,7 +80,7 @@ FC 4E 2B A9
 
 独立只读重组已经得到进一步文件系统证据：按两个成员的 RAID0 chunk 规则重组约 1 GiB 片段后，在重组逻辑空间发现有效 Btrfs superblock。该 superblock 的 fsid 为 `32-31-E5-2F-5E-15-44-C4-B2-24-E2-9C-B4-20-1C-0E`，generation 为 `4389`，sectorsize 为 `4096`，nodesize 为 `16384`，total bytes 为 `124568731648`，bytes used 为 `26126225408`。
 
-Btrfs total bytes 大于当前两个 MD 成员 data zone 形成的逻辑容量，说明仍需检查 Btrfs chunk tree、设备条带和可能的多设备布局。当前代码已经能够递归读取 chunk tree，并在真实检材的 RAID0 重组 reader 上打开 Btrfs、枚举根目录；这还不能作为完整文件树验收。
+Btrfs total bytes 大于当前两个 MD 成员 data zone 形成的逻辑容量，说明仍需检查 Btrfs chunk tree、设备条带和可能的多设备布局。当前代码已经能够递归读取 chunk tree，并在真实检材的 RAID0 重组 reader 上打开 Btrfs、枚举 `@rootfs` 根目录、读取 `/etc/passwd`；这还不能作为完整文件树验收。
 
 ## 5. 当前结论
 
@@ -93,7 +93,7 @@ Btrfs total bytes 大于当前两个 MD 成员 data zone 形成的逻辑容量�
 | LV 内 MD RAID | RAID v1 superblock 候选、level 0、两成员 | 高可信候选 |
 | RAID 成员完整性 | 成员编号 0 和 1 已匹配，data size 不同 | 已匹配，待一致性验证 |
 | 文件系统 | 直接 LV 首部没有 XFS/EXT4/Btrfs 标识；RAID0 重组片段发现 Btrfs superblock | RAID 后已确认候选 |
-| 文件树 | RAID0 reader 已接入并可枚举 Btrfs 根目录；完整多设备范围仍待验证 | 部分完成 |
+| 文件树 | RAID0 reader 已接入并可枚举 `@rootfs`、读取 `/etc/passwd`；完整多设备范围仍待验证 | 部分完成 |
 
 ## 6. 读取路径调整
 
