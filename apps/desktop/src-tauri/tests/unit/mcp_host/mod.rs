@@ -109,6 +109,30 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
         .unwrap();
     assert_eq!(result["result"]["isError"], false);
     assert_eq!(result["result"]["structuredContent"]["name"], "MCP Case");
+    let metrics: Value = request(
+        &endpoint,
+        token,
+        json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"forensics.get_mcp_metrics","arguments":{}}}),
+    )
+    .await
+    .json()
+    .await
+    .unwrap();
+    let metrics_follow_up: Value = request(
+        &endpoint,
+        token,
+        json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"forensics.get_mcp_metrics","arguments":{}}}),
+    )
+    .await
+    .json()
+    .await
+    .unwrap();
+    assert!(
+        metrics_follow_up["result"]["structuredContent"]["totalCalls"]
+            .as_u64()
+            .is_some_and(|value| value >= 1)
+    );
+    assert!(metrics["result"]["structuredContent"]["averageDurationMs"].is_number());
     let settings = transport::dto::mcp_host::McpHostSettingsDto {
         enabled: true,
         disabled_tools: vec!["forensics.get_current_case".into()],
@@ -129,7 +153,7 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     let count = persistence_sqlite::repositories::audit_repo::AuditRepo::new(&conn)
         .count_by_action("mcp.tool.call")
         .unwrap();
-    assert_eq!(count, 2);
+    assert_eq!(count, 4);
     for (name, arguments) in [
         ("forensics.get_data_source", json!({})),
         (
