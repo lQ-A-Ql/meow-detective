@@ -80,7 +80,7 @@ FC 4E 2B A9
 
 独立只读重组已经得到进一步文件系统证据：按两个成员的 RAID0 chunk 规则重组约 1 GiB 片段后，在重组逻辑空间发现有效 Btrfs superblock。该 superblock 的 fsid 为 `32-31-E5-2F-5E-15-44-C4-B2-24-E2-9C-B4-20-1C-0E`，generation 为 `4389`，sectorsize 为 `4096`，nodesize 为 `16384`，total bytes 为 `124568731648`，bytes used 为 `26126225408`。
 
-Btrfs total bytes 大于当前两个 MD 成员最小 data size 形成的逻辑容量，说明仍需检查 Btrfs chunk tree、设备条带和可能的多设备布局。这个结果足以证明 RAID0 后存在 Btrfs，不能作为完整文件树验收。
+Btrfs total bytes 大于当前两个 MD 成员 data zone 形成的逻辑容量，说明仍需检查 Btrfs chunk tree、设备条带和可能的多设备布局。当前代码已经能够递归读取 chunk tree，并在真实检材的 RAID0 重组 reader 上打开 Btrfs、枚举根目录；这还不能作为完整文件树验收。
 
 ## 5. 当前结论
 
@@ -93,7 +93,7 @@ Btrfs total bytes 大于当前两个 MD 成员最小 data size 形成的逻辑�
 | LV 内 MD RAID | RAID v1 superblock 候选、level 0、两成员 | 高可信候选 |
 | RAID 成员完整性 | 成员编号 0 和 1 已匹配，data size 不同 | 已匹配，待一致性验证 |
 | 文件系统 | 直接 LV 首部没有 XFS/EXT4/Btrfs 标识；RAID0 重组片段发现 Btrfs superblock | RAID 后已确认候选 |
-| 文件树 | RAID0 reader 和 Btrfs 多设备布局尚未接入 | 未完成 |
+| 文件树 | RAID0 reader 已接入并可枚举 Btrfs 根目录；完整多设备范围仍待验证 | 部分完成 |
 
 ## 6. 读取路径调整
 
@@ -126,11 +126,11 @@ E01 → LVM PV → VG → LV → MD RAID0 → 文件系统
 1. 在所有集合成员的全部可读 LV 中按 MD v1 superblock 规则扫描。
 2. 按阵列 UUID 分组。
 3. 验证两个成员的 `data_size`、`data_offset`、superblock offset、chunk、layout、checksum 和事件状态。
-4. 用两个成员构建只读 RAID0 reader，并按最小 data size 计算逻辑容量。
+4. 用两个成员构建只读 RAID0 reader，并按 MD RAID0 zone 计算逻辑容量。
 5. 在重组后的逻辑空间检查 XFS AG superblock、EXT4 superblock 和 Btrfs superblock。
 6. 对确认的文件系统执行 TSK `fsstat`、`fls` 交叉验证。
 7. 若成员缺失或元数据冲突，保留 `MdArrayIncomplete` 或 `MdArrayConflicted`，不创建文件树。
 
 ## 9. 证据边界
 
-本报告中的 RAID 结论来自 E01 只读读取、TSK 外层分区分析和应用内部 LVM reader 的有界读取。两个 RAID 成员已经匹配，但 RAID reader 重组和重组后文件系统尚未完成验证。文件系统识别、文件树枚举、文件预览和制品提取都应等待 RAID reader 通过一致性校验后执行。
+本报告中的 RAID 结论来自 E01 只读读取、TSK 外层分区分析和应用内部 LVM reader 的有界读取。两个 RAID 成员已经匹配，RAID reader 已能打开 Btrfs 并枚举根目录；完整多设备 chunk 范围、文件预览和制品提取仍需继续验证。

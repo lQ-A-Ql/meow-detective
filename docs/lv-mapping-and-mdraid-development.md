@@ -84,7 +84,7 @@ FC 4E 2B A9 01 00 00 00 00 10 00 00 00 00 00 00
 - total bytes：`124568731648`。
 - bytes used：`26126225408`。
 
-这证明 `LV → MD RAID0 → Btrfs` 的读取路径具备可行性。Btrfs 的 total bytes 大于当前按两个成员最小 data size 计算的阵列逻辑容量，仍需继续核对 Btrfs chunk tree 和多设备布局，不能直接宣称文件树完整可读。
+这证明 `LV → MD RAID0 → Btrfs` 的读取路径具备可行性。当前 Btrfs chunk tree 已支持递归遍历，真实检材的重组 reader 已能打开 Btrfs 并枚举根目录。Btrfs 的 total bytes 大于当前按两个成员 data zone 计算的阵列逻辑容量，仍需继续核对 Btrfs chunk tree 的多设备条带和完整文件范围，不能直接宣称文件树完整可读。
 
 ### 2.5 文件系统状态
 
@@ -135,7 +135,7 @@ Linux 证据集合成员获得集合内其他成员的 `LvmDiscoverySource`。�
 - 只读 RAID0 chunk 读取器。
 - 缺失成员、成员编号不连续、UUID/chunk/layout 冲突时失败关闭。
 
-应用服务已经在 LVM 展开阶段接入 MD superblock 诊断，能够报告跨 VG/LV 的 `member=0/2` 和 `member=1/2`。跨 LV 阵列 reader 组装仍待接入。
+应用服务已经在 LVM 展开阶段接入 MD superblock 诊断，能够报告跨 VG/LV 的 `member=0/2` 和 `member=1/2`，并能创建跨 VG/LV 的只读 RAID0 reader。跨设备 Btrfs chunk 的完整读取边界仍需继续验证。
 
 ### 3.4 当前能力边界
 
