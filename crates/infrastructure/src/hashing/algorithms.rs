@@ -11,6 +11,22 @@ pub enum HashAlgorithm {
     Sm3,
 }
 
+pub struct StreamingHasher(Hasher);
+
+impl StreamingHasher {
+    pub fn new(algorithm: HashAlgorithm) -> Self {
+        Self(Hasher::new(algorithm))
+    }
+
+    pub fn update(&mut self, bytes: &[u8]) {
+        self.0.update(bytes);
+    }
+
+    pub fn finalize(self) -> String {
+        self.0.finalize()
+    }
+}
+
 impl HashAlgorithm {
     pub const fn label(self) -> &'static str {
         match self {
@@ -38,7 +54,7 @@ pub fn digest_reader_with_cancel(
     mut on_progress: impl FnMut(u64),
 ) -> io::Result<Option<String>> {
     let mut hasher = Hasher::new(algorithm);
-    let mut buffer = [0u8; 1024 * 1024];
+    let mut buffer = vec![0u8; 1024 * 1024];
     let mut processed = 0u64;
     loop {
         if cancelled() {

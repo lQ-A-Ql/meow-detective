@@ -1,7 +1,7 @@
 //! Immutable section index and bounded, shared offset-page cache.
 use crate::{checksum::page_digest, sections::invalid};
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     fs::File,
     io::{self, Read, Seek, SeekFrom},
     sync::{Arc, Mutex},
@@ -28,17 +28,17 @@ pub(crate) struct TableSpan {
 #[path = "../tests/unit/paged_index.rs"]
 mod tests;
 
-struct CachedPage {
-    table: usize,
-    page: u64,
-    bytes: Arc<[u8]>,
+#[derive(Default)]
+struct PageCache {
+    pages: HashMap<(usize, u64), Arc<[u8]>>,
+    order: VecDeque<(usize, u64)>,
 }
 
 pub(crate) struct PagedIndex {
     tables: Vec<TableSpan>,
     chunks: usize,
     cache_limit_pages: usize,
-    cache: Mutex<VecDeque<CachedPage>>,
+    cache: Mutex<PageCache>,
 }
 
 impl PagedIndex {
@@ -61,7 +61,7 @@ impl PagedIndex {
         let index = Self {
             tables,
             chunks: usize::try_from(chunks).map_err(|_| crate::open_limits::limit())?,
-            cache: Mutex::new(VecDeque::new()),
+            cache: Mutex::new(PageCache::default()),
             cache_limit_pages,
         };
         if index.metadata_bytes() > crate::open_limits::MAX_METADATA_BYTES {
@@ -82,7 +82,7 @@ impl PagedIndex {
                 .iter()
                 .map(|t| t.page_checksums.capacity() * 32)
                 .sum::<usize>()
-            + self.cache_limit_pages * (std::mem::size_of::<CachedPage>() + 32)
+            + self.cache_limit_pages * (std::mem::size_of::<((usize, u64), Arc<[u8]>)>() + 32)
     }
     pub fn max_stored_chunk(&self) -> u64 {
         self.tables.iter().map(|t| t.max_stored).max().unwrap_or(0)
@@ -129,18 +129,11 @@ impl PagedIndex {
     }
     fn page(&self, slot: usize, page: u64, files: &mut [File]) -> io::Result<Arc<[u8]>> {
         let cached = {
-            let mut cache = self
+            let cache = self
                 .cache
                 .lock()
                 .map_err(|_| invalid("E01 table cache lock poisoned"))?;
-            let found = cache
-                .iter()
-                .rposition(|entry| entry.table == slot && entry.page == page);
-            found.and_then(|i| cache.remove(i)).map(|entry| {
-                let bytes = Arc::clone(&entry.bytes);
-                cache.push_back(entry);
-                bytes
-            })
+            cache.pages.get(&(slot, page)).cloned()
         };
         Ok(match cached {
             Some(bytes) => bytes,
@@ -166,18 +159,15 @@ impl PagedIndex {
             .cache
             .lock()
             .map_err(|_| invalid("E01 table cache lock poisoned"))?;
-        if !cache
-            .iter()
-            .any(|entry| entry.table == slot && entry.page == page)
-        {
-            while cache.len() >= self.cache_limit_pages {
-                cache.pop_front();
+        let key = (slot, page);
+        if !cache.pages.contains_key(&key) {
+            while cache.pages.len() >= self.cache_limit_pages {
+                if let Some(evicted) = cache.order.pop_front() {
+                    cache.pages.remove(&evicted);
+                }
             }
-            cache.push_back(CachedPage {
-                table: slot,
-                page,
-                bytes: Arc::clone(&bytes),
-            });
+            cache.pages.insert(key, Arc::clone(&bytes));
+            cache.order.push_back(key);
         }
         Ok(bytes)
     }

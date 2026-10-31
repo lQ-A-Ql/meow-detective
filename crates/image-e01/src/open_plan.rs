@@ -102,6 +102,7 @@ impl E01OpenPlan {
             cursor: 0,
             chunk_cache: Default::default(),
             chunk_cache_bytes: 0,
+            chunk_cache_enabled: true,
             last_chunk_read: None,
             resource_metadata: self.resource_metadata.clone(),
             resource_admission: self.resource_admission.clone(),

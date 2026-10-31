@@ -572,6 +572,7 @@ Workers
 |---|---:|---:|---:|---|
 | 当前文件 Hash | 1 | 64 MiB | 1 | Interactive |
 | 批量 Hash | 2 | 256 MiB | 1 | Background |
+| E01 逻辑磁盘 Hash | min(2 × 逻辑核, 32) | 每 lane 4 MiB，总计最多 128 MiB | min(2 × 逻辑核, 32) | Background |
 | 全文索引 | 2 | 512 MiB | 1 | Background |
 | NTFS Inspector | 1 | 128 MiB | 1 | Interactive |
 | EXIF/Artifact 批处理 | 2 | 256 MiB | 1 | Background |
@@ -581,11 +582,12 @@ Workers
 规则：
 
 1. Interactive 任务可以抢占尚未开始的 Background 任务。
-2. 同一证据源的顺序 I/O 任务默认只允许一个读槽位，避免 E01 随机读放大。
-3. CPU 密集任务共享全局 CPU 预算；不得每个 BitLocker/Hash 任务各自占满所有逻辑核。
-4. UI 预览读取保留一个低延迟 I/O 配额，不被批量索引饿死。
-5. 内存预算是准入信号；解压、EXIF 和全文解析必须另有输出上限。
-6. GPU 仅作为可选 ResourceClass；没有可用 GPU 时回退 CPU，不阻塞队列。
+2. 普通顺序 I/O 任务默认只允许一个读槽位；E01 逻辑摘要按 2 MiB 有序分块，以独立文件句柄并行读取，lane 数同时受逻辑核和内存余量约束。
+3. E01 摘要每个 lane 使用两个 2 MiB 缓冲，队列只保留一个待消费块；摘要消费严格按逻辑偏移顺序执行，单任务读取工作集不超过 128 MiB。
+4. CPU 密集任务共享全局 CPU 预算；不得每个 BitLocker/Hash 任务各自占满所有逻辑核。
+5. UI 预览读取保留一个低延迟 I/O 配额，不被批量索引饿死。
+6. 内存预算是准入信号；解压、EXIF 和全文解析必须另有输出上限。
+7. GPU 仅作为可选 ResourceClass；没有可用 GPU 时回退 CPU，不阻塞队列。
 
 ### 15.5 调度算法
 
@@ -614,9 +616,9 @@ effectivePriority = basePriority + aging(seconds / 30)
   ↓
 资源准入
   ↓
-按固定范围读取（建议 4–16 MiB）
+E01 按 2 MiB 有序分块并行读取；其他读者按固定范围读取
   ↓ 每个块检查 cancelToken
-更新哈希、bytesRead、throughput
+按逻辑偏移顺序更新摘要、bytesRead、throughput
   ↓
 每 250–500 ms 合并一次进度事件
   ↓
@@ -739,6 +741,7 @@ BitLocker 字典是 CPU 密集任务，使用专用 `ResourceClass::Cpu` 预算�
 | EVIDENCE_HASH_STATUS_SEMANTICS | P2 | 已完成 | 前端和后端均以 `hashStatus` 表示来源哈希；原始磁盘摘要保持独立 |
 | DIGEST_TASK_RECOMPUTE | P2 | 已完成 | 普通重复提交复用完成结果；强制重算创建新的任务尝试 |
 | EMULATION_TRUST_PROVENANCE | P2 | 已完成 | 仿真 provenance 记录 `sourceTrustPolicy=importTrusted`；UI 不声明内容校验 |
+| E01_PARALLEL_DIGEST | P1 | 已完成 | 2 MiB 有序分块、CPU 与内存余量共同决定 lane、最多 32 lane、每 lane 双缓冲；合成多分块和真实 E01 重复计算结果一致 |
 
 ### 16.3 执行清单
 
@@ -774,6 +777,9 @@ BitLocker 字典是 CPU 密集任务，使用专用 `ResourceClass::Cpu` 预算�
 - [x] SHA256_PIPELINE_BOUNDARIES：补齐读取故障与缓冲区回收故障测试。
 - [x] REVISION_RECOMPUTE_POLICY：将持久化内容摘要纳入普通任务复用一致性核对。
 - [x] E01_SEGMENT_SET_COVERAGE：补齐读取期间替换、追加和公开 E01 末段截断验收。
+- [x] E01_PARALLEL_DIGEST：关闭扫描 reader 的逐 reader 分块缓存，使用共享分页索引和直接摘要更新，避免重复复制。
+- [x] E01_PARALLEL_DIGEST：以内存软上限剩余空间限制 lane，保证最大读取工作集不超过 128 MiB。
+- [x] E01_PARALLEL_DIGEST：使用合成 5 MiB E01 校验四种算法与已知逻辑字节一致，并验证真实 E01 重算确定性。
 - [x] 使用公开 E01、公开 RAW 和生成 VHDX 完成四种摘要验证。
 - [x] 完成无预先摘要的公开 E01 与 RAW 仿真来源准备验收。
 - [ ] 使用受控物理磁盘或小型物理设备完成 LocalDisk 四种摘要验证。
@@ -804,7 +810,7 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1
 | 范围 | 结果 |
 |---|---|
 | `cargo fmt --all -- --check` 与 `git diff --check` | 通过 |
-| `cargo test -p app-services --lib hash_service` | 21 项通过，2 项按外部设备条件忽略 |
+| `cargo test -p app-services --lib hash_service` | 24 项通过，4 项按外部设备或样本条件忽略 |
 | `cargo test -p app-services --test evidence_tasks` | 7 项通过 |
 | `cargo test -p app-services --lib digest_service` | 4 项通过 |
 | 报告哈希告警回归 | 1 项通过 |
@@ -816,7 +822,22 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1
 | 前端类型检查、ESLint、生产构建 | 通过 |
 | 仿真、摘要强制重算和报告状态定向前端测试 | 27 项通过 |
 | 公开 E01/RAW 与生成 VHDX 四算法验收 | 通过；VHDX 四算法耗时约 4.08 秒 |
+| 真实 E01 四算法验收 | 通过；100.60 GiB，32 lane，SM3 摘要 `467093295d3565be53874257d71479b87c527b6fea0b4f968ea65060fbe1eafe` |
+| 真实 E01 SHA-256 确定性 | 通过；两轮共 111.16 秒，摘要与字节数一致 |
 | 无预先摘要的公开 E01/RAW 仿真来源准备 | 通过 |
 | 模块大小、函数大小、测试布局、命令边界、服务边界、文档漂移、文档保留守卫 | 通过 |
 | LocalDisk 与 VMware 会话 | LocalDisk 缺少受控物理测试设备；VMware、`vmrun.exe` 与 Dokan2 已可用，缺少可启动 E01/RAW 测试镜像 |
+
+### 16.6 真实 E01 性能记录
+
+样本为单分段 E01，容器大小 19,141,752,608 字节，容器 SHA-256 为 `D819689946FC2197DEC73F51BB65B1DA696C4258DB91FAC432DB734629081DA5`。逻辑磁盘大小为 108,018,008,064 字节，Release 构建使用 32 个读取 lane，进程工作集约 145 MiB。
+
+| 算法 | 耗时 | 平均吞吐 | 摘要 |
+|---|---:|---:|---|
+| MD5 | 156,685 ms | 657.5 MiB/s | `56674dba14308a8dee1ed07298b4b645` |
+| SHA-1 | 52,481 ms | 1,962.9 MiB/s | `8aeb4440f6f52d5c6eae0ade3c86ee7e491a8745` |
+| SHA-256 | 54,770 ms | 1,880.8 MiB/s | `56be362bf08d6b4c8a592e51d06cd0fa4237910bdbc1699e2cb13c9e8738db6f` |
+| SM3 | 342,661 ms | 300.6 MiB/s | `467093295d3565be53874257d71479b87c527b6fea0b4f968ea65060fbe1eafe` |
+
+SHA-1 与 SHA-256 已超过 1000 MB/s 的目标。MD5 和 SM3 都受单条顺序摘要状态限制；增加 reader lane 只能隐藏压缩读取延迟，不能增加摘要计算吞吐。
 

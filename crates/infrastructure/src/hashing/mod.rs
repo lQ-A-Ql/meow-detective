@@ -9,7 +9,7 @@ use std::io::{self, Read};
 mod algorithms;
 mod pipeline;
 
-pub use algorithms::{digest_bytes, digest_reader_with_cancel, HashAlgorithm};
+pub use algorithms::{digest_bytes, digest_reader_with_cancel, HashAlgorithm, StreamingHasher};
 
 pub use pipeline::{sha256_file_pipelined_with_cancel, sha256_pipeline_worker_threads};
 
@@ -84,7 +84,7 @@ pub fn sha256_reader_with_cancel(
     mut on_progress: impl FnMut(u64),
 ) -> io::Result<Option<String>> {
     let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 1024 * 1024];
+    let mut buffer = vec![0u8; 1024 * 1024];
     let mut processed = 0u64;
     loop {
         if cancelled() {

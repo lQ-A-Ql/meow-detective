@@ -246,12 +246,12 @@ fn page_eviction_keeps_borrowed_bytes_alive_and_reloads_verified_offsets() {
     let first = index.page(0, 0, &mut reader.segment_files).unwrap();
     let expected = first[..4].to_vec();
     let second = index.page(0, 1, &mut reader.segment_files).unwrap();
-    assert_eq!(index.cache.lock().unwrap().len(), 1);
+    assert_eq!(index.cache.lock().unwrap().pages.len(), 1);
     assert_eq!(first[..4], expected);
     assert!(!second.is_empty());
     let reloaded = index.page(0, 0, &mut reader.segment_files).unwrap();
     assert_eq!(reloaded.as_ref(), first.as_ref());
-    assert_eq!(index.cache.lock().unwrap().len(), 1);
+    assert_eq!(index.cache.lock().unwrap().pages.len(), 1);
     for offset in [0, crate::paged_index::PAGE_ENTRIES * 512, 512] {
         let mut bytes = [0; 512];
         reader.read_exact_at(offset, &mut bytes).unwrap();

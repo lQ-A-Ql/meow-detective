@@ -28,6 +28,7 @@ pub struct E01Reader {
     pub(crate) cursor: u64,
     pub(crate) chunk_cache: VecDeque<CachedChunk>,
     pub(crate) chunk_cache_bytes: usize,
+    pub(crate) chunk_cache_enabled: bool,
     pub(crate) last_chunk_read: Option<u64>,
     pub(crate) resource_metadata: Option<Arc<dyn evidence_core::reader::ReaderResourceHold>>,
     pub(crate) resource_admission: Option<Arc<dyn evidence_core::reader::ReaderAdmission>>,
@@ -66,6 +67,7 @@ impl E01Reader {
             cursor: 0,
             chunk_cache: VecDeque::new(),
             chunk_cache_bytes: 0,
+            chunk_cache_enabled: true,
             last_chunk_read: None,
             resource_metadata: None,
             resource_admission: None,
@@ -128,11 +130,20 @@ impl E01Reader {
             cursor: 0,
             chunk_cache: VecDeque::new(),
             chunk_cache_bytes: 0,
+            chunk_cache_enabled: true,
             last_chunk_read: None,
             resource_metadata: self.resource_metadata.clone(),
             resource_admission: self.resource_admission.clone(),
             _resource_reader: resource_reader,
         })
+    }
+
+    /// Disable per-reader sequential chunk caching for bounded parallel scans.
+    pub fn without_chunk_cache(mut self) -> Self {
+        self.chunk_cache_enabled = false;
+        self.chunk_cache.clear();
+        self.chunk_cache_bytes = 0;
+        self
     }
 
     /// Read from an absolute image offset without discarding the sequential
@@ -187,6 +198,11 @@ impl E01Reader {
     }
 
     fn read_chunk_cached(&mut self, idx: u64, sequential: bool) -> io::Result<Arc<[u8]>> {
+        if !self.chunk_cache_enabled {
+            return self
+                .read_chunk_uncached(idx)
+                .map(|data| Arc::<[u8]>::from(data.into_boxed_slice()));
+        }
         if let Some(data) = self.cached_chunk(idx) {
             if sequential {
                 self.prefetch_chunks_after(idx);

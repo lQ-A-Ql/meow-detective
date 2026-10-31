@@ -8,7 +8,11 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::SystemTime;
 
+mod e01_pipeline;
+mod logical;
 pub(crate) mod volumes;
+
+use logical::hash_local_disk;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EvidenceHashError {
@@ -189,86 +193,6 @@ impl HashService {
             },
         })
     }
-
-    /// Hashes the logical byte stream exposed by a source reader.  This is
-    /// intentionally separate from `hash_evidence_with_algorithm`, whose
-    /// container-set result covers the physical files that make up an image
-    /// (for example a QCOW backing chain or VMDK descriptor plus extent).
-    pub fn hash_logical_evidence(
-        path: &Path,
-        kind: &DataSourceKind,
-        algorithm: hashing::HashAlgorithm,
-        cancelled: &AtomicBool,
-        progress: &(dyn Fn(u64, u64) + Sync),
-    ) -> Result<EvidenceHashResult, EvidenceHashError> {
-        if *kind == DataSourceKind::LocalDisk {
-            return hash_local_disk(path, algorithm, cancelled, progress);
-        }
-        let mut reader: Box<dyn evidence_core::EvidenceReader> = match kind {
-            DataSourceKind::E01 => Box::new(
-                image_e01::E01Reader::open(path)
-                    .map_err(|error| io_error("open logical E01 image", error))?,
-            ),
-            DataSourceKind::Raw => Box::new(
-                evidence_core::RawImageReader::open(path)
-                    .map_err(|error| io_error("open logical raw image", error))?,
-            ),
-            DataSourceKind::AndroidSparse => Box::new(
-                image_android::AndroidSparseReader::open(path).map_err(|error| {
-                    io_error("open logical Android image", io::Error::other(error))
-                })?,
-            ),
-            _ => return Err(EvidenceHashError::Unsupported),
-        };
-        let total_bytes = reader.info().size;
-        let digest = digest_reader_exact(
-            reader.as_mut(),
-            algorithm,
-            total_bytes,
-            cancelled,
-            |processed| progress(processed.min(total_bytes), total_bytes),
-        )?;
-        Ok(EvidenceHashResult {
-            digest,
-            bytes_processed: total_bytes,
-            acceleration: if algorithm == hashing::HashAlgorithm::Sha256 {
-                HashService::sha256_acceleration()
-            } else {
-                "portable"
-            },
-            parallel_segments: 1,
-            worker_threads: 1,
-        })
-    }
-}
-
-fn hash_local_disk(
-    path: &Path,
-    algorithm: hashing::HashAlgorithm,
-    cancelled: &AtomicBool,
-    progress: &(dyn Fn(u64, u64) + Sync),
-) -> Result<EvidenceHashResult, EvidenceHashError> {
-    let mut reader = evidence_core::LocalDiskReader::open(path)
-        .map_err(|error| io_error("open local physical disk", error))?;
-    let total_bytes = reader.len();
-    let digest = digest_reader_exact(
-        &mut reader,
-        algorithm,
-        total_bytes,
-        cancelled,
-        |processed| progress(processed.min(total_bytes), total_bytes),
-    )?;
-    Ok(EvidenceHashResult {
-        digest,
-        bytes_processed: total_bytes,
-        acceleration: if algorithm == hashing::HashAlgorithm::Sha256 {
-            HashService::sha256_acceleration()
-        } else {
-            "portable"
-        },
-        parallel_segments: 1,
-        worker_threads: 1,
-    })
 }
 
 fn hash_directory_evidence(

@@ -1,6 +1,11 @@
 use super::*;
+use evidence_core::EvidenceReader;
 use std::io::{Cursor, Seek, SeekFrom, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
+
+#[allow(dead_code, clippy::duplicate_mod)]
+#[path = "../support/import_ntfs_fixture.rs"]
+mod import_ntfs_fixture;
 
 struct ShortReader(&'static [u8]);
 
@@ -284,6 +289,70 @@ fn public_e01_and_raw_fixtures_support_all_digest_algorithms() {
 }
 
 #[test]
+fn synthetic_multichunk_e01_matches_known_content_for_all_algorithms() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("multichunk.E01");
+    let bytes: Vec<u8> = (0..5 * 1024 * 1024)
+        .map(|index| ((index * 31 + index / 251) & 0xff) as u8)
+        .collect();
+    import_ntfs_fixture::write_e01(&path, &bytes).unwrap();
+    assert_eq!(
+        image_e01::E01Reader::open(&path).unwrap().info().size,
+        bytes.len() as u64
+    );
+
+    let cancelled = AtomicBool::new(false);
+    for algorithm in [
+        infrastructure::hashing::HashAlgorithm::Md5,
+        infrastructure::hashing::HashAlgorithm::Sha1,
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        infrastructure::hashing::HashAlgorithm::Sm3,
+    ] {
+        let result = HashService::hash_logical_evidence(
+            &path,
+            &domain::DataSourceKind::E01,
+            algorithm,
+            &cancelled,
+            &|_, _| {},
+        )
+        .unwrap();
+        assert_eq!(
+            result.digest,
+            infrastructure::hashing::digest_bytes(&bytes, algorithm)
+        );
+        assert_eq!(result.bytes_processed, bytes.len() as u64);
+        assert!(result.worker_threads >= 1);
+    }
+}
+
+#[test]
+fn e01_digest_lanes_scale_with_cpu_and_memory_headroom() {
+    let eight_gib = 8 * 1024 * 1024 * 1024;
+    assert_eq!(e01_pipeline::digest_lane_count(eight_gib, 4, 100, 1536), 8);
+    assert_eq!(
+        e01_pipeline::digest_lane_count(eight_gib, 64, 100, 1536),
+        32
+    );
+    assert_eq!(
+        e01_pipeline::digest_lane_count(eight_gib, 64, 1520, 1536),
+        4
+    );
+    assert_eq!(
+        e01_pipeline::digest_lane_count(eight_gib, 64, 1536, 1536),
+        1
+    );
+}
+
+#[test]
+fn e01_digest_lanes_are_bounded_by_the_logical_length() {
+    assert_eq!(e01_pipeline::digest_lane_count(1, 64, 100, 1536), 1);
+    assert_eq!(
+        e01_pipeline::digest_lane_count(5 * 1024 * 1024, 64, 100, 1536),
+        3
+    );
+}
+
+#[test]
 fn public_e01_rejects_a_truncated_tail() {
     let directory = tempfile::tempdir().unwrap();
     let source = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -352,6 +421,85 @@ fn vhdx_fixture_supports_all_digest_algorithms() {
         )
         .unwrap();
     }
+}
+
+#[test]
+#[ignore = "set FORENSICS_E01_FIXTURE to validate all E01 logical digest algorithms"]
+fn e01_fixture_supports_all_digest_algorithms() {
+    let path = std::env::var_os("FORENSICS_E01_FIXTURE")
+        .map(std::path::PathBuf::from)
+        .expect("set FORENSICS_E01_FIXTURE");
+    let cancelled = AtomicBool::new(false);
+    let logical_bytes = image_e01::E01Reader::open(&path).unwrap().info().size;
+    eprintln!("E01_LOGICAL_INFO bytes={logical_bytes}");
+    for algorithm in [
+        infrastructure::hashing::HashAlgorithm::Md5,
+        infrastructure::hashing::HashAlgorithm::Sha1,
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        infrastructure::hashing::HashAlgorithm::Sm3,
+    ] {
+        let started = std::time::Instant::now();
+        let last_report = AtomicU64::new(0);
+        let progress = |processed: u64, total: u64| {
+            const REPORT_STEP: u64 = 1024 * 1024 * 1024;
+            let previous = last_report.load(Ordering::Acquire);
+            if processed.saturating_sub(previous) < REPORT_STEP || processed == total {
+                return;
+            }
+            last_report.store(processed, Ordering::Release);
+            eprintln!(
+                "E01_LOGICAL_PROGRESS algorithm={} processed={} total={} elapsed_ms={} throughput_mib_s={}",
+                algorithm.label(),
+                processed,
+                total,
+                started.elapsed().as_millis(),
+                processed as f64 / started.elapsed().as_secs_f64() / (1024.0 * 1024.0)
+            );
+        };
+        let result = HashService::hash_logical_evidence(
+            &path,
+            &domain::DataSourceKind::E01,
+            algorithm,
+            &cancelled,
+            &progress,
+        )
+        .unwrap();
+        eprintln!(
+            "E01_LOGICAL algorithm={} bytes={} workers={} elapsed_ms={} digest={}",
+            algorithm.label(),
+            result.bytes_processed,
+            result.worker_threads,
+            started.elapsed().as_millis(),
+            result.digest
+        );
+    }
+}
+
+#[test]
+#[ignore = "set FORENSICS_E01_FIXTURE to validate deterministic E01 SHA-256"]
+fn e01_fixture_sha256_is_deterministic() {
+    let path = std::env::var_os("FORENSICS_E01_FIXTURE")
+        .map(std::path::PathBuf::from)
+        .expect("set FORENSICS_E01_FIXTURE");
+    let cancelled = AtomicBool::new(false);
+    let first = HashService::hash_logical_evidence(
+        &path,
+        &domain::DataSourceKind::E01,
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        &cancelled,
+        &|_, _| {},
+    )
+    .unwrap();
+    let second = HashService::hash_logical_evidence(
+        &path,
+        &domain::DataSourceKind::E01,
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        &cancelled,
+        &|_, _| {},
+    )
+    .unwrap();
+    assert_eq!(first.digest, second.digest);
+    assert_eq!(first.bytes_processed, second.bytes_processed);
 }
 
 #[test]
