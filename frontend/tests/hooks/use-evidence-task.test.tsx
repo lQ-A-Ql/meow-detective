@@ -17,6 +17,7 @@ function deferred() {
   return { promise, resolve };
 }
 beforeEach(() => {
+  window.localStorage.clear();
   cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   vi.mocked(startEvidenceTask).mockReset().mockResolvedValue(queued);
   vi.mocked(getEvidenceTask).mockReset().mockResolvedValue(queued);
@@ -33,6 +34,52 @@ describe('case-bound evidence task lifecycle', () => {
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
     expect(hook.result.current.task?.state).toBe('completed');
     expect(startEvidenceTask).toHaveBeenCalledWith(request);
+  });
+  it('restores a running task after navigation and a completed result after reload', async () => {
+    const hook = renderHook(() => useEvidenceTask('case-a', 'file-a'), { wrapper });
+    act(() => hook.result.current.start(request));
+    await waitFor(() => expect(hook.result.current.task?.taskId).toBe('task-a'));
+    hook.unmount();
+
+    vi.mocked(getEvidenceTask).mockResolvedValue({ ...queued, state: 'running', bytesProcessed: 64 });
+    const navigated = renderHook(() => useEvidenceTask('case-a', 'file-a'), { wrapper });
+    await waitFor(() => expect(navigated.result.current.task?.bytesProcessed).toBe(64));
+    expect(navigated.result.current.request).toEqual(request);
+    navigated.unmount();
+
+    cache.clear();
+    const completed: EvidenceTask = {
+      ...queued,
+      state: 'completed',
+      bytesProcessed: 100,
+      result: {
+        kind: 'digest',
+        result: {
+          scope: 'file',
+          algorithm: 'sha256',
+          value: 'a'.repeat(64),
+          byteLength: 100,
+          status: 'completed',
+        },
+      },
+    };
+    vi.mocked(getEvidenceTask).mockResolvedValue(completed);
+    const reloaded = renderHook(() => useEvidenceTask('case-a', 'file-a'), { wrapper });
+    await waitFor(() => expect(reloaded.result.current.task?.state).toBe('completed'));
+    expect(reloaded.result.current.task?.result).toEqual(completed.result);
+  });
+  it('binds a task that finishes starting after the original view was unmounted', async () => {
+    const pending = deferred();
+    vi.mocked(startEvidenceTask).mockReturnValue(pending.promise);
+    const first = renderHook(() => useEvidenceTask('case-a', 'file-a'), { wrapper });
+    act(() => first.result.current.start(request));
+    await waitFor(() => expect(startEvidenceTask).toHaveBeenCalledOnce());
+    first.unmount();
+
+    const navigated = renderHook(() => useEvidenceTask('case-a', 'file-a'), { wrapper });
+    await act(async () => pending.resolve(queued));
+    await waitFor(() => expect(navigated.result.current.task?.taskId).toBe('task-a'));
+    expect(navigated.result.current.request).toEqual(request);
   });
   it('does not start without an active case', () => {
     const hook = renderHook(() => useEvidenceTask(), { wrapper });
