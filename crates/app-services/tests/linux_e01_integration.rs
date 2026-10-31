@@ -3324,6 +3324,25 @@ fn pve_cluster_mdraid_reader_exposes_btrfs_root() {
             "{path} should return bytes"
         );
     }
+    for directory in ["etc", "var", "usr", "root", "home"] {
+        let children = fs
+            .list_children(&format!("@rootfs/{directory}"))
+            .unwrap_or_else(|error| panic!("@rootfs/{directory} should enumerate: {error}"));
+        assert!(
+            !children.is_empty(),
+            "@rootfs/{directory} should contain entries"
+        );
+    }
+    for path in [
+        "@rootfs/var/log/syslog",
+        "@rootfs/var/log/messages",
+        "@rootfs/root/.bash_history",
+    ] {
+        match fs.read_file_range(path, 0, 512) {
+            Ok(bytes) => assert!(!bytes.is_empty(), "{path} returned no bytes"),
+            Err(error) => eprintln!("high-value path {path} unavailable: {error}"),
+        }
+    }
 }
 
 #[test]
