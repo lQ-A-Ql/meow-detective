@@ -97,8 +97,8 @@ HTTP 审计调用者为客户端 ID，桌面调用者为 `desktop`。工具执�
 | 请求取消 | 队列、案件 SQL、源数据库 SQL 与锁等待接入取消；底层证据 I/O 待继续接入 |
 | 队列容量 | 两个执行、16 个等待；每个外部客户端最多四个等待调用 |
 | 输出定义 | 输入 JSON Schema、基础输出 JSON Schema、结构化数据与分类错误；任务状态工具已发布字段级输出 Schema，其余工具字段 Schema 待细化 |
-| 协议资源 | 当前仅声明工具能力；Resources、Prompts 与协议任务未提供 |
-| 长任务 | `list_jobs`、`get_job`、`get_task` 和 `cancel_job` 已暴露现有任务状态、结果与取消请求；内容索引、分析和报告导出任务均复用案件任务表，Tasks 协议适配仍需实现 |
+| 协议资源 | 已声明 Tools、Resources、ResourceTemplates、Prompts 与 Tasks；案件概览资源和三类 Prompt 已提供，资源权限与真实客户端协商验收继续执行 |
+| 长任务 | `list_jobs`、`get_job`、`get_task` 和 `cancel_job` 已暴露现有任务状态、结果与取消请求；内容索引、分析和报告导出任务均复用案件任务表；rmcp Tasks 已接入长任务工具 |
 
 这些项目属于服务端后续设计范围。对应的权限与验收条件需要在增加接口之前确定。
 
