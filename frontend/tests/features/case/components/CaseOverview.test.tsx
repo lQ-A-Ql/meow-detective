@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { DataSourcesPanel } from '@/features/case/components/CaseOverview';
 import type { DataSourceSummary } from '@/types/models';
@@ -76,7 +76,13 @@ describe('DataSourcesPanel', () => {
       />,
     );
     expect(screen.getByText('原始磁盘哈希')).toBeTruthy();
-    screen.getByRole('button', { name: 'SHA256' }).click();
+    const panel = screen.getByTestId('physical-disk-hash-physical-0');
+    for (const label of ['MD5', 'SHA-1', 'SHA-256', 'SM3']) {
+      const button = within(panel).getByRole('button', { name: label });
+      expect(button.firstElementChild).toHaveAttribute('aria-hidden', 'true');
+      expect(button.lastElementChild).toHaveTextContent(label);
+    }
+    within(panel).getByRole('button', { name: 'SHA-256' }).click();
     expect(onCalculate).toHaveBeenCalledWith('physical-0', 'sha256');
   });
 });

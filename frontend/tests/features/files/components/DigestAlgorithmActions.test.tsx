@@ -14,13 +14,13 @@ describe('file digest controls', () => {
     fireEvent.click(button);
     expect(calculate).toHaveBeenCalledWith('sha256');
   });
-  it('places each algorithm label after its icon button and locks every action while running', () => {
+  it('places the run icon before each algorithm label and locks every action while running', () => {
     render(<DigestAlgorithmActions available loading onCalculate={vi.fn()} />);
     for (const label of ['MD5', 'SHA-1', 'SHA-256', 'SM3']) {
       const button = screen.getByRole('button', { name: `计算 ${label}` });
       expect(button).toBeDisabled();
-      expect(button).toHaveTextContent('');
-      expect(button.nextElementSibling).toHaveTextContent(label);
+      expect(button.firstElementChild).toHaveAttribute('aria-hidden', 'true');
+      expect(button.lastElementChild).toHaveTextContent(label);
     }
   });
   it('exposes an explicit force-recompute choice', () => {

@@ -6,6 +6,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { formatPartitionDisplayName, partitionDisplayLabel } from '@/lib/partition-display';
+import { DIGEST_ALGORITHMS } from '@/lib/digest-algorithms';
 import type { DataSourceSummary, DataSourcePartition } from '@/types/models';
 import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
 import { LinuxRootMounts } from './LinuxRootMounts';
@@ -134,9 +135,10 @@ export function DataSourcesPanel({
                         </div>
                         <div className="mt-1 text-[10px] text-forensics-muted">{t('caseHome.dataSources.physicalDiskHashHint')}</div>
                         <div className="mt-2 grid grid-cols-2 gap-1">
-                          {(['md5', 'sha1', 'sha256', 'sm3'] as DigestAlgorithm[]).map((algorithm) => (
-                            <Button aria-label={algorithm.toUpperCase()} key={algorithm} type="button" size="xs" variant="forensicsOutline" disabled={logicalDiskDigestLoading} onClick={() => onCalculateLogicalDiskDigest?.(source.id, algorithm)}>
-                              <ActionIcon name={`hash-${algorithm}`} />
+                          {DIGEST_ALGORITHMS.map(({ value, label }) => (
+                            <Button aria-label={label} key={value} type="button" shape="row" variant="forensicsOutline" disabled={logicalDiskDigestLoading} onClick={() => onCalculateLogicalDiskDigest?.(source.id, value)}>
+                              <ActionIcon name="play" />
+                              <span className="min-w-0 truncate font-mono text-[10px]">{label}</span>
                             </Button>
                           ))}
                         </div>

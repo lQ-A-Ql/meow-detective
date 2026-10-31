@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next';
-import { IconButton } from '@/components/controls/IconButton';
 import { ActionIcon } from '@/components/controls/ActionIcon';
+import { Button } from '@/app/components/ui/button';
 import { Checkbox } from '@/app/components/ui/checkbox';
-import { DIGEST_ALGORITHMS } from '../digest-algorithms';
+import { Label } from '@/app/components/ui/label';
+import { DIGEST_ALGORITHMS } from '@/lib/digest-algorithms';
 import type { DigestAlgorithm } from '@/types/digest';
 
 export function DigestAlgorithmActions({ available, loading, forceRecompute = false, onForceRecomputeChange, onCalculate }: {
@@ -14,7 +15,7 @@ export function DigestAlgorithmActions({ available, loading, forceRecompute = fa
 }) {
   const { t } = useTranslation();
   return <div className="space-y-2">
-    {onForceRecomputeChange ? <label className="flex cursor-pointer items-center gap-2 text-[11px] text-forensics-muted">
+    {onForceRecomputeChange ? <Label className="cursor-pointer text-[11px] text-forensics-muted">
       <Checkbox
         variant="forensics"
         checked={forceRecompute}
@@ -22,15 +23,19 @@ export function DigestAlgorithmActions({ available, loading, forceRecompute = fa
         onCheckedChange={(checked) => onForceRecomputeChange(checked === true)}
       />
       {t('fileBrowser.inspector.hash.forceRecompute')}
-    </label> : null}
-    <div className="grid grid-cols-2 gap-2">
-    {DIGEST_ALGORITHMS.map(({ value, label }) => <div key={value} className="flex min-w-0 items-center gap-2">
-      <IconButton label={t('fileBrowser.inspector.hash.run', { algorithm: label })}
-        variant="forensicsOutline" disabled={!available || loading} onClick={() => onCalculate(value)}>
+    </Label> : null}
+    <div className="grid grid-cols-2 gap-1">
+    {DIGEST_ALGORITHMS.map(({ value, label }) =>
+      <Button key={value}
+        shape="row"
+        aria-label={t('fileBrowser.inspector.hash.run', { algorithm: label })}
+        variant="forensicsOutline"
+        disabled={!available || loading}
+        onClick={() => onCalculate(value)}>
         <ActionIcon name="play" />
-      </IconButton>
-      <span className="font-mono text-[12px] text-forensics-ink">{label}</span>
-    </div>)}
+        <span className="min-w-0 truncate font-mono text-[11px] text-forensics-ink">{label}</span>
+      </Button>
+    )}
     </div>
   </div>;
 }
