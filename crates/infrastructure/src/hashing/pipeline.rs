@@ -3,12 +3,12 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::mpsc;
 
-const PIPELINE_BUFFER_BYTES: usize = 8 * 1024 * 1024;
+pub(super) const PIPELINE_BUFFER_BYTES: usize = 8 * 1024 * 1024;
 const PIPELINE_READER_THREADS: usize = 8;
 
-struct ReaderLane {
-    receiver: mpsc::Receiver<io::Result<Vec<u8>>>,
-    recycle: mpsc::SyncSender<Vec<u8>>,
+pub(super) struct ReaderLane {
+    pub(super) receiver: mpsc::Receiver<io::Result<Vec<u8>>>,
+    pub(super) recycle: mpsc::SyncSender<Vec<u8>>,
 }
 
 pub fn sha256_pipeline_worker_threads() -> usize {
@@ -48,7 +48,7 @@ pub fn sha256_file_pipelined_with_cancel(
     })
 }
 
-fn hash_reader_lanes(
+pub(super) fn hash_reader_lanes(
     length: u64,
     lanes: &[ReaderLane],
     cancelled: &(dyn Fn() -> bool + Sync),

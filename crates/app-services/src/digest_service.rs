@@ -74,6 +74,7 @@ impl ServiceErrorCategory for DigestServiceError {
             Self::File(error) => error.category(),
             Self::Hash(EvidenceHashError::Io { .. }) => ErrorCategory::Io,
             Self::Hash(EvidenceHashError::Cancelled) => ErrorCategory::Cancelled,
+            Self::Hash(EvidenceHashError::EvidenceChanged) => ErrorCategory::Security,
             Self::Hash(EvidenceHashError::Unsupported)
             | Self::Hash(EvidenceHashError::DirectoryEntryLimit)
             | Self::Unsupported => ErrorCategory::Unsupported,

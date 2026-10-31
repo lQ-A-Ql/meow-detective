@@ -1,5 +1,5 @@
 use super::*;
-use std::io::Cursor;
+use std::io::{Cursor, Seek, SeekFrom, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 struct ShortReader(&'static [u8]);
@@ -244,6 +244,196 @@ fn ewf_first_segment_accepts_contiguous_e_numbered_parts() {
 
     let segments = volumes::discover_e01_segments(&first).unwrap();
     assert_eq!(segments, vec![first, directory.path().join("sample.E02")]);
+}
+
+#[test]
+fn public_e01_and_raw_fixtures_support_all_digest_algorithms() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let cancelled = AtomicBool::new(false);
+    for (kind, relative) in [
+        (
+            domain::DataSourceKind::E01,
+            "testdata/fixtures/public-small/e01/tiny.E01",
+        ),
+        (
+            domain::DataSourceKind::Raw,
+            "testdata/fixtures/public-small/raw/tiny.raw",
+        ),
+    ] {
+        let path = root.join(relative);
+        for algorithm in [
+            infrastructure::hashing::HashAlgorithm::Md5,
+            infrastructure::hashing::HashAlgorithm::Sha1,
+            infrastructure::hashing::HashAlgorithm::Sha256,
+            infrastructure::hashing::HashAlgorithm::Sm3,
+        ] {
+            let result =
+                HashService::hash_logical_evidence(&path, &kind, algorithm, &cancelled, &|_, _| {})
+                    .unwrap();
+            assert_eq!(
+                result.digest.len(),
+                match algorithm {
+                    infrastructure::hashing::HashAlgorithm::Md5 => 32,
+                    infrastructure::hashing::HashAlgorithm::Sha1 => 40,
+                    infrastructure::hashing::HashAlgorithm::Sha256
+                    | infrastructure::hashing::HashAlgorithm::Sm3 => 64,
+                }
+            );
+        }
+    }
+}
+
+#[test]
+fn public_e01_rejects_a_truncated_tail() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/fixtures/public-small/e01/tiny.E01");
+    let path = directory.path().join("truncated.E01");
+    std::fs::copy(&source, &path).unwrap();
+    let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+    let length = file.metadata().unwrap().len();
+    file.set_len(length - 1).unwrap();
+    file.sync_all().unwrap();
+    let cancelled = AtomicBool::new(false);
+
+    let error = HashService::hash_logical_evidence(
+        &path,
+        &domain::DataSourceKind::E01,
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        &cancelled,
+        &|_, _| {},
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, EvidenceHashError::Io { .. }));
+}
+
+#[test]
+fn public_e01_rejects_an_appended_segment() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/fixtures/public-small/e01/tiny.E01");
+    let path = directory.path().join("appended.E01");
+    std::fs::copy(&source, &path).unwrap();
+    std::fs::write(directory.path().join("appended.E02"), b"unexpected segment").unwrap();
+    let cancelled = AtomicBool::new(false);
+
+    let error = HashService::hash_logical_evidence(
+        &path,
+        &domain::DataSourceKind::E01,
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        &cancelled,
+        &|_, _| {},
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, EvidenceHashError::Io { .. }));
+}
+
+#[test]
+#[ignore = "set FORENSICS_VHDX_FIXTURE to validate all VHDX logical digest algorithms"]
+fn vhdx_fixture_supports_all_digest_algorithms() {
+    let path = std::env::var_os("FORENSICS_VHDX_FIXTURE")
+        .map(std::path::PathBuf::from)
+        .expect("set FORENSICS_VHDX_FIXTURE");
+    let cancelled = AtomicBool::new(false);
+    for algorithm in [
+        infrastructure::hashing::HashAlgorithm::Md5,
+        infrastructure::hashing::HashAlgorithm::Sha1,
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        infrastructure::hashing::HashAlgorithm::Sm3,
+    ] {
+        HashService::hash_logical_evidence(
+            &path,
+            &domain::DataSourceKind::Raw,
+            algorithm,
+            &cancelled,
+            &|_, _| {},
+        )
+        .unwrap();
+    }
+}
+
+#[test]
+#[ignore = "set FORENSICS_LOCAL_DISK_PATH to validate all physical-disk digest algorithms"]
+fn local_disk_fixture_supports_all_digest_algorithms() {
+    let path = std::env::var_os("FORENSICS_LOCAL_DISK_PATH")
+        .map(std::path::PathBuf::from)
+        .expect("set FORENSICS_LOCAL_DISK_PATH");
+    let cancelled = AtomicBool::new(false);
+    for algorithm in [
+        infrastructure::hashing::HashAlgorithm::Md5,
+        infrastructure::hashing::HashAlgorithm::Sha1,
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        infrastructure::hashing::HashAlgorithm::Sm3,
+    ] {
+        HashService::hash_logical_evidence(
+            &path,
+            &domain::DataSourceKind::LocalDisk,
+            algorithm,
+            &cancelled,
+            &|_, _| {},
+        )
+        .unwrap();
+    }
+}
+
+#[test]
+fn hash_evidence_rejects_same_length_changes_during_read() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("changing.raw");
+    std::fs::write(&path, vec![0x41u8; 2 * 1024 * 1024]).unwrap();
+    let changed = AtomicBool::new(false);
+    let cancelled = AtomicBool::new(false);
+
+    let error = HashService::hash_evidence_with_algorithm(
+        &path,
+        &domain::DataSourceKind::Raw,
+        infrastructure::hashing::HashAlgorithm::Md5,
+        &cancelled,
+        &|processed, _| {
+            if processed == 0 || changed.swap(true, Ordering::AcqRel) {
+                return;
+            }
+            let mut file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+            file.seek(SeekFrom::Start(0)).unwrap();
+            file.write_all(b"changed").unwrap();
+            file.sync_all().unwrap();
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, EvidenceHashError::EvidenceChanged));
+}
+
+#[test]
+fn hash_evidence_rejects_segment_growth_during_read() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("growing.raw");
+    std::fs::write(&path, vec![0u8; 2 * 1024 * 1024]).unwrap();
+    let changed = AtomicBool::new(false);
+    let cancelled = AtomicBool::new(false);
+
+    let error = HashService::hash_evidence_with_algorithm(
+        &path,
+        &domain::DataSourceKind::Raw,
+        infrastructure::hashing::HashAlgorithm::Md5,
+        &cancelled,
+        &|processed, _| {
+            if processed == 0 || changed.swap(true, Ordering::AcqRel) {
+                return;
+            }
+            let mut file = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap();
+            file.write_all(b"x").unwrap();
+            file.sync_all().unwrap();
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, EvidenceHashError::EvidenceChanged));
 }
 
 #[test]

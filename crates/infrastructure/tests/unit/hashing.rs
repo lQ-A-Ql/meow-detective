@@ -94,3 +94,40 @@ fn sha256_pipeline_stops_after_cancellation() {
 
     assert!(result.is_none());
 }
+
+#[test]
+fn sha256_pipeline_propagates_reader_failure() {
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let (recycle, _recycled) = std::sync::mpsc::sync_channel(1);
+    sender
+        .send(Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "injected read failure",
+        )))
+        .unwrap();
+    let lanes = [pipeline::ReaderLane { receiver, recycle }];
+
+    let error = pipeline::hash_reader_lanes(1, &lanes, &|| false, &mut |_| {}).unwrap_err();
+
+    assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+}
+
+#[test]
+fn sha256_pipeline_reports_a_stopped_buffer_recycler() {
+    let buffer = vec![0u8; pipeline::PIPELINE_BUFFER_BYTES];
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    sender.send(Ok(buffer)).unwrap();
+    let (recycle, recycled) = std::sync::mpsc::sync_channel(0);
+    drop(recycled);
+    let lanes = [pipeline::ReaderLane { receiver, recycle }];
+
+    let error = pipeline::hash_reader_lanes(
+        (pipeline::PIPELINE_BUFFER_BYTES as u64) + 1,
+        &lanes,
+        &|| false,
+        &mut |_| {},
+    )
+    .unwrap_err();
+
+    assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
+}

@@ -2,6 +2,7 @@
 
 use domain::CaseId;
 use persistence_sqlite::repositories::{
+    evidence_digest_repo::EvidenceDigestRepo,
     evidence_task_repo::{EvidenceTaskRecord, EvidenceTaskRepo},
     job_repo::JobRepo,
 };
@@ -42,8 +43,11 @@ pub fn plan(
         .reusable(&case.0, &fingerprint)
         .map_err(CommandError::from_service_error)?
     {
-        if record.state != "completed" || (kind == "digest" && !digest_requests_recompute(&request))
-        {
+        let reusable = record.state != "completed"
+            || (kind == "digest"
+                && !digest_requests_recompute(&request)
+                && completed_digest_is_current(&tx, root, case, &request, &record)?);
+        if reusable {
             return Ok(EvidenceTaskPlan {
                 task: dto(record)?,
                 request,
@@ -90,6 +94,53 @@ fn digest_requests_recompute(request: &EvidenceTaskRequestDto) -> bool {
         request,
         EvidenceTaskRequestDto::Digest(request) if request.force_recompute
     )
+}
+
+fn completed_digest_is_current(
+    conn: &rusqlite::Connection,
+    root: &Path,
+    case: &CaseId,
+    request: &EvidenceTaskRequestDto,
+    record: &EvidenceTaskRecord,
+) -> Result<bool, CommandError> {
+    let EvidenceTaskRequestDto::Digest(request) = request else {
+        return Ok(false);
+    };
+    let Some(result_json) = record.result_json.as_deref() else {
+        return Ok(false);
+    };
+    let Ok(EvidenceTaskResultDto::Digest(result)) =
+        serde_json::from_str::<EvidenceTaskResultDto>(result_json)
+    else {
+        return Ok(false);
+    };
+    let target = crate::digest_service::DigestTarget {
+        data_source_id: request.data_source_id.as_deref(),
+        file_id: request.file_id.as_deref(),
+        partition_index: request.partition_index,
+    };
+    let identity = crate::digest_service::identity::snapshot(conn, root, case, &target)
+        .map_err(CommandError::from_typed_service_error)?;
+    let current = EvidenceDigestRepo::new(conn)
+        .list(
+            &case.0,
+            &identity.source_id,
+            identity.file_id.as_deref(),
+            request.partition_index,
+        )
+        .map_err(CommandError::from_service_error)?
+        .into_iter()
+        .find(|record| {
+            record.scope == format!("{:?}", result.scope)
+                && record.algorithm == result.algorithm.label()
+                && record.file_id == identity.file_id
+                && record.partition_index == request.partition_index
+                && record.status == "completed"
+                && record.source_revision == identity.revision
+        });
+    Ok(current.is_some_and(|current| {
+        current.value == result.value && current.byte_length == result.byte_length
+    }))
 }
 
 pub fn revision(

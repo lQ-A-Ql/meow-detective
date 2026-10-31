@@ -6,6 +6,7 @@ use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelI
 use std::io::{self, Read};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::SystemTime;
 
 pub(crate) mod volumes;
 
@@ -22,6 +23,8 @@ pub enum EvidenceHashError {
     Cancelled,
     #[error("directory evidence exceeds the 1,000,000 entry hash limit")]
     DirectoryEntryLimit,
+    #[error("evidence changed during hash calculation")]
+    EvidenceChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,6 +130,7 @@ impl HashService {
                     })
                 })
             })?;
+        let segment_snapshots = snapshot_segments(&segments)?;
         let processed = AtomicU64::new(0);
         let pipelined = segments.len() == 1;
         let context = SegmentHashContext {
@@ -144,6 +148,13 @@ impl HashService {
             .collect::<Result<Vec<_>, _>>()?;
         if cancelled.load(Ordering::Acquire) {
             return Err(EvidenceHashError::Cancelled);
+        }
+        let after_segments = current_segments(path, kind)?;
+        if after_segments != segments {
+            return Err(EvidenceHashError::EvidenceChanged);
+        }
+        if snapshot_segments(&segments)? != segment_snapshots {
+            return Err(EvidenceHashError::EvidenceChanged);
         }
         let digest = if digests.len() == 1 {
             digests[0].digest.clone()
@@ -398,6 +409,52 @@ struct SegmentDigest {
     digest: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SegmentSnapshot {
+    path: std::path::PathBuf,
+    length: u64,
+    modified: SystemTime,
+}
+
+fn snapshot_segments(
+    segments: &[std::path::PathBuf],
+) -> Result<Vec<SegmentSnapshot>, EvidenceHashError> {
+    segments
+        .iter()
+        .map(|path| {
+            let metadata = std::fs::metadata(path)
+                .map_err(|error| io_error("inspect evidence snapshot", error))?;
+            Ok(SegmentSnapshot {
+                path: path.clone(),
+                length: metadata.len(),
+                modified: metadata
+                    .modified()
+                    .map_err(|error| io_error("inspect evidence modification time", error))?,
+            })
+        })
+        .collect()
+}
+
+fn current_segments(
+    path: &Path,
+    kind: &DataSourceKind,
+) -> Result<Vec<std::path::PathBuf>, EvidenceHashError> {
+    match kind {
+        DataSourceKind::E01 => volumes::discover_e01_segments(path)
+            .map_err(|error| io_error("rediscover E01 segments", error)),
+        DataSourceKind::Raw => evidence_core::RawImageReader::open(path)
+            .map(|reader| reader.backing_paths().to_vec())
+            .map_err(|error| io_error("rediscover raw image backing files", error)),
+        DataSourceKind::AndroidSparse | DataSourceKind::LogicalArchive => {
+            Ok(vec![path.to_path_buf()])
+        }
+        DataSourceKind::LogicalDirectory | DataSourceKind::CephRbd | DataSourceKind::CephFs => {
+            Ok(vec![path.to_path_buf()])
+        }
+        _ => Err(EvidenceHashError::Unsupported),
+    }
+}
+
 struct SegmentHashContext<'a> {
     algorithm: hashing::HashAlgorithm,
     total_bytes: u64,
@@ -445,7 +502,10 @@ fn hash_segment(
     }
     .map_err(|error| io_error("read evidence", error))?
     .ok_or(EvidenceHashError::Cancelled)?;
-    if local_processed != length {
+    if local_processed > length {
+        return Err(EvidenceHashError::EvidenceChanged);
+    }
+    if local_processed < length {
         return Err(short_read_error("read complete evidence segment"));
     }
     Ok(SegmentDigest {
@@ -474,7 +534,10 @@ fn digest_reader_exact(
     )
     .map_err(|error| io_error("read complete evidence input", error))?
     .ok_or(EvidenceHashError::Cancelled)?;
-    if processed != expected_bytes {
+    if processed > expected_bytes {
+        return Err(EvidenceHashError::EvidenceChanged);
+    }
+    if processed < expected_bytes {
         return Err(short_read_error("read complete evidence input"));
     }
     Ok(digest)

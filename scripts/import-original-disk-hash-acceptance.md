@@ -37,10 +37,12 @@
 | `cargo test -p app-services mount_service::emulation --lib` | 44 项通过 |
 | `cargo test -p forensics-desktop emulation_registry --lib` | 28 项通过，3 项按私有环境条件忽略 |
 | `cargo test -p app-services digest_service --lib` | 4 项通过 |
-| `cargo test -p app-services --lib hash_service` | 16 项通过 |
-| `cargo test -p app-services --test evidence_tasks` | 6 项通过 |
+| `cargo test -p app-services --lib hash_service` | 21 项通过，2 项按外部设备条件忽略 |
+| `FORENSICS_VHDX_FIXTURE=artifacts/hash-acceptance/vhdx-small.vhdx cargo test -p app-services --lib vhdx_fixture_supports_all_digest_algorithms -- --ignored` | 四种算法通过，测试耗时约 4.08 秒 |
+| `cargo test -p app-services --lib public_e01_and_raw_fixtures_prepare_without_persisted_digests` | 公开 E01 与 RAW 来源准备通过 |
+| `cargo test -p app-services --test evidence_tasks` | 7 项通过 |
 | `cargo test -p app-services --lib json_export_warns_when_evidence_hash_is_pending_or_unavailable` | 1 项通过 |
-| `cargo test -p infrastructure hashing` | 13 项通过 |
+| `cargo test -p infrastructure hashing` | 15 项通过 |
 | `cargo test -p persistence-sqlite sha256_update_refreshes` | 1 项通过 |
 | `cargo test -p transport --lib commands::digest` | 3 项通过 |
 | `cargo clippy -p app-services -p infrastructure -p persistence-sqlite -p transport -p forensics-desktop --all-targets -- -D warnings` | 通过 |
@@ -61,6 +63,6 @@
 
 | 名称 | 条件 | 原因 |
 | --- | --- | --- |
-| REAL_ALGORITHM_MATRIX | 使用真实 E01、RAW、VHDX 和物理磁盘分别计算四种摘要 | 当前工作区没有可公开使用的真实物理磁盘或私有 E01 样本 |
-| REAL_EMULATION_WITHOUT_DIGEST | 使用没有预先逻辑磁盘摘要的 E01 与 RAW 启动 VMware 并完成会话 | 需要本机 VMware、可启动镜像和相应权限 |
+| REAL_ALGORITHM_MATRIX | 使用受控物理磁盘或小型物理设备完成 LocalDisk 四种摘要 | 公开 E01、公开 RAW 与生成 VHDX 已完成；物理设备验收需要明确测试盘与环境变量 |
+| REAL_EMULATION_WITHOUT_DIGEST | 使用没有预先逻辑磁盘摘要的可启动 E01 与 RAW 完成 VMware 会话 | 来源准备已完成；VMware、`vmrun.exe` 与 Dokan2 已可用，缺少可启动测试镜像 |
 | FULL_QUALITY_GATES | 全工作区 Rust 测试、全前端测试和全部仓库守卫 | `app-services` 全库测试仍有两项既有 Kubernetes bbolt worker 失败 |

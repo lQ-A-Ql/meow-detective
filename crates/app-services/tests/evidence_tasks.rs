@@ -7,7 +7,9 @@ use app_services::{
 };
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
 use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, evidence_task_repo::EvidenceTaskRepo,
+    datasource_repo::DataSourceRepo,
+    evidence_digest_repo::{EvidenceDigestRecord, EvidenceDigestRepo},
+    evidence_task_repo::EvidenceTaskRepo,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use transport::{
@@ -60,6 +62,28 @@ fn setup() -> (
         .unwrap();
     (temp, active, path)
 }
+
+fn persist_digest(
+    active: &app_services::active_case::ActiveCase,
+    conn: &rusqlite::Connection,
+    digest: &transport::dto::EvidenceDigestDto,
+    source_revision: &str,
+) {
+    EvidenceDigestRepo::new(conn)
+        .upsert(&EvidenceDigestRecord {
+            case_id: active.meta.id.0.clone(),
+            scope: format!("{:?}", digest.scope),
+            algorithm: digest.algorithm.label().to_string(),
+            data_source_id: Some("source".to_string()),
+            file_id: None,
+            partition_index: None,
+            value: digest.value.clone(),
+            byte_length: digest.byte_length,
+            status: "completed".to_string(),
+            source_revision: source_revision.to_string(),
+        })
+        .unwrap();
+}
 #[test]
 fn planning_deduplicates_and_persists_a_committed_result_even_after_late_cancel() {
     let (_temp, active, _) = setup();
@@ -92,9 +116,10 @@ fn planning_deduplicates_and_persists_a_committed_result_even_after_late_cancel(
                 conn,
                 &active.meta.id,
                 &first.task.task_id,
-                Ok(EvidenceTaskResultDto::Digest(result)),
+                Ok(EvidenceTaskResultDto::Digest(result.clone())),
             )
             .unwrap();
+            persist_digest(&active, conn, &result, &first.task.source_revision);
             let completed =
                 evidence_tasks::get(conn, &active.meta.id, &first.task.task_id).unwrap();
             assert_eq!(completed.state, "completed");
@@ -112,6 +137,54 @@ fn planning_deduplicates_and_persists_a_committed_result_even_after_late_cancel(
                     .unwrap()
                     .launch
             );
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn normal_digest_request_does_not_reuse_a_result_superseded_by_forced_recompute() {
+    let (_temp, active, _) = setup();
+    active
+        .with_conn(|conn| {
+            let first =
+                evidence_tasks::plan(conn, &active.case_root, &active.meta.id, request()).unwrap();
+            let first_result = transport::dto::EvidenceDigestDto {
+                scope: DigestScopeDto::ContainerFile,
+                algorithm: DigestAlgorithmDto::Sha256,
+                value: "a".repeat(64),
+                byte_length: 8,
+                status: transport::dto::DigestStatusDto::Completed,
+            };
+            evidence_tasks::finish(
+                conn,
+                &active.meta.id,
+                &first.task.task_id,
+                Ok(EvidenceTaskResultDto::Digest(first_result.clone())),
+            )
+            .unwrap();
+            persist_digest(&active, conn, &first_result, &first.task.source_revision);
+
+            let forced =
+                evidence_tasks::plan(conn, &active.case_root, &active.meta.id, forced_request())
+                    .unwrap();
+            let forced_result = transport::dto::EvidenceDigestDto {
+                value: "b".repeat(64),
+                ..first_result
+            };
+            evidence_tasks::finish(
+                conn,
+                &active.meta.id,
+                &forced.task.task_id,
+                Ok(EvidenceTaskResultDto::Digest(forced_result.clone())),
+            )
+            .unwrap();
+            persist_digest(&active, conn, &forced_result, &forced.task.source_revision);
+
+            let refreshed =
+                evidence_tasks::plan(conn, &active.case_root, &active.meta.id, request()).unwrap();
+            assert!(refreshed.launch);
+            assert_ne!(refreshed.task.task_id, first.task.task_id);
             Ok(())
         })
         .unwrap();

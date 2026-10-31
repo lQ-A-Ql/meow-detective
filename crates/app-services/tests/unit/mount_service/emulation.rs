@@ -53,6 +53,52 @@ fn prepare_emulation_source_accepts_a_ready_import_without_a_persisted_digest() 
 }
 
 #[test]
+fn public_e01_and_raw_fixtures_prepare_without_persisted_digests() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for (name, kind, relative) in [
+        (
+            "trusted-e01",
+            DataSourceKind::E01,
+            "testdata/fixtures/public-small/e01/tiny.E01",
+        ),
+        (
+            "trusted-raw",
+            DataSourceKind::Raw,
+            "testdata/fixtures/public-small/raw/tiny.raw",
+        ),
+    ] {
+        let connection = persistence_sqlite::connection::open_in_memory().unwrap();
+        persistence_sqlite::runner::run_all(&connection).unwrap();
+        let case_id = CaseId(format!("case-{name}"));
+        CaseRepo::new(&connection)
+            .create(&CaseMeta {
+                id: case_id.clone(),
+                name: name.to_string(),
+                number: None,
+                examiner: None,
+                notes: None,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            })
+            .unwrap();
+        let source = crate::datasource_service::attach_data_source(
+            &connection,
+            &case_id,
+            name,
+            &root.join(relative),
+            kind,
+            DataSourcePlatform::Windows,
+        )
+        .unwrap();
+        DataSourceRepo::new(&connection)
+            .update_import_state(&source.id, "ready", None)
+            .unwrap();
+
+        prepare_emulation_source(&connection, &case_id, &source.id).unwrap();
+    }
+}
+
+#[test]
 fn direct_ntfs_volume_requires_a_derived_boot_layout_and_correct_case_scope() {
     let mut bytes = vec![0; 128 * 512];
     bytes[3..11].copy_from_slice(b"NTFS    ");

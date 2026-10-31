@@ -730,9 +730,9 @@ BitLocker 字典是 CPU 密集任务，使用专用 `ResourceClass::Cpu` 预算�
 |---|---|---|---|
 | LOGICAL_READ_COMPLETION | P1 | 已完成 | 逻辑磁盘与 LocalDisk 的提前 EOF 返回 I/O 错误；正常读取长度保持不变 |
 | CONTAINER_SEGMENT_COMPLETION | P1 | 已完成 | 每个分段核对实际读取量；分段顺序、长度和摘要进入确定性 manifest |
-| SHA256_PIPELINE_BOUNDARIES | P1 | 部分完成 | 已覆盖空文件、单字节、reader lane 边界、长文件和取消；读取故障与缓冲区回收故障测试仍待补齐 |
-| REVISION_RECOMPUTE_POLICY | P1 | 部分完成 | 已完成显式强制重算；内容摘要作为后续缓存身份仍需单独设计 |
-| E01_SEGMENT_SET_COVERAGE | P1 | 部分完成 | 已拒绝编号缺口并核对读取长度；读取期间替换与真实 E01 末段截断仍待样本验证 |
+| SHA256_PIPELINE_BOUNDARIES | P1 | 已完成 | 空文件、单字节、reader lane 边界、长文件、取消、读取故障和缓冲区回收故障均有回归 |
+| REVISION_RECOMPUTE_POLICY | P1 | 已完成 | 强制重算创建新尝试；普通复用同时核对持久化摘要值，强制结果不会回退为旧任务结果 |
+| E01_SEGMENT_SET_COVERAGE | P1 | 已完成 | 编号缺口、公开 E01 尾段截断、追加分段、读取期间同长度变化和分段增长均失败关闭 |
 | SM3_VECTOR_COVERAGE | P2 | 已完成 | 空输入、55 字节、56 字节、64 字节和长输入与标准结果一致 |
 | DIRECTORY_HASH_BOUNDS | P2 | 已完成 | 枚举支持取消；超过一百万条目返回显式错误 |
 | FILE_DIGEST_PERSISTENCE | P2 | 已完成 | SHA-256 结果同步文件记录与文件取证指纹；文件查询在完成后失效刷新 |
@@ -771,11 +771,13 @@ BitLocker 字典是 CPU 密集任务，使用专用 `ResourceClass::Cpu` 预算�
 
 - [x] SM3_VECTOR_COVERAGE：补齐 SM3 标准分块边界向量。
 - [x] DIRECTORY_HASH_BOUNDS：为目录证据哈希增加取消检查和条目上限。
-- [ ] SHA256_PIPELINE_BOUNDARIES：补齐读取故障与缓冲区回收故障测试。
-- [ ] REVISION_RECOMPUTE_POLICY：评估内容摘要进入后续任务缓存身份的兼容方案。
-- [ ] E01_SEGMENT_SET_COVERAGE：补齐读取期间替换、追加和真实 E01 末段截断验收。
-- [ ] 使用真实 E01、RAW、VHDX 和 LocalDisk 分别完成四种摘要验证。
-- [ ] 完成一次无预先摘要的 E01 与 RAW 仿真启动验收。
+- [x] SHA256_PIPELINE_BOUNDARIES：补齐读取故障与缓冲区回收故障测试。
+- [x] REVISION_RECOMPUTE_POLICY：将持久化内容摘要纳入普通任务复用一致性核对。
+- [x] E01_SEGMENT_SET_COVERAGE：补齐读取期间替换、追加和公开 E01 末段截断验收。
+- [x] 使用公开 E01、公开 RAW 和生成 VHDX 完成四种摘要验证。
+- [x] 完成无预先摘要的公开 E01 与 RAW 仿真来源准备验收。
+- [ ] 使用受控物理磁盘或小型物理设备完成 LocalDisk 四种摘要验证。
+- [ ] 提供可启动的 E01 与 RAW 测试镜像后完成无预先摘要的完整启动验收；VMware Workstation、`vmrun.exe` 与 Dokan2 已可用。
 - [ ] 记录仿真准备、布局探测和 VM 启动的耗时、RSS 与失败状态。
 
 ### 16.4 回归门禁
@@ -802,17 +804,19 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1
 | 范围 | 结果 |
 |---|---|
 | `cargo fmt --all -- --check` 与 `git diff --check` | 通过 |
-| `cargo test -p app-services --lib hash_service` | 16 项通过 |
-| `cargo test -p app-services --test evidence_tasks` | 6 项通过 |
+| `cargo test -p app-services --lib hash_service` | 21 项通过，2 项按外部设备条件忽略 |
+| `cargo test -p app-services --test evidence_tasks` | 7 项通过 |
 | `cargo test -p app-services --lib digest_service` | 4 项通过 |
 | 报告哈希告警回归 | 1 项通过 |
-| `cargo test -p infrastructure hashing` | 13 项通过 |
+| `cargo test -p infrastructure hashing` | 15 项通过 |
 | `cargo test -p persistence-sqlite sha256_update_refreshes` | 1 项通过 |
 | `cargo test -p transport --lib commands::digest` | 3 项通过 |
-| `cargo test -p app-services --lib` | 1173 项通过、15 项忽略、2 项失败；失败项均为 Kubernetes bbolt worker 测试，隔离复跑仍失败，未纳入本次修补 |
+| `cargo test -p app-services --lib` | 完整库运行仍被 2 项既有 Kubernetes bbolt worker 失败阻断；隔离复跑仍失败 |
 | Rust Clippy（应用服务、基础设施、SQLite、传输 DTO、桌面壳，全部目标） | 通过 |
 | 前端类型检查、ESLint、生产构建 | 通过 |
 | 仿真、摘要强制重算和报告状态定向前端测试 | 27 项通过 |
+| 公开 E01/RAW 与生成 VHDX 四算法验收 | 通过；VHDX 四算法耗时约 4.08 秒 |
+| 无预先摘要的公开 E01/RAW 仿真来源准备 | 通过 |
 | 模块大小、函数大小、测试布局、命令边界、服务边界、文档漂移、文档保留守卫 | 通过 |
-| 真实 E01、RAW、VHDX、LocalDisk 与 VMware 会话 | 未执行 |
+| LocalDisk 与 VMware 会话 | LocalDisk 缺少受控物理测试设备；VMware、`vmrun.exe` 与 Dokan2 已可用，缺少可启动 E01/RAW 测试镜像 |
 
