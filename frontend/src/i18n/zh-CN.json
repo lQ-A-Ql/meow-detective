@@ -718,7 +718,8 @@
       "hash": {
         "loading": "正在计算…",
         "run": "计算 {{algorithm}}",
-        "result": "{{algorithm}} · {{bytes}} 字节"
+        "result": "{{algorithm}} · {{bytes}} 字节",
+        "forceRecompute": "忽略已完成结果并重新读取"
       },
       "ntfs": {
         "sequence": "MFT 序列号",

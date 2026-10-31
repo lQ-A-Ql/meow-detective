@@ -88,6 +88,34 @@ fn find_by_path_prefix_escapes_like_wildcards() {
 }
 
 #[test]
+fn sha256_update_refreshes_file_entry_and_fingerprint() {
+    let conn = open_in_memory().unwrap();
+    runner::run_all(&conn).unwrap();
+    let ds_id = DataSourceId("ds-digest".to_string());
+    insert_data_source(&conn, &ds_id);
+    let repo = FileRepo::new(&conn);
+    repo.insert_batch(&[entry("digest-file", &ds_id, "evidence.txt")])
+        .unwrap();
+    let hash = "a".repeat(64);
+
+    let updated = repo
+        .update_hash_sha256(&FileEntryId("digest-file".to_string()), &hash)
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(updated.hash_sha256.as_deref(), Some(hash.as_str()));
+    let fingerprint: String = conn
+        .query_row(
+            "SELECT content_sha256 FROM forensic_fingerprints
+             WHERE object_key = 'file_entry:ds-digest:digest-file'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(fingerprint, hash);
+}
+
+#[test]
 fn encrypted_flag_round_trips_through_file_repository() {
     let conn = open_in_memory().unwrap();
     runner::run_source_all(&conn).unwrap();

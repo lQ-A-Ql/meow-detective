@@ -158,4 +158,21 @@ describe('import event state store', () => {
       },
     ])).toBe('failed');
   });
+
+  it('keeps original-disk digest state separate from source hash status', () => {
+    expect(deriveEvidenceHashStatus([], [
+      {
+        id: 'ds-original-disk-only',
+        name: 'Original disk only',
+        kind: 'raw',
+        sourcePath: 'redacted',
+        importedAt: '2026-06-05T10:00:00Z',
+        platform: 'windows',
+        hashStatus: 'unknown',
+        originalDiskHashStatus: 'ready',
+        originalDiskSha256: 'a'.repeat(64),
+        partitions: [],
+      },
+    ])).toBe('deferred');
+  });
 });

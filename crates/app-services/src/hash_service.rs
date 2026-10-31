@@ -20,6 +20,8 @@ pub enum EvidenceHashError {
     Unsupported,
     #[error("evidence hash cancelled")]
     Cancelled,
+    #[error("directory evidence exceeds the 1,000,000 entry hash limit")]
+    DirectoryEntryLimit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -208,14 +210,13 @@ impl HashService {
             _ => return Err(EvidenceHashError::Unsupported),
         };
         let total_bytes = reader.info().size;
-        let digest = hashing::digest_reader_with_cancel(
+        let digest = digest_reader_exact(
             reader.as_mut(),
             algorithm,
-            || cancelled.load(Ordering::Acquire),
+            total_bytes,
+            cancelled,
             |processed| progress(processed.min(total_bytes), total_bytes),
-        )
-        .map_err(|error| io_error("read logical evidence", error))?
-        .ok_or(EvidenceHashError::Cancelled)?;
+        )?;
         Ok(EvidenceHashResult {
             digest,
             bytes_processed: total_bytes,
@@ -239,14 +240,13 @@ fn hash_local_disk(
     let mut reader = evidence_core::LocalDiskReader::open(path)
         .map_err(|error| io_error("open local physical disk", error))?;
     let total_bytes = reader.len();
-    let digest = hashing::digest_reader_with_cancel(
+    let digest = digest_reader_exact(
         &mut reader,
         algorithm,
-        || cancelled.load(Ordering::Acquire),
+        total_bytes,
+        cancelled,
         |processed| progress(processed.min(total_bytes), total_bytes),
-    )
-    .map_err(|error| io_error("read local physical disk", error))?
-    .ok_or(EvidenceHashError::Cancelled)?;
+    )?;
     Ok(EvidenceHashResult {
         digest,
         bytes_processed: total_bytes,
@@ -267,7 +267,7 @@ fn hash_directory_evidence(
     progress: &(dyn Fn(u64, u64) + Sync),
 ) -> Result<EvidenceHashResult, EvidenceHashError> {
     let mut entries = Vec::new();
-    collect_directory_entries(root, root, &mut entries)?;
+    collect_directory_entries(root, root, cancelled, &mut entries)?;
     entries.sort_by(|left, right| left.0.cmp(&right.0));
     let total_bytes =
         entries
@@ -289,17 +289,11 @@ fn hash_directory_evidence(
             ('f', Some(length)) => {
                 let mut file = std::fs::File::open(path)
                     .map_err(|error| io_error("open directory evidence file", error))?;
-                let digest = hashing::digest_reader_with_cancel(
-                    &mut file,
-                    algorithm,
-                    || cancelled.load(Ordering::Acquire),
-                    |local| {
+                let digest =
+                    digest_reader_exact(&mut file, algorithm, length, cancelled, |local| {
                         let completed = processed.saturating_add(local).min(total_bytes);
                         (progress)(completed, total_bytes);
-                    },
-                )
-                .map_err(|error| io_error("read directory evidence file", error))?
-                .ok_or(EvidenceHashError::Cancelled)?;
+                    })?;
                 processed = processed.saturating_add(length);
                 use std::fmt::Write;
                 let _ = writeln!(manifest, "f\t{relative}\t{length}\t{digest}");
@@ -340,42 +334,61 @@ fn hash_directory_evidence(
 fn collect_directory_entries(
     root: &Path,
     current: &Path,
+    cancelled: &AtomicBool,
     entries: &mut Vec<(String, char, Option<u64>, std::path::PathBuf)>,
 ) -> Result<(), EvidenceHashError> {
-    let read_dir =
-        std::fs::read_dir(current).map_err(|error| io_error("read directory evidence", error))?;
-    for item in read_dir {
-        let item = item.map_err(|error| io_error("enumerate directory evidence", error))?;
-        let path = item.path();
-        let relative = path
-            .strip_prefix(root)
-            .map_err(|_| EvidenceHashError::Io {
-                operation: "normalize directory evidence path",
-                kind: io::ErrorKind::InvalidData,
-            })?
-            .to_string_lossy()
-            .replace('\\', "/");
-        let metadata = std::fs::symlink_metadata(&path)
-            .map_err(|error| io_error("inspect directory evidence entry", error))?;
-        let file_type = metadata.file_type();
-        let kind = if file_type.is_symlink() {
-            's'
-        } else if file_type.is_dir() {
-            collect_directory_entries(root, &path, entries)?;
-            'd'
-        } else if file_type.is_file() {
-            'f'
-        } else {
-            's'
-        };
-        entries.push((
-            relative,
-            kind,
-            (kind == 'f').then_some(metadata.len()),
-            path,
-        ));
+    let mut pending = vec![current.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        if cancelled.load(Ordering::Acquire) {
+            return Err(EvidenceHashError::Cancelled);
+        }
+        for item in std::fs::read_dir(&directory)
+            .map_err(|error| io_error("read directory evidence", error))?
+        {
+            if cancelled.load(Ordering::Acquire) {
+                return Err(EvidenceHashError::Cancelled);
+            }
+            let item = item.map_err(|error| io_error("enumerate directory evidence", error))?;
+            let path = item.path();
+            let relative = path
+                .strip_prefix(root)
+                .map_err(|_| EvidenceHashError::Io {
+                    operation: "normalize directory evidence path",
+                    kind: io::ErrorKind::InvalidData,
+                })?
+                .to_string_lossy()
+                .replace('\\', "/");
+            let metadata = std::fs::symlink_metadata(&path)
+                .map_err(|error| io_error("inspect directory evidence entry", error))?;
+            let file_type = metadata.file_type();
+            let kind = if file_type.is_symlink() {
+                's'
+            } else if file_type.is_dir() {
+                pending.push(path.clone());
+                'd'
+            } else if file_type.is_file() {
+                'f'
+            } else {
+                's'
+            };
+            entries.push((
+                relative,
+                kind,
+                (kind == 'f').then_some(metadata.len()),
+                path,
+            ));
+            check_directory_entry_limit(entries.len())?;
+        }
     }
     Ok(())
+}
+
+fn check_directory_entry_limit(count: usize) -> Result<(), EvidenceHashError> {
+    if count > 1_000_000 {
+        Err(EvidenceHashError::DirectoryEntryLimit)
+    } else {
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -402,9 +415,12 @@ fn hash_segment(
     let length = std::fs::metadata(path)
         .map_err(|error| io_error("inspect evidence", error))?
         .len();
-    let previous = AtomicU64::new(0);
+    let mut previous = 0u64;
+    let mut local_processed = 0u64;
     let mut track_progress = |local: u64| {
-        let delta = local.saturating_sub(previous.swap(local, Ordering::AcqRel));
+        let delta = local.saturating_sub(previous);
+        previous = local;
+        local_processed = local;
         let completed = context
             .processed
             .fetch_add(delta, Ordering::AcqRel)
@@ -429,11 +445,46 @@ fn hash_segment(
     }
     .map_err(|error| io_error("read evidence", error))?
     .ok_or(EvidenceHashError::Cancelled)?;
+    if local_processed != length {
+        return Err(short_read_error("read complete evidence segment"));
+    }
     Ok(SegmentDigest {
         index,
         length,
         digest,
     })
+}
+
+fn digest_reader_exact(
+    reader: &mut dyn Read,
+    algorithm: hashing::HashAlgorithm,
+    expected_bytes: u64,
+    cancelled: &AtomicBool,
+    mut progress: impl FnMut(u64),
+) -> Result<String, EvidenceHashError> {
+    let mut processed = 0u64;
+    let digest = hashing::digest_reader_with_cancel(
+        reader,
+        algorithm,
+        || cancelled.load(Ordering::Acquire),
+        |amount| {
+            processed = amount;
+            progress(amount);
+        },
+    )
+    .map_err(|error| io_error("read complete evidence input", error))?
+    .ok_or(EvidenceHashError::Cancelled)?;
+    if processed != expected_bytes {
+        return Err(short_read_error("read complete evidence input"));
+    }
+    Ok(digest)
+}
+
+fn short_read_error(operation: &'static str) -> EvidenceHashError {
+    EvidenceHashError::Io {
+        operation,
+        kind: io::ErrorKind::UnexpectedEof,
+    }
 }
 
 fn io_error(operation: &'static str, error: io::Error) -> EvidenceHashError {

@@ -42,7 +42,8 @@ pub fn plan(
         .reusable(&case.0, &fingerprint)
         .map_err(CommandError::from_service_error)?
     {
-        if record.state != "completed" || kind == "digest" {
+        if record.state != "completed" || (kind == "digest" && !digest_requests_recompute(&request))
+        {
             return Ok(EvidenceTaskPlan {
                 task: dto(record)?,
                 request,
@@ -82,6 +83,13 @@ pub fn plan(
         request,
         launch: true,
     })
+}
+
+fn digest_requests_recompute(request: &EvidenceTaskRequestDto) -> bool {
+    matches!(
+        request,
+        EvidenceTaskRequestDto::Digest(request) if request.force_recompute
+    )
 }
 
 pub fn revision(

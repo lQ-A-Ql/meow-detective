@@ -14,7 +14,13 @@ export function EvidenceDigestInspector({ model }: { model: ReturnType<typeof us
         <SelectTrigger aria-label={t('evidenceDigest.scope')}><SelectValue /></SelectTrigger>
         <SelectContent>{model.scopes.map((scope) => <SelectItem key={scope} value={scope}>{t(`evidenceDigest.scopes.${scope}`)}</SelectItem>)}</SelectContent>
       </Select>
-      <DigestAlgorithmActions available={model.available} loading={model.loading} onCalculate={model.calculate} />
+      <DigestAlgorithmActions
+        available={model.available}
+        loading={model.loading}
+        forceRecompute={model.forceRecompute}
+        onForceRecomputeChange={model.setForceRecompute}
+        onCalculate={model.calculate}
+      />
       <EvidenceTaskStatus model={model} />
       {model.historyError ? <div role="alert">{t('evidenceDigest.historyFailed')}</div> : null}
       {model.results.map(({ digest, sourceRevision, stale }) => <div key={digest.algorithm} className="space-y-1 break-all font-mono text-[10px]">

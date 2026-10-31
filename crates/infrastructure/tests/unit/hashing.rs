@@ -54,3 +54,43 @@ fn sha256_large_data() {
     let hash = sha256_reader(&mut cursor).unwrap();
     assert_eq!(hash, sha256_bytes(&data));
 }
+
+#[test]
+fn sha256_pipeline_matches_streaming_across_reader_lanes() {
+    for length in [
+        0u64,
+        1,
+        (8 * 1024 * 1024) - 1,
+        8 * 1024 * 1024,
+        (8 * 1024 * 1024) + 17,
+        (64 * 1024 * 1024) + 29,
+    ] {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        file.as_file().set_len(length).unwrap();
+        let pipelined = pipeline::sha256_file_pipelined_with_cancel(file.path(), &|| false, |_| {})
+            .unwrap()
+            .unwrap();
+        let mut reader = file.reopen().unwrap();
+        let streamed =
+            digest_reader_with_cancel(&mut reader, HashAlgorithm::Sha256, || false, |_| {})
+                .unwrap()
+                .unwrap();
+        assert_eq!(pipelined, streamed, "length={length}");
+    }
+}
+
+#[test]
+fn sha256_pipeline_stops_after_cancellation() {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    file.as_file().set_len((64 * 1024 * 1024) + 1).unwrap();
+    let checks = std::sync::atomic::AtomicUsize::new(0);
+
+    let result = pipeline::sha256_file_pipelined_with_cancel(
+        file.path(),
+        &|| checks.fetch_add(1, std::sync::atomic::Ordering::AcqRel) >= 2,
+        |_| {},
+    )
+    .unwrap();
+
+    assert!(result.is_none());
+}

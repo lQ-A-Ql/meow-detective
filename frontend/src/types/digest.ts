@@ -14,6 +14,7 @@ export interface CalculateEvidenceDigestRequest {
   dataSourceId?: string;
   fileId?: string;
   partitionIndex?: number;
+  forceRecompute?: boolean;
 }
 
 export interface EvidenceDigest {

@@ -348,7 +348,7 @@ export function deriveEvidenceHashStatus(
   }
 
   for (const source of dataSources) {
-    const normalized = (source.originalDiskHashStatus ?? source.hashStatus)?.toLowerCase();
+    const normalized = source.hashStatus?.toLowerCase();
     if (normalized === 'hashed' || normalized === 'recorded' || normalized === 'ready') {
       statuses.push('ready');
     } else if (normalized === 'pending') {

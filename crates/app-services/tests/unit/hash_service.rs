@@ -2,6 +2,17 @@ use super::*;
 use std::io::Cursor;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+struct ShortReader(&'static [u8]);
+
+impl Read for ShortReader {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        let count = buffer.len().min(self.0.len());
+        buffer[..count].copy_from_slice(&self.0[..count]);
+        self.0 = &self.0[count..];
+        Ok(count)
+    }
+}
+
 #[test]
 fn sha256_reader_basic() {
     let data = b"test data for hashing";
@@ -164,6 +175,75 @@ fn hash_evidence_honors_cancellation_before_reading() {
         HashService::hash_evidence(&path, &domain::DataSourceKind::Raw, &cancelled, &|_, _| {})
             .unwrap_err();
     assert!(matches!(error, EvidenceHashError::Cancelled));
+}
+
+#[test]
+fn exact_reader_digest_rejects_early_eof() {
+    let mut reader = ShortReader(b"short");
+    let cancelled = AtomicBool::new(false);
+    let error = digest_reader_exact(
+        &mut reader,
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        10,
+        &cancelled,
+        |_| {},
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        EvidenceHashError::Io {
+            operation: "read complete evidence input",
+            kind: io::ErrorKind::UnexpectedEof
+        }
+    ));
+}
+
+#[test]
+fn directory_hash_honors_cancellation_during_enumeration() {
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::write(directory.path().join("evidence.txt"), b"evidence").unwrap();
+    let cancelled = AtomicBool::new(true);
+
+    let error = hash_directory_evidence(
+        directory.path(),
+        infrastructure::hashing::HashAlgorithm::Sha256,
+        &cancelled,
+        &|_, _| {},
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, EvidenceHashError::Cancelled));
+}
+
+#[test]
+fn directory_hash_enforces_the_entry_limit() {
+    assert!(check_directory_entry_limit(1_000_000).is_ok());
+    assert!(matches!(
+        check_directory_entry_limit(1_000_001),
+        Err(EvidenceHashError::DirectoryEntryLimit)
+    ));
+}
+
+#[test]
+fn e01_segment_discovery_rejects_a_missing_middle_segment() {
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::write(directory.path().join("sample.E01"), b"first").unwrap();
+    std::fs::write(directory.path().join("sample.E03"), b"third").unwrap();
+
+    let error = volumes::discover_e01_segments(&directory.path().join("sample.E01")).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+}
+
+#[test]
+fn ewf_first_segment_accepts_contiguous_e_numbered_parts() {
+    let directory = tempfile::tempdir().unwrap();
+    let first = directory.path().join("sample.EWF");
+    std::fs::write(&first, b"first").unwrap();
+    std::fs::write(directory.path().join("sample.E02"), b"second").unwrap();
+
+    let segments = volumes::discover_e01_segments(&first).unwrap();
+    assert_eq!(segments, vec![first, directory.path().join("sample.E02")]);
 }
 
 #[test]

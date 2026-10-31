@@ -23,4 +23,19 @@ describe('file digest controls', () => {
       expect(button.nextElementSibling).toHaveTextContent(label);
     }
   });
+  it('exposes an explicit force-recompute choice', () => {
+    const onForceRecomputeChange = vi.fn();
+    render(
+      <DigestAlgorithmActions
+        available
+        loading={false}
+        forceRecompute={false}
+        onForceRecomputeChange={onForceRecomputeChange}
+        onCalculate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '忽略已完成结果并重新读取' }));
+    expect(onForceRecomputeChange).toHaveBeenCalledWith(true);
+  });
 });

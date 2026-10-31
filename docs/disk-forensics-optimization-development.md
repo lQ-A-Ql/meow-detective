@@ -726,19 +726,19 @@ BitLocker 字典是 CPU 密集任务，使用专用 `ResourceClass::Cpu` 预算�
 
 ### 16.2 算法与测试缺口
 
-| 编号 | 优先级 | 当前缺口 | 修补动作 | 验收条件 |
-|---|---|---|---|---|
-| HASH-01 | P1 | `hash_logical_evidence` 将读取器声明长度直接写入结果，没有核对 EOF 前的实际读取量 | 增加受控计数读取器，摘要结束后强制核对 `processed == declaredLength` | 截断读取、提前 EOF 和正常 EOF 均有测试；提前 EOF 必须返回 I/O 错误 |
-| HASH-02 | P1 | 多分段 `ContainerSet` 对每个分段记录声明长度，读取完成后没有统一核对实际长度 | 为每个分段保留实际读取计数，并在生成 manifest 前逐段比对 | 任一分段截断时任务失败；分段顺序、长度和摘要同时进入确定性 manifest |
-| HASH-03 | P1 | SHA-256 流水线缺少直接回归，现有测试只通过小文件间接覆盖 | 增加跨 reader lane、非整块尾段、空文件、中途取消、读取失败和缓冲区回收测试 | 流水线结果与单流 SHA-256 对每个边界样本完全一致；取消不泄漏线程 |
-| REV-01 | P1 | 来源版本由路径、大小和修改时间组成，内容同长度改写且时间恢复后无法区分 | 引入显式 `forceRecompute`，并在摘要完成后提供内容摘要作为后续缓存身份 | 已完成任务允许强制重算；任务复用和 `stale` 展示语义有明确测试 |
-| SEG-01 | P1 | E01 分段发现与容器集合测试覆盖了连续分段，未覆盖缺段、末端变动和读取期间长度变化 | 增加缺段、末段截断、追加和替换测试，明确容器集合失败边界 | 缺段或读取长度不一致时失败；完整集合结果稳定 |
-| SM3-01 | P2 | 自实现 SM3 只有 `abc` 单块已知向量 | 增加空输入、55 字节、56 字节、64 字节、跨块和长输入标准向量 | 所有分块边界与公开标准结果一致 |
-| DIR-01 | P2 | 目录证据枚举阶段没有取消检查，也没有与来源版本同等规模的条目上限 | 在目录枚举循环中检查取消，并设置与 `hash_tree` 一致的有界清单 | 深度和条目数量超限时返回显式错误；取消可在枚举阶段生效 |
-| FILE-01 | P2 | 文件摘要写入 `evidence_digests` 后没有同步 `file_entries.hash_sha256` 或文件取证指纹 | 摘要成功后同步文件记录与指纹表，或明确将顶部摘要标为历史记录值 | 摘要完成后文件列表摘要、取证指纹和摘要历史显示一致 |
-| REPORT-01 | P2 | 报告后端按 `data_sources.hash_status` 统计，前端会优先采用 `originalDiskHashStatus` | 统一定义“来源哈希”和“原始磁盘摘要”两个报告字段与状态汇总 | 后端报告告警、治理计数和前端状态使用同一事实来源 |
-| TASK-01 | P2 | 已完成 digest 任务在同一请求与版本下直接复用，用户没有强制重新读取入口 | 增加显式强制重算参数，普通重复提交继续复用完成结果 | 点击普通算法按钮复用结果；强制重算创建新任务并保留旧结果历史 |
-| EMU-01 | P2 | 删除强制内容校验后，导入来源后续被外部修改不会被仿真准入发现 | 在仿真审计和会话 provenance 中明确记录“信任导入来源”政策 | 报告和 UI 不将仿真启动描述为内容指纹验证通过 |
+| 名称 | 优先级 | 状态 | 验收条件 |
+|---|---|---|---|
+| LOGICAL_READ_COMPLETION | P1 | 已完成 | 逻辑磁盘与 LocalDisk 的提前 EOF 返回 I/O 错误；正常读取长度保持不变 |
+| CONTAINER_SEGMENT_COMPLETION | P1 | 已完成 | 每个分段核对实际读取量；分段顺序、长度和摘要进入确定性 manifest |
+| SHA256_PIPELINE_BOUNDARIES | P1 | 部分完成 | 已覆盖空文件、单字节、reader lane 边界、长文件和取消；读取故障与缓冲区回收故障测试仍待补齐 |
+| REVISION_RECOMPUTE_POLICY | P1 | 部分完成 | 已完成显式强制重算；内容摘要作为后续缓存身份仍需单独设计 |
+| E01_SEGMENT_SET_COVERAGE | P1 | 部分完成 | 已拒绝编号缺口并核对读取长度；读取期间替换与真实 E01 末段截断仍待样本验证 |
+| SM3_VECTOR_COVERAGE | P2 | 已完成 | 空输入、55 字节、56 字节、64 字节和长输入与标准结果一致 |
+| DIRECTORY_HASH_BOUNDS | P2 | 已完成 | 枚举支持取消；超过一百万条目返回显式错误 |
+| FILE_DIGEST_PERSISTENCE | P2 | 已完成 | SHA-256 结果同步文件记录与文件取证指纹；文件查询在完成后失效刷新 |
+| EVIDENCE_HASH_STATUS_SEMANTICS | P2 | 已完成 | 前端和后端均以 `hashStatus` 表示来源哈希；原始磁盘摘要保持独立 |
+| DIGEST_TASK_RECOMPUTE | P2 | 已完成 | 普通重复提交复用完成结果；强制重算创建新的任务尝试 |
+| EMULATION_TRUST_PROVENANCE | P2 | 已完成 | 仿真 provenance 记录 `sourceTrustPolicy=importTrusted`；UI 不声明内容校验 |
 
 ### 16.3 执行清单
 
@@ -754,23 +754,26 @@ BitLocker 字典是 CPU 密集任务，使用专用 `ResourceClass::Cpu` 预算�
 
 #### 第一修补批次
 
-- [ ] HASH-01：逻辑磁盘与 LocalDisk 摘要增加实际读取长度核对。
-- [ ] HASH-02：多分段容器集合增加逐段读取长度核对。
-- [ ] HASH-03：补齐 SHA-256 流水线边界、取消和失败回归。
-- [ ] REV-01：设计并实现摘要任务强制重算。
-- [ ] SEG-01：补齐 E01 分段缺失、截断和读取期间变化测试。
+- [x] LOGICAL_READ_COMPLETION：逻辑磁盘与 LocalDisk 摘要增加实际读取长度核对。
+- [x] CONTAINER_SEGMENT_COMPLETION：多分段容器集合增加逐段读取长度核对。
+- [x] SHA256_PIPELINE_BOUNDARIES：补齐 SHA-256 流水线边界与取消回归。
+- [x] REVISION_RECOMPUTE_POLICY：增加来源版本说明和摘要任务强制重算。
+- [x] E01_SEGMENT_SET_COVERAGE：补齐 E01 分段缺口和读取长度边界。
 
 #### 第二修补批次
 
-- [ ] FILE-01：统一文件摘要、文件记录和文件取证指纹。
-- [ ] REPORT-01：统一报告后端、治理统计与前端状态字段。
-- [ ] TASK-01：在任务 DTO、SQLite 指纹和前端交互中加入强制重算语义。
-- [ ] EMU-01：在仿真审计、报告文案和 provenance 中固定导入信任声明。
+- [x] FILE_DIGEST_PERSISTENCE：统一文件摘要、文件记录和文件取证指纹。
+- [x] EVIDENCE_HASH_STATUS_SEMANTICS：统一报告后端和前端来源哈希状态语义。
+- [x] DIGEST_TASK_RECOMPUTE：在任务 DTO、任务规划和前端交互中加入强制重算语义。
+- [x] EMULATION_TRUST_PROVENANCE：在仿真 provenance 中记录导入信任声明。
 
 #### 独立算法与规模验证
 
-- [ ] SM3-01：补齐 SM3 标准分块边界向量。
-- [ ] DIR-01：为目录证据哈希增加取消检查和条目上限。
+- [x] SM3_VECTOR_COVERAGE：补齐 SM3 标准分块边界向量。
+- [x] DIRECTORY_HASH_BOUNDS：为目录证据哈希增加取消检查和条目上限。
+- [ ] SHA256_PIPELINE_BOUNDARIES：补齐读取故障与缓冲区回收故障测试。
+- [ ] REVISION_RECOMPUTE_POLICY：评估内容摘要进入后续任务缓存身份的兼容方案。
+- [ ] E01_SEGMENT_SET_COVERAGE：补齐读取期间替换、追加和真实 E01 末段截断验收。
 - [ ] 使用真实 E01、RAW、VHDX 和 LocalDisk 分别完成四种摘要验证。
 - [ ] 完成一次无预先摘要的 E01 与 RAW 仿真启动验收。
 - [ ] 记录仿真准备、布局探测和 VM 启动的耗时、RSS 与失败状态。
@@ -793,4 +796,23 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1
 ```
 
 真实验收必须保留样本环境变量、提交版本、命令、日志和结果。缺少私有 E01、LocalDisk 或 VMware 条件时保持 `NOT-RUN` 或 `BLOCKED`，不能转写为通过。
+
+### 16.5 本轮验证记录
+
+| 范围 | 结果 |
+|---|---|
+| `cargo fmt --all -- --check` 与 `git diff --check` | 通过 |
+| `cargo test -p app-services --lib hash_service` | 16 项通过 |
+| `cargo test -p app-services --test evidence_tasks` | 6 项通过 |
+| `cargo test -p app-services --lib digest_service` | 4 项通过 |
+| 报告哈希告警回归 | 1 项通过 |
+| `cargo test -p infrastructure hashing` | 13 项通过 |
+| `cargo test -p persistence-sqlite sha256_update_refreshes` | 1 项通过 |
+| `cargo test -p transport --lib commands::digest` | 3 项通过 |
+| `cargo test -p app-services --lib` | 1173 项通过、15 项忽略、2 项失败；失败项均为 Kubernetes bbolt worker 测试，隔离复跑仍失败，未纳入本次修补 |
+| Rust Clippy（应用服务、基础设施、SQLite、传输 DTO、桌面壳，全部目标） | 通过 |
+| 前端类型检查、ESLint、生产构建 | 通过 |
+| 仿真、摘要强制重算和报告状态定向前端测试 | 27 项通过 |
+| 模块大小、函数大小、测试布局、命令边界、服务边界、文档漂移、文档保留守卫 | 通过 |
+| 真实 E01、RAW、VHDX、LocalDisk 与 VMware 会话 | 未执行 |
 

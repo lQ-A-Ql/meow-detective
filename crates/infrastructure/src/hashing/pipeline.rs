@@ -62,13 +62,23 @@ fn hash_reader_lanes(
             return Ok(None);
         }
         let lane = &lanes[index as usize % lanes.len()];
-        let buffer = lane.receiver.recv().map_err(|_| {
-            io::Error::new(io::ErrorKind::UnexpectedEof, "SHA-256 reader stopped early")
-        })??;
+        let buffer = match lane.receiver.recv() {
+            Ok(result) => result?,
+            Err(_) if cancelled() => return Ok(None),
+            Err(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "SHA-256 reader stopped early",
+                ));
+            }
+        };
         hasher.update(&buffer);
         processed = processed.saturating_add(buffer.len() as u64);
         on_progress(processed);
         if lane.recycle.send(buffer).is_err() && index + 1 < chunk_count {
+            if cancelled() {
+                return Ok(None);
+            }
             return Err(io::Error::new(
                 io::ErrorKind::BrokenPipe,
                 "SHA-256 reader buffer recycler stopped early",

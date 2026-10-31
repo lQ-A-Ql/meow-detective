@@ -718,7 +718,8 @@
       "hash": {
         "loading": "Calculating…",
         "run": "Calculate {{algorithm}}",
-        "result": "{{algorithm}} · {{bytes}} bytes"
+        "result": "{{algorithm}} · {{bytes}} bytes",
+        "forceRecompute": "Ignore completed results and read again"
       },
       "ntfs": {
         "sequence": "MFT sequence",

@@ -1,12 +1,44 @@
 use crate::connection::DbResult;
 use crate::repositories::fingerprint_repo::ForensicFingerprintRepo;
-use domain::{EntryType, FileEntry};
+use domain::{normalize_content_sha256, EntryType, FileEntry, FileEntryId};
 use rusqlite::{params, OptionalExtension};
 use std::collections::HashMap;
 
 use super::FileRepo;
 
 impl FileRepo<'_> {
+    pub fn update_hash_sha256(&self, id: &FileEntryId, hash: &str) -> DbResult<Option<FileEntry>> {
+        let hash = normalize_content_sha256(Some(hash)).ok_or_else(|| {
+            crate::connection::DbError::System("file SHA-256 must be hexadecimal".into())
+        })?;
+        let updated = self.conn.execute(
+            "UPDATE file_entries SET hash_sha256 = ?1 WHERE id = ?2",
+            params![hash, id.0],
+        )?;
+        if updated == 0 {
+            return Ok(None);
+        }
+        let entry = self.find_by_id(id)?.ok_or_else(|| {
+            crate::connection::DbError::System(format!("updated file entry {} is missing", id.0))
+        })?;
+        let fingerprint_repo = ForensicFingerprintRepo::new(self.conn);
+        if fingerprint_repo.is_available()? {
+            let case_id = self
+                .conn
+                .query_row(
+                    "SELECT case_id FROM data_sources WHERE id = ?1",
+                    [&entry.data_source_id.0],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?;
+            fingerprint_repo.upsert_if_available(&domain::ForensicFingerprint::for_file_entry(
+                &entry,
+                case_id.as_deref(),
+            ))?;
+        }
+        Ok(Some(entry))
+    }
+
     pub fn remove_partition_placeholder_root(
         &self,
         data_source_id: &str,

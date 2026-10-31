@@ -236,7 +236,7 @@ pub(crate) fn evidence_hash_warning_messages(
     let mut warnings = Vec::new();
     if pending > 0 {
         warnings.push(format!(
-            "evidenceHash pending: {pending} data source(s) still require background hash verification"
+            "evidenceHash pending: {pending} data source(s) still require source hash verification"
         ));
     }
     if failed > 0 {
@@ -251,7 +251,7 @@ pub(crate) fn evidence_hash_warning_messages(
     }
     if unknown > 0 {
         warnings.push(format!(
-            "evidenceHash deferred: {unknown} data source(s) have unknown hash verification status"
+            "evidenceHash deferred: {unknown} data source(s) have no recorded source hash status"
         ));
     }
     warnings

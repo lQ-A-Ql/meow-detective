@@ -22,8 +22,18 @@ fn request() -> EvidenceTaskRequestDto {
         data_source_id: Some("source".into()),
         file_id: None,
         partition_index: None,
+        force_recompute: false,
     })
 }
+
+fn forced_request() -> EvidenceTaskRequestDto {
+    let EvidenceTaskRequestDto::Digest(mut request) = request() else {
+        unreachable!("digest test helper")
+    };
+    request.force_recompute = true;
+    EvidenceTaskRequestDto::Digest(request)
+}
+
 fn setup() -> (
     tempfile::TempDir,
     app_services::active_case::ActiveCase,
@@ -102,6 +112,40 @@ fn planning_deduplicates_and_persists_a_committed_result_even_after_late_cancel(
                     .unwrap()
                     .launch
             );
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn forced_digest_completion_starts_a_new_attempt() {
+    let (_temp, active, _) = setup();
+    active
+        .with_conn(|conn| {
+            let first =
+                evidence_tasks::plan(conn, &active.case_root, &active.meta.id, forced_request())
+                    .unwrap();
+            assert!(first.launch);
+            let result = transport::dto::EvidenceDigestDto {
+                scope: DigestScopeDto::ContainerFile,
+                algorithm: DigestAlgorithmDto::Sha256,
+                value: "b".repeat(64),
+                byte_length: 8,
+                status: transport::dto::DigestStatusDto::Completed,
+            };
+            evidence_tasks::finish(
+                conn,
+                &active.meta.id,
+                &first.task.task_id,
+                Ok(EvidenceTaskResultDto::Digest(result)),
+            )
+            .unwrap();
+
+            let repeated =
+                evidence_tasks::plan(conn, &active.case_root, &active.meta.id, forced_request())
+                    .unwrap();
+            assert!(repeated.launch);
+            assert_ne!(repeated.task.task_id, first.task.task_id);
             Ok(())
         })
         .unwrap();

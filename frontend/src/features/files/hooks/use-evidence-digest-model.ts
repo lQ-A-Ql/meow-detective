@@ -12,19 +12,28 @@ export function useEvidenceDigestModel(caseId: string | undefined, file: FileEnt
   const sourceId = scoped?.sourceId ?? source?.id;
   const owner = JSON.stringify([caseId, sourceId, file?.id, partitionIndex]);
   const [selection, setSelection] = useState<{ owner: string; scope: DigestScope }>({ owner, scope: 'file' });
+  const [forceSelection, setForceSelection] = useState({ owner, force: false });
   const scope = selection.owner === owner ? selection.scope : 'file';
+  const forceRecompute = forceSelection.owner === owner ? forceSelection.force : false;
   const task = useEvidenceTask(caseId, owner);
   const cache = useQueryClient();
   const historyKey = ['evidence-digests', caseId, sourceId, file?.id, partitionIndex];
   const history = useQuery({ queryKey: historyKey, enabled: !!caseId && !!sourceId, retry: false,
     queryFn: () => listEvidenceDigests({ dataSourceId: sourceId!, fileId: file?.id, partitionIndex }),
   });
-  useEffect(() => { if (task.task?.state === 'completed') void cache.invalidateQueries({ queryKey: ['evidence-digests', caseId, sourceId] }); }, [task.task?.state, task.task?.taskId, cache, caseId, sourceId]);
+  useEffect(() => {
+    if (task.task?.state !== 'completed') return;
+    void cache.invalidateQueries({ queryKey: ['evidence-digests', caseId, sourceId] });
+    if (task.request?.kind === 'digest' && task.request.request.algorithm === 'sha256') {
+      void cache.invalidateQueries({ queryKey: ['files'] });
+    }
+  }, [task.task?.state, task.task?.taskId, task.request, cache, caseId, sourceId]);
   const available = !!caseId && !!sourceId && (scope !== 'file' || file?.entryType === 'file') && (scope !== 'partition' || partitionIndex !== undefined);
-  return { ...task, scope, available, scopes: DIGEST_SCOPES,
+  return { ...task, scope, forceRecompute, available, scopes: DIGEST_SCOPES,
     results: history.data?.filter((result) => result.digest.scope === scope) ?? [], historyLoading: history.isFetching,
     historyError: history.error,
     setScope: (scope: DigestScope) => setSelection({ owner, scope }),
-    calculate: (algorithm: DigestAlgorithm) => { if (available) task.start({ kind: 'digest', request: { scope, algorithm, dataSourceId: sourceId, ...(scope === 'file' ? { fileId: file?.id } : {}), ...(scope === 'partition' ? { partitionIndex } : {}) } }); },
+    setForceRecompute: (force: boolean) => setForceSelection({ owner, force }),
+    calculate: (algorithm: DigestAlgorithm) => { if (available) task.start({ kind: 'digest', request: { scope, algorithm, dataSourceId: sourceId, ...(scope === 'file' ? { fileId: file?.id } : {}), ...(scope === 'partition' ? { partitionIndex } : {}), ...(forceRecompute ? { forceRecompute: true } : {}) } }); },
   };
 }

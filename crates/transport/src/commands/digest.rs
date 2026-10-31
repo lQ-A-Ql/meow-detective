@@ -17,6 +17,8 @@ pub struct CalculateEvidenceDigestRequest {
     pub file_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub partition_index: Option<u32>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub force_recompute: bool,
 }
 
 impl CalculateEvidenceDigestRequest {
@@ -50,6 +52,10 @@ impl CalculateEvidenceDigestRequest {
             _ => Ok(()),
         }
     }
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[cfg(test)]
