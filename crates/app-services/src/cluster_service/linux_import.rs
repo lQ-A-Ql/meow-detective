@@ -12,6 +12,7 @@ use crate::import_precheck::{ImportSetMemberConfig, ImportSourceConfig, ImportSo
 use super::{ClusterServiceError, Result};
 
 mod scan;
+mod source_binding;
 use scan::collect_evidence_set_image_candidates;
 
 static MANIFEST_UPDATE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -141,6 +142,10 @@ impl LinuxEvidenceSetImportPlan {
                         member_index: member.member_index,
                         member_count,
                     }),
+                    lvm_extra_sources: source_binding::lvm_extra_sources(
+                        &self.members,
+                        &member.source_path,
+                    ),
                 })
             })
             .collect()

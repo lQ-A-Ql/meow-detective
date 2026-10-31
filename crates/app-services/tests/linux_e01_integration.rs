@@ -18,8 +18,9 @@ use app_services::{
     },
     cluster_service::plan_linux_evidence_set_import,
     datasource_service::{
-        detect_image_filesystem, expand_lvm_pool_candidates, ImageFilesystemCandidate,
-        ImageFilesystemKind, ImageFilesystemSource, PartitionRecord,
+        detect_image_filesystem, expand_lvm_pool_candidates,
+        expand_lvm_pool_candidates_with_sources, ImageFilesystemCandidate, ImageFilesystemKind,
+        ImageFilesystemSource, PartitionRecord,
     },
     file_service,
     import_pipeline::{
@@ -3179,6 +3180,36 @@ fn pve_cluster_import_plan_discovers_nested_server_images() {
             .all(|member| !member.source_path.to_string_lossy().ends_with(".E02")),
         "PVE sample planner must not register continuation segments"
     );
+}
+
+#[test]
+#[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real multi-PV Linux E01 sample directory"]
+fn pve_cluster_multi_pv_lvm_expands_across_members() {
+    let root = pve_cluster_root();
+    let plan = plan_linux_evidence_set_import(&root, Some("multi-pv".to_string()))
+        .expect("multi-PV evidence set should be planned");
+    assert!(plan.members.len() >= 2);
+
+    let configs = plan.member_import_configs();
+    assert_eq!(configs.len(), plan.members.len());
+    for (member, config) in plan.members.iter().zip(configs) {
+        let mut reader = E01Reader::open(&member.source_path).expect("open E01 member");
+        let mut probe = detect_image_filesystem(&mut reader).expect("probe E01 member");
+        expand_lvm_pool_candidates_with_sources(
+            &mut probe,
+            &member.source_path,
+            &member.source_kind,
+            &config.lvm_extra_sources,
+        );
+        let paired_pv_warning = probe.warnings.iter().any(|warning| {
+            warning.contains("PV source(s)=") && warning.matches("path-sha256:").count() >= 2
+        });
+        assert!(
+            paired_pv_warning,
+            "cross-member LVM should inspect PVs from both E01 members: {:?}",
+            probe.warnings
+        );
+    }
 }
 
 #[test]

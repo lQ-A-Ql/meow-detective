@@ -25,10 +25,11 @@ pub(super) fn seed_manifest_if_needed(
         transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Probe,
         || probe_image(ctx),
     )?;
-    datasource_service::expand_lvm_pool_candidates(
+    datasource_service::expand_lvm_pool_candidates_with_sources(
         &mut probe,
         &ctx.import_config.source_path,
         &ctx.import_config.kind,
+        &ctx.import_config.lvm_extra_sources,
     );
     report_probe(ctx, data_source, "probe", &probe, started.elapsed());
     if is_exclusively_bluestore_probe(&probe) {
@@ -74,10 +75,11 @@ pub(super) fn load_resume_candidates(
         transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Probe,
         || probe_image(ctx),
     )?;
-    datasource_service::expand_lvm_pool_candidates(
+    datasource_service::expand_lvm_pool_candidates_with_sources(
         &mut probe,
         &ctx.import_config.source_path,
         &ctx.import_config.kind,
+        &ctx.import_config.lvm_extra_sources,
     );
     if is_exclusively_bluestore_probe(&probe) {
         return Err(CommandError::internal(

@@ -384,7 +384,7 @@
       "category": "Linux LVM/PVE",
       "item": "非集群导入跨镜像 multi-PV VG 聚合",
       "status": "unsupported",
-      "summary": "普通导入与恢复导入仅允许当前数据源参与 LVM 展开，不扫描案件内其他 E01/RAW；缺失 PV 时保留明确诊断并 fail closed。显式多源组合 API 仅供未来经原子成员注册的集群编排使用",
+      "summary": "普通导入与恢复导入仅允许当前数据源参与 LVM 展开，不扫描案件内其他 E01/RAW；缺失 PV 时保留明确诊断并 fail closed。Linux 证据集合导入会在成员注册后显式绑定集合内其他 E01/RAW 的 PV 路径与偏移，成员仍保持独立 source DB；逻辑卷只有在读取到已支持文件系统签名时才进入文件树",
       "affectedChains": [
         "LVM",
         "MultiSourceImport"

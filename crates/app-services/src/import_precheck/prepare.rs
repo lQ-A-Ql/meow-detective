@@ -16,6 +16,7 @@ pub struct ImportSourceConfig {
     pub profile: Option<String>,
     pub mode: ImportSourceMode,
     pub import_set: Option<ImportSetMemberConfig>,
+    pub lvm_extra_sources: Vec<datasource_service::LvmDiscoverySource>,
     pub existing_data_source_id: Option<domain::DataSourceId>,
 }
 
@@ -110,6 +111,7 @@ pub fn prepare_import_source_config_from_path_with_kind(
         profile: None,
         mode,
         import_set: None,
+        lvm_extra_sources: Vec::new(),
         existing_data_source_id: None,
     })
 }

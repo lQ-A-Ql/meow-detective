@@ -101,6 +101,16 @@ fn evidence_set_member_configs_are_linux_scoped_not_cluster_profiled() {
             .map(|value| value.import_set_id.as_str()),
         Some(plan.import_set_id.as_str())
     );
+    assert_eq!(configs[0].lvm_extra_sources.len(), 1);
+    assert_eq!(
+        configs[0].lvm_extra_sources[0].source_path,
+        plan.members[1].source_path
+    );
+    assert_eq!(configs[1].lvm_extra_sources.len(), 1);
+    assert_eq!(
+        configs[1].lvm_extra_sources[0].source_path,
+        plan.members[0].source_path
+    );
 }
 
 #[test]
