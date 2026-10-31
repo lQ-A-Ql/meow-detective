@@ -80,7 +80,7 @@ FC 4E 2B A9
 
 独立只读重组已经得到进一步文件系统证据：按两个成员的 RAID0 chunk 规则重组约 1 GiB 片段后，在重组逻辑空间发现有效 Btrfs superblock。该 superblock 的 fsid 为 `32-31-E5-2F-5E-15-44-C4-B2-24-E2-9C-B4-20-1C-0E`，generation 为 `4389`，sectorsize 为 `4096`，nodesize 为 `16384`，total bytes 为 `124568731648`，bytes used 为 `26126225408`。
 
-Btrfs total bytes 大于当前两个 MD 成员 data zone 形成的逻辑容量，说明仍需检查 Btrfs chunk tree、设备条带和可能的多设备布局。当前代码已经能够递归读取 chunk tree，并在真实检材的 RAID0 重组 reader 上打开 Btrfs、枚举 `@rootfs` 根目录、读取 `/etc/passwd`；这还不能作为完整文件树验收。
+Btrfs total bytes 大于当前两个 MD 成员 data zone 形成的逻辑容量，说明仍需检查 Btrfs chunk tree、设备条带和可能的多设备布局。当前代码已经能够递归读取 chunk tree，并在真实检材的 RAID0 重组 reader 上打开 Btrfs、枚举 `@rootfs` 根目录、读取 `/etc/passwd`。对于 Btrfs 多条带 chunk，当前只对 RAID1 重复条带使用首个可读条带，其他 profile 保持失败关闭；这还不能作为完整文件树验收。
 
 高价值路径覆盖已经扩展到 `@rootfs/etc`、`@rootfs/var`、`@rootfs/usr`、`@rootfs/root` 和 `@rootfs/home`。`/etc/passwd`、`/etc/os-release`、`/etc/hostname` 均可读取；`/var/log/syslog`、`/var/log/messages` 在本检材中不存在，已按缺失证据记录，没有当作读取故障。
 
