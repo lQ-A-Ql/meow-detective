@@ -3,7 +3,7 @@ use crate::file_service::{
     FileServiceError,
 };
 use domain::FileEntryId;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::file_repo::{FileRepo, FileSortDirection, FileSortKey};
 use rusqlite::Connection;
 use transport::{commands::GetFileRowsRequest, dto::FileRowsPageDto};
 
@@ -35,28 +35,37 @@ pub fn get_file_rows_for_request(
     };
     let parent_id = parent_entry.as_ref().map(|entry| &entry.id);
     let total_count = repo.count_entries_visible(parent_id, request.show_hidden)?;
-    let page =
-        if repo.entries_need_natural_sort(parent_id, request.show_hidden, request.sort_key)? {
-            let mut entries = match parent_id {
-                Some(parent_id) => repo.find_children_visible(parent_id, request.show_hidden)?,
-                None => repo.find_root_entries_visible(request.show_hidden)?,
-            };
-            sort_entries(&mut entries, request.sort_key, request.sort_direction);
-            let start = (request.offset as usize).min(entries.len());
-            let end = start
-                .saturating_add(request.limit as usize)
-                .min(entries.len());
-            entries[start..end].to_vec()
-        } else {
-            repo.find_entries_page_visible_ordered(
-                parent_id,
-                request.offset,
-                request.limit,
-                request.show_hidden,
-                request.sort_key,
-                request.sort_direction,
-            )?
+    let sort_key = match request.sort_key {
+        transport::commands::FileSortKeyDto::Name => FileSortKey::Name,
+        transport::commands::FileSortKeyDto::Size => FileSortKey::Size,
+        transport::commands::FileSortKeyDto::ModifiedAt => FileSortKey::ModifiedAt,
+        transport::commands::FileSortKeyDto::Ext => FileSortKey::Ext,
+    };
+    let sort_direction = match request.sort_direction {
+        transport::commands::FileSortDirectionDto::Asc => FileSortDirection::Asc,
+        transport::commands::FileSortDirectionDto::Desc => FileSortDirection::Desc,
+    };
+    let page = if repo.entries_need_natural_sort(parent_id, request.show_hidden, sort_key)? {
+        let mut entries = match parent_id {
+            Some(parent_id) => repo.find_children_visible(parent_id, request.show_hidden)?,
+            None => repo.find_root_entries_visible(request.show_hidden)?,
         };
+        sort_entries(&mut entries, request.sort_key, request.sort_direction);
+        let start = (request.offset as usize).min(entries.len());
+        let end = start
+            .saturating_add(request.limit as usize)
+            .min(entries.len());
+        entries[start..end].to_vec()
+    } else {
+        repo.find_entries_page_visible_ordered(
+            parent_id,
+            request.offset,
+            request.limit,
+            request.show_hidden,
+            sort_key,
+            sort_direction,
+        )?
+    };
 
     Ok(FileRowsPageDto {
         rows: page.iter().map(file_entry_to_dto).collect(),

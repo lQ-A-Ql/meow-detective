@@ -1,8 +1,15 @@
 use app_services::{
     case_service,
-    cluster_service::{self, ClusterServiceError, LinuxImportPhaseInput},
+    cluster_service::{
+        self, get_linux_evidence_set_summary, write_mdraid_descriptor, ClusterServiceError,
+        LinuxImportPhaseInput, MdRaidArrayPlan, MdRaidMemberPlan,
+    },
+    datasource_service::{LvmLogicalVolumeIdentity, LvmPhysicalVolumeSource},
 };
-use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
+use domain::{
+    DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, DataSourceProvenanceStatus,
+};
+use fs_lvm::mdraid::MdRaidSuperblock;
 use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
     linux_import_set_repo::{LinuxImportSetMemberRecord, LinuxImportSetRecord, LinuxImportSetRepo},
@@ -176,4 +183,112 @@ fn member_binding_requires_matching_case_set_index_and_source_ownership() {
         0
     )
     .is_err());
+}
+
+#[test]
+fn summary_reads_persisted_mdraid_without_materializing_a_source() {
+    let temporary = tempfile::tempdir().unwrap();
+    let case = case_service::create_case(temporary.path(), "MD RAID summary", None).unwrap();
+    let conn = case.connection().unwrap();
+    let import_set_id = "mdraid-summary-set";
+    LinuxImportSetRepo::new(&conn)
+        .insert(&LinuxImportSetRecord {
+            id: import_set_id.into(),
+            case_id: case.meta.id.0.clone(),
+            name: "MD RAID summary".into(),
+            root_path: "evidence".into(),
+            import_state: "ready".into(),
+            member_count: 1,
+            ready_count: 1,
+            failed_count: 0,
+            last_error: None,
+        })
+        .unwrap();
+    LinuxImportSetRepo::new(&conn)
+        .insert_member(&LinuxImportSetMemberRecord {
+            import_set_id: import_set_id.into(),
+            member_index: 0,
+            source_path: "member.raw".into(),
+            source_kind: "raw".into(),
+            data_source_id: None,
+            import_state: "ready".into(),
+            last_error: None,
+        })
+        .unwrap();
+
+    let plan = MdRaidArrayPlan {
+        array_uuid: [7; 16],
+        name: "array".into(),
+        level: 0,
+        layout: 1,
+        chunk_sectors: 8,
+        raid_disks: 1,
+        min_data_size_sectors: 16,
+        capacity_mismatch: false,
+        members: vec![MdRaidMemberPlan {
+            superblock: MdRaidSuperblock {
+                major_version: 1,
+                feature_map: 0,
+                array_uuid: [7; 16],
+                name: "array".into(),
+                level: 0,
+                layout: 1,
+                size_sectors: 16,
+                chunk_sectors: 8,
+                raid_disks: 1,
+                data_offset_sectors: 2048,
+                data_size_sectors: 16,
+                super_offset_sectors: 8,
+                dev_number: 0,
+                device_uuid: [8; 16],
+            },
+            vg_name: "vg".into(),
+            vg_uuid: "vg-1".into(),
+            lv_name: "lv".into(),
+            lv_uuid: "lv-1".into(),
+            lvm_identity: LvmLogicalVolumeIdentity {
+                vg_uuid: "vg-1".into(),
+                vg_name: "vg".into(),
+                lv_uuid: "lv-1".into(),
+                lv_name: "lv".into(),
+                pv_offsets: vec![0],
+                pv_sources: vec![LvmPhysicalVolumeSource {
+                    source_path: "member.raw".into(),
+                    source_kind: Some(DataSourceKind::Raw),
+                    offset: 0,
+                    pv_uuid: "pv-1".into(),
+                    pv_name: None,
+                }],
+            },
+        }],
+    };
+    let descriptor = write_mdraid_descriptor(temporary.path(), &plan).unwrap();
+    let source_id = DataSourceId("mdraid-07070707070707070707070707070707".into());
+    let source = DataSource {
+        id: source_id.clone(),
+        name: "MD RAID array".into(),
+        kind: DataSourceKind::MdRaid,
+        source_path: descriptor,
+        imported_at: chrono::Utc::now(),
+        provenance: DataSourceProvenance {
+            provenance_status: DataSourceProvenanceStatus::Recorded,
+            ..DataSourceProvenance::unknown()
+        },
+    };
+    let mut storage =
+        DataSourceStorage::source_db(&source_id.0, Some("linux"), Some("mdraid".into()));
+    storage.import_state = "pending".into();
+    DataSourceRepo::new(&conn)
+        .insert_with_storage(&case.meta.id, &source, &storage)
+        .unwrap();
+
+    let summary =
+        get_linux_evidence_set_summary(&conn, &case.case_root, &case.meta.id, import_set_id)
+            .unwrap();
+    assert_eq!(summary.mdraid_arrays.len(), 1);
+    assert_eq!(
+        summary.mdraid_arrays[0].array_uuid,
+        "07070707070707070707070707070707"
+    );
+    assert!(!app_services::source_db::source_db_path(temporary.path(), &source_id).exists());
 }

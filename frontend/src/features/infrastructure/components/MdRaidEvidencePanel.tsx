@@ -16,12 +16,12 @@ export function MdRaidEvidencePanel({ arrays, t, onImport, onOpenFiles }: { arra
 
 function BrowseButton({ t, onOpenFiles }: { t: TFunction; onOpenFiles?: () => void }) {
   if (!onOpenFiles) return null;
-  return <Button type="button" variant="forensicsOutline" size="sm" onClick={onOpenFiles}><ActionIcon name="folder-open" /><span>{t('infrastructure.workspace.mdraid.openFiles')}</span></Button>;
+  return <Button type="button" shape="row" className="h-8 w-auto justify-center rounded-ctl px-3" variant="forensicsOutline" size="sm" onClick={onOpenFiles}><ActionIcon name="folder-open" /><span>{t('infrastructure.workspace.mdraid.openFiles')}</span></Button>;
 }
 
 function ImportButton({ t, onImport }: { t: TFunction; onImport?: () => void }) {
   if (!onImport) return null;
-  return <Button type="button" variant="forensicsOutline" size="sm" onClick={onImport}><ActionIcon name="upload" /><span>{t('infrastructure.workspace.mdraid.import')}</span></Button>;
+  return <Button type="button" shape="row" className="h-8 w-auto justify-center rounded-ctl px-3" variant="forensicsOutline" size="sm" onClick={onImport}><ActionIcon name="upload" /><span>{t('infrastructure.workspace.mdraid.import')}</span></Button>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

@@ -1,7 +1,7 @@
 use crate::file_service::visibility::visibility_flags_for_node;
-use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use evidence_core::{FileSystemDiagnostic, FileSystemReader, FsNode};
+use evidence_core::{FileSystemDiagnostic, FileSystemDiagnosticKind, FileSystemReader, FsNode};
 use infrastructure::constants::FILE_INSERT_BATCH_SIZE;
 use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
 use rusqlite::Connection;
@@ -19,6 +19,11 @@ struct DirectoryResult {
     path: String,
     children: Vec<FsNode>,
     diagnostics: Vec<FileSystemDiagnostic>,
+}
+
+enum WorkerResult {
+    Directory(DirectoryResult),
+    Fatal(String),
 }
 
 pub fn enumerate_filesystem_parallel_with_factory(
@@ -65,7 +70,8 @@ pub fn enumerate_filesystem_parallel_with_factory(
 
     let worker_count = worker_count.max(1);
     let (work_tx, work_rx) = unbounded::<DirectoryWork>();
-    let (result_tx, result_rx) = bounded::<Result<DirectoryResult, String>>(worker_count.max(1));
+    let (result_tx, result_rx) = unbounded::<WorkerResult>();
+    let stop = Arc::new(AtomicBool::new(false));
     let transaction = conn.unchecked_transaction()?;
     let repo = FileRepo::new(&transaction);
     repo.insert_batch_unchecked(&[root_entry])?;
@@ -75,63 +81,128 @@ pub fn enumerate_filesystem_parallel_with_factory(
             path: String::new(),
         })
         .map_err(|_| DbError::System("Parallel filesystem work queue closed".to_string()))?;
+    let result = run_workers(
+        &repo,
+        data_source_id,
+        worker_count,
+        reader_factory,
+        work_tx,
+        work_rx,
+        result_tx,
+        result_rx,
+        progress_fn,
+        cancel_token,
+        stop,
+    );
+    let stats = result?;
+    transaction.commit()?;
+    Ok(stats)
+}
 
+fn run_workers(
+    repo: &FileRepo<'_>,
+    data_source_id: &DataSourceId,
+    worker_count: usize,
+    reader_factory: Arc<dyn Fn() -> DbResult<Box<dyn FileSystemReader>> + Send + Sync>,
+    work_tx: Sender<DirectoryWork>,
+    work_rx: Receiver<DirectoryWork>,
+    result_tx: Sender<WorkerResult>,
+    result_rx: Receiver<WorkerResult>,
+    progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
+    stop: Arc<AtomicBool>,
+) -> DbResult<crate::file_service::EnumerationStats> {
     let result = std::thread::scope(|scope| {
         for _ in 0..worker_count {
-            let work_rx = work_rx.clone();
-            let result_tx = result_tx.clone();
-            let factory = Arc::clone(&reader_factory);
-            scope.spawn(move || {
-                let reader = match factory() {
-                    Ok(reader) => reader,
-                    Err(error) => {
-                        let _ = result_tx.send(Err(error.to_string()));
-                        return;
-                    }
-                };
-                while let Ok(work) = work_rx.recv() {
-                    let children = reader
-                        .list_children(&work.path)
-                        .map_err(|error| error.to_string());
-                    let diagnostics = reader.take_diagnostics();
-                    if result_tx
-                        .send(children.map(|children| DirectoryResult {
-                            parent_id: work.parent_id,
-                            path: work.path,
-                            children,
-                            diagnostics,
-                        }))
-                        .is_err()
-                    {
-                        return;
-                    }
-                }
-            });
+            spawn_worker(
+                scope,
+                work_rx.clone(),
+                result_tx.clone(),
+                Arc::clone(&reader_factory),
+                Arc::clone(&stop),
+            );
         }
         drop(result_tx);
         let result = enumerate_results(
-            &repo,
+            repo,
             data_source_id,
             &work_tx,
             &result_rx,
             progress_fn,
             cancel_token,
+            &stop,
         );
+        if result.is_err() {
+            stop.store(true, Ordering::Release);
+        }
         drop(work_tx);
         result
     });
-    let stats = result?;
-    transaction.commit()?;
-    Ok(stats)
+    result
+}
+
+fn spawn_worker<'scope, 'env>(
+    scope: &'scope std::thread::Scope<'scope, 'env>,
+    work_rx: Receiver<DirectoryWork>,
+    result_tx: Sender<WorkerResult>,
+    factory: Arc<dyn Fn() -> DbResult<Box<dyn FileSystemReader>> + Send + Sync>,
+    stop: Arc<AtomicBool>,
+) {
+    scope.spawn(move || {
+        let reader = match factory() {
+            Ok(reader) => reader,
+            Err(error) => {
+                stop.store(true, Ordering::Release);
+                let _ = result_tx.send(WorkerResult::Fatal(error.to_string()));
+                return;
+            }
+        };
+        while let Ok(work) = work_rx.recv() {
+            if stop.load(Ordering::Acquire) {
+                return;
+            }
+            let children = reader.list_children(&work.path).map_err(|error| {
+                FileSystemDiagnostic::new(
+                    FileSystemDiagnosticKind::DirectoryUnreadable,
+                    format!("Cannot read '{}': {}", work.path, error),
+                )
+                .with_default_path(&work.path)
+            });
+            let mut diagnostics = reader
+                .take_diagnostics()
+                .into_iter()
+                .map(|diagnostic| diagnostic.with_default_path(&work.path))
+                .collect::<Vec<_>>();
+            let children = match children {
+                Ok(children) => children,
+                Err(diagnostic) => {
+                    diagnostics.push(diagnostic);
+                    Vec::new()
+                }
+            };
+            if result_tx
+                .send(WorkerResult::Directory(DirectoryResult {
+                    parent_id: work.parent_id,
+                    path: work.path,
+                    children,
+                    diagnostics,
+                }))
+                .is_err()
+            {
+                return;
+            }
+        }
+    });
 }
 
 fn enumerate_results(
     repo: &FileRepo<'_>,
     data_source_id: &DataSourceId,
     work_tx: &Sender<DirectoryWork>,
-    result_rx: &Receiver<Result<DirectoryResult, String>>,
+    result_rx: &Receiver<WorkerResult>,
     progress_fn: Option<&dyn Fn(u32)>,
     cancel_token: Option<&AtomicBool>,
+    stop: &Arc<AtomicBool>,
 ) -> DbResult<crate::file_service::EnumerationStats> {
     let mut pending = 1usize;
     let mut batch = Vec::with_capacity(FILE_INSERT_BATCH_SIZE);
@@ -143,12 +214,20 @@ fn enumerate_results(
     let mut diagnostics = Vec::new();
     while pending > 0 {
         if cancellation_requested(cancel_token) {
+            stop.store(true, Ordering::Release);
             return Err(DbError::System("Enumeration cancelled".to_string()));
         }
-        let result = result_rx
-            .recv()
-            .map_err(|_| DbError::System("Parallel filesystem workers stopped".to_string()))?
-            .map_err(DbError::System)?;
+        let result = result_rx.recv().map_err(|_| {
+            stop.store(true, Ordering::Release);
+            DbError::System("Parallel filesystem workers stopped".to_string())
+        })?;
+        let result = match result {
+            WorkerResult::Directory(result) => result,
+            WorkerResult::Fatal(error) => {
+                stop.store(true, Ordering::Release);
+                return Err(DbError::System(error));
+            }
+        };
         pending = pending.saturating_sub(1);
         for diagnostic in result.diagnostics {
             tracing::warn!(path = %result.path, message = %diagnostic.message, "Filesystem enumeration diagnostic");
@@ -195,6 +274,10 @@ fn enumerate_results(
     }
     if !batch.is_empty() {
         repo.insert_batch_unchecked(&batch)?;
+    }
+    if cancellation_requested(cancel_token) {
+        stop.store(true, Ordering::Release);
+        return Err(DbError::System("Enumeration cancelled".to_string()));
     }
     if let Some(progress_fn) = progress_fn {
         progress_fn(100);

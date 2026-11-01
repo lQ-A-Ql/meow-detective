@@ -62,7 +62,14 @@ impl transport::ServiceErrorCategory for ParallelEnumError {
             Self::MftParams(_) | Self::MftResourceLimit(_) | Self::InvalidPlan => {
                 transport::ErrorCategory::Validation
             }
-            Self::Staging(error) => transport::ServiceErrorCategory::category(error),
+            Self::Staging(error) => match error.category() {
+                persistence_sqlite::DbErrorCategory::Cancelled => {
+                    transport::ErrorCategory::Cancelled
+                }
+                persistence_sqlite::DbErrorCategory::Timeout => transport::ErrorCategory::Timeout,
+                persistence_sqlite::DbErrorCategory::Io => transport::ErrorCategory::Io,
+                persistence_sqlite::DbErrorCategory::Internal => transport::ErrorCategory::Internal,
+            },
             Self::Filesystem(_) => transport::ErrorCategory::Parser,
         }
     }

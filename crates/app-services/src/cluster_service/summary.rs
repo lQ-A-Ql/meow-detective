@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use std::sync::{LazyLock, Mutex};
 
 use domain::{CaseId, DataSourceKind};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
@@ -44,20 +43,6 @@ struct ManifestProvenance {
     collected_at: String,
     manifest_digest: String,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct MdRaidCacheKey {
-    state: String,
-    member_count: u32,
-    ready_count: u32,
-    failed_count: u32,
-}
-
-type MdRaidSummaryCacheEntry = (MdRaidCacheKey, Vec<LinuxMdRaidArrayDto>);
-type MdRaidSummaryCache = BTreeMap<String, MdRaidSummaryCacheEntry>;
-
-static MDRAID_SUMMARY_CACHE: LazyLock<Mutex<MdRaidSummaryCache>> =
-    LazyLock::new(|| Mutex::new(BTreeMap::new()));
 
 pub fn get_linux_evidence_set_summary(
     conn: &Connection,
@@ -116,20 +101,13 @@ pub fn get_linux_evidence_set_summary(
         }
     }
     let capability_level = capability_level(&import_set, &derived_sources);
-    let mdraid_key = MdRaidCacheKey {
-        state: import_set.state.clone(),
-        member_count: import_set.member_count,
-        ready_count: import_set.ready_count,
-        failed_count: import_set.failed_count,
+    let mdraid_arrays = match load_persisted_mdraid_arrays(conn, import_set_id, &sources) {
+        Ok(arrays) => arrays,
+        Err(error) => {
+            diagnostics.push(format!("MD RAID catalog unavailable: {error}"));
+            Vec::new()
+        }
     };
-    let mdraid_arrays =
-        match cached_mdraid_arrays(conn, case_root, case_id, &import_set, &mdraid_key) {
-            Ok(arrays) => arrays,
-            Err(error) => {
-                diagnostics.push(format!("MD RAID discovery unavailable: {error}"));
-                Vec::new()
-            }
-        };
     Ok(LinuxEvidenceSetSummaryDto {
         import_set_id: import_set.id,
         name: import_set.name,
@@ -150,59 +128,59 @@ pub fn get_linux_evidence_set_summary(
     })
 }
 
-fn cached_mdraid_arrays(
+fn load_persisted_mdraid_arrays(
     conn: &Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    import_set: &ImportSetRow,
-    key: &MdRaidCacheKey,
-) -> std::result::Result<Vec<LinuxMdRaidArrayDto>, String> {
-    let mut cache = MDRAID_SUMMARY_CACHE
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some((cached_key, arrays)) = cache.get(&import_set.id) {
-        if cached_key == key {
-            return Ok(arrays.clone());
-        }
-    }
-    let plan =
-        super::plan_linux_evidence_set_import(&import_set.root_path, Some(import_set.name.clone()))
-            .map_err(|error| error.to_string())?;
-    let discovered =
-        super::discover_linux_evidence_set_mdraid(&plan).map_err(|error| error.to_string())?;
-    for array in &discovered {
-        if let Err(error) = super::materialize_mdraid_array(conn, case_root, case_id, array) {
-            tracing::warn!(array_uuid = %hex::encode(array.array_uuid), error = %error, "MD RAID source catalog materialization failed");
-        }
-    }
-    let arrays = discovered
-        .into_iter()
-        .map(|array| LinuxMdRaidArrayDto {
-            array_uuid: hex::encode(array.array_uuid),
-            name: array.name,
-            level: array.level,
-            layout: array.layout,
-            chunk_sectors: array.chunk_sectors,
-            raid_disks: array.raid_disks,
-            min_data_size_sectors: array.min_data_size_sectors,
-            capacity_mismatch: array.capacity_mismatch,
-            filesystem: "candidate".to_string(),
-            members: array
-                .members
-                .into_iter()
-                .map(|member| LinuxMdRaidMemberDto {
-                    dev_number: member.superblock.dev_number,
-                    vg_name: member.vg_name,
-                    lv_name: member.lv_name,
-                    data_offset_sectors: member.superblock.data_offset_sectors,
-                    data_size_sectors: member.superblock.data_size_sectors,
-                    super_offset_sectors: member.superblock.super_offset_sectors,
-                })
-                .collect(),
+    import_set_id: &str,
+    sources: &BTreeMap<String, domain::DataSource>,
+) -> Result<Vec<LinuxMdRaidArrayDto>> {
+    let member_paths = conn
+        .prepare(
+            "SELECT source_path FROM linux_import_set_members
+             WHERE import_set_id = ?1",
+        )?
+        .query_map([import_set_id], |row| row.get::<_, String>(0))?
+        .collect::<std::result::Result<BTreeSet<_>, _>>()?;
+    sources
+        .values()
+        .filter(|source| source.kind == DataSourceKind::MdRaid)
+        .map(|source| {
+            let payload = std::fs::read(&source.source_path)?;
+            let plan = serde_json::from_slice::<super::mdraid::MdRaidArrayPlan>(&payload)?;
+            if !plan.members.iter().any(|member| {
+                member
+                    .lvm_identity
+                    .pv_sources
+                    .iter()
+                    .any(|pv| member_paths.contains(&pv.source_path))
+            }) {
+                return Ok(None);
+            }
+            Ok(Some(LinuxMdRaidArrayDto {
+                array_uuid: hex::encode(plan.array_uuid),
+                name: plan.name,
+                level: plan.level,
+                layout: plan.layout,
+                chunk_sectors: plan.chunk_sectors,
+                raid_disks: plan.raid_disks,
+                min_data_size_sectors: plan.min_data_size_sectors,
+                capacity_mismatch: plan.capacity_mismatch,
+                filesystem: "candidate".to_string(),
+                members: plan
+                    .members
+                    .into_iter()
+                    .map(|member| LinuxMdRaidMemberDto {
+                        dev_number: member.superblock.dev_number,
+                        vg_name: member.vg_name,
+                        lv_name: member.lv_name,
+                        data_offset_sectors: member.superblock.data_offset_sectors,
+                        data_size_sectors: member.superblock.data_size_sectors,
+                        super_offset_sectors: member.superblock.super_offset_sectors,
+                    })
+                    .collect(),
+            }))
         })
-        .collect::<Vec<_>>();
-    cache.insert(import_set.id.clone(), (key.clone(), arrays.clone()));
-    Ok(arrays)
+        .filter_map(|result| result.transpose())
+        .collect()
 }
 
 fn load_manifest_provenance(case_root: &Path, import_set_id: &str) -> Option<ManifestProvenance> {

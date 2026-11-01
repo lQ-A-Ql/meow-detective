@@ -18,32 +18,67 @@ pub enum DbError {
     System(String),
 }
 
-impl transport::ServiceErrorCategory for DbError {
-    fn category(&self) -> transport::ErrorCategory {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DbErrorCategory {
+    Io,
+    Timeout,
+    Cancelled,
+    Internal,
+}
+
+impl DbError {
+    pub fn category(&self) -> DbErrorCategory {
         match self {
-            Self::ReadCancelled => transport::ErrorCategory::Cancelled,
-            Self::ReadTimedOut => transport::ErrorCategory::Timeout,
-            Self::Sqlite(_) | Self::Io(_) => transport::ErrorCategory::Io,
-            Self::Migration(_) | Self::System(_) => transport::ErrorCategory::Internal,
+            Self::ReadCancelled => DbErrorCategory::Cancelled,
+            Self::ReadTimedOut => DbErrorCategory::Timeout,
+            Self::Sqlite(_) | Self::Io(_) => DbErrorCategory::Io,
+            Self::Migration(_) | Self::System(_) => DbErrorCategory::Internal,
         }
     }
 
-    fn code(&self) -> Option<&'static str> {
+    pub fn code(&self) -> Option<&'static str> {
         matches!(self, Self::Sqlite(error) if sqlite_error_is_busy(error)).then_some("DB_BUSY")
     }
 
-    fn user_message(&self) -> Option<&'static str> {
+    pub fn user_message(&self) -> Option<&'static str> {
         matches!(self, Self::Sqlite(error) if sqlite_error_is_busy(error))
             .then_some("数据库正在被其他任务占用，请稍后重试")
     }
 
-    fn recoverable(&self) -> Option<bool> {
+    pub fn recoverable(&self) -> Option<bool> {
         matches!(self, Self::Sqlite(error) if sqlite_error_is_busy(error)).then_some(true)
     }
 
-    fn suggestion(&self) -> Option<&'static str> {
+    pub fn suggestion(&self) -> Option<&'static str> {
         matches!(self, Self::Sqlite(error) if sqlite_error_is_busy(error))
             .then_some("请等待导入、索引或分析任务完成后重试")
+    }
+}
+
+impl transport::ServiceErrorCategory for DbError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self.category() {
+            DbErrorCategory::Cancelled => transport::ErrorCategory::Cancelled,
+            DbErrorCategory::Timeout => transport::ErrorCategory::Timeout,
+            DbErrorCategory::Io => transport::ErrorCategory::Io,
+            DbErrorCategory::Internal => transport::ErrorCategory::Internal,
+        }
+    }
+
+    fn code(&self) -> Option<&'static str> {
+        DbError::code(self)
+    }
+
+    fn user_message(&self) -> Option<&'static str> {
+        DbError::user_message(self)
+    }
+
+    fn recoverable(&self) -> Option<bool> {
+        DbError::recoverable(self)
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        DbError::suggestion(self)
     }
 }
 
