@@ -1,7 +1,8 @@
 use artifact_storage::{ArtifactStorageError, ArtifactStore, ObjectAddress};
 use persistence_fjall::{
-    DatabaseConfig, FjallStorageError, KeyspaceName, PersistMode, SourceReadSnapshot, SourceStore,
-    VersionedEnvelope, WriteBatchReceipt,
+    CatalogPage, CatalogRecordStore, DatabaseConfig, FileEntryRecord, FjallStorageError,
+    KeyspaceName, PersistMode, ScanDirection, SourceReadSnapshot, SourceStore, VersionedEnvelope,
+    WriteBatchReceipt,
 };
 use std::{
     marker::PhantomData,
@@ -230,9 +231,83 @@ impl<Mode> SourceStorageHandle<Mode> {
             .read(address)
             .map_err(StorageRuntimeError::Artifacts)
     }
+
+    pub fn catalog_get(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        record_id: &str,
+    ) -> Result<Option<FileEntryRecord>, StorageRuntimeError> {
+        CatalogRecordStore::from_source_store((*self.source_store).clone())
+            .get(snapshot, source_id, record_id)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn catalog_list_by_parent(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        parent_id: Option<&str>,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<CatalogPage, StorageRuntimeError> {
+        CatalogRecordStore::from_source_store((*self.source_store).clone())
+            .list_by_parent(snapshot, source_id, parent_id, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn catalog_find_by_path(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        path: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<CatalogPage, StorageRuntimeError> {
+        CatalogRecordStore::from_source_store((*self.source_store).clone())
+            .find_by_path(snapshot, source_id, path, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn catalog_find_by_hash(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        hash_sha256: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<CatalogPage, StorageRuntimeError> {
+        CatalogRecordStore::from_source_store((*self.source_store).clone())
+            .find_by_hash(snapshot, source_id, hash_sha256, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
 }
 
 impl SourceStorageHandle<ReadWrite> {
+    pub fn catalog_upsert(
+        &self,
+        record: &FileEntryRecord,
+        mode: PersistMode,
+    ) -> Result<(), StorageRuntimeError> {
+        CatalogRecordStore::from_source_store((*self.source_store).clone())
+            .upsert(record, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn catalog_delete(
+        &self,
+        source_id: &str,
+        record_id: &str,
+        mode: PersistMode,
+    ) -> Result<bool, StorageRuntimeError> {
+        CatalogRecordStore::from_source_store((*self.source_store).clone())
+            .delete(source_id, record_id, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn write_envelope(
         &self,
         keyspace: KeyspaceName,

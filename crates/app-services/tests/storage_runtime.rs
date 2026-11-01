@@ -3,7 +3,9 @@ use app_services::storage_runtime::{
     open_source_read_only, open_source_read_write, source_storage_root, ReadOnlyStorageRuntime,
     ReadWriteStorageRuntime, StorageRuntimeError,
 };
+use chrono::Utc;
 use domain::DataSourceId;
+use persistence_fjall::{CatalogEntryType, FileEntryRecord, PersistMode, ScanDirection};
 use std::path::Path;
 use tempfile::tempdir;
 
@@ -81,5 +83,55 @@ fn source_db_facade_opens_the_same_fjall_source_layout() {
     assert_eq!(
         readonly.source_root(),
         source_db::fjall_source_storage_root(root.path(), "source-02").unwrap()
+    );
+}
+
+#[test]
+fn source_facade_reads_and_writes_catalog_records_with_keyset_pages() {
+    let root = tempdir().unwrap();
+    let source = open_source_read_write(root.path(), "source-catalog").unwrap();
+    let record = FileEntryRecord {
+        id: "file-1".to_owned(),
+        parent_id: Some("root".to_owned()),
+        data_source_id: "source-catalog".to_owned(),
+        path: "/note.txt".to_owned(),
+        name: "note.txt".to_owned(),
+        entry_type: CatalogEntryType::File,
+        size: Some(4),
+        ext: Some("txt".to_owned()),
+        deleted: false,
+        hidden: false,
+        system: false,
+        read_only: false,
+        archive: false,
+        encrypted: false,
+        created: Some(Utc::now()),
+        modified: None,
+        accessed: None,
+        changed: None,
+        hash_sha256: Some("a".repeat(64)),
+        partition_index: Some(0),
+        unix_mode: None,
+    };
+    source
+        .catalog_upsert(&record, PersistMode::SyncData)
+        .unwrap();
+    let snapshot = source.snapshot();
+    let page = source
+        .catalog_list_by_parent(
+            &snapshot,
+            "source-catalog",
+            Some("root"),
+            None,
+            ScanDirection::Forward,
+            10,
+        )
+        .unwrap();
+    assert_eq!(page.records, vec![record.clone()]);
+    assert_eq!(
+        source
+            .catalog_get(&snapshot, "source-catalog", "file-1")
+            .unwrap(),
+        Some(record)
     );
 }
