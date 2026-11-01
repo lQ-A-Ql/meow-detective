@@ -104,6 +104,7 @@ impl SourceBuild {
             database.persist(PersistMode::SyncAll)?;
             drop(database);
         }
+        seal_build(self.layout.build_path())?;
         publish_build(self.layout.build_path(), self.layout.published_path())
     }
 }
@@ -113,6 +114,20 @@ pub struct PublishReceipt {
     pub path: PathBuf,
     pub manifest_digest: String,
     pub reused: bool,
+}
+
+pub fn seal_build(build_path: impl AsRef<Path>) -> Result<String> {
+    let build_path = build_path.as_ref();
+    if !build_path.is_dir() {
+        return Err(FjallStorageError::InvalidBuildPath(
+            build_path.display().to_string(),
+        ));
+    }
+    let digest = directory_digest(build_path)?;
+    write_metadata(build_path, MANIFEST_FILE, &digest)?;
+    write_metadata(build_path, SEAL_FILE, &format!("seal-v1\n{digest}\n"))?;
+    sync_directory(build_path)?;
+    Ok(digest)
 }
 
 pub fn publish_build(
@@ -126,10 +141,7 @@ pub fn publish_build(
             build_path.display().to_string(),
         ));
     }
-    let digest = directory_digest(build_path)?;
-    write_metadata(build_path, MANIFEST_FILE, &digest)?;
-    write_metadata(build_path, SEAL_FILE, &format!("seal-v1\n{digest}\n"))?;
-    sync_directory(build_path)?;
+    let digest = verify_sealed(build_path)?;
     if published_path.exists() {
         return inspect_existing(published_path, &digest);
     }
@@ -261,7 +273,7 @@ fn sync_directory(_path: &Path) -> Result<()> {
     #[cfg(unix)]
     File::open(_path)?.sync_all()?;
     #[cfg(not(unix))]
-    let _ = path;
+    let _ = _path;
     Ok(())
 }
 

@@ -1,0 +1,255 @@
+use artifact_storage::{ArtifactStorageError, ArtifactStore, ObjectAddress};
+use persistence_fjall::{
+    DatabaseConfig, FjallStorageError, KeyspaceName, PersistMode, SourceReadSnapshot, SourceStore,
+    VersionedEnvelope, WriteBatchReceipt,
+};
+use std::{
+    marker::PhantomData,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum StorageRuntimeError {
+    #[error("storage root is not a directory: {0}")]
+    InvalidRoot(PathBuf),
+    #[error("storage root does not exist: {0}")]
+    MissingRoot(PathBuf),
+    #[error("Fjall storage operation failed: {0}")]
+    Source(#[source] FjallStorageError),
+    #[error("artifact storage operation failed: {0}")]
+    Artifacts(#[source] ArtifactStorageError),
+    #[error("read-only storage requires an existing artifact object directory: {0}")]
+    MissingArtifactDirectory(PathBuf),
+}
+
+impl From<FjallStorageError> for StorageRuntimeError {
+    fn from(error: FjallStorageError) -> Self {
+        Self::Source(error)
+    }
+}
+
+impl From<ArtifactStorageError> for StorageRuntimeError {
+    fn from(error: ArtifactStorageError) -> Self {
+        Self::Artifacts(error)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReadOnly;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReadWrite;
+
+pub type ReadOnlyStorageRuntime = StorageRuntime<ReadOnly>;
+pub type ReadWriteStorageRuntime = StorageRuntime<ReadWrite>;
+pub type ReadOnlyCaseStorageHandle = CaseStorageHandle<ReadOnly>;
+pub type ReadWriteCaseStorageHandle = CaseStorageHandle<ReadWrite>;
+pub type ReadOnlySourceStorageHandle = SourceStorageHandle<ReadOnly>;
+pub type ReadWriteSourceStorageHandle = SourceStorageHandle<ReadWrite>;
+
+pub struct StorageRuntime<Mode> {
+    source_root: PathBuf,
+    source_store: Arc<SourceStore>,
+    artifact_store: Arc<ArtifactStore>,
+    _mode: PhantomData<Mode>,
+}
+
+#[derive(Clone)]
+pub struct CaseStorageHandle<Mode> {
+    source_root: PathBuf,
+    artifact_store: Arc<ArtifactStore>,
+    _mode: PhantomData<Mode>,
+}
+
+#[derive(Clone)]
+pub struct SourceStorageHandle<Mode> {
+    source_root: PathBuf,
+    source_store: Arc<SourceStore>,
+    artifact_store: Arc<ArtifactStore>,
+    _mode: PhantomData<Mode>,
+}
+
+impl StorageRuntime<ReadOnly> {
+    pub fn open(source_root: impl AsRef<Path>) -> Result<Self, StorageRuntimeError> {
+        let parts = open_parts(source_root.as_ref(), true, DatabaseConfig::default())?;
+        Ok(Self {
+            source_root: parts.source_root,
+            source_store: parts.source_store,
+            artifact_store: parts.artifact_store,
+            _mode: PhantomData,
+        })
+    }
+
+    pub fn case(&self) -> ReadOnlyCaseStorageHandle {
+        CaseStorageHandle::new(&self.source_root, Arc::clone(&self.artifact_store))
+    }
+
+    pub fn source(&self) -> ReadOnlySourceStorageHandle {
+        SourceStorageHandle::new(
+            &self.source_root,
+            Arc::clone(&self.source_store),
+            Arc::clone(&self.artifact_store),
+        )
+    }
+
+    pub fn source_root(&self) -> &Path {
+        &self.source_root
+    }
+}
+
+impl StorageRuntime<ReadWrite> {
+    pub fn open(source_root: impl AsRef<Path>) -> Result<Self, StorageRuntimeError> {
+        let parts = open_parts(source_root.as_ref(), false, DatabaseConfig::default())?;
+        Ok(Self {
+            source_root: parts.source_root,
+            source_store: parts.source_store,
+            artifact_store: parts.artifact_store,
+            _mode: PhantomData,
+        })
+    }
+
+    pub fn open_with_config(
+        source_root: impl AsRef<Path>,
+        config: DatabaseConfig,
+    ) -> Result<Self, StorageRuntimeError> {
+        let parts = open_parts(source_root.as_ref(), false, config)?;
+        Ok(Self {
+            source_root: parts.source_root,
+            source_store: parts.source_store,
+            artifact_store: parts.artifact_store,
+            _mode: PhantomData,
+        })
+    }
+
+    pub fn case(&self) -> ReadWriteCaseStorageHandle {
+        CaseStorageHandle::new(&self.source_root, Arc::clone(&self.artifact_store))
+    }
+
+    pub fn source(&self) -> ReadWriteSourceStorageHandle {
+        SourceStorageHandle::new(
+            &self.source_root,
+            Arc::clone(&self.source_store),
+            Arc::clone(&self.artifact_store),
+        )
+    }
+
+    pub fn source_root(&self) -> &Path {
+        &self.source_root
+    }
+}
+
+impl<Mode> CaseStorageHandle<Mode> {
+    fn new(source_root: &Path, artifact_store: Arc<ArtifactStore>) -> Self {
+        Self {
+            source_root: source_root.to_path_buf(),
+            artifact_store,
+            _mode: PhantomData,
+        }
+    }
+
+    pub fn source_root(&self) -> &Path {
+        &self.source_root
+    }
+
+    pub fn artifacts(&self) -> &ArtifactStore {
+        self.artifact_store.as_ref()
+    }
+}
+
+impl<Mode> SourceStorageHandle<Mode> {
+    fn new(
+        source_root: &Path,
+        source_store: Arc<SourceStore>,
+        artifact_store: Arc<ArtifactStore>,
+    ) -> Self {
+        Self {
+            source_root: source_root.to_path_buf(),
+            source_store,
+            artifact_store,
+            _mode: PhantomData,
+        }
+    }
+
+    pub fn source_root(&self) -> &Path {
+        &self.source_root
+    }
+
+    pub fn artifacts(&self) -> &ArtifactStore {
+        self.artifact_store.as_ref()
+    }
+
+    pub fn snapshot(&self) -> SourceReadSnapshot {
+        self.source_store.database().read_snapshot()
+    }
+
+    pub fn read_envelope(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        keyspace: KeyspaceName,
+        key: &[u8],
+    ) -> Result<Option<VersionedEnvelope>, StorageRuntimeError> {
+        self.source_store
+            .read_envelope(snapshot, keyspace, key)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn read_artifact(&self, address: &ObjectAddress) -> Result<Vec<u8>, StorageRuntimeError> {
+        self.artifact_store
+            .read(address)
+            .map_err(StorageRuntimeError::Artifacts)
+    }
+}
+
+impl SourceStorageHandle<ReadWrite> {
+    pub fn write_envelope(
+        &self,
+        keyspace: KeyspaceName,
+        key: Vec<u8>,
+        envelope: &VersionedEnvelope,
+        mode: PersistMode,
+    ) -> Result<WriteBatchReceipt, StorageRuntimeError> {
+        self.source_store
+            .write_envelope(keyspace, key, envelope, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+}
+
+struct OpenParts {
+    source_root: PathBuf,
+    source_store: Arc<SourceStore>,
+    artifact_store: Arc<ArtifactStore>,
+}
+
+fn open_parts(
+    source_root: &Path,
+    read_only: bool,
+    config: DatabaseConfig,
+) -> Result<OpenParts, StorageRuntimeError> {
+    if read_only {
+        if !source_root.exists() {
+            return Err(StorageRuntimeError::MissingRoot(source_root.to_path_buf()));
+        }
+        if !source_root.is_dir() {
+            return Err(StorageRuntimeError::InvalidRoot(source_root.to_path_buf()));
+        }
+        let objects_root = source_root.join("artifacts").join("objects");
+        if !objects_root.is_dir() {
+            return Err(StorageRuntimeError::MissingArtifactDirectory(objects_root));
+        }
+    } else {
+        std::fs::create_dir_all(source_root).map_err(ArtifactStorageError::from)?;
+    }
+    let source_store = Arc::new(SourceStore::open(source_root, config)?);
+    let artifact_store = Arc::new(if read_only {
+        ArtifactStore::from_objects_root(source_root.join("artifacts").join("objects"))?
+    } else {
+        ArtifactStore::new(source_root)?
+    });
+    Ok(OpenParts {
+        source_root: source_root.to_path_buf(),
+        source_store,
+        artifact_store,
+    })
+}
