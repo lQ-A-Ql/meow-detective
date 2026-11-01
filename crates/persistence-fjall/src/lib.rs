@@ -6,6 +6,7 @@ mod deleted_recovery_types;
 mod errors;
 mod keyspaces;
 mod partition;
+mod recovery;
 mod scan;
 mod source_build;
 mod source_store;
@@ -17,8 +18,8 @@ pub use codec::{
     KEY_FORMAT_VERSION,
 };
 pub use database::{
-    DatabaseConfig, PersistMode, SingleWriterTxDatabase, SourceReadSnapshot, WriteAction,
-    WriteBatchReceipt,
+    BatchReceiptState, DatabaseConfig, PersistMode, SingleWriterTxDatabase, SourceReadSnapshot,
+    WriteAction, WriteBatchReceipt,
 };
 pub use deleted_recovery::DeletedRecoveryRecordStore;
 pub use deleted_recovery_types::{
@@ -28,6 +29,9 @@ pub use deleted_recovery_types::{
 pub use errors::{FjallStorageError, Result};
 pub use keyspaces::{KeyspaceName, KEYSPACE_NAMES};
 pub use partition::{PartitionPage, PartitionRecord, PartitionRecordStore};
+pub use recovery::{
+    scan_recovery_consistency, RecoveryConsistencyReport, RecoveryScan, RecoveryState,
+};
 pub use scan::{ScanBounds, ScanDirection, SnapshotEntry};
 pub use source_build::{
     publish_build, seal_build, verify_sealed, PublishReceipt, SourceBuild, SourceBuildLayout,

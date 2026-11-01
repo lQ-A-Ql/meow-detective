@@ -40,6 +40,8 @@ pub enum FjallStorageError {
     InvalidBuildPath(String),
     #[error("source build is missing the seal marker: {0}")]
     MissingSeal(PathBuf),
+    #[error("source build is missing the manifest marker: {0}")]
+    MissingManifest(PathBuf),
     #[error("source publication conflicts with an existing directory: {0}")]
     PublicationConflict(PathBuf),
     #[error("source manifest digest mismatch: expected {expected}, found {actual}")]

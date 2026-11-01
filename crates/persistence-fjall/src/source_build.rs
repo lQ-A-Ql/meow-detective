@@ -196,6 +196,23 @@ pub fn verify_sealed(path: impl AsRef<Path>) -> Result<String> {
         .lines()
         .nth(1)
         .ok_or_else(|| FjallStorageError::MissingSeal(path.to_path_buf()))?;
+    let manifest = fs::read_to_string(path.join(MANIFEST_FILE)).map_err(|error| {
+        if error.kind() == io::ErrorKind::NotFound {
+            FjallStorageError::MissingManifest(path.to_path_buf())
+        } else {
+            FjallStorageError::Io(error)
+        }
+    })?;
+    let manifest = manifest.trim();
+    if manifest.is_empty() {
+        return Err(FjallStorageError::MissingManifest(path.to_path_buf()));
+    }
+    if expected != manifest {
+        return Err(FjallStorageError::ManifestDigestMismatch {
+            expected: expected.to_owned(),
+            actual: manifest.to_owned(),
+        });
+    }
     let actual = directory_digest(path)?;
     if expected != actual {
         return Err(FjallStorageError::ManifestDigestMismatch {

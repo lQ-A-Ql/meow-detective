@@ -150,6 +150,33 @@ pub struct WriteBatchReceipt {
     pub batch_digest: [u8; 32],
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BatchReceiptState {
+    Present { operation_count: usize },
+    Missing,
+    Corrupt,
+}
+
+impl SingleWriterTxDatabase {
+    pub fn batch_receipt_state(&self, receipt: &WriteBatchReceipt) -> Result<BatchReceiptState> {
+        let key = [b"batch/".as_slice(), receipt.batch_digest.as_slice()].concat();
+        let snapshot = self.read_snapshot();
+        let Some(value) = snapshot.get(KeyspaceName::Batches, &key)? else {
+            return Ok(BatchReceiptState::Missing);
+        };
+        if value.len() != std::mem::size_of::<usize>() {
+            return Ok(BatchReceiptState::Corrupt);
+        }
+        let mut encoded = [0u8; std::mem::size_of::<usize>()];
+        encoded.copy_from_slice(&value);
+        let operation_count = usize::from_be_bytes(encoded);
+        if operation_count != receipt.operation_count {
+            return Ok(BatchReceiptState::Corrupt);
+        }
+        Ok(BatchReceiptState::Present { operation_count })
+    }
+}
+
 fn digest_actions(actions: &[WriteAction]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     for action in actions {

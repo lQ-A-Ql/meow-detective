@@ -1,7 +1,8 @@
 use persistence_fjall::{
-    decode_key, encode_key, publish_build, verify_sealed, DatabaseConfig, FjallStorageError,
-    KeyPart, KeyspaceName, PersistMode, ScanBounds, ScanDirection, SingleWriterTxDatabase,
-    SourceBuild, SourceBuildLayout, SourceStore, VersionedEnvelope, WriteAction,
+    decode_key, encode_key, publish_build, scan_recovery_consistency, seal_build, verify_sealed,
+    BatchReceiptState, DatabaseConfig, FjallStorageError, KeyPart, KeyspaceName, PersistMode,
+    RecoveryScan, RecoveryState, ScanBounds, ScanDirection, SingleWriterTxDatabase, SourceBuild,
+    SourceBuildLayout, SourceStore, VersionedEnvelope, WriteAction,
 };
 use serde::{Deserialize, Serialize};
 
@@ -101,6 +102,98 @@ fn database_commits_across_keyspaces_and_reopens() {
 }
 
 #[test]
+fn recovery_scan_reports_batch_receipt_and_sealed_state() {
+    let directory = tempfile::tempdir().unwrap();
+    let layout = SourceBuildLayout::new(directory.path(), "source-1", "attempt-1").unwrap();
+    let build = SourceBuild::create(layout.clone()).unwrap();
+    build.write_file("record", b"same").unwrap();
+    let database =
+        SingleWriterTxDatabase::open(layout.build_path(), DatabaseConfig::default()).unwrap();
+    let receipt = database
+        .write_batch(
+            &[WriteAction::Put {
+                keyspace: KeyspaceName::Meta,
+                key: b"ready".to_vec(),
+                value: b"yes".to_vec(),
+            }],
+            PersistMode::SyncAll,
+        )
+        .unwrap();
+    drop(database);
+    seal_build(layout.build_path()).unwrap();
+    let report = scan_recovery_consistency(RecoveryScan {
+        build_path: &layout.build_path(),
+        published_path: &layout.published_path(),
+        batch_receipt: BatchReceiptState::Present {
+            operation_count: receipt.operation_count,
+        },
+    })
+    .unwrap();
+    assert_eq!(report.state, RecoveryState::Sealed);
+    assert_eq!(
+        report.batch_receipt,
+        BatchReceiptState::Present { operation_count: 1 }
+    );
+}
+
+#[test]
+fn recovery_scan_reports_missing_manifest_and_receipt() {
+    let directory = tempfile::tempdir().unwrap();
+    let layout = SourceBuildLayout::new(directory.path(), "source-1", "attempt-1").unwrap();
+    let build = SourceBuild::create(layout.clone()).unwrap();
+    build.write_file("record", b"same").unwrap();
+    seal_build(layout.build_path()).unwrap();
+    std::fs::remove_file(layout.build_path().join(persistence_fjall::MANIFEST_FILE)).unwrap();
+    let report = scan_recovery_consistency(RecoveryScan {
+        build_path: &layout.build_path(),
+        published_path: &layout.published_path(),
+        batch_receipt: BatchReceiptState::Missing,
+    })
+    .unwrap();
+    assert_eq!(report.state, RecoveryState::MissingManifest);
+    assert_eq!(report.batch_receipt, BatchReceiptState::Missing);
+}
+
+#[test]
+fn recovery_scan_reports_publish_conflict() {
+    let directory = tempfile::tempdir().unwrap();
+    let first_layout = SourceBuildLayout::new(directory.path(), "source-1", "attempt-1").unwrap();
+    let first = SourceBuild::create(first_layout.clone()).unwrap();
+    first.write_file("record", b"first").unwrap();
+    first.seal_and_publish().unwrap();
+
+    let second_layout = SourceBuildLayout::new(directory.path(), "source-1", "attempt-2").unwrap();
+    let second = SourceBuild::create(second_layout.clone()).unwrap();
+    second.write_file("record", b"second").unwrap();
+    let receipt = {
+        let mut second = second;
+        let database = second.open_database(DatabaseConfig::default()).unwrap();
+        let receipt = database
+            .write_batch(
+                &[WriteAction::Put {
+                    keyspace: KeyspaceName::Meta,
+                    key: b"ready".to_vec(),
+                    value: b"yes".to_vec(),
+                }],
+                PersistMode::SyncAll,
+            )
+            .unwrap();
+        database.persist(PersistMode::SyncAll).unwrap();
+        receipt
+    };
+    seal_build(second_layout.build_path()).unwrap();
+    let report = scan_recovery_consistency(RecoveryScan {
+        build_path: &second_layout.build_path(),
+        published_path: &second_layout.published_path(),
+        batch_receipt: BatchReceiptState::Present {
+            operation_count: receipt.operation_count,
+        },
+    })
+    .unwrap();
+    assert_eq!(report.state, RecoveryState::PublishConflict);
+}
+
+#[test]
 fn second_open_is_reported_as_storage_locked() {
     let directory = tempfile::tempdir().unwrap();
     let _database =
@@ -187,6 +280,11 @@ fn missing_seal_is_rejected() {
     let layout = SourceBuildLayout::new(directory.path(), "source-1", "attempt-1").unwrap();
     std::fs::create_dir_all(layout.build_path()).unwrap();
     std::fs::write(layout.build_path().join("record"), b"data").unwrap();
+    std::fs::write(
+        layout.build_path().join(persistence_fjall::MANIFEST_FILE),
+        "placeholder",
+    )
+    .unwrap();
     assert!(matches!(
         publish_build(layout.build_path(), layout.published_path()),
         Err(FjallStorageError::MissingSeal(_))

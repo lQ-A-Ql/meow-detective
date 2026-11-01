@@ -26,6 +26,17 @@ enum WorkerResult {
     Fatal(String),
 }
 
+struct WorkerRuntime<'a> {
+    reader_factory: Arc<dyn Fn() -> DbResult<Box<dyn FileSystemReader>> + Send + Sync>,
+    work_tx: Sender<DirectoryWork>,
+    work_rx: Receiver<DirectoryWork>,
+    result_tx: Sender<WorkerResult>,
+    result_rx: Receiver<WorkerResult>,
+    progress_fn: Option<&'a dyn Fn(u32)>,
+    cancel_token: Option<&'a AtomicBool>,
+    stop: Arc<AtomicBool>,
+}
+
 pub fn enumerate_filesystem_parallel_with_factory(
     conn: &Connection,
     data_source_id: &DataSourceId,
@@ -85,6 +96,29 @@ pub fn enumerate_filesystem_parallel_with_factory(
         &repo,
         data_source_id,
         worker_count,
+        WorkerRuntime {
+            reader_factory,
+            work_tx,
+            work_rx,
+            result_tx,
+            result_rx,
+            progress_fn,
+            cancel_token,
+            stop,
+        },
+    );
+    let stats = result?;
+    transaction.commit()?;
+    Ok(stats)
+}
+
+fn run_workers<'a>(
+    repo: &FileRepo<'_>,
+    data_source_id: &DataSourceId,
+    worker_count: usize,
+    runtime: WorkerRuntime<'a>,
+) -> DbResult<crate::file_service::EnumerationStats> {
+    let WorkerRuntime {
         reader_factory,
         work_tx,
         work_rx,
@@ -93,26 +127,8 @@ pub fn enumerate_filesystem_parallel_with_factory(
         progress_fn,
         cancel_token,
         stop,
-    );
-    let stats = result?;
-    transaction.commit()?;
-    Ok(stats)
-}
-
-fn run_workers(
-    repo: &FileRepo<'_>,
-    data_source_id: &DataSourceId,
-    worker_count: usize,
-    reader_factory: Arc<dyn Fn() -> DbResult<Box<dyn FileSystemReader>> + Send + Sync>,
-    work_tx: Sender<DirectoryWork>,
-    work_rx: Receiver<DirectoryWork>,
-    result_tx: Sender<WorkerResult>,
-    result_rx: Receiver<WorkerResult>,
-    progress_fn: Option<&dyn Fn(u32)>,
-    cancel_token: Option<&AtomicBool>,
-    stop: Arc<AtomicBool>,
-) -> DbResult<crate::file_service::EnumerationStats> {
-    let result = std::thread::scope(|scope| {
+    } = runtime;
+    std::thread::scope(|scope| {
         for _ in 0..worker_count {
             spawn_worker(
                 scope,
@@ -137,8 +153,7 @@ fn run_workers(
         }
         drop(work_tx);
         result
-    });
-    result
+    })
 }
 
 fn spawn_worker<'scope, 'env>(
