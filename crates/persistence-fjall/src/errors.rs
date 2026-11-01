@@ -26,6 +26,10 @@ pub enum FjallStorageError {
     Serialization(String),
     #[error("deserialization failed: {0}")]
     Deserialization(String),
+    #[error("catalog record identity does not match its key")]
+    CatalogRecordIdentityMismatch,
+    #[error("catalog index entry is malformed")]
+    CatalogIndexCorrupt,
     #[error("source build path is invalid: {0}")]
     InvalidBuildPath(String),
     #[error("source build is missing the seal marker: {0}")]

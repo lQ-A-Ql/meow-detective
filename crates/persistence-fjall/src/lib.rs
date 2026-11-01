@@ -1,3 +1,4 @@
+mod catalog;
 mod codec;
 mod database;
 mod errors;
@@ -6,6 +7,7 @@ mod scan;
 mod source_build;
 mod source_store;
 
+pub use catalog::{CatalogEntryType, CatalogPage, CatalogRecordStore, FileEntryRecord};
 pub use codec::{
     decode_key, digest, encode_key, KeyPart, VersionedEnvelope, ENVELOPE_FORMAT_VERSION,
     KEY_FORMAT_VERSION,
