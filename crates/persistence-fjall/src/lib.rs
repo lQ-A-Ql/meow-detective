@@ -6,6 +6,7 @@ mod keyspaces;
 mod scan;
 mod source_build;
 mod source_store;
+mod timeline;
 
 pub use catalog::{CatalogEntryType, CatalogPage, CatalogRecordStore, FileEntryRecord};
 pub use codec::{
@@ -25,3 +26,6 @@ pub use source_build::{
     SOURCE_BUILD_DIRECTORY_PREFIX, SOURCE_PUBLISHED_DIRECTORY_NAME,
 };
 pub use source_store::SourceStore;
+pub use timeline::{
+    decode_timestamp_desc, encode_timestamp_desc, TimelinePage, TimelineRecord, TimelineRecordStore,
+};

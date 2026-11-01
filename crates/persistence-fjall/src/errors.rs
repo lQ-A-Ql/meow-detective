@@ -30,6 +30,12 @@ pub enum FjallStorageError {
     CatalogRecordIdentityMismatch,
     #[error("catalog index entry is malformed")]
     CatalogIndexCorrupt,
+    #[error("timeline record identity does not match its key")]
+    TimelineRecordIdentityMismatch,
+    #[error("timeline index entry is malformed")]
+    TimelineIndexCorrupt,
+    #[error("timeline timestamp encoding is invalid")]
+    InvalidTimelineTimestampEncoding,
     #[error("source build path is invalid: {0}")]
     InvalidBuildPath(String),
     #[error("source build is missing the seal marker: {0}")]
