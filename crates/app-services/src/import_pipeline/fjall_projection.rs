@@ -120,8 +120,5 @@ fn mirror_timeline(
 }
 
 fn parse_optional_time(value: Option<String>) -> Option<chrono::DateTime<Utc>> {
-    value.and_then(|value| {
-        let parsed = persistence_sqlite::util::parse_opt_datetime(&value);
-        parsed
-    })
+    value.and_then(|value| persistence_sqlite::util::parse_opt_datetime(&value))
 }
