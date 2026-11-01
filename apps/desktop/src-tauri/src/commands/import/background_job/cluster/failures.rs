@@ -52,13 +52,16 @@ pub(super) fn complete_evidence_set_import_with_failures(
             let task_source_id = source_id.clone();
             let app_handle = app.cloned();
             let parent_job_id = job.job_id.0.clone();
+            let task_cancel_token = Arc::new(AtomicBool::new(false));
+            let task_cancel_for_worker = Arc::clone(&task_cancel_token);
             let task = move || {
                 let connection = app_services::connection::open_existing_case_db(&db_path)
                     .map_err(|error| error.to_string())?;
-                let result = cluster_service::materialize_mdraid_source_catalog(
+                let result = cluster_service::materialize_mdraid_source_catalog_with_cancel(
                     &connection,
                     &case_root,
                     &task_source_id,
+                    &task_cancel_for_worker,
                 )
                 .map_err(|error| error.to_string());
                 if result.is_ok() {
@@ -73,14 +76,13 @@ pub(super) fn complete_evidence_set_import_with_failures(
                 result
             };
             if let Some(task_manager) = task_manager.as_ref() {
-                let cancel_token = Arc::new(AtomicBool::new(false));
                 let scope = crate::state::TaskScope::data_source(
                     case_id.0.clone(),
                     source_id.0.clone(),
                     &task_id,
                 );
                 if let Err(error) =
-                    task_manager.spawn_scoped_heavy(task_id.clone(), scope, cancel_token, task)
+                    task_manager.spawn_scoped_heavy(task_id.clone(), scope, task_cancel_token, task)
                 {
                     tracing::warn!(
                         data_source_id = %source_id.0,

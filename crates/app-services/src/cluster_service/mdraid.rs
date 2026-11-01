@@ -408,6 +408,16 @@ pub fn materialize_mdraid_source_catalog(
     case_root: &std::path::Path,
     source_id: &DataSourceId,
 ) -> Result<(), MdRaidPlanError> {
+    let cancel_token = std::sync::atomic::AtomicBool::new(false);
+    materialize_mdraid_source_catalog_with_cancel(conn, case_root, source_id, &cancel_token)
+}
+
+pub fn materialize_mdraid_source_catalog_with_cancel(
+    conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    source_id: &DataSourceId,
+    cancel_token: &std::sync::atomic::AtomicBool,
+) -> Result<(), MdRaidPlanError> {
     let repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
     let case_id = repo
         .case_id(source_id)
@@ -450,9 +460,31 @@ pub fn materialize_mdraid_source_catalog(
         elapsed_ms = materialize_started.elapsed().as_millis() as u64,
         "Btrfs reader opened for persisted MD RAID source; enumerating file tree"
     );
-    if let Err(error) =
-        crate::file_service::enumerate_filesystem(&source_conn, &source.id, &filesystem)
-    {
+    let progress_state = Mutex::new((materialize_started, 0u32));
+    let progress = |progress_pct: u32| {
+        let Ok(mut state) = progress_state.lock() else {
+            return;
+        };
+        let elapsed = state.0.elapsed();
+        if progress_pct != state.1 || elapsed.as_secs() >= 5 {
+            tracing::info!(
+                data_source_id = %source.id.0,
+                progress_pct,
+                elapsed_ms = elapsed.as_millis() as u64,
+                "Persisted MD RAID Btrfs file tree enumeration progress"
+            );
+            state.0 = std::time::Instant::now();
+            state.1 = progress_pct;
+        }
+    };
+    if let Err(error) = crate::file_service::enumerate_filesystem_with_root_name_and_cancel(
+        &source_conn,
+        &source.id,
+        &filesystem,
+        None,
+        Some(&progress),
+        Some(cancel_token),
+    ) {
         let message = error.to_string();
         let _ = repo.update_import_state(&source.id, "failed", Some(&message));
         return Err(MdRaidPlanError::Io(std::io::Error::other(message)));
