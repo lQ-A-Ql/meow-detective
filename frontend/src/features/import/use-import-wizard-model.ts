@@ -16,11 +16,12 @@ export function useImportWizardModel({
   listLocalDisks,
   initialPlatform: configuredPlatform,
   initialSourceKind: configuredSourceKind,
+  initialStep = 'platform',
 }: ImportDataSourceDialogProps) {
   const { t } = useTranslation();
   const initialPlatform = configuredPlatform ?? 'windows';
   const initialSourceKind = configuredSourceKind ?? 'auto';
-  const [step, setStep] = useState<Step>('platform');
+  const [step, setStep] = useState<Step>(initialStep);
   const [platform, setPlatform] = useState<ImportTargetPlatform>(initialPlatform);
   const [sourceKind, setSourceKind] = useState<SourceKind>(initialSourceKind);
   const [name, setName] = useState('');
@@ -30,7 +31,7 @@ export function useImportWizardModel({
   const [disksLoading, setDisksLoading] = useState(false);
 
   const reset = useCallback(() => {
-    setStep('platform');
+    setStep(initialStep);
     setPlatform(initialPlatform);
     setSourceKind(initialSourceKind);
     setName('');
@@ -38,7 +39,7 @@ export function useImportWizardModel({
     setError('');
     setDisks([]);
     setDisksLoading(false);
-  }, [initialPlatform, initialSourceKind]);
+  }, [initialPlatform, initialSourceKind, initialStep]);
 
   useEffect(() => {
     if (!open) reset();

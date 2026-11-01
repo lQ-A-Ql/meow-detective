@@ -44,6 +44,7 @@ export function useCaseHomeModel() {
   const removeCaseFromListMutation = useRemoveCaseFromList();
   const importDialog = useImportDataSourceDialogModel();
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [raidImportOpen, setRaidImportOpen] = useState(false);
   const [deleteCaseDialogOpen, setDeleteCaseDialogOpen] = useState(false);
   const [caseRoot, setCaseRoot] = useState(() => readLocalSettings().caseRoot);
   const [caseName, setCaseName] = useState('');
@@ -110,6 +111,7 @@ export function useCaseHomeModel() {
     importMutation.mutate(request, {
       onSuccess: () => {
         setImportDialogOpen(false);
+        setRaidImportOpen(false);
       },
     });
   }, [importMutation]);
@@ -141,6 +143,8 @@ export function useCaseHomeModel() {
     editingDataSourceName,
     importDataSource,
     importDialogOpen,
+    raidImportOpen,
+    setRaidImportOpen,
     importPending: importMutation.isPending,
     pickImportDirectoryPath: importDialog.pickDirectoryPath,
     pickImportSourcePath: importDialog.pickSourcePath,

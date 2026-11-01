@@ -65,6 +65,7 @@ export function InfrastructureContainer() {
         listLocalDisks={raidImport.listLocalDisks}
         initialPlatform="linux"
         initialSourceKind="linuxEvidenceSet"
+        initialStep="config"
       />
       <ClusterEvidenceHeader caseName={currentCase.data.name} sets={evidenceSets.data ?? []} selectedSetId={selectedSetId} summary={summary.data} provenance={provenance} evidenceStats={evidenceStats} onSelectSet={setSelectedSetId} onOpenTimeline={openTimeline} eventCount={events.data?.length ?? 0} t={t} />
       <div className="min-h-0 flex-1 overflow-auto scrollbar-none p-[2px]">

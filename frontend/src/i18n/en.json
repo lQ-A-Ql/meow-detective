@@ -961,6 +961,7 @@
   "importDataSource": {
     "platforms": { "windowsSubtitle": "NTFS / Registry / EVTX", "linuxSubtitle": "XFS / LVM / systemd", "androidSubtitle": "Sparse / ext4 / F2FS / EROFS" },
     "openButton": "Import Data Source",
+    "raidEntry": "Import RAID Images",
     "title": "Import Data Source",
     "steps": {
       "platform": "Step 1/4: Select target platform",
@@ -1020,12 +1021,12 @@
     },
     "modes": {
       "single": "Single Image",
-      "linuxEvidenceSet": "Linux Evidence Set",
+      "linuxEvidenceSet": "Linux Evidence Set / RAID",
       "localDisk": "Local Physical Disk"
     },
     "hints": {
       "single": "Import one image or logical directory.",
-      "linuxEvidenceSet": "Select a folder containing all E01/RAW images for the cluster. The backend registers one Linux evidence set and imports members serially.",
+      "linuxEvidenceSet": "Select a folder containing at least two E01/RAW member images. The images are imported and LVM logical volumes are checked for MD RAID0.",
       "localDisk": "Import a Windows host physical disk read-only. Administrator access is required; enter \\\\.\\PhysicalDriveN."
     },
     "errors": {

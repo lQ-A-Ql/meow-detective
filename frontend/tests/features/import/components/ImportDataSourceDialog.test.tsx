@@ -65,11 +65,15 @@ describe('ImportDataSourceDialog', () => {
       ...baseProps,
       initialPlatform: 'linux',
       initialSourceKind: 'linuxEvidenceSet',
+      initialStep: 'config',
     }));
 
-    expect(screen.getByLabelText('Linux')).toHaveAttribute('aria-checked', 'true');
-    advanceToSource();
-    expect(screen.getByLabelText('Linux 证据集合')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText(/至少两个 E01\/RAW/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '文件' })).toBeNull();
+    fireEvent.change(screen.getAllByRole('textbox')[1], { target: { value: 'L:/RAID' } });
+    advanceToConfirm();
+    clickImport();
+    expect(baseProps.onImport).toHaveBeenCalledWith({ sourcePath: 'L:/RAID', sourceKind: 'linuxEvidenceSet', platform: 'linux', profile: undefined });
   });
 
   it('preserves the shared dialog fixed viewport positioning', () => {
@@ -134,7 +138,7 @@ describe('ImportDataSourceDialog', () => {
 
     fireEvent.click(screen.getByLabelText('Linux'));
     advanceToSource();
-    fireEvent.click(screen.getByLabelText('Linux 证据集合'));
+    fireEvent.click(screen.getByLabelText('Linux 证据集合 / RAID'));
     advanceToConfig();
     const [nameInput, pathInput] = screen.getAllByRole('textbox') as HTMLInputElement[];
     fireEvent.change(nameInput, { target: { value: '  pve-cluster  ' } });

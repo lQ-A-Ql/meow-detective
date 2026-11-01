@@ -13,4 +13,5 @@ export interface ImportDataSourceDialogProps {
   listLocalDisks?: () => Promise<LocalDisk[]>;
   initialPlatform?: ImportTargetPlatform;
   initialSourceKind?: SourceKind;
+  initialStep?: Step;
 }

@@ -961,6 +961,7 @@
   "importDataSource": {
     "platforms": { "windowsSubtitle": "NTFS / Registry / EVTX", "linuxSubtitle": "XFS / LVM / systemd", "androidSubtitle": "Sparse / ext4 / F2FS / EROFS" },
     "openButton": "导入数据源",
+    "raidEntry": "导入 RAID 镜像",
     "title": "导入数据源",
     "steps": {
       "platform": "步骤 1/4：选择目标平台",
@@ -1020,12 +1021,12 @@
     },
     "modes": {
       "single": "单源镜像",
-      "linuxEvidenceSet": "Linux 证据集合",
+      "linuxEvidenceSet": "Linux 证据集合 / RAID",
       "localDisk": "本地物理磁盘"
     },
     "hints": {
       "single": "按单个镜像或逻辑目录导入。",
-      "linuxEvidenceSet": "选择包含集群全部 E01/RAW 镜像的文件夹，后端会作为一个 Linux 证据集合整体登记并串行导入成员。",
+      "linuxEvidenceSet": "选择包含至少两个 E01/RAW 成员镜像的文件夹。系统将导入镜像并检测 LVM 逻辑卷中的 MD RAID0。",
       "localDisk": "以只读方式导入 Windows 主机物理磁盘。需要管理员权限，输入 \\\\.\\PhysicalDriveN。"
     },
     "errors": {

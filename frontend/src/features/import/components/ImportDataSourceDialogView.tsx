@@ -158,17 +158,17 @@ export function ImportDataSourceDialogView({ model }: { model: ImportWizardModel
                         placeholder={t('importDataSource.placeholders.path')}
                       />
                     )}
-                    <Tooltip content={t('importDataSource.buttons.file')}>
+                    {sourceKind === 'auto' ? <Tooltip content={t('importDataSource.buttons.file')}>
                       <Button type="button" variant="forensicsOutline" aria-label={t('importDataSource.buttons.file')} onClick={() => void pickFile()}>
                         <ActionIcon name="file" />
                       </Button>
-                    </Tooltip>
+                    </Tooltip> : null}
                     <Tooltip content={t('importDataSource.buttons.directory')}>
                       <Button type="button" variant="forensicsOutline" aria-label={t('importDataSource.buttons.directory')} onClick={() => void pickDirectory()}>
                         <ActionIcon name="folder" />
                       </Button>
                     </Tooltip>
-                    {platform === 'linux' ? (
+                    {platform === 'linux' && sourceKind === 'auto' ? (
                       <Tooltip content={t('importDataSource.buttons.clusterDirectory')}>
                         <Button
                           type="button"

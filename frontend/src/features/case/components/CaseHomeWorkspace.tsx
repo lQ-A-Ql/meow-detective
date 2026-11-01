@@ -57,6 +57,10 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
                   <ActionIcon name="upload" />
                 </Button>
               </Tooltip>
+              <Button type="button" variant="forensicsOutline" onClick={() => model.setRaidImportOpen(true)}>
+                <ActionIcon name="hard-drive" />
+                <span>{t('importDataSource.raidEntry')}</span>
+              </Button>
               <Tooltip content={t('caseHome.actions.deleteCase')}>
                 <Button type="button" variant="forensicsDangerGhost" size="icon" aria-label={t('caseHome.actions.deleteCase')}
                   onClick={() => model.setDeleteCaseDialogOpen(true)}>
@@ -68,6 +72,7 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
         </section>
 
         <ImportDataSourceDialog open={model.importDialogOpen} onOpenChange={model.setImportDialogOpen} onImport={model.importDataSource} importPending={model.importPending} pickSourcePath={model.pickImportSourcePath} pickDirectoryPath={model.pickImportDirectoryPath} listLocalDisks={model.listLocalDisks} />
+        <ImportDataSourceDialog open={model.raidImportOpen} onOpenChange={model.setRaidImportOpen} onImport={model.importDataSource} importPending={model.importPending} pickSourcePath={model.pickImportSourcePath} pickDirectoryPath={model.pickImportDirectoryPath} listLocalDisks={model.listLocalDisks} initialPlatform="linux" initialSourceKind="linuxEvidenceSet" initialStep="config" />
         <RecentCasesDialog open={model.deleteCaseDialogOpen} onOpenChange={model.setDeleteCaseDialogOpen}
           intent="delete" recentCases={model.recentCases} onOpen={(item) => model.openCase(item.caseRoot)} onDelete={model.requestDeleteCase} />
 
