@@ -62,8 +62,11 @@ impl BtrfsReader {
         let required = 0x30usize
             .checked_add(num_stripes as usize * stripe_bytes)
             .ok_or_else(|| invalid_fs_data("btrfs stripe count overflow"))?;
-        if num_stripes == 0 || data.len() < required {
-            return Ok(());
+        if num_stripes == 0 {
+            return Err(invalid_fs_data("btrfs chunk item has no stripes"));
+        }
+        if data.len() < required {
+            return Err(invalid_fs_data("btrfs chunk item stripes are truncated"));
         }
         let stripe_offset = 0x30usize;
         let physical = u64::from_le_bytes(

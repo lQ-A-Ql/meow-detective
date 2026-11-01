@@ -146,22 +146,29 @@ impl BtrfsReader {
                     .try_into()
                     .map_err(|_| invalid_fs_data("disk parse error"))?,
             );
-            if num_stripes > 0 {
-                let stripe_offset = pos + 0x30;
-                let phys = u64::from_le_bytes(
-                    data[stripe_offset + 8..stripe_offset + 16]
-                        .try_into()
-                        .map_err(|_| invalid_fs_data("btrfs chunk stripe physical too short"))?,
-                );
-                self.chunk_map.push(BtrfsChunk {
-                    logical: key.offset,
-                    length,
-                    physical: phys,
-                    profile,
-                    stripe_count: num_stripes,
-                });
+            if num_stripes == 0 {
+                return Err(invalid_fs_data("btrfs chunk item has no stripes"));
             }
-            pos += 0x30 + num_stripes as usize * 0x20;
+            let required = 0x30usize
+                .checked_add(num_stripes as usize * 0x20)
+                .ok_or_else(|| invalid_fs_data("btrfs stripe count overflow"))?;
+            if data.len() < pos + required {
+                return Err(invalid_fs_data("btrfs chunk item stripes are truncated"));
+            }
+            let stripe_offset = pos + 0x30;
+            let phys = u64::from_le_bytes(
+                data[stripe_offset + 8..stripe_offset + 16]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("btrfs chunk stripe physical too short"))?,
+            );
+            self.chunk_map.push(BtrfsChunk {
+                logical: key.offset,
+                length,
+                physical: phys,
+                profile,
+                stripe_count: num_stripes,
+            });
+            pos += required;
         }
         Ok(())
     }

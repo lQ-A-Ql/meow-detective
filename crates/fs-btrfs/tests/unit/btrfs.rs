@@ -20,6 +20,38 @@ mod cases {
         Arc,
     };
 
+    fn chunk_reader() -> BtrfsReader {
+        BtrfsReader {
+            reader: std::cell::RefCell::new(Box::new(FakeReader::new(Vec::new()))),
+            _sectorsize: 4096,
+            nodesize: 4096,
+            root_tree_logical: 0,
+            chunk_tree_logical: 0,
+            volume_offset: 0,
+            chunk_map: Vec::new(),
+            subvolumes: Vec::new(),
+            default_subvol_root_bytenr: 0,
+            default_subvol_root_dirid: 0,
+        }
+    }
+
+    #[test]
+    fn truncated_chunk_item_fails_closed() {
+        let mut data = vec![0u8; KEY_SIZE + 0x30];
+        data[8] = CHUNK_ITEM_KEY;
+        data[KEY_SIZE + 0x2c..KEY_SIZE + 0x2e].copy_from_slice(&1u16.to_le_bytes());
+        let error = chunk_reader().parse_chunks(&data).unwrap_err();
+        assert!(error.to_string().contains("stripes are truncated"));
+    }
+
+    #[test]
+    fn zero_stripe_chunk_item_fails_closed() {
+        let mut data = vec![0u8; KEY_SIZE + 0x30];
+        data[8] = CHUNK_ITEM_KEY;
+        let error = chunk_reader().parse_chunks(&data).unwrap_err();
+        assert!(error.to_string().contains("no stripes"));
+    }
+
     struct CountingReader {
         inner: FakeReader,
         bytes_read: Arc<AtomicUsize>,
