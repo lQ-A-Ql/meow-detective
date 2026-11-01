@@ -385,12 +385,22 @@ pub fn materialize_mdraid_array(
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
     let source_conn = crate::source_db::open_source_db(case_root, &source.id)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    let materialize_started = std::time::Instant::now();
+    tracing::info!(
+        data_source_id = %source.id.0,
+        "Opening Btrfs reader for persisted MD RAID source"
+    );
     let reader = open_persisted_mdraid_reader(&descriptor_path)?;
     let filesystem = fs_btrfs::BtrfsReader::open(
         Box::new(reader) as Box<dyn evidence_core::EvidenceReader>,
         0,
     )
     .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    tracing::info!(
+        data_source_id = %source.id.0,
+        elapsed_ms = materialize_started.elapsed().as_millis() as u64,
+        "Btrfs reader opened for persisted MD RAID source; enumerating file tree"
+    );
     if let Err(error) =
         crate::file_service::enumerate_filesystem(&source_conn, &source.id, &filesystem)
     {
@@ -398,6 +408,11 @@ pub fn materialize_mdraid_array(
         let _ = repo.update_import_state(&source.id, "failed", Some(&message));
         return Err(MdRaidPlanError::Io(std::io::Error::other(message)));
     }
+    tracing::info!(
+        data_source_id = %source.id.0,
+        elapsed_ms = materialize_started.elapsed().as_millis() as u64,
+        "Persisted MD RAID Btrfs file tree enumeration completed"
+    );
     crate::source_db::checkpoint_source_db(&source_conn)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error.to_string())))?;
     repo.update_import_state(&source.id, "ready", None)
