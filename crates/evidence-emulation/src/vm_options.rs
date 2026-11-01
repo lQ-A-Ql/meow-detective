@@ -117,8 +117,8 @@ pub(crate) fn conditional_security_settings(
 }
 
 /// Render the complete virtual NIC profile. VMware vmxnet3 is used for the
-/// common `ens160` Linux profile; other predictable names use e1000 with a
-/// one-based PCI slot adjustment.
+/// common `ens160` Linux profile; other predictable names use e1000 with the
+/// matching PCI slot number.
 pub(crate) fn conditional_network_settings(
     options: VmOptions,
     linux_guest: bool,

@@ -166,10 +166,7 @@ impl VmxConfig {
                 values.insert(
                     "ethernet0.pciSlotNumber",
                     if self.linux_console_compat {
-                        self.linux_network_interface_index
-                            .saturating_add(1)
-                            .clamp(1, 255)
-                            .to_string()
+                        self.linux_network_interface_index.clamp(1, 255).to_string()
                     } else {
                         "160".to_string()
                     },
@@ -240,7 +237,7 @@ fn validate_network_settings(
         .get("ethernet0.pciSlotNumber")
         .and_then(|value| value.parse::<u16>().ok())
         .unwrap_or(0);
-    let interface_index = pci_slot.saturating_sub(1);
+    let interface_index = pci_slot;
     let vmxnet3 = settings.get("ethernet0.virtualDev").map(String::as_str) == Some("vmxnet3");
     if linux_guest && vmxnet3 && settings.get("ethernet0.pciSlotNumber").is_some() {
         return Err(invalid_vmx(

@@ -604,7 +604,7 @@ fn vmx_pins_linux_network_to_ens33_compatible_hardware() {
     VmxConfig::validate_rendered(&rendered, options, false).unwrap();
     assert!(rendered.contains("ethernet0.startConnected = \"TRUE\""));
     assert!(rendered.contains("ethernet0.virtualDev = \"e1000\""));
-    assert!(rendered.contains("ethernet0.pciSlotNumber = \"34\""));
+    assert!(rendered.contains("ethernet0.pciSlotNumber = \"33\""));
     assert!(!rendered.contains("ethernet0.virtualDev = \"e1000e\""));
     assert!(rendered.contains("pciBridge0.pciSlotNumber = \"17\""));
 }
@@ -641,7 +641,7 @@ fn vmx_validator_rejects_linux_network_without_predictable_name_pin() {
         .with_options(options)
         .unwrap()
         .render()
-        .replace("ethernet0.pciSlotNumber = \"34\"\n", "");
+        .replace("ethernet0.pciSlotNumber = \"33\"\n", "");
 
     assert!(VmxConfig::validate_rendered(&rendered, options, false).is_err());
 }
