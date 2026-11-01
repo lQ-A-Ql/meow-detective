@@ -50,15 +50,27 @@ pub(super) fn complete_evidence_set_import_with_failures(
             let db_path = job.db_path.clone();
             let source_id = source.id.clone();
             let task_source_id = source_id.clone();
+            let app_handle = app.cloned();
+            let parent_job_id = job.job_id.0.clone();
             let task = move || {
                 let connection = app_services::connection::open_existing_case_db(&db_path)
                     .map_err(|error| error.to_string())?;
-                cluster_service::materialize_mdraid_source_catalog(
+                let result = cluster_service::materialize_mdraid_source_catalog(
                     &connection,
                     &case_root,
                     &task_source_id,
                 )
-                .map_err(|error| error.to_string())
+                .map_err(|error| error.to_string());
+                if result.is_ok() {
+                    if let Some(app) = app_handle {
+                        crate::events::event_bridge::emit_job_completed(
+                            &app,
+                            &parent_job_id,
+                            "Nested MD RAID file tree is ready",
+                        );
+                    }
+                }
+                result
             };
             if let Some(task_manager) = task_manager.as_ref() {
                 let cancel_token = Arc::new(AtomicBool::new(false));
