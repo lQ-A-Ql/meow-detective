@@ -1,14 +1,24 @@
 import '@/i18n';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MdRaidEvidencePanel } from '@/features/infrastructure/components/MdRaidEvidencePanel';
 
 const translate = ((key: string) => key) as never;
 
 describe('MdRaidEvidencePanel', () => {
   it('renders the empty state', () => {
-    render(<MdRaidEvidencePanel arrays={[]} t={translate} />);
+    render(<MdRaidEvidencePanel arrays={[]} t={translate} onImport={() => undefined} />);
     expect(screen.getByText('infrastructure.workspace.mdraid.empty')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'infrastructure.workspace.mdraid.import' })).toBeInTheDocument();
+  });
+
+  it('opens the RAID import entry', () => {
+    const onImport = vi.fn();
+    render(<MdRaidEvidencePanel arrays={[]} t={translate} onImport={onImport} />);
+
+    screen.getByRole('button', { name: 'infrastructure.workspace.mdraid.import' }).click();
+
+    expect(onImport).toHaveBeenCalledOnce();
   });
 
   it('renders array members and capacity mismatch', () => {

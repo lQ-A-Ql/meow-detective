@@ -1406,6 +1406,7 @@
       "mdraid": {
         "empty": "当前证据集合未发现嵌套 MD RAID",
         "emptyDescription": "仅当 LVM 逻辑卷中的 MD RAID 元数据通过只读校验后，才会在这里显示阵列成员。",
+        "import": "导入 RAID 证据",
         "capacityMismatch": "容量存在差异",
         "consistent": "成员元数据一致",
         "level": "阵列级别",

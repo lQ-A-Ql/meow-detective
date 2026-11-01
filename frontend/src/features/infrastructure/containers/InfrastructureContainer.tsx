@@ -30,11 +30,14 @@ import { StorageEvidencePanel } from '../components/StorageEvidencePanel';
 import { WorkloadEvidencePanel } from '../components/WorkloadEvidencePanel';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
 import { MdRaidEvidencePanel } from '../components/MdRaidEvidencePanel';
+import { ImportDataSourceDialog } from '@/features/import/components/ImportDataSourceDialog';
+import { useMdRaidImportEntry } from '../hooks/useMdRaidImportEntry';
 
 export function InfrastructureContainer() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const model = useLinuxClusterWorkspaceModel();
+  const raidImport = useMdRaidImportEntry();
   const { currentCase, summary, evidenceSets, selectedSetId, setSelectedSetId, section, setSection, selectedMember, selectedMemberIndex, setSelectedMemberIndex, capabilities, provenance, events, fallback, infrastructure, sourceMetadata, evidenceStats } = model;
 
   const openTimeline = () => {
@@ -52,6 +55,17 @@ export function InfrastructureContainer() {
   return (
     <main className="infrastructure-workspace workspace-frame flex min-h-0 flex-1">
       <WorkspaceCard className="flex flex-1 flex-col shadow-none">
+      <ImportDataSourceDialog
+        open={raidImport.open}
+        onOpenChange={raidImport.setOpen}
+        onImport={raidImport.importRaidEvidence}
+        importPending={raidImport.importPending}
+        pickSourcePath={raidImport.pickSourcePath}
+        pickDirectoryPath={raidImport.pickDirectoryPath}
+        listLocalDisks={raidImport.listLocalDisks}
+        initialPlatform="linux"
+        initialSourceKind="linuxEvidenceSet"
+      />
       <ClusterEvidenceHeader caseName={currentCase.data.name} sets={evidenceSets.data ?? []} selectedSetId={selectedSetId} summary={summary.data} provenance={provenance} evidenceStats={evidenceStats} onSelectSet={setSelectedSetId} onOpenTimeline={openTimeline} eventCount={events.data?.length ?? 0} t={t} />
       <div className="min-h-0 flex-1 overflow-auto scrollbar-none p-[2px]">
         <div className="flex min-h-0 flex-col gap-[2px] xl:flex-row">
@@ -60,7 +74,7 @@ export function InfrastructureContainer() {
             {section === 'overview' ? <div className="space-y-4"><EvidenceTrustBar stages={stages} t={t} /><CapabilityMatrix capabilities={capabilities} t={t} /><EvidenceWorkloadSummary members={summary.data.members} t={t} /><WorkloadEvidencePanel nodes={infrastructure.nodes.filter((node) => node.domain === 'analysis')} selectedId={infrastructure.selectedId} onSelect={infrastructure.setSelectedId} networkFacts={infrastructure.networkFacts} t={t} /><TimelineContextCard events={events.data ?? []} memberCount={summary.data.memberCount} onOpen={openTimeline} t={t} /></div> : null}
             {section === 'members' ? <MemberEvidenceTable members={summary.data.members} sourceMetadata={sourceMetadata} scopes={summary.data.scopes} hostFacts={infrastructure.hostFacts} networkFacts={infrastructure.networkFacts} selectedIndex={selectedMemberIndex} onSelect={setSelectedMemberIndex} t={t} /> : null}
             {section === 'topology' ? <EvidenceTopologyPanel scopes={summary.data.scopes} edges={summary.data.edges} sourceMetadata={sourceMetadata} hostFacts={infrastructure.hostFacts} networkFacts={infrastructure.networkFacts} members={summary.data.members} t={t} /> : null}
-            {section === 'mdraid' ? <MdRaidEvidencePanel arrays={summary.data.mdraidArrays ?? []} t={t} /> : null}
+            {section === 'mdraid' ? <MdRaidEvidencePanel arrays={summary.data.mdraidArrays ?? []} t={t} onImport={raidImport.openDialog} /> : null}
             {section === 'findings' ? <FindingsPanel summary={summary.data} onOpenTimeline={openTimeline} t={t} /> : null}
             {section === 'provenance' ? <ProvenancePanel summary={summary.data} provenance={provenance} t={t} /> : null}
           </section>

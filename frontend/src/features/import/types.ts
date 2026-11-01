@@ -1,4 +1,4 @@
-import type { ImportDataSourceRequest, LocalDisk } from '@/types/models';
+import type { ImportDataSourceRequest, ImportTargetPlatform, LocalDisk } from '@/types/models';
 
 export type SourceKind = 'auto' | 'linuxEvidenceSet' | 'localDisk';
 export type Step = 'platform' | 'source' | 'config' | 'confirm';
@@ -11,4 +11,6 @@ export interface ImportDataSourceDialogProps {
   pickSourcePath: (filterName: string) => Promise<string | undefined>;
   pickDirectoryPath: () => Promise<string | undefined>;
   listLocalDisks?: () => Promise<LocalDisk[]>;
+  initialPlatform?: ImportTargetPlatform;
+  initialSourceKind?: SourceKind;
 }

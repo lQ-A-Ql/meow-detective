@@ -60,6 +60,18 @@ describe('ImportDataSourceDialog', () => {
     expect(screen.getByLabelText('Android')).toBeDefined();
   });
 
+  it('supports a Linux RAID import preset', () => {
+    render(createElement(ImportDataSourceDialog, {
+      ...baseProps,
+      initialPlatform: 'linux',
+      initialSourceKind: 'linuxEvidenceSet',
+    }));
+
+    expect(screen.getByLabelText('Linux')).toHaveAttribute('aria-checked', 'true');
+    advanceToSource();
+    expect(screen.getByLabelText('Linux 证据集合')).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('preserves the shared dialog fixed viewport positioning', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
