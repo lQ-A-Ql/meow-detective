@@ -36,6 +36,9 @@ pub fn initialize_case(
     root: &Path,
     case_id: &str,
 ) -> Result<StorageManifest, StorageManifestError> {
+    std::fs::create_dir_all(root.join("sources"))?;
+    std::fs::create_dir_all(root.join("artifacts").join("objects"))?;
+    std::fs::create_dir_all(root.join("fjall"))?;
     let manifest = StorageManifest {
         format_version: STORAGE_FORMAT_VERSION,
         model: "sqlite-fjall-v1".to_owned(),
