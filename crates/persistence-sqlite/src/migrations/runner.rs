@@ -237,6 +237,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0065_mcp_task_bindings",
         include_str!("scripts/0065_mcp_task_bindings.sql"),
     ),
+    (
+        "0066_storage_control_plane",
+        include_str!("scripts/0066_storage_control_plane.sql"),
+    ),
 ];
 
 pub use super::case_graph::{

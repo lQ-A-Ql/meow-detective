@@ -57,7 +57,7 @@ fn acquire(
 #[test]
 fn migration_installs_constrained_phase_ledger_with_cascade_delete() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0065_mcp_task_bindings");
+    assert_eq!(runner::latest_version(), "0066_storage_control_plane");
 
     let columns = conn
         .prepare("SELECT name FROM pragma_table_info('data_source_processing_phases')")

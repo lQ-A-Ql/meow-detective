@@ -44,6 +44,8 @@ members = [
   "crates/rocksdb-wire",
   "crates/plugin-api",
   "crates/portable-updater",
+  "crates/persistence-fjall",
+  "crates/artifact-storage",
 ]
 exclude = ["vendor/iscsi-target", "vendor/bbolt-rs"]
 
@@ -190,6 +192,10 @@ lopdf = "0.44"
 winres = "~0.1"
 binread = "~2.2"
 mimalloc = { version = "0.1", default-features = false }
+fjall = "~3.1.13"
+postcard = { version = "~1.1", features = ["use-std"] }
+persistence-fjall = { path = "crates/persistence-fjall" }
+artifact-storage = { path = "crates/artifact-storage" }
 
 [patch.crates-io]
 bbolt-rs = { path = "vendor/bbolt-rs" }
