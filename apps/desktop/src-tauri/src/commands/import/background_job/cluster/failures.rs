@@ -105,7 +105,7 @@ pub(super) fn complete_evidence_set_import_with_failures(
         cluster_service::update_linux_evidence_set_import_state(
             connection,
             &job.plan.import_set_id,
-            "partial",
+            "failed",
             summary.ready_count,
             summary.failed_count,
             Some(&detail),
