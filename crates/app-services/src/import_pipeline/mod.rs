@@ -37,6 +37,7 @@ mod ceph_rocksdb_wal_locator;
 mod context;
 mod emit;
 mod execute;
+mod fjall_projection;
 pub mod options;
 pub mod partition;
 mod phases;

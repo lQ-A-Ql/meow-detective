@@ -335,6 +335,13 @@ impl<Mode> SourceStorageHandle<Mode> {
 }
 
 impl SourceStorageHandle<ReadWrite> {
+    pub fn persist(&self, mode: PersistMode) -> Result<(), StorageRuntimeError> {
+        self.source_store
+            .database()
+            .persist(mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn catalog_upsert(
         &self,
         record: &FileEntryRecord,

@@ -160,9 +160,11 @@ fn execute_import_job_internal(
             transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Analysis,
             || phases::run_analyze_phase(&mut ctx, &ds),
         )?;
-        profile::measure_optional(profiling.as_ref(), Phase::Finalize, || {
+        let message = profile::measure_optional(profiling.as_ref(), Phase::Finalize, || {
             phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)
-        })
+        })?;
+        super::fjall_projection::mirror_source_records(&ctx, &ds.id.0)?;
+        Ok(message)
     })();
 
     let ready_state = match ctx.content_kind {
