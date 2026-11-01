@@ -12,6 +12,7 @@ pub(crate) mod filesystem_locators;
 mod linux_root_mounts;
 mod metadata;
 mod mft;
+mod parallel_enumeration;
 mod partition_identity;
 mod partition_roots;
 mod preview_runtime;
@@ -70,6 +71,7 @@ pub use mft::{
     mft_parent_entry_id, parse_ntfs_data_runs, populate_file_graph_for_data_source,
     read_ntfs_mft_stream, records_to_file_entries, update_entry_parent_ids, update_entry_paths,
 };
+pub use parallel_enumeration::enumerate_filesystem_parallel_with_factory;
 pub(crate) use partition_roots::partition_placeholder_status;
 pub use partition_roots::{
     insert_partition_placeholder_root, remove_partition_placeholder_root,

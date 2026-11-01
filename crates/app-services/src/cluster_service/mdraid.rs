@@ -449,12 +449,27 @@ pub fn materialize_mdraid_source_catalog_with_cancel(
         data_source_id = %source.id.0,
         "Opening Btrfs reader for persisted MD RAID source"
     );
-    let reader = open_persisted_mdraid_reader(&source.source_path)?;
-    let filesystem = fs_btrfs::BtrfsReader::open(
+    let descriptor_path = source.source_path.clone();
+    let reader = open_persisted_mdraid_reader(&descriptor_path)?;
+    fs_btrfs::BtrfsReader::open(
         Box::new(reader) as Box<dyn evidence_core::EvidenceReader>,
         0,
     )
     .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    let reader_factory: std::sync::Arc<
+        dyn Fn() -> persistence_sqlite::DbResult<Box<dyn evidence_core::FileSystemReader>>
+            + Send
+            + Sync,
+    > = std::sync::Arc::new(move || {
+        let reader = open_persisted_mdraid_reader(&descriptor_path)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        fs_btrfs::BtrfsReader::open(
+            Box::new(reader) as Box<dyn evidence_core::EvidenceReader>,
+            0,
+        )
+        .map(|filesystem| Box::new(filesystem) as Box<dyn evidence_core::FileSystemReader>)
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+    });
     tracing::info!(
         data_source_id = %source.id.0,
         elapsed_ms = materialize_started.elapsed().as_millis() as u64,
@@ -477,10 +492,32 @@ pub fn materialize_mdraid_source_catalog_with_cancel(
             state.1 = progress_pct;
         }
     };
-    if let Err(error) = crate::file_service::enumerate_filesystem_with_root_name_and_cancel(
+    let worker_count = std::thread::available_parallelism()
+        .map(|count| count.get())
+        .unwrap_or(2)
+        .clamp(2, 4);
+    let _enumeration_budget = crate::resource_budget::global_pool()
+        .acquire(
+            crate::resource_budget::Resources {
+                bytes: crate::resource_budget::ENUMERATION_BYTES,
+                readers: worker_count as u64,
+                workers: worker_count as u64,
+                catalogs: 1,
+                ..Default::default()
+            },
+            Some(cancel_token),
+        )
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error.to_string())))?;
+    tracing::info!(
+        data_source_id = %source.id.0,
+        worker_count,
+        "Starting parallel Btrfs file tree enumeration for persisted MD RAID source"
+    );
+    if let Err(error) = crate::file_service::enumerate_filesystem_parallel_with_factory(
         &source_conn,
         &source.id,
-        &filesystem,
+        worker_count,
+        reader_factory,
         None,
         Some(&progress),
         Some(cancel_token),
