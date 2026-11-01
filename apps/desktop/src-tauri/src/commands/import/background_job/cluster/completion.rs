@@ -12,6 +12,7 @@ use super::super::{
         BackgroundLinuxEvidenceSetImportJob, BrowseableEvidenceSetImport, EvidenceSetImportSummary,
     },
 };
+use crate::state::TaskManager;
 use app_services::cluster_service;
 use tauri::AppHandle;
 use transport::CommandError;
@@ -25,6 +26,7 @@ pub(super) fn complete_evidence_set_import(
     app: Option<&AppHandle>,
     summary: EvidenceSetImportSummary,
     cancel_token: Arc<AtomicBool>,
+    task_manager: Option<Arc<TaskManager>>,
 ) -> Result<Option<BrowseableEvidenceSetImport>, CommandError> {
     let total_members = job.plan.members.len() as u32;
     if summary.failed_count > 0 {
@@ -35,6 +37,7 @@ pub(super) fn complete_evidence_set_import(
             app,
             summary,
             total_members,
+            task_manager,
         )
         .map(|()| None);
     }

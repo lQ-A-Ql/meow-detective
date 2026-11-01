@@ -3,6 +3,7 @@ use super::super::{
     types::{BackgroundLinuxEvidenceSetImportJob, EvidenceSetImportSummary},
 };
 use app_services::cluster_service;
+use std::sync::{atomic::AtomicBool, Arc};
 use tauri::AppHandle;
 use transport::CommandError;
 
@@ -13,24 +14,74 @@ pub(super) fn complete_evidence_set_import_with_failures(
     app: Option<&AppHandle>,
     summary: EvidenceSetImportSummary,
     total_members: u32,
+    task_manager: Option<Arc<crate::state::TaskManager>>,
 ) -> Result<(), CommandError> {
-    match cluster_service::materialize_linux_evidence_set_mdraid(
+    let mdraid_sources = match cluster_service::register_linux_evidence_set_mdraid(
         connection,
         &job.case_root,
         &job.case_id,
         &job.plan,
     ) {
-        Ok(sources) if !sources.is_empty() => tracing::info!(
+        Ok(sources) if !sources.is_empty() => {
+            tracing::info!(
             import_set_id = %job.plan.import_set_id,
             derived_sources = sources.len(),
-            "Materialized nested MD RAID source catalogs after member import failure"
-        ),
-        Ok(_) => {}
-        Err(error) => tracing::warn!(
-            import_set_id = %job.plan.import_set_id,
-            error = %error,
-            "Nested MD RAID source catalog materialization failed after member import failure"
-        ),
+            "Registered nested MD RAID source catalogs after member import failure"
+            );
+            Some(sources)
+        }
+        Ok(_) => None,
+        Err(error) => {
+            tracing::warn!(
+                import_set_id = %job.plan.import_set_id,
+                error = %error,
+                "Nested MD RAID source registration failed after member import failure"
+            );
+            None
+        }
+    };
+    if let Some(sources) = mdraid_sources {
+        for source in sources {
+            let task_id = format!("{}:mdraid-catalog:{}", job.job_id.0, source.id.0);
+            let case_id = job.case_id.clone();
+            let case_root = job.case_root.clone();
+            let db_path = job.db_path.clone();
+            let source_id = source.id.clone();
+            let task_source_id = source_id.clone();
+            let task = move || {
+                let connection = app_services::connection::open_existing_case_db(&db_path)
+                    .map_err(|error| error.to_string())?;
+                cluster_service::materialize_mdraid_source_catalog(
+                    &connection,
+                    &case_root,
+                    &task_source_id,
+                )
+                .map_err(|error| error.to_string())
+            };
+            if let Some(task_manager) = task_manager.as_ref() {
+                let cancel_token = Arc::new(AtomicBool::new(false));
+                let scope = crate::state::TaskScope::data_source(
+                    case_id.0.clone(),
+                    source_id.0.clone(),
+                    &task_id,
+                );
+                if let Err(error) =
+                    task_manager.spawn_scoped_heavy(task_id.clone(), scope, cancel_token, task)
+                {
+                    tracing::warn!(
+                        data_source_id = %source_id.0,
+                        error = %error,
+                        "Nested MD RAID catalog task could not be scheduled"
+                    );
+                }
+            } else if let Err(error) = task() {
+                tracing::warn!(
+                    data_source_id = %source_id.0,
+                    error,
+                    "Nested MD RAID catalog materialization failed after member import failure"
+                );
+            }
+        }
     }
     let message = format!(
         "Linux evidence-set import finished with failures: {}/{} image(s) ready, {} failed",

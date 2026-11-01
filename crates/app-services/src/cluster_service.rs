@@ -69,9 +69,9 @@ pub use manifest_parser::{
 };
 pub use mdraid::{
     discover_linux_evidence_set_mdraid, materialize_linux_evidence_set_mdraid,
-    materialize_mdraid_array, mdraid_descriptor_path, open_mdraid0_reader,
-    open_persisted_mdraid_reader, write_mdraid_descriptor, MdRaidArrayPlan, MdRaidMemberPlan,
-    MdRaidPlanError,
+    materialize_mdraid_array, materialize_mdraid_source_catalog, mdraid_descriptor_path,
+    open_mdraid0_reader, open_persisted_mdraid_reader, register_linux_evidence_set_mdraid,
+    write_mdraid_descriptor, MdRaidArrayPlan, MdRaidMemberPlan, MdRaidPlanError,
 };
 pub use member_binding::get_linux_import_member_source_id;
 pub use network_parser::{

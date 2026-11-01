@@ -323,6 +323,17 @@ pub fn materialize_mdraid_array(
     case_id: &CaseId,
     plan: &MdRaidArrayPlan,
 ) -> Result<DataSource, MdRaidPlanError> {
+    let source = register_mdraid_array(conn, case_root, case_id, plan)?;
+    materialize_mdraid_source_catalog(conn, case_root, &source.id)?;
+    Ok(source)
+}
+
+fn register_mdraid_array(
+    conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    plan: &MdRaidArrayPlan,
+) -> Result<DataSource, MdRaidPlanError> {
     let descriptor_path = write_mdraid_descriptor(case_root, plan)?;
     let source_id = DataSourceId(format!("mdraid-{}", hex::encode(plan.array_uuid)));
     let repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
@@ -337,6 +348,12 @@ pub fn materialize_mdraid_array(
             .find_storage(&source_id)
             .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?
             .map(|storage| storage.import_state);
+        if state
+            .as_deref()
+            .is_some_and(|value| value.eq_ignore_ascii_case("pending"))
+        {
+            return Ok(existing);
+        }
         if state
             .as_deref()
             .is_some_and(|value| value.eq_ignore_ascii_case("ready"))
@@ -383,6 +400,38 @@ pub fn materialize_mdraid_array(
     );
     repo.insert_with_storage(case_id, &source, &storage)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    Ok(source)
+}
+
+pub fn materialize_mdraid_source_catalog(
+    conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    source_id: &DataSourceId,
+) -> Result<(), MdRaidPlanError> {
+    let repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
+    let case_id = repo
+        .case_id(source_id)
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    let source = repo
+        .find_storage(source_id)
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    if source
+        .as_ref()
+        .is_some_and(|storage| storage.import_state.eq_ignore_ascii_case("ready"))
+    {
+        return Ok(());
+    }
+    let source = repo
+        .find_by_case(&case_id)
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?
+        .into_iter()
+        .find(|source| source.id == *source_id && source.kind == DataSourceKind::MdRaid)
+        .ok_or_else(|| {
+            MdRaidPlanError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("MD RAID data source '{}' was not found", source_id.0),
+            ))
+        })?;
     let source_conn = crate::source_db::open_source_db(case_root, &source.id)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
     let materialize_started = std::time::Instant::now();
@@ -390,7 +439,7 @@ pub fn materialize_mdraid_array(
         data_source_id = %source.id.0,
         "Opening Btrfs reader for persisted MD RAID source"
     );
-    let reader = open_persisted_mdraid_reader(&descriptor_path)?;
+    let reader = open_persisted_mdraid_reader(&source.source_path)?;
     let filesystem = fs_btrfs::BtrfsReader::open(
         Box::new(reader) as Box<dyn evidence_core::EvidenceReader>,
         0,
@@ -417,7 +466,19 @@ pub fn materialize_mdraid_array(
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error.to_string())))?;
     repo.update_import_state(&source.id, "ready", None)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
-    Ok(source)
+    Ok(())
+}
+
+pub fn register_linux_evidence_set_mdraid(
+    conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    plan: &LinuxEvidenceSetImportPlan,
+) -> Result<Vec<DataSource>, MdRaidPlanError> {
+    discover_linux_evidence_set_mdraid(plan)?
+        .iter()
+        .map(|array| register_mdraid_array(conn, case_root, case_id, array))
+        .collect()
 }
 
 pub fn materialize_linux_evidence_set_mdraid(
