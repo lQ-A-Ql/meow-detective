@@ -215,6 +215,24 @@ fn open_case_reads_metadata() {
 }
 
 #[test]
+fn open_case_rejects_missing_storage_manifest_with_typed_format_error() {
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(tmp.path(), "manifest-required", None).unwrap();
+    let case_root = active.case_root.clone();
+    drop(active);
+    std::fs::remove_file(case_root.join("storage-manifest.json")).unwrap();
+
+    let error = match case_service::open_case(&case_root) {
+        Ok(_) => panic!("case without storage manifest unexpectedly opened"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        case_service::CaseServiceError::UnsupportedStorageFormat(_)
+    ));
+}
+
+#[test]
 fn open_case_rejects_ready_source_schema_that_requires_migration() {
     let tmp = TempDir::new().unwrap();
     let active = case_service::create_case(tmp.path(), "source-reopen", None).unwrap();

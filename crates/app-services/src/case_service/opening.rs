@@ -87,7 +87,7 @@ fn preflight_case_workspace(root: &Path, db_path: &Path, case_id: &CaseId) -> Re
 fn ensure_storage_manifest(root: &Path, case_id: &CaseId) -> Result<()> {
     crate::storage_manifest::validate_case(root, &case_id.0)
         .map(|_| ())
-        .map_err(|error| CaseServiceError::InvalidCaseDir(error.to_string()))
+        .map_err(|error| CaseServiceError::UnsupportedStorageFormat(error.to_string()))
 }
 
 fn ensure_current_source_schemas(
