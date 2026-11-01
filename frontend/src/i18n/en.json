@@ -1419,7 +1419,8 @@
         "dataSize": "Usable data",
         "dataOffset": "Data offset (sectors)",
         "mismatchDescription": "Member capacities differ, so reads are bounded by the safe array range. Full Btrfs multi-device coverage remains under validation.",
-        "readOnlyDescription": "This entry exposes read-only array evidence and filesystem state. File browsing will open after a derived source is persisted."
+        "readOnlyDescription": "The array is registered as a read-only derived source and its Btrfs directory is available in the file tree.",
+        "openFiles": "Open array file tree"
       },
       "trust": {
         "stages": {

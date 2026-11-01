@@ -21,6 +21,15 @@ describe('MdRaidEvidencePanel', () => {
     expect(onImport).toHaveBeenCalledOnce();
   });
 
+  it('opens the persisted array file tree', () => {
+    const onOpenFiles = vi.fn();
+    render(<MdRaidEvidencePanel arrays={[{ arrayUuid: 'array-1', name: 'md0', level: 0, layout: 1, chunkSectors: 1024, raidDisks: 2, minDataSizeSectors: 10, capacityMismatch: false, filesystem: 'candidate', members: [] }]} t={translate} onOpenFiles={onOpenFiles} />);
+
+    screen.getByRole('button', { name: 'infrastructure.workspace.mdraid.openFiles' }).click();
+
+    expect(onOpenFiles).toHaveBeenCalledOnce();
+  });
+
   it('renders array members and capacity mismatch', () => {
     render(
       <MdRaidEvidencePanel

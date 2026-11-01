@@ -1419,7 +1419,8 @@
         "dataSize": "可用数据",
         "dataOffset": "数据偏移（扇区）",
         "mismatchDescription": "成员可用容量不同，读取范围按阵列安全边界处理。完整 Btrfs 多设备范围仍需继续验证。",
-        "readOnlyDescription": "当前入口提供只读阵列证据和文件系统状态。文件树入口将在派生数据源完成持久化后开放。"
+        "readOnlyDescription": "阵列已登记为只读派生数据源，文件树会显示其 Btrfs 目录。",
+        "openFiles": "打开阵列文件树"
       },
       "trust": {
         "stages": {
