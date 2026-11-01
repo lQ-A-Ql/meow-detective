@@ -38,128 +38,105 @@ pub struct RecoveryScan<'a> {
 }
 
 pub fn scan_recovery_consistency(scan: RecoveryScan<'_>) -> Result<RecoveryConsistencyReport> {
-    let batch_receipt = scan.batch_receipt;
-    let build_path = scan.build_path.to_path_buf();
-    let published_path = scan.published_path.to_path_buf();
-    let build_exists = scan.build_path.is_dir();
-    let published_exists = scan.published_path.is_dir();
-
-    if !build_exists && published_exists {
-        let published_digest = checked_digest(scan.published_path)?;
-        let state = match batch_receipt {
-            BatchReceiptState::Present { .. } => RecoveryState::Published,
-            BatchReceiptState::Missing => RecoveryState::MissingBatchReceipt,
-            BatchReceiptState::Corrupt => RecoveryState::CorruptBatchReceipt,
-        };
-        return Ok(RecoveryConsistencyReport {
-            state,
-            build_path,
-            published_path,
-            batch_receipt,
-            manifest_digest: Some(published_digest.clone()),
-            published_digest: Some(published_digest),
-        });
+    if !scan.build_path.is_dir() {
+        return scan_without_build(scan);
     }
+    scan_build(scan)
+}
 
-    if !build_exists {
+fn scan_without_build(scan: RecoveryScan<'_>) -> Result<RecoveryConsistencyReport> {
+    if !scan.published_path.is_dir() {
         return Err(FjallStorageError::InvalidBuildPath(
             scan.build_path.display().to_string(),
         ));
     }
+    let digest = checked_digest(scan.published_path)?;
+    Ok(report(
+        published_state(scan.batch_receipt),
+        scan.build_path.to_path_buf(),
+        scan.published_path.to_path_buf(),
+        scan.batch_receipt,
+        Some(digest.clone()),
+        Some(digest),
+    ))
+}
+
+fn scan_build(scan: RecoveryScan<'_>) -> Result<RecoveryConsistencyReport> {
+    let build_path = scan.build_path.to_path_buf();
+    let published_path = scan.published_path.to_path_buf();
     let manifest_digest = match checked_digest(scan.build_path) {
         Ok(digest) => digest,
-        Err(FjallStorageError::MissingManifest(_)) => {
-            return Ok(report(
-                RecoveryState::MissingManifest,
-                build_path,
-                published_path,
-                batch_receipt,
-                None,
-                None,
-            ));
-        }
-        Err(FjallStorageError::MissingSeal(_)) => {
-            return Ok(report(
-                RecoveryState::MissingSeal,
-                build_path,
-                published_path,
-                batch_receipt,
-                None,
-                None,
-            ));
-        }
-        Err(FjallStorageError::ManifestDigestMismatch { .. }) => {
-            return Ok(report(
-                RecoveryState::ManifestMismatch,
-                build_path,
-                published_path,
-                batch_receipt,
-                None,
-                None,
-            ));
-        }
-        Err(error) => return Err(error),
+        Err(error) => return marker_report(error, scan, None),
     };
-
-    if published_exists {
-        let published_digest = match checked_digest(scan.published_path) {
-            Ok(digest) => Some(digest),
-            Err(FjallStorageError::MissingManifest(_)) => {
-                return Ok(report(
-                    RecoveryState::MissingManifest,
-                    build_path,
-                    published_path,
-                    batch_receipt,
-                    Some(manifest_digest),
-                    None,
-                ));
-            }
-            Err(FjallStorageError::MissingSeal(_)) => {
-                return Ok(report(
-                    RecoveryState::MissingSeal,
-                    build_path,
-                    published_path,
-                    batch_receipt,
-                    Some(manifest_digest),
-                    None,
-                ));
-            }
-            Err(FjallStorageError::ManifestDigestMismatch { .. }) => {
-                return Ok(report(
-                    RecoveryState::ManifestMismatch,
-                    build_path,
-                    published_path,
-                    batch_receipt,
-                    Some(manifest_digest),
-                    None,
-                ));
-            }
-            Err(error) => return Err(error),
-        };
-        if published_digest.as_deref() != Some(manifest_digest.as_str()) {
-            return Ok(report(
-                RecoveryState::PublishConflict,
-                build_path,
-                published_path,
-                batch_receipt,
-                Some(manifest_digest),
-                published_digest,
-            ));
-        }
+    if !scan.published_path.is_dir() {
+        return Ok(report(
+            sealed_state(scan.batch_receipt),
+            build_path,
+            published_path,
+            scan.batch_receipt,
+            Some(manifest_digest),
+            None,
+        ));
     }
-    let state = match batch_receipt {
-        BatchReceiptState::Present { .. } => RecoveryState::Sealed,
-        BatchReceiptState::Missing => RecoveryState::MissingBatchReceipt,
-        BatchReceiptState::Corrupt => RecoveryState::CorruptBatchReceipt,
+    let published_digest = match checked_digest(scan.published_path) {
+        Ok(digest) => digest,
+        Err(error) => return marker_report(error, scan, Some(manifest_digest)),
     };
+    if published_digest != manifest_digest {
+        return Ok(report(
+            RecoveryState::PublishConflict,
+            build_path,
+            published_path,
+            scan.batch_receipt,
+            Some(manifest_digest),
+            Some(published_digest),
+        ));
+    }
     Ok(report(
-        state,
+        sealed_state(scan.batch_receipt),
         build_path,
         published_path,
-        batch_receipt,
+        scan.batch_receipt,
         Some(manifest_digest),
         None,
     ))
+}
+
+fn marker_report(
+    error: FjallStorageError,
+    scan: RecoveryScan<'_>,
+    manifest_digest: Option<String>,
+) -> Result<RecoveryConsistencyReport> {
+    let state = match error {
+        FjallStorageError::MissingManifest(_) => RecoveryState::MissingManifest,
+        FjallStorageError::MissingSeal(_) => RecoveryState::MissingSeal,
+        FjallStorageError::ManifestDigestMismatch { .. } => RecoveryState::ManifestMismatch,
+        other => return Err(other),
+    };
+    Ok(report(
+        state,
+        scan.build_path.to_path_buf(),
+        scan.published_path.to_path_buf(),
+        scan.batch_receipt,
+        manifest_digest,
+        None,
+    ))
+}
+
+fn sealed_state(receipt: BatchReceiptState) -> RecoveryState {
+    match receipt {
+        BatchReceiptState::Present { .. } => RecoveryState::Sealed,
+        BatchReceiptState::Missing => RecoveryState::MissingBatchReceipt,
+        BatchReceiptState::Corrupt => RecoveryState::CorruptBatchReceipt,
+    }
+}
+
+fn published_state(receipt: BatchReceiptState) -> RecoveryState {
+    match receipt {
+        BatchReceiptState::Present { .. } => RecoveryState::Published,
+        BatchReceiptState::Missing => RecoveryState::MissingBatchReceipt,
+        BatchReceiptState::Corrupt => RecoveryState::CorruptBatchReceipt,
+    }
 }
 
 fn report(
