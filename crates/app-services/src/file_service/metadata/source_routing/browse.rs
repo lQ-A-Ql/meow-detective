@@ -76,11 +76,16 @@ pub fn get_file_tree_for_case(
     show_hidden: bool,
 ) -> Result<Vec<FileTreeNodeDto>, FileServiceError> {
     let mut roots = Vec::new();
-    for (_, source_conn) in
+    for (source_id, source_conn) in
         crate::source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
     {
-        let mut nodes =
-            crate::file_service::get_file_tree_real_with_visibility(&source_conn, show_hidden)?;
+        let mut nodes = if let Some(nodes) =
+            crate::file_service::fjall_read::tree(case_root, &source_id, show_hidden)?
+        {
+            nodes
+        } else {
+            crate::file_service::get_file_tree_real_with_visibility(&source_conn, show_hidden)?
+        };
         wrap_tree_nodes(&mut nodes);
         roots.extend(nodes);
     }
@@ -98,13 +103,24 @@ pub fn get_file_children_for_case(
 ) -> Result<FileChildrenDto, FileServiceError> {
     let (global_id, source_conn) =
         open_source_for_file_id(case_conn, case_root, case_id, parent_id)?;
-    let mut children = get_file_children_lazy_with_visibility(
-        &source_conn,
+    let mut children = if let Some(children) = crate::file_service::fjall_read::children(
+        case_root,
+        &global_id.data_source_id,
         &global_id.local_id.0,
         offset,
         limit,
         show_hidden,
-    )?;
+    )? {
+        children
+    } else {
+        get_file_children_lazy_with_visibility(
+            &source_conn,
+            &global_id.local_id.0,
+            offset,
+            limit,
+            show_hidden,
+        )?
+    };
     wrap_tree_nodes(&mut children.children);
     Ok(children)
 }
@@ -128,7 +144,13 @@ pub fn get_file_rows_for_case(
         open_source_for_file_id(case_conn, case_root, case_id, parent_id)?;
     let mut local_request = request.clone();
     local_request.parent_id = Some(global_id.local_id.0);
-    let mut page = get_file_rows_for_request(&source_conn, &local_request)?;
+    let mut page = if let Some(page) =
+        crate::file_service::fjall_read::rows(case_root, &global_id.data_source_id, &local_request)?
+    {
+        page
+    } else {
+        get_file_rows_for_request(&source_conn, &local_request)?
+    };
     for row in &mut page.rows {
         wrap_row_id(row, &global_id.data_source_id);
     }
