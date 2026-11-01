@@ -11,14 +11,19 @@ use std::{
 
 pub const BUILD_PREFIX: &str = "source.fjall.build.";
 pub const PUBLISHED_PREFIX: &str = "source.fjall.";
+pub const SOURCES_DIRECTORY: &str = "sources";
+pub const SOURCE_BUILD_DIRECTORY_PREFIX: &str = "source.fjall.build.";
+pub const SOURCE_PUBLISHED_DIRECTORY_NAME: &str = "source.fjall";
 pub const MANIFEST_FILE: &str = "storage-manifest.sha256";
 pub const SEAL_FILE: &str = "storage-seal";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceBuildLayout {
-    case_root: PathBuf,
+    root: PathBuf,
     source_id: String,
     attempt_id: String,
+    build_name: String,
+    published_name: String,
 }
 
 impl SourceBuildLayout {
@@ -26,20 +31,36 @@ impl SourceBuildLayout {
         validate_component(source_id)?;
         validate_component(attempt_id)?;
         Ok(Self {
-            case_root: case_root.as_ref().to_path_buf(),
+            root: case_root.as_ref().to_path_buf(),
             source_id: source_id.to_owned(),
             attempt_id: attempt_id.to_owned(),
+            build_name: format!("{BUILD_PREFIX}{attempt_id}"),
+            published_name: format!("{PUBLISHED_PREFIX}{source_id}"),
+        })
+    }
+
+    pub fn for_case_source(
+        case_root: impl AsRef<Path>,
+        source_id: &str,
+        attempt_id: &str,
+    ) -> Result<Self> {
+        validate_component(source_id)?;
+        validate_component(attempt_id)?;
+        Ok(Self {
+            root: case_root.as_ref().join(SOURCES_DIRECTORY).join(source_id),
+            source_id: source_id.to_owned(),
+            attempt_id: attempt_id.to_owned(),
+            build_name: format!("{SOURCE_BUILD_DIRECTORY_PREFIX}{attempt_id}"),
+            published_name: SOURCE_PUBLISHED_DIRECTORY_NAME.to_owned(),
         })
     }
 
     pub fn build_path(&self) -> PathBuf {
-        self.case_root
-            .join(format!("{BUILD_PREFIX}{}", self.attempt_id))
+        self.root.join(&self.build_name)
     }
 
     pub fn published_path(&self) -> PathBuf {
-        self.case_root
-            .join(format!("{PUBLISHED_PREFIX}{}", self.source_id))
+        self.root.join(&self.published_name)
     }
 
     pub fn source_id(&self) -> &str {
@@ -243,7 +264,11 @@ fn write_metadata(root: &Path, name: &str, value: &str) -> Result<()> {
 }
 
 fn safe_child(root: &Path, relative: &Path) -> Result<PathBuf> {
-    if relative.as_os_str().is_empty() || relative.is_absolute() {
+    let rendered = relative.to_string_lossy();
+    if relative.as_os_str().is_empty()
+        || relative.is_absolute()
+        || rendered.contains(['\\', ':', '\0'])
+    {
         return Err(FjallStorageError::InvalidBuildPath(
             relative.display().to_string(),
         ));

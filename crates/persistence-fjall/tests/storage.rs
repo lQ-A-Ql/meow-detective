@@ -1,7 +1,7 @@
 use persistence_fjall::{
-    decode_key, encode_key, verify_sealed, DatabaseConfig, FjallStorageError, KeyPart,
-    KeyspaceName, PersistMode, ScanBounds, ScanDirection, SingleWriterTxDatabase, SourceBuild,
-    SourceBuildLayout, SourceStore, VersionedEnvelope, WriteAction,
+    decode_key, encode_key, publish_build, verify_sealed, DatabaseConfig, FjallStorageError,
+    KeyPart, KeyspaceName, PersistMode, ScanBounds, ScanDirection, SingleWriterTxDatabase,
+    SourceBuild, SourceBuildLayout, SourceStore, VersionedEnvelope, WriteAction,
 };
 use serde::{Deserialize, Serialize};
 
@@ -182,12 +182,36 @@ fn repeated_publish_reuses_matching_published_source() {
 fn missing_seal_is_rejected() {
     let directory = tempfile::tempdir().unwrap();
     let layout = SourceBuildLayout::new(directory.path(), "source-1", "attempt-1").unwrap();
-    std::fs::create_dir_all(layout.published_path()).unwrap();
-    std::fs::write(layout.published_path().join("record"), b"data").unwrap();
+    std::fs::create_dir_all(layout.build_path()).unwrap();
+    std::fs::write(layout.build_path().join("record"), b"data").unwrap();
     assert!(matches!(
-        verify_sealed(layout.published_path()),
+        publish_build(layout.build_path(), layout.published_path()),
         Err(FjallStorageError::MissingSeal(_))
     ));
+    assert!(!layout.published_path().exists());
+}
+
+#[test]
+fn case_source_layout_uses_dedicated_source_directory_and_stable_names() {
+    let directory = tempfile::tempdir().unwrap();
+    let layout =
+        SourceBuildLayout::for_case_source(directory.path(), "source-1", "attempt-1").unwrap();
+    assert_eq!(
+        layout.build_path(),
+        directory
+            .path()
+            .join("sources")
+            .join("source-1")
+            .join("source.fjall.build.attempt-1")
+    );
+    assert_eq!(
+        layout.published_path(),
+        directory
+            .path()
+            .join("sources")
+            .join("source-1")
+            .join("source.fjall")
+    );
 }
 
 #[test]

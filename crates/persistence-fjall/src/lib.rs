@@ -19,6 +19,7 @@ pub use keyspaces::{KeyspaceName, KEYSPACE_NAMES};
 pub use scan::{ScanBounds, ScanDirection, SnapshotEntry};
 pub use source_build::{
     publish_build, seal_build, verify_sealed, PublishReceipt, SourceBuild, SourceBuildLayout,
-    BUILD_PREFIX, MANIFEST_FILE, PUBLISHED_PREFIX, SEAL_FILE,
+    BUILD_PREFIX, MANIFEST_FILE, PUBLISHED_PREFIX, SEAL_FILE, SOURCES_DIRECTORY,
+    SOURCE_BUILD_DIRECTORY_PREFIX, SOURCE_PUBLISHED_DIRECTORY_NAME,
 };
 pub use source_store::SourceStore;

@@ -12,6 +12,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum StorageRuntimeError {
+    #[error("invalid source identifier: {0}")]
+    InvalidSourceId(String),
     #[error("storage root is not a directory: {0}")]
     InvalidRoot(PathBuf),
     #[error("storage root does not exist: {0}")]
@@ -48,6 +50,34 @@ pub type ReadOnlyCaseStorageHandle = CaseStorageHandle<ReadOnly>;
 pub type ReadWriteCaseStorageHandle = CaseStorageHandle<ReadWrite>;
 pub type ReadOnlySourceStorageHandle = SourceStorageHandle<ReadOnly>;
 pub type ReadWriteSourceStorageHandle = SourceStorageHandle<ReadWrite>;
+
+pub fn source_storage_root(
+    case_root: impl AsRef<Path>,
+    source_id: &str,
+) -> Result<PathBuf, StorageRuntimeError> {
+    validate_source_id(source_id)?;
+    Ok(case_root
+        .as_ref()
+        .join("sources")
+        .join(source_id)
+        .join("source.fjall"))
+}
+
+pub fn open_source_read_only(
+    case_root: impl AsRef<Path>,
+    source_id: &str,
+) -> Result<ReadOnlySourceStorageHandle, StorageRuntimeError> {
+    let source_root = source_storage_root(case_root, source_id)?;
+    Ok(ReadOnlyStorageRuntime::open(source_root)?.source())
+}
+
+pub fn open_source_read_write(
+    case_root: impl AsRef<Path>,
+    source_id: &str,
+) -> Result<ReadWriteSourceStorageHandle, StorageRuntimeError> {
+    let source_root = source_storage_root(case_root, source_id)?;
+    Ok(ReadWriteStorageRuntime::open(source_root)?.source())
+}
 
 pub struct StorageRuntime<Mode> {
     source_root: PathBuf,
@@ -252,4 +282,21 @@ fn open_parts(
         source_store,
         artifact_store,
     })
+}
+
+fn validate_source_id(source_id: &str) -> Result<(), StorageRuntimeError> {
+    let path = Path::new(source_id);
+    let mut components = path.components();
+    let valid = !source_id.is_empty()
+        && !source_id.contains('\0')
+        && !source_id.contains('/')
+        && !source_id.contains('\\')
+        && !source_id.contains(':')
+        && matches!(components.next(), Some(std::path::Component::Normal(_)))
+        && components.next().is_none();
+    if valid {
+        Ok(())
+    } else {
+        Err(StorageRuntimeError::InvalidSourceId(source_id.to_owned()))
+    }
 }
