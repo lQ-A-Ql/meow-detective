@@ -257,6 +257,19 @@ impl<Mode> SourceStorageHandle<Mode> {
             .map_err(StorageRuntimeError::Source)
     }
 
+    pub fn catalog_list_all(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<CatalogPage, StorageRuntimeError> {
+        CatalogRecordStore::from_source_store((*self.source_store).clone())
+            .list_all(snapshot, source_id, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn catalog_find_by_path(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -330,6 +343,15 @@ impl<Mode> SourceStorageHandle<Mode> {
                 direction,
                 limit,
             )
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn timeline_cursor_revision(
+        &self,
+        snapshot: &SourceReadSnapshot,
+    ) -> Result<u64, StorageRuntimeError> {
+        TimelineRecordStore::from_source_store((*self.source_store).clone())
+            .cursor_revision(snapshot)
             .map_err(StorageRuntimeError::Source)
     }
 }

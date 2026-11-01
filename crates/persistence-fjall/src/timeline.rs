@@ -20,6 +20,7 @@ const TIME_FAMILY: &str = "timeline.time";
 const TYPE_FAMILY: &str = "timeline.type";
 const OBJECT_FAMILY: &str = "timeline.object";
 const TIMESTAMP_SORT_MASK: u64 = 1 << 63;
+const REVISION_KEY_PREFIX: &str = "timeline.revision/";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TimelineRecord {
@@ -67,6 +68,21 @@ impl TimelineRecordStore {
         self.source_store.database().read_snapshot()
     }
 
+    pub fn cursor_revision(&self, snapshot: &SourceReadSnapshot) -> Result<u64> {
+        let key = revision_key("timeline")?;
+        let Some(value) = snapshot.get(KeyspaceName::Meta, &key)? else {
+            return Ok(0);
+        };
+        if value.len() != std::mem::size_of::<u64>() {
+            return Err(FjallStorageError::InvalidEnvelope(
+                "timeline revision metadata is malformed".to_owned(),
+            ));
+        }
+        let mut bytes = [0; std::mem::size_of::<u64>()];
+        bytes.copy_from_slice(&value);
+        Ok(u64::from_be_bytes(bytes))
+    }
+
     pub fn get(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -102,6 +118,7 @@ impl TimelineRecordStore {
             value: envelope.encode()?,
         });
         self.index_writes(&mut actions, record)?;
+        self.write_revision(&snapshot, &mut actions)?;
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(())
     }
@@ -118,6 +135,7 @@ impl TimelineRecordStore {
             key,
         });
         self.index_deletes(&mut actions, &previous)?;
+        self.write_revision(&snapshot, &mut actions)?;
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(true)
     }
@@ -267,6 +285,20 @@ impl TimelineRecordStore {
         }
         Ok(())
     }
+
+    fn write_revision(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        actions: &mut Vec<WriteAction>,
+    ) -> Result<()> {
+        let revision = self.cursor_revision(snapshot)?.saturating_add(1);
+        actions.push(WriteAction::Put {
+            keyspace: KeyspaceName::Meta,
+            key: revision_key("timeline")?,
+            value: revision.to_be_bytes().to_vec(),
+        });
+        Ok(())
+    }
 }
 
 fn validate_record(record: &TimelineRecord) -> Result<()> {
@@ -302,6 +334,13 @@ fn record_key(source_id: &str, record_id: &str) -> Result<Vec<u8>> {
             KeyPart::Text(source_id.to_owned()),
             KeyPart::Text(record_id.to_owned()),
         ],
+    )
+}
+
+fn revision_key(scope: &str) -> Result<Vec<u8>> {
+    encode_key(
+        "timeline.meta",
+        &[KeyPart::Text(format!("{REVISION_KEY_PREFIX}{scope}"))],
     )
 }
 

@@ -53,7 +53,13 @@ pub fn query_timeline_filtered_for_case(
         ));
     }
     if query.cursor.is_some() || query.offset == 0 {
+        if let Some(page) = super::fjall::try_query(case_conn, case_root, case_id, query)? {
+            return Ok(page);
+        }
         return cursor::query_cursor_page(case_conn, case_root, case_id, query);
+    }
+    if let Some(page) = super::fjall::try_query(case_conn, case_root, case_id, query)? {
+        return Ok(page);
     }
     query_timeline_offset_page(case_conn, case_root, case_id, query)
 }

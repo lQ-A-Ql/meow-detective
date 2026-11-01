@@ -161,6 +161,43 @@ impl CatalogRecordStore {
         self.page_from_index(snapshot, &prefix, cursor, direction, limit)
     }
 
+    pub fn list_all(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<CatalogPage> {
+        if limit == 0 {
+            return Ok(CatalogPage {
+                records: Vec::new(),
+                next_cursor: None,
+            });
+        }
+        let prefix = encode_key(RECORD_FAMILY, &[KeyPart::Text(source_id.to_owned())])?;
+        let entries = snapshot.keyset(
+            KeyspaceName::CatalogRecords,
+            &prefix,
+            cursor,
+            direction,
+            limit.saturating_add(1),
+        )?;
+        let has_more = entries.len() > limit;
+        let entries = entries.into_iter().take(limit).collect::<Vec<_>>();
+        let next_cursor = has_more
+            .then(|| entries.last().map(|entry| entry.key.clone()))
+            .flatten();
+        let records = entries
+            .into_iter()
+            .map(|entry| decode_record(VersionedEnvelope::decode(&entry.value)?))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(CatalogPage {
+            records,
+            next_cursor,
+        })
+    }
+
     pub fn find_by_path(
         &self,
         snapshot: &SourceReadSnapshot,
