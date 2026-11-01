@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
+use std::sync::{Mutex, OnceLock};
 
 use domain::DataSourceKind;
 use fs_lvm::mdraid::{read_superblock, MdRaidSuperblock};
@@ -9,6 +11,15 @@ use crate::datasource_service::{self, LvmLogicalVolumeIdentity, LvmPhysicalVolum
 use super::linux_import::LinuxEvidenceSetImportPlan;
 
 const MD_SUPERBLOCK_LV_OFFSET: u64 = 4096;
+type MdRaidCache = BTreeMap<String, MdRaidCacheEntry>;
+
+#[derive(Clone)]
+struct MdRaidCacheEntry {
+    fingerprint: u64,
+    arrays: Vec<MdRaidArrayPlan>,
+}
+
+static MDRAID_DISCOVERY_CACHE: OnceLock<Mutex<MdRaidCache>> = OnceLock::new();
 
 #[derive(Debug, Error)]
 pub enum MdRaidPlanError {
@@ -63,6 +74,41 @@ struct PvEvidence {
 }
 
 pub fn discover_linux_evidence_set_mdraid(
+    plan: &LinuxEvidenceSetImportPlan,
+) -> Result<Vec<MdRaidArrayPlan>, MdRaidPlanError> {
+    let cache_key = plan.root_path.to_string_lossy().to_string();
+    let fingerprint = plan_fingerprint(plan);
+    let cache = MDRAID_DISCOVERY_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
+    {
+        let guard = cache.lock().map_err(|_| {
+            MdRaidPlanError::Io(std::io::Error::other("MD RAID cache lock poisoned"))
+        })?;
+        if let Some(entry) = guard.get(&cache_key) {
+            if entry.fingerprint == fingerprint {
+                return Ok(entry.arrays.clone());
+            }
+        }
+    }
+    let arrays = discover_linux_evidence_set_mdraid_uncached(plan)?;
+    let mut guard = cache
+        .lock()
+        .map_err(|_| MdRaidPlanError::Io(std::io::Error::other("MD RAID cache lock poisoned")))?;
+    if guard.len() >= 8 {
+        if let Some(first) = guard.keys().next().cloned() {
+            guard.remove(&first);
+        }
+    }
+    guard.insert(
+        cache_key,
+        MdRaidCacheEntry {
+            fingerprint,
+            arrays: arrays.clone(),
+        },
+    );
+    Ok(arrays)
+}
+
+fn discover_linux_evidence_set_mdraid_uncached(
     plan: &LinuxEvidenceSetImportPlan,
 ) -> Result<Vec<MdRaidArrayPlan>, MdRaidPlanError> {
     let mut pvs = Vec::new();
@@ -154,6 +200,23 @@ pub fn discover_linux_evidence_set_mdraid(
             .any(|member| member.superblock.data_size_sectors != plan.min_data_size_sectors);
     }
     Ok(plans)
+}
+
+fn plan_fingerprint(plan: &LinuxEvidenceSetImportPlan) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for member in &plan.members {
+        member.source_path.hash(&mut hasher);
+        member.source_kind.to_string().hash(&mut hasher);
+        if let Ok(metadata) = std::fs::metadata(&member.source_path) {
+            metadata.len().hash(&mut hasher);
+            metadata
+                .modified()
+                .ok()
+                .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
+                .hash(&mut hasher);
+        }
+    }
+    hasher.finish()
 }
 
 pub fn open_mdraid0_reader(
