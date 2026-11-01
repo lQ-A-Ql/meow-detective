@@ -85,6 +85,12 @@ fn reject_stale_source(progress: u32, platform: domain::DataSourcePlatform) {
                     Ok((r.get(0)?, r.get(1)?))
                 })?;
             assert_eq!(state, "failed");
+            let operation_state: String = conn.query_row(
+                "SELECT state FROM storage_operations WHERE operation_id = ?1",
+                [format!("source-import:{}", job.0)],
+                |r| r.get(0),
+            )?;
+            assert_eq!(operation_state, "failed");
             assert!(!sink.ready.load(Ordering::Acquire));
             if progress == 62 {
                 let c = persistence_sqlite::open_existing_source_read_only(

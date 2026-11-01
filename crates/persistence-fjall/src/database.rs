@@ -3,6 +3,7 @@ use crate::{
     keyspaces::{open_keyspaces, KeyspaceName},
 };
 use fjall::{Readable, SingleWriterTxKeyspace};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -91,6 +92,8 @@ impl SingleWriterTxDatabase {
         actions: &[WriteAction],
         mode: PersistMode,
     ) -> Result<WriteBatchReceipt> {
+        let batch_digest = digest_actions(actions);
+        let receipt_key = [b"batch/".as_slice(), batch_digest.as_slice()].concat();
         let mut transaction = self.inner.write_tx().durability(Some(mode.into()));
         for action in actions {
             match action {
@@ -104,9 +107,15 @@ impl SingleWriterTxDatabase {
                 }
             }
         }
+        transaction.insert(
+            self.keyspace(KeyspaceName::Batches),
+            receipt_key,
+            actions.len().to_be_bytes().to_vec(),
+        );
         transaction.commit()?;
         Ok(WriteBatchReceipt {
             operation_count: actions.len(),
+            batch_digest,
         })
     }
 
@@ -138,6 +147,32 @@ pub enum WriteAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WriteBatchReceipt {
     pub operation_count: usize,
+    pub batch_digest: [u8; 32],
+}
+
+fn digest_actions(actions: &[WriteAction]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    for action in actions {
+        match action {
+            WriteAction::Put {
+                keyspace,
+                key,
+                value,
+            } => {
+                hasher.update([0u8, *keyspace as u8]);
+                hasher.update((key.len() as u64).to_be_bytes());
+                hasher.update(key);
+                hasher.update((value.len() as u64).to_be_bytes());
+                hasher.update(value);
+            }
+            WriteAction::Delete { keyspace, key } => {
+                hasher.update([1u8, *keyspace as u8]);
+                hasher.update((key.len() as u64).to_be_bytes());
+                hasher.update(key);
+            }
+        }
+    }
+    hasher.finalize().into()
 }
 
 pub struct SourceReadSnapshot {

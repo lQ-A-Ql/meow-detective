@@ -1,4 +1,8 @@
 use super::context::ImportJobContext;
+use chrono::Utc;
+use persistence_sqlite::repositories::storage_control_repo::{
+    StorageControlRepo, StorageOperationState,
+};
 use transport::CommandError;
 
 pub(super) fn source_is_pending(
@@ -34,10 +38,23 @@ pub(super) fn persist_outcome(
     match result {
         Ok(message) => publish_outcome(ctx, ds, ready_state, message),
         Err(error) => {
+            mark_storage_operation(ctx, StorageOperationState::Failed, Some(&error.to_string()))?;
             record_failure(ctx, ds, &error);
             Err(error)
         }
     }
+}
+
+fn mark_storage_operation(
+    ctx: &ImportJobContext<'_>,
+    state: StorageOperationState,
+    error_code: Option<&str>,
+) -> Result<(), CommandError> {
+    let operation_id = format!("source-import:{}", ctx.job_id.0);
+    StorageControlRepo::new(ctx.conn)
+        .update_operation_state(&operation_id, state, &Utc::now().to_rfc3339(), error_code)
+        .map_err(CommandError::from_typed_service_error)?;
+    Ok(())
 }
 
 pub(super) fn record_failure(
@@ -45,6 +62,11 @@ pub(super) fn record_failure(
     ds: &domain::DataSource,
     error: &CommandError,
 ) {
+    if let Err(storage_error) =
+        mark_storage_operation(ctx, StorageOperationState::Failed, Some(&error.to_string()))
+    {
+        tracing::warn!(error = %storage_error, "Failed to mark storage operation as failed");
+    }
     let lease = ctx.runtime.as_ref().map(|r| r.publication_lease());
     if lease
         .as_ref()
@@ -71,6 +93,9 @@ fn publish_outcome(
                 let _fence = lease.as_ref().map(|lease| lease.fence_connection(ctx.conn));
                 super::execute::persist_import_outcome(ctx.conn, &ds.id, ready_state, Ok(message))
             };
+            if result.is_ok() {
+                mark_storage_operation(ctx, StorageOperationState::Published, None)?;
+            }
             if let Err(error) = &result {
                 record_failure(ctx, ds, error);
             }

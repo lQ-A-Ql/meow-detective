@@ -1,6 +1,10 @@
 //! Set up source storage and resources without changing their ownership scope.
 use super::{context::ImportJobContext, profile::measure_optional};
-use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+use chrono::Utc;
+use persistence_sqlite::repositories::{
+    datasource_repo::DataSourceRepo,
+    storage_control_repo::{StorageControlRepo, StorageOperationRecord, StorageOperationState},
+};
 use transport::{dto::import_benchmark::ImportBenchmarkPhaseDto as Phase, CommandError};
 
 pub(super) fn open_source(
@@ -14,6 +18,38 @@ pub(super) fn open_source(
     })?;
     crate::source_db::open_registered_fjall_source_read_write(ctx.case_root, &source.id)
         .map_err(|_| CommandError::internal("Fjall source storage initialization failed"))?;
+    let operation_id = format!("source-import:{}", ctx.job_id.0);
+    let control = StorageControlRepo::new(ctx.conn);
+    if control
+        .find_operation(&operation_id)
+        .map_err(CommandError::from_typed_service_error)?
+        .is_none()
+    {
+        let now = Utc::now().to_rfc3339();
+        control
+            .insert_operation(&StorageOperationRecord {
+                operation_id: operation_id.clone(),
+                case_id: ctx.case_id.0.clone(),
+                source_id: Some(source.id.0.clone()),
+                attempt_id: ctx.job_id.0.clone(),
+                operation_kind: "source_import".to_owned(),
+                state: StorageOperationState::Planned,
+                input_digest: None,
+                expected_batch_digest: None,
+                created_at: now.clone(),
+                updated_at: now,
+                last_error_code: None,
+            })
+            .map_err(CommandError::from_typed_service_error)?;
+    }
+    control
+        .update_operation_state(
+            &operation_id,
+            StorageOperationState::Running,
+            &Utc::now().to_rfc3339(),
+            None,
+        )
+        .map_err(CommandError::from_typed_service_error)?;
     let initialize = measure_optional(
         ctx.profiler.as_ref(),
         Phase::SourceMetadataInitialize,

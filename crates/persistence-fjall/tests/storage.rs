@@ -68,13 +68,11 @@ fn database_commits_across_keyspaces_and_reopens() {
             value: b"done".to_vec(),
         },
     ];
-    assert_eq!(
-        database
-            .write_batch(&actions, PersistMode::SyncData)
-            .unwrap()
-            .operation_count,
-        2
-    );
+    let receipt = database
+        .write_batch(&actions, PersistMode::SyncData)
+        .unwrap();
+    assert_eq!(receipt.operation_count, 2);
+    assert!(receipt.batch_digest.iter().any(|byte| *byte != 0));
     let snapshot = database.read_snapshot();
     assert_eq!(
         snapshot.get(KeyspaceName::Meta, b"revision").unwrap(),
@@ -83,6 +81,11 @@ fn database_commits_across_keyspaces_and_reopens() {
     assert_eq!(
         snapshot.get(KeyspaceName::Batches, b"batch").unwrap(),
         Some(b"done".to_vec())
+    );
+    let receipt_key = [b"batch/".as_slice(), receipt.batch_digest.as_slice()].concat();
+    assert_eq!(
+        snapshot.get(KeyspaceName::Batches, &receipt_key).unwrap(),
+        Some(2usize.to_be_bytes().to_vec())
     );
     drop(snapshot);
     drop(database);
