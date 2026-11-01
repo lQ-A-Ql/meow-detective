@@ -1,7 +1,9 @@
+use app_services::source_db;
 use app_services::storage_runtime::{
     open_source_read_only, open_source_read_write, source_storage_root, ReadOnlyStorageRuntime,
     ReadWriteStorageRuntime, StorageRuntimeError,
 };
+use domain::DataSourceId;
 use std::path::Path;
 use tempfile::tempdir;
 
@@ -62,4 +64,22 @@ fn source_id_must_be_a_single_path_component() {
             Err(StorageRuntimeError::InvalidSourceId(_))
         ));
     }
+}
+
+#[test]
+fn source_db_facade_opens_the_same_fjall_source_layout() {
+    let root = tempdir().unwrap();
+    let source_id = DataSourceId("source-02".to_owned());
+    let writable =
+        source_db::open_registered_fjall_source_read_write(root.path(), &source_id).unwrap();
+    assert!(writable
+        .source_root()
+        .ends_with("sources/source-02/source.fjall"));
+    drop(writable);
+    let readonly =
+        source_db::open_registered_fjall_source_read_only(root.path(), &source_id).unwrap();
+    assert_eq!(
+        readonly.source_root(),
+        source_db::fjall_source_storage_root(root.path(), "source-02").unwrap()
+    );
 }
