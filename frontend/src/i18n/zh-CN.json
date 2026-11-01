@@ -1412,6 +1412,7 @@
         "chunk": "块大小",
         "members": "成员",
         "filesystem": "后续文件系统",
+        "filesystemStatus": { "candidate": "文件系统候选", "confirmed": "文件系统已确认", "unknown": "文件系统未知" },
         "device": "设备",
         "dataSize": "可用数据",
         "dataOffset": "数据偏移（扇区）",

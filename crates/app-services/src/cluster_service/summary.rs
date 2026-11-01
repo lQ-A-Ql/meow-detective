@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::sync::{LazyLock, Mutex};
 
 use domain::{CaseId, DataSourceKind};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
@@ -43,6 +44,18 @@ struct ManifestProvenance {
     collected_at: String,
     manifest_digest: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MdRaidCacheKey {
+    state: String,
+    member_count: u32,
+    ready_count: u32,
+    failed_count: u32,
+}
+
+static MDRAID_SUMMARY_CACHE: LazyLock<
+    Mutex<BTreeMap<String, (MdRaidCacheKey, Vec<LinuxMdRaidArrayDto>)>>,
+> = LazyLock::new(|| Mutex::new(BTreeMap::new()));
 
 pub fn get_linux_evidence_set_summary(
     conn: &Connection,
@@ -101,42 +114,14 @@ pub fn get_linux_evidence_set_summary(
         }
     }
     let capability_level = capability_level(&import_set, &derived_sources);
-    let mdraid_result: std::result::Result<_, String> = match super::plan_linux_evidence_set_import(
-        &import_set.root_path,
-        Some(import_set.name.clone()),
-    ) {
-        Ok(plan) => {
-            super::discover_linux_evidence_set_mdraid(&plan).map_err(|error| error.to_string())
-        }
-        Err(error) => Err(error.to_string()),
+    let mdraid_key = MdRaidCacheKey {
+        state: import_set.state.clone(),
+        member_count: import_set.member_count,
+        ready_count: import_set.ready_count,
+        failed_count: import_set.failed_count,
     };
-    let mdraid_arrays = match mdraid_result {
-        Ok(arrays) => arrays
-            .into_iter()
-            .map(|array| LinuxMdRaidArrayDto {
-                array_uuid: hex::encode(array.array_uuid),
-                name: array.name,
-                level: array.level,
-                layout: array.layout,
-                chunk_sectors: array.chunk_sectors,
-                raid_disks: array.raid_disks,
-                min_data_size_sectors: array.min_data_size_sectors,
-                capacity_mismatch: array.capacity_mismatch,
-                filesystem: "Btrfs candidate after MD RAID0".to_string(),
-                members: array
-                    .members
-                    .into_iter()
-                    .map(|member| LinuxMdRaidMemberDto {
-                        dev_number: member.superblock.dev_number,
-                        vg_name: member.vg_name,
-                        lv_name: member.lv_name,
-                        data_offset_sectors: member.superblock.data_offset_sectors,
-                        data_size_sectors: member.superblock.data_size_sectors,
-                        super_offset_sectors: member.superblock.super_offset_sectors,
-                    })
-                    .collect(),
-            })
-            .collect(),
+    let mdraid_arrays = match cached_mdraid_arrays(&import_set, &mdraid_key) {
+        Ok(arrays) => arrays,
         Err(error) => {
             diagnostics.push(format!("MD RAID discovery unavailable: {error}"));
             Vec::new()
@@ -160,6 +145,52 @@ pub fn get_linux_evidence_set_summary(
         mdraid_arrays,
         diagnostics,
     })
+}
+
+fn cached_mdraid_arrays(
+    import_set: &ImportSetRow,
+    key: &MdRaidCacheKey,
+) -> std::result::Result<Vec<LinuxMdRaidArrayDto>, String> {
+    let mut cache = MDRAID_SUMMARY_CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some((cached_key, arrays)) = cache.get(&import_set.id) {
+        if cached_key == key {
+            return Ok(arrays.clone());
+        }
+    }
+    let plan =
+        super::plan_linux_evidence_set_import(&import_set.root_path, Some(import_set.name.clone()))
+            .map_err(|error| error.to_string())?;
+    let arrays = super::discover_linux_evidence_set_mdraid(&plan)
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .map(|array| LinuxMdRaidArrayDto {
+            array_uuid: hex::encode(array.array_uuid),
+            name: array.name,
+            level: array.level,
+            layout: array.layout,
+            chunk_sectors: array.chunk_sectors,
+            raid_disks: array.raid_disks,
+            min_data_size_sectors: array.min_data_size_sectors,
+            capacity_mismatch: array.capacity_mismatch,
+            filesystem: "candidate".to_string(),
+            members: array
+                .members
+                .into_iter()
+                .map(|member| LinuxMdRaidMemberDto {
+                    dev_number: member.superblock.dev_number,
+                    vg_name: member.vg_name,
+                    lv_name: member.lv_name,
+                    data_offset_sectors: member.superblock.data_offset_sectors,
+                    data_size_sectors: member.superblock.data_size_sectors,
+                    super_offset_sectors: member.superblock.super_offset_sectors,
+                })
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+    cache.insert(import_set.id.clone(), (key.clone(), arrays.clone()));
+    Ok(arrays)
 }
 
 fn load_manifest_provenance(case_root: &Path, import_set_id: &str) -> Option<ManifestProvenance> {

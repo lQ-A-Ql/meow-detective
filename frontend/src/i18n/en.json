@@ -1412,6 +1412,7 @@
         "chunk": "Chunk size",
         "members": "Members",
         "filesystem": "Next filesystem",
+        "filesystemStatus": { "candidate": "Filesystem candidate", "confirmed": "Filesystem confirmed", "unknown": "Filesystem unknown" },
         "device": "Device",
         "dataSize": "Usable data",
         "dataOffset": "Data offset (sectors)",
