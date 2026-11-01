@@ -1,6 +1,6 @@
 use app_services::{
     case_service,
-    source_db::open_registered_fjall_source_read_write,
+    source_db::{open_registered_fjall_source_read_write, open_source_db},
     timeline_service::{query_timeline_filtered_for_case, TimelineQuery},
 };
 use chrono::{TimeZone, Utc};
@@ -44,6 +44,11 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
         DataSourceRepo::new(connection).insert_with_storage(&case.meta.id, &source, &storage)
     })
     .unwrap();
+    let source_conn = open_source_db(&case.case_root, &source.id).unwrap();
+    DataSourceRepo::new(&source_conn)
+        .upsert_source_local_metadata(&case.meta.id, &source)
+        .unwrap();
+    drop(source_conn);
 
     let fjall = open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
     let base = Utc.with_ymd_and_hms(2026, 11, 2, 0, 0, 0).unwrap();

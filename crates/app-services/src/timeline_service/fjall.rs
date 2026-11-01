@@ -4,6 +4,7 @@ use crate::storage_runtime::{ReadOnlySourceStorageHandle, StorageRuntimeError};
 use chrono::{DateTime, Utc};
 use domain::{CaseId, DataSourceId, TimelineEvent, TimelineEventId};
 use persistence_fjall::{ScanDirection, SourceReadSnapshot, TimelineRecord};
+use persistence_sqlite::repositories::timeline_repo::TimelineRepo;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use transport::{
@@ -28,6 +29,7 @@ struct FjallContext {
 struct FjallSourceCursor {
     source_id: String,
     revision: u64,
+    sqlite_revision: u64,
     count: u64,
     consumed: u64,
     after: Option<Vec<u8>>,
@@ -50,6 +52,7 @@ struct FjallSourcePage {
     snapshot: SourceReadSnapshot,
     head: Option<TimelineRecord>,
     exhausted: bool,
+    skip_remaining: u64,
 }
 
 pub(super) fn try_query(
@@ -79,13 +82,15 @@ pub(super) fn try_query(
     sources.sort_by(|left, right| left.0 .0.cmp(&right.0 .0));
     let context = context_from_query(query)?;
     let (state, pages) = match query.cursor {
-        Some(cursor) => resume_cursor(case_id, &context, cursor, sources)?,
-        None => capture_cursor(case_id, &context, sources)?,
+        Some(cursor) => resume_cursor(case_conn, case_root, case_id, &context, cursor, sources)?,
+        None => capture_cursor(case_conn, case_root, case_id, &context, sources)?,
     };
     Ok(Some(paginate(state, pages, query.offset, query.limit)?))
 }
 
 fn capture_cursor(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
     case_id: &CaseId,
     context: &FjallContext,
     sources: Vec<(DataSourceId, ReadOnlySourceStorageHandle)>,
@@ -95,10 +100,16 @@ fn capture_cursor(
     for (source_id, source) in sources {
         let snapshot = source.snapshot();
         let revision = source.timeline_cursor_revision(&snapshot)?;
+        let sqlite_revision = sqlite_timeline_revision(case_conn, case_root, &source_id)?;
         let count = count_source(&source, &snapshot, &source_id.0, context)?;
         total = total.saturating_add(count);
         pages.push(FjallSourcePage::new(
-            source_id, source, snapshot, revision, count,
+            source_id,
+            source,
+            snapshot,
+            revision,
+            sqlite_revision,
+            count,
         ));
     }
     let state = FjallCursor {
@@ -113,6 +124,8 @@ fn capture_cursor(
 }
 
 fn resume_cursor(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
     case_id: &CaseId,
     context: &FjallContext,
     encoded: &str,
@@ -143,7 +156,14 @@ fn resume_cursor(
     for ((source_id, source), source_state) in sources.into_iter().zip(state.sources.iter()) {
         let snapshot = source.snapshot();
         let revision = source.timeline_cursor_revision(&snapshot)?;
+        let sqlite_revision = sqlite_timeline_revision(case_conn, case_root, &source_id)?;
         if revision != source_state.revision {
+            return Err(invalid_cursor(format!(
+                "timeline snapshot changed for source {}",
+                source_id.0
+            )));
+        }
+        if sqlite_revision != source_state.sqlite_revision {
             return Err(invalid_cursor(format!(
                 "timeline snapshot changed for source {}",
                 source_id.0
@@ -242,12 +262,14 @@ impl FjallSourcePage {
         source: ReadOnlySourceStorageHandle,
         snapshot: SourceReadSnapshot,
         revision: u64,
+        sqlite_revision: u64,
         count: u64,
     ) -> Self {
         Self {
             state: FjallSourceCursor {
                 source_id: source_id.0,
                 revision,
+                sqlite_revision,
                 count,
                 consumed: 0,
                 after: None,
@@ -256,20 +278,24 @@ impl FjallSourcePage {
             snapshot,
             head: None,
             exhausted: count == 0,
+            skip_remaining: 0,
         }
     }
 
     fn from_state(
         source: ReadOnlySourceStorageHandle,
         snapshot: SourceReadSnapshot,
-        state: FjallSourceCursor,
+        mut state: FjallSourceCursor,
     ) -> Self {
+        let skip_remaining = state.consumed;
+        state.after = None;
         Self {
             exhausted: state.consumed >= state.count,
             state,
             source,
             snapshot,
             head: None,
+            skip_remaining,
         }
     }
 
@@ -302,6 +328,11 @@ impl FjallSourcePage {
         self.state.after = page.next_cursor;
         if self.state.after.is_none() {
             self.exhausted = true;
+        }
+        if self.skip_remaining > 0 {
+            self.skip_remaining = self.skip_remaining.saturating_sub(1);
+            self.ensure_head(context)?;
+            return Ok(());
         }
         if matches_context(&record, context)? {
             self.head = Some(record);
@@ -371,6 +402,17 @@ fn parse_time_bound(value: Option<&str>) -> Result<Option<DateTime<Utc>>, Timeli
                 .map_err(|error| TimelineServiceError::InvalidInput(error.to_string()))
         })
         .transpose()
+}
+
+fn sqlite_timeline_revision(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
+    source_id: &DataSourceId,
+) -> Result<u64, TimelineServiceError> {
+    let source = source_db::open_registered_source_db_read_only(case_conn, case_root, source_id)?;
+    TimelineRepo::new(&source)
+        .cursor_revision()
+        .map_err(TimelineServiceError::from)
 }
 
 fn context_from_query(query: TimelineQuery<'_>) -> Result<FjallContext, TimelineServiceError> {
