@@ -88,6 +88,10 @@ fn database_commits_across_keyspaces_and_reopens() {
         snapshot.get(KeyspaceName::Batches, &receipt_key).unwrap(),
         Some(2usize.to_be_bytes().to_vec())
     );
+    assert_eq!(
+        database.batch_receipt_state(&receipt).unwrap(),
+        BatchReceiptState::Present { operation_count: 2 }
+    );
     drop(snapshot);
     drop(database);
     let reopened =
