@@ -1,8 +1,8 @@
 use artifact_storage::{ArtifactStorageError, ArtifactStore, ObjectAddress};
 use persistence_fjall::{
     CatalogPage, CatalogRecordStore, DatabaseConfig, FileEntryRecord, FjallStorageError,
-    KeyspaceName, PersistMode, ScanDirection, SourceReadSnapshot, SourceStore, VersionedEnvelope,
-    WriteBatchReceipt,
+    KeyspaceName, PersistMode, ScanDirection, SourceReadSnapshot, SourceStore, TimelinePage,
+    TimelineRecord, TimelineRecordStore, VersionedEnvelope, WriteBatchReceipt,
 };
 use std::{
     marker::PhantomData,
@@ -284,6 +284,54 @@ impl<Mode> SourceStorageHandle<Mode> {
             .find_by_hash(snapshot, source_id, hash_sha256, cursor, direction, limit)
             .map_err(StorageRuntimeError::Source)
     }
+
+    pub fn timeline_list_by_time(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<TimelinePage, StorageRuntimeError> {
+        TimelineRecordStore::from_source_store((*self.source_store).clone())
+            .list_by_time(snapshot, source_id, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn timeline_list_by_type(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        event_type: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<TimelinePage, StorageRuntimeError> {
+        TimelineRecordStore::from_source_store((*self.source_store).clone())
+            .list_by_type(snapshot, source_id, event_type, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn timeline_list_by_source_object(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        source_object_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<TimelinePage, StorageRuntimeError> {
+        TimelineRecordStore::from_source_store((*self.source_store).clone())
+            .list_by_source_object(
+                snapshot,
+                source_id,
+                source_object_id,
+                cursor,
+                direction,
+                limit,
+            )
+            .map_err(StorageRuntimeError::Source)
+    }
 }
 
 impl SourceStorageHandle<ReadWrite> {
@@ -304,6 +352,27 @@ impl SourceStorageHandle<ReadWrite> {
         mode: PersistMode,
     ) -> Result<bool, StorageRuntimeError> {
         CatalogRecordStore::from_source_store((*self.source_store).clone())
+            .delete(source_id, record_id, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn timeline_upsert(
+        &self,
+        record: &TimelineRecord,
+        mode: PersistMode,
+    ) -> Result<(), StorageRuntimeError> {
+        TimelineRecordStore::from_source_store((*self.source_store).clone())
+            .upsert(record, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn timeline_delete(
+        &self,
+        source_id: &str,
+        record_id: &str,
+        mode: PersistMode,
+    ) -> Result<bool, StorageRuntimeError> {
+        TimelineRecordStore::from_source_store((*self.source_store).clone())
             .delete(source_id, record_id, mode)
             .map_err(StorageRuntimeError::Source)
     }

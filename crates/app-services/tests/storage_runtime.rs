@@ -5,7 +5,10 @@ use app_services::storage_runtime::{
 };
 use chrono::Utc;
 use domain::DataSourceId;
+use persistence_fjall::TimelineRecord;
 use persistence_fjall::{CatalogEntryType, FileEntryRecord, PersistMode, ScanDirection};
+use serde_json::json;
+use std::collections::BTreeMap;
 use std::path::Path;
 use tempfile::tempdir;
 
@@ -134,4 +137,39 @@ fn source_facade_reads_and_writes_catalog_records_with_keyset_pages() {
             .unwrap(),
         Some(record)
     );
+}
+
+#[test]
+fn source_facade_reads_and_writes_timeline_records() {
+    let root = tempdir().unwrap();
+    let source = open_source_read_write(root.path(), "source-timeline").unwrap();
+    let event = TimelineRecord {
+        id: "event-1".to_owned(),
+        data_source_id: "source-timeline".to_owned(),
+        source_object_id: "file-1".to_owned(),
+        event_type: "FILE_MODIFIED".to_owned(),
+        timestamp: Utc::now(),
+        title: "Changed".to_owned(),
+        description: "Changed during test".to_owned(),
+        parser_id: Some("test".to_owned()),
+        parser_version: Some("1".to_owned()),
+        confidence: Some(1.0),
+        source_attribution: Some("fixture".to_owned()),
+        attrs: BTreeMap::from([(String::from("key"), json!("value"))]),
+    };
+    source
+        .timeline_upsert(&event, PersistMode::SyncData)
+        .unwrap();
+    let snapshot = source.snapshot();
+    let page = source
+        .timeline_list_by_type(
+            &snapshot,
+            "source-timeline",
+            "FILE_MODIFIED",
+            None,
+            ScanDirection::Forward,
+            10,
+        )
+        .unwrap();
+    assert_eq!(page.records, vec![event]);
 }
