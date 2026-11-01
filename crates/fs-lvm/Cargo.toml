@@ -9,5 +9,6 @@ license.workspace = true
 evidence-core = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]

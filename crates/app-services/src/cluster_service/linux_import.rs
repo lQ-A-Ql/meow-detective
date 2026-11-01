@@ -127,6 +127,7 @@ impl LinuxEvidenceSetImportPlan {
                         );
                         return None;
                     }
+                    DataSourceKind::MdRaid => return None,
                 };
                 Some(ImportSourceConfig {
                     existing_data_source_id: None,

@@ -39,7 +39,8 @@ pub enum MdRaidError {
     Io(#[from] std::io::Error),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MdRaidSuperblock {
     pub major_version: u32,
     pub feature_map: u32,

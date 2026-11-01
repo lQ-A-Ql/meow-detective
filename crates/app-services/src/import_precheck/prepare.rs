@@ -167,6 +167,6 @@ fn import_source_mode(kind: &DataSourceKind) -> Option<ImportSourceMode> {
         DataSourceKind::LocalDisk => Some(ImportSourceMode::Image {
             staging_kind: "LocalDisk",
         }),
-        DataSourceKind::CephRbd | DataSourceKind::CephFs => None,
+        DataSourceKind::CephRbd | DataSourceKind::CephFs | DataSourceKind::MdRaid => None,
     }
 }

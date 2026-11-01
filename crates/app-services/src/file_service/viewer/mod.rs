@@ -51,7 +51,8 @@ pub(crate) use handle::{detect_preview_for_file, DetectedPreview};
 pub(crate) use image_open::{
     open_android_sparse_file, open_candidate_block_reader_with_lvm_cache,
     open_descriptor_image_file, open_descriptor_image_file_with_context, open_e01_file,
-    open_local_disk_file, open_ntfs_descriptor_stream, open_raw_file, LvmPoolRequestCache,
+    open_local_disk_file, open_mdraid_file, open_mdraid_file_seekable, open_ntfs_descriptor_stream,
+    open_raw_file, LvmPoolRequestCache,
 };
 pub(crate) use io::{
     open_first_image_path, open_first_image_path_seekable, read_bounded, read_seekable_range,

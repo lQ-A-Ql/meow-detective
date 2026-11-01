@@ -382,6 +382,7 @@ fn kind_to_str(kind: &DataSourceKind) -> &'static str {
         DataSourceKind::AndroidSparse => "android_sparse",
         DataSourceKind::CephRbd => "ceph_rbd",
         DataSourceKind::CephFs => "ceph_fs",
+        DataSourceKind::MdRaid => "md_raid",
     }
 }
 
@@ -394,6 +395,7 @@ fn str_to_kind(s: &str) -> DataSourceKind {
         "android_sparse" => DataSourceKind::AndroidSparse,
         "ceph_rbd" => DataSourceKind::CephRbd,
         "ceph_fs" => DataSourceKind::CephFs,
+        "md_raid" => DataSourceKind::MdRaid,
         _ => DataSourceKind::Raw,
     }
 }

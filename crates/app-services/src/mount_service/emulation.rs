@@ -52,6 +52,7 @@ fn source_identity_sha256(
         match image_kind {
             PreparedPhysicalImageKind::E01 => b"e01",
             PreparedPhysicalImageKind::Raw => b"raw",
+            PreparedPhysicalImageKind::MdRaid => b"md_raid",
         },
     );
     digest.finalize().into()

@@ -1,7 +1,9 @@
 //! Verify source integrity and build the read-only guest parent view.
 use super::{MountServiceError, PreparedPhysicalImageKind};
 use domain::{CaseId, DataSourceId};
-use evidence_block::{open_block_provider, BlockProvider, EvidenceImageKind};
+use evidence_block::{
+    open_block_provider, BlockProvider, EvidenceImageKind, EvidenceReaderBlockProvider,
+};
 use evidence_emulation::{NtfsBootDisk, ParentIdentity, SourceVolumeMapping};
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
@@ -24,11 +26,20 @@ pub fn prepare_emulation_parent(
     let geometry =
         super::prepare_emulation_disk_layout(conn, case, source, recovery_media_available)?;
     let prepared = super::prepare_emulation_source(conn, case, source)?;
-    let kind = match prepared.image_kind {
-        PreparedPhysicalImageKind::E01 => EvidenceImageKind::E01,
-        PreparedPhysicalImageKind::Raw => EvidenceImageKind::Raw,
+    let backing: Arc<dyn BlockProvider> = match prepared.image_kind {
+        PreparedPhysicalImageKind::E01 => {
+            open_block_provider(&prepared.source_path, EvidenceImageKind::E01)?
+        }
+        PreparedPhysicalImageKind::Raw => {
+            open_block_provider(&prepared.source_path, EvidenceImageKind::Raw)?
+        }
+        PreparedPhysicalImageKind::MdRaid => {
+            let reader =
+                crate::cluster_service::open_persisted_mdraid_reader(&prepared.source_path)
+                    .map_err(|error| MountServiceError::Unsupported(error.to_string()))?;
+            Arc::new(EvidenceReaderBlockProvider::new(reader))
+        }
     };
-    let backing = open_block_provider(&prepared.source_path, kind)?;
     let mut parent = PreparedEmulationParent {
         identity: ParentIdentity::new(backing.len(), prepared.source_identity_sha256)?,
         provider: backing,

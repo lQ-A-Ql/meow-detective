@@ -14,7 +14,10 @@ pub(super) fn mount_source_binding(
 }
 
 pub(super) fn validate_source_kind(source_kind: &DataSourceKind) -> Result<(), MountServiceError> {
-    if matches!(source_kind, DataSourceKind::E01 | DataSourceKind::Raw) {
+    if matches!(
+        source_kind,
+        DataSourceKind::E01 | DataSourceKind::Raw | DataSourceKind::MdRaid
+    ) {
         return Ok(());
     }
     Err(MountServiceError::Unsupported(format!(

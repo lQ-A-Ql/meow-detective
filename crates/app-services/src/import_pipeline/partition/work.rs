@@ -207,7 +207,9 @@ pub(crate) fn open_candidate_reader(
         domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive => {
             return Err("logical sources do not expose image candidates".to_string())
         }
-        domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => {
+        domain::DataSourceKind::CephRbd
+        | domain::DataSourceKind::CephFs
+        | domain::DataSourceKind::MdRaid => {
             return Err(
                 "Ceph RBD derived sources do not use the host image import pipeline".to_string(),
             )
@@ -293,7 +295,9 @@ fn open_lvm_physical_volume_reader(
         domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive => {
             return None
         }
-        domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => return None,
+        domain::DataSourceKind::CephRbd
+        | domain::DataSourceKind::CephFs
+        | domain::DataSourceKind::MdRaid => return None,
     };
     if let Some(expected) = source {
         validate_lvm_pv_source(reader.as_mut(), offset, expected)?;

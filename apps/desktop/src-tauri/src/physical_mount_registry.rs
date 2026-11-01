@@ -71,6 +71,13 @@ impl PhysicalMountRegistry {
         let kind = match prepared.image_kind {
             PreparedPhysicalImageKind::E01 => PhysicalImageKind::E01,
             PreparedPhysicalImageKind::Raw => PhysicalImageKind::Raw,
+            PreparedPhysicalImageKind::MdRaid => {
+                return Err(PhysicalMountRegistryError::Source(
+                    MountServiceError::Unsupported(
+                        "MD RAID logical sources cannot be presented as physical disks".to_string(),
+                    ),
+                ));
+            }
         };
         tracing::info!(
             data_source_id = %data_source_id.0,

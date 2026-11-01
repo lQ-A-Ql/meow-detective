@@ -11,3 +11,4 @@ pub(crate) use ntfs::open_ntfs_descriptor_stream;
 pub(crate) use raw::open_android_sparse_file;
 pub(crate) use raw::open_local_disk_file;
 pub(crate) use raw::open_raw_file;
+pub(crate) use raw::{open_mdraid_file, open_mdraid_file_seekable};

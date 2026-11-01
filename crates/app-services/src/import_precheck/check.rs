@@ -47,7 +47,7 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
         | DataSourceKind::Raw
         | DataSourceKind::LocalDisk
         | DataSourceKind::AndroidSparse => analyze_image(source_path, kind, &mut warnings),
-        DataSourceKind::CephRbd | DataSourceKind::CephFs => {
+        DataSourceKind::CephRbd | DataSourceKind::CephFs | DataSourceKind::MdRaid => {
             unreachable!("derived Ceph sources are rejected before filesystem access")
         }
     };

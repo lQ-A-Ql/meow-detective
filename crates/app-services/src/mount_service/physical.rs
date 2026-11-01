@@ -17,6 +17,7 @@ use super::MountServiceError;
 pub enum PreparedPhysicalImageKind {
     E01,
     Raw,
+    MdRaid,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,7 +41,9 @@ pub fn prepare_physical_mount_source(
     let source_path = PathBuf::from(repo.source_path(data_source_id)?);
     let source_kind = repo.source_kind(data_source_id)?;
     validate_source_kind(&source_kind)?;
-    validate_source_identity(&source_path, repo.source_evidence_size(data_source_id)?)?;
+    if source_kind != DataSourceKind::MdRaid {
+        validate_source_identity(&source_path, repo.source_evidence_size(data_source_id)?)?;
+    }
     Ok(PreparedPhysicalMountSource {
         source_path,
         image_kind: prepared_kind(&source_kind)?,
@@ -80,6 +83,7 @@ fn prepared_kind(
     match source_kind {
         DataSourceKind::E01 => Ok(PreparedPhysicalImageKind::E01),
         DataSourceKind::Raw => Ok(PreparedPhysicalImageKind::Raw),
+        DataSourceKind::MdRaid => Ok(PreparedPhysicalImageKind::MdRaid),
         other => Err(MountServiceError::Unsupported(format!(
             "data source kind '{other}' cannot be presented as a physical disk"
         ))),

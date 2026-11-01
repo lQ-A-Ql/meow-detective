@@ -53,9 +53,11 @@ struct MdRaidCacheKey {
     failed_count: u32,
 }
 
-static MDRAID_SUMMARY_CACHE: LazyLock<
-    Mutex<BTreeMap<String, (MdRaidCacheKey, Vec<LinuxMdRaidArrayDto>)>>,
-> = LazyLock::new(|| Mutex::new(BTreeMap::new()));
+type MdRaidSummaryCacheEntry = (MdRaidCacheKey, Vec<LinuxMdRaidArrayDto>);
+type MdRaidSummaryCache = BTreeMap<String, MdRaidSummaryCacheEntry>;
+
+static MDRAID_SUMMARY_CACHE: LazyLock<Mutex<MdRaidSummaryCache>> =
+    LazyLock::new(|| Mutex::new(BTreeMap::new()));
 
 pub fn get_linux_evidence_set_summary(
     conn: &Connection,
@@ -120,13 +122,14 @@ pub fn get_linux_evidence_set_summary(
         ready_count: import_set.ready_count,
         failed_count: import_set.failed_count,
     };
-    let mdraid_arrays = match cached_mdraid_arrays(&import_set, &mdraid_key) {
-        Ok(arrays) => arrays,
-        Err(error) => {
-            diagnostics.push(format!("MD RAID discovery unavailable: {error}"));
-            Vec::new()
-        }
-    };
+    let mdraid_arrays =
+        match cached_mdraid_arrays(conn, case_root, case_id, &import_set, &mdraid_key) {
+            Ok(arrays) => arrays,
+            Err(error) => {
+                diagnostics.push(format!("MD RAID discovery unavailable: {error}"));
+                Vec::new()
+            }
+        };
     Ok(LinuxEvidenceSetSummaryDto {
         import_set_id: import_set.id,
         name: import_set.name,
@@ -148,6 +151,9 @@ pub fn get_linux_evidence_set_summary(
 }
 
 fn cached_mdraid_arrays(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
     import_set: &ImportSetRow,
     key: &MdRaidCacheKey,
 ) -> std::result::Result<Vec<LinuxMdRaidArrayDto>, String> {
@@ -162,8 +168,14 @@ fn cached_mdraid_arrays(
     let plan =
         super::plan_linux_evidence_set_import(&import_set.root_path, Some(import_set.name.clone()))
             .map_err(|error| error.to_string())?;
-    let arrays = super::discover_linux_evidence_set_mdraid(&plan)
-        .map_err(|error| error.to_string())?
+    let discovered =
+        super::discover_linux_evidence_set_mdraid(&plan).map_err(|error| error.to_string())?;
+    for array in &discovered {
+        if let Err(error) = super::materialize_mdraid_array(conn, case_root, case_id, array) {
+            tracing::warn!(array_uuid = %hex::encode(array.array_uuid), error = %error, "MD RAID source catalog materialization failed");
+        }
+    }
+    let arrays = discovered
         .into_iter()
         .map(|array| LinuxMdRaidArrayDto {
             array_uuid: hex::encode(array.array_uuid),
@@ -462,7 +474,7 @@ fn load_derived_sources(
         .filter(|source| {
             matches!(
                 source.kind,
-                DataSourceKind::CephRbd | DataSourceKind::CephFs
+                DataSourceKind::CephRbd | DataSourceKind::CephFs | DataSourceKind::MdRaid
             )
         })
         .map(|source| LinuxDerivedSourceSummaryDto {

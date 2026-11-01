@@ -130,7 +130,8 @@ pub struct UnsupportedImageVolume {
     pub lvm_identity: Option<LvmLogicalVolumeIdentity>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LvmLogicalVolumeIdentity {
     pub vg_uuid: String,
     pub vg_name: String,

@@ -15,6 +15,9 @@ pub(crate) fn open_evidence_reader(
         DataSourceKind::AndroidSparse => image_android::AndroidSparseReader::open(source_path)
             .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
             .map_err(std::io::Error::other),
+        DataSourceKind::MdRaid => crate::cluster_service::open_persisted_mdraid_reader(source_path)
+            .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            .map_err(std::io::Error::other),
         DataSourceKind::LogicalDirectory
         | DataSourceKind::LogicalArchive
         | DataSourceKind::CephRbd

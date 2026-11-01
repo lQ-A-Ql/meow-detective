@@ -10,6 +10,36 @@ use crate::file_service::{
 
 use super::lvm::open_lvm_logical_volume_reader;
 
+pub(crate) fn open_mdraid_file(
+    source_path: &str,
+    entry: &FileEntry,
+) -> Result<Box<dyn Read>, FileServiceError> {
+    let reader = crate::cluster_service::open_persisted_mdraid_reader(Path::new(source_path))
+        .map_err(|error| {
+            FileServiceError::other(format!("Failed to open MD RAID source: {error}"))
+        })?;
+    let filesystem = fs_btrfs::BtrfsReader::open(Box::new(reader) as Box<dyn EvidenceReader>, 0)
+        .map_err(FileServiceError::Io)?;
+    filesystem
+        .open_file(&entry.path)
+        .map_err(FileServiceError::Io)
+}
+
+pub(crate) fn open_mdraid_file_seekable(
+    source_path: &str,
+    entry: &FileEntry,
+) -> Result<Box<dyn evidence_core::ReadSeek>, FileServiceError> {
+    let reader = crate::cluster_service::open_persisted_mdraid_reader(Path::new(source_path))
+        .map_err(|error| {
+            FileServiceError::other(format!("Failed to open MD RAID source: {error}"))
+        })?;
+    let filesystem = fs_btrfs::BtrfsReader::open(Box::new(reader) as Box<dyn EvidenceReader>, 0)
+        .map_err(FileServiceError::Io)?;
+    filesystem
+        .open_file_seekable(&entry.path)
+        .map_err(FileServiceError::Io)
+}
+
 pub(crate) fn open_raw_file(
     source_path: &str,
     entry: &FileEntry,
@@ -316,7 +346,8 @@ fn candidate_reader(
                 domain::DataSourceKind::LogicalDirectory
                 | domain::DataSourceKind::LogicalArchive
                 | domain::DataSourceKind::CephRbd
-                | domain::DataSourceKind::CephFs => Err(std::io::Error::new(
+                | domain::DataSourceKind::CephFs
+                | domain::DataSourceKind::MdRaid => Err(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
                     format!("data source kind {source_kind} is not an image reader"),
                 )),
@@ -342,7 +373,8 @@ fn candidate_reader(
                 domain::DataSourceKind::LogicalDirectory
                 | domain::DataSourceKind::LogicalArchive
                 | domain::DataSourceKind::CephRbd
-                | domain::DataSourceKind::CephFs => {
+                | domain::DataSourceKind::CephFs
+                | domain::DataSourceKind::MdRaid => {
                     return Err(FileServiceError::Unsupported(format!(
                         "data source kind {source_kind} is not an image reader"
                     )))

@@ -9,8 +9,9 @@ use crate::file_service::{
     viewer::{
         exact_partition_candidate, open_android_sparse_file, open_descriptor_image_file,
         open_descriptor_image_file_with_context, open_e01_file, open_e01_reader_cached,
-        open_local_disk_file, open_raw_file, resolve_partition_index_for_entry,
-        validate_readable_file_entry, PreviewDescriptor, PreviewReadContext, RangeContentReader,
+        open_local_disk_file, open_mdraid_file, open_mdraid_file_seekable, open_raw_file,
+        resolve_partition_index_for_entry, validate_readable_file_entry, PreviewDescriptor,
+        PreviewReadContext, RangeContentReader,
     },
     FileServiceError,
 };
@@ -23,6 +24,7 @@ pub(crate) fn open_file_content_for_descriptor(
         "logical_archive" => archive::open_descriptor_file(descriptor),
         "e01" => open_e01_descriptor_file(descriptor),
         "raw" | "local_disk" | "android_sparse" => open_raw_descriptor_file(descriptor),
+        "md_raid" => open_mdraid_descriptor_file(descriptor),
         other => unsupported_source(other),
     }?;
     Ok(match reader {
@@ -73,6 +75,7 @@ pub(crate) fn open_range_content_for_descriptor(
         }
         "e01" => open_e01_descriptor_file(descriptor),
         "raw" | "local_disk" | "android_sparse" => open_raw_descriptor_file(descriptor),
+        "md_raid" => open_mdraid_descriptor_file(descriptor),
         other => unsupported_source(other),
     }
 }
@@ -152,6 +155,7 @@ pub(crate) fn open_file_content_for_entry(
                 open_raw_file(&source_path, entry, partition_index)
             }
         }
+        "md_raid" => open_mdraid_file(&source_path, entry),
         other => unsupported_source(other),
     }
 }
@@ -188,6 +192,9 @@ pub(crate) fn open_range_content_for_entry(
                     .map(RangeContentReader::Streaming)
             }
         }
+        "md_raid" => {
+            open_mdraid_file_seekable(&source_path, entry).map(RangeContentReader::Seekable)
+        }
         other => unsupported_source(other),
     }
 }
@@ -204,4 +211,11 @@ fn unsupported_source<T>(kind: &str) -> Result<T, FileServiceError> {
     Err(FileServiceError::other(format!(
         "Range reading is not yet wired for data source kind '{kind}'"
     )))
+}
+
+fn open_mdraid_descriptor_file(
+    descriptor: &PreviewDescriptor,
+) -> Result<RangeContentReader, FileServiceError> {
+    let entry = crate::file_service::viewer::descriptor_file_entry(descriptor);
+    open_mdraid_file_seekable(&descriptor.source_path, &entry).map(RangeContentReader::Seekable)
 }

@@ -24,6 +24,8 @@ pub enum DataSourceKind {
     CephRbd,
     /// A reconstructed CephFS namespace backed by a cluster source set.
     CephFs,
+    /// A persisted read-only Linux MD RAID0 array descriptor.
+    MdRaid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -85,6 +87,7 @@ impl fmt::Display for DataSourceKind {
             Self::AndroidSparse => write!(f, "android_sparse"),
             Self::CephRbd => write!(f, "ceph_rbd"),
             Self::CephFs => write!(f, "ceph_fs"),
+            Self::MdRaid => write!(f, "md_raid"),
         }
     }
 }

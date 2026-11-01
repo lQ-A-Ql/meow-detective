@@ -110,7 +110,7 @@ function isActiveSession(session: EmulationSessionStatus): boolean {
 }
 
 function isEmulationSource(source: DataSourceSummary): boolean {
-  return (source.kind === 'e01' || source.kind === 'raw')
+  return (source.kind === 'e01' || source.kind === 'raw' || source.kind === 'md_raid')
     && (source.importState === 'ready' || source.importState === 'ready_metadata');
 }
 

@@ -82,11 +82,40 @@ pub fn open_factory_with_cancel(
         DataSourceKind::E01 => e01_factory(path, cancel, None),
         DataSourceKind::Raw => raw_factory(path, cancel),
         DataSourceKind::LocalDisk => device_factory(path, cancel),
+        DataSourceKind::MdRaid => mdraid_factory(path),
         _ => Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "source kind has no image reader factory",
         )),
     }
+}
+
+fn mdraid_factory(path: &Path) -> io::Result<SharedReaderFactory> {
+    let path = path.to_path_buf();
+    let template =
+        crate::cluster_service::open_persisted_mdraid_reader(&path).map_err(io::Error::other)?;
+    let size = template.info().size;
+    let metadata_identity = format!("mdraid:{}", path.display());
+    let route = super::resources::ResourceRoute::default();
+    let opener_path = path.clone();
+    Ok(Arc::new(OpenFactory {
+        opener: move || {
+            crate::cluster_service::open_persisted_mdraid_reader(&opener_path)
+                .map_err(io::Error::other)
+        },
+        validator: Box::new(move || std::fs::metadata(&path).map(|_| ())),
+        metadata_identity: Some(metadata_identity),
+        size,
+        granularity: 512,
+        capabilities: ReaderCapabilities {
+            independent_cursor: true,
+            max_concurrent_readers: 2,
+            stable_snapshot: true,
+        },
+        route,
+        reader_bytes: 1024 * 1024,
+        resources: None,
+    }))
 }
 
 pub(crate) fn open_factory_for_case(

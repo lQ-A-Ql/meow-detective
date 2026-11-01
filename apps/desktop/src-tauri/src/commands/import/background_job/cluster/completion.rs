@@ -61,6 +61,24 @@ pub(super) fn complete_evidence_set_import(
         )
         .map(|_| None);
     }
+    match cluster_service::materialize_linux_evidence_set_mdraid(
+        connection,
+        &job.case_root,
+        &job.case_id,
+        &job.plan,
+    ) {
+        Ok(sources) if !sources.is_empty() => tracing::info!(
+            import_set_id = %job.plan.import_set_id,
+            derived_sources = sources.len(),
+            "Materialized nested MD RAID source catalogs"
+        ),
+        Ok(_) => {}
+        Err(error) => tracing::warn!(
+            import_set_id = %job.plan.import_set_id,
+            error = %error,
+            "Nested MD RAID source catalog materialization was unavailable"
+        ),
+    }
     let Some(ceph_scope_id) = topology.ceph_scope_id else {
         return Ok(Some(BrowseableEvidenceSetImport {
             processing: build_derived_processing_job(job, Vec::new()),

@@ -45,7 +45,9 @@ pub(crate) fn run_enumeration_phase(
         | domain::DataSourceKind::AndroidSparse => {
             enumerate_image_data_source_with_staging(ctx, data_source)?
         }
-        domain::DataSourceKind::CephRbd | domain::DataSourceKind::CephFs => {
+        domain::DataSourceKind::CephRbd
+        | domain::DataSourceKind::CephFs
+        | domain::DataSourceKind::MdRaid => {
             return Err(CommandError::unsupported(
                 "Ceph RBD derived sources do not use the ordinary import pipeline",
             ));

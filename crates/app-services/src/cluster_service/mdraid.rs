@@ -2,7 +2,11 @@ use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::sync::{Mutex, OnceLock};
 
-use domain::DataSourceKind;
+use chrono::Utc;
+use domain::{
+    CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourcePlatform,
+    DataSourceProvenance, DataSourceProvenanceStatus,
+};
 use fs_lvm::mdraid::{read_superblock, MdRaidSuperblock};
 use thiserror::Error;
 
@@ -31,6 +35,8 @@ pub enum MdRaidPlanError {
     Classification(#[from] datasource_service::DataSourceError),
     #[error("MD RAID reader could not be opened: {0}")]
     MdRaid(#[from] fs_lvm::mdraid::MdRaidError),
+    #[error("MD RAID descriptor serialization failed: {0}")]
+    Json(#[from] serde_json::Error),
 }
 
 impl transport::ServiceErrorCategory for MdRaidPlanError {
@@ -39,11 +45,13 @@ impl transport::ServiceErrorCategory for MdRaidPlanError {
             Self::Io(_) | Self::Lvm(_) => transport::ErrorCategory::Io,
             Self::MdRaid(_) => transport::ErrorCategory::Unsupported,
             Self::Classification(error) => error.category(),
+            Self::Json(_) => transport::ErrorCategory::Parser,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MdRaidMemberPlan {
     pub superblock: MdRaidSuperblock,
     pub vg_name: String,
@@ -53,7 +61,8 @@ pub struct MdRaidMemberPlan {
     pub lvm_identity: LvmLogicalVolumeIdentity,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MdRaidArrayPlan {
     pub array_uuid: [u8; 16],
     pub name: String,
@@ -262,6 +271,150 @@ pub fn open_mdraid0_reader(
         ));
     }
     Ok(fs_lvm::mdraid::MdRaid0Reader::open(members)?)
+}
+
+pub fn mdraid_descriptor_path(
+    case_root: &std::path::Path,
+    array_uuid: &[u8; 16],
+) -> std::path::PathBuf {
+    case_root
+        .join("derived")
+        .join("mdraid")
+        .join(format!("{}.json", hex::encode(array_uuid)))
+}
+
+pub fn write_mdraid_descriptor(
+    case_root: &std::path::Path,
+    plan: &MdRaidArrayPlan,
+) -> Result<std::path::PathBuf, MdRaidPlanError> {
+    if plan.members.len() != plan.raid_disks as usize {
+        return Err(MdRaidPlanError::MdRaid(
+            fs_lvm::mdraid::MdRaidError::MemberCount {
+                expected: plan.raid_disks,
+                actual: plan.members.len(),
+            },
+        ));
+    }
+    let path = mdraid_descriptor_path(case_root, &plan.array_uuid);
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("MD RAID descriptor has no parent"))?;
+    std::fs::create_dir_all(parent)?;
+    let temporary = path.with_extension("json.tmp");
+    std::fs::write(&temporary, serde_json::to_vec_pretty(plan)?)?;
+    if let Err(error) = std::fs::rename(&temporary, &path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(error.into());
+    }
+    Ok(path)
+}
+
+pub fn open_persisted_mdraid_reader(
+    descriptor_path: &std::path::Path,
+) -> Result<fs_lvm::mdraid::MdRaid0Reader, MdRaidPlanError> {
+    let payload = std::fs::read(descriptor_path)?;
+    let plan: MdRaidArrayPlan = serde_json::from_slice(&payload)?;
+    open_mdraid0_reader(&plan)
+}
+
+pub fn materialize_mdraid_array(
+    conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    plan: &MdRaidArrayPlan,
+) -> Result<DataSource, MdRaidPlanError> {
+    let descriptor_path = write_mdraid_descriptor(case_root, plan)?;
+    let source_id = DataSourceId(format!("mdraid-{}", hex::encode(plan.array_uuid)));
+    let repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
+    let sources = repo
+        .find_by_case(case_id)
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    if let Some(existing) = sources
+        .into_iter()
+        .find(|source| source.id == source_id && source.kind == DataSourceKind::MdRaid)
+    {
+        let state = repo
+            .find_storage(&source_id)
+            .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?
+            .map(|storage| storage.import_state);
+        if state
+            .as_deref()
+            .is_some_and(|value| value.eq_ignore_ascii_case("ready"))
+        {
+            return Ok(existing);
+        }
+        let source_db_path = crate::source_db::source_db_path(case_root, &source_id);
+        for suffix in ["", "-wal", "-shm"] {
+            let path = if suffix.is_empty() {
+                source_db_path.clone()
+            } else {
+                std::path::PathBuf::from(format!("{}{}", source_db_path.display(), suffix))
+            };
+            match std::fs::remove_file(path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(MdRaidPlanError::Io(error)),
+            }
+        }
+        repo.delete_cascade_with_audit(&source_id, "Rebuild incomplete MD RAID catalog")
+            .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    }
+    let logical_size = open_mdraid0_reader(plan)?.logical_size();
+    let source = DataSource {
+        id: source_id.clone(),
+        name: format!("MD RAID0 {}", hex::encode(plan.array_uuid)),
+        kind: DataSourceKind::MdRaid,
+        source_path: descriptor_path.clone(),
+        imported_at: Utc::now(),
+        provenance: DataSourceProvenance {
+            source_hash_sha256: None,
+            hash_status: DataSourceHashStatus::Unavailable,
+            canonical_source_path: std::fs::canonicalize(&descriptor_path).ok(),
+            evidence_size: Some(logical_size),
+            reader_kind: Some("md_raid".to_string()),
+            provenance_status: DataSourceProvenanceStatus::Recorded,
+            warnings: Vec::new(),
+        },
+    };
+    let storage = persistence_sqlite::repositories::datasource_repo::DataSourceStorage::source_db(
+        &source.id.0,
+        Some(DataSourcePlatform::Linux.as_storage_str()),
+        Some("mdraid".to_string()),
+    );
+    repo.insert_with_storage(case_id, &source, &storage)
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    let source_conn = crate::source_db::open_source_db(case_root, &source.id)
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    let reader = open_persisted_mdraid_reader(&descriptor_path)?;
+    let filesystem = fs_btrfs::BtrfsReader::open(
+        Box::new(reader) as Box<dyn evidence_core::EvidenceReader>,
+        0,
+    )
+    .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    if let Err(error) =
+        crate::file_service::enumerate_filesystem(&source_conn, &source.id, &filesystem)
+    {
+        let message = error.to_string();
+        let _ = repo.update_import_state(&source.id, "failed", Some(&message));
+        return Err(MdRaidPlanError::Io(std::io::Error::other(message)));
+    }
+    crate::source_db::checkpoint_source_db(&source_conn)
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error.to_string())))?;
+    repo.update_import_state(&source.id, "ready", None)
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    Ok(source)
+}
+
+pub fn materialize_linux_evidence_set_mdraid(
+    conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    plan: &LinuxEvidenceSetImportPlan,
+) -> Result<Vec<DataSource>, MdRaidPlanError> {
+    discover_linux_evidence_set_mdraid(plan)?
+        .iter()
+        .map(|array| materialize_mdraid_array(conn, case_root, case_id, array))
+        .collect()
 }
 
 fn inspect_pv(
