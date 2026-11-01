@@ -1,7 +1,7 @@
 use crate::errors::{FjallStorageError, Result};
 use fjall::{KeyspaceCreateOptions, SingleWriterTxKeyspace};
 
-pub const KEYSPACE_NAMES: [&str; 11] = [
+pub const KEYSPACE_NAMES: [&str; 15] = [
     "meta",
     "catalog_records",
     "artifact_records",
@@ -13,6 +13,10 @@ pub const KEYSPACE_NAMES: [&str; 11] = [
     "parser_indexes",
     "batches",
     "tombstones",
+    "partition_records",
+    "partition_indexes",
+    "recovery_records",
+    "recovery_indexes",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -28,6 +32,10 @@ pub enum KeyspaceName {
     ParserIndexes,
     Batches,
     Tombstones,
+    PartitionRecords,
+    PartitionIndexes,
+    RecoveryRecords,
+    RecoveryIndexes,
 }
 
 impl KeyspaceName {
@@ -44,6 +52,10 @@ impl KeyspaceName {
             Self::ParserIndexes => "parser_indexes",
             Self::Batches => "batches",
             Self::Tombstones => "tombstones",
+            Self::PartitionRecords => "partition_records",
+            Self::PartitionIndexes => "partition_indexes",
+            Self::RecoveryRecords => "recovery_records",
+            Self::RecoveryIndexes => "recovery_indexes",
         }
     }
 }
@@ -68,6 +80,10 @@ pub(crate) fn open_keyspaces(
                 8 => KeyspaceName::ParserIndexes,
                 9 => KeyspaceName::Batches,
                 10 => KeyspaceName::Tombstones,
+                11 => KeyspaceName::PartitionRecords,
+                12 => KeyspaceName::PartitionIndexes,
+                13 => KeyspaceName::RecoveryRecords,
+                14 => KeyspaceName::RecoveryIndexes,
                 _ => return Err(FjallStorageError::UnknownKeyspace((*name).to_owned())),
             };
             Ok((keyspace_name, keyspace))
