@@ -9,6 +9,7 @@
 pub mod active_case;
 pub mod analysis_service;
 pub mod artifact_service;
+pub mod artifact_storage_service;
 pub mod batch_service;
 pub mod bitlocker_runtime;
 pub mod bitlocker_service;
