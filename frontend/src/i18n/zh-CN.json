@@ -1399,8 +1399,24 @@
         "overview": "证据集总览",
         "members": "成员与节点",
         "topology": "拓扑与存储",
+        "mdraid": "LVM 与 RAID",
         "findings": "发现与证据",
         "provenance": "限制与 Provenance"
+      },
+      "mdraid": {
+        "empty": "当前证据集合未发现嵌套 MD RAID",
+        "emptyDescription": "仅当 LVM 逻辑卷中的 MD RAID 元数据通过只读校验后，才会在这里显示阵列成员。",
+        "capacityMismatch": "容量存在差异",
+        "consistent": "成员元数据一致",
+        "level": "阵列级别",
+        "chunk": "块大小",
+        "members": "成员",
+        "filesystem": "后续文件系统",
+        "device": "设备",
+        "dataSize": "可用数据",
+        "dataOffset": "数据偏移（扇区）",
+        "mismatchDescription": "成员可用容量不同，读取范围按阵列安全边界处理。完整 Btrfs 多设备范围仍需继续验证。",
+        "readOnlyDescription": "当前入口提供只读阵列证据和文件系统状态。文件树入口将在派生数据源完成持久化后开放。"
       },
       "trust": {
         "stages": {

@@ -5,7 +5,7 @@ import { getLinuxEvidenceEvents, getLinuxEvidenceSetSummary, listLinuxEvidenceSe
 import { useInfrastructureWorkspace } from '../hooks/useInfrastructureWorkspace';
 import { capabilitiesForSummary, provenanceState } from './cluster-status-map';
 
-export type ClusterWorkspaceSection = 'overview' | 'members' | 'topology' | 'findings' | 'provenance';
+export type ClusterWorkspaceSection = 'overview' | 'members' | 'topology' | 'mdraid' | 'findings' | 'provenance';
 
 export function useLinuxClusterWorkspaceModel() {
   const currentCase = useCurrentCase();

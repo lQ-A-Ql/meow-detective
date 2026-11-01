@@ -7,8 +7,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Deserialize;
 use transport::dto::{
     LinuxDerivedSourceSummaryDto, LinuxEvidenceSetListItemDto, LinuxEvidenceSetMemberSummaryDto,
-    LinuxEvidenceSetSummaryDto, LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto,
-    LinuxTopologyScopeSummaryDto,
+    LinuxEvidenceSetSummaryDto, LinuxMdRaidArrayDto, LinuxMdRaidMemberDto,
+    LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto, LinuxTopologyScopeSummaryDto,
 };
 
 use super::linux_evidence_facts::collect_linux_evidence_facts;
@@ -101,6 +101,47 @@ pub fn get_linux_evidence_set_summary(
         }
     }
     let capability_level = capability_level(&import_set, &derived_sources);
+    let mdraid_result: std::result::Result<_, String> = match super::plan_linux_evidence_set_import(
+        &import_set.root_path,
+        Some(import_set.name.clone()),
+    ) {
+        Ok(plan) => {
+            super::discover_linux_evidence_set_mdraid(&plan).map_err(|error| error.to_string())
+        }
+        Err(error) => Err(error.to_string()),
+    };
+    let mdraid_arrays = match mdraid_result {
+        Ok(arrays) => arrays
+            .into_iter()
+            .map(|array| LinuxMdRaidArrayDto {
+                array_uuid: hex::encode(array.array_uuid),
+                name: array.name,
+                level: array.level,
+                layout: array.layout,
+                chunk_sectors: array.chunk_sectors,
+                raid_disks: array.raid_disks,
+                min_data_size_sectors: array.min_data_size_sectors,
+                capacity_mismatch: array.capacity_mismatch,
+                filesystem: "Btrfs candidate after MD RAID0".to_string(),
+                members: array
+                    .members
+                    .into_iter()
+                    .map(|member| LinuxMdRaidMemberDto {
+                        dev_number: member.superblock.dev_number,
+                        vg_name: member.vg_name,
+                        lv_name: member.lv_name,
+                        data_offset_sectors: member.superblock.data_offset_sectors,
+                        data_size_sectors: member.superblock.data_size_sectors,
+                        super_offset_sectors: member.superblock.super_offset_sectors,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        Err(error) => {
+            diagnostics.push(format!("MD RAID discovery unavailable: {error}"));
+            Vec::new()
+        }
+    };
     Ok(LinuxEvidenceSetSummaryDto {
         import_set_id: import_set.id,
         name: import_set.name,
@@ -116,6 +157,7 @@ pub fn get_linux_evidence_set_summary(
         scopes,
         edges,
         derived_sources,
+        mdraid_arrays,
         diagnostics,
     })
 }

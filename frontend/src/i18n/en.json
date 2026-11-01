@@ -1399,8 +1399,24 @@
         "overview": "Evidence overview",
         "members": "Members and nodes",
         "topology": "Topology and storage",
+        "mdraid": "LVM and RAID",
         "findings": "Findings and evidence",
         "provenance": "Limitations and provenance"
+      },
+      "mdraid": {
+        "empty": "No nested MD RAID found in this evidence set",
+        "emptyDescription": "Arrays appear here only after their LVM and MD metadata pass read-only validation.",
+        "capacityMismatch": "Capacity differs",
+        "consistent": "Member metadata consistent",
+        "level": "Array level",
+        "chunk": "Chunk size",
+        "members": "Members",
+        "filesystem": "Next filesystem",
+        "device": "Device",
+        "dataSize": "Usable data",
+        "dataOffset": "Data offset (sectors)",
+        "mismatchDescription": "Member capacities differ, so reads are bounded by the safe array range. Full Btrfs multi-device coverage remains under validation.",
+        "readOnlyDescription": "This entry exposes read-only array evidence and filesystem state. File browsing will open after a derived source is persisted."
       },
       "trust": {
         "stages": {

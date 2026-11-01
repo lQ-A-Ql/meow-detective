@@ -31,7 +31,35 @@ pub struct LinuxEvidenceSetSummaryDto {
     pub scopes: Vec<LinuxTopologyScopeSummaryDto>,
     pub edges: Vec<LinuxTopologyEdgeSummaryDto>,
     pub derived_sources: Vec<LinuxDerivedSourceSummaryDto>,
+    #[serde(default)]
+    pub mdraid_arrays: Vec<LinuxMdRaidArrayDto>,
     pub diagnostics: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxMdRaidArrayDto {
+    pub array_uuid: String,
+    pub name: String,
+    pub level: i32,
+    pub layout: u32,
+    pub chunk_sectors: u32,
+    pub raid_disks: u32,
+    pub min_data_size_sectors: u64,
+    pub capacity_mismatch: bool,
+    pub filesystem: String,
+    pub members: Vec<LinuxMdRaidMemberDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxMdRaidMemberDto {
+    pub dev_number: u32,
+    pub vg_name: String,
+    pub lv_name: String,
+    pub data_offset_sectors: u64,
+    pub data_size_sectors: u64,
+    pub super_offset_sectors: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

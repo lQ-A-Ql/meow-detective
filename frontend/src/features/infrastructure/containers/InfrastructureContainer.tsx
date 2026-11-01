@@ -29,6 +29,7 @@ import { NetworkTopologyPanel } from '../components/NetworkTopologyPanel';
 import { StorageEvidencePanel } from '../components/StorageEvidencePanel';
 import { WorkloadEvidencePanel } from '../components/WorkloadEvidencePanel';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
+import { MdRaidEvidencePanel } from '../components/MdRaidEvidencePanel';
 
 export function InfrastructureContainer() {
   const { t } = useTranslation();
@@ -54,11 +55,12 @@ export function InfrastructureContainer() {
       <ClusterEvidenceHeader caseName={currentCase.data.name} sets={evidenceSets.data ?? []} selectedSetId={selectedSetId} summary={summary.data} provenance={provenance} evidenceStats={evidenceStats} onSelectSet={setSelectedSetId} onOpenTimeline={openTimeline} eventCount={events.data?.length ?? 0} t={t} />
       <div className="min-h-0 flex-1 overflow-auto scrollbar-none p-[2px]">
         <div className="flex min-h-0 flex-col gap-[2px] xl:flex-row">
-          <nav aria-label={t('infrastructure.workspace.navigation.label')} className="shrink-0 xl:w-56"><div className="flex gap-1 overflow-x-auto scrollbar-none border-b border-forensics-divider pb-2 xl:grid xl:gap-1 xl:border-b-0 xl:border-r xl:pb-0 xl:pr-3">{(['overview', 'members', 'topology', 'findings', 'provenance'] as const).map((item) => <Button key={item} type="button" variant="forensicsGhost" size="sm" onClick={() => setSection(item)} aria-current={section === item ? 'page' : undefined} className={`whitespace-nowrap text-left text-xs ${section === item ? 'border-forensics-primary-blue text-forensics-primary-blue' : 'border-transparent text-forensics-muted'}`}>{t(`infrastructure.workspace.navigation.${item}`)}</Button>)}</div></nav>
+          <nav aria-label={t('infrastructure.workspace.navigation.label')} className="shrink-0 xl:w-56"><div className="flex gap-1 overflow-x-auto scrollbar-none border-b border-forensics-divider pb-2 xl:grid xl:gap-1 xl:border-b-0 xl:border-r xl:pb-0 xl:pr-3">{(['overview', 'members', 'topology', 'mdraid', 'findings', 'provenance'] as const).map((item) => <Button key={item} type="button" variant="forensicsGhost" size="sm" onClick={() => setSection(item)} aria-current={section === item ? 'page' : undefined} className={`whitespace-nowrap text-left text-xs ${section === item ? 'border-forensics-primary-blue text-forensics-primary-blue' : 'border-transparent text-forensics-muted'}`}>{t(`infrastructure.workspace.navigation.${item}`)}</Button>)}</div></nav>
           <section className="min-w-0 flex-1">
             {section === 'overview' ? <div className="space-y-4"><EvidenceTrustBar stages={stages} t={t} /><CapabilityMatrix capabilities={capabilities} t={t} /><EvidenceWorkloadSummary members={summary.data.members} t={t} /><WorkloadEvidencePanel nodes={infrastructure.nodes.filter((node) => node.domain === 'analysis')} selectedId={infrastructure.selectedId} onSelect={infrastructure.setSelectedId} networkFacts={infrastructure.networkFacts} t={t} /><TimelineContextCard events={events.data ?? []} memberCount={summary.data.memberCount} onOpen={openTimeline} t={t} /></div> : null}
             {section === 'members' ? <MemberEvidenceTable members={summary.data.members} sourceMetadata={sourceMetadata} scopes={summary.data.scopes} hostFacts={infrastructure.hostFacts} networkFacts={infrastructure.networkFacts} selectedIndex={selectedMemberIndex} onSelect={setSelectedMemberIndex} t={t} /> : null}
             {section === 'topology' ? <EvidenceTopologyPanel scopes={summary.data.scopes} edges={summary.data.edges} sourceMetadata={sourceMetadata} hostFacts={infrastructure.hostFacts} networkFacts={infrastructure.networkFacts} members={summary.data.members} t={t} /> : null}
+            {section === 'mdraid' ? <MdRaidEvidencePanel arrays={summary.data.mdraidArrays ?? []} t={t} /> : null}
             {section === 'findings' ? <FindingsPanel summary={summary.data} onOpenTimeline={openTimeline} t={t} /> : null}
             {section === 'provenance' ? <ProvenancePanel summary={summary.data} provenance={provenance} t={t} /> : null}
           </section>

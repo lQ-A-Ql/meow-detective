@@ -88,8 +88,8 @@ pub use analysis::{
 pub use analysis_linux::LinuxSystemConfigPageDto;
 pub use analysis_linux_cluster::{
     LinuxDerivedSourceSummaryDto, LinuxEvidenceSetListItemDto, LinuxEvidenceSetMemberSummaryDto,
-    LinuxEvidenceSetSummaryDto, LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto,
-    LinuxTopologyScopeSummaryDto,
+    LinuxEvidenceSetSummaryDto, LinuxMdRaidArrayDto, LinuxMdRaidMemberDto,
+    LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto, LinuxTopologyScopeSummaryDto,
 };
 pub use analysis_linux_events::LinuxEvidenceEventDto;
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};

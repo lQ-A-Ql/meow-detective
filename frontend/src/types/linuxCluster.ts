@@ -13,7 +13,30 @@ export interface LinuxEvidenceSetSummary {
   scopes: LinuxTopologyScopeSummary[];
   edges: LinuxTopologyEdgeSummary[];
   derivedSources: LinuxDerivedSourceSummary[];
+  mdraidArrays?: LinuxMdRaidArray[];
   diagnostics: string[];
+}
+
+export interface LinuxMdRaidArray {
+  arrayUuid: string;
+  name: string;
+  level: number;
+  layout: number;
+  chunkSectors: number;
+  raidDisks: number;
+  minDataSizeSectors: number;
+  capacityMismatch: boolean;
+  filesystem: string;
+  members: LinuxMdRaidMember[];
+}
+
+export interface LinuxMdRaidMember {
+  devNumber: number;
+  vgName: string;
+  lvName: string;
+  dataOffsetSectors: number;
+  dataSizeSectors: number;
+  superOffsetSectors: number;
 }
 
 export interface LinuxEvidenceSetListItem {
