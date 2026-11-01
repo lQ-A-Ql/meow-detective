@@ -14,6 +14,24 @@ pub(super) fn complete_evidence_set_import_with_failures(
     summary: EvidenceSetImportSummary,
     total_members: u32,
 ) -> Result<(), CommandError> {
+    match cluster_service::materialize_linux_evidence_set_mdraid(
+        connection,
+        &job.case_root,
+        &job.case_id,
+        &job.plan,
+    ) {
+        Ok(sources) if !sources.is_empty() => tracing::info!(
+            import_set_id = %job.plan.import_set_id,
+            derived_sources = sources.len(),
+            "Materialized nested MD RAID source catalogs after member import failure"
+        ),
+        Ok(_) => {}
+        Err(error) => tracing::warn!(
+            import_set_id = %job.plan.import_set_id,
+            error = %error,
+            "Nested MD RAID source catalog materialization failed after member import failure"
+        ),
+    }
     let message = format!(
         "Linux evidence-set import finished with failures: {}/{} image(s) ready, {} failed",
         summary.ready_count, total_members, summary.failed_count
