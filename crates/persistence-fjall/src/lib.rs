@@ -2,6 +2,7 @@ mod catalog;
 mod codec;
 mod database;
 mod deleted_recovery;
+mod deleted_recovery_types;
 mod errors;
 mod keyspaces;
 mod partition;
@@ -19,10 +20,10 @@ pub use database::{
     DatabaseConfig, PersistMode, SingleWriterTxDatabase, SourceReadSnapshot, WriteAction,
     WriteBatchReceipt,
 };
-pub use deleted_recovery::{
+pub use deleted_recovery::DeletedRecoveryRecordStore;
+pub use deleted_recovery_types::{
     DeletedRecoveryAggregate, DeletedRecoveryHashAlgorithm, DeletedRecoveryPage,
-    DeletedRecoveryRecord, DeletedRecoveryRecordStore, RecoveryIssueRecord, RecoveryRangeRecord,
-    RecoveryScanRecord,
+    DeletedRecoveryRecord, RecoveryIssueRecord, RecoveryRangeRecord, RecoveryScanRecord,
 };
 pub use errors::{FjallStorageError, Result};
 pub use keyspaces::{KeyspaceName, KEYSPACE_NAMES};

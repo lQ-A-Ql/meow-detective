@@ -1,3 +1,7 @@
+use crate::deleted_recovery_types::{
+    DeletedRecoveryAggregate, DeletedRecoveryHashAlgorithm, DeletedRecoveryPage,
+    DeletedRecoveryRecord, RecoveryIssueRecord, RecoveryRangeRecord, RecoveryScanRecord,
+};
 use crate::{
     codec::{encode_key, KeyPart, VersionedEnvelope},
     database::{DatabaseConfig, PersistMode, SourceReadSnapshot, WriteAction},
@@ -7,7 +11,6 @@ use crate::{
     source_store::SourceStore,
     SnapshotEntry,
 };
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 const SCHEMA_VERSION: u16 = 1;
@@ -23,95 +26,6 @@ const HASH_FAMILY: &str = "recovery.hash";
 const RANGE_FAMILY: &str = "recovery.range";
 const ISSUE_FAMILY: &str = "recovery.issue";
 const TOMBSTONE_FAMILY: &str = "recovery.tombstone";
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct RecoveryScanRecord {
-    pub id: String,
-    pub data_source_id: String,
-    pub partition_index: u32,
-    pub filesystem_type: String,
-    pub filesystem_uuid: Option<String>,
-    pub parser_version: String,
-    pub log_kind: String,
-    pub snapshot_identity_sha256: String,
-    pub state: String,
-    pub transaction_count: u64,
-    pub candidate_count: u64,
-    pub warnings: Vec<String>,
-    pub started_at: String,
-    pub completed_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct DeletedRecoveryRecord {
-    pub id: String,
-    pub scan_id: String,
-    pub inode: String,
-    pub original_path: Option<String>,
-    pub entry_type: Option<String>,
-    pub mode: Option<u16>,
-    pub mft_sequence: Option<u16>,
-    pub deleted_at_unix: Option<u64>,
-    pub declared_size: u64,
-    pub recoverable_bytes: u64,
-    pub completeness: String,
-    pub recovery_method: String,
-    pub confidence: f64,
-    pub allocation_state: String,
-    pub transaction_id: Option<String>,
-    pub log_sequence: Option<u64>,
-    pub log_cycle: Option<u64>,
-    pub content_md5: Option<String>,
-    pub content_sha1: Option<String>,
-    pub content_sha256: Option<String>,
-    pub warnings: Vec<String>,
-    pub ranges: Vec<RecoveryRangeRecord>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct RecoveryRangeRecord {
-    pub ordinal: u32,
-    pub range_role: String,
-    pub source_kind: String,
-    pub logical_offset: u64,
-    pub source_offset: u64,
-    pub physical_offset: Option<u64>,
-    pub length: u64,
-    pub allocation_state: String,
-    pub sha256: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct RecoveryIssueRecord {
-    pub ordinal: u32,
-    pub severity: String,
-    pub code: String,
-    pub message: String,
-    pub log_offset: Option<u64>,
-    pub sequence: Option<u64>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct DeletedRecoveryAggregate {
-    pub scan: RecoveryScanRecord,
-    pub recoveries: Vec<DeletedRecoveryRecord>,
-    pub issues: Vec<RecoveryIssueRecord>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct DeletedRecoveryPage {
-    pub scan: RecoveryScanRecord,
-    pub recoveries: Vec<DeletedRecoveryRecord>,
-    pub issues: Vec<RecoveryIssueRecord>,
-    pub next_cursor: Option<Vec<u8>>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DeletedRecoveryHashAlgorithm {
-    Md5,
-    Sha1,
-    Sha256,
-}
 
 impl DeletedRecoveryHashAlgorithm {
     fn as_str(self) -> &'static str {
