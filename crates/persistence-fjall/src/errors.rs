@@ -26,6 +26,16 @@ pub enum FjallStorageError {
     Serialization(String),
     #[error("deserialization failed: {0}")]
     Deserialization(String),
+    #[error("source build path is invalid: {0}")]
+    InvalidBuildPath(String),
+    #[error("source build is missing the seal marker: {0}")]
+    MissingSeal(PathBuf),
+    #[error("source publication conflicts with an existing directory: {0}")]
+    PublicationConflict(PathBuf),
+    #[error("source manifest digest mismatch: expected {expected}, found {actual}")]
+    ManifestDigestMismatch { expected: String, actual: String },
+    #[error("source build is already published at {0}")]
+    AlreadyPublished(PathBuf),
 }
 
 impl From<std::io::Error> for FjallStorageError {

@@ -141,8 +141,8 @@ pub struct WriteBatchReceipt {
 }
 
 pub struct SourceReadSnapshot {
-    snapshot: fjall::Snapshot,
-    keyspaces: Arc<HashMap<KeyspaceName, SingleWriterTxKeyspace>>,
+    pub(crate) snapshot: fjall::Snapshot,
+    pub(crate) keyspaces: Arc<HashMap<KeyspaceName, SingleWriterTxKeyspace>>,
 }
 
 impl SourceReadSnapshot {

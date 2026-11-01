@@ -2,6 +2,8 @@ mod codec;
 mod database;
 mod errors;
 mod keyspaces;
+mod scan;
+mod source_build;
 mod source_store;
 
 pub use codec::{
@@ -14,4 +16,9 @@ pub use database::{
 };
 pub use errors::{FjallStorageError, Result};
 pub use keyspaces::{KeyspaceName, KEYSPACE_NAMES};
+pub use scan::{ScanBounds, ScanDirection, SnapshotEntry};
+pub use source_build::{
+    publish_build, verify_sealed, PublishReceipt, SourceBuild, SourceBuildLayout, BUILD_PREFIX,
+    MANIFEST_FILE, PUBLISHED_PREFIX, SEAL_FILE,
+};
 pub use source_store::SourceStore;
