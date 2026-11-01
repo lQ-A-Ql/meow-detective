@@ -2,9 +2,9 @@
 
 use artifact_storage::{ArtifactStorageError, ArtifactStore, ObjectAddress};
 use persistence_sqlite::repositories::storage_control_repo::{
-    ArtifactObjectRecord, StorageControlRepo,
+    ArtifactObjectRecord, ArtifactReferenceRecord, StorageControlRepo,
 };
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::Connection;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -178,43 +178,33 @@ pub fn create_reference(
     validate_text("owner_id", owner_id)?;
     validate_text("role", role)?;
 
-    let object_state: Option<String> = connection
-        .query_row(
-            "SELECT write_state FROM artifact_objects WHERE object_id = ?1 AND case_id = ?2",
-            params![object_id, case_id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    match object_state {
+    let repo = StorageControlRepo::new(connection);
+    match repo.find_artifact_by_id(case_id, object_id)? {
         None => {
             return Err(ArtifactStorageServiceError::ObjectNotFound(
                 object_id.to_owned(),
             ))
         }
-        Some(state) if state != READY => {
+        Some(record) if record.write_state != READY => {
             return Err(ArtifactStorageServiceError::ObjectNotReady {
                 object_id: object_id.to_owned(),
-                state,
+                state: record.write_state,
             });
         }
         Some(_) => {}
     }
 
     let reference_id = Uuid::new_v4().to_string();
-    connection.execute(
-        "INSERT INTO artifact_references (
-            reference_id, case_id, object_id, source_id, owner_kind, owner_id, role
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![
-            reference_id,
-            case_id,
-            object_id,
-            source_id,
-            owner_kind,
-            owner_id,
-            role,
-        ],
-    )?;
+    repo.insert_artifact_reference(&ArtifactReferenceRecord {
+        reference_id: reference_id.clone(),
+        case_id: case_id.to_owned(),
+        object_id: object_id.to_owned(),
+        source_id: source_id.map(str::to_owned),
+        owner_kind: owner_kind.to_owned(),
+        owner_id: owner_id.to_owned(),
+        role: role.to_owned(),
+        released_at: None,
+    })?;
     Ok(ArtifactReference {
         reference_id,
         case_id: case_id.to_owned(),
@@ -233,13 +223,7 @@ pub fn release_reference(
 ) -> Result<(), ArtifactStorageServiceError> {
     validate_text("case_id", case_id)?;
     validate_text("reference_id", reference_id)?;
-    let changed = connection.execute(
-        "UPDATE artifact_references
-         SET released_at = datetime('now')
-         WHERE reference_id = ?1 AND case_id = ?2 AND released_at IS NULL",
-        params![reference_id, case_id],
-    )?;
-    if changed == 0 {
+    if !StorageControlRepo::new(connection).release_artifact_reference(case_id, reference_id)? {
         return Err(ArtifactStorageServiceError::ReferenceNotFound(
             reference_id.to_owned(),
         ));
@@ -256,7 +240,8 @@ pub fn read_object(
     validate_text("case_id", case_id)?;
     validate_text("object_id", object_id)?;
     let repo = StorageControlRepo::new(connection);
-    let record = find_object_by_id(connection, case_id, object_id)?
+    let record = repo
+        .find_artifact_by_id(case_id, object_id)?
         .ok_or_else(|| ArtifactStorageServiceError::ObjectNotFound(object_id.to_owned()))?;
     if record.write_state != READY {
         return Err(ArtifactStorageServiceError::ObjectNotReady {
@@ -269,35 +254,6 @@ pub fn read_object(
         .find_artifact_by_digest(case_id, address.as_str())?
         .ok_or_else(|| ArtifactStorageServiceError::ObjectNotFound(object_id.to_owned()))?;
     Ok(store.read(&address)?)
-}
-
-fn find_object_by_id(
-    connection: &Connection,
-    case_id: &str,
-    object_id: &str,
-) -> Result<Option<ArtifactObjectRecord>, persistence_sqlite::DbError> {
-    connection
-        .query_row(
-            "SELECT object_id, case_id, sha256, original_length, stored_length,
-                    media_type, compression, relative_path, write_state
-             FROM artifact_objects WHERE object_id = ?1 AND case_id = ?2",
-            params![object_id, case_id],
-            |row| {
-                Ok(ArtifactObjectRecord {
-                    object_id: row.get(0)?,
-                    case_id: row.get(1)?,
-                    sha256: row.get(2)?,
-                    original_length: row.get(3)?,
-                    stored_length: row.get(4)?,
-                    media_type: row.get(5)?,
-                    compression: row.get(6)?,
-                    relative_path: row.get(7)?,
-                    write_state: row.get(8)?,
-                })
-            },
-        )
-        .optional()
-        .map_err(Into::into)
 }
 
 fn object_from_record(

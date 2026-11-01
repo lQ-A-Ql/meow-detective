@@ -92,6 +92,18 @@ pub struct StorageRepairEventRecord {
     pub error_code: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactReferenceRecord {
+    pub reference_id: String,
+    pub case_id: String,
+    pub object_id: String,
+    pub source_id: Option<String>,
+    pub owner_kind: String,
+    pub owner_id: String,
+    pub role: String,
+    pub released_at: Option<String>,
+}
+
 pub struct StorageControlRepo<'a> {
     connection: &'a Connection,
 }
@@ -270,6 +282,51 @@ impl<'a> StorageControlRepo<'a> {
             )
             .optional()
             .map_err(Into::into)
+    }
+
+    pub fn find_artifact_by_id(
+        &self,
+        case_id: &str,
+        object_id: &str,
+    ) -> DbResult<Option<ArtifactObjectRecord>> {
+        self.connection
+            .query_row(
+                "SELECT object_id, case_id, sha256, original_length, stored_length,
+                        media_type, compression, relative_path, write_state
+                 FROM artifact_objects WHERE object_id = ?1 AND case_id = ?2",
+                params![object_id, case_id],
+                map_artifact_object,
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn insert_artifact_reference(&self, record: &ArtifactReferenceRecord) -> DbResult<()> {
+        self.connection.execute(
+            "INSERT INTO artifact_references (
+                reference_id, case_id, object_id, source_id, owner_kind, owner_id, role
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                record.reference_id,
+                record.case_id,
+                record.object_id,
+                record.source_id,
+                record.owner_kind,
+                record.owner_id,
+                record.role,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn release_artifact_reference(&self, case_id: &str, reference_id: &str) -> DbResult<bool> {
+        let changed = self.connection.execute(
+            "UPDATE artifact_references
+             SET released_at = datetime('now')
+             WHERE reference_id = ?1 AND case_id = ?2 AND released_at IS NULL",
+            params![reference_id, case_id],
+        )?;
+        Ok(changed == 1)
     }
 
     pub fn insert_repair_event(&self, record: &StorageRepairEventRecord) -> DbResult<()> {
