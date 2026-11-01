@@ -1,4 +1,4 @@
 path,owner,reason,expires
 crates/evidence-core/src/image/raw_reader/formats.rs,review,temporary multi-format read-only block mapping module pending further format split,2026-12-31
-crates/persistence-sqlite/src/migrations/runner.rs,review,temporary migration registry exception pending module split,2026-12-31
 crates/persistence-fjall/src/deleted_recovery.rs,stage4,temporary recovery aggregate module pending split after stage4 data-domain completion,2026-12-31
+crates/persistence-sqlite/src/migrations/runner.rs,review,temporary migration registry exception pending module split,2026-12-31
