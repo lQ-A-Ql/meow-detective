@@ -12,6 +12,8 @@ pub(super) fn open_source(
         crate::source_db::open_source_db(ctx.case_root, &source.id)
             .map_err(CommandError::from_service_error)
     })?;
+    crate::source_db::open_registered_fjall_source_read_write(ctx.case_root, &source.id)
+        .map_err(|_| CommandError::internal("Fjall source storage initialization failed"))?;
     let initialize = measure_optional(
         ctx.profiler.as_ref(),
         Phase::SourceMetadataInitialize,
