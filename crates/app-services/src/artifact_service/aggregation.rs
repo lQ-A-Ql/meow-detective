@@ -128,7 +128,7 @@ pub fn get_artifact_rows_for_case(
     Ok(rows)
 }
 
-fn artifact_record_to_dto(
+pub(crate) fn artifact_record_to_dto(
     record: persistence_fjall::ArtifactRecord,
     source_id: &DataSourceId,
 ) -> ArtifactRowDto {
@@ -180,6 +180,41 @@ pub(crate) fn get_source_attributed_artifact_family_counts_for_case(
         let source_db = source_db::open_ready_source_read_only_by_id(
             case_conn, case_root, case_id, &source.id,
         )?;
+        if let Ok(fjall) = source_db::open_registered_fjall_source_read_only(case_root, &source.id)
+        {
+            let snapshot = fjall.snapshot();
+            let mut cursor = None;
+            let mut by_family = BTreeMap::<String, u64>::new();
+            loop {
+                let page = fjall
+                    .artifact_list_by_source(
+                        &snapshot,
+                        &source.id.0,
+                        cursor.as_deref(),
+                        persistence_fjall::ScanDirection::Forward,
+                        256,
+                    )
+                    .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;
+                for record in page.records {
+                    *by_family.entry(record.artifact_type).or_default() += 1;
+                }
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    break;
+                }
+            }
+            counts.extend(
+                by_family
+                    .into_iter()
+                    .map(|(family, count)| SourceArtifactFamilyCount {
+                        data_source_id: source.id.clone(),
+                        platform: platform.clone(),
+                        family,
+                        count,
+                    }),
+            );
+            continue;
+        }
         counts.extend(
             ArtifactRepo::new(&source_db.connection)
                 .count_by_family()?

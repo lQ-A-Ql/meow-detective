@@ -68,6 +68,16 @@ impl ReadOnlySourceStorageHandle {
             .list_by_source(snapshot, source_id, cursor, direction, limit)
             .map_err(StorageRuntimeError::Source)
     }
+    pub fn artifact_get(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        artifact_id: &str,
+    ) -> Result<Option<ArtifactRecord>, StorageRuntimeError> {
+        ArtifactRecordStore::from_source_store(self.source_store().clone())
+            .get(snapshot, source_id, artifact_id)
+            .map_err(StorageRuntimeError::Source)
+    }
     pub fn batch_receipt_state(
         &self,
         digest: &[u8; 32],

@@ -23,6 +23,17 @@ pub fn get_artifact_row_by_id_for_case(
         })?;
     let source =
         source_db::open_ready_source_read_only_by_id(case_conn, case_root, case_id, &source_id)?;
+    if let Ok(fjall) = source_db::open_registered_fjall_source_read_only(case_root, &source_id) {
+        let snapshot = fjall.snapshot();
+        if let Some(record) = fjall
+            .artifact_get(&snapshot, &source_id.0, &local_id)
+            .map_err(|error| ArtifactServiceError::Other(error.to_string()))?
+        {
+            return Ok(Some(
+                crate::artifact_service::aggregation::artifact_record_to_dto(record, &source_id),
+            ));
+        }
+    }
     Ok(ArtifactRepo::new(&source.connection)
         .find_by_id(&local_id)?
         .as_ref()
