@@ -1,3 +1,4 @@
+use artifact_storage::ArtifactStore;
 use chrono::Utc;
 use persistence_fjall::{
     encode_key, ArtifactRecord, CatalogEntryType, FileEntryRecord, KeyPart, PersistMode,
@@ -21,7 +22,7 @@ pub(super) fn mirror_source_records(
     .map_err(|_| CommandError::internal("Fjall source storage is unavailable"))?;
     mirror_catalog(ctx.source_connection()?, &source, source_id)?;
     mirror_timeline(ctx.source_connection()?, &source, source_id)?;
-    mirror_artifacts(ctx.source_connection()?, &source, source_id)?;
+    mirror_artifacts(ctx, ctx.source_connection()?, &source, source_id)?;
     mirror_android_parser_records(ctx.source_connection()?, &source, source_id)?;
     mirror_linux_parser_record(ctx.source_connection()?, &source, source_id)?;
     mirror_parser_tables(ctx.source_connection()?, &source, source_id)?;
@@ -252,10 +253,13 @@ fn mirror_android_parser_records(
 }
 
 fn mirror_artifacts(
+    ctx: &ImportJobContext<'_>,
     connection: &Connection,
     source: &ReadWriteSourceStorageHandle,
     source_id: &str,
 ) -> Result<(), CommandError> {
+    let object_store = ArtifactStore::new(ctx.case_root)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
     let mut statement = connection
         .prepare(
             "SELECT id, artifact_type, source_object_id, summary, attrs,
@@ -279,21 +283,45 @@ fn mirror_artifacts(
                 "sourceAttribution": row.get::<_, Option<String>>(10)?,
                 "createdAt": row.get::<_, String>(11)?,
             });
-            Ok(ArtifactRecord {
-                id: row.get(0)?,
-                data_source_id: source_id.to_owned(),
-                artifact_type: row.get(1)?,
-                source_object_id: row.get(2)?,
-                content_sha256: Some(infrastructure::hashing::sha256_bytes(summary.as_bytes())),
-                attrs: payload,
-            })
+            Ok((
+                row.get::<_, String>(0)?,
+                ArtifactRecord {
+                    id: row.get(0)?,
+                    data_source_id: source_id.to_owned(),
+                    artifact_type: row.get(1)?,
+                    source_object_id: row.get(2)?,
+                    content_sha256: Some(infrastructure::hashing::sha256_bytes(summary.as_bytes())),
+                    attrs: payload,
+                },
+            ))
         })
         .map_err(|error| CommandError::internal(error.to_string()))?;
     for row in rows {
-        let record = row.map_err(|error| CommandError::internal(error.to_string()))?;
+        let (artifact_id, record) =
+            row.map_err(|error| CommandError::internal(error.to_string()))?;
         source
             .artifact_upsert(&record, PersistMode::Buffer)
             .map_err(|error| CommandError::internal(error.to_string()))?;
+        let object_bytes = serde_json::to_vec(&record.attrs)
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+        let object = crate::artifact_storage_service::write_object(
+            ctx.conn,
+            &object_store,
+            &ctx.case_id.0,
+            &object_bytes,
+            "application/json",
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+        crate::artifact_storage_service::create_reference(
+            ctx.conn,
+            &ctx.case_id.0,
+            &object.object_id,
+            Some(source_id),
+            "artifact",
+            &artifact_id,
+            "metadata",
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     Ok(())
 }
