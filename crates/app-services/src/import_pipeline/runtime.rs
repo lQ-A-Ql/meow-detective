@@ -38,7 +38,12 @@ pub(super) fn persist_outcome(
     match result {
         Ok(message) => publish_outcome(ctx, ds, ready_state, message),
         Err(error) => {
-            mark_storage_operation(ctx, StorageOperationState::Failed, Some(&error.to_string()))?;
+            let state = if error.category == "cancelled" {
+                StorageOperationState::Cancelled
+            } else {
+                StorageOperationState::Failed
+            };
+            mark_storage_operation(ctx, state, Some(&error.code))?;
             record_failure(ctx, ds, &error);
             Err(error)
         }
