@@ -45,6 +45,7 @@ pub mod registry_browser;
 pub mod reports;
 pub mod rule_pack;
 pub mod search;
+pub mod storage_recovery;
 pub mod timeline;
 pub mod topology;
 pub mod v3_governance;
@@ -171,6 +172,10 @@ pub use rule_pack::{RulePackCoverageDto, RulePackSummaryDto, RulePackValidationR
 pub use search::{
     SearchCoverageDto, SearchFileHitDto, SearchFileResultPageDto, SearchHighlightDto, SearchHitDto,
     SearchResultPageDto, SearchSnippetDto,
+};
+pub use storage_recovery::{
+    RepairStorageOperationRequestDto, StorageRecoveryDispositionDto, StorageRecoveryItemDto,
+    StorageRecoveryReportDto,
 };
 pub use timeline::{
     TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto, TimelineFacetCountDto,

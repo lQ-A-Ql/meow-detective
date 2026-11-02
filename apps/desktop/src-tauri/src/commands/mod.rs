@@ -23,6 +23,7 @@ pub mod report_commands;
 pub mod rule_pack_commands;
 pub mod search_commands;
 pub mod settings_commands;
+pub mod storage_recovery_commands;
 pub mod timeline_commands;
 
 #[cfg(test)]
