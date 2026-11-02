@@ -12,6 +12,29 @@ pub(super) fn mirror_namespace_locators(
     source: &ReadWriteSourceStorageHandle,
     source_id: &str,
 ) -> Result<(), CommandError> {
+    let payloads = collect_namespace_locator_payloads(connection, source_id)?;
+    for (entry_id, payload) in payloads {
+        let payload = Value::Object(payload);
+        let record = persistence_fjall::ParserRecord {
+            id: format!("namespace-locator:{entry_id}"),
+            data_source_id: source_id.to_owned(),
+            family: "cephfs".to_owned(),
+            kind: "ceph_fs_namespace_locator".to_owned(),
+            status: "ready".to_owned(),
+            summary_sha256: infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes()),
+            payload,
+        };
+        source
+            .parser_upsert(&record, PersistMode::Buffer)
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
+    Ok(())
+}
+
+fn collect_namespace_locator_payloads(
+    connection: &Connection,
+    source_id: &str,
+) -> Result<BTreeMap<String, Map<String, Value>>, CommandError> {
     let mut statement = match connection.prepare(
         "SELECT manifest.filesystem_identity, manifest.filesystem_id, manifest.fsmap_epoch,
                 manifest.projection_sha256, manifest.schema_version, manifest.decoder_profile,
@@ -41,7 +64,7 @@ pub(super) fn mirror_namespace_locators(
          ORDER BY dentry.entry_id ASC, sparse.offset ASC",
     ) {
         Ok(statement) => statement,
-        Err(error) if error.to_string().contains("no such table") => return Ok(()),
+        Err(error) if error.to_string().contains("no such table") => return Ok(BTreeMap::new()),
         Err(error) => return Err(CommandError::internal(error.to_string())),
     };
     let mut payloads = BTreeMap::<String, Map<String, Value>>::new();
@@ -95,20 +118,5 @@ pub(super) fn mirror_namespace_locators(
                 .push(sparse);
         }
     }
-    for (entry_id, payload) in payloads {
-        let payload = Value::Object(payload);
-        let record = persistence_fjall::ParserRecord {
-            id: format!("namespace-locator:{entry_id}"),
-            data_source_id: source_id.to_owned(),
-            family: "cephfs".to_owned(),
-            kind: "ceph_fs_namespace_locator".to_owned(),
-            status: "ready".to_owned(),
-            summary_sha256: infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes()),
-            payload,
-        };
-        source
-            .parser_upsert(&record, PersistMode::Buffer)
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-    }
-    Ok(())
+    Ok(payloads)
 }
