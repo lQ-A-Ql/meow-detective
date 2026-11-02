@@ -3,11 +3,21 @@ use crate::storage_runtime::{
     ReadOnlySourceStorageHandle, ReadWriteSourceStorageHandle, StorageRuntimeError,
 };
 use persistence_fjall::{
-    ArtifactPage, ArtifactRecord, ArtifactRecordStore, ParserPage, ParserRecord, ParserRecordStore,
-    PersistMode, ScanDirection, SourceReadSnapshot,
+    ArtifactPage, ArtifactRecord, ArtifactRecordStore, ParserFieldQuery, ParserPage, ParserRecord,
+    ParserRecordStore, PersistMode, ScanDirection, SourceReadSnapshot,
 };
 
 impl ReadOnlySourceStorageHandle {
+    pub fn parser_get(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        record_id: &str,
+    ) -> Result<Option<ParserRecord>, StorageRuntimeError> {
+        ParserRecordStore::from_source_store(self.source_store().clone())
+            .get(snapshot, source_id, record_id)
+            .map_err(StorageRuntimeError::Source)
+    }
     pub(crate) fn search_projection_marker(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -91,6 +101,18 @@ impl ReadOnlySourceStorageHandle {
     ) -> Result<ParserPage, StorageRuntimeError> {
         ParserRecordStore::from_source_store(self.source_store().clone())
             .list_by_kind(snapshot, source_id, kind, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
+    pub fn parser_list_by_field(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        query: ParserFieldQuery<'_>,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<ParserPage, StorageRuntimeError> {
+        ParserRecordStore::from_source_store(self.source_store().clone())
+            .list_by_field(snapshot, query, cursor, direction, limit)
             .map_err(StorageRuntimeError::Source)
     }
     pub fn artifact_list_by_type(

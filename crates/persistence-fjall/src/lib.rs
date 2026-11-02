@@ -31,7 +31,7 @@ pub use deleted_recovery_types::{
 };
 pub use errors::{FjallStorageError, Result};
 pub use keyspaces::{KeyspaceName, KEYSPACE_NAMES};
-pub use parser::{ParserPage, ParserRecord, ParserRecordStore};
+pub use parser::{ParserFieldQuery, ParserPage, ParserRecord, ParserRecordStore};
 pub use partition::{PartitionPage, PartitionRecord, PartitionRecordStore};
 pub use recovery::{
     scan_recovery_consistency, RecoveryConsistencyReport, RecoveryScan, RecoveryState,

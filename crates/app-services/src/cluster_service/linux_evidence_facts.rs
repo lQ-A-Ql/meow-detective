@@ -80,6 +80,9 @@ pub fn collect_linux_evidence_facts(
             ..Default::default()
         };
     };
+    if let Some(facts) = load_persisted_linux_evidence_facts_from_fjall(case_root, data_source_id) {
+        return facts;
+    }
     if let Some(facts) = load_persisted_linux_evidence_facts(&source_connection, data_source_id) {
         return facts;
     }
@@ -148,6 +151,36 @@ pub fn collect_linux_evidence_facts(
     collect_artifact_facts(&source_connection, &mut facts);
     finalize_identity_facts(&entries, &mut facts);
     facts
+}
+
+fn load_persisted_linux_evidence_facts_from_fjall(
+    case_root: &std::path::Path,
+    data_source_id: &DataSourceId,
+) -> Option<LinuxEvidenceFacts> {
+    let source =
+        source_db::open_registered_fjall_source_read_only(case_root, data_source_id).ok()?;
+    let snapshot = source.snapshot();
+    let page = source
+        .parser_list_by_kind(
+            &snapshot,
+            &data_source_id.0,
+            "evidence_facts",
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            2,
+        )
+        .ok()?;
+    let record = page.records.first()?;
+    if record.family != "linux" || record.status != "ready" {
+        return None;
+    }
+    let version = record
+        .payload
+        .get("osReleaseParserVersion")
+        .and_then(serde_json::Value::as_str)?;
+    (version == IDENTITY_PARSER_VERSION)
+        .then(|| serde_json::from_value(record.payload.clone()).ok())
+        .flatten()
 }
 
 fn collect_manifest_facts(

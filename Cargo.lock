@@ -4439,6 +4439,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "fjall",
+ "hex",
  "postcard",
  "serde",
  "serde_json",

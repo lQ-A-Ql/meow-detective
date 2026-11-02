@@ -49,6 +49,22 @@ pub fn open_registered_fjall_source_read_write(
 ) -> Result<FjallReadWriteSourceStorageHandle, FjallStorageRuntimeError> {
     open_fjall_source_read_write(case_root, &data_source_id.0)
 }
+
+pub fn open_fjall_source_read_only_from_source_db_path(
+    source_db_path: &Path,
+    data_source_id: &DataSourceId,
+) -> Result<FjallReadOnlySourceStorageHandle, FjallStorageRuntimeError> {
+    let source_dir = source_db_path
+        .parent()
+        .ok_or_else(|| FjallStorageRuntimeError::InvalidRoot(source_db_path.to_path_buf()))?;
+    let sources_dir = source_dir
+        .parent()
+        .ok_or_else(|| FjallStorageRuntimeError::InvalidRoot(source_db_path.to_path_buf()))?;
+    let case_root = sources_dir
+        .parent()
+        .ok_or_else(|| FjallStorageRuntimeError::InvalidRoot(source_db_path.to_path_buf()))?;
+    open_registered_fjall_source_read_only(case_root, data_source_id)
+}
 pub(crate) use ready::open_catalog_recovery_source_by_id;
 pub use ready::{
     open_ready_source_by_id, open_ready_source_connections,

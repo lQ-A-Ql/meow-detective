@@ -8,6 +8,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::path::Path;
 
 const RECORD_KIND: &str = "parser_record";
@@ -15,6 +16,7 @@ const SCHEMA_VERSION: u16 = 1;
 const RECORD_FAMILY: &str = "parser.record";
 const FAMILY_INDEX: &str = "parser.family";
 const KIND_INDEX: &str = "parser.kind";
+const FIELD_INDEX: &str = "parser.field";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ParserRecord {
@@ -31,6 +33,14 @@ pub struct ParserRecord {
 pub struct ParserPage {
     pub records: Vec<ParserRecord>,
     pub next_cursor: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ParserFieldQuery<'a> {
+    pub source_id: &'a str,
+    pub kind: &'a str,
+    pub field: &'a str,
+    pub value: &'a str,
 }
 
 #[derive(Clone)]
@@ -159,6 +169,31 @@ impl ParserRecordStore {
         )
     }
 
+    pub fn list_by_field(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        query: ParserFieldQuery<'_>,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<ParserPage> {
+        self.page(
+            snapshot,
+            &encode_key(
+                FIELD_INDEX,
+                &[
+                    KeyPart::Text(query.source_id.to_owned()),
+                    KeyPart::Text(query.kind.to_owned()),
+                    KeyPart::Text(query.field.to_owned()),
+                    KeyPart::Text(query.value.to_owned()),
+                ],
+            )?,
+            cursor,
+            direction,
+            limit,
+        )
+    }
+
     fn page(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -206,6 +241,22 @@ fn validate(record: &ParserRecord) -> Result<()> {
             "parser record identity fields are empty".to_owned(),
         ));
     }
+    if record.summary_sha256.len() != 64
+        || !record
+            .summary_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(FjallStorageError::InvalidEnvelope(
+            "parser record summary digest is invalid".to_owned(),
+        ));
+    }
+    let payload = serde_json::to_string(&record.payload)
+        .map_err(|error| FjallStorageError::Serialization(error.to_string()))?;
+    let digest = hex::encode(Sha256::digest(payload.as_bytes()));
+    if digest != record.summary_sha256 {
+        return Err(FjallStorageError::EnvelopeDigestMismatch);
+    }
     Ok(())
 }
 
@@ -233,7 +284,7 @@ fn record_key(source_id: &str, id: &str) -> Result<Vec<u8>> {
 }
 fn index_writes(record: &ParserRecord) -> Result<Vec<WriteAction>> {
     let record_key = record_key(&record.data_source_id, &record.id)?;
-    Ok(vec![
+    let mut actions = vec![
         WriteAction::Put {
             keyspace: KeyspaceName::ParserIndexes,
             key: encode_key(
@@ -256,12 +307,29 @@ fn index_writes(record: &ParserRecord) -> Result<Vec<WriteAction>> {
                     KeyPart::Text(record.id.clone()),
                 ],
             )?,
-            value: record_key,
+            value: record_key.clone(),
         },
-    ])
+    ];
+    for (field, value) in scalar_fields(&record.payload) {
+        actions.push(WriteAction::Put {
+            keyspace: KeyspaceName::ParserIndexes,
+            key: encode_key(
+                FIELD_INDEX,
+                &[
+                    KeyPart::Text(record.data_source_id.clone()),
+                    KeyPart::Text(record.kind.clone()),
+                    KeyPart::Text(field),
+                    KeyPart::Text(value),
+                    KeyPart::Text(record.id.clone()),
+                ],
+            )?,
+            value: record_key.clone(),
+        });
+    }
+    Ok(actions)
 }
 fn index_deletes(record: &ParserRecord) -> Result<Vec<WriteAction>> {
-    Ok(vec![
+    let mut actions = vec![
         WriteAction::Delete {
             keyspace: KeyspaceName::ParserIndexes,
             key: encode_key(
@@ -284,5 +352,39 @@ fn index_deletes(record: &ParserRecord) -> Result<Vec<WriteAction>> {
                 ],
             )?,
         },
-    ])
+    ];
+    for (field, value) in scalar_fields(&record.payload) {
+        actions.push(WriteAction::Delete {
+            keyspace: KeyspaceName::ParserIndexes,
+            key: encode_key(
+                FIELD_INDEX,
+                &[
+                    KeyPart::Text(record.data_source_id.clone()),
+                    KeyPart::Text(record.kind.clone()),
+                    KeyPart::Text(field),
+                    KeyPart::Text(value),
+                    KeyPart::Text(record.id.clone()),
+                ],
+            )?,
+        });
+    }
+    Ok(actions)
+}
+
+fn scalar_fields(payload: &Value) -> Vec<(String, String)> {
+    let Value::Object(fields) = payload else {
+        return Vec::new();
+    };
+    fields
+        .iter()
+        .filter_map(|(field, value)| {
+            let rendered = match value {
+                Value::String(value) => value.clone(),
+                Value::Bool(value) => value.to_string(),
+                Value::Number(value) => value.to_string(),
+                Value::Null | Value::Array(_) | Value::Object(_) => return None,
+            };
+            (field.len() <= 256 && rendered.len() <= 4096).then_some((field.clone(), rendered))
+        })
+        .collect()
 }

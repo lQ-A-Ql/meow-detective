@@ -1,19 +1,109 @@
 use persistence_fjall::{
-    ArtifactRecord, ArtifactRecordStore, DatabaseConfig, ParserRecord, ParserRecordStore,
-    PersistMode, ScanDirection,
+    ArtifactRecord, ArtifactRecordStore, DatabaseConfig, ParserFieldQuery, ParserRecord,
+    ParserRecordStore, PersistMode, ScanDirection,
 };
 use serde_json::json;
+use sha2::{Digest, Sha256};
 
 fn parser(id: &str, source: &str, family: &str, kind: &str) -> ParserRecord {
+    let payload = json!({"id": id, "locator": format!("locator-{id}")});
     ParserRecord {
         id: id.into(),
         data_source_id: source.into(),
         family: family.into(),
         kind: kind.into(),
         status: "ready".into(),
-        summary_sha256: "a".repeat(64),
-        payload: json!({"id": id}),
+        summary_sha256: hex::encode(Sha256::digest(payload.to_string().as_bytes())),
+        payload,
     }
+}
+
+#[test]
+fn parser_field_index_is_exact_and_keyset_paginated() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ParserRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    store
+        .upsert(
+            &parser("one", "source", "ceph", "ceph_fs_metadata_objects"),
+            PersistMode::SyncData,
+        )
+        .unwrap();
+    store
+        .upsert(
+            &parser("two", "source", "ceph", "ceph_fs_metadata_objects"),
+            PersistMode::SyncData,
+        )
+        .unwrap();
+    let snapshot = store.read_snapshot();
+    let page = store
+        .list_by_field(
+            &snapshot,
+            ParserFieldQuery {
+                source_id: "source",
+                kind: "ceph_fs_metadata_objects",
+                field: "locator",
+                value: "locator-one",
+            },
+            None,
+            ScanDirection::Forward,
+            10,
+        )
+        .unwrap();
+    assert_eq!(page.records.len(), 1);
+    assert_eq!(page.records[0].id, "one");
+}
+
+#[test]
+fn parser_field_index_replaces_old_value_atomically() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ParserRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let mut record = parser("replace", "source", "ceph", "ceph_fs_metadata_objects");
+    if let serde_json::Value::Object(fields) = &mut record.payload {
+        fields.insert("locator".to_owned(), "old-locator".into());
+    }
+    record.summary_sha256 = hex::encode(Sha256::digest(record.payload.to_string().as_bytes()));
+    store.upsert(&record, PersistMode::SyncData).unwrap();
+    if let serde_json::Value::Object(fields) = &mut record.payload {
+        fields.insert("locator".to_owned(), "new-locator".into());
+    }
+    record.summary_sha256 = hex::encode(Sha256::digest(record.payload.to_string().as_bytes()));
+    store.upsert(&record, PersistMode::SyncData).unwrap();
+    let snapshot = store.read_snapshot();
+    assert!(store
+        .list_by_field(
+            &snapshot,
+            ParserFieldQuery {
+                source_id: "source",
+                kind: "ceph_fs_metadata_objects",
+                field: "locator",
+                value: "old-locator",
+            },
+            None,
+            ScanDirection::Forward,
+            10,
+        )
+        .unwrap()
+        .records
+        .is_empty());
+    assert_eq!(
+        store
+            .list_by_field(
+                &snapshot,
+                ParserFieldQuery {
+                    source_id: "source",
+                    kind: "ceph_fs_metadata_objects",
+                    field: "locator",
+                    value: "new-locator",
+                },
+                None,
+                ScanDirection::Forward,
+                10,
+            )
+            .unwrap()
+            .records
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -53,6 +143,15 @@ fn parser_records_reject_invalid_identity() {
     let store = ParserRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
     let mut record = parser("bad", "source", "linux", "fact");
     record.family.clear();
+    assert!(store.upsert(&record, PersistMode::SyncData).is_err());
+}
+
+#[test]
+fn parser_records_reject_summary_digest_mismatch() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ParserRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let mut record = parser("bad-digest", "source", "linux", "fact");
+    record.summary_sha256 = "a".repeat(64);
     assert!(store.upsert(&record, PersistMode::SyncData).is_err());
 }
 

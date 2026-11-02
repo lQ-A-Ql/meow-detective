@@ -106,6 +106,15 @@ fn parser_table_names(connection: &Connection) -> Result<Vec<String>, CommandErr
     result
 }
 
+fn parser_table_kind(table: &str) -> &'static str {
+    match table {
+        "ceph_fs_metadata_objects" => "ceph_fs_metadata_objects",
+        "ceph_bluefs_files" => "ceph_bluefs_files",
+        "ceph_rocksdb_latest_state" => "ceph_rocksdb_latest_state",
+        _ => "parser_table",
+    }
+}
+
 fn mirror_parser_table(
     connection: &Connection,
     source: &ReadWriteSourceStorageHandle,
@@ -134,11 +143,18 @@ fn mirror_parser_table(
     let family = parser_family(table);
     for row in rows {
         let (row_id, payload) = row.map_err(|error| CommandError::internal(error.to_string()))?;
+        let mut payload = payload;
+        if let serde_json::Value::Object(fields) = &mut payload {
+            fields.insert(
+                "sourceTable".to_owned(),
+                serde_json::Value::String(table.to_owned()),
+            );
+        }
         let record = persistence_fjall::ParserRecord {
             id: format!("table:{table}:{row_id}"),
             data_source_id: source_id.to_owned(),
             family: family.to_owned(),
-            kind: table.to_owned(),
+            kind: parser_table_kind(table).to_owned(),
             status: "ready".to_owned(),
             summary_sha256: infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes()),
             payload,
@@ -178,7 +194,9 @@ fn mirror_linux_parser_record(
             |row| row.get::<_, String>(0),
         );
     let Ok(facts) = facts else { return Ok(()) };
-    let summary = infrastructure::hashing::sha256_bytes(facts.as_bytes());
+    let payload = serde_json::from_str::<serde_json::Value>(&facts)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let summary = infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes());
     let record = persistence_fjall::ParserRecord {
         id: "linux:evidence-facts".to_owned(),
         data_source_id: source_id.to_owned(),
@@ -186,7 +204,7 @@ fn mirror_linux_parser_record(
         kind: "evidence_facts".to_owned(),
         status: "ready".to_owned(),
         summary_sha256: summary,
-        payload: serde_json::from_str(&facts).unwrap_or(serde_json::Value::Null),
+        payload,
     };
     source
         .parser_upsert(&record, PersistMode::Buffer)
@@ -208,6 +226,15 @@ fn mirror_android_parser_records(
     let rows = facts
         .query_map([source_id], |row| {
             let id: String = row.get(0)?;
+            let payload = serde_json::json!({
+                "field": row.get::<_, String>(1)?,
+                "value": row.get::<_, String>(2)?,
+                "confidence": row.get::<_, String>(3)?,
+                "sourceFileId": row.get::<_, String>(4)?,
+                "sourcePath": row.get::<_, String>(5)?,
+                "parser": row.get::<_, String>(6)?,
+                "warning": row.get::<_, Option<String>>(7)?,
+            });
             Ok(persistence_fjall::ParserRecord {
                 id: format!("android-fact:{id}"),
                 data_source_id: source_id.to_owned(),
@@ -215,23 +242,9 @@ fn mirror_android_parser_records(
                 kind: "system_fact".to_owned(),
                 status: "ready".to_owned(),
                 summary_sha256: infrastructure::hashing::sha256_bytes(
-                    format!(
-                        "{}:{}:{}",
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?
-                    )
-                    .as_bytes(),
+                    payload.to_string().as_bytes(),
                 ),
-                payload: serde_json::json!({
-                    "field": row.get::<_, String>(1)?,
-                    "value": row.get::<_, String>(2)?,
-                    "confidence": row.get::<_, String>(3)?,
-                    "sourceFileId": row.get::<_, String>(4)?,
-                    "sourcePath": row.get::<_, String>(5)?,
-                    "parser": row.get::<_, String>(6)?,
-                    "warning": row.get::<_, Option<String>>(7)?,
-                }),
+                payload,
             })
         })
         .map_err(|error| CommandError::internal(error.to_string()))?;

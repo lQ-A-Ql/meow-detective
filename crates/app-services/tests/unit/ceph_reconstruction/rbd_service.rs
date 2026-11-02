@@ -228,6 +228,21 @@ fn rbd_header_lookup_prefers_bounded_fjall_parser_projection() {
     let source_id = DataSourceId("source-fjall".to_owned());
     let source = crate::source_db::open_registered_fjall_source_read_write(root.path(), &source_id)
         .expect("open source storage");
+    let payload = serde_json::json!({
+        "inventory_id": "inventory-fjall",
+        "scope_identity": "perPool:i8",
+        "owner_nid_hex": "0000000000000001",
+        "image_id": "image-1",
+        "size_hex": "0000000000001000",
+        "object_order": 22,
+        "features_hex": "0000000000000000",
+        "operation_features_hex": null,
+        "parent_key_present": 0,
+        "object_prefix": "rbd_data.image-1",
+        "stripe_unit_hex": null,
+        "stripe_count_hex": null,
+        "data_pool_id": 8
+    });
     source
         .parser_upsert(
             &ParserRecord {
@@ -236,22 +251,10 @@ fn rbd_header_lookup_prefers_bounded_fjall_parser_projection() {
                 family: "ceph".to_owned(),
                 kind: "ceph_bluestore_rbd_headers".to_owned(),
                 status: "ready".to_owned(),
-                summary_sha256: "a".repeat(64),
-                payload: serde_json::json!({
-                    "inventory_id": "inventory-fjall",
-                    "scope_identity": "perPool:i8",
-                    "owner_nid_hex": "0000000000000001",
-                    "image_id": "image-1",
-                    "size_hex": "0000000000001000",
-                    "object_order": 22,
-                    "features_hex": "0000000000000000",
-                    "operation_features_hex": null,
-                    "parent_key_present": 0,
-                    "object_prefix": "rbd_data.image-1",
-                    "stripe_unit_hex": null,
-                    "stripe_count_hex": null,
-                    "data_pool_id": 8
-                }),
+                summary_sha256: infrastructure::hashing::sha256_bytes(
+                    payload.to_string().as_bytes(),
+                ),
+                payload,
             },
             PersistMode::SyncAll,
         )

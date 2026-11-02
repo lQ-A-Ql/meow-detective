@@ -5,6 +5,7 @@ mod validation;
 
 use std::sync::Arc;
 
+use crate::source_db::FjallReadOnlySourceStorageHandle;
 use persistence_sqlite::repositories::{
     ceph_bluestore_semantic_repo::{CephBluestoreObjectReadPlan, CephBluestoreReadPlanSession},
     ceph_fs_metadata_inventory_repo::CephFsMetadataInventoryRepo,
@@ -38,6 +39,7 @@ struct SourceRuntime {
     binding: CephFsObjectSource,
     session: Option<CephBluestoreReadPlanSession>,
     device: Option<SharedEvidenceReader>,
+    fjall: Option<FjallReadOnlySourceStorageHandle>,
 }
 
 pub(super) struct ResolvedReplica {
@@ -122,6 +124,7 @@ impl SourceDbCephFsObjectReader {
                     binding,
                     session: None,
                     device: None,
+                    fjall: None,
                 })
                 .collect(),
             expected_replica_count,
@@ -243,15 +246,20 @@ fn resolve_metadata_source(
         session.semantic_sha256(),
         &manifest,
     )?;
-    let Some(projection) = repo
-        .find_object_by_locator(
-            &descriptor.identity,
-            &runtime.binding.inventory_id,
-            canonical,
-        )
-        .map_err(|_| inventory_unavailable(runtime))?
-    else {
-        return Ok(None);
+    let projection = if let Some(projection) = fjall_metadata_projection(runtime, canonical)? {
+        projection
+    } else {
+        let Some(projection) = repo
+            .find_object_by_locator(
+                &descriptor.identity,
+                &runtime.binding.inventory_id,
+                canonical,
+            )
+            .map_err(|_| inventory_unavailable(runtime))?
+        else {
+            return Ok(None);
+        };
+        projection
     };
     let plan = session
         .find_object_read_plan(&projection.object_identity_sha256)
@@ -369,7 +377,66 @@ fn ensure_session(runtime: &mut SourceRuntime) -> Result<(), CephFsObjectReadErr
             },
         )?,
     );
+    runtime.fjall = crate::source_db::open_fjall_source_read_only_from_source_db_path(
+        &runtime.binding.source_db_path,
+        &runtime.binding.data_source_id,
+    )
+    .ok();
     Ok(())
+}
+
+fn fjall_metadata_projection(
+    runtime: &SourceRuntime,
+    canonical: &str,
+) -> Result<Option<persistence_sqlite::repositories::ceph_fs_metadata_inventory_repo::CephFsMetadataObjectProjection>, CephFsObjectReadError>{
+    let Some(storage) = runtime.fjall.as_ref() else {
+        return Ok(None);
+    };
+    let snapshot = storage.snapshot();
+    let page = storage
+        .parser_list_by_field(
+            &snapshot,
+            persistence_fjall::ParserFieldQuery {
+                source_id: &runtime.binding.data_source_id.0,
+                kind: "ceph_fs_metadata_objects",
+                field: "locator",
+                value: canonical,
+            },
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            2,
+        )
+        .map_err(|_| inventory_unavailable(runtime))?;
+    let Some(record) = page.records.first() else {
+        return Ok(None);
+    };
+    let text = |name: &str| {
+        record
+            .payload
+            .get(name)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
+    let projection = persistence_sqlite::repositories::ceph_fs_metadata_inventory_repo::CephFsMetadataObjectProjection {
+        object_identity_sha256: text("object_identity_sha256")
+            .ok_or_else(|| inventory_unavailable(runtime))?,
+        locator: text("locator").ok_or_else(|| inventory_unavailable(runtime))?,
+        candidate_mask: record
+            .payload
+            .get("candidate_mask")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .ok_or_else(|| inventory_unavailable(runtime))?,
+        classification_state: text("classification_state")
+            .ok_or_else(|| inventory_unavailable(runtime))?,
+        classifier_rule: text("classifier_rule")
+            .ok_or_else(|| inventory_unavailable(runtime))?,
+        record_sha256: text("record_sha256").ok_or_else(|| inventory_unavailable(runtime))?,
+    };
+    if projection.locator != canonical {
+        return Err(inventory_unavailable(runtime));
+    }
+    Ok(Some(projection))
 }
 
 fn source_session(
