@@ -230,11 +230,16 @@ fn verify_search_projections(
                         .ok()
                         .map(|value| value.to_string())
                 });
+        let expected_index_path =
+            source_db::registered_source_index_dir(connection, case_root, &source.id).ok();
         let valid_marker = marker.as_ref().is_some_and(|marker| {
             marker.source_id == source.id.0
                 && current_revision.as_deref() == Some(marker.input_revision.as_str())
                 && !marker.generation.is_empty()
                 && marker.schema_version > 0
+                && expected_index_path
+                    .as_deref()
+                    .is_some_and(|path| std::path::Path::new(&marker.index_path) == path)
                 && std::path::Path::new(&marker.index_path).is_dir()
                 && search::SearchIndex::open(std::path::Path::new(&marker.index_path))
                     .is_ok_and(|index| index.generation() == marker.generation)
