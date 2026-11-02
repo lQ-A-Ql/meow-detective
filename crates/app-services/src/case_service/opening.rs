@@ -71,6 +71,19 @@ fn preflight_case_workspace(root: &Path, db_path: &Path, case_id: &CaseId) -> Re
         .map_err(persistence_sqlite::DbError::from)?;
     ensure_current_schema(&conn)?;
     let stored = load_case_record(&conn, case_id)?;
+    let recovery =
+        crate::storage_recovery_service::scan_case(&conn, root, &case_id.0).map_err(|error| {
+            CaseServiceError::InvalidCaseDir(format!("storage recovery scan failed: {error}"))
+        })?;
+    if !matches!(
+        recovery.disposition,
+        crate::storage_recovery_service::RecoveryDisposition::Ready
+    ) {
+        return Err(CaseServiceError::InvalidCaseDir(format!(
+            "storage recovery required: {:?}",
+            recovery.disposition
+        )));
+    }
     ensure_current_source_schemas(&conn, db_path, case_id)?;
     if has_retired_linux_cluster_relationships(&conn, case_id)? {
         return Err(CaseServiceError::TopologyReimportRequired);

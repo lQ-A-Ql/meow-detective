@@ -158,8 +158,8 @@ pub enum BatchReceiptState {
 }
 
 impl SingleWriterTxDatabase {
-    pub fn batch_receipt_state(&self, receipt: &WriteBatchReceipt) -> Result<BatchReceiptState> {
-        let key = [b"batch/".as_slice(), receipt.batch_digest.as_slice()].concat();
+    pub fn batch_receipt_state_for_digest(&self, digest: &[u8; 32]) -> Result<BatchReceiptState> {
+        let key = [b"batch/".as_slice(), digest.as_slice()].concat();
         let snapshot = self.read_snapshot();
         let Some(value) = snapshot.get(KeyspaceName::Batches, &key)? else {
             return Ok(BatchReceiptState::Missing);
@@ -169,11 +169,21 @@ impl SingleWriterTxDatabase {
         }
         let mut encoded = [0u8; std::mem::size_of::<usize>()];
         encoded.copy_from_slice(&value);
-        let operation_count = usize::from_be_bytes(encoded);
-        if operation_count != receipt.operation_count {
-            return Ok(BatchReceiptState::Corrupt);
+        Ok(BatchReceiptState::Present {
+            operation_count: usize::from_be_bytes(encoded),
+        })
+    }
+
+    pub fn batch_receipt_state(&self, receipt: &WriteBatchReceipt) -> Result<BatchReceiptState> {
+        match self.batch_receipt_state_for_digest(&receipt.batch_digest)? {
+            BatchReceiptState::Present { operation_count }
+                if operation_count == receipt.operation_count =>
+            {
+                Ok(BatchReceiptState::Present { operation_count })
+            }
+            BatchReceiptState::Present { .. } => Ok(BatchReceiptState::Corrupt),
+            other => Ok(other),
         }
-        Ok(BatchReceiptState::Present { operation_count })
     }
 }
 

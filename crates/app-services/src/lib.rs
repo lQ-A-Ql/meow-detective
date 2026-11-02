@@ -78,6 +78,7 @@ pub mod source_runtime;
 pub mod staging;
 pub mod step_recorder;
 pub mod storage_manifest;
+pub mod storage_recovery_service;
 pub mod storage_runtime;
 mod storage_runtime_extensions;
 pub mod text_service;

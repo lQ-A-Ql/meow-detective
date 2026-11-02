@@ -7,6 +7,15 @@ use persistence_fjall::{
 };
 
 impl ReadOnlySourceStorageHandle {
+    pub fn batch_receipt_state(
+        &self,
+        digest: &[u8; 32],
+    ) -> Result<persistence_fjall::BatchReceiptState, StorageRuntimeError> {
+        self.source_store()
+            .database()
+            .batch_receipt_state_for_digest(digest)
+            .map_err(StorageRuntimeError::Source)
+    }
     pub fn parser_list_by_family(
         &self,
         snapshot: &SourceReadSnapshot,
