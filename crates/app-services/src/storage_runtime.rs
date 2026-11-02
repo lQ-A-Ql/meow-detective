@@ -190,6 +190,9 @@ impl<Mode> CaseStorageHandle<Mode> {
 }
 
 impl<Mode> SourceStorageHandle<Mode> {
+    pub(crate) fn source_store(&self) -> &SourceStore {
+        self.source_store.as_ref()
+    }
     fn new(
         source_root: &Path,
         source_store: Arc<SourceStore>,

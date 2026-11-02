@@ -124,6 +124,23 @@ impl<'a> ArtifactStorageService<'a> {
     ) -> Result<Vec<u8>, ArtifactStorageServiceError> {
         read_object(self.connection, self.store, case_id, object_id)
     }
+
+    pub fn cleanup_unreferenced(
+        &self,
+        case_id: &str,
+    ) -> Result<usize, ArtifactStorageServiceError> {
+        let repo = StorageControlRepo::new(self.connection);
+        let candidates = repo.list_unreferenced_ready_artifacts(case_id)?;
+        let mut removed = 0usize;
+        for candidate in candidates {
+            let address = ObjectAddress::parse(&candidate.sha256)?;
+            if self.store.remove(&address)? {
+                repo.update_artifact_state(&candidate.object_id, "deleted")?;
+                removed = removed.saturating_add(1);
+            }
+        }
+        Ok(removed)
+    }
 }
 
 pub fn write_object(

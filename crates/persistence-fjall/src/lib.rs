@@ -1,3 +1,4 @@
+mod artifact;
 mod catalog;
 mod codec;
 mod database;
@@ -5,6 +6,7 @@ mod deleted_recovery;
 mod deleted_recovery_types;
 mod errors;
 mod keyspaces;
+mod parser;
 mod partition;
 mod recovery;
 mod scan;
@@ -12,6 +14,7 @@ mod source_build;
 mod source_store;
 mod timeline;
 
+pub use artifact::{ArtifactPage, ArtifactRecord, ArtifactRecordStore};
 pub use catalog::{CatalogEntryType, CatalogPage, CatalogRecordStore, FileEntryRecord};
 pub use codec::{
     decode_key, digest, encode_key, KeyPart, VersionedEnvelope, ENVELOPE_FORMAT_VERSION,
@@ -28,6 +31,7 @@ pub use deleted_recovery_types::{
 };
 pub use errors::{FjallStorageError, Result};
 pub use keyspaces::{KeyspaceName, KEYSPACE_NAMES};
+pub use parser::{ParserPage, ParserRecord, ParserRecordStore};
 pub use partition::{PartitionPage, PartitionRecord, PartitionRecordStore};
 pub use recovery::{
     scan_recovery_consistency, RecoveryConsistencyReport, RecoveryScan, RecoveryState,

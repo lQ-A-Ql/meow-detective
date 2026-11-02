@@ -1,5 +1,6 @@
 use app_services::artifact_storage_service::{
-    create_reference, read_object, release_reference, write_object, ArtifactStorageServiceError,
+    create_reference, read_object, release_reference, write_object, ArtifactStorageService,
+    ArtifactStorageServiceError,
 };
 use artifact_storage::ArtifactStore;
 use persistence_sqlite::repositories::storage_control_repo::StorageControlRepo;
@@ -89,5 +90,29 @@ fn reads_reject_non_ready_objects_and_references() {
             "attachment"
         ),
         Err(ArtifactStorageServiceError::ObjectNotReady { .. })
+    ));
+}
+
+#[test]
+fn cleanup_removes_only_released_unreferenced_objects() {
+    let connection = database();
+    let root = tempdir().expect("temporary root");
+    let store = ArtifactStore::new(root.path()).expect("create artifact store");
+    let service = ArtifactStorageService::new(&connection, &store);
+    let object = service
+        .write_object("case-1", b"cleanup", "text/plain")
+        .expect("write object");
+    let reference = service
+        .create_reference("case-1", &object.object_id, None, "test", "1", "input")
+        .expect("reference");
+    assert_eq!(service.cleanup_unreferenced("case-1").unwrap(), 0);
+    service
+        .release_reference("case-1", &reference.reference_id)
+        .unwrap();
+    assert_eq!(service.cleanup_unreferenced("case-1").unwrap(), 1);
+    assert!(matches!(
+        service.read_object("case-1", &object.object_id),
+        Err(ArtifactStorageServiceError::ObjectNotReady { .. })
+            | Err(ArtifactStorageServiceError::ObjectNotFound(_))
     ));
 }

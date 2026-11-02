@@ -3,6 +3,8 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod cleanup;
+
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 

@@ -34,6 +34,14 @@ pub enum FjallStorageError {
     TimelineRecordIdentityMismatch,
     #[error("timeline index entry is malformed")]
     TimelineIndexCorrupt,
+    #[error("parser record identity does not match its key")]
+    ParserRecordIdentityMismatch,
+    #[error("parser index entry is malformed")]
+    ParserIndexCorrupt,
+    #[error("artifact record identity does not match its key")]
+    ArtifactRecordIdentityMismatch,
+    #[error("artifact index entry is malformed")]
+    ArtifactIndexCorrupt,
     #[error("timeline timestamp encoding is invalid")]
     InvalidTimelineTimestampEncoding,
     #[error("source build path is invalid: {0}")]
