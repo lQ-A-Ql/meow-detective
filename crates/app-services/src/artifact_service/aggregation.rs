@@ -208,7 +208,7 @@ pub(crate) fn get_source_attributed_artifact_family_counts_for_case(
                     .into_iter()
                     .map(|(family, count)| SourceArtifactFamilyCount {
                         data_source_id: source.id.clone(),
-                        platform: platform.clone(),
+                        platform,
                         family,
                         count,
                     }),
