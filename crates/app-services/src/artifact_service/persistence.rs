@@ -1,5 +1,6 @@
 use chrono::Utc;
 use domain::{EdgeType, FileEntryId, GraphEdge, GraphNode, NodeType};
+use persistence_fjall::{ArtifactRecord, PersistMode};
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, graph_repo::GraphRepo};
 use rusqlite::Connection;
 
@@ -15,11 +16,65 @@ pub fn store_artifacts(
         return Ok(());
     }
     ArtifactRepo::new(conn).insert_batch(artifacts, case_id, data_source_id)?;
+    mirror_artifacts_to_fjall(conn, artifacts, data_source_id)?;
 
     // Graph projection is deliberately best-effort and never blocks artifact persistence.
     if let Err(error) = populate_artifact_graph(conn, artifacts, case_id) {
         tracing::warn!("artifact graph population failed (non-fatal): {error}");
     }
+    Ok(())
+}
+
+fn mirror_artifacts_to_fjall(
+    connection: &Connection,
+    artifacts: &[domain::Artifact],
+    data_source_id: &str,
+) -> Result<(), ArtifactServiceError> {
+    let database_path: String = connection
+        .query_row("PRAGMA database_list", [], |row| row.get(2))
+        .unwrap_or_default();
+    let Some(source_root) = std::path::Path::new(&database_path)
+        .parent()
+        .and_then(std::path::Path::parent)
+        .and_then(std::path::Path::parent)
+    else {
+        return Ok(());
+    };
+    let source = crate::source_db::open_registered_fjall_source_read_write(
+        source_root,
+        &domain::DataSourceId(data_source_id.to_owned()),
+    )
+    .map_err(|error| ArtifactServiceError::other(error.to_string()))?;
+    for artifact in artifacts {
+        let payload = serde_json::json!({
+            "attrs": artifact.attrs,
+            "title": artifact.title,
+            "summary": artifact.summary,
+            "extractorId": artifact.extractor_id,
+            "extractorVersion": artifact.extractor_version,
+            "confidence": artifact.confidence,
+            "sourceAttribution": artifact.source_attribution,
+            "createdAt": artifact.created_at.to_rfc3339(),
+        });
+        source
+            .artifact_upsert(
+                &ArtifactRecord {
+                    id: artifact.id.0.clone(),
+                    data_source_id: data_source_id.to_owned(),
+                    artifact_type: artifact.family.clone(),
+                    source_object_id: artifact.source_object_id.as_ref().map(|id| id.0.clone()),
+                    content_sha256: Some(infrastructure::hashing::sha256_bytes(
+                        artifact.summary.as_bytes(),
+                    )),
+                    attrs: payload,
+                },
+                PersistMode::Buffer,
+            )
+            .map_err(|error| ArtifactServiceError::other(error.to_string()))?;
+    }
+    source
+        .persist(PersistMode::SyncAll)
+        .map_err(|error| ArtifactServiceError::other(error.to_string()))?;
     Ok(())
 }
 
