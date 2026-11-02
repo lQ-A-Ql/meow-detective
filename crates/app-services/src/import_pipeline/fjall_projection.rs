@@ -23,6 +23,7 @@ pub(super) fn mirror_source_records(
     mirror_timeline(ctx.source_connection()?, &source, source_id)?;
     mirror_artifacts(ctx.source_connection()?, &source, source_id)?;
     mirror_android_parser_records(ctx.source_connection()?, &source, source_id)?;
+    mirror_linux_parser_record(ctx.source_connection()?, &source, source_id)?;
     source
         .persist(PersistMode::SyncAll)
         .map_err(|error| CommandError::internal(error.to_string()))?;
@@ -44,6 +45,34 @@ pub(super) fn mirror_source_records(
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(hex::encode(receipt.batch_digest))
+}
+
+fn mirror_linux_parser_record(
+    connection: &Connection,
+    source: &ReadWriteSourceStorageHandle,
+    source_id: &str,
+) -> Result<(), CommandError> {
+    let facts = connection
+        .query_row(
+            "SELECT facts_json FROM linux_evidence_facts WHERE data_source_id = ?1 AND schema_version = 1",
+            [source_id],
+            |row| row.get::<_, String>(0),
+        );
+    let Ok(facts) = facts else { return Ok(()) };
+    let summary = infrastructure::hashing::sha256_bytes(facts.as_bytes());
+    let record = persistence_fjall::ParserRecord {
+        id: "linux:evidence-facts".to_owned(),
+        data_source_id: source_id.to_owned(),
+        family: "linux".to_owned(),
+        kind: "evidence_facts".to_owned(),
+        status: "ready".to_owned(),
+        summary_sha256: summary,
+        payload: serde_json::from_str(&facts).unwrap_or(serde_json::Value::Null),
+    };
+    source
+        .parser_upsert(&record, PersistMode::Buffer)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    Ok(())
 }
 
 fn mirror_android_parser_records(
