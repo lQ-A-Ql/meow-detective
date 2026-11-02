@@ -124,6 +124,39 @@ fn mirror_android_parser_records(
             )
             .map_err(|error| CommandError::internal(error.to_string()))?;
     }
+    let mut packages = connection
+        .prepare(
+            "SELECT id, package_name, app_name, version_code, install_time, update_time,
+                    installer, uid, code_path, source_file_id, source_path, parser, warning
+             FROM android_packages WHERE data_source_id = ?1 ORDER BY id ASC",
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let rows = packages
+        .query_map([source_id], |row| {
+            let id: String = row.get(0)?;
+            let payload = serde_json::json!({
+                "packageName": row.get::<_, String>(1)?, "appName": row.get::<_, Option<String>>(2)?,
+                "versionCode": row.get::<_, Option<String>>(3)?, "installTime": row.get::<_, Option<String>>(4)?,
+                "updateTime": row.get::<_, Option<String>>(5)?, "installer": row.get::<_, Option<String>>(6)?,
+                "uid": row.get::<_, Option<u32>>(7)?, "codePath": row.get::<_, Option<String>>(8)?,
+                "sourceFileId": row.get::<_, String>(9)?, "sourcePath": row.get::<_, String>(10)?,
+                "parser": row.get::<_, String>(11)?, "warning": row.get::<_, Option<String>>(12)?,
+            });
+            Ok(persistence_fjall::ParserRecord {
+                id: format!("android-package:{id}"), data_source_id: source_id.to_owned(),
+                family: "android".to_owned(), kind: "package".to_owned(), status: "ready".to_owned(),
+                summary_sha256: infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes()), payload,
+            })
+        })
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    for row in rows {
+        source
+            .parser_upsert(
+                &row.map_err(|error| CommandError::internal(error.to_string()))?,
+                PersistMode::Buffer,
+            )
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
     Ok(())
 }
 
