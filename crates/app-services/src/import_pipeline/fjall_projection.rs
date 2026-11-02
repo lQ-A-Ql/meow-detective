@@ -22,6 +22,7 @@ pub(super) fn mirror_source_records(
     mirror_catalog(ctx.source_connection()?, &source, source_id)?;
     mirror_timeline(ctx.source_connection()?, &source, source_id)?;
     mirror_artifacts(ctx.source_connection()?, &source, source_id)?;
+    mirror_android_parser_records(ctx.source_connection()?, &source, source_id)?;
     source
         .persist(PersistMode::SyncAll)
         .map_err(|error| CommandError::internal(error.to_string()))?;
@@ -43,6 +44,58 @@ pub(super) fn mirror_source_records(
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(hex::encode(receipt.batch_digest))
+}
+
+fn mirror_android_parser_records(
+    connection: &Connection,
+    source: &ReadWriteSourceStorageHandle,
+    source_id: &str,
+) -> Result<(), CommandError> {
+    let mut facts = connection
+        .prepare(
+            "SELECT id, field_key, field_value, confidence, source_file_id, source_path, parser, warning
+             FROM android_system_facts WHERE data_source_id = ?1 ORDER BY id ASC",
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let rows = facts
+        .query_map([source_id], |row| {
+            let id: String = row.get(0)?;
+            Ok(persistence_fjall::ParserRecord {
+                id: format!("android-fact:{id}"),
+                data_source_id: source_id.to_owned(),
+                family: "android".to_owned(),
+                kind: "system_fact".to_owned(),
+                status: "ready".to_owned(),
+                summary_sha256: infrastructure::hashing::sha256_bytes(
+                    format!(
+                        "{}:{}:{}",
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?
+                    )
+                    .as_bytes(),
+                ),
+                payload: serde_json::json!({
+                    "field": row.get::<_, String>(1)?,
+                    "value": row.get::<_, String>(2)?,
+                    "confidence": row.get::<_, String>(3)?,
+                    "sourceFileId": row.get::<_, String>(4)?,
+                    "sourcePath": row.get::<_, String>(5)?,
+                    "parser": row.get::<_, String>(6)?,
+                    "warning": row.get::<_, Option<String>>(7)?,
+                }),
+            })
+        })
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    for row in rows {
+        source
+            .parser_upsert(
+                &row.map_err(|error| CommandError::internal(error.to_string()))?,
+                PersistMode::Buffer,
+            )
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
+    Ok(())
 }
 
 fn mirror_artifacts(
