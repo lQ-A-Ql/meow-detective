@@ -1,5 +1,8 @@
 use chrono::Utc;
-use persistence_fjall::{CatalogEntryType, FileEntryRecord, PersistMode, TimelineRecord};
+use persistence_fjall::{
+    encode_key, CatalogEntryType, FileEntryRecord, KeyPart, PersistMode, TimelineRecord,
+    VersionedEnvelope,
+};
 use rusqlite::Connection;
 use std::collections::BTreeMap;
 
@@ -10,7 +13,7 @@ use transport::CommandError;
 pub(super) fn mirror_source_records(
     ctx: &ImportJobContext<'_>,
     source_id: &str,
-) -> Result<(), CommandError> {
+) -> Result<String, CommandError> {
     let source = crate::source_db::open_registered_fjall_source_read_write(
         ctx.case_root,
         &domain::DataSourceId(source_id.to_owned()),
@@ -21,7 +24,24 @@ pub(super) fn mirror_source_records(
     source
         .persist(PersistMode::SyncAll)
         .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(())
+    let marker = VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{source_id}"),
+        source_id,
+        1,
+        source_id.as_bytes().to_vec(),
+    );
+    let receipt = source
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            encode_key("projection", &[KeyPart::Text(source_id.to_owned())])
+                .map_err(|error| CommandError::internal(error.to_string()))?,
+            &marker,
+            PersistMode::SyncAll,
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    Ok(hex::encode(receipt.batch_digest))
 }
 
 fn mirror_catalog(

@@ -167,6 +167,16 @@ impl<'a> StorageControlRepo<'a> {
         Ok(changed == 1)
     }
 
+    pub fn update_expected_batch_digest(&self, operation_id: &str, digest: &str) -> DbResult<bool> {
+        let changed = self.connection.execute(
+            "UPDATE storage_operations
+             SET expected_batch_digest = ?2, updated_at = datetime('now')
+             WHERE operation_id = ?1",
+            params![operation_id, digest],
+        )?;
+        Ok(changed == 1)
+    }
+
     pub fn list_open_operations(&self, case_id: &str) -> DbResult<Vec<StorageOperationRecord>> {
         let mut statement = self.connection.prepare(
             "SELECT operation_id, case_id, source_id, attempt_id, operation_kind,

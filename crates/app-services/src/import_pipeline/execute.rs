@@ -163,7 +163,13 @@ fn execute_import_job_internal(
         let message = profile::measure_optional(profiling.as_ref(), Phase::Finalize, || {
             phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)
         })?;
-        super::fjall_projection::mirror_source_records(&ctx, &ds.id.0)?;
+        let projection_digest = super::fjall_projection::mirror_source_records(&ctx, &ds.id.0)?;
+        persistence_sqlite::repositories::storage_control_repo::StorageControlRepo::new(ctx.conn)
+            .update_expected_batch_digest(
+                &format!("source-import:{}", job_id.0),
+                &projection_digest,
+            )
+            .map_err(CommandError::from_typed_service_error)?;
         Ok(message)
     })();
 
