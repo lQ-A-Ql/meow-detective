@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::search_metadata_projection::MetadataProjection;
+use persistence_fjall::{CatalogEntryType, ScanDirection};
 use rusqlite::{params, Connection};
 use search::{SearchFileDocument, SearchIndex, SearchMetadataWriter};
 
@@ -56,14 +57,40 @@ fn run_search_index_phase_with_page_size(
         eligible_count: count_metadata_rows(&connection, &options)?,
         ..SearchIndexPhaseStats::default()
     };
-    index_metadata_rows(
-        &connection,
-        &options,
-        &projection,
-        page_size,
-        &mut writer,
-        &mut stats,
-    )?;
+    if let Some(source) = crate::source_db::open_registered_fjall_source_read_only(
+        &options.case_root,
+        &options.data_source_id,
+    )
+    .ok()
+    {
+        let fjall_indexed = index_fjall_metadata_rows(
+            &source,
+            &options,
+            &projection,
+            page_size,
+            &mut writer,
+            &mut stats,
+        )?;
+        if fjall_indexed == 0 {
+            index_metadata_rows(
+                &connection,
+                &options,
+                &projection,
+                page_size,
+                &mut writer,
+                &mut stats,
+            )?;
+        }
+    } else {
+        index_metadata_rows(
+            &connection,
+            &options,
+            &projection,
+            page_size,
+            &mut writer,
+            &mut stats,
+        )?;
+    }
     writer
         .commit()
         .map_err(|error| ImportAnalysisError::Other(format!("Commit search index: {error}")))?;
@@ -99,6 +126,82 @@ fn count_metadata_rows(
         |row| row.get(0),
     )?;
     Ok(count.max(0) as u64)
+}
+
+fn index_fjall_metadata_rows(
+    source: &crate::storage_runtime::ReadOnlySourceStorageHandle,
+    options: &SearchIndexPhaseOptions,
+    projection: &MetadataProjection<'_>,
+    page_size: u64,
+    writer: &mut SearchMetadataWriter,
+    stats: &mut SearchIndexPhaseStats,
+) -> Result<u64, ImportAnalysisError> {
+    let snapshot = source.snapshot();
+    let mut cursor = None;
+    loop {
+        ensure_not_cancelled(options)?;
+        let page = source
+            .catalog_list_all(
+                &snapshot,
+                &options.data_source_id.0,
+                cursor.as_deref(),
+                ScanDirection::Forward,
+                page_size as usize,
+            )
+            .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+        if page.records.is_empty() {
+            break;
+        }
+        stats.eligible_count = stats
+            .eligible_count
+            .saturating_add(page.records.len() as u64);
+        let mut documents = Vec::with_capacity(page.records.len());
+        for record in page.records {
+            let entry = domain::FileEntry {
+                id: domain::FileEntryId(record.id),
+                parent_id: record.parent_id.map(domain::FileEntryId),
+                data_source_id: domain::DataSourceId(record.data_source_id),
+                path: record.path,
+                name: record.name,
+                entry_type: match record.entry_type {
+                    CatalogEntryType::File => domain::EntryType::File,
+                    CatalogEntryType::Directory => domain::EntryType::Directory,
+                },
+                size: record.size,
+                ext: record.ext,
+                deleted: record.deleted,
+                hidden: record.hidden,
+                system: record.system,
+                encrypted: record.encrypted,
+                read_only: record.read_only,
+                archive: record.archive,
+                unix_mode: record.unix_mode,
+                created_at: record.created,
+                modified_at: record.modified,
+                accessed_at: record.accessed,
+                changed_at: record.changed,
+                hash_sha256: record.hash_sha256,
+            };
+            match projection.entry(&entry) {
+                Ok(document) => documents.push(document),
+                Err(error) => {
+                    stats.failed_count = stats.failed_count.saturating_add(1);
+                    tracing::warn!(error = %error, "Skipping malformed Fjall file metadata during search indexing");
+                }
+            }
+        }
+        stats.indexed_count =
+            stats
+                .indexed_count
+                .saturating_add(writer.add_documents(&documents).map_err(|error| {
+                    ImportAnalysisError::Other(format!("Write search metadata: {error}"))
+                })?);
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    Ok(stats.indexed_count)
 }
 
 fn index_metadata_rows(
