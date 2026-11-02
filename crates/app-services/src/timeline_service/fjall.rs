@@ -195,7 +195,7 @@ fn paginate(
             break;
         };
         items.push(timeline_event_to_source_dto(
-            to_domain(record),
+            timeline_record_to_domain(record),
             &DataSourceId(pages[source_index].state.source_id.clone()),
         ));
     }
@@ -426,7 +426,7 @@ fn context_from_query(query: TimelineQuery<'_>) -> Result<FjallContext, Timeline
     Ok(context)
 }
 
-fn to_domain(record: TimelineRecord) -> TimelineEvent {
+pub(crate) fn timeline_record_to_domain(record: TimelineRecord) -> TimelineEvent {
     TimelineEvent {
         id: TimelineEventId(record.id),
         source_object_id: record.source_object_id,

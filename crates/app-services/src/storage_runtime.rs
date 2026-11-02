@@ -314,6 +314,17 @@ impl<Mode> SourceStorageHandle<Mode> {
             .map_err(StorageRuntimeError::Source)
     }
 
+    pub fn timeline_get(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        event_id: &str,
+    ) -> Result<Option<TimelineRecord>, StorageRuntimeError> {
+        TimelineRecordStore::from_source_store((*self.source_store).clone())
+            .get(snapshot, source_id, event_id)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn timeline_list_by_type(
         &self,
         snapshot: &SourceReadSnapshot,
