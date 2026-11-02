@@ -1,4 +1,5 @@
 use super::*;
+use crate::repositories::storage_recovery_repo::StorageRecoveryStatusRecord;
 
 fn setup() -> rusqlite::Connection {
     let connection = crate::open_in_memory().expect("open database");

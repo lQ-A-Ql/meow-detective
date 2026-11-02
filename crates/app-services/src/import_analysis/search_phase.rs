@@ -165,13 +165,6 @@ fn search_input_revision(conn: &Connection) -> Result<String, ImportAnalysisErro
         .map_err(|error| ImportAnalysisError::Other(error.to_string()))
 }
 
-#[cfg(test)]
-fn data_version(conn: &Connection) -> rusqlite::Result<String> {
-    conn.pragma_query_value(None, "data_version", |row| {
-        row.get::<_, i64>(0).map(|value| value.to_string())
-    })
-}
-
 fn count_metadata_rows(
     connection: &Connection,
     options: &SearchIndexPhaseOptions,

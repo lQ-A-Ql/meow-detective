@@ -4,8 +4,9 @@ use persistence_fjall::{
     scan_recovery_consistency, BatchReceiptState, RecoveryScan, RecoveryState, SourceBuildLayout,
 };
 use persistence_sqlite::repositories::storage_control_repo::{
-    StorageControlRepo, StorageOperationState, StorageRecoveryStatusRecord,
+    StorageControlRepo, StorageOperationState,
 };
+use persistence_sqlite::repositories::storage_recovery_repo::StorageRecoveryStatusRecord;
 use rusqlite::Connection;
 use std::path::Path;
 use thiserror::Error;

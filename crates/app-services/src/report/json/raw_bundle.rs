@@ -20,7 +20,6 @@ struct RawExportManifestEntry {
     hidden: bool,
     system: bool,
 }
-
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RawExportManifest {
@@ -31,19 +30,16 @@ struct RawExportManifest {
     skipped_files: Vec<String>,
     files: Vec<RawExportManifestEntry>,
 }
-
 struct ExportableFileEntry {
     entry: domain::FileEntry,
     encryption_status: FileEncryptionStatus,
 }
-
 #[derive(Default)]
 struct ExportAccumulator {
     manifest_entries: Vec<RawExportManifestEntry>,
     hash_lines: Vec<String>,
     skipped_files: Vec<String>,
 }
-
 pub(super) fn export_raw_file_bundle(
     conn: &Connection,
     output_dir: &Path,
@@ -64,7 +60,6 @@ pub(super) fn export_raw_file_bundle(
         exported,
     )
 }
-
 pub(crate) fn export_raw_file_bundle_for_case(
     conn: &Connection,
     case_root: &Path,
@@ -95,7 +90,6 @@ pub(crate) fn export_raw_file_bundle_for_case(
         exported,
     )
 }
-
 fn export_legacy_entries(
     conn: &Connection,
     bundle_dir: &Path,
@@ -130,7 +124,6 @@ fn export_legacy_entries(
     }
     Ok(exported)
 }
-
 fn export_source_entries(
     conn: &Connection,
     case_root: &Path,
@@ -205,7 +198,6 @@ fn export_source_entries(
     }
     Ok(exported)
 }
-
 fn copy_and_hash(reader: &mut impl Read, export_path: &Path) -> Result<(u64, String), ReportError> {
     let temp_path = temporary_export_path(export_path);
     let mut output = OpenOptions::new()
@@ -245,7 +237,6 @@ fn copy_and_hash(reader: &mut impl Read, export_path: &Path) -> Result<(u64, Str
         }
     }
 }
-
 impl ExportAccumulator {
     fn push_legacy(
         &mut self,
@@ -316,7 +307,6 @@ impl ExportAccumulator {
         ));
     }
 }
-
 fn write_bundle_metadata(
     bundle_dir: PathBuf,
     bundle_dir_name: String,
@@ -351,7 +341,6 @@ fn write_bundle_metadata(
         skipped_files: manifest.skipped_files,
     })
 }
-
 fn collect_exportable_file_entries(
     conn: &Connection,
 ) -> Result<Vec<ExportableFileEntry>, ReportError> {

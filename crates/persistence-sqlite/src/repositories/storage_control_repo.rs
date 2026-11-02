@@ -70,7 +70,6 @@ pub struct StorageOperationRecord {
     pub updated_at: String,
     pub last_error_code: Option<String>,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageManifestRecord {
     pub manifest_id: String,
@@ -84,7 +83,6 @@ pub struct StorageManifestRecord {
     pub sealed_at: Option<String>,
     pub published_at: Option<String>,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArtifactObjectRecord {
     pub object_id: String,
@@ -97,7 +95,6 @@ pub struct ArtifactObjectRecord {
     pub relative_path: String,
     pub write_state: String,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageRepairEventRecord {
     pub event_id: String,
@@ -109,19 +106,6 @@ pub struct StorageRepairEventRecord {
     pub details_json: Option<String>,
     pub error_code: Option<String>,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StorageRecoveryStatusRecord {
-    pub case_id: String,
-    pub scope_key: String,
-    pub source_id: Option<String>,
-    pub operation_id: Option<String>,
-    pub disposition: String,
-    pub storage_state: Option<String>,
-    pub detail: String,
-    pub scanned_at: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArtifactReferenceRecord {
     pub reference_id: String,
@@ -133,16 +117,13 @@ pub struct ArtifactReferenceRecord {
     pub role: String,
     pub released_at: Option<String>,
 }
-
 pub struct StorageControlRepo<'a> {
-    connection: &'a Connection,
+    pub(crate) connection: &'a Connection,
 }
-
 impl<'a> StorageControlRepo<'a> {
     pub fn new(connection: &'a Connection) -> Self {
         Self { connection }
     }
-
     pub fn insert_operation(&self, record: &StorageOperationRecord) -> DbResult<()> {
         self.connection.execute(
             "INSERT INTO storage_operations (
@@ -166,7 +147,6 @@ impl<'a> StorageControlRepo<'a> {
         )?;
         Ok(())
     }
-
     pub fn find_operation(&self, operation_id: &str) -> DbResult<Option<StorageOperationRecord>> {
         self.connection
             .query_row(
@@ -180,7 +160,6 @@ impl<'a> StorageControlRepo<'a> {
             .optional()
             .map_err(Into::into)
     }
-
     pub fn update_operation_state(
         &self,
         operation_id: &str,
@@ -207,7 +186,6 @@ impl<'a> StorageControlRepo<'a> {
         )?;
         Ok(changed == 1)
     }
-
     pub fn update_expected_batch_digest(&self, operation_id: &str, digest: &str) -> DbResult<bool> {
         let changed = self.connection.execute(
             "UPDATE storage_operations
@@ -217,7 +195,6 @@ impl<'a> StorageControlRepo<'a> {
         )?;
         Ok(changed == 1)
     }
-
     pub fn list_open_operations(&self, case_id: &str) -> DbResult<Vec<StorageOperationRecord>> {
         let mut statement = self.connection.prepare(
             "SELECT operation_id, case_id, source_id, attempt_id, operation_kind,
@@ -230,7 +207,6 @@ impl<'a> StorageControlRepo<'a> {
         let rows = statement.query_map([case_id], map_operation)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
-
     pub fn insert_manifest(&self, record: &StorageManifestRecord) -> DbResult<()> {
         self.connection.execute(
             "INSERT INTO storage_manifests (
@@ -252,7 +228,6 @@ impl<'a> StorageControlRepo<'a> {
         )?;
         Ok(())
     }
-
     pub fn update_manifest_state(
         &self,
         manifest_id: &str,
@@ -268,7 +243,6 @@ impl<'a> StorageControlRepo<'a> {
         )?;
         Ok(changed == 1)
     }
-
     pub fn find_manifest_by_path(
         &self,
         case_id: &str,
@@ -286,7 +260,6 @@ impl<'a> StorageControlRepo<'a> {
             .optional()
             .map_err(Into::into)
     }
-
     pub fn list_manifests(&self, case_id: &str) -> DbResult<Vec<StorageManifestRecord>> {
         let mut statement = self.connection.prepare(
             "SELECT manifest_id, case_id, source_id, relative_path, format_version,
@@ -296,7 +269,6 @@ impl<'a> StorageControlRepo<'a> {
         let rows = statement.query_map([case_id], map_manifest)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
-
     pub fn register_artifact_object(&self, record: &ArtifactObjectRecord) -> DbResult<()> {
         self.connection.execute(
             "INSERT INTO artifact_objects (
@@ -317,7 +289,6 @@ impl<'a> StorageControlRepo<'a> {
         )?;
         Ok(())
     }
-
     pub fn update_artifact_state(&self, object_id: &str, write_state: &str) -> DbResult<bool> {
         let changed = self.connection.execute(
             "UPDATE artifact_objects
@@ -327,7 +298,6 @@ impl<'a> StorageControlRepo<'a> {
         )?;
         Ok(changed == 1)
     }
-
     pub fn find_artifact_by_digest(
         &self,
         case_id: &str,
@@ -344,7 +314,6 @@ impl<'a> StorageControlRepo<'a> {
             .optional()
             .map_err(Into::into)
     }
-
     pub fn find_artifact_by_id(
         &self,
         case_id: &str,
@@ -361,7 +330,6 @@ impl<'a> StorageControlRepo<'a> {
             .optional()
             .map_err(Into::into)
     }
-
     pub fn list_ready_artifacts(&self, case_id: &str) -> DbResult<Vec<ArtifactObjectRecord>> {
         let mut statement = self.connection.prepare(
             "SELECT object_id, case_id, sha256, original_length, stored_length,
@@ -373,7 +341,6 @@ impl<'a> StorageControlRepo<'a> {
         let rows = statement.query_map([case_id], map_artifact_object)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
-
     pub fn list_unreferenced_ready_artifacts(
         &self,
         case_id: &str,
@@ -395,7 +362,6 @@ impl<'a> StorageControlRepo<'a> {
         let rows = statement.query_map([case_id], map_artifact_object)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
-
     pub fn insert_artifact_reference(&self, record: &ArtifactReferenceRecord) -> DbResult<()> {
         self.connection.execute(
             "INSERT INTO artifact_references (
@@ -413,7 +379,6 @@ impl<'a> StorageControlRepo<'a> {
         )?;
         Ok(())
     }
-
     pub fn find_active_artifact_reference(
         &self,
         case_id: &str,
@@ -438,7 +403,6 @@ impl<'a> StorageControlRepo<'a> {
             .optional()
             .map_err(Into::into)
     }
-
     pub fn release_artifact_reference(&self, case_id: &str, reference_id: &str) -> DbResult<bool> {
         let changed = self.connection.execute(
             "UPDATE artifact_references
@@ -448,7 +412,6 @@ impl<'a> StorageControlRepo<'a> {
         )?;
         Ok(changed == 1)
     }
-
     pub fn insert_repair_event(&self, record: &StorageRepairEventRecord) -> DbResult<()> {
         self.connection.execute(
             "INSERT INTO storage_repair_events (
@@ -467,56 +430,6 @@ impl<'a> StorageControlRepo<'a> {
             ],
         )?;
         Ok(())
-    }
-
-    pub fn upsert_recovery_status(&self, record: &StorageRecoveryStatusRecord) -> DbResult<()> {
-        self.connection.execute(
-            "INSERT INTO storage_recovery_status (
-                case_id, scope_key, source_id, operation_id, disposition,
-                storage_state, detail, scanned_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-             ON CONFLICT(case_id, scope_key) DO UPDATE SET
-                source_id = excluded.source_id,
-                operation_id = excluded.operation_id,
-                disposition = excluded.disposition,
-                storage_state = excluded.storage_state,
-                detail = excluded.detail,
-                scanned_at = excluded.scanned_at",
-            params![
-                record.case_id,
-                record.scope_key,
-                record.source_id,
-                record.operation_id,
-                record.disposition,
-                record.storage_state,
-                record.detail,
-                record.scanned_at,
-            ],
-        )?;
-        Ok(())
-    }
-
-    pub fn clear_recovery_status(&self, case_id: &str) -> DbResult<()> {
-        self.connection.execute(
-            "DELETE FROM storage_recovery_status WHERE case_id = ?1",
-            [case_id],
-        )?;
-        Ok(())
-    }
-
-    pub fn list_recovery_status(
-        &self,
-        case_id: &str,
-    ) -> DbResult<Vec<StorageRecoveryStatusRecord>> {
-        let mut statement = self.connection.prepare(
-            "SELECT case_id, scope_key, source_id, operation_id, disposition,
-                    storage_state, detail, scanned_at
-             FROM storage_recovery_status
-             WHERE case_id = ?1
-             ORDER BY scope_key ASC",
-        )?;
-        let rows = statement.query_map([case_id], map_recovery_status)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 }
 
@@ -562,19 +475,6 @@ fn map_artifact_object(row: &rusqlite::Row<'_>) -> rusqlite::Result<ArtifactObje
         compression: row.get(6)?,
         relative_path: row.get(7)?,
         write_state: row.get(8)?,
-    })
-}
-
-fn map_recovery_status(row: &rusqlite::Row<'_>) -> rusqlite::Result<StorageRecoveryStatusRecord> {
-    Ok(StorageRecoveryStatusRecord {
-        case_id: row.get(0)?,
-        scope_key: row.get(1)?,
-        source_id: row.get(2)?,
-        operation_id: row.get(3)?,
-        disposition: row.get(4)?,
-        storage_state: row.get(5)?,
-        detail: row.get(6)?,
-        scanned_at: row.get(7)?,
     })
 }
 
