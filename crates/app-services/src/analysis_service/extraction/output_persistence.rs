@@ -73,6 +73,34 @@ pub(super) fn persist_outputs(
         &complete_scans,
     )?;
     transaction.commit()?;
+    mirror_published_outputs(conn, case_id)?;
+    Ok(())
+}
+
+fn mirror_published_outputs(conn: &Connection, case_id: &str) -> Result<(), AnalysisServiceError> {
+    let database_path: String = conn
+        .query_row("PRAGMA database_list", [], |row| row.get(2))
+        .unwrap_or_default();
+    let Some(case_root) = std::path::Path::new(&database_path)
+        .parent()
+        .and_then(std::path::Path::parent)
+        .and_then(std::path::Path::parent)
+    else {
+        return Ok(());
+    };
+    let source_id = resolve_output_data_source_id(conn)?;
+    let case_connection = match persistence_sqlite::open_existing(&case_root.join("app.db")) {
+        Ok(connection) => connection,
+        Err(_) => return Ok(()),
+    };
+    crate::import_pipeline::mirror_source_records_from_connections(
+        &case_connection,
+        case_root,
+        case_id,
+        conn,
+        &source_id,
+    )
+    .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     Ok(())
 }
 
