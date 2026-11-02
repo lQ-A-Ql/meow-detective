@@ -32,9 +32,33 @@ pub fn get_artifact_families_for_case(
     case_id: &CaseId,
 ) -> Result<Vec<String>, ArtifactServiceError> {
     let mut families = BTreeMap::<String, ()>::new();
-    for (_, source_conn) in
+    for (source_id, source_conn) in
         source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
     {
+        if let Ok(source) = source_db::open_registered_fjall_source_read_only(case_root, &source_id)
+        {
+            let snapshot = source.snapshot();
+            let mut cursor = None;
+            loop {
+                let page = source
+                    .artifact_list_by_source(
+                        &snapshot,
+                        &source_id.0,
+                        cursor.as_deref(),
+                        persistence_fjall::ScanDirection::Forward,
+                        256,
+                    )
+                    .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;
+                for record in page.records {
+                    families.insert(record.artifact_type, ());
+                }
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    break;
+                }
+            }
+            continue;
+        }
         for family in get_artifact_families_from_db(&source_conn)? {
             families.insert(family, ());
         }
@@ -52,6 +76,41 @@ pub fn get_artifact_rows_for_case(
     for (source_id, source_conn) in
         source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
     {
+        if let Ok(source) = source_db::open_registered_fjall_source_read_only(case_root, &source_id)
+        {
+            let snapshot = source.snapshot();
+            let mut cursor = None;
+            loop {
+                let page = match family {
+                    Some(family) => source.artifact_list_by_type(
+                        &snapshot,
+                        &source_id.0,
+                        family,
+                        cursor.as_deref(),
+                        persistence_fjall::ScanDirection::Forward,
+                        256,
+                    ),
+                    None => source.artifact_list_by_source(
+                        &snapshot,
+                        &source_id.0,
+                        cursor.as_deref(),
+                        persistence_fjall::ScanDirection::Forward,
+                        256,
+                    ),
+                }
+                .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;
+                rows.extend(
+                    page.records
+                        .into_iter()
+                        .map(|record| artifact_record_to_dto(record, &source_id)),
+                );
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    break;
+                }
+            }
+            continue;
+        }
         rows.extend(
             ArtifactRepo::new(&source_conn)
                 .list_by_family(family)?
@@ -67,6 +126,29 @@ pub fn get_artifact_rows_for_case(
     });
     rows.truncate(1_000);
     Ok(rows)
+}
+
+fn artifact_record_to_dto(
+    record: persistence_fjall::ArtifactRecord,
+    source_id: &DataSourceId,
+) -> ArtifactRowDto {
+    let attrs = record.attrs;
+    let field = |name: &str| attrs.get(name).cloned().unwrap_or(serde_json::Value::Null);
+    ArtifactRowDto {
+        id: crate::source_db::encode_source_scoped_id(source_id, &record.id),
+        artifact_type: record.artifact_type,
+        title: field("title").as_str().unwrap_or_default().to_owned(),
+        summary: field("summary").as_str().unwrap_or_default().to_owned(),
+        source_object_id: record
+            .source_object_id
+            .map(|id| crate::source_db::encode_source_scoped_id(source_id, &id)),
+        extractor_id: field("extractorId").as_str().map(str::to_owned),
+        extractor_version: field("extractorVersion").as_str().map(str::to_owned),
+        confidence: field("confidence").as_f64().map(|value| value as f32),
+        source_attribution: field("sourceAttribution").as_str().map(str::to_owned),
+        created_at: field("createdAt").as_str().unwrap_or_default().to_owned(),
+        attrs: serde_json::from_value(field("attrs")).unwrap_or_default(),
+    }
 }
 
 pub fn get_artifact_family_counts_for_case(

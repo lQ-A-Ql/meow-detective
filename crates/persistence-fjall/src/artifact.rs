@@ -127,6 +127,23 @@ impl ArtifactRecordStore {
             limit,
         )
     }
+
+    pub fn list_by_source(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<ArtifactPage> {
+        self.page(
+            snapshot,
+            &encode_key(RECORD_FAMILY, &[KeyPart::Text(source_id.to_owned())])?,
+            cursor,
+            direction,
+            limit,
+        )
+    }
     pub fn list_by_source_object(
         &self,
         snapshot: &SourceReadSnapshot,

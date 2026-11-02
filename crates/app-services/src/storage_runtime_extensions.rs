@@ -7,6 +7,18 @@ use persistence_fjall::{
 };
 
 impl ReadOnlySourceStorageHandle {
+    pub fn artifact_list_by_source(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<ArtifactPage, StorageRuntimeError> {
+        ArtifactRecordStore::from_source_store(self.source_store().clone())
+            .list_by_source(snapshot, source_id, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
     pub fn batch_receipt_state(
         &self,
         digest: &[u8; 32],
