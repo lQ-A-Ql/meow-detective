@@ -51,6 +51,14 @@ struct AnalysisExecutionControl<'a> {
     browser_password: Option<&'a str>,
 }
 
+struct ExtractionPublication<'a> {
+    case_conn: &'a Connection,
+    case_root: &'a Path,
+    case_id: &'a CaseId,
+    data_source_id: &'a DataSourceId,
+    source_connection: &'a Connection,
+}
+
 pub fn run_source_analysis_extraction(
     case_conn: &Connection,
     case_root: &Path,
@@ -296,38 +304,36 @@ fn run_source_analysis_extraction_execution_with_progress(
     }
     finish_extraction(
         &mut extraction,
-        case_conn,
-        case_root,
-        case_id,
-        data_source_id,
-        &source.connection,
-        &control,
+        ExtractionPublication {
+            case_conn,
+            case_root,
+            case_id,
+            data_source_id,
+            source_connection: &source.connection,
+        },
+        control.source_runtime,
         &mut source_reader,
     )?;
     extraction
 }
 
-fn finish_extraction(
+fn finish_extraction<'a>(
     extraction: &mut Result<AnalysisExtractionExecution, AnalysisServiceError>,
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    data_source_id: &DataSourceId,
-    source_connection: &Connection,
-    control: &AnalysisExecutionControl<'_>,
-    source_reader: &mut SourceReadContext<'_>,
+    publication: ExtractionPublication<'a>,
+    source_runtime: &AnalysisSourceReadRuntime,
+    source_reader: &mut SourceReadContext<'a>,
 ) -> Result<(), AnalysisServiceError> {
     if extraction.is_ok() {
         mirror_completed_source(
-            case_conn,
-            case_root,
-            case_id,
-            data_source_id,
-            source_connection,
+            publication.case_conn,
+            publication.case_root,
+            publication.case_id,
+            publication.data_source_id,
+            publication.source_connection,
         )?;
-        control.source_runtime.validate_publication()?;
+        source_runtime.validate_publication()?;
         if let Err(error) = source_reader.flush_derived_filesystem_locators() {
-            tracing::warn!(data_source_id = %data_source_id.0, error = %error, "Derived filesystem locator acceleration hints could not be persisted");
+            tracing::warn!(data_source_id = %publication.data_source_id.0, error = %error, "Derived filesystem locator acceleration hints could not be persisted");
         }
     }
     Ok(())
