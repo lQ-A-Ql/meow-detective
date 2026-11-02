@@ -39,6 +39,7 @@ pub fn get_artifact_families_for_case(
         {
             let snapshot = source.snapshot();
             let mut cursor = None;
+            let mut projected = false;
             loop {
                 let page = source
                     .artifact_list_by_source(
@@ -50,6 +51,7 @@ pub fn get_artifact_families_for_case(
                     )
                     .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;
                 for record in page.records {
+                    projected = true;
                     families.insert(record.artifact_type, ());
                 }
                 cursor = page.next_cursor;
@@ -57,7 +59,9 @@ pub fn get_artifact_families_for_case(
                     break;
                 }
             }
-            continue;
+            if projected {
+                continue;
+            }
         }
         for family in get_artifact_families_from_db(&source_conn)? {
             families.insert(family, ());
@@ -80,6 +84,7 @@ pub fn get_artifact_rows_for_case(
         {
             let snapshot = source.snapshot();
             let mut cursor = None;
+            let mut projected = false;
             loop {
                 let page = match family {
                     Some(family) => source.artifact_list_by_type(
@@ -99,17 +104,18 @@ pub fn get_artifact_rows_for_case(
                     ),
                 }
                 .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;
-                rows.extend(
-                    page.records
-                        .into_iter()
-                        .map(|record| artifact_record_to_dto(record, &source_id)),
-                );
+                rows.extend(page.records.into_iter().map(|record| {
+                    projected = true;
+                    artifact_record_to_dto(record, &source_id)
+                }));
                 cursor = page.next_cursor;
                 if cursor.is_none() {
                     break;
                 }
             }
-            continue;
+            if projected {
+                continue;
+            }
         }
         rows.extend(
             ArtifactRepo::new(&source_conn)
@@ -203,17 +209,17 @@ pub(crate) fn get_source_attributed_artifact_family_counts_for_case(
                     break;
                 }
             }
-            counts.extend(
-                by_family
-                    .into_iter()
-                    .map(|(family, count)| SourceArtifactFamilyCount {
+            if !by_family.is_empty() {
+                counts.extend(by_family.into_iter().map(|(family, count)| {
+                    SourceArtifactFamilyCount {
                         data_source_id: source.id.clone(),
                         platform,
                         family,
                         count,
-                    }),
-            );
-            continue;
+                    }
+                }));
+                continue;
+            }
         }
         counts.extend(
             ArtifactRepo::new(&source_db.connection)
