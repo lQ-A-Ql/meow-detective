@@ -246,6 +246,16 @@ impl<'a> StorageControlRepo<'a> {
             .map_err(Into::into)
     }
 
+    pub fn list_manifests(&self, case_id: &str) -> DbResult<Vec<StorageManifestRecord>> {
+        let mut statement = self.connection.prepare(
+            "SELECT manifest_id, case_id, source_id, relative_path, format_version,
+                    schema_version, manifest_digest, state, sealed_at, published_at
+             FROM storage_manifests WHERE case_id = ?1 ORDER BY relative_path ASC",
+        )?;
+        let rows = statement.query_map([case_id], map_manifest)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     pub fn register_artifact_object(&self, record: &ArtifactObjectRecord) -> DbResult<()> {
         self.connection.execute(
             "INSERT INTO artifact_objects (

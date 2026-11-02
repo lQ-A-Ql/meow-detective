@@ -50,6 +50,7 @@ pub fn scan_case(
 ) -> Result<StorageRecoveryReport, StorageRecoveryError> {
     let operations = StorageControlRepo::new(connection).list_open_operations(case_id)?;
     let mut items = Vec::with_capacity(operations.len() + 1);
+    verify_manifests(connection, case_root, case_id, &mut items)?;
     verify_artifacts(connection, case_root, case_id, &mut items)?;
     for operation in operations {
         let Some(source_id) = operation.source_id.clone() else {
@@ -124,6 +125,27 @@ pub fn scan_case(
             }
         });
     Ok(StorageRecoveryReport { disposition, items })
+}
+
+fn verify_manifests(
+    connection: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    items: &mut Vec<StorageRecoveryItem>,
+) -> Result<(), StorageRecoveryError> {
+    for manifest in StorageControlRepo::new(connection).list_manifests(case_id)? {
+        let path = case_root.join(&manifest.relative_path);
+        if !path.is_dir() {
+            items.push(StorageRecoveryItem {
+                operation_id: format!("manifest:{}", manifest.manifest_id),
+                source_id: manifest.source_id,
+                disposition: RecoveryDisposition::RepairRequired,
+                state: None,
+                detail: "registered storage manifest path is missing".to_owned(),
+            });
+        }
+    }
+    Ok(())
 }
 
 pub fn repair_operation(
