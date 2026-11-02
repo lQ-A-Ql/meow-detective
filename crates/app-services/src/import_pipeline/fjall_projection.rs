@@ -1,7 +1,7 @@
 use chrono::Utc;
 use persistence_fjall::{
-    encode_key, CatalogEntryType, FileEntryRecord, KeyPart, PersistMode, TimelineRecord,
-    VersionedEnvelope,
+    encode_key, ArtifactRecord, CatalogEntryType, FileEntryRecord, KeyPart, PersistMode,
+    TimelineRecord, VersionedEnvelope,
 };
 use rusqlite::Connection;
 use std::collections::BTreeMap;
@@ -21,6 +21,7 @@ pub(super) fn mirror_source_records(
     .map_err(|_| CommandError::internal("Fjall source storage is unavailable"))?;
     mirror_catalog(ctx.source_connection()?, &source, source_id)?;
     mirror_timeline(ctx.source_connection()?, &source, source_id)?;
+    mirror_artifacts(ctx.source_connection()?, &source, source_id)?;
     source
         .persist(PersistMode::SyncAll)
         .map_err(|error| CommandError::internal(error.to_string()))?;
@@ -42,6 +43,40 @@ pub(super) fn mirror_source_records(
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(hex::encode(receipt.batch_digest))
+}
+
+fn mirror_artifacts(
+    connection: &Connection,
+    source: &ReadWriteSourceStorageHandle,
+    source_id: &str,
+) -> Result<(), CommandError> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id, artifact_type, source_object_id, summary, attrs
+             FROM artifacts WHERE data_source_id = ?1 ORDER BY id ASC",
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let rows = statement
+        .query_map([source_id], |row| {
+            let summary: String = row.get(3)?;
+            let attrs: String = row.get(4)?;
+            Ok(ArtifactRecord {
+                id: row.get(0)?,
+                data_source_id: source_id.to_owned(),
+                artifact_type: row.get(1)?,
+                source_object_id: row.get(2)?,
+                content_sha256: Some(infrastructure::hashing::sha256_bytes(summary.as_bytes())),
+                attrs: serde_json::from_str(&attrs).unwrap_or(serde_json::Value::Null),
+            })
+        })
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    for row in rows {
+        let record = row.map_err(|error| CommandError::internal(error.to_string()))?;
+        source
+            .artifact_upsert(&record, PersistMode::Buffer)
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
+    Ok(())
 }
 
 fn mirror_catalog(
