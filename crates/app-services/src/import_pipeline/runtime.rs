@@ -67,10 +67,18 @@ pub(super) fn record_failure(
     ds: &domain::DataSource,
     error: &CommandError,
 ) {
-    if let Err(storage_error) =
-        mark_storage_operation(ctx, StorageOperationState::Failed, Some(&error.to_string()))
-    {
-        tracing::warn!(error = %storage_error, "Failed to mark storage operation as failed");
+    let operation_id = format!("source-import:{}", ctx.job_id.0);
+    let operation_state = StorageControlRepo::new(ctx.conn)
+        .find_operation(&operation_id)
+        .ok()
+        .flatten()
+        .map(|operation| operation.state);
+    if operation_state != Some(StorageOperationState::Cancelled) {
+        if let Err(storage_error) =
+            mark_storage_operation(ctx, StorageOperationState::Failed, Some(&error.to_string()))
+        {
+            tracing::warn!(error = %storage_error, "Failed to mark storage operation as failed");
+        }
     }
     let lease = ctx.runtime.as_ref().map(|r| r.publication_lease());
     if lease

@@ -12,7 +12,7 @@ use persistence_sqlite::{
     },
     runner,
 };
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use std::{fs, path::Path};
 
 pub fn open_case(root: &Path) -> Result<ActiveCase> {
@@ -67,8 +67,7 @@ fn validate_case_workspace(root: &Path) -> Result<(CaseMeta, std::path::PathBuf)
 
 fn preflight_case_workspace(root: &Path, db_path: &Path, case_id: &CaseId) -> Result<CaseMeta> {
     ensure_storage_manifest(root, case_id)?;
-    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(persistence_sqlite::DbError::from)?;
+    let conn = open_existing(db_path)?;
     ensure_current_schema(&conn)?;
     let stored = load_case_record(&conn, case_id)?;
     let recovery =

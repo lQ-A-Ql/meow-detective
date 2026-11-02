@@ -7,6 +7,7 @@ const MAX_REVISION_CAS_ATTEMPTS: usize = 16;
 
 pub const ARTIFACT_CURSOR_REVISION_KEY: &str = "cursor-revision:artifacts:v1";
 pub const TIMELINE_CURSOR_REVISION_KEY: &str = "cursor-revision:timeline:v1";
+pub const SEARCH_INPUT_REVISION_KEY: &str = "projection-input:search:v1";
 
 pub struct SourceMetaRepo<'a> {
     conn: &'a Connection,

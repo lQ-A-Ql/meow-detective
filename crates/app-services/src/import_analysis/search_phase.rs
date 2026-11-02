@@ -46,7 +46,8 @@ fn run_search_index_phase_with_page_size(
     reconcile_index_generation(&options.index_dir)?;
     ensure_not_cancelled(&options)?;
     let connection = persistence_sqlite::open_existing_source_read_only(&options.db_path)?;
-    let projection = MetadataProjection::new(&options.data_source_id, data_version(&connection)?);
+    let projection =
+        MetadataProjection::new(&options.data_source_id, search_input_revision(&connection)?);
     let next_index_dir = next_index_dir(&options.index_dir);
     let mut build = IndexBuildGuard::prepare(next_index_dir.clone())?;
     let index = SearchIndex::create(&next_index_dir)
@@ -98,7 +99,10 @@ fn run_search_index_phase_with_page_size(
     let schema_version = index.schema_version();
     drop(index);
     projection
-        .validate(&options.data_source_id, &data_version(&connection)?)
+        .validate(
+            &options.data_source_id,
+            &search_input_revision(&connection)?,
+        )
         .map_err(|_| ImportAnalysisError::Other("Search projection input changed".into()))?;
     if let Some(lease) = &options.publication_lease {
         lease.validate()?;
@@ -152,9 +156,19 @@ fn write_search_marker(
     Ok(())
 }
 
+fn search_input_revision(conn: &Connection) -> Result<String, ImportAnalysisError> {
+    persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(conn)
+        .read_revision(
+            persistence_sqlite::repositories::source_meta_repo::SEARCH_INPUT_REVISION_KEY,
+        )
+        .map(|revision| revision.to_string())
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()))
+}
+
+#[cfg(test)]
 fn data_version(conn: &Connection) -> rusqlite::Result<String> {
     conn.pragma_query_value(None, "data_version", |row| {
-        row.get::<_, i64>(0).map(|v| v.to_string())
+        row.get::<_, i64>(0).map(|value| value.to_string())
     })
 }
 

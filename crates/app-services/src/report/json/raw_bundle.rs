@@ -83,6 +83,7 @@ pub(crate) fn export_raw_file_bundle_for_case(
         case_root,
         case_id,
         &bundle_dir,
+        report_file_name,
         entries,
         bitlocker_runtime,
     )?;
@@ -135,12 +136,15 @@ fn export_source_entries(
     case_root: &Path,
     case_id: &str,
     bundle_dir: &Path,
+    report_file_name: &str,
     entries: Vec<ExportableFileEntry>,
     bitlocker_runtime: Option<&std::sync::Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>>,
 ) -> Result<ExportAccumulator, ReportError> {
     let export_root = bundle_dir.join("files");
     fs::create_dir_all(&export_root)?;
     let mut exported = ExportAccumulator::default();
+    let artifact_store = artifact_storage::ArtifactStore::new(case_root)
+        .map_err(|error| ReportError::Other(error.to_string()))?;
 
     for exportable in entries {
         let entry = exportable.entry;
@@ -174,13 +178,30 @@ fn export_source_entries(
                 continue;
             }
         };
+        let source_id = entry.data_source_id.0.clone();
         exported.push_source(
-            entry,
+            entry.clone(),
             global_file_id.0,
             export_rel,
             extracted.bytes_written,
             extracted.sha256,
         );
+        crate::artifact_storage_service::ArtifactStorageService::new(conn, &artifact_store)
+            .write_file(case_id, &export_path, "application/octet-stream")
+            .map_err(|error| ReportError::Other(error.to_string()))
+            .and_then(|object| {
+                crate::artifact_storage_service::ArtifactStorageService::new(conn, &artifact_store)
+                    .create_reference(
+                        case_id,
+                        &object.object_id,
+                        Some(&source_id),
+                        "report",
+                        report_file_name,
+                        "raw-file",
+                    )
+                    .map(|_| ())
+                    .map_err(|error| ReportError::Other(error.to_string()))
+            })?;
     }
     Ok(exported)
 }

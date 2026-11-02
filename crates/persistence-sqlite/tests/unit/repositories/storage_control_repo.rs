@@ -37,6 +37,22 @@ fn operation_state_and_open_listing_round_trip() {
 
     assert_eq!(repo.list_open_operations("case-1").unwrap().len(), 1);
     assert!(repo
+        .update_operation_state(
+            "operation-1",
+            StorageOperationState::Running,
+            "running",
+            None
+        )
+        .unwrap());
+    assert!(repo
+        .update_operation_state(
+            "operation-1",
+            StorageOperationState::Committed,
+            "committed",
+            None
+        )
+        .unwrap());
+    assert!(repo
         .update_operation_state("operation-1", StorageOperationState::Published, "now", None)
         .unwrap());
     assert!(repo.list_open_operations("case-1").unwrap().is_empty());
@@ -44,6 +60,37 @@ fn operation_state_and_open_listing_round_trip() {
         repo.find_operation("operation-1").unwrap().unwrap().state,
         StorageOperationState::Published
     );
+}
+
+#[test]
+fn operation_state_rejects_transition_from_terminal_state() {
+    let connection = setup();
+    let repo = StorageControlRepo::new(&connection);
+    repo.insert_operation(&StorageOperationRecord {
+        operation_id: "terminal-operation".to_owned(),
+        case_id: "case-1".to_owned(),
+        source_id: Some("source-1".to_owned()),
+        attempt_id: "attempt-1".to_owned(),
+        operation_kind: "source_build".to_owned(),
+        state: StorageOperationState::Published,
+        input_digest: None,
+        expected_batch_digest: None,
+        created_at: "2026-11-02T00:00:00Z".to_owned(),
+        updated_at: "2026-11-02T00:00:00Z".to_owned(),
+        last_error_code: None,
+    })
+    .expect("insert terminal operation");
+    let error = repo
+        .update_operation_state(
+            "terminal-operation",
+            StorageOperationState::Failed,
+            "2026-11-02T00:01:00Z",
+            Some("late-failure"),
+        )
+        .expect_err("published operation must not become failed");
+    assert!(error
+        .to_string()
+        .contains("invalid storage operation transition"));
 }
 
 #[test]
@@ -106,4 +153,38 @@ fn manifest_artifact_and_repair_records_round_trip() {
         error_code: None,
     })
     .expect("insert repair event");
+}
+
+#[test]
+fn recovery_status_is_idempotent_and_scoped_to_case() {
+    let connection = setup();
+    let repo = StorageControlRepo::new(&connection);
+    repo.upsert_recovery_status(&StorageRecoveryStatusRecord {
+        case_id: "case-1".to_owned(),
+        scope_key: "source:source-1".to_owned(),
+        source_id: Some("source-1".to_owned()),
+        operation_id: None,
+        disposition: "recovery_required".to_owned(),
+        storage_state: Some("sealed".to_owned()),
+        detail: "sealed source requires publication".to_owned(),
+        scanned_at: "2026-11-02T00:00:00Z".to_owned(),
+    })
+    .expect("insert recovery status");
+    repo.upsert_recovery_status(&StorageRecoveryStatusRecord {
+        case_id: "case-1".to_owned(),
+        scope_key: "source:source-1".to_owned(),
+        source_id: Some("source-1".to_owned()),
+        operation_id: None,
+        disposition: "ready".to_owned(),
+        storage_state: Some("published".to_owned()),
+        detail: "published source is consistent".to_owned(),
+        scanned_at: "2026-11-02T00:01:00Z".to_owned(),
+    })
+    .expect("update recovery status");
+    let statuses = repo
+        .list_recovery_status("case-1")
+        .expect("list recovery status");
+    assert_eq!(statuses.len(), 1);
+    assert_eq!(statuses[0].disposition, "ready");
+    assert_eq!(statuses[0].storage_state.as_deref(), Some("published"));
 }

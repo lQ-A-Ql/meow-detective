@@ -225,10 +225,14 @@ fn verify_search_projections(
             source_db::open_registered_source_db_read_only(connection, case_root, &source.id)
                 .ok()
                 .and_then(|source_connection| {
-                    source_connection
-                        .pragma_query_value(None, "data_version", |row| row.get::<_, i64>(0))
-                        .ok()
-                        .map(|value| value.to_string())
+                    persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(
+                &source_connection,
+            )
+            .read_revision(
+                persistence_sqlite::repositories::source_meta_repo::SEARCH_INPUT_REVISION_KEY,
+            )
+            .ok()
+            .map(|value| value.to_string())
                 });
         let expected_index_path =
             source_db::registered_source_index_dir(connection, case_root, &source.id).ok();

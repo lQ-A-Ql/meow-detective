@@ -49,6 +49,17 @@ fn writes_registers_references_reads_and_releases() {
         "attachment",
     )
     .expect("create reference");
+    let duplicate = create_reference(
+        &connection,
+        "case-1",
+        &object.object_id,
+        None,
+        "report",
+        "report-1",
+        "attachment",
+    )
+    .expect("duplicate reference is idempotent");
+    assert_eq!(duplicate.reference_id, reference.reference_id);
     assert_eq!(
         read_object(&connection, &store, "case-1", &object.object_id).unwrap(),
         b"artifact bytes"
@@ -115,4 +126,47 @@ fn cleanup_removes_only_released_unreferenced_objects() {
         Err(ArtifactStorageServiceError::ObjectNotReady { .. })
             | Err(ArtifactStorageServiceError::ObjectNotFound(_))
     ));
+}
+
+#[test]
+fn corrupted_ready_object_is_rejected_before_read_or_publish() {
+    let connection = database();
+    let root = tempdir().expect("temporary root");
+    let store = ArtifactStore::new(root.path()).expect("create artifact store");
+    let service = ArtifactStorageService::new(&connection, &store);
+    let object = service
+        .write_object("case-1", b"immutable", "text/plain")
+        .expect("write object");
+    std::fs::write(store.object_path(&object.address), b"tampered").expect("tamper object");
+
+    assert!(matches!(
+        service.read_object("case-1", &object.object_id),
+        Err(ArtifactStorageServiceError::Storage(
+            artifact_storage::ArtifactStorageError::DigestMismatch { .. }
+        ))
+    ));
+    assert!(matches!(
+        service.create_reference("case-1", &object.object_id, None, "report", "r1", "file"),
+        Err(ArtifactStorageServiceError::Storage(
+            artifact_storage::ArtifactStorageError::DigestMismatch { .. }
+        ))
+    ));
+}
+
+#[test]
+fn writes_file_through_content_addressed_service() {
+    let connection = database();
+    let root = tempdir().expect("temporary root");
+    let store = ArtifactStore::new(root.path()).expect("create artifact store");
+    let input = root.path().join("input.bin");
+    std::fs::write(&input, b"file bytes").expect("write input");
+    let object = ArtifactStorageService::new(&connection, &store)
+        .write_file("case-1", &input, "application/octet-stream")
+        .expect("write file");
+    assert_eq!(
+        ArtifactStorageService::new(&connection, &store)
+            .read_object("case-1", &object.object_id)
+            .expect("read file object"),
+        b"file bytes"
+    );
 }

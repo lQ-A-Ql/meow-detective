@@ -89,6 +89,15 @@ impl<'a> ArtifactStorageService<'a> {
         write_object(self.connection, self.store, case_id, bytes, media_type)
     }
 
+    pub fn write_file(
+        &self,
+        case_id: &str,
+        path: &std::path::Path,
+        media_type: &str,
+    ) -> Result<ArtifactObject, ArtifactStorageServiceError> {
+        write_file(self.connection, self.store, case_id, path, media_type)
+    }
+
     pub fn create_reference(
         &self,
         case_id: &str,
@@ -98,6 +107,17 @@ impl<'a> ArtifactStorageService<'a> {
         owner_id: &str,
         role: &str,
     ) -> Result<ArtifactReference, ArtifactStorageServiceError> {
+        let record = StorageControlRepo::new(self.connection)
+            .find_artifact_by_id(case_id, object_id)?
+            .ok_or_else(|| ArtifactStorageServiceError::ObjectNotFound(object_id.to_owned()))?;
+        if record.write_state != READY {
+            return Err(ArtifactStorageServiceError::ObjectNotReady {
+                object_id: object_id.to_owned(),
+                state: record.write_state,
+            });
+        }
+        let address = ObjectAddress::parse(&record.sha256)?;
+        self.store.verify(&address)?;
         create_reference(
             self.connection,
             case_id,
@@ -154,6 +174,29 @@ pub fn write_object(
     validate_text("media_type", media_type)?;
 
     let stored = store.put_bytes(bytes)?;
+    register_stored_object(connection, store, case_id, stored, media_type)
+}
+
+pub fn write_file(
+    connection: &Connection,
+    store: &ArtifactStore,
+    case_id: &str,
+    path: &std::path::Path,
+    media_type: &str,
+) -> Result<ArtifactObject, ArtifactStorageServiceError> {
+    validate_text("case_id", case_id)?;
+    validate_text("media_type", media_type)?;
+    let stored = store.put_file(path)?;
+    register_stored_object(connection, store, case_id, stored, media_type)
+}
+
+fn register_stored_object(
+    connection: &Connection,
+    _store: &ArtifactStore,
+    case_id: &str,
+    stored: artifact_storage::StoredObject,
+    media_type: &str,
+) -> Result<ArtifactObject, ArtifactStorageServiceError> {
     let address = stored.address;
     let repo = StorageControlRepo::new(connection);
     if let Some(existing) = repo.find_artifact_by_digest(case_id, address.as_str())? {
@@ -196,6 +239,11 @@ pub fn create_reference(
     validate_text("role", role)?;
 
     let repo = StorageControlRepo::new(connection);
+    if let Some(existing) = repo
+        .find_active_artifact_reference(case_id, object_id, source_id, owner_kind, owner_id, role)?
+    {
+        return Ok(reference_from_record(existing));
+    }
     match repo.find_artifact_by_id(case_id, object_id)? {
         None => {
             return Err(ArtifactStorageServiceError::ObjectNotFound(
@@ -270,7 +318,32 @@ pub fn read_object(
     let _ = repo
         .find_artifact_by_digest(case_id, address.as_str())?
         .ok_or_else(|| ArtifactStorageServiceError::ObjectNotFound(object_id.to_owned()))?;
-    Ok(store.read(&address)?)
+    let bytes = store.read(&address)?;
+    let stored_length = u64::try_from(record.stored_length).map_err(|_| {
+        ArtifactStorageServiceError::InvalidInput("negative stored length".to_owned())
+    })?;
+    if bytes.len() as u64 != stored_length {
+        return Err(ArtifactStorageServiceError::Storage(
+            ArtifactStorageError::LengthMismatch {
+                address,
+                expected_length: stored_length,
+                actual_length: bytes.len() as u64,
+            },
+        ));
+    }
+    Ok(bytes)
+}
+
+fn reference_from_record(record: ArtifactReferenceRecord) -> ArtifactReference {
+    ArtifactReference {
+        reference_id: record.reference_id,
+        case_id: record.case_id,
+        object_id: record.object_id,
+        source_id: record.source_id,
+        owner_kind: record.owner_kind,
+        owner_id: record.owner_id,
+        role: record.role,
+    }
 }
 
 fn object_from_record(

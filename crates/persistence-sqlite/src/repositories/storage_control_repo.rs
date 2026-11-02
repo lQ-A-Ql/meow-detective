@@ -36,6 +36,24 @@ impl StorageOperationState {
             ))),
         }
     }
+
+    fn can_transition_to(self, next: Self) -> bool {
+        matches!(
+            (self, next),
+            (
+                Self::Planned,
+                Self::Planned | Self::Running | Self::Failed | Self::Cancelled
+            ) | (
+                Self::Running,
+                Self::Running | Self::Committed | Self::Published | Self::Failed | Self::Cancelled
+            ) | (
+                Self::Committed,
+                Self::Committed | Self::Published | Self::Failed | Self::Cancelled
+            ) | (Self::Published, Self::Published)
+                | (Self::Failed, Self::Failed)
+                | (Self::Cancelled, Self::Cancelled)
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,6 +108,18 @@ pub struct StorageRepairEventRecord {
     pub state: String,
     pub details_json: Option<String>,
     pub error_code: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StorageRecoveryStatusRecord {
+    pub case_id: String,
+    pub scope_key: String,
+    pub source_id: Option<String>,
+    pub operation_id: Option<String>,
+    pub disposition: String,
+    pub storage_state: Option<String>,
+    pub detail: String,
+    pub scanned_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -158,6 +188,17 @@ impl<'a> StorageControlRepo<'a> {
         updated_at: &str,
         last_error_code: Option<&str>,
     ) -> DbResult<bool> {
+        let current = self.find_operation(operation_id)?;
+        let Some(current) = current else {
+            return Ok(false);
+        };
+        if !current.state.can_transition_to(state) {
+            return Err(DbError::Migration(format!(
+                "invalid storage operation transition: {} -> {}",
+                current.state.as_str(),
+                state.as_str()
+            )));
+        }
         let changed = self.connection.execute(
             "UPDATE storage_operations
              SET state = ?2, updated_at = ?3, last_error_code = ?4
@@ -373,6 +414,31 @@ impl<'a> StorageControlRepo<'a> {
         Ok(())
     }
 
+    pub fn find_active_artifact_reference(
+        &self,
+        case_id: &str,
+        object_id: &str,
+        source_id: Option<&str>,
+        owner_kind: &str,
+        owner_id: &str,
+        role: &str,
+    ) -> DbResult<Option<ArtifactReferenceRecord>> {
+        self.connection
+            .query_row(
+                "SELECT reference_id, case_id, object_id, source_id, owner_kind,
+                        owner_id, role, released_at
+                 FROM artifact_references
+                 WHERE case_id = ?1 AND object_id = ?2
+                   AND source_id IS ?3 AND owner_kind = ?4
+                   AND owner_id = ?5 AND role = ?6
+                   AND released_at IS NULL",
+                params![case_id, object_id, source_id, owner_kind, owner_id, role],
+                map_artifact_reference,
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
     pub fn release_artifact_reference(&self, case_id: &str, reference_id: &str) -> DbResult<bool> {
         let changed = self.connection.execute(
             "UPDATE artifact_references
@@ -401,6 +467,56 @@ impl<'a> StorageControlRepo<'a> {
             ],
         )?;
         Ok(())
+    }
+
+    pub fn upsert_recovery_status(&self, record: &StorageRecoveryStatusRecord) -> DbResult<()> {
+        self.connection.execute(
+            "INSERT INTO storage_recovery_status (
+                case_id, scope_key, source_id, operation_id, disposition,
+                storage_state, detail, scanned_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(case_id, scope_key) DO UPDATE SET
+                source_id = excluded.source_id,
+                operation_id = excluded.operation_id,
+                disposition = excluded.disposition,
+                storage_state = excluded.storage_state,
+                detail = excluded.detail,
+                scanned_at = excluded.scanned_at",
+            params![
+                record.case_id,
+                record.scope_key,
+                record.source_id,
+                record.operation_id,
+                record.disposition,
+                record.storage_state,
+                record.detail,
+                record.scanned_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_recovery_status(&self, case_id: &str) -> DbResult<()> {
+        self.connection.execute(
+            "DELETE FROM storage_recovery_status WHERE case_id = ?1",
+            [case_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_recovery_status(
+        &self,
+        case_id: &str,
+    ) -> DbResult<Vec<StorageRecoveryStatusRecord>> {
+        let mut statement = self.connection.prepare(
+            "SELECT case_id, scope_key, source_id, operation_id, disposition,
+                    storage_state, detail, scanned_at
+             FROM storage_recovery_status
+             WHERE case_id = ?1
+             ORDER BY scope_key ASC",
+        )?;
+        let rows = statement.query_map([case_id], map_recovery_status)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 }
 
@@ -446,6 +562,32 @@ fn map_artifact_object(row: &rusqlite::Row<'_>) -> rusqlite::Result<ArtifactObje
         compression: row.get(6)?,
         relative_path: row.get(7)?,
         write_state: row.get(8)?,
+    })
+}
+
+fn map_recovery_status(row: &rusqlite::Row<'_>) -> rusqlite::Result<StorageRecoveryStatusRecord> {
+    Ok(StorageRecoveryStatusRecord {
+        case_id: row.get(0)?,
+        scope_key: row.get(1)?,
+        source_id: row.get(2)?,
+        operation_id: row.get(3)?,
+        disposition: row.get(4)?,
+        storage_state: row.get(5)?,
+        detail: row.get(6)?,
+        scanned_at: row.get(7)?,
+    })
+}
+
+fn map_artifact_reference(row: &rusqlite::Row<'_>) -> rusqlite::Result<ArtifactReferenceRecord> {
+    Ok(ArtifactReferenceRecord {
+        reference_id: row.get(0)?,
+        case_id: row.get(1)?,
+        object_id: row.get(2)?,
+        source_id: row.get(3)?,
+        owner_kind: row.get(4)?,
+        owner_id: row.get(5)?,
+        role: row.get(6)?,
+        released_at: row.get(7)?,
     })
 }
 
