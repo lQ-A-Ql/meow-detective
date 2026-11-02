@@ -32,6 +32,13 @@ fn startup_recovery_reports_repair_for_an_unbound_open_operation() {
         .unwrap();
     assert_eq!(report.disposition, RecoveryDisposition::RepairRequired);
     assert_eq!(report.items.len(), 1);
+    let status = case
+        .with_conn(|connection| {
+            StorageControlRepo::new(connection).list_recovery_status(&case.meta.id.0)
+        })
+        .unwrap();
+    assert_eq!(status.len(), 1);
+    assert_eq!(status[0].disposition, "repair_required");
 }
 
 #[test]
