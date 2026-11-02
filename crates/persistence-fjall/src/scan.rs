@@ -1,4 +1,8 @@
-use crate::{database::SourceReadSnapshot, errors::Result, keyspaces::KeyspaceName};
+use crate::{
+    database::SourceReadSnapshot,
+    errors::{FjallStorageError, Result},
+    keyspaces::KeyspaceName,
+};
 use fjall::Readable;
 use std::ops::{Bound, RangeBounds};
 
@@ -125,14 +129,36 @@ impl SourceReadSnapshot {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<Vec<SnapshotEntry>> {
-        let mut entries = self.prefix(keyspace, prefix, direction)?;
         if let Some(cursor) = cursor {
-            entries.retain(|entry| match direction {
-                ScanDirection::Forward => entry.key.as_slice() > cursor,
-                ScanDirection::Reverse => entry.key.as_slice() < cursor,
-            });
+            if !cursor.starts_with(prefix) {
+                return Err(FjallStorageError::InvalidEnvelope(
+                    "keyset cursor does not match the requested prefix".to_owned(),
+                ));
+            }
         }
-        entries.truncate(limit);
+        let iter = self.snapshot.prefix(self.keyspace(keyspace), prefix);
+        let mut entries = Vec::with_capacity(limit);
+        let iter = match direction {
+            ScanDirection::Forward => Box::new(iter) as Box<dyn Iterator<Item = fjall::Guard>>,
+            ScanDirection::Reverse => Box::new(iter.rev()),
+        };
+        for guard in iter {
+            let (key, value) = guard.into_inner()?;
+            let eligible = cursor.is_none_or(|cursor| match direction {
+                ScanDirection::Forward => key.as_ref() > cursor,
+                ScanDirection::Reverse => key.as_ref() < cursor,
+            });
+            if !eligible {
+                continue;
+            }
+            entries.push(SnapshotEntry {
+                key: key.to_vec(),
+                value: value.to_vec(),
+            });
+            if entries.len() >= limit {
+                break;
+            }
+        }
         Ok(entries)
     }
 

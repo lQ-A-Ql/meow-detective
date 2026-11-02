@@ -423,3 +423,30 @@ fn keyset_cursor_is_exclusive_and_supports_both_directions() {
     assert_eq!(reverse[0].key, b"item/3");
     assert_eq!(reverse[1].key, b"item/2");
 }
+
+#[test]
+fn keyset_cursor_must_belong_to_the_requested_prefix() {
+    let directory = tempfile::tempdir().unwrap();
+    let database =
+        SingleWriterTxDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
+    database
+        .write_batch(
+            &[WriteAction::Put {
+                keyspace: KeyspaceName::CatalogRecords,
+                key: b"item/1".to_vec(),
+                value: b"item/1".to_vec(),
+            }],
+            PersistMode::SyncData,
+        )
+        .unwrap();
+    let snapshot = database.read_snapshot();
+    assert!(snapshot
+        .keyset(
+            KeyspaceName::CatalogRecords,
+            b"other/",
+            Some(b"item/1"),
+            ScanDirection::Forward,
+            1,
+        )
+        .is_err());
+}
