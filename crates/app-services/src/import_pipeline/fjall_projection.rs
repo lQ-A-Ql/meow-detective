@@ -167,7 +167,9 @@ fn mirror_artifacts(
 ) -> Result<(), CommandError> {
     let mut statement = connection
         .prepare(
-            "SELECT id, artifact_type, source_object_id, summary, attrs
+            "SELECT id, artifact_type, source_object_id, summary, attrs,
+                    title, summary, extractor_id, extractor_version, confidence,
+                    source_attribution, created_at
              FROM artifacts WHERE data_source_id = ?1 ORDER BY id ASC",
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
@@ -175,13 +177,24 @@ fn mirror_artifacts(
         .query_map([source_id], |row| {
             let summary: String = row.get(3)?;
             let attrs: String = row.get(4)?;
+            let payload = serde_json::json!({
+                "attrs": serde_json::from_str::<serde_json::Value>(&attrs)
+                    .unwrap_or(serde_json::Value::Null),
+                "title": row.get::<_, String>(5)?,
+                "summary": row.get::<_, String>(6)?,
+                "extractorId": row.get::<_, Option<String>>(7)?,
+                "extractorVersion": row.get::<_, Option<String>>(8)?,
+                "confidence": row.get::<_, Option<f32>>(9)?,
+                "sourceAttribution": row.get::<_, Option<String>>(10)?,
+                "createdAt": row.get::<_, String>(11)?,
+            });
             Ok(ArtifactRecord {
                 id: row.get(0)?,
                 data_source_id: source_id.to_owned(),
                 artifact_type: row.get(1)?,
                 source_object_id: row.get(2)?,
                 content_sha256: Some(infrastructure::hashing::sha256_bytes(summary.as_bytes())),
-                attrs: serde_json::from_str(&attrs).unwrap_or(serde_json::Value::Null),
+                attrs: payload,
             })
         })
         .map_err(|error| CommandError::internal(error.to_string()))?;
