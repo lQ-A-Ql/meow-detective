@@ -164,12 +164,7 @@ fn execute_import_job_internal(
             phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)
         })?;
         let projection_digest = super::fjall_projection::mirror_source_records(&ctx, &ds.id.0)?;
-        persistence_sqlite::repositories::storage_control_repo::StorageControlRepo::new(ctx.conn)
-            .update_expected_batch_digest(
-                &format!("source-import:{}", job_id.0),
-                &projection_digest,
-            )
-            .map_err(CommandError::from_typed_service_error)?;
+        mark_projection_committed(ctx.conn, &job_id.0, &projection_digest)?;
         Ok(message)
     })();
 
@@ -187,6 +182,26 @@ fn execute_import_job_internal(
     })?;
     cleanup.start();
     Ok((message, counts))
+}
+
+fn mark_projection_committed(
+    connection: &rusqlite::Connection,
+    job_id: &str,
+    digest: &str,
+) -> Result<(), CommandError> {
+    let repo =
+        persistence_sqlite::repositories::storage_control_repo::StorageControlRepo::new(connection);
+    let operation_id = format!("source-import:{job_id}");
+    repo.update_expected_batch_digest(&operation_id, digest)
+        .map_err(CommandError::from_typed_service_error)?;
+    repo.update_operation_state(
+        &operation_id,
+        persistence_sqlite::repositories::storage_control_repo::StorageOperationState::Committed,
+        &chrono::Utc::now().to_rfc3339(),
+        None,
+    )
+    .map_err(CommandError::from_typed_service_error)?;
+    Ok(())
 }
 
 fn reject_cancelled_after_register(

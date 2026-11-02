@@ -6,6 +6,7 @@ use std::{
 
 use crate::search_metadata_projection::MetadataProjection;
 use persistence_fjall::{CatalogEntryType, ScanDirection};
+use persistence_fjall::{KeyPart, PersistMode, VersionedEnvelope};
 use rusqlite::{params, Connection};
 use search::{SearchFileDocument, SearchIndex, SearchMetadataWriter};
 
@@ -105,7 +106,37 @@ fn run_search_index_phase_with_page_size(
     ensure_not_cancelled(&options)?;
     replace_index_generation(&next_index_dir, &options.index_dir)?;
     build.mark_published();
+    write_search_marker(&options)?;
     Ok(stats)
+}
+
+fn write_search_marker(options: &SearchIndexPhaseOptions) -> Result<(), ImportAnalysisError> {
+    let Ok(source) = crate::source_db::open_registered_fjall_source_read_write(
+        &options.case_root,
+        &options.data_source_id,
+    ) else {
+        return Ok(());
+    };
+    let marker = VersionedEnvelope::new(
+        "search_projection_generation",
+        1,
+        format!("search:{}", options.data_source_id.0),
+        &options.data_source_id.0,
+        1,
+        options.index_dir.to_string_lossy().as_bytes().to_vec(),
+    );
+    let key =
+        persistence_fjall::encode_key("search", &[KeyPart::Text(options.data_source_id.0.clone())])
+            .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+    source
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            PersistMode::SyncAll,
+        )
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+    Ok(())
 }
 
 fn data_version(conn: &Connection) -> rusqlite::Result<String> {
