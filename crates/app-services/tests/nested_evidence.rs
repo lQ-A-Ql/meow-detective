@@ -147,8 +147,13 @@ fn nested_pipeline_reuses_registered_id_and_exposes_child_catalog_and_bytes() {
             let bytes = range.raw_bytes.unwrap();
             assert_eq!(bytes, b"Hello World");
             assert_eq!(
-                nested_evidence_service::list_for_parent(conn, &case.active.meta.id, "parent")
-                    .unwrap()[0]
+                nested_evidence_service::list_for_parent(
+                    conn,
+                    &case.active.case_root,
+                    &case.active.meta.id,
+                    "parent",
+                )
+                .unwrap()[0]
                     .derived_data_source_id
                     .as_deref(),
                 Some(source.id.0.as_str())
