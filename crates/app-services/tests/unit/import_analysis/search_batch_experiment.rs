@@ -22,6 +22,7 @@ fn disk_search_trial() {
     let stats = run_search_index_phase_with_page_size(
         SearchIndexPhaseOptions {
             publication_lease: None,
+            case_root: temporary.path().to_path_buf(),
             db_path,
             data_source_id: DataSourceId("source".into()),
             platform: DataSourcePlatform::Windows,

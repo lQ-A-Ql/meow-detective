@@ -57,12 +57,10 @@ fn run_search_index_phase_with_page_size(
         eligible_count: count_metadata_rows(&connection, &options)?,
         ..SearchIndexPhaseStats::default()
     };
-    if let Some(source) = crate::source_db::open_registered_fjall_source_read_only(
+    if let Ok(source) = crate::source_db::open_registered_fjall_source_read_only(
         &options.case_root,
         &options.data_source_id,
-    )
-    .ok()
-    {
+    ) {
         let fjall_indexed = index_fjall_metadata_rows(
             &source,
             &options,
