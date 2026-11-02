@@ -156,6 +156,35 @@ fn parser_records_reject_summary_digest_mismatch() {
 }
 
 #[test]
+fn parser_family_oracle_covers_android_linux_ceph_and_nested_records() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ParserRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    for (family, kind) in [
+        ("android", "package"),
+        ("linux", "evidence_facts"),
+        ("ceph", "ceph_rocksdb_latest_state"),
+        ("nested", "lineage"),
+    ] {
+        let record = parser(&format!("{family}-record"), "source", family, kind);
+        store.upsert(&record, PersistMode::SyncData).unwrap();
+    }
+    let snapshot = store.read_snapshot();
+    for (family, kind) in [
+        ("android", "package"),
+        ("linux", "evidence_facts"),
+        ("ceph", "ceph_rocksdb_latest_state"),
+        ("nested", "lineage"),
+    ] {
+        let page = store
+            .list_by_kind(&snapshot, "source", kind, None, ScanDirection::Forward, 2)
+            .unwrap();
+        assert_eq!(page.records.len(), 1);
+        assert_eq!(page.records[0].family, family);
+        assert_eq!(page.records[0].status, "ready");
+    }
+}
+
+#[test]
 fn artifact_records_support_type_and_source_object_indexes() {
     let root = tempfile::tempdir().unwrap();
     let store = ArtifactRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();

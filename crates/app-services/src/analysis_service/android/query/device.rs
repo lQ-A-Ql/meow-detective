@@ -42,6 +42,11 @@ fn read_fjall_device(
     if page.records.is_empty() {
         return Ok(None);
     }
+    if page.next_cursor.is_some() {
+        return Err(AnalysisServiceError::Other(
+            "Android system facts exceed the bounded parser query limit".to_owned(),
+        ));
+    }
     let facts = page
         .records
         .into_iter()
