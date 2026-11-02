@@ -12,6 +12,8 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
 
+mod timeline_batch;
+
 const RECORD_KIND: &str = "timeline_event";
 const SCHEMA_VERSION: u16 = 1;
 const RECORD_FAMILY: &str = "timeline.record";

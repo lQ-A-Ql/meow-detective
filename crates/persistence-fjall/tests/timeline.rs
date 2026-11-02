@@ -104,6 +104,25 @@ fn upsert_and_delete_clean_all_timeline_indexes() {
 }
 
 #[test]
+fn timeline_batch_upsert_writes_all_records_and_indexes() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = TimelineRecordStore::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let records = vec![
+        record("source-a", "batch-a", "FILE_MODIFIED", "file-a", 30),
+        record("source-a", "batch-b", "FILE_MODIFIED", "file-b", 20),
+    ];
+    store.upsert_batch(&records, PersistMode::SyncData).unwrap();
+    let snapshot = store.read_snapshot();
+    assert_eq!(
+        store
+            .list_by_source(&snapshot, "source-a", None, ScanDirection::Forward, 10)
+            .unwrap()
+            .records,
+        records
+    );
+}
+
+#[test]
 fn type_and_source_queries_are_keyset_paginated() {
     let directory = tempfile::tempdir().unwrap();
     let store = TimelineRecordStore::open(directory.path(), DatabaseConfig::default()).unwrap();

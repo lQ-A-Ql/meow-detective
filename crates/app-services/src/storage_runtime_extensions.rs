@@ -5,7 +5,7 @@ use crate::storage_runtime::{
 use persistence_fjall::{
     ArtifactPage, ArtifactRecord, ArtifactRecordStore, CatalogPage, CatalogRecordStore,
     FileEntryRecord, ParserFieldQuery, ParserPage, ParserRecord, ParserRecordStore, PersistMode,
-    ScanDirection, SourceReadSnapshot,
+    ScanDirection, SourceReadSnapshot, TimelineRecord, TimelineRecordStore,
 };
 
 impl ReadOnlySourceStorageHandle {
@@ -187,6 +187,33 @@ impl ReadOnlySourceStorageHandle {
 }
 
 impl ReadWriteSourceStorageHandle {
+    pub fn parser_upsert_batch(
+        &self,
+        records: &[ParserRecord],
+        mode: PersistMode,
+    ) -> Result<(), StorageRuntimeError> {
+        ParserRecordStore::from_source_store(self.source_store().clone())
+            .upsert_batch(records, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+    pub fn artifact_upsert_batch(
+        &self,
+        records: &[ArtifactRecord],
+        mode: PersistMode,
+    ) -> Result<(), StorageRuntimeError> {
+        ArtifactRecordStore::from_source_store(self.source_store().clone())
+            .upsert_batch(records, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+    pub fn timeline_upsert_batch(
+        &self,
+        records: &[TimelineRecord],
+        mode: PersistMode,
+    ) -> Result<(), StorageRuntimeError> {
+        TimelineRecordStore::from_source_store(self.source_store().clone())
+            .upsert_batch(records, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
     pub fn catalog_upsert_batch(
         &self,
         records: &[FileEntryRecord],

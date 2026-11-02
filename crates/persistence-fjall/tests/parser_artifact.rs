@@ -138,6 +138,29 @@ fn parser_records_are_source_isolated_and_keyset_indexed() {
 }
 
 #[test]
+fn parser_batch_upsert_writes_all_records_and_indexes() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ParserRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let records = vec![
+        parser("batch-one", "source", "ceph", "ceph_fs_metadata_objects"),
+        parser("batch-two", "source", "ceph", "ceph_fs_metadata_objects"),
+    ];
+    store.upsert_batch(&records, PersistMode::SyncData).unwrap();
+    let snapshot = store.read_snapshot();
+    let page = store
+        .list_by_kind(
+            &snapshot,
+            "source",
+            "ceph_fs_metadata_objects",
+            None,
+            ScanDirection::Forward,
+            10,
+        )
+        .unwrap();
+    assert_eq!(page.records, records);
+}
+
+#[test]
 fn parser_records_reject_invalid_identity() {
     let root = tempfile::tempdir().unwrap();
     let store = ParserRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
@@ -225,5 +248,45 @@ fn artifact_records_support_type_and_source_object_indexes() {
             .unwrap()
             .records,
         vec![record]
+    );
+}
+
+#[test]
+fn artifact_batch_upsert_writes_all_records_and_indexes() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ArtifactRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let records = vec![
+        ArtifactRecord {
+            id: "batch-artifact-1".into(),
+            data_source_id: "source".into(),
+            artifact_type: "ceph".into(),
+            source_object_id: None,
+            content_sha256: None,
+            attrs: json!({"id": 1}),
+        },
+        ArtifactRecord {
+            id: "batch-artifact-2".into(),
+            data_source_id: "source".into(),
+            artifact_type: "ceph".into(),
+            source_object_id: None,
+            content_sha256: None,
+            attrs: json!({"id": 2}),
+        },
+    ];
+    store.upsert_batch(&records, PersistMode::SyncData).unwrap();
+    let snapshot = store.read_snapshot();
+    assert_eq!(
+        store
+            .list_by_type(
+                &snapshot,
+                "source",
+                "ceph",
+                None,
+                ScanDirection::Forward,
+                10
+            )
+            .unwrap()
+            .records,
+        records
     );
 }

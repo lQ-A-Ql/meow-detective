@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 
+mod artifact_batch;
+
 const RECORD_KIND: &str = "artifact_record";
 const SCHEMA_VERSION: u16 = 1;
 const RECORD_FAMILY: &str = "artifact.record";

@@ -11,6 +11,8 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
+mod parser_batch;
+
 const RECORD_KIND: &str = "parser_record";
 const SCHEMA_VERSION: u16 = 1;
 const RECORD_FAMILY: &str = "parser.record";
