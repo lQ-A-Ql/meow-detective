@@ -311,6 +311,18 @@ impl<'a> StorageControlRepo<'a> {
             .map_err(Into::into)
     }
 
+    pub fn list_ready_artifacts(&self, case_id: &str) -> DbResult<Vec<ArtifactObjectRecord>> {
+        let mut statement = self.connection.prepare(
+            "SELECT object_id, case_id, sha256, original_length, stored_length,
+                    media_type, compression, relative_path, write_state
+             FROM artifact_objects
+             WHERE case_id = ?1 AND write_state = 'ready'
+             ORDER BY object_id ASC",
+        )?;
+        let rows = statement.query_map([case_id], map_artifact_object)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     pub fn list_unreferenced_ready_artifacts(
         &self,
         case_id: &str,

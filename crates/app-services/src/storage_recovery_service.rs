@@ -1,11 +1,15 @@
 use crate::{source_db, storage_runtime::ReadOnlySourceStorageHandle};
+use artifact_storage::{ArtifactStore, ObjectAddress};
 use persistence_fjall::{
     scan_recovery_consistency, BatchReceiptState, RecoveryScan, RecoveryState, SourceBuildLayout,
 };
-use persistence_sqlite::repositories::storage_control_repo::StorageControlRepo;
+use persistence_sqlite::repositories::storage_control_repo::{
+    StorageControlRepo, StorageOperationState,
+};
 use rusqlite::Connection;
 use std::path::Path;
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum StorageRecoveryError {
@@ -45,7 +49,8 @@ pub fn scan_case(
     case_id: &str,
 ) -> Result<StorageRecoveryReport, StorageRecoveryError> {
     let operations = StorageControlRepo::new(connection).list_open_operations(case_id)?;
-    let mut items = Vec::with_capacity(operations.len());
+    let mut items = Vec::with_capacity(operations.len() + 1);
+    verify_artifacts(connection, case_root, case_id, &mut items)?;
     for operation in operations {
         let Some(source_id) = operation.source_id.clone() else {
             items.push(StorageRecoveryItem {
@@ -119,6 +124,60 @@ pub fn scan_case(
             }
         });
     Ok(StorageRecoveryReport { disposition, items })
+}
+
+pub fn repair_operation(
+    connection: &Connection,
+    operation_id: &str,
+    reason: &str,
+) -> Result<(), StorageRecoveryError> {
+    let repo = StorageControlRepo::new(connection);
+    let operation = repo.find_operation(operation_id)?.ok_or_else(|| {
+        StorageRecoveryError::Source("storage operation was not found".to_owned())
+    })?;
+    repo.update_operation_state(
+        operation_id,
+        StorageOperationState::Failed,
+        &chrono::Utc::now().to_rfc3339(),
+        Some(reason),
+    )?;
+    repo.insert_repair_event(
+        &persistence_sqlite::repositories::storage_control_repo::StorageRepairEventRecord {
+            event_id: Uuid::new_v4().to_string(),
+            case_id: operation.case_id,
+            source_id: operation.source_id,
+            operation_id: Some(operation_id.to_owned()),
+            event_kind: "storage_operation_repair".to_owned(),
+            state: "failed".to_owned(),
+            details_json: Some(serde_json::json!({"reason": reason}).to_string()),
+            error_code: Some(reason.to_owned()),
+        },
+    )?;
+    Ok(())
+}
+
+fn verify_artifacts(
+    connection: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    items: &mut Vec<StorageRecoveryItem>,
+) -> Result<(), StorageRecoveryError> {
+    let store = ArtifactStore::from_objects_root(case_root.join("artifacts").join("objects"))
+        .map_err(|error| StorageRecoveryError::Source(error.to_string()))?;
+    for object in StorageControlRepo::new(connection).list_ready_artifacts(case_id)? {
+        let address = ObjectAddress::parse(&object.sha256)
+            .map_err(|error| StorageRecoveryError::Source(error.to_string()))?;
+        if let Err(error) = store.verify(&address) {
+            items.push(StorageRecoveryItem {
+                operation_id: format!("artifact:{}", object.object_id),
+                source_id: None,
+                disposition: RecoveryDisposition::RepairRequired,
+                state: None,
+                detail: format!("artifact object verification failed: {error}"),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn open_source(case_root: &Path, source_id: &str) -> Option<ReadOnlySourceStorageHandle> {
