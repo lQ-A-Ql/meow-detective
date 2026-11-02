@@ -38,6 +38,7 @@ mod context;
 mod emit;
 mod execute;
 mod fjall_projection;
+pub(crate) use fjall_projection::mirror_source_records_from_connections;
 pub mod options;
 pub mod partition;
 mod phases;

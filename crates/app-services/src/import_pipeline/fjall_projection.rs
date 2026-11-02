@@ -15,17 +15,40 @@ pub(super) fn mirror_source_records(
     ctx: &ImportJobContext<'_>,
     source_id: &str,
 ) -> Result<String, CommandError> {
-    let source = crate::source_db::open_registered_fjall_source_read_write(
+    mirror_source_records_from_connections(
+        ctx.conn,
         ctx.case_root,
+        &ctx.case_id.0,
+        ctx.source_connection()?,
+        source_id,
+    )
+}
+
+pub(crate) fn mirror_source_records_from_connections(
+    case_connection: &Connection,
+    case_root: &std::path::Path,
+    case_id: &str,
+    source_connection: &Connection,
+    source_id: &str,
+) -> Result<String, CommandError> {
+    let source = crate::source_db::open_registered_fjall_source_read_write(
+        case_root,
         &domain::DataSourceId(source_id.to_owned()),
     )
     .map_err(|_| CommandError::internal("Fjall source storage is unavailable"))?;
-    mirror_catalog(ctx.source_connection()?, &source, source_id)?;
-    mirror_timeline(ctx.source_connection()?, &source, source_id)?;
-    mirror_artifacts(ctx, ctx.source_connection()?, &source, source_id)?;
-    mirror_android_parser_records(ctx.source_connection()?, &source, source_id)?;
-    mirror_linux_parser_record(ctx.source_connection()?, &source, source_id)?;
-    mirror_parser_tables(ctx.source_connection()?, &source, source_id)?;
+    mirror_catalog(source_connection, &source, source_id)?;
+    mirror_timeline(source_connection, &source, source_id)?;
+    mirror_artifacts(
+        case_connection,
+        case_root,
+        case_id,
+        source_connection,
+        &source,
+        source_id,
+    )?;
+    mirror_android_parser_records(source_connection, &source, source_id)?;
+    mirror_linux_parser_record(source_connection, &source, source_id)?;
+    mirror_parser_tables(source_connection, &source, source_id)?;
     source
         .persist(PersistMode::SyncAll)
         .map_err(|error| CommandError::internal(error.to_string()))?;
@@ -253,13 +276,15 @@ fn mirror_android_parser_records(
 }
 
 fn mirror_artifacts(
-    ctx: &ImportJobContext<'_>,
+    case_connection: &Connection,
+    case_root: &std::path::Path,
+    case_id: &str,
     connection: &Connection,
     source: &ReadWriteSourceStorageHandle,
     source_id: &str,
 ) -> Result<(), CommandError> {
-    let object_store = ArtifactStore::new(ctx.case_root)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let object_store =
+        ArtifactStore::new(case_root).map_err(|error| CommandError::internal(error.to_string()))?;
     let mut statement = connection
         .prepare(
             "SELECT id, artifact_type, source_object_id, summary, attrs,
@@ -305,16 +330,16 @@ fn mirror_artifacts(
         let object_bytes = serde_json::to_vec(&record.attrs)
             .map_err(|error| CommandError::internal(error.to_string()))?;
         let object = crate::artifact_storage_service::write_object(
-            ctx.conn,
+            case_connection,
             &object_store,
-            &ctx.case_id.0,
+            case_id,
             &object_bytes,
             "application/json",
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
         crate::artifact_storage_service::create_reference(
-            ctx.conn,
-            &ctx.case_id.0,
+            case_connection,
+            case_id,
             &object.object_id,
             Some(source_id),
             "artifact",
