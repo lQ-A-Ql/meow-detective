@@ -4,7 +4,7 @@ use std::{
     sync::atomic::Ordering,
 };
 
-use crate::search_metadata_projection::MetadataProjection;
+use crate::search_metadata_projection::{MetadataProjection, SearchProjectionMarker};
 use persistence_fjall::{CatalogEntryType, ScanDirection};
 use persistence_fjall::{KeyPart, PersistMode, VersionedEnvelope};
 use rusqlite::{params, Connection};
@@ -54,10 +54,7 @@ fn run_search_index_phase_with_page_size(
     let mut writer = index
         .metadata_writer_for_new_generation()
         .map_err(|error| ImportAnalysisError::Other(format!("Open search writer: {error}")))?;
-    let mut stats = SearchIndexPhaseStats {
-        eligible_count: count_metadata_rows(&connection, &options)?,
-        ..SearchIndexPhaseStats::default()
-    };
+    let mut stats = SearchIndexPhaseStats::default();
     if let Ok(source) = crate::source_db::open_registered_fjall_source_read_only(
         &options.case_root,
         &options.data_source_id,
@@ -70,7 +67,7 @@ fn run_search_index_phase_with_page_size(
             &mut writer,
             &mut stats,
         )?;
-        if fjall_indexed == 0 {
+        if fjall_indexed == 0 && stats.eligible_count == 0 {
             index_metadata_rows(
                 &connection,
                 &options,
@@ -81,6 +78,7 @@ fn run_search_index_phase_with_page_size(
             )?;
         }
     } else {
+        stats.eligible_count = count_metadata_rows(&connection, &options)?;
         index_metadata_rows(
             &connection,
             &options,
@@ -96,6 +94,8 @@ fn run_search_index_phase_with_page_size(
     stats.skipped_count = stats
         .eligible_count
         .saturating_sub(stats.indexed_count.saturating_add(stats.failed_count));
+    let generation = index.generation().to_owned();
+    let schema_version = index.schema_version();
     drop(index);
     projection
         .validate(&options.data_source_id, &data_version(&connection)?)
@@ -106,25 +106,38 @@ fn run_search_index_phase_with_page_size(
     ensure_not_cancelled(&options)?;
     replace_index_generation(&next_index_dir, &options.index_dir)?;
     build.mark_published();
-    write_search_marker(&options)?;
+    write_search_marker(&options, projection.revision(), &generation, schema_version)?;
     Ok(stats)
 }
 
-fn write_search_marker(options: &SearchIndexPhaseOptions) -> Result<(), ImportAnalysisError> {
+fn write_search_marker(
+    options: &SearchIndexPhaseOptions,
+    input_revision: &str,
+    generation: &str,
+    schema_version: u32,
+) -> Result<(), ImportAnalysisError> {
     let Ok(source) = crate::source_db::open_registered_fjall_source_read_write(
         &options.case_root,
         &options.data_source_id,
     ) else {
         return Ok(());
     };
-    let marker = VersionedEnvelope::new(
+    let marker_payload = SearchProjectionMarker {
+        source_id: options.data_source_id.0.clone(),
+        input_revision: input_revision.to_owned(),
+        generation: generation.to_owned(),
+        schema_version,
+        index_path: options.index_dir.to_string_lossy().into_owned(),
+    };
+    let marker = VersionedEnvelope::from_serializable(
         "search_projection_generation",
         1,
         format!("search:{}", options.data_source_id.0),
         &options.data_source_id.0,
         1,
-        options.index_dir.to_string_lossy().as_bytes().to_vec(),
-    );
+        &marker_payload,
+    )
+    .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
     let key =
         persistence_fjall::encode_key("search", &[KeyPart::Text(options.data_source_id.0.clone())])
             .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;

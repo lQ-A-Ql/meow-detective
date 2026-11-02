@@ -1,3 +1,4 @@
+use crate::search_metadata_projection::SearchProjectionMarker;
 use crate::storage_runtime::{
     ReadOnlySourceStorageHandle, ReadWriteSourceStorageHandle, StorageRuntimeError,
 };
@@ -7,6 +8,30 @@ use persistence_fjall::{
 };
 
 impl ReadOnlySourceStorageHandle {
+    pub(crate) fn search_projection_marker(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+    ) -> Result<Option<SearchProjectionMarker>, StorageRuntimeError> {
+        let key = persistence_fjall::encode_key(
+            "search",
+            &[persistence_fjall::KeyPart::Text(source_id.to_owned())],
+        )
+        .map_err(StorageRuntimeError::Source)?;
+        let Some(envelope) =
+            self.read_envelope(snapshot, persistence_fjall::KeyspaceName::Meta, &key)?
+        else {
+            return Ok(None);
+        };
+        if envelope.record_kind != "search_projection_generation" {
+            return Ok(None);
+        }
+        envelope
+            .decode_payload()
+            .map(Some)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn search_projection_present(
         &self,
         snapshot: &SourceReadSnapshot,

@@ -4,7 +4,7 @@ use persistence_fjall::{
     scan_recovery_consistency, BatchReceiptState, RecoveryScan, RecoveryState, SourceBuildLayout,
 };
 use persistence_sqlite::repositories::storage_control_repo::{
-    StorageControlRepo, StorageOperationState,
+    StorageControlRepo, StorageOperationState, StorageRecoveryStatusRecord,
 };
 use rusqlite::Connection;
 use std::path::Path;
@@ -125,7 +125,66 @@ pub fn scan_case(
                 _ => RecoveryDisposition::Ready,
             }
         });
-    Ok(StorageRecoveryReport { disposition, items })
+    let report = StorageRecoveryReport { disposition, items };
+    persist_recovery_status(connection, case_id, &report)?;
+    Ok(report)
+}
+
+fn persist_recovery_status(
+    connection: &Connection,
+    case_id: &str,
+    report: &StorageRecoveryReport,
+) -> Result<(), StorageRecoveryError> {
+    let repo = StorageControlRepo::new(connection);
+    let now = chrono::Utc::now().to_rfc3339();
+    repo.clear_recovery_status(case_id)?;
+    let mut rows = report
+        .items
+        .iter()
+        .map(|item| StorageRecoveryStatusRecord {
+            case_id: case_id.to_owned(),
+            scope_key: recovery_scope_key(item),
+            source_id: item.source_id.clone(),
+            operation_id: Some(item.operation_id.clone()),
+            disposition: disposition_name(item.disposition).to_owned(),
+            storage_state: item
+                .state
+                .map(|state| format!("{state:?}").to_ascii_lowercase()),
+            detail: item.detail.clone(),
+            scanned_at: now.clone(),
+        })
+        .collect::<Vec<_>>();
+    if rows.is_empty() {
+        rows.push(StorageRecoveryStatusRecord {
+            case_id: case_id.to_owned(),
+            scope_key: "case".to_owned(),
+            source_id: None,
+            operation_id: None,
+            disposition: disposition_name(report.disposition).to_owned(),
+            storage_state: None,
+            detail: "case storage recovery scan completed".to_owned(),
+            scanned_at: now,
+        });
+    }
+    for row in rows {
+        repo.upsert_recovery_status(&row)?;
+    }
+    Ok(())
+}
+
+fn recovery_scope_key(item: &StorageRecoveryItem) -> String {
+    item.source_id
+        .as_ref()
+        .map(|source_id| format!("source:{source_id}:{}", item.operation_id))
+        .unwrap_or_else(|| item.operation_id.clone())
+}
+
+fn disposition_name(disposition: RecoveryDisposition) -> &'static str {
+    match disposition {
+        RecoveryDisposition::Ready => "ready",
+        RecoveryDisposition::RecoveryRequired => "recovery_required",
+        RecoveryDisposition::RepairRequired => "repair_required",
+    }
 }
 
 fn verify_search_projections(
@@ -159,16 +218,42 @@ fn verify_search_projections(
             });
             continue;
         };
-        if !handle
-            .search_projection_present(&handle.snapshot(), &source.id.0)
-            .map_err(|error| StorageRecoveryError::Source(error.to_string()))?
-        {
+        let marker = handle
+            .search_projection_marker(&handle.snapshot(), &source.id.0)
+            .map_err(|error| StorageRecoveryError::Source(error.to_string()))?;
+        let current_revision =
+            source_db::open_registered_source_db_read_only(connection, case_root, &source.id)
+                .ok()
+                .and_then(|source_connection| {
+                    source_connection
+                        .pragma_query_value(None, "data_version", |row| row.get::<_, i64>(0))
+                        .ok()
+                        .map(|value| value.to_string())
+                });
+        let valid_marker = marker.as_ref().is_some_and(|marker| {
+            marker.source_id == source.id.0
+                && current_revision.as_deref() == Some(marker.input_revision.as_str())
+                && !marker.generation.is_empty()
+                && marker.schema_version > 0
+                && std::path::Path::new(&marker.index_path).is_dir()
+                && search::SearchIndex::open(std::path::Path::new(&marker.index_path))
+                    .is_ok_and(|index| index.generation() == marker.generation)
+        });
+        if !valid_marker {
             items.push(StorageRecoveryItem {
                 operation_id: format!("search:{}", source.id.0),
                 source_id: Some(source.id.0),
-                disposition: RecoveryDisposition::RecoveryRequired,
+                disposition: if marker.is_some() {
+                    RecoveryDisposition::RepairRequired
+                } else {
+                    RecoveryDisposition::RecoveryRequired
+                },
                 state: None,
-                detail: "search projection marker is missing".to_owned(),
+                detail: if marker.is_some() {
+                    "search projection marker or index generation is invalid".to_owned()
+                } else {
+                    "search projection marker is missing".to_owned()
+                },
             });
         }
     }
