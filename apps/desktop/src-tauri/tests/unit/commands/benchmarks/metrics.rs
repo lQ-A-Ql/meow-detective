@@ -26,9 +26,11 @@ pub(super) fn peak_memory_mb() -> u64 {
 pub(super) fn scenario_result(scenario: &str, timings: Vec<u64>) -> serde_json::Value {
     serde_json::json!({
         "scenario": scenario,
-        "datasetLevel": "small",
+        "datasetLevel": std::env::var("FORENSICS_BENCH_FIXTURE_LEVEL")
+            .unwrap_or_else(|_| "small".to_owned()),
         "p95Ms": p95_ms(timings.clone()),
         "memoryPeakMb": peak_memory_mb(),
+        "processId": std::process::id(),
         "runs": timings
             .iter()
             .map(|elapsed| serde_json::json!({"elapsedMs": elapsed}))

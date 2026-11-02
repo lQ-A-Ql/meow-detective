@@ -77,6 +77,7 @@ try {
   $procInfo.RedirectStandardOutput = $true
   $procInfo.RedirectStandardError = $true
   $procInfo.EnvironmentVariables['RUST_BACKTRACE'] = '1'
+  $procInfo.EnvironmentVariables['FORENSICS_BENCH_FIXTURE_LEVEL'] = $FixtureLevel
 
   $process = New-Object System.Diagnostics.Process
   $process.StartInfo = $procInfo

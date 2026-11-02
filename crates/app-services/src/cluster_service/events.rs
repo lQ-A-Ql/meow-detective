@@ -18,6 +18,58 @@ pub fn get_linux_evidence_events(
     let mut events = Vec::new();
     let per_source_limit = offset.saturating_add(u64::from(limit)).min(2_000);
     for source_id in source_ids {
+        if let Ok(fjall) = source_db::open_registered_fjall_source_read_only(
+            case_root,
+            &DataSourceId(source_id.clone()),
+        ) {
+            let snapshot = fjall.snapshot();
+            let page = fjall
+                .timeline_list_by_time(
+                    &snapshot,
+                    &source_id,
+                    None,
+                    persistence_fjall::ScanDirection::Forward,
+                    per_source_limit as usize,
+                )
+                .map_err(|error| {
+                    ClusterServiceError::Db(persistence_sqlite::DbError::System(error.to_string()))
+                })?;
+            events.extend(page.records.into_iter().map(|record| {
+                let attrs = serde_json::to_value(record.attrs)
+                    .ok()
+                    .and_then(|value| value.as_object().cloned())
+                    .unwrap_or_default();
+                LinuxEvidenceEventDto {
+                    event_id: record.id,
+                    data_source_id: source_id.clone(),
+                    source_object_id: record.source_object_id,
+                    event_type: record.event_type,
+                    event_time: record.timestamp.to_rfc3339(),
+                    observed_time: string_attr(&attrs, "observedTime"),
+                    ingest_time: string_attr(&attrs, "ingestTime"),
+                    timezone: string_attr(&attrs, "timezone")
+                        .or_else(|| string_attr(&attrs, "tzAssumed")),
+                    clock_skew_seconds: attrs
+                        .get("clockSkewSeconds")
+                        .and_then(serde_json::Value::as_i64),
+                    native_sequence: string_attr(&attrs, "nativeSequence"),
+                    actor: string_attr(&attrs, "actor"),
+                    resource: string_attr(&attrs, "resource"),
+                    action: string_attr(&attrs, "action"),
+                    outcome: string_attr(&attrs, "outcome"),
+                    parser_id: record.parser_id,
+                    parser_version: record.parser_version,
+                    raw_digest: string_attr(&attrs, "rawDigest")
+                        .or_else(|| string_attr(&attrs, "contentDigest")),
+                    confidence: record.confidence,
+                    completeness: string_attr(&attrs, "completeness")
+                        .unwrap_or_else(|| "parsed".to_owned()),
+                    title: record.title,
+                    description: record.description,
+                }
+            }));
+            continue;
+        }
         let source = source_db::open_ready_source_read_only_by_id(
             case_connection,
             case_root,

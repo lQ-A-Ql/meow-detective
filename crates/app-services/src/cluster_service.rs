@@ -19,6 +19,7 @@ mod linux_evidence_facts;
 mod linux_import;
 mod manifest_parser;
 mod mdraid;
+mod mdraid_materialization;
 mod member_binding;
 mod network_parser;
 mod phase_ledger;
@@ -68,11 +69,14 @@ pub use manifest_parser::{
     parse_static_pod_manifests, ManifestContainer, StaticPodManifestSummary,
 };
 pub use mdraid::{
-    discover_linux_evidence_set_mdraid, materialize_linux_evidence_set_mdraid,
-    materialize_mdraid_array, materialize_mdraid_source_catalog,
-    materialize_mdraid_source_catalog_with_cancel, mdraid_descriptor_path, open_mdraid0_reader,
-    open_persisted_mdraid_reader, register_linux_evidence_set_mdraid, write_mdraid_descriptor,
-    MdRaidArrayPlan, MdRaidMemberPlan, MdRaidPlanError,
+    discover_linux_evidence_set_mdraid, mdraid_descriptor_path, open_mdraid0_reader,
+    open_persisted_mdraid_reader, write_mdraid_descriptor, MdRaidArrayPlan, MdRaidMemberPlan,
+    MdRaidPlanError,
+};
+pub use mdraid_materialization::{
+    materialize_linux_evidence_set_mdraid, materialize_mdraid_array,
+    materialize_mdraid_source_catalog, materialize_mdraid_source_catalog_with_cancel,
+    register_linux_evidence_set_mdraid,
 };
 pub use member_binding::get_linux_import_member_source_id;
 pub use network_parser::{

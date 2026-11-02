@@ -1,4 +1,4 @@
-use super::MetadataProjection;
+use super::{MetadataProjection, SearchProjectionMarker};
 use domain::{DataSourceId, FileEntry};
 
 fn entry() -> FileEntry {
@@ -65,4 +65,18 @@ fn nullable_metadata_and_partition_identity_are_retained() {
     assert_eq!(document.modified_at, None);
     assert_eq!(document.size, None);
     assert!(document.extension.is_empty());
+}
+
+#[test]
+fn search_projection_marker_round_trips_generation_and_revision() {
+    let marker = SearchProjectionMarker {
+        source_id: "source".into(),
+        input_revision: "17".into(),
+        generation: "generation-1".into(),
+        schema_version: 5,
+        index_path: "sources/source/index".into(),
+    };
+    let bytes = serde_json::to_vec(&marker).unwrap();
+    let decoded: SearchProjectionMarker = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(decoded, marker);
 }

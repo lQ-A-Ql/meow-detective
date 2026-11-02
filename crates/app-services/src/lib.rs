@@ -9,6 +9,7 @@
 pub mod active_case;
 pub mod analysis_service;
 pub mod artifact_service;
+pub mod artifact_storage_service;
 pub mod batch_service;
 pub mod bitlocker_runtime;
 pub mod bitlocker_service;
@@ -76,6 +77,10 @@ pub mod source_db;
 pub mod source_runtime;
 pub mod staging;
 pub mod step_recorder;
+pub mod storage_manifest;
+pub mod storage_recovery_service;
+pub mod storage_runtime;
+mod storage_runtime_extensions;
 pub mod text_service;
 pub mod timeline_service;
 pub mod v2_governance_service;

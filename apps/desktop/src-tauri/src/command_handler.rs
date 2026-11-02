@@ -168,6 +168,8 @@ macro_rules! desktop_command_handler {
             get_emulation_status,
             list_emulation_sessions,
             release_emulation,
+            get_storage_recovery_report,
+            repair_storage_operation,
         ]
     };
 }

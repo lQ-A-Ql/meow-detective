@@ -118,6 +118,22 @@ pub fn export_carved_artifact(
             io_error(e.error)
         }
     })?;
+    let store = artifact_storage::ArtifactStore::new(root)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let storage = crate::artifact_storage_service::ArtifactStorageService::new(conn, &store);
+    let object = storage
+        .write_file(&case.0, destination, "application/octet-stream")
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    storage
+        .create_reference(
+            &case.0,
+            &object.object_id,
+            Some(&artifact.data_source_id),
+            "carving",
+            &artifact.artifact_id,
+            "export",
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(CarvedExportDto {
         artifact_id: artifact.artifact_id,
         bytes_written: length.to_string(),

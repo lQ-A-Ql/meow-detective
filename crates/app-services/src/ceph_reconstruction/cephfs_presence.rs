@@ -205,7 +205,14 @@ pub enum CephFsPresenceError {
 impl transport::ServiceErrorCategory for CephFsPresenceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
-            Self::Db(error) => error.category(),
+            Self::Db(error) => match error.category() {
+                persistence_sqlite::DbErrorCategory::Cancelled => {
+                    transport::ErrorCategory::Cancelled
+                }
+                persistence_sqlite::DbErrorCategory::Timeout => transport::ErrorCategory::Timeout,
+                persistence_sqlite::DbErrorCategory::Io => transport::ErrorCategory::Io,
+                persistence_sqlite::DbErrorCategory::Internal => transport::ErrorCategory::Internal,
+            },
             Self::ScopeNotFound(_) | Self::ScopeCaseMismatch { .. } => {
                 transport::ErrorCategory::Validation
             }

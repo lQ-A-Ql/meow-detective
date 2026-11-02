@@ -9,6 +9,7 @@ mod enumeration;
 mod error;
 mod extraction;
 pub(crate) mod filesystem_locators;
+mod fjall_read;
 mod linux_root_mounts;
 mod metadata;
 mod mft;

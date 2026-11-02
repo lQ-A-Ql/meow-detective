@@ -12,13 +12,13 @@ use persistence_sqlite::{
     },
     runner,
 };
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use std::{fs, path::Path};
 
 pub fn open_case(root: &Path) -> Result<ActiveCase> {
     let started = std::time::Instant::now();
     let (case_from_json, db_path) = validate_case_workspace(root)?;
-    let stored = preflight_case_workspace(&db_path, &case_from_json.id)?;
+    let stored = preflight_case_workspace(root, &db_path, &case_from_json.id)?;
     let after_preflight = started.elapsed();
     let active = ActiveCase::new(stored, root.to_path_buf(), open_existing(&db_path)?);
     let after_db_open = started.elapsed();
@@ -43,6 +43,7 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
 
 pub(super) fn open_case_for_deletion(root: &Path) -> Result<ActiveCase> {
     let (case_from_json, db_path) = validate_case_workspace(root)?;
+    ensure_storage_manifest(root, &case_from_json.id)?;
     let conn = open_existing(&db_path)?;
     let stored = load_case_record(&conn, &case_from_json.id)?;
     Ok(ActiveCase::new(stored, root.to_path_buf(), conn))
@@ -64,11 +65,24 @@ fn validate_case_workspace(root: &Path) -> Result<(CaseMeta, std::path::PathBuf)
     Ok((case_from_json, root.join("app.db")))
 }
 
-fn preflight_case_workspace(db_path: &Path, case_id: &CaseId) -> Result<CaseMeta> {
-    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(persistence_sqlite::DbError::from)?;
+fn preflight_case_workspace(root: &Path, db_path: &Path, case_id: &CaseId) -> Result<CaseMeta> {
+    ensure_storage_manifest(root, case_id)?;
+    let conn = open_existing(db_path)?;
     ensure_current_schema(&conn)?;
     let stored = load_case_record(&conn, case_id)?;
+    let recovery =
+        crate::storage_recovery_service::scan_case(&conn, root, &case_id.0).map_err(|error| {
+            CaseServiceError::InvalidCaseDir(format!("storage recovery scan failed: {error}"))
+        })?;
+    if !matches!(
+        recovery.disposition,
+        crate::storage_recovery_service::RecoveryDisposition::Ready
+    ) {
+        return Err(CaseServiceError::InvalidCaseDir(format!(
+            "storage recovery required: {:?}",
+            recovery.disposition
+        )));
+    }
     ensure_current_source_schemas(&conn, db_path, case_id)?;
     if has_retired_linux_cluster_relationships(&conn, case_id)? {
         return Err(CaseServiceError::TopologyReimportRequired);
@@ -80,6 +94,12 @@ fn preflight_case_workspace(db_path: &Path, case_id: &CaseId) -> Result<CaseMeta
         ));
     }
     Ok(stored)
+}
+
+fn ensure_storage_manifest(root: &Path, case_id: &CaseId) -> Result<()> {
+    crate::storage_manifest::validate_case(root, &case_id.0)
+        .map(|_| ())
+        .map_err(|error| CaseServiceError::UnsupportedStorageFormat(error.to_string()))
 }
 
 fn ensure_current_source_schemas(

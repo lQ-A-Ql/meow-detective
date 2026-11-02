@@ -1,9 +1,22 @@
 use crate::connection::DbResult;
 use domain::{FileEntry, FileEntryId};
 use rusqlite::params;
-use transport::commands::{FileSortDirectionDto, FileSortKeyDto};
 
 use super::{mapping::collect_entries, mapping::row_to_file_entry, FileRepo, FILE_ENTRY_COLUMNS};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileSortKey {
+    Name,
+    Size,
+    ModifiedAt,
+    Ext,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileSortDirection {
+    Asc,
+    Desc,
+}
 
 impl FileRepo<'_> {
     pub fn count_entries_visible(
@@ -35,7 +48,7 @@ impl FileRepo<'_> {
         &self,
         parent_id: Option<&FileEntryId>,
         show_hidden: bool,
-        sort_key: FileSortKeyDto,
+        sort_key: FileSortKey,
     ) -> DbResult<bool> {
         let parent = if parent_id.is_some() {
             "parent_id = ?1"
@@ -48,9 +61,9 @@ impl FileRepo<'_> {
             " AND hidden = 0 AND system = 0"
         };
         let field = match sort_key {
-            FileSortKeyDto::Ext => "(name GLOB '*[0-9]*' OR ext GLOB '*[0-9]*')",
-            FileSortKeyDto::Name => "name GLOB '*[0-9]*'",
-            FileSortKeyDto::Size | FileSortKeyDto::ModifiedAt => return Ok(false),
+            FileSortKey::Ext => "(name GLOB '*[0-9]*' OR ext GLOB '*[0-9]*')",
+            FileSortKey::Name => "name GLOB '*[0-9]*'",
+            FileSortKey::Size | FileSortKey::ModifiedAt => return Ok(false),
         };
         let sql = format!(
             "SELECT EXISTS(SELECT 1 FROM file_entries WHERE {parent}{visibility} AND {field} GLOB '*[0-9]*')"
@@ -70,8 +83,8 @@ impl FileRepo<'_> {
         offset: u64,
         limit: u32,
         show_hidden: bool,
-        sort_key: FileSortKeyDto,
-        sort_direction: FileSortDirectionDto,
+        sort_key: FileSortKey,
+        sort_direction: FileSortDirection,
     ) -> DbResult<Vec<FileEntry>> {
         let parent = if parent_id.is_some() {
             "parent_id = ?1"
@@ -84,24 +97,24 @@ impl FileRepo<'_> {
             " AND hidden = 0 AND system = 0"
         };
         let key = match sort_key {
-            FileSortKeyDto::Name => "name COLLATE NOCASE",
-            FileSortKeyDto::Size => "COALESCE(size, 0)",
-            FileSortKeyDto::ModifiedAt => "modified_at",
-            FileSortKeyDto::Ext => "COALESCE(ext, '') COLLATE NOCASE",
+            FileSortKey::Name => "name COLLATE NOCASE",
+            FileSortKey::Size => "COALESCE(size, 0)",
+            FileSortKey::ModifiedAt => "modified_at",
+            FileSortKey::Ext => "COALESCE(ext, '') COLLATE NOCASE",
         };
         let direction = match sort_direction {
-            FileSortDirectionDto::Asc => "ASC",
-            FileSortDirectionDto::Desc => "DESC",
+            FileSortDirection::Asc => "ASC",
+            FileSortDirection::Desc => "DESC",
         };
-        let raw_key_tie = if matches!(sort_key, FileSortKeyDto::Ext) {
+        let raw_key_tie = if matches!(sort_key, FileSortKey::Ext) {
             format!("COALESCE(ext, '') {direction},")
         } else {
             String::new()
         };
-        let null_order = if matches!(sort_key, FileSortKeyDto::ModifiedAt) {
+        let null_order = if matches!(sort_key, FileSortKey::ModifiedAt) {
             match sort_direction {
-                FileSortDirectionDto::Asc => "(modified_at IS NOT NULL) ASC,",
-                FileSortDirectionDto::Desc => "(modified_at IS NOT NULL) DESC,",
+                FileSortDirection::Asc => "(modified_at IS NOT NULL) ASC,",
+                FileSortDirection::Desc => "(modified_at IS NOT NULL) DESC,",
             }
         } else {
             ""

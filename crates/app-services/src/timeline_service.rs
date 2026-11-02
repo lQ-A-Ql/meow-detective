@@ -1,6 +1,7 @@
 mod error;
 mod export;
 mod facets;
+mod fjall;
 mod ingestion;
 mod page_cache;
 mod pagination;

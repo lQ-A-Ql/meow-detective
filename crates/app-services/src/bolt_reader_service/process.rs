@@ -25,14 +25,39 @@ impl Drop for ChildGuard {
 }
 
 fn executable() -> Result<PathBuf, BoltReadError> {
-    let path = match std::env::var_os("FORENSICS_BOLT_READER_EXE") {
-        Some(path) => PathBuf::from(path),
-        None => std::env::current_exe()?,
-    };
-    if !path.is_file() {
-        return Err(BoltReadError::MissingWorker);
+    if let Some(path) = std::env::var_os("FORENSICS_BOLT_READER_EXE") {
+        let path = PathBuf::from(path);
+        return path
+            .is_file()
+            .then_some(path)
+            .ok_or(BoltReadError::MissingWorker);
     }
-    Ok(path)
+
+    let current = std::env::current_exe()?;
+    if current
+        .file_stem()
+        .is_some_and(|stem| stem.eq_ignore_ascii_case("meow-bolt-worker"))
+        && current.is_file()
+    {
+        return Ok(current);
+    }
+
+    let worker_name = if cfg!(windows) {
+        "meow-bolt-worker.exe"
+    } else {
+        "meow-bolt-worker"
+    };
+    for parent in current.ancestors().skip(1).take(3) {
+        let sibling = parent.join(worker_name);
+        if sibling.is_file() {
+            return Ok(sibling);
+        }
+    }
+
+    current
+        .is_file()
+        .then_some(current)
+        .ok_or(BoltReadError::MissingWorker)
 }
 
 pub(super) fn execute(

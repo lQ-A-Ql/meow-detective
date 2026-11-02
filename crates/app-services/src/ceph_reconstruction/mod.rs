@@ -82,8 +82,9 @@ pub use rbd_reader::{
 };
 pub use rbd_service::{
     detect_rbd_image_from_source_dbs, detect_rbd_image_from_source_dbs_with_policy,
-    discover_rbd_images_from_source_dbs, discover_rbd_images_from_source_dbs_unbound,
-    discover_rbd_images_from_source_dbs_with_policy, RbdReconstructionError,
+    discover_rbd_images_from_case_storage, discover_rbd_images_from_source_dbs,
+    discover_rbd_images_from_source_dbs_unbound, discover_rbd_images_from_source_dbs_with_policy,
+    find_rbd_header_from_case_storage, RbdReconstructionError,
 };
 pub use source_bound_lvm::{
     open_source_bound_bluestore_lvm, BoundEvidenceOpenError, FilesystemEvidenceOpener,

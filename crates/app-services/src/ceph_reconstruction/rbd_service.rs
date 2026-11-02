@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::collections::HashSet;
+use std::path::Path;
 
+use persistence_fjall::{ParserFieldQuery, ScanDirection};
 use persistence_sqlite::repositories::ceph_bluestore_omap_repo::CephBluestoreOmapRepo;
 use thiserror::Error;
 
@@ -49,6 +51,145 @@ pub fn discover_rbd_images_from_source_dbs(
     discover_rbd_images_from_source_dbs_with_policy(replicas, &RbdReplicaPolicy::strict_legacy())
 }
 
+/// Discovers RBD descriptors for an active case. The source-local OMAP
+/// aggregate remains the reference for scope and directory relationships;
+/// RBD headers are read through the Fjall parser projection first.
+pub fn discover_rbd_images_from_case_storage(
+    case_root: &Path,
+    replicas: &[RadosReplicaSource],
+) -> Result<Vec<RbdImageDescriptor>, RbdReconstructionError> {
+    validate_replica_bindings(replicas, None)?;
+    discover_rbd_descriptors_with_case_storage(case_root, replicas)
+}
+
+/// Reads one RBD header from the Fjall parser projection when it is available.
+/// The source database remains the reference fallback for sources created before
+/// the projection was published. The bounded page prevents a malformed source
+/// from turning a point lookup into an unbounded scan.
+pub fn find_rbd_header_from_case_storage(
+    case_root: &Path,
+    replica: &RadosReplicaSource,
+    image_id: &str,
+) -> Result<
+    Option<
+        persistence_sqlite::repositories::ceph_bluestore_omap_repo::CephBluestoreRbdHeaderRecord,
+    >,
+    RbdReconstructionError,
+> {
+    if image_id.is_empty() || image_id.contains('\0') {
+        return Err(RbdReconstructionError::Catalog {
+            inventory_id: replica.inventory_id.clone(),
+            detail: "RBD image identity is invalid".to_owned(),
+        });
+    }
+    const HEADER_KIND: &str = "ceph_bluestore_rbd_headers";
+    const MAX_HEADERS: usize = 4096;
+    if let Ok(source) =
+        crate::source_db::open_registered_fjall_source_read_only(case_root, &replica.data_source_id)
+    {
+        let snapshot = source.snapshot();
+        let page = source
+            .parser_list_by_field(
+                &snapshot,
+                ParserFieldQuery {
+                    source_id: &replica.data_source_id.0,
+                    kind: HEADER_KIND,
+                    field: "image_id",
+                    value: image_id,
+                },
+                None,
+                ScanDirection::Forward,
+                MAX_HEADERS.saturating_add(1),
+            )
+            .map_err(|error| RbdReconstructionError::Catalog {
+                inventory_id: replica.inventory_id.clone(),
+                detail: error.to_string(),
+            })?;
+        if page.records.len() > MAX_HEADERS {
+            return Err(RbdReconstructionError::Catalog {
+                inventory_id: replica.inventory_id.clone(),
+                detail: "RBD header projection exceeds the bounded query limit".to_owned(),
+            });
+        }
+        for record in page.records {
+            if let Some(header) =
+                header_from_parser_record(&record, &replica.inventory_id, image_id)?
+            {
+                return Ok(Some(header));
+            }
+        }
+    }
+    let connection = persistence_sqlite::open_existing_source_read_only(&replica.source_db_path)
+        .map_err(|error| RbdReconstructionError::SourceDb {
+            inventory_id: replica.inventory_id.clone(),
+            detail: source_db_error_detail(&error),
+        })?;
+    CephBluestoreOmapRepo::new(&connection)
+        .find_rbd_header(&replica.inventory_id, image_id)
+        .map_err(|error| RbdReconstructionError::SourceDb {
+            inventory_id: replica.inventory_id.clone(),
+            detail: source_db_error_detail(&error),
+        })
+}
+
+fn header_from_parser_record(
+    record: &persistence_fjall::ParserRecord,
+    inventory_id: &str,
+    requested_image_id: &str,
+) -> Result<
+    Option<
+        persistence_sqlite::repositories::ceph_bluestore_omap_repo::CephBluestoreRbdHeaderRecord,
+    >,
+    RbdReconstructionError,
+> {
+    let payload = &record.payload;
+    let payload_inventory = payload
+        .get("inventory_id")
+        .and_then(serde_json::Value::as_str);
+    if payload_inventory != Some(inventory_id) {
+        return Ok(None);
+    }
+    let Some(image_id) = payload.get("image_id").and_then(serde_json::Value::as_str) else {
+        return Err(RbdReconstructionError::Catalog {
+            inventory_id: inventory_id.to_owned(),
+            detail: "RBD header projection is missing image identity".to_owned(),
+        });
+    };
+    if image_id != requested_image_id {
+        return Ok(None);
+    }
+    let text = |key: &str| {
+        payload
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
+    let integer = |key: &str| payload.get(key).and_then(serde_json::Value::as_i64);
+    let boolean = |key: &str| {
+        payload
+            .get(key)
+            .and_then(|value| value.as_bool().or_else(|| value.as_i64().map(|v| v != 0)))
+            .unwrap_or(false)
+    };
+    Ok(Some(
+        persistence_sqlite::repositories::ceph_bluestore_omap_repo::CephBluestoreRbdHeaderRecord {
+            inventory_id: inventory_id.to_owned(),
+            scope_identity: text("scope_identity").unwrap_or_default(),
+            owner_nid_hex: text("owner_nid_hex").unwrap_or_default(),
+            image_id: image_id.to_owned(),
+            size_hex: text("size_hex"),
+            object_order: integer("object_order").and_then(|value| u8::try_from(value).ok()),
+            features_hex: text("features_hex"),
+            operation_features_hex: text("operation_features_hex"),
+            parent_key_present: boolean("parent_key_present"),
+            object_prefix: text("object_prefix"),
+            stripe_unit_hex: text("stripe_unit_hex"),
+            stripe_count_hex: text("stripe_count_hex"),
+            data_pool_id: integer("data_pool_id"),
+        },
+    ))
+}
+
 pub fn discover_rbd_images_from_source_dbs_unbound(
     replicas: &[RadosReplicaSource],
 ) -> Result<Vec<RbdImageDescriptor>, RbdReconstructionError> {
@@ -91,6 +232,47 @@ fn discover_rbd_descriptors(
                 detail: error.to_string(),
             })?;
         for descriptor in descriptors {
+            merge_descriptor(&mut images, descriptor)?;
+        }
+    }
+    Ok(images.into_values().collect())
+}
+
+fn discover_rbd_descriptors_with_case_storage(
+    case_root: &Path,
+    replicas: &[RadosReplicaSource],
+) -> Result<Vec<RbdImageDescriptor>, RbdReconstructionError> {
+    let mut images = BTreeMap::new();
+    for replica in replicas {
+        let connection = persistence_sqlite::open_existing_source_read_only(
+            &replica.source_db_path,
+        )
+        .map_err(|error| RbdReconstructionError::SourceDb {
+            inventory_id: replica.inventory_id.clone(),
+            detail: source_db_error_detail(&error),
+        })?;
+        let mut aggregate = CephBluestoreOmapRepo::new(&connection)
+            .find_aggregate(&replica.inventory_id)
+            .map_err(|error| RbdReconstructionError::SourceDb {
+                inventory_id: replica.inventory_id.clone(),
+                detail: format!("OMAP query failed: {}", source_db_error_detail(&error)),
+            })?
+            .ok_or_else(|| RbdReconstructionError::MissingOmap {
+                inventory_id: replica.inventory_id.clone(),
+            })?;
+        for header in &mut aggregate.rbd_headers {
+            if let Some(projected) =
+                find_rbd_header_from_case_storage(case_root, replica, &header.image_id)?
+            {
+                *header = projected;
+            }
+        }
+        for descriptor in
+            discover_rbd_images(&aggregate).map_err(|error| RbdReconstructionError::Catalog {
+                inventory_id: replica.inventory_id.clone(),
+                detail: error.to_string(),
+            })?
+        {
             merge_descriptor(&mut images, descriptor)?;
         }
     }

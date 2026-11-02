@@ -13,9 +13,9 @@ use persistence_sqlite::repositories::{
 
 use crate::{
     ceph_reconstruction::{
-        assess_inventory_coverage, discover_rbd_images_from_source_dbs_unbound,
-        evidence_is_present, resolve_rbd_replica_policy, validate_inventory_membership,
-        InventoryEvidence, RadosReplicaSource, RbdReplicaPolicy, ReplicaIdentity,
+        assess_inventory_coverage, discover_rbd_images_from_case_storage, evidence_is_present,
+        resolve_rbd_replica_policy, validate_inventory_membership, InventoryEvidence,
+        RadosReplicaSource, RbdReplicaPolicy, ReplicaIdentity,
     },
     cluster_service, source_db,
 };
@@ -94,7 +94,7 @@ pub fn materialize_rbd_sources_for_scope_with_cancel(
         &cancel_token,
     )?;
     validate_map_inventory_membership(case_root, &ceph_scope_id.0, &replicas)?;
-    let descriptors = discover_rbd_images_from_source_dbs_unbound(&replicas)
+    let descriptors = discover_rbd_images_from_case_storage(case_root, &replicas)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     if descriptors.is_empty() {
         return Err(DerivedSourceError::ImageNotFound(

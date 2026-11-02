@@ -55,6 +55,7 @@ pub async fn get_nested_evidence_lineage(
         let conn = crate::commands::command_support::get_case_read_connection(&app_state)?;
         app_services::nested_evidence_service::list_for_parent(
             &conn,
+            &active.case_root,
             &active.meta.id,
             &request.parent_data_source_id,
         )

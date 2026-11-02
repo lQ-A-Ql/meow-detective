@@ -4,9 +4,9 @@
 
 ## 项目介绍
 
-Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 42 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
+Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 44 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
-当前工程事实快照：12 frontend pages（其中 `/v2` V2 workbench 仅在 dev/audit 模式注册，生产路由 11 个）、167 Tauri commands、50 source modules、migration scripts (106)、141 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+当前工程事实快照：12 frontend pages（其中 `/v2` V2 workbench 仅在 dev/audit 模式注册，生产路由 11 个）、169 Tauri commands、55 source modules、migration scripts (108)、142 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
 RAW/E01 导入采用作业级 SourceRuntime、独立 reader 与共享 E01 OpenPlan，默认 worker 数为 `min(CPU 数, 2)`；并发由 1536 MB 软限的估算资源准入与独立的 2048 MB RSS 硬限共同约束。来源元数据身份用于续导绑定和失效检查，证据内容摘要仍由字节校验路径生成。
 
@@ -357,6 +357,8 @@ cargo build --release
 | `crates/transport/` | Rust DTO、请求、事件与错误契约的唯一事实源。 |
 | `crates/app-services/` | 案件、导入、预览、分析、BitLocker、恢复、导出等用例编排。 |
 | `crates/persistence-sqlite/` | SQLite 迁移、仓储与 source-local 数据库访问。 |
+| `crates/persistence-fjall/` | Fjall source 数据、批次写入、版本化记录和查询索引。 |
+| `crates/artifact-storage/` | SHA-256 内容地址对象、摘要校验和安全对象读取。 |
 | `crates/evidence-core/`、`image-e01/` | 统一证据 reader、RAW/dd/img、tar/gzip 逻辑包、ISO9660/Joliet、flat VMDK 适配、镜像探测、分区和 E01 读取。 |
 | `crates/fs-*/`、`fs-lvm/` | NTFS/FAT/exFAT/ext4/XFS/Btrfs 与 LVM 文件系统能力。 |
 | `crates/image-android/`、`artifacts-android/` | Android sparse 镜像读取，以及 build.prop、SettingsProvider、packages.xml/list 与 APK 标签/图标解析。 |

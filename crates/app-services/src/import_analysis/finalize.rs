@@ -73,10 +73,20 @@ pub(super) fn merge_finished_analysis_staging(
     .map_err(|e| ImportAnalysisError::Staging(e.to_string()))?;
     stats.artifact_count = merge_stats.artifact_count;
     stats.timeline_count = merge_stats.timeline_count;
+    bump_search_input_revision(&source)?;
     let search_stats = rebuild_file_metadata_index(options, progress_cb)?;
     apply_search_stats(&mut stats, search_stats);
 
     Ok(stats)
+}
+
+fn bump_search_input_revision(source: &Connection) -> Result<(), ImportAnalysisError> {
+    persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(source)
+        .bump_revision(
+            persistence_sqlite::repositories::source_meta_repo::SEARCH_INPUT_REVISION_KEY,
+        )
+        .map(|_| ())
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()))
 }
 
 pub(super) fn rebuild_file_metadata_index(
@@ -92,6 +102,7 @@ pub(super) fn rebuild_file_metadata_index(
     let search_started = Instant::now();
     let stats = super::search_phase::run_search_index_phase(SearchIndexPhaseOptions {
         publication_lease: options.publication_lease.clone(),
+        case_root: options.case_root.clone(),
         db_path: options.db_path.clone(),
         data_source_id: options.data_source_id.clone(),
         platform: options.platform,

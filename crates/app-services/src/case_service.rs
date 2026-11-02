@@ -38,6 +38,8 @@ pub enum CaseServiceError {
     NotFound(PathBuf),
     #[error("Invalid case directory: {0}")]
     InvalidCaseDir(String),
+    #[error("Unsupported storage format: {0}")]
+    UnsupportedStorageFormat(String),
     #[error("Unsupported data source platform in case: {0}")]
     UnsupportedPlatform(String),
     #[error("Case uses the retired Linux cluster model and must be re-imported")]
@@ -93,6 +95,7 @@ impl transport::ServiceErrorCategory for CaseServiceError {
             Self::AlreadyExists(_) | Self::InvalidCaseDir(_) => {
                 transport::ErrorCategory::Validation
             }
+            Self::UnsupportedStorageFormat(_) => transport::ErrorCategory::Unsupported,
             Self::UnsupportedPlatform(_) | Self::TopologyReimportRequired => {
                 transport::ErrorCategory::Unsupported
             }
@@ -112,6 +115,7 @@ impl transport::ServiceErrorCategory for CaseServiceError {
                 Some("DATA_SOURCE_DELETE_ROLLBACK_FAILED")
             }
             Self::TopologyReimportRequired => Some("TOPOLOGY_REIMPORT_REQUIRED"),
+            Self::UnsupportedStorageFormat(_) => Some("UNSUPPORTED_STORAGE_FORMAT"),
             _ => None,
         }
     }
@@ -130,6 +134,9 @@ impl transport::ServiceErrorCategory for CaseServiceError {
             Self::TopologyReimportRequired => {
                 Some("This case uses the retired Linux cluster model and must be re-imported.")
             }
+            Self::UnsupportedStorageFormat(_) => {
+                Some("This case uses an unsupported storage format and must be re-imported.")
+            }
             _ => None,
         }
     }
@@ -140,6 +147,7 @@ impl transport::ServiceErrorCategory for CaseServiceError {
             | Self::DataSourceDeleteCleanupPending { .. }
             | Self::DataSourceDeleteRollbackFailed { .. } => Some(true),
             Self::TopologyReimportRequired => Some(false),
+            Self::UnsupportedStorageFormat(_) => Some(false),
             _ => None,
         }
     }
@@ -182,6 +190,11 @@ impl transport::ServiceErrorCategory for CaseServiceError {
                 "reimportRequired": true,
                 "reason": "retiredLinuxClusterModel"
             })),
+            Self::UnsupportedStorageFormat(message) => Some(serde_json::json!({
+                "reimportRequired": true,
+                "reason": "unsupportedStorageFormat",
+                "message": message
+            })),
             _ => None,
         }
     }
@@ -197,6 +210,9 @@ impl transport::ServiceErrorCategory for CaseServiceError {
             ),
             Self::TopologyReimportRequired => Some(
                 "Create a new case and re-import the evidence to build typed Linux topology scopes.",
+            ),
+            Self::UnsupportedStorageFormat(_) => Some(
+                "Create a new case and re-import the evidence using the current storage format.",
             ),
             _ => None,
         }

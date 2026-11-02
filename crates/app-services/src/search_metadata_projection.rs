@@ -2,6 +2,7 @@
 use domain::{DataSourceId, FileEntry};
 use rusqlite::Row;
 use search::SearchFileDocument;
+use serde::{Deserialize, Serialize};
 use transport::CommandError;
 
 pub(crate) struct MetadataProjection<'a> {
@@ -9,9 +10,23 @@ pub(crate) struct MetadataProjection<'a> {
     revision: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SearchProjectionMarker {
+    pub(crate) source_id: String,
+    pub(crate) input_revision: String,
+    pub(crate) generation: String,
+    pub(crate) schema_version: u32,
+    pub(crate) index_path: String,
+}
+
 impl<'a> MetadataProjection<'a> {
     pub(crate) fn new(source: &'a DataSourceId, revision: String) -> Self {
         Self { source, revision }
+    }
+
+    pub(crate) fn revision(&self) -> &str {
+        &self.revision
     }
 
     pub(crate) fn validate(

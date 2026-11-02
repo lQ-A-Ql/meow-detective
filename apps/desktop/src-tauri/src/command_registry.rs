@@ -86,5 +86,6 @@ pub(crate) use crate::commands::{
     rule_pack_commands::{list_loaded_rule_packs, load_rule_pack, validate_rule_pack},
     search_commands::search_files_request,
     settings_commands::{get_app_settings, save_app_settings},
+    storage_recovery_commands::{get_storage_recovery_report, repair_storage_operation},
     timeline_commands::{get_timeline_event_by_id, get_timeline_events, get_timeline_facets},
 };

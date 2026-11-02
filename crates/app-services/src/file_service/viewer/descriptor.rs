@@ -7,6 +7,7 @@ use crate::file_service::{metadata::lookup::mime_for_entry, FileServiceError};
 use domain::{FileEntry, FileEntryId};
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
+use std::path::{Path, PathBuf};
 
 pub fn preview_descriptor_for_case(
     conn: &Connection,
@@ -89,6 +90,36 @@ fn cephfs_descriptor(
     conn: &Connection,
     entry: &FileEntry,
 ) -> Result<PreviewCephFsDescriptor, FileServiceError> {
+    if let Some(case_root) = case_root_from_connection(conn) {
+        if let Ok(source) = crate::source_db::open_registered_fjall_source_read_only(
+            &case_root,
+            &entry.data_source_id,
+        ) {
+            let snapshot = source.snapshot();
+            let page = source
+                .parser_list_by_field(
+                    &snapshot,
+                    persistence_fjall::ParserFieldQuery {
+                        source_id: &entry.data_source_id.0,
+                        kind: "ceph_fs_namespace_locator",
+                        field: "entry_id",
+                        value: &entry.id.0,
+                    },
+                    None,
+                    persistence_fjall::ScanDirection::Forward,
+                    2,
+                )
+                .map_err(|error| FileServiceError::other(error.to_string()))?;
+            if page.records.len() > 1 {
+                return Err(FileServiceError::other(
+                    "Multiple CephFS namespace locators matched the file entry",
+                ));
+            }
+            if let Some(record) = page.records.into_iter().next() {
+                return cephfs_descriptor_from_parser_record(&record, entry);
+            }
+        }
+    }
     let locator =
         persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(conn)
             .find_file_locator(&entry.data_source_id.0, &entry.id.0)?
@@ -128,6 +159,103 @@ fn cephfs_descriptor(
                 },
             )
             .collect(),
+    })
+}
+
+fn case_root_from_connection(conn: &Connection) -> Option<PathBuf> {
+    let path = conn
+        .query_row("PRAGMA database_list", [], |row| row.get::<_, String>(2))
+        .ok()?;
+    Path::new(&path).parent().map(Path::to_path_buf)
+}
+
+fn cephfs_descriptor_from_parser_record(
+    record: &persistence_fjall::ParserRecord,
+    entry: &FileEntry,
+) -> Result<PreviewCephFsDescriptor, FileServiceError> {
+    let value = &record.payload;
+    let text = |name: &str| {
+        value
+            .get(name)
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| FileServiceError::other(format!("Missing CephFS locator field: {name}")))
+    };
+    let integer = |name: &str| {
+        value
+            .get(name)
+            .and_then(serde_json::Value::as_i64)
+            .ok_or_else(|| FileServiceError::other(format!("Invalid CephFS locator field: {name}")))
+    };
+    let inline_data = match value
+        .get("inline_data_hex")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some(hex) => {
+            Some(hex::decode(hex).map_err(|error| FileServiceError::other(error.to_string()))?)
+        }
+        None => None,
+    };
+    let sparse_extents = value
+        .get("sparse_extents")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| FileServiceError::other("Invalid CephFS sparse extent list"))?
+        .iter()
+        .map(|extent| {
+            Ok(crate::ceph_reconstruction::CephFsSparseExtentProof {
+                offset: extent
+                    .get("offset")
+                    .and_then(serde_json::Value::as_u64)
+                    .ok_or_else(|| FileServiceError::other("Invalid sparse extent offset"))?,
+                length: extent
+                    .get("length")
+                    .and_then(serde_json::Value::as_u64)
+                    .ok_or_else(|| FileServiceError::other("Invalid sparse extent length"))?,
+                evidence_sha256: extent
+                    .get("evidence_sha256")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| {
+                        FileServiceError::other("Invalid sparse extent evidence digest")
+                    })?
+                    .to_owned(),
+                proof_sha256: extent
+                    .get("proof_sha256")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| FileServiceError::other("Invalid sparse extent proof digest"))?
+                    .to_owned(),
+            })
+        })
+        .collect::<Result<Vec<_>, FileServiceError>>()?;
+    let size = u64::try_from(integer("size")?)
+        .map_err(|error| FileServiceError::other(error.to_string()))?;
+    if text("entry_id")? != entry.id.0
+        || !matches!(text("entry_kind")?, "file" | "symlink")
+        || size != entry.size.unwrap_or(0)
+    {
+        return Err(FileServiceError::other(
+            "CephFS parser locator does not match the file catalog",
+        ));
+    }
+    Ok(PreviewCephFsDescriptor {
+        filesystem_identity: text("filesystem_identity")?.to_owned(),
+        filesystem_id: integer("filesystem_id")?,
+        fsmap_epoch: u32::try_from(integer("fsmap_epoch")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        inode: u64::try_from(integer("inode")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        stripe_unit: u32::try_from(integer("stripe_unit")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        stripe_count: u32::try_from(integer("stripe_count")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        object_size: u32::try_from(integer("object_size")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        pool_id: integer("pool_id")?,
+        pool_namespace: text("pool_namespace")?.to_owned(),
+        inline_data,
+        projection_sha256: text("projection_sha256")?.to_owned(),
+        schema_version: u32::try_from(integer("schema_version")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        decoder_profile: text("decoder_profile")?.to_owned(),
+        sparse_extents,
     })
 }
 

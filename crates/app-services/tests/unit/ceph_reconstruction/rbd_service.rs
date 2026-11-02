@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use ceph_wire::RbdImageMetadata;
 use domain::DataSourceId;
+use persistence_fjall::{ParserRecord, PersistMode};
 
 use super::*;
 use crate::ceph_reconstruction::ReplicaIdentity;
@@ -219,4 +220,55 @@ fn conflicting_replica_identity_fails_before_source_database_access() {
         RbdReconstructionError::IdentityConflict { detail }
             if detail.contains("FSIDs conflict")
     ));
+}
+
+#[test]
+fn rbd_header_lookup_prefers_bounded_fjall_parser_projection() {
+    let root = tempfile::tempdir().expect("temporary case root");
+    let source_id = DataSourceId("source-fjall".to_owned());
+    let source = crate::source_db::open_registered_fjall_source_read_write(root.path(), &source_id)
+        .expect("open source storage");
+    let payload = serde_json::json!({
+        "inventory_id": "inventory-fjall",
+        "scope_identity": "perPool:i8",
+        "owner_nid_hex": "0000000000000001",
+        "image_id": "image-1",
+        "size_hex": "0000000000001000",
+        "object_order": 22,
+        "features_hex": "0000000000000000",
+        "operation_features_hex": null,
+        "parent_key_present": 0,
+        "object_prefix": "rbd_data.image-1",
+        "stripe_unit_hex": null,
+        "stripe_count_hex": null,
+        "data_pool_id": 8
+    });
+    source
+        .parser_upsert(
+            &ParserRecord {
+                id: "table:ceph_bluestore_rbd_headers:1".to_owned(),
+                data_source_id: source_id.0.clone(),
+                family: "ceph".to_owned(),
+                kind: "ceph_bluestore_rbd_headers".to_owned(),
+                status: "ready".to_owned(),
+                summary_sha256: infrastructure::hashing::sha256_bytes(
+                    payload.to_string().as_bytes(),
+                ),
+                payload,
+            },
+            PersistMode::SyncAll,
+        )
+        .expect("persist parser projection");
+    drop(source);
+    let replica = RadosReplicaSource::new(
+        source_id,
+        "inventory-fjall",
+        root.path().join("missing-source.db"),
+    )
+    .expect("valid replica");
+    let header = find_rbd_header_from_case_storage(root.path(), &replica, "image-1")
+        .expect("lookup header")
+        .expect("header exists");
+    assert_eq!(header.image_id, "image-1");
+    assert_eq!(header.data_pool_id, Some(8));
 }

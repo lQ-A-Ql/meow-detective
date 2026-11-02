@@ -5,6 +5,18 @@ mod path_safety;
 mod paths;
 mod ready;
 
+use std::path::Path;
+
+use domain::DataSourceId;
+
+pub use crate::storage_runtime::{
+    open_source_read_only as open_fjall_source_read_only,
+    open_source_read_write as open_fjall_source_read_write,
+    source_storage_root as fjall_source_storage_root,
+    ReadOnlySourceStorageHandle as FjallReadOnlySourceStorageHandle,
+    ReadWriteSourceStorageHandle as FjallReadWriteSourceStorageHandle,
+    StorageRuntimeError as FjallStorageRuntimeError,
+};
 pub(crate) use build::{
     discard_source_build_db, finalize_source_build_db, open_fresh_source_build_db,
     preserve_unpublished_source_build_db, publish_source_build_db, verify_finalized_source_db,
@@ -23,6 +35,36 @@ pub use paths::{
     source_content_index_dir, source_db_path, source_dir, source_index_dir, source_staging_dir,
     SourceDbLocator,
 };
+
+pub fn open_registered_fjall_source_read_only(
+    case_root: &Path,
+    data_source_id: &DataSourceId,
+) -> Result<FjallReadOnlySourceStorageHandle, FjallStorageRuntimeError> {
+    open_fjall_source_read_only(case_root, &data_source_id.0)
+}
+
+pub fn open_registered_fjall_source_read_write(
+    case_root: &Path,
+    data_source_id: &DataSourceId,
+) -> Result<FjallReadWriteSourceStorageHandle, FjallStorageRuntimeError> {
+    open_fjall_source_read_write(case_root, &data_source_id.0)
+}
+
+pub fn open_fjall_source_read_only_from_source_db_path(
+    source_db_path: &Path,
+    data_source_id: &DataSourceId,
+) -> Result<FjallReadOnlySourceStorageHandle, FjallStorageRuntimeError> {
+    let source_dir = source_db_path
+        .parent()
+        .ok_or_else(|| FjallStorageRuntimeError::InvalidRoot(source_db_path.to_path_buf()))?;
+    let sources_dir = source_dir
+        .parent()
+        .ok_or_else(|| FjallStorageRuntimeError::InvalidRoot(source_db_path.to_path_buf()))?;
+    let case_root = sources_dir
+        .parent()
+        .ok_or_else(|| FjallStorageRuntimeError::InvalidRoot(source_db_path.to_path_buf()))?;
+    open_registered_fjall_source_read_only(case_root, data_source_id)
+}
 pub(crate) use ready::open_catalog_recovery_source_by_id;
 pub use ready::{
     open_ready_source_by_id, open_ready_source_connections,

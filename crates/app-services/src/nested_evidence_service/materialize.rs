@@ -184,9 +184,38 @@ fn materialize_inner(
         let _ = fs::remove_file(&output_path);
         return Err(MaterializeError::Database(error));
     }
+    persist_lineage(case_root, &parent, &entry, &derived_id, size)?;
     Ok(materialized_result(
         parent, entry.id.0, entry.path, derived_id, size,
     ))
+}
+
+fn persist_lineage(
+    case_root: &Path,
+    parent: &DataSourceId,
+    entry: &domain::FileEntry,
+    derived_id: &DataSourceId,
+    size: u64,
+) -> Result<(), MaterializeError> {
+    let Ok(storage) = crate::source_db::open_registered_fjall_source_read_write(case_root, parent)
+    else {
+        return Ok(());
+    };
+    let lineage = NestedEvidenceLineage {
+        parent_data_source_id: parent.clone(),
+        nested_file_path: entry.path.clone(),
+        parent_file_id: Some(entry.id.0.clone()),
+        derived_data_source_id: Some(derived_id.clone()),
+        offset: 0,
+        length: size,
+        probe_kind: "vhd-fixed".into(),
+    };
+    storage
+        .parser_upsert(
+            &super::lineage_parser_record(&lineage),
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .map_err(|error| MaterializeError::Source(error.to_string()))
 }
 
 fn load_entry(

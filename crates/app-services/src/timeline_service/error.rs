@@ -54,3 +54,9 @@ impl From<crate::source_db::ReadySourceError> for TimelineServiceError {
         }
     }
 }
+
+impl From<crate::storage_runtime::StorageRuntimeError> for TimelineServiceError {
+    fn from(error: crate::storage_runtime::StorageRuntimeError) -> Self {
+        Self::Other(error.to_string())
+    }
+}

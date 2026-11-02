@@ -10,6 +10,7 @@ use crate::file_service::SourceReadContext;
 
 pub(crate) fn run_android_source_analysis(
     source_conn: &Connection,
+    case_root: &std::path::Path,
     source_reader: &mut SourceReadContext<'_>,
     data_source_id: &DataSourceId,
 ) -> Result<AndroidAnalysisRunDto, AnalysisServiceError> {
@@ -28,7 +29,7 @@ pub(crate) fn run_android_source_analysis(
         &mut scanned_file_count,
     )?;
     sort_device_facts(&mut facts);
-    persist_android_analysis(source_conn, data_source_id, &facts, &packages)?;
+    persist_android_analysis(source_conn, case_root, data_source_id, &facts, &packages)?;
 
     Ok(AndroidAnalysisRunDto {
         status: parse_status(facts.is_empty(), packages.is_empty(), &warnings),

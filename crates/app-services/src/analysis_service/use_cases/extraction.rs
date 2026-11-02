@@ -51,6 +51,14 @@ struct AnalysisExecutionControl<'a> {
     browser_password: Option<&'a str>,
 }
 
+struct ExtractionPublication<'a> {
+    case_conn: &'a Connection,
+    case_root: &'a Path,
+    case_id: &'a CaseId,
+    data_source_id: &'a DataSourceId,
+    source_connection: &'a Connection,
+}
+
 pub fn run_source_analysis_extraction(
     case_conn: &Connection,
     case_root: &Path,
@@ -279,11 +287,12 @@ fn run_source_analysis_extraction_execution_with_progress(
         },
     );
     if let Ok(execution) = &mut extraction {
-        execution.source_read_count = source_read_count;
-        execution.source_read_elapsed_ms =
-            u64::try_from(source_read_elapsed.as_millis()).unwrap_or(u64::MAX);
-        execution.filesystem_read_metrics = source_reader.filesystem_read_metrics();
-        execution.rados_read_metrics = source_reader.rados_read_metrics();
+        record_extraction_metrics(
+            execution,
+            source_read_count,
+            source_read_elapsed,
+            &source_reader,
+        );
         record_plugin_audit_trail(
             case_conn,
             case_id,
@@ -293,17 +302,72 @@ fn run_source_analysis_extraction_execution_with_progress(
             &execution.plugin_extract_failures,
         );
     }
+    finish_extraction(
+        &mut extraction,
+        ExtractionPublication {
+            case_conn,
+            case_root,
+            case_id,
+            data_source_id,
+            source_connection: &source.connection,
+        },
+        control.source_runtime,
+        &mut source_reader,
+    )?;
+    extraction
+}
+
+fn finish_extraction<'a>(
+    extraction: &mut Result<AnalysisExtractionExecution, AnalysisServiceError>,
+    publication: ExtractionPublication<'a>,
+    source_runtime: &AnalysisSourceReadRuntime,
+    source_reader: &mut SourceReadContext<'a>,
+) -> Result<(), AnalysisServiceError> {
     if extraction.is_ok() {
-        control.source_runtime.validate_publication()?;
+        mirror_completed_source(
+            publication.case_conn,
+            publication.case_root,
+            publication.case_id,
+            publication.data_source_id,
+            publication.source_connection,
+        )?;
+        source_runtime.validate_publication()?;
         if let Err(error) = source_reader.flush_derived_filesystem_locators() {
-            tracing::warn!(
-                data_source_id = %data_source_id.0,
-                error = %error,
-                "Derived filesystem locator acceleration hints could not be persisted"
-            );
+            tracing::warn!(data_source_id = %publication.data_source_id.0, error = %error, "Derived filesystem locator acceleration hints could not be persisted");
         }
     }
-    extraction
+    Ok(())
+}
+
+fn record_extraction_metrics(
+    execution: &mut AnalysisExtractionExecution,
+    source_read_count: u64,
+    source_read_elapsed: Duration,
+    source_reader: &SourceReadContext<'_>,
+) {
+    execution.source_read_count = source_read_count;
+    execution.source_read_elapsed_ms =
+        u64::try_from(source_read_elapsed.as_millis()).unwrap_or(u64::MAX);
+    execution.filesystem_read_metrics = source_reader.filesystem_read_metrics();
+    execution.rados_read_metrics = source_reader.rados_read_metrics();
+}
+
+fn mirror_completed_source(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    source_connection: &Connection,
+) -> Result<(), AnalysisServiceError> {
+    crate::import_pipeline::mirror_source_records_from_connections(
+        case_conn,
+        case_root,
+        &case_id.0,
+        source_connection,
+        &data_source_id.0,
+    )
+    .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+    Ok(())
 }
 
 pub(crate) fn run_import_source_extraction(

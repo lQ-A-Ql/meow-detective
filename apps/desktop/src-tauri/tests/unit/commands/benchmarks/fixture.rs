@@ -61,6 +61,20 @@ pub(super) fn setup_case() -> (app_services::active_case::ActiveCase, TempDir) {
         "System log: boot at 2026-01-15, user alice logged in at 2026-01-15T08:00:00Z\n",
     )
     .unwrap();
+    let fixture_level =
+        std::env::var("FORENSICS_BENCH_FIXTURE_LEVEL").unwrap_or_else(|_| "small".to_owned());
+    let generated_files = match fixture_level.as_str() {
+        "medium" => 5_000,
+        "large" => 20_000,
+        _ => 0,
+    };
+    for index in 0..generated_files {
+        std::fs::write(
+            evidence_dir.join(format!("generated-{index:05}.txt")),
+            format!("Forensics benchmark record {index:05}\n"),
+        )
+        .unwrap();
+    }
     std::fs::write(
         evidence_dir.join("CMD.EXE-DEADBEEF.pf"),
         prefetch_fixture("CMD.EXE", 3, Utc::now()),

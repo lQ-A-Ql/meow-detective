@@ -22,6 +22,7 @@ fn disk_search_trial() {
     let stats = run_search_index_phase_with_page_size(
         SearchIndexPhaseOptions {
             publication_lease: None,
+            case_root: temporary.path().to_path_buf(),
             db_path,
             data_source_id: DataSourceId("source".into()),
             platform: DataSourcePlatform::Windows,
@@ -72,14 +73,20 @@ fn catalog_revision_changes_are_detected_on_the_bound_connection() {
     let writer = persistence_sqlite::open_or_create_source(&db_path).unwrap();
     let reader = persistence_sqlite::open_existing_source_read_only(&db_path).unwrap();
     let source = DataSourceId("source".into());
-    let projection = MetadataProjection::new(&source, data_version(&reader).unwrap());
-    writer
-        .execute(
-            "INSERT INTO source_meta(key,value) VALUES ('test','changed')",
-            [],
-        )
+    let revision_key =
+        persistence_sqlite::repositories::source_meta_repo::SEARCH_INPUT_REVISION_KEY;
+    persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(&writer)
+        .write(revision_key, "0")
         .unwrap();
-    assert!(projection
-        .validate(&source, &data_version(&reader).unwrap())
-        .is_err());
+    assert_eq!(
+        persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(&reader)
+            .read_revision(revision_key)
+            .unwrap(),
+        0
+    );
+    let projection = MetadataProjection::new(&source, "0".to_owned());
+    persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(&writer)
+        .bump_revision(revision_key)
+        .unwrap();
+    assert!(projection.validate(&source, "1").is_err());
 }

@@ -85,5 +85,7 @@ pub fn create_case(root: &Path, name: &str, examiner: Option<&str>) -> Result<Ac
         case_root.join("case.json"),
         serde_json::to_string_pretty(&case)?,
     )?;
+    crate::storage_manifest::initialize_case(&case_root, &case.id.0)
+        .map_err(|error| CaseServiceError::InvalidCaseDir(error.to_string()))?;
     Ok(ActiveCase::new(case, case_root, conn))
 }

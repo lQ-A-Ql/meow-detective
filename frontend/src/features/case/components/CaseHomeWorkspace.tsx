@@ -57,7 +57,7 @@ export function CaseHomeWorkspace({ model }: CaseHomeWorkspaceProps) {
                   <ActionIcon name="upload" />
                 </Button>
               </Tooltip>
-              <Button type="button" variant="forensicsOutline" onClick={() => model.setRaidImportOpen(true)}>
+              <Button type="button" shape="row" className="h-8 w-auto justify-center rounded-ctl px-3" variant="forensicsOutline" onClick={() => model.setRaidImportOpen(true)}>
                 <ActionIcon name="hard-drive" />
                 <span>{t('importDataSource.raidEntry')}</span>
               </Button>

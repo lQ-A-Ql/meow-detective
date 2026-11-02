@@ -36,12 +36,15 @@ export interface McpHostToolCallResult {
 }
 
 export interface McpHostMetrics {
+  running: boolean;
   activeRequests: number;
   queuedRequests: number;
+  taskOwnerCount: number;
   totalCalls: number;
   successfulCalls: number;
   failedCalls: number;
   cancelledCalls: number;
+  totalDurationMs: number;
   averageDurationMs: number;
   currentRssMb: number;
   peakRssMb: number;
