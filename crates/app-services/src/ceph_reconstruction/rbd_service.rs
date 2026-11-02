@@ -114,7 +114,6 @@ pub fn find_rbd_header_from_case_storage(
                 return Ok(Some(header));
             }
         }
-        return Ok(None);
     }
     let connection = persistence_sqlite::open_existing_source_read_only(&replica.source_db_path)
         .map_err(|error| RbdReconstructionError::SourceDb {
