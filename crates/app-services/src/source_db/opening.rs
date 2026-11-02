@@ -15,11 +15,17 @@ use std::path::{Path, PathBuf};
 
 pub fn open_source_db(case_root: &Path, data_source_id: &DataSourceId) -> DbResult<Connection> {
     super::identity::validate_source_storage_id(data_source_id)?;
+    let started = std::time::Instant::now();
     let connection =
         persistence_sqlite::open_or_create_source(&source_db_path(case_root, data_source_id))?;
     persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::recover(
         &connection,
     )?;
+    tracing::debug!(
+        data_source_id = %data_source_id.0,
+        elapsed_ms = started.elapsed().as_millis(),
+        "Source SQLite database opened and bulk-load recovery checked"
+    );
     Ok(connection)
 }
 

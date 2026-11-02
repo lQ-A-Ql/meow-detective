@@ -444,6 +444,7 @@ fn open_parts(
     read_only: bool,
     config: DatabaseConfig,
 ) -> Result<OpenParts, StorageRuntimeError> {
+    let started = std::time::Instant::now();
     if read_only {
         if !source_root.exists() {
             return Err(StorageRuntimeError::MissingRoot(source_root.to_path_buf()));
@@ -464,6 +465,12 @@ fn open_parts(
     } else {
         ArtifactStore::new(source_root)?
     });
+    tracing::debug!(
+        source_root = %source_root.display(),
+        read_only,
+        elapsed_ms = started.elapsed().as_millis(),
+        "Fjall source storage opened"
+    );
     Ok(OpenParts {
         source_root: source_root.to_path_buf(),
         source_store,

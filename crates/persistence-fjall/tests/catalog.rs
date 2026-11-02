@@ -184,3 +184,40 @@ fn parent_listing_is_keyset_paginated_and_source_isolated() {
         .iter()
         .all(|item| item.data_source_id == "source-b"));
 }
+
+#[test]
+fn batch_upsert_preserves_parent_and_orphan_indexes() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = CatalogRecordStore::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let records = vec![
+        record("source-a", "parent", None, "parent", "/parent"),
+        record(
+            "source-a",
+            "child",
+            Some("parent"),
+            "child",
+            "/parent/child",
+        ),
+    ];
+    store.upsert_batch(&records, PersistMode::SyncData).unwrap();
+    let snapshot = store.read_snapshot();
+    assert_eq!(
+        store
+            .list_by_parent(
+                &snapshot,
+                "source-a",
+                Some("parent"),
+                None,
+                ScanDirection::Forward,
+                10,
+            )
+            .unwrap()
+            .records,
+        vec![records[1].clone()]
+    );
+    assert!(store
+        .list_orphan_directories(&snapshot, "source-a", None, ScanDirection::Forward, 10,)
+        .unwrap()
+        .records
+        .is_empty());
+}

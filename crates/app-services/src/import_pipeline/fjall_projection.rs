@@ -6,6 +6,7 @@ use persistence_fjall::{
 };
 use rusqlite::Connection;
 use std::collections::BTreeMap;
+use std::time::Instant;
 
 use super::context::ImportJobContext;
 use crate::storage_runtime::ReadWriteSourceStorageHandle;
@@ -36,6 +37,7 @@ pub(crate) fn mirror_source_records_from_connections(
     source_connection: &Connection,
     source_id: &str,
 ) -> Result<String, CommandError> {
+    let started = Instant::now();
     let source = crate::source_db::open_registered_fjall_source_read_write(
         case_root,
         &domain::DataSourceId(source_id.to_owned()),
@@ -59,6 +61,11 @@ pub(crate) fn mirror_source_records_from_connections(
     source
         .persist(PersistMode::SyncAll)
         .map_err(|error| CommandError::internal(error.to_string()))?;
+    tracing::info!(
+        source_id,
+        elapsed_ms = started.elapsed().as_millis(),
+        "Fjall source projection committed"
+    );
     let marker = VersionedEnvelope::new(
         "source_projection_complete",
         1,
@@ -376,6 +383,7 @@ fn mirror_catalog(
     source: &ReadWriteSourceStorageHandle,
     source_id: &str,
 ) -> Result<(), CommandError> {
+    const BATCH_SIZE: usize = 512;
     let mut statement = connection
         .prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext,
@@ -416,10 +424,20 @@ fn mirror_catalog(
             })
         })
         .map_err(|error| CommandError::internal(error.to_string()))?;
+    let mut batch = Vec::with_capacity(BATCH_SIZE);
     for row in rows {
         let record = row.map_err(|error| CommandError::internal(error.to_string()))?;
+        batch.push(record);
+        if batch.len() == BATCH_SIZE {
+            source
+                .catalog_upsert_batch(&batch, PersistMode::Buffer)
+                .map_err(|error| CommandError::internal(error.to_string()))?;
+            batch.clear();
+        }
+    }
+    if !batch.is_empty() {
         source
-            .catalog_upsert(&record, PersistMode::Buffer)
+            .catalog_upsert_batch(&batch, PersistMode::Buffer)
             .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     Ok(())

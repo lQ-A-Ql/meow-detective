@@ -80,13 +80,28 @@ where
     let result = result_rx
         .recv()
         .map_err(|_| CommandError::internal("Analysis task ended without a result"))??;
-    crate::case_projection_jobs::schedule(
-        &state.task_manager,
-        app,
-        request.case_id,
-        request.case_root,
-    )?;
+    schedule_projection_best_effort(request.case_id, || {
+        crate::case_projection_jobs::schedule(
+            &state.task_manager,
+            app,
+            request.case_id,
+            request.case_root,
+        )
+    });
     Ok(result)
+}
+
+fn schedule_projection_best_effort<T, F>(case_id: &str, schedule: F)
+where
+    F: FnOnce() -> Result<T, CommandError>,
+{
+    if let Err(error) = schedule() {
+        tracing::warn!(
+            case_id,
+            error = %error,
+            "Analysis completed, but scheduling the follow-up case projection failed"
+        );
+    }
 }
 
 pub(crate) fn start_evidence_classification(

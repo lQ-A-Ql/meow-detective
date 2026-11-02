@@ -3,11 +3,37 @@ use crate::storage_runtime::{
     ReadOnlySourceStorageHandle, ReadWriteSourceStorageHandle, StorageRuntimeError,
 };
 use persistence_fjall::{
-    ArtifactPage, ArtifactRecord, ArtifactRecordStore, ParserFieldQuery, ParserPage, ParserRecord,
-    ParserRecordStore, PersistMode, ScanDirection, SourceReadSnapshot,
+    ArtifactPage, ArtifactRecord, ArtifactRecordStore, CatalogPage, CatalogRecordStore,
+    FileEntryRecord, ParserFieldQuery, ParserPage, ParserRecord, ParserRecordStore, PersistMode,
+    ScanDirection, SourceReadSnapshot,
 };
 
 impl ReadOnlySourceStorageHandle {
+    pub fn catalog_list_directories_by_parent(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        parent_id: Option<&str>,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<CatalogPage, StorageRuntimeError> {
+        CatalogRecordStore::from_source_store(self.source_store().clone())
+            .list_directories_by_parent(snapshot, source_id, parent_id, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
+    pub fn catalog_list_orphan_directories(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<CatalogPage, StorageRuntimeError> {
+        CatalogRecordStore::from_source_store(self.source_store().clone())
+            .list_orphan_directories(snapshot, source_id, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
     pub fn parser_get(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -161,6 +187,15 @@ impl ReadOnlySourceStorageHandle {
 }
 
 impl ReadWriteSourceStorageHandle {
+    pub fn catalog_upsert_batch(
+        &self,
+        records: &[FileEntryRecord],
+        mode: PersistMode,
+    ) -> Result<(), StorageRuntimeError> {
+        CatalogRecordStore::from_source_store(self.source_store().clone())
+            .upsert_batch(records, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
     pub fn parser_upsert(
         &self,
         record: &ParserRecord,

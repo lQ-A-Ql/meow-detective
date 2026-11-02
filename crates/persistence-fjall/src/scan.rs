@@ -136,7 +136,30 @@ impl SourceReadSnapshot {
                 ));
             }
         }
-        let iter = self.snapshot.prefix(self.keyspace(keyspace), prefix);
+        let prefix_end = prefix_end(prefix).ok_or_else(|| {
+            FjallStorageError::InvalidEnvelope("keyset prefix has no upper bound".to_owned())
+        })?;
+        let bounds = match (direction, cursor) {
+            (ScanDirection::Forward, Some(cursor)) => ScanBounds {
+                start: Bound::Excluded(cursor.to_vec()),
+                end: Bound::Excluded(prefix_end),
+            },
+            (ScanDirection::Forward, None) => ScanBounds {
+                start: Bound::Included(prefix.to_vec()),
+                end: Bound::Excluded(prefix_end),
+            },
+            (ScanDirection::Reverse, Some(cursor)) => ScanBounds {
+                start: Bound::Included(prefix.to_vec()),
+                end: Bound::Excluded(cursor.to_vec()),
+            },
+            (ScanDirection::Reverse, None) => ScanBounds {
+                start: Bound::Included(prefix.to_vec()),
+                end: Bound::Excluded(prefix_end),
+            },
+        };
+        let iter = self
+            .snapshot
+            .range(self.keyspace(keyspace), (bounds.start, bounds.end));
         let mut entries = Vec::with_capacity(limit);
         let iter = match direction {
             ScanDirection::Forward => Box::new(iter) as Box<dyn Iterator<Item = fjall::Guard>>,
@@ -144,13 +167,6 @@ impl SourceReadSnapshot {
         };
         for guard in iter {
             let (key, value) = guard.into_inner()?;
-            let eligible = cursor.is_none_or(|cursor| match direction {
-                ScanDirection::Forward => key.as_ref() > cursor,
-                ScanDirection::Reverse => key.as_ref() < cursor,
-            });
-            if !eligible {
-                continue;
-            }
             entries.push(SnapshotEntry {
                 key: key.to_vec(),
                 value: value.to_vec(),
@@ -167,6 +183,19 @@ impl SourceReadSnapshot {
             .get(&keyspace)
             .expect("configured keyspace is present")
     }
+}
+
+fn prefix_end(prefix: &[u8]) -> Option<Vec<u8>> {
+    let mut end = prefix.to_vec();
+    while let Some(last) = end.last_mut() {
+        if *last == u8::MAX {
+            end.pop();
+        } else {
+            *last += 1;
+            return Some(end);
+        }
+    }
+    None
 }
 
 fn clone_bounds<R>(bounds: R) -> ScanBounds

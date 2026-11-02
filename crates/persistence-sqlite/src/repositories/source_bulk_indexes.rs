@@ -52,6 +52,7 @@ impl SourceBulkLoadRepo {
     /// Rebuilding is idempotent after process termination. Do not publish ready
     /// until every saved index and ANALYZE have committed successfully.
     pub fn finish(conn: &Connection) -> DbResult<()> {
+        let started = std::time::Instant::now();
         if Self::state(conn)? == BulkLoadState::Inactive {
             return Ok(());
         }
@@ -68,6 +69,8 @@ impl SourceBulkLoadRepo {
         })?;
         let definitions: Vec<(String, String)> = serde_json::from_str(&saved)
             .map_err(|e| DbError::System(format!("Invalid deferred index manifest: {e}")))?;
+        let index_count = definitions.len();
+        tracing::debug!(index_count, "Source bulk-load index recovery started");
         conn.execute(
             "UPDATE source_meta SET value='rebuilding' WHERE key='bulk_load.state'",
             [],
@@ -106,7 +109,13 @@ impl SourceBulkLoadRepo {
             [],
         )?;
         transaction.commit()?;
-        Self::clear_transient(conn)
+        Self::clear_transient(conn)?;
+        tracing::debug!(
+            index_count,
+            elapsed_ms = started.elapsed().as_millis(),
+            "Source bulk-load index recovery completed"
+        );
+        Ok(())
     }
 
     pub fn recover(conn: &Connection) -> DbResult<()> {

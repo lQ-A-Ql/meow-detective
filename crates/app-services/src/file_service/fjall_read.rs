@@ -3,7 +3,7 @@ use crate::{
 };
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use persistence_fjall::{CatalogEntryType, FileEntryRecord, ScanDirection};
-use std::collections::HashSet;
+use std::collections::BTreeMap;
 use std::path::Path;
 use transport::{
     commands::GetFileRowsRequest,
@@ -82,30 +82,94 @@ fn all(
     Ok(result)
 }
 
-fn all_catalog(
+fn all_directories(
     source: &ReadOnlySourceStorageHandle,
     source_id: &str,
+    parent: Option<&str>,
 ) -> Result<Vec<FileEntry>, FileServiceError> {
     let snapshot = source.snapshot();
     let mut cursor = None;
     let mut result = Vec::new();
     loop {
         let page = source
-            .catalog_list_all(
+            .catalog_list_directories_by_parent(
                 &snapshot,
                 source_id,
+                parent,
                 cursor.as_deref(),
                 ScanDirection::Forward,
                 PAGE_SIZE,
             )
             .map_err(|error| FileServiceError::other(error.to_string()))?;
         result.extend(page.records.into_iter().map(record_to_domain));
-        let Some(next) = page.next_cursor else {
+        cursor = page.next_cursor;
+        if cursor.is_none() {
             break;
-        };
-        cursor = Some(next);
+        }
     }
     Ok(result)
+}
+
+fn root_catalog(
+    source: &ReadOnlySourceStorageHandle,
+    source_id: &str,
+) -> Result<Vec<FileEntry>, FileServiceError> {
+    let snapshot = source.snapshot();
+    let mut records = Vec::new();
+    for orphan in [false, true] {
+        let mut cursor = None;
+        loop {
+            let page = if orphan {
+                source
+                    .catalog_list_orphan_directories(
+                        &snapshot,
+                        source_id,
+                        cursor.as_deref(),
+                        ScanDirection::Forward,
+                        PAGE_SIZE,
+                    )
+                    .map_err(|error| FileServiceError::other(error.to_string()))?
+            } else {
+                source
+                    .catalog_list_directories_by_parent(
+                        &snapshot,
+                        source_id,
+                        None,
+                        cursor.as_deref(),
+                        ScanDirection::Forward,
+                        PAGE_SIZE,
+                    )
+                    .map_err(|error| FileServiceError::other(error.to_string()))?
+            };
+            for record in page.records {
+                let entry = record_to_domain(record);
+                if orphan {
+                    if let Some(parent) = entry.parent_id.as_ref() {
+                        if parent != &entry.id
+                            && source
+                                .catalog_get(&snapshot, source_id, &parent.0)
+                                .map_err(|error| FileServiceError::other(error.to_string()))?
+                                .is_some()
+                        {
+                            continue;
+                        }
+                    }
+                }
+                records.push(entry);
+            }
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                break;
+            }
+        }
+    }
+    let mut by_id = BTreeMap::new();
+    for entry in records {
+        if entry.entry_type == EntryType::Directory {
+            by_id.insert(entry.id.0.clone(), entry);
+        }
+    }
+    Ok(by_id.into_values().collect())
 }
 
 pub(super) fn tree(
@@ -116,22 +180,9 @@ pub(super) fn tree(
     let Some(source) = open(case_root, source_id)? else {
         return Ok(None);
     };
-    let entries = all_catalog(&source, &source_id.0)?;
-    let ids = entries
-        .iter()
-        .map(|entry| entry.id.0.clone())
-        .collect::<HashSet<_>>();
-    let mut entries = entries
+    let mut entries = root_catalog(&source, &source_id.0)?
         .into_iter()
-        .filter(|entry| {
-            entry.entry_type == EntryType::Directory
-                && (entry.parent_id.is_none()
-                    || entry
-                        .parent_id
-                        .as_ref()
-                        .is_some_and(|parent| parent == &entry.id || !ids.contains(&parent.0)))
-                && (show_hidden || (!entry.hidden && !entry.system))
-        })
+        .filter(|entry| show_hidden || (!entry.hidden && !entry.system))
         .collect::<Vec<_>>();
     super::metadata::sorting::sort_directories_for_tree(&mut entries);
     Ok(Some(
@@ -153,9 +204,9 @@ pub(super) fn children(
     let Some(source) = open(case_root, source_id)? else {
         return Ok(None);
     };
-    let mut entries = all(&source, &source_id.0, Some(parent_id))?
+    let mut entries = all_directories(&source, &source_id.0, Some(parent_id))?
         .into_iter()
-        .filter(|entry| entry.entry_type == EntryType::Directory && (show_hidden || !entry.hidden))
+        .filter(|entry| show_hidden || !entry.hidden)
         .collect::<Vec<_>>();
     super::metadata::sorting::sort_directories_for_tree(&mut entries);
     let total = entries.len() as u64;

@@ -4,7 +4,7 @@ use persistence_sqlite::repositories::job_repo::JobRepo;
 use tempfile::TempDir;
 use transport::CommandError;
 
-use super::execute;
+use super::{execute, schedule_projection_best_effort};
 
 struct Fixture {
     _temp: TempDir,
@@ -84,4 +84,14 @@ fn failed_operation_marks_job_failed() {
 
     assert_eq!(error.category, "internal");
     assert_eq!(status(&fixture), "failed");
+}
+
+#[test]
+fn projection_schedule_failure_does_not_change_success_path() {
+    let mut called = false;
+    schedule_projection_best_effort("case-id", || {
+        called = true;
+        Err::<(), _>(CommandError::internal("projection unavailable"))
+    });
+    assert!(called);
 }

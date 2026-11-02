@@ -10,6 +10,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+mod catalog_batch;
+mod catalog_directory;
+
 const RECORD_KIND: &str = "file_entry";
 const SCHEMA_VERSION: u16 = 1;
 const RECORD_FAMILY: &str = "catalog.record";
@@ -17,6 +20,8 @@ const PARENT_FAMILY: &str = "catalog.parent";
 const PATH_FAMILY: &str = "catalog.path";
 const HASH_FAMILY: &str = "catalog.hash";
 const TOMBSTONE_FAMILY: &str = "catalog.tombstone";
+const ORPHAN_FAMILY: &str = "catalog.orphan";
+const DIRECTORY_FAMILY: &str = "catalog.directory";
 const ROOT_PARENT: &str = "";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -112,6 +117,20 @@ impl CatalogRecordStore {
             value: envelope.encode()?,
         });
         self.index_writes(&mut actions, record)?;
+        if record.entry_type == CatalogEntryType::Directory {
+            if let Some(parent_id) = record.parent_id.as_deref() {
+                if parent_id == record.id
+                    || self
+                        .get(&snapshot, &record.data_source_id, parent_id)?
+                        .is_none()
+                {
+                    actions.push(index_write(
+                        orphan_key(record)?,
+                        record_key(&record.data_source_id, &record.id)?,
+                    ));
+                }
+            }
+        }
         actions.push(WriteAction::Delete {
             keyspace: KeyspaceName::Tombstones,
             key: tombstone_key(&record.data_source_id, &record.id)?,
@@ -127,6 +146,9 @@ impl CatalogRecordStore {
             return Ok(false);
         };
         let mut actions = Vec::with_capacity(5);
+        if previous.entry_type == CatalogEntryType::Directory {
+            self.index_children_as_orphans(&snapshot, source_id, record_id, &mut actions)?;
+        }
         actions.push(WriteAction::Delete {
             keyspace: KeyspaceName::CatalogRecords,
             key: key.clone(),
@@ -158,6 +180,18 @@ impl CatalogRecordStore {
                 KeyPart::Text(parent.to_owned()),
             ],
         )?;
+        self.page_from_index(snapshot, &prefix, cursor, direction, limit)
+    }
+
+    pub fn list_orphan_directories(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<CatalogPage> {
+        let prefix = encode_key(ORPHAN_FAMILY, &[KeyPart::Text(source_id.to_owned())])?;
         self.page_from_index(snapshot, &prefix, cursor, direction, limit)
     }
 
@@ -301,6 +335,9 @@ impl CatalogRecordStore {
     fn index_writes(&self, actions: &mut Vec<WriteAction>, record: &FileEntryRecord) -> Result<()> {
         let record_key = record_key(&record.data_source_id, &record.id)?;
         actions.push(index_write(parent_key(record)?, record_key.clone()));
+        if record.entry_type == CatalogEntryType::Directory {
+            actions.push(index_write(directory_key(record)?, record_key.clone()));
+        }
         actions.push(index_write(path_key(record)?, record_key.clone()));
         if record
             .hash_sha256
@@ -321,10 +358,22 @@ impl CatalogRecordStore {
             keyspace: KeyspaceName::CatalogIndexes,
             key: parent_key(record)?,
         });
+        if record.entry_type == CatalogEntryType::Directory {
+            actions.push(WriteAction::Delete {
+                keyspace: KeyspaceName::CatalogIndexes,
+                key: directory_key(record)?,
+            });
+        }
         actions.push(WriteAction::Delete {
             keyspace: KeyspaceName::CatalogIndexes,
             key: path_key(record)?,
         });
+        if record.parent_id.is_some() {
+            actions.push(WriteAction::Delete {
+                keyspace: KeyspaceName::CatalogIndexes,
+                key: orphan_key(record)?,
+            });
+        }
         if record
             .hash_sha256
             .as_deref()
@@ -378,12 +427,42 @@ fn parent_key(record: &FileEntryRecord) -> Result<Vec<u8>> {
     )
 }
 
+fn directory_key(record: &FileEntryRecord) -> Result<Vec<u8>> {
+    encode_key(
+        DIRECTORY_FAMILY,
+        &[
+            KeyPart::Text(record.data_source_id.clone()),
+            KeyPart::Text(
+                record
+                    .parent_id
+                    .as_deref()
+                    .unwrap_or(ROOT_PARENT)
+                    .to_owned(),
+            ),
+            KeyPart::Text(record.name.clone()),
+            KeyPart::Text(record.id.clone()),
+        ],
+    )
+}
+
 fn path_key(record: &FileEntryRecord) -> Result<Vec<u8>> {
     encode_key(
         PATH_FAMILY,
         &[
             KeyPart::Text(record.data_source_id.clone()),
             KeyPart::Text(record.path.clone()),
+            KeyPart::Text(record.id.clone()),
+        ],
+    )
+}
+
+fn orphan_key(record: &FileEntryRecord) -> Result<Vec<u8>> {
+    encode_key(
+        ORPHAN_FAMILY,
+        &[
+            KeyPart::Text(record.data_source_id.clone()),
+            KeyPart::Text(record.parent_id.clone().unwrap_or_default()),
+            KeyPart::Text(record.name.clone()),
             KeyPart::Text(record.id.clone()),
         ],
     )
