@@ -11,7 +11,9 @@ use super::context::ImportJobContext;
 use crate::storage_runtime::ReadWriteSourceStorageHandle;
 use transport::CommandError;
 
+mod cephfs;
 mod nested;
+use cephfs::mirror_namespace_locators;
 use nested::mirror_nested_lineage;
 
 pub(super) fn mirror_source_records(
@@ -52,6 +54,7 @@ pub(crate) fn mirror_source_records_from_connections(
     mirror_android_parser_records(source_connection, &source, source_id)?;
     mirror_linux_parser_record(source_connection, &source, source_id)?;
     mirror_parser_tables(source_connection, &source, source_id)?;
+    mirror_namespace_locators(source_connection, &source, source_id)?;
     mirror_nested_lineage(case_connection, &source, source_id)?;
     source
         .persist(PersistMode::SyncAll)
