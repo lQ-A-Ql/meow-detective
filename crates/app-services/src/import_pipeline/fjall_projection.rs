@@ -24,6 +24,7 @@ pub(super) fn mirror_source_records(
     mirror_artifacts(ctx.source_connection()?, &source, source_id)?;
     mirror_android_parser_records(ctx.source_connection()?, &source, source_id)?;
     mirror_linux_parser_record(ctx.source_connection()?, &source, source_id)?;
+    mirror_parser_tables(ctx.source_connection()?, &source, source_id)?;
     source
         .persist(PersistMode::SyncAll)
         .map_err(|error| CommandError::internal(error.to_string()))?;
@@ -45,6 +46,96 @@ pub(super) fn mirror_source_records(
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(hex::encode(receipt.batch_digest))
+}
+
+fn mirror_parser_tables(
+    connection: &Connection,
+    source: &ReadWriteSourceStorageHandle,
+    source_id: &str,
+) -> Result<(), CommandError> {
+    let tables = parser_table_names(connection)?;
+    for table in tables {
+        mirror_parser_table(connection, source, source_id, &table)?;
+    }
+    Ok(())
+}
+
+fn parser_table_names(connection: &Connection) -> Result<Vec<String>, CommandError> {
+    let mut statement = connection
+        .prepare(
+            "SELECT name FROM sqlite_master
+             WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+               AND (name LIKE 'android_%' OR name LIKE 'linux_%' OR name LIKE 'ceph_%'
+                    OR name LIKE 'nested_%' OR name LIKE 'correlation_%')
+             ORDER BY name ASC",
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let result = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| CommandError::internal(error.to_string()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| CommandError::internal(error.to_string()));
+    result
+}
+
+fn mirror_parser_table(
+    connection: &Connection,
+    source: &ReadWriteSourceStorageHandle,
+    source_id: &str,
+    table: &str,
+) -> Result<(), CommandError> {
+    let quoted = format!("\"{}\"", table.replace('"', "\"\""));
+    let mut statement = connection
+        .prepare(&format!("SELECT rowid, * FROM {quoted} ORDER BY rowid ASC"))
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let columns = statement
+        .column_names()
+        .iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>();
+    let rows = statement
+        .query_map([], |row| {
+            let row_id: i64 = row.get(0)?;
+            let mut payload = serde_json::Map::new();
+            for (index, column) in columns.iter().enumerate().skip(1) {
+                payload.insert(column.to_string(), sqlite_value(row.get_ref(index)?));
+            }
+            Ok((row_id, serde_json::Value::Object(payload)))
+        })
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let family = parser_family(table);
+    for row in rows {
+        let (row_id, payload) = row.map_err(|error| CommandError::internal(error.to_string()))?;
+        let record = persistence_fjall::ParserRecord {
+            id: format!("table:{table}:{row_id}"),
+            data_source_id: source_id.to_owned(),
+            family: family.to_owned(),
+            kind: table.to_owned(),
+            status: "ready".to_owned(),
+            summary_sha256: infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes()),
+            payload,
+        };
+        source
+            .parser_upsert(&record, PersistMode::Buffer)
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
+    Ok(())
+}
+
+fn parser_family(table: &str) -> &str {
+    table.split('_').next().unwrap_or("parser")
+}
+
+fn sqlite_value(value: rusqlite::types::ValueRef<'_>) -> serde_json::Value {
+    match value {
+        rusqlite::types::ValueRef::Null => serde_json::Value::Null,
+        rusqlite::types::ValueRef::Integer(value) => value.into(),
+        rusqlite::types::ValueRef::Real(value) => serde_json::json!(value),
+        rusqlite::types::ValueRef::Text(value) => {
+            String::from_utf8_lossy(value).into_owned().into()
+        }
+        rusqlite::types::ValueRef::Blob(value) => hex::encode(value).into(),
+    }
 }
 
 fn mirror_linux_parser_record(
