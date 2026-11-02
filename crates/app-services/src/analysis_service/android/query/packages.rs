@@ -17,73 +17,93 @@ pub(crate) fn get_android_package_summary(
     if let Ok(source) =
         crate::source_db::open_registered_fjall_source_read_only(case_root, data_source_id)
     {
-        let snapshot = source.snapshot();
-        let page = source
-            .parser_list_by_kind(
-                &snapshot,
-                &data_source_id.0,
-                "package",
-                None,
-                ScanDirection::Forward,
-                limit as usize,
-            )
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        if !page.records.is_empty() {
-            let packages = page
-                .records
-                .into_iter()
-                .filter_map(|record| {
-                    let value = record.payload;
-                    Some(AndroidPackageDto {
-                        package_name: value.get("packageName")?.as_str()?.to_owned(),
-                        app_name: value
-                            .get("appName")
-                            .and_then(|value| value.as_str().map(str::to_owned)),
-                        version_code: value
-                            .get("versionCode")
-                            .and_then(|value| value.as_str().map(str::to_owned)),
-                        install_time: value
-                            .get("installTime")
-                            .and_then(|value| value.as_str().map(str::to_owned)),
-                        update_time: value
-                            .get("updateTime")
-                            .and_then(|value| value.as_str().map(str::to_owned)),
-                        installer: value
-                            .get("installer")
-                            .and_then(|value| value.as_str().map(str::to_owned)),
-                        uid: value
-                            .get("uid")
-                            .and_then(|value| value.as_u64())
-                            .map(|value| value as u32),
-                        user_id: None,
-                        user_state: None,
-                        code_path: value
-                            .get("codePath")
-                            .and_then(|value| value.as_str().map(str::to_owned)),
-                        source_file_id: value.get("sourceFileId")?.as_str()?.to_owned(),
-                        source_path: value.get("sourcePath")?.as_str()?.to_owned(),
-                        parser: value.get("parser")?.as_str()?.to_owned(),
-                        icon_data_url: None,
-                        warning: value
-                            .get("warning")
-                            .and_then(|value| value.as_str().map(str::to_owned)),
-                    })
-                })
-                .collect::<Vec<_>>();
-            let total_count = packages.len() as u64;
-            let warnings = packages
-                .iter()
-                .filter_map(|package| package.warning.clone())
-                .collect();
-            return Ok(AndroidPackageSummaryDto {
-                status: AnalysisParseStatusDto::Parsed,
-                total_count,
-                page_total: total_count,
-                packages,
-                warnings,
-            });
+        if let Some(result) = read_fjall_packages(&source, data_source_id, limit)? {
+            return Ok(result);
         }
     }
+    read_sqlite_packages(connection, data_source_id, offset, limit)
+}
+
+fn read_fjall_packages(
+    source: &crate::source_db::FjallReadOnlySourceStorageHandle,
+    data_source_id: &DataSourceId,
+    limit: u32,
+) -> Result<Option<AndroidPackageSummaryDto>, AnalysisServiceError> {
+    let snapshot = source.snapshot();
+    let page = source
+        .parser_list_by_kind(
+            &snapshot,
+            &data_source_id.0,
+            "package",
+            None,
+            ScanDirection::Forward,
+            limit as usize,
+        )
+        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+    if page.records.is_empty() {
+        return Ok(None);
+    }
+    let packages = page
+        .records
+        .into_iter()
+        .filter_map(|record| {
+            let value = record.payload;
+            Some(AndroidPackageDto {
+                package_name: value.get("packageName")?.as_str()?.to_owned(),
+                app_name: value
+                    .get("appName")
+                    .and_then(|value| value.as_str().map(str::to_owned)),
+                version_code: value
+                    .get("versionCode")
+                    .and_then(|value| value.as_str().map(str::to_owned)),
+                install_time: value
+                    .get("installTime")
+                    .and_then(|value| value.as_str().map(str::to_owned)),
+                update_time: value
+                    .get("updateTime")
+                    .and_then(|value| value.as_str().map(str::to_owned)),
+                installer: value
+                    .get("installer")
+                    .and_then(|value| value.as_str().map(str::to_owned)),
+                uid: value
+                    .get("uid")
+                    .and_then(|value| value.as_u64())
+                    .map(|value| value as u32),
+                user_id: None,
+                user_state: None,
+                code_path: value
+                    .get("codePath")
+                    .and_then(|value| value.as_str().map(str::to_owned)),
+                source_file_id: value.get("sourceFileId")?.as_str()?.to_owned(),
+                source_path: value.get("sourcePath")?.as_str()?.to_owned(),
+                parser: value.get("parser")?.as_str()?.to_owned(),
+                icon_data_url: None,
+                warning: value
+                    .get("warning")
+                    .and_then(|value| value.as_str().map(str::to_owned)),
+            })
+        })
+        .collect::<Vec<_>>();
+    let total_count = packages.len() as u64;
+    let warnings = packages
+        .iter()
+        .filter_map(|package| package.warning.clone())
+        .collect();
+    Ok(Some(AndroidPackageSummaryDto {
+        status: AnalysisParseStatusDto::Parsed,
+        total_count,
+        page_total: total_count,
+        packages,
+        warnings,
+    }))
+}
+
+fn read_sqlite_packages(
+    connection: &Connection,
+    data_source_id: &DataSourceId,
+    offset: u64,
+    limit: u32,
+) -> Result<AndroidPackageSummaryDto, AnalysisServiceError> {
     let repository = AndroidAnalysisRepo::new(connection);
     let total_count = repository.count_packages(data_source_id)?;
     let packages = repository
