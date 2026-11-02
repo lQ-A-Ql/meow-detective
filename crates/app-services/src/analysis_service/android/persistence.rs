@@ -1,8 +1,10 @@
 use domain::DataSourceId;
+use persistence_fjall::{ParserRecord, PersistMode};
 use persistence_sqlite::repositories::android_analysis_repo::{
     AndroidAnalysisRepo, AndroidFactRecord, AndroidPackageRecord,
 };
 use rusqlite::Connection;
+use std::path::Path;
 
 use super::model::{AndroidFact, AndroidPackage};
 use crate::analysis_service::AnalysisServiceError;
@@ -11,6 +13,7 @@ const PARSER: &str = "android.system-packages.v1";
 
 pub(super) fn persist_android_analysis(
     connection: &Connection,
+    case_root: &Path,
     data_source_id: &DataSourceId,
     facts: &[AndroidFact],
     packages: &[AndroidPackage],
@@ -50,5 +53,64 @@ pub(super) fn persist_android_analysis(
         &fact_records,
         &package_records,
     )?;
+    if let Ok(source) =
+        crate::source_db::open_registered_fjall_source_read_write(case_root, data_source_id)
+    {
+        for fact in &fact_records {
+            let payload = serde_json::json!({
+                "field": fact.field, "value": fact.value, "confidence": fact.confidence,
+                "sourceFileId": fact.source_file_id, "sourcePath": fact.source_path,
+                "parser": fact.parser, "warning": fact.warning,
+            });
+            source
+                .parser_upsert(
+                    &ParserRecord {
+                        id: format!("android-fact:{}:{}", fact.field, fact.source_file_id),
+                        data_source_id: data_source_id.0.clone(),
+                        family: "android".into(),
+                        kind: "system_fact".into(),
+                        status: "ready".into(),
+                        summary_sha256: infrastructure::hashing::sha256_bytes(
+                            payload.to_string().as_bytes(),
+                        ),
+                        payload,
+                    },
+                    PersistMode::Buffer,
+                )
+                .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        }
+        for package in &package_records {
+            let payload = serde_json::json!({
+                "packageName": package.package_name, "appName": package.app_name,
+                "versionCode": package.version_code, "installTime": package.install_time,
+                "updateTime": package.update_time, "installer": package.installer,
+                "uid": package.uid, "codePath": package.code_path,
+                "sourceFileId": package.source_file_id, "sourcePath": package.source_path,
+                "parser": package.parser, "warning": package.warning,
+            });
+            source
+                .parser_upsert(
+                    &ParserRecord {
+                        id: format!(
+                            "android-package:{}:{}",
+                            package.package_name, package.source_file_id
+                        ),
+                        data_source_id: data_source_id.0.clone(),
+                        family: "android".into(),
+                        kind: "package".into(),
+                        status: "ready".into(),
+                        summary_sha256: infrastructure::hashing::sha256_bytes(
+                            payload.to_string().as_bytes(),
+                        ),
+                        payload,
+                    },
+                    PersistMode::Buffer,
+                )
+                .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        }
+        source
+            .persist(PersistMode::SyncAll)
+            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+    }
     Ok(())
 }

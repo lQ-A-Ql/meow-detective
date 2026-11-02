@@ -46,8 +46,12 @@ pub fn run_source_android_analysis_with_cancel(
         case_id,
         data_source_id,
     ));
-    let result =
-        android::run_android_source_analysis(&source.connection, &mut reader, data_source_id)?;
+    let result = android::run_android_source_analysis(
+        &source.connection,
+        case_root,
+        &mut reader,
+        data_source_id,
+    )?;
     super::super::cancellation::ensure_not_cancelled(cancel_token)?;
     Ok(result)
 }
