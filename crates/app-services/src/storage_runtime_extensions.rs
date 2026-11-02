@@ -7,6 +7,20 @@ use persistence_fjall::{
 };
 
 impl ReadOnlySourceStorageHandle {
+    pub fn search_projection_present(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+    ) -> Result<bool, StorageRuntimeError> {
+        let key = persistence_fjall::encode_key(
+            "search",
+            &[persistence_fjall::KeyPart::Text(source_id.to_owned())],
+        )
+        .map_err(StorageRuntimeError::Source)?;
+        Ok(self
+            .read_envelope(snapshot, persistence_fjall::KeyspaceName::Meta, &key)?
+            .is_some_and(|envelope| envelope.record_kind == "search_projection_generation"))
+    }
     pub fn artifact_list_by_source(
         &self,
         snapshot: &SourceReadSnapshot,

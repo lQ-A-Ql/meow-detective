@@ -52,6 +52,7 @@ pub fn scan_case(
     let mut items = Vec::with_capacity(operations.len() + 1);
     verify_manifests(connection, case_root, case_id, &mut items)?;
     verify_artifacts(connection, case_root, case_id, &mut items)?;
+    verify_search_projections(connection, case_root, case_id, &mut items)?;
     for operation in operations {
         let Some(source_id) = operation.source_id.clone() else {
             items.push(StorageRecoveryItem {
@@ -125,6 +126,53 @@ pub fn scan_case(
             }
         });
     Ok(StorageRecoveryReport { disposition, items })
+}
+
+fn verify_search_projections(
+    connection: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    items: &mut Vec<StorageRecoveryItem>,
+) -> Result<(), StorageRecoveryError> {
+    let sources =
+        persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(connection)
+            .find_by_case(&domain::CaseId(case_id.to_owned()))?;
+    for source in sources {
+        let Some(storage) =
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(connection)
+                .find_storage(&source.id)?
+        else {
+            continue;
+        };
+        if !storage.import_state.eq_ignore_ascii_case("ready") {
+            continue;
+        }
+        let Ok(handle) = open_source(case_root, &source.id.0)
+            .ok_or_else(|| StorageRecoveryError::Source("source unavailable".to_owned()))
+        else {
+            items.push(StorageRecoveryItem {
+                operation_id: format!("search:{}", source.id.0),
+                source_id: Some(source.id.0),
+                disposition: RecoveryDisposition::RepairRequired,
+                state: None,
+                detail: "search source storage unavailable".to_owned(),
+            });
+            continue;
+        };
+        if !handle
+            .search_projection_present(&handle.snapshot(), &source.id.0)
+            .map_err(|error| StorageRecoveryError::Source(error.to_string()))?
+        {
+            items.push(StorageRecoveryItem {
+                operation_id: format!("search:{}", source.id.0),
+                source_id: Some(source.id.0),
+                disposition: RecoveryDisposition::RecoveryRequired,
+                state: None,
+                detail: "search projection marker is missing".to_owned(),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn verify_manifests(
