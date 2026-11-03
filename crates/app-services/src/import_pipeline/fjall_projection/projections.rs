@@ -34,7 +34,7 @@ pub(super) fn mirror_artifacts(
         let object_bytes = serde_json::to_vec(&record.attrs)
             .map_err(|error| CommandError::internal(error.to_string()))?;
         let stored = object_store
-            .put_bytes(&object_bytes)
+            .put_bytes_buffered(&object_bytes)
             .map_err(|error| CommandError::internal(error.to_string()))?;
         object_batch.push(crate::artifact_storage_service::ArtifactObjectBatchItem {
             stored,
