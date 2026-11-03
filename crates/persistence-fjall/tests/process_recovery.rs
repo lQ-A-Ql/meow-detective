@@ -23,7 +23,15 @@ fn workspace() -> PathBuf {
 #[test]
 fn child_process_termination_matrix_reopens_each_durable_boundary() {
     run_matrix_child_if_requested();
-    for node in ["batch_commit", "sync_data", "sync_all", "seal", "rename"] {
+    for node in [
+        "batch_commit",
+        "sync_data",
+        "sync_all",
+        "seal",
+        "rename",
+        "source_generation_seal",
+        "source_generation_rename",
+    ] {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(node);
         fs::create_dir_all(&path).unwrap();
@@ -67,6 +75,22 @@ fn child_process_termination_matrix_reopens_each_durable_boundary() {
                 let published = path.join("sources").join("source-1").join("source.fjall");
                 assert!(published.is_dir());
                 assert_eq!(verify_sealed(published).unwrap().len(), 64);
+            }
+            "source_generation_seal" | "source_generation_rename" => {
+                let layout =
+                    SourceBuildLayout::for_case_source(&path, "source-1", "attempt").unwrap();
+                let source_root = if node == "source_generation_seal" {
+                    layout.build_path()
+                } else {
+                    layout.published_path()
+                };
+                let source =
+                    persistence_fjall::SourceStore::open(source_root, DatabaseConfig::default())
+                        .unwrap();
+                let manifest =
+                    persistence_fjall::verify_source_generation(&source, "source-1").unwrap();
+                assert_eq!(manifest.attempt_id, "attempt");
+                assert_eq!(manifest.projection_batch_digest.len(), 64);
             }
             _ => unreachable!(),
         }
@@ -128,6 +152,41 @@ fn run_matrix_child_if_requested() {
             seal_build(layout.build_path()).unwrap();
             if node == "rename" {
                 publish_build(layout.build_path(), layout.published_path()).unwrap();
+            }
+        }
+        "source_generation_seal" | "source_generation_rename" => {
+            let layout = SourceBuildLayout::for_case_source(&path, "source-1", "attempt").unwrap();
+            fs::create_dir_all(layout.build_path()).unwrap();
+            let source = persistence_fjall::SourceStore::open(
+                layout.build_path(),
+                DatabaseConfig::default(),
+            )
+            .unwrap();
+            let receipt = source
+                .database()
+                .write_batch(
+                    &[WriteAction::Put {
+                        keyspace: persistence_fjall::KeyspaceName::Meta,
+                        key: b"projection".to_vec(),
+                        value: b"complete".to_vec(),
+                    }],
+                    PersistMode::SyncAll,
+                )
+                .unwrap();
+            persistence_fjall::seal_source_generation(
+                &source,
+                "source-1",
+                "attempt",
+                &hex::encode(receipt.batch_digest),
+            )
+            .unwrap();
+            drop(source);
+            if node == "source_generation_rename" {
+                persistence_fjall::publish_source_generation(
+                    layout.build_path(),
+                    layout.published_path(),
+                )
+                .unwrap();
             }
         }
         _ => panic!("unknown recovery matrix node: {node}"),

@@ -91,6 +91,11 @@ fn mirror_published_outputs(conn: &Connection, case_id: &str) -> Result<(), Anal
         return Ok(());
     };
     let source_id = resolve_output_data_source_id(conn)?;
+    let fjall_root = crate::source_db::fjall_source_storage_root(case_root, &source_id)
+        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+    if !fjall_root.is_dir() {
+        return Ok(());
+    }
     let case_connection = match persistence_sqlite::open_existing(&case_root.join("app.db")) {
         Ok(connection) => connection,
         Err(_) => return Ok(()),

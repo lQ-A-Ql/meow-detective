@@ -11,6 +11,7 @@ mod partition;
 mod recovery;
 mod scan;
 mod source_build;
+mod source_generation;
 mod source_store;
 mod timeline;
 
@@ -41,6 +42,11 @@ pub use source_build::{
     publish_build, seal_build, verify_sealed, PublishReceipt, SourceBuild, SourceBuildLayout,
     BUILD_PREFIX, MANIFEST_FILE, PUBLISHED_PREFIX, SEAL_FILE, SOURCES_DIRECTORY,
     SOURCE_BUILD_DIRECTORY_PREFIX, SOURCE_PUBLISHED_DIRECTORY_NAME,
+};
+pub use source_generation::{
+    publish_source_generation, replace_source_generation, seal_source_generation,
+    source_generation_manifest_digest, verify_source_generation, SourceGenerationManifest,
+    SourceGenerationReceipt, SOURCE_GENERATION_MANIFEST_FILE, SOURCE_GENERATION_SEAL_FILE,
 };
 pub use source_store::SourceStore;
 pub use timeline::{

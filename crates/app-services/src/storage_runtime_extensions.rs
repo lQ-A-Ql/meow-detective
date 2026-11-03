@@ -9,6 +9,14 @@ use persistence_fjall::{
 };
 
 impl ReadOnlySourceStorageHandle {
+    pub fn verify_source_generation(
+        &self,
+        source_id: &str,
+    ) -> Result<persistence_fjall::SourceGenerationManifest, StorageRuntimeError> {
+        persistence_fjall::verify_source_generation(self.source_store(), source_id)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn source_projection_complete(
         &self,
         snapshot: &SourceReadSnapshot,

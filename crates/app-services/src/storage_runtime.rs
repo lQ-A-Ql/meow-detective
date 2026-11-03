@@ -6,7 +6,9 @@ use persistence_fjall::{
 };
 mod artifact_root;
 mod source_registry;
-pub(crate) use source_registry::{close_case_source_stores, close_source_store};
+pub(crate) use source_registry::{
+    close_case_source_stores, close_source_store, close_source_store_at_path,
+};
 use std::{
     marker::PhantomData,
     path::{Path, PathBuf},
@@ -79,6 +81,12 @@ pub fn open_source_read_write(
     source_id: &str,
 ) -> Result<ReadWriteSourceStorageHandle, StorageRuntimeError> {
     let source_root = source_storage_root(case_root, source_id)?;
+    Ok(ReadWriteStorageRuntime::open(source_root)?.source())
+}
+
+pub(crate) fn open_source_read_write_at_path(
+    source_root: impl AsRef<Path>,
+) -> Result<ReadWriteSourceStorageHandle, StorageRuntimeError> {
     Ok(ReadWriteStorageRuntime::open(source_root)?.source())
 }
 

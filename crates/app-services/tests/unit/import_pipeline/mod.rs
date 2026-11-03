@@ -813,6 +813,23 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
                 |row| row.get(0),
             )?;
             assert_eq!(source_file_entries, 2);
+            let fjall_layout = persistence_fjall::SourceBuildLayout::for_case_source(
+                &active.case_root,
+                &data_source_id.0,
+                &job_id.0,
+            )
+            .expect("build Fjall source generation layout");
+            assert!(!fjall_layout.build_path().exists());
+            let fjall = crate::source_db::open_registered_fjall_source_read_only(
+                &active.case_root,
+                &data_source_id,
+            )
+            .expect("open published Fjall source generation");
+            let generation = fjall
+                .verify_source_generation(&data_source_id.0)
+                .expect("published Fjall source generation is valid");
+            assert_eq!(generation.attempt_id, job_id.0);
+            assert_eq!(generation.projection_batch_digest.len(), 64);
             let timeline_events: i64 = conn.query_row(
                 "SELECT COUNT(*) FROM timeline_events",
                 [],

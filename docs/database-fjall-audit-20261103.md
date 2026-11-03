@@ -35,7 +35,7 @@
 | 7 | Artifact Storage 对象目录不一致 | 已完成 | source runtime 与导入投影统一使用案件根目录 `artifacts/objects`。 |
 | 8 | RBD Header Parser kind 不一致 | 已完成 | `ceph_bluestore_rbd_headers` 使用同名 kind 写入和查询。 |
 | 9 | Timeline 查询重复扫描 | 部分完成 | 总数按 512 条 keyset 页读取 Timeline type/time 索引，不再逐条分页计数，也不再为游标打开 SQLite 读取 revision；精确总数及时间过滤仍需扫描匹配前缀的索引记录。 |
-| 10 | 普通导入与恢复构建发布流程分离 | 待处理 | 普通导入仍直接写 `source.fjall`。完整目录 seal 与发布后的 Analysis 写入相冲突；需要先定义可变 source generation 的 manifest 校验范围及恢复节点，再接入 build/publish。 |
+| 10 | 普通导入与恢复构建发布流程分离 | 已完成 | 首次导入按 operation attempt 写入 Fjall build generation，SyncAll 后写入 generation manifest/seal，并原子改名发布；SQLite operation receipt 与 generation 中的 projection receipt 可共同恢复。seal 只覆盖稳定的 Catalog/Partition 主记录与索引，Analysis、Parser、Meta 和 batch keyspace 的后续写入不会使 generation 失效。应用启动时会校验已发布 generation，并自动完成具有有效 seal 和 batch receipt 的待发布 build。重新导入已发布 source 时先写 building 状态，完成后重新计算并替换稳定 generation seal；若旧句柄仍被使用则拒绝发布。 |
 | 11 | 分析输出重复镜像与无关 Parser 重扫 | 部分完成 | SQLite Artifact/Timeline revision 与最大 rowid 未变化时跳过投影；revision 比较不再额外执行全表计数。变化时同步新增、更新和删除，并释放旧对象引用。变化后仍扫描全部 Artifact、Timeline，并校验/登记现存对象。 |
 | 12 | Android Parser 双重身份造成重复记录 | 已完成 | SQLite source projection 与 Android 分析共用 field/file、package/file 的稳定 Parser id；相同 payload 使用幂等 upsert。 |
 | 13 | Artifact source 列表 keyspace 错用 | 已完成 | 按 source 查询直接分页扫描 Artifact records 主记录 keyspace，不再在未建立的 source index 上查询。 |
@@ -65,6 +65,9 @@
 - `cargo test -p app-services --lib analysis_projection_removes_deleted_rows_and_skips_unchanged_replays --quiet`
 - `cargo test -p app-services --lib output_replacement_commits_artifacts_timeline_and_checkpoint_atomically --quiet`
 - `cargo test -p app-services --lib logical_import_post_pipeline_indexes_marker_and_extracts_artifact -- --nocapture`
+- `cargo test -p persistence-fjall --test source_generation`
+- `cargo test -p app-services --test storage_recovery startup_recovery_publishes_a_sealed_import_generation_and_finishes_its_operation -- --nocapture`
+- `cargo test -p persistence-fjall --test process_recovery child_process_termination_matrix_reopens_each_durable_boundary -- --nocapture`
 - `cargo test -p app-services --lib analysis_projection_removes_deleted_rows_and_skips_unchanged_replays -- --nocapture`
 - `cargo test -p app-services --lib`：1185 项通过、2 项失败、19 项忽略；`etcd_bolt_parser_reads_bucket_geometry_and_redacts_values` 单独运行仍以 `Bolt(WorkerFailed)` 失败，`parsers_reject_unsafe_yaml_and_corrupt_bolt_input` 单独运行通过。
 - `cargo check -p app-services`
@@ -80,4 +83,4 @@
 - `powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1`
 - `git diff --check`
 
-仍待处理：source SQLite 与 Fjall 的完整明细双写迁移，以及普通导入与恢复构建发布流程统一。分析输出按 revision 跳过未变化扫描；revision 改变后仍进行全量 Artifact/Timeline 对照。性能基准尚未运行，当前测试只证明行为正确，不代表已有导入提速数据。
+仍待处理：source SQLite 与 Fjall 的完整明细双写迁移。分析输出按 revision 跳过未变化扫描；revision 改变后仍进行全量 Artifact/Timeline 对照。性能基准尚未运行，当前测试只证明行为正确，不代表已有导入提速数据。

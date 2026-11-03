@@ -2,7 +2,9 @@ use crate::{
     database::BatchReceiptState,
     errors::{FjallStorageError, Result},
     source_build::{MANIFEST_FILE, SEAL_FILE},
+    source_generation::{SOURCE_GENERATION_MANIFEST_FILE, SOURCE_GENERATION_SEAL_FILE},
 };
+use sha2::{Digest, Sha256};
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -158,6 +160,11 @@ fn report(
 }
 
 fn checked_digest(path: &Path) -> Result<String> {
+    if path.join(SOURCE_GENERATION_MANIFEST_FILE).is_file()
+        || path.join(SOURCE_GENERATION_SEAL_FILE).is_file()
+    {
+        return checked_source_generation_digest(path);
+    }
     let seal = fs::read_to_string(path.join(SEAL_FILE))
         .map_err(|error| marker_error(error, path, true))?;
     let expected = seal
@@ -178,6 +185,37 @@ fn checked_digest(path: &Path) -> Result<String> {
         });
     }
     Ok(expected.to_owned())
+}
+
+fn checked_source_generation_digest(path: &Path) -> Result<String> {
+    let manifest_path = path.join(SOURCE_GENERATION_MANIFEST_FILE);
+    let bytes = fs::read(&manifest_path).map_err(|error| marker_error(error, path, false))?;
+    let digest = hex::encode(Sha256::digest(&bytes));
+    let seal = fs::read_to_string(path.join(SOURCE_GENERATION_SEAL_FILE))
+        .map_err(|error| source_generation_seal_error(error, path))?;
+    let mut lines = seal.lines();
+    if lines.next() != Some("source-generation-v1") {
+        return Err(FjallStorageError::MissingSeal(path.to_path_buf()));
+    }
+    let expected = lines
+        .next()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| FjallStorageError::MissingSeal(path.to_path_buf()))?;
+    if expected != digest {
+        return Err(FjallStorageError::ManifestDigestMismatch {
+            expected: expected.to_owned(),
+            actual: digest,
+        });
+    }
+    Ok(expected.to_owned())
+}
+
+fn source_generation_seal_error(error: io::Error, path: &Path) -> FjallStorageError {
+    if error.kind() == io::ErrorKind::NotFound {
+        FjallStorageError::MissingSeal(path.to_path_buf())
+    } else {
+        FjallStorageError::Io(error)
+    }
 }
 
 fn marker_error(error: io::Error, path: &Path, seal: bool) -> FjallStorageError {

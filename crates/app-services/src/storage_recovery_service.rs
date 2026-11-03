@@ -1,8 +1,6 @@
-use crate::{source_db, storage_runtime::ReadOnlySourceStorageHandle};
+use crate::source_db;
 use artifact_storage::{ArtifactStore, ObjectAddress};
-use persistence_fjall::{
-    scan_recovery_consistency, BatchReceiptState, RecoveryScan, RecoveryState, SourceBuildLayout,
-};
+use persistence_fjall::RecoveryState;
 use persistence_sqlite::repositories::storage_control_repo::{
     StorageControlRepo, StorageOperationState,
 };
@@ -11,6 +9,8 @@ use rusqlite::Connection;
 use std::path::Path;
 use thiserror::Error;
 use uuid::Uuid;
+
+mod operations;
 
 #[derive(Debug, Error)]
 pub enum StorageRecoveryError {
@@ -54,65 +54,9 @@ pub fn scan_case(
     verify_manifests(connection, case_root, case_id, &mut items)?;
     verify_artifacts(connection, case_root, case_id, &mut items)?;
     verify_search_projections(connection, case_root, case_id, &mut items)?;
-    for operation in operations {
-        let Some(source_id) = operation.source_id.clone() else {
-            items.push(StorageRecoveryItem {
-                operation_id: operation.operation_id,
-                source_id: None,
-                disposition: RecoveryDisposition::RepairRequired,
-                state: None,
-                detail: "open storage operation has no source identity".to_owned(),
-            });
-            continue;
-        };
-        let Some(handle) = open_source(case_root, &source_id) else {
-            items.push(StorageRecoveryItem {
-                operation_id: operation.operation_id,
-                source_id: Some(source_id),
-                disposition: RecoveryDisposition::RepairRequired,
-                state: None,
-                detail: "source Fjall directory is unavailable".to_owned(),
-            });
-            continue;
-        };
-        let layout =
-            SourceBuildLayout::for_case_source(case_root, &source_id, &operation.attempt_id)?;
-        let receipt = receipt_state(&handle, operation.expected_batch_digest.as_deref())?;
-        let report = scan_recovery_consistency(RecoveryScan {
-            build_path: &layout.build_path(),
-            published_path: &layout.published_path(),
-            batch_receipt: receipt,
-        });
-        let item = match report {
-            Ok(report) => {
-                let disposition = match report.state {
-                    RecoveryState::Published => RecoveryDisposition::Ready,
-                    RecoveryState::Sealed => RecoveryDisposition::RecoveryRequired,
-                    RecoveryState::MissingBatchReceipt
-                    | RecoveryState::MissingManifest
-                    | RecoveryState::MissingSeal => RecoveryDisposition::RecoveryRequired,
-                    RecoveryState::CorruptBatchReceipt
-                    | RecoveryState::ManifestMismatch
-                    | RecoveryState::PublishConflict => RecoveryDisposition::RepairRequired,
-                };
-                StorageRecoveryItem {
-                    operation_id: operation.operation_id,
-                    source_id: Some(source_id),
-                    disposition,
-                    state: Some(report.state),
-                    detail: format!("storage operation state {:?}", operation.state),
-                }
-            }
-            Err(error) => StorageRecoveryItem {
-                operation_id: operation.operation_id,
-                source_id: Some(source_id),
-                disposition: RecoveryDisposition::RepairRequired,
-                state: None,
-                detail: error.to_string(),
-            },
-        };
-        items.push(item);
-    }
+    items.extend(operations::scan_open_operations(
+        connection, case_root, operations,
+    )?);
     let disposition = items
         .iter()
         .fold(RecoveryDisposition::Ready, |current, item| {
@@ -212,9 +156,7 @@ fn verify_search_projections(
         if !storage.import_state.eq_ignore_ascii_case("ready") {
             continue;
         }
-        let Ok(handle) = open_source(case_root, &source.id.0)
-            .ok_or_else(|| StorageRecoveryError::Source("source unavailable".to_owned()))
-        else {
+        let Ok(handle) = source_db::open_fjall_source_read_only(case_root, &source.id.0) else {
             items.push(StorageRecoveryItem {
                 operation_id: format!("search:{}", source.id.0),
                 source_id: Some(source.id.0),
@@ -348,25 +290,4 @@ fn verify_artifacts(
         }
     }
     Ok(())
-}
-
-fn open_source(case_root: &Path, source_id: &str) -> Option<ReadOnlySourceStorageHandle> {
-    source_db::open_fjall_source_read_only(case_root, source_id).ok()
-}
-
-fn receipt_state(
-    handle: &ReadOnlySourceStorageHandle,
-    digest: Option<&str>,
-) -> Result<BatchReceiptState, StorageRecoveryError> {
-    let Some(digest) = digest else {
-        return Ok(BatchReceiptState::Missing);
-    };
-    let bytes =
-        hex::decode(digest).map_err(|error| StorageRecoveryError::Source(error.to_string()))?;
-    let digest: [u8; 32] = bytes.try_into().map_err(|_| {
-        StorageRecoveryError::Source("batch digest must contain 32 bytes".to_owned())
-    })?;
-    handle
-        .batch_receipt_state(&digest)
-        .map_err(|error| StorageRecoveryError::Source(error.to_string()))
 }

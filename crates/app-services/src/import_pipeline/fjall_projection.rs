@@ -27,25 +27,88 @@ pub(super) fn mirror_source_records(
     source_id: &str,
 ) -> Result<String, CommandError> {
     ctx.report_job_progress(96, "Projecting queryable records...")?;
-    let result = mirror_source_records_from_connections(
+    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+        ctx.case_root,
+        source_id,
+        &ctx.job_id.0,
+    )
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    let existing_generation = layout.published_path().is_dir();
+    let target_root = if existing_generation {
+        layout.published_path()
+    } else {
+        layout.build_path()
+    };
+    std::fs::create_dir_all(&target_root)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let result = mirror_source_records_into_root(
         ctx.conn,
         ctx.case_root,
         &ctx.case_id.0,
         ctx.source_connection()?,
         source_id,
+        &target_root,
     );
-    if result.is_ok() {
-        ctx.report_job_progress(97, "Queryable record projection completed")?;
-    }
-    result
+    let projection_digest = result?;
+    publish_source_generation(
+        &layout,
+        &target_root,
+        existing_generation,
+        source_id,
+        &ctx.job_id.0,
+        &projection_digest,
+    )?;
+    ctx.report_job_progress(97, "Queryable record projection completed")?;
+    Ok(projection_digest)
 }
 
-pub(crate) fn mirror_source_records_from_connections(
+fn publish_source_generation(
+    layout: &persistence_fjall::SourceBuildLayout,
+    target_root: &std::path::Path,
+    existing_generation: bool,
+    source_id: &str,
+    attempt_id: &str,
+    projection_digest: &str,
+) -> Result<(), CommandError> {
+    let _close_guard = crate::storage_runtime::close_source_store_at_path(target_root)
+        .map_err(|error| CommandError::internal(error.to_string()))?
+        .ok_or_else(|| CommandError::internal("Fjall source generation is still in use"))?;
+    let source = persistence_fjall::SourceStore::open(
+        target_root,
+        persistence_fjall::DatabaseConfig::default(),
+    )
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    if existing_generation {
+        persistence_fjall::replace_source_generation(
+            &source,
+            source_id,
+            attempt_id,
+            projection_digest,
+        )
+    } else {
+        persistence_fjall::seal_source_generation(&source, source_id, attempt_id, projection_digest)
+    }
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    source
+        .database()
+        .persist(PersistMode::SyncAll)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    drop(source);
+    if !existing_generation {
+        persistence_fjall::publish_source_generation(layout.build_path(), layout.published_path())
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
+    drop(_close_guard);
+    Ok(())
+}
+
+fn mirror_source_records_into_root(
     case_connection: &Connection,
     case_root: &std::path::Path,
     case_id: &str,
     source_connection: &Connection,
     source_id: &str,
+    source_root: &std::path::Path,
 ) -> Result<String, CommandError> {
     mirror_source_records_from_connections_internal(
         case_connection,
@@ -54,6 +117,7 @@ pub(crate) fn mirror_source_records_from_connections(
         source_connection,
         source_id,
         true,
+        Some(source_root),
     )
 }
 
@@ -71,6 +135,7 @@ pub(crate) fn mirror_analysis_outputs_from_connections(
         source_connection,
         source_id,
         false,
+        None,
     )
 }
 
@@ -124,12 +189,16 @@ fn mirror_source_records_from_connections_internal(
     source_connection: &Connection,
     source_id: &str,
     include_catalog: bool,
+    source_root: Option<&std::path::Path>,
 ) -> Result<String, CommandError> {
     let started = Instant::now();
-    let source = crate::source_db::open_registered_fjall_source_read_write(
-        case_root,
-        &domain::DataSourceId(source_id.to_owned()),
-    )
+    let source = match source_root {
+        Some(source_root) => crate::storage_runtime::open_source_read_write_at_path(source_root),
+        None => crate::source_db::open_registered_fjall_source_read_write(
+            case_root,
+            &domain::DataSourceId(source_id.to_owned()),
+        ),
+    }
     .map_err(|_| CommandError::internal("Fjall source storage is unavailable"))?;
     tracing::info!(source_id, "Fjall source projection started");
     let analysis_revision = if include_catalog {
