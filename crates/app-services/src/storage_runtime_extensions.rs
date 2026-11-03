@@ -9,6 +9,81 @@ use persistence_fjall::{
 };
 
 impl ReadOnlySourceStorageHandle {
+    pub fn source_projection_complete(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+    ) -> Result<bool, StorageRuntimeError> {
+        let key = persistence_fjall::encode_key(
+            "projection",
+            &[persistence_fjall::KeyPart::Text(source_id.to_owned())],
+        )
+        .map_err(StorageRuntimeError::Source)?;
+        let source_complete = self
+            .read_envelope(snapshot, persistence_fjall::KeyspaceName::Meta, &key)?
+            .is_some_and(|envelope| {
+                envelope.record_kind == "source_projection_complete"
+                    && envelope.source_id == source_id
+            });
+        if !source_complete {
+            return Ok(false);
+        }
+        let analysis_state_key = persistence_fjall::encode_key(
+            "analysis_projection_state",
+            &[persistence_fjall::KeyPart::Text(source_id.to_owned())],
+        )
+        .map_err(StorageRuntimeError::Source)?;
+        if let Some(state) = self.read_envelope(
+            snapshot,
+            persistence_fjall::KeyspaceName::Meta,
+            &analysis_state_key,
+        )? {
+            if state.source_id != source_id || state.record_kind != "analysis_projection_complete" {
+                return Ok(false);
+            }
+        }
+        let analysis_key = persistence_fjall::encode_key(
+            "analysis_projection",
+            &[persistence_fjall::KeyPart::Text(source_id.to_owned())],
+        )
+        .map_err(StorageRuntimeError::Source)?;
+        Ok(self
+            .read_envelope(
+                snapshot,
+                persistence_fjall::KeyspaceName::Meta,
+                &analysis_key,
+            )?
+            .is_none_or(|envelope| {
+                envelope.record_kind == "analysis_projection_complete"
+                    && envelope.source_id == source_id
+            }))
+    }
+
+    pub fn timeline_count_by_time(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        start: Option<chrono::DateTime<chrono::Utc>>,
+        end: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<u64, StorageRuntimeError> {
+        TimelineRecordStore::from_source_store(self.source_store().clone())
+            .count_by_time(snapshot, source_id, start, end)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn timeline_count_by_type(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        event_type: &str,
+        start: Option<chrono::DateTime<chrono::Utc>>,
+        end: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<u64, StorageRuntimeError> {
+        TimelineRecordStore::from_source_store(self.source_store().clone())
+            .count_by_type(snapshot, source_id, event_type, start, end)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn catalog_list_directories_by_parent(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -187,6 +262,19 @@ impl ReadOnlySourceStorageHandle {
 }
 
 impl ReadWriteSourceStorageHandle {
+    pub fn artifact_list_by_source(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<ArtifactPage, StorageRuntimeError> {
+        ArtifactRecordStore::from_source_store(self.source_store().clone())
+            .list_by_source(snapshot, source_id, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn parser_upsert_batch(
         &self,
         records: &[ParserRecord],
@@ -214,6 +302,17 @@ impl ReadWriteSourceStorageHandle {
             .upsert_batch(records, mode)
             .map_err(StorageRuntimeError::Source)
     }
+
+    pub fn artifact_delete_batch(
+        &self,
+        source_id: &str,
+        ids: &[String],
+        mode: PersistMode,
+    ) -> Result<usize, StorageRuntimeError> {
+        ArtifactRecordStore::from_source_store(self.source_store().clone())
+            .delete_batch(source_id, ids, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
     pub fn timeline_upsert_batch(
         &self,
         records: &[TimelineRecord],
@@ -221,6 +320,17 @@ impl ReadWriteSourceStorageHandle {
     ) -> Result<(), StorageRuntimeError> {
         TimelineRecordStore::from_source_store(self.source_store().clone())
             .upsert_batch(records, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn timeline_delete_batch(
+        &self,
+        source_id: &str,
+        ids: &[String],
+        mode: PersistMode,
+    ) -> Result<usize, StorageRuntimeError> {
+        TimelineRecordStore::from_source_store(self.source_store().clone())
+            .delete_batch(source_id, ids, mode)
             .map_err(StorageRuntimeError::Source)
     }
     pub fn catalog_upsert_batch(

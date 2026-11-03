@@ -38,7 +38,9 @@ mod context;
 mod emit;
 mod execute;
 mod fjall_projection;
-pub(crate) use fjall_projection::mirror_analysis_outputs_from_connections;
+pub(crate) use fjall_projection::{
+    begin_analysis_output_projection, mirror_analysis_outputs_from_connections,
+};
 pub mod options;
 pub mod partition;
 mod phases;

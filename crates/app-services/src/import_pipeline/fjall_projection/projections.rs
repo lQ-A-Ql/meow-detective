@@ -3,7 +3,7 @@ use artifact_storage::ArtifactStore;
 use chrono::Utc;
 use persistence_fjall::{CatalogEntryType, FileEntryRecord, PersistMode, TimelineRecord};
 use rusqlite::Connection;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use transport::CommandError;
 
 const BATCH_SIZE: usize = 512;
@@ -18,18 +18,20 @@ pub(super) fn mirror_artifacts(
 ) -> Result<(), CommandError> {
     let object_store =
         ArtifactStore::new(case_root).map_err(|error| CommandError::internal(error.to_string()))?;
-    let mut statement = connection.prepare("SELECT id, artifact_type, source_object_id, summary, attrs, title, summary, extractor_id, extractor_version, confidence, source_attribution, created_at FROM artifacts WHERE data_source_id = ?1 ORDER BY id ASC").map_err(|error| CommandError::internal(error.to_string()))?;
+    let mut statement = connection.prepare("SELECT id, artifact_type, source_object_id, summary, attrs, title, extractor_id, extractor_version, confidence, source_attribution, created_at FROM artifacts WHERE data_source_id = ?1 ORDER BY id ASC").map_err(|error| CommandError::internal(error.to_string()))?;
     let rows = statement.query_map([source_id], |row| {
         let summary: String = row.get(3)?;
         let attrs: String = row.get(4)?;
-        let payload = serde_json::json!({"attrs": serde_json::from_str::<serde_json::Value>(&attrs).unwrap_or(serde_json::Value::Null), "title": row.get::<_, String>(5)?, "summary": row.get::<_, String>(6)?, "extractorId": row.get::<_, Option<String>>(7)?, "extractorVersion": row.get::<_, Option<String>>(8)?, "confidence": row.get::<_, Option<f32>>(9)?, "sourceAttribution": row.get::<_, Option<String>>(10)?, "createdAt": row.get::<_, String>(11)?});
+        let payload = serde_json::json!({"attrs": serde_json::from_str::<serde_json::Value>(&attrs).unwrap_or(serde_json::Value::Null), "title": row.get::<_, String>(5)?, "summary": summary, "extractorId": row.get::<_, Option<String>>(6)?, "extractorVersion": row.get::<_, Option<String>>(7)?, "confidence": row.get::<_, Option<f32>>(8)?, "sourceAttribution": row.get::<_, Option<String>>(9)?, "createdAt": row.get::<_, String>(10)?});
         Ok((row.get::<_, String>(0)?, persistence_fjall::ArtifactRecord { id: row.get(0)?, data_source_id: source_id.to_owned(), artifact_type: row.get(1)?, source_object_id: row.get(2)?, content_sha256: Some(infrastructure::hashing::sha256_bytes(summary.as_bytes())), attrs: payload }))
     }).map_err(|error| CommandError::internal(error.to_string()))?;
     let mut batch = Vec::with_capacity(BATCH_SIZE);
     let mut object_batch = Vec::with_capacity(BATCH_SIZE);
+    let mut current_ids = HashSet::new();
     for row in rows {
         let (artifact_id, record) =
             row.map_err(|error| CommandError::internal(error.to_string()))?;
+        current_ids.insert(artifact_id.clone());
         batch.push(record.clone());
         let object_bytes = serde_json::to_vec(&record.attrs)
             .map_err(|error| CommandError::internal(error.to_string()))?;
@@ -86,6 +88,52 @@ pub(super) fn mirror_artifacts(
             &object_batch,
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
+    delete_stale_artifacts(case_connection, case_id, source, source_id, &current_ids)?;
+    Ok(())
+}
+
+fn delete_stale_artifacts(
+    case_connection: &Connection,
+    case_id: &str,
+    source: &ReadWriteSourceStorageHandle,
+    source_id: &str,
+    current_ids: &HashSet<String>,
+) -> Result<(), CommandError> {
+    let snapshot = source.snapshot();
+    let mut cursor = None;
+    loop {
+        let page = source
+            .artifact_list_by_source(
+                &snapshot,
+                source_id,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                BATCH_SIZE,
+            )
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+        let stale = page
+            .records
+            .into_iter()
+            .map(|record| record.id)
+            .filter(|id| !current_ids.contains(id))
+            .collect::<Vec<_>>();
+        crate::artifact_storage_service::release_artifact_owner_references_batch(
+            case_connection,
+            case_id,
+            source_id,
+            "artifact",
+            "metadata",
+            &stale,
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+        source
+            .artifact_delete_batch(source_id, &stale, PersistMode::Buffer)
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
     }
     Ok(())
 }
@@ -173,8 +221,11 @@ pub(super) fn mirror_timeline(
         })
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let mut batch = Vec::with_capacity(BATCH_SIZE);
+    let mut current_ids = HashSet::new();
     for row in rows {
-        batch.push(row.map_err(|error| CommandError::internal(error.to_string()))?);
+        let record = row.map_err(|error| CommandError::internal(error.to_string()))?;
+        current_ids.insert(record.id.clone());
+        batch.push(record);
         if batch.len() == BATCH_SIZE {
             source
                 .timeline_upsert_batch(&batch, PersistMode::Buffer)
@@ -186,6 +237,41 @@ pub(super) fn mirror_timeline(
         source
             .timeline_upsert_batch(&batch, PersistMode::Buffer)
             .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
+    delete_stale_timeline(source, source_id, &current_ids)?;
+    Ok(())
+}
+
+fn delete_stale_timeline(
+    source: &ReadWriteSourceStorageHandle,
+    source_id: &str,
+    current_ids: &HashSet<String>,
+) -> Result<(), CommandError> {
+    let snapshot = source.snapshot();
+    let mut cursor = None;
+    loop {
+        let page = source
+            .timeline_list_by_time(
+                &snapshot,
+                source_id,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                BATCH_SIZE,
+            )
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+        let stale = page
+            .records
+            .into_iter()
+            .map(|record| record.id)
+            .filter(|id| !current_ids.contains(id))
+            .collect::<Vec<_>>();
+        source
+            .timeline_delete_batch(source_id, &stale, PersistMode::Buffer)
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
     }
     Ok(())
 }

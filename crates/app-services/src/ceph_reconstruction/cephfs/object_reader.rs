@@ -393,6 +393,12 @@ fn fjall_metadata_projection(
         return Ok(None);
     };
     let snapshot = storage.snapshot();
+    if !storage
+        .source_projection_complete(&snapshot, &runtime.binding.data_source_id.0)
+        .map_err(|_| inventory_unavailable(runtime))?
+    {
+        return Ok(None);
+    }
     let page = storage
         .parser_list_by_field(
             &snapshot,

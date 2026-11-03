@@ -6,7 +6,10 @@ use app_services::storage_runtime::{
 use chrono::Utc;
 use domain::DataSourceId;
 use persistence_fjall::TimelineRecord;
-use persistence_fjall::{CatalogEntryType, FileEntryRecord, PersistMode, ScanDirection};
+use persistence_fjall::{
+    encode_key, CatalogEntryType, FileEntryRecord, KeyPart, KeyspaceName, PersistMode,
+    ScanDirection, VersionedEnvelope,
+};
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -47,6 +50,10 @@ fn source_runtime_uses_the_fixed_case_source_layout() {
 
     let source = open_source_read_write(root.path(), "source-01").unwrap();
     assert_eq!(source.source_root(), Path::new(&expected));
+    assert_eq!(
+        source.artifacts().objects_root(),
+        root.path().join("artifacts").join("objects")
+    );
     drop(source);
 
     let source = open_source_read_only(root.path(), "source-01").unwrap();
@@ -87,6 +94,122 @@ fn source_db_facade_opens_the_same_fjall_source_layout() {
         readonly.source_root(),
         source_db::fjall_source_storage_root(root.path(), "source-02").unwrap()
     );
+}
+
+#[test]
+fn read_only_source_reuses_an_active_write_handle() {
+    let root = tempdir().unwrap();
+    let writable = open_source_read_write(root.path(), "source-shared").unwrap();
+    let readonly = open_source_read_only(root.path(), "source-shared").unwrap();
+    let record = FileEntryRecord {
+        id: "shared-file".to_owned(),
+        parent_id: None,
+        data_source_id: "source-shared".to_owned(),
+        path: "/shared.txt".to_owned(),
+        name: "shared.txt".to_owned(),
+        entry_type: CatalogEntryType::File,
+        size: Some(1),
+        ext: Some("txt".to_owned()),
+        deleted: false,
+        hidden: false,
+        system: false,
+        read_only: false,
+        archive: false,
+        encrypted: false,
+        created: None,
+        modified: None,
+        accessed: None,
+        changed: None,
+        hash_sha256: None,
+        partition_index: None,
+        unix_mode: None,
+    };
+    writable
+        .catalog_upsert(&record, PersistMode::SyncData)
+        .unwrap();
+    let snapshot = readonly.snapshot();
+    assert_eq!(
+        readonly
+            .catalog_get(&snapshot, "source-shared", "shared-file")
+            .unwrap(),
+        Some(record)
+    );
+}
+
+#[test]
+fn concurrent_source_opens_share_one_fjall_database() {
+    let root = tempdir().unwrap();
+    drop(open_source_read_write(root.path(), "source-concurrent").unwrap());
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+    let workers = (0..8)
+        .map(|_| {
+            let root = root.path().to_path_buf();
+            let barrier = std::sync::Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                open_source_read_write(root, "source-concurrent").unwrap()
+            })
+        })
+        .collect::<Vec<_>>();
+    let handles = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(handles.len(), 8);
+}
+
+#[test]
+fn source_runtime_reopens_after_handles_are_dropped() {
+    let root = tempdir().unwrap();
+    drop(open_source_read_write(root.path(), "source-cached").unwrap());
+    let reopened = open_source_read_only(root.path(), "source-cached").unwrap();
+    assert_eq!(
+        reopened.source_root(),
+        source_storage_root(root.path(), "source-cached").unwrap()
+    );
+}
+
+#[test]
+fn incomplete_analysis_projection_hides_fjall_source_data_until_complete() {
+    let root = tempdir().unwrap();
+    let source_id = "source-projection-state";
+    let writable = open_source_read_write(root.path(), source_id).unwrap();
+    let marker = |family: &str, kind: &str| {
+        let key = encode_key(family, &[KeyPart::Text(source_id.to_owned())]).unwrap();
+        let envelope = VersionedEnvelope::new(
+            kind,
+            1,
+            format!("projection:{source_id}"),
+            source_id,
+            1,
+            source_id.as_bytes().to_vec(),
+        );
+        writable
+            .write_envelope(KeyspaceName::Meta, key, &envelope, PersistMode::SyncAll)
+            .unwrap();
+    };
+    marker("projection", "source_projection_complete");
+    let readonly = open_source_read_only(root.path(), source_id).unwrap();
+    assert!(readonly
+        .source_projection_complete(&readonly.snapshot(), source_id)
+        .unwrap());
+
+    marker("projection", "source_projection_building");
+    assert!(!readonly
+        .source_projection_complete(&readonly.snapshot(), source_id)
+        .unwrap());
+    marker("projection", "source_projection_complete");
+
+    marker("analysis_projection_state", "analysis_projection_building");
+    assert!(!readonly
+        .source_projection_complete(&readonly.snapshot(), source_id)
+        .unwrap());
+
+    marker("analysis_projection", "analysis_projection_complete");
+    marker("analysis_projection_state", "analysis_projection_complete");
+    assert!(readonly
+        .source_projection_complete(&readonly.snapshot(), source_id)
+        .unwrap());
 }
 
 #[test]

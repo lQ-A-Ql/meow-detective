@@ -45,6 +45,7 @@ fn mirror_artifacts_to_fjall(
         &domain::DataSourceId(data_source_id.to_owned()),
     )
     .map_err(|error| ArtifactServiceError::other(error.to_string()))?;
+    let mut records = Vec::with_capacity(artifacts.len());
     for artifact in artifacts {
         let payload = serde_json::json!({
             "attrs": artifact.attrs,
@@ -56,22 +57,20 @@ fn mirror_artifacts_to_fjall(
             "sourceAttribution": artifact.source_attribution,
             "createdAt": artifact.created_at.to_rfc3339(),
         });
-        source
-            .artifact_upsert(
-                &ArtifactRecord {
-                    id: artifact.id.0.clone(),
-                    data_source_id: data_source_id.to_owned(),
-                    artifact_type: artifact.family.clone(),
-                    source_object_id: artifact.source_object_id.as_ref().map(|id| id.0.clone()),
-                    content_sha256: Some(infrastructure::hashing::sha256_bytes(
-                        artifact.summary.as_bytes(),
-                    )),
-                    attrs: payload,
-                },
-                PersistMode::Buffer,
-            )
-            .map_err(|error| ArtifactServiceError::other(error.to_string()))?;
+        records.push(ArtifactRecord {
+            id: artifact.id.0.clone(),
+            data_source_id: data_source_id.to_owned(),
+            artifact_type: artifact.family.clone(),
+            source_object_id: artifact.source_object_id.as_ref().map(|id| id.0.clone()),
+            content_sha256: Some(infrastructure::hashing::sha256_bytes(
+                artifact.summary.as_bytes(),
+            )),
+            attrs: payload,
+        });
     }
+    source
+        .artifact_upsert_batch(&records, PersistMode::Buffer)
+        .map_err(|error| ArtifactServiceError::other(error.to_string()))?;
     source
         .persist(PersistMode::SyncAll)
         .map_err(|error| ArtifactServiceError::other(error.to_string()))?;

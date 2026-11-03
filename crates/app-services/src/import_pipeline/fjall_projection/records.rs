@@ -57,6 +57,7 @@ fn parser_table_names(connection: &Connection) -> Result<Vec<String>, CommandErr
 
 fn parser_table_kind(table: &str) -> &'static str {
     match table {
+        "ceph_bluestore_rbd_headers" => "ceph_bluestore_rbd_headers",
         "ceph_fs_metadata_objects" => "ceph_fs_metadata_objects",
         "ceph_bluefs_files" => "ceph_bluefs_files",
         "ceph_rocksdb_latest_state" => "ceph_rocksdb_latest_state",
@@ -194,19 +195,16 @@ pub(super) fn mirror_android_parser_records(
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let rows = facts
         .query_map([source_id], |row| {
-            let id: String = row.get(0)?;
+            let field: String = row.get(1)?;
+            let source_file_id: String = row.get(4)?;
+            let id = format!("android-fact:{field}:{source_file_id}");
             let payload = serde_json::json!({
-                "field": row.get::<_, String>(1)?, "value": row.get::<_, String>(2)?,
-                "confidence": row.get::<_, String>(3)?, "sourceFileId": row.get::<_, String>(4)?,
+                "field": field, "value": row.get::<_, String>(2)?,
+                "confidence": row.get::<_, String>(3)?, "sourceFileId": source_file_id,
                 "sourcePath": row.get::<_, String>(5)?, "parser": row.get::<_, String>(6)?,
                 "warning": row.get::<_, Option<String>>(7)?,
             });
-            Ok(parser_record(
-                format!("android-fact:{id}"),
-                source_id,
-                "system_fact",
-                payload,
-            ))
+            Ok(parser_record(id, source_id, "system_fact", payload))
         })
         .map_err(|error| CommandError::internal(error.to_string()))?;
     flush_parser_rows(source, rows)?;
@@ -220,16 +218,23 @@ pub(super) fn mirror_android_parser_records(
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let rows = packages
         .query_map([source_id], |row| {
-            let id: String = row.get(0)?;
+            let package_name: String = row.get(1)?;
+            let source_file_id: String = row.get(9)?;
+            let id = format!("android-package:{package_name}:{source_file_id}");
             let payload = serde_json::json!({
-                "packageName": row.get::<_, String>(1)?, "appName": row.get::<_, Option<String>>(2)?,
+                "packageName": package_name, "appName": row.get::<_, Option<String>>(2)?,
                 "versionCode": row.get::<_, Option<String>>(3)?, "installTime": row.get::<_, Option<String>>(4)?,
                 "updateTime": row.get::<_, Option<String>>(5)?, "installer": row.get::<_, Option<String>>(6)?,
                 "uid": row.get::<_, Option<u32>>(7)?, "codePath": row.get::<_, Option<String>>(8)?,
-                "sourceFileId": row.get::<_, String>(9)?, "sourcePath": row.get::<_, String>(10)?,
+                "sourceFileId": source_file_id, "sourcePath": row.get::<_, String>(10)?,
                 "parser": row.get::<_, String>(11)?, "warning": row.get::<_, Option<String>>(12)?,
             });
-            Ok(parser_record(format!("android-package:{id}"), source_id, "package", payload))
+            Ok(parser_record(
+                id,
+                source_id,
+                "package",
+                payload,
+            ))
         })
         .map_err(|error| CommandError::internal(error.to_string()))?;
     flush_parser_rows(source, rows)

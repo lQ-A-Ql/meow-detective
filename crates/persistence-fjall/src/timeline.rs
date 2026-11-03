@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 mod timeline_batch;
+mod timeline_count;
 
 const RECORD_KIND: &str = "timeline_event";
 const SCHEMA_VERSION: u16 = 1;
@@ -100,6 +101,9 @@ impl TimelineRecordStore {
         let key = record_key(&record.data_source_id, &record.id)?;
         let snapshot = self.read_snapshot();
         let old = self.read_record(&snapshot, &key, &record.data_source_id, &record.id)?;
+        if old.as_ref().is_some_and(|previous| previous == record) {
+            return Ok(());
+        }
         let mut actions = Vec::with_capacity(6);
         if let Some(previous) = old {
             self.index_deletes(&mut actions, &previous)?;
@@ -140,6 +144,36 @@ impl TimelineRecordStore {
         self.write_revision(&snapshot, &mut actions)?;
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(true)
+    }
+
+    pub fn delete_batch(
+        &self,
+        source_id: &str,
+        ids: &[String],
+        mode: PersistMode,
+    ) -> Result<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let snapshot = self.read_snapshot();
+        let mut actions = Vec::new();
+        let mut deleted = 0usize;
+        for id in ids {
+            let Some(record) = self.get(&snapshot, source_id, id)? else {
+                continue;
+            };
+            actions.push(WriteAction::Delete {
+                keyspace: KeyspaceName::TimelineRecords,
+                key: record_key(source_id, id)?,
+            });
+            self.index_deletes(&mut actions, &record)?;
+            deleted = deleted.saturating_add(1);
+        }
+        if !actions.is_empty() {
+            self.write_revision(&snapshot, &mut actions)?;
+            self.source_store.database().write_batch(&actions, mode)?;
+        }
+        Ok(deleted)
     }
 
     pub fn list_by_source(

@@ -86,7 +86,11 @@ impl ParserRecordStore {
         let key = record_key(&record.data_source_id, &record.id)?;
         let snapshot = self.read_snapshot();
         let mut actions = Vec::new();
-        if let Some(previous) = self.get(&snapshot, &record.data_source_id, &record.id)? {
+        let previous = self.get(&snapshot, &record.data_source_id, &record.id)?;
+        if previous.as_ref().is_some_and(|previous| previous == record) {
+            return Ok(());
+        }
+        if let Some(previous) = previous {
             actions.extend(index_deletes(&previous)?);
         }
         let payload = serde_json::to_vec(record)

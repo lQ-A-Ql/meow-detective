@@ -7,15 +7,18 @@ use serde_json::{Map, Value};
 use crate::storage_runtime::ReadWriteSourceStorageHandle;
 use transport::CommandError;
 
+const BATCH_SIZE: usize = 512;
+
 pub(super) fn mirror_namespace_locators(
     connection: &Connection,
     source: &ReadWriteSourceStorageHandle,
     source_id: &str,
 ) -> Result<(), CommandError> {
     let payloads = collect_namespace_locator_payloads(connection, source_id)?;
+    let mut batch = Vec::with_capacity(BATCH_SIZE);
     for (entry_id, payload) in payloads {
         let payload = Value::Object(payload);
-        let record = persistence_fjall::ParserRecord {
+        batch.push(persistence_fjall::ParserRecord {
             id: format!("namespace-locator:{entry_id}"),
             data_source_id: source_id.to_owned(),
             family: "cephfs".to_owned(),
@@ -23,9 +26,17 @@ pub(super) fn mirror_namespace_locators(
             status: "ready".to_owned(),
             summary_sha256: infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes()),
             payload,
-        };
+        });
+        if batch.len() == BATCH_SIZE {
+            source
+                .parser_upsert_batch(&batch, PersistMode::Buffer)
+                .map_err(|error| CommandError::internal(error.to_string()))?;
+            batch.clear();
+        }
+    }
+    if !batch.is_empty() {
         source
-            .parser_upsert(&record, PersistMode::Buffer)
+            .parser_upsert_batch(&batch, PersistMode::Buffer)
             .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     Ok(())

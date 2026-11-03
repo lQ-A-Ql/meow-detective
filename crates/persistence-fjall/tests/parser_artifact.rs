@@ -237,6 +237,13 @@ fn artifact_records_support_type_and_source_object_indexes() {
     );
     assert_eq!(
         store
+            .list_by_source(&snapshot, "source", None, ScanDirection::Forward, 10,)
+            .unwrap()
+            .records,
+        vec![record.clone()]
+    );
+    assert_eq!(
+        store
             .list_by_source_object(
                 &snapshot,
                 "source",

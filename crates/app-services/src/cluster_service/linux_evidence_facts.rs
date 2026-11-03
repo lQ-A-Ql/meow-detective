@@ -160,6 +160,12 @@ fn load_persisted_linux_evidence_facts_from_fjall(
     let source =
         source_db::open_registered_fjall_source_read_only(case_root, data_source_id).ok()?;
     let snapshot = source.snapshot();
+    if !source
+        .source_projection_complete(&snapshot, &data_source_id.0)
+        .ok()?
+    {
+        return None;
+    }
     let page = source
         .parser_list_by_kind(
             &snapshot,

@@ -259,6 +259,27 @@ fn rbd_header_lookup_prefers_bounded_fjall_parser_projection() {
             PersistMode::SyncAll,
         )
         .expect("persist parser projection");
+    let marker_key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(source_id.0.clone())],
+    )
+    .expect("encode projection marker key");
+    let marker = persistence_fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{}", source_id.0),
+        source_id.0.clone(),
+        1,
+        source_id.0.as_bytes().to_vec(),
+    );
+    source
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            marker_key,
+            &marker,
+            PersistMode::SyncAll,
+        )
+        .expect("persist source projection marker");
     drop(source);
     let replica = RadosReplicaSource::new(
         source_id,

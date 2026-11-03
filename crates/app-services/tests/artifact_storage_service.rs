@@ -1,7 +1,7 @@
 use app_services::artifact_storage_service::{
     create_reference, read_object, register_artifact_objects_and_references_batch,
-    release_reference, write_object, ArtifactObjectBatchItem, ArtifactStorageService,
-    ArtifactStorageServiceError,
+    release_artifact_owner_references_batch, release_reference, write_object,
+    ArtifactObjectBatchItem, ArtifactStorageService, ArtifactStorageServiceError,
 };
 use artifact_storage::ArtifactStore;
 use persistence_sqlite::repositories::storage_control_repo::StorageControlRepo;
@@ -216,4 +216,64 @@ fn batch_registers_objects_and_references_atomically() {
             .unwrap(),
         2
     );
+}
+
+#[test]
+fn batch_reference_release_can_be_reactivated_by_reprojection() {
+    let connection = database();
+    connection
+        .execute(
+            "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
+             VALUES ('source-1', 'case-1', 'Source', 'raw', 'source.raw', '2026-11-03T00:00:00Z')",
+            [],
+        )
+        .expect("insert source owner");
+    let root = tempdir().expect("temporary root");
+    let store = ArtifactStore::new(root.path()).expect("create artifact store");
+    let stored = store
+        .put_bytes(b"reprojected metadata")
+        .expect("store object");
+    let item = ArtifactObjectBatchItem {
+        stored,
+        media_type: "application/json".to_owned(),
+        source_id: Some("source-1".to_owned()),
+        owner_kind: "artifact".to_owned(),
+        owner_id: "artifact-1".to_owned(),
+        role: "metadata".to_owned(),
+    };
+    register_artifact_objects_and_references_batch(&connection, "case-1", &[item])
+        .expect("register artifact reference");
+    assert_eq!(
+        release_artifact_owner_references_batch(
+            &connection,
+            "case-1",
+            "source-1",
+            "artifact",
+            "metadata",
+            &["artifact-1".to_owned()],
+        )
+        .unwrap(),
+        1
+    );
+    let stored = store
+        .put_bytes(b"reprojected metadata")
+        .expect("reuse object on reprojection");
+    let item = ArtifactObjectBatchItem {
+        stored,
+        media_type: "application/json".to_owned(),
+        source_id: Some("source-1".to_owned()),
+        owner_kind: "artifact".to_owned(),
+        owner_id: "artifact-1".to_owned(),
+        role: "metadata".to_owned(),
+    };
+    register_artifact_objects_and_references_batch(&connection, "case-1", &[item])
+        .expect("reactivate artifact reference");
+    let active: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM artifact_references WHERE released_at IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count active references");
+    assert_eq!(active, 1);
 }

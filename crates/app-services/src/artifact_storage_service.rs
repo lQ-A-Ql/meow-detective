@@ -310,9 +310,11 @@ pub fn register_artifact_objects_and_references_batch(
         "SELECT object_id FROM artifact_objects WHERE case_id = ?1 AND sha256 = ?2",
     )?;
     let mut reference_insert = transaction.prepare_cached(
-        "INSERT OR IGNORE INTO artifact_references (
+        "INSERT INTO artifact_references (
             reference_id, case_id, object_id, source_id, owner_kind, owner_id, role
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(case_id, object_id, owner_kind, owner_id, role)
+         DO UPDATE SET source_id = excluded.source_id, released_at = NULL",
     )?;
     for item in items {
         validate_text("media_type", &item.media_type)?;
@@ -352,6 +354,28 @@ pub fn register_artifact_objects_and_references_batch(
     drop(object_insert);
     transaction.commit()?;
     Ok(())
+}
+
+pub fn release_artifact_owner_references_batch(
+    connection: &Connection,
+    case_id: &str,
+    source_id: &str,
+    owner_kind: &str,
+    role: &str,
+    owner_ids: &[String],
+) -> Result<usize, ArtifactStorageServiceError> {
+    validate_text("case_id", case_id)?;
+    validate_text("source_id", source_id)?;
+    validate_text("owner_kind", owner_kind)?;
+    validate_text("role", role)?;
+    if owner_ids.is_empty() {
+        return Ok(0);
+    }
+    let transaction = connection.unchecked_transaction()?;
+    let released = StorageControlRepo::new(&transaction)
+        .release_artifact_owner_references(case_id, source_id, owner_kind, role, owner_ids)?;
+    transaction.commit()?;
+    Ok(released)
 }
 
 pub fn release_reference(

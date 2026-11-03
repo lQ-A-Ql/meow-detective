@@ -71,7 +71,11 @@ impl ArtifactRecordStore {
         validate(record)?;
         let snapshot = self.read_snapshot();
         let mut actions = Vec::new();
-        if let Some(old) = self.get(&snapshot, &record.data_source_id, &record.id)? {
+        let old = self.get(&snapshot, &record.data_source_id, &record.id)?;
+        if old.as_ref().is_some_and(|previous| previous == record) {
+            return Ok(());
+        }
+        if let Some(old) = old {
             actions.extend(index_deletes(&old)?);
         }
         let payload = serde_json::to_vec(record)
@@ -106,6 +110,35 @@ impl ArtifactRecordStore {
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(true)
     }
+
+    pub fn delete_batch(
+        &self,
+        source_id: &str,
+        ids: &[String],
+        mode: PersistMode,
+    ) -> Result<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let snapshot = self.read_snapshot();
+        let mut actions = Vec::new();
+        let mut deleted = 0usize;
+        for id in ids {
+            let Some(record) = self.get(&snapshot, source_id, id)? else {
+                continue;
+            };
+            actions.push(WriteAction::Delete {
+                keyspace: KeyspaceName::ArtifactRecords,
+                key: record_key(source_id, id)?,
+            });
+            actions.extend(index_deletes(&record)?);
+            deleted = deleted.saturating_add(1);
+        }
+        if !actions.is_empty() {
+            self.source_store.database().write_batch(&actions, mode)?;
+        }
+        Ok(deleted)
+    }
     pub fn list_by_type(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -138,7 +171,7 @@ impl ArtifactRecordStore {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<ArtifactPage> {
-        self.page(
+        self.page_records(
             snapshot,
             &encode_key(RECORD_FAMILY, &[KeyPart::Text(source_id.to_owned())])?,
             cursor,
@@ -194,6 +227,42 @@ impl ArtifactRecordStore {
                     .ok_or(FjallStorageError::ArtifactIndexCorrupt)?,
             )?);
         }
+        let next_cursor = has_more
+            .then(|| entries.last().map(|entry| entry.key.clone()))
+            .flatten();
+        Ok(ArtifactPage {
+            records,
+            next_cursor,
+        })
+    }
+
+    fn page_records(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        prefix: &[u8],
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<ArtifactPage> {
+        if limit == 0 {
+            return Ok(ArtifactPage {
+                records: Vec::new(),
+                next_cursor: None,
+            });
+        }
+        let entries = snapshot.keyset(
+            KeyspaceName::ArtifactRecords,
+            prefix,
+            cursor,
+            direction,
+            limit.saturating_add(1),
+        )?;
+        let has_more = entries.len() > limit;
+        let entries = entries.into_iter().take(limit).collect::<Vec<_>>();
+        let records = entries
+            .iter()
+            .map(|entry| decode(VersionedEnvelope::decode(&entry.value)?))
+            .collect::<Result<Vec<_>>>()?;
         let next_cursor = has_more
             .then(|| entries.last().map(|entry| entry.key.clone()))
             .flatten();

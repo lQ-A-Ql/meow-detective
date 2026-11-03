@@ -35,8 +35,7 @@ pub fn get_artifact_families_for_case(
     for (source_id, source_conn) in
         source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
     {
-        if let Ok(source) = source_db::open_registered_fjall_source_read_only(case_root, &source_id)
-        {
+        if let Some(source) = open_complete_fjall_source(case_root, &source_id)? {
             let snapshot = source.snapshot();
             let mut cursor = None;
             let mut projected = false;
@@ -80,8 +79,7 @@ pub fn get_artifact_rows_for_case(
     for (source_id, source_conn) in
         source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
     {
-        if let Ok(source) = source_db::open_registered_fjall_source_read_only(case_root, &source_id)
-        {
+        if let Some(source) = open_complete_fjall_source(case_root, &source_id)? {
             let snapshot = source.snapshot();
             let mut cursor = None;
             let mut projected = false;
@@ -186,8 +184,7 @@ pub(crate) fn get_source_attributed_artifact_family_counts_for_case(
         let source_db = source_db::open_ready_source_read_only_by_id(
             case_conn, case_root, case_id, &source.id,
         )?;
-        if let Ok(fjall) = source_db::open_registered_fjall_source_read_only(case_root, &source.id)
-        {
+        if let Some(fjall) = open_complete_fjall_source(case_root, &source.id)? {
             let snapshot = fjall.snapshot();
             let mut cursor = None;
             let mut by_family = BTreeMap::<String, u64>::new();
@@ -240,4 +237,18 @@ pub(crate) fn get_source_attributed_artifact_family_counts_for_case(
             .then_with(|| left.family.cmp(&right.family))
     });
     Ok(counts)
+}
+
+pub(super) fn open_complete_fjall_source(
+    case_root: &Path,
+    source_id: &DataSourceId,
+) -> Result<Option<crate::source_db::FjallReadOnlySourceStorageHandle>, ArtifactServiceError> {
+    let Ok(source) = source_db::open_registered_fjall_source_read_only(case_root, source_id) else {
+        return Ok(None);
+    };
+    let snapshot = source.snapshot();
+    source
+        .source_projection_complete(&snapshot, &source_id.0)
+        .map(|complete| complete.then_some(source))
+        .map_err(|error| ArtifactServiceError::Other(error.to_string()))
 }

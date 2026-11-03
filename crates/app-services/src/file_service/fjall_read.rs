@@ -21,9 +21,16 @@ fn open(
     if !root.is_dir() {
         return Ok(None);
     }
-    source_db::open_registered_fjall_source_read_only(case_root, source_id)
-        .map(Some)
-        .map_err(|error| FileServiceError::other(error.to_string()))
+    let source = source_db::open_registered_fjall_source_read_only(case_root, source_id)
+        .map_err(|error| FileServiceError::other(error.to_string()))?;
+    let snapshot = source.snapshot();
+    if !source
+        .source_projection_complete(&snapshot, &source_id.0)
+        .map_err(|error| FileServiceError::other(error.to_string()))?
+    {
+        return Ok(None);
+    }
+    Ok(Some(source))
 }
 
 fn record_to_domain(record: FileEntryRecord) -> FileEntry {

@@ -1,4 +1,4 @@
-use app_services::{case_service, source_db};
+use app_services::{case_service, source_db, storage_runtime::open_source_read_write};
 use domain::{Artifact, ArtifactId, DataSource, DataSourceId, EntryType, FileEntry, FileEntryId};
 use persistence_sqlite::repositories::{
     artifact_repo::ArtifactRepo, audit_repo::AuditRepo, datasource_repo::DataSourceRepo,
@@ -295,7 +295,10 @@ fn open_case_rejects_ready_source_schema_that_requires_migration() {
         Ok(_) => panic!("obsolete ready source schema unexpectedly opened"),
         Err(error) => error,
     };
-    assert!(error.to_string().contains("re-import is required"));
+    assert!(
+        error.to_string().contains("re-import is required"),
+        "unexpected case-open error: {error}"
+    );
 }
 
 #[test]
@@ -572,6 +575,37 @@ fn delete_case_rejects_non_case_directory_without_removing_it() {
 }
 
 #[test]
+fn delete_case_requires_fjall_source_handles_to_close() {
+    let _guard = lock_case_env();
+    let tmp = TempDir::new().unwrap();
+    std::env::set_var("APPDATA", tmp.path());
+    let active =
+        case_service::create_case(&tmp.path().join("cases"), "case-fjall-close", None).unwrap();
+    let case_root = active.case_root.clone();
+    let case_id = active.meta.id.clone();
+    let source = test_data_source("source-fjall-close", "source", tmp.path().join("evidence"));
+    active
+        .with_conn(|connection| {
+            let storage = DataSourceStorage::source_db(&source.id.0, Some("linux"), None);
+            DataSourceRepo::new(connection).insert_with_storage(&case_id, &source, &storage)?;
+            let source_connection = source_db::open_source_db(&case_root, &source.id)?;
+            DataSourceRepo::new(&source_connection).upsert_source_local_metadata(&case_id, &source)
+        })
+        .unwrap();
+    let fjall_handle = open_source_read_write(&case_root, &source.id.0).unwrap();
+    drop(active);
+
+    assert!(matches!(
+        case_service::delete_case_in(&case_root),
+        Err(case_service::CaseServiceError::StorageHandlesInUse(_))
+    ));
+    assert!(case_root.exists());
+    drop(fjall_handle);
+    case_service::delete_case_in(&case_root).unwrap();
+    assert!(!case_root.exists());
+}
+
+#[test]
 fn delete_data_source_in_removes_isolated_storage_and_writes_audit_log() {
     let tmp = TempDir::new().unwrap();
     let active =
@@ -594,6 +628,16 @@ fn delete_data_source_in_removes_isolated_storage_and_writes_audit_log() {
                 AuditRepo::new(conn).count_by_action("datasource.delete")?,
                 0
             );
+
+            let fjall_handle = open_source_read_write(&case_root, &deleted_source.id.0)
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            let blocked =
+                case_service::delete_data_source_in(conn, &case_root, &deleted_source.id.0);
+            assert!(matches!(
+                blocked,
+                Err(case_service::CaseServiceError::StorageHandlesInUse(_))
+            ));
+            drop(fjall_handle);
 
             case_service::delete_data_source_in(conn, &case_root, &deleted_source.id.0).unwrap();
 

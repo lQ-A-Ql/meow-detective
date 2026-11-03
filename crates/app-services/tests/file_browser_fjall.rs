@@ -7,6 +7,9 @@ use persistence_fjall::{CatalogEntryType, FileEntryRecord, PersistMode};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use transport::commands::GetFileRowsRequest;
 
+#[path = "support/fjall_projection.rs"]
+mod projection_support;
+
 fn record(
     id: &str,
     parent_id: Option<&str>,
@@ -148,6 +151,19 @@ fn file_browser_fjall_matches_visibility_sorting_and_orphan_root_rules() {
     let fjall =
         source_db::open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
     write_catalog(&fjall);
+    drop(fjall);
+
+    let incomplete_tree = case
+        .with_conn(|connection| {
+            file_service::get_file_tree_for_case(connection, &case.case_root, &case.meta.id, false)
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    assert!(incomplete_tree.is_empty());
+
+    let fjall =
+        source_db::open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
+    projection_support::mark_source_projection_complete(&fjall, &source.id.0);
     drop(fjall);
 
     let tree = case

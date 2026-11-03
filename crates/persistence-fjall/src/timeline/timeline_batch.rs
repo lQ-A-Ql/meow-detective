@@ -19,7 +19,11 @@ impl TimelineRecordStore {
         for record in records {
             validate_record(record)?;
             let key = record_key(&record.data_source_id, &record.id)?;
-            if let Some(previous) = self.get(&snapshot, &record.data_source_id, &record.id)? {
+            let previous = self.get(&snapshot, &record.data_source_id, &record.id)?;
+            if previous.as_ref().is_some_and(|previous| previous == record) {
+                continue;
+            }
+            if let Some(previous) = previous {
                 for index in index_keys(&previous)? {
                     actions.push(WriteAction::Delete {
                         keyspace: KeyspaceName::TimelineIndexes,
@@ -51,6 +55,9 @@ impl TimelineRecordStore {
                     value: record_key.clone(),
                 });
             }
+        }
+        if actions.is_empty() {
+            return Ok(());
         }
         let revision = self.cursor_revision(&snapshot)?.saturating_add(1);
         actions.push(WriteAction::Put {

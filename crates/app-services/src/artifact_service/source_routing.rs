@@ -23,7 +23,7 @@ pub fn get_artifact_row_by_id_for_case(
         })?;
     let source =
         source_db::open_ready_source_read_only_by_id(case_conn, case_root, case_id, &source_id)?;
-    if let Ok(fjall) = source_db::open_registered_fjall_source_read_only(case_root, &source_id) {
+    if let Some(fjall) = super::aggregation::open_complete_fjall_source(case_root, &source_id)? {
         let snapshot = fjall.snapshot();
         if let Some(record) = fjall
             .artifact_get(&snapshot, &source_id.0, &local_id)

@@ -330,22 +330,27 @@ fn count_source_entries(
         crate::source_db::open_registered_fjall_source_read_only(case_root, source_id)
     {
         let snapshot = source.snapshot();
-        let mut cursor = None;
-        let mut count = 0u64;
-        loop {
-            let page = source
-                .catalog_list_all(
-                    &snapshot,
-                    &source_id.0,
-                    cursor.as_deref(),
-                    persistence_fjall::ScanDirection::Forward,
-                    512,
-                )
-                .map_err(|error| SearchError::Other(error.to_string()))?;
-            count = count.saturating_add(page.records.len() as u64);
-            cursor = page.next_cursor;
-            if cursor.is_none() {
-                return Ok(count);
+        if source
+            .source_projection_complete(&snapshot, &source_id.0)
+            .map_err(|error| SearchError::Other(error.to_string()))?
+        {
+            let mut cursor = None;
+            let mut count = 0u64;
+            loop {
+                let page = source
+                    .catalog_list_all(
+                        &snapshot,
+                        &source_id.0,
+                        cursor.as_deref(),
+                        persistence_fjall::ScanDirection::Forward,
+                        512,
+                    )
+                    .map_err(|error| SearchError::Other(error.to_string()))?;
+                count = count.saturating_add(page.records.len() as u64);
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    return Ok(count);
+                }
             }
         }
     }

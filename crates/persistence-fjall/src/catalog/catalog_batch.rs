@@ -19,9 +19,11 @@ impl CatalogRecordStore {
         let mut actions = Vec::with_capacity(records.len().saturating_mul(8));
         for record in records {
             let key = record_key(&record.data_source_id, &record.id)?;
-            if let Some(previous) =
-                self.read_record(&snapshot, &key, &record.data_source_id, &record.id)?
-            {
+            let previous = self.read_record(&snapshot, &key, &record.data_source_id, &record.id)?;
+            if previous.as_ref().is_some_and(|previous| previous == record) {
+                continue;
+            }
+            if let Some(previous) = previous {
                 self.index_deletes(&mut actions, &previous)?;
             }
             let envelope = crate::codec::VersionedEnvelope::from_serializable(
@@ -57,6 +59,9 @@ impl CatalogRecordStore {
                 keyspace: KeyspaceName::Tombstones,
                 key: tombstone_key(&record.data_source_id, &record.id)?,
             });
+        }
+        if actions.is_empty() {
+            return Ok(());
         }
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(())

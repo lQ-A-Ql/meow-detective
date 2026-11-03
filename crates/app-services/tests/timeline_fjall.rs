@@ -9,6 +9,9 @@ use persistence_fjall::{PersistMode, TimelineRecord};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use std::collections::BTreeMap;
 
+#[path = "support/fjall_projection.rs"]
+mod projection_support;
+
 fn event(id: &str, timestamp: chrono::DateTime<Utc>) -> TimelineRecord {
     TimelineRecord {
         id: id.to_owned(),
@@ -61,6 +64,30 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
             .unwrap();
     }
     fjall.persist(PersistMode::SyncAll).unwrap();
+    drop(fjall);
+
+    let incomplete = case
+        .with_conn(|connection| {
+            query_timeline_filtered_for_case(
+                connection,
+                &case.case_root,
+                &case.meta.id,
+                TimelineQuery {
+                    offset: 0,
+                    limit: 2,
+                    time_start: None,
+                    time_end: None,
+                    event_type: Some("FILE_CREATED"),
+                    cursor: None,
+                },
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    assert_eq!(incomplete.total, 0);
+
+    let fjall = open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
+    projection_support::mark_source_projection_complete(&fjall, &source.id.0);
     drop(fjall);
 
     let first = case

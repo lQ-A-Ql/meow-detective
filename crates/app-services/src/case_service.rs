@@ -66,6 +66,8 @@ pub enum CaseServiceError {
         original: Box<CaseServiceError>,
         rollback: std::io::Error,
     },
+    #[error("storage handles are still active for data source '{0}'")]
+    StorageHandlesInUse(String),
 }
 
 impl From<crate::source_db::ReadySourceError> for CaseServiceError {
@@ -89,7 +91,8 @@ impl transport::ServiceErrorCategory for CaseServiceError {
             Self::Io(_)
             | Self::DataSourceDeleteRecoveryPending { .. }
             | Self::DataSourceDeleteCleanupPending { .. }
-            | Self::DataSourceDeleteRollbackFailed { .. } => transport::ErrorCategory::Io,
+            | Self::DataSourceDeleteRollbackFailed { .. }
+            | Self::StorageHandlesInUse(_) => transport::ErrorCategory::Io,
             Self::Db(_) => transport::ErrorCategory::Io,
             Self::Json(_) => transport::ErrorCategory::Parser,
             Self::AlreadyExists(_) | Self::InvalidCaseDir(_) => {
@@ -114,6 +117,7 @@ impl transport::ServiceErrorCategory for CaseServiceError {
             Self::DataSourceDeleteRollbackFailed { .. } => {
                 Some("DATA_SOURCE_DELETE_ROLLBACK_FAILED")
             }
+            Self::StorageHandlesInUse(_) => Some("STORAGE_HANDLES_IN_USE"),
             Self::TopologyReimportRequired => Some("TOPOLOGY_REIMPORT_REQUIRED"),
             Self::UnsupportedStorageFormat(_) => Some("UNSUPPORTED_STORAGE_FORMAT"),
             _ => None,
@@ -131,6 +135,9 @@ impl transport::ServiceErrorCategory for CaseServiceError {
             Self::DataSourceDeleteRollbackFailed { .. } => {
                 Some("Data source deletion failed and rollback requires recovery.")
             }
+            Self::StorageHandlesInUse(_) => {
+                Some("The data source is still in use and cannot be deleted yet.")
+            }
             Self::TopologyReimportRequired => {
                 Some("This case uses the retired Linux cluster model and must be re-imported.")
             }
@@ -145,7 +152,8 @@ impl transport::ServiceErrorCategory for CaseServiceError {
         match self {
             Self::DataSourceDeleteRecoveryPending { .. }
             | Self::DataSourceDeleteCleanupPending { .. }
-            | Self::DataSourceDeleteRollbackFailed { .. } => Some(true),
+            | Self::DataSourceDeleteRollbackFailed { .. }
+            | Self::StorageHandlesInUse(_) => Some(true),
             Self::TopologyReimportRequired => Some(false),
             Self::UnsupportedStorageFormat(_) => Some(false),
             _ => None,
@@ -186,6 +194,10 @@ impl transport::ServiceErrorCategory for CaseServiceError {
                 "state": "rollbackFailed",
                 "rollbackStep": step
             })),
+            Self::StorageHandlesInUse(data_source_id) => Some(serde_json::json!({
+                "dataSourceId": data_source_id,
+                "state": "activeHandles"
+            })),
             Self::TopologyReimportRequired => Some(serde_json::json!({
                 "reimportRequired": true,
                 "reason": "retiredLinuxClusterModel"
@@ -201,8 +213,10 @@ impl transport::ServiceErrorCategory for CaseServiceError {
 
     fn suggestion(&self) -> Option<&'static str> {
         match self {
-            Self::DataSourceDeleteRecoveryPending { .. }
-            | Self::DataSourceDeleteRollbackFailed { .. } => Some(
+            Self::StorageHandlesInUse(_) => {
+                Some("Close active source queries and tasks, then retry the deletion.")
+            }
+            Self::DataSourceDeleteRecoveryPending { .. } | Self::DataSourceDeleteRollbackFailed { .. } => Some(
                 "Preserve the tombstone, review backend logs and recovery state, then retry the deletion after recovery.",
             ),
             Self::DataSourceDeleteCleanupPending { .. } => Some(

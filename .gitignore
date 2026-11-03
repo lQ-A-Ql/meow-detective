@@ -1,5 +1,6 @@
 # Rust
 /target/
+/crates/persistence-fjall/target/
 /coverage/
 /artifacts/
 
@@ -79,6 +80,7 @@ AGENTS.md
 !/docs/dependency-decisions.md
 !/docs/disk-forensics-optimization-development.md
 !/docs/documentation-index.md
+!/docs/database-fjall-audit-20261103.md
 !/docs/error-classification-manual.md
 !/docs/error-taxonomy.md
 !/docs/evtx-dependency-decision.md

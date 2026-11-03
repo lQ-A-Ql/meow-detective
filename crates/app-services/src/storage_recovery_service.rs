@@ -142,19 +142,24 @@ fn persist_recovery_status(
     let mut rows = report
         .items
         .iter()
-        .map(|item| StorageRecoveryStatusRecord {
-            case_id: case_id.to_owned(),
-            scope_key: recovery_scope_key(item),
-            source_id: item.source_id.clone(),
-            operation_id: Some(item.operation_id.clone()),
-            disposition: disposition_name(item.disposition).to_owned(),
-            storage_state: item
-                .state
-                .map(|state| format!("{state:?}").to_ascii_lowercase()),
-            detail: item.detail.clone(),
-            scanned_at: now.clone(),
+        .map(|item| {
+            let operation_id = repo
+                .find_operation(&item.operation_id)?
+                .map(|operation| operation.operation_id);
+            Ok(StorageRecoveryStatusRecord {
+                case_id: case_id.to_owned(),
+                scope_key: recovery_scope_key(item),
+                source_id: item.source_id.clone(),
+                operation_id,
+                disposition: disposition_name(item.disposition).to_owned(),
+                storage_state: item
+                    .state
+                    .map(|state| format!("{state:?}").to_ascii_lowercase()),
+                detail: item.detail.clone(),
+                scanned_at: now.clone(),
+            })
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, persistence_sqlite::DbError>>()?;
     if rows.is_empty() {
         rows.push(StorageRecoveryStatusRecord {
             case_id: case_id.to_owned(),

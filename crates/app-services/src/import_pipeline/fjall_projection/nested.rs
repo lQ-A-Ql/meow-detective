@@ -4,6 +4,8 @@ use rusqlite::Connection;
 use crate::storage_runtime::ReadWriteSourceStorageHandle;
 use transport::CommandError;
 
+const BATCH_SIZE: usize = 512;
+
 pub(super) fn mirror_nested_lineage(
     case_connection: &Connection,
     source: &ReadWriteSourceStorageHandle,
@@ -46,12 +48,19 @@ pub(super) fn mirror_nested_lineage(
             ))
         })
         .map_err(|error| CommandError::internal(error.to_string()))?;
+    let mut batch = Vec::with_capacity(BATCH_SIZE);
     for row in rows {
+        batch.push(row.map_err(|error| CommandError::internal(error.to_string()))?);
+        if batch.len() == BATCH_SIZE {
+            source
+                .parser_upsert_batch(&batch, PersistMode::Buffer)
+                .map_err(|error| CommandError::internal(error.to_string()))?;
+            batch.clear();
+        }
+    }
+    if !batch.is_empty() {
         source
-            .parser_upsert(
-                &row.map_err(|error| CommandError::internal(error.to_string()))?,
-                PersistMode::Buffer,
-            )
+            .parser_upsert_batch(&batch, PersistMode::Buffer)
             .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     Ok(())

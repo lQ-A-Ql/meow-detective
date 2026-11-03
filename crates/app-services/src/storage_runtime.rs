@@ -4,6 +4,9 @@ use persistence_fjall::{
     KeyspaceName, PersistMode, ScanDirection, SourceReadSnapshot, SourceStore, TimelinePage,
     TimelineRecord, TimelineRecordStore, VersionedEnvelope, WriteBatchReceipt,
 };
+mod artifact_root;
+mod source_registry;
+pub(crate) use source_registry::{close_case_source_stores, close_source_store};
 use std::{
     marker::PhantomData,
     path::{Path, PathBuf},
@@ -25,6 +28,10 @@ pub enum StorageRuntimeError {
     Artifacts(#[source] ArtifactStorageError),
     #[error("read-only storage requires an existing artifact object directory: {0}")]
     MissingArtifactDirectory(PathBuf),
+    #[error("source storage registry lock is poisoned")]
+    RegistryPoisoned,
+    #[error("source storage is being removed: {0}")]
+    SourceClosing(PathBuf),
 }
 
 impl From<FjallStorageError> for StorageRuntimeError {
@@ -56,12 +63,7 @@ pub fn source_storage_root(
     case_root: impl AsRef<Path>,
     source_id: &str,
 ) -> Result<PathBuf, StorageRuntimeError> {
-    validate_source_id(source_id)?;
-    Ok(case_root
-        .as_ref()
-        .join("sources")
-        .join(source_id)
-        .join("source.fjall"))
+    source_registry::source_storage_root(case_root.as_ref(), source_id)
 }
 
 pub fn open_source_read_only(
@@ -452,19 +454,18 @@ fn open_parts(
         if !source_root.is_dir() {
             return Err(StorageRuntimeError::InvalidRoot(source_root.to_path_buf()));
         }
-        let objects_root = source_root.join("artifacts").join("objects");
+        let objects_root = artifact_root::artifact_objects_root(source_root);
         if !objects_root.is_dir() {
             return Err(StorageRuntimeError::MissingArtifactDirectory(objects_root));
         }
     } else {
-        std::fs::create_dir_all(source_root).map_err(ArtifactStorageError::from)?;
+        std::fs::create_dir_all(source_root)
+            .map_err(|error| StorageRuntimeError::Source(FjallStorageError::Io(error)))?;
     }
-    let source_store = Arc::new(SourceStore::open(source_root, config)?);
-    let artifact_store = Arc::new(if read_only {
-        ArtifactStore::from_objects_root(source_root.join("artifacts").join("objects"))?
-    } else {
-        ArtifactStore::new(source_root)?
-    });
+    let source_store = source_registry::open_shared_source_store(source_root, config)?;
+    let artifact_store = Arc::new(ArtifactStore::from_objects_root(
+        artifact_root::artifact_objects_root(source_root),
+    )?);
     tracing::debug!(
         source_root = %source_root.display(),
         read_only,
@@ -476,21 +477,4 @@ fn open_parts(
         source_store,
         artifact_store,
     })
-}
-
-fn validate_source_id(source_id: &str) -> Result<(), StorageRuntimeError> {
-    let path = Path::new(source_id);
-    let mut components = path.components();
-    let valid = !source_id.is_empty()
-        && !source_id.contains('\0')
-        && !source_id.contains('/')
-        && !source_id.contains('\\')
-        && !source_id.contains(':')
-        && matches!(components.next(), Some(std::path::Component::Normal(_)))
-        && components.next().is_none();
-    if valid {
-        Ok(())
-    } else {
-        Err(StorageRuntimeError::InvalidSourceId(source_id.to_owned()))
-    }
 }

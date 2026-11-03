@@ -36,7 +36,11 @@ impl ParserRecordStore {
         for record in records {
             validate(record)?;
             let key = record_key(&record.data_source_id, &record.id)?;
-            if let Some(previous) = self.get(&snapshot, &record.data_source_id, &record.id)? {
+            let previous = self.get(&snapshot, &record.data_source_id, &record.id)?;
+            if previous.as_ref().is_some_and(|previous| previous == record) {
+                continue;
+            }
+            if let Some(previous) = previous {
                 actions.extend(index_deletes(&previous)?);
             }
             let payload = serde_json::to_vec(record).map_err(|error| {
@@ -60,6 +64,9 @@ impl ParserRecordStore {
             } else {
                 index_writes_without_fields(record)?
             });
+        }
+        if actions.is_empty() {
+            return Ok(());
         }
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(())

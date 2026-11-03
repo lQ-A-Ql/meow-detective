@@ -88,34 +88,42 @@ pub fn find_rbd_header_from_case_storage(
         crate::source_db::open_registered_fjall_source_read_only(case_root, &replica.data_source_id)
     {
         let snapshot = source.snapshot();
-        let page = source
-            .parser_list_by_field(
-                &snapshot,
-                ParserFieldQuery {
-                    source_id: &replica.data_source_id.0,
-                    kind: HEADER_KIND,
-                    field: "image_id",
-                    value: image_id,
-                },
-                None,
-                ScanDirection::Forward,
-                MAX_HEADERS.saturating_add(1),
-            )
+        if source
+            .source_projection_complete(&snapshot, &replica.data_source_id.0)
             .map_err(|error| RbdReconstructionError::Catalog {
                 inventory_id: replica.inventory_id.clone(),
                 detail: error.to_string(),
-            })?;
-        if page.records.len() > MAX_HEADERS {
-            return Err(RbdReconstructionError::Catalog {
-                inventory_id: replica.inventory_id.clone(),
-                detail: "RBD header projection exceeds the bounded query limit".to_owned(),
-            });
-        }
-        for record in page.records {
-            if let Some(header) =
-                header_from_parser_record(&record, &replica.inventory_id, image_id)?
-            {
-                return Ok(Some(header));
+            })?
+        {
+            let page = source
+                .parser_list_by_field(
+                    &snapshot,
+                    ParserFieldQuery {
+                        source_id: &replica.data_source_id.0,
+                        kind: HEADER_KIND,
+                        field: "image_id",
+                        value: image_id,
+                    },
+                    None,
+                    ScanDirection::Forward,
+                    MAX_HEADERS.saturating_add(1),
+                )
+                .map_err(|error| RbdReconstructionError::Catalog {
+                    inventory_id: replica.inventory_id.clone(),
+                    detail: error.to_string(),
+                })?;
+            if page.records.len() > MAX_HEADERS {
+                return Err(RbdReconstructionError::Catalog {
+                    inventory_id: replica.inventory_id.clone(),
+                    detail: "RBD header projection exceeds the bounded query limit".to_owned(),
+                });
+            }
+            for record in page.records {
+                if let Some(header) =
+                    header_from_parser_record(&record, &replica.inventory_id, image_id)?
+                {
+                    return Ok(Some(header));
+                }
             }
         }
     }

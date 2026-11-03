@@ -18,7 +18,11 @@ impl ArtifactRecordStore {
         let mut actions = Vec::with_capacity(records.len().saturating_mul(4));
         for record in records {
             validate(record)?;
-            if let Some(previous) = self.get(&snapshot, &record.data_source_id, &record.id)? {
+            let previous = self.get(&snapshot, &record.data_source_id, &record.id)?;
+            if previous.as_ref().is_some_and(|previous| previous == record) {
+                continue;
+            }
+            if let Some(previous) = previous {
                 actions.extend(index_deletes(&previous)?);
             }
             let payload = serde_json::to_vec(record).map_err(|error| {
@@ -38,6 +42,9 @@ impl ArtifactRecordStore {
                 value: envelope.encode()?,
             });
             actions.extend(index_writes(record)?);
+        }
+        if actions.is_empty() {
+            return Ok(());
         }
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(())

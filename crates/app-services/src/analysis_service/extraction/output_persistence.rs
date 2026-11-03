@@ -31,6 +31,8 @@ pub(super) fn persist_outputs(
     let clean_scans = std::mem::take(&mut state.clean_scans);
     let diagnostic_scans = std::mem::take(&mut state.diagnostic_scans);
     let complete_scans = std::mem::take(&mut state.complete_scans);
+    crate::import_pipeline::begin_analysis_output_projection(conn)
+        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     let transaction = conn.unchecked_transaction()?;
 
     let artifact_repo = ArtifactRepo::new(&transaction);
@@ -100,8 +102,8 @@ fn mirror_published_outputs(conn: &Connection, case_id: &str) -> Result<(), Anal
         conn,
         &source_id,
     )
-    .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-    Ok(())
+    .map(|_| ())
+    .map_err(|error| AnalysisServiceError::Other(error.to_string()))
 }
 
 pub(super) fn resolve_output_data_source_id(

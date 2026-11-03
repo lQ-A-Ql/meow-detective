@@ -123,6 +123,48 @@ fn timeline_batch_upsert_writes_all_records_and_indexes() {
 }
 
 #[test]
+fn timeline_index_counts_match_type_and_time_filters() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = TimelineRecordStore::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let records = [
+        record("source-a", "a", "CREATE", "file-a", 30),
+        record("source-a", "b", "MODIFY", "file-b", 20),
+        record("source-a", "c", "CREATE", "file-c", 10),
+    ];
+    store.upsert_batch(&records, PersistMode::SyncData).unwrap();
+    let snapshot = store.read_snapshot();
+    assert_eq!(
+        store
+            .count_by_time(
+                &snapshot,
+                "source-a",
+                Some(timestamp(15)),
+                Some(timestamp(30))
+            )
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        store
+            .count_by_type(&snapshot, "source-a", "CREATE", Some(timestamp(15)), None,)
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn repeated_identical_upsert_keeps_timeline_revision_stable() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = TimelineRecordStore::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let event = record("source-a", "same", "EVENT", "file", 10);
+    store.upsert(&event, PersistMode::SyncData).unwrap();
+    let first_revision = store.cursor_revision(&store.read_snapshot()).unwrap();
+    store.upsert(&event, PersistMode::SyncData).unwrap();
+    let second_revision = store.cursor_revision(&store.read_snapshot()).unwrap();
+    assert_eq!(first_revision, second_revision);
+}
+
+#[test]
 fn type_and_source_queries_are_keyset_paginated() {
     let directory = tempfile::tempdir().unwrap();
     let store = TimelineRecordStore::open(directory.path(), DatabaseConfig::default()).unwrap();

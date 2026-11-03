@@ -96,27 +96,32 @@ fn cephfs_descriptor(
             &entry.data_source_id,
         ) {
             let snapshot = source.snapshot();
-            let page = source
-                .parser_list_by_field(
-                    &snapshot,
-                    persistence_fjall::ParserFieldQuery {
-                        source_id: &entry.data_source_id.0,
-                        kind: "ceph_fs_namespace_locator",
-                        field: "entry_id",
-                        value: &entry.id.0,
-                    },
-                    None,
-                    persistence_fjall::ScanDirection::Forward,
-                    2,
-                )
-                .map_err(|error| FileServiceError::other(error.to_string()))?;
-            if page.records.len() > 1 {
-                return Err(FileServiceError::other(
-                    "Multiple CephFS namespace locators matched the file entry",
-                ));
-            }
-            if let Some(record) = page.records.into_iter().next() {
-                return cephfs_descriptor_from_parser_record(&record, entry);
+            if source
+                .source_projection_complete(&snapshot, &entry.data_source_id.0)
+                .map_err(|error| FileServiceError::other(error.to_string()))?
+            {
+                let page = source
+                    .parser_list_by_field(
+                        &snapshot,
+                        persistence_fjall::ParserFieldQuery {
+                            source_id: &entry.data_source_id.0,
+                            kind: "ceph_fs_namespace_locator",
+                            field: "entry_id",
+                            value: &entry.id.0,
+                        },
+                        None,
+                        persistence_fjall::ScanDirection::Forward,
+                        2,
+                    )
+                    .map_err(|error| FileServiceError::other(error.to_string()))?;
+                if page.records.len() > 1 {
+                    return Err(FileServiceError::other(
+                        "Multiple CephFS namespace locators matched the file entry",
+                    ));
+                }
+                if let Some(record) = page.records.into_iter().next() {
+                    return cephfs_descriptor_from_parser_record(&record, entry);
+                }
             }
         }
     }

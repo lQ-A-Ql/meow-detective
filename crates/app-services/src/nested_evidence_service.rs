@@ -64,6 +64,20 @@ pub fn list_for_parent(
     if let Ok(source) = crate::source_db::open_registered_fjall_source_read_only(case_root, &parent)
     {
         let snapshot = source.snapshot();
+        if !source
+            .source_projection_complete(&snapshot, &parent.0)
+            .map_err(|error| {
+                NestedEvidenceError::Database(persistence_sqlite::DbError::System(
+                    error.to_string(),
+                ))
+            })?
+        {
+            return Ok(NestedEvidenceRepo::new(conn)
+                .find_by_parent(&parent)?
+                .into_iter()
+                .map(to_dto)
+                .collect());
+        }
         let page = source
             .parser_list_by_kind(
                 &snapshot,

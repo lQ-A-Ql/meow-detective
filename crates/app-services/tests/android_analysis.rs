@@ -8,6 +8,7 @@ use domain::{
     CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType,
     FileEntry, FileEntryId,
 };
+use persistence_fjall::ScanDirection;
 use persistence_sqlite::repositories::{
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
@@ -86,6 +87,33 @@ fn android_analysis_persists_standard_device_and_package_manager_metadata() {
         .packages
         .iter()
         .any(|package| package.package_name == "org.example.listonly"));
+
+    run_source_android_analysis(
+        &case_connection,
+        case_root.path(),
+        &case_id,
+        &source.id,
+        &runtime,
+    )
+    .expect("rerun Android analysis");
+    let fjall = app_services::source_db::open_registered_fjall_source_read_only(
+        case_root.path(),
+        &source.id,
+    )
+    .expect("open Android parser projection");
+    let snapshot = fjall.snapshot();
+    let parser_records = fjall
+        .parser_list_by_family(
+            &snapshot,
+            &source.id.0,
+            "android",
+            None,
+            ScanDirection::Forward,
+            32,
+        )
+        .expect("read Android parser projection");
+    assert_eq!(parser_records.records.len(), 9);
+    assert!(parser_records.next_cursor.is_none());
 }
 
 fn register_ready_source(

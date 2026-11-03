@@ -1,5 +1,8 @@
 use super::{opening::open_case_for_deletion, CaseServiceError, Result};
-use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
+use persistence_sqlite::repositories::{
+    audit_repo::{AuditAction, AuditRepo},
+    datasource_repo::DataSourceRepo,
+};
 use std::{fs, path::Path};
 
 pub fn delete_case(root: &Path) -> Result<()> {
@@ -17,21 +20,42 @@ pub fn delete_case_in(root: &Path) -> Result<()> {
         ));
     }
     let active = open_case_for_deletion(root)?;
+    let source_ids = active.with_conn(|connection| {
+        DataSourceRepo::new(connection)
+            .find_by_case(&active.meta.id)
+            .map(|sources| {
+                sources
+                    .into_iter()
+                    .map(|source| source.id.0)
+                    .collect::<Vec<_>>()
+            })
+    })?;
+    let case_id = active.meta.id.0.clone();
+    drop(active);
+    let _source_store_guard = crate::storage_runtime::close_case_source_stores(root)
+        .map_err(|error| CaseServiceError::InvalidCaseDir(error.to_string()))?
+        .ok_or_else(|| {
+            CaseServiceError::StorageHandlesInUse(
+                source_ids
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "case".to_owned()),
+            )
+        })?;
     let delete_details = serde_json::json!({
-        "case_id": active.meta.id.0,
+        "case_id": case_id,
         "case_root": root.display().to_string(),
     })
     .to_string();
-    let _ = active.with_conn(|conn| {
-        AuditRepo::new(conn).log(
-            Some(&active.meta.id.0),
+    if let Ok(connection) = persistence_sqlite::open_existing(&root.join("app.db")) {
+        let _ = AuditRepo::new(&connection).log(
+            Some(&case_id),
             "system",
             &AuditAction::CaseDelete,
-            Some(&active.meta.id.0),
+            Some(&case_id),
             &delete_details,
-        )
-    });
-    drop(active);
+        );
+    }
     remove_dir_all_with_retry(root, 5)?;
     Ok(())
 }

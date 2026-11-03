@@ -17,8 +17,14 @@ pub(crate) fn get_android_device_info(
     if let Ok(source) =
         crate::source_db::open_registered_fjall_source_read_only(case_root, data_source_id)
     {
-        if let Some(result) = read_fjall_device(&source, data_source_id)? {
-            return Ok(result);
+        let snapshot = source.snapshot();
+        let complete = source
+            .source_projection_complete(&snapshot, &data_source_id.0)
+            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        if complete {
+            if let Some(result) = read_fjall_device(&source, data_source_id)? {
+                return Ok(result);
+            }
         }
     }
     read_sqlite_device(connection, data_source_id)

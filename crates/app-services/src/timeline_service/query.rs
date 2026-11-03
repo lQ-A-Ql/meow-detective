@@ -105,14 +105,16 @@ pub fn get_timeline_event_by_id_for_case(
     if let Ok(fjall) = source_db::open_registered_fjall_source_read_only(case_root, &data_source_id)
     {
         let snapshot = fjall.snapshot();
-        if let Some(event) = fjall
-            .timeline_get(&snapshot, &data_source_id.0, &local_id)
-            .map_err(|error| TimelineServiceError::Other(error.to_string()))?
-        {
-            return Ok(Some(timeline_event_to_source_dto(
-                super::fjall::timeline_record_to_domain(event),
-                &data_source_id,
-            )));
+        if fjall.source_projection_complete(&snapshot, &data_source_id.0)? {
+            if let Some(event) = fjall
+                .timeline_get(&snapshot, &data_source_id.0, &local_id)
+                .map_err(|error| TimelineServiceError::Other(error.to_string()))?
+            {
+                return Ok(Some(timeline_event_to_source_dto(
+                    super::fjall::timeline_record_to_domain(event),
+                    &data_source_id,
+                )));
+            }
         }
     }
     Ok(TimelineRepo::new(&source.connection)

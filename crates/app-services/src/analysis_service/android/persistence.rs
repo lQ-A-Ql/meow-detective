@@ -67,6 +67,7 @@ fn persist_fjall_records(
     fact_records: &[AndroidFactRecord],
     package_records: &[AndroidPackageRecord],
 ) -> Result<(), AnalysisServiceError> {
+    let mut records = Vec::with_capacity(fact_records.len().saturating_add(package_records.len()));
     for fact in fact_records {
         let payload = serde_json::json!({"field": fact.field, "value": fact.value, "confidence": fact.confidence, "sourceFileId": fact.source_file_id, "sourcePath": fact.source_path, "parser": fact.parser, "warning": fact.warning});
         let record = ParserRecord {
@@ -78,9 +79,7 @@ fn persist_fjall_records(
             summary_sha256: infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes()),
             payload,
         };
-        source
-            .parser_upsert(&record, PersistMode::Buffer)
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        records.push(record);
     }
     for package in package_records {
         let payload = serde_json::json!({"packageName": package.package_name, "appName": package.app_name, "versionCode": package.version_code, "installTime": package.install_time, "updateTime": package.update_time, "installer": package.installer, "uid": package.uid, "codePath": package.code_path, "sourceFileId": package.source_file_id, "sourcePath": package.source_path, "parser": package.parser, "warning": package.warning});
@@ -96,10 +95,11 @@ fn persist_fjall_records(
             summary_sha256: infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes()),
             payload,
         };
-        source
-            .parser_upsert(&record, PersistMode::Buffer)
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        records.push(record);
     }
+    source
+        .parser_upsert_batch(&records, PersistMode::Buffer)
+        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     source
         .persist(PersistMode::SyncAll)
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
