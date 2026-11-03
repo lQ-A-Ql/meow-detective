@@ -285,6 +285,17 @@ fn record_key(source_id: &str, id: &str) -> Result<Vec<u8>> {
     )
 }
 fn index_writes(record: &ParserRecord) -> Result<Vec<WriteAction>> {
+    index_writes_with_fields(record, true)
+}
+
+pub(crate) fn index_writes_without_fields(record: &ParserRecord) -> Result<Vec<WriteAction>> {
+    index_writes_with_fields(record, false)
+}
+
+fn index_writes_with_fields(
+    record: &ParserRecord,
+    include_fields: bool,
+) -> Result<Vec<WriteAction>> {
     let record_key = record_key(&record.data_source_id, &record.id)?;
     let mut actions = vec![
         WriteAction::Put {
@@ -312,6 +323,9 @@ fn index_writes(record: &ParserRecord) -> Result<Vec<WriteAction>> {
             value: record_key.clone(),
         },
     ];
+    if !include_fields {
+        return Ok(actions);
+    }
     for (field, value) in scalar_fields(&record.payload) {
         actions.push(WriteAction::Put {
             keyspace: KeyspaceName::ParserIndexes,

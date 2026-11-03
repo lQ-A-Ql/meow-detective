@@ -16,13 +16,18 @@ pub(super) fn mirror_source_records(
     ctx: &ImportJobContext<'_>,
     source_id: &str,
 ) -> Result<String, CommandError> {
-    mirror_source_records_from_connections(
+    ctx.report_job_progress(96, "Projecting queryable records...")?;
+    let result = mirror_source_records_from_connections(
         ctx.conn,
         ctx.case_root,
         &ctx.case_id.0,
         ctx.source_connection()?,
         source_id,
-    )
+    );
+    if result.is_ok() {
+        ctx.report_job_progress(97, "Queryable record projection completed")?;
+    }
+    result
 }
 
 pub(crate) fn mirror_source_records_from_connections(
@@ -38,6 +43,7 @@ pub(crate) fn mirror_source_records_from_connections(
         &domain::DataSourceId(source_id.to_owned()),
     )
     .map_err(|_| CommandError::internal("Fjall source storage is unavailable"))?;
+    tracing::info!(source_id, "Fjall source projection started");
     projections::mirror_catalog(source_connection, &source, source_id)?;
     projections::mirror_timeline(source_connection, &source, source_id)?;
     projections::mirror_artifacts(

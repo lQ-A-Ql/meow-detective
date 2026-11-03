@@ -196,6 +196,15 @@ impl ReadWriteSourceStorageHandle {
             .upsert_batch(records, mode)
             .map_err(StorageRuntimeError::Source)
     }
+    pub fn parser_upsert_batch_without_field_indexes(
+        &self,
+        records: &[ParserRecord],
+        mode: PersistMode,
+    ) -> Result<(), StorageRuntimeError> {
+        ParserRecordStore::from_source_store(self.source_store().clone())
+            .upsert_batch_without_field_indexes(records, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
     pub fn artifact_upsert_batch(
         &self,
         records: &[ArtifactRecord],

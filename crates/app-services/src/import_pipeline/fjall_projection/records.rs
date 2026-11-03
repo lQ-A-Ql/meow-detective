@@ -1,10 +1,16 @@
 use rusqlite::Connection;
+use std::time::Instant;
 
 use crate::storage_runtime::ReadWriteSourceStorageHandle;
 use persistence_fjall::PersistMode;
 use transport::CommandError;
 
 const BATCH_SIZE: usize = 512;
+const FIELD_INDEXED_PARSER_TABLES: &[&str] = &[
+    "ceph_bluestore_rbd_headers",
+    "ceph_fs_metadata_objects",
+    "ceph_rocksdb_latest_state",
+];
 
 pub(super) fn mirror_parser_tables(
     connection: &Connection,
@@ -28,12 +34,12 @@ fn parser_table_names(connection: &Connection) -> Result<Vec<String>, CommandErr
              ORDER BY name ASC",
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
-    let rows = statement
+    let candidates = statement
         .query_map([], |row| row.get::<_, String>(0))
         .map_err(|error| CommandError::internal(error.to_string()))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(rows)
+    Ok(candidates)
 }
 
 fn parser_table_kind(table: &str) -> &'static str {
@@ -51,6 +57,7 @@ fn mirror_parser_table(
     source_id: &str,
     table: &str,
 ) -> Result<(), CommandError> {
+    let started = Instant::now();
     let quoted = format!("\"{}\"", table.replace('"', "\"\""));
     let mut statement = connection
         .prepare(&format!("SELECT rowid, * FROM {quoted} ORDER BY rowid ASC"))
@@ -71,7 +78,9 @@ fn mirror_parser_table(
         })
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let family = table.split('_').next().unwrap_or("parser");
+    let field_indexed = FIELD_INDEXED_PARSER_TABLES.contains(&table);
     let mut batch = Vec::with_capacity(BATCH_SIZE);
+    let mut row_count = 0usize;
     for row in rows {
         let (row_id, mut payload) =
             row.map_err(|error| CommandError::internal(error.to_string()))?;
@@ -90,18 +99,33 @@ fn mirror_parser_table(
             summary_sha256: infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes()),
             payload,
         });
+        row_count = row_count.saturating_add(1);
         if batch.len() == BATCH_SIZE {
-            source
-                .parser_upsert_batch(&batch, PersistMode::Buffer)
-                .map_err(|error| CommandError::internal(error.to_string()))?;
+            let write = if field_indexed {
+                source.parser_upsert_batch(&batch, PersistMode::Buffer)
+            } else {
+                source.parser_upsert_batch_without_field_indexes(&batch, PersistMode::Buffer)
+            };
+            write.map_err(|error| CommandError::internal(error.to_string()))?;
             batch.clear();
         }
     }
     if !batch.is_empty() {
-        source
-            .parser_upsert_batch(&batch, PersistMode::Buffer)
-            .map_err(|error| CommandError::internal(error.to_string()))?;
+        let write = if field_indexed {
+            source.parser_upsert_batch(&batch, PersistMode::Buffer)
+        } else {
+            source.parser_upsert_batch_without_field_indexes(&batch, PersistMode::Buffer)
+        };
+        write.map_err(|error| CommandError::internal(error.to_string()))?;
     }
+    tracing::info!(
+        source_id,
+        table,
+        row_count,
+        field_indexed,
+        elapsed_ms = started.elapsed().as_millis(),
+        "Fjall parser table projection completed"
+    );
     Ok(())
 }
 

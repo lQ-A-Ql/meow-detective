@@ -1,6 +1,6 @@
 use super::{
-    index_deletes, index_writes, record_key, validate, ParserRecord, ParserRecordStore,
-    RECORD_KIND, SCHEMA_VERSION,
+    index_deletes, index_writes, index_writes_without_fields, record_key, validate, ParserRecord,
+    ParserRecordStore, RECORD_KIND, SCHEMA_VERSION,
 };
 use crate::{
     codec::VersionedEnvelope,
@@ -11,6 +11,23 @@ use crate::{
 
 impl ParserRecordStore {
     pub fn upsert_batch(&self, records: &[ParserRecord], mode: PersistMode) -> Result<()> {
+        self.upsert_batch_with_field_indexes(records, mode, true)
+    }
+
+    pub fn upsert_batch_without_field_indexes(
+        &self,
+        records: &[ParserRecord],
+        mode: PersistMode,
+    ) -> Result<()> {
+        self.upsert_batch_with_field_indexes(records, mode, false)
+    }
+
+    fn upsert_batch_with_field_indexes(
+        &self,
+        records: &[ParserRecord],
+        mode: PersistMode,
+        include_field_indexes: bool,
+    ) -> Result<()> {
         if records.is_empty() {
             return Ok(());
         }
@@ -38,7 +55,11 @@ impl ParserRecordStore {
                 key,
                 value: envelope.encode()?,
             });
-            actions.extend(index_writes(record)?);
+            actions.extend(if include_field_indexes {
+                index_writes(record)?
+            } else {
+                index_writes_without_fields(record)?
+            });
         }
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(())
