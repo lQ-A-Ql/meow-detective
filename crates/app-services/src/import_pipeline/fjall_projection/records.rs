@@ -11,6 +11,7 @@ const FIELD_INDEXED_PARSER_TABLES: &[&str] = &[
     "ceph_fs_metadata_objects",
     "ceph_rocksdb_latest_state",
 ];
+const QUERYABLE_PARSER_TABLES: &[&str] = FIELD_INDEXED_PARSER_TABLES;
 
 pub(super) fn mirror_parser_tables(
     connection: &Connection,
@@ -39,7 +40,19 @@ fn parser_table_names(connection: &Connection) -> Result<Vec<String>, CommandErr
         .map_err(|error| CommandError::internal(error.to_string()))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(candidates)
+    Ok(candidates
+        .into_iter()
+        .filter(|table| {
+            let selected = QUERYABLE_PARSER_TABLES.contains(&table.as_str());
+            if !selected {
+                tracing::debug!(
+                    table,
+                    "Skipping SQLite parser table without a Fjall query consumer"
+                );
+            }
+            selected
+        })
+        .collect())
 }
 
 fn parser_table_kind(table: &str) -> &'static str {
