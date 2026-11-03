@@ -62,6 +62,7 @@ pub mod report_repo;
 mod source_bulk_indexes;
 pub mod source_bulk_load_repo;
 pub mod source_meta_repo;
+pub mod source_projection_change_repo;
 pub mod staging_fingerprint_repo;
 mod staging_merge_validation;
 pub mod staging_repo;

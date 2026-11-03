@@ -40,7 +40,7 @@ fn fresh_source_schema_contains_timeline_projection_identity() {
         runner::current_version(&connection)
             .expect("read source version")
             .as_deref(),
-        Some("source_039_file_browse_paging_index")
+        Some("source_040_projection_change_log")
     );
 }
 
@@ -118,7 +118,7 @@ fn source_016_projection_metadata_is_upgraded_without_losing_rows() {
 
     assert_eq!(
         runner::run_source_all(&connection).expect("upgrade source database"),
-        23
+        24
     );
     let row: (String, i64, String) = connection
         .query_row(

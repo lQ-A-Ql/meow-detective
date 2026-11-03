@@ -152,6 +152,10 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_039_file_browse_paging_index",
         include_str!("scripts/source_039_file_browse_paging_index.sql"),
     ),
+    (
+        "source_040_projection_change_log",
+        include_str!("scripts/source_040_projection_change_log.sql"),
+    ),
 ];
 
 pub(super) fn version_is_at_least(actual: &str, minimum: &str) -> bool {

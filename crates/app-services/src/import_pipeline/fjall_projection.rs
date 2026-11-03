@@ -1,26 +1,23 @@
 use persistence_fjall::{encode_key, KeyPart, PersistMode, VersionedEnvelope};
 use rusqlite::Connection;
-use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 use super::context::ImportJobContext;
 use transport::CommandError;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct AnalysisProjectionRevision {
-    source_id: String,
-    artifact_revision: u64,
-    artifact_high_water: i64,
-    timeline_revision: u64,
-    timeline_high_water: i64,
-}
-
 mod cephfs;
 mod nested;
+mod output_changes;
+mod projection_state;
 mod projections;
 mod records;
 use cephfs::mirror_namespace_locators;
 use nested::mirror_nested_lineage;
+use projection_state::{
+    analysis_projection_marker, analysis_projection_revision, catalog_projection_is_published,
+    ensure_analysis_projection_building, ensure_projection_building,
+    write_analysis_projection_state, AnalysisProjectionRevision,
+};
 
 pub(super) fn mirror_source_records(
     ctx: &ImportJobContext<'_>,
@@ -192,6 +189,15 @@ fn mirror_source_records_from_connections_internal(
     source_root: Option<&std::path::Path>,
 ) -> Result<String, CommandError> {
     let started = Instant::now();
+    let sqlite_projection_transaction = source_connection
+        .unchecked_transaction()
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let source_connection = &sqlite_projection_transaction;
+    persistence_sqlite::repositories::source_projection_change_repo::SourceProjectionChangeRepo::new(
+        source_connection,
+    )
+    .acquire_projection_writer_barrier()
+    .map_err(|error| CommandError::internal(error.to_string()))?;
     let source = match source_root {
         Some(source_root) => crate::storage_runtime::open_source_read_write_at_path(source_root),
         None => crate::source_db::open_registered_fjall_source_read_write(
@@ -201,33 +207,39 @@ fn mirror_source_records_from_connections_internal(
     }
     .map_err(|_| CommandError::internal("Fjall source storage is unavailable"))?;
     tracing::info!(source_id, "Fjall source projection started");
-    let analysis_revision = if include_catalog {
-        None
-    } else {
-        Some(analysis_projection_revision(source_connection, source_id)?)
-    };
-    if let Some(revision) = analysis_revision.as_ref() {
-        if analysis_projection_marker(&source, source_id)?.as_ref() == Some(revision) {
-            write_analysis_projection_state(&source, source_id, "analysis_projection_complete")?;
-            let digest = encode_key(
-                "analysis_projection_revision",
-                &[
-                    KeyPart::Text(source_id.to_owned()),
-                    KeyPart::U64(revision.artifact_revision),
-                    KeyPart::U64(revision.artifact_high_water.max(0) as u64),
-                    KeyPart::U64(revision.timeline_revision),
-                    KeyPart::U64(revision.timeline_high_water.max(0) as u64),
-                ],
-            )
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-            return Ok(hex::encode(persistence_fjall::digest(&digest)));
+    let analysis_revision = Some(analysis_projection_revision(source_connection, source_id)?);
+    let previous_analysis_revision = analysis_projection_marker(&source, source_id)?;
+    if !include_catalog {
+        if let Some(revision) = analysis_revision.as_ref() {
+            if previous_analysis_revision.as_ref() == Some(revision) {
+                write_analysis_projection_state(
+                    &source,
+                    source_id,
+                    "analysis_projection_complete",
+                )?;
+                prune_analysis_projection_changes(source_connection, revision.change_high_water)?;
+                let digest = encode_key(
+                    "analysis_projection_revision",
+                    &[
+                        KeyPart::Text(source_id.to_owned()),
+                        KeyPart::U64(revision.artifact_revision),
+                        KeyPart::U64(revision.artifact_high_water.max(0) as u64),
+                        KeyPart::U64(revision.timeline_revision),
+                        KeyPart::U64(revision.timeline_high_water.max(0) as u64),
+                        KeyPart::U64(revision.change_high_water),
+                    ],
+                )
+                .map_err(|error| CommandError::internal(error.to_string()))?;
+                sqlite_projection_transaction
+                    .commit()
+                    .map_err(|error| CommandError::internal(error.to_string()))?;
+                return Ok(hex::encode(persistence_fjall::digest(&digest)));
+            }
         }
     }
     let catalog_published = include_catalog && catalog_projection_is_published(&source, source_id)?;
-    if !include_catalog {
-        ensure_analysis_projection_building(&source, source_id)?;
-    }
-    mirror_projection_records(
+    ensure_analysis_projection_building(&source, source_id)?;
+    apply_projection_records(
         case_connection,
         case_root,
         case_id,
@@ -236,6 +248,10 @@ fn mirror_source_records_from_connections_internal(
         &source,
         include_catalog,
         catalog_published,
+        analysis_revision
+            .as_ref()
+            .expect("analysis revision exists"),
+        previous_analysis_revision.as_ref(),
     )?;
     source
         .persist(PersistMode::SyncAll)
@@ -245,12 +261,74 @@ fn mirror_source_records_from_connections_internal(
         elapsed_ms = started.elapsed().as_millis(),
         "Fjall source projection committed"
     );
-    publish_projection_marker(
+    let projection_digest = publish_projection_marker(
         &source,
         source_id,
         include_catalog,
         analysis_revision.as_ref(),
+    )?;
+    if let Some(revision) = analysis_revision {
+        prune_analysis_projection_changes(source_connection, revision.change_high_water)?;
+    }
+    sqlite_projection_transaction
+        .commit()
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    Ok(projection_digest)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_projection_records(
+    case_connection: &Connection,
+    case_root: &std::path::Path,
+    case_id: &str,
+    source_connection: &Connection,
+    source_id: &str,
+    source: &crate::source_db::FjallReadWriteSourceStorageHandle,
+    include_catalog: bool,
+    catalog_published: bool,
+    analysis_revision: &AnalysisProjectionRevision,
+    previous_analysis_revision: Option<&AnalysisProjectionRevision>,
+) -> Result<(), CommandError> {
+    let incremental_analysis = !include_catalog
+        && previous_analysis_revision.is_some_and(|revision| revision.change_log_initialized);
+    if incremental_analysis {
+        let checkpoint =
+            previous_analysis_revision.map_or(0, |revision| revision.change_high_water);
+        output_changes::mirror_analysis_output_changes(
+            case_connection,
+            case_root,
+            case_id,
+            source_connection,
+            source,
+            source_id,
+            checkpoint,
+            analysis_revision.change_high_water,
+        )?;
+    } else {
+        mirror_projection_records(
+            case_connection,
+            case_root,
+            case_id,
+            source_connection,
+            source_id,
+            source,
+            include_catalog,
+            catalog_published,
+        )?;
+    }
+    Ok(())
+}
+
+fn prune_analysis_projection_changes(
+    source_connection: &Connection,
+    through_revision: u64,
+) -> Result<(), CommandError> {
+    persistence_sqlite::repositories::source_projection_change_repo::SourceProjectionChangeRepo::new(
+        source_connection,
     )
+    .prune_through(through_revision)
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -331,153 +409,35 @@ fn publish_projection_marker(
             PersistMode::SyncAll,
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
+    let mut batch_digest = receipt.batch_digest;
+    if include_catalog {
+        let revision = analysis_revision
+            .ok_or_else(|| CommandError::internal("Import projection revision is missing"))?;
+        let analysis_marker = VersionedEnvelope::from_serializable(
+            "analysis_projection_complete",
+            1,
+            format!("projection:{source_id}"),
+            source_id,
+            1,
+            revision,
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+        let analysis_receipt = source
+            .write_envelope(
+                persistence_fjall::KeyspaceName::Meta,
+                encode_key(
+                    "analysis_projection",
+                    &[KeyPart::Text(source_id.to_owned())],
+                )
+                .map_err(|error| CommandError::internal(error.to_string()))?,
+                &analysis_marker,
+                PersistMode::SyncAll,
+            )
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+        batch_digest = analysis_receipt.batch_digest;
+    }
     if analysis_revision.is_some() {
         write_analysis_projection_state(source, source_id, "analysis_projection_complete")?;
     }
-    Ok(hex::encode(receipt.batch_digest))
-}
-
-fn analysis_projection_revision(
-    source_connection: &Connection,
-    source_id: &str,
-) -> Result<AnalysisProjectionRevision, CommandError> {
-    let artifact_repo =
-        persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(source_connection);
-    let artifact_revision = artifact_repo
-        .cursor_revision()
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let artifact_high_water = artifact_repo
-        .snapshot_high_water()
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let timeline_repo =
-        persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(source_connection);
-    let timeline_revision = timeline_repo
-        .cursor_revision()
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let timeline_high_water = timeline_repo
-        .snapshot_high_water()
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(AnalysisProjectionRevision {
-        source_id: source_id.to_owned(),
-        artifact_revision,
-        artifact_high_water,
-        timeline_revision,
-        timeline_high_water,
-    })
-}
-
-fn analysis_projection_marker(
-    source: &crate::source_db::FjallReadWriteSourceStorageHandle,
-    source_id: &str,
-) -> Result<Option<AnalysisProjectionRevision>, CommandError> {
-    let key = encode_key(
-        "analysis_projection",
-        &[KeyPart::Text(source_id.to_owned())],
-    )
-    .map_err(|error| CommandError::internal(error.to_string()))?;
-    let snapshot = source.snapshot();
-    let Some(envelope) = source
-        .read_envelope(&snapshot, persistence_fjall::KeyspaceName::Meta, &key)
-        .map_err(|error| CommandError::internal(error.to_string()))?
-    else {
-        return Ok(None);
-    };
-    if envelope.record_kind != "analysis_projection_complete" || envelope.source_id != source_id {
-        return Ok(None);
-    }
-    envelope
-        .decode_payload()
-        .map(Some)
-        .map_err(|error| CommandError::internal(error.to_string()))
-}
-
-fn ensure_analysis_projection_building(
-    source: &crate::source_db::FjallReadWriteSourceStorageHandle,
-    source_id: &str,
-) -> Result<(), CommandError> {
-    ensure_projection_building(source, source_id, "analysis_projection_state")
-}
-
-fn write_analysis_projection_state(
-    source: &crate::source_db::FjallReadWriteSourceStorageHandle,
-    source_id: &str,
-    record_kind: &str,
-) -> Result<(), CommandError> {
-    let key = encode_key(
-        "analysis_projection_state",
-        &[KeyPart::Text(source_id.to_owned())],
-    )
-    .map_err(|error| CommandError::internal(error.to_string()))?;
-    let marker = VersionedEnvelope::new(
-        record_kind,
-        1,
-        format!("projection:{source_id}"),
-        source_id,
-        1,
-        source_id.as_bytes().to_vec(),
-    );
-    source
-        .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
-            key,
-            &marker,
-            PersistMode::SyncAll,
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(())
-}
-
-fn ensure_projection_building(
-    source: &crate::source_db::FjallReadWriteSourceStorageHandle,
-    source_id: &str,
-    family: &str,
-) -> Result<(), CommandError> {
-    let building_kind = if family == "projection" {
-        "source_projection_building"
-    } else {
-        "analysis_projection_building"
-    };
-    let key = encode_key(family, &[KeyPart::Text(source_id.to_owned())])
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let snapshot = source.snapshot();
-    let current = source
-        .read_envelope(&snapshot, persistence_fjall::KeyspaceName::Meta, &key)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    if current.is_some_and(|envelope| {
-        envelope.record_kind == building_kind && envelope.source_id == source_id
-    }) {
-        return Ok(());
-    }
-    let marker = VersionedEnvelope::new(
-        building_kind,
-        1,
-        format!("projection:{source_id}"),
-        source_id,
-        1,
-        source_id.as_bytes().to_vec(),
-    );
-    source
-        .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
-            key,
-            &marker,
-            PersistMode::SyncAll,
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(())
-}
-
-fn catalog_projection_is_published(
-    source: &crate::source_db::FjallReadWriteSourceStorageHandle,
-    source_id: &str,
-) -> Result<bool, CommandError> {
-    let snapshot = source.snapshot();
-    let key = encode_key("projection", &[KeyPart::Text(source_id.to_owned())])
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(source
-        .read_envelope(&snapshot, persistence_fjall::KeyspaceName::Meta, &key)
-        .map_err(|error| CommandError::internal(error.to_string()))?
-        .is_some_and(|envelope| {
-            envelope.record_kind == "source_projection_complete" && envelope.source_id == source_id
-        }))
+    Ok(hex::encode(batch_digest))
 }

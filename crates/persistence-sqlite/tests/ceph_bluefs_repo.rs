@@ -177,7 +177,7 @@ fn source_migration_installs_bluefs_inventory_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_039_file_browse_paging_index"
+        "source_040_projection_change_log"
     );
     for table in [
         "ceph_bluefs_superblocks",

@@ -178,7 +178,7 @@ fn source_024_through_032_upgrade_preserves_rows_and_adds_query_indexes() {
         )
         .unwrap();
 
-    assert_eq!(runner::run_source_all(&connection).unwrap(), 16);
+    assert_eq!(runner::run_source_all(&connection).unwrap(), 17);
 
     let encrypted_column: (String, i64, Option<String>) = connection
         .query_row(

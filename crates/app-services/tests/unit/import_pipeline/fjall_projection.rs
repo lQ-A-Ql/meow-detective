@@ -70,13 +70,22 @@ fn analysis_projection_removes_deleted_rows_and_skips_unchanged_replays() {
         .unwrap();
     ArtifactRepo::new(&source_connection)
         .insert_batch(
-            &[artifact("old-artifact", "file-old")],
+            &[
+                artifact("old-artifact", "file-old"),
+                artifact("stable-artifact", "file-stable"),
+            ],
             &case.meta.id.0,
             &source_id.0,
         )
         .unwrap();
     TimelineRepo::new(&source_connection)
-        .insert_batch_with_case(&[event("old-event", "file-old")], &case.meta.id.0)
+        .insert_batch_with_case(
+            &[
+                event("old-event", "file-old"),
+                event("stable-event", "file-stable"),
+            ],
+            &case.meta.id.0,
+        )
         .unwrap();
 
     let project = |source_connection: &rusqlite::Connection| {
@@ -92,6 +101,19 @@ fn analysis_projection_removes_deleted_rows_and_skips_unchanged_replays() {
         })
     };
     let first_receipt = project(&source_connection).unwrap();
+    let first_change_high_water = persistence_sqlite::repositories::
+        source_projection_change_repo::SourceProjectionChangeRepo::new(&source_connection)
+        .high_water()
+        .unwrap();
+    assert_eq!(
+        persistence_sqlite::repositories::source_projection_change_repo::
+            SourceProjectionChangeRepo::new(&source_connection)
+            .list_after(0, first_change_high_water, 512)
+            .unwrap()
+            .len(),
+        0,
+        "full reconciliation must retire its captured change range"
+    );
 
     let transaction = source_connection.unchecked_transaction().unwrap();
     ArtifactRepo::new(&transaction)
@@ -111,6 +133,19 @@ fn analysis_projection_removes_deleted_rows_and_skips_unchanged_replays() {
         .insert_batch_with_case_in_transaction(&[event("new-event", "file-new")], &case.meta.id.0)
         .unwrap();
     transaction.commit().unwrap();
+    let change_repo = persistence_sqlite::repositories::
+        source_projection_change_repo::SourceProjectionChangeRepo::new(&source_connection);
+    let changed_records = change_repo
+        .list_after(
+            first_change_high_water,
+            change_repo.high_water().unwrap(),
+            512,
+        )
+        .unwrap();
+    assert_eq!(changed_records.len(), 4);
+    assert!(changed_records
+        .iter()
+        .all(|change| !change.entity_id.starts_with("stable-")));
     assert!(ArtifactRepo::new(&source_connection)
         .find_by_id("old-artifact")
         .unwrap()
@@ -142,6 +177,14 @@ fn analysis_projection_removes_deleted_rows_and_skips_unchanged_replays() {
         .is_some());
     assert!(fjall
         .timeline_get(&snapshot, &source_id.0, "new-event")
+        .unwrap()
+        .is_some());
+    assert!(fjall
+        .artifact_get(&snapshot, &source_id.0, "stable-artifact")
+        .unwrap()
+        .is_some());
+    assert!(fjall
+        .timeline_get(&snapshot, &source_id.0, "stable-event")
         .unwrap()
         .is_some());
     let released_references: i64 = case

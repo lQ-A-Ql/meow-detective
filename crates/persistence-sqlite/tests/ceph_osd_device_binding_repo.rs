@@ -90,7 +90,7 @@ fn source_migration_installs_device_binding_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_039_file_browse_paging_index"
+        "source_040_projection_change_log"
     );
     for table in ["ceph_osd_device_bindings", "ceph_osd_device_binding_pvs"] {
         let exists: bool = conn

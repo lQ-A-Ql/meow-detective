@@ -36,7 +36,7 @@
 | 8 | RBD Header Parser kind 不一致 | 已完成 | `ceph_bluestore_rbd_headers` 使用同名 kind 写入和查询。 |
 | 9 | Timeline 查询重复扫描 | 部分完成 | 总数按 512 条 keyset 页读取 Timeline type/time 索引，不再逐条分页计数，也不再为游标打开 SQLite 读取 revision；精确总数及时间过滤仍需扫描匹配前缀的索引记录。 |
 | 10 | 普通导入与恢复构建发布流程分离 | 已完成 | 首次导入按 operation attempt 写入 Fjall build generation，SyncAll 后写入 generation manifest/seal，并原子改名发布；SQLite operation receipt 与 generation 中的 projection receipt 可共同恢复。seal 只覆盖稳定的 Catalog/Partition 主记录与索引，Analysis、Parser、Meta 和 batch keyspace 的后续写入不会使 generation 失效。应用启动时会校验已发布 generation，并自动完成具有有效 seal 和 batch receipt 的待发布 build。重新导入已发布 source 时先写 building 状态，完成后重新计算并替换稳定 generation seal；若旧句柄仍被使用则拒绝发布。 |
-| 11 | 分析输出重复镜像与无关 Parser 重扫 | 部分完成 | SQLite Artifact/Timeline revision 与最大 rowid 未变化时跳过投影；revision 比较不再额外执行全表计数。变化时同步新增、更新和删除，并释放旧对象引用。变化后仍扫描全部 Artifact、Timeline，并校验/登记现存对象。 |
+| 11 | 分析输出重复镜像与无关 Parser 重扫 | 已完成 | source migration `source_040_projection_change_log` 由 SQLite 触发器按 Artifact/Timeline ID 合并记录最新增删改序号。投影取得 SQLite source 写屏障后读取一致的 revision 和变更高水位；已有 Fjall revision marker 首次启用时执行一次完整校准，之后仅按 keyset 读取游标至高水位之间的 ID，并批量 upsert/delete。Artifact 删除同步释放对象引用。Fjall 数据和完成游标 `SyncAll` 后才清理已应用变更。旧 marker 自动走完整校准；无变化时 O(1) 检查并跳过。 |
 | 12 | Android Parser 双重身份造成重复记录 | 已完成 | SQLite source projection 与 Android 分析共用 field/file、package/file 的稳定 Parser id；相同 payload 使用幂等 upsert。 |
 | 13 | Artifact source 列表 keyspace 错用 | 已完成 | 按 source 查询直接分页扫描 Artifact records 主记录 keyspace，不再在未建立的 source index 上查询。 |
 | 14 | 已缓存 Fjall 句柄阻止案件目录删除 | 已完成 | source/case 删除设置关闭租约；活动句柄会让删除以可恢复状态退出，关闭期间拒绝该路径的新打开。 |
@@ -66,6 +66,7 @@
 - `cargo test -p app-services --lib output_replacement_commits_artifacts_timeline_and_checkpoint_atomically --quiet`
 - `cargo test -p app-services --lib logical_import_post_pipeline_indexes_marker_and_extracts_artifact -- --nocapture`
 - `cargo test -p persistence-fjall --test source_generation`
+- `cargo test -p persistence-sqlite source_projection_change -- --nocapture`
 - `cargo test -p app-services --test storage_recovery startup_recovery_publishes_a_sealed_import_generation_and_finishes_its_operation -- --nocapture`
 - `cargo test -p persistence-fjall --test process_recovery child_process_termination_matrix_reopens_each_durable_boundary -- --nocapture`
 - `cargo test -p app-services --lib analysis_projection_removes_deleted_rows_and_skips_unchanged_replays -- --nocapture`
@@ -83,4 +84,18 @@
 - `powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1`
 - `git diff --check`
 
-仍待处理：source SQLite 与 Fjall 的完整明细双写迁移。分析输出按 revision 跳过未变化扫描；revision 改变后仍进行全量 Artifact/Timeline 对照。性能基准尚未运行，当前测试只证明行为正确，不代表已有导入提速数据。
+### 2026-11-04
+
+- `cargo test -p persistence-sqlite`
+- `cargo test -p app-services --lib analysis_projection_removes_deleted_rows_and_skips_unchanged_replays -- --nocapture`
+- `cargo test -p app-services --lib logical_import_post_pipeline_indexes_marker_and_extracts_artifact -- --nocapture`
+- `cargo test -p app-services --test analysis_platform_orchestration --test android_analysis --test import_source_publication --test storage_recovery`
+- `cargo clippy -p persistence-sqlite -p persistence-fjall -p app-services --lib -- -D warnings`
+- `cargo fmt --all -- --check`
+- `powershell -ExecutionPolicy Bypass -File scripts/check-module-size.ps1`
+- `powershell -ExecutionPolicy Bypass -File scripts/check-rust-function-size.ps1`
+- `powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1`
+- `powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1`
+- `git diff --check`
+
+仍待处理：source SQLite 与 Fjall 的完整明细双写迁移及性能基准。行为回归证明变更后按 ID 增量同步，性能收益仍需固定数据集的正式测量，不根据实现路径推定。
