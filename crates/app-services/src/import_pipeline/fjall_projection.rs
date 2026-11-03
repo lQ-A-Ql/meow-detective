@@ -37,6 +37,41 @@ pub(crate) fn mirror_source_records_from_connections(
     source_connection: &Connection,
     source_id: &str,
 ) -> Result<String, CommandError> {
+    mirror_source_records_from_connections_internal(
+        case_connection,
+        case_root,
+        case_id,
+        source_connection,
+        source_id,
+        true,
+    )
+}
+
+pub(crate) fn mirror_analysis_outputs_from_connections(
+    case_connection: &Connection,
+    case_root: &std::path::Path,
+    case_id: &str,
+    source_connection: &Connection,
+    source_id: &str,
+) -> Result<String, CommandError> {
+    mirror_source_records_from_connections_internal(
+        case_connection,
+        case_root,
+        case_id,
+        source_connection,
+        source_id,
+        false,
+    )
+}
+
+fn mirror_source_records_from_connections_internal(
+    case_connection: &Connection,
+    case_root: &std::path::Path,
+    case_id: &str,
+    source_connection: &Connection,
+    source_id: &str,
+    include_catalog: bool,
+) -> Result<String, CommandError> {
     let started = Instant::now();
     let source = crate::source_db::open_registered_fjall_source_read_write(
         case_root,
@@ -44,7 +79,7 @@ pub(crate) fn mirror_source_records_from_connections(
     )
     .map_err(|_| CommandError::internal("Fjall source storage is unavailable"))?;
     tracing::info!(source_id, "Fjall source projection started");
-    if catalog_projection_is_published(&source, source_id)? {
+    if !include_catalog || catalog_projection_is_published(&source, source_id)? {
         tracing::info!(
             source_id,
             "Skipping already-published Fjall catalog remirror"

@@ -93,7 +93,7 @@ fn mirror_published_outputs(conn: &Connection, case_id: &str) -> Result<(), Anal
         Ok(connection) => connection,
         Err(_) => return Ok(()),
     };
-    crate::import_pipeline::mirror_source_records_from_connections(
+    crate::import_pipeline::mirror_analysis_outputs_from_connections(
         &case_connection,
         case_root,
         case_id,

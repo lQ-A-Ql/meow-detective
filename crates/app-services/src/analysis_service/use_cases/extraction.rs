@@ -359,7 +359,7 @@ fn mirror_completed_source(
     data_source_id: &DataSourceId,
     source_connection: &Connection,
 ) -> Result<(), AnalysisServiceError> {
-    crate::import_pipeline::mirror_source_records_from_connections(
+    crate::import_pipeline::mirror_analysis_outputs_from_connections(
         case_conn,
         case_root,
         &case_id.0,
