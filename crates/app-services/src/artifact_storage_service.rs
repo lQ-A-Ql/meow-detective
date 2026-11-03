@@ -68,6 +68,15 @@ pub struct ArtifactReference {
     pub role: String,
 }
 
+pub struct ArtifactObjectBatchItem {
+    pub stored: artifact_storage::StoredObject,
+    pub media_type: String,
+    pub source_id: Option<String>,
+    pub owner_kind: String,
+    pub owner_id: String,
+    pub role: String,
+}
+
 pub struct ArtifactStorageService<'a> {
     connection: &'a Connection,
     store: &'a ArtifactStore,
@@ -279,6 +288,70 @@ pub fn create_reference(
         owner_id: owner_id.to_owned(),
         role: role.to_owned(),
     })
+}
+
+pub fn register_artifact_objects_and_references_batch(
+    connection: &Connection,
+    case_id: &str,
+    items: &[ArtifactObjectBatchItem],
+) -> Result<(), ArtifactStorageServiceError> {
+    validate_text("case_id", case_id)?;
+    if items.is_empty() {
+        return Ok(());
+    }
+    let transaction = connection.unchecked_transaction()?;
+    let mut object_insert = transaction.prepare_cached(
+        "INSERT OR IGNORE INTO artifact_objects (
+            object_id, case_id, sha256, original_length, stored_length, media_type,
+            compression, relative_path, write_state
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'ready')",
+    )?;
+    let mut object_lookup = transaction.prepare_cached(
+        "SELECT object_id FROM artifact_objects WHERE case_id = ?1 AND sha256 = ?2",
+    )?;
+    let mut reference_insert = transaction.prepare_cached(
+        "INSERT OR IGNORE INTO artifact_references (
+            reference_id, case_id, object_id, source_id, owner_kind, owner_id, role
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+    )?;
+    for item in items {
+        validate_text("media_type", &item.media_type)?;
+        validate_text("owner_kind", &item.owner_kind)?;
+        validate_text("owner_id", &item.owner_id)?;
+        validate_text("role", &item.role)?;
+        let address = item.stored.address.as_str().to_owned();
+        let length = i64::try_from(item.stored.length).map_err(|_| {
+            ArtifactStorageServiceError::InvalidInput(
+                "artifact length exceeds SQLite range".to_owned(),
+            )
+        })?;
+        object_insert.execute(rusqlite::params![
+            Uuid::new_v4().to_string(),
+            case_id,
+            address,
+            length,
+            length,
+            item.media_type,
+            NONE_COMPRESSION,
+            relative_object_path(&item.stored.address),
+        ])?;
+        let object_id: String =
+            object_lookup.query_row(rusqlite::params![case_id, address], |row| row.get(0))?;
+        reference_insert.execute(rusqlite::params![
+            Uuid::new_v4().to_string(),
+            case_id,
+            object_id,
+            item.source_id,
+            item.owner_kind,
+            item.owner_id,
+            item.role,
+        ])?;
+    }
+    drop(reference_insert);
+    drop(object_lookup);
+    drop(object_insert);
+    transaction.commit()?;
+    Ok(())
 }
 
 pub fn release_reference(

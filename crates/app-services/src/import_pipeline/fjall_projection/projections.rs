@@ -26,41 +26,52 @@ pub(super) fn mirror_artifacts(
         Ok((row.get::<_, String>(0)?, persistence_fjall::ArtifactRecord { id: row.get(0)?, data_source_id: source_id.to_owned(), artifact_type: row.get(1)?, source_object_id: row.get(2)?, content_sha256: Some(infrastructure::hashing::sha256_bytes(summary.as_bytes())), attrs: payload }))
     }).map_err(|error| CommandError::internal(error.to_string()))?;
     let mut batch = Vec::with_capacity(BATCH_SIZE);
+    let mut object_batch = Vec::with_capacity(BATCH_SIZE);
     for row in rows {
         let (artifact_id, record) =
             row.map_err(|error| CommandError::internal(error.to_string()))?;
         batch.push(record.clone());
         let object_bytes = serde_json::to_vec(&record.attrs)
             .map_err(|error| CommandError::internal(error.to_string()))?;
-        let object = crate::artifact_storage_service::write_object(
-            case_connection,
-            &object_store,
-            case_id,
-            &object_bytes,
-            "application/json",
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-        crate::artifact_storage_service::create_reference(
-            case_connection,
-            case_id,
-            &object.object_id,
-            Some(source_id),
-            "artifact",
-            &artifact_id,
-            "metadata",
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
+        let stored = object_store
+            .put_bytes(&object_bytes)
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+        object_batch.push(crate::artifact_storage_service::ArtifactObjectBatchItem {
+            stored,
+            media_type: "application/json".to_owned(),
+            source_id: Some(source_id.to_owned()),
+            owner_kind: "artifact".to_owned(),
+            owner_id: artifact_id,
+            role: "metadata".to_owned(),
+        });
         if batch.len() == BATCH_SIZE {
             source
                 .artifact_upsert_batch(&batch, PersistMode::Buffer)
                 .map_err(|error| CommandError::internal(error.to_string()))?;
             batch.clear();
         }
+        if object_batch.len() == BATCH_SIZE {
+            crate::artifact_storage_service::register_artifact_objects_and_references_batch(
+                case_connection,
+                case_id,
+                &object_batch,
+            )
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+            object_batch.clear();
+        }
     }
     if !batch.is_empty() {
         source
             .artifact_upsert_batch(&batch, PersistMode::Buffer)
             .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
+    if !object_batch.is_empty() {
+        crate::artifact_storage_service::register_artifact_objects_and_references_batch(
+            case_connection,
+            case_id,
+            &object_batch,
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     Ok(())
 }

@@ -1,5 +1,6 @@
 use app_services::artifact_storage_service::{
-    create_reference, read_object, release_reference, write_object, ArtifactStorageService,
+    create_reference, read_object, register_artifact_objects_and_references_batch,
+    release_reference, write_object, ArtifactObjectBatchItem, ArtifactStorageService,
     ArtifactStorageServiceError,
 };
 use artifact_storage::ArtifactStore;
@@ -168,5 +169,51 @@ fn writes_file_through_content_addressed_service() {
             .read_object("case-1", &object.object_id)
             .expect("read file object"),
         b"file bytes"
+    );
+}
+
+#[test]
+fn batch_registers_objects_and_references_atomically() {
+    let connection = database();
+    let root = tempdir().expect("temporary root");
+    let store = ArtifactStore::new(root.path()).expect("create artifact store");
+    let first = store.put_bytes(b"batch-one").expect("store first object");
+    let second = store.put_bytes(b"batch-two").expect("store second object");
+    register_artifact_objects_and_references_batch(
+        &connection,
+        "case-1",
+        &[
+            ArtifactObjectBatchItem {
+                stored: first,
+                media_type: "application/json".to_owned(),
+                source_id: None,
+                owner_kind: "artifact".to_owned(),
+                owner_id: "artifact-1".to_owned(),
+                role: "metadata".to_owned(),
+            },
+            ArtifactObjectBatchItem {
+                stored: second,
+                media_type: "application/json".to_owned(),
+                source_id: None,
+                owner_kind: "artifact".to_owned(),
+                owner_id: "artifact-2".to_owned(),
+                role: "metadata".to_owned(),
+            },
+        ],
+    )
+    .expect("register batch");
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM artifact_objects", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM artifact_references", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        2
     );
 }
