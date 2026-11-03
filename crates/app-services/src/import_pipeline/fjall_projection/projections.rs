@@ -51,6 +51,13 @@ pub(super) fn mirror_artifacts(
             batch.clear();
         }
         if object_batch.len() == BATCH_SIZE {
+            let stored_objects = object_batch
+                .iter()
+                .map(|item| item.stored.clone())
+                .collect::<Vec<_>>();
+            object_store
+                .sync_objects(&stored_objects)
+                .map_err(|error| CommandError::internal(error.to_string()))?;
             crate::artifact_storage_service::register_artifact_objects_and_references_batch(
                 case_connection,
                 case_id,
@@ -66,6 +73,13 @@ pub(super) fn mirror_artifacts(
             .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     if !object_batch.is_empty() {
+        let stored_objects = object_batch
+            .iter()
+            .map(|item| item.stored.clone())
+            .collect::<Vec<_>>();
+        object_store
+            .sync_objects(&stored_objects)
+            .map_err(|error| CommandError::internal(error.to_string()))?;
         crate::artifact_storage_service::register_artifact_objects_and_references_batch(
             case_connection,
             case_id,

@@ -160,6 +160,23 @@ impl ArtifactStore {
         self.put_reader(io::Cursor::new(bytes))
     }
 
+    pub fn put_bytes_buffered(&self, bytes: &[u8]) -> Result<StoredObject, ArtifactStorageError> {
+        self.put_reader_with_sync(io::Cursor::new(bytes), false)
+    }
+
+    pub fn sync_objects(&self, objects: &[StoredObject]) -> Result<(), ArtifactStorageError> {
+        let mut directories = std::collections::BTreeSet::new();
+        for object in objects {
+            if let Some(parent) = object.path.parent() {
+                directories.insert(parent.to_path_buf());
+            }
+        }
+        for directory in directories {
+            sync_directory(Some(&directory))?;
+        }
+        Ok(())
+    }
+
     pub fn store_bytes(&self, bytes: &[u8]) -> Result<StoredObject, ArtifactStorageError> {
         self.put_bytes(bytes)
     }
@@ -194,6 +211,14 @@ impl ArtifactStore {
     }
 
     pub fn put_reader<R: Read>(&self, mut reader: R) -> Result<StoredObject, ArtifactStorageError> {
+        self.put_reader_with_sync(&mut reader, true)
+    }
+
+    fn put_reader_with_sync<R: Read>(
+        &self,
+        mut reader: R,
+        sync: bool,
+    ) -> Result<StoredObject, ArtifactStorageError> {
         let staging_dir = self.objects_root.join(".staging");
         fs::create_dir_all(&staging_dir)?;
         let temporary_path =
@@ -203,7 +228,9 @@ impl ArtifactStore {
             .create_new(true)
             .open(&temporary_path)?;
         let (digest, length) = copy_and_hash(&mut reader, &mut temporary)?;
-        temporary.sync_all()?;
+        if sync {
+            temporary.sync_all()?;
+        }
         drop(temporary);
 
         let address = ObjectAddress::from_digest(digest);
@@ -211,7 +238,7 @@ impl ArtifactStore {
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent)?;
         }
-        let result = self.publish_temporary(&temporary_path, &destination, &address, length);
+        let result = self.publish_temporary(&temporary_path, &destination, &address, length, sync);
         if result.as_ref().map_or(true, |stored| stored.reused) {
             let _ = fs::remove_file(&temporary_path);
         }
@@ -238,8 +265,13 @@ impl ArtifactStore {
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent)?;
         }
-        let result =
-            self.publish_temporary(&temporary_path, &destination, address, bytes.len() as u64);
+        let result = self.publish_temporary(
+            &temporary_path,
+            &destination,
+            address,
+            bytes.len() as u64,
+            true,
+        );
         if result.as_ref().map_or(true, |stored| stored.reused) {
             let _ = fs::remove_file(&temporary_path);
         }
@@ -324,13 +356,16 @@ impl ArtifactStore {
         destination: &Path,
         address: &ObjectAddress,
         length: u64,
+        sync: bool,
     ) -> Result<StoredObject, ArtifactStorageError> {
         if destination.exists() {
             return self.reuse_existing(destination, address, length);
         }
         match fs::rename(temporary, destination) {
             Ok(()) => {
-                sync_directory(destination.parent())?;
+                if sync {
+                    sync_directory(destination.parent())?;
+                }
                 Ok(StoredObject {
                     address: address.clone(),
                     length,
