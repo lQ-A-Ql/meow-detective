@@ -76,6 +76,36 @@ impl From<(Bound<Vec<u8>>, Bound<Vec<u8>>)> for ScanBounds {
 }
 
 impl SourceReadSnapshot {
+    pub fn range_keyset(
+        &self,
+        keyspace: KeyspaceName,
+        bounds: ScanBounds,
+        cursor: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<Vec<SnapshotEntry>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let start = cursor
+            .map(|cursor| Bound::Excluded(cursor.to_vec()))
+            .unwrap_or(bounds.start);
+        let iter = self
+            .snapshot
+            .range(self.keyspace(keyspace), (start, bounds.end));
+        let mut entries = Vec::with_capacity(limit);
+        for guard in iter {
+            let (key, value) = guard.into_inner()?;
+            entries.push(SnapshotEntry {
+                key: key.to_vec(),
+                value: value.to_vec(),
+            });
+            if entries.len() == limit {
+                break;
+            }
+        }
+        Ok(entries)
+    }
+
     pub fn prefix(
         &self,
         keyspace: KeyspaceName,

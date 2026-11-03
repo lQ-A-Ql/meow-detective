@@ -373,6 +373,15 @@ pub(super) fn mirror_timeline(
             .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     delete_stale_timeline(source, source_id, &current_ids)?;
+    let snapshot = source.snapshot();
+    if !source
+        .timeline_counts_ready(&snapshot, source_id)
+        .map_err(|error| CommandError::internal(error.to_string()))?
+    {
+        source
+            .timeline_rebuild_count_indexes(source_id, PersistMode::Buffer)
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
     Ok(())
 }
 

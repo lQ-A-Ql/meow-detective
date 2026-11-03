@@ -153,6 +153,61 @@ fn timeline_index_counts_match_type_and_time_filters() {
 }
 
 #[test]
+fn timeline_aggregate_counts_cover_cross_day_ranges_and_deletes() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = TimelineRecordStore::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let first = record("source-a", "first", "CREATE", "file-a", 86_400 + 10);
+    let second = record("source-a", "second", "CREATE", "file-b", 2 * 86_400 + 10);
+    let third = record("source-a", "third", "MODIFY", "file-c", 3 * 86_400 + 10);
+    store
+        .upsert_batch(
+            &[first.clone(), second.clone(), third.clone()],
+            PersistMode::SyncAll,
+        )
+        .unwrap();
+    let snapshot = store.read_snapshot();
+    assert_eq!(
+        store
+            .count_by_time(
+                &snapshot,
+                "source-a",
+                Some(timestamp(86_400)),
+                Some(timestamp(3 * 86_400 + 10)),
+            )
+            .unwrap(),
+        3
+    );
+    assert_eq!(
+        store
+            .count_by_type(
+                &snapshot,
+                "source-a",
+                "CREATE",
+                Some(timestamp(86_400)),
+                Some(timestamp(2 * 86_400 + 10)),
+            )
+            .unwrap(),
+        2
+    );
+    store
+        .delete("source-a", "second", PersistMode::SyncAll)
+        .unwrap();
+    let snapshot = store.read_snapshot();
+    assert_eq!(
+        store
+            .count_by_time(&snapshot, "source-a", None, None)
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        store
+            .count_by_type(&snapshot, "source-a", "CREATE", None, None)
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
 fn repeated_identical_upsert_keeps_timeline_revision_stable() {
     let directory = tempfile::tempdir().unwrap();
     let store = TimelineRecordStore::open(directory.path(), DatabaseConfig::default()).unwrap();

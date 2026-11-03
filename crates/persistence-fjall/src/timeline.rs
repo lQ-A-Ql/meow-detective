@@ -9,7 +9,7 @@ use crate::{
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 mod timeline_batch;
@@ -105,8 +105,17 @@ impl TimelineRecordStore {
             return Ok(());
         }
         let mut actions = Vec::with_capacity(6);
+        let mut count_deltas = HashMap::new();
+        let (update_counts, initialize_counts) =
+            timeline_count::count_write_policy(&snapshot, &record.data_source_id)?;
         if let Some(previous) = old {
             self.index_deletes(&mut actions, &previous)?;
+            if update_counts {
+                timeline_count::adjust_count_deltas(&mut count_deltas, &previous, -1)?;
+            }
+        }
+        if update_counts {
+            timeline_count::adjust_count_deltas(&mut count_deltas, record, 1)?;
         }
         let payload = serde_json::to_vec(record)
             .map_err(|error| FjallStorageError::Serialization(error.to_string()))?;
@@ -124,6 +133,12 @@ impl TimelineRecordStore {
             value: envelope.encode()?,
         });
         self.index_writes(&mut actions, record)?;
+        timeline_count::append_count_actions(&snapshot, &mut actions, count_deltas)?;
+        if initialize_counts {
+            actions.push(timeline_count::count_schema_marker_action(
+                &record.data_source_id,
+            )?);
+        }
         self.write_revision(&snapshot, &mut actions)?;
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(())
@@ -141,6 +156,11 @@ impl TimelineRecordStore {
             key,
         });
         self.index_deletes(&mut actions, &previous)?;
+        if timeline_count::counts_ready(&snapshot, source_id)? {
+            let mut count_deltas = HashMap::new();
+            timeline_count::adjust_count_deltas(&mut count_deltas, &previous, -1)?;
+            timeline_count::append_count_actions(&snapshot, &mut actions, count_deltas)?;
+        }
         self.write_revision(&snapshot, &mut actions)?;
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(true)
@@ -157,6 +177,8 @@ impl TimelineRecordStore {
         }
         let snapshot = self.read_snapshot();
         let mut actions = Vec::new();
+        let mut count_deltas = HashMap::new();
+        let counts_ready = timeline_count::counts_ready(&snapshot, source_id)?;
         let mut deleted = 0usize;
         for id in ids {
             let Some(record) = self.get(&snapshot, source_id, id)? else {
@@ -167,9 +189,15 @@ impl TimelineRecordStore {
                 key: record_key(source_id, id)?,
             });
             self.index_deletes(&mut actions, &record)?;
+            if counts_ready {
+                timeline_count::adjust_count_deltas(&mut count_deltas, &record, -1)?;
+            }
             deleted = deleted.saturating_add(1);
         }
         if !actions.is_empty() {
+            if counts_ready {
+                timeline_count::append_count_actions(&snapshot, &mut actions, count_deltas)?;
+            }
             self.write_revision(&snapshot, &mut actions)?;
             self.source_store.database().write_batch(&actions, mode)?;
         }

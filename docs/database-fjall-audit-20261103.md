@@ -34,7 +34,7 @@
 | 6 | 未完成的 Fjall 投影被查询读取 | 已完成 | 文件浏览、Timeline、Artifact、Android/Linux Parser、RBD、nested、CephFS 和 Search 路径验证投影状态；缺少完成标记或 analysis 正在更新时使用 SQLite。 |
 | 7 | Artifact Storage 对象目录不一致 | 已完成 | source runtime 与导入投影统一使用案件根目录 `artifacts/objects`。 |
 | 8 | RBD Header Parser kind 不一致 | 已完成 | `ceph_bluestore_rbd_headers` 使用同名 kind 写入和查询。 |
-| 9 | Timeline 查询重复扫描 | 部分完成 | 总数按 512 条 keyset 页读取 Timeline type/time 索引，不再逐条分页计数，也不再为游标打开 SQLite 读取 revision；精确总数及时间过滤仍需扫描匹配前缀的索引记录。 |
+| 9 | Timeline 查询重复扫描 | 已完成 | Fjall Timeline 在 source projection 中维护总数、按类型总数以及日/月/年计数索引；查询无过滤条件时为 O(1)，跨日范围使用聚合计数，仅在边界日期扫描受限时间索引。旧 source generation 没有计数 marker 时保留兼容扫描，并在下一次完整 Timeline mirror 后建立计数索引。分页仍使用 keyset 和冻结 revision。 |
 | 10 | 普通导入与恢复构建发布流程分离 | 已完成 | 首次导入按 operation attempt 写入 Fjall build generation，SyncAll 后写入 generation manifest/seal，并原子改名发布；SQLite operation receipt 与 generation 中的 projection receipt 可共同恢复。seal 只覆盖稳定的 Catalog/Partition 主记录与索引，Analysis、Parser、Meta 和 batch keyspace 的后续写入不会使 generation 失效。应用启动时会校验已发布 generation，并自动完成具有有效 seal 和 batch receipt 的待发布 build。重新导入已发布 source 时先写 building 状态，完成后重新计算并替换稳定 generation seal；若旧句柄仍被使用则拒绝发布。 |
 | 11 | 分析输出重复镜像与无关 Parser 重扫 | 已完成 | source migration `source_040_projection_change_log` 由 SQLite 触发器按 Artifact/Timeline ID 合并记录最新增删改序号。投影取得 SQLite source 写屏障后读取一致的 revision 和变更高水位；已有 Fjall revision marker 首次启用时执行一次完整校准，之后仅按 keyset 读取游标至高水位之间的 ID，并批量 upsert/delete。Artifact 删除同步释放对象引用。Fjall 数据和完成游标 `SyncAll` 后才清理已应用变更。旧 marker 自动走完整校准；无变化时 O(1) 检查并跳过。 |
 | 12 | Android Parser 双重身份造成重复记录 | 已完成 | SQLite source projection 与 Android 分析共用 field/file、package/file 的稳定 Parser id；相同 payload 使用幂等 upsert。 |
@@ -87,6 +87,7 @@
 ### 2026-11-04
 
 - `cargo test -p persistence-sqlite`
+- `cargo test -p persistence-fjall --test timeline`
 - `cargo test -p app-services --lib analysis_projection_removes_deleted_rows_and_skips_unchanged_replays -- --nocapture`
 - `cargo test -p app-services --lib logical_import_post_pipeline_indexes_marker_and_extracts_artifact -- --nocapture`
 - `cargo test -p app-services --test analysis_platform_orchestration --test android_analysis --test import_source_publication --test storage_recovery`

@@ -9,6 +9,16 @@ use persistence_fjall::{
 };
 
 impl ReadOnlySourceStorageHandle {
+    pub fn timeline_counts_ready(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+    ) -> Result<bool, StorageRuntimeError> {
+        TimelineRecordStore::from_source_store(self.source_store().clone())
+            .counts_ready(snapshot, source_id)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn verify_source_generation(
         &self,
         source_id: &str,
@@ -270,6 +280,26 @@ impl ReadOnlySourceStorageHandle {
 }
 
 impl ReadWriteSourceStorageHandle {
+    pub fn timeline_counts_ready(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+    ) -> Result<bool, StorageRuntimeError> {
+        TimelineRecordStore::from_source_store(self.source_store().clone())
+            .counts_ready(snapshot, source_id)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn timeline_rebuild_count_indexes(
+        &self,
+        source_id: &str,
+        mode: PersistMode,
+    ) -> Result<(), StorageRuntimeError> {
+        TimelineRecordStore::from_source_store(self.source_store().clone())
+            .rebuild_count_indexes(source_id, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn artifact_list_by_source(
         &self,
         snapshot: &SourceReadSnapshot,

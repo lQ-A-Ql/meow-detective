@@ -209,7 +209,10 @@ fn mirror_source_records_from_connections_internal(
     tracing::info!(source_id, "Fjall source projection started");
     let analysis_revision = Some(analysis_projection_revision(source_connection, source_id)?);
     let previous_analysis_revision = analysis_projection_marker(&source, source_id)?;
-    if !include_catalog {
+    let counts_ready = source
+        .timeline_counts_ready(&source.snapshot(), source_id)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    if !include_catalog && counts_ready {
         if let Some(revision) = analysis_revision.as_ref() {
             if previous_analysis_revision.as_ref() == Some(revision) {
                 write_analysis_projection_state(
@@ -248,6 +251,7 @@ fn mirror_source_records_from_connections_internal(
         &source,
         include_catalog,
         catalog_published,
+        counts_ready,
         analysis_revision
             .as_ref()
             .expect("analysis revision exists"),
@@ -286,10 +290,12 @@ fn apply_projection_records(
     source: &crate::source_db::FjallReadWriteSourceStorageHandle,
     include_catalog: bool,
     catalog_published: bool,
+    counts_ready: bool,
     analysis_revision: &AnalysisProjectionRevision,
     previous_analysis_revision: Option<&AnalysisProjectionRevision>,
 ) -> Result<(), CommandError> {
     let incremental_analysis = !include_catalog
+        && counts_ready
         && previous_analysis_revision.is_some_and(|revision| revision.change_log_initialized);
     if incremental_analysis {
         let checkpoint =
