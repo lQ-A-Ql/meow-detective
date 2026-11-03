@@ -44,7 +44,14 @@ pub(crate) fn mirror_source_records_from_connections(
     )
     .map_err(|_| CommandError::internal("Fjall source storage is unavailable"))?;
     tracing::info!(source_id, "Fjall source projection started");
-    projections::mirror_catalog(source_connection, &source, source_id)?;
+    if catalog_projection_is_published(&source, source_id)? {
+        tracing::info!(
+            source_id,
+            "Skipping already-published Fjall catalog remirror"
+        );
+    } else {
+        projections::mirror_catalog(source_connection, &source, source_id)?;
+    }
     projections::mirror_timeline(source_connection, &source, source_id)?;
     projections::mirror_artifacts(
         case_connection,
@@ -85,4 +92,17 @@ pub(crate) fn mirror_source_records_from_connections(
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(hex::encode(receipt.batch_digest))
+}
+
+fn catalog_projection_is_published(
+    source: &crate::source_db::FjallReadWriteSourceStorageHandle,
+    source_id: &str,
+) -> Result<bool, CommandError> {
+    let snapshot = source.snapshot();
+    let key = encode_key("projection", &[KeyPart::Text(source_id.to_owned())])
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    Ok(source
+        .read_envelope(&snapshot, persistence_fjall::KeyspaceName::Meta, &key)
+        .map_err(|error| CommandError::internal(error.to_string()))?
+        .is_some_and(|envelope| envelope.record_kind == "source_projection_complete"))
 }
