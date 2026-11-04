@@ -162,9 +162,6 @@ fn partition_metadata_fast_path_builds_and_caches_descriptor_without_file_entry_
         )
         .expect("build direct descriptor");
     source_conn
-        .execute("DELETE FROM data_source_partitions", [])
-        .expect("remove persisted partitions after cache fill");
-    source_conn
         .execute("DELETE FROM data_sources", [])
         .expect("remove source location after cache fill");
     let second = context

@@ -184,18 +184,6 @@ fn setup_recoverable_catalog(
         .expect("insert source-local metadata");
     source_connection
         .execute(
-            "INSERT INTO data_source_partitions (
-                id, data_source_id, partition_index, name, kind_label, status,
-                offset, length, filesystem
-             ) VALUES (
-                'partition-0', ?1, 0, 'root', 'Linux filesystem', 'supported',
-                0, 4096, 'XFS'
-             )",
-            [&source.id.0],
-        )
-        .expect("insert source partition");
-    source_connection
-        .execute(
             "INSERT INTO file_entries (
                 id, parent_id, data_source_id, path, name, entry_type, size,
                 deleted, hidden, system, partition_index

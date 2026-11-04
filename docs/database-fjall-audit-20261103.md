@@ -98,7 +98,7 @@
 
 - `case_service::get_case_metrics_for_case` 与 `step_recorder::compute_case_state_hash` 在 source projection 和 Timeline count marker 均有效时读取 Fjall O(1) 总数；缺少 Fjall 目录或投影未完成时读取 SQLite。
 - Search 覆盖率在 source projection 完成时通过 Fjall Catalog 分页计算目录总数，并跳过 SQLite source 打开；旧 source 或未完成投影才读取 SQLite。
-- source 全量投影将 `data_source_partitions` 映射到 `PartitionRecord` 后执行 source 级替换，主记录、source/index/type index 与 tombstone 在一个 Fjall 批次中更新；source 投影完成标记写入前完成此步骤。
+- source 全量投影直接使用当前 attempt 的 `PartitionRecord` 执行 source 级替换，主记录、source/index/type index 与 tombstone 在一个 Fjall 批次中更新；source 投影完成标记写入前完成此步骤。
 - `partition_replace_removes_stale_rows_and_preserves_other_sources` 与 `partition_projection_replaces_stale_source_rows` 覆盖 source 隔离、过期删除、索引更新和重复投影。
 - 新增 `case_metrics_and_search_coverage_use_published_fjall_counts`，验证案例指标读取 Fjall 的 Timeline 总数，Search 覆盖率读取 Fjall 的 Catalog 总数。
 - `cargo test -p persistence-sqlite`

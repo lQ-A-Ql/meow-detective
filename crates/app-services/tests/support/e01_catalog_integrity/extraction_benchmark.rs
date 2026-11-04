@@ -142,16 +142,13 @@ fn candidates(
 ) -> persistence_sqlite::DbResult<Vec<Candidate>> {
     let mut statement = source_conn.prepare(
         "SELECT f.id, f.path, f.size, f.partition_index,
-                CASE WHEN lower(p.kind_label) = 'bitlocker' THEN 1 ELSE 0 END AS is_bitlocker
+                0 AS is_bitlocker
          FROM file_entries f
-         LEFT JOIN data_source_partitions p
-           ON p.data_source_id = f.data_source_id
-          AND p.partition_index = f.partition_index
          WHERE f.data_source_id = ?1
            AND f.entry_type = 'file' COLLATE NOCASE
            AND f.encrypted = 0
            AND f.size BETWEEN ?2 AND ?3
-           AND (?4 = 0 OR lower(p.kind_label) = 'bitlocker')
+           AND ?4 = 0
          ORDER BY is_bitlocker DESC, f.size DESC
          LIMIT 64",
     )?;
