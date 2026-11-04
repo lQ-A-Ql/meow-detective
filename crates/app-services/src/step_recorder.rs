@@ -85,7 +85,7 @@ fn aggregate_source_counts(
     case_id: &str,
 ) -> Result<SourceCounts, persistence_sqlite::DbError> {
     let mut counts = SourceCounts::default();
-    for (_, source_conn) in crate::source_db::open_ready_source_connections_read_only(
+    for (source_id, source_conn) in crate::source_db::open_ready_source_connections_read_only(
         conn,
         case_root,
         &domain::CaseId(case_id.to_string()),
@@ -99,7 +99,14 @@ fn aggregate_source_counts(
         counts.artifact_count +=
             count_table_rows_no_params(&source_conn, "SELECT COUNT(*) FROM artifacts");
         counts.timeline_count +=
-            count_table_rows_no_params(&source_conn, "SELECT COUNT(*) FROM timeline_events");
+            crate::source_db::ready_source_timeline_count(case_root, &source_id)
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
+                .map(i64::try_from)
+                .transpose()
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
+                .unwrap_or_else(|| {
+                    count_table_rows_no_params(&source_conn, "SELECT COUNT(*) FROM timeline_events")
+                });
         counts.graph_node_count += count_table_rows_for_case(
             &source_conn,
             "SELECT COUNT(*) FROM graph_nodes WHERE case_id = ?1",

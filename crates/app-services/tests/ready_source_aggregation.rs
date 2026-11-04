@@ -6,6 +6,7 @@ use domain::{
     Artifact, ArtifactId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance,
     TimelineEvent, TimelineEventId,
 };
+use persistence_fjall::{encode_key, KeyPart, PersistMode, TimelineRecord, VersionedEnvelope};
 use persistence_sqlite::repositories::{
     artifact_repo::ArtifactRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
@@ -415,6 +416,104 @@ fn case_overview_aggregates_ready_source_facts_without_v2_or_graph_payloads() {
             Ok(())
         })
         .expect("build case overview");
+}
+
+#[test]
+fn case_metrics_use_published_fjall_timeline_count() {
+    let temp = tempfile::TempDir::new().expect("create case parent");
+    let active = app_services::case_service::create_case(
+        temp.path(),
+        "fjall-timeline-metrics",
+        Some("timeline-count-test"),
+    )
+    .expect("create case");
+
+    active
+        .with_conn(|case_conn| {
+            register_source(case_conn, &active, "ready", "windows", "ready", true)?;
+            let source_id = DataSourceId("ready".to_string());
+            let source_conn =
+                source_db::open_registered_source_db(case_conn, &active.case_root, &source_id)?;
+            TimelineRepo::new(&source_conn)
+                .insert_batch_with_case(&[timeline_event("sqlite-event")], &active.meta.id.0)?;
+
+            let fjall =
+                source_db::open_registered_fjall_source_read_write(&active.case_root, &source_id)
+                    .map_err(service_error)?;
+            fjall
+                .timeline_upsert_batch(
+                    &[
+                        timeline_record("fjall-event-1"),
+                        timeline_record("fjall-event-2"),
+                    ],
+                    PersistMode::Buffer,
+                )
+                .map_err(service_error)?;
+            fjall
+                .timeline_rebuild_count_indexes(&source_id.0, PersistMode::Buffer)
+                .map_err(service_error)?;
+            let marker = VersionedEnvelope::new(
+                "source_projection_complete",
+                1,
+                "projection:ready",
+                &source_id.0,
+                1,
+                source_id.0.as_bytes().to_vec(),
+            );
+            fjall
+                .write_envelope(
+                    persistence_fjall::KeyspaceName::Meta,
+                    encode_key("projection", &[KeyPart::Text(source_id.0.clone())])
+                        .map_err(service_error)?,
+                    &marker,
+                    PersistMode::SyncAll,
+                )
+                .map_err(service_error)?;
+            drop(fjall);
+
+            let metrics = app_services::case_service::get_case_metrics_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+            )
+            .map_err(service_error)?;
+            assert_eq!(metrics.timeline_event_count, 2);
+            Ok(())
+        })
+        .expect("read published Fjall timeline count");
+}
+
+fn timeline_event(id: &str) -> TimelineEvent {
+    TimelineEvent {
+        id: TimelineEventId(id.to_string()),
+        source_object_id: "file-1".to_string(),
+        event_type: "Fixture".to_string(),
+        timestamp: chrono::Utc::now(),
+        title: id.to_string(),
+        description: "fixture".to_string(),
+        parser_id: Some("fixture".to_string()),
+        parser_version: Some("1".to_string()),
+        confidence: Some(1.0),
+        source_attribution: Some("fixture".to_string()),
+        attrs: Default::default(),
+    }
+}
+
+fn timeline_record(id: &str) -> TimelineRecord {
+    TimelineRecord {
+        id: id.to_string(),
+        data_source_id: "ready".to_string(),
+        source_object_id: "file-1".to_string(),
+        event_type: "Fixture".to_string(),
+        timestamp: chrono::Utc::now(),
+        title: id.to_string(),
+        description: "fixture".to_string(),
+        parser_id: Some("fixture".to_string()),
+        parser_version: Some("1".to_string()),
+        confidence: Some(1.0),
+        source_attribution: Some("fixture".to_string()),
+        attrs: Default::default(),
+    }
 }
 
 fn unsupported_ready_source_error(

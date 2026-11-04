@@ -1,4 +1,5 @@
 mod build;
+mod fjall_projection;
 mod identity;
 mod opening;
 mod path_safety;
@@ -21,6 +22,7 @@ pub(crate) use build::{
     discard_source_build_db, finalize_source_build_db, open_fresh_source_build_db,
     preserve_unpublished_source_build_db, publish_source_build_db, verify_finalized_source_db,
 };
+pub use fjall_projection::ready_source_timeline_count;
 pub use identity::{encode_source_scoped_id, parse_source_scoped_id, GlobalFileId};
 pub(crate) use opening::ready_data_sources;
 pub use opening::{
