@@ -154,6 +154,7 @@ fn execute_import_job_internal(
         let stats = profile::measure_optional(profiling.as_ref(), Phase::Catalog, || {
             phases::run_enumeration_phase(&mut ctx, &ds)
         })?;
+        super::fjall_projection::mirror_source_records(&ctx, &ds.id.0)?;
         let profiler = ctx.profiler.clone();
         let pipeline_msg = profile::measure_optional(
             profiler.as_ref(),
@@ -163,7 +164,13 @@ fn execute_import_job_internal(
         let message = profile::measure_optional(profiling.as_ref(), Phase::Finalize, || {
             phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)
         })?;
-        let projection_digest = super::fjall_projection::mirror_source_records(&ctx, &ds.id.0)?;
+        let projection_digest = super::fjall_projection::mirror_analysis_outputs_from_connections(
+            ctx.conn,
+            ctx.case_root,
+            &ctx.case_id.0,
+            &source_conn,
+            &ds.id.0,
+        )?;
         mark_projection_committed(ctx.conn, &job_id.0, &projection_digest)?;
         Ok(message)
     })();
