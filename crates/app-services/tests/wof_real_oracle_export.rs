@@ -6,9 +6,7 @@ use std::{
 
 use app_services::source_db::GlobalFileId;
 use domain::{CaseMeta, FileEntryId};
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, partition_repo::PartitionRepo,
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 
 #[test]
 #[ignore = "requires a private imported case, WOF file and explicit oracle export directory"]
@@ -46,12 +44,13 @@ fn export_owned_wof_stream_for_independent_oracle() {
         &global.data_source_id,
     )
     .unwrap();
-    let partition = PartitionRepo::new(&ready.connection)
-        .find_by_data_source(&global.data_source_id.0)
-        .unwrap()
-        .into_iter()
-        .find(|partition| partition.partition_index == index as u32)
-        .unwrap();
+    let partition =
+        app_services::partition_query_service::PartitionQueryRepo::new(&ready.connection)
+            .find_by_data_source(&global.data_source_id.0)
+            .unwrap()
+            .into_iter()
+            .find(|partition| partition.partition_index == index as u32)
+            .unwrap();
     let mut image = image_e01::E01Reader::open(&source.source_path).unwrap();
     image.seek(SeekFrom::Start(partition.offset)).unwrap();
     let mut boot = [0; 512];

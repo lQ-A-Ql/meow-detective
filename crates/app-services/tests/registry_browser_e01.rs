@@ -8,10 +8,7 @@ use app_services::{
 use artifacts_windows::registry::browser::HiveSnapshot;
 use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{
-    file_repo::FileRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use sha2::{Digest, Sha256};
 use std::{io::Read, path::PathBuf, sync::Arc, time::Instant};
 use transport::dto::*;
@@ -45,7 +42,40 @@ fn registry_browser_reads_real_hives_and_hot_navigation_preserves_source_bytes()
     assert!(case.temp.path().exists());
     case.active.with_conn(|conn| {
         let source=case.source(conn,"sample-source",&image,domain::DataSourceKind::E01);
-        PartitionRepo::new(&source).insert_batch(&[DataSourcePartitionRecord {id:"sample-partition".into(),data_source_id:"sample-source".into(),partition_index:0,name:"Windows".into(),kind_label:"NTFS".into(),status:"ready".into(),offset,length:0,filesystem:Some("NTFS".into()),type_guid:None,unlock_hint:None,lvm_vg_uuid:None,lvm_vg_name:None,lvm_lv_uuid:None,lvm_lv_name:None,lvm_pv_offsets_json:None,lvm_pv_sources_json:None}]).unwrap();
+        let storage = app_services::source_db::open_fjall_source_read_write(
+            &case.active.case_root,
+            "sample-source",
+        )
+        .unwrap();
+        storage
+            .partition_replace_by_source(
+                "sample-source",
+                &[persistence_fjall::PartitionRecord {
+                    id: "sample-partition".into(),
+                    data_source_id: "sample-source".into(),
+                    partition_index: 0,
+                    name: "Windows".into(),
+                    kind_label: "NTFS".into(),
+                    status: "ready".into(),
+                    offset,
+                    length: 0,
+                    filesystem: Some("NTFS".into()),
+                    type_guid: None,
+                    unlock_hint: None,
+                    lvm_vg_uuid: None,
+                    lvm_vg_name: None,
+                    lvm_lv_uuid: None,
+                    lvm_lv_name: None,
+                    lvm_pv_offsets_json: None,
+                    lvm_pv_sources_json: None,
+                    gpt_disk_guid: None,
+                    gpt_partition_uuid: None,
+                    filesystem_uuid: None,
+                }],
+                persistence_fjall::PersistMode::SyncAll,
+            )
+            .unwrap();
+        storage.partition_projection_publish("sample-source").unwrap();
         let mut paths=vec!["Windows/System32/config/SYSTEM".to_string(),"Windows/System32/config/SOFTWARE".to_string(),"Windows/System32/config/SAM".to_string(),"Windows/System32/config/SECURITY".to_string(),"Windows/System32/config/DEFAULT".to_string(),"Windows/appcompat/Programs/Amcache.hve".to_string()];
         for user in fs.list_children("Users").unwrap().into_iter().filter(|c|c.is_dir) {
             paths.push(format!("Users/{}/NTUSER.DAT",user.name));paths.push(format!("Users/{}/AppData/Local/Microsoft/Windows/UsrClass.dat",user.name));

@@ -10,9 +10,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, partition_repo::PartitionRepo,
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use transport::dto::EmulationFsVolumeStateDto;
 
 fn sample_path() -> PathBuf {
@@ -81,8 +79,10 @@ fn xfs_log_repair_and_materialization() {
                 &data_source_id,
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-            let partitions = PartitionRepo::new(&source_conn.connection)
-                .find_by_data_source(&data_source_id.0)?;
+            let partitions = app_services::partition_query_service::PartitionQueryRepo::new(
+                &source_conn.connection,
+            )
+            .find_by_data_source(&data_source_id.0)?;
             Ok(partitions
                 .iter()
                 .filter(|record| record.filesystem.as_deref() == Some("XFS"))

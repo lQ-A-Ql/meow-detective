@@ -10,10 +10,7 @@ use artifacts_windows::registry::log_replay::{
 };
 use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{
-    file_repo::FileRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use sha2::{Digest, Sha256};
 use std::{
     io::{Read, Write},
@@ -75,7 +72,40 @@ fn validates_original_clean_hives_and_controlled_real_log_recovery() {
     let mut report = Vec::new();
     case.active.with_conn(|conn| {
         let source=case.source(conn,"real-source",&image,domain::DataSourceKind::E01);
-        PartitionRepo::new(&source).insert_batch(&[DataSourcePartitionRecord {id:"real-partition".into(),data_source_id:"real-source".into(),partition_index:0,name:"Windows".into(),kind_label:"NTFS".into(),status:"ready".into(),offset,length:0,filesystem:Some("NTFS".into()),type_guid:None,unlock_hint:None,lvm_vg_uuid:None,lvm_vg_name:None,lvm_lv_uuid:None,lvm_lv_name:None,lvm_pv_offsets_json:None,lvm_pv_sources_json:None}]).unwrap();
+        let storage = app_services::source_db::open_fjall_source_read_write(
+            &case.active.case_root,
+            "real-source",
+        )
+        .unwrap();
+        storage
+            .partition_replace_by_source(
+                "real-source",
+                &[persistence_fjall::PartitionRecord {
+                    id: "real-partition".into(),
+                    data_source_id: "real-source".into(),
+                    partition_index: 0,
+                    name: "Windows".into(),
+                    kind_label: "NTFS".into(),
+                    status: "ready".into(),
+                    offset,
+                    length: 0,
+                    filesystem: Some("NTFS".into()),
+                    type_guid: None,
+                    unlock_hint: None,
+                    lvm_vg_uuid: None,
+                    lvm_vg_name: None,
+                    lvm_lv_uuid: None,
+                    lvm_lv_name: None,
+                    lvm_pv_offsets_json: None,
+                    lvm_pv_sources_json: None,
+                    gpt_disk_guid: None,
+                    gpt_partition_uuid: None,
+                    filesystem_uuid: None,
+                }],
+                persistence_fjall::PersistMode::SyncAll,
+            )
+            .unwrap();
+        storage.partition_projection_publish("real-source").unwrap();
         for (index,path) in paths.iter().enumerate() {
             let Ok(file)=fs.preview_file(path) else {continue};let id=format!("mft:0:{}",file.inode());
             let mut bytes=Vec::new();fs.open_file(path).unwrap().read_to_end(&mut bytes).unwrap();

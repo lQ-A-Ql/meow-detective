@@ -8,10 +8,7 @@ use domain::{DataSourceKind, DataSourcePlatform};
 use evidence_core::{EvidenceReader, PartitionWindowReader};
 use image_e01::E01Reader;
 use memory_windows::{recover_vmks_structurally, TargetedKernelSearchLimits};
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::{
@@ -245,12 +242,21 @@ fn private_liuyang_memory_image_completes_the_production_unlock_service() {
             DataSourceRepo::new(&source_conn)
                 .upsert_source_local_metadata(&case_id, &source)
                 .expect("persist source-local metadata");
-            PartitionRepo::new(&source_conn)
-                .replace_for_data_source(
+            let partition_storage = app_services::source_db::open_fjall_source_read_write(
+                &active.case_root,
+                &source.id.0,
+            )
+            .expect("partition storage");
+            partition_storage
+                .partition_replace_by_source(
                     &source.id.0,
                     &[bitlocker_partition_record(&source.id.0, partition)],
+                    persistence_fjall::PersistMode::SyncAll,
                 )
                 .expect("persist BitLocker partition metadata");
+            partition_storage
+                .partition_projection_publish(&source.id.0)
+                .expect("publish BitLocker partition metadata");
             DataSourceRepo::new(case_conn)
                 .update_import_state(&source.id, "ready", None)
                 .expect("mark source ready");
@@ -343,8 +349,8 @@ fn private_liuyang_structural_vmk_authentication_oracles() {
 fn bitlocker_partition_record(
     data_source_id: &str,
     partition: &PartitionRecord,
-) -> DataSourcePartitionRecord {
-    DataSourcePartitionRecord {
+) -> persistence_fjall::PartitionRecord {
+    persistence_fjall::PartitionRecord {
         id: format!("{data_source_id}:partition:{}", partition.index),
         data_source_id: data_source_id.to_string(),
         partition_index: partition.index as u32,
@@ -362,6 +368,9 @@ fn bitlocker_partition_record(
         lvm_lv_name: None,
         lvm_pv_offsets_json: None,
         lvm_pv_sources_json: None,
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
     }
 }
 
@@ -415,12 +424,21 @@ fn private_liuyang_memory_unlock_reconstructs_the_expected_recovery_password() {
             DataSourceRepo::new(&source_conn)
                 .upsert_source_local_metadata(&case_id, &source)
                 .expect("persist source-local metadata");
-            PartitionRepo::new(&source_conn)
-                .replace_for_data_source(
+            let partition_storage = app_services::source_db::open_fjall_source_read_write(
+                &active.case_root,
+                &source.id.0,
+            )
+            .expect("partition storage");
+            partition_storage
+                .partition_replace_by_source(
                     &source.id.0,
                     &[bitlocker_partition_record(&source.id.0, partition)],
+                    persistence_fjall::PersistMode::SyncAll,
                 )
                 .expect("persist BitLocker partition metadata");
+            partition_storage
+                .partition_projection_publish(&source.id.0)
+                .expect("publish BitLocker partition metadata");
             DataSourceRepo::new(case_conn)
                 .update_import_state(&source.id, "ready", None)
                 .expect("mark source ready");

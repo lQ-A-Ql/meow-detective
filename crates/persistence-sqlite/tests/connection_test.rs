@@ -42,7 +42,6 @@ fn run_all_migrations() {
         "jobs",
         "reports",
         "tags",
-        "data_source_partitions",
     ];
     for table in &tables {
         let has_table: bool = conn
@@ -174,8 +173,7 @@ fn upgrades_legacy_schema_to_latest_with_partition_job_columns() {
             ('0005_timeline_events'),
             ('0006_jobs'),
             ('0007_reports'),
-            ('0008_tags'),
-            ('0009_data_source_partitions');
+            ('0008_tags');
 
         CREATE TABLE cases (
             id TEXT PRIMARY KEY NOT NULL,
@@ -265,20 +263,6 @@ fn upgrades_legacy_schema_to_latest_with_partition_job_columns() {
             object_id TEXT NOT NULL,
             PRIMARY KEY (tag_id, object_id)
         );
-        CREATE TABLE data_source_partitions (
-            id TEXT PRIMARY KEY,
-            data_source_id TEXT NOT NULL REFERENCES data_sources(id) ON DELETE CASCADE,
-            partition_index INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            kind_label TEXT NOT NULL,
-            status TEXT NOT NULL,
-            type_guid TEXT,
-            offset INTEGER NOT NULL,
-            length INTEGER NOT NULL,
-            filesystem TEXT,
-            unlock_hint TEXT
-        );
-
         INSERT INTO cases (id, name, created_at, updated_at)
             VALUES ('case-old', 'Old Case', datetime('now'), datetime('now'));
         INSERT INTO data_sources (id, case_id, name, kind, source_path)
@@ -313,27 +297,6 @@ fn upgrades_legacy_schema_to_latest_with_partition_job_columns() {
             )
             .unwrap();
         assert!(exists, "jobs.{column} should exist after upgrade");
-    }
-
-    for column in [
-        "lvm_vg_uuid",
-        "lvm_vg_name",
-        "lvm_lv_uuid",
-        "lvm_lv_name",
-        "lvm_pv_offsets_json",
-        "lvm_pv_sources_json",
-    ] {
-        let exists: bool = conn
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM pragma_table_info('data_source_partitions') WHERE name = ?1",
-                [column],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert!(
-            exists,
-            "data_source_partitions.{column} should exist after upgrade"
-        );
     }
 
     for (table, column) in [

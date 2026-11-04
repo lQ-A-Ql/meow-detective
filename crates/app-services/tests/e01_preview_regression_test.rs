@@ -10,11 +10,7 @@
 use app_services::{case_service, datasource_service, file_service};
 use evidence_core::filesystem::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo,
-    file_repo::FileRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -75,47 +71,17 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
             let probe = datasource_service::detect_image_filesystem(&mut probe_reader)
                 .map_err(|e| persistence_sqlite::DbError::System(format!("probe: {e}")))?;
 
-            // 3. Store partition metadata
-            let part_repo = PartitionRepo::new(&source_conn);
-            let records: Vec<_> = probe
-                .candidates
-                .iter()
-                .enumerate()
-                .map(|(i, c)| {
-                    let partition_index = c.partition_index.unwrap_or(i);
-                    persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord {
-                        id: format!("{}:{partition_index}", ds.id.0),
-                        data_source_id: ds.id.0.clone(),
-                        partition_index: partition_index as u32,
-                        name: format!("Partition {partition_index}"),
-                        kind_label: format!("{:?}", c.kind),
-                        status: "Supported".to_string(),
-                        type_guid: None,
-                        offset: c.offset,
-                        length: 0,
-                        filesystem: Some(
-                            match c.kind {
-                                datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
-                                datasource_service::ImageFilesystemKind::Fat => "FAT",
-                                datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
-                                datasource_service::ImageFilesystemKind::Ext4 => "Ext4",
-                                datasource_service::ImageFilesystemKind::Xfs => "XFS",
-                                datasource_service::ImageFilesystemKind::Btrfs => "Btrfs",
-                                _ => "Other",
-                            }
-                            .to_string(),
-                        ),
-                        unlock_hint: None,
-                        lvm_vg_uuid: None,
-                        lvm_vg_name: None,
-                        lvm_lv_uuid: None,
-                        lvm_lv_name: None,
-                        lvm_pv_offsets_json: None,
-                        lvm_pv_sources_json: None,
-                    }
-                })
-                .collect();
-            part_repo.replace_for_data_source(&ds.id.0, &records)?;
+            // 3. Store partition metadata in the source Fjall generation.
+            let partition_storage =
+                app_services::source_db::open_fjall_source_read_write(&active.case_root, &ds.id.0)
+                    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            app_services::partition_storage_service::replace_from_probe(
+                &partition_storage,
+                &ds.id,
+                &probe.partitions,
+                probe.gpt_disk_guid.as_deref(),
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
 
             // 4. Find the first NTFS candidate (lowest offset — usually the main volume)
             let ntfs_candidates: Vec<(usize, &datasource_service::ImageFilesystemCandidate)> =
@@ -608,10 +574,15 @@ fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
                     },
                 )
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            PartitionRepo::new(&source_conn)
-                .replace_for_data_source(
+            let partition_storage = app_services::source_db::open_fjall_source_read_write(
+                &active.case_root,
+                &data_source_id.0,
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            partition_storage
+                .partition_replace_by_source(
                     &data_source_id.0,
-                    &[DataSourcePartitionRecord {
+                    &[persistence_fjall::PartitionRecord {
                         id: format!("{}:{partition_index}", data_source_id.0),
                         data_source_id: data_source_id.0.clone(),
                         partition_index: partition_index as u32,
@@ -629,8 +600,15 @@ fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
                         lvm_lv_name: None,
                         lvm_pv_offsets_json: None,
                         lvm_pv_sources_json: None,
+                        gpt_disk_guid: None,
+                        gpt_partition_uuid: None,
+                        filesystem_uuid: None,
                     }],
+                    persistence_fjall::PersistMode::SyncAll,
                 )
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            partition_storage
+                .partition_projection_publish(&data_source_id.0)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             FileRepo::new(&source_conn)
                 .insert_batch(&[domain::FileEntry {

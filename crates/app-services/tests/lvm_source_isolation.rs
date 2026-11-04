@@ -4,9 +4,7 @@ use std::sync::Arc;
 use app_services::datasource_service::{self, ImageFilesystemSource, LvmDiscoverySource};
 use app_services::import_pipeline::{execute_import_job, ImportJobOptions};
 use domain::{DataSourceKind, DataSourcePlatform};
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, job_repo::JobRepo, partition_repo::PartitionRepo,
-};
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
 
 const SECTOR_SIZE: u64 = 512;
 const PV_SIZE: u64 = 2_097_152;
@@ -124,9 +122,10 @@ fn ordinary_import_does_not_consume_a_case_registered_supplementary_pv() {
             let source_conn =
                 app_services::source_db::open_source_db(&active.case_root, &primary.id)
                     .expect("open primary source database");
-            let partitions = PartitionRepo::new(&source_conn)
-                .find_by_data_source(&primary.id.0)
-                .expect("read persisted primary partitions");
+            let partitions =
+                app_services::partition_query_service::PartitionQueryRepo::new(&source_conn)
+                    .find_by_data_source(&primary.id.0)
+                    .expect("read persisted primary partitions");
             assert!(
                 !partitions.is_empty(),
                 "primary probe must persist its partition"

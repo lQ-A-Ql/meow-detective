@@ -16,7 +16,6 @@
 
 use app_services::{file_service, staging};
 use domain::{DataSourceId, EntryType, FileEntryId};
-use persistence_sqlite::repositories::partition_repo::{DataSourcePartitionRecord, PartitionRepo};
 use rusqlite::{params, Connection};
 use tempfile::TempDir;
 
@@ -26,49 +25,61 @@ fn seed_main_db(conn: &Connection) {
     persistence_sqlite::runner::run_source_all(conn).unwrap();
 }
 
-fn seed_partitions_table(conn: &Connection) {
-    let repo = PartitionRepo::new(conn);
-    repo.insert_batch(&[
-        DataSourcePartitionRecord {
-            id: "part-0".to_string(),
-            data_source_id: DS_ID.to_string(),
-            partition_index: 0,
-            name: "Basic data partition".to_string(),
-            kind_label: "Basic data".to_string(),
-            status: "supported".to_string(),
-            type_guid: None,
-            offset: 0,
-            length: 1024,
-            filesystem: Some("NTFS".to_string()),
-            unlock_hint: None,
-            lvm_vg_uuid: None,
-            lvm_vg_name: None,
-            lvm_lv_uuid: None,
-            lvm_lv_name: None,
-            lvm_pv_offsets_json: None,
-            lvm_pv_sources_json: None,
-        },
-        DataSourcePartitionRecord {
-            id: "part-1".to_string(),
-            data_source_id: DS_ID.to_string(),
-            partition_index: 1,
-            name: "EFI system partition".to_string(),
-            kind_label: "EFI System".to_string(),
-            status: "supported".to_string(),
-            type_guid: None,
-            offset: 2048,
-            length: 1024,
-            filesystem: Some("FAT".to_string()),
-            unlock_hint: None,
-            lvm_vg_uuid: None,
-            lvm_vg_name: None,
-            lvm_lv_uuid: None,
-            lvm_lv_name: None,
-            lvm_pv_offsets_json: None,
-            lvm_pv_sources_json: None,
-        },
-    ])
-    .unwrap();
+fn seed_partitions_table(case_root: &std::path::Path) {
+    let storage = app_services::source_db::open_fjall_source_read_write(case_root, DS_ID).unwrap();
+    storage
+        .partition_replace_by_source(
+            DS_ID,
+            &[
+                persistence_fjall::PartitionRecord {
+                    id: "part-0".to_string(),
+                    data_source_id: DS_ID.to_string(),
+                    partition_index: 0,
+                    name: "Basic data partition".to_string(),
+                    kind_label: "Basic data".to_string(),
+                    status: "supported".to_string(),
+                    type_guid: None,
+                    offset: 0,
+                    length: 1024,
+                    filesystem: Some("NTFS".to_string()),
+                    unlock_hint: None,
+                    lvm_vg_uuid: None,
+                    lvm_vg_name: None,
+                    lvm_lv_uuid: None,
+                    lvm_lv_name: None,
+                    lvm_pv_offsets_json: None,
+                    lvm_pv_sources_json: None,
+                    gpt_disk_guid: None,
+                    gpt_partition_uuid: None,
+                    filesystem_uuid: None,
+                },
+                persistence_fjall::PartitionRecord {
+                    id: "part-1".to_string(),
+                    data_source_id: DS_ID.to_string(),
+                    partition_index: 1,
+                    name: "EFI system partition".to_string(),
+                    kind_label: "EFI System".to_string(),
+                    status: "supported".to_string(),
+                    type_guid: None,
+                    offset: 2048,
+                    length: 1024,
+                    filesystem: Some("FAT".to_string()),
+                    unlock_hint: None,
+                    lvm_vg_uuid: None,
+                    lvm_vg_name: None,
+                    lvm_lv_uuid: None,
+                    lvm_lv_name: None,
+                    lvm_pv_offsets_json: None,
+                    lvm_pv_sources_json: None,
+                    gpt_disk_guid: None,
+                    gpt_partition_uuid: None,
+                    filesystem_uuid: None,
+                },
+            ],
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
+    storage.partition_projection_publish(DS_ID).unwrap();
 }
 
 /// NTFS-style staging DB: a synthetic `\` root (MFT record 5) with children
@@ -144,9 +155,9 @@ fn make_done_partition(index: usize, name: &str, file_count: u64) -> staging::Pa
 fn full_merge_yields_only_partition_roots_no_bare_fs_roots() {
     let tmp = TempDir::new().unwrap();
     let case_root = tmp.path();
-    let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    let main_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
     seed_main_db(&main_conn);
-    seed_partitions_table(&main_conn);
+    seed_partitions_table(case_root);
 
     // (A) Insert index-bound placeholder roots, exactly as the import pipeline does.
     file_service::insert_partition_placeholder_root(
@@ -289,9 +300,9 @@ fn full_merge_yields_only_partition_roots_no_bare_fs_roots() {
 fn repeated_merge_is_idempotent_and_stays_folded() {
     let tmp = TempDir::new().unwrap();
     let case_root = tmp.path();
-    let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    let main_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
     seed_main_db(&main_conn);
-    seed_partitions_table(&main_conn);
+    seed_partitions_table(case_root);
 
     file_service::insert_partition_placeholder_root(
         &main_conn,
@@ -341,52 +352,65 @@ fn repeated_merge_is_idempotent_and_stays_folded() {
 
 #[test]
 fn redirected_lvm_placeholder_root_can_be_removed_on_resume_repair() {
-    let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    let tmp = TempDir::new().unwrap();
+    let main_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
     seed_main_db(&main_conn);
     let ds_id = DataSourceId(DS_ID.to_string());
 
-    PartitionRepo::new(&main_conn)
-        .insert_batch(&[
-            DataSourcePartitionRecord {
-                id: "part-lvm-pool".to_string(),
-                data_source_id: DS_ID.to_string(),
-                partition_index: 1,
-                name: "Linux LVM".to_string(),
-                kind_label: "LVM".to_string(),
-                status: "supported".to_string(),
-                type_guid: None,
-                offset: 1_048_576,
-                length: 1024,
-                filesystem: Some("LVM".to_string()),
-                unlock_hint: None,
-                lvm_vg_uuid: None,
-                lvm_vg_name: None,
-                lvm_lv_uuid: None,
-                lvm_lv_name: None,
-                lvm_pv_offsets_json: None,
-                lvm_pv_sources_json: None,
-            },
-            DataSourcePartitionRecord {
-                id: "part-root-lv".to_string(),
-                data_source_id: DS_ID.to_string(),
-                partition_index: 2,
-                name: "cl/root".to_string(),
-                kind_label: "XFS".to_string(),
-                status: "supported".to_string(),
-                type_guid: None,
-                offset: 1_048_576,
-                length: 1024,
-                filesystem: Some("XFS".to_string()),
-                unlock_hint: None,
-                lvm_vg_uuid: Some("vg".to_string()),
-                lvm_vg_name: Some("cl".to_string()),
-                lvm_lv_uuid: Some("lv".to_string()),
-                lvm_lv_name: Some("root".to_string()),
-                lvm_pv_offsets_json: Some("[1048576]".to_string()),
-                lvm_pv_sources_json: None,
-            },
-        ])
+    let storage = app_services::source_db::open_fjall_source_read_write(tmp.path(), DS_ID).unwrap();
+    storage
+        .partition_replace_by_source(
+            DS_ID,
+            &[
+                persistence_fjall::PartitionRecord {
+                    id: "part-lvm-pool".to_string(),
+                    data_source_id: DS_ID.to_string(),
+                    partition_index: 1,
+                    name: "Linux LVM".to_string(),
+                    kind_label: "LVM".to_string(),
+                    status: "supported".to_string(),
+                    type_guid: None,
+                    offset: 1_048_576,
+                    length: 1024,
+                    filesystem: Some("LVM".to_string()),
+                    unlock_hint: None,
+                    lvm_vg_uuid: None,
+                    lvm_vg_name: None,
+                    lvm_lv_uuid: None,
+                    lvm_lv_name: None,
+                    lvm_pv_offsets_json: None,
+                    lvm_pv_sources_json: None,
+                    gpt_disk_guid: None,
+                    gpt_partition_uuid: None,
+                    filesystem_uuid: None,
+                },
+                persistence_fjall::PartitionRecord {
+                    id: "part-root-lv".to_string(),
+                    data_source_id: DS_ID.to_string(),
+                    partition_index: 2,
+                    name: "cl/root".to_string(),
+                    kind_label: "XFS".to_string(),
+                    status: "supported".to_string(),
+                    type_guid: None,
+                    offset: 1_048_576,
+                    length: 1024,
+                    filesystem: Some("XFS".to_string()),
+                    unlock_hint: None,
+                    lvm_vg_uuid: Some("vg".to_string()),
+                    lvm_vg_name: Some("cl".to_string()),
+                    lvm_lv_uuid: Some("lv".to_string()),
+                    lvm_lv_name: Some("root".to_string()),
+                    lvm_pv_offsets_json: Some("[1048576]".to_string()),
+                    lvm_pv_sources_json: None,
+                    gpt_disk_guid: None,
+                    gpt_partition_uuid: None,
+                    filesystem_uuid: None,
+                },
+            ],
+            persistence_fjall::PersistMode::SyncAll,
+        )
         .unwrap();
+    storage.partition_projection_publish(DS_ID).unwrap();
 
     file_service::insert_partition_placeholder_root(
         &main_conn,

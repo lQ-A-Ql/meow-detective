@@ -75,7 +75,7 @@ fn linux_static_network_profile_is_cleared_in_cow_only() {
                 &source.id,
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-            let rows = persistence_sqlite::repositories::partition_repo::PartitionRepo::new(
+            let rows = app_services::partition_query_service::PartitionQueryRepo::new(
                 &source_conn.connection,
             )
             .find_by_data_source(&source.id.0)?;

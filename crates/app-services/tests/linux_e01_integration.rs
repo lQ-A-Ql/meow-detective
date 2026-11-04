@@ -33,10 +33,7 @@ use app_services::{
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind, FileEntryId};
 use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -1643,7 +1640,7 @@ fn assert_full_image_partition_root_contract(
         "visible DB row count should match enumerated files and directories"
     );
 
-    let partitions = PartitionRepo::new(conn)
+    let partitions = app_services::partition_query_service::PartitionQueryRepo::new(conn)
         .find_by_data_source(&ds_id.0)
         .unwrap();
 
@@ -1940,8 +1937,11 @@ fn assert_linux_artifact_source_paths_include(conn: &Connection, paths: &[&str])
     }
 }
 
-fn lvm_root_partition_record(conn: &Connection, ds_id: &DataSourceId) -> DataSourcePartitionRecord {
-    PartitionRepo::new(conn)
+fn lvm_root_partition_record(
+    conn: &Connection,
+    ds_id: &DataSourceId,
+) -> persistence_fjall::PartitionRecord {
+    app_services::partition_query_service::PartitionQueryRepo::new(conn)
         .find_by_data_source(&ds_id.0)
         .unwrap()
         .into_iter()

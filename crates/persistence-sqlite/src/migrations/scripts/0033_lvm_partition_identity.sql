@@ -1,3 +1,0 @@
--- Applied through the migration runner so legacy databases can add only the
--- missing columns safely even if a test or repaired DB already has some of
--- them. The canonical fresh schema includes these columns in 0009.

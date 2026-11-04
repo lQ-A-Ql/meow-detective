@@ -1,6 +1,6 @@
 use app_services::{
-    datasource_service::detect_image_filesystem, file_service,
-    partition_query_service::PartitionQueryRepo, source_db,
+    datasource_service::detect_image_filesystem, partition_query_service::PartitionQueryRepo,
+    source_db,
 };
 use domain::DataSourceId;
 use std::io::Cursor;

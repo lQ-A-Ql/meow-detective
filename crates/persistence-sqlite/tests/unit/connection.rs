@@ -99,7 +99,6 @@ fn open_or_create_source_runs_source_schema() {
     for table in [
         "source_meta",
         "data_sources",
-        "data_source_partitions",
         "file_entries",
         "artifacts",
         "timeline_events",

@@ -22,10 +22,6 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
     ("0007_reports", include_str!("scripts/0007_reports.sql")),
     ("0008_tags", include_str!("scripts/0008_tags.sql")),
     (
-        "0009_data_source_partitions",
-        include_str!("scripts/0009_data_source_partitions.sql"),
-    ),
-    (
         "0010_job_partition_progress",
         include_str!("scripts/0010_job_partition_progress.sql"),
     ),
@@ -40,10 +36,6 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
     (
         "0013_create_partitions",
         include_str!("scripts/0013_create_partitions.sql"),
-    ),
-    (
-        "0014_migrate_partitions",
-        include_str!("scripts/0014_migrate_partitions.sql"),
     ),
     (
         "0015_create_audit_log",
@@ -98,16 +90,8 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
     ),
     ("0030_custody", include_str!("scripts/0030_custody.sql")),
     (
-        "0031_cleanup_partition_triple_representation",
-        include_str!("scripts/0031_cleanup_partition_triple_representation.sql"),
-    ),
-    (
         "0032_file_entry_type_nocase_index",
         include_str!("scripts/0032_file_entry_type_nocase_index.sql"),
-    ),
-    (
-        "0033_lvm_partition_identity",
-        include_str!("scripts/0033_lvm_partition_identity.sql"),
     ),
     (
         "0034_data_source_storage",
@@ -295,9 +279,7 @@ pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> 
             conn.execute_batch("BEGIN").map_err(|e| {
                 DbError::Migration(format!("Failed to begin transaction for {}: {}", name, e))
             })?;
-            let migration_result = if *name == "0033_lvm_partition_identity" {
-                add_missing_lvm_partition_identity_columns(conn)
-            } else if *name == "source_015_ceph_bluestore_rbd_header_context" {
+            let migration_result = if *name == "source_015_ceph_bluestore_rbd_header_context" {
                 add_ceph_bluestore_rbd_header_context(conn)
             } else if matches!(
                 *name,
@@ -353,30 +335,6 @@ fn all_migrations_recorded(conn: &Connection, migrations: &[(&str, &str)]) -> bo
     };
     let recorded = rows.filter_map(Result::ok).collect::<HashSet<_>>();
     migrations.iter().all(|(name, _)| recorded.contains(*name))
-}
-
-fn add_missing_lvm_partition_identity_columns(conn: &Connection) -> DbResult<()> {
-    for column in [
-        "lvm_vg_uuid",
-        "lvm_vg_name",
-        "lvm_lv_uuid",
-        "lvm_lv_name",
-        "lvm_pv_offsets_json",
-        "lvm_pv_sources_json",
-    ] {
-        let exists: bool = conn.query_row(
-            "SELECT COUNT(*) > 0 FROM pragma_table_info('data_source_partitions') WHERE name = ?1",
-            [column],
-            |row| row.get(0),
-        )?;
-        if !exists {
-            conn.execute(
-                &format!("ALTER TABLE data_source_partitions ADD COLUMN {column} TEXT"),
-                [],
-            )?;
-        }
-    }
-    Ok(())
 }
 
 fn add_ceph_bluestore_rbd_header_context(conn: &Connection) -> DbResult<()> {

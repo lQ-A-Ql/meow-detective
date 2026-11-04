@@ -19,11 +19,7 @@ use app_services::bitlocker_service::{
 };
 use app_services::file_service::PreviewRuntimeRegistry;
 use domain::{DataSourceKind, DataSourcePlatform};
-use persistence_sqlite::repositories::{
-    audit_repo::AuditRepo,
-    datasource_repo::DataSourceRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::{audit_repo::AuditRepo, datasource_repo::DataSourceRepo};
 use sha2::{Digest, Sha256};
 use volume_bitlocker::{MetadataFingerprint, PersistedKeyBlob};
 
@@ -108,10 +104,13 @@ fn real_raw_bitlocker_dictionary_attack_uses_parallel_kdf() {
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(&active.meta.id, &source)
         .expect("source metadata");
-    PartitionRepo::new(&source_conn)
-        .replace_for_data_source(
+    let partition_storage =
+        app_services::source_db::open_fjall_source_read_write(&active.case_root, &source.id.0)
+            .expect("partition storage");
+    partition_storage
+        .partition_replace_by_source(
             &source.id.0,
-            &[DataSourcePartitionRecord {
+            &[persistence_fjall::PartitionRecord {
                 id: format!("{}:partition:0", source.id.0),
                 data_source_id: source.id.0.clone(),
                 partition_index: 0,
@@ -129,9 +128,16 @@ fn real_raw_bitlocker_dictionary_attack_uses_parallel_kdf() {
                 lvm_lv_name: None,
                 lvm_pv_offsets_json: None,
                 lvm_pv_sources_json: None,
+                gpt_disk_guid: None,
+                gpt_partition_uuid: None,
+                filesystem_uuid: None,
             }],
+            persistence_fjall::PersistMode::SyncAll,
         )
         .expect("partition metadata");
+    partition_storage
+        .partition_projection_publish(&source.id.0)
+        .expect("publish partition metadata");
     active
         .with_conn(|conn| DataSourceRepo::new(conn).update_import_state(&source.id, "ready", None))
         .expect("ready state");

@@ -55,7 +55,6 @@ pub mod notebook_repo;
 mod ntfs_staging_merge;
 mod ntfs_staging_paths;
 pub mod ntfs_staging_repo;
-pub mod partition_repo;
 pub mod processing_phase_repo;
 pub mod provenance_assertion_repo;
 pub mod report_repo;

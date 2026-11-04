@@ -1,4 +1,4 @@
-use app_services::{case_service, datasource_service, deleted_recovery, file_service};
+use app_services::{case_service, datasource_service, deleted_recovery};
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
