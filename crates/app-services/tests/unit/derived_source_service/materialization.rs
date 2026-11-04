@@ -205,13 +205,51 @@ fn setup_recoverable_catalog(
             [&source.id.0],
         )
         .expect("insert source catalog");
+    let fjall_source = crate::source_db::open_fjall_source_read_write(case_root, &source.id.0)
+        .expect("open Fjall source storage");
+    fjall_source
+        .partition_replace_by_source(
+            &source.id.0,
+            &[persistence_fjall::PartitionRecord {
+                id: "partition-0".to_owned(),
+                data_source_id: source.id.0.clone(),
+                partition_index: 0,
+                name: "root".to_owned(),
+                kind_label: "Linux filesystem".to_owned(),
+                status: "supported".to_owned(),
+                type_guid: None,
+                offset: 0,
+                length: 4096,
+                filesystem: Some("XFS".to_owned()),
+                unlock_hint: None,
+                lvm_vg_uuid: None,
+                lvm_vg_name: None,
+                lvm_lv_uuid: None,
+                lvm_lv_name: None,
+                lvm_pv_offsets_json: None,
+                lvm_pv_sources_json: None,
+                gpt_disk_guid: None,
+                gpt_partition_uuid: None,
+                filesystem_uuid: None,
+            }],
+            persistence_fjall::PersistMode::Buffer,
+        )
+        .expect("persist Fjall partition");
+    fjall_source
+        .partition_projection_publish(&source.id.0)
+        .expect("publish Fjall partition projection");
     let persisted_summary = super::super::catalog_manifest::summarize_source_connection(
         &source_connection,
         source.clone(),
     )
     .expect("summarize source catalog");
-    persist_current_source_manifest(&source_connection, &fingerprint, &persisted_summary)
-        .expect("persist catalog manifest");
+    persist_current_source_manifest(
+        &source_connection,
+        &fjall_source,
+        &fingerprint,
+        &persisted_summary,
+    )
+    .expect("persist catalog manifest");
     crate::source_db::checkpoint_source_db(&source_connection).expect("checkpoint source database");
     drop(source_connection);
     let catalog_fingerprint =
@@ -542,13 +580,15 @@ fn catalog_recovery_rejects_partition_drift_without_deleting_source() {
     let temp = tempfile::tempdir().expect("create temporary case root");
     let (connection, source, _, _) = setup_recoverable_catalog(temp.path());
     let source_path = crate::source_db::source_db_path(temp.path(), &source.id);
-    let source_connection =
-        crate::source_db::open_source_db(temp.path(), &source.id).expect("open source database");
-    source_connection
-        .execute("DELETE FROM data_source_partitions", [])
+    let storage = crate::source_db::open_fjall_source_read_write(temp.path(), &source.id.0)
+        .expect("open Fjall source storage");
+    storage
+        .partition_replace_by_source(&source.id.0, &[], persistence_fjall::PersistMode::Buffer)
         .expect("delete partition inventory");
-    crate::source_db::checkpoint_source_db(&source_connection).expect("checkpoint source database");
-    drop(source_connection);
+    storage
+        .partition_projection_publish(&source.id.0)
+        .expect("publish empty partition inventory");
+    drop(storage);
 
     let error = reuse_existing_catalog(
         &connection,
@@ -731,25 +771,29 @@ fn cancelled_catalog_is_deferred_and_remains_retryable() {
 fn catalog_recovery_rejects_changed_partition_uuid_metadata() {
     let temp = tempfile::tempdir().unwrap();
     let (connection, source, _, _) = setup_recoverable_catalog(temp.path());
-    let source_connection = crate::source_db::open_source_db(temp.path(), &source.id).unwrap();
-    let repository =
-        persistence_sqlite::repositories::partition_repo::PartitionRepo::new(&source_connection);
-    let records = repository.find_by_data_source(&source.id.0).unwrap();
-    let identities = persistence_sqlite::repositories::partition_repo::SourceIdentityMetadata {
-        partitions: std::collections::BTreeMap::from([(
-            0,
-            persistence_sqlite::repositories::partition_repo::PartitionIdentityMetadata {
-                gpt_partition_uuid: Some("00112233-4455-6677-8899-aabbccddeeff".into()),
-                filesystem_uuid: None,
-            },
-        )]),
-        ..Default::default()
-    };
-    repository
-        .replace_for_data_source_with_identities(&source.id.0, &records, &identities)
+    let storage =
+        crate::source_db::open_fjall_source_read_write(temp.path(), &source.id.0).unwrap();
+    let snapshot = storage.snapshot();
+    let mut records = storage
+        .partition_list_by_source(
+            &snapshot,
+            &source.id.0,
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            256,
+        )
         .unwrap();
-    crate::source_db::checkpoint_source_db(&source_connection).unwrap();
-    drop(source_connection);
+    let mut record = records.records.pop().expect("partition record");
+    record.gpt_partition_uuid = Some("00112233-4455-6677-8899-aabbccddeeff".into());
+    storage
+        .partition_replace_by_source(
+            &source.id.0,
+            &[record],
+            persistence_fjall::PersistMode::Buffer,
+        )
+        .unwrap();
+    storage.partition_projection_publish(&source.id.0).unwrap();
+    drop(storage);
     let error = reuse_existing_catalog(
         &connection,
         temp.path(),

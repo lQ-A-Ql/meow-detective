@@ -24,9 +24,13 @@ fn candidate(id: &str, partition_index: Option<usize>, path: &str) -> EvidenceCa
     }
 }
 
-fn derived_source_connection() -> Connection {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+fn derived_source_connection() -> (tempfile::TempDir, Connection) {
+    let root = tempfile::tempdir().expect("create case root");
+    let connection = crate::source_db::open_source_db(
+        root.path(),
+        &domain::DataSourceId("derived-linux".to_owned()),
+    )
+    .expect("open source database");
     connection
         .execute(
             "INSERT INTO data_sources
@@ -36,21 +40,43 @@ fn derived_source_connection() -> Connection {
             [],
         )
         .expect("insert derived source");
-    for partition_index in [1, 2] {
-        connection
-            .execute(
-                "INSERT INTO data_source_partitions
-                 (id, data_source_id, partition_index, name, kind_label, status,
-                  offset, length, filesystem)
-                 VALUES (?1, 'derived-linux', ?2, ?3, 'XFS', 'ready', 0, 4096, 'XFS')",
-                rusqlite::params![
-                    format!("partition-{partition_index}"),
-                    partition_index,
-                    format!("Partition {partition_index}")
-                ],
-            )
-            .expect("insert XFS partition");
-    }
+    let storage = crate::source_db::open_fjall_source_read_write(root.path(), "derived-linux")
+        .expect("open Fjall source storage");
+    let partitions = [1u32, 2u32]
+        .into_iter()
+        .map(|partition_index| persistence_fjall::PartitionRecord {
+            id: format!("partition-{partition_index}"),
+            data_source_id: "derived-linux".to_owned(),
+            partition_index,
+            name: format!("Partition {partition_index}"),
+            kind_label: "XFS".to_owned(),
+            status: "ready".to_owned(),
+            type_guid: None,
+            offset: 0,
+            length: 4096,
+            filesystem: Some("XFS".to_owned()),
+            unlock_hint: None,
+            lvm_vg_uuid: None,
+            lvm_vg_name: None,
+            lvm_lv_uuid: None,
+            lvm_lv_name: None,
+            lvm_pv_offsets_json: None,
+            lvm_pv_sources_json: None,
+            gpt_disk_guid: None,
+            gpt_partition_uuid: None,
+            filesystem_uuid: None,
+        })
+        .collect::<Vec<_>>();
+    storage
+        .partition_replace_by_source(
+            "derived-linux",
+            &partitions,
+            persistence_fjall::PersistMode::Buffer,
+        )
+        .expect("insert XFS partitions");
+    storage
+        .partition_projection_publish("derived-linux")
+        .expect("publish XFS partitions");
     let manifest = serde_json::json!({
         "materializerVersion": crate::derived_source_catalog::CATALOG_MATERIALIZER_VERSION,
         "inputFingerprint": CATALOG_FINGERPRINT,
@@ -71,7 +97,7 @@ fn derived_source_connection() -> Connection {
             [manifest.to_string()],
         )
         .expect("insert derived Catalog manifest");
-    connection
+    (root, connection)
 }
 
 fn locator_scope(partition_index: usize) -> String {
@@ -89,7 +115,7 @@ fn locator_scope(partition_index: usize) -> String {
 
 #[test]
 fn derived_xfs_order_uses_partition_inode_then_path_without_dropping_candidates() {
-    let connection = derived_source_connection();
+    let (_root, connection) = derived_source_connection();
     let repo = FilesystemLocatorRepo::new(&connection);
     repo.replace_file_locators(
         "derived-linux",

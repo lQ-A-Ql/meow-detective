@@ -75,10 +75,11 @@ fn linux_shadow_bypass_with_direct_partition_registration() {
     let source_db = app_services::source_db::source_db_path(&active.case_root, &ds.id);
     std::fs::create_dir_all(source_db.parent().unwrap()).unwrap();
     {
-        let source_conn = persistence_sqlite::connection::open_or_create_source(&source_db)
+        let _source_conn = persistence_sqlite::connection::open_or_create_source(&source_db)
             .expect("create the source database");
-        app_services::file_service::store_data_source_partitions_with_gpt_disk_guid(
-            &source_conn,
+        app_services::partition_storage_service::replace_from_probe(
+            &app_services::source_db::open_fjall_source_read_write(&active.case_root, &ds.id.0)
+                .expect("open source Fjall store"),
             &ds.id,
             &probe.partitions,
             probe.gpt_disk_guid.as_deref(),

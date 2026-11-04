@@ -1,12 +1,30 @@
 use super::*;
 use crate::datasource_service::{ImageFilesystemKind, PartitionRecord, PartitionStatus};
+use std::ops::Deref;
 
 const FS_UUID: &str = "10325476-98ba-dcfe-1122-334455667788";
 const PART_UUID: &str = "00112233-4455-6677-8899-AABBCCDDEEFF";
 
-fn setup() -> Connection {
-    let conn = persistence_sqlite::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_source_all(&conn).unwrap();
+struct TestDb {
+    _root: tempfile::TempDir,
+    conn: Connection,
+}
+
+impl Deref for TestDb {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.conn
+    }
+}
+
+fn setup() -> TestDb {
+    let root = tempfile::TempDir::new().unwrap();
+    let case_root = root.path().join("case");
+    let source_id = DataSourceId("source".into());
+    let conn = crate::source_db::open_source_db(&case_root, &source_id).unwrap();
+    let partition_storage =
+        crate::source_db::open_fjall_source_read_write(&case_root, &source_id.0).unwrap();
     let partitions: Vec<_> = (1..=2)
         .map(|index| PartitionRecord {
             index,
@@ -30,14 +48,14 @@ fn setup() -> Connection {
             lvm_identity: None,
         })
         .collect();
-    super::super::store_data_source_partitions_with_gpt_disk_guid(
-        &conn,
+    crate::partition_storage_service::replace_from_probe(
+        &partition_storage,
         &DataSourceId("source".into()),
         &partitions,
         None,
     )
     .unwrap();
-    conn
+    TestDb { _root: root, conn }
 }
 
 fn insert_fstab(conn: &Connection, source: &str, index: u32, path: &str, text: &str) {
@@ -127,7 +145,44 @@ fn fstab_is_source_scoped_case_sensitive_and_requires_complete_bytes() {
 #[test]
 fn lvm_escaped_mapper_name_is_matched_against_stored_vg_and_lv_names() {
     let conn = setup();
-    conn.execute("UPDATE data_source_partitions SET lvm_vg_name='vg-main', lvm_lv_name='lv-root' WHERE partition_index=1", []).unwrap();
+    let database_path: String = conn
+        .query_row("PRAGMA database_list", [], |row| row.get(2))
+        .unwrap();
+    let case_root = std::path::Path::new(&database_path)
+        .parent()
+        .and_then(std::path::Path::parent)
+        .and_then(std::path::Path::parent)
+        .expect("source database case root");
+    let storage = crate::source_db::open_fjall_source_read_write(case_root, "source").unwrap();
+    let snapshot = storage.snapshot();
+    let mut partitions = storage
+        .partition_list_by_source(
+            &snapshot,
+            "source",
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            256,
+        )
+        .unwrap()
+        .records;
+    partitions
+        .iter_mut()
+        .find(|partition| partition.partition_index == 1)
+        .expect("partition 1")
+        .lvm_vg_name = Some("vg-main".to_owned());
+    partitions
+        .iter_mut()
+        .find(|partition| partition.partition_index == 1)
+        .expect("partition 1")
+        .lvm_lv_name = Some("lv-root".to_owned());
+    storage
+        .partition_replace_by_source(
+            "source",
+            &partitions,
+            persistence_fjall::PersistMode::Buffer,
+        )
+        .unwrap();
+    storage.partition_projection_publish("source").unwrap();
     let text = "/dev/mapper/vg--main-lv--root / ext4 defaults 0 1\n";
     insert_fstab(&conn, "source", 1, "etc/fstab", text);
     assert_eq!(

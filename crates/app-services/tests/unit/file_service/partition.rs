@@ -1,7 +1,8 @@
 use super::*;
+use crate::partition_query_service::PartitionRecord;
 
-fn partition_record() -> DataSourcePartitionRecord {
-    DataSourcePartitionRecord {
+fn partition_record() -> PartitionRecord {
+    PartitionRecord {
         id: "p-lvm".to_string(),
         data_source_id: "ds-lvm".to_string(),
         partition_index: 4,
@@ -22,6 +23,9 @@ fn partition_record() -> DataSourcePartitionRecord {
             r#"[{"sourcePath":"disk1.E01","offset":1048576},{"sourcePath":"disk2.E01","offset":2097152}]"#
                 .to_string(),
         ),
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
     }
 }
 

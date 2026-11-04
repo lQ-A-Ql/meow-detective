@@ -87,23 +87,57 @@ fn source_read_hint(
     )
 }
 
+fn write_partition_records(
+    case_root: &std::path::Path,
+    source_id: &str,
+    records: &[persistence_fjall::PartitionRecord],
+) {
+    let storage = crate::source_db::open_fjall_source_read_write(case_root, source_id)
+        .expect("open Fjall source storage");
+    storage
+        .partition_replace_by_source(source_id, records, persistence_fjall::PersistMode::Buffer)
+        .expect("write Fjall partition records");
+    storage
+        .partition_projection_publish(source_id)
+        .expect("publish Fjall partition projection");
+}
+
 #[test]
 fn partition_metadata_fast_path_builds_and_caches_descriptor_without_file_entry_lookup() {
-    let source_conn = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&source_conn).expect("run source migrations");
-    insert_source(&source_conn, "derived-linux", "ceph_rbd", "derived.rbd");
-    source_conn
-        .execute(
-            "INSERT INTO data_source_partitions
-             (id, data_source_id, partition_index, name, kind_label, status,
-              offset, length, filesystem)
-             VALUES ('partition-2', 'derived-linux', 2, 'Root', 'XFS', 'ready',
-                     0, 4096, 'XFS')",
-            [],
-        )
-        .expect("insert partition");
-    let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
     let case_root = TempDir::new().expect("create case root");
+    let source_conn = crate::source_db::open_source_db(
+        case_root.path(),
+        &DataSourceId("derived-linux".to_owned()),
+    )
+    .expect("open source database");
+    insert_source(&source_conn, "derived-linux", "ceph_rbd", "derived.rbd");
+    write_partition_records(
+        case_root.path(),
+        "derived-linux",
+        &[persistence_fjall::PartitionRecord {
+            id: "partition-2".to_owned(),
+            data_source_id: "derived-linux".to_owned(),
+            partition_index: 2,
+            name: "Root".to_owned(),
+            kind_label: "XFS".to_owned(),
+            status: "ready".to_owned(),
+            type_guid: None,
+            offset: 0,
+            length: 4096,
+            filesystem: Some("XFS".to_owned()),
+            unlock_hint: None,
+            lvm_vg_uuid: None,
+            lvm_vg_name: None,
+            lvm_lv_uuid: None,
+            lvm_lv_name: None,
+            lvm_pv_offsets_json: None,
+            lvm_pv_sources_json: None,
+            gpt_disk_guid: None,
+            gpt_partition_uuid: None,
+            filesystem_uuid: None,
+        }],
+    );
+    let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
     let case_id = CaseId("case-1".to_string());
     let source_id = DataSourceId("derived-linux".to_string());
     let mut context = SourceReadContext::new(
@@ -309,20 +343,67 @@ fn bitlocker_plaintext_probe_resolves_ntfs_and_exfat() {
 
 #[test]
 fn bitlocker_candidate_detection_is_scoped_to_the_bound_source() {
-    let source_conn = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&source_conn).expect("run source migrations");
-    source_conn
-        .execute_batch(
-            "INSERT INTO data_source_partitions
-             (id, data_source_id, partition_index, name, kind_label, status,
-              offset, length, filesystem)
-             VALUES
-             ('locked', 'source-a', 2, 'Encrypted', 'BitLocker', 'ready', 4096, 8192, 'NTFS'),
-             ('plain', 'source-b', 2, 'Plain', 'NTFS', 'ready', 4096, 8192, 'NTFS');",
-        )
-        .expect("insert partition metadata");
-    let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
     let case_root = TempDir::new().expect("create case root");
+    let source_conn =
+        crate::source_db::open_source_db(case_root.path(), &DataSourceId("source-a".to_owned()))
+            .expect("open source database");
+    write_partition_records(
+        case_root.path(),
+        "source-a",
+        &[persistence_fjall::PartitionRecord {
+            id: "locked".to_owned(),
+            data_source_id: "source-a".to_owned(),
+            partition_index: 2,
+            name: "Encrypted".to_owned(),
+            kind_label: "BitLocker".to_owned(),
+            status: "ready".to_owned(),
+            type_guid: None,
+            offset: 4096,
+            length: 8192,
+            filesystem: Some("NTFS".to_owned()),
+            unlock_hint: None,
+            lvm_vg_uuid: None,
+            lvm_vg_name: None,
+            lvm_lv_uuid: None,
+            lvm_lv_name: None,
+            lvm_pv_offsets_json: None,
+            lvm_pv_sources_json: None,
+            gpt_disk_guid: None,
+            gpt_partition_uuid: None,
+            filesystem_uuid: None,
+        }],
+    );
+    let source_b_storage =
+        crate::source_db::open_source_db(case_root.path(), &DataSourceId("source-b".to_owned()))
+            .expect("open second source database");
+    drop(source_b_storage);
+    write_partition_records(
+        case_root.path(),
+        "source-b",
+        &[persistence_fjall::PartitionRecord {
+            id: "plain".to_owned(),
+            data_source_id: "source-b".to_owned(),
+            partition_index: 2,
+            name: "Plain".to_owned(),
+            kind_label: "NTFS".to_owned(),
+            status: "ready".to_owned(),
+            type_guid: None,
+            offset: 4096,
+            length: 8192,
+            filesystem: Some("NTFS".to_owned()),
+            unlock_hint: None,
+            lvm_vg_uuid: None,
+            lvm_vg_name: None,
+            lvm_lv_uuid: None,
+            lvm_lv_name: None,
+            lvm_pv_offsets_json: None,
+            lvm_pv_sources_json: None,
+            gpt_disk_guid: None,
+            gpt_partition_uuid: None,
+            filesystem_uuid: None,
+        }],
+    );
+    let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
     let case_id = CaseId("case-1".to_string());
     let source_a = DataSourceId("source-a".to_string());
     let source_b = DataSourceId("source-b".to_string());
@@ -354,23 +435,40 @@ fn bitlocker_candidate_detection_is_scoped_to_the_bound_source() {
 
 #[test]
 fn locked_bitlocker_candidate_fails_before_plaintext_filesystem_open() {
-    let source_conn = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&source_conn).expect("run source migrations");
-    source_conn
-        .execute(
-            "INSERT INTO data_source_partitions
-             (id, data_source_id, partition_index, name, kind_label, status,
-              offset, length, filesystem)
-             VALUES ('locked', 'source-a', 0, 'Encrypted', 'BitLocker', 'ready',
-                     0, 4096, 'NTFS')",
-            [],
-        )
-        .expect("insert partition metadata");
+    let case_root = TempDir::new().expect("create case root");
+    let source_conn =
+        crate::source_db::open_source_db(case_root.path(), &DataSourceId("source-a".to_owned()))
+            .expect("open source database");
+    write_partition_records(
+        case_root.path(),
+        "source-a",
+        &[persistence_fjall::PartitionRecord {
+            id: "locked".to_owned(),
+            data_source_id: "source-a".to_owned(),
+            partition_index: 0,
+            name: "Encrypted".to_owned(),
+            kind_label: "BitLocker".to_owned(),
+            status: "ready".to_owned(),
+            type_guid: None,
+            offset: 0,
+            length: 4096,
+            filesystem: Some("NTFS".to_owned()),
+            unlock_hint: None,
+            lvm_vg_uuid: None,
+            lvm_vg_name: None,
+            lvm_lv_uuid: None,
+            lvm_lv_name: None,
+            lvm_pv_offsets_json: None,
+            lvm_pv_sources_json: None,
+            gpt_disk_guid: None,
+            gpt_partition_uuid: None,
+            filesystem_uuid: None,
+        }],
+    );
     let raw = TempDir::new().expect("create raw evidence root");
     let raw_path = raw.path().join("locked.raw");
     std::fs::write(&raw_path, vec![0u8; 4096]).expect("write bounded raw image");
     let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
-    let case_root = TempDir::new().expect("create case root");
     let case_id = CaseId("case-1".to_string());
     let source_id = DataSourceId("source-a".to_string());
     let mut context = SourceReadContext::new(

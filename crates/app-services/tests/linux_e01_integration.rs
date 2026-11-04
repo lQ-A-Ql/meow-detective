@@ -1105,11 +1105,33 @@ fn create_linux_test_data_source(conn: &Connection, case_id: &str, ds_id: &DataS
         .unwrap();
 }
 
-fn setup_linux_fixture_case(case_id: &str, ds_id: &DataSourceId) -> Connection {
-    let conn = persistence_sqlite::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_source_all(&conn).unwrap();
+struct LinuxFixtureSource {
+    _root: tempfile::TempDir,
+    connection: Connection,
+    partition_storage: app_services::storage_runtime::ReadWriteSourceStorageHandle,
+}
+
+impl std::ops::Deref for LinuxFixtureSource {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.connection
+    }
+}
+
+fn setup_linux_fixture_case(case_id: &str, ds_id: &DataSourceId) -> LinuxFixtureSource {
+    let root = tempfile::TempDir::new().unwrap();
+    let case_root = root.path().join(case_id);
+    std::fs::create_dir_all(&case_root).unwrap();
+    let conn = app_services::source_db::open_source_db(&case_root, ds_id).unwrap();
     create_linux_test_data_source(&conn, case_id, ds_id);
-    conn
+    let partition_storage =
+        app_services::source_db::open_fjall_source_read_write(&case_root, &ds_id.0).unwrap();
+    LinuxFixtureSource {
+        _root: root,
+        connection: conn,
+        partition_storage,
+    }
 }
 
 fn find_first_readable_file(
@@ -1161,13 +1183,13 @@ fn find_first_readable_file(
 }
 
 fn enumerate_root_lv_into_case(
-    conn: &Connection,
+    conn: &LinuxFixtureSource,
     ds_id: &DataSourceId,
 ) -> app_services::file_service::EnumerationStats {
     let probe = detect_expanded_linux_probe();
     let root_lv = root_lv_candidate(&probe);
-    file_service::store_data_source_partitions_with_gpt_disk_guid(
-        conn,
+    app_services::partition_storage_service::replace_from_probe(
+        &conn.partition_storage,
         ds_id,
         &probe.partitions,
         probe.gpt_disk_guid.as_deref(),
@@ -1309,7 +1331,7 @@ fn import_full_linux_image_into_case(
     case_id: &str,
     ds_id: &DataSourceId,
 ) -> (
-    Connection,
+    LinuxFixtureSource,
     app_services::file_service::EnumerationStats,
     Vec<String>,
 ) {
@@ -1317,6 +1339,7 @@ fn import_full_linux_image_into_case(
     let mut progress_events = Vec::new();
     let stats = enumerate_image_data_source(
         &conn,
+        &conn.partition_storage,
         ds_id,
         E01Reader::open(&fixture_path()).unwrap(),
         |pct, detail| {
@@ -2222,8 +2245,8 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
 
     let ds_id = DataSourceId("e01-linux-ds".to_string());
     let conn = setup_linux_fixture_case("linux-e01-test", &ds_id);
-    file_service::store_data_source_partitions_with_gpt_disk_guid(
-        &conn,
+    app_services::partition_storage_service::replace_from_probe(
+        &conn.partition_storage,
         &ds_id,
         &probe.partitions,
         probe.gpt_disk_guid.as_deref(),
@@ -3874,6 +3897,7 @@ fn assert_lvm_root_lv_visible_without_expanded_pool_root(
 
     let stats = enumerate_image_data_source(
         &conn,
+        &conn.partition_storage,
         &ds_id,
         E01Reader::open(&fixture).unwrap(),
         |pct, detail| {

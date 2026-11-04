@@ -21,6 +21,9 @@ fn record(source: &str, id: &str, index: u32) -> PartitionRecord {
         lvm_lv_name: None,
         lvm_pv_offsets_json: None,
         lvm_pv_sources_json: None,
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
     }
 }
 
@@ -133,4 +136,27 @@ fn partition_replace_removes_stale_rows_and_preserves_other_sources() {
             .len(),
         1
     );
+}
+
+#[test]
+fn partition_replacement_clears_runtime_catalog_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = PartitionRecordStore::open(dir.path(), DatabaseConfig::default()).unwrap();
+    let initial = record("source-a", "p0", 0);
+    store.upsert(&initial, PersistMode::SyncData).unwrap();
+    assert!(store
+        .mark_catalog_ready("source-a", 0, "XFS", PersistMode::SyncData)
+        .unwrap());
+
+    let mut replacement = initial;
+    replacement.status = "supported".to_owned();
+    replacement.filesystem = Some("NTFS".to_owned());
+    store
+        .replace_by_source("source-a", &[replacement.clone()], PersistMode::SyncData)
+        .unwrap();
+
+    let snapshot = store.read_snapshot();
+    let actual = store.get(&snapshot, "source-a", "p0").unwrap().unwrap();
+    assert_eq!(actual.status, replacement.status);
+    assert_eq!(actual.filesystem, replacement.filesystem);
 }

@@ -24,14 +24,38 @@ use crate::file_service::{
 use evidence_core::FileSystemReader;
 use transport::commands::{FileSortDirectionDto, FileSortKeyDto, GetFileRowsRequest};
 
-fn normalized_bare_root_name(conn: &rusqlite::Connection, entry: &FileEntry) -> String {
-    let partitions = persistence_sqlite::repositories::partition_repo::PartitionRepo::new(conn)
-        .find_by_data_source(&entry.data_source_id.0)
-        .unwrap_or_default();
+fn normalized_bare_root_name(
+    entry: &FileEntry,
+    partitions: &[crate::partition_query_service::PartitionRecord],
+) -> String {
     crate::file_service::partition_roots::normalized_bare_root_name_from_partitions(
-        entry,
-        &partitions,
+        entry, partitions,
     )
+}
+
+fn partition(index: u32, kind: &str) -> crate::partition_query_service::PartitionRecord {
+    crate::partition_query_service::PartitionRecord {
+        id: format!("partition:{index}"),
+        data_source_id: "fixture-source".to_owned(),
+        partition_index: index,
+        name: format!("Partition {index}"),
+        kind_label: kind.to_owned(),
+        status: "ready".to_owned(),
+        type_guid: None,
+        offset: 0,
+        length: 1024,
+        filesystem: Some(kind.to_owned()),
+        unlock_hint: None,
+        lvm_vg_uuid: None,
+        lvm_vg_name: None,
+        lvm_lv_uuid: None,
+        lvm_lv_name: None,
+        lvm_pv_offsets_json: None,
+        lvm_pv_sources_json: None,
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
+    }
 }
 
 struct CancelAfterRootFs;
@@ -882,18 +906,56 @@ fn seed_ds_with_partition_name(conn: &Connection, ds_id: &str, index: u32, name:
             params![ds_id],
         )
         .unwrap();
-    conn.execute(
-            "INSERT INTO data_source_partitions (id, data_source_id, partition_index, name, kind_label, status, offset, length)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'supported', 0, 1024)",
-            params![format!("p-{index}"), ds_id, index, name, kind],
-        )
+    let database_path: String = conn
+        .query_row("PRAGMA database_list", [], |row| row.get(2))
         .unwrap();
+    let case_root = std::path::Path::new(&database_path)
+        .parent()
+        .expect("case database parent");
+    let storage = crate::source_db::open_fjall_source_read_write(case_root, ds_id).unwrap();
+    let snapshot = storage.snapshot();
+    let mut records = storage
+        .partition_list_by_source(
+            &snapshot,
+            ds_id,
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            256,
+        )
+        .unwrap()
+        .records;
+    records.push(persistence_fjall::PartitionRecord {
+        id: format!("p-{index}"),
+        data_source_id: ds_id.to_owned(),
+        partition_index: index,
+        name: name.to_owned(),
+        kind_label: kind.to_owned(),
+        status: "supported".to_owned(),
+        type_guid: None,
+        offset: 0,
+        length: 1024,
+        filesystem: Some(kind.to_owned()),
+        unlock_hint: None,
+        lvm_vg_uuid: None,
+        lvm_vg_name: None,
+        lvm_lv_uuid: None,
+        lvm_lv_name: None,
+        lvm_pv_offsets_json: None,
+        lvm_pv_sources_json: None,
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
+    });
+    storage
+        .partition_replace_by_source(ds_id, &records, persistence_fjall::PersistMode::Buffer)
+        .unwrap();
+    storage.partition_projection_publish(ds_id).unwrap();
 }
 
 #[test]
 fn bare_root_renamed_via_mft_partition_index() {
     let tmp = TempDir::new().unwrap();
-    let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+    let conn = open_or_create(&tmp.path().join("app.db")).unwrap();
     runner::run_all(&conn).unwrap();
     let ds_id = "ds-bare-mft";
     seed_ds_with_partition(&conn, ds_id, 3, "NTFS");
@@ -903,7 +965,7 @@ fn bare_root_renamed_via_mft_partition_index() {
     entry.data_source_id = DataSourceId(ds_id.to_string());
 
     assert_eq!(
-        normalized_bare_root_name(&conn, &entry),
+        normalized_bare_root_name(&entry, &[partition(3, "NTFS")]),
         "Partition 3 (NTFS)"
     );
 }
@@ -911,7 +973,7 @@ fn bare_root_renamed_via_mft_partition_index() {
 #[test]
 fn bare_root_renamed_via_sole_partition_when_no_mft_index() {
     let tmp = TempDir::new().unwrap();
-    let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+    let conn = open_or_create(&tmp.path().join("app.db")).unwrap();
     runner::run_all(&conn).unwrap();
     let ds_id = "ds-bare-sole";
     seed_ds_with_partition(&conn, ds_id, 0, "FAT");
@@ -921,7 +983,7 @@ fn bare_root_renamed_via_sole_partition_when_no_mft_index() {
     entry.data_source_id = DataSourceId(ds_id.to_string());
 
     assert_eq!(
-        normalized_bare_root_name(&conn, &entry),
+        normalized_bare_root_name(&entry, &[partition(0, "FAT")]),
         "Partition 0 (FAT)"
     );
 }
@@ -941,7 +1003,7 @@ fn bare_root_unknown_when_unattributable() {
     entry.data_source_id = DataSourceId(ds_id.to_string());
 
     assert_eq!(
-        normalized_bare_root_name(&conn, &entry),
+        normalized_bare_root_name(&entry, &[partition(0, "NTFS"), partition(1, "FAT")]),
         "Partition ? (UNKNOWN)"
     );
 }
@@ -949,7 +1011,7 @@ fn bare_root_unknown_when_unattributable() {
 #[test]
 fn tree_builder_normalizes_residual_bare_root() {
     let tmp = TempDir::new().unwrap();
-    let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+    let conn = open_or_create(&tmp.path().join("app.db")).unwrap();
     runner::run_all(&conn).unwrap();
     let ds_id = "ds-tree-bare";
     seed_ds_with_partition(&conn, ds_id, 2, "NTFS");
@@ -973,7 +1035,7 @@ fn tree_builder_normalizes_residual_bare_root() {
 #[test]
 fn tree_builder_marks_named_lvm_root_as_partition() {
     let tmp = TempDir::new().unwrap();
-    let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+    let conn = open_or_create(&tmp.path().join("app.db")).unwrap();
     runner::run_all(&conn).unwrap();
     let ds_id = "ds-tree-lvm";
     seed_ds_with_partition_name(&conn, ds_id, 2, "cl/root", "XFS");

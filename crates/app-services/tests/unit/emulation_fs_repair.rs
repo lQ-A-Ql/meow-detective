@@ -5,7 +5,6 @@ use evidence_emulation::{CowDiskConfig, ParentIdentity};
 use persistence_sqlite::repositories::{
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
 };
 
 const BPS: usize = 512;
@@ -139,28 +138,37 @@ fn setup(image: &[u8]) -> RepairFixture {
     let source_path = crate::source_db::source_db_path(&case_root, &data_source_id);
     std::fs::create_dir_all(source_path.parent().unwrap()).unwrap();
     let source_conn = persistence_sqlite::open_or_create_source(&source_path).unwrap();
-    PartitionRepo::new(&source_conn)
-        .insert_batch(&[DataSourcePartitionRecord {
-            id: "ds-xfs:partition:0".to_string(),
-            data_source_id: "ds-xfs".to_string(),
-            partition_index: 0,
-            name: "root".to_string(),
-            kind_label: "XFS".to_string(),
-            status: "supported".to_string(),
-            type_guid: None,
-            offset: PART_OFFSET,
-            length: FS_BLOCKS * FS_BLOCK as u64,
-            filesystem: Some("XFS".to_string()),
-            unlock_hint: None,
-            lvm_vg_uuid: None,
-            lvm_vg_name: None,
-            lvm_lv_uuid: None,
-            lvm_lv_name: None,
-            lvm_pv_offsets_json: None,
-            lvm_pv_sources_json: None,
-        }])
-        .unwrap();
     drop(source_conn);
+    let storage = crate::source_db::open_fjall_source_read_write(&case_root, "ds-xfs").unwrap();
+    storage
+        .partition_replace_by_source(
+            "ds-xfs",
+            &[persistence_fjall::PartitionRecord {
+                id: "ds-xfs:partition:0".to_string(),
+                data_source_id: "ds-xfs".to_string(),
+                partition_index: 0,
+                name: "root".to_string(),
+                kind_label: "XFS".to_string(),
+                status: "supported".to_string(),
+                type_guid: None,
+                offset: PART_OFFSET,
+                length: FS_BLOCKS * FS_BLOCK as u64,
+                filesystem: Some("XFS".to_string()),
+                unlock_hint: None,
+                lvm_vg_uuid: None,
+                lvm_vg_name: None,
+                lvm_lv_uuid: None,
+                lvm_lv_name: None,
+                lvm_pv_offsets_json: None,
+                lvm_pv_sources_json: None,
+                gpt_disk_guid: None,
+                gpt_partition_uuid: None,
+                filesystem_uuid: None,
+            }],
+            persistence_fjall::PersistMode::Buffer,
+        )
+        .unwrap();
+    storage.partition_projection_publish("ds-xfs").unwrap();
 
     RepairFixture {
         case_root,
@@ -240,30 +248,55 @@ fn dirty_log_is_cleared_and_mount_metadata_normalized() {
 fn unsupported_second_volume_prevents_writes_to_the_first() {
     let image = dirty_xfs_disk();
     let fixture = setup(&image);
-    let source_path = crate::source_db::source_db_path(&fixture.case_root, &fixture.data_source_id);
-    let source_conn = persistence_sqlite::open_or_create_source(&source_path).unwrap();
-    PartitionRepo::new(&source_conn)
-        .insert_batch(&[DataSourcePartitionRecord {
-            id: "ds-xfs:partition:1".to_string(),
-            data_source_id: "ds-xfs".to_string(),
-            partition_index: 1,
-            name: "unsupported".to_string(),
-            kind_label: "XFS".to_string(),
-            status: "supported".to_string(),
-            type_guid: None,
-            offset: PART_OFFSET + FS_BLOCKS * FS_BLOCK as u64 - BPS as u64,
-            length: BPS as u64,
-            filesystem: Some("XFS".to_string()),
-            unlock_hint: None,
-            lvm_vg_uuid: None,
-            lvm_vg_name: None,
-            lvm_lv_uuid: None,
-            lvm_lv_name: None,
-            lvm_pv_offsets_json: None,
-            lvm_pv_sources_json: None,
-        }])
+    let storage = crate::source_db::open_fjall_source_read_write(
+        &fixture.case_root,
+        &fixture.data_source_id.0,
+    )
+    .unwrap();
+    let snapshot = storage.snapshot();
+    let existing = storage
+        .partition_list_by_source(
+            &snapshot,
+            &fixture.data_source_id.0,
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            16,
+        )
+        .unwrap()
+        .records;
+    let mut partitions = existing;
+    partitions.push(persistence_fjall::PartitionRecord {
+        id: "ds-xfs:partition:1".to_string(),
+        data_source_id: "ds-xfs".to_string(),
+        partition_index: 1,
+        name: "unsupported".to_string(),
+        kind_label: "XFS".to_string(),
+        status: "supported".to_string(),
+        type_guid: None,
+        offset: PART_OFFSET + FS_BLOCKS * FS_BLOCK as u64 - BPS as u64,
+        length: BPS as u64,
+        filesystem: Some("XFS".to_string()),
+        unlock_hint: None,
+        lvm_vg_uuid: None,
+        lvm_vg_name: None,
+        lvm_lv_uuid: None,
+        lvm_lv_name: None,
+        lvm_pv_offsets_json: None,
+        lvm_pv_sources_json: None,
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
+    });
+    storage
+        .partition_replace_by_source(
+            &fixture.data_source_id.0,
+            &partitions,
+            persistence_fjall::PersistMode::Buffer,
+        )
         .unwrap();
-    drop(source_conn);
+    storage
+        .partition_projection_publish(&fixture.data_source_id.0)
+        .unwrap();
     let disk = session_disk(&fixture);
     let log_offset = PART_OFFSET + LOG_START_FSB * FS_BLOCK as u64;
     let mut before = vec![0u8; LOG_BLOCKS as usize * FS_BLOCK];

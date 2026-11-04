@@ -71,8 +71,9 @@ fn register_windows_source(
         ntfs_count > 0,
         "Liu Yang fixture must expose an NTFS candidate"
     );
-    file_service::store_data_source_partitions_with_gpt_disk_guid(
-        &source_conn,
+    app_services::partition_storage_service::replace_from_probe(
+        &app_services::source_db::open_fjall_source_read_write(&active.case_root, &source_id.0)
+            .unwrap(),
         &source_id,
         &probe.partitions,
         probe.gpt_disk_guid.as_deref(),

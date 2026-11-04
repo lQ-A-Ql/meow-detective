@@ -1,12 +1,8 @@
 use super::is_bitlocker_partition;
-use persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord;
+use crate::partition_query_service::PartitionRecord;
 
-fn partition(
-    kind_label: &str,
-    filesystem: Option<&str>,
-    status: &str,
-) -> DataSourcePartitionRecord {
-    DataSourcePartitionRecord {
+fn partition(kind_label: &str, filesystem: Option<&str>, status: &str) -> PartitionRecord {
+    PartitionRecord {
         id: "partition-1".to_string(),
         data_source_id: "source-1".to_string(),
         partition_index: 1,
@@ -24,6 +20,9 @@ fn partition(
         lvm_lv_name: None,
         lvm_pv_offsets_json: None,
         lvm_pv_sources_json: None,
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
     }
 }
 

@@ -38,9 +38,10 @@ fn linux_static_network_profile_is_cleared_in_cow_only() {
         })
         .expect("attach source");
     let db_path = app_services::source_db::source_db_path(&active.case_root, &source.id);
-    let db = persistence_sqlite::open_or_create_source(&db_path).expect("source db");
-    app_services::file_service::store_data_source_partitions_with_gpt_disk_guid(
-        &db,
+    let _db = persistence_sqlite::open_or_create_source(&db_path).expect("source db");
+    app_services::partition_storage_service::replace_from_probe(
+        &app_services::source_db::open_fjall_source_read_write(&active.case_root, &source.id.0)
+            .expect("source Fjall store"),
         &source.id,
         &probe.partitions,
         probe.gpt_disk_guid.as_deref(),

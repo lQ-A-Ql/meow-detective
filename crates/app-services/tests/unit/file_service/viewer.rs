@@ -1086,9 +1086,8 @@ fn setup_e01_preview_routing_case(
     root_name: &str,
 ) -> (tempfile::TempDir, rusqlite::Connection, domain::FileEntryId) {
     let dir = tempfile::TempDir::new().unwrap();
-    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
-
     let data_source_id = DataSourceId("ds-preview-routing".to_string());
+    let conn = crate::source_db::open_source_db(dir.path(), &data_source_id).unwrap();
     DataSourceRepo::new(&conn)
         .upsert_source_local_metadata(
             &CaseId("case-preview-routing".to_string()),
@@ -1118,29 +1117,39 @@ fn setup_e01_preview_routing_case(
     )
     .unwrap();
 
-    let partitions = [2u32, 4u32].map(|partition_index| {
-        persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord {
-            id: format!("routing-partition-{partition_index}"),
-            data_source_id: data_source_id.0.clone(),
-            partition_index,
-            name: format!("Partition {partition_index}"),
-            kind_label: "NTFS".to_string(),
-            status: "ready".to_string(),
-            type_guid: None,
-            offset: u64::from(partition_index) * 1_048_576,
-            length: 1_048_576,
-            filesystem: Some("NTFS".to_string()),
-            unlock_hint: None,
-            lvm_vg_uuid: None,
-            lvm_vg_name: None,
-            lvm_lv_uuid: None,
-            lvm_lv_name: None,
-            lvm_pv_offsets_json: None,
-            lvm_pv_sources_json: None,
-        }
+    let partitions = [2u32, 4u32].map(|partition_index| persistence_fjall::PartitionRecord {
+        id: format!("routing-partition-{partition_index}"),
+        data_source_id: data_source_id.0.clone(),
+        partition_index,
+        name: format!("Partition {partition_index}"),
+        kind_label: "NTFS".to_string(),
+        status: "ready".to_string(),
+        type_guid: None,
+        offset: u64::from(partition_index) * 1_048_576,
+        length: 1_048_576,
+        filesystem: Some("NTFS".to_string()),
+        unlock_hint: None,
+        lvm_vg_uuid: None,
+        lvm_vg_name: None,
+        lvm_lv_uuid: None,
+        lvm_lv_name: None,
+        lvm_pv_offsets_json: None,
+        lvm_pv_sources_json: None,
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
     });
-    persistence_sqlite::repositories::partition_repo::PartitionRepo::new(&conn)
-        .insert_batch(&partitions)
+    let storage =
+        crate::source_db::open_fjall_source_read_write(dir.path(), &data_source_id.0).unwrap();
+    storage
+        .partition_replace_by_source(
+            &data_source_id.0,
+            &partitions,
+            persistence_fjall::PersistMode::Buffer,
+        )
+        .unwrap();
+    storage
+        .partition_projection_publish(&data_source_id.0)
         .unwrap();
 
     (dir, conn, FileEntryId(file_id.to_string()))
@@ -1761,32 +1770,14 @@ fn e01_ntfs_lvm_record_uses_logical_volume_reader() {
         changed_at: None,
         hash_sha256: None,
     };
-    let conn = rusqlite::Connection::open_in_memory().unwrap();
-    conn.execute_batch(
-        "CREATE TABLE data_source_partitions (
-            id TEXT PRIMARY KEY,
-            data_source_id TEXT NOT NULL,
-            partition_index INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            kind_label TEXT NOT NULL,
-            status TEXT NOT NULL,
-            type_guid TEXT,
-            offset INTEGER NOT NULL,
-            length INTEGER NOT NULL,
-            filesystem TEXT,
-            unlock_hint TEXT,
-            lvm_vg_uuid TEXT,
-            lvm_vg_name TEXT,
-            lvm_lv_uuid TEXT,
-            lvm_lv_name TEXT,
-            lvm_pv_offsets_json TEXT,
-            lvm_pv_sources_json TEXT
-        );",
-    )
-    .unwrap();
-    persistence_sqlite::repositories::partition_repo::PartitionRepo::new(&conn)
-        .insert_batch(&[
-            persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord {
+    let conn = crate::source_db::open_source_db(dir.path(), &entry.data_source_id).unwrap();
+    let storage =
+        crate::source_db::open_fjall_source_read_write(dir.path(), &entry.data_source_id.0)
+            .unwrap();
+    storage
+        .partition_replace_by_source(
+            &entry.data_source_id.0,
+            &[persistence_fjall::PartitionRecord {
                 id: "partition-lvm-ntfs".to_string(),
                 data_source_id: entry.data_source_id.0.clone(),
                 partition_index: 4,
@@ -1804,8 +1795,15 @@ fn e01_ntfs_lvm_record_uses_logical_volume_reader() {
                 lvm_lv_name: Some("root".to_string()),
                 lvm_pv_offsets_json: Some("[0]".to_string()),
                 lvm_pv_sources_json: None,
-            },
-        ])
+                gpt_disk_guid: None,
+                gpt_partition_uuid: None,
+                filesystem_uuid: None,
+            }],
+            persistence_fjall::PersistMode::Buffer,
+        )
+        .unwrap();
+    storage
+        .partition_projection_publish(&entry.data_source_id.0)
         .unwrap();
 
     let open_reader_calls = AtomicUsize::new(0);

@@ -6,7 +6,6 @@ use domain::{
 use persistence_sqlite::repositories::{
     artifact_repo::ArtifactRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
     timeline_repo::TimelineRepo,
 };
 use std::collections::BTreeMap;
@@ -44,87 +43,6 @@ fn event(id: &str, source_id: &str) -> TimelineEvent {
         source_attribution: None,
         attrs: BTreeMap::new(),
     }
-}
-
-#[test]
-fn partition_projection_replaces_stale_source_rows() {
-    let directory = tempfile::tempdir().unwrap();
-    let case =
-        crate::case_service::create_case(directory.path(), "Partition projection", None).unwrap();
-    let source_id = DataSourceId("partition-projection-source".to_owned());
-    let source_connection = crate::source_db::open_source_db(&case.case_root, &source_id).unwrap();
-    PartitionRepo::new(&source_connection)
-        .insert_batch(&[DataSourcePartitionRecord {
-            id: "partition-new".to_owned(),
-            data_source_id: source_id.0.clone(),
-            partition_index: 2,
-            name: "volume".to_owned(),
-            kind_label: "NTFS".to_owned(),
-            status: "ready".to_owned(),
-            type_guid: Some("type-guid".to_owned()),
-            offset: 4096,
-            length: 8192,
-            filesystem: Some("NTFS".to_owned()),
-            unlock_hint: None,
-            lvm_vg_uuid: None,
-            lvm_vg_name: None,
-            lvm_lv_uuid: None,
-            lvm_lv_name: None,
-            lvm_pv_offsets_json: None,
-            lvm_pv_sources_json: None,
-        }])
-        .unwrap();
-
-    let fjall =
-        crate::source_db::open_fjall_source_read_write(&case.case_root, &source_id.0).unwrap();
-    fjall
-        .partition_replace_by_source(
-            &source_id.0,
-            &[persistence_fjall::PartitionRecord {
-                id: "partition-old".to_owned(),
-                data_source_id: source_id.0.clone(),
-                partition_index: 1,
-                name: "old-volume".to_owned(),
-                kind_label: "NTFS".to_owned(),
-                status: "ready".to_owned(),
-                type_guid: None,
-                offset: 0,
-                length: 4096,
-                filesystem: Some("NTFS".to_owned()),
-                unlock_hint: None,
-                lvm_vg_uuid: None,
-                lvm_vg_name: None,
-                lvm_lv_uuid: None,
-                lvm_lv_name: None,
-                lvm_pv_offsets_json: None,
-                lvm_pv_sources_json: None,
-            }],
-            persistence_fjall::PersistMode::Buffer,
-        )
-        .unwrap();
-    crate::import_pipeline::fjall_projection::mirror_source_partitions(
-        &source_connection,
-        &fjall,
-        &source_id.0,
-    )
-    .unwrap();
-    drop(fjall);
-
-    let fjall =
-        crate::source_db::open_fjall_source_read_only(&case.case_root, &source_id.0).unwrap();
-    let snapshot = fjall.snapshot();
-    let page = fjall
-        .partition_list_by_source(
-            &snapshot,
-            &source_id.0,
-            None,
-            persistence_fjall::ScanDirection::Forward,
-            10,
-        )
-        .unwrap();
-    assert_eq!(page.records.len(), 1);
-    assert_eq!(page.records[0].id, "partition-new");
-    assert_eq!(page.records[0].offset, 4096);
 }
 
 #[test]

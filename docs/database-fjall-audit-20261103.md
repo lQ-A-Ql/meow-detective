@@ -26,7 +26,7 @@
 
 | 编号 | 修复项 | 状态 | 结果 |
 |---|---|---|---|
-| 1 | source SQLite 与 Fjall 的明细双写 | 进行中 | 案例指标与调查步骤状态哈希的 Timeline 总数，以及 Search 覆盖率的 Catalog 总数，在 source projection 完成时读取 Fjall；普通 source 发布现在同步 SQLite 分区清单到 Fjall，并按 source 删除过期记录。旧 source 或未完成投影保留 SQLite 查询。FileEntry、Partition、Artifact、Timeline 及复杂分析路径仍有 SQLite 主写入与 Fjall 投影，尚未完成明细写入迁移。 |
+| 1 | source SQLite 与 Fjall 的明细双写 | 进行中 | 案例指标与调查步骤状态哈希的 Timeline 总数，以及 Search 覆盖率的 Catalog 总数，在 source projection 完成时读取 Fjall；普通导入探测阶段直接写入当前 attempt 的 Fjall PartitionRecord，枚举开始前即可读取，重新导入优先读取活动 attempt build，避免返回旧 published generation。FileEntry、Artifact、Timeline 及复杂分析路径仍有 SQLite 主写入与 Fjall 投影，尚未完成明细写入迁移。 |
 | 2 | Fjall 只读与读写入口重复打开数据库 | 已完成 | 进程内按规范路径共享 `SourceStore`；每个 source 使用独立初始化锁，四个空闲句柄采用 LRU 保留。source/case 删除取得关闭租约；活动句柄会在文件变动前阻止删除。 |
 | 3 | 相同记录重复 upsert | 已完成 | Catalog、Timeline、Parser、Artifact 相同记录跳过写事务；Timeline revision 不再因相同内容变化。 |
 | 4 | Android、nested、CephFS、旧 Artifact Service 逐条提交 | 已完成 | 改用批量 upsert；导入投影按 512 条分批。 |
@@ -83,6 +83,15 @@
 - `powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1`
 - `powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1`
 - `git diff --check`
+
+### 2026-11-04
+
+- `cargo check -p app-services --lib -p persistence-fjall`
+- `cargo test -p persistence-fjall`
+- `cargo test -p app-services --test partition_query_service`
+- `cargo test -p app-services --lib`：本轮分区、RBD 清单、预览、BitLocker、仿真和恢复测试均通过；剩余失败为既有 Kubernetes bbolt worker 测试。
+- 分区替换、更新和删除都会清理运行时 Catalog 状态，防止旧的 ready/filesystem 值污染新探测结果。
+- 活动 import 同时存在旧 published generation 时，分区查询固定读取活动 attempt build；活动 build 缺失会返回错误，不会静默读取旧 generation。
 
 ### 2026-11-04
 

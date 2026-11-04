@@ -1,6 +1,8 @@
-use app_services::{datasource_service::detect_image_filesystem, file_service};
+use app_services::{
+    datasource_service::detect_image_filesystem, file_service,
+    partition_query_service::PartitionQueryRepo, source_db,
+};
 use domain::DataSourceId;
-use persistence_sqlite::repositories::partition_repo::PartitionRepo;
 use std::io::Cursor;
 
 fn image(unique: [u8; 16]) -> Vec<u8> {
@@ -57,31 +59,30 @@ fn gpt_unique_uuid_survives_probe_and_source_partition_storage() {
     );
     assert_ne!(partition.filesystem_uuid, partition.gpt_partition_uuid);
     assert_ne!(partition.filesystem_uuid, probe.gpt_disk_guid);
-    let connection = persistence_sqlite::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_source_all(&connection).unwrap();
-    let version_before = persistence_sqlite::runner::current_version(&connection).unwrap();
-    file_service::store_data_source_partitions_with_gpt_disk_guid(
-        &connection,
-        &DataSourceId("source".into()),
+    let temp = tempfile::TempDir::new().unwrap();
+    let case_root = temp.path().join("case");
+    let source_id = DataSourceId("source".into());
+    let connection = source_db::open_source_db(&case_root, &source_id).unwrap();
+    let source = source_db::open_fjall_source_read_write(&case_root, &source_id.0).unwrap();
+    app_services::partition_storage_service::replace_from_probe(
+        &source,
+        &source_id,
         &probe.partitions,
         probe.gpt_disk_guid.as_deref(),
     )
     .unwrap();
-    let identities = PartitionRepo::new(&connection)
+    let identities = PartitionQueryRepo::new(&connection)
         .identities_for_data_source("source")
         .unwrap();
     assert_eq!(identities.gpt_disk_guid, probe.gpt_disk_guid);
+    let partition_record = PartitionQueryRepo::new(&connection)
+        .find_by_data_source_and_index("source", 1)
+        .unwrap()
+        .unwrap();
+    assert_eq!(partition_record.filesystem_uuid, partition.filesystem_uuid);
     assert_eq!(
-        identities.partitions[&1].filesystem_uuid,
-        partition.filesystem_uuid
-    );
-    assert_eq!(
-        identities.partitions[&1].gpt_partition_uuid.as_deref(),
+        partition_record.gpt_partition_uuid.as_deref(),
         partition.gpt_partition_uuid.as_deref()
-    );
-    assert_eq!(
-        persistence_sqlite::runner::current_version(&connection).unwrap(),
-        version_before
     );
 }
 

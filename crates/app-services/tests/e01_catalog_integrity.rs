@@ -132,8 +132,9 @@ fn enumerate_staged_catalog(
     cancel_token: Arc<AtomicBool>,
     env_name: &str,
 ) -> persistence_sqlite::DbResult<(u64, u64, u64)> {
-    file_service::store_data_source_partitions_with_gpt_disk_guid(
-        source_conn,
+    app_services::partition_storage_service::replace_from_probe(
+        &app_services::source_db::open_fjall_source_read_write(case_root, &data_source_id.0)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?,
         data_source_id,
         &probe.partitions,
         probe.gpt_disk_guid.as_deref(),

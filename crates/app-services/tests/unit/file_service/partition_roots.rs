@@ -49,33 +49,14 @@ impl FileSystemReader for TwoFileFs {
 
 #[test]
 fn store_data_source_partitions_persists_lvm_identity() {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    conn.execute_batch(
-        "CREATE TABLE data_source_partitions (
-            id TEXT PRIMARY KEY,
-            data_source_id TEXT NOT NULL,
-            partition_index INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            kind_label TEXT NOT NULL,
-            status TEXT NOT NULL,
-            type_guid TEXT,
-            offset INTEGER NOT NULL,
-            length INTEGER NOT NULL,
-            filesystem TEXT,
-            unlock_hint TEXT,
-            lvm_vg_uuid TEXT,
-            lvm_vg_name TEXT,
-            lvm_lv_uuid TEXT,
-            lvm_lv_name TEXT,
-            lvm_pv_offsets_json TEXT,
-            lvm_pv_sources_json TEXT
-        );",
-    )
-    .unwrap();
-
+    let root = tempfile::TempDir::new().unwrap();
     let data_source_id = DataSourceId("ds-lvm".to_string());
-    store_data_source_partitions_with_gpt_disk_guid(
-        &conn,
+    let case_root = root.path().join("case");
+    let conn = crate::source_db::open_source_db(&case_root, &data_source_id).unwrap();
+    let source =
+        crate::source_db::open_fjall_source_read_write(&case_root, &data_source_id.0).unwrap();
+    crate::partition_storage_service::replace_from_probe(
+        &source,
         &data_source_id,
         &[PartitionRecord {
             index: 2,
@@ -116,7 +97,7 @@ fn store_data_source_partitions_persists_lvm_identity() {
     )
     .unwrap();
 
-    let record = PartitionRepo::new(&conn)
+    let record = crate::partition_query_service::PartitionQueryRepo::new(&conn)
         .find_by_data_source(&data_source_id.0)
         .unwrap()
         .pop()

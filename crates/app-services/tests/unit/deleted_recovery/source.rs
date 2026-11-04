@@ -1,7 +1,8 @@
 use super::*;
+use crate::partition_query_service::PartitionRecord;
 
-fn partition(filesystem: &str) -> DataSourcePartitionRecord {
-    DataSourcePartitionRecord {
+fn partition(filesystem: &str) -> PartitionRecord {
+    PartitionRecord {
         id: format!("partition-{filesystem}"),
         data_source_id: "source-1".to_string(),
         partition_index: 1,
@@ -19,10 +20,13 @@ fn partition(filesystem: &str) -> DataSourcePartitionRecord {
         lvm_lv_name: None,
         lvm_pv_offsets_json: None,
         lvm_pv_sources_json: None,
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
     }
 }
 
-fn bitlocker_partition() -> DataSourcePartitionRecord {
+fn bitlocker_partition() -> PartitionRecord {
     let mut value = partition("NTFS");
     value.kind_label = "BitLocker".to_string();
     value

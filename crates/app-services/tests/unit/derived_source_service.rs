@@ -190,8 +190,7 @@ fn rbd_materialization_preserves_database_failure_in_scope_validation() {
 
 #[test]
 fn catalog_manifest_supports_fast_reuse_and_explicit_deep_verification() {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+    let temp = tempfile::tempdir().expect("create case root");
     let source = DataSource {
         id: DataSourceId("derived-catalog-test".to_string()),
         name: "VM disk".to_string(),
@@ -200,6 +199,8 @@ fn catalog_manifest_supports_fast_reuse_and_explicit_deep_verification() {
         imported_at: chrono::Utc::now(),
         provenance: domain::DataSourceProvenance::default(),
     };
+    let connection =
+        crate::source_db::open_source_db(temp.path(), &source.id).expect("open source database");
     persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
         .upsert_source_local_metadata(&CaseId("case-1".to_string()), &source)
         .expect("insert source metadata");
@@ -218,8 +219,18 @@ fn catalog_manifest_supports_fast_reuse_and_explicit_deep_verification() {
     let lineage_fingerprint = "b".repeat(64);
     let summary =
         catalog_manifest::summarize_source_connection(&connection, source.clone()).unwrap();
-    catalog_manifest::persist_current_source_manifest(&connection, &lineage_fingerprint, &summary)
-        .unwrap();
+    let fjall_source = crate::source_db::open_fjall_source_read_write(temp.path(), &source.id.0)
+        .expect("open Fjall source storage");
+    fjall_source
+        .partition_projection_publish(&source.id.0)
+        .expect("publish Fjall partition projection");
+    catalog_manifest::persist_current_source_manifest(
+        &connection,
+        &fjall_source,
+        &lineage_fingerprint,
+        &summary,
+    )
+    .unwrap();
 
     connection
         .execute(
