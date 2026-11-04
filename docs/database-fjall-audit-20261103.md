@@ -89,7 +89,9 @@
 - `cargo check -p app-services --lib -p persistence-fjall`
 - `cargo test -p persistence-fjall`
 - `cargo test -p app-services --test partition_query_service`
-- `cargo test -p app-services --lib`：本轮分区、RBD 清单、预览、BitLocker、仿真和恢复测试均通过；剩余失败为既有 Kubernetes bbolt worker 测试。
+- `cargo test -p app-services --lib`：1185 项通过、2 项失败、19 项忽略；分区、RBD 清单、预览、BitLocker、仿真和恢复测试均通过，剩余失败为既有 Kubernetes bbolt worker 测试。
+- `cargo test -p persistence-sqlite`：159 项通过、1 项忽略；新 source schema 不创建 SQLite 分区表。
+- `cargo clippy -p persistence-sqlite -p persistence-fjall -p app-services --lib -- -D warnings`
 - 分区替换、更新和删除都会清理运行时 Catalog 状态，防止旧的 ready/filesystem 值污染新探测结果。
 - 活动 import 同时存在旧 published generation 时，分区查询固定读取活动 attempt build；活动 build 缺失会返回错误，不会静默读取旧 generation。
 - 删除 SQLite `PartitionRepo`、`DataSourcePartitionRecord`、旧分区迁移模块、分区表迁移脚本和 source 分区表定义；新 source schema 不再创建分区 SQLite 表，测试夹具全部经过 Fjall 分区服务写入。
