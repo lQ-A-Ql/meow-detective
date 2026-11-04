@@ -150,6 +150,7 @@ fn mirror_source_records_into_root(
         source_connection,
         source_id,
         true,
+        false,
         Some(source_root),
     )
 }
@@ -168,6 +169,7 @@ pub(crate) fn mirror_analysis_outputs_from_connections(
         source_connection,
         source_id,
         false,
+        true,
         None,
     )
 }
@@ -236,6 +238,7 @@ fn mirror_source_records_from_connections_internal(
     source_connection: &Connection,
     source_id: &str,
     include_catalog: bool,
+    include_analysis: bool,
     source_root: Option<&std::path::Path>,
 ) -> Result<String, CommandError> {
     let started = Instant::now();
@@ -300,6 +303,7 @@ fn mirror_source_records_from_connections_internal(
         source_id,
         &source,
         include_catalog,
+        include_analysis,
         catalog_published,
         counts_ready,
         analysis_revision
@@ -339,6 +343,7 @@ fn apply_projection_records(
     source_id: &str,
     source: &crate::source_db::FjallReadWriteSourceStorageHandle,
     include_catalog: bool,
+    include_analysis: bool,
     catalog_published: bool,
     counts_ready: bool,
     analysis_revision: &AnalysisProjectionRevision,
@@ -369,6 +374,7 @@ fn apply_projection_records(
             source_id,
             source,
             include_catalog,
+            include_analysis,
             catalog_published,
         )?;
     }
@@ -396,6 +402,7 @@ fn mirror_projection_records(
     source_id: &str,
     source: &crate::source_db::FjallReadWriteSourceStorageHandle,
     include_catalog: bool,
+    include_analysis: bool,
     catalog_published: bool,
 ) -> Result<(), CommandError> {
     if include_catalog {
@@ -406,19 +413,21 @@ fn mirror_projection_records(
     } else {
         tracing::debug!(source_id, "Skipping Fjall catalog mirror");
     }
-    projections::mirror_timeline(source_connection, source, source_id)?;
-    projections::mirror_artifacts(
-        case_connection,
-        case_root,
-        case_id,
-        source_connection,
-        source,
-        source_id,
-    )?;
-    if include_catalog {
+    if include_analysis {
+        projections::mirror_timeline(source_connection, source, source_id)?;
+        projections::mirror_artifacts(
+            case_connection,
+            case_root,
+            case_id,
+            source_connection,
+            source,
+            source_id,
+        )?;
         records::mirror_android_parser_records(source_connection, source, source_id)?;
         records::mirror_linux_parser_record(source_connection, source, source_id)?;
         records::mirror_parser_tables(source_connection, source, source_id)?;
+    }
+    if include_catalog {
         mirror_namespace_locators(source_connection, source, source_id)?;
         mirror_nested_lineage(case_connection, source, source_id)?;
         source
