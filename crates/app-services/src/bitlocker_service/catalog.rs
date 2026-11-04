@@ -4,9 +4,7 @@ use domain::{CaseId, DataSourceId, FileEntryId};
 use evidence_core::{
     EvidenceReader, FileSystemDiagnostic, FileSystemDiagnosticKind, FileSystemReader,
 };
-use persistence_sqlite::repositories::{
-    file_repo::FileRepo, partition_repo::PartitionRepo, staging_repo::StagingRepo,
-};
+use persistence_sqlite::repositories::{file_repo::FileRepo, staging_repo::StagingRepo};
 use rusqlite::Connection;
 use transport::dto::BitLockerCatalogImportDto;
 use volume_bitlocker::read_volume_identities;
@@ -429,12 +427,9 @@ fn mark_catalog_ready(
     partition_index: u32,
     filesystem: &str,
 ) -> Result<(), BitLockerServiceError> {
-    let updated = PartitionRepo::new(source_conn).mark_bitlocker_catalog_ready(
-        &data_source_id.0,
-        partition_index,
-        filesystem,
-    )?;
-    if updated == 1 {
+    let updated = crate::partition_query_service::PartitionQueryRepo::new(source_conn)
+        .mark_catalog_ready(&data_source_id.0, partition_index, filesystem)?;
+    if updated {
         Ok(())
     } else {
         Err(BitLockerServiceError::CatalogState(format!(

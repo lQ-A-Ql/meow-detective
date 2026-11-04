@@ -1,13 +1,11 @@
 use std::io;
 use std::sync::Arc;
 
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use domain::DataSource;
 use evidence_core::{EvidenceReader, FileSystemReader, PartitionWindowReader};
 use evidence_emulation::CowDisk;
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 
 use crate::emulation_bypass::{BypassCaseContext, EmulationBypassError};
 
@@ -174,7 +172,7 @@ pub(super) fn open_linux_partition(
 }
 
 fn filesystem_kind(
-    record: &DataSourcePartitionRecord,
+    record: &crate::partition_query_service::PartitionRecord,
 ) -> Result<FilesystemKind, EmulationBypassError> {
     match record.filesystem.as_deref() {
         Some("Ext4") => Ok(FilesystemKind::Ext4),
@@ -185,7 +183,9 @@ fn filesystem_kind(
     }
 }
 
-fn lvm_reader_count(record: &DataSourcePartitionRecord) -> Result<usize, EmulationBypassError> {
+fn lvm_reader_count(
+    record: &crate::partition_query_service::PartitionRecord,
+) -> Result<usize, EmulationBypassError> {
     if record.lvm_lv_name.is_none() {
         return Ok(1);
     }
@@ -220,7 +220,7 @@ fn open_readers(
 
 fn open_direct_partition(
     mut readers: Vec<Box<dyn EvidenceReader>>,
-    record: &DataSourcePartitionRecord,
+    record: &crate::partition_query_service::PartitionRecord,
     kind: FilesystemKind,
 ) -> Result<LinuxPartition, EmulationBypassError> {
     if record.length == 0 {
@@ -241,7 +241,7 @@ fn open_direct_partition(
 
 fn open_lvm_partition(
     readers: Vec<Box<dyn EvidenceReader>>,
-    record: &DataSourcePartitionRecord,
+    record: &crate::partition_query_service::PartitionRecord,
     kind: FilesystemKind,
 ) -> Result<LinuxPartition, EmulationBypassError> {
     let pv_offsets: Vec<u64> = record

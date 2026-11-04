@@ -206,13 +206,12 @@ fn persist_probe(
     manifest: &mut staging::StagingManifest,
 ) -> Result<(), CommandError> {
     let source_conn = ctx.source_connection()?;
-    file_service::store_data_source_partitions_with_gpt_disk_guid(
-        source_conn,
-        &data_source.id,
+    super::super::mirror_partition_data_for_import(
+        ctx,
+        &data_source.id.0,
         &probe.partitions,
         probe.gpt_disk_guid.as_deref(),
-    )
-    .map_err(CommandError::from_service_error)?;
+    )?;
     seed_placeholder_roots(source_conn, data_source, probe)?;
     seed_manifest_entries(manifest, &probe.candidates);
     manifest
@@ -316,13 +315,12 @@ fn repair_resumed_partition_metadata(
     probe: &datasource_service::ImageFilesystemProbe,
 ) -> Result<(), CommandError> {
     let source_conn = ctx.source_connection()?;
-    file_service::store_data_source_partitions_with_gpt_disk_guid(
-        source_conn,
-        &data_source.id,
+    super::super::mirror_partition_data_for_import(
+        ctx,
+        &data_source.id.0,
         &probe.partitions,
         probe.gpt_disk_guid.as_deref(),
-    )
-    .map_err(CommandError::from_service_error)?;
+    )?;
     for partition in &probe.partitions {
         if partition.status == datasource_service::PartitionStatus::Expanded {
             file_service::remove_partition_placeholder_root(

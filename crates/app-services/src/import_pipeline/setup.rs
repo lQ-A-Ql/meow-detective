@@ -48,6 +48,7 @@ pub(super) fn open_source(
             None,
         )
         .map_err(CommandError::from_typed_service_error)?;
+    super::begin_partition_projection(ctx.case_root, &source.id)?;
     let initialize = measure_optional(
         ctx.profiler.as_ref(),
         Phase::SourceMetadataInitialize,

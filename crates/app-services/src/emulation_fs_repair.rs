@@ -15,12 +15,10 @@
 
 use std::sync::Arc;
 
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use evidence_core::{EvidenceReader, PartitionWindowReader};
 use evidence_emulation::CowDisk;
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use transport::dto::{
     EmulationFsRepairItemDto, EmulationFsRepairResultDto, EmulationFsVolumeStateDto,
 };
@@ -69,7 +67,7 @@ struct XfsVolume {
 }
 
 struct PlannedVolume {
-    record: DataSourcePartitionRecord,
+    record: crate::partition_query_service::PartitionRecord,
     volume: XfsVolume,
     plan: Option<fs_xfs::XfsLogClearPlan>,
     log_bytes: u64,
@@ -138,7 +136,7 @@ impl VolumeMapping {
 
 fn open_lv(
     disk: &Arc<CowDisk>,
-    record: &DataSourcePartitionRecord,
+    record: &crate::partition_query_service::PartitionRecord,
 ) -> Result<fs_lvm::LvReader, EmulationBypassError> {
     let pv_offsets: Vec<u64> = record
         .lvm_pv_offsets_json
@@ -173,7 +171,7 @@ fn open_lv(
 /// repairs already applied in this session.
 fn open_xfs_volume(
     disk: &Arc<CowDisk>,
-    record: &DataSourcePartitionRecord,
+    record: &crate::partition_query_service::PartitionRecord,
 ) -> Result<XfsVolume, EmulationBypassError> {
     if record.lvm_lv_name.is_some() {
         let lv = open_lv(disk, record)?;
@@ -332,7 +330,7 @@ fn validate_volume_plan(volume: &PlannedVolume) -> Result<(), EmulationBypassErr
 
 fn plan_one_volume(
     disk: &Arc<CowDisk>,
-    record: DataSourcePartitionRecord,
+    record: crate::partition_query_service::PartitionRecord,
 ) -> Result<VolumeAssessment, EmulationBypassError> {
     let partition_index = record.partition_index;
     let volume = match open_xfs_volume(disk, &record) {

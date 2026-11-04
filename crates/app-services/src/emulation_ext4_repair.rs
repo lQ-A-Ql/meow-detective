@@ -9,12 +9,10 @@
 
 use std::sync::Arc;
 
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use evidence_core::{EvidenceReader, PartitionWindowReader};
 use evidence_emulation::CowDisk;
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use transport::dto::{
     EmulationFsRepairItemDto, EmulationFsRepairResultDto, EmulationFsVolumeStateDto,
 };
@@ -31,7 +29,7 @@ struct Ext4Volume {
 }
 
 struct PlannedVolume {
-    record: DataSourcePartitionRecord,
+    record: crate::partition_query_service::PartitionRecord,
     volume: Ext4Volume,
     plan: Option<fs_ext4::journal::Ext4JournalRepairPlan>,
     journal_bytes: u64,
@@ -138,7 +136,7 @@ pub fn repair_ext4_journals(
 
 fn plan_volume(
     disk: &Arc<CowDisk>,
-    record: DataSourcePartitionRecord,
+    record: crate::partition_query_service::PartitionRecord,
 ) -> Result<PlannedVolume, EmulationBypassError> {
     let volume = open_volume(disk, &record)?;
     let journal_bytes = volume
@@ -160,7 +158,7 @@ fn plan_volume(
 
 fn open_volume(
     disk: &Arc<CowDisk>,
-    record: &DataSourcePartitionRecord,
+    record: &crate::partition_query_service::PartitionRecord,
 ) -> Result<Ext4Volume, EmulationBypassError> {
     if record.lvm_lv_name.is_some() {
         let offsets: Vec<u64> = record

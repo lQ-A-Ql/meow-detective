@@ -88,6 +88,7 @@ fn reject_cancelled(cancel_token: Option<&AtomicBool>) -> persistence_sqlite::Db
 
 pub fn enumerate_image_data_source<R>(
     conn: &rusqlite::Connection,
+    partition_storage: &crate::storage_runtime::ReadWriteSourceStorageHandle,
     data_source_id: &domain::DataSourceId,
     mut reader: R,
     mut progress: impl FnMut(u32, &str) -> Result<(), String>,
@@ -106,8 +107,8 @@ where
         return Ok(empty_stats(probe.warnings));
     }
 
-    file_service::store_data_source_partitions_with_gpt_disk_guid(
-        conn,
+    crate::partition_storage_service::replace_from_probe(
+        partition_storage,
         data_source_id,
         &probe.partitions,
         probe.gpt_disk_guid.as_deref(),

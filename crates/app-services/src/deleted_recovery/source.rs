@@ -1,11 +1,9 @@
 use std::path::PathBuf;
 
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use domain::{DataSourceId, DataSourceKind, DataSourcePlatform};
 use evidence_core::EvidenceReader;
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 
 use crate::datasource_service::{
@@ -23,7 +21,7 @@ pub(super) struct RecoverySource {
 
 #[derive(Debug, Clone)]
 pub(super) struct RecoveryTarget {
-    pub partition: DataSourcePartitionRecord,
+    pub partition: crate::partition_query_service::PartitionRecord,
     pub candidate: ImageFilesystemCandidate,
     pub filesystem_type: &'static str,
 }
@@ -144,7 +142,7 @@ fn map_bitlocker_runtime_error(
 }
 
 fn recovery_filesystem(
-    partition: &DataSourcePartitionRecord,
+    partition: &crate::partition_query_service::PartitionRecord,
     platform: DataSourcePlatform,
 ) -> Option<(&'static str, ImageFilesystemKind)> {
     let label = partition
@@ -166,7 +164,7 @@ fn recovery_filesystem(
 }
 
 fn candidate_from_partition(
-    partition: &DataSourcePartitionRecord,
+    partition: &crate::partition_query_service::PartitionRecord,
     kind: ImageFilesystemKind,
 ) -> Result<ImageFilesystemCandidate, DeletedRecoveryError> {
     let lvm_identity = lvm_identity(partition)?;
@@ -186,7 +184,7 @@ fn candidate_from_partition(
 }
 
 fn lvm_identity(
-    partition: &DataSourcePartitionRecord,
+    partition: &crate::partition_query_service::PartitionRecord,
 ) -> Result<Option<LvmLogicalVolumeIdentity>, DeletedRecoveryError> {
     let Some(offsets_json) = partition.lvm_pv_offsets_json.as_deref() else {
         return Ok(None);

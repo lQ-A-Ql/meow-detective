@@ -10,11 +10,10 @@
 
 use std::sync::Arc;
 
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use domain::{CaseId, DataSourceId};
 use evidence_emulation::CowDisk;
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, partition_repo::PartitionRepo,
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use transport::dto::{
     EmulationBypassAccountDto, EmulationBypassActionDto, EmulationBypassResultDto,

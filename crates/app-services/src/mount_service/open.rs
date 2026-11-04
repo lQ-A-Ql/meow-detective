@@ -3,12 +3,13 @@ use std::sync::Arc;
 
 use domain::{CaseId, DataSourceId};
 use evidence_mount::{MountPlan, MountReadPolicy, MountSession};
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, partition_repo::PartitionRepo,
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 
-use crate::source_db::{open_ready_source_read_only_by_id, ReadySourceError};
+use crate::{
+    partition_query_service::PartitionQueryRepo as PartitionRepo,
+    source_db::{open_ready_source_read_only_by_id, ReadySourceError},
+};
 
 use super::catalog::CatalogMountFileSystem;
 use super::error::MountServiceError;

@@ -1,7 +1,7 @@
 use std::path::Path;
 
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use domain::{CaseId, DataSourceId};
-use persistence_sqlite::repositories::partition_repo::{DataSourcePartitionRecord, PartitionRepo};
 use rusqlite::Connection;
 use transport::ServiceErrorCategory;
 
@@ -66,7 +66,7 @@ fn inspect_partition(
     case_root: &Path,
     case_id: &CaseId,
     data_source_id: &DataSourceId,
-    partition: DataSourcePartitionRecord,
+    partition: crate::partition_query_service::PartitionRecord,
     runtimes: BitLockerRuntimeContext<'_>,
 ) -> BitLockerReportEntry {
     match inspect_bitlocker_volume(

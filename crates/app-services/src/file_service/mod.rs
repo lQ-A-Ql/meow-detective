@@ -77,7 +77,6 @@ pub(crate) use partition_roots::partition_placeholder_status;
 pub use partition_roots::{
     insert_partition_placeholder_root, remove_partition_placeholder_root,
     replace_placeholder_root_with_real, replace_placeholder_root_with_real_and_cancel,
-    store_data_source_partitions_with_gpt_disk_guid,
 };
 pub use preview_runtime::{PreviewRuntimeRegistry, PreviewRuntimeStats};
 pub(crate) use source_read::{PreparedSourceReadState, SourceReadContext, SourceReadFileHint};

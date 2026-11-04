@@ -2,15 +2,16 @@ use std::path::PathBuf;
 
 use domain::{CaseId, DataSourceId};
 use evidence_core::FileSystemReader;
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, file_repo::FileRepo, partition_repo::PartitionRepo,
-};
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use transport::dto::{EmulationBootRouteDto, EmulationInstallDto, EmulationPreflightDto};
 
 use super::{prepare_physical_mount_source, MountServiceError, PreparedPhysicalImageKind};
-use crate::source_db::{self, ReadySourceError};
+use crate::{
+    partition_query_service::PartitionQueryRepo as PartitionRepo,
+    source_db::{self, ReadySourceError},
+};
 
 /// Upper bound for the partition scan; real images have a handful of
 /// partitions and indices may be sparse when system partitions are skipped.

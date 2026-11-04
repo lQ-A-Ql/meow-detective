@@ -12,11 +12,19 @@ use std::path::Path;
 mod batch;
 
 const RECORD_KIND: &str = "data_source_partition";
-const SCHEMA_VERSION: u16 = 1;
+const SCHEMA_VERSION: u16 = 2;
 const RECORD_FAMILY: &str = "partition.record";
 const SOURCE_FAMILY: &str = "partition.source";
 const INDEX_FAMILY: &str = "partition.index";
 const TOMBSTONE_FAMILY: &str = "partition.tombstone";
+const RUNTIME_FAMILY: &str = "partition.runtime";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RuntimePartitionState {
+    status: String,
+    filesystem: Option<String>,
+    unlock_hint: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PartitionRecord {
@@ -37,6 +45,9 @@ pub struct PartitionRecord {
     pub lvm_lv_name: Option<String>,
     pub lvm_pv_offsets_json: Option<String>,
     pub lvm_pv_sources_json: Option<String>,
+    pub gpt_disk_guid: Option<String>,
+    pub gpt_partition_uuid: Option<String>,
+    pub filesystem_uuid: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,7 +93,8 @@ impl PartitionRecordStore {
         else {
             return Ok(None);
         };
-        decode_record(envelope, source_id, record_id).map(Some)
+        self.apply_runtime_state(snapshot, decode_record(envelope, source_id, record_id)?)
+            .map(Some)
     }
 
     pub fn find_by_data_source_and_index(
@@ -120,6 +132,10 @@ impl PartitionRecordStore {
         if let Some(previous) = old.as_ref() {
             index_deletes(&mut actions, previous)?;
         }
+        actions.push(WriteAction::Delete {
+            keyspace: KeyspaceName::Meta,
+            key: runtime_key(&record.data_source_id, &record.id)?,
+        });
         let envelope = VersionedEnvelope::from_serializable(
             RECORD_KIND,
             SCHEMA_VERSION,
@@ -142,6 +158,42 @@ impl PartitionRecordStore {
         Ok(())
     }
 
+    pub fn mark_catalog_ready(
+        &self,
+        source_id: &str,
+        partition_index: u32,
+        filesystem: &str,
+        mode: PersistMode,
+    ) -> Result<bool> {
+        let snapshot = self.read_snapshot();
+        let Some(record) =
+            self.find_by_data_source_and_index(&snapshot, source_id, partition_index)?
+        else {
+            return Ok(false);
+        };
+        let envelope = VersionedEnvelope::from_serializable(
+            "partition_runtime_state",
+            SCHEMA_VERSION,
+            &record.id,
+            source_id,
+            1,
+            &RuntimePartitionState {
+                status: "ready".to_owned(),
+                filesystem: Some(filesystem.to_owned()),
+                unlock_hint: None,
+            },
+        )?;
+        self.source_store.database().write_batch(
+            &[WriteAction::Put {
+                keyspace: KeyspaceName::Meta,
+                key: runtime_key(source_id, &record.id)?,
+                value: envelope.encode()?,
+            }],
+            mode,
+        )?;
+        Ok(true)
+    }
+
     pub fn delete(&self, source_id: &str, record_id: &str, mode: PersistMode) -> Result<bool> {
         let key = record_key(source_id, record_id)?;
         let snapshot = self.read_snapshot();
@@ -152,6 +204,10 @@ impl PartitionRecordStore {
             keyspace: KeyspaceName::PartitionRecords,
             key: key.clone(),
         }];
+        actions.push(WriteAction::Delete {
+            keyspace: KeyspaceName::Meta,
+            key: runtime_key(source_id, record_id)?,
+        });
         index_deletes(&mut actions, &previous)?;
         actions.push(WriteAction::Put {
             keyspace: KeyspaceName::Tombstones,
@@ -250,8 +306,47 @@ impl PartitionRecordStore {
             .ok_or(FjallStorageError::InvalidEnvelope(
                 "partition index is stale".to_owned(),
             ))?;
-        decode_record(envelope, "", "")
+        self.apply_runtime_state(snapshot, decode_record(envelope, "", "")?)
     }
+
+    fn apply_runtime_state(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        mut record: PartitionRecord,
+    ) -> Result<PartitionRecord> {
+        let Some(envelope) = self.source_store.read_envelope(
+            snapshot,
+            KeyspaceName::Meta,
+            &runtime_key(&record.data_source_id, &record.id)?,
+        )?
+        else {
+            return Ok(record);
+        };
+        if envelope.record_kind != "partition_runtime_state"
+            || envelope.schema_version != SCHEMA_VERSION
+            || envelope.source_id != record.data_source_id
+            || envelope.record_id != record.id
+        {
+            return Err(FjallStorageError::InvalidEnvelope(
+                "partition runtime state identity mismatch".to_owned(),
+            ));
+        }
+        let state: RuntimePartitionState = envelope.decode_payload()?;
+        record.status = state.status;
+        record.filesystem = state.filesystem;
+        record.unlock_hint = state.unlock_hint;
+        Ok(record)
+    }
+}
+
+fn runtime_key(source_id: &str, record_id: &str) -> Result<Vec<u8>> {
+    encode_key(
+        RUNTIME_FAMILY,
+        &[
+            KeyPart::Text(source_id.to_owned()),
+            KeyPart::Text(record_id.to_owned()),
+        ],
+    )
 }
 
 fn validate_record(record: &PartitionRecord) -> Result<()> {

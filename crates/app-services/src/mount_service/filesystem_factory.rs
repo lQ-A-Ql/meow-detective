@@ -3,7 +3,6 @@ use std::path::Path;
 
 use domain::DataSourceKind;
 use evidence_core::{EvidenceReader, FileSystemReader};
-use persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord;
 
 use crate::file_service::{
     open_candidate_block_reader_with_lvm_cache, open_host_evidence_reader,
@@ -16,7 +15,7 @@ pub(crate) fn open_partition_filesystem(
     source_path: &Path,
     source_kind: &DataSourceKind,
     case_id: &str,
-    partition: &DataSourcePartitionRecord,
+    partition: &crate::partition_query_service::PartitionRecord,
 ) -> Result<Box<dyn FileSystemReader + Send>, MountServiceError> {
     let source_kind = source_kind.to_string();
     let candidate = preview_partition_candidate_from_record(partition);

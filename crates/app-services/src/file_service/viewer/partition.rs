@@ -6,10 +6,10 @@ use crate::file_service::{
 };
 use domain::FileEntry;
 use evidence_core::{EvidenceReader, LocalDiskReader, RawImageReader};
-use persistence_sqlite::repositories::partition_repo::{DataSourcePartitionRecord, PartitionRepo};
 use rusqlite::Connection;
 use std::path::Path;
 
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 pub(crate) fn e01_partition_candidates(
     conn: &Connection,
     entry: &FileEntry,
@@ -373,7 +373,7 @@ fn direct_exfat_partition_candidate(
 }
 
 pub(crate) fn preview_partition_candidate_from_record(
-    partition: &DataSourcePartitionRecord,
+    partition: &crate::partition_query_service::PartitionRecord,
 ) -> crate::file_service::viewer::PreviewPartitionCandidate {
     crate::file_service::viewer::PreviewPartitionCandidate {
         partition_index: partition.partition_index as usize,
@@ -417,7 +417,7 @@ pub(crate) fn preview_lvm_identity_from_datasource(
 }
 
 fn preview_lvm_identity_from_record(
-    partition: &DataSourcePartitionRecord,
+    partition: &crate::partition_query_service::PartitionRecord,
 ) -> Option<crate::file_service::viewer::PreviewLvmIdentity> {
     let offsets_json = partition.lvm_pv_offsets_json.as_deref()?;
     let pv_offsets = serde_json::from_str::<Vec<u64>>(offsets_json).ok()?;

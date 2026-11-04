@@ -1,6 +1,6 @@
-use persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord;
-
-pub(crate) fn is_bitlocker_partition(partition: &DataSourcePartitionRecord) -> bool {
+pub(crate) fn is_bitlocker_partition(
+    partition: &crate::partition_query_service::PartitionRecord,
+) -> bool {
     partition.kind_label.eq_ignore_ascii_case("bitlocker")
         || partition
             .filesystem

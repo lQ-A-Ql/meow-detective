@@ -1,10 +1,11 @@
 //! Resolve configured Linux root mounts from source-scoped fstab evidence.
 use domain::{DataSourceId, EntryType, FileEntryId};
-use persistence_sqlite::repositories::{file_repo::FileRepo, partition_repo::PartitionRepo};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use transport::dto::{DataSourcePartitionDto, LinuxRootMountDto};
 
 use super::FileServiceError;
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 
 const MAX_FSTAB_BYTES: usize = 64 * 1024;
 const MAX_PARTITIONS: usize = 64;
@@ -131,7 +132,7 @@ fn decode_field(field: &str) -> Option<String> {
 fn matches_spec(
     spec: &str,
     partition: &DataSourcePartitionDto,
-    record: Option<&persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord>,
+    record: Option<&crate::partition_query_service::PartitionRecord>,
 ) -> bool {
     let uuid = spec
         .strip_prefix("UUID=")

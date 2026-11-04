@@ -1,6 +1,6 @@
 use std::{path::Path, sync::Arc};
 
-use persistence_sqlite::repositories::partition_repo::PartitionRepo;
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 
 use crate::file_service::{
     viewer::{PreviewDescriptor, PreviewPartitionCandidate, PreviewReadContext},

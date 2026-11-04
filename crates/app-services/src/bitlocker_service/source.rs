@@ -1,19 +1,17 @@
 use std::io::SeekFrom;
 use std::path::Path;
 
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
 use evidence_core::{EvidenceReader, PartitionWindowReader};
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 
 use super::BitLockerServiceError;
 
 pub(crate) struct BitLockerSource {
     pub source: DataSource,
-    pub partition: DataSourcePartitionRecord,
+    pub partition: crate::partition_query_service::PartitionRecord,
     pub source_conn: Connection,
 }
 

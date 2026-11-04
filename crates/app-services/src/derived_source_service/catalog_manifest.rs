@@ -90,25 +90,6 @@ struct PartitionSummary {
     digest: String,
 }
 
-struct PartitionRow {
-    id: String,
-    partition_index: i64,
-    name: String,
-    kind_label: String,
-    status: String,
-    type_guid: Option<String>,
-    offset: i64,
-    length: i64,
-    filesystem: Option<String>,
-    unlock_hint: Option<String>,
-    lvm_vg_uuid: Option<String>,
-    lvm_vg_name: Option<String>,
-    lvm_lv_uuid: Option<String>,
-    lvm_lv_name: Option<String>,
-    lvm_pv_offsets_json: Option<String>,
-    lvm_pv_sources_json: Option<String>,
-}
-
 #[derive(Default)]
 struct CatalogAccumulator {
     hasher: Sha256,
@@ -331,6 +312,10 @@ fn update_i64(hasher: &mut Sha256, value: i64) {
     hasher.update(value.to_le_bytes());
 }
 
+fn update_u64(hasher: &mut Sha256, value: u64) {
+    hasher.update(value.to_le_bytes());
+}
+
 pub(super) fn verify_current_source_manifest_deep(
     connection: &Connection,
     lineage_fingerprint: &str,
@@ -362,11 +347,13 @@ pub(super) fn verify_current_source_manifest_deep(
 
 pub(super) fn persist_current_source_manifest(
     connection: &Connection,
+    source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
     lineage_fingerprint: &str,
     summary: &MaterializedRbdSource,
 ) -> DerivedSourceResult<()> {
     let fingerprint = catalog_fingerprint_for_source(lineage_fingerprint);
-    let partitions = summarize_partitions(connection, &summary.data_source.id.0)?;
+    let partitions =
+        summarize_partition_records(source_partition_records(source, &summary.data_source.id.0)?);
     persist_catalog_manifest(connection, &fingerprint, summary, &partitions)
 }
 
@@ -374,89 +361,83 @@ fn summarize_partitions(
     connection: &Connection,
     data_source_id: &str,
 ) -> DerivedSourceResult<PartitionSummary> {
-    let identities =
-        persistence_sqlite::repositories::partition_repo::PartitionRepo::new(connection)
-            .identities_for_data_source(data_source_id)?;
-    let mut statement = connection
-        .prepare(
-            "SELECT id, partition_index, name, kind_label, status, type_guid,
-                    offset, length, filesystem, unlock_hint, lvm_vg_uuid,
-                    lvm_vg_name, lvm_lv_uuid, lvm_lv_name,
-                    lvm_pv_offsets_json, lvm_pv_sources_json
-             FROM data_source_partitions
-             WHERE data_source_id = ?1
-             ORDER BY partition_index, id COLLATE BINARY",
-        )
-        .map_err(persistence_sqlite::DbError::from)?;
-    let rows = statement
-        .query_map([data_source_id], read_partition_row)
-        .map_err(persistence_sqlite::DbError::from)?;
+    let records = crate::partition_query_service::PartitionQueryRepo::new(connection)
+        .source_records(data_source_id)?;
+    Ok(summarize_partition_records(records))
+}
+
+fn source_partition_records(
+    source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
+    source_id: &str,
+) -> DerivedSourceResult<Vec<crate::partition_query_service::PartitionRecord>> {
+    let snapshot = source.snapshot();
+    let mut cursor = None;
+    let mut records = Vec::new();
+    loop {
+        let page = source
+            .partition_list_by_source(
+                &snapshot,
+                source_id,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                256,
+            )
+            .map_err(|error| {
+                DerivedSourceError::Database(persistence_sqlite::DbError::System(error.to_string()))
+            })?;
+        records.extend(page.records);
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            return Ok(records);
+        }
+    }
+}
+
+fn summarize_partition_records(
+    records: Vec<crate::partition_query_service::PartitionRecord>,
+) -> PartitionSummary {
     let mut hasher = Sha256::new();
-    if let Some(guid) = identities.gpt_disk_guid.as_deref() {
+    if let Some(guid) = records
+        .iter()
+        .find_map(|record| record.gpt_disk_guid.as_deref())
+    {
         update_field(&mut hasher, b"gpt-disk-guid-v1");
         update_field(&mut hasher, guid.as_bytes());
     }
-    let mut record_count = 0u64;
-    for row in rows {
-        let row = row.map_err(persistence_sqlite::DbError::from)?;
-        record_count += 1;
-        update_field(&mut hasher, row.id.as_bytes());
-        update_i64(&mut hasher, row.partition_index);
-        update_field(&mut hasher, row.name.as_bytes());
-        update_field(&mut hasher, row.kind_label.as_bytes());
-        update_field(&mut hasher, row.status.as_bytes());
-        update_optional_text(&mut hasher, row.type_guid.as_deref());
-        // Both GPT and filesystem identities are part of the source digest.
-        if let Some(identity) = identities.partitions.get(&(row.partition_index as u32)) {
-            if let Some(uuid) = identity.gpt_partition_uuid.as_deref() {
-                update_field(&mut hasher, b"gpt-partition-uuid-v1");
-                update_field(&mut hasher, uuid.as_bytes());
-            }
-            if let Some(uuid) = identity.filesystem_uuid.as_deref() {
-                update_field(&mut hasher, b"filesystem-uuid-v1");
-                update_field(&mut hasher, uuid.as_bytes());
-            }
+    for record in &records {
+        update_field(&mut hasher, record.id.as_bytes());
+        update_i64(&mut hasher, i64::from(record.partition_index));
+        update_field(&mut hasher, record.name.as_bytes());
+        update_field(&mut hasher, record.kind_label.as_bytes());
+        update_field(&mut hasher, record.status.as_bytes());
+        update_optional_text(&mut hasher, record.type_guid.as_deref());
+        if let Some(uuid) = record.gpt_partition_uuid.as_deref() {
+            update_field(&mut hasher, b"gpt-partition-uuid-v1");
+            update_field(&mut hasher, uuid.as_bytes());
         }
-        update_i64(&mut hasher, row.offset);
-        update_i64(&mut hasher, row.length);
+        if let Some(uuid) = record.filesystem_uuid.as_deref() {
+            update_field(&mut hasher, b"filesystem-uuid-v1");
+            update_field(&mut hasher, uuid.as_bytes());
+        }
+        update_u64(&mut hasher, record.offset);
+        update_u64(&mut hasher, record.length);
         for value in [
-            row.filesystem,
-            row.unlock_hint,
-            row.lvm_vg_uuid,
-            row.lvm_vg_name,
-            row.lvm_lv_uuid,
-            row.lvm_lv_name,
-            row.lvm_pv_offsets_json,
-            row.lvm_pv_sources_json,
+            record.filesystem.as_deref(),
+            record.unlock_hint.as_deref(),
+            record.lvm_vg_uuid.as_deref(),
+            record.lvm_vg_name.as_deref(),
+            record.lvm_lv_uuid.as_deref(),
+            record.lvm_lv_name.as_deref(),
+            record.lvm_pv_offsets_json.as_deref(),
+            record.lvm_pv_sources_json.as_deref(),
         ] {
-            update_optional_text(&mut hasher, value.as_deref());
+            update_optional_text(&mut hasher, value);
         }
     }
-    Ok(PartitionSummary {
-        record_count,
+    PartitionSummary {
+        record_count: records.len() as u64,
         digest: hex::encode(hasher.finalize()),
-    })
-}
-
-fn read_partition_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PartitionRow> {
-    Ok(PartitionRow {
-        id: row.get(0)?,
-        partition_index: row.get(1)?,
-        name: row.get(2)?,
-        kind_label: row.get(3)?,
-        status: row.get(4)?,
-        type_guid: row.get(5)?,
-        offset: row.get(6)?,
-        length: row.get(7)?,
-        filesystem: row.get(8)?,
-        unlock_hint: row.get(9)?,
-        lvm_vg_uuid: row.get(10)?,
-        lvm_vg_name: row.get(11)?,
-        lvm_lv_uuid: row.get(12)?,
-        lvm_lv_name: row.get(13)?,
-        lvm_pv_offsets_json: row.get(14)?,
-        lvm_pv_sources_json: row.get(15)?,
-    })
+    }
 }
 
 fn source_identity_matches(

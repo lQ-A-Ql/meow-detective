@@ -8,13 +8,11 @@ use transport::CommandError;
 mod cephfs;
 mod nested;
 mod output_changes;
-mod partitions;
 mod projection_state;
 mod projections;
 mod records;
 use cephfs::mirror_namespace_locators;
 use nested::mirror_nested_lineage;
-pub(super) use partitions::mirror_source_partitions;
 use projection_state::{
     analysis_projection_marker, analysis_projection_revision, catalog_projection_is_published,
     ensure_analysis_projection_building, ensure_projection_building,
@@ -59,6 +57,42 @@ pub(super) fn mirror_source_records(
     )?;
     ctx.report_job_progress(97, "Queryable record projection completed")?;
     Ok(projection_digest)
+}
+
+pub(crate) fn mirror_partition_data_for_import(
+    ctx: &ImportJobContext<'_>,
+    source_id: &str,
+    partitions: &[crate::datasource_service::PartitionRecord],
+    gpt_disk_guid: Option<&str>,
+) -> Result<(), CommandError> {
+    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+        ctx.case_root,
+        source_id,
+        &ctx.job_id.0,
+    )
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    let target_root = if layout.published_path().is_dir() {
+        layout.published_path()
+    } else {
+        layout.build_path()
+    };
+    std::fs::create_dir_all(&target_root)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let source = crate::storage_runtime::open_source_read_write_at_path(&target_root)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    if target_root == layout.published_path() {
+        ensure_projection_building(&source, source_id, "projection")?;
+    }
+    crate::partition_storage_service::replace_from_probe(
+        &source,
+        &domain::DataSourceId(source_id.to_owned()),
+        partitions,
+        gpt_disk_guid,
+    )
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    source
+        .persist(PersistMode::SyncAll)
+        .map_err(|error| CommandError::internal(error.to_string()))
 }
 
 fn publish_source_generation(
@@ -179,6 +213,20 @@ pub(crate) fn begin_analysis_output_projection(
     )
     .map_err(|error| CommandError::internal(error.to_string()))?;
     ensure_analysis_projection_building(&source, &source_id)
+}
+
+pub(crate) fn begin_partition_projection(
+    case_root: &std::path::Path,
+    source_id: &domain::DataSourceId,
+) -> Result<(), CommandError> {
+    let root = crate::source_db::fjall_source_storage_root(case_root, &source_id.0)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    if !root.is_dir() {
+        return Ok(());
+    }
+    let source = crate::source_db::open_registered_fjall_source_read_write(case_root, source_id)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    ensure_projection_building(&source, &source_id.0, "projection")
 }
 
 fn mirror_source_records_from_connections_internal(
@@ -352,7 +400,6 @@ fn mirror_projection_records(
 ) -> Result<(), CommandError> {
     if include_catalog {
         ensure_projection_building(source, source_id, "projection")?;
-        mirror_source_partitions(source_connection, source, source_id)?;
     }
     if include_catalog && !catalog_published {
         projections::mirror_catalog(source_connection, source, source_id)?;
@@ -374,6 +421,9 @@ fn mirror_projection_records(
         records::mirror_parser_tables(source_connection, source, source_id)?;
         mirror_namespace_locators(source_connection, source, source_id)?;
         mirror_nested_lineage(case_connection, source, source_id)?;
+        source
+            .partition_projection_publish(source_id)
+            .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     Ok(())
 }

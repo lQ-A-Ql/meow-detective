@@ -10,6 +10,39 @@ use persistence_fjall::{
 };
 
 impl ReadOnlySourceStorageHandle {
+    pub fn partition_projection_complete(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+    ) -> Result<bool, StorageRuntimeError> {
+        let projection_key = persistence_fjall::encode_key(
+            "projection",
+            &[persistence_fjall::KeyPart::Text(source_id.to_owned())],
+        )
+        .map_err(StorageRuntimeError::Source)?;
+        if self
+            .read_envelope(
+                snapshot,
+                persistence_fjall::KeyspaceName::Meta,
+                &projection_key,
+            )?
+            .is_some_and(|envelope| {
+                envelope.source_id != source_id
+                    || envelope.record_kind == "source_projection_building"
+            })
+        {
+            return Ok(false);
+        }
+        let (keyspace, key, _) =
+            crate::partition_storage_service::partition_projection_marker(source_id)?;
+        Ok(self
+            .read_envelope(snapshot, keyspace, &key)?
+            .is_some_and(|envelope| {
+                envelope.record_kind == "partition_projection_complete"
+                    && envelope.source_id == source_id
+            }))
+    }
+
     pub fn partition_list_by_source(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -294,6 +327,38 @@ impl ReadOnlySourceStorageHandle {
 }
 
 impl ReadWriteSourceStorageHandle {
+    pub fn partition_list_by_source(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<PartitionPage, StorageRuntimeError> {
+        PartitionRecordStore::from_source_store(self.source_store().clone())
+            .list_by_source(snapshot, source_id, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn partition_mark_catalog_ready(
+        &self,
+        source_id: &str,
+        partition_index: u32,
+        filesystem: &str,
+        mode: PersistMode,
+    ) -> Result<bool, StorageRuntimeError> {
+        persistence_fjall::PartitionRecordStore::from_source_store(self.source_store().clone())
+            .mark_catalog_ready(source_id, partition_index, filesystem, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+
+    pub fn partition_projection_publish(&self, source_id: &str) -> Result<(), StorageRuntimeError> {
+        let (keyspace, key, marker) =
+            crate::partition_storage_service::partition_projection_marker(source_id)?;
+        self.write_envelope(keyspace, key, &marker, PersistMode::SyncAll)?;
+        Ok(())
+    }
+
     pub fn partition_replace_by_source(
         &self,
         source_id: &str,

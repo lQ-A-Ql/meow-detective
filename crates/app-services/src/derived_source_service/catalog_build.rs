@@ -28,6 +28,7 @@ pub(super) struct CatalogBuildRequest<'a> {
 
 pub(super) struct RbdCatalogBuildContext<'a> {
     pub(super) source_conn: &'a rusqlite::Connection,
+    pub(super) fjall_source: &'a crate::storage_runtime::ReadWriteSourceStorageHandle,
     pub(super) case_id: &'a CaseId,
     pub(super) data_source: &'a DataSource,
     pub(super) replicas: &'a [RadosReplicaSource],
@@ -48,27 +49,63 @@ pub(super) fn build_and_enumerate_source(
         &request.data_source.id,
         attempt_id,
     )?;
-    let build_result = (|| {
-        let summary = build_catalog_on_connection(RbdCatalogBuildContext {
-            source_conn: &source_conn,
-            case_id: request.case_id,
-            data_source: request.data_source,
-            replicas: request.replicas,
-            policy: request.policy,
-            descriptor: request.descriptor,
-            lineage_fingerprint: request.lineage_fingerprint,
-            cancel_token: request.cancel_token,
-        })?;
-        persist_current_source_manifest(&source_conn, request.lineage_fingerprint, &summary)?;
-        super::ensure_not_cancelled(request.cancel_token)?;
-        source_db::finalize_source_build_db(&source_conn)?;
-        Ok(summary)
-    })();
-    drop(source_conn);
-
-    let summary = match build_result {
+    let fjall_layout = persistence_fjall::SourceBuildLayout::for_case_source(
+        request.case_root,
+        &request.data_source.id.0,
+        attempt_id,
+    )
+    .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    let fjall_generation_exists = fjall_layout.published_path().is_dir();
+    let fjall_target_root = if fjall_generation_exists {
+        fjall_layout.published_path()
+    } else {
+        fjall_layout.build_path()
+    };
+    std::fs::create_dir_all(&fjall_target_root)?;
+    crate::import_pipeline::begin_partition_projection(request.case_root, &request.data_source.id)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    let fjall_source = crate::storage_runtime::open_source_read_write_at_path(&fjall_target_root)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    if fjall_generation_exists {
+        let key = persistence_fjall::encode_key(
+            "projection",
+            &[persistence_fjall::KeyPart::Text(
+                request.data_source.id.0.clone(),
+            )],
+        )
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+        let marker = persistence_fjall::VersionedEnvelope::new(
+            "source_projection_building",
+            1,
+            format!("projection:{}", request.data_source.id.0),
+            &request.data_source.id.0,
+            1,
+            request.data_source.id.0.as_bytes().to_vec(),
+        );
+        fjall_source
+            .write_envelope(
+                persistence_fjall::KeyspaceName::Meta,
+                key,
+                &marker,
+                persistence_fjall::PersistMode::SyncAll,
+            )
+            .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    }
+    let summary = match build_catalog_on_connection(RbdCatalogBuildContext {
+        source_conn: &source_conn,
+        fjall_source: &fjall_source,
+        case_id: request.case_id,
+        data_source: request.data_source,
+        replicas: request.replicas,
+        policy: request.policy,
+        descriptor: request.descriptor,
+        lineage_fingerprint: request.lineage_fingerprint,
+        cancel_token: request.cancel_token,
+    }) {
         Ok(summary) => summary,
         Err(error) => {
+            drop(fjall_source);
+            drop(source_conn);
             discard_failed_source_build(
                 request.case_root,
                 &request.data_source.id,
@@ -78,6 +115,39 @@ pub(super) fn build_and_enumerate_source(
             return Err(error);
         }
     };
+    fjall_source
+        .persist(persistence_fjall::PersistMode::SyncAll)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    let source_finalize = (|| {
+        persist_current_source_manifest(
+            &source_conn,
+            &fjall_source,
+            request.lineage_fingerprint,
+            &summary,
+        )?;
+        super::ensure_not_cancelled(request.cancel_token)?;
+        source_db::finalize_source_build_db(&source_conn)?;
+        Ok::<_, DerivedSourceError>(())
+    })();
+    drop(fjall_source);
+    drop(source_conn);
+    if let Err(error) = source_finalize {
+        discard_failed_source_build(
+            request.case_root,
+            &request.data_source.id,
+            attempt_id,
+            &error,
+        );
+        return Err(error);
+    }
+    publish_fjall_partition_generation(
+        &request.data_source.id,
+        attempt_id,
+        &fjall_layout,
+        &fjall_target_root,
+        fjall_generation_exists,
+        &summary.catalog_digest,
+    )?;
     if let Err(error) = publish_claimed_source_build(
         request.case_conn,
         request.case_root,
@@ -100,6 +170,65 @@ pub(super) fn build_and_enumerate_source(
         "Ceph RBD derived source catalog materialization completed"
     );
     Ok(summary)
+}
+
+fn publish_fjall_partition_generation(
+    data_source_id: &DataSourceId,
+    attempt_id: &str,
+    layout: &persistence_fjall::SourceBuildLayout,
+    target_root: &std::path::Path,
+    replace_published: bool,
+    catalog_digest: &str,
+) -> DerivedSourceResult<()> {
+    let _close_guard = crate::storage_runtime::close_source_store_at_path(target_root)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?
+        .ok_or_else(|| {
+            DerivedSourceError::Reconstruction("Fjall source build is still in use".to_owned())
+        })?;
+    let source = persistence_fjall::SourceStore::open(
+        target_root,
+        persistence_fjall::DatabaseConfig::default(),
+    )
+    .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    let projection_digest = hex::encode(persistence_fjall::digest(catalog_digest.as_bytes()));
+    let seal = if replace_published {
+        persistence_fjall::replace_source_generation(
+            &source,
+            &data_source_id.0,
+            attempt_id,
+            &projection_digest,
+        )
+    } else {
+        persistence_fjall::seal_source_generation(
+            &source,
+            &data_source_id.0,
+            attempt_id,
+            &projection_digest,
+        )
+    };
+    seal.map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    let (keyspace, key, marker) =
+        crate::partition_storage_service::partition_projection_marker(&data_source_id.0)
+            .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    source
+        .write_envelope(
+            keyspace,
+            key,
+            &marker,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    source
+        .database()
+        .persist(persistence_fjall::PersistMode::SyncAll)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    drop(source);
+    if !replace_published {
+        persistence_fjall::publish_source_generation(target_root, layout.published_path())
+            .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    }
+    drop(_close_guard);
+    Ok(())
 }
 
 pub(super) fn publish_claimed_source_build(

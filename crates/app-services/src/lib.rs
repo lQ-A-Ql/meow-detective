@@ -62,6 +62,8 @@ pub mod nested_evidence_service;
 pub mod notebook_service;
 pub mod parallel_enum;
 mod partition_capabilities;
+pub mod partition_query_service;
+pub mod partition_storage_service;
 pub mod performance;
 pub mod plugin_action_service;
 pub mod plugin_loader;

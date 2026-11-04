@@ -91,7 +91,7 @@ pub(super) fn build_catalog_on_connection(
         ));
     }
     store_rbd_partitions(
-        context.source_conn,
+        context.fjall_source,
         &context.data_source.id,
         &probe.partitions,
         probe.gpt_disk_guid.as_deref(),
@@ -118,23 +118,18 @@ pub(super) fn build_catalog_on_connection(
 }
 
 fn store_rbd_partitions(
-    source_conn: &rusqlite::Connection,
+    fjall_source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
     data_source_id: &DataSourceId,
     partitions: &[PartitionRecord],
     gpt_disk_guid: Option<&str>,
 ) -> DerivedSourceResult<()> {
-    file_service::store_data_source_partitions_with_gpt_disk_guid(
-        source_conn,
+    crate::partition_storage_service::replace_from_probe(
+        fjall_source,
         data_source_id,
         partitions,
         gpt_disk_guid,
     )
-    .map_err(|error| {
-        DerivedSourceError::Database(match error {
-            file_service::FileServiceError::Db(error) => error,
-            other => persistence_sqlite::DbError::System(other.to_string()),
-        })
-    })
+    .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))
 }
 
 fn enumerate_rbd_candidates(context: RbdEnumerationContext<'_>) -> DerivedSourceResult<()> {

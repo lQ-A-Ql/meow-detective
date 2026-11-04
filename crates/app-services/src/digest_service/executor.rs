@@ -45,6 +45,7 @@ pub(super) fn execute_scope(
         ),
         DigestScopeDto::Partition => digest_partition(
             case_conn,
+            case_root,
             case_id,
             target.data_source_id,
             target.partition_index,
@@ -170,6 +171,7 @@ fn digest_logical_disk(
 
 fn digest_partition(
     case_conn: &Connection,
+    case_root: &Path,
     case_id: &CaseId,
     data_source_id: Option<&str>,
     partition_index: Option<u32>,
@@ -179,9 +181,19 @@ fn digest_partition(
     let source_id = data_source_id.ok_or(DigestServiceError::InvalidInput)?;
     let index = partition_index.ok_or(DigestServiceError::InvalidInput)? as usize;
     let source = super::load_source(case_conn, case_id, Some(source_id))?;
-    let partition = persistence_sqlite::repositories::partition_repo::PartitionRepo::new(case_conn)
-        .find_by_data_source_and_index(source_id, index)?
-        .ok_or(DigestServiceError::NotFound)?;
+    let source_connection = crate::source_db::open_ready_source_read_only_by_id(
+        case_conn,
+        case_root,
+        case_id,
+        &domain::DataSourceId(source_id.to_owned()),
+    )
+    .map_err(|error| {
+        DigestServiceError::Database(persistence_sqlite::DbError::System(error.to_string()))
+    })?;
+    let partition =
+        crate::partition_query_service::PartitionQueryRepo::new(&source_connection.connection)
+            .find_by_data_source_and_index(source_id, index)?
+            .ok_or(DigestServiceError::NotFound)?;
     let reader = crate::datasource_service::open_evidence_reader(&source.source_path, &source.kind)
         .map_err(|error| {
             DigestServiceError::Hash(EvidenceHashError::Io {

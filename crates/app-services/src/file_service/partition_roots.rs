@@ -1,15 +1,6 @@
-use crate::{
-    datasource_service::{self, ImageFilesystemKind},
-    file_service::FileServiceError,
-};
+use crate::datasource_service;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::{
-    repositories::{
-        file_repo::FileRepo,
-        partition_repo::{PartitionIdentityMetadata, PartitionRepo, SourceIdentityMetadata},
-    },
-    DbResult,
-};
+use persistence_sqlite::{repositories::file_repo::FileRepo, DbResult};
 use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;
 use uuid::Uuid;
@@ -192,7 +183,7 @@ pub(crate) fn mft_entry_partition_index(entry_id: &str) -> Option<usize> {
 
 pub(crate) fn normalized_bare_root_name_from_partitions(
     entry: &FileEntry,
-    partitions: &[persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord],
+    partitions: &[crate::partition_query_service::PartitionRecord],
 ) -> String {
     let resolved = mft_entry_partition_index(&entry.id.0)
         .and_then(|idx| {
@@ -216,124 +207,6 @@ pub(crate) fn normalized_bare_root_name_from_partitions(
             None,
         ),
         None => "Partition ? (UNKNOWN)".to_string(),
-    }
-}
-
-pub fn store_data_source_partitions_with_gpt_disk_guid(
-    conn: &Connection,
-    data_source_id: &DataSourceId,
-    partitions: &[crate::datasource_service::PartitionRecord],
-    gpt_disk_guid: Option<&str>,
-) -> Result<(), FileServiceError> {
-    let repo = PartitionRepo::new(conn);
-    let records = partitions
-        .iter()
-        .map(|partition| {
-            persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord {
-                id: Uuid::new_v4().to_string(),
-                data_source_id: data_source_id.0.clone(),
-                partition_index: partition.index as u32,
-                name: partition.name.clone(),
-                kind_label: partition.kind_label.clone(),
-                status: partition_status_label(partition.status).to_string(),
-                type_guid: partition.type_guid.clone(),
-                offset: partition.offset,
-                length: partition.length,
-                filesystem: partition.filesystem.map(image_filesystem_kind_label),
-                unlock_hint: partition_unlock_hint(partition),
-                lvm_vg_uuid: partition
-                    .lvm_identity
-                    .as_ref()
-                    .map(|identity| identity.vg_uuid.clone()),
-                lvm_vg_name: partition
-                    .lvm_identity
-                    .as_ref()
-                    .map(|identity| identity.vg_name.clone()),
-                lvm_lv_uuid: partition
-                    .lvm_identity
-                    .as_ref()
-                    .map(|identity| identity.lv_uuid.clone()),
-                lvm_lv_name: partition
-                    .lvm_identity
-                    .as_ref()
-                    .map(|identity| identity.lv_name.clone()),
-                lvm_pv_offsets_json: partition.lvm_identity.as_ref().and_then(|identity| {
-                    serde_json::to_string(&identity.pv_offsets)
-                        .map_err(|error| {
-                            tracing::warn!(
-                                partition_index = partition.index,
-                                %error,
-                                "Failed to serialize LVM PV offsets for partition metadata"
-                            );
-                        })
-                        .ok()
-                }),
-                lvm_pv_sources_json: partition.lvm_identity.as_ref().and_then(|identity| {
-                    if identity.pv_sources.is_empty() {
-                        return None;
-                    }
-                    serde_json::to_string(&identity.pv_sources)
-                        .map_err(|error| {
-                            tracing::warn!(
-                                partition_index = partition.index,
-                                %error,
-                                "Failed to serialize LVM PV sources for partition metadata"
-                            );
-                        })
-                        .ok()
-                }),
-            }
-        })
-        .collect::<Vec<_>>();
-
-    let mut identities = SourceIdentityMetadata {
-        gpt_disk_guid: gpt_disk_guid.map(str::to_string),
-        partitions: std::collections::BTreeMap::new(),
-    };
-    for partition in partitions {
-        if partition.gpt_partition_uuid.is_some() || partition.filesystem_uuid.is_some() {
-            identities.partitions.insert(
-                partition.index as u32,
-                PartitionIdentityMetadata {
-                    gpt_partition_uuid: partition.gpt_partition_uuid.clone(),
-                    filesystem_uuid: partition.filesystem_uuid.clone(),
-                },
-            );
-        }
-    }
-    repo.replace_for_data_source_with_identities(&data_source_id.0, &records, &identities)?;
-    Ok(())
-}
-
-fn partition_status_label(status: crate::datasource_service::PartitionStatus) -> &'static str {
-    match status {
-        crate::datasource_service::PartitionStatus::Supported => "supported",
-        crate::datasource_service::PartitionStatus::Expanded => "redirected",
-        crate::datasource_service::PartitionStatus::EncryptedBitLocker => "locked",
-        crate::datasource_service::PartitionStatus::Unsupported => "unsupported",
-    }
-}
-
-fn image_filesystem_kind_label(kind: crate::datasource_service::ImageFilesystemKind) -> String {
-    match kind {
-        ImageFilesystemKind::Ntfs => "NTFS".to_string(),
-        ImageFilesystemKind::Fat => "FAT".to_string(),
-        ImageFilesystemKind::Iso9660 => "ISO9660".to_string(),
-        ImageFilesystemKind::BitLocker => "BitLocker".to_string(),
-        ImageFilesystemKind::Ext4 => "Ext4".to_string(),
-        ImageFilesystemKind::F2fs => "F2FS".to_string(),
-        ImageFilesystemKind::Erofs => "EROFS".to_string(),
-        ImageFilesystemKind::Xfs => "XFS".to_string(),
-        ImageFilesystemKind::Btrfs => "Btrfs".to_string(),
-        ImageFilesystemKind::LvmPool => "LVM".to_string(),
-    }
-}
-
-fn partition_unlock_hint(partition: &crate::datasource_service::PartitionRecord) -> Option<String> {
-    if partition.status == crate::datasource_service::PartitionStatus::EncryptedBitLocker {
-        Some("BitLocker 分区需要先解锁后才能浏览文件内容。".to_string())
-    } else {
-        None
     }
 }
 

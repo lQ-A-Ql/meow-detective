@@ -9,10 +9,11 @@ use crate::file_service::{
     FileServiceError,
 };
 use domain::{EntryType, FileEntryId};
-use persistence_sqlite::repositories::{file_repo::FileRepo, partition_repo::PartitionRepo};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use transport::dto::{FileChildrenDto, FileTreeNodeDto};
 
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 pub fn get_file_tree_real(conn: &Connection) -> Result<Vec<FileTreeNodeDto>, FileServiceError> {
     get_file_tree_real_with_visibility(conn, false)
 }
@@ -67,15 +68,13 @@ pub fn get_file_tree_real_with_visibility(
         .collect()
 }
 
-type PartitionRecordsByDataSource = std::collections::HashMap<
-    String,
-    Vec<persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord>,
->;
+type PartitionRecordsByDataSource =
+    std::collections::HashMap<String, Vec<crate::partition_query_service::PartitionRecord>>;
 
 fn partitions_for_entry<'a>(
     partitions_by_ds: &'a PartitionRecordsByDataSource,
     entry: &domain::FileEntry,
-) -> &'a [persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord] {
+) -> &'a [crate::partition_query_service::PartitionRecord] {
     partitions_by_ds
         .get(&entry.data_source_id.0)
         .map(Vec::as_slice)
@@ -83,7 +82,7 @@ fn partitions_for_entry<'a>(
 }
 
 fn should_mark_root_as_partition(
-    partitions: &[persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord],
+    partitions: &[crate::partition_query_service::PartitionRecord],
 ) -> bool {
     partitions
         .iter()

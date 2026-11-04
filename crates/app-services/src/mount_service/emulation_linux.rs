@@ -8,13 +8,10 @@
 //! the UI. Probing is deliberately lenient: a doubtful install is listed
 //! with risk notes rather than silently dropped.
 
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use domain::DataSourceId;
 use evidence_core::{EvidenceReader, FileSystemReader};
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo,
-    file_repo::FileRepo,
-    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
-};
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 use rusqlite::Connection;
 use transport::dto::{EmulationInstallDto, EmulationInstallPlatformDto};
 
@@ -252,7 +249,7 @@ pub fn linux_guest_os_id(distro_id: Option<&str>) -> &'static str {
 
 fn open_linux_fs(
     context: &EvidenceContext,
-    record: &DataSourcePartitionRecord,
+    record: &crate::partition_query_service::PartitionRecord,
 ) -> Option<Box<dyn FileSystemReader>> {
     let fs_label = record.filesystem.as_deref()?;
     let reader = open_linux_volume_reader(context, record)?;
@@ -263,7 +260,7 @@ fn open_linux_fs(
 /// direct partitions, the LV reader for LVM logical volumes.
 pub(super) fn open_linux_volume_reader(
     context: &EvidenceContext,
-    record: &DataSourcePartitionRecord,
+    record: &crate::partition_query_service::PartitionRecord,
 ) -> Option<Box<dyn EvidenceReader>> {
     if record.lvm_lv_name.is_some() {
         return open_lvm_lv_reader(context, record);
@@ -276,7 +273,7 @@ pub(super) fn open_linux_volume_reader(
 
 fn open_lvm_lv_reader(
     context: &EvidenceContext,
-    record: &DataSourcePartitionRecord,
+    record: &crate::partition_query_service::PartitionRecord,
 ) -> Option<Box<dyn EvidenceReader>> {
     let pv_offsets: Vec<u64> = record
         .lvm_pv_offsets_json

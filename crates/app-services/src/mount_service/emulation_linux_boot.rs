@@ -4,12 +4,12 @@
 
 use domain::DataSourceId;
 use evidence_core::FileSystemReader;
-use persistence_sqlite::repositories::partition_repo::PartitionRepo;
 use transport::dto::EmulationInstallDto;
 
 use super::emulation::EvidenceContext;
 use super::emulation_linux::open_linux_volume_reader;
 use crate::datasource_service::open_evidence_reader;
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 
 /// XFS log annotation for the boot path: a volume captured with pending
 /// log transactions blocks the RHEL/CentOS GRUB builds before the kernel is

@@ -2,7 +2,6 @@ use std::{io::Read, path::Path};
 
 use domain::FileEntry;
 use evidence_core::{EvidenceReader, FileSystemReader};
-use persistence_sqlite::repositories::partition_repo::{DataSourcePartitionRecord, PartitionRepo};
 use rusqlite::Connection;
 
 use crate::file_service::{
@@ -15,6 +14,7 @@ use crate::file_service::{
     },
     FileServiceError,
 };
+use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 
 use super::{descriptor::open_linux_image_candidate, lvm::open_candidate_block_reader};
 
@@ -75,7 +75,7 @@ where
 fn load_partitions(
     conn: &Connection,
     entry: &FileEntry,
-) -> Result<Vec<DataSourcePartitionRecord>, FileServiceError> {
+) -> Result<Vec<crate::partition_query_service::PartitionRecord>, FileServiceError> {
     let partitions = PartitionRepo::new(conn)
         .find_by_data_source(&entry.data_source_id.0)
         .map_err(|error| FileServiceError::other(format!("Failed to query partitions: {error}")))?;
@@ -98,9 +98,9 @@ fn validate_entry_path(entry: &FileEntry) -> Result<(), FileServiceError> {
 }
 
 fn select_partitions(
-    partitions: &[DataSourcePartitionRecord],
+    partitions: &[crate::partition_query_service::PartitionRecord],
     expected_partition_index: Option<usize>,
-) -> Result<Vec<&DataSourcePartitionRecord>, FileServiceError> {
+) -> Result<Vec<&crate::partition_query_service::PartitionRecord>, FileServiceError> {
     let selected = match expected_partition_index {
         Some(expected) => partitions
             .iter()
@@ -140,7 +140,7 @@ fn select_partitions(
 fn try_open_partition<F>(
     source_path: &str,
     entry: &FileEntry,
-    target: &DataSourcePartitionRecord,
+    target: &crate::partition_query_service::PartitionRecord,
     fs_kind: &str,
     candidate: &PreviewPartitionCandidate,
     paths: &[String],
@@ -230,7 +230,7 @@ where
 
 fn exfat_hint(
     source_path: &str,
-    target: &DataSourcePartitionRecord,
+    target: &crate::partition_query_service::PartitionRecord,
     fs_kind: &str,
 ) -> Result<bool, FileServiceError> {
     if is_exfat_filesystem_kind(fs_kind) {
