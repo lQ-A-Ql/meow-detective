@@ -6,7 +6,10 @@ use domain::{
     Artifact, ArtifactId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance,
     TimelineEvent, TimelineEventId,
 };
-use persistence_fjall::{encode_key, KeyPart, PersistMode, TimelineRecord, VersionedEnvelope};
+use persistence_fjall::{
+    encode_key, CatalogEntryType, FileEntryRecord, KeyPart, PersistMode, TimelineRecord,
+    VersionedEnvelope,
+};
 use persistence_sqlite::repositories::{
     artifact_repo::ArtifactRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
@@ -419,7 +422,7 @@ fn case_overview_aggregates_ready_source_facts_without_v2_or_graph_payloads() {
 }
 
 #[test]
-fn case_metrics_use_published_fjall_timeline_count() {
+fn case_metrics_and_search_coverage_use_published_fjall_counts() {
     let temp = tempfile::TempDir::new().expect("create case parent");
     let active = app_services::case_service::create_case(
         temp.path(),
@@ -440,6 +443,15 @@ fn case_metrics_use_published_fjall_timeline_count() {
             let fjall =
                 source_db::open_registered_fjall_source_read_write(&active.case_root, &source_id)
                     .map_err(service_error)?;
+            fjall
+                .catalog_upsert_batch(
+                    &[
+                        catalog_record("fjall-file-1"),
+                        catalog_record("fjall-file-2"),
+                    ],
+                    PersistMode::Buffer,
+                )
+                .map_err(service_error)?;
             fjall
                 .timeline_upsert_batch(
                     &[
@@ -478,9 +490,29 @@ fn case_metrics_use_published_fjall_timeline_count() {
             )
             .map_err(service_error)?;
             assert_eq!(metrics.timeline_event_count, 2);
+
+            let search = app_services::search_service::search_files_for_case(
+                case_conn,
+                &active.case_root,
+                &active.meta.id,
+                &transport::commands::SearchFilesRequest {
+                    query: "fixture".to_string(),
+                    match_path: false,
+                    entry_type: Default::default(),
+                    extensions: Vec::new(),
+                    data_source_ids: Vec::new(),
+                    sort_key: Default::default(),
+                    sort_direction: Default::default(),
+                    offset: 0,
+                    limit: 10,
+                    cursor: None,
+                },
+            )
+            .map_err(service_error)?;
+            assert_eq!(search.coverage.expected_entry_count, 2);
             Ok(())
         })
-        .expect("read published Fjall timeline count");
+        .expect("read published Fjall aggregate counts");
 }
 
 fn timeline_event(id: &str) -> TimelineEvent {
@@ -513,6 +545,32 @@ fn timeline_record(id: &str) -> TimelineRecord {
         confidence: Some(1.0),
         source_attribution: Some("fixture".to_string()),
         attrs: Default::default(),
+    }
+}
+
+fn catalog_record(id: &str) -> FileEntryRecord {
+    FileEntryRecord {
+        id: id.to_string(),
+        parent_id: None,
+        data_source_id: "ready".to_string(),
+        path: format!("/{id}.txt"),
+        name: format!("{id}.txt"),
+        entry_type: CatalogEntryType::File,
+        size: Some(1),
+        ext: Some("txt".to_string()),
+        deleted: false,
+        hidden: false,
+        system: false,
+        read_only: false,
+        archive: false,
+        encrypted: false,
+        created: None,
+        modified: None,
+        accessed: None,
+        changed: None,
+        hash_sha256: None,
+        partition_index: None,
+        unix_mode: None,
     }
 }
 

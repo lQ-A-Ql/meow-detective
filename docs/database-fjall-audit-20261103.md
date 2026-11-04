@@ -26,7 +26,7 @@
 
 | 编号 | 修复项 | 状态 | 结果 |
 |---|---|---|---|
-| 1 | source SQLite 与 Fjall 的明细双写 | 进行中 | 已将案例指标与调查步骤状态哈希的 Timeline 总数切换到已发布 Fjall 计数索引；旧 source 或未完成投影保留 SQLite 查询。FileEntry、Artifact、Timeline 及复杂分析路径仍有 SQLite 主写入与 Fjall 投影，尚未完成明细写入迁移。 |
+| 1 | source SQLite 与 Fjall 的明细双写 | 进行中 | 案例指标与调查步骤状态哈希的 Timeline 总数，以及 Search 覆盖率的 Catalog 总数，在 source projection 完成时读取 Fjall；旧 source 或未完成投影保留 SQLite 查询。FileEntry、Artifact、Timeline 及复杂分析路径仍有 SQLite 主写入与 Fjall 投影，尚未完成明细写入迁移。 |
 | 2 | Fjall 只读与读写入口重复打开数据库 | 已完成 | 进程内按规范路径共享 `SourceStore`；每个 source 使用独立初始化锁，四个空闲句柄采用 LRU 保留。source/case 删除取得关闭租约；活动句柄会在文件变动前阻止删除。 |
 | 3 | 相同记录重复 upsert | 已完成 | Catalog、Timeline、Parser、Artifact 相同记录跳过写事务；Timeline revision 不再因相同内容变化。 |
 | 4 | Android、nested、CephFS、旧 Artifact Service 逐条提交 | 已完成 | 改用批量 upsert；导入投影按 512 条分批。 |
@@ -87,7 +87,8 @@
 ### 2026-11-04
 
 - `case_service::get_case_metrics_for_case` 与 `step_recorder::compute_case_state_hash` 在 source projection 和 Timeline count marker 均有效时读取 Fjall O(1) 总数；缺少 Fjall 目录或投影未完成时读取 SQLite。
-- 新增 `case_metrics_use_published_fjall_timeline_count`，验证 SQLite 只有 1 条 Timeline、Fjall 有 2 条时案例指标返回 Fjall 的 2 条。
+- Search 覆盖率在 source projection 完成时通过 Fjall Catalog 分页计算目录总数，并跳过 SQLite source 打开；旧 source 或未完成投影才读取 SQLite。
+- 新增 `case_metrics_and_search_coverage_use_published_fjall_counts`，验证案例指标读取 Fjall 的 Timeline 总数，Search 覆盖率读取 Fjall 的 Catalog 总数。
 - `cargo test -p persistence-sqlite`
 - `cargo test -p persistence-fjall --test timeline`
 - `cargo test -p app-services --lib analysis_projection_removes_deleted_rows_and_skips_unchanged_replays -- --nocapture`

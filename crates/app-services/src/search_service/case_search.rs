@@ -177,8 +177,16 @@ pub(super) fn current_sources(
             continue;
         }
         coverage.ready_source_count = coverage.ready_source_count.saturating_add(1);
-        let ready = open_ready_source_read_only_by_id(case_conn, case_root, case_id, &source.id)?;
-        let expected = count_source_entries(case_root, &source.id, &ready.connection)?;
+        let expected = match crate::source_db::ready_source_catalog_count(case_root, &source.id)
+            .map_err(|error| SearchError::Other(error.to_string()))?
+        {
+            Some(count) => count,
+            None => {
+                let ready =
+                    open_ready_source_read_only_by_id(case_conn, case_root, case_id, &source.id)?;
+                count_source_entries(&ready.connection)?
+            }
+        };
         coverage.expected_entry_count = coverage.expected_entry_count.saturating_add(expected);
         let index_dir = registered_source_index_dir(case_conn, case_root, &source.id)?;
         if !index_dir.exists() {
@@ -321,39 +329,7 @@ fn next_search_source(
     selected
 }
 
-fn count_source_entries(
-    case_root: &Path,
-    source_id: &DataSourceId,
-    connection: &Connection,
-) -> Result<u64, SearchError> {
-    if let Ok(source) =
-        crate::source_db::open_registered_fjall_source_read_only(case_root, source_id)
-    {
-        let snapshot = source.snapshot();
-        if source
-            .source_projection_complete(&snapshot, &source_id.0)
-            .map_err(|error| SearchError::Other(error.to_string()))?
-        {
-            let mut cursor = None;
-            let mut count = 0u64;
-            loop {
-                let page = source
-                    .catalog_list_all(
-                        &snapshot,
-                        &source_id.0,
-                        cursor.as_deref(),
-                        persistence_fjall::ScanDirection::Forward,
-                        512,
-                    )
-                    .map_err(|error| SearchError::Other(error.to_string()))?;
-                count = count.saturating_add(page.records.len() as u64);
-                cursor = page.next_cursor;
-                if cursor.is_none() {
-                    return Ok(count);
-                }
-            }
-        }
-    }
+fn count_source_entries(connection: &Connection) -> Result<u64, SearchError> {
     let count: i64 = connection
         .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
         .map_err(|error| SearchError::Other(format!("count searchable file entries: {error}")))?;
