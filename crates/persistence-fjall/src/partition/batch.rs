@@ -70,7 +70,7 @@ impl PartitionRecordStore {
             });
             actions.push(WriteAction::Delete {
                 keyspace: KeyspaceName::Meta,
-                key: super::runtime_key(source_id, &id)?,
+                key: super::runtime_key(source_id, id)?,
             });
             index_deletes(&mut actions, previous)?;
             actions.push(WriteAction::Put {

@@ -32,10 +32,10 @@ pub fn get_file_tree_real_with_visibility(
     )?;
 
     let mut partitions_by_ds: PartitionRecordsByDataSource = std::collections::HashMap::new();
-    let partition_repo = PartitionRepo::new(conn);
+    let partition_query = PartitionRepo::new(conn);
     for entry in &roots {
         if !partitions_by_ds.contains_key(&entry.data_source_id.0) {
-            let partitions = partition_repo
+            let partitions = partition_query
                 .find_by_data_source(&entry.data_source_id.0)
                 .unwrap_or_default();
             partitions_by_ds.insert(entry.data_source_id.0.clone(), partitions);

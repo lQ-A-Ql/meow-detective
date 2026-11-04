@@ -53,7 +53,7 @@ fn load_derived_xfs_inode_hints(
         .map(|candidate| candidate.data_source_id.clone())
         .collect::<BTreeSet<_>>();
     let file_repo = FileRepo::new(conn);
-    let partition_repo = PartitionRepo::new(conn);
+    let partition_query = PartitionRepo::new(conn);
     let locator_repo = FilesystemLocatorRepo::new(conn);
     let catalog_fingerprint = match crate::derived_source_catalog::load_catalog_fingerprint(conn) {
         Ok(Some(fingerprint)) => fingerprint,
@@ -70,7 +70,7 @@ fn load_derived_xfs_inode_hints(
             .filter(|candidate| candidate.data_source_id == source_id)
             .filter_map(|candidate| candidate.partition_index)
             .collect::<BTreeSet<_>>();
-        let Ok(partitions) = partition_repo.find_by_data_source(&source_id) else {
+        let Ok(partitions) = partition_query.find_by_data_source(&source_id) else {
             continue;
         };
         for partition in partitions {

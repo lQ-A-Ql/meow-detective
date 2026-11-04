@@ -48,7 +48,7 @@ impl FileSystemReader for TwoFileFs {
 }
 
 #[test]
-fn store_data_source_partitions_persists_lvm_identity() {
+fn store_partition_metadata_persists_lvm_identity() {
     let root = tempfile::TempDir::new().unwrap();
     let data_source_id = DataSourceId("ds-lvm".to_string());
     let case_root = root.path().join("case");
