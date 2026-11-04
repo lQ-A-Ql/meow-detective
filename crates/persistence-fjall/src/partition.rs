@@ -9,6 +9,8 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+mod batch;
+
 const RECORD_KIND: &str = "data_source_partition";
 const SCHEMA_VERSION: u16 = 1;
 const RECORD_FAMILY: &str = "partition.record";

@@ -4,11 +4,25 @@ use crate::storage_runtime::{
 };
 use persistence_fjall::{
     ArtifactPage, ArtifactRecord, ArtifactRecordStore, CatalogPage, CatalogRecordStore,
-    FileEntryRecord, ParserFieldQuery, ParserPage, ParserRecord, ParserRecordStore, PersistMode,
-    ScanDirection, SourceReadSnapshot, TimelineRecord, TimelineRecordStore,
+    FileEntryRecord, ParserFieldQuery, ParserPage, ParserRecord, ParserRecordStore, PartitionPage,
+    PartitionRecord, PartitionRecordStore, PersistMode, ScanDirection, SourceReadSnapshot,
+    TimelineRecord, TimelineRecordStore,
 };
 
 impl ReadOnlySourceStorageHandle {
+    pub fn partition_list_by_source(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<PartitionPage, StorageRuntimeError> {
+        PartitionRecordStore::from_source_store(self.source_store().clone())
+            .list_by_source(snapshot, source_id, cursor, direction, limit)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn timeline_counts_ready(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -280,6 +294,17 @@ impl ReadOnlySourceStorageHandle {
 }
 
 impl ReadWriteSourceStorageHandle {
+    pub fn partition_replace_by_source(
+        &self,
+        source_id: &str,
+        records: &[PartitionRecord],
+        mode: PersistMode,
+    ) -> Result<(), StorageRuntimeError> {
+        PartitionRecordStore::from_source_store(self.source_store().clone())
+            .replace_by_source(source_id, records, mode)
+            .map_err(StorageRuntimeError::Source)
+    }
+
     pub fn timeline_counts_ready(
         &self,
         snapshot: &SourceReadSnapshot,

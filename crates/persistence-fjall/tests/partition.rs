@@ -85,3 +85,52 @@ fn partition_delete_writes_tombstone_and_clears_indexes() {
         .unwrap()
         .is_none());
 }
+
+#[test]
+fn partition_replace_removes_stale_rows_and_preserves_other_sources() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = PartitionRecordStore::open(dir.path(), DatabaseConfig::default()).unwrap();
+    store
+        .replace_by_source(
+            "source-a",
+            &[record("source-a", "old", 0), record("source-a", "kept", 1)],
+            PersistMode::SyncData,
+        )
+        .unwrap();
+    store
+        .replace_by_source(
+            "source-b",
+            &[record("source-b", "other", 0)],
+            PersistMode::SyncData,
+        )
+        .unwrap();
+
+    let replacement = record("source-a", "new", 1);
+    store
+        .replace_by_source(
+            "source-a",
+            std::slice::from_ref(&replacement),
+            PersistMode::SyncData,
+        )
+        .unwrap();
+    store
+        .replace_by_source("source-a", &[replacement], PersistMode::SyncData)
+        .unwrap();
+
+    let snapshot = store.read_snapshot();
+    let source_a = store
+        .list_by_source(&snapshot, "source-a", None, ScanDirection::Forward, 10)
+        .unwrap();
+    assert_eq!(source_a.records.len(), 1);
+    assert_eq!(source_a.records[0].id, "new");
+    assert!(store.get(&snapshot, "source-a", "old").unwrap().is_none());
+    assert!(store.get(&snapshot, "source-a", "kept").unwrap().is_none());
+    assert_eq!(
+        store
+            .list_by_source(&snapshot, "source-b", None, ScanDirection::Forward, 10)
+            .unwrap()
+            .records
+            .len(),
+        1
+    );
+}

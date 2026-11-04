@@ -8,11 +8,13 @@ use transport::CommandError;
 mod cephfs;
 mod nested;
 mod output_changes;
+mod partitions;
 mod projection_state;
 mod projections;
 mod records;
 use cephfs::mirror_namespace_locators;
 use nested::mirror_nested_lineage;
+pub(super) use partitions::mirror_source_partitions;
 use projection_state::{
     analysis_projection_marker, analysis_projection_revision, catalog_projection_is_published,
     ensure_analysis_projection_building, ensure_projection_building,
@@ -350,6 +352,7 @@ fn mirror_projection_records(
 ) -> Result<(), CommandError> {
     if include_catalog {
         ensure_projection_building(source, source_id, "projection")?;
+        mirror_source_partitions(source_connection, source, source_id)?;
     }
     if include_catalog && !catalog_published {
         projections::mirror_catalog(source_connection, source, source_id)?;
