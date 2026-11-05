@@ -227,7 +227,12 @@ fn file_count_for_case(
 ) -> Result<u64, ReportError> {
     let mut total = 0u64;
     for source in source_analysis::open_ready_source_connections(case_conn, case_root, &case.id)? {
-        total = total.saturating_add(FileRepo::new(&source.connection).count_all()?);
+        let catalog_count =
+            crate::source_db::ready_source_catalog_count(case_root, &source.data_source_id)
+                .map_err(|error| ReportError::Other(error.to_string()))?;
+        total = total.saturating_add(
+            catalog_count.unwrap_or(FileRepo::new(&source.connection).count_all()?),
+        );
     }
     Ok(total)
 }
