@@ -97,6 +97,8 @@
 - 删除 SQLite `PartitionRepo`、`DataSourcePartitionRecord`、旧分区迁移模块、分区表迁移脚本和 source 分区表定义；新 source schema 不再创建分区 SQLite 表，测试夹具全部经过 Fjall 分区服务写入。
 - 普通导入在 Enumeration/Merge 完成后立即发布 Catalog Fjall generation；Analysis 阶段只执行 Analysis projection，预发布阶段不再写空的 Timeline、Artifact 和 Parser 镜像。
 - staging merge 现在在未提交的 SQLite 事务中完成 root folding，先将最终 Catalog batch 写入 Fjall 并完成 `SyncAll`，随后才提交 SQLite 投影；取消、冲突和写入失败不会标记 staging merged。
+- Analysis worker merge 现在在未提交的 SQLite 事务中合并 Artifact/Timeline，使用独立 worker attach alias，将最终 Analysis records 写入 Fjall 并 `SyncAll` 后才提交 SQLite；worker 只有在两边成功后才标记 merged。
+- LogicalDirectory/LogicalArchive 的枚举和 Analysis 使用当前 source import generation；完整镜像结束后更新 generation seal，避免分析阶段另建冲突目录。
 
 ### 2026-11-04
 
