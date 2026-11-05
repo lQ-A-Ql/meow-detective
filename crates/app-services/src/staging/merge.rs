@@ -116,6 +116,82 @@ pub fn merge_all_staging_to_main_with_cancel(
     Ok(stats)
 }
 
+pub fn merge_all_staging_to_main_with_catalog(
+    main_conn: &Connection,
+    case_root: &Path,
+    data_source_id: &str,
+    manifest: &StagingManifest,
+    source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
+    progress_cb: Option<&dyn Fn(usize, usize)>,
+    cancel_token: Option<&AtomicBool>,
+) -> Result<StagingMergeStats, StagingError> {
+    let mut stats = StagingMergeStats::default();
+    let mut merged_partitions = Vec::new();
+    let total = manifest.partitions.len();
+    let transaction = main_conn.unchecked_transaction().map_err(|error| {
+        StagingError::Other(format!("Begin catalog merge transaction: {error}"))
+    })?;
+
+    for (position, partition) in manifest.partitions.iter().enumerate() {
+        if cancel_token.is_some_and(|token| token.load(Ordering::Relaxed)) {
+            let _ = transaction.rollback();
+            return Err(StagingError::Cancelled);
+        }
+        if partition.status != PartitionStatus::Done
+            || !enum_staging_db_path(case_root, data_source_id, partition.index).exists()
+            || partition_already_merged(case_root, data_source_id, partition.index)?
+        {
+            report_progress(progress_cb, position + 1, total);
+            continue;
+        }
+
+        let started = Instant::now();
+        let staging_conn = open_partition_staging(case_root, data_source_id, partition.index)
+            .map_err(|error| {
+                StagingError::Other(format!("Open staging DB {}: {error}", partition.index))
+            })?;
+        let partition_stats = super::partition_root::merge_partition_into_main_in_transaction(
+            &transaction,
+            &staging_conn,
+            data_source_id,
+            partition,
+        )?;
+        log_enum_merge(partition.index, partition_stats, started.elapsed());
+        stats.add(partition_stats);
+        merged_partitions.push(partition.index);
+        report_progress(progress_cb, position + 1, total);
+    }
+
+    crate::import_pipeline::mirror_catalog_records_from_connection(
+        &transaction,
+        source,
+        data_source_id,
+    )
+    .map_err(|error| {
+        StagingError::Other(format!(
+            "Mirror Fjall Catalog before SQLite commit: {error}"
+        ))
+    })?;
+    source
+        .persist(persistence_fjall::PersistMode::SyncAll)
+        .map_err(|error| StagingError::Other(format!("Persist Fjall Catalog: {error}")))?;
+    transaction.commit().map_err(|error| {
+        StagingError::Other(format!("Commit SQLite Catalog projection: {error}"))
+    })?;
+
+    for partition_index in merged_partitions {
+        let staging_conn = open_partition_staging(case_root, data_source_id, partition_index)
+            .map_err(|error| {
+                StagingError::Other(format!("Open staging DB {partition_index}: {error}"))
+            })?;
+        set_staging_meta(&staging_conn, "merged", "true").map_err(|error| {
+            StagingError::Other(format!("Mark staging DB {partition_index} merged: {error}"))
+        })?;
+    }
+
+    Ok(stats)
+}
+
 pub fn merge_analysis_staging_to_main(
     main_conn: &Connection,
     case_root: &Path,

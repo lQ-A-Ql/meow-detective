@@ -23,15 +23,31 @@ pub(super) fn merge_enumeration_results(
     let started = Instant::now();
     let source_connection = ctx.source_connection()?;
     super::super::runtime::validate_current(ctx.runtime.as_deref())?;
+    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+        ctx.case_root,
+        &data_source.id.0,
+        &ctx.job_id.0,
+    )
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    let target_root = if layout.published_path().is_dir() {
+        layout.published_path()
+    } else {
+        layout.build_path()
+    };
+    std::fs::create_dir_all(&target_root)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let fjall_source = crate::storage_runtime::open_source_read_write_at_path(&target_root)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
     let merged = super::super::profile::measure_optional(
         ctx.profiler.as_ref(),
         transport::dto::import_benchmark::ImportBenchmarkPhaseDto::StagingMerge,
         || {
-            staging::merge_all_staging_to_main_with_cancel(
+            staging::merge_all_staging_to_main_with_catalog(
                 source_connection,
                 ctx.case_root,
                 &data_source.id.0,
                 manifest,
+                &fjall_source,
                 Some(&|completed, total| {
                     let percent = 62 + (completed as u32 * 8 / total as u32);
                     crate::import_pipeline::emit::emit_job_progress(

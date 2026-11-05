@@ -325,6 +325,33 @@ impl StagingRepo {
         partition_index: usize,
         partition_name: &str,
     ) -> rusqlite::Result<u64> {
+        let transaction = main_conn.unchecked_transaction()?;
+        let result = Self::merge_enum_staging_to_main_in_transaction(
+            &transaction,
+            staging_conn,
+            data_source_id,
+            partition_index,
+            partition_name,
+        );
+        match result {
+            Ok(rows) => {
+                transaction.commit()?;
+                Ok(rows)
+            }
+            Err(error) => {
+                let _ = transaction.rollback();
+                Err(error)
+            }
+        }
+    }
+
+    pub fn merge_enum_staging_to_main_in_transaction(
+        main_conn: &rusqlite::Transaction<'_>,
+        staging_conn: &Connection,
+        data_source_id: &str,
+        partition_index: usize,
+        partition_name: &str,
+    ) -> rusqlite::Result<u64> {
         super::staging_merge_validation::validate_enum_merge_target(main_conn)?;
         if super::ntfs_staging_repo::NtfsStagingRepo::is_numeric(staging_conn)? {
             super::ntfs_staging_repo::NtfsStagingRepo::validate_paths(staging_conn)?;
@@ -332,7 +359,6 @@ impl StagingRepo {
         let staging_path = staging_db_file_path(staging_conn)?;
         let escaped = staging_path.replace('\'', "''");
         main_conn.execute_batch(&format!("ATTACH DATABASE '{}' AS staging", escaped))?;
-        main_conn.execute_batch("BEGIN IMMEDIATE")?;
         let result = (|| {
             let existing = Self::find_partition_placeholder_root_id_by_index(
                 main_conn,
@@ -378,12 +404,8 @@ impl StagingRepo {
                     params![placeholder_root_id, partition_index as i64],
                 )? as u64,
             };
-            main_conn.execute_batch("COMMIT")?;
             Ok(inserted)
         })();
-        if result.is_err() {
-            let _ = main_conn.execute_batch("ROLLBACK");
-        }
         let _ = main_conn.execute_batch("DETACH DATABASE staging");
         result
     }

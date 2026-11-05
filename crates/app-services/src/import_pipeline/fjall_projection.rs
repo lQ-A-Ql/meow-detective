@@ -174,6 +174,14 @@ pub(crate) fn mirror_analysis_outputs_from_connections(
     )
 }
 
+pub(crate) fn mirror_catalog_records_from_connection(
+    connection: &Connection,
+    source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
+    source_id: &str,
+) -> Result<(), CommandError> {
+    projections::mirror_catalog(connection, source, source_id)
+}
+
 pub(crate) fn begin_analysis_output_projection(
     source_connection: &Connection,
 ) -> Result<(), CommandError> {
@@ -231,6 +239,7 @@ pub(crate) fn begin_partition_projection(
     ensure_projection_building(&source, &source_id.0, "projection")
 }
 
+#[allow(clippy::too_many_arguments)]
 fn mirror_source_records_from_connections_internal(
     case_connection: &Connection,
     case_root: &std::path::Path,

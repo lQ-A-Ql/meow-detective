@@ -38,6 +38,31 @@ pub(super) fn merge_partition_into_main(
     })
 }
 
+pub(super) fn merge_partition_into_main_in_transaction(
+    main_conn: &rusqlite::Transaction<'_>,
+    staging_conn: &Connection,
+    data_source_id: &str,
+    partition: &PartitionEntry,
+) -> Result<PartitionMergeStats, StagingError> {
+    let staging_rows = count_staging_rows(staging_conn, partition.index)?;
+    let merged_rows = StagingRepo::merge_enum_staging_to_main_in_transaction(
+        main_conn,
+        staging_conn,
+        data_source_id,
+        partition.index,
+        &partition.name,
+    )
+    .map_err(|error| {
+        StagingError::MergeConflict(format!("Merge partition {}: {error}", partition.index))
+    })?;
+
+    Ok(PartitionMergeStats {
+        staging_rows,
+        merged_rows,
+        ignored_rows: staging_rows.saturating_sub(merged_rows),
+    })
+}
+
 fn count_staging_rows(
     staging_conn: &Connection,
     partition_index: usize,
