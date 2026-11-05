@@ -25,12 +25,23 @@ pub(super) fn enumerate_logical_source(
     let source_conn = ctx.source_conn.ok_or_else(|| {
         persistence_sqlite::DbError::System("source DB connection is not initialized".to_string())
     })?;
-    file_service::enumerate_filesystem_with_root_name_and_cancel(
+    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+        ctx.case_root,
+        &data_source.id.0,
+        &ctx.job_id.0,
+    )
+    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    std::fs::create_dir_all(layout.build_path())
+        .map_err(|error| persistence_sqlite::DbError::Io(error))?;
+    let catalog = crate::storage_runtime::open_source_read_write_at_path(layout.build_path())
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    file_service::enumerate_filesystem_with_root_name_and_cancel_with_catalog(
         source_conn,
         &data_source.id,
         fs.as_ref(),
         None,
         None::<&dyn Fn(u32)>,
         Some(ctx.options.cancel_token),
+        &catalog,
     )
 }

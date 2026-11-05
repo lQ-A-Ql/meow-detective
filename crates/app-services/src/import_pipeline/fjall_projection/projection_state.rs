@@ -165,6 +165,8 @@ pub(super) fn catalog_projection_is_published(
         .read_envelope(&snapshot, persistence_fjall::KeyspaceName::Meta, &key)
         .map_err(|error| CommandError::internal(error.to_string()))?
         .is_some_and(|envelope| {
-            envelope.record_kind == "source_projection_complete" && envelope.source_id == source_id
+            (envelope.record_kind == "source_projection_complete"
+                || envelope.record_kind == "catalog_projection_seeded")
+                && envelope.source_id == source_id
         }))
 }

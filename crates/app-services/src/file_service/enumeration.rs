@@ -60,6 +60,46 @@ pub fn enumerate_filesystem_with_root_name_and_cancel(
     progress_fn: Option<&dyn Fn(u32)>,
     cancel_token: Option<&AtomicBool>,
 ) -> DbResult<EnumerationStats> {
+    enumerate_filesystem_with_root_name_and_cancel_internal(
+        conn,
+        data_source_id,
+        fs,
+        root_name_override,
+        progress_fn,
+        cancel_token,
+        None,
+    )
+}
+
+pub(crate) fn enumerate_filesystem_with_root_name_and_cancel_with_catalog(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    fs: &dyn FileSystemReader,
+    root_name_override: Option<&str>,
+    progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
+    catalog: &crate::storage_runtime::ReadWriteSourceStorageHandle,
+) -> DbResult<EnumerationStats> {
+    enumerate_filesystem_with_root_name_and_cancel_internal(
+        conn,
+        data_source_id,
+        fs,
+        root_name_override,
+        progress_fn,
+        cancel_token,
+        Some(catalog),
+    )
+}
+
+fn enumerate_filesystem_with_root_name_and_cancel_internal(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    fs: &dyn FileSystemReader,
+    root_name_override: Option<&str>,
+    progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
+    catalog: Option<&crate::storage_runtime::ReadWriteSourceStorageHandle>,
+) -> DbResult<EnumerationStats> {
     let root = fs.root().map_err(|e| {
         persistence_sqlite::DbError::System(format!("Failed to read filesystem root: {}", e))
     })?;
@@ -109,6 +149,19 @@ pub fn enumerate_filesystem_with_root_name_and_cancel(
     };
     match result {
         Ok(stats) => {
+            if let Some(catalog) = catalog {
+                crate::import_pipeline::mirror_catalog_records_from_connection(
+                    &tx,
+                    catalog,
+                    &data_source_id.0,
+                )
+                .map_err(|error| DbError::System(error.to_string()))?;
+                catalog
+                    .persist(persistence_fjall::PersistMode::SyncAll)
+                    .map_err(|error| DbError::System(error.to_string()))?;
+                crate::import_pipeline::mark_catalog_projection_seeded(catalog, &data_source_id.0)
+                    .map_err(|error| DbError::System(error.to_string()))?;
+            }
             tx.commit()?;
             Ok(stats)
         }

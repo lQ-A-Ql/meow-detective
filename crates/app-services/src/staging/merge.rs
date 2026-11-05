@@ -175,6 +175,8 @@ pub fn merge_all_staging_to_main_with_catalog(
     source
         .persist(persistence_fjall::PersistMode::SyncAll)
         .map_err(|error| StagingError::Other(format!("Persist Fjall Catalog: {error}")))?;
+    crate::import_pipeline::mark_catalog_projection_seeded(source, data_source_id)
+        .map_err(|error| StagingError::Other(format!("Mark Fjall Catalog seeded: {error}")))?;
     transaction.commit().map_err(|error| {
         StagingError::Other(format!("Commit SQLite Catalog projection: {error}"))
     })?;

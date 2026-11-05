@@ -182,6 +182,31 @@ pub(crate) fn mirror_catalog_records_from_connection(
     projections::mirror_catalog(connection, source, source_id)
 }
 
+pub(crate) fn mark_catalog_projection_seeded(
+    source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
+    source_id: &str,
+) -> Result<(), CommandError> {
+    let key = encode_key("projection", &[KeyPart::Text(source_id.to_owned())])
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let marker = VersionedEnvelope::new(
+        "catalog_projection_seeded",
+        1,
+        format!("projection:{source_id}"),
+        source_id,
+        1,
+        source_id.as_bytes().to_vec(),
+    );
+    source
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            PersistMode::SyncAll,
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    Ok(())
+}
+
 pub(crate) fn begin_analysis_output_projection(
     source_connection: &Connection,
 ) -> Result<(), CommandError> {

@@ -30,6 +30,7 @@ pub use data_sources::{
     get_data_sources_real, get_recent_objects_for_case, get_recent_objects_real,
     rename_data_source_real,
 };
+pub(crate) use enumeration::enumerate_filesystem_with_root_name_and_cancel_with_catalog;
 pub use enumeration::{
     enumerate_filesystem, enumerate_filesystem_with_root_name,
     enumerate_filesystem_with_root_name_and_cancel, EnumerationStats,
