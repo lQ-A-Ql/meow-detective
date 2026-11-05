@@ -217,6 +217,17 @@ fn base_provenance_entry(
 }
 
 fn enrich_parser_versions(conn: &Connection, entries: &mut [GraphProvenanceEntryDto]) {
+    if let Some(versions) = fjall_parser_versions(conn) {
+        for entry in entries {
+            let Some(parser) = entry.source_parser.as_ref() else {
+                continue;
+            };
+            if let Some(version) = versions.get(parser) {
+                entry.parser_version = Some(version.clone());
+            }
+        }
+        return;
+    }
     let repo = ArtifactRepo::new(conn);
     for entry in entries {
         let Some(parser) = entry.source_parser.as_ref() else {
@@ -226,6 +237,67 @@ fn enrich_parser_versions(conn: &Connection, entries: &mut [GraphProvenanceEntry
             if let Some((_, Some(version))) = versions.first() {
                 entry.parser_version = Some(version.clone());
             }
+        }
+    }
+}
+
+fn fjall_parser_versions(conn: &Connection) -> Option<std::collections::HashMap<String, String>> {
+    let database_path = conn
+        .query_row("PRAGMA database_list", [], |row| row.get::<_, String>(2))
+        .ok()?;
+    let source_id = conn
+        .query_row(
+            "SELECT id FROM data_sources ORDER BY id LIMIT 2",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()?;
+    let source = crate::source_db::open_fjall_source_read_only_from_source_db_path(
+        std::path::Path::new(&database_path),
+        &domain::DataSourceId(source_id.clone()),
+    )
+    .ok()?;
+    let snapshot = source.snapshot();
+    if !source
+        .source_projection_complete(&snapshot, &source_id)
+        .ok()?
+    {
+        return None;
+    }
+    let mut cursor = None;
+    let mut versions = std::collections::HashMap::new();
+    loop {
+        let page = source
+            .artifact_list_by_source(
+                &snapshot,
+                &source_id,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                512,
+            )
+            .ok()?;
+        let next_cursor = page.next_cursor.clone();
+        for artifact in page.records {
+            let Some(parser) = artifact
+                .attrs
+                .get("extractorId")
+                .and_then(serde_json::Value::as_str)
+            else {
+                continue;
+            };
+            if let Some(version) = artifact
+                .attrs
+                .get("extractorVersion")
+                .and_then(serde_json::Value::as_str)
+            {
+                versions
+                    .entry(parser.to_owned())
+                    .or_insert_with(|| version.to_owned());
+            }
+        }
+        cursor = next_cursor;
+        if cursor.is_none() {
+            return Some(versions);
         }
     }
 }
