@@ -23,9 +23,11 @@ pub fn get_case_metrics_for_case(
     for (source_id, source_conn) in
         crate::source_db::open_ready_source_connections_read_only(conn, case_root, case_id)?
     {
+        let catalog_count = crate::source_db::ready_source_catalog_count(case_root, &source_id)
+            .map_err(|error| DbError::System(error.to_string()))?;
         metrics.indexed_file_count = metrics
             .indexed_file_count
-            .saturating_add(FileRepo::new(&source_conn).count_all()?);
+            .saturating_add(catalog_count.unwrap_or(FileRepo::new(&source_conn).count_all()?));
         let projected_timeline_count =
             crate::source_db::ready_source_timeline_count(case_root, &source_id)
                 .map_err(|error| DbError::System(error.to_string()))?;
@@ -35,9 +37,11 @@ pub fn get_case_metrics_for_case(
             TimelineRepo::new(&source_conn).count()?
         };
         metrics.timeline_event_count = metrics.timeline_event_count.saturating_add(timeline_count);
+        let artifact_count = crate::source_db::ready_source_artifact_count(case_root, &source_id)
+            .map_err(|error| DbError::System(error.to_string()))?;
         metrics.artifact_count = metrics
             .artifact_count
-            .saturating_add(ArtifactRepo::new(&source_conn).count()?);
+            .saturating_add(artifact_count.unwrap_or(ArtifactRepo::new(&source_conn).count()?));
     }
     Ok(metrics)
 }
