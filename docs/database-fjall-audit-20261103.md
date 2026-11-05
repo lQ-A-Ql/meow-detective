@@ -61,7 +61,7 @@
 | FJ-07 | Analysis candidate | evidence candidate collection 优先读取 Fjall Catalog | 已完成 | `4ee39926` | candidate ordering/discovery 回归 | 旧 source 或未完成 projection 使用 SQLite fallback |
 | FJ-08 | HTML 报告计数 | source file count 优先读取 Fjall Catalog | 已完成 | `c4b642c5` | `cargo check -p app-services --lib` | 完整报告行仍需继续迁移 |
 | FJ-09 | JSON/HTML 完整行 | Artifact、Timeline 导出行全部来自 Fjall 分页 | 未完成 | — | 未执行 | `report/json.rs`、`report/html_export.rs` 仍存在 SQLite 明细读取 |
-| FJ-10 | Graph provenance | Artifact parser/version provenance 来自 Fjall Artifact records | 未完成 | — | 未执行 | `graph_service/query.rs` 仍调用 ArtifactRepo |
+| FJ-10 | Graph provenance | Artifact parser/version provenance 来自 Fjall Artifact records | 部分完成 | `99bc8138` | `cargo check -p app-services --lib`、Clippy | Graph edge/node 主体仍由 SQLite GraphRepo 提供，完整 Graph 读取迁移仍需继续 |
 | FJ-11 | 文件浏览读取 | tree、rows、jump、preview metadata 读取 Fjall Catalog | 未完成 | — | 未执行 | `file_service/browse/*`、viewer metadata 仍调用 FileRepo |
 | FJ-12 | SQLite 明细删除 | source SQLite 不再保存 FileEntry、Artifact、Timeline 明细 | 未完成 | — | 未执行 | 需要先完成 FJ-09 至 FJ-11 以及 source schema 重构 |
 
