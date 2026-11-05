@@ -100,6 +100,7 @@
 - Analysis worker merge 现在在未提交的 SQLite 事务中合并 Artifact/Timeline，使用独立 worker attach alias，将最终 Analysis records 写入 Fjall 并 `SyncAll` 后才提交 SQLite；worker 只有在两边成功后才标记 merged。
 - LogicalDirectory/LogicalArchive 的枚举和 Analysis 使用当前 source import generation；完整镜像结束后更新 generation seal，避免分析阶段另建冲突目录。
 - 独立 Analysis extraction/re-extraction 的输出事务也在 SQLite commit 前写入当前 Fjall generation；纯内存单元测试在没有案件存储时保持 SQLite-only，实际案件路径统一 Fjall-first。
+- 案例指标的 Catalog、Timeline、Artifact 计数已优先使用已发布 Fjall projection；仅在 generation 或完成标记缺失时读取 SQLite。
 
 ### 2026-11-04
 
