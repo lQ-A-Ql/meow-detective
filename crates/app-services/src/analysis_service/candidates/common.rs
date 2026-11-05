@@ -98,6 +98,9 @@ pub struct EvidenceCandidate {
 }
 
 pub fn collect_file_entries(conn: &Connection) -> Result<Vec<FileEntry>, AnalysisServiceError> {
+    if let Some(entries) = collect_file_entries_from_fjall(conn)? {
+        return Ok(entries);
+    }
     let file_repo = FileRepo::new(conn);
     let roots = file_repo.find_root_entries()?;
     let mut all_files = Vec::new();
@@ -112,6 +115,84 @@ pub fn collect_file_entries(conn: &Connection) -> Result<Vec<FileEntry>, Analysi
     }
 
     Ok(all_files)
+}
+
+fn collect_file_entries_from_fjall(
+    conn: &Connection,
+) -> Result<Option<Vec<FileEntry>>, AnalysisServiceError> {
+    let database_path: String = conn
+        .query_row("PRAGMA database_list", [], |row| row.get(2))
+        .unwrap_or_default();
+    let source_id = conn
+        .query_row(
+            "SELECT id FROM data_sources ORDER BY id LIMIT 2",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    let Some(source_id) = source_id else {
+        return Ok(None);
+    };
+    let source_path = std::path::Path::new(&database_path);
+    let Ok(fjall) = crate::source_db::open_fjall_source_read_only_from_source_db_path(
+        source_path,
+        &domain::DataSourceId(source_id.clone()),
+    ) else {
+        return Ok(None);
+    };
+    let snapshot = fjall.snapshot();
+    if !fjall
+        .source_projection_complete(&snapshot, &source_id)
+        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?
+    {
+        return Ok(None);
+    }
+    let mut cursor = None;
+    let mut entries = Vec::new();
+    loop {
+        let page = fjall
+            .catalog_list_all(
+                &snapshot,
+                &source_id,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                512,
+            )
+            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        entries.extend(page.records.into_iter().map(file_entry_from_catalog_record));
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            return Ok(Some(entries));
+        }
+    }
+}
+
+fn file_entry_from_catalog_record(record: persistence_fjall::FileEntryRecord) -> FileEntry {
+    FileEntry {
+        id: FileEntryId(record.id),
+        parent_id: record.parent_id.map(FileEntryId),
+        data_source_id: domain::DataSourceId(record.data_source_id),
+        path: record.path,
+        name: record.name,
+        entry_type: match record.entry_type {
+            persistence_fjall::CatalogEntryType::Directory => EntryType::Directory,
+            persistence_fjall::CatalogEntryType::File => EntryType::File,
+        },
+        size: record.size,
+        ext: record.ext,
+        deleted: record.deleted,
+        hidden: record.hidden,
+        system: record.system,
+        encrypted: record.encrypted,
+        read_only: record.read_only,
+        archive: record.archive,
+        unix_mode: record.unix_mode,
+        created_at: record.created,
+        modified_at: record.modified,
+        accessed_at: record.accessed,
+        changed_at: record.changed,
+        hash_sha256: record.hash_sha256,
+    }
 }
 
 pub(crate) fn find_candidate_by_path_suffix(
