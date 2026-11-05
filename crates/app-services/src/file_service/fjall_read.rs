@@ -33,7 +33,7 @@ fn open(
     Ok(Some(source))
 }
 
-fn record_to_domain(record: FileEntryRecord) -> FileEntry {
+pub(crate) fn record_to_domain(record: FileEntryRecord) -> FileEntry {
     FileEntry {
         id: FileEntryId(record.id),
         parent_id: record.parent_id.map(FileEntryId),

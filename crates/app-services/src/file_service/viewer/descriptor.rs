@@ -6,7 +6,7 @@ use crate::file_service::viewer::{
 use crate::file_service::{metadata::lookup::mime_for_entry, FileServiceError};
 use domain::{FileEntry, FileEntryId};
 use persistence_sqlite::repositories::file_repo::FileRepo;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 
 pub fn preview_descriptor_for_case(
@@ -15,11 +15,48 @@ pub fn preview_descriptor_for_case(
     file_id: &FileEntryId,
 ) -> Result<PreviewDescriptor, FileServiceError> {
     let repo = FileRepo::new(conn);
-    let entry = repo
-        .find_by_id(file_id)?
+    let entry = fjall_entry_for_id(conn, file_id)?
+        .or(repo.find_by_id(file_id)?)
         .ok_or_else(|| FileServiceError::not_found("File not found"))?;
 
     preview_descriptor_for_entry(conn, &repo, case_id, &entry)
+}
+
+fn fjall_entry_for_id(
+    conn: &Connection,
+    file_id: &FileEntryId,
+) -> Result<Option<FileEntry>, FileServiceError> {
+    let database_path: String = conn
+        .query_row("PRAGMA database_list", [], |row| row.get(2))
+        .unwrap_or_default();
+    let source_id = conn
+        .query_row(
+            "SELECT id FROM data_sources ORDER BY id LIMIT 2",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| FileServiceError::other(error.to_string()))?;
+    let Some(source_id) = source_id else {
+        return Ok(None);
+    };
+    let Ok(source) = crate::source_db::open_fjall_source_read_only_from_source_db_path(
+        Path::new(&database_path),
+        &domain::DataSourceId(source_id.clone()),
+    ) else {
+        return Ok(None);
+    };
+    let snapshot = source.snapshot();
+    if !source
+        .source_projection_complete(&snapshot, &source_id)
+        .map_err(|error| FileServiceError::other(error.to_string()))?
+    {
+        return Ok(None);
+    }
+    source
+        .catalog_get(&snapshot, &source_id, &file_id.0)
+        .map(|record| record.map(crate::file_service::fjall_read::record_to_domain))
+        .map_err(|error| FileServiceError::other(error.to_string()))
 }
 
 fn preview_descriptor_for_entry(
@@ -171,7 +208,11 @@ fn case_root_from_connection(conn: &Connection) -> Option<PathBuf> {
     let path = conn
         .query_row("PRAGMA database_list", [], |row| row.get::<_, String>(2))
         .ok()?;
-    Path::new(&path).parent().map(Path::to_path_buf)
+    Path::new(&path)
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
 }
 
 fn cephfs_descriptor_from_parser_record(
