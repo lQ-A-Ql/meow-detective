@@ -35,7 +35,8 @@ pub fn persist_analysis_fingerprints(
             },
             None,
         );
-        repo.upsert_in_transaction(&fingerprint)?;
+        repo.upsert_in_transaction(&fingerprint)
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
     }
     Ok(())
 }
@@ -47,4 +48,43 @@ pub fn persist_analysis_fingerprints_for_merge(
 ) -> rusqlite::Result<()> {
     persist_analysis_fingerprints(conn, case_id, data_source_id)
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+}
+
+pub fn persist_analysis_fingerprints_for_merge_with_alias(
+    conn: &Connection,
+    case_id: &str,
+    data_source_id: &str,
+    alias: &str,
+) -> rusqlite::Result<()> {
+    let repo = ForensicFingerprintRepo::new(conn);
+    if !repo
+        .is_available()
+        .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?
+    {
+        return Ok(());
+    }
+    let mut statement = conn.prepare(&format!(
+        "SELECT id, file_id, extractor_id, extractor_version, source_attribution
+         FROM {alias}.artifact_rows ORDER BY id ASC"
+    ))?;
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        let fingerprint = ForensicFingerprint::new(
+            ForensicMetadata {
+                object_id: row.get(0)?,
+                case_id: Some(case_id.to_owned()),
+                source_id: Some(data_source_id.to_owned()),
+                object_type: ForensicObjectType::Artifact,
+                parent_object_id: row.get(1)?,
+                source_locator: row.get(4)?,
+                byte_length: None,
+                parser_id: row.get(2)?,
+                parser_version: row.get(3)?,
+            },
+            None,
+        );
+        repo.upsert_in_transaction(&fingerprint)
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+    }
+    Ok(())
 }

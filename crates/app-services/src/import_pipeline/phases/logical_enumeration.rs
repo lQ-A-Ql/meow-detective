@@ -31,8 +31,7 @@ pub(super) fn enumerate_logical_source(
         &ctx.job_id.0,
     )
     .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-    std::fs::create_dir_all(layout.build_path())
-        .map_err(|error| persistence_sqlite::DbError::Io(error))?;
+    std::fs::create_dir_all(layout.build_path()).map_err(persistence_sqlite::DbError::Io)?;
     let catalog = crate::storage_runtime::open_source_read_write_at_path(layout.build_path())
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
     file_service::enumerate_filesystem_with_root_name_and_cancel_with_catalog(

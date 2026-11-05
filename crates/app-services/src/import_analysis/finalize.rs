@@ -6,6 +6,9 @@ use super::options::{
 use super::progress::{current_rss_mb, rows_per_sec};
 use super::worker_staging::clear_analysis_worker_rows;
 use crate::staging;
+use persistence_sqlite::repositories::storage_control_repo::{
+    StorageControlRepo, StorageOperationState,
+};
 use persistence_sqlite::DbResult;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
@@ -42,18 +45,22 @@ pub(super) fn merge_finished_analysis_staging(
         lease.validate()?;
     }
     let source = persistence_sqlite::open_existing_source(&options.db_path)?;
+    let fjall_root = analysis_fjall_root(options)?;
+    let fjall_source = crate::storage_runtime::open_source_read_write_at_path(&fjall_root)
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
     let _source_fence = options
         .publication_lease
         .as_ref()
         .map(|lease| lease.fence_connection(&source));
     let content_index_dir = crate::source_db::source_content_index_dir(&options.index_dir);
-    let merge_stats = staging::merge_analysis_staging_to_main(
+    let merge_stats = staging::merge_analysis_staging_to_main_with_fjall(
         &source,
         &options.case_root,
         &options.data_source_id.0,
         worker_ids,
         &options.case_id,
         &content_index_dir,
+        &fjall_source,
         Some(&|completed, total| {
             if let Some(cb) = progress_cb {
                 let pct = 84 + ((completed as u32 * 7) / total.max(1) as u32);
@@ -78,6 +85,47 @@ pub(super) fn merge_finished_analysis_staging(
     apply_search_stats(&mut stats, search_stats);
 
     Ok(stats)
+}
+
+fn analysis_fjall_root(options: &ImportAnalysisOptions) -> Result<PathBuf, ImportAnalysisError> {
+    let case_connection =
+        crate::connection::open_existing_case_db(&options.case_root.join("app.db"))
+            .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+    let active = StorageControlRepo::new(&case_connection)
+        .list_open_operations(&options.case_id)
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()))?
+        .into_iter()
+        .filter(|operation| {
+            operation.source_id.as_deref() == Some(options.data_source_id.0.as_str())
+                && operation.operation_kind == "source_import"
+                && matches!(
+                    operation.state,
+                    StorageOperationState::Planned | StorageOperationState::Running
+                )
+        })
+        .collect::<Vec<_>>();
+    if active.len() > 1 {
+        return Err(ImportAnalysisError::Other(
+            "multiple source import attempts are active".to_owned(),
+        ));
+    }
+    if let Some(operation) = active.into_iter().next() {
+        return persistence_fjall::SourceBuildLayout::for_case_source(
+            &options.case_root,
+            &options.data_source_id.0,
+            &operation.attempt_id,
+        )
+        .map(|layout| {
+            if layout.published_path().is_dir() {
+                layout.published_path()
+            } else {
+                layout.build_path()
+            }
+        })
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()));
+    }
+    crate::source_db::fjall_source_storage_root(&options.case_root, &options.data_source_id.0)
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()))
 }
 
 fn bump_search_input_revision(source: &Connection) -> Result<(), ImportAnalysisError> {

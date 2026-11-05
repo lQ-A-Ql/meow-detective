@@ -162,7 +162,8 @@ pub(crate) fn mirror_analysis_outputs_from_connections(
     source_connection: &Connection,
     source_id: &str,
 ) -> Result<String, CommandError> {
-    mirror_source_records_from_connections_internal(
+    let source_root = active_import_generation_root(case_root, case_id, source_id)?;
+    let projection_digest = mirror_source_records_from_connections_internal(
         case_connection,
         case_root,
         case_id,
@@ -170,8 +171,104 @@ pub(crate) fn mirror_analysis_outputs_from_connections(
         source_id,
         false,
         true,
-        None,
+        source_root.as_deref(),
+    )?;
+    if let Some(root) = source_root.as_deref() {
+        if let Some(attempt_id) = root
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| name.strip_prefix("source.fjall.build."))
+        {
+            let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+                case_root, source_id, attempt_id,
+            )
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+            publish_analysis_generation(
+                &layout,
+                root,
+                false,
+                source_id,
+                attempt_id,
+                &projection_digest,
+            )?;
+            if layout.published_path().is_dir() && layout.build_path().is_dir() {
+                std::fs::remove_dir_all(layout.build_path())
+                    .map_err(|error| CommandError::internal(error.to_string()))?;
+            }
+        }
+    }
+    Ok(projection_digest)
+}
+
+fn publish_analysis_generation(
+    layout: &persistence_fjall::SourceBuildLayout,
+    target_root: &std::path::Path,
+    _existing_generation: bool,
+    source_id: &str,
+    attempt_id: &str,
+    projection_digest: &str,
+) -> Result<(), CommandError> {
+    let _close_guard = crate::storage_runtime::close_source_store_at_path(target_root)
+        .map_err(|error| CommandError::internal(error.to_string()))?
+        .ok_or_else(|| CommandError::internal("Fjall analysis generation is still in use"))?;
+    let source = persistence_fjall::SourceStore::open(
+        target_root,
+        persistence_fjall::DatabaseConfig::default(),
     )
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    persistence_fjall::replace_source_generation(&source, source_id, attempt_id, projection_digest)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    source
+        .database()
+        .persist(PersistMode::SyncAll)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    drop(source);
+    if !layout.published_path().is_dir() {
+        persistence_fjall::publish_source_generation(target_root, layout.published_path())
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
+    drop(_close_guard);
+    Ok(())
+}
+
+fn active_import_generation_root(
+    case_root: &std::path::Path,
+    case_id: &str,
+    source_id: &str,
+) -> Result<Option<std::path::PathBuf>, CommandError> {
+    let case_connection = crate::connection::open_existing_case_db(&case_root.join("app.db"))
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let operations = persistence_sqlite::repositories::storage_control_repo::StorageControlRepo::new(
+        &case_connection,
+    )
+    .list_open_operations(case_id)
+    .map_err(|error| CommandError::internal(error.to_string()))?
+    .into_iter()
+    .filter(|operation| {
+        operation.source_id.as_deref() == Some(source_id)
+            && operation.operation_kind == "source_import"
+            && matches!(
+                operation.state,
+                persistence_sqlite::repositories::storage_control_repo::StorageOperationState::Planned
+                    | persistence_sqlite::repositories::storage_control_repo::StorageOperationState::Running
+            )
+    })
+    .collect::<Vec<_>>();
+    if operations.len() > 1 {
+        return Err(CommandError::internal(
+            "multiple source import attempts are active",
+        ));
+    }
+    let Some(operation) = operations.into_iter().next() else {
+        return Ok(None);
+    };
+    persistence_fjall::SourceBuildLayout::for_case_source(
+        case_root,
+        source_id,
+        &operation.attempt_id,
+    )
+    .map(|layout| Some(layout.build_path()))
+    .map_err(|error| CommandError::internal(error.to_string()))
 }
 
 pub(crate) fn mirror_catalog_records_from_connection(
@@ -180,6 +277,15 @@ pub(crate) fn mirror_catalog_records_from_connection(
     source_id: &str,
 ) -> Result<(), CommandError> {
     projections::mirror_catalog(connection, source, source_id)
+}
+
+pub(crate) fn mirror_analysis_records_before_sqlite_commit(
+    connection: &Connection,
+    source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
+    source_id: &str,
+) -> Result<(), CommandError> {
+    projections::mirror_timeline(connection, source, source_id)?;
+    projections::mirror_artifact_records_only(connection, source, source_id)
 }
 
 pub(crate) fn mark_catalog_projection_seeded(

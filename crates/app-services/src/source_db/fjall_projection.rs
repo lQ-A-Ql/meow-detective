@@ -52,7 +52,9 @@ pub fn ready_source_timeline_count(
         return Ok(None);
     }
 
-    source
-        .timeline_count_by_time(&snapshot, &data_source_id.0, None, None)
-        .map(Some)
+    let count = source.timeline_count_by_time(&snapshot, &data_source_id.0, None, None)?;
+    if count == 0 {
+        return Ok(None);
+    }
+    Ok(Some(count))
 }

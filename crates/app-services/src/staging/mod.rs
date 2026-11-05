@@ -12,7 +12,8 @@ pub use error::StagingError;
 pub use merge::{
     merge_all_staging_to_main, merge_all_staging_to_main_with_cancel,
     merge_all_staging_to_main_with_catalog, merge_all_staging_to_main_with_stats,
-    merge_analysis_staging_to_main, AnalysisMergeStats, StagingMergeStats,
+    merge_analysis_staging_to_main, merge_analysis_staging_to_main_with_fjall, AnalysisMergeStats,
+    StagingMergeStats,
 };
 pub use schema::{
     analysis_staging_db_path, enum_staging_db_path, open_analysis_staging, open_enum_staging,

@@ -472,39 +472,76 @@ impl StagingRepo {
         case_id: &str,
         data_source_id: &str,
     ) -> rusqlite::Result<(u64, u64)> {
+        let transaction = main_conn.unchecked_transaction()?;
+        let result = Self::merge_analysis_staging_to_main_in_transaction(
+            &transaction,
+            staging_conn,
+            case_id,
+            data_source_id,
+        );
+        match result {
+            Ok(stats) => {
+                transaction.commit()?;
+                let _ = main_conn.execute_batch("DETACH DATABASE analysis_stage");
+                Ok(stats)
+            }
+            Err(error) => {
+                let _ = transaction.rollback();
+                let _ = main_conn.execute_batch("DETACH DATABASE analysis_stage");
+                Err(error)
+            }
+        }
+    }
+
+    pub fn merge_analysis_staging_to_main_in_transaction(
+        main_conn: &rusqlite::Transaction<'_>,
+        staging_conn: &Connection,
+        case_id: &str,
+        data_source_id: &str,
+    ) -> rusqlite::Result<(u64, u64)> {
+        Self::merge_analysis_staging_to_main_in_transaction_with_alias(
+            main_conn,
+            staging_conn,
+            case_id,
+            data_source_id,
+            "analysis_stage",
+        )
+    }
+
+    pub fn merge_analysis_staging_to_main_in_transaction_with_alias(
+        main_conn: &rusqlite::Transaction<'_>,
+        staging_conn: &Connection,
+        case_id: &str,
+        data_source_id: &str,
+        alias: &str,
+    ) -> rusqlite::Result<(u64, u64)> {
         let staging_path = staging_db_file_path(staging_conn)?;
         let escaped = staging_path.replace('\'', "''");
-        main_conn.execute_batch(&format!("ATTACH DATABASE '{}' AS analysis_stage", escaped))?;
-        main_conn.execute_batch("BEGIN IMMEDIATE")?;
+        main_conn.execute_batch(&format!("ATTACH DATABASE '{}' AS {alias}", escaped))?;
 
         let result = (|| {
             let artifact_count = main_conn.execute(
-                "INSERT INTO main.artifacts
+                &format!("INSERT INTO main.artifacts
                  (id, case_id, data_source_id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at)
                  SELECT id, ?1, ?2, artifact_type, file_id, extractor_id, extractor_version, confidence, source_attribution, display_name, summary, data_json, created_at
-                 FROM analysis_stage.artifact_rows",
+                 FROM {alias}.artifact_rows"),
                 params![case_id, data_source_id],
             )?;
-            super::staging_fingerprint_repo::persist_analysis_fingerprints_for_merge(
+            super::staging_fingerprint_repo::persist_analysis_fingerprints_for_merge_with_alias(
                 main_conn,
                 case_id,
                 data_source_id,
+                alias,
             )?;
             let timeline_count = main_conn.execute(
-                "INSERT INTO main.timeline_events
+                &format!("INSERT INTO main.timeline_events
                  (id, case_id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs)
                  SELECT id, ?1, file_id, event_type, timestamp, title, description, parser_id, parser_version, confidence, source_attribution, data_json
-                 FROM analysis_stage.timeline_rows",
+                 FROM {alias}.timeline_rows"),
                 params![case_id],
             )?;
-            main_conn.execute_batch("COMMIT")?;
             Ok((artifact_count as u64, timeline_count as u64))
         })();
-
-        if result.is_err() {
-            let _ = main_conn.execute_batch("ROLLBACK");
-        }
-        let _ = main_conn.execute_batch("DETACH DATABASE analysis_stage");
         result
     }
     pub fn read_analysis_index_docs_page(

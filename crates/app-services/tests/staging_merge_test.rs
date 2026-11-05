@@ -3,8 +3,9 @@ mod staging_support;
 use app_services::staging::{
     get_staging_meta, merge_all_staging_to_main, merge_all_staging_to_main_with_cancel,
     merge_all_staging_to_main_with_catalog, merge_all_staging_to_main_with_stats,
-    merge_analysis_staging_to_main, open_analysis_staging, open_partition_staging,
-    set_staging_meta, set_worker_meta, StagingError, StagingManifest,
+    merge_analysis_staging_to_main, merge_analysis_staging_to_main_with_fjall,
+    open_analysis_staging, open_partition_staging, set_staging_meta, set_worker_meta, StagingError,
+    StagingManifest,
 };
 use rusqlite::params;
 use staging_support::{
@@ -351,6 +352,64 @@ fn staging_analysis_merge_skips_already_merged_worker() {
     )
     .unwrap();
     assert_eq!(stats.artifact_count, 0);
+}
+
+#[test]
+fn staging_analysis_projects_fjall_before_sqlite_commit() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let main = persistence_sqlite::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_source_all(&main).unwrap();
+    main.execute(
+        "INSERT INTO data_sources
+         (id, case_id, name, kind, source_path, imported_at)
+         VALUES ('ds-analysis-fjall', 'case-1', 'source', 'e01', 'source.E01', datetime('now'))",
+        [],
+    )
+    .unwrap();
+    let worker = open_analysis_staging(tmp.path(), "ds-analysis-fjall", 0).unwrap();
+    worker
+        .execute(
+            "INSERT INTO artifact_rows
+             (id, file_id, artifact_type, display_name, summary, data_json, source_path, created_at)
+             VALUES ('artifact-fjall', 'file-1', 'Test', 'Artifact', '', '{}', '', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+    drop(worker);
+    let fjall =
+        app_services::source_db::open_fjall_source_read_write(tmp.path(), "ds-analysis-fjall")
+            .unwrap();
+
+    let stats = merge_analysis_staging_to_main_with_fjall(
+        &main,
+        tmp.path(),
+        "ds-analysis-fjall",
+        &[0],
+        "case-1",
+        &tmp.path().join("index"),
+        &fjall,
+        None,
+    )
+    .unwrap();
+    assert_eq!(stats.artifact_count, 1);
+    assert_eq!(
+        main.query_row(
+            "SELECT COUNT(*) FROM artifacts WHERE id = 'artifact-fjall'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap(),
+        1
+    );
+    drop(fjall);
+    let fjall =
+        app_services::source_db::open_fjall_source_read_only(tmp.path(), "ds-analysis-fjall")
+            .unwrap();
+    let snapshot = fjall.snapshot();
+    assert!(fjall
+        .artifact_get(&snapshot, "ds-analysis-fjall", "artifact-fjall")
+        .unwrap()
+        .is_some());
 }
 
 #[test]

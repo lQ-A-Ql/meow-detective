@@ -232,6 +232,75 @@ pub fn merge_analysis_staging_to_main(
     Ok(stats)
 }
 
+#[allow(clippy::too_many_arguments)]
+pub fn merge_analysis_staging_to_main_with_fjall(
+    main_conn: &Connection,
+    case_root: &Path,
+    data_source_id: &str,
+    worker_ids: &[usize],
+    case_id: &str,
+    index_dir: &Path,
+    source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
+    progress_cb: Option<&dyn Fn(usize, usize)>,
+) -> Result<AnalysisMergeStats, StagingError> {
+    let mut stats = AnalysisMergeStats::default();
+    let mut merged_workers = Vec::new();
+    let total = worker_ids.len().max(1);
+    let transaction = main_conn.unchecked_transaction().map_err(|error| {
+        StagingError::Other(format!("Begin Analysis merge transaction: {error}"))
+    })?;
+
+    for (position, worker_id) in worker_ids.iter().copied().enumerate() {
+        if analysis_worker_already_merged(case_root, data_source_id, worker_id)? {
+            report_progress(progress_cb, position + 1, total);
+            continue;
+        }
+        let worker_conn = open_analysis_worker(case_root, data_source_id, worker_id)?;
+        let alias = format!("analysis_stage_{worker_id}");
+        let (artifact_count, timeline_count) =
+            StagingRepo::merge_analysis_staging_to_main_in_transaction_with_alias(
+                &transaction,
+                &worker_conn,
+                case_id,
+                data_source_id,
+                &alias,
+            )
+            .map_err(|error| StagingError::Other(format!("Merge analysis staging: {error}")))?;
+        stats.artifact_count += artifact_count;
+        stats.timeline_count += timeline_count;
+        merged_workers.push((worker_id, worker_conn, alias));
+        report_progress(progress_cb, position + 1, total);
+    }
+
+    crate::import_pipeline::mirror_analysis_records_before_sqlite_commit(
+        &transaction,
+        source,
+        data_source_id,
+    )
+    .map_err(|error| {
+        StagingError::Other(format!(
+            "Mirror Fjall Analysis before SQLite commit: {error}"
+        ))
+    })?;
+    source
+        .persist(persistence_fjall::PersistMode::SyncAll)
+        .map_err(|error| StagingError::Other(format!("Persist Fjall Analysis: {error}")))?;
+    transaction.commit().map_err(|error| {
+        StagingError::Other(format!("Commit SQLite Analysis projection: {error}"))
+    })?;
+
+    for (worker_id, worker_conn, alias) in merged_workers {
+        let _ = main_conn.execute_batch(&format!("DETACH DATABASE {alias}"));
+        stats.indexed_count += merge_analysis_index(&worker_conn, index_dir, worker_id)?;
+        set_worker_meta(&worker_conn, "merged", "true").map_err(|error| {
+            StagingError::Other(format!(
+                "Mark analysis staging DB {worker_id} merged: {error}"
+            ))
+        })?;
+    }
+    Ok(stats)
+}
+
 fn partition_already_merged(
     case_root: &Path,
     data_source_id: &str,

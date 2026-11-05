@@ -95,6 +95,39 @@ pub(super) fn mirror_artifacts(
     Ok(())
 }
 
+pub(super) fn mirror_artifact_records_only(
+    connection: &Connection,
+    source: &ReadWriteSourceStorageHandle,
+    source_id: &str,
+) -> Result<(), CommandError> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id, artifact_type, source_object_id, summary, attrs, title,
+                    extractor_id, extractor_version, confidence, source_attribution, created_at
+             FROM artifacts WHERE data_source_id = ?1 ORDER BY id ASC",
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let rows = statement
+        .query_map([source_id], |row| artifact_record_from_row(row, source_id))
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let mut batch = Vec::with_capacity(BATCH_SIZE);
+    for row in rows {
+        batch.push(row.map_err(|error| CommandError::internal(error.to_string()))?);
+        if batch.len() == BATCH_SIZE {
+            source
+                .artifact_upsert_batch(&batch, PersistMode::Buffer)
+                .map_err(|error| CommandError::internal(error.to_string()))?;
+            batch.clear();
+        }
+    }
+    if !batch.is_empty() {
+        source
+            .artifact_upsert_batch(&batch, PersistMode::Buffer)
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn mirror_artifact_ids(
     case_connection: &Connection,
@@ -373,15 +406,9 @@ pub(super) fn mirror_timeline(
             .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     delete_stale_timeline(source, source_id, &current_ids)?;
-    let snapshot = source.snapshot();
-    if !source
-        .timeline_counts_ready(&snapshot, source_id)
-        .map_err(|error| CommandError::internal(error.to_string()))?
-    {
-        source
-            .timeline_rebuild_count_indexes(source_id, PersistMode::Buffer)
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-    }
+    source
+        .timeline_rebuild_count_indexes(source_id, PersistMode::Buffer)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(())
 }
 
