@@ -26,7 +26,7 @@
 
 | 编号 | 修复项 | 状态 | 结果 |
 |---|---|---|---|
-| 1 | source SQLite 与 Fjall 的明细双写 | 进行中 | 案例指标与调查步骤状态哈希的 Timeline 总数，以及 Search 覆盖率的 Catalog 总数，在 source projection 完成时读取 Fjall；普通导入探测阶段直接写入当前 attempt 的 Fjall PartitionRecord，枚举开始前即可读取，重新导入优先读取活动 attempt build，避免返回旧 published generation。FileEntry、Artifact、Timeline 及复杂分析路径仍有 SQLite 主写入与 Fjall 投影，尚未完成明细写入迁移。 |
+| 1 | source SQLite 与 Fjall 的明细双写 | 进行中 | 普通分区导入、Logical 导入、Analysis worker merge 和独立重提取已在 SQLite 提交前写入当前 Fjall generation，并在 Fjall 同步成功后提交 SQLite 投影；案例指标与调查步骤状态哈希的 Timeline 总数，以及 Search 覆盖率的 Catalog 总数，在 source projection 完成时读取 Fjall。剩余工作是迁移报告、Graph、搜索候选和文件浏览等 SQLite 读取入口，并最终删除 source SQLite 明细投影。 |
 | 2 | Fjall 只读与读写入口重复打开数据库 | 已完成 | 进程内按规范路径共享 `SourceStore`；每个 source 使用独立初始化锁，四个空闲句柄采用 LRU 保留。source/case 删除取得关闭租约；活动句柄会在文件变动前阻止删除。 |
 | 3 | 相同记录重复 upsert | 已完成 | Catalog、Timeline、Parser、Artifact 相同记录跳过写事务；Timeline revision 不再因相同内容变化。 |
 | 4 | Android、nested、CephFS、旧 Artifact Service 逐条提交 | 已完成 | 改用批量 upsert；导入投影按 512 条分批。 |
