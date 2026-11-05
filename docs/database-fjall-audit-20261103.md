@@ -60,7 +60,7 @@
 | FJ-06 | 案例指标 | Catalog、Artifact、Timeline 计数优先读取 Fjall | 已完成 | `5782684c` | app-services 指标回归 | 未完成 generation 使用 SQLite fallback |
 | FJ-07 | Analysis candidate | evidence candidate collection 优先读取 Fjall Catalog | 已完成 | `4ee39926` | candidate ordering/discovery 回归 | 旧 source 或未完成 projection 使用 SQLite fallback |
 | FJ-08 | HTML 报告计数 | source file count 优先读取 Fjall Catalog | 已完成 | `c4b642c5` | `cargo check -p app-services --lib` | 完整报告行仍需继续迁移 |
-| FJ-09 | JSON/HTML 完整行 | Artifact、Timeline 导出行全部来自 Fjall 分页 | 部分完成 | `c4b642c5` | `cargo check -p app-services --lib` | case-level JSON/HTML 已使用 Fjall-first service；legacy report API 仍有 SQLite 明细读取 |
+| FJ-09 | JSON/HTML 完整行 | Artifact、Timeline 导出行全部来自 Fjall 分页 | 已完成 | `b7fd1477` | report 19 项回归、Clippy | 仅无案件路径的内存测试保留 SQLite-only legacy API |
 | FJ-10 | Graph provenance | Artifact parser/version provenance 来自 Fjall Artifact records | 已完成 | `99bc8138` | `cargo check -p app-services --lib`、Clippy | Graph edge/node 本身仍属于独立 Graph projection |
 | FJ-11 | 文件浏览读取 | tree、rows、jump、preview metadata 读取 Fjall Catalog | 已完成 | `304a83b5`、`26d61543` | `cargo check -p app-services --lib`、Clippy | 未完成或未发布 projection 保留 SQLite fallback |
 | FJ-12 | SQLite 明细删除 | source SQLite 不再保存 FileEntry、Artifact、Timeline 明细 | 未完成 | — | 未执行 | 需要先完成 FJ-09 至 FJ-11 以及 source schema 重构 |
