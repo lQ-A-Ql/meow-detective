@@ -325,24 +325,66 @@ impl StagingRepo {
         partition_index: usize,
         partition_name: &str,
     ) -> rusqlite::Result<u64> {
-        let transaction = main_conn.unchecked_transaction()?;
-        let result = Self::merge_enum_staging_to_main_in_transaction(
-            &transaction,
-            staging_conn,
-            data_source_id,
-            partition_index,
-            partition_name,
-        );
-        match result {
-            Ok(rows) => {
-                transaction.commit()?;
-                Ok(rows)
-            }
-            Err(error) => {
-                let _ = transaction.rollback();
-                Err(error)
-            }
+        super::staging_merge_validation::validate_enum_merge_target(main_conn)?;
+        if super::ntfs_staging_repo::NtfsStagingRepo::is_numeric(staging_conn)? {
+            super::ntfs_staging_repo::NtfsStagingRepo::validate_paths(staging_conn)?;
         }
+        let staging_path = staging_db_file_path(staging_conn)?;
+        let escaped = staging_path.replace('\'', "''");
+        main_conn.execute_batch(&format!("ATTACH DATABASE '{}' AS staging", escaped))?;
+        main_conn.execute_batch("BEGIN IMMEDIATE")?;
+        let result = (|| {
+            let existing = Self::find_partition_placeholder_root_id_by_index(
+                main_conn,
+                data_source_id,
+                partition_index,
+            )?;
+            let placeholder_root_id = match existing {
+                Some(id) => id,
+                None => {
+                    let id = uuid::Uuid::new_v4().to_string();
+                    main_conn.execute(
+                        "INSERT INTO main.file_entries
+                         (id, parent_id, data_source_id, path, name, entry_type, encrypted, partition_index)
+                         VALUES (?1, NULL, ?2, ?3, ?4, 'directory', 0, ?5)",
+                        params![
+                            id,
+                            data_source_id,
+                            format!("__partition_placeholder__/{partition_index}/queued"),
+                            partition_name,
+                            partition_index as i64,
+                        ],
+                    )?;
+                    id
+                }
+            };
+            Self::promote_partition_placeholder_root(
+                main_conn,
+                &placeholder_root_id,
+                partition_name,
+                partition_index,
+            )?;
+            let inserted = match super::ntfs_staging_merge::merge_completed_numeric(
+                main_conn,
+                staging_conn,
+                data_source_id,
+                partition_index,
+                &placeholder_root_id,
+            )? {
+                Some(rows) => rows,
+                None => main_conn.execute(
+                    include_str!("staging_enum_merge.sql"),
+                    params![placeholder_root_id, partition_index as i64],
+                )? as u64,
+            };
+            main_conn.execute_batch("COMMIT")?;
+            Ok(inserted)
+        })();
+        if result.is_err() {
+            let _ = main_conn.execute_batch("ROLLBACK");
+        }
+        let _ = main_conn.execute_batch("DETACH DATABASE staging");
+        result
     }
 
     pub fn merge_enum_staging_to_main_in_transaction(

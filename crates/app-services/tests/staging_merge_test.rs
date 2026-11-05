@@ -2,8 +2,9 @@ mod staging_support;
 
 use app_services::staging::{
     get_staging_meta, merge_all_staging_to_main, merge_all_staging_to_main_with_cancel,
-    merge_all_staging_to_main_with_stats, merge_analysis_staging_to_main, open_analysis_staging,
-    open_partition_staging, set_staging_meta, set_worker_meta, StagingError, StagingManifest,
+    merge_all_staging_to_main_with_catalog, merge_all_staging_to_main_with_stats,
+    merge_analysis_staging_to_main, open_analysis_staging, open_partition_staging,
+    set_staging_meta, set_worker_meta, StagingError, StagingManifest,
 };
 use rusqlite::params;
 use staging_support::{
@@ -106,6 +107,56 @@ fn staging_merge_combines_two_partitions_and_reports_progress() {
         )
         .unwrap();
     assert_eq!(unknown_encryption_rows, 5);
+}
+
+#[test]
+fn staging_merge_projects_fjall_before_committing_sqlite_projection() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let main = persistence_sqlite::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_source_all(&main).unwrap();
+    let ds_id = "ds-fjall-first";
+    main.execute(
+        "INSERT INTO data_sources
+         (id, case_id, name, kind, source_path, imported_at)
+         VALUES (?1, 'case-1', 'source', 'e01', 'source.E01', datetime('now'))",
+        [ds_id],
+    )
+    .unwrap();
+    let fjall = app_services::source_db::open_fjall_source_read_write(tmp.path(), ds_id).unwrap();
+    let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
+    staging
+        .execute(
+            "INSERT INTO file_entries (id, data_source_id, path, name, entry_type)
+             VALUES ('f1', ?1, '/f1', 'f1', 'File')",
+            [ds_id],
+        )
+        .unwrap();
+    drop(staging);
+    let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
+    manifest.partitions.push(done_partition(0, "P0", 1));
+
+    merge_all_staging_to_main_with_catalog(&main, tmp.path(), ds_id, &manifest, &fjall, None, None)
+    .unwrap();
+
+    let sqlite_count: i64 = main
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1",
+            [ds_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let fjall_page = fjall
+        .catalog_list_all(
+            &fjall.snapshot(),
+            ds_id,
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            32,
+        )
+        .unwrap();
+    assert_eq!(sqlite_count, 2);
+    assert_eq!(fjall_page.records.len(), 2);
+    assert!(fjall_page.records.iter().any(|record| record.id == "f1"));
 }
 
 #[test]
