@@ -24,6 +24,14 @@ pub fn generate_json_export(
     output_dir: &Path,
     scope: &ExportScopeDto,
 ) -> Result<String, ReportError> {
+    if let Some(case_root) = case_root_from_connection(conn) {
+        let case = persistence_sqlite::repositories::case_repo::CaseRepo::new(conn)
+            .find_by_id(&domain::CaseId(case_id.to_owned()))?
+            .ok_or_else(|| ReportError::Other("Case not found".to_owned()))?;
+        return super::json_case::generate_json_export_for_case(
+            conn, &case, &case_root, output_dir, scope,
+        );
+    }
     let events = if scope.full_timeline {
         TimelineRepo::new(conn).query(0, 500)?
     } else {
@@ -76,6 +84,15 @@ pub fn generate_json_export(
         })
     })?;
     Ok(file_name)
+}
+
+fn case_root_from_connection(conn: &Connection) -> Option<std::path::PathBuf> {
+    let path = conn
+        .query_row("PRAGMA database_list", [], |row| row.get::<_, String>(2))
+        .ok()?;
+    std::path::Path::new(&path)
+        .parent()
+        .map(std::path::Path::to_path_buf)
 }
 
 // ---------------------------------------------------------------------------
