@@ -136,7 +136,7 @@ fn staging_merge_projects_fjall_before_committing_sqlite_projection() {
     manifest.partitions.push(done_partition(0, "P0", 1));
 
     merge_all_staging_to_main_with_catalog(&main, tmp.path(), ds_id, &manifest, &fjall, None, None)
-    .unwrap();
+        .unwrap();
 
     let sqlite_count: i64 = main
         .query_row(
