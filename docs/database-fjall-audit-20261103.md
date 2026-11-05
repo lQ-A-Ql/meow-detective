@@ -60,9 +60,9 @@
 | FJ-06 | 案例指标 | Catalog、Artifact、Timeline 计数优先读取 Fjall | 已完成 | `5782684c` | app-services 指标回归 | 未完成 generation 使用 SQLite fallback |
 | FJ-07 | Analysis candidate | evidence candidate collection 优先读取 Fjall Catalog | 已完成 | `4ee39926` | candidate ordering/discovery 回归 | 旧 source 或未完成 projection 使用 SQLite fallback |
 | FJ-08 | HTML 报告计数 | source file count 优先读取 Fjall Catalog | 已完成 | `c4b642c5` | `cargo check -p app-services --lib` | 完整报告行仍需继续迁移 |
-| FJ-09 | JSON/HTML 完整行 | Artifact、Timeline 导出行全部来自 Fjall 分页 | 未完成 | — | 未执行 | `report/json.rs`、`report/html_export.rs` 仍存在 SQLite 明细读取 |
-| FJ-10 | Graph provenance | Artifact parser/version provenance 来自 Fjall Artifact records | 部分完成 | `99bc8138` | `cargo check -p app-services --lib`、Clippy | Graph edge/node 主体仍由 SQLite GraphRepo 提供，完整 Graph 读取迁移仍需继续 |
-| FJ-11 | 文件浏览读取 | tree、rows、jump、preview metadata 读取 Fjall Catalog | 未完成 | — | 未执行 | `file_service/browse/*`、viewer metadata 仍调用 FileRepo |
+| FJ-09 | JSON/HTML 完整行 | Artifact、Timeline 导出行全部来自 Fjall 分页 | 部分完成 | `c4b642c5` | `cargo check -p app-services --lib` | case-level JSON/HTML 已使用 Fjall-first service；legacy report API 仍有 SQLite 明细读取 |
+| FJ-10 | Graph provenance | Artifact parser/version provenance 来自 Fjall Artifact records | 部分完成 | `99bc8138` | `cargo check -p app-services --lib`、Clippy | Graph edge/node 主体仍由 SQLite GraphRepo 提供 |
+| FJ-11 | 文件浏览读取 | tree、rows、jump、preview metadata 读取 Fjall Catalog | 部分完成 | `304a83b5` | `cargo check -p app-services --lib`、Clippy | case browse 已有 Fjall facade；jump、部分 direct source browse 和 descriptor freshness 仍有 SQLite fallback |
 | FJ-12 | SQLite 明细删除 | source SQLite 不再保存 FileEntry、Artifact、Timeline 明细 | 未完成 | — | 未执行 | 需要先完成 FJ-09 至 FJ-11 以及 source schema 重构 |
 
 验收判定：FJ-01 至 FJ-08 已满足 Fjall-first 写入或核心计数读取条件；FJ-09 至 FJ-12 未满足，因此第一项整体仍处于进行中。完整验收需要 FJ-09 至 FJ-12 逐项通过，并运行 `cargo test -p app-services --lib`、`cargo test -p persistence-fjall`、`cargo test -p persistence-sqlite`、Clippy、格式检查和仓库架构 guard。
