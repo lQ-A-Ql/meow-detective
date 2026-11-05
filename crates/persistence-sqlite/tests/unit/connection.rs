@@ -96,13 +96,7 @@ fn open_or_create_source_runs_source_schema() {
     let path = tmp.path().join("sources").join("ds-1").join("source.db");
     let conn = open_or_create_source(&path).unwrap();
 
-    for table in [
-        "source_meta",
-        "data_sources",
-        "file_entries",
-        "artifacts",
-        "timeline_events",
-    ] {
+    for table in ["source_meta", "data_sources", "graph_nodes", "graph_edges"] {
         let found: String = conn
             .query_row(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name = ?1",
@@ -111,6 +105,16 @@ fn open_or_create_source_runs_source_schema() {
             )
             .unwrap();
         assert_eq!(found, table);
+    }
+    for table in ["file_entries", "artifacts", "timeline_events"] {
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
     }
 }
 

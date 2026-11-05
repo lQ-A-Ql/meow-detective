@@ -35,6 +35,9 @@ impl<'a> ArtifactRepo<'a> {
         case_id: &str,
         data_source_id: &str,
     ) -> DbResult<()> {
+        if crate::source_fjall::upsert_artifacts(self.conn, artifacts, data_source_id)? {
+            return Ok(());
+        }
         let tx = self.conn.unchecked_transaction()?;
         ArtifactRepo::new(&tx).insert_batch_in_transaction(artifacts, case_id, data_source_id)?;
         tx.commit()?;
@@ -47,6 +50,9 @@ impl<'a> ArtifactRepo<'a> {
         case_id: &str,
         data_source_id: &str,
     ) -> DbResult<()> {
+        if crate::source_fjall::upsert_artifacts(self.conn, artifacts, data_source_id)? {
+            return Ok(());
+        }
         let mut stmt = self.conn.prepare_cached(
             "INSERT INTO artifacts (id, case_id, data_source_id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
@@ -83,6 +89,30 @@ impl<'a> ArtifactRepo<'a> {
         source_object_id: &str,
         producer_prefix: &str,
     ) -> DbResult<usize> {
+        if let Some(records) = fjall_records(self.conn)? {
+            let store = crate::source_fjall::open_store(self.conn)?
+                .expect("Fjall source store is configured");
+            let ids = records
+                .into_iter()
+                .filter(|record| {
+                    record.source_object_id.as_deref() == Some(source_object_id)
+                        && record
+                            .attrs
+                            .get("extractorId")
+                            .and_then(serde_json::Value::as_str)
+                            .is_some_and(|id| id.starts_with(producer_prefix))
+                })
+                .map(|record| record.id)
+                .collect::<Vec<_>>();
+            return persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone())
+                .delete_batch(
+                    &crate::source_fjall::source_id(self.conn)?
+                        .expect("source identity is configured"),
+                    &ids,
+                    persistence_fjall::PersistMode::SyncAll,
+                )
+                .map_err(|error| crate::connection::DbError::System(error.to_string()));
+        }
         let deleted = self.conn.execute(
             "DELETE FROM artifacts
                  WHERE source_object_id = ?1
@@ -103,6 +133,30 @@ impl<'a> ArtifactRepo<'a> {
         source_object_id: &str,
         extractor_id: &str,
     ) -> DbResult<usize> {
+        if let Some(records) = fjall_records(self.conn)? {
+            let store = crate::source_fjall::open_store(self.conn)?
+                .expect("Fjall source store is configured");
+            let ids = records
+                .into_iter()
+                .filter(|record| {
+                    record.source_object_id.as_deref() == Some(source_object_id)
+                        && record
+                            .attrs
+                            .get("extractorId")
+                            .and_then(serde_json::Value::as_str)
+                            == Some(extractor_id)
+                })
+                .map(|record| record.id)
+                .collect::<Vec<_>>();
+            return persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone())
+                .delete_batch(
+                    &crate::source_fjall::source_id(self.conn)?
+                        .expect("source identity is configured"),
+                    &ids,
+                    persistence_fjall::PersistMode::SyncAll,
+                )
+                .map_err(|error| crate::connection::DbError::System(error.to_string()));
+        }
         let deleted = self.conn.execute(
             "DELETE FROM artifacts
                  WHERE source_object_id = ?1
@@ -120,6 +174,20 @@ impl<'a> ArtifactRepo<'a> {
         source_object_id: &str,
         producer_prefix: &str,
     ) -> DbResult<Vec<Artifact>> {
+        if let Some(records) = fjall_records(self.conn)? {
+            return Ok(records
+                .into_iter()
+                .filter(|record| {
+                    record.source_object_id.as_deref() == Some(source_object_id)
+                        && record
+                            .attrs
+                            .get("extractorId")
+                            .and_then(serde_json::Value::as_str)
+                            .is_some_and(|id| id.starts_with(producer_prefix))
+                })
+                .map(artifact_from_record)
+                .collect());
+        }
         let mut statement = self.conn.prepare(
             "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version,
                     confidence, source_attribution, title, summary, attrs, created_at
@@ -140,6 +208,19 @@ impl<'a> ArtifactRepo<'a> {
         source_object_id: &str,
         producer_prefix: &str,
     ) -> DbResult<u64> {
+        if let Some(records) = fjall_records(self.conn)? {
+            return Ok(records
+                .iter()
+                .filter(|record| {
+                    record.source_object_id.as_deref() == Some(source_object_id)
+                        && record
+                            .attrs
+                            .get("extractorId")
+                            .and_then(serde_json::Value::as_str)
+                            .is_some_and(|id| id.starts_with(producer_prefix))
+                })
+                .count() as u64);
+        }
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*)
              FROM artifacts
@@ -149,6 +230,30 @@ impl<'a> ArtifactRepo<'a> {
             |row| row.get(0),
         )?;
         Ok(count.max(0) as u64)
+    }
+
+    pub fn count_by_source_object(&self, source_object_id: &str) -> DbResult<u64> {
+        if let Some(records) = fjall_records(self.conn)? {
+            return Ok(records
+                .iter()
+                .filter(|record| record.source_object_id.as_deref() == Some(source_object_id))
+                .count() as u64);
+        }
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM artifacts WHERE source_object_id = ?1",
+                [source_object_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|value| value.max(0) as u64)
+            .map_err(Into::into)
+    }
+
+    pub fn list_all_records(&self) -> DbResult<Vec<persistence_fjall::ArtifactRecord>> {
+        if let Some(records) = fjall_records(self.conn)? {
+            return Ok(records);
+        }
+        Ok(Vec::new())
     }
 
     pub fn list_analysis_outputs_for_prefixes(
@@ -248,6 +353,13 @@ impl<'a> ArtifactRepo<'a> {
     }
 
     pub fn list_by_family(&self, family: Option<&str>) -> DbResult<Vec<Artifact>> {
+        if let Some(records) = fjall_records(self.conn)? {
+            return Ok(records
+                .into_iter()
+                .filter(|record| family.is_none_or(|value| value == record.artifact_type))
+                .map(artifact_from_record)
+                .collect());
+        }
         let mut stmt = match family {
             Some(_) => self.conn.prepare(
                 "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at
@@ -316,6 +428,13 @@ impl<'a> ArtifactRepo<'a> {
     }
 
     pub fn snapshot_high_water(&self) -> DbResult<i64> {
+        if let Some(records) = fjall_records(self.conn)? {
+            return i64::try_from(records.len()).map_err(|_| {
+                crate::connection::DbError::System(
+                    "artifact count exceeds SQLite integer range".into(),
+                )
+            });
+        }
         self.conn
             .query_row("SELECT COALESCE(MAX(rowid), 0) FROM artifacts", [], |row| {
                 row.get(0)
@@ -324,6 +443,11 @@ impl<'a> ArtifactRepo<'a> {
     }
 
     pub fn cursor_revision(&self) -> DbResult<u64> {
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            let records = fjall_records(self.conn)?.expect("Fjall records are available");
+            let _ = store;
+            return Ok(records.len() as u64);
+        }
         SourceMetaRepo::new(self.conn).read_revision(ARTIFACT_CURSOR_REVISION_KEY)
     }
 
@@ -354,6 +478,15 @@ impl<'a> ArtifactRepo<'a> {
     }
 
     pub fn families(&self) -> DbResult<Vec<String>> {
+        if let Some(records) = fjall_records(self.conn)? {
+            let mut families = records
+                .into_iter()
+                .map(|record| record.artifact_type)
+                .collect::<Vec<_>>();
+            families.sort();
+            families.dedup();
+            return Ok(families);
+        }
         let mut stmt = self
             .conn
             .prepare("SELECT DISTINCT artifact_type FROM artifacts ORDER BY artifact_type")?;
@@ -366,6 +499,9 @@ impl<'a> ArtifactRepo<'a> {
     }
 
     pub fn count(&self) -> DbResult<u64> {
+        if let Some(records) = fjall_records(self.conn)? {
+            return Ok(records.len() as u64);
+        }
         let count: i64 = self
             .conn
             .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))?;
@@ -373,6 +509,13 @@ impl<'a> ArtifactRepo<'a> {
     }
 
     pub fn count_by_family(&self) -> DbResult<Vec<(String, u64)>> {
+        if let Some(records) = fjall_records(self.conn)? {
+            let mut counts = std::collections::BTreeMap::<String, u64>::new();
+            for record in records {
+                *counts.entry(record.artifact_type).or_default() += 1;
+            }
+            return Ok(counts.into_iter().collect());
+        }
         let mut stmt = self.conn.prepare(
             "SELECT artifact_type, COUNT(*) FROM artifacts GROUP BY artifact_type ORDER BY artifact_type",
         )?;
@@ -387,6 +530,12 @@ impl<'a> ArtifactRepo<'a> {
     }
 
     pub fn find_by_id(&self, artifact_id: &str) -> DbResult<Option<Artifact>> {
+        if let Some(records) = fjall_records(self.conn)? {
+            return Ok(records
+                .into_iter()
+                .find(|record| record.id == artifact_id)
+                .map(artifact_from_record));
+        }
         let mut stmt = self.conn.prepare(
             "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at
              FROM artifacts WHERE id = ?1",
@@ -402,6 +551,14 @@ impl<'a> ArtifactRepo<'a> {
     /// Load artifacts by family type, returning (id, attrs) pairs.
     /// Used by rule pack engine to find source artifacts for matching.
     pub fn find_by_family_raw(&self, family: &str) -> DbResult<Vec<(String, String)>> {
+        if let Some(records) = fjall_records(self.conn)? {
+            let result = records
+                .into_iter()
+                .filter(|record| record.artifact_type == family)
+                .map(|record| (record.id, record.attrs.to_string()))
+                .collect::<Vec<_>>();
+            return Ok(result);
+        }
         let mut stmt = self
             .conn
             .prepare("SELECT id, attrs FROM artifacts WHERE artifact_type = ?1")?;
@@ -418,6 +575,26 @@ impl<'a> ArtifactRepo<'a> {
     /// Find distinct extractor version info for families matching a given parser name.
     /// Returns (extractor_id, extractor_version) pairs.
     pub fn find_extractor_versions(&self, parser: &str) -> DbResult<Vec<(String, Option<String>)>> {
+        if let Some(records) = fjall_records(self.conn)? {
+            return Ok(records
+                .into_iter()
+                .filter_map(|record| {
+                    let extractor = record.attrs.get("extractorId")?.as_str()?.to_owned();
+                    if !extractor.eq_ignore_ascii_case(parser) {
+                        return None;
+                    }
+                    Some((
+                        extractor,
+                        record
+                            .attrs
+                            .get("extractorVersion")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_owned),
+                    ))
+                })
+                .take(1)
+                .collect());
+        }
         let mut stmt = self.conn.prepare(
             "SELECT DISTINCT extractor_id, extractor_version FROM artifacts
              WHERE LOWER(extractor_id) = LOWER(?1) AND extractor_version IS NOT NULL
@@ -456,6 +633,81 @@ fn row_to_artifact(row: &rusqlite::Row) -> rusqlite::Result<Artifact> {
             }),
         attrs,
     })
+}
+
+fn fjall_records(conn: &Connection) -> DbResult<Option<Vec<persistence_fjall::ArtifactRecord>>> {
+    let Some(source_id) = crate::source_fjall::source_id(conn)? else {
+        return Ok(None);
+    };
+    let Some(store) = crate::source_fjall::open_store(conn)? else {
+        return Ok(None);
+    };
+    let repository = persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+    let snapshot = repository.read_snapshot();
+    let mut cursor = None;
+    let mut records = Vec::new();
+    loop {
+        let page = repository
+            .list_by_source(
+                &snapshot,
+                &source_id,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                512,
+            )
+            .map_err(|error| crate::connection::DbError::System(error.to_string()))?;
+        records.extend(page.records);
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    Ok(Some(records))
+}
+
+fn artifact_from_record(record: persistence_fjall::ArtifactRecord) -> Artifact {
+    let attrs = record.attrs;
+    Artifact {
+        id: ArtifactId(record.id),
+        family: record.artifact_type,
+        title: attrs
+            .get("title")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        summary: attrs
+            .get("summary")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        source_object_id: record.source_object_id.map(domain::FileEntryId),
+        extractor_id: attrs
+            .get("extractorId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        extractor_version: attrs
+            .get("extractorVersion")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        confidence: attrs
+            .get("confidence")
+            .and_then(serde_json::Value::as_f64)
+            .map(|value| value as f32),
+        source_attribution: attrs
+            .get("sourceAttribution")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        created_at: attrs
+            .get("createdAt")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+            .map(|value| value.with_timezone(&chrono::Utc))
+            .unwrap_or_default(),
+        attrs: attrs
+            .get("attrs")
+            .and_then(|value| serde_json::from_value(value.clone()).ok())
+            .unwrap_or_default(),
+    }
 }
 
 fn row_to_artifact_cursor_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ArtifactCursorRow> {

@@ -96,6 +96,25 @@ impl CatalogRecordStore {
         self.read_record(snapshot, &key, source_id, record_id)
     }
 
+    pub fn find_by_id_any_source(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        record_id: &str,
+    ) -> Result<Option<FileEntryRecord>> {
+        let prefix = encode_key(RECORD_FAMILY, &[])?;
+        for entry in snapshot.prefix(
+            KeyspaceName::CatalogRecords,
+            &prefix,
+            ScanDirection::Forward,
+        )? {
+            let record = decode_record(VersionedEnvelope::decode(&entry.value)?)?;
+            if record.id == record_id {
+                return Ok(Some(record));
+            }
+        }
+        Ok(None)
+    }
+
     pub fn delete(&self, source_id: &str, record_id: &str, mode: PersistMode) -> Result<bool> {
         let key = record_key(source_id, record_id)?;
         let snapshot = self.read_snapshot();

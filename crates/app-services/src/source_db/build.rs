@@ -43,6 +43,7 @@ pub(crate) fn open_fresh_source_build_db(
         )));
     }
     let connection = persistence_sqlite::open_or_create_source(&build_path)?;
+    persistence_sqlite::source_fjall::configure_source_identity(&connection, &data_source_id.0)?;
     connection.pragma_update(
         None,
         "wal_autocheckpoint",

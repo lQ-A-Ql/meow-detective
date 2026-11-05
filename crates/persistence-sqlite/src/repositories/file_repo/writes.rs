@@ -11,6 +11,18 @@ impl FileRepo<'_> {
         let hash = normalize_content_sha256(Some(hash)).ok_or_else(|| {
             crate::connection::DbError::System("file SHA-256 must be hexadecimal".into())
         })?;
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            let source = self.find_by_id(id)?;
+            let Some(mut entry) = source else {
+                return Ok(None);
+            };
+            entry.hash_sha256 = Some(hash);
+            let record = crate::source_fjall::file_record(&entry);
+            persistence_fjall::CatalogRecordStore::from_source_store((*store).clone())
+                .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+                .map_err(|error| crate::connection::DbError::System(error.to_string()))?;
+            return Ok(Some(entry));
+        }
         let updated = self.conn.execute(
             "UPDATE file_entries SET hash_sha256 = ?1 WHERE id = ?2",
             params![hash, id.0],
@@ -44,6 +56,37 @@ impl FileRepo<'_> {
         data_source_id: &str,
         path_pattern: &str,
     ) -> DbResult<usize> {
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            let source = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+            let snapshot = source.read_snapshot();
+            let page = source
+                .list_all(
+                    &snapshot,
+                    data_source_id,
+                    None,
+                    persistence_fjall::ScanDirection::Forward,
+                    usize::MAX,
+                )
+                .map_err(|error| crate::connection::DbError::System(error.to_string()))?;
+            let ids = page
+                .records
+                .into_iter()
+                .filter(|entry| {
+                    entry.parent_id.is_none() && wildcard_match(path_pattern, &entry.path)
+                })
+                .map(|entry| entry.id)
+                .collect::<Vec<_>>();
+            let mut deleted = 0;
+            for id in ids {
+                if source
+                    .delete(data_source_id, &id, persistence_fjall::PersistMode::SyncAll)
+                    .map_err(|error| crate::connection::DbError::System(error.to_string()))?
+                {
+                    deleted += 1;
+                }
+            }
+            return Ok(deleted);
+        }
         Ok(self.conn.execute(
             "DELETE FROM file_entries WHERE data_source_id = ?1 AND parent_id IS NULL AND path GLOB ?2",
             params![data_source_id, path_pattern],
@@ -51,6 +94,15 @@ impl FileRepo<'_> {
     }
 
     pub fn update_root_metadata(&self, entry: &FileEntry) -> DbResult<()> {
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            persistence_fjall::CatalogRecordStore::from_source_store((*store).clone())
+                .upsert(
+                    &crate::source_fjall::file_record(entry),
+                    persistence_fjall::PersistMode::SyncAll,
+                )
+                .map_err(|error| crate::connection::DbError::System(error.to_string()))?;
+            return Ok(());
+        }
         self.conn.execute(
             "UPDATE file_entries SET path = ?1, name = ?2, created_at = ?3, modified_at = ?4,
              accessed_at = ?5, hidden = ?6, system = ?7 WHERE id = ?8",
@@ -77,6 +129,9 @@ impl FileRepo<'_> {
 
     pub fn insert_batch_unchecked(&self, entries: &[FileEntry]) -> DbResult<()> {
         if entries.is_empty() {
+            return Ok(());
+        }
+        if crate::source_fjall::upsert_files(self.conn, entries)? {
             return Ok(());
         }
         let mut statement = self.conn.prepare_cached(
@@ -146,4 +201,11 @@ fn case_ids_by_source(
         }
     }
     Ok(ids)
+}
+
+fn wildcard_match(pattern: &str, value: &str) -> bool {
+    let Some(prefix) = pattern.strip_suffix('*') else {
+        return pattern == value;
+    };
+    value.starts_with(prefix)
 }

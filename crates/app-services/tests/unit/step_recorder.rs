@@ -2,8 +2,10 @@ use super::*;
 use crate::notebook_service;
 use domain::{CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
 use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo,
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
+    file_repo::FileRepo,
     notebook_repo::StepFilters,
 };
 use persistence_sqlite::runner;
@@ -77,18 +79,47 @@ fn case_state_hash_changes_when_counts_change() {
     let hash_before = compute_case_state_hash(&case.conn, &case.case_root, "case-hash-change");
 
     let source_conn = persistence_sqlite::open_or_create_source(&source_path).unwrap();
-    source_conn
-        .execute(
-            "INSERT INTO file_entries (id, data_source_id, path, name, entry_type, size)
-             VALUES ('fe-1', 'ds-1', '/test.txt', 'test.txt', 'file', 100)",
-            [],
-        )
+    FileRepo::new(&source_conn)
+        .insert_batch(&[domain::FileEntry {
+            id: domain::FileEntryId("fe-1".into()),
+            parent_id: None,
+            data_source_id: domain::DataSourceId("ds-1".into()),
+            path: "/test.txt".into(),
+            name: "test.txt".into(),
+            entry_type: domain::EntryType::File,
+            size: Some(100),
+            ext: Some("txt".into()),
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
         .unwrap();
-    source_conn
-        .execute(
-            "INSERT INTO artifacts (id, data_source_id, artifact_type, title)
-             VALUES ('art-1', 'ds-1', 'TestFamily', 'TestArtifact')",
-            [],
+    ArtifactRepo::new(&source_conn)
+        .insert_batch(
+            &[domain::Artifact {
+                id: domain::ArtifactId("art-1".into()),
+                family: "TestFamily".into(),
+                title: "TestArtifact".into(),
+                summary: String::new(),
+                source_object_id: None,
+                extractor_id: None,
+                extractor_version: None,
+                confidence: None,
+                source_attribution: None,
+                created_at: chrono::Utc::now(),
+                attrs: std::collections::BTreeMap::new(),
+            }],
+            "case-hash-change",
+            "ds-1",
         )
         .unwrap();
     drop(source_conn);

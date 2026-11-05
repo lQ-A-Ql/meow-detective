@@ -17,6 +17,26 @@ impl TimelineRepo<'_> {
         source_object_id: &str,
         parser_id: &str,
     ) -> DbResult<usize> {
+        if let Some(events) = super::fjall_events(self.conn)? {
+            let store = crate::source_fjall::open_store(self.conn)?
+                .expect("Fjall source store is configured");
+            let ids = events
+                .into_iter()
+                .filter(|event| {
+                    event.source_object_id == source_object_id
+                        && event.parser_id.as_deref() == Some(parser_id)
+                })
+                .map(|event| event.id.0)
+                .collect::<Vec<_>>();
+            return persistence_fjall::TimelineRecordStore::from_source_store((*store).clone())
+                .delete_batch(
+                    &crate::source_fjall::source_id(self.conn)?
+                        .expect("source identity is configured"),
+                    &ids,
+                    persistence_fjall::PersistMode::SyncAll,
+                )
+                .map_err(|error| crate::connection::DbError::System(error.to_string()));
+        }
         let deleted = self.conn.execute(
             "DELETE FROM timeline_events
                  WHERE source_object_id = ?1

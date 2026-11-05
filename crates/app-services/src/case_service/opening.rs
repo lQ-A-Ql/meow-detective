@@ -162,6 +162,15 @@ fn load_case_record(conn: &Connection, case_id: &CaseId) -> Result<CaseMeta> {
 }
 
 fn has_legacy_single_db_payload(conn: &Connection) -> persistence_sqlite::DbResult<bool> {
+    let detail_tables: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master
+         WHERE type = 'table' AND name IN ('file_entries', 'artifacts', 'timeline_events')",
+        [],
+        |row| row.get(0),
+    )?;
+    if detail_tables == 0 {
+        return Ok(false);
+    }
     let file_count: i64 =
         conn.query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
     let artifact_count: i64 =

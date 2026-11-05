@@ -42,20 +42,38 @@ impl ArtifactExtractor for StubPlugin {
 }
 
 fn source_connection() -> Connection {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
-    connection
+    let root = tempfile::tempdir()
+        .expect("create source root")
+        .keep();
+    crate::source_db::open_source_db(&root, &domain::DataSourceId("source-1".into()))
+        .expect("open source database")
 }
 
 fn insert_file(conn: &Connection, id: &str, path: &str, name: &str) {
-    conn.execute(
-        "INSERT INTO file_entries (
-            id, parent_id, data_source_id, path, name, entry_type, size,
-            deleted, hidden, system, encrypted
-         ) VALUES (?1, NULL, 'source-1', ?2, ?3, 'file', 64, 0, 0, 0, 0)",
-        rusqlite::params![id, path, name],
-    )
-    .expect("insert file entry");
+    persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+        .insert_batch(&[domain::FileEntry {
+            id: domain::FileEntryId(id.into()),
+            parent_id: None,
+            data_source_id: domain::DataSourceId("source-1".into()),
+            path: path.into(),
+            name: name.into(),
+            entry_type: domain::EntryType::File,
+            size: Some(64),
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
+        .expect("insert file entry");
 }
 
 #[test]

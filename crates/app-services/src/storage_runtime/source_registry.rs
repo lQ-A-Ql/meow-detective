@@ -127,7 +127,8 @@ pub(super) fn open_shared_source_store(
             return Ok(store);
         }
     }
-    let store = Arc::new(SourceStore::open(&source_root, config)?);
+    let store = persistence_fjall::open_shared_source_store(&source_root, config)
+        .map_err(StorageRuntimeError::Source)?;
     let mut registry = registry
         .lock()
         .map_err(|_| StorageRuntimeError::RegistryPoisoned)?;

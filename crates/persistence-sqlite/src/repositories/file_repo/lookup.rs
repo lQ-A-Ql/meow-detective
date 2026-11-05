@@ -15,6 +15,20 @@ impl FileRepo<'_> {
         entry_id: &FileEntryId,
         max_depth: usize,
     ) -> DbResult<(Vec<FileEntry>, bool)> {
+        if let Some(entries) = self.fjall_entries(None)? {
+            let mut chain = Vec::new();
+            let mut current = entries.iter().find(|entry| entry.id == *entry_id).cloned();
+            for _ in 0..=max_depth {
+                let Some(entry) = current else { break };
+                let parent = entry.parent_id.clone();
+                chain.push(entry);
+                current =
+                    parent.and_then(|id| entries.iter().find(|entry| entry.id == id).cloned());
+            }
+            chain.reverse();
+            let complete = chain.first().is_some_and(|entry| entry.parent_id.is_none());
+            return Ok((chain, complete));
+        }
         let sql = "WITH RECURSIVE ancestors(id, parent_id, depth) AS (
                  SELECT id, parent_id, 0 FROM file_entries WHERE id = ?1
                  UNION ALL
@@ -54,6 +68,17 @@ impl FileRepo<'_> {
         partition_index: usize,
         path: &str,
     ) -> DbResult<Option<FileEntry>> {
+        if let Some(entries) = self.fjall_entries(Some(&data_source_id.0))? {
+            let normalized = path.trim_start_matches('/');
+            let candidates = [
+                path.to_owned(),
+                format!("[P{partition_index}]/{normalized}"),
+                format!("/{normalized}"),
+            ];
+            return Ok(entries.into_iter().find(|entry| {
+                !entry.deleted && candidates.iter().any(|candidate| entry.path == *candidate)
+            }));
+        }
         let sql = format!(
             "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
              WHERE data_source_id = ?1 AND partition_index = ?2
@@ -91,6 +116,20 @@ impl FileRepo<'_> {
         partition_index: usize,
         path: &str,
     ) -> DbResult<Option<FileEntry>> {
+        if let Some(entries) = self.fjall_entries(Some(&data_source_id.0))? {
+            let normalized = path.trim_start_matches('/');
+            let candidates = [
+                normalized.to_owned(),
+                format!("[P{partition_index}]/{normalized}"),
+                format!("/{normalized}"),
+            ];
+            return Ok(entries.into_iter().find(|entry| {
+                !entry.deleted
+                    && candidates
+                        .iter()
+                        .any(|candidate| entry.path.eq_ignore_ascii_case(candidate))
+            }));
+        }
         let sql = format!(
             "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
              WHERE data_source_id = ?1 AND partition_index = ?2
@@ -124,6 +163,11 @@ impl FileRepo<'_> {
         data_source_id: &DataSourceId,
         prefix: &str,
     ) -> DbResult<Vec<FileEntry>> {
+        if let Some(mut entries) = self.fjall_entries(Some(&data_source_id.0))? {
+            entries.retain(|entry| entry.path.starts_with(prefix));
+            entries.sort_by(|left, right| left.path.cmp(&right.path));
+            return Ok(entries);
+        }
         let pattern = format!("{}%", escape_like_literal(prefix));
         let sql = format!(
             "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE data_source_id = ?1 AND path LIKE ?2 ESCAPE '\\' ORDER BY path ASC",
@@ -134,6 +178,9 @@ impl FileRepo<'_> {
     }
 
     pub fn count_by_data_source(&self, data_source_id: &DataSourceId) -> DbResult<u64> {
+        if let Some(entries) = self.fjall_entries(Some(&data_source_id.0))? {
+            return Ok(entries.len() as u64);
+        }
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1",
             params![data_source_id.0],
@@ -143,6 +190,9 @@ impl FileRepo<'_> {
     }
 
     pub fn count_all(&self) -> DbResult<u64> {
+        if let Some(entries) = self.fjall_entries(None)? {
+            return Ok(entries.len() as u64);
+        }
         let count: i64 = self
             .conn
             .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
@@ -150,6 +200,14 @@ impl FileRepo<'_> {
     }
 
     pub fn find_by_id(&self, id: &FileEntryId) -> DbResult<Option<FileEntry>> {
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            let snapshot = store.database().read_snapshot();
+            let source = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+            return source
+                .find_by_id_any_source(&snapshot, &id.0)
+                .map(|record| record.map(crate::source_fjall::file_entry))
+                .map_err(|error| crate::connection::DbError::System(error.to_string()));
+        }
         let sql = format!("SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE id = ?1");
         let mut statement = self.conn.prepare(&sql)?;
         match statement.query_row(params![id.0], row_to_file_entry) {
@@ -163,6 +221,13 @@ impl FileRepo<'_> {
         &self,
         id: &FileEntryId,
     ) -> DbResult<Option<FileEncryptionStatus>> {
+        if let Some(entry) = self.find_by_id(id)? {
+            return Ok(Some(if entry.encrypted {
+                FileEncryptionStatus::Encrypted
+            } else {
+                FileEncryptionStatus::Clear
+            }));
+        }
         let result = self.conn.query_row(
             "SELECT encrypted FROM file_entries WHERE id = ?1",
             params![id.0],
@@ -176,6 +241,9 @@ impl FileRepo<'_> {
     }
 
     pub fn find_partition_index_by_id(&self, id: &FileEntryId) -> DbResult<Option<usize>> {
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            return crate::source_fjall::partition_index(self.conn, &id.0);
+        }
         let result = self.conn.query_row(
             "SELECT partition_index FROM file_entries WHERE id = ?1",
             params![id.0],
@@ -198,6 +266,9 @@ impl FileRepo<'_> {
         id: &FileEntryId,
         partition_index: usize,
     ) -> DbResult<()> {
+        if crate::source_fjall::set_partition_index(self.conn, &id.0, partition_index)? {
+            return Ok(());
+        }
         let partition_index = i64::try_from(partition_index).map_err(|_| {
             crate::connection::DbError::System(format!(
                 "Partition index is too large for SQLite: {partition_index}"
@@ -246,6 +317,16 @@ impl FileRepo<'_> {
         data_source_id: &DataSourceId,
         fragments: &[&str],
     ) -> DbResult<Vec<FileEntry>> {
+        if let Some(mut entries) = self.fjall_entries(Some(&data_source_id.0))? {
+            entries.retain(|entry| {
+                !entry.deleted
+                    && fragments
+                        .iter()
+                        .all(|fragment| entry.path.contains(fragment))
+            });
+            entries.sort_by(|left, right| left.path.cmp(&right.path));
+            return Ok(entries);
+        }
         if fragments.is_empty() {
             return Ok(Vec::new());
         }

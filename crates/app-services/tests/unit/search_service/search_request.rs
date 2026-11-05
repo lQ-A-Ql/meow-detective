@@ -4,6 +4,7 @@ use crate::search_service::record_search_step;
 use chrono::Utc;
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use search::SearchFileDocument;
 use tempfile::TempDir;
 use transport::commands::{FileSortDirectionDto, SearchEntryTypeDto, SearchSortKeyDto};
@@ -79,30 +80,39 @@ fn setup_indexed_case(tmp: &TempDir) -> SearchRequestFixture {
         document("one", "report.txt", "/Downloads/report.txt", "file"),
         document("two", "report-data", "/Downloads/report-data", "directory"),
     ];
-    for entry in &documents {
-        source_conn
-            .execute(
-                "INSERT INTO file_entries
-                 (id, data_source_id, path, name, entry_type, size, ext, modified_at,
-                  deleted, hidden, system, encrypted)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-                rusqlite::params![
-                    entry.file_id,
-                    "ds-1",
-                    entry.path,
-                    entry.name,
-                    entry.entry_type,
-                    entry.size,
-                    (!entry.extension.is_empty()).then_some(entry.extension.clone()),
-                    Option::<String>::None,
-                    0,
-                    0,
-                    0,
-                    0,
-                ],
-            )
-            .unwrap();
-    }
+    FileRepo::new(&source_conn)
+        .insert_batch(
+            &documents
+                .iter()
+                .map(|entry| domain::FileEntry {
+                    id: domain::FileEntryId(entry.file_id.clone()),
+                    parent_id: None,
+                    data_source_id: source_id.clone(),
+                    path: entry.path.clone(),
+                    name: entry.name.clone(),
+                    entry_type: if entry.entry_type.eq_ignore_ascii_case("directory") {
+                        domain::EntryType::Directory
+                    } else {
+                        domain::EntryType::File
+                    },
+                    size: entry.size,
+                    ext: (!entry.extension.is_empty()).then_some(entry.extension.clone()),
+                    deleted: entry.deleted,
+                    hidden: entry.hidden,
+                    system: entry.system,
+                    encrypted: entry.encrypted,
+                    read_only: false,
+                    archive: false,
+                    unix_mode: None,
+                    created_at: None,
+                    modified_at: None,
+                    accessed_at: None,
+                    changed_at: None,
+                    hash_sha256: None,
+                })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
     let index_dir = case_root.join("sources").join("ds-1").join("index");
     let index = search::SearchIndex::create(&index_dir).unwrap();
     let mut writer = index.metadata_writer().unwrap();

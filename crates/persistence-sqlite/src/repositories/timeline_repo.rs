@@ -38,6 +38,11 @@ impl<'a> TimelineRepo<'a> {
 
     /// 插入时间线事件（带 case_id）
     pub fn insert_batch_with_case(&self, events: &[TimelineEvent], case_id: &str) -> DbResult<()> {
+        if let Some(source_id) = crate::source_fjall::source_id(self.conn)? {
+            if crate::source_fjall::upsert_timeline(self.conn, events, &source_id)? {
+                return Ok(());
+            }
+        }
         let tx = self.conn.unchecked_transaction()?;
         TimelineRepo::new(&tx).insert_batch_with_case_in_transaction(events, case_id)?;
         tx.commit()?;
@@ -49,6 +54,11 @@ impl<'a> TimelineRepo<'a> {
         events: &[TimelineEvent],
         case_id: &str,
     ) -> DbResult<()> {
+        if let Some(source_id) = crate::source_fjall::source_id(self.conn)? {
+            if crate::source_fjall::upsert_timeline(self.conn, events, &source_id)? {
+                return Ok(());
+            }
+        }
         let mut stmt = self.conn.prepare_cached(
             "INSERT INTO timeline_events (id, case_id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
@@ -77,6 +87,29 @@ impl<'a> TimelineRepo<'a> {
         source_object_id: &str,
         producer_prefix: &str,
     ) -> DbResult<usize> {
+        if let Some(events) = fjall_events(self.conn)? {
+            let store = crate::source_fjall::open_store(self.conn)?
+                .expect("Fjall source store is configured");
+            let ids = events
+                .into_iter()
+                .filter(|event| {
+                    event.source_object_id == source_object_id
+                        && event
+                            .parser_id
+                            .as_deref()
+                            .is_some_and(|id| id.starts_with(producer_prefix))
+                })
+                .map(|event| event.id.0)
+                .collect::<Vec<_>>();
+            return persistence_fjall::TimelineRecordStore::from_source_store((*store).clone())
+                .delete_batch(
+                    &crate::source_fjall::source_id(self.conn)?
+                        .expect("source identity is configured"),
+                    &ids,
+                    persistence_fjall::PersistMode::SyncAll,
+                )
+                .map_err(|error| crate::connection::DbError::System(error.to_string()));
+        }
         let deleted = self.conn.execute(
             "DELETE FROM timeline_events
                  WHERE source_object_id = ?1
@@ -94,6 +127,18 @@ impl<'a> TimelineRepo<'a> {
         source_object_id: &str,
         producer_prefix: &str,
     ) -> DbResult<Vec<TimelineEvent>> {
+        if let Some(events) = fjall_events(self.conn)? {
+            return Ok(events
+                .into_iter()
+                .filter(|event| {
+                    event.source_object_id == source_object_id
+                        && event
+                            .parser_id
+                            .as_deref()
+                            .is_some_and(|id| id.starts_with(producer_prefix))
+                })
+                .collect());
+        }
         let mut statement = self.conn.prepare(&format!(
             "SELECT {TIMELINE_SELECT_COLUMNS}
              FROM timeline_events
@@ -113,6 +158,18 @@ impl<'a> TimelineRepo<'a> {
         source_object_id: &str,
         producer_prefix: &str,
     ) -> DbResult<u64> {
+        if let Some(events) = fjall_events(self.conn)? {
+            return Ok(events
+                .into_iter()
+                .filter(|event| {
+                    event.source_object_id == source_object_id
+                        && event
+                            .parser_id
+                            .as_deref()
+                            .is_some_and(|id| id.starts_with(producer_prefix))
+                })
+                .count() as u64);
+        }
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*)
              FROM timeline_events
@@ -225,6 +282,19 @@ impl<'a> TimelineRepo<'a> {
     }
 
     pub fn query(&self, offset: u64, limit: u32) -> DbResult<Vec<TimelineEvent>> {
+        if let Some(mut events) = fjall_events(self.conn)? {
+            events.sort_by(|left, right| {
+                right
+                    .timestamp
+                    .cmp(&left.timestamp)
+                    .then_with(|| left.id.0.cmp(&right.id.0))
+            });
+            return Ok(events
+                .into_iter()
+                .skip(offset as usize)
+                .take(limit as usize)
+                .collect());
+        }
         let mut stmt = self.conn.prepare(&format!(
             "SELECT {TIMELINE_SELECT_COLUMNS} FROM timeline_events {TIMELINE_ORDER_BY} LIMIT ?1 OFFSET ?2"
         ))?;
@@ -237,6 +307,9 @@ impl<'a> TimelineRepo<'a> {
     }
 
     pub fn count(&self) -> DbResult<u64> {
+        if let Some(events) = fjall_events(self.conn)? {
+            return Ok(events.len() as u64);
+        }
         let n: i64 = self
             .conn
             .query_row("SELECT COUNT(*) FROM timeline_events", [], |r| r.get(0))?;
@@ -252,6 +325,24 @@ impl<'a> TimelineRepo<'a> {
         time_end: Option<&str>,
         event_type: Option<&str>,
     ) -> DbResult<Vec<TimelineEvent>> {
+        if let Some(mut events) = fjall_events(self.conn)? {
+            events.retain(|event| {
+                event_type.is_none_or(|value| event.event_type == value)
+                    && time_start.is_none_or(|value| event.timestamp.to_rfc3339().as_str() >= value)
+                    && time_end.is_none_or(|value| event.timestamp.to_rfc3339().as_str() <= value)
+            });
+            events.sort_by(|left, right| {
+                right
+                    .timestamp
+                    .cmp(&left.timestamp)
+                    .then_with(|| left.id.0.cmp(&right.id.0))
+            });
+            return Ok(events
+                .into_iter()
+                .skip(offset as usize)
+                .take(limit as usize)
+                .collect());
+        }
         self.query_filtered_for_case(offset, limit, None, time_start, time_end, event_type)
     }
 
@@ -333,6 +424,13 @@ impl<'a> TimelineRepo<'a> {
     }
 
     pub fn snapshot_high_water(&self) -> DbResult<i64> {
+        if let Some(events) = fjall_events(self.conn)? {
+            return i64::try_from(events.len()).map_err(|_| {
+                crate::connection::DbError::System(
+                    "timeline count exceeds SQLite integer range".into(),
+                )
+            });
+        }
         self.conn
             .query_row(
                 "SELECT COALESCE(MAX(rowid), 0) FROM timeline_events",
@@ -343,6 +441,14 @@ impl<'a> TimelineRepo<'a> {
     }
 
     pub fn cursor_revision(&self) -> DbResult<u64> {
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            return persistence_fjall::TimelineRecordStore::from_source_store((*store).clone())
+                .cursor_revision(
+                    &persistence_fjall::TimelineRecordStore::from_source_store((*store).clone())
+                        .read_snapshot(),
+                )
+                .map_err(|error| crate::connection::DbError::System(error.to_string()));
+        }
         SourceMetaRepo::new(self.conn).read_revision(TIMELINE_CURSOR_REVISION_KEY)
     }
 
@@ -380,6 +486,18 @@ impl<'a> TimelineRepo<'a> {
         time_end: Option<&str>,
         event_type: Option<&str>,
     ) -> DbResult<u64> {
+        if let Some(events) = fjall_events(self.conn)? {
+            return Ok(events
+                .into_iter()
+                .filter(|event| {
+                    event_type.is_none_or(|value| event.event_type == value)
+                        && time_start
+                            .is_none_or(|value| event.timestamp.to_rfc3339().as_str() >= value)
+                        && time_end
+                            .is_none_or(|value| event.timestamp.to_rfc3339().as_str() <= value)
+                })
+                .count() as u64);
+        }
         self.count_filtered_for_case(None, time_start, time_end, event_type)
     }
 
@@ -409,6 +527,9 @@ impl<'a> TimelineRepo<'a> {
     }
 
     pub fn find_by_id(&self, event_id: &str) -> DbResult<Option<TimelineEvent>> {
+        if let Some(events) = fjall_events(self.conn)? {
+            return Ok(events.into_iter().find(|event| event.id.0 == event_id));
+        }
         let mut stmt = self.conn.prepare(&format!(
             "SELECT {TIMELINE_SELECT_COLUMNS} FROM timeline_events WHERE id = ?1"
         ))?;
@@ -464,6 +585,52 @@ fn row_to_timeline_cursor_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Timel
             event_id,
         },
     })
+}
+
+fn fjall_events(conn: &Connection) -> DbResult<Option<Vec<TimelineEvent>>> {
+    let Some(source_id) = crate::source_fjall::source_id(conn)? else {
+        return Ok(None);
+    };
+    let Some(store) = crate::source_fjall::open_store(conn)? else {
+        return Ok(None);
+    };
+    let repository = persistence_fjall::TimelineRecordStore::from_source_store((*store).clone());
+    let snapshot = repository.read_snapshot();
+    let mut cursor = None;
+    let mut events = Vec::new();
+    loop {
+        let page = repository
+            .list_by_source(
+                &snapshot,
+                &source_id,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                512,
+            )
+            .map_err(|error| crate::connection::DbError::System(error.to_string()))?;
+        events.extend(page.records.into_iter().map(timeline_from_record));
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    Ok(Some(events))
+}
+
+fn timeline_from_record(record: persistence_fjall::TimelineRecord) -> TimelineEvent {
+    TimelineEvent {
+        id: TimelineEventId(record.id),
+        source_object_id: record.source_object_id,
+        event_type: record.event_type,
+        timestamp: record.timestamp,
+        title: record.title,
+        description: record.description,
+        parser_id: record.parser_id,
+        parser_version: record.parser_version,
+        confidence: record.confidence,
+        source_attribution: record.source_attribution,
+        attrs: record.attrs,
+    }
 }
 
 fn row_to_timeline_event(row: &rusqlite::Row<'_>) -> rusqlite::Result<TimelineEvent> {

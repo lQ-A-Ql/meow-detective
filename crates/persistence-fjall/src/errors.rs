@@ -4,6 +4,8 @@ use std::path::PathBuf;
 pub enum FjallStorageError {
     #[error("database is locked: {path}")]
     StorageLocked { path: PathBuf },
+    #[error("shared source store registry lock is poisoned")]
+    LockPoisoned,
     #[error("Fjall operation failed: {0}")]
     Engine(#[source] fjall::Error),
     #[error("storage I/O failed: {0}")]

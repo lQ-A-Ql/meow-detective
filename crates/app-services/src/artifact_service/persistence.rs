@@ -81,14 +81,7 @@ pub(super) fn already_has_artifact_for_source(
     conn: &Connection,
     source_object_id: &str,
 ) -> Result<bool, ArtifactServiceError> {
-    let count = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE source_object_id = ?1",
-            [source_object_id],
-            |row| row.get::<_, i64>(0),
-        )
-        .map_err(|error| ArtifactServiceError::Db(persistence_sqlite::DbError::from(error)))?;
-    Ok(count > 0)
+    Ok(ArtifactRepo::new(conn).count_by_source_object(source_object_id)? > 0)
 }
 
 fn populate_artifact_graph(

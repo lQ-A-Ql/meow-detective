@@ -1,6 +1,6 @@
 use super::source_registry::SOURCE_MIGRATIONS;
 use crate::connection::{DbError, DbResult};
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::Connection;
 use std::collections::HashSet;
 
 pub(super) const MIGRATIONS: &[(&str, &str)] = &[
@@ -243,10 +243,7 @@ pub const MIGRATION_COUNT: usize = MIGRATIONS.len();
 pub use super::run_case::{current_version, latest_source_version, latest_version, run_all};
 
 pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
-    let applied = run_migrations(conn, SOURCE_MIGRATIONS)?;
-    ensure_analysis_file_feed_index(conn, source_analysis_file_feed_index_sql())?;
-    super::mount_directory_index::ensure(conn, super::mount_directory_index::registered_sql())?;
-    Ok(applied)
+    run_migrations(conn, SOURCE_MIGRATIONS)
 }
 
 pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u32> {
@@ -281,21 +278,8 @@ pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> 
             })?;
             let migration_result = if *name == "source_015_ceph_bluestore_rbd_header_context" {
                 add_ceph_bluestore_rbd_header_context(conn)
-            } else if matches!(
-                *name,
-                "source_016_file_partition_index" | "source_022_file_partition_index_repair"
-            ) {
-                add_file_partition_index_and_backfill(conn, sql)
-            } else if *name == "source_017_timeline_projection_identity" {
-                super::timeline_projection_identity::add_timeline_projection_identity(conn, sql)
             } else if *name == "source_024_ntfs_deleted_recovery" {
                 super::ntfs_deleted_recovery::add_sequence_column(conn, sql)
-            } else if *name == "source_030_analysis_file_feed_index" {
-                ensure_analysis_file_feed_index(conn, sql)
-            } else if *name == "source_031_mount_directory_index" {
-                super::mount_directory_index::ensure(conn, sql)
-            } else if *name == "source_033_timeline_case_id_index" {
-                ensure_timeline_case_id_index(conn, sql)
             } else {
                 conn.execute_batch(sql).map_err(DbError::from)
             };
@@ -378,109 +362,5 @@ fn add_ceph_bluestore_rbd_header_context(conn: &Connection) -> DbResult<()> {
              object_identity_sha256
          )",
     )?;
-    Ok(())
-}
-
-fn add_file_partition_index_and_backfill(conn: &Connection, sql: &str) -> DbResult<()> {
-    let table_exists: bool = conn.query_row(
-        "SELECT COUNT(*) > 0
-         FROM sqlite_master
-         WHERE type = 'table' AND name = 'file_entries'",
-        [],
-        |row| row.get(0),
-    )?;
-    if !table_exists {
-        return Ok(());
-    }
-    let column_exists: bool = conn.query_row(
-        "SELECT COUNT(*) > 0
-         FROM pragma_table_info('file_entries')
-         WHERE name = 'partition_index'",
-        [],
-        |row| row.get(0),
-    )?;
-    if !column_exists {
-        conn.execute_batch("ALTER TABLE file_entries ADD COLUMN partition_index INTEGER")?;
-    }
-    conn.execute_batch(sql)?;
-    Ok(())
-}
-
-fn source_analysis_file_feed_index_sql() -> &'static str {
-    SOURCE_MIGRATIONS
-        .iter()
-        .find_map(|(name, sql)| (*name == "source_030_analysis_file_feed_index").then_some(*sql))
-        .expect("source analysis feed migration must be registered")
-}
-
-fn ensure_timeline_case_id_index(conn: &Connection, sql: &str) -> DbResult<()> {
-    let has_case_id: bool = conn.query_row(
-        "SELECT COUNT(*) = 1
-         FROM sqlite_master, pragma_table_info('timeline_events') AS info
-         WHERE sqlite_master.type = 'table'
-           AND sqlite_master.name = 'timeline_events'
-           AND info.name = 'case_id'",
-        [],
-        |row| row.get(0),
-    )?;
-    if has_case_id {
-        conn.execute_batch(sql).map_err(DbError::from)?;
-    }
-    Ok(())
-}
-
-fn ensure_analysis_file_feed_index(conn: &Connection, sql: &str) -> DbResult<()> {
-    let has_feed_columns: bool = conn.query_row(
-        "SELECT COUNT(*) = 4
-         FROM pragma_table_info('file_entries')
-         WHERE name IN ('data_source_id', 'path', 'id', 'entry_type')",
-        [],
-        |row| row.get(0),
-    )?;
-    if !has_feed_columns {
-        return Err(DbError::Migration(
-            "source_030 requires file_entries(data_source_id, path, id, entry_type)".to_string(),
-        ));
-    }
-    let current_sql = conn
-        .query_row(
-            "SELECT sql FROM sqlite_master
-             WHERE type = 'index' AND name = 'idx_source_file_entries_analysis_feed'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()?;
-    if current_sql
-        .as_deref()
-        .is_some_and(analysis_feed_index_is_current)
-    {
-        return Ok(());
-    }
-    repair_analysis_file_feed_index(conn, sql)
-}
-
-fn analysis_feed_index_is_current(sql: &str) -> bool {
-    let normalized = sql
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_ascii_lowercase();
-    normalized.contains("on file_entries(data_source_id, path asc, id asc)")
-        && normalized.contains("where lower(entry_type) = 'file'")
-}
-
-fn repair_analysis_file_feed_index(conn: &Connection, sql: &str) -> DbResult<()> {
-    conn.execute_batch(
-        "SAVEPOINT source_030_analysis_feed_repair;
-         DROP INDEX IF EXISTS idx_source_file_entries_analysis_feed;",
-    )?;
-    if let Err(error) = conn.execute_batch(sql) {
-        let _ = conn.execute_batch(
-            "ROLLBACK TO source_030_analysis_feed_repair;
-             RELEASE source_030_analysis_feed_repair;",
-        );
-        return Err(error.into());
-    }
-    conn.execute_batch("RELEASE source_030_analysis_feed_repair;")?;
     Ok(())
 }

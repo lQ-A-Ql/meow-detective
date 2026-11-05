@@ -92,21 +92,20 @@ fn aggregate_source_counts(
     )
     .map_err(crate::source_db::ReadySourceError::into_db_error)?
     {
-        counts.file_count += count_table_rows_no_params(
-            &source_conn,
-            "SELECT COUNT(*) FROM file_entries WHERE entry_type = 'file'",
-        );
+        counts.file_count += crate::source_db::ready_source_catalog_count(case_root, &source_id)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
+            .unwrap_or(0) as i64;
         counts.artifact_count +=
-            count_table_rows_no_params(&source_conn, "SELECT COUNT(*) FROM artifacts");
+            crate::source_db::ready_source_artifact_count(case_root, &source_id)
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
+                .unwrap_or(0) as i64;
         counts.timeline_count +=
             crate::source_db::ready_source_timeline_count(case_root, &source_id)
                 .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
                 .map(i64::try_from)
                 .transpose()
                 .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
-                .unwrap_or_else(|| {
-                    count_table_rows_no_params(&source_conn, "SELECT COUNT(*) FROM timeline_events")
-                });
+                .unwrap_or(0);
         counts.graph_node_count += count_table_rows_for_case(
             &source_conn,
             "SELECT COUNT(*) FROM graph_nodes WHERE case_id = ?1",
@@ -119,10 +118,6 @@ fn aggregate_source_counts(
         );
     }
     Ok(counts)
-}
-
-fn count_table_rows_no_params(conn: &Connection, sql: &str) -> i64 {
-    conn.query_row(sql, [], |row| row.get(0)).unwrap_or(0)
 }
 
 fn count_table_rows_for_case(conn: &Connection, sql: &str, case_id: &str) -> i64 {

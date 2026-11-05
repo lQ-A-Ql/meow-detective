@@ -1,3 +1,5 @@
+use crate::connection::DbResult;
+use domain::FileEntry;
 use rusqlite::Connection;
 
 mod browse;
@@ -20,6 +22,44 @@ pub struct FileRepo<'a> {
 impl<'a> FileRepo<'a> {
     pub fn new(conn: &'a Connection) -> Self {
         Self { conn }
+    }
+
+    pub(super) fn fjall_entries(
+        &self,
+        source_id: Option<&str>,
+    ) -> DbResult<Option<Vec<FileEntry>>> {
+        let Some(configured_source_id) = crate::source_fjall::source_id(self.conn)? else {
+            return Ok(None);
+        };
+        let source_id = source_id.unwrap_or(&configured_source_id);
+        let Some(store) = crate::source_fjall::open_store(self.conn)? else {
+            return Ok(None);
+        };
+        let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+        let snapshot = repository.read_snapshot();
+        let mut cursor = None;
+        let mut entries = Vec::new();
+        loop {
+            let page = repository
+                .list_all(
+                    &snapshot,
+                    source_id,
+                    cursor.as_deref(),
+                    persistence_fjall::ScanDirection::Forward,
+                    512,
+                )
+                .map_err(|error| crate::connection::DbError::System(error.to_string()))?;
+            entries.extend(
+                page.records
+                    .into_iter()
+                    .map(crate::source_fjall::file_entry),
+            );
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                break;
+            }
+        }
+        Ok(Some(entries))
     }
 }
 

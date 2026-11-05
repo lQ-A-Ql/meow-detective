@@ -2,7 +2,7 @@ use std::collections::{HashSet, VecDeque};
 use std::path::Path;
 
 use domain::DataSourceId;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use search::{
     FileEntryTypeFilter, FileSearchHit, FileSearchOptions, FileSearchQuerySession,
     FileSearchRankedHit, FileSearchSortDirection, FileSearchSortField, SearchIndex,
@@ -330,6 +330,43 @@ fn next_search_source(
 }
 
 fn count_source_entries(connection: &Connection) -> Result<u64, SearchError> {
+    if let Some(source_id) = connection
+        .query_row(
+            "SELECT id FROM data_sources ORDER BY id LIMIT 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| SearchError::Other(error.to_string()))?
+    {
+        let database_path: String = connection
+            .query_row("PRAGMA database_list", [], |row| row.get(2))
+            .map_err(|error| SearchError::Other(error.to_string()))?;
+        if let Ok(source) = crate::source_db::open_fjall_source_read_only_from_source_db_path(
+            Path::new(&database_path),
+            &DataSourceId(source_id.clone()),
+        ) {
+            let snapshot = source.snapshot();
+            let mut cursor = None;
+            let mut total = 0u64;
+            loop {
+                let page = source
+                    .catalog_list_all(
+                        &snapshot,
+                        &source_id,
+                        cursor.as_deref(),
+                        persistence_fjall::ScanDirection::Forward,
+                        512,
+                    )
+                    .map_err(|error| SearchError::Other(error.to_string()))?;
+                total = total.saturating_add(page.records.len() as u64);
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    return Ok(total);
+                }
+            }
+        }
+    }
     let count: i64 = connection
         .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
         .map_err(|error| SearchError::Other(format!("count searchable file entries: {error}")))?;

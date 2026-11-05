@@ -85,58 +85,31 @@ pub(super) fn already_has_v1_artifacts(
     if families.is_empty() {
         return Ok(false);
     }
-    let placeholders = (1..=families.len())
-        .map(|index| format!("?{}", index + 1))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let version_clause = if candidate.category == "Registry" {
-        format!(" AND extractor_version = ?{}", families.len() + 2)
-    } else {
-        String::new()
-    };
-    let sql = format!(
-        "SELECT COUNT(*) FROM artifacts
-         WHERE source_object_id = ?1 AND artifact_type IN ({placeholders}){version_clause}"
-    );
-    let mut params_values: Vec<Box<dyn rusqlite::types::ToSql>> =
-        vec![Box::new(candidate.file_id.0.clone())];
-    for family in families {
-        params_values.push(Box::new((*family).to_string()));
-    }
-    if candidate.category == "Registry" {
-        params_values.push(Box::new(
-            crate::analysis_service::capability::REGISTRY_EXTRACTOR_VERSION,
-        ));
-    }
-    let params_refs = params_values
-        .iter()
-        .map(|param| param.as_ref())
-        .collect::<Vec<&dyn rusqlite::types::ToSql>>();
-    let count: i64 = conn.query_row(&sql, params_refs.as_slice(), |row| row.get(0))?;
-    Ok(count > 0)
+    let records = artifact_records(conn)?;
+    Ok(records.iter().any(|record| {
+        record.source_object_id.as_deref() == Some(candidate.file_id.0.as_str())
+            && families.contains(&record.artifact_type.as_str())
+            && (candidate.category != "Registry"
+                || record.attrs.get("extractorVersion").and_then(Value::as_str)
+                    == Some(crate::analysis_service::capability::REGISTRY_EXTRACTOR_VERSION))
+    }))
 }
 
 pub(super) fn count_analysis_artifacts(conn: &Connection) -> Result<u64, AnalysisServiceError> {
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type IN ('RegistryValue', 'RegistrySamUser', 'RegistryUserAssist', 'RegistryHive', 'RegistryNetworkAdapter', 'RegistryNetworkProfile', 'RegistryInstalledSoftware', 'RegistryPortableDevice', 'RegistrySystemService', 'RegistryUsbDevice', 'RegistryMountedDevice', 'RegistryShutdownTime', 'RegistryShimCache', 'RegistryMachineRunKey', 'RegistryWinlogonConfig', 'RegistryLsaPackage', 'RegistryOpenSaveMru', 'RegistryLastVisitedMru', 'RegistryRunMru', 'RegistryShellbag', 'RegistryMuiCache', 'RegistryAmcacheApplication', 'RegistryAmcacheApplicationFile', 'RegistryAppCompatLayer', 'RegistrySecurityPolicy', 'RegistryLsaSecret', 'RegistryCachedCredential', 'BrowserHistory', 'BrowserDownload', 'BrowserCookie', 'BrowserSessionTab', 'BrowserPassword', 'BrowserExtension', 'EmailMessage', 'EmailAccount', 'EvtxBootShutdown', 'EvtxSecurityEvent', 'EvtxApplicationEvent', 'LinuxJournal', 'LinuxWtmp', 'LinuxBashCommand', 'LinuxAptEvent', 'LinuxCronJob', 'LinuxSudoEvent', 'LinuxSystemConfig', 'LinuxWebSite', 'LinuxWebAccessLog', 'LinuxWebErrorLog', 'LinuxWebFinding', 'LinuxMysqlConfig', 'LinuxMysqlLogEntry', 'LinuxMysqlFinding')",
-            [],
-            |row| row.get(0),
-        )
-        ?;
-    Ok(count as u64)
+    Ok(artifact_records(conn)?
+        .iter()
+        .filter(|record| analysis_families().contains(&record.artifact_type.as_str()))
+        .count() as u64)
 }
 
 pub(super) fn count_artifacts_by_type(
     conn: &Connection,
     artifact_type: &str,
 ) -> Result<u64, AnalysisServiceError> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM artifacts WHERE artifact_type = ?1",
-        [artifact_type],
-        |row| row.get(0),
-    )?;
-    Ok(count as u64)
+    Ok(artifact_records(conn)?
+        .iter()
+        .filter(|record| record.artifact_type == artifact_type)
+        .count() as u64)
 }
 
 /// Count artifacts of one type produced by a specific extractor. Used to keep
@@ -148,12 +121,13 @@ pub(super) fn count_artifacts_by_type_and_extractor(
     artifact_type: &str,
     extractor_id: &str,
 ) -> Result<u64, AnalysisServiceError> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM artifacts WHERE artifact_type = ?1 AND extractor_id = ?2",
-        [artifact_type, extractor_id],
-        |row| row.get(0),
-    )?;
-    Ok(count as u64)
+    Ok(artifact_records(conn)?
+        .iter()
+        .filter(|record| {
+            record.artifact_type == artifact_type
+                && record.attrs.get("extractorId").and_then(Value::as_str) == Some(extractor_id)
+        })
+        .count() as u64)
 }
 
 pub(super) fn count_artifacts_by_type_excluding_extractor(
@@ -161,26 +135,23 @@ pub(super) fn count_artifacts_by_type_excluding_extractor(
     artifact_type: &str,
     extractor_id: &str,
 ) -> Result<u64, AnalysisServiceError> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM artifacts
-         WHERE artifact_type = ?1 AND COALESCE(extractor_id, '') != ?2",
-        [artifact_type, extractor_id],
-        |row| row.get(0),
-    )?;
-    Ok(count as u64)
+    Ok(artifact_records(conn)?
+        .iter()
+        .filter(|record| {
+            record.artifact_type == artifact_type
+                && record.attrs.get("extractorId").and_then(Value::as_str) != Some(extractor_id)
+        })
+        .count() as u64)
 }
 
 pub(super) fn count_artifacts_by_family_prefix(
     conn: &Connection,
     prefix: &str,
 ) -> Result<u64, AnalysisServiceError> {
-    let pattern = format!("{}%", prefix);
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM artifacts WHERE artifact_type LIKE ?1",
-        [pattern],
-        |row| row.get(0),
-    )?;
-    Ok(count as u64)
+    Ok(artifact_records(conn)?
+        .iter()
+        .filter(|record| record.artifact_type.starts_with(prefix))
+        .count() as u64)
 }
 
 pub(super) fn query_artifact_rows(
@@ -192,31 +163,22 @@ pub(super) fn query_artifact_rows(
     if families.is_empty() {
         return Ok(Vec::new());
     }
-    let placeholders = (1..=families.len())
-        .map(|index| format!("?{}", index))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let sql = format!(
-        "SELECT id, source_object_id, extractor_id, created_at, attrs
-         FROM artifacts
-         WHERE artifact_type IN ({})
-         ORDER BY created_at DESC, id ASC
-         LIMIT ?{} OFFSET ?{}",
-        placeholders,
-        families.len() + 1,
-        families.len() + 2
-    );
-    let mut params_values: Vec<Box<dyn rusqlite::types::ToSql>> = families
-        .iter()
-        .map(|family| Box::new((*family).to_string()) as Box<dyn rusqlite::types::ToSql>)
-        .collect();
-    params_values.push(Box::new(limit as i64));
-    params_values.push(Box::new(offset as i64));
-    let params_refs = params_values
-        .iter()
-        .map(|param| param.as_ref())
-        .collect::<Vec<&dyn rusqlite::types::ToSql>>();
-    query_artifact_rows_with_statement(conn, &sql, params_refs.as_slice())
+    let mut rows = artifact_records(conn)?
+        .into_iter()
+        .filter(|record| families.contains(&record.artifact_type.as_str()))
+        .map(artifact_row)
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| {
+        right
+            .created_at
+            .cmp(&left.created_at)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    Ok(rows
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect())
 }
 
 pub(super) fn query_evtx_artifact_rows(
@@ -228,33 +190,29 @@ pub(super) fn query_evtx_artifact_rows(
     if families.is_empty() {
         return Ok(Vec::new());
     }
-    let placeholders = (1..=families.len())
-        .map(|index| format!("?{index}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let limit_param = families.len() + 1;
-    let offset_param = families.len() + 2;
-    let sql = format!(
-        "SELECT id, source_object_id, extractor_id, created_at, attrs
-         FROM artifacts
-         WHERE artifact_type IN ({placeholders})
-         ORDER BY julianday(json_extract(attrs, '$.timestamp')) IS NULL ASC,
-                  julianday(json_extract(attrs, '$.timestamp')) DESC,
-                  CAST(json_extract(attrs, '$.recordId') AS INTEGER) DESC,
-                  id ASC
-         LIMIT ?{limit_param} OFFSET ?{offset_param}"
-    );
-    let mut params_values: Vec<Box<dyn rusqlite::types::ToSql>> = families
-        .iter()
-        .map(|family| Box::new((*family).to_string()) as Box<dyn rusqlite::types::ToSql>)
-        .collect();
-    params_values.push(Box::new(limit as i64));
-    params_values.push(Box::new(offset as i64));
-    let params_refs = params_values
-        .iter()
-        .map(|param| param.as_ref())
-        .collect::<Vec<&dyn rusqlite::types::ToSql>>();
-    query_artifact_rows_with_statement(conn, &sql, params_refs.as_slice())
+    let mut rows = artifact_records(conn)?
+        .into_iter()
+        .filter(|record| families.contains(&record.artifact_type.as_str()))
+        .map(artifact_row)
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| {
+        let left_ts = left
+            .attrs
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let right_ts = right
+            .attrs
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        right_ts.cmp(left_ts).then_with(|| left.id.cmp(&right.id))
+    });
+    Ok(rows
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect())
 }
 
 pub(super) fn query_evtx_artifact_rows_by_kinds(
@@ -267,34 +225,24 @@ pub(super) fn query_evtx_artifact_rows_by_kinds(
     if kinds.is_empty() {
         return Ok(Vec::new());
     }
-    let placeholders = (2..=kinds.len() + 1)
-        .map(|index| format!("?{index}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let limit_param = kinds.len() + 2;
-    let offset_param = kinds.len() + 3;
-    let sql = format!(
-        "SELECT id, source_object_id, extractor_id, created_at, attrs
-         FROM artifacts
-         WHERE artifact_type = ?1 AND json_extract(attrs, '$.kind') IN ({placeholders})
-         ORDER BY julianday(json_extract(attrs, '$.timestamp')) IS NULL ASC,
-                  julianday(json_extract(attrs, '$.timestamp')) DESC,
-                  CAST(json_extract(attrs, '$.recordId') AS INTEGER) DESC,
-                  id ASC
-         LIMIT ?{limit_param} OFFSET ?{offset_param}"
-    );
-    let mut params_values: Vec<Box<dyn rusqlite::types::ToSql>> =
-        vec![Box::new(artifact_type.to_string())];
-    for kind in kinds {
-        params_values.push(Box::new((*kind).to_string()));
-    }
-    params_values.push(Box::new(limit as i64));
-    params_values.push(Box::new(offset as i64));
-    let params_refs = params_values
-        .iter()
-        .map(|param| param.as_ref())
-        .collect::<Vec<&dyn rusqlite::types::ToSql>>();
-    query_artifact_rows_with_statement(conn, &sql, params_refs.as_slice())
+    let mut rows = artifact_records(conn)?
+        .into_iter()
+        .filter(|record| {
+            record.artifact_type == artifact_type
+                && record
+                    .attrs
+                    .get("kind")
+                    .and_then(Value::as_str)
+                    .is_some_and(|kind| kinds.contains(&kind))
+        })
+        .map(artifact_row)
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| right.id.cmp(&left.id));
+    Ok(rows
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect())
 }
 
 fn query_artifact_rows_with_statement(
@@ -328,45 +276,50 @@ pub(super) fn count_linux_system_config_by_kind(
     conn: &Connection,
     config_kind: &str,
 ) -> Result<u64, AnalysisServiceError> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM artifacts
-         WHERE artifact_type = 'LinuxSystemConfig'
-           AND json_extract(attrs, '$.configKind') = ?1
-           AND json_extract(attrs, '$.overlayContext') IS NULL",
-        [config_kind],
-        |row| row.get(0),
-    )?;
-    Ok(count as u64)
+    Ok(artifact_records(conn)?
+        .iter()
+        .filter(|record| {
+            record.artifact_type == "LinuxSystemConfig"
+                && record.attrs.get("configKind").and_then(Value::as_str) == Some(config_kind)
+                && record.attrs.get("overlayContext").is_none()
+        })
+        .count() as u64)
 }
 
 /// Count passwd account rows whose uid is in the regular-user range.
 pub(super) fn count_linux_user_accounts(conn: &Connection) -> Result<u64, AnalysisServiceError> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM artifacts
-         WHERE artifact_type = 'LinuxSystemConfig'
-           AND json_extract(attrs, '$.configKind') = 'passwdAccount'
-           AND CAST(json_extract(attrs, '$.uid') AS INTEGER) >= 1000
-           AND json_extract(attrs, '$.overlayContext') IS NULL",
-        [],
-        |row| row.get(0),
-    )?;
-    Ok(count as u64)
+    Ok(artifact_records(conn)?
+        .iter()
+        .filter(|record| {
+            record.artifact_type == "LinuxSystemConfig"
+                && record.attrs.get("configKind").and_then(Value::as_str) == Some("passwdAccount")
+                && record
+                    .attrs
+                    .get("uid")
+                    .and_then(Value::as_i64)
+                    .is_some_and(|uid| uid >= 1000)
+                && record.attrs.get("overlayContext").is_none()
+        })
+        .count() as u64)
 }
 
 /// Count shadow account rows flagged `locked`.
 pub(super) fn count_linux_locked_shadow_accounts(
     conn: &Connection,
 ) -> Result<u64, AnalysisServiceError> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM artifacts
-         WHERE artifact_type = 'LinuxSystemConfig'
-           AND json_extract(attrs, '$.configKind') = 'shadowAccount'
-           AND json_extract(attrs, '$.locked') = 1
-           AND json_extract(attrs, '$.overlayContext') IS NULL",
-        [],
-        |row| row.get(0),
-    )?;
-    Ok(count as u64)
+    Ok(artifact_records(conn)?
+        .iter()
+        .filter(|record| {
+            record.artifact_type == "LinuxSystemConfig"
+                && record.attrs.get("configKind").and_then(Value::as_str) == Some("shadowAccount")
+                && record
+                    .attrs
+                    .get("locked")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                && record.attrs.get("overlayContext").is_none()
+        })
+        .count() as u64)
 }
 
 /// Fetch `LinuxSystemConfig` rows of one `configKind` without paging. The
@@ -377,6 +330,17 @@ pub(super) fn query_linux_system_config_by_kind(
     config_kind: &str,
     limit: u32,
 ) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
+    return Ok(artifact_records(conn)?
+        .into_iter()
+        .filter(|record| {
+            record.artifact_type == "LinuxSystemConfig"
+                && record.attrs.get("configKind").and_then(Value::as_str) == Some(config_kind)
+                && record.attrs.get("overlayContext").is_none()
+        })
+        .take(limit as usize)
+        .map(artifact_row)
+        .collect());
+    #[allow(unreachable_code)]
     let sql = "SELECT id, source_object_id, extractor_id, created_at, attrs
          FROM artifacts
          WHERE artifact_type = 'LinuxSystemConfig'
@@ -404,6 +368,18 @@ pub(super) fn query_linux_system_config_by_kind_paged(
     offset: u64,
     limit: u32,
 ) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
+    return Ok(artifact_records(conn)?
+        .into_iter()
+        .filter(|record| {
+            record.artifact_type == "LinuxSystemConfig"
+                && record.attrs.get("configKind").and_then(Value::as_str) == Some(config_kind)
+                && record.attrs.get("overlayContext").is_none()
+        })
+        .skip(offset as usize)
+        .take(limit as usize)
+        .map(artifact_row)
+        .collect());
+    #[allow(unreachable_code)]
     let sql = "SELECT id, source_object_id, extractor_id, created_at, attrs
          FROM artifacts
          WHERE artifact_type = 'LinuxSystemConfig'
@@ -426,6 +402,19 @@ pub(super) fn query_linux_system_config_by_kind_paged(
 pub(super) fn query_linux_account_rows(
     conn: &Connection,
 ) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
+    return Ok(artifact_records(conn)?
+        .into_iter()
+        .filter(|record| {
+            record.artifact_type == "LinuxSystemConfig"
+                && matches!(
+                    record.attrs.get("configKind").and_then(Value::as_str),
+                    Some("passwdAccount" | "shadowAccount")
+                )
+                && record.attrs.get("overlayContext").is_none()
+        })
+        .map(artifact_row)
+        .collect());
+    #[allow(unreachable_code)]
     let sql = "SELECT id, source_object_id, extractor_id, created_at, attrs
          FROM artifacts
          WHERE artifact_type = 'LinuxSystemConfig'
@@ -441,6 +430,23 @@ pub(super) fn query_linux_hostname_rows(
     conn: &Connection,
     limit: u32,
 ) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
+    return Ok(artifact_records(conn)?
+        .into_iter()
+        .filter(|record| {
+            record.artifact_type == "LinuxSystemConfig"
+                && record
+                    .attrs
+                    .get("sourcePath")
+                    .and_then(Value::as_str)
+                    .is_some_and(|path| {
+                        path.ends_with("/etc/hostname") || path.ends_with("etc/hostname")
+                    })
+                && record.attrs.get("overlayContext").is_none()
+        })
+        .take(limit as usize)
+        .map(artifact_row)
+        .collect());
+    #[allow(unreachable_code)]
     let sql = "SELECT id, source_object_id, extractor_id, created_at, attrs
          FROM artifacts
          WHERE artifact_type = 'LinuxSystemConfig'
@@ -457,4 +463,94 @@ pub(super) fn status_from_total(total: u64) -> AnalysisParseStatusDto {
     } else {
         AnalysisParseStatusDto::NotFound
     }
+}
+
+fn artifact_records(
+    conn: &Connection,
+) -> Result<Vec<persistence_fjall::ArtifactRecord>, AnalysisServiceError> {
+    persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(conn)
+        .list_all_records()
+        .map_err(Into::into)
+}
+
+fn artifact_row(record: persistence_fjall::ArtifactRecord) -> AnalysisArtifactRow {
+    let created_at = record
+        .attrs
+        .get("createdAt")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let attrs = record
+        .attrs
+        .get("attrs")
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .unwrap_or_default();
+    AnalysisArtifactRow {
+        id: record.id,
+        source_object_id: record.source_object_id,
+        extractor_id: record
+            .attrs
+            .get("extractorId")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        created_at,
+        attrs,
+    }
+}
+
+fn analysis_families() -> Vec<&'static str> {
+    vec![
+        "RegistryValue",
+        "RegistrySamUser",
+        "RegistryUserAssist",
+        "RegistryHive",
+        "RegistryNetworkAdapter",
+        "RegistryNetworkProfile",
+        "RegistryInstalledSoftware",
+        "RegistryPortableDevice",
+        "RegistrySystemService",
+        "RegistryUsbDevice",
+        "RegistryMountedDevice",
+        "RegistryShutdownTime",
+        "RegistryShimCache",
+        "RegistryMachineRunKey",
+        "RegistryWinlogonConfig",
+        "RegistryLsaPackage",
+        "RegistryOpenSaveMru",
+        "RegistryLastVisitedMru",
+        "RegistryRunMru",
+        "RegistryShellbag",
+        "RegistryMuiCache",
+        "RegistryAmcacheApplication",
+        "RegistryAmcacheApplicationFile",
+        "RegistryAppCompatLayer",
+        "RegistrySecurityPolicy",
+        "RegistryLsaSecret",
+        "RegistryCachedCredential",
+        "BrowserHistory",
+        "BrowserDownload",
+        "BrowserCookie",
+        "BrowserSessionTab",
+        "BrowserPassword",
+        "BrowserExtension",
+        "EmailMessage",
+        "EmailAccount",
+        "EvtxBootShutdown",
+        "EvtxSecurityEvent",
+        "EvtxApplicationEvent",
+        "LinuxJournal",
+        "LinuxWtmp",
+        "LinuxBashCommand",
+        "LinuxAptEvent",
+        "LinuxCronJob",
+        "LinuxSudoEvent",
+        "LinuxSystemConfig",
+        "LinuxWebSite",
+        "LinuxWebAccessLog",
+        "LinuxWebErrorLog",
+        "LinuxWebFinding",
+        "LinuxMysqlConfig",
+        "LinuxMysqlLogEntry",
+        "LinuxMysqlFinding",
+    ]
 }

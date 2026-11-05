@@ -7,7 +7,6 @@ use transport::CommandError;
 
 mod cephfs;
 mod nested;
-mod output_changes;
 mod projection_state;
 mod projections;
 mod records;
@@ -301,10 +300,6 @@ pub(crate) fn mirror_analysis_outputs_before_sqlite_commit(
     let source = crate::storage_runtime::open_source_read_write_at_path(&source_root)
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let analysis_revision = analysis_projection_revision(source_connection, source_id)?;
-    let previous_analysis_revision = analysis_projection_marker(&source, source_id)?;
-    let counts_ready = source
-        .timeline_counts_ready(&source.snapshot(), source_id)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
     ensure_analysis_projection_building(&source, source_id)?;
     apply_projection_records(
         case_connection,
@@ -316,9 +311,6 @@ pub(crate) fn mirror_analysis_outputs_before_sqlite_commit(
         false,
         true,
         false,
-        counts_ready,
-        &analysis_revision,
-        previous_analysis_revision.as_ref(),
     )?;
     source
         .persist(PersistMode::SyncAll)
@@ -425,11 +417,6 @@ fn mirror_source_records_from_connections_internal(
         .unchecked_transaction()
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let source_connection = &sqlite_projection_transaction;
-    persistence_sqlite::repositories::source_projection_change_repo::SourceProjectionChangeRepo::new(
-        source_connection,
-    )
-    .acquire_projection_writer_barrier()
-    .map_err(|error| CommandError::internal(error.to_string()))?;
     let source = match source_root {
         Some(source_root) => crate::storage_runtime::open_source_read_write_at_path(source_root),
         None => crate::source_db::open_registered_fjall_source_read_write(
@@ -484,11 +471,6 @@ fn mirror_source_records_from_connections_internal(
         include_catalog,
         include_analysis,
         catalog_published,
-        counts_ready,
-        analysis_revision
-            .as_ref()
-            .expect("analysis revision exists"),
-        previous_analysis_revision.as_ref(),
     )?;
     source
         .persist(PersistMode::SyncAll)
@@ -524,39 +506,18 @@ fn apply_projection_records(
     include_catalog: bool,
     include_analysis: bool,
     catalog_published: bool,
-    counts_ready: bool,
-    analysis_revision: &AnalysisProjectionRevision,
-    previous_analysis_revision: Option<&AnalysisProjectionRevision>,
 ) -> Result<(), CommandError> {
-    let incremental_analysis = !include_catalog
-        && counts_ready
-        && previous_analysis_revision.is_some_and(|revision| revision.change_log_initialized);
-    if incremental_analysis {
-        let checkpoint =
-            previous_analysis_revision.map_or(0, |revision| revision.change_high_water);
-        output_changes::mirror_analysis_output_changes(
-            case_connection,
-            case_root,
-            case_id,
-            source_connection,
-            source,
-            source_id,
-            checkpoint,
-            analysis_revision.change_high_water,
-        )?;
-    } else {
-        mirror_projection_records(
-            case_connection,
-            case_root,
-            case_id,
-            source_connection,
-            source_id,
-            source,
-            include_catalog,
-            include_analysis,
-            catalog_published,
-        )?;
-    }
+    mirror_projection_records(
+        case_connection,
+        case_root,
+        case_id,
+        source_connection,
+        source_id,
+        source,
+        include_catalog,
+        include_analysis,
+        catalog_published,
+    )?;
     Ok(())
 }
 
@@ -564,11 +525,7 @@ fn prune_analysis_projection_changes(
     source_connection: &Connection,
     through_revision: u64,
 ) -> Result<(), CommandError> {
-    persistence_sqlite::repositories::source_projection_change_repo::SourceProjectionChangeRepo::new(
-        source_connection,
-    )
-    .prune_through(through_revision)
-    .map_err(|error| CommandError::internal(error.to_string()))?;
+    let _ = (source_connection, through_revision);
     Ok(())
 }
 

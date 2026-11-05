@@ -57,14 +57,6 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         include_str!("scripts/source_015_ceph_bluestore_rbd_header_context.sql"),
     ),
     (
-        "source_016_file_partition_index",
-        include_str!("scripts/source_016_file_partition_index.sql"),
-    ),
-    (
-        "source_017_timeline_projection_identity",
-        include_str!("scripts/source_017_timeline_projection_identity.sql"),
-    ),
-    (
         "source_018_cephfs_metadata_inventory",
         include_str!("scripts/source_018_cephfs_metadata_inventory.sql"),
     ),
@@ -81,10 +73,6 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         include_str!("scripts/source_021_cephfs_assembly_capability.sql"),
     ),
     (
-        "source_022_file_partition_index_repair",
-        include_str!("scripts/source_022_file_partition_index_repair.sql"),
-    ),
-    (
         "source_023_deleted_recovery",
         include_str!("scripts/source_023_deleted_recovery.sql"),
     ),
@@ -93,48 +81,12 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         include_str!("scripts/source_024_ntfs_deleted_recovery.sql"),
     ),
     (
-        "source_025_file_entry_encrypted",
-        include_str!("scripts/source_025_file_entry_encrypted.sql"),
-    ),
-    (
-        "source_026_timeline_keyset_indexes",
-        include_str!("scripts/source_026_timeline_keyset_indexes.sql"),
-    ),
-    (
-        "source_027_artifact_keyset_indexes",
-        include_str!("scripts/source_027_artifact_keyset_indexes.sql"),
-    ),
-    (
-        "source_028_file_entry_read_only",
-        include_str!("scripts/source_028_file_entry_read_only.sql"),
-    ),
-    (
         "source_029_case_graph_entity_index",
         include_str!("scripts/source_029_case_graph_entity_index.sql"),
     ),
     (
-        "source_030_analysis_file_feed_index",
-        include_str!("scripts/source_030_analysis_file_feed_index.sql"),
-    ),
-    (
-        "source_031_mount_directory_index",
-        include_str!("scripts/source_031_mount_directory_index.sql"),
-    ),
-    (
         "source_032_deleted_recovery_hashes",
         include_str!("scripts/source_032_deleted_recovery_hashes.sql"),
-    ),
-    (
-        "source_033_timeline_case_id_index",
-        include_str!("scripts/source_033_timeline_case_id_index.sql"),
-    ),
-    (
-        "source_034_file_entry_archive",
-        include_str!("scripts/source_034_file_entry_archive.sql"),
-    ),
-    (
-        "source_035_file_entry_unix_mode",
-        include_str!("scripts/source_035_file_entry_unix_mode.sql"),
     ),
     (
         "source_036_android_analysis",
@@ -147,14 +99,6 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
     (
         "source_038_linux_evidence_facts",
         include_str!("scripts/source_038_linux_evidence_facts.sql"),
-    ),
-    (
-        "source_039_file_browse_paging_index",
-        include_str!("scripts/source_039_file_browse_paging_index.sql"),
-    ),
-    (
-        "source_040_projection_change_log",
-        include_str!("scripts/source_040_projection_change_log.sql"),
     ),
 ];
 

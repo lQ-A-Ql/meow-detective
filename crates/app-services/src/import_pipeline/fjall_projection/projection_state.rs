@@ -36,12 +36,7 @@ pub(super) fn analysis_projection_revision(
     let timeline_high_water = timeline_repo
         .snapshot_high_water()
         .map_err(|error| CommandError::internal(error.to_string()))?;
-    let change_high_water =
-        persistence_sqlite::repositories::source_projection_change_repo::SourceProjectionChangeRepo::new(
-            source_connection,
-        )
-        .high_water()
-        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let change_high_water = artifact_revision.max(timeline_revision);
     Ok(AnalysisProjectionRevision {
         source_id: source_id.to_owned(),
         artifact_revision,
@@ -49,7 +44,7 @@ pub(super) fn analysis_projection_revision(
         timeline_revision,
         timeline_high_water,
         change_high_water,
-        change_log_initialized: true,
+        change_log_initialized: false,
     })
 }
 

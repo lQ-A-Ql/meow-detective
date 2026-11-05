@@ -16,6 +16,8 @@ static TEMPORARY_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Error)]
 pub enum ArtifactStorageError {
+    #[error("artifact object root does not exist: {0}")]
+    MissingRoot(PathBuf),
     #[error("invalid content address: {0}")]
     InvalidAddress(String),
     #[error("unsafe relative path: {0}")]
@@ -132,6 +134,20 @@ impl ArtifactStore {
     pub fn from_objects_root(objects_root: impl AsRef<Path>) -> Result<Self, ArtifactStorageError> {
         let objects_root = objects_root.as_ref().to_path_buf();
         fs::create_dir_all(&objects_root)?;
+        let case_root = objects_root
+            .parent()
+            .and_then(Path::parent)
+            .map_or_else(|| objects_root.clone(), Path::to_path_buf);
+        Ok(Self {
+            case_root,
+            objects_root,
+        })
+    }
+
+    pub fn from_existing_objects_root(
+        objects_root: impl AsRef<Path>,
+    ) -> Result<Self, ArtifactStorageError> {
+        let objects_root = objects_root.as_ref().to_path_buf();
         let case_root = objects_root
             .parent()
             .and_then(Path::parent)

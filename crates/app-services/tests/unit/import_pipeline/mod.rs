@@ -20,8 +20,6 @@ use transport::dto::{
     PartialResultDto,
 };
 
-#[path = "fjall_projection.rs"]
-mod fjall_projection_tests;
 fn import_config_for_path(path: &std::path::Path) -> import_precheck::ImportSourceConfig {
     import_precheck::prepare_import_source_config_from_path(
         &path.to_string_lossy(),

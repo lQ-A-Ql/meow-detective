@@ -226,35 +226,24 @@ fn build_provenance(
 fn artifact_counts_by_family(
     conn: &Connection,
 ) -> Result<HashMap<String, u64>, AnalysisServiceError> {
-    let mut statement =
-        conn.prepare("SELECT artifact_type, COUNT(*) FROM artifacts GROUP BY artifact_type")?;
-    let rows = statement.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
-    })?;
-    let mut counts = HashMap::new();
-    for row in rows {
-        let (family, count) = row?;
-        counts.insert(family, count);
-    }
-    Ok(counts)
+    Ok(
+        persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(conn)
+            .count_by_family()?
+            .into_iter()
+            .collect(),
+    )
 }
 
 fn artifact_counts_by_source(
     conn: &Connection,
 ) -> Result<HashMap<String, u64>, AnalysisServiceError> {
-    let mut statement = conn.prepare(
-        "SELECT source_object_id, COUNT(*)
-         FROM artifacts
-         WHERE source_object_id IS NOT NULL
-         GROUP BY source_object_id",
-    )?;
-    let rows = statement.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
-    })?;
     let mut counts = HashMap::new();
-    for row in rows {
-        let (source_id, count) = row?;
-        counts.insert(source_id, count);
+    for candidate in discover_evidence_candidates(conn)?.into_values().flatten() {
+        let count = persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(conn)
+            .count_by_source_object(&candidate.file_id.0)?;
+        if count > 0 {
+            counts.insert(candidate.file_id.0, count);
+        }
     }
     Ok(counts)
 }

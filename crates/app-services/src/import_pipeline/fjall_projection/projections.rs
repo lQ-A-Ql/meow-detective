@@ -128,83 +128,6 @@ pub(super) fn mirror_artifact_records_only(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(super) fn mirror_artifact_ids(
-    case_connection: &Connection,
-    case_root: &std::path::Path,
-    case_id: &str,
-    connection: &Connection,
-    source: &ReadWriteSourceStorageHandle,
-    source_id: &str,
-    artifact_ids: &[String],
-) -> Result<(), CommandError> {
-    if artifact_ids.is_empty() {
-        return Ok(());
-    }
-    let placeholders = (2..=artifact_ids.len() + 1)
-        .map(|index| format!("?{index}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let sql = format!(
-        "SELECT id, artifact_type, source_object_id, summary, attrs, title,
-                extractor_id, extractor_version, confidence, source_attribution, created_at
-         FROM artifacts WHERE data_source_id = ?1 AND id IN ({placeholders})"
-    );
-    let mut parameters = Vec::with_capacity(artifact_ids.len() + 1);
-    parameters.push(rusqlite::types::Value::Text(source_id.to_owned()));
-    parameters.extend(
-        artifact_ids
-            .iter()
-            .cloned()
-            .map(rusqlite::types::Value::Text),
-    );
-    let mut statement = connection
-        .prepare(&sql)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let rows = statement
-        .query_map(rusqlite::params_from_iter(parameters), |row| {
-            artifact_record_from_row(row, source_id)
-        })
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let records = rows
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let existing_ids = records
-        .iter()
-        .map(|record| record.id.clone())
-        .collect::<HashSet<_>>();
-    let object_store =
-        ArtifactStore::new(case_root).map_err(|error| CommandError::internal(error.to_string()))?;
-    for batch in records.chunks(BATCH_SIZE) {
-        persist_artifact_records(
-            case_connection,
-            case_id,
-            source_id,
-            source,
-            &object_store,
-            batch,
-        )?;
-    }
-    let deleted = artifact_ids
-        .iter()
-        .filter(|id| !existing_ids.contains(*id))
-        .cloned()
-        .collect::<Vec<_>>();
-    crate::artifact_storage_service::release_artifact_owner_references_batch(
-        case_connection,
-        case_id,
-        source_id,
-        "artifact",
-        "metadata",
-        &deleted,
-    )
-    .map_err(|error| CommandError::internal(error.to_string()))?;
-    source
-        .artifact_delete_batch(source_id, &deleted, PersistMode::Buffer)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(())
-}
-
 fn artifact_record_from_row(
     row: &rusqlite::Row<'_>,
     source_id: &str,
@@ -229,52 +152,6 @@ fn artifact_record_from_row(
         content_sha256: Some(infrastructure::hashing::sha256_bytes(summary.as_bytes())),
         attrs: payload,
     })
-}
-
-fn persist_artifact_records(
-    case_connection: &Connection,
-    case_id: &str,
-    source_id: &str,
-    source: &ReadWriteSourceStorageHandle,
-    object_store: &ArtifactStore,
-    records: &[persistence_fjall::ArtifactRecord],
-) -> Result<(), CommandError> {
-    if records.is_empty() {
-        return Ok(());
-    }
-    source
-        .artifact_upsert_batch(records, PersistMode::Buffer)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let mut items = Vec::with_capacity(records.len());
-    for record in records {
-        let object_bytes = serde_json::to_vec(&record.attrs)
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-        let stored = object_store
-            .put_bytes_buffered(&object_bytes)
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-        items.push(crate::artifact_storage_service::ArtifactObjectBatchItem {
-            stored,
-            media_type: "application/json".to_owned(),
-            source_id: Some(source_id.to_owned()),
-            owner_kind: "artifact".to_owned(),
-            owner_id: record.id.clone(),
-            role: "metadata".to_owned(),
-        });
-    }
-    let stored = items
-        .iter()
-        .map(|item| item.stored.clone())
-        .collect::<Vec<_>>();
-    object_store
-        .sync_objects(&stored)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    crate::artifact_storage_service::register_artifact_objects_and_references_batch(
-        case_connection,
-        case_id,
-        &items,
-    )
-    .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(())
 }
 
 fn delete_stale_artifacts(
@@ -408,55 +285,6 @@ pub(super) fn mirror_timeline(
     delete_stale_timeline(source, source_id, &current_ids)?;
     source
         .timeline_rebuild_count_indexes(source_id, PersistMode::Buffer)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(())
-}
-
-pub(super) fn mirror_timeline_ids(
-    connection: &Connection,
-    source: &ReadWriteSourceStorageHandle,
-    source_id: &str,
-    event_ids: &[String],
-) -> Result<(), CommandError> {
-    if event_ids.is_empty() {
-        return Ok(());
-    }
-    let placeholders = (1..=event_ids.len())
-        .map(|index| format!("?{index}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let sql = format!(
-        "SELECT id, source_object_id, event_type, ts, title, description, parser_id,
-                parser_version, confidence, source_attribution, attrs
-         FROM timeline_events WHERE id IN ({placeholders})"
-    );
-    let mut statement = connection
-        .prepare(&sql)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let rows = statement
-        .query_map(rusqlite::params_from_iter(event_ids.iter()), |row| {
-            timeline_record_from_row(row, source_id)
-        })
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let records = rows
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let existing_ids = records
-        .iter()
-        .map(|record| record.id.clone())
-        .collect::<HashSet<_>>();
-    for batch in records.chunks(BATCH_SIZE) {
-        source
-            .timeline_upsert_batch(batch, PersistMode::Buffer)
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-    }
-    let deleted = event_ids
-        .iter()
-        .filter(|id| !existing_ids.contains(*id))
-        .cloned()
-        .collect::<Vec<_>>();
-    source
-        .timeline_delete_batch(source_id, &deleted, PersistMode::Buffer)
         .map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(())
 }

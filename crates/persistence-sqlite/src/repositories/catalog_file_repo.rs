@@ -20,6 +20,9 @@ impl<'a> CatalogFileRepo<'a> {
         if entries.is_empty() {
             return Ok(());
         }
+        if crate::source_fjall::upsert_files_with_partition(self.conn, entries, partition_index)? {
+            return Ok(());
+        }
         let partition_index = i64::try_from(partition_index)
             .map_err(|_| DbError::System("Partition index exceeds SQLite range".to_string()))?;
         let mut statement = self.conn.prepare_cached(
@@ -76,6 +79,10 @@ impl<'a> CatalogFileRepo<'a> {
     }
 
     pub fn update_root_in_transaction(&self, entry: &FileEntry) -> DbResult<()> {
+        if crate::source_fjall::open_store(self.conn)?.is_some() {
+            crate::source_fjall::upsert_files(self.conn, std::slice::from_ref(entry))?;
+            return Ok(());
+        }
         self.conn.execute(
             "UPDATE file_entries
              SET path = ?1, name = ?2, entry_type = 'directory', size = NULL,

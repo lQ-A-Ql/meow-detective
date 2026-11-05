@@ -141,12 +141,27 @@ fn collect_file_entries_from_fjall(
         return Ok(None);
     };
     let snapshot = fjall.snapshot();
-    if !fjall
-        .source_projection_complete(&snapshot, &source_id)
-        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?
+    let projection_key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(source_id.clone())],
+    )
+    .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+    let projection = fjall
+        .read_envelope(
+            &snapshot,
+            persistence_fjall::KeyspaceName::Meta,
+            &projection_key,
+        )
+        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+    if projection
+        .as_ref()
+        .is_some_and(|envelope| envelope.record_kind == "source_projection_building")
     {
         return Ok(None);
     }
+    let projection_complete = fjall
+        .source_projection_complete(&snapshot, &source_id)
+        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     let mut cursor = None;
     let mut entries = Vec::new();
     loop {
@@ -162,7 +177,7 @@ fn collect_file_entries_from_fjall(
         entries.extend(page.records.into_iter().map(file_entry_from_catalog_record));
         cursor = page.next_cursor;
         if cursor.is_none() {
-            return Ok(Some(entries));
+            return Ok((projection_complete || !entries.is_empty()).then_some(entries));
         }
     }
 }
@@ -268,29 +283,20 @@ fn discover_evidence_candidates_with_definitions(
         .iter()
         .map(|definition| (definition.category.to_string(), Vec::new()))
         .collect::<HashMap<_, _>>();
-    let partition_column = if file_entries_has_partition_index(conn)? {
-        "partition_index"
-    } else {
-        "NULL"
-    };
-    let sql = format!(
-        "SELECT id, data_source_id, path, COALESCE(size, 0), {partition_column},
-                created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
-         FROM file_entries
-         WHERE entry_type = 'file' COLLATE NOCASE"
-    );
-    let mut statement = conn.prepare(&sql)?;
-    let mut rows = statement.query([])?;
+    let entries = collect_file_entries(conn)?;
     let mut companions = super::companion_index::CompanionIndex::default();
 
-    while let Some(row) = rows.next()? {
+    for entry in entries {
         ensure_not_cancelled(cancel_token)?;
-        let file_id: String = row.get(0)?;
-        let data_source_id: String = row.get(1)?;
-        let path: String = row.get(2)?;
-        let size: u64 = row.get(3)?;
-        let partition_index = parse_partition_index(row, &file_id)?;
-        let encryption_status = file_encryption_status_from_row(row, 10)?;
+        if !entry.is_file() {
+            continue;
+        }
+        let file_id = entry.id.0;
+        let data_source_id = entry.data_source_id.0;
+        let path = entry.path;
+        let size = entry.size.unwrap_or_default();
+        let partition_index = None;
+        let encryption_status: FileEncryptionStatus = entry.encrypted.into();
         let encrypted = encryption_status.blocks_content();
         let content_identity = candidate_content_identity(
             &file_id,
@@ -300,14 +306,14 @@ fn discover_evidence_candidates_with_definitions(
             size,
             encryption_status,
             [
-                row.get::<_, Option<String>>(5)?,
-                row.get::<_, Option<String>>(6)?,
-                row.get::<_, Option<String>>(7)?,
-                row.get::<_, Option<String>>(8)?,
-                row.get::<_, Option<String>>(9)?,
+                entry.created_at.map(|value| value.to_rfc3339()),
+                entry.modified_at.map(|value| value.to_rfc3339()),
+                entry.accessed_at.map(|value| value.to_rfc3339()),
+                entry.changed_at.map(|value| value.to_rfc3339()),
+                entry.hash_sha256,
             ],
         );
-        let modified_at = parse_timestamp(row.get::<_, Option<String>>(6)?);
+        let modified_at = entry.modified_at;
         if super::companion_index::CompanionIndex::matches(&path) {
             companions.insert(
                 &data_source_id,
@@ -348,39 +354,6 @@ fn discover_evidence_candidates_with_definitions(
     }
     ensure_not_cancelled(cancel_token)?;
     Ok(candidates)
-}
-
-pub(crate) fn file_entries_has_partition_index(
-    conn: &Connection,
-) -> Result<bool, AnalysisServiceError> {
-    let mut statement = conn.prepare("PRAGMA table_info(file_entries)")?;
-    let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
-    for column in columns {
-        if column?.eq_ignore_ascii_case("partition_index") {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-pub(crate) fn parse_partition_index(
-    row: &rusqlite::Row<'_>,
-    file_id: &str,
-) -> Result<Option<usize>, AnalysisServiceError> {
-    match row.get_ref(4)? {
-        rusqlite::types::ValueRef::Null => Ok(None),
-        rusqlite::types::ValueRef::Integer(value) => {
-            let partition_index = u32::try_from(value).map_err(|_| {
-                AnalysisServiceError::InvalidInput(format!(
-                    "file entry '{file_id}' has invalid partition_index {value}"
-                ))
-            })?;
-            Ok(Some(partition_index as usize))
-        }
-        _ => Err(AnalysisServiceError::InvalidInput(format!(
-            "file entry '{file_id}' has non-integer partition_index"
-        ))),
-    }
 }
 
 struct CandidateRow<'a> {

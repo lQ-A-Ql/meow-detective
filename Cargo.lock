@@ -4455,6 +4455,7 @@ dependencies = [
  "chrono",
  "domain",
  "hex",
+ "persistence-fjall",
  "r2d2",
  "rusqlite",
  "serde",

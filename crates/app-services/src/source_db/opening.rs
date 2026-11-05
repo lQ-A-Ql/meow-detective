@@ -18,6 +18,7 @@ pub fn open_source_db(case_root: &Path, data_source_id: &DataSourceId) -> DbResu
     let started = std::time::Instant::now();
     let connection =
         persistence_sqlite::open_or_create_source(&source_db_path(case_root, data_source_id))?;
+    persistence_sqlite::source_fjall::configure_source_identity(&connection, &data_source_id.0)?;
     persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::recover(
         &connection,
     )?;

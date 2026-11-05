@@ -48,7 +48,7 @@ pub use source_generation::{
     source_generation_manifest_digest, verify_source_generation, SourceGenerationManifest,
     SourceGenerationReceipt, SOURCE_GENERATION_MANIFEST_FILE, SOURCE_GENERATION_SEAL_FILE,
 };
-pub use source_store::SourceStore;
+pub use source_store::{open_shared_source_store, SourceStore};
 pub use timeline::{
     decode_timestamp_desc, encode_timestamp_desc, TimelinePage, TimelineRecord, TimelineRecordStore,
 };
