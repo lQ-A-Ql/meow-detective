@@ -46,6 +46,27 @@
 
 ## 本轮验证
 
+## 第一项细化验收表
+
+验收基准：第一项要求普通导入、Logical 导入、Analysis 输出、独立重提取都遵循 Fjall-first 写入顺序；已发布 source 的 Catalog、Artifact、Timeline 查询优先读取 Fjall；SQLite source 明细只保留经过验证的投影用途。
+
+| 验收编号 | 领域 | 验收条件 | 当前状态 | 代码提交 | 已执行验证 | 剩余边界 |
+|---|---|---|---|---|---|---|
+| FJ-01 | 分区元数据 | PartitionRecord 只写 Fjall；旧 SQLite 分区仓库、表和迁移脚本不存在 | 已完成 | `d381c766` | `cargo test -p persistence-fjall`、分区查询测试 | 无 |
+| FJ-02 | 镜像分区 Catalog | staging root folding 在 SQLite 未提交事务中完成；Fjall SyncAll 成功后才提交 SQLite | 已完成 | `981d30b2`、`e17ea3f8` | `staging_merge_test` 12 项 | Fjall 写入失败后的 build 清理依赖导入失败收尾 |
+| FJ-03 | Logical Catalog | LogicalDirectory/Archive 枚举事务先写 Fjall，再提交 SQLite；最终 generation 不重复 Catalog 镜像 | 已完成 | `daa896d8` | Logical import 回归 | 直接调用旧枚举 API 的外部调用者仍保留 SQLite-only 行为 |
+| FJ-04 | Analysis worker | Worker rows 在 SQLite 未提交事务内合并；Artifact/Timeline 先写 Fjall；成功后标记 merged | 已完成 | `e6ec91f9` | staging Analysis merge 回归、Logical import 回归 | 非导入独立输出入口单独验收见 FJ-05 |
+| FJ-05 | 独立重提取 | extraction/re-extraction 输出在 source SQLite commit 前写入 Fjall | 已完成 | `4e5027cb` | extraction 原子替换回归、Clippy | 内存测试无案件存储时保留 SQLite-only 路径 |
+| FJ-06 | 案例指标 | Catalog、Artifact、Timeline 计数优先读取 Fjall | 已完成 | `5782684c` | app-services 指标回归 | 未完成 generation 使用 SQLite fallback |
+| FJ-07 | Analysis candidate | evidence candidate collection 优先读取 Fjall Catalog | 已完成 | `4ee39926` | candidate ordering/discovery 回归 | 旧 source 或未完成 projection 使用 SQLite fallback |
+| FJ-08 | HTML 报告计数 | source file count 优先读取 Fjall Catalog | 已完成 | `c4b642c5` | `cargo check -p app-services --lib` | 完整报告行仍需继续迁移 |
+| FJ-09 | JSON/HTML 完整行 | Artifact、Timeline 导出行全部来自 Fjall 分页 | 未完成 | — | 未执行 | `report/json.rs`、`report/html_export.rs` 仍存在 SQLite 明细读取 |
+| FJ-10 | Graph provenance | Artifact parser/version provenance 来自 Fjall Artifact records | 未完成 | — | 未执行 | `graph_service/query.rs` 仍调用 ArtifactRepo |
+| FJ-11 | 文件浏览读取 | tree、rows、jump、preview metadata 读取 Fjall Catalog | 未完成 | — | 未执行 | `file_service/browse/*`、viewer metadata 仍调用 FileRepo |
+| FJ-12 | SQLite 明细删除 | source SQLite 不再保存 FileEntry、Artifact、Timeline 明细 | 未完成 | — | 未执行 | 需要先完成 FJ-09 至 FJ-11 以及 source schema 重构 |
+
+验收判定：FJ-01 至 FJ-08 已满足 Fjall-first 写入或核心计数读取条件；FJ-09 至 FJ-12 未满足，因此第一项整体仍处于进行中。完整验收需要 FJ-09 至 FJ-12 逐项通过，并运行 `cargo test -p app-services --lib`、`cargo test -p persistence-fjall`、`cargo test -p persistence-sqlite`、Clippy、格式检查和仓库架构 guard。
+
 ### 2026-11-03
 
 - `cargo fmt --all`
