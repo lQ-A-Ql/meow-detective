@@ -74,6 +74,31 @@ pub(super) fn persist_outputs(
         &diagnostic_scans,
         &complete_scans,
     )?;
+    let data_source_id = resolve_output_data_source_id(&transaction)?;
+    let database_path: String = conn
+        .query_row("PRAGMA database_list", [], |row| row.get(2))
+        .unwrap_or_default();
+    let case_root = std::path::Path::new(&database_path)
+        .parent()
+        .and_then(std::path::Path::parent)
+        .and_then(std::path::Path::parent);
+    if let Some(case_root) = case_root {
+        let fjall_root = crate::source_db::fjall_source_storage_root(case_root, &data_source_id)
+            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        if fjall_root.is_dir() {
+            let case_connection =
+                crate::connection::open_existing_case_db(&case_root.join("app.db"))
+                    .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+            crate::import_pipeline::mirror_analysis_outputs_before_sqlite_commit(
+                &case_connection,
+                case_root,
+                case_id,
+                &transaction,
+                &data_source_id,
+            )
+            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        }
+    }
     transaction.commit()?;
     mirror_published_outputs(conn, case_id)?;
     Ok(())

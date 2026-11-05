@@ -288,6 +288,45 @@ pub(crate) fn mirror_analysis_records_before_sqlite_commit(
     projections::mirror_artifact_records_only(connection, source, source_id)
 }
 
+pub(crate) fn mirror_analysis_outputs_before_sqlite_commit(
+    case_connection: &Connection,
+    case_root: &std::path::Path,
+    case_id: &str,
+    source_connection: &rusqlite::Transaction<'_>,
+    source_id: &str,
+) -> Result<(), CommandError> {
+    let source_root = active_import_generation_root(case_root, case_id, source_id)?
+        .or_else(|| crate::source_db::fjall_source_storage_root(case_root, source_id).ok())
+        .ok_or_else(|| CommandError::internal("Fjall source generation is unavailable"))?;
+    let source = crate::storage_runtime::open_source_read_write_at_path(&source_root)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let analysis_revision = analysis_projection_revision(source_connection, source_id)?;
+    let previous_analysis_revision = analysis_projection_marker(&source, source_id)?;
+    let counts_ready = source
+        .timeline_counts_ready(&source.snapshot(), source_id)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    ensure_analysis_projection_building(&source, source_id)?;
+    apply_projection_records(
+        case_connection,
+        case_root,
+        case_id,
+        source_connection,
+        source_id,
+        &source,
+        false,
+        true,
+        false,
+        counts_ready,
+        &analysis_revision,
+        previous_analysis_revision.as_ref(),
+    )?;
+    source
+        .persist(PersistMode::SyncAll)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    publish_projection_marker(&source, source_id, false, Some(&analysis_revision))?;
+    prune_analysis_projection_changes(source_connection, analysis_revision.change_high_water)
+}
+
 pub(crate) fn mark_catalog_projection_seeded(
     source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
     source_id: &str,
