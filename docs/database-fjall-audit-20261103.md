@@ -102,6 +102,7 @@
 - 独立 Analysis extraction/re-extraction 的输出事务也在 SQLite commit 前写入当前 Fjall generation；纯内存单元测试在没有案件存储时保持 SQLite-only，实际案件路径统一 Fjall-first。
 - 案例指标的 Catalog、Timeline、Artifact 计数已优先使用已发布 Fjall projection；仅在 generation 或完成标记缺失时读取 SQLite。
 - Analysis evidence candidate collection now reads the completed Fjall Catalog before using the source SQLite fallback.
+- Case HTML report file counts now use completed Fjall Catalog counts before SQLite fallback; report row and Graph provenance migration remains open.
 
 ### 2026-11-04
 
