@@ -12,7 +12,7 @@ use transport::{
 
 const PAGE_SIZE: usize = 256;
 
-fn open(
+pub(super) fn open(
     case_root: &Path,
     source_id: &DataSourceId,
 ) -> Result<Option<ReadOnlySourceStorageHandle>, FileServiceError> {
@@ -31,6 +31,42 @@ fn open(
         return Ok(None);
     }
     Ok(Some(source))
+}
+
+pub(super) fn source_context(
+    conn: &rusqlite::Connection,
+) -> Option<(std::path::PathBuf, DataSourceId)> {
+    let database_path: String = conn
+        .query_row("PRAGMA database_list", [], |row| row.get(2))
+        .ok()?;
+    let source_id = conn
+        .query_row(
+            "SELECT id FROM data_sources ORDER BY id LIMIT 2",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()?;
+    let case_root = Path::new(&database_path)
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)?
+        .to_path_buf();
+    Some((case_root, DataSourceId(source_id)))
+}
+
+pub(super) fn entry(
+    case_root: &Path,
+    source_id: &DataSourceId,
+    file_id: &str,
+) -> Result<Option<FileEntry>, FileServiceError> {
+    let Some(source) = open(case_root, source_id)? else {
+        return Ok(None);
+    };
+    let snapshot = source.snapshot();
+    source
+        .catalog_get(&snapshot, &source_id.0, file_id)
+        .map(|record| record.map(record_to_domain))
+        .map_err(|error| FileServiceError::other(error.to_string()))
 }
 
 pub(crate) fn record_to_domain(record: FileEntryRecord) -> FileEntry {
@@ -61,7 +97,7 @@ pub(crate) fn record_to_domain(record: FileEntryRecord) -> FileEntry {
     }
 }
 
-fn all(
+pub(super) fn all(
     source: &ReadOnlySourceStorageHandle,
     source_id: &str,
     parent: Option<&str>,

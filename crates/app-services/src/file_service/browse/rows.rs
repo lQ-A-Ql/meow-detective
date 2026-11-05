@@ -11,6 +11,12 @@ pub fn get_file_rows_for_request(
     conn: &Connection,
     request: &GetFileRowsRequest,
 ) -> Result<FileRowsPageDto, FileServiceError> {
+    if let Some((case_root, source_id)) = crate::file_service::fjall_read::source_context(conn) {
+        if let Some(page) = crate::file_service::fjall_read::rows(&case_root, &source_id, request)?
+        {
+            return Ok(page);
+        }
+    }
     let mut request = request.clone();
     request.validate().map_err(FileServiceError::InvalidInput)?;
     let repo = FileRepo::new(conn);

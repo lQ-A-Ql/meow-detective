@@ -22,6 +22,13 @@ pub fn get_file_tree_real_with_visibility(
     conn: &Connection,
     show_hidden: bool,
 ) -> Result<Vec<FileTreeNodeDto>, FileServiceError> {
+    if let Some((case_root, source_id)) = crate::file_service::fjall_read::source_context(conn) {
+        if let Some(nodes) =
+            crate::file_service::fjall_read::tree(&case_root, &source_id, show_hidden)?
+        {
+            return Ok(nodes);
+        }
+    }
     let repo = FileRepo::new(conn);
     let mut roots = repo.find_root_directories_visible(show_hidden)?;
     sort_directories_for_tree(&mut roots);
@@ -105,6 +112,18 @@ pub fn get_file_children_lazy_with_visibility(
     limit: u32,
     show_hidden: bool,
 ) -> Result<FileChildrenDto, FileServiceError> {
+    if let Some((case_root, source_id)) = crate::file_service::fjall_read::source_context(conn) {
+        if let Some(children) = crate::file_service::fjall_read::children(
+            &case_root,
+            &source_id,
+            parent_id,
+            offset,
+            limit,
+            show_hidden,
+        )? {
+            return Ok(children);
+        }
+    }
     let repo = FileRepo::new(conn);
     let parent = match repo.find_by_id(&FileEntryId(parent_id.to_string()))? {
         Some(entry) if entry.entry_type == EntryType::Directory => entry,

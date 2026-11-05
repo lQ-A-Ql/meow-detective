@@ -355,14 +355,14 @@ pub(crate) fn descriptor_is_fresh(
     descriptor: &PreviewDescriptor,
 ) -> bool {
     let file_repo = FileRepo::new(conn);
-    let entry = match file_repo.find_by_id(file_id) {
-        Ok(Some(entry)) => entry,
-        Ok(None) => {
+    let entry = match fjall_entry_for_id(conn, file_id)
+        .ok()
+        .flatten()
+        .or_else(|| file_repo.find_by_id(file_id).ok().flatten())
+    {
+        Some(entry) => entry,
+        None => {
             tracing::debug!(file_id = %file_id.0, "File entry not found; treating descriptor as stale");
-            return false;
-        }
-        Err(error) => {
-            tracing::warn!(%error, file_id = %file_id.0, "Failed to validate descriptor freshness");
             return false;
         }
     };
