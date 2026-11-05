@@ -96,6 +96,7 @@
 - 活动 import 同时存在旧 published generation 时，分区查询固定读取活动 attempt build；活动 build 缺失会返回错误，不会静默读取旧 generation。
 - 删除 SQLite `PartitionRepo`、`DataSourcePartitionRecord`、旧分区迁移模块、分区表迁移脚本和 source 分区表定义；新 source schema 不再创建分区 SQLite 表，测试夹具全部经过 Fjall 分区服务写入。
 - 普通导入在 Enumeration/Merge 完成后立即发布 Catalog Fjall generation；Analysis 阶段只执行 Analysis projection，预发布阶段不再写空的 Timeline、Artifact 和 Parser 镜像。
+- staging merge 现在在未提交的 SQLite 事务中完成 root folding，先将最终 Catalog batch 写入 Fjall 并完成 `SyncAll`，随后才提交 SQLite 投影；取消、冲突和写入失败不会标记 staging merged。
 
 ### 2026-11-04
 
