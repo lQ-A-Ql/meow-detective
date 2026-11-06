@@ -28,6 +28,7 @@ fn read_write_runtime_exposes_case_and_source_handles() {
 fn read_only_runtime_requires_an_existing_storage_layout() {
     let root = tempdir().unwrap();
     assert!(ReadOnlyStorageRuntime::open(root.path()).is_err());
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
 
     let writable = ReadWriteStorageRuntime::open(root.path()).unwrap();
     drop(writable);

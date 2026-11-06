@@ -9,6 +9,7 @@ mod indexing;
 mod lookup;
 pub(crate) mod mapping;
 mod registry_hives;
+mod visiting;
 mod writes;
 
 pub use browse_paging::{FileSortDirection, FileSortKey};

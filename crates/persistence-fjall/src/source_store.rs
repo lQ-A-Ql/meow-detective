@@ -13,7 +13,8 @@ use std::{
     sync::{Arc, Mutex, OnceLock, Weak},
 };
 
-static SHARED_STORES: OnceLock<Mutex<HashMap<PathBuf, Weak<SourceStore>>>> = OnceLock::new();
+static SHARED_STORES: OnceLock<Mutex<HashMap<PathBuf, Weak<crate::database::DatabaseState>>>> =
+    OnceLock::new();
 
 #[derive(Clone)]
 pub struct SourceStore {
@@ -28,6 +29,10 @@ impl SourceStore {
     }
     pub fn database(&self) -> &SingleWriterTxDatabase {
         &self.database
+    }
+
+    pub fn is_exclusively_owned(&self) -> bool {
+        Arc::strong_count(&self.database.inner) == 1
     }
     pub fn write_envelope(
         &self,
@@ -82,9 +87,11 @@ pub fn open_shared_source_store(
         .map_err(|_| crate::errors::FjallStorageError::LockPoisoned)?;
     registry.retain(|_, store| store.strong_count() > 0);
     if let Some(store) = registry.get(&path).and_then(Weak::upgrade) {
-        return Ok(store);
+        return Ok(Arc::new(SourceStore {
+            database: SingleWriterTxDatabase { inner: store },
+        }));
     }
     let store = Arc::new(SourceStore::open(&path, config)?);
-    registry.insert(path, Arc::downgrade(&store));
+    registry.insert(path, Arc::downgrade(&store.database.inner));
     Ok(store)
 }

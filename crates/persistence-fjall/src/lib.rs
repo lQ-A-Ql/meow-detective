@@ -8,6 +8,7 @@ mod errors;
 mod keyspaces;
 mod parser;
 mod partition;
+mod record_metrics;
 mod recovery;
 mod scan;
 mod source_build;

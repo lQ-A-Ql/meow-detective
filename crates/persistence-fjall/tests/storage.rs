@@ -198,6 +198,33 @@ fn recovery_scan_reports_publish_conflict() {
 }
 
 #[test]
+fn shared_source_lifetime_includes_repository_clones_and_snapshots() {
+    let directory = tempfile::tempdir().unwrap();
+    let owner =
+        persistence_fjall::open_shared_source_store(directory.path(), DatabaseConfig::default())
+            .unwrap();
+    let repository = persistence_fjall::ArtifactRecordStore::from_source_store((*owner).clone());
+    let snapshot = repository.read_snapshot();
+    assert!(!owner.is_exclusively_owned());
+    drop(owner);
+    let reopened =
+        persistence_fjall::open_shared_source_store(directory.path(), DatabaseConfig::default())
+            .unwrap();
+    assert!(!reopened.is_exclusively_owned());
+    drop(repository);
+    drop(reopened);
+    let snapshot_owner =
+        persistence_fjall::open_shared_source_store(directory.path(), DatabaseConfig::default())
+            .unwrap();
+    assert!(!snapshot_owner.is_exclusively_owned());
+    drop(snapshot);
+    assert!(snapshot_owner.is_exclusively_owned());
+    drop(snapshot_owner);
+    let exclusive = SourceStore::open(directory.path(), DatabaseConfig::default()).unwrap();
+    assert!(exclusive.is_exclusively_owned());
+}
+
+#[test]
 fn second_open_is_reported_as_storage_locked() {
     let directory = tempfile::tempdir().unwrap();
     let _database =

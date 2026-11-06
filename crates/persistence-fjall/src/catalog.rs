@@ -13,6 +13,8 @@ use std::path::Path;
 mod catalog_batch;
 mod catalog_directory;
 mod file_feed;
+mod id_feed;
+mod metrics;
 
 const RECORD_KIND: &str = "file_entry";
 const SCHEMA_VERSION: u16 = 2;
@@ -117,6 +119,13 @@ impl CatalogRecordStore {
                     key: key.clone(),
                 });
                 self.index_deletes(&mut actions, &previous)?;
+                let mut deltas = crate::record_metrics::CountDeltas::new();
+                crate::record_metrics::adjust(&mut deltas, "catalog", source_id, -1)?;
+                if previous.entry_type == CatalogEntryType::File {
+                    crate::record_metrics::adjust(&mut deltas, "catalog.files", source_id, -1)?;
+                }
+                crate::record_metrics::append(snapshot, &mut actions, deltas)?;
+                crate::record_metrics::advance(snapshot, &mut actions, "catalog")?;
                 actions.push(WriteAction::Put {
                     keyspace: KeyspaceName::Tombstones,
                     key: tombstone_key(source_id, record_id)?,
@@ -299,6 +308,10 @@ impl CatalogRecordStore {
 
     fn index_writes(&self, actions: &mut Vec<WriteAction>, record: &FileEntryRecord) -> Result<()> {
         let record_key = record_key(&record.data_source_id, &record.id)?;
+        actions.push(index_write(
+            id_feed::key(&record.data_source_id, &record.id)?,
+            record_key.clone(),
+        ));
         actions.push(index_write(parent_key(record)?, record_key.clone()));
         if record.entry_type == CatalogEntryType::Directory {
             actions.push(index_write(directory_key(record)?, record_key.clone()));
@@ -322,6 +335,10 @@ impl CatalogRecordStore {
         actions: &mut Vec<WriteAction>,
         record: &FileEntryRecord,
     ) -> Result<()> {
+        actions.push(WriteAction::Delete {
+            keyspace: KeyspaceName::CatalogIndexes,
+            key: id_feed::key(&record.data_source_id, &record.id)?,
+        });
         actions.push(WriteAction::Delete {
             keyspace: KeyspaceName::CatalogIndexes,
             key: parent_key(record)?,

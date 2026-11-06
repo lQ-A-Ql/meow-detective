@@ -26,6 +26,7 @@ impl ArtifactRecordStore {
         records: &[ArtifactRecord],
     ) -> Result<Vec<WriteAction>> {
         let mut actions = Vec::with_capacity(records.len().saturating_mul(4));
+        let mut deltas = crate::record_metrics::CountDeltas::new();
         let latest = records
             .iter()
             .map(|record| ((record.data_source_id.as_str(), record.id.as_str()), record))
@@ -38,6 +39,8 @@ impl ArtifactRecordStore {
             }
             if let Some(previous) = previous {
                 actions.extend(index_deletes(&previous)?);
+            } else {
+                crate::record_metrics::adjust(&mut deltas, "artifact", &record.data_source_id, 1)?;
             }
             let payload = serde_json::to_vec(record).map_err(|error| {
                 crate::errors::FjallStorageError::Serialization(error.to_string())
@@ -60,6 +63,7 @@ impl ArtifactRecordStore {
         if actions.is_empty() {
             return Ok(actions);
         }
+        crate::record_metrics::append(snapshot, &mut actions, deltas)?;
         actions.push(self.revision_action(snapshot)?);
         Ok(actions)
     }

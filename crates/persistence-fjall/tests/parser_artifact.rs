@@ -33,6 +33,7 @@ fn artifact_revision_tracks_equal_count_replacement_and_rejects_invalid_batches(
     store.upsert(&original, PersistMode::SyncAll).unwrap();
     let before = store.read_snapshot();
     let revision = store.cursor_revision(&before).unwrap();
+    assert_eq!(store.count(&before, None).unwrap(), 1);
     store.upsert(&original, PersistMode::SyncAll).unwrap();
     assert_eq!(
         store.cursor_revision(&store.read_snapshot()).unwrap(),
@@ -47,6 +48,7 @@ fn artifact_revision_tracks_equal_count_replacement_and_rejects_invalid_batches(
         .upsert_batch(&[original.clone(), updated.clone()], PersistMode::SyncAll)
         .unwrap();
     let after = store.read_snapshot();
+    assert_eq!(store.count(&after, Some("source")).unwrap(), 1);
     assert_eq!(store.cursor_revision(&after).unwrap(), revision + 1);
     assert_eq!(store.get(&before, "source", "one").unwrap(), Some(original));
     assert!(store

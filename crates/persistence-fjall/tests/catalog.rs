@@ -37,6 +37,71 @@ fn record(
 }
 
 #[test]
+fn catalog_counts_and_binary_id_feed_follow_atomic_changes() {
+    let root = tempfile::tempdir().unwrap();
+    let store = CatalogRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let first = record("s", "a-long-id", None, "file", "file");
+    let second = record("s", "b", None, "file2", "file2");
+    let other = record("other", "x", None, "foreign", "foreign");
+    store
+        .upsert_batch(
+            &[first.clone(), second.clone(), first.clone(), other],
+            PersistMode::SyncAll,
+        )
+        .unwrap();
+    let before = store.read_snapshot();
+    assert_eq!(store.count(&before, None).unwrap(), 3);
+    assert_eq!(store.count(&before, Some("s")).unwrap(), 2);
+    assert_eq!(store.file_count(&before, "s").unwrap(), 2);
+    let revision = store.cursor_revision(&before).unwrap();
+    assert_eq!(
+        store.list_by_id(&before, "s", None, 1).unwrap().records[0].id,
+        "a-long-id"
+    );
+    assert_eq!(
+        store
+            .list_by_id(&before, "s", Some("a-long-id"), 1)
+            .unwrap()
+            .records[0]
+            .id,
+        "b"
+    );
+    let mut directory = first.clone();
+    directory.entry_type = CatalogEntryType::Directory;
+    store.upsert(&directory, PersistMode::SyncAll).unwrap();
+    store.delete("s", "b", PersistMode::SyncAll).unwrap();
+    let after = store.read_snapshot();
+    assert_eq!(store.count(&after, None).unwrap(), 2);
+    assert_eq!(store.file_count(&after, "s").unwrap(), 0);
+    assert_eq!(store.cursor_revision(&after).unwrap(), revision + 2);
+    assert_eq!(store.count(&before, Some("s")).unwrap(), 2);
+    store.upsert(&directory, PersistMode::SyncAll).unwrap();
+    assert_eq!(
+        store.cursor_revision(&store.read_snapshot()).unwrap(),
+        revision + 2
+    );
+    let invalid = record("s", "bad\0id", None, "bad", "bad");
+    assert!(store
+        .upsert_batch(&[second, invalid], PersistMode::SyncAll)
+        .is_err());
+    assert_eq!(store.count(&store.read_snapshot(), None).unwrap(), 2);
+    assert!(store
+        .get(&store.read_snapshot(), "s", "b")
+        .unwrap()
+        .is_none());
+    drop(before);
+    drop(after);
+    drop(store);
+    let reopened = CatalogRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    assert_eq!(
+        reopened
+            .count(&reopened.read_snapshot(), Some("s"))
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
 fn file_feed_uses_binary_path_and_id_order_with_stable_snapshot() {
     let root = tempfile::tempdir().unwrap();
     let store = CatalogRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();

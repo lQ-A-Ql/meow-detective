@@ -354,11 +354,9 @@ impl<'a> ArtifactRepo<'a> {
     }
 
     pub fn snapshot_high_water(&self) -> DbResult<i64> {
-        if let Some(records) = fjall_records(self.conn)? {
-            return i64::try_from(records.len()).map_err(|_| {
-                crate::connection::DbError::System(
-                    "artifact count exceeds SQLite integer range".into(),
-                )
+        if crate::source_fjall::has_source_store(self.conn)? {
+            return i64::try_from(self.cursor_revision()?).map_err(|_| {
+                crate::connection::DbError::System("artifact revision exceeds cursor range".into())
             });
         }
         self.conn
@@ -427,8 +425,12 @@ impl<'a> ArtifactRepo<'a> {
     }
 
     pub fn count(&self) -> DbResult<u64> {
-        if let Some(records) = fjall_records(self.conn)? {
-            return Ok(records.len() as u64);
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            let repository =
+                persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+            return repository
+                .count(&repository.read_snapshot(), None)
+                .map_err(|error| crate::DbError::System(error.to_string()));
         }
         let count: i64 = self
             .conn

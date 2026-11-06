@@ -47,7 +47,7 @@ members = [
   "crates/persistence-fjall",
   "crates/artifact-storage",
 ]
-exclude = ["vendor/iscsi-target", "vendor/bbolt-rs"]
+exclude = ["vendor/iscsi-target", "vendor/bbolt-rs", "vendor/fjall-3.1.13"]
 
 [workspace.package]
 edition = "2021"
@@ -198,6 +198,7 @@ persistence-fjall = { path = "crates/persistence-fjall" }
 artifact-storage = { path = "crates/artifact-storage" }
 
 [patch.crates-io]
+fjall = { path = "vendor/fjall-3.1.13" }
 bbolt-rs = { path = "vendor/bbolt-rs" }
 # Upstream 1.0.0 acknowledges WRITE commands, reports writable MODE SENSE data,
 # and emits Data-In status/residual fields that Windows rejects. The local patch

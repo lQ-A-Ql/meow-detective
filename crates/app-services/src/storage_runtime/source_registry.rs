@@ -167,10 +167,9 @@ pub(crate) fn close_source_store_at_path(
             .get(&source_root)
             .and_then(Weak::upgrade)
             .is_some()
-            || registry
-                .stores
-                .get(&source_root)
-                .is_some_and(|cached| Arc::strong_count(&cached.store) > 1)
+            || registry.stores.get(&source_root).is_some_and(|cached| {
+                Arc::strong_count(&cached.store) > 1 || !cached.store.is_exclusively_owned()
+            })
         {
             return Ok(None);
         }
@@ -204,10 +203,9 @@ pub(crate) fn close_case_source_stores(
             .iter()
             .any(|(path, lock)| path.starts_with(&sources_root) && lock.strong_count() > 0)
             || paths.iter().any(|path| {
-                registry
-                    .stores
-                    .get(path)
-                    .is_some_and(|cached| Arc::strong_count(&cached.store) > 1)
+                registry.stores.get(path).is_some_and(|cached| {
+                    Arc::strong_count(&cached.store) > 1 || !cached.store.is_exclusively_owned()
+                })
             })
         {
             return Ok(None);
@@ -248,7 +246,9 @@ fn evict_idle_stores(registry: &mut Registry) {
         let victim = registry
             .stores
             .iter()
-            .filter(|(_, cached)| Arc::strong_count(&cached.store) == 1)
+            .filter(|(_, cached)| {
+                Arc::strong_count(&cached.store) == 1 && cached.store.is_exclusively_owned()
+            })
             .min_by_key(|(_, cached)| cached.last_used)
             .map(|(path, _)| path.clone());
         let Some(victim) = victim else {

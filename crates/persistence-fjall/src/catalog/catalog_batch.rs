@@ -33,6 +33,7 @@ impl CatalogRecordStore {
             .map(|record| (record.data_source_id.clone(), record.id.clone()))
             .collect::<HashSet<_>>();
         let mut actions = Vec::with_capacity(records.len().saturating_mul(8));
+        let mut deltas = crate::record_metrics::CountDeltas::new();
         for record in records {
             let key = record_key(&record.data_source_id, &record.id)?;
             let previous = self.read_record(snapshot, &key, &record.data_source_id, &record.id)?;
@@ -41,6 +42,24 @@ impl CatalogRecordStore {
             }
             if let Some(previous) = previous {
                 self.index_deletes(&mut actions, &previous)?;
+                if previous.entry_type == super::CatalogEntryType::File {
+                    crate::record_metrics::adjust(
+                        &mut deltas,
+                        "catalog.files",
+                        &record.data_source_id,
+                        -1,
+                    )?;
+                }
+            } else {
+                crate::record_metrics::adjust(&mut deltas, "catalog", &record.data_source_id, 1)?;
+            }
+            if record.entry_type == super::CatalogEntryType::File {
+                crate::record_metrics::adjust(
+                    &mut deltas,
+                    "catalog.files",
+                    &record.data_source_id,
+                    1,
+                )?;
             }
             let envelope = crate::codec::VersionedEnvelope::from_serializable(
                 RECORD_KIND,
@@ -79,6 +98,8 @@ impl CatalogRecordStore {
         if actions.is_empty() {
             return Ok(actions);
         }
+        crate::record_metrics::append(snapshot, &mut actions, deltas)?;
+        crate::record_metrics::advance(snapshot, &mut actions, "catalog")?;
         Ok(actions)
     }
 }

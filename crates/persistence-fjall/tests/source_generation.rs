@@ -13,6 +13,31 @@ fn put(keyspace: KeyspaceName, key: &[u8], value: &[u8]) -> WriteAction {
 }
 
 #[test]
+fn worker_shutdown_releases_generation_for_immediate_publication() {
+    let root = tempfile::tempdir().unwrap();
+    for iteration in 0..32 {
+        let source_id = format!("source-{iteration}");
+        let layout =
+            SourceBuildLayout::for_case_source(root.path(), &source_id, "attempt").unwrap();
+        std::fs::create_dir_all(layout.build_path()).unwrap();
+        let source = SourceStore::open(layout.build_path(), DatabaseConfig::default()).unwrap();
+        source
+            .database()
+            .write_batch(
+                &[put(KeyspaceName::CatalogRecords, b"catalog/1", b"file")],
+                PersistMode::SyncAll,
+            )
+            .unwrap();
+        seal_source_generation(&source, &source_id, "attempt", &"d".repeat(64)).unwrap();
+        drop(source);
+        publish_source_generation(layout.build_path(), layout.published_path()).unwrap();
+        let published =
+            SourceStore::open(layout.published_path(), DatabaseConfig::default()).unwrap();
+        verify_source_generation(&published, &source_id).unwrap();
+    }
+}
+
+#[test]
 fn source_generation_manifest_survives_mutable_analysis_writes() {
     let directory = tempfile::tempdir().unwrap();
     let layout =

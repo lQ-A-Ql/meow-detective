@@ -25,29 +25,9 @@ pub(super) fn count_analysis_file_tasks(
     let conn = persistence_sqlite::open_existing_source_read_only(db_path)?;
     if let Some(store) = persistence_sqlite::source_fjall::open_store(&conn)? {
         let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
-        let snapshot = catalog.read_snapshot();
-        let mut cursor: Option<(String, String)> = None;
-        let mut total = 0;
-        loop {
-            let page = catalog
-                .list_files_by_path(
-                    &snapshot,
-                    &data_source_id.0,
-                    cursor
-                        .as_ref()
-                        .map(|(path, id)| (path.as_str(), id.as_str())),
-                    FILE_PAGE_SIZE as usize,
-                )
-                .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
-            total += page.records.len() as u64;
-            if page.next_cursor.is_none() {
-                return Ok(total);
-            }
-            cursor = page
-                .records
-                .last()
-                .map(|record| (record.path.clone(), record.id.clone()));
-        }
+        return catalog
+            .file_count(&catalog.read_snapshot(), &data_source_id.0)
+            .map_err(|error| ImportAnalysisError::Other(error.to_string()));
     }
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM file_entries

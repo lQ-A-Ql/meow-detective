@@ -462,17 +462,20 @@ fn open_parts(
         if !source_root.is_dir() {
             return Err(StorageRuntimeError::InvalidRoot(source_root.to_path_buf()));
         }
+        if !source_root.join("version").is_file() {
+            return Err(StorageRuntimeError::MissingRoot(source_root.to_path_buf()));
+        }
     } else {
         std::fs::create_dir_all(source_root)
             .map_err(|error| StorageRuntimeError::Source(FjallStorageError::Io(error)))?;
     }
-    let source_store = source_registry::open_shared_source_store(source_root, config)?;
     let artifact_root = artifact_root::artifact_objects_root(source_root);
     let artifact_store = Arc::new(if read_only {
         ArtifactStore::from_existing_objects_root(&artifact_root)?
     } else {
         ArtifactStore::from_objects_root(&artifact_root)?
     });
+    let source_store = source_registry::open_shared_source_store(source_root, config)?;
     tracing::debug!(
         source_root = %source_root.display(),
         read_only,

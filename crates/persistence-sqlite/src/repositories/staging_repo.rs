@@ -475,25 +475,8 @@ impl StagingRepo {
         })();
         result
     }
-    pub fn read_analysis_index_docs_page(
-        conn: &Connection,
-        limit: i64,
-        offset: i64,
-    ) -> rusqlite::Result<Vec<(String, String, String, String)>> {
-        let mut stmt = conn.prepare(
-            "SELECT file_id, path, text, language FROM index_docs WHERE text <> '' ORDER BY file_id LIMIT ?1 OFFSET ?2",
-        )?;
-        let rows = stmt.query_map(params![limit, offset], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })?;
-        rows.collect()
-    }
 }
+mod analysis_index;
 mod completion;
 mod fallback;
 mod metadata;

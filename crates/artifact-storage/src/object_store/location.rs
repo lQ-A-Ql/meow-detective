@@ -21,6 +21,14 @@ impl ArtifactStore {
         objects_root: impl AsRef<Path>,
     ) -> Result<Self, ArtifactStorageError> {
         let objects_root = objects_root.as_ref().to_path_buf();
+        let metadata = fs::metadata(&objects_root)?;
+        if !metadata.is_dir() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotADirectory,
+                "artifact object root must be a directory",
+            )
+            .into());
+        }
         let case_root = objects_root
             .parent()
             .and_then(Path::parent)

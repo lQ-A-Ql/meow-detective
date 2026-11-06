@@ -15,15 +15,29 @@ impl FileRepo<'_> {
         entry_id: &FileEntryId,
         max_depth: usize,
     ) -> DbResult<(Vec<FileEntry>, bool)> {
-        if let Some(entries) = self.fjall_entries(None)? {
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            let catalog =
+                persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+            let snapshot = catalog.read_snapshot();
+            let owner = crate::source_fjall::source_id(self.conn)?
+                .ok_or_else(|| crate::DbError::System("source identity is missing".into()))?;
             let mut chain = Vec::new();
-            let mut current = entries.iter().find(|entry| entry.id == *entry_id).cloned();
+            let mut current = Some(entry_id.0.clone());
+            let mut visited = std::collections::BTreeSet::new();
             for _ in 0..=max_depth {
-                let Some(entry) = current else { break };
+                let Some(id) = current else { break };
+                if !visited.insert(id.clone()) {
+                    break;
+                }
+                let Some(entry) = catalog
+                    .get(&snapshot, &owner, &id)
+                    .map_err(|error| crate::DbError::System(error.to_string()))?
+                else {
+                    break;
+                };
                 let parent = entry.parent_id.clone();
-                chain.push(entry);
-                current =
-                    parent.and_then(|id| entries.iter().find(|entry| entry.id == id).cloned());
+                chain.push(crate::source_fjall::file_entry(entry));
+                current = parent;
             }
             chain.reverse();
             let complete = chain.first().is_some_and(|entry| entry.parent_id.is_none());
@@ -175,8 +189,8 @@ impl FileRepo<'_> {
     }
 
     pub fn count_by_data_source(&self, data_source_id: &DataSourceId) -> DbResult<u64> {
-        if let Some(entries) = self.fjall_entries(Some(&data_source_id.0))? {
-            return Ok(entries.len() as u64);
+        if let Some(count) = self.native_count(Some(&data_source_id.0))? {
+            return Ok(count);
         }
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1",
@@ -187,8 +201,8 @@ impl FileRepo<'_> {
     }
 
     pub fn count_all(&self) -> DbResult<u64> {
-        if let Some(entries) = self.fjall_entries(None)? {
-            return Ok(entries.len() as u64);
+        if let Some(count) = self.native_count(None)? {
+            return Ok(count);
         }
         let count: i64 = self
             .conn

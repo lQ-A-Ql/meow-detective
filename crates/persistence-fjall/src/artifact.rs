@@ -40,6 +40,9 @@ pub struct ArtifactRecordStore {
 }
 
 impl ArtifactRecordStore {
+    pub fn count(&self, snapshot: &SourceReadSnapshot, source: Option<&str>) -> Result<u64> {
+        crate::record_metrics::count(snapshot, "artifact", source)
+    }
     pub fn cursor_revision(&self, snapshot: &SourceReadSnapshot) -> Result<u64> {
         let key = encode_key("artifact.revision", &[])?;
         let Some(value) = snapshot.get(KeyspaceName::Meta, &key)? else {
@@ -112,6 +115,7 @@ impl ArtifactRecordStore {
             .database()
             .write_planned(mode, |snapshot| {
                 let mut actions = Vec::new();
+                let mut deltas = crate::record_metrics::CountDeltas::new();
                 let ids = ids.iter().collect::<std::collections::BTreeSet<_>>();
                 for id in ids {
                     let Some(record) = self.get(snapshot, source_id, id)? else {
@@ -122,9 +126,11 @@ impl ArtifactRecordStore {
                         key: record_key(source_id, id)?,
                     });
                     actions.extend(index_deletes(&record)?);
+                    crate::record_metrics::adjust(&mut deltas, "artifact", source_id, -1)?;
                     deleted += 1;
                 }
                 if !actions.is_empty() {
+                    crate::record_metrics::append(snapshot, &mut actions, deltas)?;
                     actions.push(self.revision_action(snapshot)?);
                 }
                 Ok(actions)

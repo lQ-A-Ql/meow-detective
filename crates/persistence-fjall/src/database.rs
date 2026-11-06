@@ -48,9 +48,13 @@ impl Default for DatabaseConfig {
 
 #[derive(Clone)]
 pub struct SingleWriterTxDatabase {
-    inner: Arc<fjall::SingleWriterTxDatabase>,
-    path: PathBuf,
+    pub(crate) inner: Arc<DatabaseState>,
+}
+
+pub(crate) struct DatabaseState {
     keyspaces: Arc<HashMap<KeyspaceName, SingleWriterTxKeyspace>>,
+    engine: fjall::SingleWriterTxDatabase,
+    path: PathBuf,
 }
 
 impl SingleWriterTxDatabase {
@@ -67,24 +71,27 @@ impl SingleWriterTxDatabase {
         })?;
         let keyspaces = open_keyspaces(&inner)?.into_iter().collect();
         Ok(Self {
-            inner: Arc::new(inner),
-            path,
-            keyspaces: Arc::new(keyspaces),
+            inner: Arc::new(DatabaseState {
+                engine: inner,
+                path,
+                keyspaces: Arc::new(keyspaces),
+            }),
         })
     }
 
     pub fn path(&self) -> &Path {
-        &self.path
+        &self.inner.path
     }
 
     fn keyspace(&self, name: KeyspaceName) -> &SingleWriterTxKeyspace {
-        self.keyspaces
+        self.inner
+            .keyspaces
             .get(&name)
             .expect("configured keyspace is present")
     }
 
     pub fn keyspace_names(&self) -> impl Iterator<Item = KeyspaceName> + '_ {
-        self.keyspaces.keys().copied()
+        self.inner.keyspaces.keys().copied()
     }
 
     pub fn write_batch(
@@ -94,7 +101,7 @@ impl SingleWriterTxDatabase {
     ) -> Result<WriteBatchReceipt> {
         let batch_digest = digest_actions(actions);
         let receipt_key = [b"batch/".as_slice(), batch_digest.as_slice()].concat();
-        let mut transaction = self.inner.write_tx().durability(Some(mode.into()));
+        let mut transaction = self.inner.engine.write_tx().durability(Some(mode.into()));
         for action in actions {
             match action {
                 WriteAction::Put {
@@ -120,7 +127,7 @@ impl SingleWriterTxDatabase {
     }
 
     pub fn persist(&self, mode: PersistMode) -> Result<()> {
-        self.inner.persist(mode.into()).map_err(Into::into)
+        self.inner.engine.persist(mode.into()).map_err(Into::into)
     }
 
     pub(crate) fn write_planned(
@@ -128,7 +135,7 @@ impl SingleWriterTxDatabase {
         mode: PersistMode,
         plan: impl FnOnce(&SourceReadSnapshot) -> Result<Vec<WriteAction>>,
     ) -> Result<WriteBatchReceipt> {
-        let mut transaction = self.inner.write_tx().durability(Some(mode.into()));
+        let mut transaction = self.inner.engine.write_tx().durability(Some(mode.into()));
         let actions = plan(&self.read_snapshot())?;
         let batch_digest = digest_actions(&actions);
         if actions.is_empty() {
@@ -163,8 +170,9 @@ impl SingleWriterTxDatabase {
 
     pub fn read_snapshot(&self) -> SourceReadSnapshot {
         SourceReadSnapshot {
-            snapshot: self.inner.read_tx(),
-            keyspaces: Arc::clone(&self.keyspaces),
+            snapshot: self.inner.engine.read_tx(),
+            keyspaces: Arc::clone(&self.inner.keyspaces),
+            _owner: self.clone(),
         }
     }
 }
@@ -253,6 +261,7 @@ fn digest_actions(actions: &[WriteAction]) -> [u8; 32] {
 pub struct SourceReadSnapshot {
     pub(crate) snapshot: fjall::Snapshot,
     pub(crate) keyspaces: Arc<HashMap<KeyspaceName, SingleWriterTxKeyspace>>,
+    _owner: SingleWriterTxDatabase,
 }
 
 impl SourceReadSnapshot {

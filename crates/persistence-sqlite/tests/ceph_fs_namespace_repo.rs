@@ -298,20 +298,71 @@ fn deleting_source_cascades_namespace_projection() {
 }
 
 fn insert_file_catalog(conn: &Connection) {
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size)
-         VALUES (?1, NULL, ?2, '/', 'CephFS', 'directory', NULL)",
-        rusqlite::params!["cephfs:root:1", SOURCE],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size)
-         VALUES (?1, ?2, ?3, '/file.txt', 'file.txt', 'file', 4)",
-        rusqlite::params!["cephfs:1:0:2:file.txt", "cephfs:root:1", SOURCE],
-    )
-    .unwrap();
+    let catalog = native_catalog(conn);
+    let records = projection(&"a".repeat(64), true)
+        .dentries
+        .into_iter()
+        .map(|dentry| {
+            let directory = dentry.entry_kind == "directory";
+            persistence_fjall::FileEntryRecord {
+                id: dentry.entry_id,
+                parent_id: dentry.parent_entry_id,
+                data_source_id: SOURCE.into(),
+                path: dentry.path,
+                name: if directory {
+                    "CephFS".into()
+                } else {
+                    dentry.name
+                },
+                entry_type: if directory {
+                    persistence_fjall::CatalogEntryType::Directory
+                } else {
+                    persistence_fjall::CatalogEntryType::File
+                },
+                size: if directory {
+                    None
+                } else {
+                    dentry.size.map(|size| size as u64)
+                },
+                ext: None,
+                deleted: false,
+                hidden: false,
+                system: false,
+                read_only: false,
+                archive: false,
+                encrypted: Some(false),
+                created: None,
+                modified: None,
+                accessed: None,
+                changed: None,
+                hash_sha256: None,
+                partition_index: None,
+                unix_mode: dentry.mode,
+            }
+        })
+        .collect::<Vec<_>>();
+    catalog
+        .upsert_batch(&records, persistence_fjall::PersistMode::SyncAll)
+        .unwrap();
+}
+
+fn native_catalog(conn: &Connection) -> persistence_fjall::CatalogRecordStore {
+    let store = persistence_sqlite::source_fjall::open_store(conn)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::CatalogRecordStore::from_source_store((*store).clone())
+}
+
+fn mutate_file(conn: &Connection, mutate: impl FnOnce(&mut persistence_fjall::FileEntryRecord)) {
+    let catalog = native_catalog(conn);
+    let mut record = catalog
+        .get(&catalog.read_snapshot(), SOURCE, "cephfs:1:0:2:file.txt")
+        .unwrap()
+        .unwrap();
+    mutate(&mut record);
+    catalog
+        .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+        .unwrap();
 }
 
 fn assert_catalog_invalid_after(
@@ -329,7 +380,10 @@ fn assert_catalog_invalid_after(
 
 #[test]
 fn published_catalog_verification_closes_the_file_entry_boundary() {
-    let conn = setup();
+    let root = tempfile::tempdir().unwrap();
+    let conn = persistence_sqlite::open_or_create_source(&root.path().join("source.db")).unwrap();
+    persistence_sqlite::source_fjall::configure_source_identity(&conn, SOURCE).unwrap();
+    conn.execute("INSERT INTO data_sources (id,case_id,name,kind,source_path,imported_at) VALUES (?1,'case-1','CephFS','ceph_fs','cephfs://cluster-a/1','2026-07-20T00:00:00Z')", [SOURCE]).unwrap();
     let repo = CephFsNamespaceRepo::new(&conn);
     repo.replace(&projection(&"a".repeat(64), true)).unwrap();
     insert_file_catalog(&conn);
@@ -341,137 +395,126 @@ fn published_catalog_verification_closes_the_file_entry_boundary() {
     assert_eq!(verified.summary.directory_count, 1);
     assert_eq!(verified.summary.total_size, 4);
 
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size)
-         VALUES ('foreign-entry', NULL, 'foreign-source', '/', 'foreign', 'directory', NULL)",
-        [],
-    )
-    .unwrap();
+    let catalog = native_catalog(&conn);
+    let mut foreign = catalog
+        .get(&catalog.read_snapshot(), SOURCE, "cephfs:root:1")
+        .unwrap()
+        .unwrap();
+    foreign.id = "foreign-entry".into();
+    foreign.data_source_id = "foreign-source".into();
+    catalog
+        .upsert(&foreign, persistence_fjall::PersistMode::SyncAll)
+        .unwrap();
     assert!(matches!(
         repo.verify_published_catalog(FILESYSTEM, SOURCE, "CephFS"),
         Err(CephFsNamespaceRepoError::Invalid(_))
     ));
-    conn.execute("DELETE FROM file_entries WHERE id = 'foreign-entry'", [])
+    catalog
+        .delete(
+            "foreign-source",
+            "foreign-entry",
+            persistence_fjall::PersistMode::SyncAll,
+        )
         .unwrap();
 
     assert_catalog_invalid_after(
         &conn,
         |conn| {
-            conn.execute(
-                "UPDATE file_entries SET id = 'tampered-id' WHERE id = ?1",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
+            let catalog = native_catalog(conn);
+            mutate_file(conn, |record| record.id = "tampered-id".into());
+            catalog
+                .delete(
+                    SOURCE,
+                    "cephfs:1:0:2:file.txt",
+                    persistence_fjall::PersistMode::SyncAll,
+                )
+                .unwrap();
         },
         |conn| {
-            conn.execute(
-                "UPDATE file_entries SET id = ?1 WHERE id = 'tampered-id'",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
-        },
-    );
-    assert_catalog_invalid_after(
-        &conn,
-        |conn| {
-            conn.execute(
-                "UPDATE file_entries SET parent_id = NULL WHERE id = ?1",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
-        },
-        |conn| {
-            conn.execute(
-                "UPDATE file_entries SET parent_id = ?1 WHERE id = ?2",
-                rusqlite::params!["cephfs:root:1", "cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
+            native_catalog(conn)
+                .delete(
+                    SOURCE,
+                    "tampered-id",
+                    persistence_fjall::PersistMode::SyncAll,
+                )
+                .unwrap();
+            insert_file_catalog(conn);
         },
     );
     assert_catalog_invalid_after(
         &conn,
         |conn| {
-            conn.execute(
-                "UPDATE file_entries SET data_source_id = 'foreign-source' WHERE id = ?1",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
+            mutate_file(conn, |record| record.parent_id = None);
         },
         |conn| {
-            conn.execute(
-                "UPDATE file_entries SET data_source_id = ?1 WHERE id = ?2",
-                rusqlite::params![SOURCE, "cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
+            mutate_file(conn, |record| {
+                record.parent_id = Some("cephfs:root:1".into())
+            });
         },
     );
     assert_catalog_invalid_after(
         &conn,
         |conn| {
-            conn.execute(
-                "UPDATE file_entries SET path = '/tampered.txt' WHERE id = ?1",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
+            mutate_file(conn, |record| {
+                record.data_source_id = "foreign-source".into()
+            });
+            native_catalog(conn)
+                .delete(
+                    SOURCE,
+                    "cephfs:1:0:2:file.txt",
+                    persistence_fjall::PersistMode::SyncAll,
+                )
+                .unwrap();
         },
         |conn| {
-            conn.execute(
-                "UPDATE file_entries SET path = '/file.txt' WHERE id = ?1",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
-        },
-    );
-    assert_catalog_invalid_after(
-        &conn,
-        |conn| {
-            conn.execute(
-                "UPDATE file_entries SET name = 'tampered.txt' WHERE id = ?1",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
-        },
-        |conn| {
-            conn.execute(
-                "UPDATE file_entries SET name = 'file.txt' WHERE id = ?1",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
+            native_catalog(conn)
+                .delete(
+                    "foreign-source",
+                    "cephfs:1:0:2:file.txt",
+                    persistence_fjall::PersistMode::SyncAll,
+                )
+                .unwrap();
+            insert_file_catalog(conn);
         },
     );
     assert_catalog_invalid_after(
         &conn,
         |conn| {
-            conn.execute(
-                "UPDATE file_entries SET entry_type = 'directory' WHERE id = ?1",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
+            mutate_file(conn, |record| record.path = "/tampered.txt".into());
         },
         |conn| {
-            conn.execute(
-                "UPDATE file_entries SET entry_type = 'file' WHERE id = ?1",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
+            mutate_file(conn, |record| record.path = "/file.txt".into());
         },
     );
     assert_catalog_invalid_after(
         &conn,
         |conn| {
-            conn.execute(
-                "UPDATE file_entries SET size = 5 WHERE id = ?1",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
+            mutate_file(conn, |record| record.name = "tampered.txt".into());
         },
         |conn| {
-            conn.execute(
-                "UPDATE file_entries SET size = 4 WHERE id = ?1",
-                ["cephfs:1:0:2:file.txt"],
-            )
-            .unwrap();
+            mutate_file(conn, |record| record.name = "file.txt".into());
+        },
+    );
+    assert_catalog_invalid_after(
+        &conn,
+        |conn| {
+            mutate_file(conn, |record| {
+                record.entry_type = persistence_fjall::CatalogEntryType::Directory
+            });
+        },
+        |conn| {
+            mutate_file(conn, |record| {
+                record.entry_type = persistence_fjall::CatalogEntryType::File
+            });
+        },
+    );
+    assert_catalog_invalid_after(
+        &conn,
+        |conn| {
+            mutate_file(conn, |record| record.size = Some(5));
+        },
+        |conn| {
+            mutate_file(conn, |record| record.size = Some(4));
         },
     );
 }
