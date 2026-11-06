@@ -68,16 +68,16 @@ impl FileRepo<'_> {
         partition_index: usize,
         path: &str,
     ) -> DbResult<Option<FileEntry>> {
-        if let Some(entries) = self.fjall_entries(Some(&data_source_id.0))? {
-            let normalized = path.trim_start_matches('/');
-            let candidates = [
-                path.to_owned(),
-                format!("[P{partition_index}]/{normalized}"),
-                format!("/{normalized}"),
-            ];
-            return Ok(entries.into_iter().find(|entry| {
-                !entry.deleted && candidates.iter().any(|candidate| entry.path == *candidate)
-            }));
+        let normalized = path.trim_start_matches('/');
+        let candidates = [
+            path.to_owned(),
+            format!("[P{partition_index}]/{normalized}"),
+            format!("/{normalized}"),
+        ];
+        if let Some(entry) =
+            self.native_partition_path(data_source_id, partition_index, &candidates, false)?
+        {
+            return Ok(entry);
         }
         let sql = format!(
             "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
@@ -116,19 +116,16 @@ impl FileRepo<'_> {
         partition_index: usize,
         path: &str,
     ) -> DbResult<Option<FileEntry>> {
-        if let Some(entries) = self.fjall_entries(Some(&data_source_id.0))? {
-            let normalized = path.trim_start_matches('/');
-            let candidates = [
-                normalized.to_owned(),
-                format!("[P{partition_index}]/{normalized}"),
-                format!("/{normalized}"),
-            ];
-            return Ok(entries.into_iter().find(|entry| {
-                !entry.deleted
-                    && candidates
-                        .iter()
-                        .any(|candidate| entry.path.eq_ignore_ascii_case(candidate))
-            }));
+        let normalized = path.trim_start_matches('/');
+        let candidates = [
+            normalized.to_owned(),
+            format!("[P{partition_index}]/{normalized}"),
+            format!("/{normalized}"),
+        ];
+        if let Some(entry) =
+            self.native_partition_path(data_source_id, partition_index, &candidates, true)?
+        {
+            return Ok(entry);
         }
         let sql = format!(
             "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
@@ -203,8 +200,11 @@ impl FileRepo<'_> {
         if let Some(store) = crate::source_fjall::open_store(self.conn)? {
             let snapshot = store.database().read_snapshot();
             let source = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+            let source_id = crate::source_fjall::source_id(self.conn)?.ok_or_else(|| {
+                crate::connection::DbError::System("source identity is missing".into())
+            })?;
             return source
-                .find_by_id_any_source(&snapshot, &id.0)
+                .get(&snapshot, &source_id, &id.0)
                 .map(|record| record.map(crate::source_fjall::file_entry))
                 .map_err(|error| crate::connection::DbError::System(error.to_string()));
         }
@@ -221,12 +221,22 @@ impl FileRepo<'_> {
         &self,
         id: &FileEntryId,
     ) -> DbResult<Option<FileEncryptionStatus>> {
-        if let Some(entry) = self.find_by_id(id)? {
-            return Ok(Some(if entry.encrypted {
-                FileEncryptionStatus::Encrypted
-            } else {
-                FileEncryptionStatus::Clear
-            }));
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            let owner = crate::source_fjall::source_id(self.conn)?.ok_or_else(|| {
+                crate::connection::DbError::System("source identity is missing".into())
+            })?;
+            let repository =
+                persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+            return repository
+                .get(&repository.read_snapshot(), &owner, &id.0)
+                .map(|record| {
+                    record.map(|record| match record.encrypted {
+                        None => FileEncryptionStatus::Unknown,
+                        Some(true) => FileEncryptionStatus::Encrypted,
+                        Some(false) => FileEncryptionStatus::Clear,
+                    })
+                })
+                .map_err(|error| crate::connection::DbError::System(error.to_string()));
         }
         let result = self.conn.query_row(
             "SELECT encrypted FROM file_entries WHERE id = ?1",

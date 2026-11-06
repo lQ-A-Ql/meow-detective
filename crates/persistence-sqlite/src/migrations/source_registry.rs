@@ -100,6 +100,10 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_038_linux_evidence_facts",
         include_str!("scripts/source_038_linux_evidence_facts.sql"),
     ),
+    (
+        "source_041_fjall_detail_ownership",
+        include_str!("scripts/source_041_fjall_detail_ownership.sql"),
+    ),
 ];
 
 pub(super) fn version_is_at_least(actual: &str, minimum: &str) -> bool {

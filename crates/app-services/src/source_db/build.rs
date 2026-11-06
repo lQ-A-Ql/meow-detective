@@ -53,6 +53,7 @@ pub(crate) fn open_fresh_source_build_db(
 }
 
 pub(crate) fn finalize_source_build_db(conn: &Connection) -> DbResult<()> {
+    persistence_sqlite::source_fjall::bind_generation(conn, "source.fjall")?;
     super::verify_source_db_integrity(conn)?;
     super::checkpoint_source_db(conn)?;
     let journal_mode: String =

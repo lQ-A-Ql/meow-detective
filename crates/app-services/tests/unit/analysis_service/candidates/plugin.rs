@@ -42,9 +42,7 @@ impl ArtifactExtractor for StubPlugin {
 }
 
 fn source_connection() -> Connection {
-    let root = tempfile::tempdir()
-        .expect("create source root")
-        .keep();
+    let root = tempfile::tempdir().expect("create source root").keep();
     crate::source_db::open_source_db(&root, &domain::DataSourceId("source-1".into()))
         .expect("open source database")
 }

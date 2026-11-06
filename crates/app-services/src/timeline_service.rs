@@ -7,6 +7,7 @@ mod page_cache;
 mod pagination;
 mod policy;
 mod projection;
+mod projection_fjall;
 mod projection_graph;
 mod projection_meta;
 mod projection_timing;

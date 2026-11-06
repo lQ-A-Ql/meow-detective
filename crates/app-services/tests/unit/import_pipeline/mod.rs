@@ -805,12 +805,14 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
                 |row| row.get(0),
             )?;
             assert_eq!(file_entries, 0, "app.db must not own source file entries");
-            let source_file_entries: i64 = source_conn.query_row(
-                "SELECT COUNT(*) FROM file_entries WHERE entry_type = 'file'",
-                [],
-                |row| row.get(0),
-            )?;
+            let source_file_entries = persistence_sqlite::repositories::file_repo::FileRepo::new(&source_conn)
+                .find_by_data_source(&data_source_id)?.into_iter().filter(|entry| entry.is_file()).count();
             assert_eq!(source_file_entries, 2);
+            let source_detail_tables: u64 = source_conn.query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('file_entries','artifacts','timeline_events')",
+                [], |row| row.get(0),
+            )?;
+            assert_eq!(source_detail_tables,0);
             let fjall_layout = persistence_fjall::SourceBuildLayout::for_case_source(
                 &active.case_root,
                 &data_source_id.0,
@@ -837,11 +839,7 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
             let app_graph_nodes: i64 =
                 conn.query_row("SELECT COUNT(*) FROM graph_nodes", [], |row| row.get(0))?;
             assert_eq!(app_graph_nodes, 0, "app.db must not own source-local graph");
-            let source_timeline_events: i64 = source_conn.query_row(
-                "SELECT COUNT(*) FROM timeline_events",
-                [],
-                |row| row.get(0),
-            )?;
+            let source_timeline_events = persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&source_conn).count()?;
             assert!(source_timeline_events > 0);
             let source_graph_nodes: i64 =
                 source_conn.query_row("SELECT COUNT(*) FROM graph_nodes", [], |row| row.get(0))?;
@@ -898,6 +896,8 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
 
 #[test]
 fn logical_import_reports_progress_through_tauri_free_sink() {
+    let subscriber = tracing_subscriber::fmt().with_test_writer().finish();
+    let _subscriber = tracing::subscriber::set_default(subscriber);
     let tmp = TempDir::new().unwrap();
     let evidence_dir = tmp.path().join("evidence-sink");
     std::fs::create_dir_all(&evidence_dir).unwrap();

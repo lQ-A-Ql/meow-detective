@@ -4,7 +4,11 @@ use persistence_fjall::{
     PersistMode, SourceStore, TimelineRecord,
 };
 use rusqlite::Connection;
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
+pub(crate) mod analysis_staging;
+mod catalog_staging;
+mod fingerprints;
+pub use catalog_staging::merge_staging_catalog;
 
 const FJALL_ROOT_KEY: &str = "fjall_root";
 const SOURCE_ID_KEY: &str = "data_source_id";
@@ -21,19 +25,23 @@ pub fn configure_source_fjall(
         .strip_prefix("source.db.build.")
         .map(|attempt| format!("source.fjall.build.{attempt}"))
         .unwrap_or_else(|| "source.fjall".to_owned());
-    let root = source_db
-        .parent()
-        .ok_or_else(|| crate::DbError::System("source database has no parent directory".into()))?
-        .join(root_name);
     conn.execute(
         "INSERT INTO source_meta(key, value) VALUES (?1, ?2)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        rusqlite::params![FJALL_ROOT_KEY, root.to_string_lossy().as_ref()],
+         ON CONFLICT(key) DO NOTHING",
+        rusqlite::params![FJALL_ROOT_KEY, root_name],
     )?;
     Ok(())
 }
 
 pub fn configure_source_identity(conn: &Connection, source_id: &str) -> crate::DbResult<()> {
+    if let Some(owner) = self::source_id(conn)? {
+        if owner != source_id {
+            return Err(crate::DbError::System(
+                "source identity cannot be replaced".into(),
+            ));
+        }
+        return Ok(());
+    }
     conn.execute(
         "INSERT INTO source_meta(key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -42,7 +50,25 @@ pub fn configure_source_identity(conn: &Connection, source_id: &str) -> crate::D
     Ok(())
 }
 
-pub(crate) fn source_id(conn: &Connection) -> crate::DbResult<Option<String>> {
+pub fn bind_generation(conn: &Connection, name: &str) -> crate::DbResult<()> {
+    if name != "source.fjall" && !name.starts_with("source.fjall.build.") {
+        return Err(crate::DbError::System(
+            "invalid source generation name".into(),
+        ));
+    }
+    if name.contains(['/', '\\', ':']) || name.ends_with('.') {
+        return Err(crate::DbError::System(
+            "invalid source generation component".into(),
+        ));
+    }
+    conn.execute(
+        "UPDATE source_meta SET value = ?1 WHERE key = ?2",
+        rusqlite::params![name, FJALL_ROOT_KEY],
+    )?;
+    Ok(())
+}
+
+pub fn source_id(conn: &Connection) -> crate::DbResult<Option<String>> {
     match conn.query_row(
         "SELECT value FROM source_meta WHERE key = ?1",
         [SOURCE_ID_KEY],
@@ -66,14 +92,25 @@ pub(crate) fn source_id(conn: &Connection) -> crate::DbResult<Option<String>> {
     }
 }
 
+fn require_owner(conn: &Connection, requested: &str) -> crate::DbResult<()> {
+    if source_id(conn)?.as_deref() != Some(requested) {
+        return Err(crate::DbError::System(
+            "source detail owner mismatch".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub fn partition_index(conn: &Connection, record_id: &str) -> crate::DbResult<Option<usize>> {
     let Some(store) = open_store(conn)? else {
         return Ok(None);
     };
     let repository = CatalogRecordStore::from_source_store((*store).clone());
     let snapshot = repository.read_snapshot();
+    let owner = source_id(conn)?
+        .ok_or_else(|| crate::DbError::System("source identity is missing".into()))?;
     let Some(record) = repository
-        .find_by_id_any_source(&snapshot, record_id)
+        .get(&snapshot, &owner, record_id)
         .map_err(|error| crate::DbError::System(error.to_string()))?
     else {
         return Ok(None);
@@ -93,13 +130,15 @@ pub fn set_partition_index(
     record_id: &str,
     partition: usize,
 ) -> crate::DbResult<bool> {
-    let Some(store) = open_store(conn)? else {
+    let Some(store) = open_store_for_write(conn)? else {
         return Ok(false);
     };
     let repository = CatalogRecordStore::from_source_store((*store).clone());
     let snapshot = repository.read_snapshot();
+    let owner = source_id(conn)?
+        .ok_or_else(|| crate::DbError::System("source identity is missing".into()))?;
     let Some(mut record) = repository
-        .find_by_id_any_source(&snapshot, record_id)
+        .get(&snapshot, &owner, record_id)
         .map_err(|error| crate::DbError::System(error.to_string()))?
     else {
         return Ok(false);
@@ -120,7 +159,7 @@ pub fn update_catalog_path(
     path: &str,
     source_id: &str,
 ) -> crate::DbResult<bool> {
-    let Some(store) = open_store(conn)? else {
+    let Some(store) = open_store_for_write(conn)? else {
         return Ok(false);
     };
     let repository = CatalogRecordStore::from_source_store((*store).clone());
@@ -144,7 +183,7 @@ pub fn update_catalog_parent(
     parent_id: Option<String>,
     source_id: &str,
 ) -> crate::DbResult<bool> {
-    let Some(store) = open_store(conn)? else {
+    let Some(store) = open_store_for_write(conn)? else {
         return Ok(false);
     };
     let repository = CatalogRecordStore::from_source_store((*store).clone());
@@ -166,7 +205,7 @@ pub fn has_source_store(conn: &Connection) -> crate::DbResult<bool> {
     Ok(open_store(conn)?.is_some())
 }
 
-pub(crate) fn open_store(conn: &Connection) -> crate::DbResult<Option<Arc<SourceStore>>> {
+pub fn open_store(conn: &Connection) -> crate::DbResult<Option<Arc<SourceStore>>> {
     let root: Option<String> = match conn.query_row(
         "SELECT value FROM source_meta WHERE key = ?1",
         [FJALL_ROOT_KEY],
@@ -188,11 +227,49 @@ pub(crate) fn open_store(conn: &Connection) -> crate::DbResult<Option<Arc<Source
             }
         }
     };
-    root.map(|value| {
-        persistence_fjall::open_shared_source_store(PathBuf::from(value), DatabaseConfig::default())
-            .map_err(|error| crate::DbError::System(error.to_string()))
-    })
-    .transpose()
+    let Some(name) = root else { return Ok(None) };
+    if name != "source.fjall" && !name.starts_with("source.fjall.build.") {
+        return Err(crate::DbError::System(
+            "invalid source generation name".into(),
+        ));
+    }
+    if name.contains(['/', '\\', ':']) || name.ends_with('.') {
+        return Err(crate::DbError::System(
+            "invalid source generation component".into(),
+        ));
+    }
+    let database_path: String = conn.query_row(
+        "SELECT file FROM pragma_database_list WHERE name = 'main'",
+        [],
+        |row| row.get(0),
+    )?;
+    let parent = std::path::Path::new(&database_path)
+        .parent()
+        .ok_or_else(|| crate::DbError::System("source database has no directory".into()))?;
+    let path = parent.join(name);
+    if !path.is_dir() {
+        let query_only: bool = conn.pragma_query_value(None, "query_only", |row| row.get(0))?;
+        if query_only || conn.is_readonly(rusqlite::DatabaseName::Main)? {
+            return Err(crate::DbError::System(
+                "source generation directory is missing".into(),
+            ));
+        }
+        std::fs::create_dir_all(&path)?;
+    }
+    persistence_fjall::open_shared_source_store(path, DatabaseConfig::default())
+        .map(Some)
+        .map_err(|error| crate::DbError::System(error.to_string()))
+}
+
+pub fn open_store_for_write(conn: &Connection) -> crate::DbResult<Option<Arc<SourceStore>>> {
+    let query_only: bool = conn.pragma_query_value(None, "query_only", |row| row.get(0))?;
+    if query_only || conn.is_readonly(rusqlite::DatabaseName::Main)? {
+        return Err(crate::DbError::Io(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "source connection is read-only",
+        )));
+    }
+    open_store(conn)
 }
 
 pub(crate) fn file_record(entry: &FileEntry) -> FileEntryRecord {
@@ -213,7 +290,7 @@ pub(crate) fn file_record(entry: &FileEntry) -> FileEntryRecord {
         system: entry.system,
         read_only: entry.read_only,
         archive: entry.archive,
-        encrypted: entry.encrypted,
+        encrypted: Some(entry.encrypted),
         created: entry.created_at,
         modified: entry.modified_at,
         accessed: entry.accessed_at,
@@ -240,7 +317,7 @@ pub(crate) fn file_entry(record: FileEntryRecord) -> FileEntry {
         deleted: record.deleted,
         hidden: record.hidden,
         system: record.system,
-        encrypted: record.encrypted,
+        encrypted: record.encrypted.unwrap_or(true),
         read_only: record.read_only,
         archive: record.archive,
         unix_mode: record.unix_mode,
@@ -290,13 +367,17 @@ pub(crate) fn timeline_record(event: &TimelineEvent, source_id: &str) -> Timelin
 }
 
 pub(crate) fn upsert_files(conn: &Connection, entries: &[FileEntry]) -> crate::DbResult<bool> {
-    let Some(store) = open_store(conn)? else {
+    let Some(store) = open_store_for_write(conn)? else {
         return Ok(false);
     };
+    for entry in entries {
+        require_owner(conn, &entry.data_source_id.0)?;
+    }
     let records = entries.iter().map(file_record).collect::<Vec<_>>();
     CatalogRecordStore::from_source_store((*store).clone())
         .upsert_batch(&records, PersistMode::SyncAll)
         .map_err(|error| crate::DbError::System(error.to_string()))?;
+    fingerprints::files(conn, entries)?;
     Ok(true)
 }
 
@@ -305,9 +386,12 @@ pub fn upsert_files_with_partition(
     entries: &[FileEntry],
     partition_index: usize,
 ) -> crate::DbResult<bool> {
-    let Some(store) = open_store(conn)? else {
+    let Some(store) = open_store_for_write(conn)? else {
         return Ok(false);
     };
+    for entry in entries {
+        require_owner(conn, &entry.data_source_id.0)?;
+    }
     let partition_index = u32::try_from(partition_index)
         .map_err(|_| crate::DbError::System("partition index exceeds Fjall range".into()))?;
     let records = entries
@@ -321,6 +405,7 @@ pub fn upsert_files_with_partition(
     CatalogRecordStore::from_source_store((*store).clone())
         .upsert_batch(&records, persistence_fjall::PersistMode::SyncAll)
         .map_err(|error| crate::DbError::System(error.to_string()))?;
+    fingerprints::files(conn, entries)?;
     Ok(true)
 }
 
@@ -329,9 +414,10 @@ pub(crate) fn upsert_artifacts(
     artifacts: &[Artifact],
     source_id: &str,
 ) -> crate::DbResult<bool> {
-    let Some(store) = open_store(conn)? else {
+    let Some(store) = open_store_for_write(conn)? else {
         return Ok(false);
     };
+    require_owner(conn, source_id)?;
     let records = artifacts
         .iter()
         .map(|artifact| artifact_record(artifact, source_id))
@@ -347,9 +433,10 @@ pub(crate) fn upsert_timeline(
     events: &[TimelineEvent],
     source_id: &str,
 ) -> crate::DbResult<bool> {
-    let Some(store) = open_store(conn)? else {
+    let Some(store) = open_store_for_write(conn)? else {
         return Ok(false);
     };
+    require_owner(conn, source_id)?;
     let records = events
         .iter()
         .map(|event| timeline_record(event, source_id))

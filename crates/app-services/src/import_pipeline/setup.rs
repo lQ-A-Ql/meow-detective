@@ -48,6 +48,19 @@ pub(super) fn open_source(
             None,
         )
         .map_err(CommandError::from_typed_service_error)?;
+    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+        ctx.case_root,
+        &source.id.0,
+        &ctx.job_id.0,
+    )
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    if !layout.published_path().is_dir() {
+        persistence_sqlite::source_fjall::bind_generation(
+            &conn,
+            &format!("source.fjall.build.{}", ctx.job_id.0),
+        )
+        .map_err(CommandError::from_service_error)?;
+    }
     super::begin_partition_projection(ctx.case_root, &source.id)?;
     let initialize = measure_optional(
         ctx.profiler.as_ref(),

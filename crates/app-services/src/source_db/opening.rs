@@ -19,13 +19,10 @@ pub fn open_source_db(case_root: &Path, data_source_id: &DataSourceId) -> DbResu
     let connection =
         persistence_sqlite::open_or_create_source(&source_db_path(case_root, data_source_id))?;
     persistence_sqlite::source_fjall::configure_source_identity(&connection, &data_source_id.0)?;
-    persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::recover(
-        &connection,
-    )?;
     tracing::debug!(
         data_source_id = %data_source_id.0,
         elapsed_ms = started.elapsed().as_millis(),
-        "Source SQLite database opened and bulk-load recovery checked"
+        "Source control database opened"
     );
     Ok(connection)
 }

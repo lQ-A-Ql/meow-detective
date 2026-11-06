@@ -49,48 +49,12 @@ pub(super) fn build_and_enumerate_source(
         &request.data_source.id,
         attempt_id,
     )?;
-    let fjall_layout = persistence_fjall::SourceBuildLayout::for_case_source(
-        request.case_root,
-        &request.data_source.id.0,
-        attempt_id,
-    )
-    .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    let fjall_generation_exists = fjall_layout.published_path().is_dir();
-    let fjall_target_root = if fjall_generation_exists {
-        fjall_layout.published_path()
-    } else {
-        fjall_layout.build_path()
-    };
-    std::fs::create_dir_all(&fjall_target_root)?;
-    crate::import_pipeline::begin_partition_projection(request.case_root, &request.data_source.id)
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    let fjall_source = crate::storage_runtime::open_source_read_write_at_path(&fjall_target_root)
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    if fjall_generation_exists {
-        let key = persistence_fjall::encode_key(
-            "projection",
-            &[persistence_fjall::KeyPart::Text(
-                request.data_source.id.0.clone(),
-            )],
-        )
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-        let marker = persistence_fjall::VersionedEnvelope::new(
-            "source_projection_building",
-            1,
-            format!("projection:{}", request.data_source.id.0),
-            &request.data_source.id.0,
-            1,
-            request.data_source.id.0.as_bytes().to_vec(),
-        );
-        fjall_source
-            .write_envelope(
-                persistence_fjall::KeyspaceName::Meta,
-                key,
-                &marker,
-                persistence_fjall::PersistMode::SyncAll,
-            )
-            .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    }
+    let FjallBuildStorage {
+        layout: fjall_layout,
+        root: fjall_target_root,
+        existing: fjall_generation_exists,
+        source: fjall_source,
+    } = prepare_fjall_source(&request, &source_conn)?;
     let summary = match build_catalog_on_connection(RbdCatalogBuildContext {
         source_conn: &source_conn,
         fjall_source: &fjall_source,
@@ -170,6 +134,54 @@ pub(super) fn build_and_enumerate_source(
         "Ceph RBD derived source catalog materialization completed"
     );
     Ok(summary)
+}
+
+struct FjallBuildStorage {
+    layout: persistence_fjall::SourceBuildLayout,
+    root: std::path::PathBuf,
+    existing: bool,
+    source: crate::storage_runtime::ReadWriteSourceStorageHandle,
+}
+
+fn prepare_fjall_source(
+    request: &CatalogBuildRequest<'_>,
+    conn: &rusqlite::Connection,
+) -> DerivedSourceResult<FjallBuildStorage> {
+    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+        request.case_root,
+        &request.data_source.id.0,
+        request.catalog_attempt.attempt_id(),
+    )
+    .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    let existing = layout.published_path().is_dir();
+    let root = if existing {
+        layout.published_path()
+    } else {
+        layout.build_path()
+    };
+    let name = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            DerivedSourceError::InconsistentState("source generation component is missing".into())
+        })?;
+    persistence_sqlite::source_fjall::bind_generation(conn, name)?;
+    std::fs::create_dir_all(&root)?;
+    let source = crate::storage_runtime::open_source_read_write_at_path(&root)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    if existing {
+        crate::import_pipeline::begin_partition_projection(
+            request.case_root,
+            &request.data_source.id,
+        )
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    }
+    Ok(FjallBuildStorage {
+        layout,
+        root,
+        existing,
+        source,
+    })
 }
 
 fn publish_fjall_partition_generation(

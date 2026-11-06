@@ -23,6 +23,32 @@ pub(super) fn count_analysis_file_tasks(
     data_source_id: &DataSourceId,
 ) -> Result<u64, ImportAnalysisError> {
     let conn = persistence_sqlite::open_existing_source_read_only(db_path)?;
+    if let Some(store) = persistence_sqlite::source_fjall::open_store(&conn)? {
+        let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+        let snapshot = catalog.read_snapshot();
+        let mut cursor: Option<(String, String)> = None;
+        let mut total = 0;
+        loop {
+            let page = catalog
+                .list_files_by_path(
+                    &snapshot,
+                    &data_source_id.0,
+                    cursor
+                        .as_ref()
+                        .map(|(path, id)| (path.as_str(), id.as_str())),
+                    FILE_PAGE_SIZE as usize,
+                )
+                .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+            total += page.records.len() as u64;
+            if page.next_cursor.is_none() {
+                return Ok(total);
+            }
+            cursor = page
+                .records
+                .last()
+                .map(|record| (record.path.clone(), record.id.clone()));
+        }
+    }
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM file_entries
              WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'",
@@ -39,6 +65,32 @@ pub(super) fn fetch_analysis_file_page(
     after_id: Option<&str>,
     limit: u64,
 ) -> Result<Vec<FileTask>, ImportAnalysisError> {
+    if let Some(store) = persistence_sqlite::source_fjall::open_store(conn)? {
+        let after = match (after_path, after_id) {
+            (None, None) => None,
+            (Some(path), Some(id)) => Some((path, id)),
+            _ => {
+                return Err(ImportAnalysisError::Other(
+                    "analysis file cursor requires both path and id".into(),
+                ))
+            }
+        };
+        let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+        let page = catalog
+            .list_files_by_path(
+                &catalog.read_snapshot(),
+                &data_source_id.0,
+                after,
+                usize::try_from(limit.min(FILE_PAGE_SIZE))
+                    .map_err(|error| ImportAnalysisError::Other(error.to_string()))?,
+            )
+            .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+        return Ok(page
+            .records
+            .into_iter()
+            .map(file_task_from_record)
+            .collect());
+    }
     let (sql, cursor) = match (after_path, after_id) {
         (None, None) => (
             "SELECT id, parent_id, data_source_id, path, name, entry_type,
@@ -182,4 +234,25 @@ fn row_to_file_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileTask> {
             .map(|dt| dt.with_timezone(&chrono::Utc)),
         hash_sha256: row.get(15)?,
     })
+}
+
+fn file_task_from_record(record: persistence_fjall::FileEntryRecord) -> FileTask {
+    FileTask {
+        id: FileEntryId(record.id),
+        data_source_id: DataSourceId(record.data_source_id),
+        path: record.path,
+        name: record.name,
+        entry_type: EntryType::File,
+        size: record.size,
+        ext: record.ext,
+        deleted: record.deleted,
+        hidden: record.hidden,
+        system: record.system,
+        encrypted: record.encrypted.unwrap_or(true),
+        created_at: record.created,
+        modified_at: record.modified,
+        accessed_at: record.accessed,
+        changed_at: record.changed,
+        hash_sha256: record.hash_sha256,
+    }
 }

@@ -85,7 +85,7 @@ pub(crate) fn record_to_domain(record: FileEntryRecord) -> FileEntry {
         deleted: record.deleted,
         hidden: record.hidden,
         system: record.system,
-        encrypted: record.encrypted,
+        encrypted: record.encrypted.unwrap_or(true),
         read_only: record.read_only,
         archive: record.archive,
         unix_mode: record.unix_mode,

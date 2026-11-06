@@ -243,6 +243,17 @@ pub const MIGRATION_COUNT: usize = MIGRATIONS.len();
 pub use super::run_case::{current_version, latest_source_version, latest_version, run_all};
 
 pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
+    let has_sqlite_details: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table'
+         AND name IN ('file_entries','artifacts','timeline_events'))",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_sqlite_details {
+        return Err(DbError::Migration(
+            "source format requires Fjall detail ownership; re-import is required".into(),
+        ));
+    }
     run_migrations(conn, SOURCE_MIGRATIONS)
 }
 

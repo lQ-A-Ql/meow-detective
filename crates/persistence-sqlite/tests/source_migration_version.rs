@@ -41,3 +41,26 @@ fn fresh_source_schema_contains_control_tables_without_detail_tables() {
         assert_eq!(count, 1, "source control table {table} must exist");
     }
 }
+
+#[test]
+fn source_with_sqlite_details_is_rejected_without_migration_or_data_changes() {
+    let conn = persistence_sqlite::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE file_entries(id TEXT PRIMARY KEY); INSERT INTO file_entries VALUES ('evidence')").unwrap();
+    assert!(runner::run_source_all(&conn).is_err());
+    let value: String = conn
+        .query_row("SELECT id FROM file_entries", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(value, "evidence");
+    let migrations: u64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='schema_migrations'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(migrations, 0);
+    assert_eq!(
+        runner::latest_source_version(),
+        "source_041_fjall_detail_ownership"
+    );
+}

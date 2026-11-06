@@ -19,6 +19,116 @@ fn parser(id: &str, source: &str, family: &str, kind: &str) -> ParserRecord {
 }
 
 #[test]
+fn artifact_revision_tracks_equal_count_replacement_and_rejects_invalid_batches() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ArtifactRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let original = ArtifactRecord {
+        id: "one".into(),
+        data_source_id: "source".into(),
+        artifact_type: "old".into(),
+        source_object_id: Some("file".into()),
+        content_sha256: None,
+        attrs: json!({"value":1}),
+    };
+    store.upsert(&original, PersistMode::SyncAll).unwrap();
+    let before = store.read_snapshot();
+    let revision = store.cursor_revision(&before).unwrap();
+    store.upsert(&original, PersistMode::SyncAll).unwrap();
+    assert_eq!(
+        store.cursor_revision(&store.read_snapshot()).unwrap(),
+        revision
+    );
+    let updated = ArtifactRecord {
+        artifact_type: "new".into(),
+        attrs: json!({"value":2}),
+        ..original.clone()
+    };
+    store
+        .upsert_batch(&[original.clone(), updated.clone()], PersistMode::SyncAll)
+        .unwrap();
+    let after = store.read_snapshot();
+    assert_eq!(store.cursor_revision(&after).unwrap(), revision + 1);
+    assert_eq!(store.get(&before, "source", "one").unwrap(), Some(original));
+    assert!(store
+        .list_by_type(&after, "source", "old", None, ScanDirection::Forward, 10)
+        .unwrap()
+        .records
+        .is_empty());
+    assert_eq!(
+        store
+            .list_by_type(&after, "source", "new", None, ScanDirection::Forward, 10)
+            .unwrap()
+            .records,
+        vec![updated.clone()]
+    );
+    let invalid = ArtifactRecord {
+        id: String::new(),
+        ..updated.clone()
+    };
+    assert!(store
+        .upsert_batch(&[updated.clone(), invalid], PersistMode::SyncAll)
+        .is_err());
+    assert_eq!(
+        store.cursor_revision(&store.read_snapshot()).unwrap(),
+        revision + 1
+    );
+    assert_eq!(
+        store
+            .delete_batch(
+                "source",
+                &["one".into(), "one".into()],
+                PersistMode::SyncAll
+            )
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        store.cursor_revision(&store.read_snapshot()).unwrap(),
+        revision + 2
+    );
+}
+
+#[test]
+fn concurrent_artifact_updates_keep_one_current_type_index() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ArtifactRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    std::thread::scope(|scope| {
+        for family in ["a", "b"] {
+            let writer = store.clone();
+            scope.spawn(move || {
+                for value in 0..50 {
+                    writer
+                        .upsert(
+                            &ArtifactRecord {
+                                id: "shared".into(),
+                                data_source_id: "source".into(),
+                                artifact_type: family.into(),
+                                source_object_id: None,
+                                content_sha256: None,
+                                attrs: json!({"value":value}),
+                            },
+                            PersistMode::Buffer,
+                        )
+                        .unwrap();
+                }
+            });
+        }
+    });
+    let snapshot = store.read_snapshot();
+    let expected = store.get(&snapshot, "source", "shared").unwrap().unwrap();
+    let indexed = ["a", "b"]
+        .into_iter()
+        .flat_map(|kind| {
+            store
+                .list_by_type(&snapshot, "source", kind, None, ScanDirection::Forward, 10)
+                .unwrap()
+                .records
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(indexed, vec![expected]);
+}
+
+#[test]
 fn parser_field_index_is_exact_and_keyset_paginated() {
     let root = tempfile::tempdir().unwrap();
     let store = ParserRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();

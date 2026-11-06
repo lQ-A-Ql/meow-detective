@@ -1,4 +1,5 @@
 use super::*;
+use domain::ArtifactId;
 use std::collections::BTreeMap;
 
 fn setup_db() -> rusqlite::Connection {

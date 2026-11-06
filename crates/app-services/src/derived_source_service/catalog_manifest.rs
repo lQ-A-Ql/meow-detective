@@ -158,60 +158,63 @@ pub(super) fn summarize_source_connection(
     connection: &Connection,
     data_source: DataSource,
 ) -> DerivedSourceResult<MaterializedRbdSource> {
-    let mut statement = connection
-        .prepare(
-            "SELECT child.id, child.parent_id, child.path, child.name,
-                    child.entry_type, child.size,
-                    child.deleted, child.hidden, child.system,
-                    child.created_at, child.modified_at, child.accessed_at,
-                    child.changed_at,
-                    CASE
-                        WHEN child.parent_id IS NULL THEN 0
-                        WHEN parent.id IS NULL THEN 2
-                        ELSE 1
-                    END AS parent_state,
-                    parent.path, parent.name, parent.entry_type
-             FROM file_entries AS child
-             LEFT JOIN file_entries AS parent
-               ON parent.id = child.parent_id
-              AND parent.data_source_id = child.data_source_id
-             WHERE child.data_source_id = ?1
-             ORDER BY child.path COLLATE BINARY,
-                      child.name COLLATE BINARY,
-                      child.entry_type COLLATE BINARY,
-                      COALESCE(child.size, -1)",
-        )
-        .map_err(persistence_sqlite::DbError::from)?;
-    let mut rows = statement
-        .query([&data_source.id.0])
-        .map_err(persistence_sqlite::DbError::from)?;
+    let entries = persistence_sqlite::repositories::file_repo::FileRepo::new(connection)
+        .find_by_data_source(&data_source.id)
+        .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?;
+    let by_id = entries
+        .iter()
+        .map(|entry| (entry.id.0.clone(), entry.clone()))
+        .collect::<std::collections::HashMap<_, _>>();
+    let mut entries = entries;
+    entries.sort_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then_with(|| left.name.cmp(&right.name))
+            .then_with(|| left.is_directory().cmp(&right.is_directory()))
+            .then_with(|| left.size.cmp(&right.size))
+    });
     let mut accumulator = CatalogAccumulator::default();
-    while let Some(row) = rows.next().map_err(persistence_sqlite::DbError::from)? {
-        accumulator.push(read_catalog_row(row)?);
+    for entry in entries {
+        let is_directory = entry.is_directory();
+        let parent_id = entry.parent_id.clone();
+        let parent = parent_id.as_ref().and_then(|id| by_id.get(&id.0));
+        accumulator.push(CatalogRow {
+            id: entry.id.0,
+            parent_id: parent_id.as_ref().map(|id| id.0.clone()),
+            path: entry.path,
+            name: entry.name,
+            entry_type: if is_directory {
+                "directory".into()
+            } else {
+                "file".into()
+            },
+            size: entry.size,
+            deleted: i64::from(entry.deleted),
+            hidden: i64::from(entry.hidden),
+            system: i64::from(entry.system),
+            created_at: entry.created_at.map(|value| value.to_rfc3339()),
+            modified_at: entry.modified_at.map(|value| value.to_rfc3339()),
+            accessed_at: entry.accessed_at.map(|value| value.to_rfc3339()),
+            changed_at: entry.changed_at.map(|value| value.to_rfc3339()),
+            parent_state: if parent_id.is_none() {
+                0
+            } else if parent.is_some() {
+                1
+            } else {
+                2
+            },
+            parent_path: parent.map(|value| value.path.clone()),
+            parent_name: parent.map(|value| value.name.clone()),
+            parent_entry_type: parent.map(|value| {
+                if value.is_directory() {
+                    "directory".into()
+                } else {
+                    "file".into()
+                }
+            }),
+        });
     }
     Ok(accumulator.into_summary(data_source))
-}
-
-fn read_catalog_row(row: &rusqlite::Row<'_>) -> Result<CatalogRow, persistence_sqlite::DbError> {
-    Ok(CatalogRow {
-        id: row.get(0)?,
-        parent_id: row.get(1)?,
-        path: row.get(2)?,
-        name: row.get(3)?,
-        entry_type: row.get(4)?,
-        size: row.get(5)?,
-        deleted: row.get(6)?,
-        hidden: row.get(7)?,
-        system: row.get(8)?,
-        created_at: row.get(9)?,
-        modified_at: row.get(10)?,
-        accessed_at: row.get(11)?,
-        changed_at: row.get(12)?,
-        parent_state: row.get(13)?,
-        parent_path: row.get(14)?,
-        parent_name: row.get(15)?,
-        parent_entry_type: row.get(16)?,
-    })
 }
 
 fn persist_catalog_manifest(

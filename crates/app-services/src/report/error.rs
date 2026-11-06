@@ -90,6 +90,9 @@ impl From<crate::artifact_service::ArtifactServiceError> for ReportError {
 impl From<crate::timeline_service::TimelineServiceError> for ReportError {
     fn from(error: crate::timeline_service::TimelineServiceError) -> Self {
         match error {
+            crate::timeline_service::TimelineServiceError::Storage(error) => {
+                Self::Other(error.to_string())
+            }
             crate::timeline_service::TimelineServiceError::Db(error) => Self::Db(error),
             crate::timeline_service::TimelineServiceError::NotFound(message)
             | crate::timeline_service::TimelineServiceError::InvalidInput(message) => {

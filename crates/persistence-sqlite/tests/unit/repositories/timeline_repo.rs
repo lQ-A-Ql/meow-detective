@@ -1,4 +1,5 @@
 use super::*;
+use domain::TimelineEventId;
 use std::collections::BTreeMap;
 
 fn setup_db() -> rusqlite::Connection {

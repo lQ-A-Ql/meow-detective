@@ -16,6 +16,75 @@ pub(super) struct AnalysisProjectionRevision {
     pub(super) change_log_initialized: bool,
 }
 
+pub(super) fn publish_projection_marker(
+    source: &crate::source_db::FjallReadWriteSourceStorageHandle,
+    source_id: &str,
+    include_catalog: bool,
+    analysis_revision: Option<&AnalysisProjectionRevision>,
+) -> Result<String, CommandError> {
+    let (family, kind) = if include_catalog {
+        ("projection", "source_projection_complete")
+    } else {
+        ("analysis_projection", "analysis_projection_complete")
+    };
+    let marker = match analysis_revision {
+        Some(revision) => VersionedEnvelope::from_serializable(
+            kind,
+            1,
+            format!("projection:{source_id}"),
+            source_id,
+            1,
+            revision,
+        ),
+        None => Ok(VersionedEnvelope::new(
+            kind,
+            1,
+            format!("projection:{source_id}"),
+            source_id,
+            1,
+            source_id.as_bytes().to_vec(),
+        )),
+    }
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    let key = encode_key(family, &[KeyPart::Text(source_id.into())])
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let mut receipt = source
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            PersistMode::SyncAll,
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    if include_catalog {
+        let revision = analysis_revision
+            .ok_or_else(|| CommandError::internal("Import projection revision is missing"))?;
+        let marker = VersionedEnvelope::from_serializable(
+            "analysis_projection_complete",
+            1,
+            format!("projection:{source_id}"),
+            source_id,
+            1,
+            revision,
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+        let key = encode_key("analysis_projection", &[KeyPart::Text(source_id.into())])
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+        receipt = source
+            .write_envelope(
+                persistence_fjall::KeyspaceName::Meta,
+                key,
+                &marker,
+                PersistMode::SyncAll,
+            )
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+    }
+    if analysis_revision.is_some() {
+        write_analysis_projection_state(source, source_id, "analysis_projection_complete")?;
+    }
+    Ok(hex::encode(receipt.batch_digest))
+}
+
 pub(super) fn analysis_projection_revision(
     source_connection: &Connection,
     source_id: &str,

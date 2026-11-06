@@ -97,73 +97,11 @@ impl TimelineRecordStore {
     }
 
     pub fn upsert(&self, record: &TimelineRecord, mode: PersistMode) -> Result<()> {
-        validate_record(record)?;
-        let key = record_key(&record.data_source_id, &record.id)?;
-        let snapshot = self.read_snapshot();
-        let old = self.read_record(&snapshot, &key, &record.data_source_id, &record.id)?;
-        if old.as_ref().is_some_and(|previous| previous == record) {
-            return Ok(());
-        }
-        let mut actions = Vec::with_capacity(6);
-        let mut count_deltas = HashMap::new();
-        let (update_counts, initialize_counts) =
-            timeline_count::count_write_policy(&snapshot, &record.data_source_id)?;
-        if let Some(previous) = old {
-            self.index_deletes(&mut actions, &previous)?;
-            if update_counts {
-                timeline_count::adjust_count_deltas(&mut count_deltas, &previous, -1)?;
-            }
-        }
-        if update_counts {
-            timeline_count::adjust_count_deltas(&mut count_deltas, record, 1)?;
-        }
-        let payload = serde_json::to_vec(record)
-            .map_err(|error| FjallStorageError::Serialization(error.to_string()))?;
-        let envelope = VersionedEnvelope::new(
-            RECORD_KIND,
-            SCHEMA_VERSION,
-            &record.id,
-            &record.data_source_id,
-            1,
-            payload,
-        );
-        actions.push(WriteAction::Put {
-            keyspace: KeyspaceName::TimelineRecords,
-            key,
-            value: envelope.encode()?,
-        });
-        self.index_writes(&mut actions, record)?;
-        timeline_count::append_count_actions(&snapshot, &mut actions, count_deltas)?;
-        if initialize_counts {
-            actions.push(timeline_count::count_schema_marker_action(
-                &record.data_source_id,
-            )?);
-        }
-        self.write_revision(&snapshot, &mut actions)?;
-        self.source_store.database().write_batch(&actions, mode)?;
-        Ok(())
+        self.upsert_batch(std::slice::from_ref(record), mode)
     }
 
     pub fn delete(&self, source_id: &str, record_id: &str, mode: PersistMode) -> Result<bool> {
-        let key = record_key(source_id, record_id)?;
-        let snapshot = self.read_snapshot();
-        let Some(previous) = self.read_record(&snapshot, &key, source_id, record_id)? else {
-            return Ok(false);
-        };
-        let mut actions = Vec::with_capacity(5);
-        actions.push(WriteAction::Delete {
-            keyspace: KeyspaceName::TimelineRecords,
-            key,
-        });
-        self.index_deletes(&mut actions, &previous)?;
-        if timeline_count::counts_ready(&snapshot, source_id)? {
-            let mut count_deltas = HashMap::new();
-            timeline_count::adjust_count_deltas(&mut count_deltas, &previous, -1)?;
-            timeline_count::append_count_actions(&snapshot, &mut actions, count_deltas)?;
-        }
-        self.write_revision(&snapshot, &mut actions)?;
-        self.source_store.database().write_batch(&actions, mode)?;
-        Ok(true)
+        Ok(self.delete_batch(source_id, &[record_id.into()], mode)? > 0)
     }
 
     pub fn delete_batch(
@@ -175,32 +113,36 @@ impl TimelineRecordStore {
         if ids.is_empty() {
             return Ok(0);
         }
-        let snapshot = self.read_snapshot();
-        let mut actions = Vec::new();
-        let mut count_deltas = HashMap::new();
-        let counts_ready = timeline_count::counts_ready(&snapshot, source_id)?;
         let mut deleted = 0usize;
-        for id in ids {
-            let Some(record) = self.get(&snapshot, source_id, id)? else {
-                continue;
-            };
-            actions.push(WriteAction::Delete {
-                keyspace: KeyspaceName::TimelineRecords,
-                key: record_key(source_id, id)?,
-            });
-            self.index_deletes(&mut actions, &record)?;
-            if counts_ready {
-                timeline_count::adjust_count_deltas(&mut count_deltas, &record, -1)?;
-            }
-            deleted = deleted.saturating_add(1);
-        }
-        if !actions.is_empty() {
-            if counts_ready {
-                timeline_count::append_count_actions(&snapshot, &mut actions, count_deltas)?;
-            }
-            self.write_revision(&snapshot, &mut actions)?;
-            self.source_store.database().write_batch(&actions, mode)?;
-        }
+        self.source_store
+            .database()
+            .write_planned(mode, |snapshot| {
+                let mut actions = Vec::new();
+                let mut count_deltas = HashMap::new();
+                let counts_ready = timeline_count::counts_ready(snapshot, source_id)?;
+                let ids = ids.iter().collect::<std::collections::BTreeSet<_>>();
+                for id in ids {
+                    let Some(record) = self.get(snapshot, source_id, id)? else {
+                        continue;
+                    };
+                    actions.push(WriteAction::Delete {
+                        keyspace: KeyspaceName::TimelineRecords,
+                        key: record_key(source_id, id)?,
+                    });
+                    self.index_deletes(&mut actions, &record)?;
+                    if counts_ready {
+                        timeline_count::adjust_count_deltas(&mut count_deltas, &record, -1)?;
+                    }
+                    deleted += 1;
+                }
+                if !actions.is_empty() {
+                    if counts_ready {
+                        timeline_count::append_count_actions(snapshot, &mut actions, count_deltas)?;
+                    }
+                    self.write_revision(snapshot, &mut actions)?;
+                }
+                Ok(actions)
+            })?;
         Ok(deleted)
     }
 
@@ -328,18 +270,6 @@ impl TimelineRecordStore {
         Ok(Some(decode_record(envelope)?))
     }
 
-    fn index_writes(&self, actions: &mut Vec<WriteAction>, record: &TimelineRecord) -> Result<()> {
-        let record_key = record_key(&record.data_source_id, &record.id)?;
-        for key in index_keys(record)? {
-            actions.push(WriteAction::Put {
-                keyspace: KeyspaceName::TimelineIndexes,
-                key,
-                value: record_key.clone(),
-            });
-        }
-        Ok(())
-    }
-
     fn index_deletes(&self, actions: &mut Vec<WriteAction>, record: &TimelineRecord) -> Result<()> {
         for key in index_keys(record)? {
             actions.push(WriteAction::Delete {
@@ -355,7 +285,12 @@ impl TimelineRecordStore {
         snapshot: &SourceReadSnapshot,
         actions: &mut Vec<WriteAction>,
     ) -> Result<()> {
-        let revision = self.cursor_revision(snapshot)?.saturating_add(1);
+        let revision = self
+            .cursor_revision(snapshot)?
+            .checked_add(1)
+            .ok_or_else(|| {
+                FjallStorageError::InvalidEnvelope("timeline revision overflowed".into())
+            })?;
         actions.push(WriteAction::Put {
             keyspace: KeyspaceName::Meta,
             key: revision_key("timeline")?,

@@ -12,10 +12,10 @@ use std::path::Path;
 
 mod catalog_batch;
 mod catalog_directory;
-mod catalog_upsert;
+mod file_feed;
 
 const RECORD_KIND: &str = "file_entry";
-const SCHEMA_VERSION: u16 = 1;
+const SCHEMA_VERSION: u16 = 2;
 const RECORD_FAMILY: &str = "catalog.record";
 const PARENT_FAMILY: &str = "catalog.parent";
 const PATH_FAMILY: &str = "catalog.path";
@@ -46,7 +46,7 @@ pub struct FileEntryRecord {
     pub system: bool,
     pub read_only: bool,
     pub archive: bool,
-    pub encrypted: bool,
+    pub encrypted: Option<bool>,
     pub created: Option<DateTime<Utc>>,
     pub modified: Option<DateTime<Utc>>,
     pub accessed: Option<DateTime<Utc>>,
@@ -68,6 +68,9 @@ pub struct CatalogRecordStore {
 }
 
 impl CatalogRecordStore {
+    pub fn upsert(&self, record: &FileEntryRecord, mode: PersistMode) -> Result<()> {
+        self.upsert_batch(std::slice::from_ref(record), mode)
+    }
     pub fn open(path: impl AsRef<Path>, config: DatabaseConfig) -> Result<Self> {
         Ok(Self {
             source_store: SourceStore::open(path, config)?,
@@ -96,47 +99,33 @@ impl CatalogRecordStore {
         self.read_record(snapshot, &key, source_id, record_id)
     }
 
-    pub fn find_by_id_any_source(
-        &self,
-        snapshot: &SourceReadSnapshot,
-        record_id: &str,
-    ) -> Result<Option<FileEntryRecord>> {
-        let prefix = encode_key(RECORD_FAMILY, &[])?;
-        for entry in snapshot.prefix(
-            KeyspaceName::CatalogRecords,
-            &prefix,
-            ScanDirection::Forward,
-        )? {
-            let record = decode_record(VersionedEnvelope::decode(&entry.value)?)?;
-            if record.id == record_id {
-                return Ok(Some(record));
-            }
-        }
-        Ok(None)
-    }
-
     pub fn delete(&self, source_id: &str, record_id: &str, mode: PersistMode) -> Result<bool> {
-        let key = record_key(source_id, record_id)?;
-        let snapshot = self.read_snapshot();
-        let Some(previous) = self.read_record(&snapshot, &key, source_id, record_id)? else {
-            return Ok(false);
-        };
-        let mut actions = Vec::with_capacity(5);
-        if previous.entry_type == CatalogEntryType::Directory {
-            self.index_children_as_orphans(&snapshot, source_id, record_id, &mut actions)?;
-        }
-        actions.push(WriteAction::Delete {
-            keyspace: KeyspaceName::CatalogRecords,
-            key: key.clone(),
-        });
-        self.index_deletes(&mut actions, &previous)?;
-        actions.push(WriteAction::Put {
-            keyspace: KeyspaceName::Tombstones,
-            key: tombstone_key(source_id, record_id)?,
-            value: key.clone(),
-        });
-        self.source_store.database().write_batch(&actions, mode)?;
-        Ok(true)
+        let mut deleted = false;
+        self.source_store
+            .database()
+            .write_planned(mode, |snapshot| {
+                let key = record_key(source_id, record_id)?;
+                let Some(previous) = self.read_record(snapshot, &key, source_id, record_id)? else {
+                    return Ok(Vec::new());
+                };
+                let mut actions = Vec::with_capacity(8);
+                if previous.entry_type == CatalogEntryType::Directory {
+                    self.index_children_as_orphans(snapshot, source_id, record_id, &mut actions)?;
+                }
+                actions.push(WriteAction::Delete {
+                    keyspace: KeyspaceName::CatalogRecords,
+                    key: key.clone(),
+                });
+                self.index_deletes(&mut actions, &previous)?;
+                actions.push(WriteAction::Put {
+                    keyspace: KeyspaceName::Tombstones,
+                    key: tombstone_key(source_id, record_id)?,
+                    value: key,
+                });
+                deleted = true;
+                Ok(actions)
+            })?;
+        Ok(deleted)
     }
 
     pub fn list_by_parent(
@@ -315,6 +304,9 @@ impl CatalogRecordStore {
             actions.push(index_write(directory_key(record)?, record_key.clone()));
         }
         actions.push(index_write(path_key(record)?, record_key.clone()));
+        if record.entry_type == CatalogEntryType::File {
+            actions.push(index_write(file_feed::key(record)?, record_key.clone()));
+        }
         if record
             .hash_sha256
             .as_deref()
@@ -344,6 +336,12 @@ impl CatalogRecordStore {
             keyspace: KeyspaceName::CatalogIndexes,
             key: path_key(record)?,
         });
+        if record.entry_type == CatalogEntryType::File {
+            actions.push(WriteAction::Delete {
+                keyspace: KeyspaceName::CatalogIndexes,
+                key: file_feed::key(record)?,
+            });
+        }
         if record.parent_id.is_some() {
             actions.push(WriteAction::Delete {
                 keyspace: KeyspaceName::CatalogIndexes,

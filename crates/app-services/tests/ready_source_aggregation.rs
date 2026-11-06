@@ -563,7 +563,7 @@ fn catalog_record(id: &str) -> FileEntryRecord {
         system: false,
         read_only: false,
         archive: false,
-        encrypted: false,
+        encrypted: Some(false),
         created: None,
         modified: None,
         accessed: None,

@@ -25,7 +25,7 @@ fn record(
         system: false,
         read_only: false,
         archive: false,
-        encrypted: false,
+        encrypted: Some(false),
         created: Some(Utc::now()),
         modified: None,
         accessed: None,
@@ -34,6 +34,60 @@ fn record(
         partition_index: Some(1),
         unix_mode: Some(0o644),
     }
+}
+
+#[test]
+fn file_feed_uses_binary_path_and_id_order_with_stable_snapshot() {
+    let root = tempfile::tempdir().unwrap();
+    let store = CatalogRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let mut records = vec![
+        record("s", "long-id", None, "a", "a"),
+        record("s", "b", None, "a", "a"),
+        record("s", "short", None, "z", "z"),
+        record("s", "other", None, "aa", "aa"),
+        record("foreign", "foreign", None, "a", "a"),
+    ];
+    let mut directory = record("s", "dir", None, "dir", "0");
+    directory.entry_type = CatalogEntryType::Directory;
+    records.push(directory);
+    store.upsert_batch(&records, PersistMode::SyncAll).unwrap();
+    let snapshot = store.read_snapshot();
+    let first = store.list_files_by_path(&snapshot, "s", None, 2).unwrap();
+    assert_eq!(
+        first
+            .records
+            .iter()
+            .map(|row| row.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["b", "long-id"]
+    );
+    store.delete("s", "other", PersistMode::SyncAll).unwrap();
+    let next = store
+        .list_files_by_path(&snapshot, "s", Some(("a", "long-id")), 2)
+        .unwrap();
+    assert_eq!(
+        next.records
+            .iter()
+            .map(|row| row.path.as_str())
+            .collect::<Vec<_>>(),
+        vec!["aa", "z"]
+    );
+    let current = store
+        .list_files_by_path(&store.read_snapshot(), "s", None, 10)
+        .unwrap();
+    assert_eq!(current.records.len(), 3);
+    let mut updated = records[0].clone();
+    updated.path = "0".into();
+    updated.entry_type = CatalogEntryType::Directory;
+    store.upsert(&updated, PersistMode::SyncAll).unwrap();
+    assert_eq!(
+        store
+            .list_files_by_path(&store.read_snapshot(), "s", None, 10)
+            .unwrap()
+            .records
+            .len(),
+        2
+    );
 }
 
 #[test]

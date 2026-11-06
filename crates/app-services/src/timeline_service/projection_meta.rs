@@ -26,6 +26,9 @@ pub(super) fn projection_identity(
     conn: &Connection,
     platform: DataSourcePlatform,
 ) -> Result<String, TimelineServiceError> {
+    if persistence_sqlite::source_fjall::has_source_store(conn)? {
+        return super::projection_fjall::identity(conn, platform);
+    }
     let (count, max_id, max_created, max_modified, max_accessed, max_changed, deleted_count): (
         u64,
         String,

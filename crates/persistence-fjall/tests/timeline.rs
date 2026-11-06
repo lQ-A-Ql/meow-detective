@@ -34,6 +34,64 @@ fn record(
 }
 
 #[test]
+fn replacement_commits_records_counts_indexes_and_revision_together() {
+    let root = tempfile::tempdir().unwrap();
+    let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let mut original = record("source", "old", "FILE_CREATED", "file", 10);
+    original.parser_id = Some("timeline.file_created".into());
+    let unrelated = record("source", "analysis", "LOGON", "file", 20);
+    store
+        .upsert_batch(&[original.clone(), unrelated], PersistMode::SyncAll)
+        .unwrap();
+    let before = store.read_snapshot();
+    let revision = store.cursor_revision(&before).unwrap();
+    let mut replacement = record("source", "new", "FILE_MODIFIED", "file", 30);
+    replacement.parser_id = Some("timeline.file_modified".into());
+    let mut invalid = replacement.clone();
+    invalid.id.clear();
+    assert!(store
+        .replace_by_parser_prefix(
+            "source",
+            "timeline.file_",
+            &[replacement.clone(), invalid],
+            PersistMode::SyncAll
+        )
+        .is_err());
+    let failed = store.read_snapshot();
+    assert_eq!(store.get(&failed, "source", "old").unwrap(), Some(original));
+    assert_eq!(store.cursor_revision(&failed).unwrap(), revision);
+    store
+        .replace_by_parser_prefix(
+            "source",
+            "timeline.file_",
+            &[replacement],
+            PersistMode::SyncAll,
+        )
+        .unwrap();
+    let after = store.read_snapshot();
+    assert!(store.get(&after, "source", "old").unwrap().is_none());
+    assert!(store.get(&before, "source", "old").unwrap().is_some());
+    assert!(store.get(&after, "source", "analysis").unwrap().is_some());
+    assert_eq!(
+        store.count_by_time(&after, "source", None, None).unwrap(),
+        2
+    );
+    assert_eq!(
+        store
+            .count_by_type(&after, "source", "FILE_CREATED", None, None)
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        store
+            .count_by_type(&after, "source", "FILE_MODIFIED", None, None)
+            .unwrap(),
+        1
+    );
+    assert_eq!(store.cursor_revision(&after).unwrap(), revision + 1);
+}
+
+#[test]
 fn upsert_and_delete_clean_all_timeline_indexes() {
     let directory = tempfile::tempdir().unwrap();
     let store = TimelineRecordStore::open(directory.path(), DatabaseConfig::default()).unwrap();

@@ -3,12 +3,14 @@ use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::error::AnalysisServiceError;
 use domain::{EntryType, FileEncryptionStatus, FileEntry, FileEntryId};
 use persistence_sqlite::repositories::file_repo::{file_encryption_status_from_row, FileRepo};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 
+mod catalog;
 mod path_matching;
+use catalog::collect_file_entries_from_fjall;
 
 pub(crate) use path_matching::evidence_path_matches;
 pub(crate) use path_matching::evidence_relative_path;
@@ -117,116 +119,22 @@ pub fn collect_file_entries(conn: &Connection) -> Result<Vec<FileEntry>, Analysi
     Ok(all_files)
 }
 
-fn collect_file_entries_from_fjall(
-    conn: &Connection,
-) -> Result<Option<Vec<FileEntry>>, AnalysisServiceError> {
-    let database_path: String = conn
-        .query_row("PRAGMA database_list", [], |row| row.get(2))
-        .unwrap_or_default();
-    let source_id = conn
-        .query_row(
-            "SELECT id FROM data_sources ORDER BY id LIMIT 2",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()?;
-    let Some(source_id) = source_id else {
-        return Ok(None);
-    };
-    let source_path = std::path::Path::new(&database_path);
-    let Ok(fjall) = crate::source_db::open_fjall_source_read_only_from_source_db_path(
-        source_path,
-        &domain::DataSourceId(source_id.clone()),
-    ) else {
-        return Ok(None);
-    };
-    let snapshot = fjall.snapshot();
-    let projection_key = persistence_fjall::encode_key(
-        "projection",
-        &[persistence_fjall::KeyPart::Text(source_id.clone())],
-    )
-    .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-    let projection = fjall
-        .read_envelope(
-            &snapshot,
-            persistence_fjall::KeyspaceName::Meta,
-            &projection_key,
-        )
-        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-    if projection
-        .as_ref()
-        .is_some_and(|envelope| envelope.record_kind == "source_projection_building")
-    {
-        return Ok(None);
-    }
-    let projection_complete = fjall
-        .source_projection_complete(&snapshot, &source_id)
-        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-    let mut cursor = None;
-    let mut entries = Vec::new();
-    loop {
-        let page = fjall
-            .catalog_list_all(
-                &snapshot,
-                &source_id,
-                cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
-                512,
-            )
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        entries.extend(page.records.into_iter().map(file_entry_from_catalog_record));
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            return Ok((projection_complete || !entries.is_empty()).then_some(entries));
-        }
-    }
-}
-
-fn file_entry_from_catalog_record(record: persistence_fjall::FileEntryRecord) -> FileEntry {
-    FileEntry {
-        id: FileEntryId(record.id),
-        parent_id: record.parent_id.map(FileEntryId),
-        data_source_id: domain::DataSourceId(record.data_source_id),
-        path: record.path,
-        name: record.name,
-        entry_type: match record.entry_type {
-            persistence_fjall::CatalogEntryType::Directory => EntryType::Directory,
-            persistence_fjall::CatalogEntryType::File => EntryType::File,
-        },
-        size: record.size,
-        ext: record.ext,
-        deleted: record.deleted,
-        hidden: record.hidden,
-        system: record.system,
-        encrypted: record.encrypted,
-        read_only: record.read_only,
-        archive: record.archive,
-        unix_mode: record.unix_mode,
-        created_at: record.created,
-        modified_at: record.modified,
-        accessed_at: record.accessed,
-        changed_at: record.changed,
-        hash_sha256: record.hash_sha256,
-    }
-}
-
 pub(crate) fn find_candidate_by_path_suffix(
     conn: &Connection,
     suffix: &str,
 ) -> Result<Option<FileEntry>, AnalysisServiceError> {
-    Ok(conn
-        .query_row(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted, read_only, archive, unix_mode
-             FROM file_entries
-             WHERE entry_type = 'file' COLLATE NOCASE
-               AND REPLACE(LOWER(path), '\\', '/') LIKE ?1
-             ORDER BY LENGTH(path) ASC
-             LIMIT 1",
-            params![format!("%{suffix}")],
-            row_to_file_entry_for_analysis,
-        )
-        .optional()?)
+    let suffix = suffix.to_ascii_lowercase().replace('\\', "/");
+    Ok(collect_file_entries(conn)?
+        .into_iter()
+        .filter(|entry| {
+            entry.is_file()
+                && entry
+                    .path
+                    .to_ascii_lowercase()
+                    .replace('\\', "/")
+                    .ends_with(&suffix)
+        })
+        .min_by_key(|entry| entry.path.len()))
 }
 
 pub(crate) fn row_to_file_entry_for_analysis(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
@@ -285,18 +193,21 @@ fn discover_evidence_candidates_with_definitions(
         .collect::<HashMap<_, _>>();
     let entries = collect_file_entries(conn)?;
     let mut companions = super::companion_index::CompanionIndex::default();
+    let repository = FileRepo::new(conn);
 
     for entry in entries {
         ensure_not_cancelled(cancel_token)?;
         if !entry.is_file() {
             continue;
         }
+        let partition_index = repository.find_partition_index_by_id(&entry.id)?;
+        let encryption_status = repository
+            .find_encryption_status(&entry.id)?
+            .ok_or_else(|| AnalysisServiceError::Other("analysis candidate disappeared".into()))?;
         let file_id = entry.id.0;
         let data_source_id = entry.data_source_id.0;
         let path = entry.path;
         let size = entry.size.unwrap_or_default();
-        let partition_index = None;
-        let encryption_status: FileEncryptionStatus = entry.encrypted.into();
         let encrypted = encryption_status.blocks_content();
         let content_identity = candidate_content_identity(
             &file_id,

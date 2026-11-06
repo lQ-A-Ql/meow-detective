@@ -4,8 +4,6 @@ use tempfile::TempDir;
 
 const APPLICATION_ENCRYPTION_MIGRATION: &str =
     include_str!("../src/migrations/scripts/0042_file_entry_encrypted.sql");
-const SOURCE_ENCRYPTION_MIGRATION: &str =
-    include_str!("../src/migrations/scripts/source_025_file_entry_encrypted.sql");
 
 #[test]
 fn application_and_source_schemas_share_the_encrypted_column_contract() {
@@ -64,11 +62,8 @@ fn fresh_and_upgraded_staging_schemas_share_the_encrypted_column_contract() {
 }
 
 #[test]
-fn historical_rows_remain_unknown_after_application_and_source_migrations() {
-    for migration in [
-        APPLICATION_ENCRYPTION_MIGRATION,
-        SOURCE_ENCRYPTION_MIGRATION,
-    ] {
+fn historical_application_rows_remain_unknown_after_encryption_migration() {
+    for migration in [APPLICATION_ENCRYPTION_MIGRATION] {
         let connection = Connection::open_in_memory().expect("open legacy database");
         connection
             .execute_batch(

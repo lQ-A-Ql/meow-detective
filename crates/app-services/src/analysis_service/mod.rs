@@ -6,6 +6,7 @@ mod android;
 mod artifact_builders;
 mod cancellation;
 mod candidates;
+pub(crate) use candidates::normalize_evidence_path;
 mod capability;
 mod classification;
 mod error;

@@ -29,7 +29,7 @@ fn file_record(
         system: false,
         read_only: true,
         archive: true,
-        encrypted: false,
+        encrypted: Some(false),
         created: Some(Utc.timestamp_opt(1_700_000_000, 0).single().unwrap()),
         modified: Some(Utc.timestamp_opt(1_700_000_100, 0).single().unwrap()),
         accessed: None,

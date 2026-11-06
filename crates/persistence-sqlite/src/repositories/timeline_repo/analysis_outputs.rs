@@ -18,7 +18,7 @@ impl TimelineRepo<'_> {
         parser_id: &str,
     ) -> DbResult<usize> {
         if let Some(events) = super::fjall_events(self.conn)? {
-            let store = crate::source_fjall::open_store(self.conn)?
+            let store = crate::source_fjall::open_store_for_write(self.conn)?
                 .expect("Fjall source store is configured");
             let ids = events
                 .into_iter()

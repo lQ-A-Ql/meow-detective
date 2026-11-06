@@ -11,7 +11,23 @@ impl CatalogRecordStore {
         if records.is_empty() {
             return Ok(());
         }
-        let snapshot = self.read_snapshot();
+        self.source_store
+            .database()
+            .write_planned(mode, |snapshot| self.upsert_actions(snapshot, records))?;
+        Ok(())
+    }
+
+    fn upsert_actions(
+        &self,
+        snapshot: &crate::SourceReadSnapshot,
+        records: &[FileEntryRecord],
+    ) -> Result<Vec<WriteAction>> {
+        let records = records
+            .iter()
+            .map(|record| ((record.data_source_id.as_str(), record.id.as_str()), record))
+            .collect::<std::collections::BTreeMap<_, _>>()
+            .into_values()
+            .collect::<Vec<_>>();
         let batch_ids = records
             .iter()
             .map(|record| (record.data_source_id.clone(), record.id.clone()))
@@ -19,7 +35,7 @@ impl CatalogRecordStore {
         let mut actions = Vec::with_capacity(records.len().saturating_mul(8));
         for record in records {
             let key = record_key(&record.data_source_id, &record.id)?;
-            let previous = self.read_record(&snapshot, &key, &record.data_source_id, &record.id)?;
+            let previous = self.read_record(snapshot, &key, &record.data_source_id, &record.id)?;
             if previous.as_ref().is_some_and(|previous| previous == record) {
                 continue;
             }
@@ -45,7 +61,7 @@ impl CatalogRecordStore {
                     let parent_exists = batch_ids
                         .contains(&(record.data_source_id.clone(), parent_id.to_owned()))
                         || self
-                            .get(&snapshot, &record.data_source_id, parent_id)?
+                            .get(snapshot, &record.data_source_id, parent_id)?
                             .is_some();
                     if parent_id == record.id || !parent_exists {
                         actions.push(index_write(
@@ -61,9 +77,8 @@ impl CatalogRecordStore {
             });
         }
         if actions.is_empty() {
-            return Ok(());
+            return Ok(actions);
         }
-        self.source_store.database().write_batch(&actions, mode)?;
-        Ok(())
+        Ok(actions)
     }
 }

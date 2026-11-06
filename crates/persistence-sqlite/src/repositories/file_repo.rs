@@ -4,9 +4,10 @@ use rusqlite::Connection;
 
 mod browse;
 mod browse_paging;
+mod browse_partition;
 mod indexing;
 mod lookup;
-mod mapping;
+pub(crate) mod mapping;
 mod registry_hives;
 mod writes;
 
@@ -32,6 +33,11 @@ impl<'a> FileRepo<'a> {
             return Ok(None);
         };
         let source_id = source_id.unwrap_or(&configured_source_id);
+        if source_id != configured_source_id {
+            return Err(crate::DbError::System(
+                "source catalog owner mismatch".into(),
+            ));
+        }
         let Some(store) = crate::source_fjall::open_store(self.conn)? else {
             return Ok(None);
         };

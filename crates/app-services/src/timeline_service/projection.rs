@@ -108,6 +108,11 @@ pub fn materialize_file_activity_with_identity_and_policy(
             "timeline projection input identity must not be empty".to_string(),
         ));
     }
+    if persistence_sqlite::source_fjall::has_source_store(conn)
+        .map_err(|error| TimelineServiceError::Other(error.to_string()))?
+    {
+        return super::projection_fjall::materialize(conn, platform, cancel_token, input_identity);
+    }
     if !projection_source_tables_present(conn)? {
         return Ok(already_projected_stats());
     }

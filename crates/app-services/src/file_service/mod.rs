@@ -10,6 +10,7 @@ mod error;
 mod extraction;
 pub(crate) mod filesystem_locators;
 mod fjall_read;
+pub(crate) use fjall_read::record_to_domain;
 mod linux_root_mounts;
 mod metadata;
 mod mft;

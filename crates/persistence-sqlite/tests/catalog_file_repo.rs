@@ -29,8 +29,10 @@ fn entry(id: &str, parent_id: Option<&str>, path: &str, entry_type: EntryType) -
 
 #[test]
 fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
-    let connection = persistence_sqlite::open_in_memory().expect("open database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+    let directory = tempfile::tempdir().unwrap();
+    let connection = persistence_sqlite::open_or_create_source(&directory.path().join("source.db"))
+        .expect("open database");
+    persistence_sqlite::source_fjall::configure_source_identity(&connection, "source-1").unwrap();
     connection
         .execute(
             "INSERT INTO data_sources
@@ -55,23 +57,31 @@ fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
         .expect("insert catalog batch");
     transaction.commit().expect("commit catalog batch");
 
-    let rows = connection
-        .prepare(
-            "SELECT id, parent_id, partition_index
-             FROM file_entries
-             ORDER BY id",
+    let store = persistence_sqlite::source_fjall::open_store(&connection)
+        .unwrap()
+        .unwrap();
+    let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let snapshot = catalog.read_snapshot();
+    let mut rows = catalog
+        .list_all(
+            &snapshot,
+            "source-1",
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            10,
         )
-        .expect("prepare query")
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, Option<String>>(1)?,
-                row.get::<_, i64>(2)?,
-            ))
+        .unwrap()
+        .records
+        .into_iter()
+        .map(|record| {
+            (
+                record.id,
+                record.parent_id,
+                i64::from(record.partition_index.unwrap()),
+            )
         })
-        .expect("query rows")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("collect rows");
+        .collect::<Vec<_>>();
+    rows.sort();
 
     assert_eq!(
         rows,
@@ -80,14 +90,12 @@ fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
             ("root".to_string(), None, 7),
         ]
     );
-    let encrypted: bool = connection
-        .query_row(
-            "SELECT encrypted <> 0 FROM file_entries WHERE id = 'file'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("read encrypted flag");
-    assert!(encrypted);
+    let encrypted = catalog
+        .get(&snapshot, "source-1", "file")
+        .unwrap()
+        .unwrap()
+        .encrypted;
+    assert_eq!(encrypted, Some(true));
     let fingerprint_count: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM forensic_fingerprints WHERE source_id = 'source-1'",
@@ -96,4 +104,26 @@ fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
         )
         .expect("count file fingerprints");
     assert_eq!(fingerprint_count, 2);
+    let hash = "b".repeat(64);
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&connection)
+        .update_hash_sha256(&FileEntryId("file".into()), &hash)
+        .unwrap();
+    let fingerprint =
+        persistence_sqlite::repositories::fingerprint_repo::ForensicFingerprintRepo::new(
+            &connection,
+        )
+        .find(
+            domain::ForensicObjectType::FileEntry,
+            Some("source-1"),
+            "file",
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(fingerprint.content_sha256, Some(hash));
+    assert_eq!(
+        persistence_sqlite::repositories::file_repo::FileRepo::new(&connection)
+            .find_partition_index_by_id(&FileEntryId("file".into()))
+            .unwrap(),
+        Some(7)
+    );
 }

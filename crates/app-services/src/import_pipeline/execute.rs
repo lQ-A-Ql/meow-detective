@@ -144,13 +144,6 @@ fn execute_import_job_internal(
         let _source_fence = publication
             .as_ref()
             .map(|lease| lease.fence_connection(&source_conn));
-        profile::measure_optional(profiling.as_ref(), Phase::BulkLoadBegin, || {
-            persistence_sqlite::repositories::source_bulk_load_repo::SourceBulkLoadRepo::begin(
-                &source_conn,
-                &job_id.0,
-            )
-            .map_err(CommandError::from_typed_service_error)
-        })?;
         let stats = profile::measure_optional(profiling.as_ref(), Phase::Catalog, || {
             phases::run_enumeration_phase(&mut ctx, &ds)
         })?;

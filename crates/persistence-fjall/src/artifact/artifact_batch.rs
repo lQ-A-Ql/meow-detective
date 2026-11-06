@@ -14,11 +14,25 @@ impl ArtifactRecordStore {
         if records.is_empty() {
             return Ok(());
         }
-        let snapshot = self.read_snapshot();
+        self.source_store
+            .database()
+            .write_planned(mode, |snapshot| self.upsert_actions(snapshot, records))?;
+        Ok(())
+    }
+
+    fn upsert_actions(
+        &self,
+        snapshot: &crate::SourceReadSnapshot,
+        records: &[ArtifactRecord],
+    ) -> Result<Vec<WriteAction>> {
         let mut actions = Vec::with_capacity(records.len().saturating_mul(4));
-        for record in records {
+        let latest = records
+            .iter()
+            .map(|record| ((record.data_source_id.as_str(), record.id.as_str()), record))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        for record in latest.into_values() {
             validate(record)?;
-            let previous = self.get(&snapshot, &record.data_source_id, &record.id)?;
+            let previous = self.get(snapshot, &record.data_source_id, &record.id)?;
             if previous.as_ref().is_some_and(|previous| previous == record) {
                 continue;
             }
@@ -44,9 +58,9 @@ impl ArtifactRecordStore {
             actions.extend(index_writes(record)?);
         }
         if actions.is_empty() {
-            return Ok(());
+            return Ok(actions);
         }
-        self.source_store.database().write_batch(&actions, mode)?;
-        Ok(())
+        actions.push(self.revision_action(snapshot)?);
+        Ok(actions)
     }
 }

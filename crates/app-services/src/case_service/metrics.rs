@@ -25,9 +25,11 @@ pub fn get_case_metrics_for_case(
     {
         let catalog_count = crate::source_db::ready_source_catalog_count(case_root, &source_id)
             .map_err(|error| DbError::System(error.to_string()))?;
-        metrics.indexed_file_count = metrics
-            .indexed_file_count
-            .saturating_add(catalog_count.unwrap_or(FileRepo::new(&source_conn).count_all()?));
+        let catalog_count = match catalog_count {
+            Some(count) => count,
+            None => FileRepo::new(&source_conn).count_all()?,
+        };
+        metrics.indexed_file_count = metrics.indexed_file_count.saturating_add(catalog_count);
         let projected_timeline_count =
             crate::source_db::ready_source_timeline_count(case_root, &source_id)
                 .map_err(|error| DbError::System(error.to_string()))?;
@@ -39,9 +41,11 @@ pub fn get_case_metrics_for_case(
         metrics.timeline_event_count = metrics.timeline_event_count.saturating_add(timeline_count);
         let artifact_count = crate::source_db::ready_source_artifact_count(case_root, &source_id)
             .map_err(|error| DbError::System(error.to_string()))?;
-        metrics.artifact_count = metrics
-            .artifact_count
-            .saturating_add(artifact_count.unwrap_or(ArtifactRepo::new(&source_conn).count()?));
+        let artifact_count = match artifact_count {
+            Some(count) => count,
+            None => ArtifactRepo::new(&source_conn).count()?,
+        };
+        metrics.artifact_count = metrics.artifact_count.saturating_add(artifact_count);
     }
     Ok(metrics)
 }

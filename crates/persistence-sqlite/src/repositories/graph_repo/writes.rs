@@ -12,6 +12,9 @@ const INSERT_EDGES_SQL: &str =
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)";
 
 impl GraphRepo<'_> {
+    pub fn insert_edges_in_transaction(&self, edges: &[GraphEdge]) -> DbResult<()> {
+        self.insert_edges_batch_unchecked(edges)
+    }
     /// Caller owns the transaction, so artifacts and nodes publish together.
     pub fn insert_nodes_in_transaction(&self, nodes: &[GraphNode]) -> DbResult<()> {
         self.insert_nodes_batch_unchecked(nodes)

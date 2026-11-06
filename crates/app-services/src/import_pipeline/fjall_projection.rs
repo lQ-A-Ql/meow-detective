@@ -6,16 +6,20 @@ use super::context::ImportJobContext;
 use transport::CommandError;
 
 mod cephfs;
+mod generation;
 mod nested;
 mod projection_state;
 mod projections;
 mod records;
 use cephfs::mirror_namespace_locators;
+use generation::{
+    active_root as active_import_generation_root, publish as publish_source_generation,
+};
 use nested::mirror_nested_lineage;
 use projection_state::{
     analysis_projection_marker, analysis_projection_revision, catalog_projection_is_published,
-    ensure_analysis_projection_building, ensure_projection_building,
-    write_analysis_projection_state, AnalysisProjectionRevision,
+    ensure_analysis_projection_building, ensure_projection_building, publish_projection_marker,
+    write_analysis_projection_state,
 };
 
 pub(super) fn mirror_source_records(
@@ -54,6 +58,8 @@ pub(super) fn mirror_source_records(
         &ctx.job_id.0,
         &projection_digest,
     )?;
+    persistence_sqlite::source_fjall::bind_generation(ctx.source_connection()?, "source.fjall")
+        .map_err(CommandError::from_service_error)?;
     ctx.report_job_progress(97, "Queryable record projection completed")?;
     Ok(projection_digest)
 }
@@ -92,46 +98,6 @@ pub(crate) fn mirror_partition_data_for_import(
     source
         .persist(PersistMode::SyncAll)
         .map_err(|error| CommandError::internal(error.to_string()))
-}
-
-fn publish_source_generation(
-    layout: &persistence_fjall::SourceBuildLayout,
-    target_root: &std::path::Path,
-    existing_generation: bool,
-    source_id: &str,
-    attempt_id: &str,
-    projection_digest: &str,
-) -> Result<(), CommandError> {
-    let _close_guard = crate::storage_runtime::close_source_store_at_path(target_root)
-        .map_err(|error| CommandError::internal(error.to_string()))?
-        .ok_or_else(|| CommandError::internal("Fjall source generation is still in use"))?;
-    let source = persistence_fjall::SourceStore::open(
-        target_root,
-        persistence_fjall::DatabaseConfig::default(),
-    )
-    .map_err(|error| CommandError::internal(error.to_string()))?;
-    if existing_generation {
-        persistence_fjall::replace_source_generation(
-            &source,
-            source_id,
-            attempt_id,
-            projection_digest,
-        )
-    } else {
-        persistence_fjall::seal_source_generation(&source, source_id, attempt_id, projection_digest)
-    }
-    .map_err(|error| CommandError::internal(error.to_string()))?;
-    source
-        .database()
-        .persist(PersistMode::SyncAll)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    drop(source);
-    if !existing_generation {
-        persistence_fjall::publish_source_generation(layout.build_path(), layout.published_path())
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-    }
-    drop(_close_guard);
-    Ok(())
 }
 
 fn mirror_source_records_into_root(
@@ -182,7 +148,7 @@ pub(crate) fn mirror_analysis_outputs_from_connections(
                 case_root, source_id, attempt_id,
             )
             .map_err(|error| CommandError::internal(error.to_string()))?;
-            publish_analysis_generation(
+            publish_source_generation(
                 &layout,
                 root,
                 false,
@@ -190,84 +156,9 @@ pub(crate) fn mirror_analysis_outputs_from_connections(
                 attempt_id,
                 &projection_digest,
             )?;
-            if layout.published_path().is_dir() && layout.build_path().is_dir() {
-                std::fs::remove_dir_all(layout.build_path())
-                    .map_err(|error| CommandError::internal(error.to_string()))?;
-            }
         }
     }
     Ok(projection_digest)
-}
-
-fn publish_analysis_generation(
-    layout: &persistence_fjall::SourceBuildLayout,
-    target_root: &std::path::Path,
-    _existing_generation: bool,
-    source_id: &str,
-    attempt_id: &str,
-    projection_digest: &str,
-) -> Result<(), CommandError> {
-    let _close_guard = crate::storage_runtime::close_source_store_at_path(target_root)
-        .map_err(|error| CommandError::internal(error.to_string()))?
-        .ok_or_else(|| CommandError::internal("Fjall analysis generation is still in use"))?;
-    let source = persistence_fjall::SourceStore::open(
-        target_root,
-        persistence_fjall::DatabaseConfig::default(),
-    )
-    .map_err(|error| CommandError::internal(error.to_string()))?;
-    persistence_fjall::replace_source_generation(&source, source_id, attempt_id, projection_digest)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    source
-        .database()
-        .persist(PersistMode::SyncAll)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    drop(source);
-    if !layout.published_path().is_dir() {
-        persistence_fjall::publish_source_generation(target_root, layout.published_path())
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-    }
-    drop(_close_guard);
-    Ok(())
-}
-
-fn active_import_generation_root(
-    case_root: &std::path::Path,
-    case_id: &str,
-    source_id: &str,
-) -> Result<Option<std::path::PathBuf>, CommandError> {
-    let case_connection = crate::connection::open_existing_case_db(&case_root.join("app.db"))
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let operations = persistence_sqlite::repositories::storage_control_repo::StorageControlRepo::new(
-        &case_connection,
-    )
-    .list_open_operations(case_id)
-    .map_err(|error| CommandError::internal(error.to_string()))?
-    .into_iter()
-    .filter(|operation| {
-        operation.source_id.as_deref() == Some(source_id)
-            && operation.operation_kind == "source_import"
-            && matches!(
-                operation.state,
-                persistence_sqlite::repositories::storage_control_repo::StorageOperationState::Planned
-                    | persistence_sqlite::repositories::storage_control_repo::StorageOperationState::Running
-            )
-    })
-    .collect::<Vec<_>>();
-    if operations.len() > 1 {
-        return Err(CommandError::internal(
-            "multiple source import attempts are active",
-        ));
-    }
-    let Some(operation) = operations.into_iter().next() else {
-        return Ok(None);
-    };
-    persistence_fjall::SourceBuildLayout::for_case_source(
-        case_root,
-        source_id,
-        &operation.attempt_id,
-    )
-    .map(|layout| Some(layout.build_path()))
-    .map_err(|error| CommandError::internal(error.to_string()))
 }
 
 pub(crate) fn mirror_catalog_records_from_connection(
@@ -316,7 +207,7 @@ pub(crate) fn mirror_analysis_outputs_before_sqlite_commit(
         .persist(PersistMode::SyncAll)
         .map_err(|error| CommandError::internal(error.to_string()))?;
     publish_projection_marker(&source, source_id, false, Some(&analysis_revision))?;
-    prune_analysis_projection_changes(source_connection, analysis_revision.change_high_water)
+    Ok(())
 }
 
 pub(crate) fn mark_catalog_projection_seeded(
@@ -439,7 +330,6 @@ fn mirror_source_records_from_connections_internal(
                     source_id,
                     "analysis_projection_complete",
                 )?;
-                prune_analysis_projection_changes(source_connection, revision.change_high_water)?;
                 let digest = encode_key(
                     "analysis_projection_revision",
                     &[
@@ -486,9 +376,6 @@ fn mirror_source_records_from_connections_internal(
         include_catalog,
         analysis_revision.as_ref(),
     )?;
-    if let Some(revision) = analysis_revision {
-        prune_analysis_projection_changes(source_connection, revision.change_high_water)?;
-    }
     sqlite_projection_transaction
         .commit()
         .map_err(|error| CommandError::internal(error.to_string()))?;
@@ -518,14 +405,6 @@ fn apply_projection_records(
         include_analysis,
         catalog_published,
     )?;
-    Ok(())
-}
-
-fn prune_analysis_projection_changes(
-    source_connection: &Connection,
-    through_revision: u64,
-) -> Result<(), CommandError> {
-    let _ = (source_connection, through_revision);
     Ok(())
 }
 
@@ -571,77 +450,4 @@ fn mirror_projection_records(
             .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     Ok(())
-}
-
-fn publish_projection_marker(
-    source: &crate::source_db::FjallReadWriteSourceStorageHandle,
-    source_id: &str,
-    include_catalog: bool,
-    analysis_revision: Option<&AnalysisProjectionRevision>,
-) -> Result<String, CommandError> {
-    let (marker_family, marker_kind) = if include_catalog {
-        ("projection", "source_projection_complete")
-    } else {
-        ("analysis_projection", "analysis_projection_complete")
-    };
-    let marker = if let Some(revision) = analysis_revision {
-        VersionedEnvelope::from_serializable(
-            marker_kind,
-            1,
-            format!("projection:{source_id}"),
-            source_id,
-            1,
-            revision,
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?
-    } else {
-        VersionedEnvelope::new(
-            marker_kind,
-            1,
-            format!("projection:{source_id}"),
-            source_id,
-            1,
-            source_id.as_bytes().to_vec(),
-        )
-    };
-    let receipt = source
-        .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
-            encode_key(marker_family, &[KeyPart::Text(source_id.to_owned())])
-                .map_err(|error| CommandError::internal(error.to_string()))?,
-            &marker,
-            PersistMode::SyncAll,
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let mut batch_digest = receipt.batch_digest;
-    if include_catalog {
-        let revision = analysis_revision
-            .ok_or_else(|| CommandError::internal("Import projection revision is missing"))?;
-        let analysis_marker = VersionedEnvelope::from_serializable(
-            "analysis_projection_complete",
-            1,
-            format!("projection:{source_id}"),
-            source_id,
-            1,
-            revision,
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-        let analysis_receipt = source
-            .write_envelope(
-                persistence_fjall::KeyspaceName::Meta,
-                encode_key(
-                    "analysis_projection",
-                    &[KeyPart::Text(source_id.to_owned())],
-                )
-                .map_err(|error| CommandError::internal(error.to_string()))?,
-                &analysis_marker,
-                PersistMode::SyncAll,
-            )
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-        batch_digest = analysis_receipt.batch_digest;
-    }
-    if analysis_revision.is_some() {
-        write_analysis_projection_state(source, source_id, "analysis_projection_complete")?;
-    }
-    Ok(hex::encode(batch_digest))
 }

@@ -156,25 +156,53 @@ fn run_search_projection(context: SearchPhaseContext<'_>) -> Result<String, Stri
 pub(super) fn timeline_event_counts(
     connection: &rusqlite::Connection,
 ) -> Result<(u64, u64), String> {
-    connection
+    let source_id: String = connection
         .query_row(
-            "SELECT
-                COALESCE(SUM(CASE WHEN event_type IN (
-                    'FILE_CREATED',
-                    'FILE_MODIFIED',
-                    'FILE_ACCESSED',
-                    'FILE_DELETED'
-                ) THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN event_type IN (
-                    'REGISTRY_HIVE_LAST_WRITE',
-                    'REGISTRY_SAM_LAST_LOGIN',
-                    'REGISTRY_SAM_PASSWORD_LAST_SET',
-                    'REGISTRY_SYSTEM_SHUTDOWN',
-                    'FILE_EXECUTED'
-                ) THEN 1 ELSE 0 END), 0)
-             FROM timeline_events",
+            "SELECT id FROM data_sources ORDER BY id LIMIT 1",
             [],
-            |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)),
+            |row| row.get(0),
         )
-        .map_err(|error| format!("Count Timeline phase events: {error}"))
+        .map_err(|error| format!("Count Timeline phase source: {error}"))?;
+    let store = persistence_sqlite::source_fjall::open_store(connection)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "Fjall source storage is unavailable".to_owned())?;
+    let repository = persistence_fjall::TimelineRecordStore::from_source_store((*store).clone());
+    let snapshot = repository.read_snapshot();
+    let mut cursor = None;
+    let mut file = 0;
+    let mut system = 0;
+    loop {
+        let page = repository
+            .list_by_source(
+                &snapshot,
+                &source_id,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                512,
+            )
+            .map_err(|error| error.to_string())?;
+        for event in page.records {
+            if matches!(
+                event.event_type.as_str(),
+                "FILE_CREATED" | "FILE_MODIFIED" | "FILE_ACCESSED" | "FILE_DELETED"
+            ) {
+                file += 1;
+            }
+            if matches!(
+                event.event_type.as_str(),
+                "REGISTRY_HIVE_LAST_WRITE"
+                    | "REGISTRY_SAM_LAST_LOGIN"
+                    | "REGISTRY_SAM_PASSWORD_LAST_SET"
+                    | "REGISTRY_SYSTEM_SHUTDOWN"
+                    | "FILE_EXECUTED"
+            ) {
+                system += 1;
+            }
+        }
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    Ok((file, system))
 }

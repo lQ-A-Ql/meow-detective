@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum TimelineServiceError {
     #[error("database error: {0}")]
     Db(#[from] persistence_sqlite::DbError),
+    #[error("source storage error: {0}")]
+    Storage(#[from] persistence_fjall::FjallStorageError),
     #[error("not found: {0}")]
     NotFound(String),
     #[error("invalid input: {0}")]
@@ -19,7 +21,7 @@ pub enum TimelineServiceError {
 impl transport::ServiceErrorCategory for TimelineServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
-            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::Db(_) | Self::Storage(_) => transport::ErrorCategory::Io,
             Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
             Self::Cancelled => transport::ErrorCategory::Cancelled,

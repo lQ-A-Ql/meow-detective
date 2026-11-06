@@ -96,16 +96,19 @@ fn load_plugin_files(
 ) -> Result<Vec<PluginFileRecord>, AnalysisServiceError> {
     let entries = super::common::collect_file_entries(conn)?;
     let mut records = Vec::new();
+    let repository = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
     for entry in entries {
         ensure_not_cancelled(cancel_token)?;
         if !entry.is_file() {
             continue;
         }
+        let partition_index = repository.find_partition_index_by_id(&entry.id)?;
+        let encryption_status = repository
+            .find_encryption_status(&entry.id)?
+            .ok_or_else(|| AnalysisServiceError::Other("plugin candidate disappeared".into()))?;
         let file_id = entry.id.0;
         let data_source_id = entry.data_source_id.0;
         let path = entry.path;
-        let partition_index = None;
-        let encryption_status: domain::FileEncryptionStatus = entry.encrypted.into();
         let size = entry.size.unwrap_or_default();
         records.push(PluginFileRecord {
             content_identity: candidate_content_identity(

@@ -40,6 +40,30 @@ pub struct ArtifactRecordStore {
 }
 
 impl ArtifactRecordStore {
+    pub fn cursor_revision(&self, snapshot: &SourceReadSnapshot) -> Result<u64> {
+        let key = encode_key("artifact.revision", &[])?;
+        let Some(value) = snapshot.get(KeyspaceName::Meta, &key)? else {
+            return Ok(0);
+        };
+        let bytes = <[u8; 8]>::try_from(value.as_slice()).map_err(|_| {
+            FjallStorageError::InvalidEnvelope("artifact revision is malformed".into())
+        })?;
+        Ok(u64::from_be_bytes(bytes))
+    }
+
+    fn revision_action(&self, snapshot: &SourceReadSnapshot) -> Result<WriteAction> {
+        let revision = self
+            .cursor_revision(snapshot)?
+            .checked_add(1)
+            .ok_or_else(|| {
+                FjallStorageError::InvalidEnvelope("artifact revision overflowed".into())
+            })?;
+        Ok(WriteAction::Put {
+            keyspace: KeyspaceName::Meta,
+            key: encode_key("artifact.revision", &[])?,
+            value: revision.to_be_bytes().to_vec(),
+        })
+    }
     pub fn open(path: impl AsRef<Path>, config: DatabaseConfig) -> Result<Self> {
         Ok(Self {
             source_store: SourceStore::open(path, config)?,
@@ -68,47 +92,10 @@ impl ArtifactRecordStore {
         Ok(Some(decode(envelope)?))
     }
     pub fn upsert(&self, record: &ArtifactRecord, mode: PersistMode) -> Result<()> {
-        validate(record)?;
-        let snapshot = self.read_snapshot();
-        let mut actions = Vec::new();
-        let old = self.get(&snapshot, &record.data_source_id, &record.id)?;
-        if old.as_ref().is_some_and(|previous| previous == record) {
-            return Ok(());
-        }
-        if let Some(old) = old {
-            actions.extend(index_deletes(&old)?);
-        }
-        let payload = serde_json::to_vec(record)
-            .map_err(|error| FjallStorageError::Serialization(error.to_string()))?;
-        let envelope = VersionedEnvelope::new(
-            RECORD_KIND,
-            SCHEMA_VERSION,
-            &record.id,
-            &record.data_source_id,
-            1,
-            payload,
-        );
-        actions.push(WriteAction::Put {
-            keyspace: KeyspaceName::ArtifactRecords,
-            key: record_key(&record.data_source_id, &record.id)?,
-            value: envelope.encode()?,
-        });
-        actions.extend(index_writes(record)?);
-        self.source_store.database().write_batch(&actions, mode)?;
-        Ok(())
+        self.upsert_batch(std::slice::from_ref(record), mode)
     }
     pub fn delete(&self, source_id: &str, id: &str, mode: PersistMode) -> Result<bool> {
-        let snapshot = self.read_snapshot();
-        let Some(old) = self.get(&snapshot, source_id, id)? else {
-            return Ok(false);
-        };
-        let mut actions = vec![WriteAction::Delete {
-            keyspace: KeyspaceName::ArtifactRecords,
-            key: record_key(source_id, id)?,
-        }];
-        actions.extend(index_deletes(&old)?);
-        self.source_store.database().write_batch(&actions, mode)?;
-        Ok(true)
+        Ok(self.delete_batch(source_id, &[id.to_owned()], mode)? > 0)
     }
 
     pub fn delete_batch(
@@ -120,23 +107,28 @@ impl ArtifactRecordStore {
         if ids.is_empty() {
             return Ok(0);
         }
-        let snapshot = self.read_snapshot();
-        let mut actions = Vec::new();
         let mut deleted = 0usize;
-        for id in ids {
-            let Some(record) = self.get(&snapshot, source_id, id)? else {
-                continue;
-            };
-            actions.push(WriteAction::Delete {
-                keyspace: KeyspaceName::ArtifactRecords,
-                key: record_key(source_id, id)?,
-            });
-            actions.extend(index_deletes(&record)?);
-            deleted = deleted.saturating_add(1);
-        }
-        if !actions.is_empty() {
-            self.source_store.database().write_batch(&actions, mode)?;
-        }
+        self.source_store
+            .database()
+            .write_planned(mode, |snapshot| {
+                let mut actions = Vec::new();
+                let ids = ids.iter().collect::<std::collections::BTreeSet<_>>();
+                for id in ids {
+                    let Some(record) = self.get(snapshot, source_id, id)? else {
+                        continue;
+                    };
+                    actions.push(WriteAction::Delete {
+                        keyspace: KeyspaceName::ArtifactRecords,
+                        key: record_key(source_id, id)?,
+                    });
+                    actions.extend(index_deletes(&record)?);
+                    deleted += 1;
+                }
+                if !actions.is_empty() {
+                    actions.push(self.revision_action(snapshot)?);
+                }
+                Ok(actions)
+            })?;
         Ok(deleted)
     }
     pub fn list_by_type(

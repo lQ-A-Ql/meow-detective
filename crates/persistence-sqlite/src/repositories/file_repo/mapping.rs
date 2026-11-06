@@ -12,7 +12,7 @@ pub(super) fn escape_like_literal(value: &str) -> String {
     escaped
 }
 
-pub(super) fn row_to_file_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileEntry> {
+pub(crate) fn row_to_file_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileEntry> {
     let entry_type: String = row.get(5)?;
     let encryption_status = file_encryption_status_from_row(row, 16)?;
     Ok(FileEntry {

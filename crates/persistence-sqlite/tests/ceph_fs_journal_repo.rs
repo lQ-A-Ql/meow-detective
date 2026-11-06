@@ -568,7 +568,7 @@ fn source_019_is_latest_and_reapplication_is_idempotent() {
     let (conn, _) = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_040_projection_change_log"
+        "source_041_fjall_detail_ownership"
     );
     assert_eq!(runner::run_source_all(&conn).unwrap(), 0);
     for table in [

@@ -11,17 +11,28 @@ impl FileRepo<'_> {
         let hash = normalize_content_sha256(Some(hash)).ok_or_else(|| {
             crate::connection::DbError::System("file SHA-256 must be hexadecimal".into())
         })?;
-        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
-            let source = self.find_by_id(id)?;
-            let Some(mut entry) = source else {
+        if let Some(store) = crate::source_fjall::open_store_for_write(self.conn)? {
+            let source_id = crate::source_fjall::source_id(self.conn)?
+                .ok_or_else(|| crate::DbError::System("source identity is missing".into()))?;
+            let catalog =
+                persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+            let Some(mut record) = catalog
+                .get(&catalog.read_snapshot(), &source_id, &id.0)
+                .map_err(|error| crate::DbError::System(error.to_string()))?
+            else {
                 return Ok(None);
             };
-            entry.hash_sha256 = Some(hash);
-            let record = crate::source_fjall::file_record(&entry);
-            persistence_fjall::CatalogRecordStore::from_source_store((*store).clone())
+            record.hash_sha256 = Some(hash);
+            catalog
                 .upsert(&record, persistence_fjall::PersistMode::SyncAll)
                 .map_err(|error| crate::connection::DbError::System(error.to_string()))?;
-            return Ok(Some(entry));
+            ForensicFingerprintRepo::new(self.conn).update_content_sha256(
+                domain::ForensicObjectType::FileEntry,
+                Some(&source_id),
+                &id.0,
+                record.hash_sha256.as_deref(),
+            )?;
+            return Ok(Some(crate::source_fjall::file_entry(record)));
         }
         let updated = self.conn.execute(
             "UPDATE file_entries SET hash_sha256 = ?1 WHERE id = ?2",
@@ -56,35 +67,44 @@ impl FileRepo<'_> {
         data_source_id: &str,
         path_pattern: &str,
     ) -> DbResult<usize> {
-        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+        if let Some(store) = crate::source_fjall::open_store_for_write(self.conn)? {
             let source = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
             let snapshot = source.read_snapshot();
-            let page = source
-                .list_all(
-                    &snapshot,
-                    data_source_id,
-                    None,
-                    persistence_fjall::ScanDirection::Forward,
-                    usize::MAX,
-                )
-                .map_err(|error| crate::connection::DbError::System(error.to_string()))?;
-            let ids = page
-                .records
-                .into_iter()
-                .filter(|entry| {
-                    entry.parent_id.is_none() && wildcard_match(path_pattern, &entry.path)
-                })
-                .map(|entry| entry.id)
-                .collect::<Vec<_>>();
             let mut deleted = 0;
-            for id in ids {
-                if source
-                    .delete(data_source_id, &id, persistence_fjall::PersistMode::SyncAll)
-                    .map_err(|error| crate::connection::DbError::System(error.to_string()))?
-                {
-                    deleted += 1;
+            let mut cursor = None;
+            loop {
+                let page = source
+                    .list_by_parent(
+                        &snapshot,
+                        data_source_id,
+                        None,
+                        cursor.as_deref(),
+                        persistence_fjall::ScanDirection::Forward,
+                        512,
+                    )
+                    .map_err(|error| crate::DbError::System(error.to_string()))?;
+                for record in page.records {
+                    if wildcard_match(path_pattern, &record.path)
+                        && source
+                            .delete(
+                                data_source_id,
+                                &record.id,
+                                persistence_fjall::PersistMode::Buffer,
+                            )
+                            .map_err(|error| crate::DbError::System(error.to_string()))?
+                    {
+                        deleted += 1;
+                    }
+                }
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    break;
                 }
             }
+            store
+                .database()
+                .persist(persistence_fjall::PersistMode::SyncAll)
+                .map_err(|error| crate::DbError::System(error.to_string()))?;
             return Ok(deleted);
         }
         Ok(self.conn.execute(
@@ -94,12 +114,22 @@ impl FileRepo<'_> {
     }
 
     pub fn update_root_metadata(&self, entry: &FileEntry) -> DbResult<()> {
-        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
-            persistence_fjall::CatalogRecordStore::from_source_store((*store).clone())
-                .upsert(
-                    &crate::source_fjall::file_record(entry),
-                    persistence_fjall::PersistMode::SyncAll,
+        if let Some(store) = crate::source_fjall::open_store_for_write(self.conn)? {
+            let catalog =
+                persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+            let previous = catalog
+                .get(
+                    &catalog.read_snapshot(),
+                    &entry.data_source_id.0,
+                    &entry.id.0,
                 )
+                .map_err(|error| crate::DbError::System(error.to_string()))?
+                .ok_or_else(|| crate::DbError::System("catalog root is missing".into()))?;
+            let mut record = crate::source_fjall::file_record(entry);
+            record.partition_index = previous.partition_index;
+            record.encrypted = previous.encrypted;
+            catalog
+                .upsert(&record, persistence_fjall::PersistMode::SyncAll)
                 .map_err(|error| crate::connection::DbError::System(error.to_string()))?;
             return Ok(());
         }

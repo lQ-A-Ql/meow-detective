@@ -123,6 +123,44 @@ impl SingleWriterTxDatabase {
         self.inner.persist(mode.into()).map_err(Into::into)
     }
 
+    pub(crate) fn write_planned(
+        &self,
+        mode: PersistMode,
+        plan: impl FnOnce(&SourceReadSnapshot) -> Result<Vec<WriteAction>>,
+    ) -> Result<WriteBatchReceipt> {
+        let mut transaction = self.inner.write_tx().durability(Some(mode.into()));
+        let actions = plan(&self.read_snapshot())?;
+        let batch_digest = digest_actions(&actions);
+        if actions.is_empty() {
+            return Ok(WriteBatchReceipt {
+                operation_count: 0,
+                batch_digest,
+            });
+        }
+        for action in &actions {
+            match action {
+                WriteAction::Put {
+                    keyspace,
+                    key,
+                    value,
+                } => transaction.insert(self.keyspace(*keyspace), key.clone(), value.clone()),
+                WriteAction::Delete { keyspace, key } => {
+                    transaction.remove(self.keyspace(*keyspace), key.clone())
+                }
+            }
+        }
+        transaction.insert(
+            self.keyspace(KeyspaceName::Batches),
+            [b"batch/".as_slice(), batch_digest.as_slice()].concat(),
+            actions.len().to_be_bytes().to_vec(),
+        );
+        transaction.commit()?;
+        Ok(WriteBatchReceipt {
+            operation_count: actions.len(),
+            batch_digest,
+        })
+    }
+
     pub fn read_snapshot(&self) -> SourceReadSnapshot {
         SourceReadSnapshot {
             snapshot: self.inner.read_tx(),

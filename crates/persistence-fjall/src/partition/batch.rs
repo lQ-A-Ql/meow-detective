@@ -29,31 +29,7 @@ impl PartitionRecordStore {
         }
 
         let snapshot = self.read_snapshot();
-        let mut current = HashMap::new();
-        let prefix = crate::encode_key(
-            super::RECORD_FAMILY,
-            &[crate::KeyPart::Text(source_id.to_owned())],
-        )?;
-        let mut cursor = None;
-        loop {
-            let entries = snapshot.keyset(
-                KeyspaceName::PartitionRecords,
-                &prefix,
-                cursor.as_deref(),
-                crate::ScanDirection::Forward,
-                256,
-            )?;
-            let has_more = entries.len() == 256;
-            for entry in &entries {
-                let record =
-                    decode_record(VersionedEnvelope::decode(&entry.value)?, source_id, "")?;
-                current.insert(record.id.clone(), record);
-            }
-            cursor = entries.last().map(|entry| entry.key.clone());
-            if !has_more {
-                break;
-            }
-        }
+        let current = self.current_partitions(&snapshot, source_id)?;
 
         let action_capacity = current
             .len()
@@ -116,5 +92,34 @@ impl PartitionRecordStore {
             self.source_store.database().write_batch(&actions, mode)?;
         }
         Ok(())
+    }
+
+    fn current_partitions(
+        &self,
+        snapshot: &crate::SourceReadSnapshot,
+        source: &str,
+    ) -> Result<HashMap<String, PartitionRecord>> {
+        let mut current = HashMap::new();
+        let prefix =
+            crate::encode_key(super::RECORD_FAMILY, &[crate::KeyPart::Text(source.into())])?;
+        let mut cursor = None;
+        loop {
+            let entries = snapshot.keyset(
+                KeyspaceName::PartitionRecords,
+                &prefix,
+                cursor.as_deref(),
+                crate::ScanDirection::Forward,
+                256,
+            )?;
+            let more = entries.len() == 256;
+            for entry in &entries {
+                let record = decode_record(VersionedEnvelope::decode(&entry.value)?, source, "")?;
+                current.insert(record.id.clone(), record);
+            }
+            cursor = entries.last().map(|entry| entry.key.clone());
+            if !more {
+                return Ok(current);
+            }
+        }
     }
 }

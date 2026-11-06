@@ -33,7 +33,7 @@ fn record(
         system,
         read_only: false,
         archive: false,
-        encrypted: false,
+        encrypted: Some(false),
         created: None,
         modified: Some(Utc::now()),
         accessed: None,
