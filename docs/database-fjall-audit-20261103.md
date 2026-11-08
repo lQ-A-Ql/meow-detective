@@ -95,6 +95,7 @@
 - 浏览器预加载的 Chromium 密钥文件、Android APK 与 package-restrictions 查询在原生 source 上改用 Fjall Catalog 访问；SQLite 查询仅保留 staging/旧格式路径。
 - 未完成 generation 现在由 source storage 直接返回 `SourceNotReady`，文件浏览、Artifact 聚合、Timeline 分页和计数入口不再用空值回退到明细仓库。
 - 独立 Analysis 输出在存在 Fjall source 时使用临时 build generation 完成 Artifact/Timeline 替换；SQLite checkpoint 与 generation 指针在同一事务提交，失败时自动清理 build 目录并保留旧 generation。Artifact forensic fingerprint 在同一 SQLite 事务写入。
+- Plugin 与 EVTX 摘要、Linux 解析覆盖统计已改用 ArtifactRepo 的 Fjall 分页访问；Plugin 单元回归已迁移到真实 native source fixture 并通过。
 
 ### 2026-11-03
 
