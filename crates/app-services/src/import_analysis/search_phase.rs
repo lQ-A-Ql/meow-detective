@@ -68,16 +68,7 @@ fn run_search_index_phase_with_page_size(
             &mut writer,
             &mut stats,
         )?;
-        if fjall_indexed == 0 && stats.eligible_count == 0 {
-            index_metadata_rows(
-                &connection,
-                &options,
-                &projection,
-                page_size,
-                &mut writer,
-                &mut stats,
-            )?;
-        }
+        let _ = fjall_indexed;
     } else {
         stats.eligible_count = count_metadata_rows(&connection, &options)?;
         index_metadata_rows(

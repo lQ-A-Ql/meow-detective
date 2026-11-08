@@ -347,6 +347,9 @@ fn count_source_entries(connection: &Connection) -> Result<u64, SearchError> {
             &DataSourceId(source_id.clone()),
         ) {
             let snapshot = source.snapshot();
+            source
+                .require_projection_complete(&snapshot, &source_id)
+                .map_err(|error| SearchError::Other(error.to_string()))?;
             let mut cursor = None;
             let mut total = 0u64;
             loop {

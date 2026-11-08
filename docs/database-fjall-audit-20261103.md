@@ -91,11 +91,12 @@
 - CephFS published catalog 校验逐条比对原生记录，保留 ID、父目录、来源、路径、名称、类型、大小及总数校验；7 项回归通过。
 - 共享数据库注册表按底层数据库状态管理生命周期，Repository 克隆与读取快照均保持所有权。关闭与缓存驱逐同时检查底层持有者。
 - Fjall worker 退出计数完成后，其闭包仍可能短暂持有文件句柄。仓库内依赖补丁等待 worker 完整退出，确保 Windows generation 发布可以立即改名。原生存储完整测试、进程终止矩阵及 32 次连续发布通过。
-- SQLite 完整包测试执行至全部目标，14 个目标失败；其中 CephFS 当前格式校验已修复并通过，其余目标涉及旧 source 明细布局、staging 与索引恢复测试，继续迁移和验证。
+- SQLite 完整包测试曾执行至全部目标，14 个目标失败；其中 CephFS 当前格式校验已修复并通过，其余失败集中在旧 source 明细布局、staging 与索引恢复测试，不能作为当前格式生产路径通过证据。
 - 浏览器预加载的 Chromium 密钥文件、Android APK 与 package-restrictions 查询在原生 source 上改用 Fjall Catalog 访问；SQLite 查询仅保留 staging/旧格式路径。
 - 未完成 generation 现在由 source storage 直接返回 `SourceNotReady`，文件浏览、Artifact 聚合、Timeline 分页和计数入口不再用空值回退到明细仓库。
 - 独立 Analysis 输出在存在 Fjall source 时使用临时 build generation 完成 Artifact/Timeline 替换；SQLite checkpoint 与 generation 指针在同一事务提交，失败时自动清理 build 目录并保留旧 generation。Artifact forensic fingerprint 在同一 SQLite 事务写入。
 - Plugin 与 EVTX 摘要、Linux 解析覆盖统计已改用 ArtifactRepo 的 Fjall 分页访问；Plugin 单元回归已迁移到真实 native source fixture 并通过。
+- Search metadata phase 在 Fjall source 为空时不再回退到已删除的 source SQLite 明细表；Search source 计数要求 generation 完成后使用 Catalog。
 - Timeline facets 已加入 native Timeline count/index 路径；Linux facts 改用 ArtifactRepo。当前 direct SQL 清单只剩 staging/旧格式 fallback、SQLite Graph fallback 和仍需拆分的 repository 兼容入口，未将这些路径误报为当前 source 的生产读取。
 
 ### 2026-11-03
