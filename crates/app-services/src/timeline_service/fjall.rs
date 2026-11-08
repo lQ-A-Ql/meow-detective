@@ -1,6 +1,6 @@
 use super::{export::timeline_event_to_source_dto, TimelineQuery, TimelineServiceError};
 use crate::source_db;
-use crate::storage_runtime::{ReadOnlySourceStorageHandle, StorageRuntimeError};
+use crate::storage_runtime::ReadOnlySourceStorageHandle;
 use chrono::{DateTime, Utc};
 use domain::{CaseId, DataSourceId, TimelineEvent, TimelineEventId};
 use persistence_fjall::{ScanDirection, SourceReadSnapshot, TimelineRecord};
@@ -69,16 +69,9 @@ pub(super) fn try_query(
     }
     let mut sources = Vec::with_capacity(ready.len());
     for (source, _) in ready {
-        let handle = match source_db::open_registered_fjall_source_read_only(case_root, &source.id)
-        {
-            Ok(handle) => handle,
-            Err(StorageRuntimeError::MissingRoot(_)) => return Ok(None),
-            Err(error) => return Err(TimelineServiceError::Other(error.to_string())),
-        };
+        let handle = source_db::open_registered_fjall_source_read_only(case_root, &source.id)?;
         let snapshot = handle.snapshot();
-        if !handle.source_projection_complete(&snapshot, &source.id.0)? {
-            return Ok(None);
-        }
+        handle.require_projection_complete(&snapshot, &source.id.0)?;
         sources.push((source.id, handle));
     }
     sources.sort_by(|left, right| left.0 .0.cmp(&right.0 .0));

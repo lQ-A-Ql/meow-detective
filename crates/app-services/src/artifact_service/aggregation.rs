@@ -243,12 +243,11 @@ pub(super) fn open_complete_fjall_source(
     case_root: &Path,
     source_id: &DataSourceId,
 ) -> Result<Option<crate::source_db::FjallReadOnlySourceStorageHandle>, ArtifactServiceError> {
-    let Ok(source) = source_db::open_registered_fjall_source_read_only(case_root, source_id) else {
-        return Ok(None);
-    };
+    let source = source_db::open_registered_fjall_source_read_only(case_root, source_id)
+        .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;
     let snapshot = source.snapshot();
     source
-        .source_projection_complete(&snapshot, &source_id.0)
-        .map(|complete| complete.then_some(source))
-        .map_err(|error| ArtifactServiceError::Other(error.to_string()))
+        .require_projection_complete(&snapshot, &source_id.0)
+        .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;
+    Ok(Some(source))
 }

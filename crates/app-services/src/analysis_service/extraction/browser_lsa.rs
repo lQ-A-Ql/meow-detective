@@ -2,7 +2,9 @@
 //! browser preload pipeline. All failures degrade to warnings so the base
 //! v10/v11 decryption path keeps working.
 
-use super::browser_preload::{locate_by_suffix, locator_from_row, read_locator};
+use super::browser_preload::{
+    locate_by_suffix, locator_from_entry, locator_from_row, read_locator,
+};
 use super::candidate_processing::CandidateSource;
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
 use artifacts_windows::dpapi::{
@@ -183,6 +185,30 @@ fn locate_files_by_like(
     data_source_id: &str,
     like_pattern: &str,
 ) -> Vec<EvidenceCandidate> {
+    if persistence_sqlite::source_fjall::has_source_store(conn).unwrap_or(false) {
+        let marker = like_pattern
+            .trim_matches('%')
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+        let mut candidates = Vec::new();
+        if persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+            .visit_all(Some(data_source_id), |entry| {
+                if !entry.deleted
+                    && !entry.is_directory()
+                    && normalize_evidence_path(&entry.path).contains(&marker)
+                {
+                    candidates.push(locator_from_entry(data_source_id, &entry, "BrowserPreload"));
+                }
+                Ok(())
+            })
+            .is_err()
+        {
+            return Vec::new();
+        }
+        candidates.sort_by_key(|candidate| candidate.path.len());
+        candidates.truncate(32);
+        return candidates;
+    }
     let Ok(mut statement) = conn.prepare(
         "SELECT id, path, COALESCE(size, 0), partition_index, encrypted
          FROM file_entries

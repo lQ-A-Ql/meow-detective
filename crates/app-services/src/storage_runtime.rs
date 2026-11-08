@@ -5,6 +5,7 @@ use persistence_fjall::{
     TimelineRecord, TimelineRecordStore, VersionedEnvelope, WriteBatchReceipt,
 };
 mod artifact_root;
+mod source_counts;
 mod source_registry;
 pub(crate) use source_registry::{
     close_case_source_stores, close_source_store, close_source_store_at_path,
@@ -34,6 +35,8 @@ pub enum StorageRuntimeError {
     RegistryPoisoned,
     #[error("source storage is being removed: {0}")]
     SourceClosing(PathBuf),
+    #[error("source details are not ready: {0}")]
+    SourceNotReady(String),
 }
 
 impl From<FjallStorageError> for StorageRuntimeError {

@@ -19,17 +19,16 @@ pub(super) fn open(
     let root = source_db::fjall_source_storage_root(case_root, &source_id.0)
         .map_err(|error| FileServiceError::other(error.to_string()))?;
     if !root.is_dir() {
-        return Ok(None);
+        return Err(FileServiceError::Integrity(
+            "source detail storage is missing".into(),
+        ));
     }
     let source = source_db::open_registered_fjall_source_read_only(case_root, source_id)
         .map_err(|error| FileServiceError::other(error.to_string()))?;
     let snapshot = source.snapshot();
-    if !source
-        .source_projection_complete(&snapshot, &source_id.0)
-        .map_err(|error| FileServiceError::other(error.to_string()))?
-    {
-        return Ok(None);
-    }
+    source
+        .require_projection_complete(&snapshot, &source_id.0)
+        .map_err(|error| FileServiceError::invalid_input(error.to_string()))?;
     Ok(Some(source))
 }
 

@@ -337,6 +337,23 @@ pub(super) fn locate_by_suffix(
     data_source_id: &str,
     suffix: &str,
 ) -> Option<EvidenceCandidate> {
+    if persistence_sqlite::source_fjall::has_source_store(conn).ok()? {
+        let normalized_suffix = suffix.replace('\\', "/").to_ascii_lowercase();
+        let mut found = None;
+        persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+            .visit_all(Some(data_source_id), |entry| {
+                if found.is_none()
+                    && !entry.deleted
+                    && !entry.is_directory()
+                    && normalize_evidence_path(&entry.path).ends_with(&normalized_suffix)
+                {
+                    found = Some(locator_from_entry(data_source_id, &entry, "BrowserPreload"));
+                }
+                Ok(())
+            })
+            .ok()?;
+        return found;
+    }
     // The LIKE prefilter must tolerate every stored path form (partition-
     // prefixed `[P3]/…`, leading-slash, drive-letter, and bare relative
     // paths); the ends_with check on the normalized path below is the actual
@@ -373,6 +390,21 @@ pub(super) fn locate_by_suffix(
 }
 
 fn locate_master_key_files(conn: &Connection, data_source_id: &str) -> Vec<EvidenceCandidate> {
+    if persistence_sqlite::source_fjall::has_source_store(conn).unwrap_or(false) {
+        let mut candidates = Vec::new();
+        if persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+            .visit_all(Some(data_source_id), |entry| {
+                if is_master_key_path(&entry.path) && !entry.deleted && !entry.is_directory() {
+                    candidates.push(locator_from_entry(data_source_id, &entry, "BrowserPreload"));
+                }
+                Ok(())
+            })
+            .is_err()
+        {
+            return Vec::new();
+        }
+        return candidates;
+    }
     let Ok(mut statement) = conn.prepare(
         "SELECT id, path, COALESCE(size, 0), partition_index, encrypted
          FROM file_entries
@@ -398,6 +430,31 @@ fn locate_master_key_files(conn: &Connection, data_source_id: &str) -> Vec<Evide
         .filter(|(_, path, _, _, _)| is_master_key_path(path))
         .map(|row| locator_from_row(data_source_id, row, "BrowserPreload"))
         .collect()
+}
+
+pub(super) fn locator_from_entry(
+    data_source_id: &str,
+    entry: &domain::FileEntry,
+    category: &str,
+) -> EvidenceCandidate {
+    EvidenceCandidate {
+        file_id: entry.id.clone(),
+        data_source_id: data_source_id.to_owned(),
+        partition_index: None,
+        path: entry.path.clone(),
+        size: entry.size.unwrap_or_default(),
+        encrypted: entry.encrypted,
+        content_identity: format!(
+            "browser-preload:{data_source_id}:{}:{}",
+            entry.size.unwrap_or_default(),
+            entry.encrypted
+        ),
+        companions: Vec::new(),
+        modified_at: entry.modified_at,
+        evidence_kind: "browser_preload".to_owned(),
+        parser: "browser.dpapi".to_owned(),
+        category: category.to_owned(),
+    }
 }
 
 fn is_master_key_path(path: &str) -> bool {

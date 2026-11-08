@@ -1,6 +1,6 @@
 # SQLite 与 Fjall 混合数据库审计与修复记录
 
-日期：2026-11-07
+日期：2026-11-08
 审计基线：`0c49f1c6 perf: skip catalog mirror during analysis output`
 
 ## 审计结论
@@ -92,6 +92,8 @@
 - 共享数据库注册表按底层数据库状态管理生命周期，Repository 克隆与读取快照均保持所有权。关闭与缓存驱逐同时检查底层持有者。
 - Fjall worker 退出计数完成后，其闭包仍可能短暂持有文件句柄。仓库内依赖补丁等待 worker 完整退出，确保 Windows generation 发布可以立即改名。原生存储完整测试、进程终止矩阵及 32 次连续发布通过。
 - SQLite 完整包测试执行至全部目标，14 个目标失败；其中 CephFS 当前格式校验已修复并通过，其余目标涉及旧 source 明细布局、staging 与索引恢复测试，继续迁移和验证。
+- 浏览器预加载的 Chromium 密钥文件、Android APK 与 package-restrictions 查询在原生 source 上改用 Fjall Catalog 访问；SQLite 查询仅保留 staging/旧格式路径。
+- 未完成 generation 现在由 source storage 直接返回 `SourceNotReady`，文件浏览、Artifact 聚合、Timeline 分页和计数入口不再用空值回退到明细仓库。
 
 ### 2026-11-03
 

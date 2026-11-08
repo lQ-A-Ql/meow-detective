@@ -100,6 +100,31 @@ fn hydrate_package_restrictions(
 }
 
 fn find_restriction_files(connection: &Connection) -> Result<Vec<FileEntry>, AnalysisServiceError> {
+    if persistence_sqlite::source_fjall::has_source_store(connection)? {
+        let mut entries = Vec::new();
+        persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
+            None,
+            |entry| {
+                if !entry.deleted
+                    && !entry.is_directory()
+                    && entry
+                        .path
+                        .replace('\\', "/")
+                        .to_ascii_lowercase()
+                        .ends_with("package-restrictions.xml")
+                {
+                    entries.push(entry);
+                }
+                Ok(())
+            },
+        )?;
+        entries.sort_by(|left, right| {
+            left.path
+                .to_ascii_lowercase()
+                .cmp(&right.path.to_ascii_lowercase())
+        });
+        return Ok(entries);
+    }
     let mut statement = connection.prepare(
         "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
                 hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256,
@@ -231,6 +256,32 @@ fn find_exact_apk_file(
     connection: &Connection,
     path: &str,
 ) -> Result<Option<FileEntry>, AnalysisServiceError> {
+    if persistence_sqlite::source_fjall::has_source_store(connection)? {
+        let expected = path
+            .trim_start_matches('/')
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+        let mut found = None;
+        persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
+            None,
+            |entry| {
+                let actual = entry
+                    .path
+                    .trim_start_matches('/')
+                    .replace('\\', "/")
+                    .to_ascii_lowercase();
+                if found.is_none()
+                    && !entry.deleted
+                    && !entry.is_directory()
+                    && actual.ends_with(&expected)
+                {
+                    found = Some(entry);
+                }
+                Ok(())
+            },
+        )?;
+        return Ok(found);
+    }
     let suffix = escape_like_suffix(path.trim_start_matches('/'));
     connection
         .query_row(
@@ -252,6 +303,29 @@ fn find_directory_apk_file(
     connection: &Connection,
     directory: &str,
 ) -> Result<Option<FileEntry>, AnalysisServiceError> {
+    if persistence_sqlite::source_fjall::has_source_store(connection)? {
+        let expected = directory
+            .trim_start_matches('/')
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+        let mut found = None;
+        persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
+            None,
+            |entry| {
+                let actual = entry.path.replace('\\', "/").to_ascii_lowercase();
+                if found.is_none()
+                    && !entry.deleted
+                    && !entry.is_directory()
+                    && entry.name.to_ascii_lowercase().ends_with(".apk")
+                    && actual.starts_with(&format!("{expected}/"))
+                {
+                    found = Some(entry);
+                }
+                Ok(())
+            },
+        )?;
+        return Ok(found);
+    }
     let prefix = escape_like_suffix(directory.trim_start_matches('/'));
     connection
         .query_row(
