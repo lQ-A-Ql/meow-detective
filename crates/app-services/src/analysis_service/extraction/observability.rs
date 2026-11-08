@@ -6,6 +6,7 @@ use crate::analysis_service::extraction::linux::{
     linux_candidate_read_limit, linux_candidate_support,
 };
 use crate::analysis_service::extraction::linux_sections::LinuxCandidateSupport;
+use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
 use std::collections::HashMap;
 use transport::dto::AnalysisParseStatusDto;
@@ -104,20 +105,29 @@ pub(super) fn linux_summary_observability(
 fn linux_parsed_source_ids(
     conn: &Connection,
 ) -> Result<HashMap<String, u64>, AnalysisServiceError> {
-    let mut stmt = conn.prepare(
-        "SELECT source_object_id, COUNT(*)
-         FROM artifacts
-         WHERE artifact_type IN ('LinuxJournal', 'LinuxWtmp', 'LinuxBashCommand', 'LinuxAptEvent', 'LinuxCronJob', 'LinuxSudoEvent', 'LinuxSystemConfig', 'LinuxWebSite', 'LinuxWebAccessLog', 'LinuxWebErrorLog', 'LinuxWebFinding', 'LinuxMysqlConfig', 'LinuxMysqlLogEntry', 'LinuxMysqlFinding')
-           AND source_object_id IS NOT NULL
-         GROUP BY source_object_id",
-    )?;
-    let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
-    })?;
     let mut ids = HashMap::new();
-    for row in rows {
-        let (source_id, count) = row?;
-        ids.insert(source_id, count);
+    for family in [
+        "LinuxJournal",
+        "LinuxWtmp",
+        "LinuxBashCommand",
+        "LinuxAptEvent",
+        "LinuxCronJob",
+        "LinuxSudoEvent",
+        "LinuxSystemConfig",
+        "LinuxWebSite",
+        "LinuxWebAccessLog",
+        "LinuxWebErrorLog",
+        "LinuxWebFinding",
+        "LinuxMysqlConfig",
+        "LinuxMysqlLogEntry",
+        "LinuxMysqlFinding",
+    ] {
+        ArtifactRepo::new(conn).visit_by_family(Some(family), |artifact| {
+            if let Some(source_id) = artifact.source_object_id {
+                *ids.entry(source_id.0).or_insert(0) += 1;
+            }
+            Ok(())
+        })?;
     }
     Ok(ids)
 }

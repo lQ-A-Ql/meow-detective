@@ -7,6 +7,7 @@ use crate::analysis_service::extraction::attr_mapping::{
     details_attr, optional_string_attr, optional_u64_attr, string_attr, u32_attr,
 };
 use chrono::Utc;
+use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
 use transport::dto::{
     EvtxApplicationEventDto, EvtxBootEventDto, EvtxEventSummaryDto, EvtxEventViewDto,
@@ -135,22 +136,16 @@ struct EvtxMetrics {
 impl EvtxMetrics {
     fn load(conn: &Connection, counts: &EvtxCounts) -> Result<Self, AnalysisServiceError> {
         let mut metrics = Self::default();
-        let mut stmt = conn.prepare(
-            "SELECT artifact_type, COALESCE(json_extract(attrs, '$.kind'), ''), COUNT(*)
-             FROM artifacts
-             WHERE artifact_type IN ('EvtxSecurityEvent', 'EvtxApplicationEvent')
-             GROUP BY artifact_type, COALESCE(json_extract(attrs, '$.kind'), '')",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, u64>(2)?,
-            ))
-        })?;
-        for row in rows {
-            let (artifact_type, kind, count) = row?;
-            metrics.add_kind_count(&artifact_type, &kind, count);
+        for artifact_type in ["EvtxSecurityEvent", "EvtxApplicationEvent"] {
+            ArtifactRepo::new(conn).visit_by_family(Some(artifact_type), |artifact| {
+                let kind = artifact
+                    .attrs
+                    .get("kind")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                metrics.add_kind_count(artifact_type, kind, 1);
+                Ok(())
+            })?;
         }
         let other = counts
             .security

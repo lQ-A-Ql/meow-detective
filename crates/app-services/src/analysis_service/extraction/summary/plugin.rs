@@ -7,7 +7,10 @@
 
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::plugin_loader::PluginModuleMeta;
+use domain::Artifact;
+use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use transport::dto::{
     PluginArtifactEntryDto, PluginFamilyCountDto, PluginFamilyEntriesDto, PluginModuleDto,
@@ -81,12 +84,14 @@ fn count_plugin_family_artifacts(
     plugin_id: &str,
     family: &str,
 ) -> Result<u64, AnalysisServiceError> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM artifacts WHERE extractor_id = ?1 AND artifact_type = ?2",
-        rusqlite::params![plugin_id, family],
-        |row| row.get(0),
-    )?;
-    Ok(count.max(0) as u64)
+    let mut count = 0;
+    ArtifactRepo::new(conn).visit_by_family(Some(family), |artifact| {
+        if artifact.extractor_id.as_deref() == Some(plugin_id) {
+            count += 1;
+        }
+        Ok(())
+    })?;
+    Ok(count)
 }
 
 fn query_plugin_family_entries(
@@ -96,55 +101,94 @@ fn query_plugin_family_entries(
     offset: u64,
     limit: u32,
 ) -> Result<Vec<PluginArtifactEntryDto>, AnalysisServiceError> {
-    let order = plugin_family_order(plugin_id, family);
-    let sql = format!(
-        "SELECT id, source_object_id, source_attribution, title, summary, confidence, attrs, created_at
-         FROM artifacts
-         WHERE extractor_id = ?1 AND artifact_type = ?2
-         ORDER BY {order}
-         LIMIT ?3 OFFSET ?4"
-    );
-    let mut statement = conn.prepare(&sql)?;
-    let rows = statement.query_map(
-        rusqlite::params![plugin_id, family, i64::from(limit), offset as i64],
-        |row| {
-            let attrs_text: String = row.get(6)?;
-            Ok(PluginArtifactEntryDto {
-                artifact_id: row.get(0)?,
-                file_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                source_path: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                title: row.get(3)?,
-                summary: row.get(4)?,
-                confidence: row.get::<_, Option<f64>>(5)?.map(|value| value as f32),
-                attrs: serde_json::from_str(&attrs_text).unwrap_or_default(),
-                created_at: row.get(7)?,
-            })
-        },
-    )?;
-    let mut entries = Vec::new();
-    for row in rows {
-        entries.push(row?);
-    }
-    Ok(entries)
+    let window = offset
+        .checked_add(u64::from(limit))
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or_else(|| {
+            AnalysisServiceError::InvalidInput("plugin page range exceeds platform limits".into())
+        })?;
+    let mut candidates = Vec::new();
+    ArtifactRepo::new(conn).visit_by_family(Some(family), |artifact| {
+        if artifact.extractor_id.as_deref() != Some(plugin_id) {
+            return Ok(());
+        }
+        candidates.push(artifact);
+        if candidates.len() > window {
+            candidates.sort_by(|left, right| plugin_artifact_cmp(left, right, plugin_id, family));
+            candidates.pop();
+        }
+        Ok(())
+    })?;
+    candidates.sort_by(|left, right| plugin_artifact_cmp(left, right, plugin_id, family));
+    Ok(candidates
+        .into_iter()
+        .skip(usize::try_from(offset).map_err(|_| {
+            AnalysisServiceError::InvalidInput("plugin offset exceeds platform limits".into())
+        })?)
+        .take(limit as usize)
+        .map(to_plugin_entry)
+        .collect())
 }
 
-fn plugin_family_order(plugin_id: &str, family: &str) -> &'static str {
-    if plugin_id != "meow.plugin.wechat" {
-        return "created_at DESC, id ASC";
+fn to_plugin_entry(artifact: Artifact) -> PluginArtifactEntryDto {
+    PluginArtifactEntryDto {
+        artifact_id: artifact.id.0,
+        file_id: artifact.source_object_id.map(|id| id.0).unwrap_or_default(),
+        source_path: artifact.source_attribution.unwrap_or_default(),
+        title: artifact.title,
+        summary: artifact.summary,
+        confidence: artifact.confidence,
+        attrs: artifact.attrs.into_iter().collect(),
+        created_at: artifact.created_at.to_rfc3339(),
     }
-    match family {
-        "WeChatMessage" => {
-            "COALESCE(json_extract(attrs, '$.createTimeUtc'), '') DESC, \
-             COALESCE(json_extract(attrs, '$.localId'), 0) DESC, id ASC"
-        }
-        "WeChatSession" => "COALESCE(json_extract(attrs, '$.lastTimestampUtc'), '') DESC, id ASC",
-        "WeChatMoment" => {
-            "COALESCE(json_extract(attrs, '$.createTimeUtc'), '') DESC, \
-             COALESCE(json_extract(attrs, '$.tid'), 0) DESC, id ASC"
-        }
-        "WeChatFavorite" => "COALESCE(json_extract(attrs, '$.updateTimeUtc'), '') DESC, id ASC",
-        _ => "created_at DESC, id ASC",
+}
+
+fn plugin_artifact_cmp(
+    left: &Artifact,
+    right: &Artifact,
+    plugin_id: &str,
+    family: &str,
+) -> Ordering {
+    if plugin_id == "meow.plugin.wechat" {
+        let left_time = wechat_time(left, family);
+        let right_time = wechat_time(right, family);
+        return right_time
+            .cmp(&left_time)
+            .then_with(|| wechat_sequence(right, family).cmp(&wechat_sequence(left, family)))
+            .then_with(|| left.id.0.cmp(&right.id.0));
     }
+    right
+        .created_at
+        .cmp(&left.created_at)
+        .then_with(|| left.id.0.cmp(&right.id.0))
+}
+
+fn wechat_time(artifact: &Artifact, family: &str) -> String {
+    let field = match family {
+        "WeChatMessage" | "WeChatMoment" => "createTimeUtc",
+        "WeChatSession" => "lastTimestampUtc",
+        "WeChatFavorite" => "updateTimeUtc",
+        _ => "createTimeUtc",
+    };
+    artifact
+        .attrs
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_owned()
+}
+
+fn wechat_sequence(artifact: &Artifact, family: &str) -> i64 {
+    let field = match family {
+        "WeChatMessage" => "localId",
+        "WeChatMoment" => "tid",
+        _ => "",
+    };
+    artifact
+        .attrs
+        .get(field)
+        .and_then(|value| value.as_i64().or_else(|| value.as_str()?.parse().ok()))
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

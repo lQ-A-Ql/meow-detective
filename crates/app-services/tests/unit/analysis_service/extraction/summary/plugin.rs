@@ -1,9 +1,17 @@
 use super::*;
 use crate::plugin_loader::PluginModuleMeta;
+use chrono::Utc;
+use domain::{Artifact, ArtifactId, FileEntryId};
+use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use std::collections::BTreeMap;
 
 fn source_connection() -> Connection {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+    let root = tempfile::tempdir().expect("create source root").keep();
+    let db_path = root.join("source.db");
+    let connection =
+        persistence_sqlite::open_or_create_source(&db_path).expect("open source database");
+    persistence_sqlite::source_fjall::configure_source_identity(&connection, "source-1").unwrap();
+    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &db_path).unwrap();
     connection
 }
 
@@ -25,16 +33,44 @@ fn insert_artifact(
     title: &str,
     created_at: &str,
 ) {
-    conn.execute(
-        "INSERT INTO artifacts (
-            id, case_id, data_source_id, artifact_type, source_object_id,
-            extractor_id, extractor_version, confidence, source_attribution,
-            title, summary, attrs, created_at
-         ) VALUES (?1, 'case-1', 'source-1', ?2, 'file-1', ?3, '1.0.0', 0.9,
-                   '[P0]/Evidence/FOO.MFX', ?4, 'summary text', '{\"k\":\"v\"}', ?5)",
-        rusqlite::params![id, family, plugin_id, title, created_at],
-    )
-    .expect("insert plugin artifact");
+    insert_artifact_with_attrs(
+        conn,
+        id,
+        plugin_id,
+        family,
+        title,
+        created_at,
+        BTreeMap::from([("k".to_string(), serde_json::Value::String("v".to_string()))]),
+    );
+}
+
+fn insert_artifact_with_attrs(
+    conn: &Connection,
+    id: &str,
+    plugin_id: &str,
+    family: &str,
+    title: &str,
+    created_at: &str,
+    attrs: BTreeMap<String, serde_json::Value>,
+) {
+    let artifact = Artifact {
+        id: ArtifactId(id.to_string()),
+        family: family.to_string(),
+        source_object_id: Some(FileEntryId("file-1".to_string())),
+        title: title.to_string(),
+        summary: "summary text".to_string(),
+        extractor_id: Some(plugin_id.to_string()),
+        extractor_version: Some("1.0.0".to_string()),
+        confidence: Some(0.9),
+        source_attribution: Some("[P0]/Evidence/FOO.MFX".to_string()),
+        created_at: chrono::DateTime::parse_from_rfc3339(created_at)
+            .unwrap()
+            .with_timezone(&Utc),
+        attrs,
+    };
+    ArtifactRepo::new(conn)
+        .insert_batch(&[artifact], "case-1", "source-1")
+        .expect("insert plugin artifact");
 }
 
 #[test]
@@ -157,38 +193,36 @@ fn undeclared_family_is_rejected() {
 #[test]
 fn wechat_messages_paginate_by_evidence_time() {
     let conn = source_connection();
-    insert_artifact(
+    insert_artifact_with_attrs(
         &conn,
         "older-evidence-newer-row",
         "meow.plugin.wechat",
         "WeChatMessage",
         "older",
         "2026-08-17T12:00:00Z",
+        BTreeMap::from([
+            (
+                "createTimeUtc".to_string(),
+                serde_json::Value::String("2025-01-01T00:00:00Z".to_string()),
+            ),
+            ("localId".to_string(), serde_json::Value::Number(1.into())),
+        ]),
     );
-    insert_artifact(
+    insert_artifact_with_attrs(
         &conn,
         "newer-evidence-older-row",
         "meow.plugin.wechat",
         "WeChatMessage",
         "newer",
         "2026-08-17T11:00:00Z",
+        BTreeMap::from([
+            (
+                "createTimeUtc".to_string(),
+                serde_json::Value::String("2025-01-02T00:00:00Z".to_string()),
+            ),
+            ("localId".to_string(), serde_json::Value::Number(2.into())),
+        ]),
     );
-    conn.execute(
-        "UPDATE artifacts SET attrs = ?1 WHERE id = ?2",
-        rusqlite::params![
-            r#"{"createTimeUtc":"2025-01-01T00:00:00Z","localId":1}"#,
-            "older-evidence-newer-row"
-        ],
-    )
-    .expect("update older evidence attrs");
-    conn.execute(
-        "UPDATE artifacts SET attrs = ?1 WHERE id = ?2",
-        rusqlite::params![
-            r#"{"createTimeUtc":"2025-01-02T00:00:00Z","localId":2}"#,
-            "newer-evidence-older-row"
-        ],
-    )
-    .expect("update newer evidence attrs");
     let meta = plugin_meta("meow.plugin.wechat", &["WeChatMessage"]);
 
     let page = get_plugin_family_entries(&conn, &meta, "WeChatMessage", 0, 1)
