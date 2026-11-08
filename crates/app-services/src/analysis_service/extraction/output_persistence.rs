@@ -43,86 +43,76 @@ pub(super) fn persist_outputs(
     let native_ready = case_root.is_some()
         && !database_path.is_empty()
         && persistence_sqlite::source_fjall::open_store(conn)?.is_some();
-    let native_generation = if native_ready {
-        Some(native_output::stage(
-            conn,
-            case_root.expect("native source has a case root"),
-            &data_source_id,
-            &artifacts,
-            &events,
-            &replacements,
-        )?)
-    } else {
-        None
-    };
+    let native_generation = native_ready
+        .then(|| {
+            native_output::stage(
+                conn,
+                case_root.expect("native source has a case root"),
+                &data_source_id,
+                &artifacts,
+                &events,
+                &replacements,
+            )
+        })
+        .transpose()?;
     validate_artifact_source_attribution(&artifacts, &data_source_id)?;
+    commit_outputs(
+        conn,
+        case_id,
+        &data_source_id,
+        native_generation,
+        &artifacts,
+        &events,
+        &replacements,
+        &clean_scans,
+        &diagnostic_scans,
+        &complete_scans,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn commit_outputs(
+    conn: &Connection,
+    case_id: &str,
+    data_source_id: &str,
+    native_generation: Option<native_output::StagedGeneration>,
+    artifacts: &[domain::Artifact],
+    events: &[domain::TimelineEvent],
+    replacements: &[super::state::AnalysisOutputReplacement],
+    clean_scans: &[persistence_sqlite::repositories::analysis_scan_repo::CleanAnalysisCandidateScan],
+    diagnostic_scans: &[persistence_sqlite::repositories::analysis_scan_repo::DiagnosticAnalysisCandidateScan],
+    complete_scans: &[persistence_sqlite::repositories::analysis_scan_repo::CompleteAnalysisCandidateScan],
+) -> Result<(), AnalysisServiceError> {
     if native_generation.is_none() {
         crate::import_pipeline::begin_analysis_output_projection(conn)
             .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     }
     let transaction = conn.unchecked_transaction()?;
-
     let artifact_repo = ArtifactRepo::new(&transaction);
     let timeline_repo = TimelineRepo::new(&transaction);
     if let Some(generation) = native_generation.as_ref() {
         persistence_sqlite::source_fjall::bind_generation(&transaction, &generation.name)?;
     }
     if native_generation.is_some() {
-        let fingerprints =
-            persistence_sqlite::repositories::fingerprint_repo::ForensicFingerprintRepo::new(
-                &transaction,
-            );
-        if fingerprints.is_available()? {
-            for artifact in &artifacts {
-                fingerprints.upsert_in_transaction(&domain::ForensicFingerprint::for_artifact(
-                    artifact,
-                    case_id,
-                    &data_source_id,
-                ))?;
-            }
-        }
+        persist_native_fingerprints(&transaction, case_id, data_source_id, artifacts)?;
     }
-    for replacement in replacements {
-        if native_generation.is_some() {
-            break;
-        }
-        match &replacement.producer {
-            AnalysisOutputProducer::Prefix(prefix) => {
-                artifact_repo.delete_analysis_outputs_in_transaction(
-                    &replacement.source_object_id,
-                    prefix,
-                )?;
-                timeline_repo.delete_analysis_outputs_in_transaction(
-                    &replacement.source_object_id,
-                    prefix,
-                )?;
-            }
-            AnalysisOutputProducer::ExtractorId(extractor_id) => {
-                artifact_repo.delete_analysis_outputs_by_extractor_in_transaction(
-                    &replacement.source_object_id,
-                    extractor_id,
-                )?;
-                timeline_repo.delete_analysis_outputs_by_parser_in_transaction(
-                    &replacement.source_object_id,
-                    extractor_id,
-                )?;
-            }
-        }
+    if native_generation.is_none() {
+        replace_legacy_outputs(&artifact_repo, &timeline_repo, replacements)?;
     }
-    if native_generation.is_none() && !artifacts.is_empty() {
-        let data_source_id = resolve_output_data_source_id(&transaction)?;
-        validate_artifact_source_attribution(&artifacts, &data_source_id)?;
-        artifact_repo.insert_batch_in_transaction(&artifacts, case_id, &data_source_id)?;
-    }
-    if native_generation.is_none() && !events.is_empty() {
-        timeline_repo.insert_batch_with_case_in_transaction(&events, case_id)?;
+    if native_generation.is_none() {
+        if !artifacts.is_empty() {
+            artifact_repo.insert_batch_in_transaction(artifacts, case_id, data_source_id)?;
+        }
+        if !events.is_empty() {
+            timeline_repo.insert_batch_with_case_in_transaction(events, case_id)?;
+        }
     }
     AnalysisScanRepo::new(&transaction).insert_all_checkpoint_batch_in_transaction(
-        &clean_scans,
-        &diagnostic_scans,
-        &complete_scans,
+        clean_scans,
+        diagnostic_scans,
+        complete_scans,
     )?;
-    let data_source_id = resolve_output_data_source_id(&transaction)?;
+    let data_source_id = data_source_id.to_owned();
     let database_path: String = conn
         .query_row("PRAGMA database_list", [], |row| row.get(2))
         .unwrap_or_default();
@@ -156,6 +146,56 @@ pub(super) fn persist_outputs(
         return Ok(());
     }
     mirror_published_outputs(conn, case_id)?;
+    Ok(())
+}
+
+fn persist_native_fingerprints(
+    conn: &rusqlite::Transaction<'_>,
+    case_id: &str,
+    source_id: &str,
+    artifacts: &[domain::Artifact],
+) -> Result<(), AnalysisServiceError> {
+    let fingerprints =
+        persistence_sqlite::repositories::fingerprint_repo::ForensicFingerprintRepo::new(conn);
+    if fingerprints.is_available()? {
+        for artifact in artifacts {
+            fingerprints.upsert_in_transaction(&domain::ForensicFingerprint::for_artifact(
+                artifact, case_id, source_id,
+            ))?;
+        }
+    }
+    Ok(())
+}
+
+fn replace_legacy_outputs(
+    artifact_repo: &ArtifactRepo<'_>,
+    timeline_repo: &TimelineRepo<'_>,
+    replacements: &[super::state::AnalysisOutputReplacement],
+) -> Result<(), AnalysisServiceError> {
+    for replacement in replacements {
+        match &replacement.producer {
+            AnalysisOutputProducer::Prefix(prefix) => {
+                artifact_repo.delete_analysis_outputs_in_transaction(
+                    &replacement.source_object_id,
+                    prefix,
+                )?;
+                timeline_repo.delete_analysis_outputs_in_transaction(
+                    &replacement.source_object_id,
+                    prefix,
+                )?;
+            }
+            AnalysisOutputProducer::ExtractorId(extractor_id) => {
+                artifact_repo.delete_analysis_outputs_by_extractor_in_transaction(
+                    &replacement.source_object_id,
+                    extractor_id,
+                )?;
+                timeline_repo.delete_analysis_outputs_by_parser_in_transaction(
+                    &replacement.source_object_id,
+                    extractor_id,
+                )?;
+            }
+        }
+    }
     Ok(())
 }
 
