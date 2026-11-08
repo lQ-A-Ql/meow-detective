@@ -153,6 +153,9 @@ impl<'a> InfrastructureNetworkFactRepo<'a> {
         source_conn: &Connection,
         limit: usize,
     ) -> DbResult<Vec<InfrastructureNetworkConfigRow>> {
+        if crate::source_fjall::source_id(source_conn)?.is_some() {
+            return Self::list_native_source_config_rows(source_conn, limit);
+        }
         let mut statement = source_conn.prepare(
             "SELECT id, source_object_id, attrs
              FROM artifacts
@@ -191,6 +194,93 @@ impl<'a> InfrastructureNetworkFactRepo<'a> {
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(Into::into)
     }
+
+    fn list_native_source_config_rows(
+        source_conn: &Connection,
+        limit: usize,
+    ) -> DbResult<Vec<InfrastructureNetworkConfigRow>> {
+        let source_id = crate::source_fjall::source_id(source_conn)?
+            .ok_or_else(|| DbError::System("source identity is missing".into()))?;
+        let store = crate::source_fjall::require_source_store(source_conn)?;
+        let repository =
+            persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+        let snapshot = repository.read_snapshot();
+        let mut cursor = None;
+        let mut rows = Vec::with_capacity(limit.min(512));
+        loop {
+            crate::read_operation::ensure_active()?;
+            let page = repository
+                .list_by_type(
+                    &snapshot,
+                    &source_id,
+                    "LinuxSystemConfig",
+                    cursor.as_deref(),
+                    persistence_fjall::ScanDirection::Forward,
+                    512,
+                )
+                .map_err(|error| DbError::System(error.to_string()))?;
+            for record in page.records {
+                let artifact = super::artifact_repo::decode_fjall_artifact(record)?;
+                let Some(file_id) = artifact.source_object_id.map(|id| id.0) else {
+                    continue;
+                };
+                if artifact
+                    .attrs
+                    .get("overlayContext")
+                    .is_some_and(|value| !value.is_null())
+                {
+                    continue;
+                }
+                let source_path = artifact
+                    .attrs
+                    .get("sourcePath")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                if !network_config_path(source_path) {
+                    continue;
+                }
+                rows.push(InfrastructureNetworkConfigRow {
+                    artifact_id: artifact.id.0,
+                    file_id,
+                    source_path: source_path.to_owned(),
+                    line_number: artifact
+                        .attrs
+                        .get("lineNumber")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or_default(),
+                    line: artifact
+                        .attrs
+                        .get("line")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned(),
+                });
+                if rows.len() == limit {
+                    return Ok(rows);
+                }
+            }
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                break;
+            }
+        }
+        Ok(rows)
+    }
+}
+
+fn network_config_path(path: &str) -> bool {
+    let path = path.replace('\\', "/").to_ascii_lowercase();
+    [
+        "/etc/hosts",
+        "/etc/resolv.conf",
+        "/etc/network/interfaces",
+        "/etc/pve/corosync.conf",
+        "/etc/corosync/corosync.conf",
+        "/etc/pve/.version",
+        "/etc/debian_version",
+    ]
+    .iter()
+    .any(|suffix| path == *suffix || path.ends_with(suffix))
 }
 
 fn fact_key(fact: &InfrastructureNetworkFactRecord) -> (&str, &str, &str, u64, &str, &str, &str) {

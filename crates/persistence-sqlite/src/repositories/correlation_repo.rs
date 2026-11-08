@@ -70,6 +70,17 @@ pub fn clear_correlation_cache(conn: &Connection, case_id: &str) -> DbResult<()>
 /// Returns the hex-encoded SHA-256 digest.
 pub fn compute_artifact_hash_hex(conn: &Connection) -> DbResult<String> {
     use sha2::{Digest, Sha256};
+    if crate::source_fjall::source_id(conn)?.is_some() {
+        let mut hasher = Sha256::new();
+        super::artifact_repo::ArtifactRepo::new(conn).visit_by_family(None, |artifact| {
+            hasher.update(artifact.id.0.as_bytes());
+            hasher.update(b"|");
+            hasher.update(artifact.created_at.to_rfc3339().as_bytes());
+            hasher.update(b"\n");
+            Ok(())
+        })?;
+        return Ok(hex::encode(hasher.finalize()));
+    }
     let mut stmt = conn.prepare("SELECT id, created_at FROM artifacts ORDER BY id")?;
     let mut hasher = Sha256::new();
     let rows = stmt.query_map([], |row| {
@@ -90,6 +101,24 @@ pub fn compute_artifact_hash_hex(conn: &Connection) -> DbResult<String> {
 /// Resolve the case_id from the artifacts table (returns the first distinct id).
 pub fn resolve_case_id(conn: &Connection) -> DbResult<Option<String>> {
     use rusqlite::OptionalExtension;
+    if let Some(source_id) = crate::source_fjall::source_id(conn)? {
+        let artifact_count = super::artifact_repo::ArtifactRepo::new(conn).count()?;
+        if artifact_count == 0 {
+            return Ok(None);
+        }
+        let mut statement =
+            conn.prepare("SELECT case_id FROM data_sources WHERE id = ?1 ORDER BY id LIMIT 2")?;
+        let cases = statement
+            .query_map([source_id], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        return match cases.as_slice() {
+            [case_id] => Ok(Some(case_id.clone())),
+            [] => Ok(None),
+            _ => Err(DbError::System(
+                "artifact source catalog spans multiple cases".into(),
+            )),
+        };
+    }
     conn.query_row(
         "SELECT DISTINCT case_id FROM artifacts LIMIT 1",
         [],
@@ -101,6 +130,15 @@ pub fn resolve_case_id(conn: &Connection) -> DbResult<Option<String>> {
 
 /// Collect all artifact IDs ordered by id.
 pub fn collect_artifact_ids(conn: &Connection) -> DbResult<Vec<String>> {
+    if crate::source_fjall::source_id(conn)?.is_some() {
+        let mut ids = Vec::new();
+        super::artifact_repo::ArtifactRepo::new(conn).visit_by_family(None, |artifact| {
+            ids.push(artifact.id.0);
+            Ok(())
+        })?;
+        ids.sort();
+        return Ok(ids);
+    }
     let mut stmt = conn.prepare("SELECT id FROM artifacts ORDER BY id")?;
     let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
     let mut ids = Vec::new();

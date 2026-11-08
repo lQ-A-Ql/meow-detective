@@ -6,6 +6,7 @@ use rusqlite::{params, Connection};
 mod carving;
 mod mapping;
 mod persistence;
+mod visit_sources;
 mod visiting;
 use mapping::{row_to_artifact, row_to_artifact_cursor_row};
 pub(crate) use visiting::decode as decode_fjall_artifact;
@@ -240,42 +241,6 @@ impl<'a> ArtifactRepo<'a> {
         let mut statement = self.conn.prepare(&sql)?;
         let rows = statement.query_map(rusqlite::params_from_iter(parameters), row_to_artifact)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-    }
-
-    pub fn visit_analysis_outputs_for_sources<F>(
-        &self,
-        source_object_ids: &[&str],
-        producer_prefix: &str,
-        mut visit: F,
-    ) -> DbResult<()>
-    where
-        F: FnMut(Artifact) -> DbResult<()>,
-    {
-        if source_object_ids.is_empty() {
-            return Ok(());
-        }
-        let placeholders = (1..=source_object_ids.len())
-            .map(|index| format!("?{index}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let prefix_parameter = source_object_ids.len() + 1;
-        let sql = format!(
-            "SELECT {ARTIFACT_SELECT_COLUMNS} FROM artifacts
-             WHERE source_object_id IN ({placeholders})
-               AND extractor_id LIKE ?{prefix_parameter}
-             ORDER BY source_object_id ASC, rowid ASC"
-        );
-        let mut parameters = source_object_ids
-            .iter()
-            .map(|source_id| (*source_id).to_string())
-            .collect::<Vec<_>>();
-        parameters.push(format!("{producer_prefix}%"));
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(rusqlite::params_from_iter(parameters), row_to_artifact)?;
-        for row in rows {
-            visit(row?)?;
-        }
-        Ok(())
     }
 
     pub fn list_by_family(&self, family: Option<&str>) -> DbResult<Vec<Artifact>> {

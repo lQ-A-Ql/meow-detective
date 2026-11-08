@@ -1,4 +1,5 @@
 use crate::DbResult;
+use persistence_fjall::{ArtifactRecordStore, ScanDirection};
 use rusqlite::{params, Connection, OptionalExtension};
 pub struct ContentIndexRepo<'a> {
     conn: &'a Connection,
@@ -40,6 +41,9 @@ impl<'a> ContentIndexRepo<'a> {
         Ok(())
     }
     pub fn artifact_text(&self, source: &str, local: &str, global: &str) -> DbResult<String> {
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            return self.native_artifact_text(source, local, global);
+        }
         let mut statement=self.conn.prepare("SELECT substr(title || ' ' || summary || ' ' || attrs,1,65536) FROM artifacts WHERE data_source_id=?1 AND source_object_id IN (?2,?3) ORDER BY id LIMIT 128")?;
         let rows = statement.query_map(params![source, local, global], |row| {
             row.get::<_, String>(0)
@@ -52,6 +56,62 @@ impl<'a> ContentIndexRepo<'a> {
             }
             result.push_str(&text);
             result.push('\n');
+        }
+        Ok(result)
+    }
+
+    fn native_artifact_text(&self, source: &str, local: &str, global: &str) -> DbResult<String> {
+        let owner = crate::source_fjall::source_id(self.conn)?
+            .ok_or_else(|| crate::DbError::System("source identity is missing".into()))?;
+        if owner != source {
+            return Err(crate::DbError::System(
+                "content index artifact source owner mismatch".into(),
+            ));
+        }
+        let store = crate::source_fjall::require_source_store(self.conn)?;
+        let repository = ArtifactRecordStore::from_source_store((*store).clone());
+        let snapshot = repository.read_snapshot();
+        let mut result = String::new();
+        let mut rows = 0usize;
+        for object_id in [local, global] {
+            let mut cursor = None;
+            loop {
+                crate::read_operation::ensure_active()?;
+                let page = repository
+                    .list_by_source_object(
+                        &snapshot,
+                        source,
+                        object_id,
+                        cursor.as_deref(),
+                        ScanDirection::Forward,
+                        128,
+                    )
+                    .map_err(|error| crate::DbError::System(error.to_string()))?;
+                for record in page.records {
+                    if rows == 128 {
+                        return Ok(result);
+                    }
+                    let artifact = super::artifact_repo::decode_fjall_artifact(record)?;
+                    let text = format!(
+                        "{} {} {}",
+                        artifact.title,
+                        artifact.summary,
+                        serde_json::to_string(&artifact.attrs)
+                            .map_err(|error| crate::DbError::System(error.to_string()))?
+                    );
+                    let text = text.chars().take(65_536).collect::<String>();
+                    if result.len().saturating_add(text.len()) > 1024 * 1024 {
+                        return Ok(result);
+                    }
+                    result.push_str(&text);
+                    result.push('\n');
+                    rows += 1;
+                }
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    break;
+                }
+            }
         }
         Ok(result)
     }

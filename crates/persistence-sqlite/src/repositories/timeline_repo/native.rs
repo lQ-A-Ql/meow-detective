@@ -52,7 +52,7 @@ pub(super) fn events(conn: &Connection) -> DbResult<Option<Vec<TimelineEvent>>> 
     }
 }
 
-fn from_record(record: persistence_fjall::TimelineRecord) -> TimelineEvent {
+pub(super) fn from_record(record: persistence_fjall::TimelineRecord) -> TimelineEvent {
     TimelineEvent {
         id: TimelineEventId(record.id),
         source_object_id: record.source_object_id,

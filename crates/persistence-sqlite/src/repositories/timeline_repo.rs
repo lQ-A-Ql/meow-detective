@@ -12,6 +12,7 @@ mod filtering;
 mod mapping;
 mod native;
 mod persistence;
+mod visit_sources;
 pub use bulk_indexes::with_deferred_empty_indexes;
 use filtering::{count_timeline_rows, filtered_timeline_clauses};
 use mapping::{row_to_timeline_cursor_row, row_to_timeline_event};
@@ -196,45 +197,6 @@ impl<'a> TimelineRepo<'a> {
             row_to_timeline_event,
         )?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-    }
-
-    pub fn visit_analysis_outputs_for_sources<F>(
-        &self,
-        source_object_ids: &[&str],
-        producer_prefix: &str,
-        mut visit: F,
-    ) -> DbResult<()>
-    where
-        F: FnMut(TimelineEvent) -> DbResult<()>,
-    {
-        if source_object_ids.is_empty() {
-            return Ok(());
-        }
-        let placeholders = (1..=source_object_ids.len())
-            .map(|index| format!("?{index}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let prefix_parameter = source_object_ids.len() + 1;
-        let sql = format!(
-            "SELECT {TIMELINE_SELECT_COLUMNS} FROM timeline_events
-             WHERE source_object_id IN ({placeholders})
-               AND parser_id LIKE ?{prefix_parameter}
-             ORDER BY source_object_id ASC, rowid ASC"
-        );
-        let mut parameters = source_object_ids
-            .iter()
-            .map(|source_id| (*source_id).to_string())
-            .collect::<Vec<_>>();
-        parameters.push(format!("{producer_prefix}%"));
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(
-            rusqlite::params_from_iter(parameters),
-            row_to_timeline_event,
-        )?;
-        for row in rows {
-            visit(row?)?;
-        }
-        Ok(())
     }
 
     pub fn query(&self, offset: u64, limit: u32) -> DbResult<Vec<TimelineEvent>> {

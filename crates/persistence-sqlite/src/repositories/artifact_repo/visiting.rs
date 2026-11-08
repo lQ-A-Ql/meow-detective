@@ -70,6 +70,52 @@ pub(crate) fn decode(record: ArtifactRecord) -> DbResult<Artifact> {
 }
 
 impl ArtifactRepo<'_> {
+    pub fn visit_by_source_object(
+        &self,
+        source_object_id: &str,
+        mut visit: impl FnMut(Artifact) -> DbResult<()>,
+    ) -> DbResult<()> {
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            let source_id = crate::source_fjall::source_id(self.conn)?
+                .ok_or_else(|| DbError::System("source identity is missing".into()))?;
+            let repository = ArtifactRecordStore::from_source_store((*store).clone());
+            let snapshot = repository.read_snapshot();
+            let mut cursor = None;
+            loop {
+                crate::read_operation::ensure_active()?;
+                let page = repository
+                    .list_by_source_object(
+                        &snapshot,
+                        &source_id,
+                        source_object_id,
+                        cursor.as_deref(),
+                        ScanDirection::Forward,
+                        256,
+                    )
+                    .map_err(|error| DbError::System(error.to_string()))?;
+                for record in page.records {
+                    visit(decode(record)?)?;
+                }
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    return Ok(());
+                }
+            }
+        }
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            return Err(DbError::System("source detail storage is missing".into()));
+        }
+        let mut statement = self.conn.prepare(&format!(
+            "SELECT {ARTIFACT_SELECT_COLUMNS} FROM artifacts
+             WHERE source_object_id = ?1 ORDER BY id"
+        ))?;
+        for row in statement.query_map([source_object_id], row_to_artifact)? {
+            crate::read_operation::ensure_active()?;
+            visit(row?)?;
+        }
+        Ok(())
+    }
+
     pub fn count_by_source_object(&self, object: &str) -> DbResult<u64> {
         let mut count = 0;
         self.visit_by_family(None, |artifact| {
