@@ -288,16 +288,18 @@ fn collect_artifact_facts(
     source_connection: &rusqlite::Connection,
     facts: &mut LinuxEvidenceFacts,
 ) {
-    let Ok(mut statement) = source_connection.prepare(
-        "SELECT attrs FROM artifacts WHERE artifact_type = 'LinuxSystemConfig' AND json_valid(attrs)",
-    ) else { return };
-    let Ok(rows) = statement.query_map([], |row| row.get::<_, String>(0)) else {
+    let mut artifacts = Vec::new();
+    if persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(source_connection)
+        .visit_by_family(Some("LinuxSystemConfig"), |artifact| {
+            artifacts.push(artifact);
+            Ok(())
+        })
+        .is_err()
+    {
         return;
-    };
-    for row in rows.flatten() {
-        let Ok(attrs) = serde_json::from_str::<Value>(&row) else {
-            continue;
-        };
+    }
+    for artifact in artifacts {
+        let attrs = serde_json::to_value(artifact.attrs).unwrap_or(Value::Null);
         let path = attrs["sourcePath"].as_str().unwrap_or_default();
         let kind = attrs["configKind"].as_str().unwrap_or_default();
         let line = attrs["line"].as_str().unwrap_or_default().trim();
