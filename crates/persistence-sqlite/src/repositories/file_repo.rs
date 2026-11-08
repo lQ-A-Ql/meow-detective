@@ -40,6 +40,11 @@ impl<'a> FileRepo<'a> {
             ));
         }
         let Some(store) = crate::source_fjall::open_store(self.conn)? else {
+            if crate::source_fjall::source_id(self.conn)?.is_some() {
+                return Err(crate::DbError::System(
+                    "source detail storage is missing".into(),
+                ));
+            }
             return Ok(None);
         };
         let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());

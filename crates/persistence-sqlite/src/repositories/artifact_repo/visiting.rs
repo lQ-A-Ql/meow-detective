@@ -10,6 +10,9 @@ pub(super) fn records(conn: &rusqlite::Connection) -> DbResult<Option<Vec<Artifa
         return Ok(None);
     };
     let Some(store) = crate::source_fjall::open_store(conn)? else {
+        if crate::source_fjall::source_id(conn)?.is_some() {
+            return Err(DbError::System("source detail storage is missing".into()));
+        }
         return Ok(None);
     };
     let repository = ArtifactRecordStore::from_source_store((*store).clone());

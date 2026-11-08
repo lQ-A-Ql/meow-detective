@@ -205,6 +205,14 @@ pub fn has_source_store(conn: &Connection) -> crate::DbResult<bool> {
     Ok(open_store(conn)?.is_some())
 }
 
+pub fn require_source_store(conn: &Connection) -> crate::DbResult<Arc<SourceStore>> {
+    if source_id(conn)?.is_none() {
+        return Err(crate::DbError::System("source identity is missing".into()));
+    }
+    open_store(conn)?
+        .ok_or_else(|| crate::DbError::System("source detail storage is missing".into()))
+}
+
 pub fn open_store(conn: &Connection) -> crate::DbResult<Option<Arc<SourceStore>>> {
     let root: Option<String> = match conn.query_row(
         "SELECT value FROM source_meta WHERE key = ?1",
