@@ -1,9 +1,10 @@
-use super::candidate_persistence::{
-    delete_previous_outputs, persist_checkpoint, CandidateCommit, CandidateOutputBatch,
-};
+use super::candidate_persistence::{persist_checkpoint, CandidateCommit, CandidateOutputBatch};
 use super::evtx::project_evtx_event;
 use super::output_persistence::resolve_output_data_source_id;
-use super::{state::PersistedExtractionOutcome, ExtractionOutcome};
+use super::{
+    state::{AnalysisOutputProducer, AnalysisOutputReplacement, PersistedExtractionOutcome},
+    ExtractionOutcome,
+};
 use crate::analysis_service::{
     cancellation::ensure_not_cancelled, candidates::EvidenceCandidate,
     capability::AnalysisCapability, error::AnalysisServiceError,
@@ -76,8 +77,11 @@ fn persist_evtx_candidate_with_batch_size(
         batch_size: batch_size.max(1),
     };
     match build_evtx_commit(&context, reader) {
-        Ok(persisted) => {
+        Ok(mut persisted) => {
             transaction.commit()?;
+            if let Some(mut generation) = persisted.staged_generation.take() {
+                generation.commit();
+            }
             Ok(EvtxPersistenceResult::Persisted(persisted.observation))
         }
         Err(failure) => {
@@ -103,9 +107,13 @@ fn build_evtx_commit(
     context: &EvtxCommitContext<'_>,
     reader: &mut dyn evidence_core::ReadSeek,
 ) -> Result<CandidateCommit, EvtxTransactionFailure> {
-    delete_previous_outputs(context.conn, context.candidate, context.capability)
-        .map_err(EvtxTransactionFailure::Service)?;
-    let mut batch = CandidateOutputBatch::default();
+    let replacements = [AnalysisOutputReplacement {
+        source_object_id: context.candidate.file_id.0.clone(),
+        producer: AnalysisOutputProducer::Prefix(context.capability.producer_prefix()),
+    }];
+    let mut batch =
+        CandidateOutputBatch::begin(context.conn, context.data_source_id, &replacements)
+            .map_err(EvtxTransactionFailure::Service)?;
     let visit = artifacts_windows::visit_structured_events_from_read_seek(
         reader,
         &context.candidate.path,
@@ -129,7 +137,14 @@ fn build_evtx_commit(
     batch
         .flush(context.conn, context.case_id, context.data_source_id)
         .map_err(EvtxTransactionFailure::Service)?;
-    let commit = batch.finish(summary.warnings);
+    let commit = batch
+        .finish(summary.warnings)
+        .map_err(EvtxTransactionFailure::Service)?;
+    if let Some(generation) = commit.staged_generation.as_ref() {
+        persistence_sqlite::source_fjall::bind_generation(context.conn, &generation.name).map_err(
+            |error| EvtxTransactionFailure::Service(AnalysisServiceError::Other(error.to_string())),
+        )?;
+    }
     persist_checkpoint(context.conn, context.candidate, context.capability, &commit)
         .map_err(EvtxTransactionFailure::Service)?;
     Ok(commit)

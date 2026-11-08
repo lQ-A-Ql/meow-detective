@@ -1,11 +1,9 @@
 use super::{
     super::{
         browser_preload::BrowserPreloadContext,
-        candidate_persistence::{
-            delete_previous_outputs, persist_checkpoint, CandidateOutputBatch,
-        },
+        candidate_persistence::{persist_checkpoint, CandidateOutputBatch},
         output_persistence::resolve_output_data_source_id,
-        state::PersistedExtractionOutcome,
+        state::{AnalysisOutputProducer, AnalysisOutputReplacement, PersistedExtractionOutcome},
         ExtractionOutcome,
     },
     profile::browser_profile_from_path,
@@ -71,8 +69,11 @@ pub(in crate::analysis_service::extraction) fn persist(
     let view = open_view(connection, bytes, companions)?;
     let mode = view.mode();
     let transaction = connection.unchecked_transaction()?;
-    delete_previous_outputs(&transaction, candidate, capability)?;
-    let mut batch = CandidateOutputBatch::default();
+    let replacements = [AnalysisOutputReplacement {
+        source_object_id: candidate.file_id.0.clone(),
+        producer: AnalysisOutputProducer::Prefix(capability.producer_prefix()),
+    }];
+    let mut batch = CandidateOutputBatch::begin(&transaction, &source_id, &replacements)?;
     let mut sink = |mut outcome: ExtractionOutcome| {
         ensure_not_cancelled(cancel)?;
         for artifact in &mut outcome.artifacts {
@@ -87,10 +88,16 @@ pub(in crate::analysis_service::extraction) fn persist(
     visit(view.connection(), candidate, preload, cancel, &mut sink)?;
     ensure_not_cancelled(cancel)?;
     batch.flush(&transaction, case_id, &source_id)?;
-    let commit = batch.finish(Vec::new());
+    let mut commit = batch.finish(Vec::new())?;
+    if let Some(generation) = commit.staged_generation.as_ref() {
+        persistence_sqlite::source_fjall::bind_generation(&transaction, &generation.name)?;
+    }
     persist_checkpoint(&transaction, candidate, capability, &commit)?;
     ensure_not_cancelled(cancel)?;
     transaction.commit()?;
+    if let Some(mut generation) = commit.staged_generation.take() {
+        generation.commit();
+    }
     Ok(commit.observation)
 }
 

@@ -1,5 +1,5 @@
 use super::{
-    output_digest::OutputDigestAccumulator,
+    native_output, output_digest::OutputDigestAccumulator,
     output_persistence::validate_artifact_source_attribution, state::PersistedExtractionOutcome,
     ExtractionOutcome,
 };
@@ -12,6 +12,7 @@ use persistence_sqlite::repositories::{
         DiagnosticAnalysisCandidateScan,
     },
     artifact_repo::ArtifactRepo,
+    fingerprint_repo::ForensicFingerprintRepo,
     timeline_repo::TimelineRepo,
 };
 use rusqlite::Connection;
@@ -19,6 +20,7 @@ use rusqlite::Connection;
 pub(super) struct CandidateCommit {
     pub(super) observation: PersistedExtractionOutcome,
     output_digest: String,
+    pub(super) staged_generation: Option<native_output::StagedGeneration>,
 }
 
 #[derive(Default)]
@@ -28,9 +30,25 @@ pub(super) struct CandidateOutputBatch {
     artifact_count: u64,
     timeline_event_count: u64,
     digest: OutputDigestAccumulator,
+    native: Option<native_output::StreamingGeneration>,
 }
 
 impl CandidateOutputBatch {
+    pub(super) fn begin(
+        conn: &Connection,
+        data_source_id: &str,
+        replacements: &[super::state::AnalysisOutputReplacement],
+    ) -> Result<Self, AnalysisServiceError> {
+        let native = native_output::begin_streaming(conn, data_source_id, replacements)?;
+        if native.is_none() {
+            delete_previous_outputs_for_replacements(conn, replacements)?;
+        }
+        Ok(Self {
+            native,
+            ..Self::default()
+        })
+    }
+
     pub(super) fn push(&mut self, mut outcome: ExtractionOutcome) {
         for artifact in outcome.artifacts {
             self.digest.record_artifact(&artifact);
@@ -57,46 +75,96 @@ impl CandidateOutputBatch {
     ) -> Result<(), AnalysisServiceError> {
         if !self.artifacts.is_empty() {
             validate_artifact_source_attribution(&self.artifacts, source_id)?;
-            ArtifactRepo::new(connection).insert_batch_in_transaction(
-                &self.artifacts,
-                case_id,
-                source_id,
-            )?;
+            if let Some(native) = self.native.as_ref() {
+                persist_fingerprints(connection, case_id, source_id, &self.artifacts)?;
+                native.write_batch(&self.artifacts, &[])?;
+            } else {
+                ArtifactRepo::new(connection).insert_batch_in_transaction(
+                    &self.artifacts,
+                    case_id,
+                    source_id,
+                )?;
+            }
             self.artifacts.clear();
         }
         if !self.timeline_events.is_empty() {
-            TimelineRepo::new(connection)
-                .insert_batch_with_case_in_transaction(&self.timeline_events, case_id)?;
+            if let Some(native) = self.native.as_ref() {
+                native.write_batch(&[], &self.timeline_events)?;
+            } else {
+                TimelineRepo::new(connection)
+                    .insert_batch_with_case_in_transaction(&self.timeline_events, case_id)?;
+            }
             self.timeline_events.clear();
         }
         Ok(())
     }
 
-    pub(super) fn finish(self, warnings: Vec<String>) -> CandidateCommit {
-        CandidateCommit {
+    pub(super) fn finish(
+        mut self,
+        warnings: Vec<String>,
+    ) -> Result<CandidateCommit, AnalysisServiceError> {
+        let staged_generation = self.native.take().map(|native| native.seal()).transpose()?;
+        Ok(CandidateCommit {
             observation: PersistedExtractionOutcome {
                 artifact_count: self.artifact_count,
                 timeline_event_count: self.timeline_event_count,
                 warnings,
             },
             output_digest: self.digest.finish(),
-        }
+            staged_generation,
+        })
     }
 }
 
-pub(super) fn delete_previous_outputs(
+fn persist_fingerprints(
     connection: &Connection,
-    candidate: &EvidenceCandidate,
-    capability: AnalysisCapability,
+    case_id: &str,
+    data_source_id: &str,
+    artifacts: &[domain::Artifact],
 ) -> Result<(), AnalysisServiceError> {
-    ArtifactRepo::new(connection).delete_analysis_outputs_in_transaction(
-        &candidate.file_id.0,
-        capability.producer_prefix(),
-    )?;
-    TimelineRepo::new(connection).delete_analysis_outputs_in_transaction(
-        &candidate.file_id.0,
-        capability.producer_prefix(),
-    )?;
+    let fingerprints = ForensicFingerprintRepo::new(connection);
+    if fingerprints.is_available()? {
+        for artifact in artifacts {
+            fingerprints.upsert_in_transaction(&domain::ForensicFingerprint::for_artifact(
+                artifact,
+                case_id,
+                data_source_id,
+            ))?;
+        }
+    }
+    Ok(())
+}
+
+fn delete_previous_outputs_for_replacements(
+    connection: &Connection,
+    replacements: &[super::state::AnalysisOutputReplacement],
+) -> Result<(), AnalysisServiceError> {
+    let artifacts = ArtifactRepo::new(connection);
+    let timeline = TimelineRepo::new(connection);
+    for replacement in replacements {
+        match &replacement.producer {
+            super::state::AnalysisOutputProducer::Prefix(prefix) => {
+                artifacts.delete_analysis_outputs_in_transaction(
+                    &replacement.source_object_id,
+                    prefix,
+                )?;
+                timeline.delete_analysis_outputs_in_transaction(
+                    &replacement.source_object_id,
+                    prefix,
+                )?;
+            }
+            super::state::AnalysisOutputProducer::ExtractorId(extractor_id) => {
+                artifacts.delete_analysis_outputs_by_extractor_in_transaction(
+                    &replacement.source_object_id,
+                    extractor_id,
+                )?;
+                timeline.delete_analysis_outputs_by_parser_in_transaction(
+                    &replacement.source_object_id,
+                    extractor_id,
+                )?;
+            }
+        }
+    }
     Ok(())
 }
 
