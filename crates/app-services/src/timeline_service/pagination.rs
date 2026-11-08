@@ -1,3 +1,4 @@
+use persistence_fjall::{ScanDirection, TimelineRecordStore};
 use persistence_sqlite::repositories::timeline_repo::{
     TimelineCursorRow, TimelineRepo, TimelineSortKey,
 };
@@ -205,12 +206,139 @@ pub fn query_timeline_aggregated(
     offset: u64,
     limit: u32,
 ) -> Result<TimelineAggregatedDto, TimelineServiceError> {
+    if persistence_sqlite::source_fjall::source_id(conn)?.is_some() {
+        return query_native_timeline_aggregated(conn, offset, limit);
+    }
     let rows = query_cluster_rows(conn, offset, limit)?;
     let event_types = distinct_event_types(&rows);
     let totals = query_totals_by_type(conn, &event_types)?;
     let mut stripes_by_type = seed_stripes(totals);
     append_clusters(&mut stripes_by_type, rows);
     Ok(TimelineAggregatedDto { stripes_by_type })
+}
+
+fn query_native_timeline_aggregated(
+    conn: &Connection,
+    offset: u64,
+    limit: u32,
+) -> Result<TimelineAggregatedDto, TimelineServiceError> {
+    let source = persistence_sqlite::source_fjall::require_source_store(conn)
+        .map_err(TimelineServiceError::Db)?;
+    let source_id = persistence_sqlite::source_fjall::source_id(conn)?
+        .ok_or_else(|| TimelineServiceError::Other("source identity is missing".into()))?;
+    let repository = TimelineRecordStore::from_source_store((*source).clone());
+    let snapshot = repository.read_snapshot();
+    let mut cursor = None;
+    let mut clusters = HashMap::<(String, String), ClusterRow>::new();
+    loop {
+        let page = repository
+            .list_by_source(
+                &snapshot,
+                &source_id,
+                cursor.as_deref(),
+                ScanDirection::Forward,
+                512,
+            )
+            .map_err(|error| TimelineServiceError::Other(error.to_string()))?;
+        for record in page.records {
+            let key = (record.event_type.clone(), record.description.clone());
+            let row = clusters.entry(key).or_insert_with(|| ClusterRow {
+                event_type: record.event_type.clone(),
+                description: record.description.clone(),
+                count: 0,
+                first_ts: record.timestamp.to_rfc3339(),
+                last_ts: record.timestamp.to_rfc3339(),
+                sample_ids: String::new(),
+            });
+            row.count = row.count.saturating_add(1);
+            let timestamp = record.timestamp.to_rfc3339();
+            if timestamp < row.first_ts {
+                row.first_ts = timestamp.clone();
+            }
+            if timestamp > row.last_ts {
+                row.last_ts = timestamp;
+            }
+            if row
+                .sample_ids
+                .split(',')
+                .filter(|value| !value.is_empty())
+                .count()
+                < 5
+            {
+                if !row.sample_ids.is_empty() {
+                    row.sample_ids.push(',');
+                }
+                row.sample_ids.push_str(&record.id);
+            }
+        }
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    let mut rows = clusters.into_values().collect::<Vec<_>>();
+    rows.sort_by(|left, right| {
+        right
+            .count
+            .cmp(&left.count)
+            .then_with(|| left.event_type.cmp(&right.event_type))
+            .then_with(|| left.description.cmp(&right.description))
+    });
+    let event_types = rows
+        .iter()
+        .map(|row| row.event_type.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    let totals = rows
+        .iter()
+        .fold(HashMap::<String, u64>::new(), |mut totals, row| {
+            *totals.entry(row.event_type.clone()).or_default() += row.count;
+            totals
+        });
+    let mut stripes = totals
+        .into_iter()
+        .map(|(event_type, total_events)| {
+            (
+                event_type,
+                TimelineStripeDto {
+                    clusters: Vec::new(),
+                    total_events,
+                },
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    for row in rows.into_iter().skip(offset as usize).take(limit as usize) {
+        stripes
+            .entry(row.event_type.clone())
+            .or_insert_with(|| TimelineStripeDto {
+                clusters: Vec::new(),
+                total_events: 0,
+            })
+            .clusters
+            .push(TimelineClusterDto {
+                event_type: row.event_type,
+                description: row.description,
+                count: row.count,
+                first_ts: row.first_ts,
+                last_ts: row.last_ts,
+                sample_event_ids: row
+                    .sample_ids
+                    .split(',')
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_owned)
+                    .collect(),
+            });
+    }
+    for event_type in event_types {
+        stripes
+            .entry(event_type)
+            .or_insert_with(|| TimelineStripeDto {
+                clusters: Vec::new(),
+                total_events: 0,
+            });
+    }
+    Ok(TimelineAggregatedDto {
+        stripes_by_type: stripes,
+    })
 }
 
 fn query_cluster_rows(
