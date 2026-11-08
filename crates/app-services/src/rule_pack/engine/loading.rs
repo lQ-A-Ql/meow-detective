@@ -58,20 +58,23 @@ pub(super) fn nodes_by_type(
 }
 
 pub(super) fn file_entries(conn: &Connection) -> Result<Vec<FileEntryRow>, RulePackError> {
-    let mut statement = conn.prepare(
-        "SELECT id, path, name FROM file_entries
-         WHERE entry_type = 'file' ORDER BY id",
+    let source_id: String = conn.query_row(
+        "SELECT id FROM data_sources ORDER BY id LIMIT 1",
+        [],
+        |row| row.get(0),
     )?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok(FileEntryRow {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                name: row.get(2)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(RulePackError::from)?;
+    let mut rows = persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+        .find_by_data_source(&domain::DataSourceId(source_id))
+        .map_err(|error| RulePackError::Other(error.to_string()))?
+        .into_iter()
+        .filter(|entry| entry.is_file())
+        .map(|entry| FileEntryRow {
+            id: entry.id.0,
+            path: entry.path,
+            name: entry.name,
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(rows)
 }
 

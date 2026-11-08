@@ -6,30 +6,22 @@ use rusqlite::Connection;
 pub(crate) fn query_linux_kernel_image_versions(
     conn: &Connection,
 ) -> Result<Vec<String>, AnalysisServiceError> {
-    let mut stmt = conn.prepare(
-        "SELECT path
-         FROM file_entries
-         WHERE REPLACE(path, '\\', '/') LIKE '%/boot/vmlinuz-%'
-            OR REPLACE(path, '\\', '/') LIKE 'boot/vmlinuz-%'
-            OR REPLACE(path, '\\', '/') LIKE 'vmlinuz-%'",
-    )?;
-    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
     let mut versions = Vec::new();
-    for row in rows {
-        let path = row?;
-        let normalized = normalize_evidence_path(&path);
+    persistence_sqlite::repositories::file_repo::FileRepo::new(conn).visit_all(None, |entry| {
+        let normalized = normalize_evidence_path(&entry.path);
         // A separately mounted /boot filesystem is cataloged from its own
         // root, so its canonical relative path is `/vmlinuz-*`.
         let Some(version) = normalized
             .strip_prefix("/boot/vmlinuz-")
             .or_else(|| normalized.strip_prefix("/vmlinuz-"))
         else {
-            continue;
+            return Ok(());
         };
         if is_kernel_version_candidate(version) {
             versions.push(version.to_string());
         }
-    }
+        Ok(())
+    })?;
     Ok(versions)
 }
 
@@ -39,19 +31,9 @@ pub(crate) fn query_linux_kernel_image_versions(
 pub(crate) fn query_linux_module_dir_versions(
     conn: &Connection,
 ) -> Result<Vec<String>, AnalysisServiceError> {
-    let mut stmt = conn.prepare(
-        "SELECT path
-         FROM file_entries
-         WHERE REPLACE(path, '\\', '/') LIKE '%/lib/modules/%'
-            OR REPLACE(path, '\\', '/') LIKE 'lib/modules/%'
-            OR REPLACE(path, '\\', '/') LIKE '%/usr/lib/modules/%'
-            OR REPLACE(path, '\\', '/') LIKE 'usr/lib/modules/%'",
-    )?;
-    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
     let mut versions = Vec::new();
-    for row in rows {
-        let path = row?;
-        let normalized = normalize_evidence_path(&path);
+    persistence_sqlite::repositories::file_repo::FileRepo::new(conn).visit_all(None, |entry| {
+        let normalized = normalize_evidence_path(&entry.path);
         let suffix = normalized
             .strip_prefix("/lib/modules/")
             .or_else(|| normalized.strip_prefix("/usr/lib/modules/"));
@@ -61,7 +43,8 @@ pub(crate) fn query_linux_module_dir_versions(
         {
             versions.push(version.to_string());
         }
-    }
+        Ok(())
+    })?;
     Ok(versions)
 }
 

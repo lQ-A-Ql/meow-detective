@@ -156,15 +156,13 @@ fn find_unique_data_source_id(conn: &Connection) -> Option<String> {
 }
 
 fn unique_data_source_id_from_files(conn: &Connection) -> Option<String> {
-    conn.query_row(
-        "SELECT CASE WHEN COUNT(DISTINCT data_source_id) = 1 THEN MIN(data_source_id) END
-         FROM file_entries
-         WHERE data_source_id <> ''",
-        [],
-        |row| row.get::<_, Option<String>>(0),
-    )
-    .ok()
-    .flatten()
+    let ids = crate::analysis_service::collect_file_entries(conn)
+        .ok()?
+        .into_iter()
+        .map(|entry| entry.data_source_id.0)
+        .filter(|id| !id.is_empty())
+        .collect::<std::collections::BTreeSet<_>>();
+    (ids.len() == 1).then(|| ids.into_iter().next()).flatten()
 }
 
 fn unique_registered_data_source_id(conn: &Connection) -> Option<String> {

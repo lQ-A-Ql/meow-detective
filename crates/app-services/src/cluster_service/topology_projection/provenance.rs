@@ -145,16 +145,31 @@ pub(super) fn persist_analysis_links(
     member_sources: &[(u32, String, String)],
 ) -> Result<()> {
     for (member_index, source_id, _) in member_sources {
-        let source_connection = crate::source_db::open_registered_source_db_read_only(
-            case_connection,
+        let environment_object_id = format!("env:os:{import_set_id}:{member_index}");
+        let fjall = crate::source_db::open_registered_fjall_source_read_only(
             case_root,
             &domain::DataSourceId(source_id.clone()),
-        )?;
-        let environment_object_id = format!("env:os:{import_set_id}:{member_index}");
-        let mut statement = source_connection.prepare("SELECT id FROM artifacts ORDER BY id")?;
-        let artifact_ids = statement
-            .query_map([], |row| row.get::<_, String>(0))?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+        )
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        let snapshot = fjall.snapshot();
+        let mut artifact_ids = Vec::new();
+        let mut cursor = None;
+        loop {
+            let page = fjall
+                .artifact_list_by_source(
+                    &snapshot,
+                    source_id,
+                    cursor.as_deref(),
+                    persistence_fjall::ScanDirection::Forward,
+                    512,
+                )
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            artifact_ids.extend(page.records.into_iter().map(|record| record.id));
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                break;
+            }
+        }
         for artifact_id in artifact_ids {
             case_connection.execute(
                 "INSERT OR IGNORE INTO analysis_object_links
@@ -164,11 +179,24 @@ pub(super) fn persist_analysis_links(
                 rusqlite::params![artifact_id, environment_object_id, source_id],
             )?;
         }
-        let mut statement =
-            source_connection.prepare("SELECT id FROM timeline_events ORDER BY id")?;
-        let timeline_ids = statement
-            .query_map([], |row| row.get::<_, String>(0))?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut timeline_ids = Vec::new();
+        let mut cursor = None;
+        loop {
+            let page = fjall
+                .timeline_list_by_time(
+                    &snapshot,
+                    source_id,
+                    cursor.as_deref(),
+                    persistence_fjall::ScanDirection::Forward,
+                    512,
+                )
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            timeline_ids.extend(page.records.into_iter().map(|record| record.id));
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                break;
+            }
+        }
         for timeline_id in timeline_ids {
             case_connection.execute(
                 "INSERT OR IGNORE INTO analysis_object_links

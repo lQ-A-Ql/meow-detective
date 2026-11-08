@@ -1,6 +1,5 @@
 use crate::report::{RawExportBundle, ReportError};
 use domain::FileEncryptionStatus;
-use persistence_sqlite::repositories::file_repo::file_encryption_status_from_row;
 use rusqlite::Connection;
 use sha2::Digest;
 use std::fs::{self, OpenOptions};
@@ -344,47 +343,21 @@ fn write_bundle_metadata(
 fn collect_exportable_file_entries(
     conn: &Connection,
 ) -> Result<Vec<ExportableFileEntry>, ReportError> {
-    let mut stmt = conn.prepare(
-        "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted, read_only, archive, unix_mode
-         FROM file_entries
-         WHERE entry_type = 'file'
-         ORDER BY data_source_id ASC, path ASC",
+    let source_id: String = conn.query_row(
+        "SELECT id FROM data_sources ORDER BY id LIMIT 1",
+        [],
+        |row| row.get(0),
     )?;
-    let rows = stmt.query_map([], |row| {
-        let entry_type: String = row.get(5)?;
-        let encryption_status = file_encryption_status_from_row(row, 16)?;
-        Ok(ExportableFileEntry {
-            entry: domain::FileEntry {
-                id: domain::FileEntryId(row.get::<_, String>(0)?),
-                parent_id: row.get::<_, Option<String>>(1)?.map(domain::FileEntryId),
-                data_source_id: domain::DataSourceId(row.get::<_, String>(2)?),
-                path: row.get(3)?,
-                name: row.get(4)?,
-                entry_type: if entry_type.eq_ignore_ascii_case("directory") {
-                    domain::EntryType::Directory
-                } else {
-                    domain::EntryType::File
-                },
-                size: row.get(6)?,
-                ext: row.get(7)?,
-                deleted: row.get::<_, i32>(8)? != 0,
-                hidden: row.get::<_, i32>(9)? != 0,
-                system: row.get::<_, i32>(10)? != 0,
-                encrypted: encryption_status.blocks_content(),
-                created_at: None,
-                modified_at: None,
-                accessed_at: None,
-                changed_at: None,
-                hash_sha256: row.get(15)?,
-                read_only: row.get::<_, i32>(17)? != 0,
-                archive: row.get::<_, i32>(18)? != 0,
-                unix_mode: row.get(19)?,
-            },
-            encryption_status,
+    let entries = persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+        .find_by_data_source(&domain::DataSourceId(source_id))?;
+    Ok(entries
+        .into_iter()
+        .filter(|entry| entry.is_file())
+        .map(|entry| ExportableFileEntry {
+            encryption_status: FileEncryptionStatus::from(entry.encrypted),
+            entry,
         })
-    })?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(ReportError::from)
+        .collect())
 }
 
 fn collect_exportable_file_entries_for_case(

@@ -9,7 +9,7 @@ use super::{ClusterServiceError, Result};
 pub fn get_linux_evidence_events(
     case_connection: &Connection,
     case_root: &std::path::Path,
-    case_id: &CaseId,
+    _case_id: &CaseId,
     import_set_id: &str,
     offset: u64,
     limit: u32,
@@ -20,26 +20,6 @@ pub fn get_linux_evidence_events(
     for source_id in source_ids {
         if let Some(projected) = projected_events(case_root, &source_id, per_source_limit)? {
             events.extend(projected);
-            continue;
-        }
-        let source = source_db::open_ready_source_read_only_by_id(
-            case_connection,
-            case_root,
-            case_id,
-            &DataSourceId(source_id.clone()),
-        )
-        .map_err(|error| ClusterServiceError::Db(error.into_db_error()))?;
-        let mut statement = source.connection.prepare(
-            "SELECT id, source_object_id, event_type, ts, title, description,
-                    parser_id, parser_version, confidence, attrs
-             FROM timeline_events ORDER BY ts DESC, id ASC LIMIT ?1",
-        )?;
-        let rows = statement.query_map([per_source_limit as i64], |row| {
-            let attrs: String = row.get(9)?;
-            Ok(event_from_row(&source_id, row, &attrs))
-        })?;
-        for row in rows {
-            events.push(row?);
         }
     }
     events.sort_by(|left, right| {
@@ -65,14 +45,11 @@ fn projected_events(
         return Ok(None);
     };
     let snapshot = fjall.snapshot();
-    if !fjall
-        .source_projection_complete(&snapshot, source_id)
+    fjall
+        .require_projection_complete(&snapshot, source_id)
         .map_err(|error| {
             ClusterServiceError::Db(persistence_sqlite::DbError::System(error.to_string()))
-        })?
-    {
-        return Ok(None);
-    }
+        })?;
     let page = fjall
         .timeline_list_by_time(
             &snapshot,
@@ -137,41 +114,6 @@ fn source_ids(conn: &Connection, import_set_id: &str) -> Result<Vec<String>> {
     let rows = statement.query_map([import_set_id], |row| row.get(0))?;
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(Into::into)
-}
-
-fn event_from_row(
-    data_source_id: &str,
-    row: &rusqlite::Row<'_>,
-    attrs_json: &str,
-) -> LinuxEvidenceEventDto {
-    let attrs = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(attrs_json)
-        .unwrap_or_default();
-    LinuxEvidenceEventDto {
-        event_id: row.get(0).unwrap_or_default(),
-        data_source_id: data_source_id.to_string(),
-        source_object_id: row.get(1).unwrap_or_default(),
-        event_type: row.get(2).unwrap_or_default(),
-        event_time: row.get(3).unwrap_or_default(),
-        observed_time: string_attr(&attrs, "observedTime"),
-        ingest_time: string_attr(&attrs, "ingestTime"),
-        timezone: string_attr(&attrs, "timezone").or_else(|| string_attr(&attrs, "tzAssumed")),
-        clock_skew_seconds: attrs
-            .get("clockSkewSeconds")
-            .and_then(serde_json::Value::as_i64),
-        native_sequence: string_attr(&attrs, "nativeSequence"),
-        actor: string_attr(&attrs, "actor"),
-        resource: string_attr(&attrs, "resource"),
-        action: string_attr(&attrs, "action"),
-        outcome: string_attr(&attrs, "outcome"),
-        parser_id: row.get(6).ok(),
-        parser_version: row.get(7).ok(),
-        raw_digest: string_attr(&attrs, "rawDigest")
-            .or_else(|| string_attr(&attrs, "contentDigest")),
-        confidence: row.get(8).ok(),
-        completeness: string_attr(&attrs, "completeness").unwrap_or_else(|| "parsed".to_string()),
-        title: row.get(4).unwrap_or_default(),
-        description: row.get(5).unwrap_or_default(),
-    }
 }
 
 fn string_attr(attrs: &serde_json::Map<String, serde_json::Value>, key: &str) -> Option<String> {

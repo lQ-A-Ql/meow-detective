@@ -87,12 +87,8 @@ fn preflight_case_workspace(root: &Path, db_path: &Path, case_id: &CaseId) -> Re
     if has_retired_linux_cluster_relationships(&conn, case_id)? {
         return Err(CaseServiceError::TopologyReimportRequired);
     }
+    ensure_global_detail_boundary(&conn)?;
     ensure_supported_data_source_platforms_for_case(&conn, case_id)?;
-    if has_legacy_single_db_payload(&conn)? {
-        return Err(CaseServiceError::InvalidCaseDir(
-            "This case uses the legacy single-database storage model; re-import is required for the current development version".to_string(),
-        ));
-    }
     Ok(stored)
 }
 
@@ -100,6 +96,22 @@ fn ensure_storage_manifest(root: &Path, case_id: &CaseId) -> Result<()> {
     crate::storage_manifest::validate_case(root, &case_id.0)
         .map(|_| ())
         .map_err(|error| CaseServiceError::UnsupportedStorageFormat(error.to_string()))
+}
+
+fn ensure_global_detail_boundary(conn: &Connection) -> Result<()> {
+    let detail_tables: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('file_entries','artifacts','timeline_events')",
+        [],
+        |row| row.get(0),
+    )
+    .map_err(persistence_sqlite::DbError::from)?;
+    if detail_tables > 0 {
+        return Err(CaseServiceError::InvalidCaseDir(
+            "case database contains forbidden global detail tables; re-import is required"
+                .to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 fn ensure_current_source_schemas(
@@ -159,25 +171,6 @@ fn load_case_record(conn: &Connection, case_id: &CaseId) -> Result<CaseMeta> {
     CaseRepo::new(conn)
         .find_by_id(case_id)?
         .ok_or_else(|| CaseServiceError::InvalidCaseDir("Case not in database".to_string()))
-}
-
-fn has_legacy_single_db_payload(conn: &Connection) -> persistence_sqlite::DbResult<bool> {
-    let detail_tables: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM sqlite_master
-         WHERE type = 'table' AND name IN ('file_entries', 'artifacts', 'timeline_events')",
-        [],
-        |row| row.get(0),
-    )?;
-    if detail_tables == 0 {
-        return Ok(false);
-    }
-    let file_count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
-    let artifact_count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))?;
-    let timeline_count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))?;
-    Ok(file_count > 0 || artifact_count > 0 || timeline_count > 0)
 }
 
 fn has_retired_linux_cluster_relationships(

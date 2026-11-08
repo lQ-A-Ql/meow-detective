@@ -5,7 +5,6 @@
 //! falls back to extension/path inference and is marked `metadata`.
 
 use super::file_classification_taxonomy::{family_of, file_type_from_ext};
-use crate::analysis_service::candidates::row_to_file_entry_for_analysis;
 use crate::analysis_service::error::AnalysisServiceError;
 use domain::{FileEntry, FileEntryId};
 use infrastructure::file_magic::{detect as detect_magic, is_office_extension as is_office_ext};
@@ -52,24 +51,20 @@ pub fn build_file_classification_board<E: std::fmt::Display>(
     magic_read_limit: u32,
     mut read_header_fn: impl FnMut(&FileEntryId) -> Result<Vec<u8>, E>,
 ) -> Result<FileClassificationBoardDto, AnalysisServiceError> {
-    let (total_files, total_size) = conn
-        .query_row(
-            "SELECT COUNT(*), COALESCE(SUM(COALESCE(size, 0)), 0)
-             FROM file_entries WHERE entry_type = 'file' COLLATE NOCASE",
-            [],
-            |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)),
-        )
-        .map_err(AnalysisServiceError::from)?;
+    let mut entries = crate::analysis_service::collect_file_entries(conn)?
+        .into_iter()
+        .filter(FileEntry::is_file)
+        .collect::<Vec<_>>();
+    let total_files = entries.len() as u64;
+    let total_size = entries.iter().map(FileEntry::size_or_zero).sum();
     let (encrypted_files, unknown_encryption_files) = encryption_counts(conn)?;
 
-    let mut statement = conn.prepare(
-        "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted, read_only, archive, unix_mode
-         FROM file_entries
-         WHERE entry_type = 'file' COLLATE NOCASE
-         ORDER BY COALESCE(size, 0) DESC, path ASC",
-    )?;
-    let rows = statement.query_map([], row_to_file_entry_for_analysis)?;
+    entries.sort_by(|left, right| {
+        right
+            .size_or_zero()
+            .cmp(&left.size_or_zero())
+            .then_with(|| left.path.cmp(&right.path))
+    });
 
     let mut buckets: HashMap<(&'static str, &'static str), Bucket> = HashMap::new();
     let mut magic_classified = 0u64;
@@ -78,8 +73,7 @@ pub fn build_file_classification_board<E: std::fmt::Display>(
     let mut header_read_failures = 0usize;
     let mut warnings = Vec::new();
 
-    for row in rows {
-        let entry = row?;
+    for entry in entries {
         seen += 1;
         let header = if seen <= u64::from(magic_read_limit) && !entry.encrypted {
             match read_header_fn(&entry.id) {
@@ -144,16 +138,23 @@ pub fn build_file_classification_board<E: std::fmt::Display>(
 }
 
 fn encryption_counts(conn: &Connection) -> Result<(u64, u64), AnalysisServiceError> {
-    conn.query_row(
-        "SELECT
-             COALESCE(SUM(CASE WHEN encrypted = 1 THEN 1 ELSE 0 END), 0),
-             COALESCE(SUM(CASE WHEN encrypted IS NULL THEN 1 ELSE 0 END), 0)
-         FROM file_entries
-         WHERE entry_type = 'file' COLLATE NOCASE",
-        [],
-        |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)),
-    )
-    .map_err(AnalysisServiceError::from)
+    let entries = crate::analysis_service::collect_file_entries(conn)?;
+    let repository = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+    let mut encrypted = 0;
+    let mut unknown = 0;
+    for entry in entries.into_iter().filter(FileEntry::is_file) {
+        match repository.find_encryption_status(&entry.id)? {
+            Some(domain::FileEncryptionStatus::Encrypted) => encrypted += 1,
+            Some(domain::FileEncryptionStatus::Unknown) => unknown += 1,
+            Some(domain::FileEncryptionStatus::Clear) => {}
+            None => {
+                return Err(AnalysisServiceError::Other(
+                    "classification entry is missing".into(),
+                ))
+            }
+        }
+    }
+    Ok((encrypted, unknown))
 }
 
 fn assemble_groups(

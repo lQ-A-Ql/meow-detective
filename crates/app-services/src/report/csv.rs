@@ -3,6 +3,7 @@ use super::{
     current_correlation_for_case, current_governance, execute_report_export, html,
     prepare_report_output, write_report_atomically, ReportError,
 };
+use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
 use reports::CsvExporter;
 use rusqlite::Connection;
 use std::path::Path;
@@ -32,27 +33,54 @@ pub fn generate_csv_artifacts(
     output_dir: &Path,
     scope: &ExportScopeDto,
 ) -> Result<String, ReportError> {
-    let mut stmt = conn.prepare(
-        "SELECT id, data_source_id, artifact_type, title, summary, source_object_id, extractor_id, extractor_version, confidence, source_attribution FROM artifacts ORDER BY created_at DESC LIMIT 1000"
-    )?;
-    let rows_data: Vec<Vec<String>> = stmt
-        .query_map([], |row| {
-            Ok(vec![
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, Option<String>>(5)?.unwrap_or_default(),
-                row.get::<_, Option<String>>(6)?.unwrap_or_default(),
-                row.get::<_, Option<String>>(7)?.unwrap_or_default(),
-                row.get::<_, Option<f32>>(8)?
+    let rows_data: Vec<Vec<String>> = ArtifactRepo::new(conn)
+        .list_all_records()?
+        .into_iter()
+        .map(|record| {
+            vec![
+                record.id,
+                record.data_source_id,
+                record.artifact_type,
+                record
+                    .attrs
+                    .get("title")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                record
+                    .attrs
+                    .get("summary")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                record.source_object_id.unwrap_or_default(),
+                record
+                    .attrs
+                    .get("extractorId")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                record
+                    .attrs
+                    .get("extractorVersion")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                record
+                    .attrs
+                    .get("confidence")
+                    .and_then(serde_json::Value::as_f64)
                     .map(|value| value.to_string())
                     .unwrap_or_default(),
-                row.get::<_, Option<String>>(9)?.unwrap_or_default(),
-            ])
-        })?
-        .collect::<Result<Vec<Vec<String>>, rusqlite::Error>>()?;
+                record
+                    .attrs
+                    .get("sourceAttribution")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+            ]
+        })
+        .collect();
     let mut rows_data = rows_data;
     let analysis = current_analysis(conn)?;
     let governance = current_governance(conn, case_id)?;

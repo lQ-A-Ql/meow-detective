@@ -1,11 +1,10 @@
-use crate::analysis_service::candidates::row_to_file_entry_for_analysis;
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::provenance::{
     file_classification_provenance, metadata_classification_provenance,
 };
 use domain::{FileEntry, FileEntryId};
 use infrastructure::file_magic::{detect as detect_magic, MagicMatch};
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use std::collections::HashMap;
 use std::path::Path;
 use transport::dto::analysis::AnalysisProvenanceDto;
@@ -18,19 +17,17 @@ pub fn classify_files_by_metadata(
     sample_size: u32,
 ) -> Result<Vec<AnalysisFileClassificationDto>, AnalysisServiceError> {
     let category_stats = metadata_category_stats(conn)?;
-    let mut stmt = conn.prepare(
-        "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted, read_only, archive, unix_mode
-             FROM file_entries
-             WHERE entry_type = 'file' COLLATE NOCASE
-             ORDER BY size DESC, path ASC
-             LIMIT ?1",
-    )?;
-    let rows = stmt.query_map(params![sample_size as i64], row_to_file_entry_for_analysis)?;
-    let mut files = Vec::new();
-    for row in rows {
-        files.push(row?);
-    }
+    let mut files = crate::analysis_service::collect_file_entries(conn)?
+        .into_iter()
+        .filter(FileEntry::is_file)
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| {
+        right
+            .size_or_zero()
+            .cmp(&left.size_or_zero())
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    files.truncate(sample_size as usize);
 
     let mut classifications = classify_files_by_extension_path(&files, sample_size);
     apply_metadata_category_stats(&mut classifications, category_stats);
@@ -40,16 +37,13 @@ pub fn classify_files_by_metadata(
 pub(crate) fn metadata_category_stats(
     conn: &Connection,
 ) -> Result<HashMap<String, (u64, u64)>, AnalysisServiceError> {
-    let mut stmt = conn.prepare(
-        "SELECT path, COALESCE(size, 0)
-             FROM file_entries
-             WHERE entry_type = 'file' COLLATE NOCASE",
-    )?;
-    let mut rows = stmt.query([])?;
     let mut stats: HashMap<String, (u64, u64)> = HashMap::new();
-    while let Some(row) = rows.next()? {
-        let path: String = row.get(0)?;
-        let size: u64 = row.get(1)?;
+    for entry in crate::analysis_service::collect_file_entries(conn)? {
+        if !entry.is_file() {
+            continue;
+        }
+        let size = entry.size_or_zero();
+        let path = entry.path;
         let category = detect_file_type(&path, None)
             .map(|(_, category, _)| category)
             .unwrap_or("Other");
