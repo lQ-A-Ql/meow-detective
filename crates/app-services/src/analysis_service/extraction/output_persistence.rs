@@ -1,3 +1,4 @@
+use super::native_output;
 use super::state::{AnalysisOutputProducer, ExtractionState};
 use crate::analysis_service::error::AnalysisServiceError;
 use persistence_sqlite::repositories::{
@@ -31,13 +32,60 @@ pub(super) fn persist_outputs(
     let clean_scans = std::mem::take(&mut state.clean_scans);
     let diagnostic_scans = std::mem::take(&mut state.diagnostic_scans);
     let complete_scans = std::mem::take(&mut state.complete_scans);
-    crate::import_pipeline::begin_analysis_output_projection(conn)
-        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+    let data_source_id = resolve_output_data_source_id(conn)?;
+    let database_path: String = conn
+        .query_row("PRAGMA database_list", [], |row| row.get(2))
+        .unwrap_or_default();
+    let case_root = std::path::Path::new(&database_path)
+        .parent()
+        .and_then(std::path::Path::parent)
+        .and_then(std::path::Path::parent);
+    let native_ready = case_root.is_some()
+        && !database_path.is_empty()
+        && persistence_sqlite::source_fjall::open_store(conn)?.is_some();
+    let native_generation = if native_ready {
+        Some(native_output::stage(
+            conn,
+            case_root.expect("native source has a case root"),
+            &data_source_id,
+            &artifacts,
+            &events,
+            &replacements,
+        )?)
+    } else {
+        None
+    };
+    validate_artifact_source_attribution(&artifacts, &data_source_id)?;
+    if native_generation.is_none() {
+        crate::import_pipeline::begin_analysis_output_projection(conn)
+            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+    }
     let transaction = conn.unchecked_transaction()?;
 
     let artifact_repo = ArtifactRepo::new(&transaction);
     let timeline_repo = TimelineRepo::new(&transaction);
+    if let Some(generation) = native_generation.as_ref() {
+        persistence_sqlite::source_fjall::bind_generation(&transaction, &generation.name)?;
+    }
+    if native_generation.is_some() {
+        let fingerprints =
+            persistence_sqlite::repositories::fingerprint_repo::ForensicFingerprintRepo::new(
+                &transaction,
+            );
+        if fingerprints.is_available()? {
+            for artifact in &artifacts {
+                fingerprints.upsert_in_transaction(&domain::ForensicFingerprint::for_artifact(
+                    artifact,
+                    case_id,
+                    &data_source_id,
+                ))?;
+            }
+        }
+    }
     for replacement in replacements {
+        if native_generation.is_some() {
+            break;
+        }
         match &replacement.producer {
             AnalysisOutputProducer::Prefix(prefix) => {
                 artifact_repo.delete_analysis_outputs_in_transaction(
@@ -61,12 +109,12 @@ pub(super) fn persist_outputs(
             }
         }
     }
-    if !artifacts.is_empty() {
+    if native_generation.is_none() && !artifacts.is_empty() {
         let data_source_id = resolve_output_data_source_id(&transaction)?;
         validate_artifact_source_attribution(&artifacts, &data_source_id)?;
         artifact_repo.insert_batch_in_transaction(&artifacts, case_id, &data_source_id)?;
     }
-    if !events.is_empty() {
+    if native_generation.is_none() && !events.is_empty() {
         timeline_repo.insert_batch_with_case_in_transaction(&events, case_id)?;
     }
     AnalysisScanRepo::new(&transaction).insert_all_checkpoint_batch_in_transaction(
@@ -82,24 +130,31 @@ pub(super) fn persist_outputs(
         .parent()
         .and_then(std::path::Path::parent)
         .and_then(std::path::Path::parent);
-    if let Some(case_root) = case_root {
-        let fjall_root = crate::source_db::fjall_source_storage_root(case_root, &data_source_id)
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        if fjall_root.is_dir() {
-            let case_connection =
-                crate::connection::open_existing_case_db(&case_root.join("app.db"))
+    if native_generation.is_none() {
+        if let Some(case_root) = case_root {
+            let fjall_root =
+                crate::source_db::fjall_source_storage_root(case_root, &data_source_id)
                     .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-            crate::import_pipeline::mirror_analysis_outputs_before_sqlite_commit(
-                &case_connection,
-                case_root,
-                case_id,
-                &transaction,
-                &data_source_id,
-            )
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+            if fjall_root.is_dir() {
+                let case_connection =
+                    crate::connection::open_existing_case_db(&case_root.join("app.db"))
+                        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+                crate::import_pipeline::mirror_analysis_outputs_before_sqlite_commit(
+                    &case_connection,
+                    case_root,
+                    case_id,
+                    &transaction,
+                    &data_source_id,
+                )
+                .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+            }
         }
     }
     transaction.commit()?;
+    if let Some(mut generation) = native_generation {
+        generation.commit();
+        return Ok(());
+    }
     mirror_published_outputs(conn, case_id)?;
     Ok(())
 }

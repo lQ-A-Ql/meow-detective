@@ -78,7 +78,7 @@
 | FJ-12-E | Artifact 属性、EVTX 排序、Linux 主机筛选以及跨页完整性 | 定向通过 | 1,301 条 native Artifact、SQLite 时间排序 oracle、主机属性筛选 3 项；其余页面入口待迁移 |
 | FJ-12-F | Artifact/Timeline 更新与索引、计数、revision 同时提交 | 通过 | 原生写计划持有写事务；重复 ID、相同数量替换、并发更新与失败保持旧状态的回归 |
 | FJ-12-G | Logical 导入从枚举至 Search、Artifact、Timeline、Graph 和 seal 均可达 | 定向通过 | `logical_import` 2 项；Archive、RAW/E01、派生来源待验证 |
-| FJ-12-H | 独立分析和流式重提取的输出与 checkpoint 同时提交 | 未完成 | EVTX、Browser、插件及一般 extraction 需要统一原子发布；大结果不能全量驻留内存 |
+| FJ-12-H | 独立分析和流式重提取的输出与 checkpoint 同时提交 | 进行中 | Fjall source 已使用临时 generation 完成 Artifact/Timeline 替换、checkpoint 与 generation 指针同事务提交；EVTX、Browser 和 plugin 的 SQLite-only 测试夹具及大结果资源验收仍需迁移 |
 | FJ-12-I | 报告、Graph、MCP、Android、预览、恢复、索引及领域聚合全部消除 source 明细 SQL | 未完成 | 按实际服务入口迁移并验证；保留 SQLite control/Graph/领域状态查询 |
 | FJ-12-J | 未完成 generation 查询、重新打开、取消、失败重试、source 删除和进程终止 | 未完成 | 完成故障与生命周期矩阵，验证不会遗漏结果或读到部分更新 |
 | FJ-12-K | 原生计数、排序分页及导入过程满足内存和 I/O 边界 | 进行中 | Catalog/Artifact 原生计数与 Catalog 二进制 ID 分页已加入；剩余 Repository 全量收集、Timeline 全源替换内存增长及对象重扫仍需消除 |
@@ -94,6 +94,7 @@
 - SQLite 完整包测试执行至全部目标，14 个目标失败；其中 CephFS 当前格式校验已修复并通过，其余目标涉及旧 source 明细布局、staging 与索引恢复测试，继续迁移和验证。
 - 浏览器预加载的 Chromium 密钥文件、Android APK 与 package-restrictions 查询在原生 source 上改用 Fjall Catalog 访问；SQLite 查询仅保留 staging/旧格式路径。
 - 未完成 generation 现在由 source storage 直接返回 `SourceNotReady`，文件浏览、Artifact 聚合、Timeline 分页和计数入口不再用空值回退到明细仓库。
+- 独立 Analysis 输出在存在 Fjall source 时使用临时 build generation 完成 Artifact/Timeline 替换；SQLite checkpoint 与 generation 指针在同一事务提交，失败时自动清理 build 目录并保留旧 generation。Artifact forensic fingerprint 在同一 SQLite 事务写入。
 
 ### 2026-11-03
 

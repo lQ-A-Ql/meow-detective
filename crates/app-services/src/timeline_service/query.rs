@@ -66,11 +66,19 @@ pub fn count_timeline_events_for_case(
     case_id: &domain::CaseId,
 ) -> Result<u64, TimelineServiceError> {
     let mut total = 0u64;
-    for (_, source_conn) in
+    for (source_id, _) in
         source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
     {
-        total =
-            total.saturating_add(TimelineRepo::new(&source_conn).count_filtered(None, None, None)?);
+        let source = source_db::open_registered_fjall_source_read_only(case_root, &source_id)
+            .map_err(TimelineServiceError::from)?;
+        let snapshot = source.snapshot();
+        source.require_projection_complete(&snapshot, &source_id.0)?;
+        total = total.saturating_add(source.timeline_count_by_time(
+            &snapshot,
+            &source_id.0,
+            None,
+            None,
+        )?);
     }
     Ok(total)
 }
@@ -96,28 +104,18 @@ pub fn get_timeline_event_by_id_for_case(
                 "{error}; source database timeline events require ds:<dataSourceId>:<localId>"
             ))
         })?;
-    let source = source_db::open_ready_source_read_only_by_id(
-        case_conn,
-        case_root,
-        case_id,
-        &data_source_id,
-    )?;
-    if let Ok(fjall) = source_db::open_registered_fjall_source_read_only(case_root, &data_source_id)
-    {
-        let snapshot = fjall.snapshot();
-        if fjall.source_projection_complete(&snapshot, &data_source_id.0)? {
-            if let Some(event) = fjall
-                .timeline_get(&snapshot, &data_source_id.0, &local_id)
-                .map_err(|error| TimelineServiceError::Other(error.to_string()))?
-            {
-                return Ok(Some(timeline_event_to_source_dto(
-                    super::fjall::timeline_record_to_domain(event),
-                    &data_source_id,
-                )));
-            }
-        }
-    }
-    Ok(TimelineRepo::new(&source.connection)
-        .find_by_id(&local_id)?
-        .map(|event| timeline_event_to_source_dto(event, &data_source_id)))
+    source_db::open_ready_source_read_only_by_id(case_conn, case_root, case_id, &data_source_id)?;
+    let fjall = source_db::open_registered_fjall_source_read_only(case_root, &data_source_id)
+        .map_err(TimelineServiceError::from)?;
+    let snapshot = fjall.snapshot();
+    fjall.require_projection_complete(&snapshot, &data_source_id.0)?;
+    Ok(fjall
+        .timeline_get(&snapshot, &data_source_id.0, &local_id)
+        .map_err(|error| TimelineServiceError::Other(error.to_string()))?
+        .map(|event| {
+            timeline_event_to_source_dto(
+                super::fjall::timeline_record_to_domain(event),
+                &data_source_id,
+            )
+        }))
 }

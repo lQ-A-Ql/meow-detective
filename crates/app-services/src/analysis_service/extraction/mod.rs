@@ -13,6 +13,7 @@ pub(crate) mod evtx;
 mod evtx_persistence;
 pub(crate) mod linux;
 mod linux_sections;
+mod native_output;
 mod observability;
 mod output_digest;
 mod output_persistence;

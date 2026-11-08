@@ -329,7 +329,7 @@ pub(crate) fn file_entry(record: FileEntryRecord) -> FileEntry {
     }
 }
 
-pub(crate) fn artifact_record(artifact: &Artifact, source_id: &str) -> ArtifactRecord {
+pub fn artifact_record(artifact: &Artifact, source_id: &str) -> ArtifactRecord {
     ArtifactRecord {
         id: artifact.id.0.clone(),
         data_source_id: source_id.to_owned(),
@@ -349,7 +349,7 @@ pub(crate) fn artifact_record(artifact: &Artifact, source_id: &str) -> ArtifactR
     }
 }
 
-pub(crate) fn timeline_record(event: &TimelineEvent, source_id: &str) -> TimelineRecord {
+pub fn timeline_record(event: &TimelineEvent, source_id: &str) -> TimelineRecord {
     TimelineRecord {
         id: event.id.0.clone(),
         data_source_id: source_id.to_owned(),
