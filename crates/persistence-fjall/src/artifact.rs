@@ -12,6 +12,7 @@ use std::path::Path;
 
 mod artifact_batch;
 mod indexing;
+use indexing::{created_index_key, family_created_index_key, CREATED_INDEX, FAMILY_CREATED_INDEX};
 pub(super) use indexing::{index_deletes, index_writes};
 
 const RECORD_KIND: &str = "artifact_record";

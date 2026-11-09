@@ -7,11 +7,11 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 
-const CREATED_INDEX: &str = "artifact.created";
-const FAMILY_CREATED_INDEX: &str = "artifact.family-created";
+pub(crate) const CREATED_INDEX: &str = "artifact.created";
+pub(crate) const FAMILY_CREATED_INDEX: &str = "artifact.family-created";
 const TIMESTAMP_SORT_MASK: u64 = 1 << 63;
 
-pub(super) fn index_writes(record: &ArtifactRecord) -> Result<Vec<WriteAction>> {
+pub(crate) fn index_writes(record: &ArtifactRecord) -> Result<Vec<WriteAction>> {
     let value = record_key(&record.data_source_id, &record.id)?;
     let mut actions = vec![WriteAction::Put {
         keyspace: KeyspaceName::ArtifactIndexes,
@@ -59,7 +59,7 @@ pub(super) fn index_writes(record: &ArtifactRecord) -> Result<Vec<WriteAction>> 
     Ok(actions)
 }
 
-pub(super) fn index_deletes(record: &ArtifactRecord) -> Result<Vec<WriteAction>> {
+pub(crate) fn index_deletes(record: &ArtifactRecord) -> Result<Vec<WriteAction>> {
     let mut actions = vec![WriteAction::Delete {
         keyspace: KeyspaceName::ArtifactIndexes,
         key: encode_key(
@@ -116,7 +116,7 @@ fn created_at(record: &ArtifactRecord) -> Result<Option<DateTime<Utc>>> {
         .map(Some)
 }
 
-fn created_index_key(source_id: &str, created_at: &str, id: &str) -> Result<Vec<u8>> {
+pub(crate) fn created_index_key(source_id: &str, created_at: &str, id: &str) -> Result<Vec<u8>> {
     let timestamp = parse_created_at(created_at)?;
     encode_key(
         CREATED_INDEX,
@@ -128,7 +128,7 @@ fn created_index_key(source_id: &str, created_at: &str, id: &str) -> Result<Vec<
     )
 }
 
-fn family_created_index_key(
+pub(crate) fn family_created_index_key(
     source_id: &str,
     family: &str,
     created_at: &str,
