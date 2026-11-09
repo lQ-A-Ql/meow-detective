@@ -5,11 +5,17 @@ use crate::analysis_service::extraction::output_persistence::persist_outputs;
 use crate::analysis_service::extraction::reader::CancellableProgressReader;
 use crate::analysis_service::extraction::ExtractionOutcome;
 use chrono::Utc;
-use domain::{Artifact, ArtifactId, TimelineEvent, TimelineEventId};
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
+use domain::{
+    Artifact, ArtifactId, DataSourceId, EntryType, FileEntry, FileEntryId, TimelineEvent,
+    TimelineEventId,
+};
+use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
+};
 use rusqlite::Connection;
 use std::collections::BTreeMap;
 use std::io::{Read, Seek, SeekFrom};
+use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[test]
@@ -175,9 +181,30 @@ fn event(id: &str, source_id: &str, parser_id: &str, version: &str) -> TimelineE
     }
 }
 
-fn source_connection() -> rusqlite::Connection {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+struct SourceFixture {
+    _root: tempfile::TempDir,
+    connection: Connection,
+}
+
+impl Deref for SourceFixture {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.connection
+    }
+}
+
+fn source_connection() -> SourceFixture {
+    let root = tempfile::tempdir().expect("create source fixture");
+    let source_dir = root.path().join("case/sources/source-linux");
+    std::fs::create_dir_all(&source_dir).expect("create source directory");
+    let db_path = source_dir.join("source.db");
+    let connection =
+        persistence_sqlite::open_or_create_source(&db_path).expect("open source database");
+    persistence_sqlite::source_fjall::configure_source_identity(&connection, "source-linux")
+        .expect("configure source identity");
+    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &db_path)
+        .expect("configure source storage");
     connection
         .execute(
             "INSERT INTO data_sources
@@ -189,7 +216,185 @@ fn source_connection() -> rusqlite::Connection {
             [],
         )
         .expect("register source database owner");
-    connection
+    let store = persistence_fjall::open_shared_source_store(
+        source_dir.join("source.fjall"),
+        persistence_fjall::DatabaseConfig::default(),
+    )
+    .expect("open source store");
+    persistence_fjall::seal_source_generation(&store, "source-linux", "fixture", &"a".repeat(64))
+        .expect("seal fixture generation");
+    drop(store);
+    SourceFixture {
+        _root: root,
+        connection,
+    }
+}
+
+fn native_files(connection: &Connection) -> Vec<Artifact> {
+    ArtifactRepo::new(connection)
+        .list_by_family(None)
+        .expect("list native artifacts")
+}
+
+fn native_events(connection: &Connection) -> Vec<TimelineEvent> {
+    TimelineRepo::new(connection)
+        .query_filtered(0, 10_000, None, None, None)
+        .expect("list native timeline")
+}
+
+fn native_artifact_ids(connection: &Connection) -> Vec<String> {
+    let mut ids = native_files(connection)
+        .into_iter()
+        .map(|artifact| artifact.id.0)
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids
+}
+
+fn native_event_ids(connection: &Connection) -> Vec<String> {
+    let mut ids = native_events(connection)
+        .into_iter()
+        .map(|event| event.id.0)
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids
+}
+
+fn native_event_exists(connection: &Connection, id: &str) -> bool {
+    let store = persistence_sqlite::source_fjall::open_store(connection)
+        .expect("open source store")
+        .expect("configured source store");
+    let source_id = persistence_sqlite::source_fjall::source_id(connection)
+        .expect("read source identity")
+        .expect("source identity");
+    let repository = persistence_fjall::TimelineRecordStore::from_source_store((*store).clone());
+    repository
+        .get(&repository.read_snapshot(), &source_id, id)
+        .expect("read native timeline event")
+        .is_some()
+}
+
+fn native_artifact_exists(connection: &Connection, id: &str) -> bool {
+    let store = persistence_sqlite::source_fjall::open_store(connection)
+        .expect("open source store")
+        .expect("configured source store");
+    let source_id = persistence_sqlite::source_fjall::source_id(connection)
+        .expect("read source identity")
+        .expect("source identity");
+    let repository = persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+    repository
+        .get(&repository.read_snapshot(), &source_id, id)
+        .expect("read native artifact")
+        .is_some()
+}
+
+fn tamper_native_artifact(connection: &Connection, artifact_id: &str) {
+    let mut artifact = native_files(connection)
+        .into_iter()
+        .find(|artifact| artifact.id.0 == artifact_id)
+        .expect("find native artifact");
+    artifact.summary = "tampered".to_string();
+    ArtifactRepo::new(connection)
+        .insert_batch(&[artifact], "case-1", "source-linux")
+        .expect("tamper native artifact");
+}
+
+fn inject_corrupt_timeline(connection: &Connection) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+        .expect("open source store")
+        .expect("configured source store");
+    let record_key = persistence_fjall::encode_key(
+        "timeline.record",
+        &[
+            persistence_fjall::KeyPart::Text("source-linux".to_string()),
+            persistence_fjall::KeyPart::Text("corrupt-event".to_string()),
+        ],
+    )
+    .expect("encode corrupt event key");
+    let timestamp = native_events(connection)
+        .into_iter()
+        .next()
+        .expect("fixture has an existing event")
+        .timestamp;
+    let sort_value = (timestamp.timestamp_micros() as u64) ^ (1_u64 << 63);
+    let source_key = persistence_fjall::encode_key(
+        "timeline.source",
+        &[
+            persistence_fjall::KeyPart::Text("source-linux".to_string()),
+            persistence_fjall::KeyPart::InverseU64(sort_value),
+            persistence_fjall::KeyPart::Text("corrupt-event".to_string()),
+        ],
+    )
+    .expect("encode corrupt event source index");
+    store
+        .database()
+        .write_batch(
+            &[
+                persistence_fjall::WriteAction::Put {
+                    keyspace: persistence_fjall::KeyspaceName::TimelineRecords,
+                    key: record_key.clone(),
+                    value: b"corrupt".to_vec(),
+                },
+                persistence_fjall::WriteAction::Put {
+                    keyspace: persistence_fjall::KeyspaceName::TimelineIndexes,
+                    key: source_key,
+                    value: record_key,
+                },
+            ],
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .expect("inject corrupt timeline record");
+}
+
+fn insert_file(connection: &Connection, file: FileEntry) {
+    FileRepo::new(connection)
+        .insert_batch(&[file])
+        .expect("insert native file catalog entry");
+    reseal_native_generation(connection);
+}
+
+fn insert_partitioned_file(connection: &Connection, file: FileEntry, partition: usize) {
+    persistence_sqlite::source_fjall::upsert_files_with_partition(connection, &[file], partition)
+        .expect("insert partitioned native file catalog entry");
+    reseal_native_generation(connection);
+}
+
+fn reseal_native_generation(connection: &Connection) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+        .expect("open source store")
+        .expect("configured source store");
+    persistence_fjall::replace_source_generation(
+        &store,
+        "source-linux",
+        "fixture-reseal",
+        &"a".repeat(64),
+    )
+    .expect("reseal fixture generation");
+}
+
+fn file_entry(id: &str, path: &str, size: u64, encrypted: bool) -> FileEntry {
+    FileEntry {
+        id: FileEntryId(id.to_string()),
+        parent_id: None,
+        data_source_id: DataSourceId("source-linux".to_string()),
+        path: path.to_string(),
+        name: path.rsplit('/').next().unwrap_or(path).to_string(),
+        entry_type: EntryType::File,
+        size: Some(size),
+        ext: path.rsplit_once('.').map(|(_, ext)| ext.to_string()),
+        deleted: false,
+        hidden: false,
+        system: false,
+        encrypted,
+        read_only: false,
+        archive: false,
+        unix_mode: None,
+        created_at: None,
+        modified_at: None,
+        accessed_at: None,
+        changed_at: None,
+        hash_sha256: None,
+    }
 }
 
 #[test]
@@ -245,16 +450,14 @@ fn output_replacement_commits_artifacts_timeline_and_checkpoint_atomically() {
     persist_outputs(&connection, "case-1", &mut state).expect("replace analysis outputs");
 
     assert_eq!(
-        connection
-            .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row
-                .get::<_, i64>(0))
+        ArtifactRepo::new(&connection)
+            .count()
             .expect("count artifacts"),
         1
     );
     assert_eq!(
-        connection
-            .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row
-                .get::<_, i64>(0))
+        TimelineRepo::new(&connection)
+            .count()
             .expect("count timeline"),
         1
     );
@@ -298,16 +501,7 @@ fn output_replacement_rolls_back_when_timeline_insert_fails() {
             "case-1",
         )
         .expect("insert old event");
-    connection
-        .execute_batch(
-            "CREATE TRIGGER reject_new_timeline
-             BEFORE INSERT ON timeline_events
-             WHEN NEW.id = 'new-event'
-             BEGIN
-                 SELECT RAISE(ABORT, 'injected timeline failure');
-             END;",
-        )
-        .expect("install timeline failure");
+    inject_corrupt_timeline(&connection);
     let capability = crate::analysis_service::capability::find_capability("LinuxWebServices")
         .expect("web capability");
     let mut state = ExtractionState::new(&[capability]);
@@ -335,19 +529,10 @@ fn output_replacement_rolls_back_when_timeline_insert_fails() {
         .expect_err("timeline failure must roll back the replacement");
 
     assert_eq!(
-        connection
-            .query_row("SELECT id FROM artifacts", [], |row| row
-                .get::<_, String>(0))
-            .expect("load retained artifact"),
-        "old-artifact"
+        native_artifact_ids(&connection),
+        vec!["old-artifact".to_string()]
     );
-    assert_eq!(
-        connection
-            .query_row("SELECT id FROM timeline_events", [], |row| row
-                .get::<_, String>(0))
-            .expect("load retained event"),
-        "old-event"
-    );
+    assert!(native_event_exists(&connection, "old-event"));
     assert_eq!(
         connection
             .query_row(
@@ -422,19 +607,10 @@ fn output_replacement_rolls_back_when_artifact_source_attribution_conflicts() {
     assert!(error.to_string().contains("source-windows"));
     assert!(error.to_string().contains("source-linux"));
     assert_eq!(
-        connection
-            .query_row("SELECT id FROM artifacts", [], |row| row
-                .get::<_, String>(0))
-            .expect("load retained artifact"),
-        "old-artifact"
+        native_artifact_ids(&connection),
+        vec!["old-artifact".to_string()]
     );
-    assert_eq!(
-        connection
-            .query_row("SELECT id FROM timeline_events", [], |row| row
-                .get::<_, String>(0))
-            .expect("load retained event"),
-        "old-event"
-    );
+    assert_eq!(native_event_ids(&connection), vec!["old-event".to_string()]);
     assert_eq!(
         connection
             .query_row(
@@ -486,12 +662,7 @@ fn complete_checkpoint_is_ignored_after_persisted_output_tampering() {
         .expect("validate complete checkpoint")
         .contains_key(&key));
 
-    connection
-        .execute(
-            "UPDATE artifacts SET summary = 'tampered' WHERE id = 'new-artifact'",
-            [],
-        )
-        .expect("tamper persisted artifact");
+    tamper_native_artifact(&connection, "new-artifact");
 
     assert!(!existing_complete_scan_keys(&connection)
         .expect("revalidate complete checkpoint")
@@ -547,18 +718,10 @@ fn complete_checkpoint_is_ignored_when_stale_producer_output_remains() {
 #[test]
 fn internal_execution_reports_retryable_read_failures_without_checkpointing() {
     let connection = source_connection();
-    connection
-        .execute(
-            "INSERT INTO file_entries (
-                id, parent_id, data_source_id, path, name, entry_type, size,
-                deleted, hidden, system, encrypted
-             ) VALUES (
-                'read-failure', NULL, 'source-linux', 'var/www/html/index.php',
-                'index.php', 'file', 128, 0, 0, 0, 0
-             )",
-            [],
-        )
-        .expect("insert analysis candidate");
+    insert_file(
+        &connection,
+        file_entry("read-failure", "var/www/html/index.php", 128, false),
+    );
     let cancel = AtomicBool::new(false);
     let mut updates = Vec::new();
     let mut collect_progress = |update: super::ExtractionProgressUpdate| updates.push(update);
@@ -605,18 +768,8 @@ fn insert_rbd_web_candidate(connection: &rusqlite::Connection, encrypted: bool) 
             [],
         )
         .expect("mark source as derived RBD");
-    connection
-        .execute(
-            "INSERT INTO file_entries (
-                id, parent_id, data_source_id, path, name, entry_type, size,
-                deleted, hidden, system, encrypted, partition_index
-             ) VALUES (
-                'rbd-web', NULL, 'source-linux', 'var/www/html/index.php',
-                'index.php', 'file', 128, 0, 0, 0, ?1, 2
-             )",
-            rusqlite::params![if encrypted { 1_i64 } else { 0_i64 }],
-        )
-        .expect("insert RBD analysis candidate");
+    let entry = file_entry("rbd-web", "var/www/html/index.php", 128, encrypted);
+    insert_partitioned_file(connection, entry, 2);
 }
 
 #[test]
@@ -675,20 +828,8 @@ fn encrypted_rbd_candidate_never_opens_provider_and_removes_stale_outputs() {
         .warnings
         .iter()
         .all(|warning| !warning.contains("var/www/html/index.php")));
-    assert_eq!(
-        connection
-            .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row
-                .get::<_, i64>(0))
-            .expect("count artifacts"),
-        0
-    );
-    assert_eq!(
-        connection
-            .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row
-                .get::<_, i64>(0))
-            .expect("count timeline events"),
-        0
-    );
+    assert_eq!(ArtifactRepo::new(&connection).count().unwrap(), 0);
+    assert_eq!(TimelineRepo::new(&connection).count().unwrap(), 0);
 }
 
 #[test]
@@ -730,19 +871,13 @@ fn encrypted_rbd_event_log_never_opens_seekable_provider() {
             [],
         )
         .expect("mark source as derived RBD");
-    connection
-        .execute(
-            "INSERT INTO file_entries (
-                id, parent_id, data_source_id, path, name, entry_type, size,
-                deleted, hidden, system, encrypted, partition_index
-             ) VALUES (
-                'rbd-evtx', NULL, 'source-linux',
-                'Windows/System32/winevt/Logs/Security.evtx', 'Security.evtx',
-                'file', 4096, 0, 0, 0, 1, 2
-             )",
-            [],
-        )
-        .expect("insert encrypted RBD event log");
+    let entry = file_entry(
+        "rbd-evtx",
+        "Windows/System32/winevt/Logs/Security.evtx",
+        4096,
+        true,
+    );
+    insert_partitioned_file(&connection, entry, 2);
     let cancel = AtomicBool::new(false);
     let mut ignore_progress = |_update: super::ExtractionProgressUpdate| {};
     let mut provider_calls = 0usize;
@@ -853,16 +988,7 @@ fn seekable_evtx_insert_failure_rolls_back_output_replacement() {
             "case-1",
         )
         .expect("insert previous EVTX event");
-    connection
-        .execute_batch(
-            "CREATE TRIGGER reject_evtx_artifact
-             BEFORE INSERT ON artifacts
-             WHEN NEW.extractor_id LIKE 'evtx.%'
-             BEGIN
-                 SELECT RAISE(ABORT, 'injected EVTX persistence failure');
-             END;",
-        )
-        .expect("install EVTX failure trigger");
+    inject_corrupt_timeline(&connection);
     let cancel = AtomicBool::new(false);
     let mut ignore_progress = |_update: super::ExtractionProgressUpdate| {};
 
@@ -884,14 +1010,8 @@ fn seekable_evtx_insert_failure_rolls_back_output_replacement() {
         "injected batch failure must abort extraction"
     );
 
-    let artifact_id: String = connection
-        .query_row("SELECT id FROM artifacts", [], |row| row.get(0))
-        .expect("load retained EVTX artifact");
-    let event_id: String = connection
-        .query_row("SELECT id FROM timeline_events", [], |row| row.get(0))
-        .expect("load retained EVTX event");
-    assert_eq!(artifact_id, "old-evtx-artifact");
-    assert_eq!(event_id, "old-evtx-event");
+    assert!(native_artifact_exists(&connection, "old-evtx-artifact"));
+    assert!(native_event_exists(&connection, "old-evtx-event"));
 }
 
 #[test]
@@ -958,43 +1078,26 @@ fn seekable_evtx_reparses_checkpoint_from_before_ntfs_valid_data_fix() {
         first.dto.timeline_event_count
     );
     assert_eq!(
-        connection
-            .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row
-                .get::<_, u64>(0))
-            .unwrap(),
+        ArtifactRepo::new(&connection).count().unwrap(),
         first.dto.artifact_count
     );
 }
 
 fn insert_event_log_candidate(connection: &Connection, size: u64) {
-    connection
-        .execute(
-            "INSERT INTO file_entries (
-                id, parent_id, data_source_id, path, name, entry_type, size,
-                deleted, hidden, system, encrypted, partition_index
-             ) VALUES (
-                'system-evtx', NULL, 'source-linux',
-                'Windows/System32/winevt/Logs/System.evtx', 'System.evtx',
-                'file', ?1, 0, 0, 0, 0, 2
-             )",
-            [i64::try_from(size).expect("fixture size fits SQLite integer")],
-        )
-        .expect("insert EVTX candidate");
+    let entry = file_entry(
+        "system-evtx",
+        "Windows/System32/winevt/Logs/System.evtx",
+        size,
+        false,
+    );
+    insert_partitioned_file(connection, entry, 2);
 }
 
 fn insert_plugin_shaped_candidate(connection: &Connection) {
-    connection
-        .execute(
-            "INSERT INTO file_entries (
-                id, parent_id, data_source_id, path, name, entry_type, size,
-                deleted, hidden, system, encrypted
-             ) VALUES (
-                'plugin-mfx', NULL, 'source-linux',
-                '[P0]/Evidence/FOO.MFX', 'FOO.MFX', 'file', 64, 0, 0, 0, 0
-             )",
-            [],
-        )
-        .expect("insert plugin-shaped candidate");
+    insert_file(
+        connection,
+        file_entry("plugin-mfx", "[P0]/Evidence/FOO.MFX", 64, false),
+    );
 }
 
 #[test]
@@ -1030,13 +1133,7 @@ fn plugin_capability_stays_zero_overhead_without_loaded_plugins() {
     assert!(execution.plugin_loads.is_empty());
     assert!(execution.plugin_rejections.is_empty());
     assert!(execution.plugin_extract_failures.is_empty());
-    assert_eq!(
-        connection
-            .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row
-                .get::<_, i64>(0))
-            .expect("count artifacts"),
-        0
-    );
+    assert_eq!(ArtifactRepo::new(&connection).count().unwrap(), 0);
 }
 
 #[test]
@@ -1129,14 +1226,7 @@ fn plugin_reextraction_replaces_outputs_by_exact_extractor_id() {
     );
     persist_outputs(&connection, "case-1", &mut state).expect("persist plugin outputs");
 
-    let mut artifact_ids = connection
-        .prepare("SELECT id FROM artifacts ORDER BY id ASC")
-        .expect("prepare artifact listing")
-        .query_map([], |row| row.get::<_, String>(0))
-        .expect("list artifacts")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("collect artifact ids");
-    artifact_ids.sort();
+    let artifact_ids = native_artifact_ids(&connection);
     assert_eq!(
         artifact_ids,
         vec![
@@ -1146,13 +1236,7 @@ fn plugin_reextraction_replaces_outputs_by_exact_extractor_id() {
         ],
         "exact-id replacement drops only this source's outputs by this plugin"
     );
-    let event_ids = connection
-        .prepare("SELECT id FROM timeline_events ORDER BY id ASC")
-        .expect("prepare event listing")
-        .query_map([], |row| row.get::<_, String>(0))
-        .expect("list events")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("collect event ids");
+    let event_ids = native_event_ids(&connection);
     assert_eq!(event_ids, vec!["new-plugin-event".to_string()]);
 
     let checkpoint_count: i64 = connection
