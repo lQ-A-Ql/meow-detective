@@ -8,8 +8,7 @@ use super::{mapping::collect_entries, mapping::row_to_file_entry, FileRepo, FILE
 
 impl FileRepo<'_> {
     pub fn find_children(&self, parent_id: &FileEntryId) -> DbResult<Vec<FileEntry>> {
-        if let Some(mut entries) = self.fjall_entries(None)? {
-            entries.retain(|entry| entry.parent_id.as_ref() == Some(parent_id));
+        if let Some(mut entries) = self.fjall_entries_by_parent(None, Some(&parent_id.0))? {
             sort_entries(&mut entries);
             return Ok(entries);
         }
@@ -67,11 +66,8 @@ impl FileRepo<'_> {
     }
 
     pub fn count_children(&self, parent_id: &FileEntryId) -> DbResult<u64> {
-        if let Some(entries) = self.fjall_entries(None)? {
-            return Ok(entries
-                .iter()
-                .filter(|entry| entry.parent_id.as_ref() == Some(parent_id))
-                .count() as u64);
+        if let Some(entries) = self.fjall_entries_by_parent(None, Some(&parent_id.0))? {
+            return Ok(entries.len() as u64);
         }
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1",
@@ -82,8 +78,7 @@ impl FileRepo<'_> {
     }
 
     pub fn find_root_entries(&self) -> DbResult<Vec<FileEntry>> {
-        if let Some(mut entries) = self.fjall_entries(None)? {
-            entries.retain(|entry| entry.parent_id.is_none());
+        if let Some(mut entries) = self.fjall_entries_by_parent(None, None)? {
             sort_entries(&mut entries);
             return Ok(entries);
         }
@@ -96,6 +91,14 @@ impl FileRepo<'_> {
     }
 
     pub fn find_root_entries_page(&self, offset: u64, limit: u32) -> DbResult<Vec<FileEntry>> {
+        if let Some(mut entries) = self.fjall_entries_by_parent(None, None)? {
+            sort_entries(&mut entries);
+            return Ok(entries
+                .into_iter()
+                .skip(offset as usize)
+                .take(limit as usize)
+                .collect());
+        }
         let sql = format!(
             "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC, id ASC LIMIT ?1 OFFSET ?2",
         );
@@ -122,11 +125,8 @@ impl FileRepo<'_> {
     }
 
     pub fn count_root_entries(&self) -> DbResult<u64> {
-        if let Some(entries) = self.fjall_entries(None)? {
-            return Ok(entries
-                .iter()
-                .filter(|entry| entry.parent_id.is_none())
-                .count() as u64);
+        if let Some(entries) = self.fjall_entries_by_parent(None, None)? {
+            return Ok(entries.len() as u64);
         }
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM file_entries WHERE parent_id IS NULL",
@@ -257,6 +257,12 @@ impl FileRepo<'_> {
         parent_id: &FileEntryId,
         show_hidden: bool,
     ) -> DbResult<bool> {
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            return Ok(self
+                .find_child_directories_visible(parent_id, show_hidden)?
+                .iter()
+                .any(|entry| entry.name.bytes().any(|byte| byte.is_ascii_digit())));
+        }
         let visibility = if show_hidden {
             ""
         } else {
@@ -393,23 +399,19 @@ impl FileRepo<'_> {
         if parent_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        if let Some(entries) = self.fjall_entries(None)? {
-            let wanted = parent_ids
-                .iter()
-                .map(|id| id.0.as_str())
-                .collect::<std::collections::HashSet<_>>();
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
             let mut result = HashMap::new();
-            for entry in entries {
-                if entry.is_directory()
-                    && entry
-                        .parent_id
-                        .as_ref()
-                        .is_some_and(|id| wanted.contains(id.0.as_str()))
-                    && (!visible_only || (!entry.hidden && !entry.system))
-                {
-                    if let Some(parent) = entry.parent_id {
-                        *result.entry(parent.0).or_insert(0) += 1;
-                    }
+            for parent_id in parent_ids {
+                let count = self
+                    .fjall_entries_by_parent(None, Some(&parent_id.0))?
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|entry| {
+                        entry.is_directory() && (!visible_only || (!entry.hidden && !entry.system))
+                    })
+                    .count();
+                if count > 0 {
+                    result.insert(parent_id.0.clone(), count as i64);
                 }
             }
             return Ok(result);

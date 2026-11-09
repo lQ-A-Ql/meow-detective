@@ -24,6 +24,13 @@ impl FileRepo<'_> {
         parent_id: Option<&FileEntryId>,
         show_hidden: bool,
     ) -> DbResult<u64> {
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            let entries = match parent_id {
+                Some(parent_id) => self.find_children_visible(parent_id, show_hidden)?,
+                None => self.find_root_entries_visible(show_hidden)?,
+            };
+            return Ok(entries.len() as u64);
+        }
         let parent = if parent_id.is_some() {
             "parent_id = ?1"
         } else {
@@ -50,6 +57,20 @@ impl FileRepo<'_> {
         show_hidden: bool,
         sort_key: FileSortKey,
     ) -> DbResult<bool> {
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            let entries = match parent_id {
+                Some(parent_id) => self.find_children_visible(parent_id, show_hidden)?,
+                None => self.find_root_entries_visible(show_hidden)?,
+            };
+            return Ok(entries.iter().any(|entry| match sort_key {
+                FileSortKey::Ext => {
+                    contains_ascii_digit(&entry.name)
+                        || entry.ext.as_deref().is_some_and(contains_ascii_digit)
+                }
+                FileSortKey::Name => contains_ascii_digit(&entry.name),
+                FileSortKey::Size | FileSortKey::ModifiedAt => false,
+            }));
+        }
         let parent = if parent_id.is_some() {
             "parent_id = ?1"
         } else {
@@ -86,6 +107,21 @@ impl FileRepo<'_> {
         sort_key: FileSortKey,
         sort_direction: FileSortDirection,
     ) -> DbResult<Vec<FileEntry>> {
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            let mut entries = match parent_id {
+                Some(parent_id) => self.find_children(parent_id)?,
+                None => self.find_root_entries()?,
+            };
+            if !show_hidden {
+                entries.retain(|entry| !entry.hidden && !entry.system);
+            }
+            sort_native_entries(&mut entries, sort_key, sort_direction);
+            return Ok(entries
+                .into_iter()
+                .skip(offset as usize)
+                .take(limit as usize)
+                .collect());
+        }
         let parent = if parent_id.is_some() {
             "parent_id = ?1"
         } else {
@@ -139,5 +175,67 @@ impl FileRepo<'_> {
             None => statement.query_map(params![limit as i64, offset as i64], row_to_file_entry)?,
         };
         collect_entries(rows)
+    }
+}
+
+fn contains_ascii_digit(value: &str) -> bool {
+    value.bytes().any(|byte| byte.is_ascii_digit())
+}
+
+fn sort_native_entries(
+    entries: &mut [FileEntry],
+    sort_key: FileSortKey,
+    sort_direction: FileSortDirection,
+) {
+    entries.sort_by(|left, right| {
+        right
+            .is_directory()
+            .cmp(&left.is_directory())
+            .then_with(|| visibility_rank(left).cmp(&visibility_rank(right)))
+            .then_with(|| {
+                let ordering = match sort_key {
+                    FileSortKey::Name => left
+                        .name
+                        .to_ascii_lowercase()
+                        .cmp(&right.name.to_ascii_lowercase()),
+                    FileSortKey::Size => left
+                        .size
+                        .unwrap_or_default()
+                        .cmp(&right.size.unwrap_or_default()),
+                    FileSortKey::ModifiedAt => left.modified_at.cmp(&right.modified_at),
+                    FileSortKey::Ext => left
+                        .ext
+                        .as_deref()
+                        .unwrap_or_default()
+                        .to_ascii_lowercase()
+                        .cmp(
+                            &right
+                                .ext
+                                .as_deref()
+                                .unwrap_or_default()
+                                .to_ascii_lowercase(),
+                        ),
+                };
+                match sort_direction {
+                    FileSortDirection::Asc => ordering,
+                    FileSortDirection::Desc => ordering.reverse(),
+                }
+            })
+            .then_with(|| {
+                left.name
+                    .to_ascii_lowercase()
+                    .cmp(&right.name.to_ascii_lowercase())
+            })
+            .then_with(|| left.name.cmp(&right.name))
+            .then_with(|| left.id.0.cmp(&right.id.0))
+    });
+}
+
+fn visibility_rank(entry: &FileEntry) -> u8 {
+    match (entry.deleted, entry.hidden || entry.system) {
+        (false, false) => 0,
+        (false, true) => 1,
+        (true, false) => 2,
+        (true, true) => 3,
     }
 }

@@ -17,25 +17,23 @@ impl TimelineRepo<'_> {
         source_object_id: &str,
         parser_id: &str,
     ) -> DbResult<usize> {
-        if let Some(events) = super::fjall_events(self.conn)? {
-            let store = crate::source_fjall::open_store_for_write(self.conn)?
-                .expect("Fjall source store is configured");
-            let ids = events
-                .into_iter()
-                .filter(|event| {
-                    event.source_object_id == source_object_id
-                        && event.parser_id.as_deref() == Some(parser_id)
-                })
-                .map(|event| event.id.0)
-                .collect::<Vec<_>>();
+        if let Some(store) = crate::source_fjall::open_store_for_write(self.conn)? {
+            let source_id = crate::source_fjall::source_id(self.conn)?.ok_or_else(|| {
+                crate::connection::DbError::System("source identity is missing".into())
+            })?;
             return persistence_fjall::TimelineRecordStore::from_source_store((*store).clone())
-                .delete_batch(
-                    &crate::source_fjall::source_id(self.conn)?
-                        .expect("source identity is configured"),
-                    &ids,
+                .delete_by_source_object_where(
+                    &source_id,
+                    source_object_id,
                     persistence_fjall::PersistMode::SyncAll,
+                    |event| event.parser_id.as_deref() == Some(parser_id),
                 )
                 .map_err(|error| crate::connection::DbError::System(error.to_string()));
+        }
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            return Err(crate::connection::DbError::System(
+                "source detail storage is missing".into(),
+            ));
         }
         let deleted = self.conn.execute(
             "DELETE FROM timeline_events

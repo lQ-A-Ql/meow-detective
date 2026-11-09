@@ -73,6 +73,49 @@ impl<'a> FileRepo<'a> {
         }
         Ok(Some(entries))
     }
+
+    pub(super) fn fjall_entries_by_parent(
+        &self,
+        source_id: Option<&str>,
+        parent_id: Option<&str>,
+    ) -> DbResult<Option<Vec<FileEntry>>> {
+        let Some(configured_source_id) = crate::source_fjall::source_id(self.conn)? else {
+            return Ok(None);
+        };
+        let source_id = source_id.unwrap_or(&configured_source_id);
+        if source_id != configured_source_id {
+            return Err(crate::DbError::System(
+                "source catalog owner mismatch".into(),
+            ));
+        }
+        let store = crate::source_fjall::require_source_store(self.conn)?;
+        let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+        let snapshot = repository.read_snapshot();
+        let mut cursor = None;
+        let mut entries = Vec::new();
+        loop {
+            crate::read_operation::ensure_active()?;
+            let page = repository
+                .list_by_parent(
+                    &snapshot,
+                    source_id,
+                    parent_id,
+                    cursor.as_deref(),
+                    persistence_fjall::ScanDirection::Forward,
+                    512,
+                )
+                .map_err(|error| crate::DbError::System(error.to_string()))?;
+            entries.extend(
+                page.records
+                    .into_iter()
+                    .map(crate::source_fjall::file_entry),
+            );
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                return Ok(Some(entries));
+            }
+        }
+    }
 }
 
 #[cfg(test)]

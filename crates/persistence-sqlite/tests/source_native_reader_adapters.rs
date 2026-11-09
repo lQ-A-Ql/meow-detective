@@ -164,3 +164,106 @@ fn native_reader_adapters_use_source_catalog_and_native_details() {
         64
     );
 }
+
+#[test]
+fn native_artifact_cursor_and_family_count_read_created_indexes() {
+    let (_root, connection) = setup();
+    let mut newest = artifact("newest", "hosts", "/etc/hosts", "2026-01-03T00:00:00Z");
+    newest.created_at = "2026-01-03T00:00:00Z".parse().unwrap();
+    let mut middle = artifact("middle", "hosts", "/etc/hosts", "2026-01-02T00:00:00Z");
+    middle.created_at = "2026-01-02T00:00:00Z".parse().unwrap();
+    let mut oldest = artifact("oldest", "hosts", "/etc/hosts", "2026-01-01T00:00:00Z");
+    oldest.created_at = "2026-01-01T00:00:00Z".parse().unwrap();
+    let repository = ArtifactRepo::new(&connection);
+    repository
+        .insert_batch(&[oldest, middle, newest], "case-1", SOURCE)
+        .unwrap();
+
+    let snapshot = repository.snapshot_high_water().unwrap();
+    assert_eq!(
+        repository
+            .count_for_family_at_snapshot(Some("LinuxSystemConfig"), snapshot)
+            .unwrap(),
+        3
+    );
+    let first = repository
+        .list_by_family_after_at_snapshot(Some("LinuxSystemConfig"), None, snapshot, 2)
+        .unwrap();
+    assert_eq!(
+        first
+            .iter()
+            .map(|row| row.sort_key.artifact_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["newest", "middle"]
+    );
+    let second = repository
+        .list_by_family_after_at_snapshot(
+            Some("LinuxSystemConfig"),
+            Some(&first.last().unwrap().sort_key),
+            snapshot,
+            2,
+        )
+        .unwrap();
+    assert_eq!(
+        second
+            .iter()
+            .map(|row| row.sort_key.artifact_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["oldest"]
+    );
+}
+
+#[test]
+fn native_timeline_queries_stream_time_and_type_indexes() {
+    let (_root, connection) = setup();
+    let mut newest = timeline("newest", "object");
+    newest.timestamp = "2026-01-03T00:00:00Z".parse().unwrap();
+    let mut middle = timeline("middle", "object");
+    middle.timestamp = "2026-01-02T00:00:00Z".parse().unwrap();
+    middle.event_type = "LOGON".into();
+    let mut oldest = timeline("oldest", "object");
+    oldest.timestamp = "2026-01-01T00:00:00Z".parse().unwrap();
+    TimelineRepo::new(&connection)
+        .insert_batch_with_case(&[oldest, middle, newest], "case-1")
+        .unwrap();
+    let repository = TimelineRepo::new(&connection);
+
+    assert_eq!(
+        repository
+            .query_filtered(
+                0,
+                2,
+                Some("2026-01-01T00:00:00Z"),
+                Some("2026-01-03T00:00:00Z"),
+                None,
+            )
+            .unwrap()
+            .into_iter()
+            .map(|event| event.id.0)
+            .collect::<Vec<_>>(),
+        vec!["newest", "middle"]
+    );
+    assert_eq!(
+        repository
+            .query_filtered(0, 10, None, None, Some("FILE_MODIFIED"),)
+            .unwrap()
+            .into_iter()
+            .map(|event| event.id.0)
+            .collect::<Vec<_>>(),
+        vec!["newest", "oldest"]
+    );
+    assert_eq!(
+        repository
+            .count_filtered(
+                Some("2026-01-02T00:00:00Z"),
+                Some("2026-01-03T00:00:00Z"),
+                None,
+            )
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        repository.find_by_id("middle").unwrap().unwrap().id.0,
+        "middle"
+    );
+}

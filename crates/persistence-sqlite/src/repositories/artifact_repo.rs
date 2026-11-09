@@ -3,6 +3,7 @@ use crate::repositories::source_meta_repo::{SourceMetaRepo, ARTIFACT_CURSOR_REVI
 use crate::sql_builder::ClauseBuilder;
 use domain::Artifact;
 use rusqlite::{params, Connection};
+mod analysis_outputs;
 mod carving;
 mod mapping;
 mod persistence;
@@ -33,214 +34,6 @@ pub struct ArtifactRepo<'a> {
 impl<'a> ArtifactRepo<'a> {
     pub fn new(conn: &'a Connection) -> Self {
         Self { conn }
-    }
-
-    pub fn delete_analysis_outputs_in_transaction(
-        &self,
-        source_object_id: &str,
-        producer_prefix: &str,
-    ) -> DbResult<usize> {
-        if let Some(records) = fjall_records(self.conn)? {
-            let store = crate::source_fjall::open_store_for_write(self.conn)?
-                .expect("Fjall source store is configured");
-            let ids = records
-                .into_iter()
-                .filter(|record| {
-                    record.source_object_id.as_deref() == Some(source_object_id)
-                        && record
-                            .attrs
-                            .get("extractorId")
-                            .and_then(serde_json::Value::as_str)
-                            .is_some_and(|id| id.starts_with(producer_prefix))
-                })
-                .map(|record| record.id)
-                .collect::<Vec<_>>();
-            return persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone())
-                .delete_batch(
-                    &crate::source_fjall::source_id(self.conn)?
-                        .expect("source identity is configured"),
-                    &ids,
-                    persistence_fjall::PersistMode::SyncAll,
-                )
-                .map_err(|error| crate::connection::DbError::System(error.to_string()));
-        }
-        let deleted = self.conn.execute(
-            "DELETE FROM artifacts
-                 WHERE source_object_id = ?1
-                   AND extractor_id LIKE ?2",
-            params![source_object_id, format!("{producer_prefix}%")],
-        )?;
-        if deleted > 0 {
-            SourceMetaRepo::new(self.conn).bump_revision(ARTIFACT_CURSOR_REVISION_KEY)?;
-        }
-        Ok(deleted)
-    }
-
-    /// Delete one source's outputs produced by one exact extractor id. Plugin
-    /// artifacts carry the bare plugin id (no shared prefix), so plugin
-    /// re-extraction replaces outputs by exact match instead of `LIKE`.
-    pub fn delete_analysis_outputs_by_extractor_in_transaction(
-        &self,
-        source_object_id: &str,
-        extractor_id: &str,
-    ) -> DbResult<usize> {
-        if let Some(records) = fjall_records(self.conn)? {
-            let store = crate::source_fjall::open_store_for_write(self.conn)?
-                .expect("Fjall source store is configured");
-            let ids = records
-                .into_iter()
-                .filter(|record| {
-                    record.source_object_id.as_deref() == Some(source_object_id)
-                        && record
-                            .attrs
-                            .get("extractorId")
-                            .and_then(serde_json::Value::as_str)
-                            == Some(extractor_id)
-                })
-                .map(|record| record.id)
-                .collect::<Vec<_>>();
-            return persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone())
-                .delete_batch(
-                    &crate::source_fjall::source_id(self.conn)?
-                        .expect("source identity is configured"),
-                    &ids,
-                    persistence_fjall::PersistMode::SyncAll,
-                )
-                .map_err(|error| crate::connection::DbError::System(error.to_string()));
-        }
-        let deleted = self.conn.execute(
-            "DELETE FROM artifacts
-                 WHERE source_object_id = ?1
-                   AND extractor_id = ?2",
-            params![source_object_id, extractor_id],
-        )?;
-        if deleted > 0 {
-            SourceMetaRepo::new(self.conn).bump_revision(ARTIFACT_CURSOR_REVISION_KEY)?;
-        }
-        Ok(deleted)
-    }
-
-    pub fn list_analysis_outputs(
-        &self,
-        source_object_id: &str,
-        producer_prefix: &str,
-    ) -> DbResult<Vec<Artifact>> {
-        if let Some(records) = fjall_records(self.conn)? {
-            return records
-                .into_iter()
-                .filter(|record| {
-                    record.source_object_id.as_deref() == Some(source_object_id)
-                        && record
-                            .attrs
-                            .get("extractorId")
-                            .and_then(serde_json::Value::as_str)
-                            .is_some_and(|id| id.starts_with(producer_prefix))
-                })
-                .map(visiting::decode)
-                .collect::<DbResult<Vec<_>>>();
-        }
-        let mut statement = self.conn.prepare(
-            "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version,
-                    confidence, source_attribution, title, summary, attrs, created_at
-             FROM artifacts
-             WHERE source_object_id = ?1
-               AND extractor_id LIKE ?2
-             ORDER BY rowid ASC",
-        )?;
-        let rows = statement.query_map(
-            params![source_object_id, format!("{producer_prefix}%")],
-            row_to_artifact,
-        )?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-    }
-
-    pub fn count_analysis_outputs(
-        &self,
-        source_object_id: &str,
-        producer_prefix: &str,
-    ) -> DbResult<u64> {
-        if let Some(records) = fjall_records(self.conn)? {
-            return Ok(records
-                .iter()
-                .filter(|record| {
-                    record.source_object_id.as_deref() == Some(source_object_id)
-                        && record
-                            .attrs
-                            .get("extractorId")
-                            .and_then(serde_json::Value::as_str)
-                            .is_some_and(|id| id.starts_with(producer_prefix))
-                })
-                .count() as u64);
-        }
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*)
-             FROM artifacts
-             WHERE source_object_id = ?1
-               AND extractor_id LIKE ?2",
-            params![source_object_id, format!("{producer_prefix}%")],
-            |row| row.get(0),
-        )?;
-        Ok(count.max(0) as u64)
-    }
-
-    pub fn list_analysis_outputs_for_prefixes(
-        &self,
-        producer_prefixes: &[&str],
-    ) -> DbResult<Vec<Artifact>> {
-        if producer_prefixes.is_empty() {
-            return Ok(Vec::new());
-        }
-        let predicates = (1..=producer_prefixes.len())
-            .map(|index| format!("extractor_id LIKE ?{index}"))
-            .collect::<Vec<_>>()
-            .join(" OR ");
-        let sql = format!(
-            "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version,
-                    confidence, source_attribution, title, summary, attrs, created_at
-             FROM artifacts
-             WHERE source_object_id IS NOT NULL
-               AND extractor_id IS NOT NULL
-               AND ({predicates})
-             ORDER BY rowid ASC"
-        );
-        let patterns = producer_prefixes
-            .iter()
-            .map(|prefix| format!("{prefix}%"))
-            .collect::<Vec<_>>();
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(rusqlite::params_from_iter(patterns), row_to_artifact)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-    }
-
-    pub fn list_analysis_outputs_for_sources(
-        &self,
-        source_object_ids: &[&str],
-        producer_prefix: &str,
-    ) -> DbResult<Vec<Artifact>> {
-        if source_object_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let placeholders = (1..=source_object_ids.len())
-            .map(|index| format!("?{index}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let prefix_parameter = source_object_ids.len() + 1;
-        let sql = format!(
-            "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version,
-                    confidence, source_attribution, title, summary, attrs, created_at
-             FROM artifacts
-             WHERE source_object_id IN ({placeholders})
-               AND extractor_id LIKE ?{prefix_parameter}
-             ORDER BY source_object_id ASC, rowid ASC"
-        );
-        let mut parameters = source_object_ids
-            .iter()
-            .map(|source_id| (*source_id).to_string())
-            .collect::<Vec<_>>();
-        parameters.push(format!("{producer_prefix}%"));
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(rusqlite::params_from_iter(parameters), row_to_artifact)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     pub fn list_by_family(&self, family: Option<&str>) -> DbResult<Vec<Artifact>> {
@@ -289,6 +82,43 @@ impl<'a> ArtifactRepo<'a> {
         snapshot_high_water: Option<i64>,
         limit: u32,
     ) -> DbResult<Vec<ArtifactCursorRow>> {
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            let source_id = crate::source_fjall::source_id(self.conn)?
+                .ok_or_else(|| crate::DbError::System("source identity is missing".into()))?;
+            let repository =
+                persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+            let snapshot = repository.read_snapshot();
+            let page = repository
+                .list_by_created_order(
+                    &snapshot,
+                    &source_id,
+                    family,
+                    after.map(|key| (key.created_at.as_str(), key.artifact_id.as_str())),
+                    limit as usize,
+                )
+                .map_err(|error| crate::DbError::System(error.to_string()))?;
+            return page
+                .records
+                .into_iter()
+                .map(|record| {
+                    let artifact = visiting::decode(record)?;
+                    let created_at = artifact.created_at.to_rfc3339();
+                    let artifact_id = artifact.id.0.clone();
+                    Ok(ArtifactCursorRow {
+                        artifact,
+                        sort_key: ArtifactSortKey {
+                            created_at,
+                            artifact_id,
+                        },
+                    })
+                })
+                .collect();
+        }
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            return Err(crate::DbError::System(
+                "source detail storage is missing".into(),
+            ));
+        }
         let mut builder = ClauseBuilder::new();
         if let Some(family) = family {
             builder.push_eq("artifact_type", family.to_string());
@@ -355,6 +185,30 @@ impl<'a> ArtifactRepo<'a> {
         family: Option<&str>,
         snapshot_high_water: Option<i64>,
     ) -> DbResult<u64> {
+        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+            let source_id = crate::source_fjall::source_id(self.conn)?
+                .ok_or_else(|| crate::DbError::System("source identity is missing".into()))?;
+            let repository =
+                persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+            let snapshot = repository.read_snapshot();
+            return family.map_or_else(
+                || {
+                    repository
+                        .count(&snapshot, Some(&source_id))
+                        .map_err(|error| crate::DbError::System(error.to_string()))
+                },
+                |family| {
+                    repository
+                        .count_by_type(&snapshot, &source_id, family)
+                        .map_err(|error| crate::DbError::System(error.to_string()))
+                },
+            );
+        }
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            return Err(crate::DbError::System(
+                "source detail storage is missing".into(),
+            ));
+        }
         let mut builder = ClauseBuilder::new();
         if let Some(family) = family {
             builder.push_eq("artifact_type", family.to_string());
