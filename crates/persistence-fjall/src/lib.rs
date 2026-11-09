@@ -51,5 +51,6 @@ pub use source_generation::{
 };
 pub use source_store::{open_shared_source_store, SourceStore};
 pub use timeline::{
-    decode_timestamp_desc, encode_timestamp_desc, TimelinePage, TimelineRecord, TimelineRecordStore,
+    decode_timestamp_desc, encode_timestamp_desc, TimelinePage, TimelineRecord,
+    TimelineRecordStore, TimelineStreamError,
 };

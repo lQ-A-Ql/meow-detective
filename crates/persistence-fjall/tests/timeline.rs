@@ -1,7 +1,7 @@
 use chrono::{DateTime, TimeZone, Utc};
 use persistence_fjall::{
-    decode_timestamp_desc, encode_timestamp_desc, DatabaseConfig, PersistMode, ScanDirection,
-    TimelineRecord, TimelineRecordStore,
+    decode_timestamp_desc, encode_timestamp_desc, DatabaseConfig, FjallStorageError, PersistMode,
+    ScanDirection, TimelineRecord, TimelineRecordStore,
 };
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -89,6 +89,104 @@ fn replacement_commits_records_counts_indexes_and_revision_together() {
         1
     );
     assert_eq!(store.cursor_revision(&after).unwrap(), revision + 1);
+}
+
+#[test]
+fn streamed_replacement_rolls_back_every_batch_when_the_producer_fails() {
+    let root = tempfile::tempdir().unwrap();
+    let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let mut original = record("source", "old", "FILE_CREATED", "file", 10);
+    original.parser_id = Some("timeline.file_created".into());
+    let unrelated = record("source", "analysis", "LOGON", "file", 20);
+    store
+        .upsert_batch(&[original.clone(), unrelated.clone()], PersistMode::SyncAll)
+        .unwrap();
+    let before = store.read_snapshot();
+    let revision = store.cursor_revision(&before).unwrap();
+    let mut replacement = record("source", "new", "FILE_MODIFIED", "file", 30);
+    replacement.parser_id = Some("timeline.file_modified".into());
+    let mut calls = 0usize;
+
+    let error = store
+        .replace_by_parser_prefix_streamed(
+            "source",
+            "timeline.file_",
+            PersistMode::SyncAll,
+            move || match calls {
+                0 => {
+                    calls += 1;
+                    Ok(Some(vec![replacement.clone()]))
+                }
+                _ => Err(FjallStorageError::InvalidEnvelope(
+                    "injected producer failure".into(),
+                )),
+            },
+        )
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        persistence_fjall::TimelineStreamError::Producer(_)
+    ));
+    let after = store.read_snapshot();
+    assert_eq!(store.get(&after, "source", "old").unwrap(), Some(original));
+    assert!(store.get(&after, "source", "new").unwrap().is_none());
+    assert_eq!(
+        store.get(&after, "source", "analysis").unwrap(),
+        Some(unrelated)
+    );
+    assert_eq!(
+        store.count_by_time(&after, "source", None, None).unwrap(),
+        2
+    );
+    assert_eq!(store.cursor_revision(&after).unwrap(), revision);
+}
+
+#[test]
+fn streamed_timeline_deletion_updates_counts_and_cluster_indexes_atomically() {
+    let root = tempfile::tempdir().unwrap();
+    let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let mut first = record("source", "first", "FILE_MODIFIED", "file", 10);
+    first.description = "same cluster".into();
+    first.parser_id = Some("timeline.file_modified".into());
+    let mut second = record("source", "second", "FILE_MODIFIED", "file", 20);
+    second.description = "same cluster".into();
+    second.parser_id = Some("timeline.file_modified".into());
+    let mut keep = record("source", "keep", "FILE_MODIFIED", "file", 30);
+    keep.description = "same cluster".into();
+    keep.parser_id = Some("analysis.keep".into());
+    store
+        .upsert_batch(&[first, second, keep.clone()], PersistMode::SyncAll)
+        .unwrap();
+    let before = store.read_snapshot();
+    let revision = store.cursor_revision(&before).unwrap();
+
+    let deleted = store
+        .delete_by_source_object_where("source", "file", PersistMode::SyncAll, |record| {
+            record.parser_id.as_deref() == Some("timeline.file_modified")
+        })
+        .unwrap();
+
+    assert_eq!(deleted, 2);
+    let after = store.read_snapshot();
+    assert_eq!(store.get(&after, "source", "keep").unwrap(), Some(keep));
+    assert_eq!(
+        store
+            .count_by_type(&after, "source", "FILE_MODIFIED", None, None)
+            .unwrap(),
+        1
+    );
+    assert_eq!(store.cursor_revision(&after).unwrap(), revision + 1);
+    assert_eq!(
+        store
+            .list_by_cluster(&after, "source", None, ScanDirection::Forward, 10)
+            .unwrap()
+            .records
+            .iter()
+            .map(|record| record.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["keep"]
+    );
 }
 
 #[test]

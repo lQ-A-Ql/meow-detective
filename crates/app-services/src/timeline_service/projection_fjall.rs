@@ -80,21 +80,15 @@ pub(super) fn materialize(
     let count = if file_done {
         0
     } else {
-        let records = file_events(
+        stream_file_events(
+            &timeline,
             CatalogRecordStore::from_source_store((*store).clone()),
             &source,
             platform,
             cancel,
-        )?;
-        ensure_active(cancel)?;
-        timeline.replace_by_parser_prefix(
-            &source,
-            "timeline.file_",
-            &records,
-            PersistMode::SyncAll,
-        )?;
-        meta.mark_done(FILE_KEY, records.len() as u64, identity)?;
-        records.len() as u64
+            identity,
+            &meta,
+        )?
     };
     let events_elapsed_ms = started.elapsed().as_millis();
     let graph_started = Instant::now();
@@ -115,55 +109,95 @@ pub(super) fn materialize(
     })
 }
 
-fn file_events(
+fn stream_file_events(
+    timeline: &TimelineRecordStore,
     catalog: CatalogRecordStore,
     source: &str,
     platform: DataSourcePlatform,
     cancel: &AtomicBool,
-) -> Result<Vec<TimelineRecord>, TimelineServiceError> {
+    identity: &str,
+    meta: &persistence_sqlite::repositories::timeline_projection_repo::TimelineProjectionRepo<'_>,
+) -> Result<u64, TimelineServiceError> {
     let snapshot = catalog.read_snapshot();
     let mut cursor = None;
-    let mut events = Vec::new();
-    loop {
-        ensure_active(cancel)?;
-        let page = catalog.list_all(
-            &snapshot,
+    let mut complete = false;
+    let mut next_batch = || {
+        if complete {
+            return Ok(None);
+        }
+        loop {
+            ensure_active(cancel)?;
+            let page = catalog.list_all(
+                &snapshot,
+                source,
+                cursor.as_deref(),
+                ScanDirection::Forward,
+                512,
+            )?;
+            let mut events = Vec::new();
+            for record in page.records {
+                if eligible(&record, platform) {
+                    events.extend(file_events_for_record(record, source, platform));
+                }
+            }
+            cursor = page.next_cursor;
+            if !events.is_empty() {
+                complete = cursor.is_none();
+                return Ok(Some(events));
+            }
+            if cursor.is_none() {
+                complete = true;
+                return Ok(None);
+            }
+        }
+    };
+    let count = timeline
+        .replace_by_parser_prefix_streamed(
             source,
-            cursor.as_deref(),
-            ScanDirection::Forward,
-            512,
-        )?;
-        for record in page.records {
-            if !eligible(&record, platform) {
-                continue;
+            "timeline.file_",
+            PersistMode::SyncAll,
+            &mut next_batch,
+        )
+        .map_err(|error| match error {
+            persistence_fjall::TimelineStreamError::Storage(error) => {
+                TimelineServiceError::Storage(error)
             }
-            let file = crate::file_service::record_to_domain(record);
-            for mut event in timeline::project_file_activity(&file) {
-                event.attrs.insert(
-                    "platform".into(),
-                    serde_json::Value::String(platform.as_storage_str().into()),
-                );
-                events.push(TimelineRecord {
-                    id: event.id.0,
-                    data_source_id: source.into(),
-                    source_object_id: event.source_object_id,
-                    event_type: event.event_type,
-                    timestamp: event.timestamp,
-                    title: event.title,
-                    description: event.description,
-                    parser_id: event.parser_id,
-                    parser_version: event.parser_version,
-                    confidence: event.confidence,
-                    source_attribution: event.source_attribution,
-                    attrs: event.attrs,
-                });
+            persistence_fjall::TimelineStreamError::Producer(error) => error,
+        })?;
+    ensure_active(cancel)?;
+    meta.mark_done(FILE_KEY, count, identity)?;
+    Ok(count)
+}
+
+fn file_events_for_record(
+    record: persistence_fjall::FileEntryRecord,
+    source: &str,
+    platform: DataSourcePlatform,
+) -> Vec<TimelineRecord> {
+    let file = crate::file_service::record_to_domain(record);
+    timeline::project_file_activity(&file)
+        .into_iter()
+        .map(|mut event| {
+            event.attrs.insert(
+                "platform".into(),
+                serde_json::Value::String(platform.as_storage_str().into()),
+            );
+            TimelineRecord {
+                id: event.id.0,
+                data_source_id: source.into(),
+                source_object_id: event.source_object_id,
+                event_type: event.event_type,
+                timestamp: event.timestamp,
+                title: event.title,
+                description: event.description,
+                parser_id: event.parser_id,
+                parser_version: event.parser_version,
+                confidence: event.confidence,
+                source_attribution: event.source_attribution,
+                attrs: event.attrs,
             }
-        }
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            return Ok(events);
-        }
-    }
+        })
+        .collect()
 }
 
 fn eligible(record: &persistence_fjall::FileEntryRecord, platform: DataSourcePlatform) -> bool {

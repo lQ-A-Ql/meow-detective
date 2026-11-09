@@ -11,6 +11,8 @@ use serde_json::Value;
 use std::path::Path;
 
 mod artifact_batch;
+mod indexing;
+pub(super) use indexing::{index_deletes, index_writes};
 
 const RECORD_KIND: &str = "artifact_record";
 const SCHEMA_VERSION: u16 = 1;
@@ -200,6 +202,72 @@ impl ArtifactRecordStore {
             limit,
         )
     }
+
+    pub fn list_by_created_order(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        family: Option<&str>,
+        after: Option<(&str, &str)>,
+        limit: usize,
+    ) -> Result<ArtifactPage> {
+        let (prefix, cursor) = match family {
+            Some(family) => {
+                let prefix = encode_key(
+                    FAMILY_CREATED_INDEX,
+                    &[
+                        KeyPart::Text(source_id.to_owned()),
+                        KeyPart::Text(family.to_owned()),
+                    ],
+                )?;
+                let cursor = after
+                    .map(|(created_at, id)| {
+                        family_created_index_key(source_id, family, created_at, id)
+                    })
+                    .transpose()?;
+                (prefix, cursor)
+            }
+            None => {
+                let prefix = encode_key(CREATED_INDEX, &[KeyPart::Text(source_id.to_owned())])?;
+                let cursor = after
+                    .map(|(created_at, id)| created_index_key(source_id, created_at, id))
+                    .transpose()?;
+                (prefix, cursor)
+            }
+        };
+        self.page(
+            snapshot,
+            &prefix,
+            cursor.as_deref(),
+            ScanDirection::Forward,
+            limit,
+        )
+    }
+
+    pub fn count_by_type(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        artifact_type: &str,
+    ) -> Result<u64> {
+        let mut cursor = None;
+        let mut count = 0u64;
+        loop {
+            let page = self.list_by_type(
+                snapshot,
+                source_id,
+                artifact_type,
+                cursor.as_deref(),
+                ScanDirection::Forward,
+                512,
+            )?;
+            count = count.saturating_add(page.records.len() as u64);
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                return Ok(count);
+            }
+        }
+    }
     fn page(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -299,61 +367,4 @@ fn record_key(source_id: &str, id: &str) -> Result<Vec<u8>> {
             KeyPart::Text(id.to_owned()),
         ],
     )
-}
-fn index_writes(record: &ArtifactRecord) -> Result<Vec<WriteAction>> {
-    let value = record_key(&record.data_source_id, &record.id)?;
-    let mut actions = vec![WriteAction::Put {
-        keyspace: KeyspaceName::ArtifactIndexes,
-        key: encode_key(
-            TYPE_INDEX,
-            &[
-                KeyPart::Text(record.data_source_id.clone()),
-                KeyPart::Text(record.artifact_type.clone()),
-                KeyPart::Text(record.id.clone()),
-            ],
-        )?,
-        value: value.clone(),
-    }];
-    if let Some(source_object_id) = &record.source_object_id {
-        actions.push(WriteAction::Put {
-            keyspace: KeyspaceName::ArtifactIndexes,
-            key: encode_key(
-                OBJECT_INDEX,
-                &[
-                    KeyPart::Text(record.data_source_id.clone()),
-                    KeyPart::Text(source_object_id.clone()),
-                    KeyPart::Text(record.id.clone()),
-                ],
-            )?,
-            value,
-        });
-    }
-    Ok(actions)
-}
-fn index_deletes(record: &ArtifactRecord) -> Result<Vec<WriteAction>> {
-    let mut actions = vec![WriteAction::Delete {
-        keyspace: KeyspaceName::ArtifactIndexes,
-        key: encode_key(
-            TYPE_INDEX,
-            &[
-                KeyPart::Text(record.data_source_id.clone()),
-                KeyPart::Text(record.artifact_type.clone()),
-                KeyPart::Text(record.id.clone()),
-            ],
-        )?,
-    }];
-    if let Some(source_object_id) = &record.source_object_id {
-        actions.push(WriteAction::Delete {
-            keyspace: KeyspaceName::ArtifactIndexes,
-            key: encode_key(
-                OBJECT_INDEX,
-                &[
-                    KeyPart::Text(record.data_source_id.clone()),
-                    KeyPart::Text(source_object_id.clone()),
-                    KeyPart::Text(record.id.clone()),
-                ],
-            )?,
-        });
-    }
-    Ok(actions)
 }

@@ -91,6 +91,61 @@ fn artifact_revision_tracks_equal_count_replacement_and_rejects_invalid_batches(
 }
 
 #[test]
+fn streamed_artifact_deletion_removes_created_indexes_and_counts_atomically() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ArtifactRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let artifact = |id: &str, object: &str, created_at: &str, extractor: &str| ArtifactRecord {
+        id: id.into(),
+        data_source_id: "source".into(),
+        artifact_type: "LinuxSystemConfig".into(),
+        source_object_id: Some(object.into()),
+        content_sha256: None,
+        attrs: json!({
+            "createdAt": created_at,
+            "extractorId": extractor
+        }),
+    };
+    store
+        .upsert_batch(
+            &[
+                artifact("old-a", "file", "2026-01-03T00:00:00Z", "linux.config"),
+                artifact("old-b", "file", "2026-01-02T00:00:00Z", "linux.config"),
+                artifact("keep", "file", "2026-01-01T00:00:00Z", "analysis.keep"),
+            ],
+            PersistMode::SyncAll,
+        )
+        .unwrap();
+    let before = store.read_snapshot();
+    let revision = store.cursor_revision(&before).unwrap();
+
+    let deleted = store
+        .delete_by_source_object_where("source", "file", PersistMode::SyncAll, |record| {
+            record
+                .attrs
+                .get("extractorId")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|value| value.starts_with("linux."))
+        })
+        .unwrap();
+
+    assert_eq!(deleted, 2);
+    let after = store.read_snapshot();
+    assert_eq!(store.count(&after, Some("source")).unwrap(), 1);
+    assert_eq!(store.cursor_revision(&after).unwrap(), revision + 1);
+    let remaining = store
+        .list_by_created_order(&after, "source", Some("LinuxSystemConfig"), None, 10)
+        .unwrap()
+        .records;
+    assert_eq!(
+        remaining
+            .iter()
+            .map(|record| record.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["keep"]
+    );
+}
+
+#[test]
 fn concurrent_artifact_updates_keep_one_current_type_index() {
     let root = tempfile::tempdir().unwrap();
     let store = ArtifactRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();

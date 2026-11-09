@@ -2,7 +2,7 @@ use crate::{
     errors::{FjallStorageError, Result},
     keyspaces::{open_keyspaces, KeyspaceName},
 };
-use fjall::{Readable, SingleWriterTxKeyspace};
+use fjall::{Readable, SingleWriterTxKeyspace, SingleWriterWriteTx};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
@@ -168,12 +168,125 @@ impl SingleWriterTxDatabase {
         })
     }
 
+    pub(crate) fn write_streamed<T, E>(
+        &self,
+        mode: PersistMode,
+        plan: impl FnOnce(&SourceReadSnapshot, &mut WriteStream<'_>) -> std::result::Result<T, E>,
+    ) -> std::result::Result<(T, WriteBatchReceipt), E>
+    where
+        E: From<FjallStorageError>,
+    {
+        let transaction = self.inner.engine.write_tx().durability(Some(mode.into()));
+        let snapshot = self.read_snapshot();
+        let mut stream = WriteStream::new(transaction, &self.inner.keyspaces);
+        let value = plan(&snapshot, &mut stream)?;
+        let receipt = stream.finish().map_err(E::from)?;
+        Ok((value, receipt))
+    }
+
     pub fn read_snapshot(&self) -> SourceReadSnapshot {
         SourceReadSnapshot {
             snapshot: self.inner.engine.read_tx(),
             keyspaces: Arc::clone(&self.inner.keyspaces),
             _owner: self.clone(),
         }
+    }
+}
+
+pub(crate) struct WriteStream<'a> {
+    transaction: SingleWriterWriteTx<'a>,
+    keyspaces: &'a HashMap<KeyspaceName, SingleWriterTxKeyspace>,
+    hasher: Option<Sha256>,
+    operation_count: usize,
+}
+
+impl<'a> WriteStream<'a> {
+    fn new(
+        transaction: SingleWriterWriteTx<'a>,
+        keyspaces: &'a HashMap<KeyspaceName, SingleWriterTxKeyspace>,
+    ) -> Self {
+        Self {
+            transaction,
+            keyspaces,
+            hasher: Some(Sha256::new()),
+            operation_count: 0,
+        }
+    }
+
+    pub(crate) fn put(&mut self, keyspace: KeyspaceName, key: Vec<u8>, value: Vec<u8>) {
+        hash_action(
+            self.hasher
+                .as_mut()
+                .expect("streamed write digest is available"),
+            &WriteAction::Put {
+                keyspace,
+                key: key.clone(),
+                value: value.clone(),
+            },
+        );
+        let keyspace = self
+            .keyspaces
+            .get(&keyspace)
+            .expect("configured keyspace is present");
+        self.transaction.insert(keyspace, key, value);
+        self.operation_count += 1;
+    }
+
+    pub(crate) fn delete(&mut self, keyspace: KeyspaceName, key: Vec<u8>) {
+        hash_action(
+            self.hasher
+                .as_mut()
+                .expect("streamed write digest is available"),
+            &WriteAction::Delete {
+                keyspace,
+                key: key.clone(),
+            },
+        );
+        let keyspace = self
+            .keyspaces
+            .get(&keyspace)
+            .expect("configured keyspace is present");
+        self.transaction.remove(keyspace, key);
+        self.operation_count += 1;
+    }
+
+    pub(crate) fn get(&self, keyspace: KeyspaceName, key: &[u8]) -> Result<Option<Vec<u8>>> {
+        self.transaction
+            .get(self.keyspace(keyspace), key)
+            .map(|value| value.map(|bytes| bytes.to_vec()))
+            .map_err(Into::into)
+    }
+
+    fn keyspace(&self, name: KeyspaceName) -> &SingleWriterTxKeyspace {
+        self.keyspaces
+            .get(&name)
+            .expect("configured keyspace is present")
+    }
+
+    fn finish(mut self) -> Result<WriteBatchReceipt> {
+        let digest: [u8; 32] = self
+            .hasher
+            .take()
+            .expect("streamed write digest is available")
+            .finalize()
+            .into();
+        if self.operation_count > 0 {
+            let batches = self
+                .keyspaces
+                .get(&KeyspaceName::Batches)
+                .expect("configured keyspace is present");
+            self.transaction.insert(
+                batches,
+                [b"batch/".as_slice(), digest.as_slice()].concat(),
+                self.operation_count.to_be_bytes().to_vec(),
+            );
+        }
+        let operation_count = self.operation_count;
+        self.transaction.commit()?;
+        Ok(WriteBatchReceipt {
+            operation_count,
+            batch_digest: digest,
+        })
     }
 }
 
@@ -236,26 +349,30 @@ impl SingleWriterTxDatabase {
 fn digest_actions(actions: &[WriteAction]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     for action in actions {
-        match action {
-            WriteAction::Put {
-                keyspace,
-                key,
-                value,
-            } => {
-                hasher.update([0u8, *keyspace as u8]);
-                hasher.update((key.len() as u64).to_be_bytes());
-                hasher.update(key);
-                hasher.update((value.len() as u64).to_be_bytes());
-                hasher.update(value);
-            }
-            WriteAction::Delete { keyspace, key } => {
-                hasher.update([1u8, *keyspace as u8]);
-                hasher.update((key.len() as u64).to_be_bytes());
-                hasher.update(key);
-            }
-        }
+        hash_action(&mut hasher, action);
     }
     hasher.finalize().into()
+}
+
+fn hash_action(hasher: &mut Sha256, action: &WriteAction) {
+    match action {
+        WriteAction::Put {
+            keyspace,
+            key,
+            value,
+        } => {
+            hasher.update([0u8, *keyspace as u8]);
+            hasher.update((key.len() as u64).to_be_bytes());
+            hasher.update(key);
+            hasher.update((value.len() as u64).to_be_bytes());
+            hasher.update(value);
+        }
+        WriteAction::Delete { keyspace, key } => {
+            hasher.update([1u8, *keyspace as u8]);
+            hasher.update((key.len() as u64).to_be_bytes());
+            hasher.update(key);
+        }
+    }
 }
 
 pub struct SourceReadSnapshot {

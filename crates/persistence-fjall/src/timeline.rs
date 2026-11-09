@@ -22,6 +22,7 @@ const SOURCE_FAMILY: &str = "timeline.source";
 const TIME_FAMILY: &str = "timeline.time";
 const TYPE_FAMILY: &str = "timeline.type";
 const OBJECT_FAMILY: &str = "timeline.object";
+const CLUSTER_FAMILY: &str = "timeline.cluster";
 const TIMESTAMP_SORT_MASK: u64 = 1 << 63;
 const REVISION_KEY_PREFIX: &str = "timeline.revision/";
 
@@ -45,6 +46,14 @@ pub struct TimelineRecord {
 pub struct TimelinePage {
     pub records: Vec<TimelineRecord>,
     pub next_cursor: Option<Vec<u8>>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum TimelineStreamError<E> {
+    #[error(transparent)]
+    Storage(#[from] FjallStorageError),
+    #[error("timeline stream producer failed: {0}")]
+    Producer(E),
 }
 
 #[derive(Clone)]
@@ -170,6 +179,27 @@ impl TimelineRecordStore {
         self.page_from_index(snapshot, &prefix, cursor, direction, limit)
     }
 
+    pub fn list_by_time_after(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        after_timestamp: DateTime<Utc>,
+        after_id: &str,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<TimelinePage> {
+        let prefix = encode_key(TIME_FAMILY, &[KeyPart::Text(source_id.to_owned())])?;
+        let cursor = encode_key(
+            TIME_FAMILY,
+            &[
+                KeyPart::Text(source_id.to_owned()),
+                KeyPart::InverseU64(timestamp_sort_value(after_timestamp)),
+                KeyPart::Text(after_id.to_owned()),
+            ],
+        )?;
+        self.page_from_index(snapshot, &prefix, Some(&cursor), direction, limit)
+    }
+
     pub fn list_by_type(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -189,6 +219,35 @@ impl TimelineRecordStore {
         self.page_from_index(snapshot, &prefix, cursor, direction, limit)
     }
 
+    pub fn list_by_type_after(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        event_type: &str,
+        after_timestamp: DateTime<Utc>,
+        after_id: &str,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<TimelinePage> {
+        let prefix = encode_key(
+            TYPE_FAMILY,
+            &[
+                KeyPart::Text(source_id.to_owned()),
+                KeyPart::Text(event_type.to_owned()),
+            ],
+        )?;
+        let cursor = encode_key(
+            TYPE_FAMILY,
+            &[
+                KeyPart::Text(source_id.to_owned()),
+                KeyPart::Text(event_type.to_owned()),
+                KeyPart::InverseU64(timestamp_sort_value(after_timestamp)),
+                KeyPart::Text(after_id.to_owned()),
+            ],
+        )?;
+        self.page_from_index(snapshot, &prefix, Some(&cursor), direction, limit)
+    }
+
     pub fn list_by_source_object(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -205,6 +264,18 @@ impl TimelineRecordStore {
                 KeyPart::Text(source_object_id.to_owned()),
             ],
         )?;
+        self.page_from_index(snapshot, &prefix, cursor, direction, limit)
+    }
+
+    pub fn list_by_cluster(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        cursor: Option<&[u8]>,
+        direction: ScanDirection,
+        limit: usize,
+    ) -> Result<TimelinePage> {
+        let prefix = encode_key(CLUSTER_FAMILY, &[KeyPart::Text(source_id.to_owned())])?;
         self.page_from_index(snapshot, &prefix, cursor, direction, limit)
     }
 
@@ -343,7 +414,7 @@ fn revision_key(scope: &str) -> Result<Vec<u8>> {
     )
 }
 
-fn index_keys(record: &TimelineRecord) -> Result<[Vec<u8>; 4]> {
+fn index_keys(record: &TimelineRecord) -> Result<[Vec<u8>; 5]> {
     let timestamp = KeyPart::InverseU64(timestamp_sort_value(record.timestamp));
     Ok([
         encode_key(
@@ -376,6 +447,16 @@ fn index_keys(record: &TimelineRecord) -> Result<[Vec<u8>; 4]> {
             &[
                 KeyPart::Text(record.data_source_id.clone()),
                 KeyPart::Text(record.source_object_id.clone()),
+                timestamp.clone(),
+                KeyPart::Text(record.id.clone()),
+            ],
+        )?,
+        encode_key(
+            CLUSTER_FAMILY,
+            &[
+                KeyPart::Text(record.data_source_id.clone()),
+                KeyPart::Text(record.event_type.clone()),
+                KeyPart::Text(record.description.clone()),
                 timestamp,
                 KeyPart::Text(record.id.clone()),
             ],

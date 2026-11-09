@@ -4,9 +4,9 @@ use super::{
 };
 use crate::{
     codec::VersionedEnvelope,
-    database::{PersistMode, SourceReadSnapshot, WriteAction},
+    database::{PersistMode, SourceReadSnapshot, WriteAction, WriteStream},
     keyspaces::KeyspaceName,
-    Result,
+    FjallStorageError, Result,
 };
 use std::collections::{BTreeMap, HashMap};
 
@@ -23,6 +23,71 @@ impl TimelineRecordStore {
         Ok(())
     }
 
+    pub fn delete_by_source_object_where<F>(
+        &self,
+        source_id: &str,
+        source_object_id: &str,
+        mode: PersistMode,
+        mut predicate: F,
+    ) -> Result<usize>
+    where
+        F: FnMut(&TimelineRecord) -> bool,
+    {
+        let ((deleted, _), _) =
+            self.source_store
+                .database()
+                .write_streamed(mode, |snapshot, writer| {
+                    let mut count_deltas = HashMap::new();
+                    let mut count_policies = BTreeMap::new();
+                    let mut deleted = 0usize;
+                    let mut cursor = None;
+                    loop {
+                        let page = self.list_by_source_object(
+                            snapshot,
+                            source_id,
+                            source_object_id,
+                            cursor.as_deref(),
+                            crate::ScanDirection::Forward,
+                            512,
+                        )?;
+                        for record in page.records {
+                            if !predicate(&record) {
+                                continue;
+                            }
+                            let policy = count_policies
+                                .entry(record.data_source_id.clone())
+                                .or_insert(super::timeline_count::count_write_policy(
+                                    snapshot,
+                                    &record.data_source_id,
+                                )?);
+                            if policy.0 {
+                                super::timeline_count::adjust_count_deltas(
+                                    &mut count_deltas,
+                                    &record,
+                                    -1,
+                                )?;
+                            }
+                            stream_delete(writer, &record)?;
+                            deleted += 1;
+                        }
+                        cursor = page.next_cursor;
+                        if cursor.is_none() {
+                            break;
+                        }
+                    }
+                    if deleted > 0 {
+                        self.finish_streamed_mutations(
+                            snapshot,
+                            writer,
+                            count_deltas,
+                            count_policies,
+                        )?;
+                    }
+                    Ok::<(usize, ()), FjallStorageError>((deleted, ()))
+                })?;
+        Ok(deleted)
+    }
+
     pub fn replace_by_parser_prefix(
         &self,
         source_id: &str,
@@ -30,45 +95,223 @@ impl TimelineRecordStore {
         records: &[TimelineRecord],
         mode: PersistMode,
     ) -> Result<()> {
-        if prefix.is_empty()
-            || records.iter().any(|record| {
-                record.data_source_id != source_id
-                    || !record
-                        .parser_id
-                        .as_deref()
-                        .is_some_and(|id| id.starts_with(prefix))
-            })
-        {
-            return Err(crate::FjallStorageError::InvalidEnvelope(
-                "timeline replacement identity is invalid".into(),
-            ));
+        let mut records = Some(records.to_vec());
+        self.replace_by_parser_prefix_streamed(
+            source_id,
+            prefix,
+            mode,
+            move || -> Result<Option<Vec<TimelineRecord>>> { Ok(records.take()) },
+        )
+        .map(|_| ())
+        .map_err(|error| match error {
+            crate::TimelineStreamError::Storage(error) => error,
+            crate::TimelineStreamError::Producer(error) => error,
+        })
+    }
+
+    pub fn replace_by_parser_prefix_streamed<E, F>(
+        &self,
+        source_id: &str,
+        prefix: &str,
+        mode: PersistMode,
+        mut next_batch: F,
+    ) -> std::result::Result<u64, crate::TimelineStreamError<E>>
+    where
+        E: std::error::Error + 'static,
+        F: FnMut() -> std::result::Result<Option<Vec<TimelineRecord>>, E>,
+    {
+        if prefix.is_empty() {
+            return Err(FjallStorageError::InvalidEnvelope(
+                "timeline replacement prefix is empty".into(),
+            )
+            .into());
         }
-        self.source_store
-            .database()
-            .write_planned(mode, |snapshot| {
-                let mut cursor = None;
-                let mut deleted = Vec::new();
-                loop {
-                    let page = self.list_by_source(
-                        snapshot,
-                        source_id,
-                        cursor.as_deref(),
-                        crate::ScanDirection::Forward,
-                        512,
-                    )?;
-                    deleted.extend(page.records.into_iter().filter(|record| {
-                        record
-                            .parser_id
-                            .as_deref()
-                            .is_some_and(|id| id.starts_with(prefix))
-                    }));
-                    cursor = page.next_cursor;
-                    if cursor.is_none() {
-                        break;
+        let ((inserted, _), _) =
+            self.source_store
+                .database()
+                .write_streamed(mode, |snapshot, writer| {
+                    let mut count_deltas = HashMap::new();
+                    let mut count_policies = BTreeMap::new();
+                    let mut changed = self
+                        .delete_parser_prefix(
+                            snapshot,
+                            writer,
+                            source_id,
+                            prefix,
+                            &mut count_deltas,
+                            &mut count_policies,
+                        )
+                        .map_err(crate::TimelineStreamError::Storage)?;
+                    let mut inserted = 0u64;
+                    while let Some(records) =
+                        next_batch().map_err(crate::TimelineStreamError::Producer)?
+                    {
+                        if records.is_empty() {
+                            return Err(crate::TimelineStreamError::Storage(
+                                FjallStorageError::InvalidEnvelope(
+                                    "streamed timeline replacement produced an empty batch".into(),
+                                ),
+                            ));
+                        }
+                        for record in &records {
+                            validate_replacement_record(record, source_id, prefix)
+                                .map_err(crate::TimelineStreamError::Storage)?;
+                            changed |= self
+                                .stream_upsert(
+                                    snapshot,
+                                    writer,
+                                    record,
+                                    &mut count_deltas,
+                                    &mut count_policies,
+                                )
+                                .map_err(crate::TimelineStreamError::Storage)?;
+                        }
+                        inserted = inserted.saturating_add(records.len() as u64);
                     }
+                    if changed {
+                        self.finish_streamed_mutations(
+                            snapshot,
+                            writer,
+                            count_deltas,
+                            count_policies,
+                        )
+                        .map_err(crate::TimelineStreamError::Storage)?;
+                    }
+                    Ok((inserted, ()))
+                })?;
+        Ok(inserted)
+    }
+
+    fn delete_parser_prefix(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        writer: &mut WriteStream<'_>,
+        source_id: &str,
+        prefix: &str,
+        count_deltas: &mut HashMap<Vec<u8>, i64>,
+        count_policies: &mut BTreeMap<String, (bool, bool)>,
+    ) -> Result<bool> {
+        let mut cursor = None;
+        let mut deleted = false;
+        loop {
+            let page = self.list_by_source(
+                snapshot,
+                source_id,
+                cursor.as_deref(),
+                crate::ScanDirection::Forward,
+                512,
+            )?;
+            for record in page.records {
+                if !record
+                    .parser_id
+                    .as_deref()
+                    .is_some_and(|id| id.starts_with(prefix))
+                {
+                    continue;
                 }
-                self.mutation_actions(snapshot, records, &deleted)
+                let policy = count_policies
+                    .entry(record.data_source_id.clone())
+                    .or_insert(super::timeline_count::count_write_policy(
+                        snapshot,
+                        &record.data_source_id,
+                    )?);
+                if policy.0 {
+                    super::timeline_count::adjust_count_deltas(count_deltas, &record, -1)?;
+                }
+                stream_delete(writer, &record)?;
+                deleted = true;
+            }
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                return Ok(deleted);
+            }
+        }
+    }
+
+    fn stream_upsert(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        writer: &mut WriteStream<'_>,
+        record: &TimelineRecord,
+        count_deltas: &mut HashMap<Vec<u8>, i64>,
+        count_policies: &mut BTreeMap<String, (bool, bool)>,
+    ) -> Result<bool> {
+        let existing = writer
+            .get(
+                KeyspaceName::TimelineRecords,
+                &record_key(&record.data_source_id, &record.id)?,
+            )?
+            .map(|envelope| {
+                VersionedEnvelope::decode(&envelope).and_then(|envelope| {
+                    if envelope.record_id != record.id
+                        || envelope.source_id != record.data_source_id
+                    {
+                        return Err(FjallStorageError::TimelineRecordIdentityMismatch);
+                    }
+                    super::decode_record(envelope)
+                })
+            })
+            .transpose()?;
+        if existing.as_ref().is_some_and(|existing| existing == record) {
+            return Ok(false);
+        }
+        let policy = count_policies
+            .entry(record.data_source_id.clone())
+            .or_insert(super::timeline_count::count_write_policy(
+                snapshot,
+                &record.data_source_id,
+            )?);
+        if let Some(existing) = existing.as_ref() {
+            if policy.0 {
+                super::timeline_count::adjust_count_deltas(count_deltas, existing, -1)?;
+            }
+            stream_delete(writer, existing)?;
+        }
+        stream_action(writer, record_action(record)?);
+        for index in index_keys(record)? {
+            writer.put(
+                KeyspaceName::TimelineIndexes,
+                index,
+                record_key(&record.data_source_id, &record.id)?,
+            );
+        }
+        if policy.0 {
+            super::timeline_count::adjust_count_deltas(count_deltas, record, 1)?;
+        }
+        Ok(true)
+    }
+
+    fn finish_streamed_mutations(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        writer: &mut WriteStream<'_>,
+        count_deltas: HashMap<Vec<u8>, i64>,
+        count_policies: BTreeMap<String, (bool, bool)>,
+    ) -> Result<()> {
+        let mut actions = Vec::new();
+        super::timeline_count::append_count_actions(snapshot, &mut actions, count_deltas)?;
+        for source_id in count_policies
+            .into_iter()
+            .filter_map(|(source_id, (_, initialize))| initialize.then_some(source_id))
+        {
+            actions.push(super::timeline_count::count_schema_marker_action(
+                &source_id,
+            )?);
+        }
+        let revision = self
+            .cursor_revision(snapshot)?
+            .checked_add(1)
+            .ok_or_else(|| {
+                FjallStorageError::InvalidEnvelope("timeline revision overflowed".into())
             })?;
+        actions.push(WriteAction::Put {
+            keyspace: KeyspaceName::Meta,
+            key: super::revision_key("timeline")?,
+            value: revision.to_be_bytes().to_vec(),
+        });
+        for action in actions {
+            stream_action(writer, action);
+        }
         Ok(())
     }
 
@@ -188,6 +431,47 @@ impl TimelineRecordStore {
             value: revision.to_be_bytes().to_vec(),
         });
         Ok(actions)
+    }
+}
+
+fn validate_replacement_record(
+    record: &TimelineRecord,
+    source_id: &str,
+    prefix: &str,
+) -> Result<()> {
+    validate_record(record)?;
+    if record.data_source_id != source_id
+        || !record
+            .parser_id
+            .as_deref()
+            .is_some_and(|id| id.starts_with(prefix))
+    {
+        return Err(FjallStorageError::InvalidEnvelope(
+            "timeline replacement identity is invalid".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn stream_delete(writer: &mut WriteStream<'_>, record: &TimelineRecord) -> Result<()> {
+    writer.delete(
+        KeyspaceName::TimelineRecords,
+        record_key(&record.data_source_id, &record.id)?,
+    );
+    for index in index_keys(record)? {
+        writer.delete(KeyspaceName::TimelineIndexes, index);
+    }
+    Ok(())
+}
+
+fn stream_action(writer: &mut WriteStream<'_>, action: WriteAction) {
+    match action {
+        WriteAction::Put {
+            keyspace,
+            key,
+            value,
+        } => writer.put(keyspace, key, value),
+        WriteAction::Delete { keyspace, key } => writer.delete(keyspace, key),
     }
 }
 

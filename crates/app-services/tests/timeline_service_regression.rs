@@ -12,54 +12,28 @@ use domain::{
 };
 use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
+    file_repo::FileRepo,
     timeline_repo::TimelineRepo,
 };
 use transport::dto::PerformanceReportDto;
 
-const TIMELINE_SCHEMA: &str =
-    include_str!("../../persistence-sqlite/src/migrations/scripts/0005_timeline_events.sql");
-
-const MACB_SOURCE_SCHEMA: &str = r#"
-CREATE TABLE data_sources (
-    id TEXT PRIMARY KEY NOT NULL,
-    case_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    source_path TEXT NOT NULL,
-    size INTEGER,
-    imported_at TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE file_entries (
-    id TEXT PRIMARY KEY NOT NULL,
-    parent_id TEXT,
-    data_source_id TEXT NOT NULL,
-    path TEXT NOT NULL,
-    name TEXT NOT NULL,
-    entry_type TEXT NOT NULL,
-    size INTEGER,
-    ext TEXT,
-    deleted INTEGER NOT NULL DEFAULT 0,
-    hidden INTEGER NOT NULL DEFAULT 0,
-    system INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT,
-    modified_at TEXT,
-    accessed_at TEXT,
-    changed_at TEXT,
-    hash_sha256 TEXT
-);
-"#;
-
 fn in_memory_db_with_timeline() -> rusqlite::Connection {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    conn.execute_batch(TIMELINE_SCHEMA).unwrap();
-    conn.execute_batch(
-        "ALTER TABLE timeline_events ADD COLUMN parser_id TEXT;
-         ALTER TABLE timeline_events ADD COLUMN parser_version TEXT;
-         ALTER TABLE timeline_events ADD COLUMN confidence REAL;
-         ALTER TABLE timeline_events ADD COLUMN source_attribution TEXT;",
-    )
-    .unwrap();
-    conn.execute_batch(MACB_SOURCE_SCHEMA).unwrap();
+    let root = tempfile::TempDir::new().unwrap().keep();
+    let db_path = root.join("source.db");
+    let conn = persistence_sqlite::open_or_create_source(&db_path).unwrap();
+    persistence_sqlite::source_fjall::configure_source_identity(&conn, "ds-1").unwrap();
+    persistence_sqlite::source_fjall::configure_source_fjall(&conn, &db_path).unwrap();
+    let source = DataSource {
+        id: DataSourceId("ds-1".to_string()),
+        name: "source".to_string(),
+        kind: DataSourceKind::LogicalDirectory,
+        source_path: root.join("evidence"),
+        imported_at: Utc::now(),
+        provenance: DataSourceProvenance::unknown(),
+    };
+    DataSourceRepo::new(&conn)
+        .upsert_source_local_metadata(&domain::CaseId("case-1".to_string()), &source)
+        .unwrap();
     conn
 }
 
@@ -169,7 +143,41 @@ fn register_ready_source(
     DataSourceRepo::new(case_conn).insert_with_storage(case_id, &source, &storage)?;
     let source_conn = app_services::source_db::open_source_db(case_root, &source.id)?;
     DataSourceRepo::new(&source_conn).upsert_source_local_metadata(case_id, &source)?;
+    mark_source_projection_complete(case_root, source_id)?;
     Ok(source_conn)
+}
+
+fn mark_source_projection_complete(
+    case_root: &std::path::Path,
+    source_id: &str,
+) -> persistence_sqlite::DbResult<()> {
+    let source = app_services::source_db::open_registered_fjall_source_read_write(
+        case_root,
+        &DataSourceId(source_id.to_string()),
+    )
+    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(source_id.to_string())],
+    )
+    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let marker = persistence_fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{source_id}"),
+        source_id,
+        1,
+        source_id.as_bytes().to_vec(),
+    );
+    source
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .map(|_| ())
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
 }
 
 fn timeline_event(id: &str, timestamp: chrono::DateTime<Utc>) -> domain::TimelineEvent {
@@ -197,13 +205,13 @@ fn timeline_file_activity_projection_inserts_expected_events_and_handles_empty_i
     ];
     assert_eq!(project_and_store_file_activity(&conn, &files).unwrap(), 5);
     assert_eq!(TimelineRepo::new(&conn).count().unwrap(), 5);
-    let event_types = conn
-        .prepare("SELECT event_type FROM timeline_events ORDER BY event_type")
+    let mut event_types = TimelineRepo::new(&conn)
+        .query_filtered(0, 100, None, None, None)
         .unwrap()
-        .query_map([], |row| row.get::<_, String>(0))
-        .unwrap()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .into_iter()
+        .map(|event| event.event_type)
+        .collect::<Vec<_>>();
+    event_types.sort();
     assert_eq!(
         event_types,
         vec![
@@ -220,6 +228,7 @@ fn timeline_file_activity_projection_inserts_expected_events_and_handles_empty_i
 #[test]
 fn timeline_source_database_query_wraps_event_and_source_object_ids() {
     let tmp = tempfile::TempDir::new().unwrap();
+    std::fs::create_dir_all(tmp.path().join("artifacts/objects")).unwrap();
     let case_conn = in_memory_case_db_with_source();
     let source_id = DataSourceId("ds-1".to_string());
     let source_conn = app_services::source_db::open_source_db(tmp.path(), &source_id).unwrap();
@@ -239,6 +248,7 @@ fn timeline_source_database_query_wraps_event_and_source_object_ids() {
     TimelineRepo::new(&source_conn)
         .insert_batch_with_case(&[event], "case-1")
         .unwrap();
+    mark_source_projection_complete(tmp.path(), "ds-1").unwrap();
 
     let case_id = domain::CaseId("case-1".to_string());
     let page = query_timeline_for_case(&case_conn, tmp.path(), &case_id, 0, 10).unwrap();
@@ -661,13 +671,18 @@ fn timeline_cursor_rejects_offset_and_deleted_unconsumed_rows() {
                 TimelineServiceError::InvalidInput(_)
             ));
 
-            let source = app_services::source_db::open_source_db(
+            let source = app_services::source_db::open_registered_fjall_source_read_write(
                 &active.case_root,
                 &DataSourceId("source-a".to_string()),
-            )?;
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
             source
-                .execute("DELETE FROM timeline_events WHERE id = 'oldest'", [])
-                .map_err(persistence_sqlite::DbError::from)?;
+                .timeline_delete(
+                    "source-a",
+                    "oldest",
+                    persistence_fjall::PersistMode::SyncAll,
+                )
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
             drop(source);
 
             let stale = query_timeline_filtered_for_case(
@@ -736,16 +751,6 @@ fn timeline_cursor_rejects_equal_count_replacement() {
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
             let cursor = first.next_cursor.expect("cursor for remaining rows");
 
-            let source = app_services::source_db::open_source_db(
-                &active.case_root,
-                &DataSourceId("source-a".to_string()),
-            )?;
-            let transaction = source.unchecked_transaction()?;
-            let repository = TimelineRepo::new(&transaction);
-            assert_eq!(
-                repository.delete_analysis_outputs_in_transaction("shared-source", "test.")?,
-                3
-            );
             let mut replacements = vec![
                 timeline_event("replacement-newest", timestamp),
                 timeline_event("replacement-middle", timestamp - chrono::Duration::hours(1)),
@@ -754,8 +759,25 @@ fn timeline_cursor_rejects_equal_count_replacement() {
             for event in &mut replacements {
                 event.source_object_id = "shared-source".to_string();
             }
-            repository.insert_batch_with_case_in_transaction(&replacements, &active.meta.id.0)?;
-            transaction.commit()?;
+            let source = app_services::source_db::open_registered_fjall_source_read_write(
+                &active.case_root,
+                &DataSourceId("source-a".to_string()),
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            for event in ["newest", "middle", "oldest"] {
+                source
+                    .timeline_delete("source-a", event, persistence_fjall::PersistMode::Buffer)
+                    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            }
+            for event in &replacements {
+                let record = persistence_sqlite::source_fjall::timeline_record(event, "source-a");
+                source
+                    .timeline_upsert(&record, persistence_fjall::PersistMode::Buffer)
+                    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            }
+            source
+                .persist(persistence_fjall::PersistMode::SyncAll)
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
 
             let stale = query_timeline_filtered_for_case(
                 case_conn,
@@ -1034,16 +1056,30 @@ fn timeline_large_aggregation_remains_bounded() {
 #[test]
 fn timeline_file_activity_materialization_is_idempotent() {
     let conn = in_memory_db_with_timeline();
-    conn.execute_batch(
-        "INSERT INTO data_sources (id, case_id, name, kind, source_path)
-         VALUES ('ds-1', 'case-1', 'sample', 'Raw', '/sample.raw');
-         INSERT INTO file_entries
-         (id, data_source_id, path, name, entry_type, created_at, modified_at, accessed_at)
-         VALUES ('file-1', 'ds-1', '/file.txt', 'file.txt', 'file',
-                 '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z', '2026-01-03T00:00:00Z');",
-    )
-    .unwrap();
-
+    FileRepo::new(&conn)
+        .insert_batch(&[FileEntry {
+            id: FileEntryId("file-1".to_string()),
+            parent_id: None,
+            data_source_id: DataSourceId("ds-1".to_string()),
+            path: "/file.txt".to_string(),
+            name: "file.txt".to_string(),
+            entry_type: EntryType::File,
+            size: Some(1),
+            ext: Some("txt".to_string()),
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: Some(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()),
+            modified_at: Some(Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap()),
+            accessed_at: Some(Utc.with_ymd_and_hms(2026, 1, 3, 0, 0, 0).unwrap()),
+            changed_at: None,
+            hash_sha256: None,
+        }])
+        .unwrap();
     let first = materialize_file_activity_unknown(&conn).unwrap();
     assert_eq!(first.inserted_count, 3);
     assert!(!first.already_projected);

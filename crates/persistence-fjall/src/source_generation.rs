@@ -156,7 +156,7 @@ pub fn publish_source_generation(
             reused: true,
         });
     }
-    match fs::rename(build_path, published_path) {
+    match rename_directory(build_path, published_path) {
         Ok(()) => {
             sync_directory(published_path.parent().unwrap_or_else(|| Path::new(".")))?;
             Ok(SourceGenerationReceipt {
@@ -180,6 +180,24 @@ pub fn publish_source_generation(
         }
         Err(error) => Err(FjallStorageError::Io(error)),
     }
+}
+
+fn rename_directory(source: &Path, target: &Path) -> io::Result<()> {
+    const ATTEMPTS: usize = 40;
+    for attempt in 0..ATTEMPTS {
+        match fs::rename(source, target) {
+            Ok(()) => return Ok(()),
+            Err(error)
+                if cfg!(windows)
+                    && attempt + 1 < ATTEMPTS
+                    && matches!(error.kind(), io::ErrorKind::PermissionDenied) =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!("bounded directory rename loop always returns")
 }
 
 pub fn source_generation_manifest_digest(path: impl AsRef<Path>) -> Result<String> {

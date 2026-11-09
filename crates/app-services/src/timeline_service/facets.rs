@@ -34,6 +34,8 @@ pub fn get_timeline_facets_for_case(
             .into_iter()
             .map(|(id, _)| id)
             .collect::<Vec<_>>();
+    let mut ready_source_ids = ready_source_ids;
+    ready_source_ids.sort_by(|left, right| left.0.cmp(&right.0));
     if ready_source_ids.iter().all(|source_id| {
         source_db::open_registered_fjall_source_read_only(case_root, source_id).is_ok()
     }) {

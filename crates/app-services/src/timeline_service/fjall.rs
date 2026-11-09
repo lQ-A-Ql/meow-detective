@@ -11,7 +11,7 @@ use transport::{
     paging::{decode_opaque_cursor, encode_opaque_cursor, PageResponse},
 };
 
-const CURSOR_VERSION: u8 = 2;
+const CURSOR_VERSION: u8 = 3;
 const CURSOR_KIND: &str = "timeline-fjall";
 const FETCH_LIMIT: usize = 1;
 
@@ -31,6 +31,7 @@ struct FjallSourceCursor {
     count: u64,
     consumed: u64,
     after: Option<Vec<u8>>,
+    snapshot_upper_bound: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,9 +95,15 @@ fn capture_cursor(
         let snapshot = source.snapshot();
         let revision = source.timeline_cursor_revision(&snapshot)?;
         let count = count_source(&source, &snapshot, &source_id.0, context)?;
+        let snapshot_upper_bound = source_upper_bound(&source, &snapshot, &source_id.0, context)?;
         total = total.saturating_add(count);
         pages.push(FjallSourcePage::new(
-            source_id, source, snapshot, revision, count,
+            source_id,
+            source,
+            snapshot,
+            revision,
+            count,
+            snapshot_upper_bound,
         ));
     }
     let state = FjallCursor {
@@ -141,17 +148,18 @@ fn resume_cursor(
     for ((source_id, source), source_state) in sources.into_iter().zip(state.sources.iter()) {
         let snapshot = source.snapshot();
         let revision = source.timeline_cursor_revision(&snapshot)?;
-        if revision != source_state.revision {
+        let current_count = count_source(&source, &snapshot, &source_id.0, context)?;
+        if revision != source_state.revision && current_count <= source_state.count {
             return Err(invalid_cursor(format!(
                 "timeline snapshot changed for source {}",
                 source_id.0
             )));
         }
-        pages.push(FjallSourcePage::from_state(
-            source,
-            snapshot,
-            source_state.clone(),
-        ));
+        let mut page = FjallSourcePage::from_state(source, snapshot, source_state.clone());
+        if revision != source_state.revision {
+            page.state.revision = revision;
+        }
+        pages.push(page);
     }
     Ok((state, pages))
 }
@@ -241,6 +249,7 @@ impl FjallSourcePage {
         snapshot: SourceReadSnapshot,
         revision: u64,
         count: u64,
+        snapshot_upper_bound: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
             state: FjallSourceCursor {
@@ -249,6 +258,7 @@ impl FjallSourcePage {
                 count,
                 consumed: 0,
                 after: None,
+                snapshot_upper_bound,
             },
             source,
             snapshot,
@@ -276,6 +286,9 @@ impl FjallSourcePage {
     }
 
     fn ensure_head(&mut self, context: &FjallContext) -> Result<(), TimelineServiceError> {
+        if self.state.consumed >= self.state.count {
+            self.exhausted = true;
+        }
         if self.exhausted || self.head.is_some() {
             return Ok(());
         }
@@ -310,7 +323,9 @@ impl FjallSourcePage {
             self.ensure_head(context)?;
             return Ok(());
         }
-        if matches_context(&record, context)? {
+        if record.timestamp <= self.state.snapshot_upper_bound.unwrap_or(record.timestamp)
+            && matches_context(&record, context)?
+        {
             self.head = Some(record);
         } else {
             self.ensure_head(context)?;
@@ -333,6 +348,27 @@ fn count_source(
         source.timeline_count_by_time(snapshot, source_id, start, end)?
     };
     Ok(count)
+}
+
+fn source_upper_bound(
+    source: &ReadOnlySourceStorageHandle,
+    snapshot: &SourceReadSnapshot,
+    source_id: &str,
+    context: &FjallContext,
+) -> Result<Option<DateTime<Utc>>, TimelineServiceError> {
+    let page = if let Some(event_type) = context.event_type.as_deref() {
+        source.timeline_list_by_type(
+            snapshot,
+            source_id,
+            event_type,
+            None,
+            ScanDirection::Forward,
+            1,
+        )?
+    } else {
+        source.timeline_list_by_time(snapshot, source_id, None, ScanDirection::Forward, 1)?
+    };
+    Ok(page.records.first().map(|record| record.timestamp))
 }
 
 fn matches_context(

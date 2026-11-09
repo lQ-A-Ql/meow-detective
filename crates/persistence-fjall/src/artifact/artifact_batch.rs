@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     codec::VersionedEnvelope,
-    database::{PersistMode, WriteAction},
+    database::{PersistMode, WriteAction, WriteStream},
     keyspaces::KeyspaceName,
     Result,
 };
@@ -18,6 +18,64 @@ impl ArtifactRecordStore {
             .database()
             .write_planned(mode, |snapshot| self.upsert_actions(snapshot, records))?;
         Ok(())
+    }
+
+    pub fn delete_by_source_object_where<F>(
+        &self,
+        source_id: &str,
+        source_object_id: &str,
+        mode: PersistMode,
+        mut predicate: F,
+    ) -> Result<usize>
+    where
+        F: FnMut(&ArtifactRecord) -> bool,
+    {
+        let ((deleted, _), _) =
+            self.source_store
+                .database()
+                .write_streamed(mode, |snapshot, writer| {
+                    let mut deltas = crate::record_metrics::CountDeltas::new();
+                    let mut deleted = 0usize;
+                    let mut cursor = None;
+                    loop {
+                        let page = self.list_by_source_object(
+                            snapshot,
+                            source_id,
+                            source_object_id,
+                            cursor.as_deref(),
+                            crate::ScanDirection::Forward,
+                            512,
+                        )?;
+                        for record in page.records {
+                            if !predicate(&record) {
+                                continue;
+                            }
+                            writer.delete(
+                                KeyspaceName::ArtifactRecords,
+                                record_key(source_id, &record.id)?,
+                            );
+                            for action in index_deletes(&record)? {
+                                stream_action(writer, action);
+                            }
+                            crate::record_metrics::adjust(&mut deltas, "artifact", source_id, -1)?;
+                            deleted += 1;
+                        }
+                        cursor = page.next_cursor;
+                        if cursor.is_none() {
+                            break;
+                        }
+                    }
+                    if deleted > 0 {
+                        let mut actions = Vec::new();
+                        crate::record_metrics::append(snapshot, &mut actions, deltas)?;
+                        actions.push(self.revision_action(snapshot)?);
+                        for action in actions {
+                            stream_action(writer, action);
+                        }
+                    }
+                    Ok::<(usize, ()), crate::FjallStorageError>((deleted, ()))
+                })?;
+        Ok(deleted)
     }
 
     fn upsert_actions(
@@ -66,5 +124,16 @@ impl ArtifactRecordStore {
         crate::record_metrics::append(snapshot, &mut actions, deltas)?;
         actions.push(self.revision_action(snapshot)?);
         Ok(actions)
+    }
+}
+
+fn stream_action(writer: &mut WriteStream<'_>, action: WriteAction) {
+    match action {
+        WriteAction::Put {
+            keyspace,
+            key,
+            value,
+        } => writer.put(keyspace, key, value),
+        WriteAction::Delete { keyspace, key } => writer.delete(keyspace, key),
     }
 }
