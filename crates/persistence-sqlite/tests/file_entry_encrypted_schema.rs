@@ -6,16 +6,11 @@ const APPLICATION_ENCRYPTION_MIGRATION: &str =
     include_str!("../src/migrations/scripts/0042_file_entry_encrypted.sql");
 
 #[test]
-fn application_and_source_schemas_share_the_encrypted_column_contract() {
+fn application_schema_preserves_unknown_encryption_classification() {
     let application = open_in_memory().expect("open application database");
     runner::run_all(&application).expect("run application migrations");
     seed_application_source(&application);
     assert_encrypted_column_contract(&application, "app-file", "app-source");
-
-    let source = open_in_memory().expect("open source database");
-    runner::run_source_all(&source).expect("run source migrations");
-    seed_source_local_registration(&source);
-    assert_encrypted_column_contract(&source, "source-file", "source-1");
 }
 
 #[test]
@@ -171,13 +166,4 @@ fn seed_application_source(conn: &Connection) {
         [],
     )
     .expect("insert application source");
-}
-
-fn seed_source_local_registration(conn: &Connection) {
-    conn.execute(
-        "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
-         VALUES ('source-1', 'case-1', 'source', 'ceph_rbd', '', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .expect("insert source-local registration");
 }

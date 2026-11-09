@@ -23,20 +23,20 @@ fn migration_log(names: &[&str]) -> Connection {
 #[test]
 fn source_version_uses_registry_order_after_an_older_gap_is_repaired() {
     let connection = migration_log(&[
-        "source_023_deleted_recovery",
-        "source_024_ntfs_deleted_recovery",
-        "source_022_file_partition_index_repair",
+        "source_037_forensic_fingerprints",
+        "source_038_linux_evidence_facts",
+        "source_036_android_analysis",
     ]);
 
     assert_eq!(
         runner::current_version(&connection).expect("read source version"),
-        Some("source_024_ntfs_deleted_recovery".to_string())
+        Some("source_038_linux_evidence_facts".to_string())
     );
 }
 
 #[test]
 fn unknown_migration_remains_visible_for_fail_closed_version_checks() {
-    let connection = migration_log(&["source_024_ntfs_deleted_recovery", "source_999_unknown"]);
+    let connection = migration_log(&["source_038_linux_evidence_facts", "source_999_unknown"]);
 
     assert_eq!(
         runner::current_version(&connection).expect("read source version"),

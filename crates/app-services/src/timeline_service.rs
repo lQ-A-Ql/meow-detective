@@ -3,16 +3,12 @@ mod export;
 mod facets;
 mod fjall;
 mod ingestion;
-mod page_cache;
 mod pagination;
 mod policy;
 mod projection;
 mod projection_fjall;
-mod projection_graph;
-mod projection_meta;
 mod projection_timing;
 mod query;
-mod wal_policy;
 
 pub use error::TimelineServiceError;
 pub use export::{

@@ -1,6 +1,5 @@
-use persistence_sqlite::repositories::{
-    ntfs_staging_repo::{NtfsStagingRepo, NTFS_STAGING_LAYOUT_VERSION},
-    source_bulk_load_repo::{BulkLoadState, SourceBulkLoadRepo},
+use persistence_sqlite::repositories::ntfs_staging_repo::{
+    NtfsStagingRepo, NTFS_STAGING_LAYOUT_VERSION,
 };
 use rusqlite::Connection;
 #[test]
@@ -19,75 +18,6 @@ fn numeric_layout_is_versioned_and_clear_preserves_layout() {
     NtfsStagingRepo::clear(&c).unwrap();
     assert_eq!(NtfsStagingRepo::meta(&c, "attempt").unwrap(), None)
 }
-#[test]
-fn bulk_state_transitions_are_durable() {
-    let c = Connection::open_in_memory().unwrap();
-    c.execute_batch("CREATE TABLE source_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)")
-        .unwrap();
-    SourceBulkLoadRepo::set_state(&c, BulkLoadState::Active, "a").unwrap();
-    assert_eq!(
-        SourceBulkLoadRepo::state(&c).unwrap(),
-        BulkLoadState::Active
-    );
-    SourceBulkLoadRepo::set_state(&c, BulkLoadState::Rebuilding, "a").unwrap();
-    assert_eq!(
-        SourceBulkLoadRepo::state(&c).unwrap(),
-        BulkLoadState::Rebuilding
-    );
-    SourceBulkLoadRepo::set_state(&c, BulkLoadState::Ready, "a").unwrap();
-    SourceBulkLoadRepo::clear_transient(&c).unwrap();
-    assert_eq!(
-        SourceBulkLoadRepo::state(&c).unwrap(),
-        BulkLoadState::Inactive
-    )
-}
-
-fn indexes(conn: &Connection) -> Vec<(String, String)> {
-    conn.prepare("SELECT name,sql FROM sqlite_master WHERE type='index' AND tbl_name='file_entries' AND sql IS NOT NULL ORDER BY name").unwrap()
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?))).unwrap().collect::<Result<_,_>>().unwrap()
-}
-
-#[test]
-fn bulk_load_restores_exact_indexes_after_reopening_an_interrupted_import() {
-    let temporary = tempfile::tempdir().unwrap();
-    let path = temporary.path().join("source.db");
-    let source = persistence_sqlite::open_or_create_source(&path).unwrap();
-    let original = indexes(&source);
-    assert!(SourceBulkLoadRepo::begin(&source, "interrupted").unwrap());
-    assert!(indexes(&source).len() < original.len());
-    drop(source);
-    let source = persistence_sqlite::open_existing_source(&path).unwrap();
-    assert_eq!(
-        SourceBulkLoadRepo::state(&source).unwrap(),
-        BulkLoadState::Active
-    );
-    SourceBulkLoadRepo::recover(&source).unwrap();
-    assert_eq!(indexes(&source), original);
-    assert_eq!(
-        SourceBulkLoadRepo::state(&source).unwrap(),
-        BulkLoadState::Inactive
-    );
-    SourceBulkLoadRepo::recover(&source).unwrap();
-}
-
-#[test]
-fn bulk_rebuild_failure_never_publishes_ready() {
-    let source = persistence_sqlite::open_in_memory().unwrap();
-    source.execute_batch("CREATE TABLE source_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE file_entries(id TEXT PRIMARY KEY)").unwrap();
-    SourceBulkLoadRepo::begin(&source, "failed").unwrap();
-    source
-        .execute(
-            "UPDATE source_meta SET value=?1 WHERE key='bulk_load.indexes'",
-            [r#"[["missing","CREATE INDEX missing ON absent(id)"]]"#],
-        )
-        .unwrap();
-    assert!(SourceBulkLoadRepo::finish(&source).is_err());
-    assert_eq!(
-        SourceBulkLoadRepo::state(&source).unwrap(),
-        BulkLoadState::Rebuilding
-    );
-}
-
 #[test]
 fn numeric_staging_projects_ids_and_resets_atomically_for_generic_fallback() {
     let temporary = tempfile::tempdir().unwrap();

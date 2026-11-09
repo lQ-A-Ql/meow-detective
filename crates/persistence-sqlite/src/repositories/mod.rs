@@ -58,8 +58,6 @@ pub mod ntfs_staging_repo;
 pub mod processing_phase_repo;
 pub mod provenance_assertion_repo;
 pub mod report_repo;
-mod source_bulk_indexes;
-pub mod source_bulk_load_repo;
 pub mod source_meta_repo;
 pub mod staging_fingerprint_repo;
 mod staging_merge_validation;

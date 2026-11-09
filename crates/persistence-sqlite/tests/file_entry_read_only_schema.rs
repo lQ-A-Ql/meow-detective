@@ -3,16 +3,11 @@ use rusqlite::{Connection, ErrorCode};
 use tempfile::TempDir;
 
 #[test]
-fn application_and_source_schemas_enforce_read_only_boolean_contract() {
+fn application_schema_enforces_read_only_boolean_contract() {
     let application = open_in_memory().expect("open application database");
     runner::run_all(&application).expect("run application migrations");
     seed_application_source(&application);
     assert_read_only_contract(&application, "app-file", "app-source", true);
-
-    let source = open_in_memory().expect("open source database");
-    runner::run_source_all(&source).expect("run source migrations");
-    seed_source_registration(&source);
-    assert_read_only_contract(&source, "source-file", "source-1", true);
 }
 
 #[test]
@@ -117,27 +112,10 @@ fn seed_application_source(conn: &Connection) {
         [],
     )
     .expect("insert application case");
-    seed_source_registration(conn);
-}
-
-fn seed_source_registration(conn: &Connection) {
     conn.execute(
         "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
-         VALUES (?1, 'case-1', 'source', 'e01', '', '2026-01-01T00:00:00Z')",
-        [if table_has_case(conn) {
-            "app-source"
-        } else {
-            "source-1"
-        }],
+         VALUES ('app-source', 'case-1', 'source', 'e01', '', '2026-01-01T00:00:00Z')",
+        [],
     )
     .expect("insert data source");
-}
-
-fn table_has_case(conn: &Connection) -> bool {
-    conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM cases WHERE id = 'case-1')",
-        [],
-        |row| row.get(0),
-    )
-    .unwrap_or(false)
 }

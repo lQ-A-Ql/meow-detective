@@ -7,13 +7,11 @@ const TIMELINE_SELECT_COLUMNS: &str = "id, source_object_id, event_type, ts, tit
 const TIMELINE_ORDER_BY: &str = "ORDER BY ts DESC, id ASC";
 
 mod analysis_outputs;
-mod bulk_indexes;
 mod filtering;
 mod mapping;
 mod native;
 mod persistence;
 mod visit_sources;
-pub use bulk_indexes::with_deferred_empty_indexes;
 use filtering::{count_timeline_rows, filtered_timeline_clauses};
 use mapping::{row_to_timeline_cursor_row, row_to_timeline_event};
 
