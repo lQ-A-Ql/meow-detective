@@ -1,25 +1,21 @@
-//! Btrfs filesystem reader.
+//! Read-only Btrfs filesystem integration.
 //!
-//! The crate exposes a read-only `FileSystemReader` implementation. Production
-//! responsibilities are split by on-disk format, B-tree traversal, directory
-//! resolution, extent reading, and filesystem facade behavior.
+//! On-disk decoding, checksum verification, subvolume crossing, and extent
+//! decompression are provided by the MIT-licensed `rust-fs-btrfs` parser.
+//! This crate adapts the application's evidence reader to its block-device
+//! interface and projects its filesystem model onto `FileSystemReader`.
 
-mod btree;
-mod directory;
-mod extents;
 mod filesystem;
-mod format;
 mod reader;
 pub mod snapshot;
-mod types;
 mod types_reader;
 
-pub use types::BtrfsSubvol;
 pub use types_reader::BtrfsReader;
 
-pub(crate) use format::*;
-pub(crate) use types::BtrfsHeader;
-
-#[cfg(test)]
-#[path = "../tests/unit/btrfs.rs"]
-mod tests;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BtrfsSubvol {
+    pub id: u64,
+    pub name: String,
+    pub root_dirid: u64,
+    pub tree_root_bytenr: u64,
+}

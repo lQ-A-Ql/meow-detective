@@ -4,6 +4,8 @@
 
 本文记录 `L:\检材3-服务器` 的只读分析事实，并定义后续 LV 映射与 Linux MD RAID 读取模块的接入边界。本文只描述已经验证的输入、当前代码行为和可执行的开发接口，不把尚未匹配的 RAID 成员写成已完成能力。
 
+2026-11-11 更新：实现已覆盖直接成员盘/分区、LVM LV 成员、mdadm 0.90/1.0/1.1/1.2 元数据、linear、RAID0、RAID1、RAID4、RAID5、RAID6、RAID10，以及 Btrfs 子卷和跨 leaf 目录枚举。当前双 E01 样本已完成完整 Catalog 物化。
+
 ## 2. 已验证的检材事实
 
 ### 2.1 E01 输入
@@ -126,20 +128,24 @@ Linux 证据集合成员获得集合内其他成员的 `LvmDiscoverySource`。�
 - cache、snapshot、VDO、writecache。
 - 缺失 PV 或不一致 VG。
 
-### 3.3 MD RAID 基础模块
+### 3.3 MD RAID 读取模块
 
-`crates/fs-lvm/src/mdraid.rs` 已新增并通过 `fs-lvm` 定向测试：
+`crates/fs-lvm/src/mdraid.rs` 及其子模块通过 `fs-lvm` 定向测试：
 
-- MD v1 superblock 字段解析。
-- magic、版本、level、UUID、chunk、成员数量、成员编号和 data range 校验。
-- 只读 RAID0 chunk 读取器。
-- 缺失成员、成员编号不连续、UUID/chunk/layout 冲突时失败关闭。
+- mdadm 0.90 与 1.x superblock 字段、host byte order、checksum、事件计数和角色表解析。
+- 角色以 `dev_roles[dev_number]` 为槽位，最新事件计数优先，落后一次的成员可作为当前成员读取。
+- linear、RAID0、RAID1、RAID4、RAID5、RAID6 和 RAID10 的只读读取后端。
+- RAID5 单列重建、RAID6 双列重建和 RAID1/RAID10 副本故障切换。
+- UUID、level、chunk、layout、槽位冲突、data range 和布局覆盖校验。
+- 阵列后可继续探测分区表、整卷文件系统、LVM 和嵌套结构。
 
-应用服务已经在 LVM 展开阶段接入 MD superblock 诊断，能够报告跨 VG/LV 的 `member=0/2` 和 `member=1/2`，并能创建跨 VG/LV 的只读 RAID0 reader。跨设备 Btrfs chunk 的完整读取边界仍需继续验证。
+应用服务在整盘、分区和 LVM LV 上探测成员。成员来源以 `MdRaidMemberOrigin::{Lvm, Direct}` 固化到 descriptor，重启后按同一来源范围重新打开。样本跨 VG/LV 的 `member=0/2` 和 `member=1/2` 已完成组装。
 
-### 3.4 当前能力边界
+### 3.4 当前实现状态
 
-当前 LVM `direct=true` 只表示 LV 的 LVM segment 可以直接映射到 PV data area，不表示 LV 内容本身就是文件系统。`volum/root` 正是这种情况：LVM 映射成立，LV 内容还包含一层 MD RAID 证据。
+当前 LVM `direct=true` 表示 LV 的 LVM segment 可以直接映射到 PV data area；LV 内容继续交给 MD/Btrfs 探测。`volum/root` 与 `root/data` 已按 MD RAID0 成员完成组装。
+
+Btrfs 使用 MIT 许可的 `rust-fs-btrfs` 0.10.2 作为格式解析核心。本地补丁增加只读“committed trees”入口，用于介质带有未重放 log tree 的取证场景；导入会记录该状态。日志树中的 fsync-only 变更尚未回放，主树、inode、目录、extent、压缩与 checksum 校验仍由解析库完成。该边界会在样本诊断中明确显示。
 
 ## 4. 目标读取链路
 
@@ -254,7 +260,7 @@ MD reader 创建后，按现有顺序运行：
 | `FilesystemUnconfirmed` | MD reader 可读，文件系统尚未确认 |
 | `FilesystemReady` | 文件系统 reader 通过完整校验 |
 
-当前检材应报告为 `MdCandidateFound`。两个成员已经匹配，向 `MdArrayReady` 推进仍需要验证 data offset、data size、superblock checksum、事件状态和重组读取结果。
+当前检材报告为 `MdArrayReady`，随后进入 `FilesystemReady`。两个成员的 data offset、data size、superblock checksum、角色表和重组读取结果均已验证。
 
 ## 7. 安全和取证边界
 
@@ -267,21 +273,29 @@ MD reader 创建后，按现有顺序运行：
 
 ## 8. 验收条件
 
-### 合成测试
+### 算法测试
 
 - MD RAID0 两成员、不同 chunk size、跨成员连续读取。
 - 成员顺序交换后读取结果保持正确。
 - 缺失成员、重复成员、UUID 冲突和容量冲突均失败关闭。
-- RAID1 识别为候选但在未实现 reader 前返回 typed unsupported。
-- RAID5/6/10 不进入 RAID0 reader。
+- RAID5 缺一列时由 P 校验重建。
+- RAID6 缺两列数据时由 P/Q 联合重建。
+- RAID10 near-2 相邻镜像读取。
+- mdadm 0.90 superblock 与角色表解析。
 
 ### 检材回归
 
-- `L:\检材3-服务器` 能发现同一阵列的两个 MD 成员，并报告 data size 差异。
+- `J:\检材3-服务器` 能发现同一阵列的两个 MD 成员，并报告 data size 差异。
 - 两个成员都来自集合内已登记的 LVM LV。
-- 重组后的 reader 能通过文件系统 superblock 校验，或明确返回 `FilesystemUnconfirmed`。
+- 重组后的 reader 通过 Btrfs superblock、root tree、子卷与文件读取校验。
 - 不把随机字符串命中当作文件系统候选。
 - TSK `fsstat`/`fls` 交叉验证只在应用生成的只读逻辑视图上执行。
+
+2026-11-11 实测结果：
+
+- `pve_cluster_mdraid_reader_exposes_btrfs_root` 通过，`@rootfs/etc/passwd`、`os-release`、`hostname` 可读。
+- `mdraid_btrfs_catalog_materializes_to_completion` 通过，Debug 构建完成 `304,162` 条 Catalog 记录，`materialize_mdraid_array` 耗时约 `81.633` 秒，最终状态为 `ready`。
+- 旧日志中的 95% 停滞不再出现。
 
 ### 现有质量检查
 
@@ -294,9 +308,15 @@ powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
 ```
 
-当前检材的两个 RAID 成员已经匹配，MD RAID0 基础 reader 已在 `fs-lvm` 中实现；跨 VG/LV 的应用层阵列组装、data size 差异处理和重组后文件系统确认仍未完成。
+当前双 E01 检材的两个 RAID 成员已经匹配，容量差异被保留为诊断，RAID0 逻辑读取和 Btrfs 文件系统均已确认。
 
 MD v1 字段布局参考：
 
 - Linux kernel `include/uapi/linux/raid/md_p.h`：<https://raw.githubusercontent.com/torvalds/linux/master/include/uapi/linux/raid/md_p.h>
 - Linux kernel RAID administration：<https://www.kernel.org/doc/html/latest/admin-guide/md.html>
+
+实现边界与许可：
+
+- `LovelyCarve` 仅用于行为、格式能力矩阵和失败场景交叉核对；其 `AGPL-3.0-only` 源码没有复制、翻译或改写进本项目。
+- MD RAID 实现依据 Linux UAPI、内核管理文档和独立测试向量编写。
+- `vendor/rust-fs-btrfs` 基于 MIT 许可的 `rust-fs-btrfs` 0.10.2。本地改动只增加只读 committed-tree 挂载入口，许可证文件随 vendored 包保留。

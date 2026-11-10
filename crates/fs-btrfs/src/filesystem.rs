@@ -1,8 +1,10 @@
-use crate::format::FT_DIR;
+use crate::reader::btrfs_error;
 use crate::BtrfsReader;
+use btrfs_driver::inode::Inode;
+use btrfs_driver::subvol::EMPTY_SUBVOL_DIR_OBJECTID;
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, fs_node, is_special_directory_name,
-    path_is_directory, path_not_found, root_node, FileSystemReader, FsNode,
+    child_nodes_with_parent_path, fs_node, is_special_directory_name, path_components,
+    path_is_directory, root_node, FileSystemReader, FsNode, FsTimestamp,
 };
 use std::io::{self, Read};
 
@@ -12,81 +14,61 @@ impl FileSystemReader for BtrfsReader {
     }
 
     fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
-        if path.is_empty() || path == "/" || path == "\\" {
-            let nodes: Vec<FsNode> = self
-                .subvolumes
-                .iter()
-                .map(|subvolume| fs_node(subvolume.name.clone(), true, 0, None, None, None))
-                .collect();
-            return Ok(child_nodes_with_parent_path(nodes, ""));
-        }
-
-        let (subvolume_name, sub_path) = split_subvolume_path(path).unwrap_or((path, ""));
-        let subvolume = self
-            .subvolumes
-            .iter()
-            .find(|subvolume| subvolume.name == subvolume_name)
-            .ok_or_else(|| path_not_found(path))?;
-        let (inode_objectid, is_dir, _) = self
-            .resolve_path_in_tree(subvolume.tree_root_bytenr, subvolume.root_dirid, sub_path)?
-            .ok_or_else(|| path_not_found(path))?;
-        if !is_dir {
-            return Err(evidence_core::filesystem::path_is_not_directory(path));
+        let normalized = normalize_path(path);
+        let target = self
+            .filesystem
+            .resolve_path(&normalized)
+            .map_err(btrfs_error)?;
+        if !target.inode.is_dir() {
+            return Err(path_is_directory(path));
         }
 
         let mut nodes = Vec::new();
-        for (name, child_objectid, file_type) in
-            self.list_dir_entries(subvolume.tree_root_bytenr, inode_objectid)?
-        {
+        let tree = target.fs(&self.filesystem);
+        for entry in tree.read_dir(target.inode.ino).map_err(btrfs_error)? {
+            let name = String::from_utf8_lossy(&entry.name).into_owned();
             if is_special_directory_name(&name) {
                 continue;
             }
-            let child_is_dir = file_type == FT_DIR;
-            let metadata = self
-                .get_inode_metadata(subvolume.tree_root_bytenr, child_objectid)
-                .ok()
-                .flatten();
-            let size = if child_is_dir {
-                0
+            let child_path = join_path(&normalized, &name);
+            let inode = if entry.is_inode() {
+                tree.read_inode(entry.ino).map_err(btrfs_error)?
             } else {
-                metadata.map(|value| value.size).unwrap_or_default()
+                self.filesystem
+                    .resolve_path(&child_path)
+                    .map_err(btrfs_error)?
+                    .inode
             };
-            let mut node = fs_node(
-                name,
-                child_is_dir,
-                size,
-                metadata.and_then(|value| value.created_at),
-                metadata.and_then(|value| value.modified_at),
-                metadata.and_then(|value| value.accessed_at),
-            );
-            if let Some(metadata) = metadata {
-                node.read_only = metadata.read_only;
-                node.unix_mode = Some(metadata.unix_mode);
-                node.changed_at = metadata.changed_at;
-            }
-            nodes.push(node);
+            let is_directory = inode.is_dir() || inode.ino == EMPTY_SUBVOL_DIR_OBJECTID;
+            nodes.push(node_from_inode(name, &inode, is_directory));
         }
         Ok(child_nodes_with_parent_path(nodes, path))
     }
 
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
-        let (subvolume, inode_objectid, file_size) = self.resolve_file(path)?;
-        if file_size == 0 {
-            return Ok(Box::new(io::Cursor::new(Vec::new())));
-        }
-        let data = self.read_file_extents(subvolume.tree_root_bytenr, inode_objectid, file_size)?;
+        let data = self
+            .filesystem
+            .read_path(&normalize_path(path))
+            .map_err(btrfs_error)?;
         Ok(Box::new(io::Cursor::new(data)))
     }
 
     fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
-        let (subvolume, inode_objectid, file_size) = self.resolve_file(path)?;
-        self.read_file_extents_range(
-            subvolume.tree_root_bytenr,
-            inode_objectid,
-            file_size,
-            offset,
-            length,
-        )
+        let normalized = normalize_path(path);
+        let target = self
+            .filesystem
+            .resolve_path(&normalized)
+            .map_err(btrfs_error)?;
+        if target.inode.is_dir() {
+            return Err(path_is_directory(path));
+        }
+        let mut output = vec![0u8; length];
+        let read = target
+            .fs(&self.filesystem)
+            .read_at(target.inode.ino, offset, &mut output)
+            .map_err(btrfs_error)?;
+        output.truncate(read);
+        Ok(output)
     }
 
     fn data_source_name(&self) -> &str {
@@ -94,26 +76,37 @@ impl FileSystemReader for BtrfsReader {
     }
 }
 
-impl BtrfsReader {
-    fn resolve_file(&self, path: &str) -> io::Result<(&crate::BtrfsSubvol, u64, u64)> {
-        let (subvolume_name, sub_path) =
-            split_subvolume_path(path).ok_or_else(|| file_not_found(path))?;
-        let subvolume = self
-            .subvolumes
-            .iter()
-            .find(|subvolume| subvolume.name == subvolume_name)
-            .ok_or_else(|| file_not_found(path))?;
-        let (inode_objectid, is_dir, file_size) = self
-            .resolve_path_in_tree(subvolume.tree_root_bytenr, subvolume.root_dirid, sub_path)?
-            .ok_or_else(|| file_not_found(path))?;
-        if is_dir {
-            return Err(path_is_directory(path));
-        }
-        Ok((subvolume, inode_objectid, file_size))
+fn node_from_inode(name: String, inode: &Inode, is_directory: bool) -> FsNode {
+    let mut node = fs_node(
+        name,
+        is_directory,
+        if is_directory { 0 } else { inode.size },
+        timestamp(inode.otime),
+        timestamp(inode.mtime),
+        timestamp(inode.atime),
+    );
+    node.read_only = inode.mode & 0o222 == 0;
+    node.unix_mode = Some(inode.mode);
+    node.changed_at = timestamp(inode.ctime);
+    node
+}
+
+fn timestamp(value: btrfs_driver::inode::Timestamp) -> Option<FsTimestamp> {
+    FsTimestamp::from_timestamp(value.sec, value.nsec)
+}
+
+fn normalize_path(path: &str) -> String {
+    path_components(path).join("/")
+}
+
+fn join_path(parent: &str, name: &str) -> String {
+    if parent.is_empty() {
+        name.to_string()
+    } else {
+        format!("{parent}/{name}")
     }
 }
 
-fn split_subvolume_path(path: &str) -> Option<(&str, &str)> {
-    let separator = path.find(['/', '\\'])?;
-    Some((&path[..separator], &path[separator + 1..]))
-}
+#[cfg(test)]
+#[path = "../tests/unit/filesystem.rs"]
+mod tests;

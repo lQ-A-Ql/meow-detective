@@ -284,6 +284,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrayvec"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
+
+[[package]]
 name = "artifact-storage"
 version = "0.1.0"
 dependencies = [
@@ -595,6 +601,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96a7139abd3d9cebf8cd6f920a389cf3dc9576172e32f4563f188cae3c3eb019"
 dependencies = [
  "crunchy",
+]
+
+[[package]]
+name = "blake2b_simd"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3560a7b1951efe814fcd721938313adc56753ca39f4b23847d7e9a2402f5dbff"
+dependencies = [
+ "arrayvec",
+ "constant_time_eq",
 ]
 
 [[package]]
@@ -1093,6 +1109,12 @@ name = "const-oid"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
+
+[[package]]
+name = "constant_time_eq"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
 name = "containers-bolt"
@@ -2051,7 +2073,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
 dependencies = [
  "crc32fast",
- "miniz_oxide",
+ "miniz_oxide 0.8.9",
  "zlib-rs",
 ]
 
@@ -2177,6 +2199,8 @@ name = "fs-btrfs"
 version = "0.1.0"
 dependencies = [
  "evidence-core",
+ "rust-fs-btrfs",
+ "rust-fs-core",
  "serde",
  "tempfile",
  "thiserror 2.0.21",
@@ -3878,6 +3902,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "miniz_oxide"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
+dependencies = [
+ "adler2",
+]
+
+[[package]]
 name = "mio"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4616,7 +4649,7 @@ dependencies = [
  "crc32fast",
  "fdeflate",
  "flate2",
- "miniz_oxide",
+ "miniz_oxide 0.8.9",
 ]
 
 [[package]]
@@ -4629,7 +4662,7 @@ dependencies = [
  "crc32fast",
  "fdeflate",
  "flate2",
- "miniz_oxide",
+ "miniz_oxide 0.8.9",
 ]
 
 [[package]]
@@ -5311,6 +5344,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-fs-btrfs"
+version = "0.10.2"
+dependencies = [
+ "blake2b_simd",
+ "crc32c",
+ "miniz_oxide 0.9.1",
+ "rust-fs-core",
+ "rust-lzo1x",
+ "ruzstd",
+ "sha2 0.10.9",
+ "twox-hash",
+]
+
+[[package]]
+name = "rust-fs-core"
+version = "0.3.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bbaddc2c8464b3c5e9cee1992a4c4b89e29de35fcaed934c02038733a67b797"
+
+[[package]]
+name = "rust-lzo1x"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fd08cac3694f478b11379ad5e198d839827d6f0d8fa3b5c3a593e95cf6e8522"
+
+[[package]]
 name = "rustc-hash"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5429,6 +5488,15 @@ name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
+
+[[package]]
+name = "ruzstd"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69e4ce4a039f42bf25920b95667e4d789e98749ab11bbb8d2c2936f788421bb5"
+dependencies = [
+ "twox-hash",
+]
 
 [[package]]
 name = "ryu"

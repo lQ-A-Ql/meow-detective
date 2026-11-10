@@ -9,6 +9,8 @@ license.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 evidence-core.workspace = true
+btrfs-driver = { package = "rust-fs-btrfs", version = "=0.10.2", default-features = false }
+fs-core = { package = "rust-fs-core", version = "=0.3.14" }
 
 [dev-dependencies]
 tempfile.workspace = true

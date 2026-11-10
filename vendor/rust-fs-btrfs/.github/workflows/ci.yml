@@ -1,0 +1,560 @@
+name: CI
+
+# EVERY JOB RUNS CHORE TASKS, so a green local `chore test` is the same
+# evidence as a green run here (see the test contract at the top of
+# chores.yml):
+#
+#   unit         `chore test:unit` on a runner with NO fixtures: the tests
+#                that need no tool, no fixture and no VM, in the debug
+#                profile that traps an arithmetic overflow. That the job
+#                passes with test-disks/ empty is what proves the split.
+#   fixtures     `chore fixtures`: the kernel-made images, built in the
+#                fs-linux-test-harness VM under KVM on x86_64, and handed
+#                to the other jobs as an artifact (they are disk images,
+#                the same for every architecture).
+#   test         x86_64, where GitHub gives us KVM: `chore lint` and
+#                `chore test` — the whole gate, with EVERY btrfs-progs
+#                call and every kernel mount happening inside the harness
+#                VM. Nothing installs btrfs-progs on the runner, and the
+#                log shows `[oracle vm]` / `[kernel vm]` for each one.
+#   test-arm64   aarch64 matters on its own (c_char is unsigned there, and
+#                Apple Silicon hosts link the static archive) but GitHub's arm64
+#                runners have NO KVM, so no VM can run: this job runs the
+#                tiers that need none — lint, the unit tier, and the
+#                fixture-reading tests. The tool and kernel oracles are
+#                architecture-independent (they read the same images) and
+#                are covered by `test`; so are the script tests, which
+#                check the tree rather than the machine.
+#   suite-in-vm  `chore test:vm`: the whole suite COMPILED AND RUN INSIDE
+#                the guest. That is how a macOS host runs a Linux suite,
+#                and this job is what keeps that path working.
+#   cli          `chore cli:install` then `chore test:cli`: the command-line
+#                tools built in release mode, staged under every name first
+#                on PATH, and tested AS INSTALLED -- `rust-fs-btrfs doctor`
+#                first, then tests/cli/*.sh, against the kernel-made
+#                fixtures. A change that breaks a tool fails the pull
+#                request, not the release. What btrfs-progs and the kernel
+#                make of the tools' work is judged in the oracle and kernel
+#                tiers (tests/cli_*.rs), where the VM is.
+#   ci-ok        the one required check: green only when every job above
+#                ran and succeeded (failed, cancelled OR skipped fails it).
+#
+# WHAT THIS REPLACED, AND WHY IT MATTERS MORE HERE THAN ANYWHERE ELSE.
+# The old `kernel-gate` job was a list of fifty-odd steps: it installed
+# btrfs-progs on the runner, built most of the fixtures with `sudo mount
+# -o loop` there, and then invoked thirty-four suites by name. Two
+# consequences, both of which bit:
+#
+#   * a suite that was not in the list ran nowhere. `read_path_cost` and
+#     `dup_mirror_fallback` both arrived after the list and were never
+#     added to it, so neither executed an assertion on a pull request
+#     (#70). The tiers are derived from the tests now
+#     (scripts/test-targets.sh), so a new suite is in the gate the moment
+#     its file is committed.
+#   * the kernel half of the gate needed root on the runner, so it did
+#     not exist away from CI at all — a developer on a Mac could not run
+#     it, and neither could one on Linux without handing a test suite
+#     sudo. It runs in the harness guest now, the same way everywhere.
+#
+# THE FLOORS SURVIVED THE MOVE. Each of those steps carried the number of
+# tests it executed on a known-good run, because `cargo test` exits 0 on
+# "0 passed; 0 failed" and a suite that empties from the inside reports
+# green having stopped checking. Those numbers now live in
+# .github/test-floors.txt, one per integration target, and
+# ../rust-fs-core/scripts/test-floor.sh checks each of them against that target's own
+# `test result:` line in the tier log. Same guard, one file, and it no
+# longer requires the workflow to name every suite.
+#
+# THE OUTPUT BUDGET IS IN THE TASKS, so it is in this workflow too. Each
+# tier writes its full output to tmp/logs/<tier>.log and prints a verdict;
+# a tier that prints more than its measured budget FAILS (exit 65), which
+# is how a job that starts emitting thousands of lines turns red here
+# rather than being noticed by whoever scrolls it next. See the budget
+# table at the top of chores.yml.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  # EVERY pull request, whatever its base. A stack of pull requests is based
+  # on each other's branches, and a filter on `main` gave every one but the
+  # bottom no run at all -- which a merge queue then reads as nothing
+  # failing.
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CHORE_VERSION: "0.11.0"
+
+jobs:
+  unit:
+    name: unit (no tools, no fixtures)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chore
+        # Pinned (CHORE_VERSION) and checked against the release's
+        # checksums: the siblings, the tools and the tests all come
+        # through it.
+        run: scripts/ci-install-chore.sh
+      - name: chore siblings
+        # rust-fs-core (the path dependency) and fs-linux-test-harness, at
+        # the refs pinned in chores.yml.
+        run: chore siblings
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-unit-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: No fixtures are present
+        run: |
+          set -euo pipefail
+          if ls test-disks/*.img >/dev/null 2>&1; then
+            echo "::error::test-disks/ has images; this job must prove the unit tier needs none"
+            exit 1
+          fi
+      - name: chore test:unit
+        # The DEBUG profile, which is the point: overflow-checks are on
+        # here and off in release, and the task sets
+        # EXPECT_OVERFLOW_CHECKS=1 so src/lib.rs can prove the build it
+        # was asked to check does check. `--lib` is what carries the
+        # library's own unit tests, the largest body of arithmetic in the
+        # crate. tests/ci_profile.rs refuses a workflow that stops
+        # running this task.
+        run: chore test:unit
+      - name: The unit tier executed its tests
+        run: bash ../rust-fs-core/scripts/test-floor.sh unit 322
+      # THE TIER LOGS OUTLIVE THE RUNNER. Every tier writes its whole run to
+      # tmp/logs/<tier>.log and prints one line naming it; without this the
+      # file goes away with the runner. `if: always()` because the failing
+      # run is the one whose log is wanted most, and a passing run's log is
+      # the evidence -- the `[oracle vm]` / `[kernel vm]` lines -- that the
+      # tools ran in the guest. tests/scripts/ci-tier-logs-uploaded.sh
+      # refuses a job that runs a tier without this step.
+      - name: Keep the tier logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logs-${{ github.job }}
+          path: tmp/logs/
+          if-no-files-found: error
+          retention-days: 7
+
+  fixtures:
+    name: fixtures (harness VM, x86_64 KVM)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chore
+        run: scripts/ci-install-chore.sh
+      - name: chore siblings
+        run: chore siblings
+      - name: KVM, QEMU and Vagrant
+        id: vm-host
+        run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Cache the Vagrant box
+        uses: actions/cache@v4
+        with:
+          path: ~/.vagrant.d/boxes
+          key: ${{ steps.vm-host.outputs.box-cache-key }}
+      - name: chore fixtures
+        run: chore fixtures
+      - name: chore vm:status (the VM is down again)
+        run: '! chore vm:status'
+      # TARRED, AND `--sparse` IS NOT OPTIONAL. These images total about
+      # ten gigabytes of address space and a few hundred megabytes of
+      # actual data: two 2 GiB populated filesystems, ten 400 MiB
+      # geometries, four 600 MiB compressing mounts. upload-artifact
+      # uploads files, not extents, so it would read and store every hole
+      # as zeroes. `tar --sparse` skips the holes on the way in, and the
+      # consumers below restore them on the way out.
+      - name: Pack the fixtures, holes and all
+        run: tar --sparse -czf fixtures.tar.gz -C test-disks .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fixtures
+          path: fixtures.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  test:
+    name: test (x86_64, oracles and kernel in the VM)
+    needs: fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chore
+        run: scripts/ci-install-chore.sh
+      - name: chore siblings
+        run: chore siblings
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-x86_64-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: KVM, QEMU and Vagrant
+        id: vm-host
+        run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Cache the Vagrant box
+        uses: actions/cache@v4
+        with:
+          path: ~/.vagrant.d/boxes
+          key: ${{ steps.vm-host.outputs.box-cache-key }}
+      - name: chore tools
+        run: chore tools
+      - uses: actions/download-artifact@v4
+        with:
+          name: fixtures
+      - name: Unpack the fixtures
+        run: tar --sparse -xzf fixtures.tar.gz -C test-disks
+      # THE EVIDENCE, NOT THE CLAIM. The runner has btrfs-progs, so
+      # instead every one of its programs is replaced with a stub that
+      # fails loudly. Nothing this job runs may use them: the tools
+      # belong to the guest, and a test that reached for one here would
+      # turn the run red with a message saying so, rather than quietly
+      # passing against whatever version this image happens to ship.
+      - name: Make the runner's own btrfs-progs unusable
+        run: |
+          set -eu
+          for tool in btrfs mkfs.btrfs btrfstune btrfs-image btrfs-convert \
+                      btrfs-find-root btrfs-map-logical fsck.btrfs; do
+            path="$(command -v "$tool" 2>/dev/null || true)"
+            [ -n "$path" ] || continue
+            sudo mv "$path" "$path.host-copy"
+            printf '#!/bin/sh\necho "::error::%s ran on the runner; the oracle tools belong in the VM" >&2\nexit 97\n' \
+              "$tool" | sudo tee "$path" >/dev/null
+            sudo chmod +x "$path"
+            echo "poisoned $path"
+          done
+      - name: chore lint
+        run: chore lint
+      - name: chore test
+        run: chore test
+      - name: chore vm:status (the VM is down again)
+        run: '! chore vm:status'
+      # THE FLOORS. Per target against the whole-suite log, which is the
+      # one run that builds every integration target, plus a total for
+      # each tier that runs on its own. A target missing from the log
+      # counts as zero, so a suite that stopped being built fails here.
+      - name: Every suite executed its tests
+        run: bash ../rust-fs-core/scripts/test-floor.sh --targets .github/test-floors.txt suite
+      # Each of these is what that tier executed on a green `chore test`
+      # of this branch, exactly. A tier runs on its own in some job here
+      # and inside the whole-suite run in others, so it needs a total of
+      # its own: the per-target file above only sees the suite log.
+      - name: The tiers executed their tests
+        run: |
+          set -euo pipefail
+          bash ../rust-fs-core/scripts/test-floor.sh unit 322
+          bash ../rust-fs-core/scripts/test-floor.sh oracle 30
+          bash ../rust-fs-core/scripts/test-floor.sh kernel 6
+          bash ../rust-fs-core/scripts/test-floor.sh suite 500
+      # The shell tests are counted by their own `ok` lines rather than
+      # by libtest's summary, but the failure is identical in shape:
+      # `tests/scripts/*.sh` matching fewer files, or a script that
+      # returns 0 having asserted nothing, is a step that passes having
+      # checked nothing.
+      - name: The script tests executed their assertions
+        run: |
+          set -euo pipefail
+          # 53 assertions across four scripts, measured on this branch.
+          # Floor 45: room for a check to be folded into another without
+          # room for a script to stop asserting.
+          assertions=$(grep -ac '^ok' tmp/logs/scripts.log || true)
+          echo "script assertions executed: $assertions (floor 45)"
+          if [ "$assertions" -lt 45 ]; then
+            echo "::error::only $assertions script assertions executed, floor is 45 — a run that asserts fewer stopped early rather than passed" >&2
+            exit 1
+          fi
+      # THE TIER LOGS OUTLIVE THE RUNNER. Every tier writes its whole run to
+      # tmp/logs/<tier>.log and prints one line naming it; without this the
+      # file goes away with the runner. `if: always()` because the failing
+      # run is the one whose log is wanted most, and a passing run's log is
+      # the evidence -- the `[oracle vm]` / `[kernel vm]` lines -- that the
+      # tools ran in the guest. tests/scripts/ci-tier-logs-uploaded.sh
+      # refuses a job that runs a tier without this step.
+      - name: Keep the tier logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logs-${{ github.job }}
+          path: tmp/logs/
+          if-no-files-found: error
+          retention-days: 7
+
+  test-arm64:
+    name: test (aarch64, no KVM on this runner)
+    needs: fixtures
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chore
+        run: scripts/ci-install-chore.sh
+      - name: chore siblings
+        run: chore siblings
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-aarch64-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: fixtures
+      - name: Unpack the fixtures
+        run: tar --sparse -xzf fixtures.tar.gz -C test-disks
+      - name: chore lint
+        run: chore lint
+      - name: chore test:unit
+        run: chore test:unit
+      # Everything that reads a fixture but needs no VM. The oracle and
+      # kernel tiers cannot run here — GitHub's arm64 runners have no
+      # /dev/kvm — and they are not architecture-specific: they read the
+      # same bytes the x86_64 job's guest reads.
+      - name: chore test:images
+        run: chore test:images
+      - name: Both tiers executed their tests
+        run: |
+          set -euo pipefail
+          bash ../rust-fs-core/scripts/test-floor.sh unit 322
+          bash ../rust-fs-core/scripts/test-floor.sh images 149
+      # THE TIER LOGS OUTLIVE THE RUNNER. Every tier writes its whole run to
+      # tmp/logs/<tier>.log and prints one line naming it; without this the
+      # file goes away with the runner. `if: always()` because the failing
+      # run is the one whose log is wanted most, and a passing run's log is
+      # the evidence -- the `[oracle vm]` / `[kernel vm]` lines -- that the
+      # tools ran in the guest. tests/scripts/ci-tier-logs-uploaded.sh
+      # refuses a job that runs a tier without this step.
+      - name: Keep the tier logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logs-${{ github.job }}
+          path: tmp/logs/
+          if-no-files-found: error
+          retention-days: 7
+
+  suite-in-vm:
+    name: suite in the guest (the macOS path)
+    needs: fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chore
+        run: scripts/ci-install-chore.sh
+      - name: chore siblings
+        run: chore siblings
+      - name: KVM, QEMU and Vagrant
+        id: vm-host
+        run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+      - name: Cache the Vagrant box
+        uses: actions/cache@v4
+        with:
+          path: ~/.vagrant.d/boxes
+          key: ${{ steps.vm-host.outputs.box-cache-key }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: fixtures
+      - name: Unpack the fixtures
+        run: tar --sparse -xzf fixtures.tar.gz -C test-disks
+      # No Rust on the runner: the toolchain that matters is the one the
+      # guest installs from rust-toolchain.toml. That is the point of the
+      # job — on a Mac there is no usable host toolchain for these tests
+      # either.
+      - name: chore test:vm
+        run: chore test:vm
+      - name: chore vm:status (the VM is down again)
+        run: '! chore vm:status'
+      - name: The in-guest suite executed its tests
+        run: bash ../rust-fs-core/scripts/test-floor.sh vm 500
+      # THE TIER LOGS OUTLIVE THE RUNNER. Every tier writes its whole run to
+      # tmp/logs/<tier>.log and prints one line naming it; without this the
+      # file goes away with the runner. `if: always()` because the failing
+      # run is the one whose log is wanted most, and a passing run's log is
+      # the evidence -- the `[oracle vm]` / `[kernel vm]` lines -- that the
+      # tools ran in the guest. tests/scripts/ci-tier-logs-uploaded.sh
+      # refuses a job that runs a tier without this step.
+      - name: Keep the tier logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logs-${{ github.job }}
+          path: tmp/logs/
+          if-no-files-found: error
+          retention-days: 7
+
+  cli:
+    name: cli (the installed tools, on PATH)
+    needs: fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chore
+        run: scripts/ci-install-chore.sh
+      - name: chore siblings
+        run: chore siblings
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cli-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cli-cargo-
+      - uses: actions/download-artifact@v4
+        with:
+          name: fixtures
+      - name: Unpack the fixtures
+        run: tar --sparse -xzf fixtures.tar.gz -C test-disks
+      - name: chore cli:install
+        run: chore cli:install
+      # FIRST on PATH, so what the tier tests is what this checkout built.
+      - name: The staged tools first on PATH
+        run: scripts/cli-install.sh --print-bin-dir >> "$GITHUB_PATH"
+      - name: chore test:cli
+        run: chore test:cli
+      # THE RELEASE TARBALL, built here so a release is not the first time
+      # it is put together, by the same rust-fs-core script release.yml's
+      # release-cli call runs: `../rust-fs-core/scripts/package-cli.sh` stages the install prefix
+      # from the binary cli:install built, then refuses it unless it holds
+      # exactly that, every dotted name is a relative symlink to
+      # bin/rust-fs-btrfs, every name has its man page and completions,
+      # CAVEATS is at most four lines, and every name answers --version as
+      # this crate at Cargo.toml's version.
+      - name: The release tarball has the install layout
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          mkdir -p tmp/package
+          cd tmp/package
+          tarball="$(bash ../../../rust-fs-core/scripts/package-cli.sh "$version" linux-x86_64 ../../target/release | tail -n 1)"
+          tar -tzvf "$tarball"
+      # THE TIER LOGS OUTLIVE THE RUNNER, as in every job that runs a tier.
+      - name: Keep the tier logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logs-${{ github.job }}
+          path: tmp/logs/
+          if-no-files-found: error
+          retention-days: 7
+
+  # ONE CHECK GATES THIS REPOSITORY, AND IT STANDS FOR EVERY JOB (#187).
+  #
+  # Branch protection names checks, and a check is a job name — so a list
+  # naming each job has to be edited whenever a job is renamed, split into
+  # a matrix leg, or added, and until someone does, the new work is
+  # required by nobody. That is what the sweep in #197 found in five
+  # repositories. The opposite spelling is worse: a required check no job
+  # produces reads as permanently pending, and with enforce_admins on
+  # nothing merges and there is no failure to point at. This branch is the
+  # case the rule was written for: it retires both jobs the list used to
+  # name and adds three more.
+  #
+  # `if: always()` because a job that was cancelled or skipped is not a job
+  # that passed, and an aggregate that runs only on success cannot say so:
+  # it would be skipped itself, and a skipped required check never reports.
+  # Every result is named in the output, so the run page says which leg
+  # failed without opening it.
+  semver:
+    # `chore check:semver`: this tree's public API against the newest
+    # version on crates.io, refusing a break the version in Cargo.toml does
+    # not declare. Why, and what it cannot see, is at the top of
+    # ../rust-fs-core/scripts/semver-check.sh.
+    name: semver (public API against crates.io)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The version ../rust-fs-core/scripts/semver-check.sh expects. A prebuilt binary,
+      # checksum-verified by the action, rather than a ten-minute build.
+      CARGO_SEMVER_CHECKS_VERSION: "0.50.0"
+      # A failing tier prints only its verdict by default. Here the tail IS
+      # the answer -- which items broke -- so it is printed in full.
+      OUTPUT_BUDGET_FAIL_TAIL: "200"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chore
+        run: scripts/ci-install-chore.sh
+      - name: chore siblings
+        # rust-fs-core, the path dependency the current tree builds against.
+        run: chore siblings
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-semver-checks@${{ env.CARGO_SEMVER_CHECKS_VERSION }}
+      - name: chore check:semver
+        shell: bash
+        run: chore check:semver
+
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [unit, fixtures, test, test-arm64, suite-in-vm, cli, semver]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job ran and succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          bad="$(echo "$NEEDS" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')"
+          if [ -n "$bad" ]; then
+            echo "::error::not green: $bad (failed, cancelled or skipped)"
+            exit 1
+          fi
+          echo "all required jobs succeeded"

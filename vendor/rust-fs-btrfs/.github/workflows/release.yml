@@ -1,0 +1,278 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CHORE_VERSION: "0.11.0"
+  # Pinned tag of the sibling rust-fs-core repo used to satisfy the path dep
+  # during local build/verify. `chore siblings` is the copy that matters
+  # (chores.yml pins FS_CORE_REF there, and CI reads it through the task);
+  # this one is for the publish job below, which clones by hand because it
+  # needs nothing else chore provides. Bump the two in lockstep with the
+  # rust-fs-core version constraint in Cargo.toml.
+  FS_CORE_REF: v0.3.7
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: install chore
+        run: scripts/ci-install-chore.sh
+
+      - name: chore siblings
+        run: chore siblings
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: verify tag matches Cargo.toml version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          crate_ver=$(grep -m1 '^version' Cargo.toml | sed -E 's/version *= *"(.*)"/\1/')
+          if [ "$tag" != "$crate_ver" ]; then
+            echo "tag $tag does not match Cargo.toml version $crate_ver" >&2
+            exit 1
+          fi
+
+      # THE RELEASE GATE IS THE SAME GATE, through the same tasks. It
+      # used to install btrfs-progs on the runner and build the fixtures
+      # there; both now happen inside the fs-linux-test-harness VM, so a
+      # tag is checked against exactly the tooling a pull request was,
+      # rather than against whatever this runner image ships. See the
+      # test contract at the top of chores.yml.
+      - name: KVM, QEMU and Vagrant
+        id: vm-host
+        run: ../fs-linux-test-harness/scripts/ci-setup-linux.sh
+
+      - name: Cache the Vagrant box
+        uses: actions/cache@v4
+        with:
+          path: ~/.vagrant.d/boxes
+          key: ${{ steps.vm-host.outputs.box-cache-key }}
+
+      # What the HOST needs, which is NOT btrfs-progs: ripgrep for the
+      # script tests, and the VM the oracle tools live in.
+      - name: chore tools
+        run: chore tools
+
+      # Without the fixtures the oracles have nothing to compare against,
+      # and they FAIL rather than skip — so a tag cannot ship on the
+      # strength of self-consistency alone, which is what the old
+      # arrangement allowed.
+      - name: chore fixtures
+        run: chore fixtures
+
+      - name: chore lint
+        run: chore lint
+
+      - name: chore test
+        run: chore test
+
+      - name: chore vm:status (the VM is down again)
+        run: '! chore vm:status'
+
+      # THE TIER LOGS OUTLIVE THE RUNNER, as in every ci.yml job that runs
+      # a tier. tier.sh prints one verdict line naming tmp/logs/<tier>.log
+      # and no tail, so without this a failed release keeps nothing but a
+      # line count and an exit status (#255). `if: always()` because the
+      # failed run is the one the log is wanted for. Pinned by SHA, as
+      # every action a release runs should be; the major is ci.yml's.
+      # tests/release_attestation.rs refuses a release.yml without it.
+      - name: Keep the tier logs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: logs-${{ github.job }}
+          path: tmp/logs/
+          if-no-files-found: error
+          retention-days: 7
+
+  # THE COMMAND-LINE TOOLS, AS A DOWNLOADABLE PREFIX. The CLI rides the
+  # library's release, at the same version: one tag, one CHANGELOG, and no
+  # binary that could wrap a library other than the one it was tagged with.
+  #
+  # Packaged, attested and attached by rust-fs-core's reusable release-cli
+  # workflow, the family's one copy (this repository's own package-cli
+  # matrix, attest-and-attach job and ../rust-fs-core/scripts/package-cli.sh drifted from
+  # the others', #251). It builds `--features cli --bin rust-fs-btrfs`
+  # natively on darwin-arm64 and linux-x86_64, runs
+  # `../rust-fs-core/scripts/package-cli.sh`, which lays the tarball out as the install
+  # prefix [package.metadata.package-cli] in Cargo.toml declares and checks
+  # it, and then attests both tarballs and attaches them to the release
+  # `publish` made, from the one job of its own that holds write grants.
+  # The tarballs keep their names, rust-fs-btrfs-<version>-<platform>.tar.gz,
+  # and their layout. The `cli` job in ci.yml runs the same packaging on
+  # every pull request, so a release is not the first time it is put
+  # together.
+  #
+  # The checks are now named `cli / package the tools (<platform>)` and
+  # `cli / attest and attach the tools`. The attestation is signed by the
+  # called workflow, so a download is checked with
+  #
+  #   gh attestation verify <tarball> --repo antimatter-studios/rust-fs-btrfs \
+  #       --signer-workflow antimatter-studios/rust-fs-core/.github/workflows/release-cli.yml
+  #
+  # `with:` cannot read `env`, so core-ref repeats FS_CORE_REF above;
+  # tests/ci_profile.rs holds the two, and Cargo.toml's pin, to one version.
+  # The toolchain is rust-toolchain.toml's, so the release binary is built
+  # by the compiler the branch gate checked.
+  cli:
+    needs: [test, publish]
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: antimatter-studios/rust-fs-core/.github/workflows/release-cli.yml@82e762b995d6a68fb60393ce2624b2245854f4cc # v0.3.7
+    with:
+      core-ref: v0.3.7
+      toolchain: 1.95.0
+
+  publish:
+    name: publish to crates.io
+    needs: test
+    runs-on: ubuntu-latest
+    environment: release
+    # The only job with any write grant, because it is the only one that
+    # needs one: an OIDC token for crates.io trusted publishing and for
+    # signing the attestation, the attestation store, and the release the
+    # .crate is attached to.
+    permissions:
+      id-token: write
+      attestations: write
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: clone rust-fs-core sibling
+        shell: bash
+        run: git clone --depth 1 --branch "$FS_CORE_REF" https://github.com/antimatter-studios/rust-fs-core.git ../rust-fs-core
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable, 2026-09-27
+        with:
+          toolchain: stable
+
+      # A version already on crates.io cannot be published again, and a
+      # re-tag — or a release published by hand — would otherwise fail
+      # this job every time. Skip instead, so the workflow is idempotent
+      # and a red run means something actually went wrong.
+      - name: skip if this version is already on crates.io
+        id: already
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="$(grep -m1 '^name = ' Cargo.toml | sed 's/name = //; s/"//g')"
+          version="$(grep -m1 '^version = ' Cargo.toml | sed 's/version = //; s/"//g')"
+          if curl -sf "https://crates.io/api/v1/crates/$name/$version" \
+               -H 'User-Agent: release-workflow' >/dev/null 2>&1; then
+            echo "$name $version is already published; nothing to do."
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$name $version is not on crates.io; publishing."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # PROVENANCE. A version on crates.io says nothing about where it was
+      # built, so the crate is packaged here, checked after the publish
+      # against the checksum crates.io serves, and only then attested and
+      # attached to the GitHub release for the tag. Packaged on every run,
+      # published or not, so a re-run of a tag whose publish succeeded but
+      # whose attestation did not can still finish the job. The same
+      # packaging `cargo publish` does, and cargo's archive is
+      # reproducible: the file `cargo publish` uploads is this one.
+      # A tag the CHANGELOG does not describe stops before crates.io has
+      # anything (rust-fs-core#209).
+      - name: the CHANGELOG describes this version
+        uses: antimatter-studios/agent-skills/.github/actions/changelog-notes@ed0b96812c5908478dcd84543debf4d5f8bf87e3
+        with:
+          tag: ${{ github.ref_name }}
+
+      - name: package the crate
+        shell: bash
+        run: cargo package --no-verify
+
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
+        if: steps.already.outputs.published == 'false'
+        id: auth
+
+      - name: cargo publish
+        if: steps.already.outputs.published == 'false'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        # No `--locked`: publish must rewrite the `rust-fs-core` path
+        # dependency into its registry equivalent in the packaged
+        # lockfile, which `--locked` forbids ("cannot update the lock
+        # file"). The verify-build resolves rust-fs-core from crates.io via
+        # the `version` constraint, so the published artifact is pinned by
+        # that constraint, not by the local path checkout.
+        run: cargo publish
+
+      # Nothing is attested on trust: the file is compared with the
+      # checksum crates.io records for this version, so the attestation
+      # speaks for the crates.io download, not merely for a file that was
+      # on this runner. The index can trail the upload by a few seconds.
+      - name: the packaged crate is the one crates.io serves
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="$(grep -m1 '^name = ' Cargo.toml | sed 's/name = //; s/"//g')"
+          version="$(grep -m1 '^version = ' Cargo.toml | sed 's/version = //; s/"//g')"
+          crate="target/package/$name-$version.crate"
+          local_sum="$(sha256sum "$crate" | cut -d' ' -f1)"
+          remote_sum=""
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            remote_sum="$(curl -sf "https://crates.io/api/v1/crates/$name/$version" \
+              -H 'User-Agent: release-workflow' | jq -r '.version.checksum')" && break
+            sleep 6
+          done
+          if [ "$local_sum" != "$remote_sum" ]; then
+            echo "::error::$crate is sha256 $local_sum but crates.io records ${remote_sum:-nothing} for $name $version; the file here is not the published one, so it is not attested"
+            exit 1
+          fi
+          echo "$crate is the crates.io download: sha256 $local_sum"
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: target/package/*.crate
+
+      # So `gh attestation verify` has a file to check that anyone can
+      # fetch beside the tag, and so the crates.io download can be
+      # compared with it.
+      # The release body is this version's CHANGELOG section, from github-guard's
+      # changelog extraction through agent-skills' changelog-notes action.
+      - name: the release notes are this version's CHANGELOG section
+        uses: antimatter-studios/agent-skills/.github/actions/changelog-notes@ed0b96812c5908478dcd84543debf4d5f8bf87e3
+        with:
+          tag: ${{ github.ref_name }}
+          output-file: ${{ runner.temp }}/release-notes.md
+      - name: attach the crate to the GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
+          gh release upload "$GITHUB_REF_NAME" target/package/*.crate --clobber

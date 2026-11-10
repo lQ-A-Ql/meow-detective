@@ -1,0 +1,50 @@
+# fs-linux-test-harness consumer config (see ../fs-linux-test-harness/README.md).
+#
+# EVERYTHING THAT IS LINUX HAPPENS IN HERE. The fixtures, which need the
+# real kernel to populate them — subvolumes, snapshots, extended
+# attributes, `chattr +C`, a compressing mount, a two-device pool; every
+# oracle tool (mkfs.btrfs, btrfs check, btrfs inspect-internal), because
+# btrfs-progs on a workstation is whatever that machine has and on a Mac
+# is not the platform these images are for; the kernel oracles, which
+# loop-mount our images; and, on a host that is not Linux, the suite
+# itself (`chore test:vm`).
+
+[project]
+name = "rust-fs-btrfs"
+
+[setup]
+# Runs as root INSIDE the VM; installs btrfs-progs, attr, e2fsprogs (for
+# chattr), python3, and the toolchain the in-guest suite builds with.
+script = "scripts/vm-setup.sh"
+
+[test]
+# Runs INSIDE the guest, from /repo (this repository, mounted there).
+guest_command = "scripts/guest-suite.sh"
+
+[share]
+dir = ".vm-share"
+
+[vm]
+# EIGHT HOURS on the deadline, not two: the whole suite on a loaded
+# arm64 host runs well past an hour — the populated fixtures alone fill
+# two trees with eighty thousand files — and the guest's own poweroff
+# does not care what is using it. A VM pulled out from under a running
+# suite leaves every call it was serving with nothing to answer. The
+# deadline is still what stops a VM nobody cleaned up; it just has to
+# outlast a test run.
+#
+# 4G of memory, and a 32G disk because the fixture build is the heaviest
+# in the family: two 2 GiB populated images, a 600 MiB compressing mount
+# per algorithm, and a two-device pool, all on the guest's own disk
+# before they are copied out.
+#
+# NOT MORE MEMORY. The guest fills a loop-mounted 2 GiB image with
+# eighty thousand files, which is page cache the host has to find; on a
+# 16 GB development machine an 8G guest doing that pushed the host into
+# swap and the VM stopped answering SSH mid-build. The work is disk
+# bound, not memory bound, and 4G is what the sibling consumers use.
+memory = "4G"
+cpus = 4
+disk = "32G"
+ssh_port = 50126
+deadline_minutes = 480

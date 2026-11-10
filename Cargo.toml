@@ -47,7 +47,12 @@ members = [
   "crates/persistence-fjall",
   "crates/artifact-storage",
 ]
-exclude = ["vendor/iscsi-target", "vendor/bbolt-rs", "vendor/fjall-3.1.13"]
+exclude = [
+  "vendor/iscsi-target",
+  "vendor/bbolt-rs",
+  "vendor/fjall-3.1.13",
+  "vendor/rust-fs-btrfs",
+]
 
 [workspace.package]
 edition = "2021"
@@ -101,6 +106,8 @@ fs-ext4 = { path = "crates/fs-ext4" }
 fs-f2fs = { path = "crates/fs-f2fs" }
 fs-erofs = { path = "crates/fs-erofs" }
 fs-btrfs = { path = "crates/fs-btrfs" }
+rust-fs-btrfs = "=0.10.2"
+rust-fs-core = "=0.3.14"
 fs-xfs = { path = "crates/fs-xfs" }
 fs-lvm = { path = "crates/fs-lvm" }
 volume-bitlocker = { path = "crates/volume-bitlocker" }
@@ -200,6 +207,7 @@ artifact-storage = { path = "crates/artifact-storage" }
 [patch.crates-io]
 fjall = { path = "vendor/fjall-3.1.13" }
 bbolt-rs = { path = "vendor/bbolt-rs" }
+rust-fs-btrfs = { path = "vendor/rust-fs-btrfs" }
 # Upstream 1.0.0 acknowledges WRITE commands, reports writable MODE SENSE data,
 # and emits Data-In status/residual fields that Windows rejects. The local patch
 # adds the forensic read-only contract and RFC 7143 interoperability fixes.

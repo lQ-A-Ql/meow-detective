@@ -1,0 +1,95 @@
+name: fuzz
+
+# The explorer half of the fuzzing setup. The gate half --
+# tests/fuzz_decoders.rs -- runs in the `test` job of ci.yml on every
+# pull request, because it is deterministic and finishes in five
+# seconds. This one is neither, and that is why it is here instead.
+#
+# A fuzzer's result depends on how long it ran. Putting it in the pull
+# request gate would mean a fresh finding fails whichever unrelated
+# change happened to be open, and a green result would only ever mean
+# "nothing found in the seconds we could spare".
+#
+# So it runs nightly and on demand, and when it finds something the
+# reproducer is uploaded. That reproducer belongs in fuzz/corpus/, where
+# the gate replays it on every pull request from then on.
+#
+# EROFS is read-only and mounted from sources the reader did not
+# produce -- a container image, an appliance, an OTA payload -- which is
+# exactly the threat model a fuzzer is for.
+on:
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: "Seconds per target"
+        required: false
+        default: "120"
+  schedule:
+    - cron: "0 3 * * *"
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+# Read-only unless a job asks for more. This repository's default token
+# is read-write, and a workflow that declares nothing inherits it, so every
+# job here would otherwise hold a write token beside actions it does not
+# pin.
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: fuzz the superblock, tree and item decoders
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # The fuzz crate depends on the same sibling the parent crate
+      # does, by path, so both tiers build against one copy of it.
+      - name: Clone sibling rust-fs-core
+        run: git clone --depth 1 --branch v0.3.7 https://github.com/antimatter-studios/rust-fs-core.git ../rust-fs-core
+
+      # Nightly, not the pin in rust-toolchain.toml. cargo-fuzz needs
+      # `-Z sanitizer`, which stable does not have. The explicit
+      # `+nightly` in scripts/fuzz-all.sh overrides the pin for these
+      # invocations and nothing else.
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      # Building cargo-fuzz takes several minutes and changes about as
+      # often as the compiler does, so it is cached on its own version
+      # rather than on this repository's lockfile.
+      - name: Cache cargo-fuzz
+        id: cache-cargo-fuzz
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-fuzz
+          key: cargo-fuzz-${{ runner.os }}-${{ runner.arch }}-v1
+
+      - name: Install cargo-fuzz
+        if: steps.cache-cargo-fuzz.outputs.cache-hit != 'true'
+        run: cargo +nightly install cargo-fuzz --locked
+
+      - name: Show what the corpus holds
+        run: |
+          find fuzz/corpus -type f | sort
+          echo "total: $(find fuzz/corpus -type f | wc -l) seeds"
+
+      - name: Fuzz
+        run: ./scripts/fuzz-all.sh "${{ inputs.seconds || '120' }}"
+
+      # WITHOUT THIS THE FINDING IS LOST. A crash reproducer lives in
+      # fuzz/artifacts/<target>/ on the runner, and the runner is thrown
+      # away. The log would say a target crashed and the bytes that
+      # caused it would be gone, leaving the next person to re-derive an
+      # input the fuzzer had already found.
+      - name: Keep the reproducers
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
+          retention-days: 90

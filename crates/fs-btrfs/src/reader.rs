@@ -1,195 +1,70 @@
-use crate::format::{
-    BLOCK_GROUP_RAID1, BTRFS_MAGIC, BTRFS_SUPERBLOCK_OFFSET, CHUNK_ITEM_KEY, KEY_SIZE,
-};
-use crate::types::BtrfsChunk;
 use crate::BtrfsReader;
-use evidence_core::filesystem::invalid_fs_data;
+use btrfs_driver::fs::NODE_CACHE_BLOCKS;
 use evidence_core::EvidenceReader;
-use std::cell::RefCell;
+use fs_core::{BlockRead, Error as BlockError, Result as BlockResult};
 use std::io::{self, Read, Seek, SeekFrom};
+use std::sync::{Arc, Mutex};
 
-// Real format caps nodesize at 64 KiB; accept generously above that while
-// keeping per-block allocations bounded on untrusted images.
-const MAX_NODESIZE: u32 = 1024 * 1024;
+const MIN_BTRFS_DEVICE_BYTES: u64 = 0x1_1000;
 
 impl BtrfsReader {
-    pub fn open(mut reader: Box<dyn EvidenceReader>, offset: u64) -> io::Result<Self> {
-        reader.seek(SeekFrom::Start(offset + BTRFS_SUPERBLOCK_OFFSET))?;
-        let mut sb = [0u8; 4096];
-        reader.read_exact(&mut sb)?;
-
-        if &sb[0x40..0x48] != BTRFS_MAGIC {
-            return Err(invalid_fs_data(format!(
-                "not a valid btrfs filesystem (magic {:02X?})",
-                &sb[0x40..0x48]
-            )));
+    pub fn open(reader: Box<dyn EvidenceReader>, offset: u64) -> io::Result<Self> {
+        let source_size = reader.info().size;
+        let device_bytes = source_size.checked_sub(offset).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Btrfs volume offset exceeds evidence length",
+            )
+        })?;
+        if device_bytes < MIN_BTRFS_DEVICE_BYTES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Btrfs volume is too short to contain its primary superblock",
+            ));
         }
-
-        // Field offsets follow struct btrfs_super_block (btrfs_tree.h).
-        let sectorsize = u32::from_le_bytes(
-            sb[0x90..0x94]
-                .try_into()
-                .map_err(|_| invalid_fs_data("disk parse error"))?,
-        );
-        let nodesize = u32::from_le_bytes(
-            sb[0x94..0x98]
-                .try_into()
-                .map_err(|_| invalid_fs_data("disk parse error"))?,
-        );
-        let root_tree_logical = u64::from_le_bytes(
-            sb[0x50..0x58]
-                .try_into()
-                .map_err(|_| invalid_fs_data("disk parse error"))?,
-        );
-        let chunk_tree_logical = u64::from_le_bytes(
-            sb[0x58..0x60]
-                .try_into()
-                .map_err(|_| invalid_fs_data("disk parse error"))?,
-        );
-        if sectorsize == 0 || nodesize == 0 {
-            return Err(invalid_fs_data("invalid btrfs geometry"));
-        }
-        if nodesize > MAX_NODESIZE {
-            return Err(invalid_fs_data("btrfs nodesize exceeds supported maximum"));
-        }
-
-        let sys_chunk_array_size = u32::from_le_bytes(
-            sb[0xA0..0xA4]
-                .try_into()
-                .map_err(|_| invalid_fs_data("disk parse error"))?,
-        ) as usize;
-        let sys_chunk_start = 0x32B;
-        let sys_chunk_end = (sys_chunk_start + sys_chunk_array_size).min(sb.len());
-
-        let mut reader_obj = Self {
-            reader: RefCell::new(reader),
-            _sectorsize: sectorsize,
-            nodesize,
-            root_tree_logical,
-            chunk_tree_logical,
-            volume_offset: offset,
-            chunk_map: Vec::new(),
-            subvolumes: Vec::new(),
-            default_subvol_root_bytenr: 0,
-            default_subvol_root_dirid: crate::format::FIRST_FREE_OBJECTID,
+        let device = EvidenceBlockDevice {
+            reader: Mutex::new(reader),
+            offset,
+            size: device_bytes,
         };
-
-        reader_obj.parse_chunks(&sb[sys_chunk_start..sys_chunk_end])?;
-        if reader_obj.chunk_tree_logical != 0
-            && reader_obj.chunk_tree_logical != reader_obj.root_tree_logical
-        {
-            reader_obj.read_chunk_tree()?;
-        }
-        reader_obj.discover_subvolumes()?;
-
-        if reader_obj.default_subvol_root_bytenr == 0 {
-            if let Some(default_sv) = reader_obj
-                .subvolumes
-                .iter()
-                .find(|s| s.name == "default" || s.id == crate::format::FS_TREE_OBJECTID)
-            {
-                reader_obj.default_subvol_root_bytenr = default_sv.tree_root_bytenr;
-                reader_obj.default_subvol_root_dirid = default_sv.root_dirid;
-            } else if let Some(first) = reader_obj.subvolumes.first() {
-                reader_obj.default_subvol_root_bytenr = first.tree_root_bytenr;
-                reader_obj.default_subvol_root_dirid = first.root_dirid;
-            }
-        }
-        Ok(reader_obj)
+        let filesystem = btrfs_driver::Filesystem::mount_committed_with_cache(
+            Arc::new(device),
+            NODE_CACHE_BLOCKS,
+        )
+        .map_err(btrfs_error)?;
+        Ok(Self { filesystem })
     }
 
-    pub(crate) fn translate_logical(&self, logical: u64) -> io::Result<u64> {
-        for chunk in &self.chunk_map {
-            let Some(delta) = logical.checked_sub(chunk.logical) else {
-                continue;
-            };
-            if delta < chunk.length {
-                if chunk.stripe_count > 1 && chunk.profile & BLOCK_GROUP_RAID1 == 0 {
-                    return Err(invalid_fs_data(
-                        "btrfs multi-stripe chunk mapping requires device map",
-                    ));
-                }
-                return chunk
-                    .physical
-                    .checked_add(delta)
-                    .ok_or_else(|| invalid_fs_data("btrfs chunk translation overflow"));
-            }
-        }
-        Err(invalid_fs_data(format!(
-            "btrfs logical address {logical:#x} is not covered by any chunk"
-        )))
+    pub fn has_unreplayed_log(&self) -> bool {
+        self.filesystem.superblock().has_dirty_log()
     }
+}
 
-    pub(crate) fn parse_chunks(&mut self, data: &[u8]) -> io::Result<()> {
-        let mut pos = 0usize;
-        while pos + KEY_SIZE + 8 <= data.len() {
-            let key = crate::types::BtrfsKey::parse(&data[pos..pos + KEY_SIZE])?;
-            pos += KEY_SIZE;
-            if key.ty != CHUNK_ITEM_KEY {
-                break;
-            }
-            if pos + 0x30 > data.len() {
-                break;
-            }
-            let length = u64::from_le_bytes(
-                data[pos..pos + 8]
-                    .try_into()
-                    .map_err(|_| invalid_fs_data("disk parse error"))?,
-            );
-            let profile = u64::from_le_bytes(
-                data[pos + 0x18..pos + 0x20]
-                    .try_into()
-                    .map_err(|_| invalid_fs_data("btrfs chunk profile parse error"))?,
-            );
-            let num_stripes = u16::from_le_bytes(
-                data[pos + 0x2C..pos + 0x2E]
-                    .try_into()
-                    .map_err(|_| invalid_fs_data("disk parse error"))?,
-            );
-            if num_stripes == 0 {
-                return Err(invalid_fs_data("btrfs chunk item has no stripes"));
-            }
-            let required = 0x30usize
-                .checked_add(num_stripes as usize * 0x20)
-                .ok_or_else(|| invalid_fs_data("btrfs stripe count overflow"))?;
-            if data.len() < pos + required {
-                return Err(invalid_fs_data("btrfs chunk item stripes are truncated"));
-            }
-            let stripe_offset = pos + 0x30;
-            let phys = u64::from_le_bytes(
-                data[stripe_offset + 8..stripe_offset + 16]
-                    .try_into()
-                    .map_err(|_| invalid_fs_data("btrfs chunk stripe physical too short"))?,
-            );
-            self.chunk_map.push(BtrfsChunk {
-                logical: key.offset,
-                length,
-                physical: phys,
-                profile,
-                stripe_count: num_stripes,
-            });
-            pos += required;
-        }
+struct EvidenceBlockDevice {
+    reader: Mutex<Box<dyn EvidenceReader>>,
+    offset: u64,
+    size: u64,
+}
+
+impl BlockRead for EvidenceBlockDevice {
+    fn read_at(&self, offset: u64, buffer: &mut [u8]) -> BlockResult<()> {
+        let offset = self.offset.checked_add(offset).ok_or_else(|| {
+            BlockError::Custom("Btrfs device offset overflowed the evidence reader".into())
+        })?;
+        let mut reader = self
+            .reader
+            .lock()
+            .map_err(|_| BlockError::Custom("Btrfs evidence reader lock was poisoned".into()))?;
+        reader.seek(SeekFrom::Start(offset))?;
+        reader.read_exact(buffer)?;
         Ok(())
     }
 
-    pub(crate) fn read_logical_block(&self, logical: u64) -> io::Result<Vec<u8>> {
-        self.read_logical_range(logical, self.nodesize as usize)
+    fn size_bytes(&self) -> u64 {
+        self.size
     }
+}
 
-    pub(crate) fn read_logical_range(&self, logical: u64, length: usize) -> io::Result<Vec<u8>> {
-        let physical = self.translate_logical(logical)?;
-        let absolute = self
-            .volume_offset
-            .checked_add(physical)
-            .ok_or_else(|| invalid_fs_data("btrfs physical address overflow"))?;
-        let mut buf = vec![0u8; length];
-        if length == 0 {
-            return Ok(buf);
-        }
-        let mut reader = self.reader.borrow_mut();
-        reader.seek(SeekFrom::Start(absolute))?;
-        reader.read_exact(&mut buf)?;
-        Ok(buf)
-    }
+pub(crate) fn btrfs_error(error: btrfs_driver::Error) -> io::Error {
+    io::Error::other(error)
 }

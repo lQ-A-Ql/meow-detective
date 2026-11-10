@@ -1,0 +1,123 @@
+[package]
+name = "rust-fs-btrfs"
+version = "0.10.2"
+edition = "2021"
+license = "MIT"
+description = "Pure-Rust Btrfs filesystem driver. Exposes a C ABI (fs_btrfs_*) suitable for FFI from C/C++/Swift/Go."
+repository = "https://github.com/antimatter-studios/rust-fs-btrfs"
+
+# The fuzz crate is its own package, on its own toolchain, and is not
+# part of this one. Without this, `cargo package` and `cargo publish`
+# try to include it and fail on the nightly-only dependency.
+exclude = ["fuzz"]
+
+# What the release tarball ships, read by rust-fs-core's package-cli
+# (`../rust-fs-core/scripts/package-cli.sh`, run by the release-cli workflow
+# release.yml calls and by ci.yml's `cli` job): every dotted name with its
+# man section -- which must agree with `rust-fs-btrfs generate names` --
+# and the licence files. CAVEATS is the default, packaging/CAVEATS.
+[package.metadata.package-cli]
+names = { "fs.btrfs" = 1, "mkfs.btrfs" = 8, "fsck.btrfs" = 8 }
+licenses = ["LICENSE"]
+
+# The name this crate had on crates.io: the semver check's baseline until
+# a release exists under the new one (rust-fs-core's semver-check.sh).
+[package.metadata.semver]
+former-name = "am-fs-btrfs"
+
+[lib]
+name = "fs_btrfs"
+crate-type = ["staticlib", "rlib"]
+
+# THE COMMAND-LINE TOOLS: one multi-call binary, named for the repository.
+# It dispatches on argv[0], the way busybox and e2fsprogs do, so the
+# release step installs it once as `rust-fs-btrfs` and links `fs.btrfs` to
+# it (cargo refuses a dot in a target name, so the dotted name is never
+# cargo's). `rust-fs-btrfs fs ...` is the form nothing else on PATH can
+# shadow, and `cargo run --features cli -- fs ...` works before anything
+# is installed.
+#
+# BEHIND THE `cli` FEATURE, so the static library a consumer links gains no
+# dependency from the tools: `required-features` keeps the target out of a
+# build that did not ask for it. scripts/test.sh and `chore lint` ask for
+# it, so the tests and clippy both reach it.
+[[bin]]
+name = "rust-fs-btrfs"
+path = "src/cli/main.rs"
+required-features = ["cli"]
+
+[features]
+# The command-line tools and nothing else. The plumbing they share --
+# dispatch, --version, doctor, the output contract, man pages and
+# completions -- is rust-fs-core's `cli` feature, turned on only here, so
+# the static library gains nothing. clap is MIT/Apache-2.0.
+cli = ["dep:clap", "rust-fs-core/cli"]
+
+[dependencies]
+# Btrfs lets the volume pick its metadata hash at mkfs time, so a reader
+# has to carry all four. Every crate below is permissive-licensed
+# (MIT / Apache-2.0 / BSL-1.0); no GPL or LGPL anywhere in the tree.
+#
+# csum_type 0 — CRC32C (Castagnoli). Apache-2.0.
+crc32c = "0.6"
+# csum_type 1 — XXH64, seed 0. MIT.
+twox-hash = { version = "2", default-features = false, features = ["xxhash64"] }
+# csum_type 2 — SHA-256. MIT OR Apache-2.0.
+sha2 = "0.10"
+# csum_type 3 — BLAKE2b truncated to 256 bits. MIT.
+blake2b_simd = "1.0"
+# Block-device trait surface shared with the sister fs-* drivers and the
+# img-* disk-image readers.
+#
+# THE VERSION IS ALSO THE FAMILY SCRIPTS' VERSION: every tier, floor and
+# check runs rust-fs-core's scripts in place from this checkout, so moving
+# the pin is how they are upgraded, and nothing here is a copy of them.
+#
+# The path dependency is deliberate and stays: `chore test:vm` stages this
+# sibling onto the VM share and guest-suite.sh links it into place, so
+# ../rust-fs-core resolves inside the guest as well as on the host. An
+# absolute path written into a .cargo/config.toml override would not.
+rust-fs-core = { path = "../rust-fs-core", version = "0.3.7" }
+# Decompressors, one per compression type Btrfs defines. All three are
+# pure Rust with no C bindings, and permissively licensed like the rest.
+#
+# compression 1 — zlib. MIT OR Zlib OR Apache-2.0.
+miniz_oxide = "0.9.1"
+# compression 2 — LZO1X, in the segmented framing Btrfs wraps it in. MIT,
+# and ours: see src/compression.rs for the framing.
+rust-lzo1x = "0.4.0"
+# compression 3 — zstd. MIT.
+ruzstd = "0.9.0"
+# The command-line tools' argument parser, behind the `cli` feature (see
+# the `rust-fs-btrfs` target above). No derive: the builder API keeps each
+# tool's command a function the man pages and completions can be made from.
+clap = { version = "4.5", optional = true, default-features = false, features = ["std", "help", "usage", "error-context", "suggestions"] }
+
+[dev-dependencies]
+# The test suite's one way in to a fixture, to a btrfs-progs tool and to
+# the kernel — all three of which live in the fs-linux-test-harness VM.
+# Dev-only: it never reaches a consumer of this crate, and it is what
+# tests/test_contract.rs holds every test to.
+fs-btrfs-test-support = { path = "tests/support" }
+# YAML parser for tests/ci_profile.rs, which reads .github/workflows/ci.yml
+# and refuses if the debug run that lets the PR gate see an arithmetic
+# overflow has been removed or disabled. That guard hand-rolled its own
+# scanner and was defeated by ordinary YAML -- a quoted "if" key, a
+# commented-out trigger, and a `|-` block scalar. Quoted keys, block
+# styles and comments are the grammar, not edge cases, so the file is
+# parsed rather than scanned. Pure Rust, YAML 1.2 (so GitHub's `on:` key
+# stays the string `on` and is not folded into a boolean),
+# MIT/Apache-2.0, and no C to transpile -- unlike serde_yaml, which is
+# deprecated and wraps unsafe-libyaml. Dev-only: it never reaches a
+# consumer of this crate.
+saphyr = "0.0.12"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+panic = "unwind"  # required for catch_unwind at the FFI boundary
+
+[profile.dev]
+opt-level = 1
+panic = "unwind"

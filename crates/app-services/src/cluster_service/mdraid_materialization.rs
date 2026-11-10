@@ -8,7 +8,7 @@ use domain::{
 
 use super::linux_import::LinuxEvidenceSetImportPlan;
 use super::mdraid::{
-    discover_linux_evidence_set_mdraid, open_mdraid0_reader, open_persisted_mdraid_reader,
+    discover_linux_evidence_set_mdraid, open_mdraid_reader, open_persisted_mdraid_reader,
     write_mdraid_descriptor, MdRaidArrayPlan, MdRaidPlanError,
 };
 
@@ -68,10 +68,15 @@ fn register_mdraid_array(
         repo.delete_cascade_with_audit(&source_id, "Rebuild incomplete MD RAID catalog")
             .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
     }
-    let logical_size = open_mdraid0_reader(plan)?.logical_size();
+    let logical_size = open_mdraid_reader(plan)?.logical_size();
+    let level_label = if plan.level == -1 {
+        "linear".to_string()
+    } else {
+        plan.level.to_string()
+    };
     let source = DataSource {
         id: source_id.clone(),
-        name: format!("MD RAID0 {}", hex::encode(plan.array_uuid)),
+        name: format!("MD RAID{} {}", level_label, hex::encode(plan.array_uuid)),
         kind: DataSourceKind::MdRaid,
         source_path: descriptor_path.clone(),
         imported_at: Utc::now(),
@@ -163,11 +168,17 @@ fn enumerate_mdraid_catalog(
     let started = std::time::Instant::now();
     let descriptor_path = source.source_path.clone();
     let reader = open_persisted_mdraid_reader(&descriptor_path)?;
-    fs_btrfs::BtrfsReader::open(
+    let filesystem = fs_btrfs::BtrfsReader::open(
         Box::new(reader) as Box<dyn evidence_core::EvidenceReader>,
         0,
     )
     .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    if filesystem.has_unreplayed_log() {
+        tracing::warn!(
+            data_source_id = %source.id.0,
+            "Btrfs log tree is not replayed; committed filesystem trees are used"
+        );
+    }
     let reader_factory: Arc<
         dyn Fn() -> persistence_sqlite::DbResult<Box<dyn evidence_core::FileSystemReader>>
             + Send

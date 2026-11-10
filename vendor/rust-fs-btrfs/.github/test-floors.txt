@@ -1,0 +1,103 @@
+# test-floors.txt — one floor per integration target, checked by
+# rust-fs-core's floor against the whole-suite tier log:
+#
+#   bash ../rust-fs-core/scripts/test-floor.sh --targets .github/test-floors.txt suite
+#
+# A FLOOR, BECAUSE THE FAILURE MODE HERE IS AN ABSENCE. `cargo test`
+# exits 0 on "0 passed; 0 failed", so a target that selected nothing
+# looks exactly like a target that passed everything. A suite emptied
+# from the inside — every test renamed, feature-gated out, or moved to
+# another file — reports green having stopped checking that this driver
+# reads Btrfs. A target missing from the log counts as zero, so a suite
+# that stopped being BUILT fails here too.
+#
+# WHERE THESE NUMBERS LIVED BEFORE. In .github/workflows/ci.yml, one per
+# `cargo test --test <name>` step, across a job of fifty-odd steps. That
+# arrangement had the guard and the hazard in one place: a suite absent
+# from the list executed nowhere at all, and two of them were (#70). The
+# tiers are derived from the tests now, so the workflow no longer names
+# suites — and the floors moved here rather than being lost, which is
+# the point of this file.
+#
+# THE NUMBERS ARE MEASURED, not guessed: each is what that target
+# executed on a known-good run of `chore test` (the whole suite, release
+# profile). They move UP with the suite and never down: raising one when
+# tests are added is bookkeeping, lowering one is a decision someone has
+# to write down in a diff.
+#
+# `lib` is the library's own unit tests, which `cargo test` reports as
+# `Running unittests src/lib.rs`.
+#
+# Measured on a green `chore test` of this branch: fifty targets, 500
+# tests between them. Every number below is that run's count for that
+# target, exactly — a floor set under the measurement is a floor that
+# lets a suite lose tests quietly, which is the thing this file exists
+# to refuse.
+#
+# <target> <floor>
+acl_oracle                8
+backup_ring               1
+block_group_used          1
+bootstrap_chain           2
+btree_oracle              4
+capi                      39
+chore_manifest            15
+chunk_tree_items          3
+ci_profile                67
+cli_dispatch              13
+cli_docs                  2
+cli_fsck_oracle           4
+cli_label_kernel          2
+cli_mkfs_kernel           5
+cli_oracle                3
+cli_write_kernel          1
+commit_order              3
+compat_ro_write_refusal   2
+compressed_extent_window  3
+compressed_short_decode   2
+compression_oracle        3
+cow_write_oracle          3
+crash_consistency         3
+csum_oracle               6
+csum_width_populated      1
+docs_describe_the_code    5
+dup_data_writes           1
+dup_mirror_fallback       7
+extent_record_missing     1
+extent_window_read        2
+extent_window_write       3
+extent_write_oracle       3
+fixtures_present          2
+free_space_oracle         4
+free_space_straddle       2
+fs_oracle                 13
+fstree_oracle             2
+fuzz_decoders             5
+getxattr_byte_names       1
+hard_link_extref          5
+kernel_readback           2
+leaf_edit_oracle          3
+lib                       232
+lookup_by_name_key        1
+node_write_oracle         4
+oracle_vm_fixtures        3
+pool_oracle               4
+prealloc_extent_write     1
+read_file_huge_size       1
+read_path_cost            1
+readlink_kernel_oracle    1
+release_attestation       2
+render_plan               4
+shared_tree_block_release 1
+snapshot_shared_write     1
+split_oracle              4
+subvol_oracle             8
+superblock_mirrors        4
+super_flags_refusals      3
+super_write_oracle        3
+test_contract             7
+transaction_oracle        5
+transaction_plan          7
+tree_write_oracle         6
+write_oracle              3
+xattr_oracle              9

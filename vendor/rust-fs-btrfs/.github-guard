@@ -1,0 +1,42 @@
+# .github-guard — declarations github-guard reads (see the github-guard skill:
+# https://github.com/antimatter-studios/agent-skills/blob/main/.claude/skills/github-guard/README.md).
+# git-config format: check with `git config -f .github-guard --list`, and
+# double-quote any value containing # or ;.
+
+# What must pass before main takes a merge. github-guard reads this from the
+# default branch on the server and applies it to branch protection.
+#
+#   ci-ok   ci.yml: the one always-run gate. It fails when any job it needs
+#           failed, was cancelled or was skipped: the unit tier with no
+#           fixtures, the kernel-made fixtures built in the
+#           fs-linux-test-harness VM, the whole suite (lint, unit, the
+#           btrfs-progs oracles, the kernel oracles) on x86_64, the
+#           VM-free tiers on aarch64, and the suite compiled and run
+#           inside the guest.
+#
+# WHY A GATE RATHER THAN A LIST OF JOBS (#187). This file used to name two
+# jobs — `test-ubuntu-latest` and `validate against kernel btrfs driver` —
+# and that is a shape with two failure modes, both of which were live here.
+# A renamed or split job leaves a required check that never reports, which
+# blocks every pull request with nothing to point at; and an ADDED job is
+# required by nobody, so a leg can run, go red, and merge anyway. The first
+# came due immediately: the move into the harness VM renames both of those
+# jobs out of existence and adds three more. Requiring the aggregate
+# instead means jobs can be added, renamed or split freely, and the
+# aggregate fails on a SKIPPED job too — which is the case a list of names
+# cannot express at all.
+#
+# release.yml is deliberately absent: it triggers on a version tag, never on
+# a pull request, and a required check that never reports blocks every merge
+# forever.
+#
+# ONE NAME, AND IT IS THE AGGREGATE. `ci-ok` needs every other job in
+# ci.yml and fails unless each concluded success, so a job renamed, split
+# into a matrix leg or added is gated the moment it is in the workflow --
+# without anyone editing this file. Naming the jobs here instead is what
+# left new work required by nobody in five repositories (#197), and
+# tests/ci_aggregate_gate.rs is what keeps the aggregate honest: it fails
+# if a job is missing from ci-ok's needs, if ci-ok loses `if: always()`,
+# or if this list names anything else (#187).
+[checks]
+	required = ci-ok

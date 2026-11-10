@@ -1,0 +1,54 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# THE FIXTURES, which are generated and large.
+#
+# `chore fixtures` builds them with the real kernel inside the
+# fs-linux-test-harness VM; `test-disks/build-fixtures.sh --artefacts`
+# lists every file a full build produces. Ten gigabytes of address space
+# and a few hundred megabytes of data, regenerable in one command, and
+# none of it belongs in git.
+#
+# The scripts that build them do, which is why this is a list of
+# extensions rather than `test-disks/`.
+test-disks/*.img
+test-disks/*.superdump
+test-disks/*.manifest
+test-disks/*.compression
+test-disks/*.super
+test-disks/btrfs-split*.txt
+test-disks/snapshot/
+test-disks/dirtylog/
+test-disks/cli/
+test-disks/[0-9]*/
+test-disks/test-run/
+!test-disks/.gitkeep
+
+# Test scratch. Every image a test writes lives here, because the oracle
+# tools run in the guest, which sees this repository and nothing else of
+# the host (tests/support/src/lib.rs). The tier logs live here too.
+tmp/
+
+.claude/
+# The harness's shared directory: what a run hands across to the guest
+# and back. No trailing slash: `.vm-share/` matches a directory only, so
+# a symlink named `.vm-share` was not ignored and `git add -A` committed
+# it onto a fix branch. Measured here, on this branch.
+.vm-share
+
+# chore fingerprint cache (sources:/generates: checksums). Derived data.
+.chore/
+
+# Build output. `chore staticlib` writes the archive and headers here for a
+# consumer to copy out of (`chore artifact` prints this directory).
+/dist/
