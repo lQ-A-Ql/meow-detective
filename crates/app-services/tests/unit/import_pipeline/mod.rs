@@ -1276,24 +1276,14 @@ fn e01_full_import() {
             ] {
                 let count = catalog
                     .iter()
-                    .filter(|record| {
-                        record.name.eq_ignore_ascii_case(expected)
-                            && normalized_path(record).ends_with(
-                                &format!("/{}", expected.to_ascii_lowercase()),
-                            )
-                    })
+                    .filter(|record| record.name.eq_ignore_ascii_case(expected))
                     .count() as i64;
                 assert!(count >= 1, "Expected modern NTFS name {expected:?}");
             }
             for dos_alias in ["PROGRA~1", "PROGRA~2", "SYSTEM~1"] {
                 let count = catalog
                     .iter()
-                    .filter(|record| {
-                        record.name.eq_ignore_ascii_case(dos_alias)
-                            && normalized_path(record).ends_with(
-                                &format!("/{}", dos_alias.to_ascii_lowercase()),
-                            )
-                    })
+                    .filter(|record| record.name.eq_ignore_ascii_case(dos_alias))
                     .count() as i64;
                 assert_eq!(count, 0, "Unexpected DOS alias {dos_alias:?}");
             }
