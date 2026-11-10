@@ -12,7 +12,10 @@ use crate::import_pipeline::{
 crate::native_source_test_support!();
 use crate::{case_service, import_analysis, import_precheck, search_service, staging};
 use chrono::{DateTime, TimeZone, Utc};
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, job_repo::JobRepo};
+use persistence_fjall::{FileEntryRecord, ScanDirection};
+use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo, job_repo::JobRepo, timeline_repo::TimelineRepo,
+};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
@@ -39,6 +42,31 @@ fn single_imported_data_source_id(
         |row| row.get::<_, String>(0).map(domain::DataSourceId),
     )
     .map_err(Into::into)
+}
+
+fn read_native_catalog(
+    source: &crate::source_db::FjallReadOnlySourceStorageHandle,
+    source_id: &str,
+) -> persistence_sqlite::DbResult<Vec<FileEntryRecord>> {
+    let snapshot = source.snapshot();
+    let mut cursor = None;
+    let mut records = Vec::new();
+    loop {
+        let page = source
+            .catalog_list_all(
+                &snapshot,
+                source_id,
+                cursor.as_deref(),
+                ScanDirection::Forward,
+                512,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        records.extend(page.records);
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            return Ok(records);
+        }
+    }
 }
 
 fn filetime(dt: DateTime<Utc>) -> u64 {
@@ -1180,41 +1208,43 @@ fn e01_full_import() {
             let source_conn =
                 crate::source_db::open_source_db(&active.case_root, &data_source_id)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let native_source = crate::source_db::open_registered_fjall_source_read_only(
+                &active.case_root,
+                &data_source_id,
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let catalog = read_native_catalog(&native_source, &data_source_id.0)?;
 
             eprintln!("\n[2/7] Verifying file entries...");
-            let file_count: i64 =
-                source_conn.query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
+            let file_count = catalog.len() as i64;
             eprintln!("  File entries: {}", file_count);
             assert!(file_count > 0, "Expected file entries, got 0");
-            let root_system32: i64 = source_conn.query_row(
-                "SELECT COUNT(*) FROM file_entries
-                 WHERE name = 'System32' COLLATE NOCASE
-                   AND parent_id IN (
-                     SELECT id FROM file_entries WHERE parent_id IS NULL
-                   )",
-                [],
-                |row| row.get(0),
-            )?;
-            let root_windows: i64 = source_conn.query_row(
-                "SELECT COUNT(*) FROM file_entries
-                 WHERE entry_type = 'directory' COLLATE NOCASE
-                   AND name = 'Windows' COLLATE NOCASE
-                   AND parent_id IN (
-                     SELECT id FROM file_entries WHERE parent_id IS NULL
-                   )",
-                [],
-                |row| row.get(0),
-            )?;
-            let system_hives: i64 = source_conn.query_row(
-                "SELECT COUNT(*) FROM file_entries
-                 WHERE LOWER(REPLACE(path, '\\', '/')) IN (
-                   'windows/system32/config/system',
-                   'windows/system32/config/software',
-                   'windows/system32/winevt/logs/system.evtx'
-                 )",
-                [],
-                |row| row.get(0),
-            )?;
+            let root_system32 = catalog
+                .iter()
+                .filter(|record| {
+                    record.parent_id.is_none()
+                        && record.name.eq_ignore_ascii_case("System32")
+                })
+                .count() as i64;
+            let root_windows = catalog
+                .iter()
+                .filter(|record| {
+                    record.parent_id.is_none()
+                        && record.entry_type == persistence_fjall::CatalogEntryType::Directory
+                        && record.name.eq_ignore_ascii_case("Windows")
+                })
+                .count() as i64;
+            let system_hives = catalog
+                .iter()
+                .filter(|record| {
+                    matches!(
+                        record.path.replace('\\', "/").to_ascii_lowercase().as_str(),
+                        "windows/system32/config/system"
+                            | "windows/system32/config/software"
+                            | "windows/system32/winevt/logs/system.evtx"
+                    )
+                })
+                .count() as i64;
             eprintln!(
                 "  NTFS shape: root Windows={}, root System32={}, key hives/logs={}",
                 root_windows, root_system32, system_hives
@@ -1236,43 +1266,33 @@ fn e01_full_import() {
                 "Program Files (x86)",
                 "System Volume Information",
             ] {
-                let count: i64 = source_conn.query_row(
-                    "SELECT COUNT(*) FROM file_entries
-                     WHERE name = ?1
-                       AND parent_id IN (
-                         SELECT id FROM file_entries WHERE parent_id IS NULL
-                       )",
-                    [expected],
-                    |row| row.get(0),
-                )?;
+                let count = catalog
+                    .iter()
+                    .filter(|record| {
+                        record.parent_id.is_none() && record.name.eq_ignore_ascii_case(expected)
+                    })
+                    .count() as i64;
                 assert!(count >= 1, "Expected modern NTFS name {expected:?}");
             }
             for dos_alias in ["PROGRA~1", "PROGRA~2", "SYSTEM~1"] {
-                let count: i64 = source_conn.query_row(
-                    "SELECT COUNT(*) FROM file_entries
-                     WHERE name = ?1
-                       AND parent_id IN (
-                         SELECT id FROM file_entries WHERE parent_id IS NULL
-                       )",
-                    [dos_alias],
-                    |row| row.get(0),
-                )?;
+                let count = catalog
+                    .iter()
+                    .filter(|record| {
+                        record.parent_id.is_none() && record.name.eq_ignore_ascii_case(dos_alias)
+                    })
+                    .count() as i64;
                 assert_eq!(count, 0, "Unexpected DOS alias {dos_alias:?}");
             }
 
             eprintln!("\n[3/7] Verifying import-finalized timeline...");
-            let tl_count_after_import: i64 = source_conn.query_row(
-                "SELECT COUNT(*) FROM timeline_events",
-                [],
-                |row| row.get(0),
-            )?;
+            let tl_count_after_import = TimelineRepo::new(&source_conn).count()?;
             assert!(
                 tl_count_after_import > 0,
                 "metadata-only import should finalize the narrowed Timeline projection"
             );
             let timeline_page = crate::timeline_service::query_timeline(&source_conn, 0, 10)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            assert_eq!(timeline_page.total as i64, tl_count_after_import);
+            assert_eq!(timeline_page.total, tl_count_after_import);
             eprintln!(
                 "  Timeline events after import: {}",
                 tl_count_after_import
@@ -1370,8 +1390,7 @@ fn e01_full_import() {
             );
 
             eprintln!("\n[6/7] Verifying optional post-import content outputs...");
-            let artifact_count: i64 =
-                source_conn.query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))?;
+            let artifact_count = ArtifactRepo::new(&source_conn).count()?;
             eprintln!("  Artifacts: {}", artifact_count);
             let index_rows: i64 = staging::analysis_staging_db_path(
                 &active.case_root,
