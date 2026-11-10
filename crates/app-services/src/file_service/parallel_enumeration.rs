@@ -77,6 +77,7 @@ pub fn enumerate_filesystem_parallel_with_factory(
         .send(DirectoryWork {
             parent_id: root_id,
             path: String::new(),
+            depth: 0,
         })
         .map_err(|_| DbError::System("Parallel filesystem work queue closed".to_string()))?;
     let result = run_workers(
@@ -123,6 +124,7 @@ fn enumerate_native_parallel(
         .send(DirectoryWork {
             parent_id: root_entry.id.clone(),
             path: String::new(),
+            depth: 0,
         })
         .map_err(|_| DbError::System("Parallel filesystem work queue closed".to_string()))?;
     std::thread::scope(|scope| {

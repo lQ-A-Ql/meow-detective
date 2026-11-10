@@ -10,14 +10,19 @@ use uuid::Uuid;
 
 use super::workers::cancellation_requested;
 
+pub(super) const MAX_ENUMERATION_DEPTH: u32 = 256;
+pub(super) const MAX_ENUMERATION_PATH_BYTES: usize = 60 * 1024;
+
 pub(super) struct DirectoryWork {
     pub(super) parent_id: FileEntryId,
     pub(super) path: String,
+    pub(super) depth: u32,
 }
 
 pub(super) struct DirectoryResult {
     pub(super) parent_id: FileEntryId,
     pub(super) path: String,
+    pub(super) depth: u32,
     pub(super) children: Vec<FsNode>,
     pub(super) diagnostics: Vec<FileSystemDiagnostic>,
 }
@@ -112,6 +117,7 @@ impl<'a> ParallelBatchProducer<'a> {
                 }
                 let id = FileEntryId(Uuid::new_v4().to_string());
                 if child.is_dir {
+                    let child_depth = checked_child_depth(result.depth, &child.path)?;
                     self.pending = self.pending.saturating_add(1);
                     self.dirs = self.dirs.saturating_add(1);
                     self.work_tx
@@ -120,6 +126,7 @@ impl<'a> ParallelBatchProducer<'a> {
                         .send(DirectoryWork {
                             parent_id: id.clone(),
                             path: child.path.clone(),
+                            depth: child_depth,
                         })
                         .map_err(|_| {
                             DbError::System("Parallel filesystem work queue closed".to_string())
@@ -211,4 +218,14 @@ fn compute_enumeration_progress(processed: u64) -> u32 {
     } else {
         (80 + (processed - 1000).min(5000) * 15 / 5000) as u32
     }
+}
+
+fn checked_child_depth(parent_depth: u32, path: &str) -> DbResult<u32> {
+    let depth = parent_depth.saturating_add(1);
+    if depth > MAX_ENUMERATION_DEPTH || path.len() > MAX_ENUMERATION_PATH_BYTES {
+        return Err(DbError::System(format!(
+            "Filesystem directory traversal exceeded safety limits at '{path}'"
+        )));
+    }
+    Ok(depth)
 }

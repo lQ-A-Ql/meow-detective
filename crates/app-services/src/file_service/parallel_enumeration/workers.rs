@@ -6,7 +6,10 @@ use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use super::producer::{file_entry_for_child, DirectoryResult, DirectoryWork, WorkerResult};
+use super::producer::{
+    file_entry_for_child, DirectoryResult, DirectoryWork, WorkerResult, MAX_ENUMERATION_DEPTH,
+    MAX_ENUMERATION_PATH_BYTES,
+};
 
 pub(super) struct WorkerRuntime<'a> {
     pub(super) reader_factory: Arc<dyn Fn() -> DbResult<Box<dyn FileSystemReader>> + Send + Sync>,
@@ -106,6 +109,7 @@ pub(super) fn spawn_worker<'scope, 'env>(
                 .send(WorkerResult::Directory(DirectoryResult {
                     parent_id: work.parent_id,
                     path: work.path,
+                    depth: work.depth,
                     children,
                     diagnostics,
                 }))
@@ -162,12 +166,14 @@ fn enumerate_results(
             }
             let id = domain::FileEntryId(uuid::Uuid::new_v4().to_string());
             if child.is_dir {
+                let child_depth = checked_child_depth(result.depth, &child.path)?;
                 pending = pending.saturating_add(1);
                 dirs = dirs.saturating_add(1);
                 work_tx
                     .send(DirectoryWork {
                         parent_id: id.clone(),
                         path: child.path.clone(),
+                        depth: child_depth,
                     })
                     .map_err(|_| {
                         DbError::System("Parallel filesystem work queue closed".to_string())
@@ -225,4 +231,14 @@ fn compute_enumeration_progress(processed: u64) -> u32 {
     } else {
         (80 + (processed - 1000).min(5000) * 15 / 5000) as u32
     }
+}
+
+fn checked_child_depth(parent_depth: u32, path: &str) -> DbResult<u32> {
+    let depth = parent_depth.saturating_add(1);
+    if depth > MAX_ENUMERATION_DEPTH || path.len() > MAX_ENUMERATION_PATH_BYTES {
+        return Err(DbError::System(format!(
+            "Filesystem directory traversal exceeded safety limits at '{path}'"
+        )));
+    }
+    Ok(depth)
 }
