@@ -59,12 +59,15 @@ pub fn run_png_carving(
         let producer =
             threads.spawn(move || produce(sender, reader, scope_ref, stop_ref, progress));
         let consumed = consume(
-            &source.connection,
-            case,
-            &DataSourceId(scope.source_id.clone()),
+            ConsumerContext {
+                conn: &source.connection,
+                root,
+                case,
+                source: &DataSourceId(scope.source_id.clone()),
+                cancel,
+                stop: &stop,
+            },
             receiver,
-            cancel,
-            &stop,
             &mut summary,
         );
         stop.store(true, Ordering::Release);
@@ -118,19 +121,24 @@ fn produce(
     )
 }
 
+struct ConsumerContext<'a> {
+    conn: &'a Connection,
+    root: &'a Path,
+    case: &'a CaseId,
+    source: &'a DataSourceId,
+    cancel: &'a AtomicBool,
+    stop: &'a AtomicBool,
+}
+
 fn consume(
-    conn: &Connection,
-    case: &CaseId,
-    source: &DataSourceId,
+    context: ConsumerContext<'_>,
     receiver: crossbeam_channel::Receiver<CarveCandidate>,
-    cancel: &AtomicBool,
-    stop: &AtomicBool,
     summary: &mut PngCarvingSummaryDto,
 ) -> Result<(), CommandError> {
     let mut batch = Vec::with_capacity(128);
     loop {
-        if cancel.load(Ordering::Acquire) {
-            stop.store(true, Ordering::Release);
+        if context.cancel.load(Ordering::Acquire) {
+            context.stop.store(true, Ordering::Release);
             return Err(CommandError::cancelled("Carving cancelled"));
         }
         match receiver.recv_timeout(Duration::from_millis(50)) {
@@ -148,20 +156,37 @@ fn consume(
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
         }
         if batch.len() == 128 {
-            flush(conn, case, source, &mut batch, summary, cancel)?;
+            flush(
+                context.conn,
+                context.root,
+                context.case,
+                context.source,
+                &mut batch,
+                summary,
+                context.cancel,
+            )?;
         }
     }
-    flush(conn, case, source, &mut batch, summary, cancel)
+    flush(
+        context.conn,
+        context.root,
+        context.case,
+        context.source,
+        &mut batch,
+        summary,
+        context.cancel,
+    )
 }
 fn flush(
     conn: &Connection,
+    root: &Path,
     case: &CaseId,
     source: &DataSourceId,
     batch: &mut Vec<CarveCandidate>,
     summary: &mut PngCarvingSummaryDto,
     cancel: &AtomicBool,
 ) -> Result<(), CommandError> {
-    let artifacts = super::persistence::persist(conn, case, source, batch, cancel)?;
+    let artifacts = super::persistence::persist(conn, root, case, source, batch, cancel)?;
     for artifact in artifacts {
         if summary.artifacts.len() < 128 {
             summary.artifacts.push(artifact);

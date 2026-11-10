@@ -29,10 +29,34 @@ fn register_source(
         .insert_with_storage(case_id, &source, &storage)
         .expect("register source");
 
-    let source_path = app_services::source_db::source_db_path(case_root, &source.id);
-    std::fs::create_dir_all(source_path.parent().expect("source directory"))
-        .expect("create source directory");
-    drop(persistence_sqlite::open_or_create_source(&source_path).expect("create source database"));
+    let source_conn =
+        app_services::source_db::open_source_db(case_root, &source.id).expect("create source db");
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+        .expect("open source store")
+        .expect("configured source store");
+    persistence_fjall::seal_source_generation(&store, &source.id.0, "fixture", &"a".repeat(64))
+        .expect("seal source generation");
+    let key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(source.id.0.clone())],
+    )
+    .expect("encode projection key");
+    let marker = persistence_fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{}", source.id.0),
+        &source.id.0,
+        1,
+        source.id.0.as_bytes().to_vec(),
+    );
+    store
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .expect("mark source projection complete");
     source.id
 }
 

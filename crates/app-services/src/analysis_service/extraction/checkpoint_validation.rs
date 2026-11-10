@@ -168,7 +168,7 @@ impl CheckpointOutputState {
         self.digest.record_timeline_event(event);
     }
 
-    fn matches(self, scan: &CompleteAnalysisCandidateScan) -> bool {
+    fn matches(&self, scan: &CompleteAnalysisCandidateScan) -> bool {
         self.artifact_count == scan.artifact_count
             && self.timeline_event_count == scan.timeline_event_count
             && self.artifact_versions_match

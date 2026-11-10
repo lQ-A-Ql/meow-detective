@@ -1,10 +1,11 @@
 use super::*;
+crate::native_source_test_support!();
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use evidence_core::{
     filesystem::root_node, EvidenceReader, FileSystemDiagnostic, FileSystemDiagnosticKind, FsNode,
 };
 use fs_ntfs::mft_scanner::MftRecord;
-use persistence_sqlite::{open_or_create, repositories::file_repo::FileRepo, runner};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::{params, Connection};
 use std::{
     cmp::Ordering as CmpOrdering,
@@ -13,7 +14,7 @@ use std::{
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
-use tempfile::TempDir;
+use test_support::NativeSourceFixture;
 
 use crate::file_service::{
     metadata::sorting::{natural_cmp, sort_entries},
@@ -23,6 +24,17 @@ use crate::file_service::{
 };
 use evidence_core::FileSystemReader;
 use transport::commands::{FileSortDirectionDto, FileSortKeyDto, GetFileRowsRequest};
+
+fn standalone_file_entries_connection(source_id: &str) -> (tempfile::TempDir, Connection) {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("source.db");
+    let conn = persistence_sqlite::open_or_create_source(&path).unwrap();
+    persistence_sqlite::source_fjall::configure_source_identity(&conn, source_id).unwrap();
+    persistence_sqlite::source_fjall::open_store_for_write(&conn)
+        .unwrap()
+        .unwrap();
+    (root, conn)
+}
 
 fn normalized_bare_root_name(
     entry: &FileEntry,
@@ -197,31 +209,7 @@ impl FileSystemReader for TimestampedFs {
 
 #[test]
 fn enumerate_filesystem_cancel_rolls_back_transaction() {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0003_file_entries.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-            "../../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
-        ))
-        .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0044_file_entry_read_only.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0045_file_entry_archive.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0046_file_entry_unix_mode.sql"
-    ))
-    .unwrap();
+    let (_root, conn) = standalone_file_entries_connection("ds-cancel-enum");
     let cancel = AtomicBool::new(false);
     let ds_id = DataSourceId("ds-cancel-enum".to_string());
     let fs = CancelAfterRootFs;
@@ -238,39 +226,12 @@ fn enumerate_filesystem_cancel_rolls_back_transaction() {
     };
 
     assert!(err.to_string().contains("Enumeration cancelled"));
-    let row_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(row_count, 0);
+    assert_eq!(FileRepo::new(&conn).count_all().unwrap(), 0);
 }
 
 #[test]
 fn enumerate_filesystem_persists_root_and_child_changed_at() {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0003_file_entries.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0044_file_entry_read_only.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0045_file_entry_archive.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0046_file_entry_unix_mode.sql"
-    ))
-    .unwrap();
+    let (_root, conn) = standalone_file_entries_connection("ds-timestamps");
     let root_changed_at = chrono::DateTime::from_timestamp(1_700_000_000, 123).unwrap();
     let child_changed_at = chrono::DateTime::from_timestamp(1_800_000_000, 456).unwrap();
     let fs = TimestampedFs {
@@ -292,31 +253,7 @@ fn enumerate_filesystem_persists_root_and_child_changed_at() {
 
 #[test]
 fn enumerate_filesystem_preserves_typed_completeness_diagnostics() {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0003_file_entries.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0044_file_entry_read_only.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0045_file_entry_archive.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0046_file_entry_unix_mode.sql"
-    ))
-    .unwrap();
+    let (_root, conn) = standalone_file_entries_connection("ds-diagnostic");
     let stats = enumerate_filesystem(
         &conn,
         &DataSourceId("ds-diagnostic".to_string()),
@@ -455,32 +392,8 @@ fn mft_orphan_records_are_anchored_to_root() {
 
 #[test]
 fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0003_file_entries.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-            "../../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
-        ))
-        .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0042_file_entry_encrypted.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0044_file_entry_read_only.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0045_file_entry_archive.sql"
-    ))
-    .unwrap();
-    conn.execute_batch(include_str!(
-        "../../../../persistence-sqlite/src/migrations/scripts/0046_file_entry_unix_mode.sql"
-    ))
-    .unwrap();
     let ds_id = DataSourceId("ds-deleted-orphan".to_string());
+    let (_root, conn) = standalone_file_entries_connection(&ds_id.0);
     let mut entries = records_to_file_entries(
         &[
             MftRecord {
@@ -539,13 +452,13 @@ fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
     update_entry_paths(&conn, &ds_id, &path_map, &deleted_records, 0).unwrap();
     update_entry_parent_ids(&conn, &ds_id, &path_map).unwrap();
 
-    let (path, parent_id, deleted): (String, Option<String>, i32) = conn
-        .query_row(
-            "SELECT path, parent_id, deleted FROM file_entries WHERE id = 'mft:77'",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
+    let deleted_entry = FileRepo::new(&conn)
+        .find_by_id(&FileEntryId("mft:77".into()))
+        .unwrap()
         .unwrap();
+    let path = deleted_entry.path;
+    let parent_id = deleted_entry.parent_id.map(|id| id.0);
+    let deleted = i32::from(deleted_entry.deleted);
     assert_eq!(path, "[P0]/$DeletedOrphans/77-old.txt");
     assert_eq!(parent_id.as_deref(), Some("mft:5"));
     assert_eq!(deleted, 1);
@@ -781,24 +694,12 @@ fn sort_by_size_descending_within_files() {
 
 #[test]
 fn get_file_rows_sorts_full_set_then_paginates() {
-    let tmp = TempDir::new().unwrap();
-    let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
-    runner::run_all(&conn).unwrap();
     let ds_id = DataSourceId("ds-sort-page".to_string());
-    conn.execute(
-            "INSERT INTO cases (id, name, created_at, updated_at) VALUES ('c1','C','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
-            [],
-        )
-        .unwrap();
-    conn.execute(
-            "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at) VALUES (?1,'c1','ds','logical_directory','C:/e','2026-01-01T00:00:00Z')",
-            params![ds_id.0],
-        )
-        .unwrap();
+    let fixture = NativeSourceFixture::new(&ds_id.0, "c1");
 
     // Root parent dir + children: 1 dir + files file1,file2,file10.
     let parent = FileEntryId("parent".to_string());
-    let repo = FileRepo::new(&conn);
+    let repo = FileRepo::new(&fixture.connection);
     let mut parent_entry = sort_entry("root", EntryType::Directory, false, false, false, None);
     parent_entry.id = parent.clone();
     parent_entry.data_source_id = ds_id.clone();
@@ -825,6 +726,7 @@ fn get_file_rows_sorts_full_set_then_paginates() {
         children.push(child);
     }
     repo.insert_batch(&children).unwrap();
+    fixture.seal();
 
     let request = GetFileRowsRequest {
         parent_id: Some(parent.0.clone()),
@@ -834,7 +736,7 @@ fn get_file_rows_sorts_full_set_then_paginates() {
         sort_key: FileSortKeyDto::Name,
         sort_direction: FileSortDirectionDto::Asc,
     };
-    let page = get_file_rows_for_request(&conn, &request).unwrap();
+    let page = get_file_rows_for_request(&fixture.connection, &request).unwrap();
     assert_eq!(page.total_count, 4);
     assert!(page.truncated);
     // Page 1: directory first, then natural-sorted file1.
@@ -845,24 +747,32 @@ fn get_file_rows_sorts_full_set_then_paginates() {
         offset: 2,
         ..request
     };
-    let page2 = get_file_rows_for_request(&conn, &request2).unwrap();
+    let page2 = get_file_rows_for_request(&fixture.connection, &request2).unwrap();
     let names2: Vec<_> = page2.rows.iter().map(|r| r.name.clone()).collect();
     assert_eq!(names2, vec!["file2.txt", "file10.txt"]);
 }
 
 #[test]
 fn placeholder_path_encodes_partition_index() {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    runner::run_source_all(&conn).unwrap();
     let ds_id = DataSourceId("ds-ph-index".to_string());
+    let fixture = NativeSourceFixture::new(&ds_id.0, "case-ph-index");
 
-    let id = insert_partition_placeholder_root(&conn, &ds_id, 3, "Partition 3 (NTFS)", "queued")
+    let id = insert_partition_placeholder_root(
+        &fixture.connection,
+        &ds_id,
+        3,
+        "Partition 3 (NTFS)",
+        "queued",
+    )
+    .unwrap();
+    let entry = FileRepo::new(&fixture.connection)
+        .find_by_id(&id)
+        .unwrap()
         .unwrap();
-    let entry = FileRepo::new(&conn).find_by_id(&id).unwrap().unwrap();
     assert_eq!(entry.path, "__partition_placeholder__/3/queued");
     assert_eq!(partition_placeholder_status(&entry), Some("queued"));
     assert_eq!(
-        FileRepo::new(&conn)
+        FileRepo::new(&fixture.connection)
             .find_partition_index_by_id(&id)
             .unwrap(),
         Some(3)
@@ -897,20 +807,17 @@ fn seed_ds_with_partition(conn: &Connection, ds_id: &str, index: u32, kind: &str
 
 fn seed_ds_with_partition_name(conn: &Connection, ds_id: &str, index: u32, name: &str, kind: &str) {
     conn.execute(
-            "INSERT OR IGNORE INTO cases (id, name, created_at, updated_at) VALUES ('c1','C','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
-            [],
-        )
-        .unwrap();
-    conn.execute(
-            "INSERT OR IGNORE INTO data_sources (id, case_id, name, kind, source_path, imported_at) VALUES (?1,'c1','ds','e01','C:/e','2026-01-01T00:00:00Z')",
-            params![ds_id],
-        )
-        .unwrap();
+        "UPDATE data_sources SET kind='e01', source_path='C:/e' WHERE id=?1",
+        params![ds_id],
+    )
+    .unwrap();
     let database_path: String = conn
         .query_row("PRAGMA database_list", [], |row| row.get(2))
         .unwrap();
     let case_root = std::path::Path::new(&database_path)
         .parent()
+        .and_then(std::path::Path::parent)
+        .and_then(std::path::Path::parent)
         .expect("case database parent");
     let storage = crate::source_db::open_fjall_source_read_write(case_root, ds_id).unwrap();
     let snapshot = storage.snapshot();
@@ -950,15 +857,19 @@ fn seed_ds_with_partition_name(conn: &Connection, ds_id: &str, index: u32, name:
         .partition_replace_by_source(ds_id, &records, persistence_fjall::PersistMode::Buffer)
         .unwrap();
     storage.partition_projection_publish(ds_id).unwrap();
+    assert_eq!(
+        crate::partition_query_service::PartitionQueryRepo::new(conn)
+            .count_by_data_source(ds_id)
+            .unwrap(),
+        records.len() as u64
+    );
 }
 
 #[test]
 fn bare_root_renamed_via_mft_partition_index() {
-    let tmp = TempDir::new().unwrap();
-    let conn = open_or_create(&tmp.path().join("app.db")).unwrap();
-    runner::run_all(&conn).unwrap();
     let ds_id = "ds-bare-mft";
-    seed_ds_with_partition(&conn, ds_id, 3, "NTFS");
+    let fixture = NativeSourceFixture::new(ds_id, "c1");
+    seed_ds_with_partition(&fixture.connection, ds_id, 3, "NTFS");
 
     let mut entry = sort_entry("\\", EntryType::Directory, false, false, false, None);
     entry.id = FileEntryId("mft:3:5".to_string());
@@ -972,11 +883,9 @@ fn bare_root_renamed_via_mft_partition_index() {
 
 #[test]
 fn bare_root_renamed_via_sole_partition_when_no_mft_index() {
-    let tmp = TempDir::new().unwrap();
-    let conn = open_or_create(&tmp.path().join("app.db")).unwrap();
-    runner::run_all(&conn).unwrap();
     let ds_id = "ds-bare-sole";
-    seed_ds_with_partition(&conn, ds_id, 0, "FAT");
+    let fixture = NativeSourceFixture::new(ds_id, "c1");
+    seed_ds_with_partition(&fixture.connection, ds_id, 0, "FAT");
 
     let mut entry = sort_entry("/", EntryType::Directory, false, false, false, None);
     entry.id = FileEntryId("uuid-root".to_string());
@@ -990,13 +899,11 @@ fn bare_root_renamed_via_sole_partition_when_no_mft_index() {
 
 #[test]
 fn bare_root_unknown_when_unattributable() {
-    let tmp = TempDir::new().unwrap();
-    let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
-    runner::run_all(&conn).unwrap();
     let ds_id = "ds-bare-unknown";
+    let fixture = NativeSourceFixture::new(ds_id, "c1");
     // Two partitions, non-MFT id → cannot attribute deterministically.
-    seed_ds_with_partition(&conn, ds_id, 0, "NTFS");
-    seed_ds_with_partition(&conn, ds_id, 1, "FAT");
+    seed_ds_with_partition(&fixture.connection, ds_id, 0, "NTFS");
+    seed_ds_with_partition(&fixture.connection, ds_id, 1, "FAT");
 
     let mut entry = sort_entry("\\", EntryType::Directory, false, false, false, None);
     entry.id = FileEntryId("uuid-ambiguous".to_string());
@@ -1010,22 +917,19 @@ fn bare_root_unknown_when_unattributable() {
 
 #[test]
 fn tree_builder_normalizes_residual_bare_root() {
-    let tmp = TempDir::new().unwrap();
-    let conn = open_or_create(&tmp.path().join("app.db")).unwrap();
-    runner::run_all(&conn).unwrap();
     let ds_id = "ds-tree-bare";
-    seed_ds_with_partition(&conn, ds_id, 2, "NTFS");
+    let fixture = NativeSourceFixture::new(ds_id, "c1");
+    seed_ds_with_partition(&fixture.connection, ds_id, 2, "NTFS");
 
-    // A residual bare `\` root directly in the main DB (simulates an older
-    // case that escaped staging folding).
-    conn.execute(
-        "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type, size)
-             VALUES ('mft:2:5', NULL, ?1, '', '\\', 'directory', 0)",
-        params![ds_id],
-    )
-    .unwrap();
+    let mut root = sort_entry("\\", EntryType::Directory, false, false, false, None);
+    root.id = FileEntryId("mft:2:5".into());
+    root.data_source_id = DataSourceId(ds_id.into());
+    FileRepo::new(&fixture.connection)
+        .insert_batch(&[root])
+        .unwrap();
+    fixture.seal();
 
-    let tree = get_file_tree_real_with_visibility(&conn, false).unwrap();
+    let tree = get_file_tree_real_with_visibility(&fixture.connection, false).unwrap();
     assert_eq!(tree.len(), 1);
     assert_eq!(tree[0].name, "Partition 2 (NTFS)");
     assert_eq!(tree[0].node_type.as_deref(), Some("partition"));
@@ -1034,20 +938,19 @@ fn tree_builder_normalizes_residual_bare_root() {
 
 #[test]
 fn tree_builder_marks_named_lvm_root_as_partition() {
-    let tmp = TempDir::new().unwrap();
-    let conn = open_or_create(&tmp.path().join("app.db")).unwrap();
-    runner::run_all(&conn).unwrap();
     let ds_id = "ds-tree-lvm";
-    seed_ds_with_partition_name(&conn, ds_id, 2, "cl/root", "XFS");
+    let fixture = NativeSourceFixture::new(ds_id, "c1");
+    seed_ds_with_partition_name(&fixture.connection, ds_id, 2, "cl/root", "XFS");
 
-    conn.execute(
-        "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type, size)
-             VALUES ('root-lv', NULL, ?1, '', 'cl/root', 'directory', 0)",
-        params![ds_id],
-    )
-    .unwrap();
+    let mut root = sort_entry("cl/root", EntryType::Directory, false, false, false, None);
+    root.id = FileEntryId("root-lv".into());
+    root.data_source_id = DataSourceId(ds_id.into());
+    FileRepo::new(&fixture.connection)
+        .insert_batch(&[root])
+        .unwrap();
+    fixture.seal();
 
-    let tree = get_file_tree_real_with_visibility(&conn, false).unwrap();
+    let tree = get_file_tree_real_with_visibility(&fixture.connection, false).unwrap();
     assert_eq!(tree.len(), 1);
     assert_eq!(tree[0].name, "cl/root");
     assert_eq!(tree[0].node_type.as_deref(), Some("partition"));

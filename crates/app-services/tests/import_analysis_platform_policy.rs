@@ -12,7 +12,9 @@ use app_services::import_pipeline::{execute_import_job, ImportJobOptions};
 use app_services::{case_service, import_precheck, search_service, source_db};
 use domain::{DataSourceId, DataSourcePlatform};
 use fixture_builder::build_prefetch_v30;
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, job_repo::JobRepo};
+use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo, job_repo::JobRepo, timeline_repo::TimelineRepo,
+};
 use tempfile::TempDir;
 use transport::{ErrorCategory, ServiceErrorCategory};
 
@@ -125,9 +127,7 @@ fn run_logical_import(platform: DataSourcePlatform, case_name: &str) -> Pipeline
             )?;
             let source_conn = source_db::open_source_db(&active.case_root, &data_source_id)?;
             let artifact_count = ArtifactRepo::new(&source_conn).count()? as i64;
-            let timeline_count =
-                source_conn
-                    .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))?;
+            let timeline_count = TimelineRepo::new(&source_conn).count()? as i64;
             let search_result = search_service::search_files_real(
                 &source_db::source_index_dir(&active.case_root, &data_source_id),
                 &marker,

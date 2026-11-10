@@ -1,4 +1,5 @@
 use super::*;
+crate::native_source_test_support!();
 use chrono::Utc;
 use domain::{
     Artifact, ArtifactId, CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance,
@@ -14,36 +15,11 @@ use persistence_sqlite::repositories::{
 use rusqlite::Connection;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
+use test_support::NativeSourceFixture;
 use transport::dto::{ArtifactRowDto, CorrelationCoverageStatusDto, CorrelationNodeKindDto};
 
-fn setup_case_db() -> Connection {
-    let conn = Connection::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_all(&conn).unwrap();
-    CaseRepo::new(&conn)
-        .create(&domain::CaseMeta {
-            id: CaseId("case-1".to_string()),
-            name: "Case".to_string(),
-            number: None,
-            examiner: None,
-            notes: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        })
-        .unwrap();
-    DataSourceRepo::new(&conn)
-        .insert(
-            &CaseId("case-1".to_string()),
-            &DataSource {
-                id: DataSourceId("ds-1".to_string()),
-                name: "source".to_string(),
-                kind: DataSourceKind::Raw,
-                source_path: "C:/evidence/mock.raw".into(),
-                imported_at: Utc::now(),
-                provenance: DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
-    conn
+fn setup_case_db() -> NativeSourceFixture {
+    NativeSourceFixture::new("ds-1", "case-1")
 }
 
 fn setup_case_db_without_source() -> Connection {
@@ -900,7 +876,7 @@ fn incremental_only_processes_new_artifacts() {
 }
 
 #[test]
-fn second_call_under_200ms() {
+fn second_call_reuses_cached_snapshot() {
     let conn = setup_case_db();
 
     // Insert a modest number of artifacts and files to make the first call non-trivial
@@ -927,26 +903,32 @@ fn second_call_under_200ms() {
         );
     }
 
-    // First call: populate cache (measure but don't enforce a limit)
-    let t0 = std::time::Instant::now();
-    let _first = get_correlation_snapshot(&conn).unwrap();
-    let first_duration = t0.elapsed();
-    // Verify first call was non-trivial (should take some time with rayon + files)
-    assert!(
-        first_duration.as_nanos() > 0,
-        "first call should do real work"
-    );
+    // First call: populate cache
+    let first = get_correlation_snapshot(&conn).unwrap();
+    let stored_before: String = conn
+        .query_row(
+            "SELECT snapshot_json FROM correlation_snapshots WHERE case_id = 'case-1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
 
-    // Second call: should hit cache
-    let t1 = std::time::Instant::now();
-    let _second = get_correlation_snapshot(&conn).unwrap();
-    let second_duration = t1.elapsed();
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    let second = get_correlation_snapshot(&conn).unwrap();
+    let stored_after: String = conn
+        .query_row(
+            "SELECT snapshot_json FROM correlation_snapshots WHERE case_id = 'case-1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
 
-    assert!(
-        second_duration.as_millis() < 200,
-        "second cached call took {}ms, expected < 200ms",
-        second_duration.as_millis()
+    assert_eq!(
+        stored_after, stored_before,
+        "cache hit must not rewrite the stored snapshot"
     );
+    assert_eq!(second.node_count, first.node_count);
+    assert_eq!(second.edge_count, first.edge_count);
 }
 
 fn artifact_dto(artifact_type: &str, attrs: BTreeMap<String, Value>) -> ArtifactRowDto {

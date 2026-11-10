@@ -1,6 +1,7 @@
 use app_services::file_service::enumerate_filesystem_parallel_with_factory;
 use domain::DataSourceId;
 use evidence_core::{filesystem::fs_node_without_timestamps, FileSystemReader, FsNode, ReadSeek};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use std::collections::BTreeMap;
 use std::io;
 use std::sync::{
@@ -117,20 +118,32 @@ impl FileSystemReader for FaultyFs {
 }
 
 fn source_entry_count(connection: &rusqlite::Connection, source_id: &DataSourceId) -> usize {
+    FileRepo::new(connection)
+        .find_by_data_source(source_id)
+        .expect("count file entries")
+        .len()
+}
+
+fn native_source(root: &std::path::Path, source_id: &str) -> rusqlite::Connection {
+    let id = DataSourceId(source_id.to_string());
+    let connection = app_services::source_db::open_source_db(root, &id).unwrap();
     connection
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1",
-            [&source_id.0],
-            |row| row.get::<_, i64>(0),
+        .execute(
+            "INSERT INTO data_sources
+             (id, case_id, name, kind, source_path, imported_at)
+             VALUES (?1, 'case-1', ?1, 'directory', 'fixture',
+                     '2026-01-01T00:00:00Z')",
+            [source_id],
         )
-        .expect("count file entries") as usize
+        .unwrap();
+    connection
 }
 
 #[test]
 fn parallel_enumeration_preserves_directory_relationships() {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+    let root = tempfile::tempdir().unwrap();
     let source_id = DataSourceId("parallel-fixture".to_string());
+    let connection = native_source(root.path(), &source_id.0);
     let factory = Arc::new(|| Ok(Box::new(FixtureFs::new()) as Box<dyn FileSystemReader>));
 
     let stats = enumerate_filesystem_parallel_with_factory(
@@ -147,14 +160,12 @@ fn parallel_enumeration_preserves_directory_relationships() {
     assert_eq!(stats.file_count, 3);
     assert_eq!(stats.dir_count, 3);
     assert_eq!(stats.total_size, 18);
-    let mut statement = connection
-        .prepare("SELECT path FROM file_entries WHERE data_source_id = ?1")
-        .expect("prepare file entry query");
-    let rows = statement
-        .query_map([&source_id.0], |row| row.get::<_, String>(0))
-        .expect("query file entries")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("collect file entries");
+    let rows = FileRepo::new(&connection)
+        .find_by_data_source(&source_id)
+        .unwrap()
+        .into_iter()
+        .map(|entry| entry.path)
+        .collect::<Vec<_>>();
     assert_eq!(rows.len(), 6);
     assert!(rows.iter().any(|path| path == "etc/network/interfaces"));
     assert!(rows.iter().any(|path| path == "etc/hostname"));
@@ -162,9 +173,9 @@ fn parallel_enumeration_preserves_directory_relationships() {
 
 #[test]
 fn unreadable_directory_is_recorded_and_sibling_files_are_kept() {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+    let root = tempfile::tempdir().unwrap();
     let source_id = DataSourceId("parallel-fault-fixture".to_string());
+    let connection = native_source(root.path(), &source_id.0);
     let factory = Arc::new(|| {
         Ok(Box::new(FaultyFs {
             inner: FixtureFs::new(),
@@ -192,9 +203,9 @@ fn unreadable_directory_is_recorded_and_sibling_files_are_kept() {
 
 #[test]
 fn pre_cancelled_enumeration_does_not_publish_root() {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+    let root = tempfile::tempdir().unwrap();
     let source_id = DataSourceId("parallel-cancelled-fixture".to_string());
+    let connection = native_source(root.path(), &source_id.0);
     let cancel = AtomicBool::new(true);
     let factory = Arc::new(|| Ok(Box::new(FixtureFs::new()) as Box<dyn FileSystemReader>));
 
@@ -210,14 +221,19 @@ fn pre_cancelled_enumeration_does_not_publish_root() {
 
     let error = result.err().expect("pre-cancelled enumeration must fail");
     assert!(error.to_string().contains("cancelled"));
-    assert_eq!(source_entry_count(&connection, &source_id), 0);
+    assert!(!root
+        .path()
+        .join("sources")
+        .join(&source_id.0)
+        .join("source.fjall")
+        .exists());
 }
 
 #[test]
 fn worker_factory_failure_returns_without_leaking_entries() {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+    let root = tempfile::tempdir().unwrap();
     let source_id = DataSourceId("parallel-factory-failure".to_string());
+    let connection = native_source(root.path(), &source_id.0);
     let calls = Arc::new(AtomicBool::new(false));
     let calls_for_factory = Arc::clone(&calls);
     let factory = Arc::new(move || {

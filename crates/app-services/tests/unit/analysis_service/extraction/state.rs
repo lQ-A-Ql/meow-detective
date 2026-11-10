@@ -2,8 +2,13 @@ use super::*;
 use crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION;
 use chrono::Utc;
 use domain::{Artifact, ArtifactId, FileEntryId};
-use rusqlite::Connection;
 use std::collections::BTreeMap;
+
+crate::native_source_test_support!();
+
+fn native_source() -> test_support::NativeSourceFixture {
+    test_support::NativeSourceFixture::new("source-linux", "case-analysis")
+}
 
 fn warning_artifact(source_object_id: &FileEntryId) -> Artifact {
     Artifact {
@@ -23,8 +28,8 @@ fn warning_artifact(source_object_id: &FileEntryId) -> Artifact {
 
 #[test]
 fn warning_with_artifact_checkpoint_remains_pending_until_atomic_persistence() {
-    let conn = Connection::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&conn).expect("run source migrations");
+    let fixture = native_source();
+    let conn = &fixture.connection;
     let capability = crate::analysis_service::capability::find_capability("LinuxWebServices")
         .expect("web capability");
     let mut state = ExtractionState::new(&[capability]);
@@ -69,8 +74,8 @@ fn warning_with_artifact_checkpoint_remains_pending_until_atomic_persistence() {
 
 #[test]
 fn checkpoint_replay_preserves_section_counts_and_warnings() {
-    let conn = Connection::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&conn).expect("run source migrations");
+    let fixture = native_source();
+    let conn = &fixture.connection;
     let capability = crate::analysis_service::capability::find_capability("LinuxWebServices")
         .expect("web capability");
     let mut state = ExtractionState::new(&[capability]);
@@ -88,7 +93,7 @@ fn checkpoint_replay_preserves_section_counts_and_warnings() {
 
     state.replay_complete(capability, &scan);
     let dto = state
-        .into_dto(&conn, "2026-07-18T00:00:00Z".to_string())
+        .into_dto(conn, "2026-07-18T00:00:00Z".to_string())
         .expect("build replay DTO");
 
     assert_eq!(dto.scanned_count, 1);
@@ -103,15 +108,15 @@ fn checkpoint_replay_preserves_section_counts_and_warnings() {
 
 #[test]
 fn clean_checkpoint_replay_counts_the_scanned_candidate() {
-    let conn = Connection::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&conn).expect("run source migrations");
+    let fixture = native_source();
+    let conn = &fixture.connection;
     let capability = crate::analysis_service::capability::find_capability("LinuxWebServices")
         .expect("web capability");
     let mut state = ExtractionState::new(&[capability]);
 
     state.replay_clean(capability);
     let dto = state
-        .into_dto(&conn, "2026-07-18T00:00:00Z".to_string())
+        .into_dto(conn, "2026-07-18T00:00:00Z".to_string())
         .expect("build replay DTO");
 
     assert_eq!(dto.scanned_count, 1);
@@ -174,8 +179,8 @@ fn retryable_source_read_failure_does_not_create_a_checkpoint() {
 
 #[test]
 fn registry_parser_upgrade_expires_only_registry_checkpoints() {
-    let conn = Connection::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_source_all(&conn).unwrap();
+    let fixture = native_source();
+    let conn = &fixture.connection;
     let registry = find_capability("Registry").unwrap();
     let browser = find_capability("BrowserHistory").unwrap();
     let mut clean = Vec::new();
@@ -201,11 +206,11 @@ fn registry_parser_upgrade_expires_only_registry_checkpoints() {
             warnings: vec!["format diagnostic".into()],
         });
     }
-    AnalysisScanRepo::new(&conn)
+    AnalysisScanRepo::new(conn)
         .insert_checkpoint_batch(&clean, &diagnostics)
         .unwrap();
-    let clean_keys = existing_clean_scan_keys(&conn).unwrap();
-    let diagnostic_keys = existing_diagnostic_scan_keys(&conn).unwrap();
+    let clean_keys = existing_clean_scan_keys(conn).unwrap();
+    let diagnostic_keys = existing_diagnostic_scan_keys(conn).unwrap();
     assert_eq!(clean_keys.len(), 2);
     assert_eq!(diagnostic_keys.len(), 2);
     assert!(clean_keys.iter().any(|key| key.0 == "clean-new-registry"));

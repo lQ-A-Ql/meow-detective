@@ -1,4 +1,4 @@
-use super::{mapping::row_to_timeline_event, native, TimelineRepo, TIMELINE_SELECT_COLUMNS};
+use super::{native, TimelineRepo};
 use crate::DbResult;
 use domain::TimelineEvent;
 
@@ -57,30 +57,8 @@ impl TimelineRepo<'_> {
             }
             return Ok(());
         }
-        let placeholders = (1..=source_object_ids.len())
-            .map(|index| format!("?{index}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let prefix_parameter = source_object_ids.len() + 1;
-        let sql = format!(
-            "SELECT {TIMELINE_SELECT_COLUMNS} FROM timeline_events
-             WHERE source_object_id IN ({placeholders})
-               AND parser_id LIKE ?{prefix_parameter}
-             ORDER BY source_object_id ASC, rowid ASC"
-        );
-        let mut parameters = source_object_ids
-            .iter()
-            .map(|source_id| (*source_id).to_string())
-            .collect::<Vec<_>>();
-        parameters.push(format!("{producer_prefix}%"));
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(
-            rusqlite::params_from_iter(parameters),
-            row_to_timeline_event,
-        )?;
-        for row in rows {
-            visit(row?)?;
-        }
-        Ok(())
+        Err(crate::DbError::System(
+            "source detail storage is missing".into(),
+        ))
     }
 }

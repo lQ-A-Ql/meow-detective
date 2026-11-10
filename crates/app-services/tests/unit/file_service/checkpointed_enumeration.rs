@@ -1,6 +1,8 @@
 use super::*;
+crate::native_source_test_support!();
 use evidence_core::{filesystem::root_node, FsNode};
 use std::io::{self, Cursor, Read};
+use test_support::NativeSourceFixture;
 
 struct LargeRootFs {
     child_count: usize,
@@ -108,14 +110,13 @@ fn setup_placeholder(
 
 #[test]
 fn cancellation_keeps_only_committed_catalog_batches() {
-    let connection = persistence_sqlite::open_in_memory().expect("open database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
     let data_source_id = DataSourceId("source-checkpoint".to_string());
-    let placeholder_id = setup_placeholder(&connection, &data_source_id);
+    let fixture = NativeSourceFixture::new(&data_source_id.0, "case-checkpoint");
+    let placeholder_id = setup_placeholder(&fixture.connection, &data_source_id);
     let cancel_token = AtomicBool::new(false);
 
     let result = replace_placeholder_root_checkpointed(
-        &connection,
+        &fixture.connection,
         &placeholder_id,
         &LargeRootFs {
             child_count: CATALOG_COMMIT_BATCH_ROWS + 1,
@@ -130,30 +131,25 @@ fn cancellation_keeps_only_committed_catalog_batches() {
     };
 
     assert!(error.to_string().contains("cancelled"));
-    let row_count: i64 = connection
-        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
-        .expect("count committed rows");
-    assert_eq!(row_count, CATALOG_COMMIT_BATCH_ROWS as i64 + 1);
-    let unindexed: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE partition_index IS NULL",
-            [],
-            |row| row.get(0),
-        )
-        .expect("count unindexed rows");
-    assert_eq!(unindexed, 0);
+    assert_eq!(
+        catalog_row_count(&fixture.connection, &data_source_id),
+        CATALOG_COMMIT_BATCH_ROWS as u64 + 1
+    );
+    assert_eq!(
+        unindexed_catalog_rows(&fixture.connection, &data_source_id),
+        0
+    );
 }
 
 #[test]
 fn batches_catalog_rows_across_directory_boundaries() {
-    let connection = persistence_sqlite::open_in_memory().expect("open database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
     let data_source_id = DataSourceId("source-cross-directory-batch".to_string());
-    let placeholder_id = setup_placeholder(&connection, &data_source_id);
+    let fixture = NativeSourceFixture::new(&data_source_id.0, "case-cross-directory");
+    let placeholder_id = setup_placeholder(&fixture.connection, &data_source_id);
     let cancel_token = AtomicBool::new(false);
 
     let result = replace_placeholder_root_checkpointed(
-        &connection,
+        &fixture.connection,
         &placeholder_id,
         &DeepDirectoryFs {
             depth: CATALOG_COMMIT_BATCH_ROWS + 1,
@@ -168,21 +164,20 @@ fn batches_catalog_rows_across_directory_boundaries() {
         Err(error) => error,
     };
     assert!(error.to_string().contains("cancelled"));
-    let row_count: i64 = connection
-        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
-        .expect("count committed rows");
-    assert_eq!(row_count, CATALOG_COMMIT_BATCH_ROWS as i64 + 1);
+    assert_eq!(
+        catalog_row_count(&fixture.connection, &data_source_id),
+        CATALOG_COMMIT_BATCH_ROWS as u64 + 1
+    );
 }
 
 #[test]
 fn completed_checkpointed_enumeration_returns_full_stats() {
-    let connection = persistence_sqlite::open_in_memory().expect("open database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
     let data_source_id = DataSourceId("source-complete".to_string());
-    let placeholder_id = setup_placeholder(&connection, &data_source_id);
+    let fixture = NativeSourceFixture::new(&data_source_id.0, "case-complete");
+    let placeholder_id = setup_placeholder(&fixture.connection, &data_source_id);
 
     let stats = replace_placeholder_root_checkpointed(
-        &connection,
+        &fixture.connection,
         &placeholder_id,
         &LargeRootFs { child_count: 2 },
         Some("Partition 3 (XFS)"),
@@ -195,4 +190,46 @@ fn completed_checkpointed_enumeration_returns_full_stats() {
     assert_eq!(stats.dir_count, 1);
     assert_eq!(stats.total_size, 2);
     assert!(stats.diagnostics.is_empty());
+}
+
+fn catalog_row_count(connection: &rusqlite::Connection, source_id: &DataSourceId) -> u64 {
+    persistence_fjall::CatalogRecordStore::from_source_store(
+        (*persistence_sqlite::source_fjall::require_source_store(connection).unwrap()).clone(),
+    )
+    .count(
+        &persistence_sqlite::source_fjall::require_source_store(connection)
+            .unwrap()
+            .database()
+            .read_snapshot(),
+        Some(&source_id.0),
+    )
+    .unwrap()
+}
+
+fn unindexed_catalog_rows(connection: &rusqlite::Connection, source_id: &DataSourceId) -> u64 {
+    let store = persistence_sqlite::source_fjall::require_source_store(connection).unwrap();
+    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let snapshot = repository.read_snapshot();
+    let mut cursor = None;
+    let mut unindexed = 0;
+    loop {
+        let page = repository
+            .list_all(
+                &snapshot,
+                &source_id.0,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                512,
+            )
+            .unwrap();
+        unindexed += page
+            .records
+            .iter()
+            .filter(|record| record.partition_index.is_none())
+            .count();
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            return unindexed as u64;
+        }
+    }
 }

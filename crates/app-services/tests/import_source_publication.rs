@@ -93,23 +93,20 @@ fn reject_stale_source(progress: u32, platform: domain::DataSourcePlatform) {
             assert_eq!(operation_state, "failed");
             assert!(!sink.ready.load(Ordering::Acquire));
             if progress == 62 {
-                let c = persistence_sqlite::open_existing_source_read_only(
+                let connection = persistence_sqlite::open_existing_source_read_only(
                     &source_db::source_db_path(&active.case_root, &domain::DataSourceId(id)),
                 )?;
-                assert_eq!(
-                    c.query_row("SELECT COUNT(*) FROM file_entries", [], |r| r
-                        .get::<_, u64>(0))?,
-                    1
-                );
-                // Attach creates the existing source root before runtime planning.
-                // No MFT facts may cross the invalidated merge boundary.
-                assert_eq!(
-                    c.query_row(
-                        "SELECT COUNT(*) FROM file_entries WHERE id LIKE 'mft:%'",
-                        [],
-                        |r| r.get::<_, u64>(0)
-                    )?,
-                    0
+                let source_id = domain::DataSourceId(connection.query_row(
+                    "SELECT id FROM data_sources LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )?);
+                let storage_root =
+                    source_db::fjall_source_storage_root(&active.case_root, &source_id.0)
+                        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+                assert!(
+                    !storage_root.exists(),
+                    "invalidated import must not publish a partial Fjall generation"
                 );
             }
             Ok(())

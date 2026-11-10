@@ -1,5 +1,3 @@
-use rusqlite::params;
-
 use super::GraphRepo;
 use crate::connection::DbResult;
 
@@ -16,35 +14,9 @@ impl GraphRepo<'_> {
         if let Some(store) = crate::source_fjall::open_store(self.conn)? {
             return self.project_fjall_file_tree(&store, data_source_id, created_at);
         }
-        let tx = self.conn.unchecked_transaction()?;
-        let case_id: String = tx.query_row(
-            "SELECT case_id FROM data_sources WHERE id = ?1",
-            params![data_source_id],
-            |row| row.get(0),
-        )?;
-
-        let node_count = tx.execute(
-            "INSERT OR REPLACE INTO graph_nodes
-                (id, case_id, node_type, label, summary, tags, created_at)
-             SELECT id, ?2, 'file', name, path, '[]', ?3
-             FROM file_entries
-             WHERE data_source_id = ?1
-               AND NOT (name = '' AND parent_id IS NULL)",
-            params![data_source_id, case_id, created_at],
-        )?;
-        let edge_count = tx.execute(
-            "INSERT OR REPLACE INTO graph_edges
-                (id, case_id, source_id, target_id, edge_type, confidence, provenance, created_at)
-             SELECT 'contains:' || parent_id || ':' || id,
-                    ?2, parent_id, id, 'contains', NULL, NULL, ?3
-             FROM file_entries
-             WHERE data_source_id = ?1
-               AND parent_id IS NOT NULL",
-            params![data_source_id, case_id, created_at],
-        )?;
-
-        tx.commit()?;
-        Ok((node_count as u64, edge_count as u64))
+        Err(crate::connection::DbError::System(
+            "source identity is missing".into(),
+        ))
     }
 }
 

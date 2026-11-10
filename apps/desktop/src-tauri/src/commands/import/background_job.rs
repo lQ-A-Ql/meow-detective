@@ -20,18 +20,8 @@ pub(crate) use linux_artifacts::schedule_linux_artifact_analysis;
 pub(crate) use single::run_background_import_job;
 pub(crate) use types::{
     BackgroundDerivedSourceProcessingJob, BackgroundImportJob, BackgroundLinuxEvidenceSetImportJob,
-    BrowseableEvidenceSetImport,
 };
 
 #[cfg(test)]
-pub(crate) fn run_background_linux_evidence_set_import_until_browseable(
-    job: BackgroundLinuxEvidenceSetImportJob,
-    app: Option<&tauri::AppHandle>,
-    cancel_token: std::sync::Arc<std::sync::atomic::AtomicBool>,
-) -> Result<Option<BrowseableEvidenceSetImport>, transport::CommandError> {
-    cluster::run_background_linux_evidence_set_import_with_scheduler(job, app, cancel_token, None)
-}
-
-#[cfg(test)]
-#[path = "../../../tests/unit/commands/import/background_job.rs"]
+#[path = "../../../tests/unit/commands/import/background_job/mod.rs"]
 mod tests;

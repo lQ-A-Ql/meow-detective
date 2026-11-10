@@ -153,46 +153,10 @@ impl<'a> InfrastructureNetworkFactRepo<'a> {
         source_conn: &Connection,
         limit: usize,
     ) -> DbResult<Vec<InfrastructureNetworkConfigRow>> {
-        if crate::source_fjall::source_id(source_conn)?.is_some() {
-            return Self::list_native_source_config_rows(source_conn, limit);
+        if crate::source_fjall::source_id(source_conn)?.is_none() {
+            return Err(crate::DbError::System("source identity is missing".into()));
         }
-        let mut statement = source_conn.prepare(
-            "SELECT id, source_object_id, attrs
-             FROM artifacts
-             WHERE artifact_type = 'LinuxSystemConfig'
-               AND source_object_id IS NOT NULL
-               AND json_valid(attrs)
-               AND json_extract(attrs, '$.overlayContext') IS NULL
-               AND (
-                 LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/hosts'
-                 OR LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/resolv.conf'
-                 OR LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/network/interfaces'
-                 OR LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/pve/corosync.conf'
-                 OR LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/corosync/corosync.conf'
-                 OR LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/pve/.version'
-                 OR LOWER(REPLACE(json_extract(attrs, '$.sourcePath'), '\', '/')) LIKE '%/etc/debian_version'
-               )
-             ORDER BY id LIMIT ?1",
-        )?;
-        let rows = statement.query_map([limit as i64], |row| {
-            let attrs: String = row.get(2)?;
-            let value: serde_json::Value = serde_json::from_str(&attrs).map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    2,
-                    rusqlite::types::Type::Text,
-                    Box::new(error),
-                )
-            })?;
-            Ok(InfrastructureNetworkConfigRow {
-                artifact_id: row.get(0)?,
-                file_id: row.get(1)?,
-                source_path: value["sourcePath"].as_str().unwrap_or_default().to_string(),
-                line_number: value["lineNumber"].as_u64().unwrap_or_default(),
-                line: value["line"].as_str().unwrap_or_default().to_string(),
-            })
-        })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
+        Self::list_native_source_config_rows(source_conn, limit)
     }
 
     fn list_native_source_config_rows(

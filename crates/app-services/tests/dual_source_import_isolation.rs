@@ -5,7 +5,9 @@ use std::sync::Arc;
 use app_services::import_analysis::ImportAnalysisMode;
 use app_services::import_pipeline::{execute_import_job_with_counts, ImportJobOptions};
 use domain::{DataSourceId, DataSourcePlatform};
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
+use persistence_sqlite::repositories::{
+    datasource_repo::DataSourceRepo, file_repo::FileRepo, job_repo::JobRepo,
+};
 
 #[test]
 fn windows_and_linux_logical_imports_are_isolated_in_both_orders() {
@@ -69,9 +71,15 @@ fn run_order_isolation_case(linux_first: bool) {
             assert_source_db_is_local(&active.case_root, &windows_id)?;
             assert_source_db_is_local(&active.case_root, &linux_id)?;
 
-            let app_file_count: i64 =
-                case_conn.query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
-            assert_eq!(app_file_count, 0, "app.db must remain a control database");
+            for table in ["file_entries", "artifacts", "timeline_events"] {
+                let exists: i64 = case_conn.query_row(
+                    "SELECT COUNT(*) FROM sqlite_master
+                     WHERE type = 'table' AND name = ?1",
+                    [table],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(exists, 0, "app.db must not own {table}");
+            }
 
             let summaries = app_services::file_service::get_data_sources_for_case(
                 case_conn,
@@ -156,19 +164,15 @@ fn assert_source_db_is_local(
     data_source_id: &DataSourceId,
 ) -> persistence_sqlite::DbResult<()> {
     let source_conn = app_services::source_db::open_source_db(case_root, data_source_id)?;
-    let own_count: i64 = source_conn.query_row(
-        "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1",
-        [&data_source_id.0],
-        |row| row.get(0),
-    )?;
-    let foreign_count: i64 = source_conn.query_row(
-        "SELECT COUNT(*) FROM file_entries WHERE data_source_id <> ?1",
-        [&data_source_id.0],
-        |row| row.get(0),
-    )?;
-    assert!(own_count > 0, "source.db must contain its own file tree");
-    assert_eq!(
-        foreign_count, 0,
+    let records = FileRepo::new(&source_conn).find_by_data_source(data_source_id)?;
+    assert!(
+        !records.is_empty(),
+        "source.db must contain its own file tree"
+    );
+    assert!(
+        records
+            .iter()
+            .all(|record| record.data_source_id == *data_source_id),
         "source.db must not contain another source"
     );
     Ok(())

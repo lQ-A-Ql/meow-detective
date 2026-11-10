@@ -16,9 +16,11 @@ use std::path::{Path, PathBuf};
 pub fn open_source_db(case_root: &Path, data_source_id: &DataSourceId) -> DbResult<Connection> {
     super::identity::validate_source_storage_id(data_source_id)?;
     let started = std::time::Instant::now();
-    let connection =
-        persistence_sqlite::open_or_create_source(&source_db_path(case_root, data_source_id))?;
+    std::fs::create_dir_all(case_root.join("artifacts").join("objects"))?;
+    let database_path = source_db_path(case_root, data_source_id);
+    let connection = persistence_sqlite::open_or_create_source(&database_path)?;
     persistence_sqlite::source_fjall::configure_source_identity(&connection, &data_source_id.0)?;
+    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &database_path)?;
     tracing::debug!(
         data_source_id = %data_source_id.0,
         elapsed_ms = started.elapsed().as_millis(),

@@ -5,8 +5,7 @@ use super::priority_queue::{PriorityTaskQueue, TaskPriority};
 use super::worker_runtime::{FileTask, SharedAnalysisState};
 use crossbeam_channel::Sender;
 use domain::{DataSourceId, EntryType, FileEntryId};
-use persistence_sqlite::repositories::file_repo::file_encryption_status_from_row;
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -23,19 +22,13 @@ pub(super) fn count_analysis_file_tasks(
     data_source_id: &DataSourceId,
 ) -> Result<u64, ImportAnalysisError> {
     let conn = persistence_sqlite::open_existing_source_read_only(db_path)?;
-    if let Some(store) = persistence_sqlite::source_fjall::open_store(&conn)? {
-        let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
-        return catalog
-            .file_count(&catalog.read_snapshot(), &data_source_id.0)
-            .map_err(|error| ImportAnalysisError::Other(error.to_string()));
-    }
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM file_entries
-             WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'",
-        params![data_source_id.0],
-        |row| row.get(0),
-    )?;
-    Ok(count as u64)
+    let store = persistence_sqlite::source_fjall::open_store(&conn)?.ok_or_else(|| {
+        ImportAnalysisError::Other("source detail storage is missing".to_string())
+    })?;
+    let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    catalog
+        .file_count(&catalog.read_snapshot(), &data_source_id.0)
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()))
 }
 
 pub(super) fn fetch_analysis_file_page(
@@ -45,68 +38,33 @@ pub(super) fn fetch_analysis_file_page(
     after_id: Option<&str>,
     limit: u64,
 ) -> Result<Vec<FileTask>, ImportAnalysisError> {
-    if let Some(store) = persistence_sqlite::source_fjall::open_store(conn)? {
-        let after = match (after_path, after_id) {
-            (None, None) => None,
-            (Some(path), Some(id)) => Some((path, id)),
-            _ => {
-                return Err(ImportAnalysisError::Other(
-                    "analysis file cursor requires both path and id".into(),
-                ))
-            }
-        };
-        let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
-        let page = catalog
-            .list_files_by_path(
-                &catalog.read_snapshot(),
-                &data_source_id.0,
-                after,
-                usize::try_from(limit.min(FILE_PAGE_SIZE))
-                    .map_err(|error| ImportAnalysisError::Other(error.to_string()))?,
-            )
-            .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
-        return Ok(page
-            .records
-            .into_iter()
-            .map(file_task_from_record)
-            .collect());
-    }
-    let (sql, cursor) = match (after_path, after_id) {
-        (None, None) => (
-            "SELECT id, parent_id, data_source_id, path, name, entry_type,
-                    size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
-             FROM file_entries
-             WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'
-             ORDER BY path ASC, id ASC
-             LIMIT ?2",
-            None,
-        ),
-        (Some(path), Some(id)) => (
-            "SELECT id, parent_id, data_source_id, path, name, entry_type,
-                    size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted
-             FROM file_entries
-             WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'
-               AND (path > ?2 OR (path = ?2 AND id > ?3))
-             ORDER BY path ASC, id ASC
-             LIMIT ?4",
-            Some((path, id)),
-        ),
+    let after = match (after_path, after_id) {
+        (None, None) => None,
+        (Some(path), Some(id)) => Some((path, id)),
         _ => {
             return Err(ImportAnalysisError::Other(
-                "analysis file cursor requires both path and id".to_string(),
+                "analysis file cursor requires both path and id".into(),
             ))
         }
     };
-    let mut stmt = conn.prepare(sql)?;
-    let mut rows = match cursor {
-        Some((path, id)) => stmt.query(params![data_source_id.0, path, id, limit])?,
-        None => stmt.query(params![data_source_id.0, limit])?,
-    };
-    let mut files = Vec::new();
-    while let Some(row) = rows.next()? {
-        files.push(row_to_file_task(row)?);
-    }
-    Ok(files)
+    let store = persistence_sqlite::source_fjall::open_store(conn)?.ok_or_else(|| {
+        ImportAnalysisError::Other("source detail storage is missing".to_string())
+    })?;
+    let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let page = catalog
+        .list_files_by_path(
+            &catalog.read_snapshot(),
+            &data_source_id.0,
+            after,
+            usize::try_from(limit.min(FILE_PAGE_SIZE))
+                .map_err(|error| ImportAnalysisError::Other(error.to_string()))?,
+        )
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+    Ok(page
+        .records
+        .into_iter()
+        .map(file_task_from_record)
+        .collect())
 }
 
 /// Enqueue file tasks with priority classification.
@@ -175,45 +133,6 @@ pub(super) fn enqueue_analysis_tasks_prioritized(
         }
     }
     Ok(())
-}
-
-fn row_to_file_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileTask> {
-    let entry_type_str: String = row.get(5)?;
-    let encryption_status = file_encryption_status_from_row(row, 16)?;
-    Ok(FileTask {
-        id: FileEntryId(row.get::<_, String>(0)?),
-        data_source_id: DataSourceId(row.get::<_, String>(2)?),
-        path: row.get(3)?,
-        name: row.get(4)?,
-        entry_type: if entry_type_str.eq_ignore_ascii_case("directory") {
-            EntryType::Directory
-        } else {
-            EntryType::File
-        },
-        size: row.get(6)?,
-        ext: row.get(7)?,
-        deleted: row.get::<_, i32>(8)? != 0,
-        hidden: row.get::<_, i32>(9)? != 0,
-        system: row.get::<_, i32>(10)? != 0,
-        encrypted: encryption_status.blocks_content(),
-        created_at: row
-            .get::<_, Option<String>>(11)?
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc)),
-        modified_at: row
-            .get::<_, Option<String>>(12)?
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc)),
-        accessed_at: row
-            .get::<_, Option<String>>(13)?
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc)),
-        changed_at: row
-            .get::<_, Option<String>>(14)?
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc)),
-        hash_sha256: row.get(15)?,
-    })
 }
 
 fn file_task_from_record(record: persistence_fjall::FileEntryRecord) -> FileTask {

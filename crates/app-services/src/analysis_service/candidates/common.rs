@@ -1,8 +1,8 @@
 use super::{evidence_category_defs, UNSUPPORTED_MACOS_CATEGORY};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::error::AnalysisServiceError;
-use domain::{EntryType, FileEncryptionStatus, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::file_repo::{file_encryption_status_from_row, FileRepo};
+use domain::{FileEncryptionStatus, FileEntry, FileEntryId};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -100,23 +100,7 @@ pub struct EvidenceCandidate {
 }
 
 pub fn collect_file_entries(conn: &Connection) -> Result<Vec<FileEntry>, AnalysisServiceError> {
-    if let Some(entries) = collect_file_entries_from_fjall(conn)? {
-        return Ok(entries);
-    }
-    let file_repo = FileRepo::new(conn);
-    let roots = file_repo.find_root_entries()?;
-    let mut all_files = Vec::new();
-    let mut queue = roots;
-
-    while let Some(entry) = queue.pop() {
-        if entry.entry_type == EntryType::Directory {
-            queue.extend(file_repo.find_children(&entry.id)?);
-        } else {
-            all_files.push(entry);
-        }
-    }
-
-    Ok(all_files)
+    collect_file_entries_from_fjall(conn)
 }
 
 pub(crate) fn find_candidate_by_path_suffix(
@@ -135,43 +119,6 @@ pub(crate) fn find_candidate_by_path_suffix(
                     .ends_with(&suffix)
         })
         .min_by_key(|entry| entry.path.len()))
-}
-
-pub(crate) fn row_to_file_entry_for_analysis(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
-    let entry_type_str: String = row.get(5)?;
-    let encryption_status = file_encryption_status_from_row(row, 16)?;
-    Ok(FileEntry {
-        id: FileEntryId(row.get::<_, String>(0)?),
-        parent_id: row.get::<_, Option<String>>(1)?.map(FileEntryId),
-        data_source_id: domain::DataSourceId(row.get::<_, String>(2)?),
-        path: row.get(3)?,
-        name: row.get(4)?,
-        entry_type: if entry_type_str.eq_ignore_ascii_case("directory") {
-            EntryType::Directory
-        } else {
-            EntryType::File
-        },
-        size: row.get(6)?,
-        ext: row.get(7)?,
-        deleted: row.get::<_, i32>(8)? != 0,
-        hidden: row.get::<_, i32>(9)? != 0,
-        system: row.get::<_, i32>(10)? != 0,
-        encrypted: encryption_status.blocks_content(),
-        created_at: parse_timestamp(row.get(11)?),
-        modified_at: parse_timestamp(row.get(12)?),
-        accessed_at: parse_timestamp(row.get(13)?),
-        changed_at: parse_timestamp(row.get(14)?),
-        hash_sha256: row.get(15)?,
-        read_only: row.get::<_, i32>(17)? != 0,
-        archive: row.get::<_, i32>(18)? != 0,
-        unix_mode: row.get(19)?,
-    })
-}
-
-pub(crate) fn parse_timestamp(value: Option<String>) -> Option<chrono::DateTime<chrono::Utc>> {
-    value
-        .and_then(|timestamp| chrono::DateTime::parse_from_rfc3339(&timestamp).ok())
-        .map(|timestamp| timestamp.with_timezone(&chrono::Utc))
 }
 
 pub fn discover_evidence_candidates(

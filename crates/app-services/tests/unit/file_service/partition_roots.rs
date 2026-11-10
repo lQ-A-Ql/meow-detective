@@ -1,12 +1,15 @@
 use super::*;
+crate::native_source_test_support!();
 use crate::datasource_service::{
     ImageFilesystemKind, LvmLogicalVolumeIdentity, PartitionRecord, PartitionStatus,
 };
 use crate::file_service::get_file_tree_real_with_visibility;
 use evidence_core::{filesystem::root_node, FileSystemReader, FsNode};
 use std::io::{self, Cursor, Read};
+use test_support::NativeSourceFixture;
 
 struct TwoFileFs;
+struct InvalidChildFs;
 
 impl FileSystemReader for TwoFileFs {
     fn root(&self) -> io::Result<FsNode> {
@@ -44,6 +47,46 @@ impl FileSystemReader for TwoFileFs {
 
     fn data_source_name(&self) -> &str {
         "two-file-fs"
+    }
+}
+
+impl FileSystemReader for InvalidChildFs {
+    fn root(&self) -> io::Result<FsNode> {
+        Ok(root_node())
+    }
+
+    fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
+        if !path.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(vec![fs_file("first.txt"), fs_file("")])
+    }
+
+    fn open_file(&self, _path: &str) -> io::Result<Box<dyn Read>> {
+        Ok(Box::new(Cursor::new(Vec::<u8>::new())))
+    }
+
+    fn data_source_name(&self) -> &str {
+        "invalid-child-fs"
+    }
+}
+
+fn fs_file(name: &str) -> FsNode {
+    FsNode {
+        name: name.to_string(),
+        path: name.to_string(),
+        is_dir: false,
+        size: 1,
+        hidden: false,
+        system: false,
+        read_only: false,
+        encrypted: false,
+        archive: false,
+        unix_mode: None,
+        created_at: None,
+        modified_at: None,
+        accessed_at: None,
+        changed_at: None,
     }
 }
 
@@ -120,64 +163,64 @@ fn store_partition_metadata_persists_lvm_identity() {
 
 #[test]
 fn replace_placeholder_rolls_back_root_update_and_children_on_insert_failure() {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_source_all(&conn).unwrap();
     let data_source_id = DataSourceId("ds-placeholder".to_string());
-    let placeholder =
-        insert_partition_placeholder_root(&conn, &data_source_id, 1, "Partition 1", "supported")
-            .unwrap();
-    conn.execute_batch(
-        "CREATE TRIGGER fail_second_file
-         BEFORE INSERT ON file_entries
-         WHEN NEW.name = 'second.txt'
-         BEGIN
-             SELECT RAISE(ABORT, 'forced insert failure');
-         END;",
+    let fixture = NativeSourceFixture::new(&data_source_id.0, "case-placeholder");
+    let placeholder = insert_partition_placeholder_root(
+        &fixture.connection,
+        &data_source_id,
+        1,
+        "Partition 1",
+        "supported",
     )
     .unwrap();
+    fixture.seal();
 
-    let result =
-        replace_placeholder_root_with_real(&conn, &placeholder, &TwoFileFs, Some("XFS"), None);
+    let result = replace_placeholder_root_with_real(
+        &fixture.connection,
+        &placeholder,
+        &InvalidChildFs,
+        Some("XFS"),
+        None,
+    );
     assert!(result.is_err());
 
-    let (path, name): (String, String) = conn
-        .query_row(
-            "SELECT path, name FROM file_entries WHERE id = ?1",
-            rusqlite::params![placeholder.0],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
+    let existing = FileRepo::new(&fixture.connection)
+        .find_by_id(&placeholder)
         .unwrap();
-    assert_eq!(path, "__partition_placeholder__/1/supported");
-    assert_eq!(name, "Partition 1");
-    let child_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1",
-            rusqlite::params![placeholder.0],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(child_count, 0);
-    let partition_index: i64 = conn
-        .query_row(
-            "SELECT partition_index FROM file_entries WHERE id = ?1",
-            rusqlite::params![placeholder.0],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(partition_index, 1);
+    let existing = existing.expect("placeholder survives failed replacement");
+    assert_eq!(existing.path, "__partition_placeholder__/1/supported");
+    assert_eq!(existing.name, "Partition 1");
+    assert_eq!(
+        FileRepo::new(&fixture.connection)
+            .find_children(&placeholder)
+            .unwrap()
+            .len(),
+        0
+    );
+    assert_eq!(
+        FileRepo::new(&fixture.connection)
+            .find_partition_index_by_id(&placeholder)
+            .unwrap(),
+        Some(1)
+    );
 }
 
 #[test]
 fn replace_placeholder_materializes_partition_index_for_entire_subtree() {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_source_all(&conn).unwrap();
     let data_source_id = DataSourceId("ds-materialized".to_string());
-    let placeholder =
-        insert_partition_placeholder_root(&conn, &data_source_id, 7, "Partition 7", "supported")
-            .unwrap();
+    let fixture = NativeSourceFixture::new(&data_source_id.0, "case-materialized");
+    let placeholder = insert_partition_placeholder_root(
+        &fixture.connection,
+        &data_source_id,
+        7,
+        "Partition 7",
+        "supported",
+    )
+    .unwrap();
+    fixture.seal();
 
     replace_placeholder_root_with_real(
-        &conn,
+        &fixture.connection,
         &placeholder,
         &TwoFileFs,
         Some("Partition 7 (XFS)"),
@@ -185,25 +228,28 @@ fn replace_placeholder_materializes_partition_index_for_entire_subtree() {
     )
     .unwrap();
 
-    let mismatched: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries
-             WHERE partition_index IS NULL OR partition_index <> 7",
-            [],
-            |row| row.get(0),
-        )
+    let mut ids = Vec::new();
+    FileRepo::new(&fixture.connection)
+        .visit_all(None, |entry| {
+            ids.push(entry.id);
+            Ok(())
+        })
         .unwrap();
-    assert_eq!(mismatched, 0);
+    assert!(ids.iter().all(|id| {
+        FileRepo::new(&fixture.connection)
+            .find_partition_index_by_id(id)
+            .unwrap()
+            == Some(7)
+    }));
 }
 
 #[test]
 fn unsupported_placeholder_stays_persisted_and_is_labeled_in_tree() {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_source_all(&conn).unwrap();
     let data_source_id = DataSourceId("ds-unsupported-placeholder".to_string());
+    let fixture = NativeSourceFixture::new(&data_source_id.0, "case-unsupported-placeholder");
 
     let unsupported = insert_partition_placeholder_root(
-        &conn,
+        &fixture.connection,
         &data_source_id,
         1,
         "Partition 1 (Unknown)",
@@ -211,15 +257,16 @@ fn unsupported_placeholder_stays_persisted_and_is_labeled_in_tree() {
     )
     .unwrap();
     let supported = insert_partition_placeholder_root(
-        &conn,
+        &fixture.connection,
         &data_source_id,
         2,
         "Partition 2 (Ext4)",
         "queued",
     )
     .unwrap();
+    fixture.seal();
     replace_placeholder_root_with_real(
-        &conn,
+        &fixture.connection,
         &supported,
         &TwoFileFs,
         Some("Partition 2 (Ext4)"),
@@ -227,7 +274,7 @@ fn unsupported_placeholder_stays_persisted_and_is_labeled_in_tree() {
     )
     .unwrap();
 
-    let tree = get_file_tree_real_with_visibility(&conn, false).unwrap();
+    let tree = get_file_tree_real_with_visibility(&fixture.connection, false).unwrap();
     assert_eq!(tree.len(), 2);
     let unsupported_node = tree
         .iter()
@@ -241,28 +288,24 @@ fn unsupported_placeholder_stays_persisted_and_is_labeled_in_tree() {
         .expect("supported partition should remain visible after enumeration");
     assert_eq!(supported_node.status.as_deref(), Some("ready"));
     assert!(
-        FileRepo::new(&conn)
+        FileRepo::new(&fixture.connection)
             .find_by_id(&unsupported)
             .unwrap()
             .is_some(),
         "unsupported partition metadata must remain available for diagnostics"
     );
 
-    let visible_rows: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries
-             WHERE data_source_id = ?1 AND path NOT LIKE '__partition_placeholder__/%'",
-            rusqlite::params![data_source_id.0],
-            |row| row.get(0),
-        )
-        .unwrap();
-    let placeholder_rows: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries
-             WHERE data_source_id = ?1 AND path LIKE '__partition_placeholder__/%'",
-            rusqlite::params![data_source_id.0],
-            |row| row.get(0),
-        )
+    let mut visible_rows = 0;
+    let mut placeholder_rows = 0;
+    FileRepo::new(&fixture.connection)
+        .visit_all(None, |entry| {
+            if entry.path.starts_with("__partition_placeholder__/") {
+                placeholder_rows += 1;
+            } else {
+                visible_rows += 1;
+            }
+            Ok(())
+        })
         .unwrap();
     assert_eq!(visible_rows, 3);
     assert_eq!(placeholder_rows, 1);

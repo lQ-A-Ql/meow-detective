@@ -1,10 +1,12 @@
 use super::*;
-use domain::{CaseId, DataSourceKind};
+crate::native_source_test_support!();
+use domain::{CaseId, DataSourceKind, EntryType, FileEntry, FileEntryId};
 use evidence_core::{FileSystemDiagnostic, FileSystemDiagnosticKind};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
+use test_support::NativeSourceFixture;
 
 #[test]
 fn derived_source_id_is_deterministic_and_path_safe() {
@@ -204,17 +206,12 @@ fn catalog_manifest_supports_fast_reuse_and_explicit_deep_verification() {
     persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
         .upsert_source_local_metadata(&CaseId("case-1".to_string()), &source)
         .expect("insert source metadata");
-    connection
-        .execute(
-            "INSERT INTO file_entries
-             (id, parent_id, data_source_id, path, name, entry_type, size,
-              deleted, hidden, system)
-             VALUES
-             ('root', NULL, ?1, '', 'root', 'directory', NULL, 0, 0, 0),
-             ('other', NULL, ?1, '', 'other', 'directory', NULL, 0, 0, 0),
-             ('file', 'root', ?1, 'etc/passwd', 'passwd', 'file', 42, 0, 0, 0)",
-            [&source.id.0],
-        )
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&connection)
+        .insert_batch(&[
+            catalog_dir(&source, "root", None, "", "root"),
+            catalog_dir(&source, "other", None, "", "other"),
+            catalog_file(&source, "file", "root", "etc/passwd", "passwd"),
+        ])
         .expect("insert catalog rows");
     let lineage_fingerprint = "b".repeat(64);
     let summary =
@@ -232,12 +229,13 @@ fn catalog_manifest_supports_fast_reuse_and_explicit_deep_verification() {
     )
     .unwrap();
 
-    connection
-        .execute(
-            "UPDATE file_entries SET parent_id = 'other' WHERE id = 'file'",
-            [],
-        )
-        .expect("simulate catalog drift");
+    persistence_sqlite::source_fjall::update_catalog_parent(
+        &connection,
+        "file",
+        Some("other".into()),
+        &source.id.0,
+    )
+    .unwrap();
 
     let fast = catalog_manifest::load_current_source_summary(
         &connection,
@@ -257,8 +255,7 @@ fn catalog_manifest_supports_fast_reuse_and_explicit_deep_verification() {
 
 #[test]
 fn catalog_digest_ignores_materialized_partition_routing_hints() {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+    let fixture = NativeSourceFixture::new("derived-partition-hint-test", "case-1");
     let source = DataSource {
         id: DataSourceId("derived-partition-hint-test".to_string()),
         name: "VM disk".to_string(),
@@ -267,39 +264,100 @@ fn catalog_digest_ignores_materialized_partition_routing_hints() {
         imported_at: chrono::Utc::now(),
         provenance: domain::DataSourceProvenance::default(),
     };
-    persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
+    persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&fixture.connection)
         .upsert_source_local_metadata(&CaseId("case-1".to_string()), &source)
         .expect("insert source metadata");
-    connection
-        .execute(
-            "INSERT INTO file_entries
-             (id, parent_id, data_source_id, path, name, entry_type, size,
-              deleted, hidden, system, partition_index)
-             VALUES
-             ('root-1', NULL, ?1, '', 'Partition 1', 'directory', NULL, 0, 0, 0, NULL),
-             ('file-1', 'root-1', ?1, 'etc/passwd', 'passwd', 'file', 42, 0, 0, 0, NULL),
-             ('root-0', NULL, ?1, '', 'Partition 0', 'directory', NULL, 0, 0, 0, NULL),
-             ('file-0', 'root-0', ?1, 'boot/grub.cfg', 'grub.cfg', 'file', 24, 0, 0, 0, NULL)",
-            [&source.id.0],
-        )
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&fixture.connection)
+        .insert_batch(&[
+            catalog_dir(&source, "root-1", None, "", "Partition 1"),
+            catalog_file(&source, "file-1", "root-1", "etc/passwd", "passwd"),
+            catalog_dir(&source, "root-0", None, "", "Partition 0"),
+            catalog_file(&source, "file-0", "root-0", "boot/grub.cfg", "grub.cfg"),
+        ])
         .expect("insert catalog rows");
+    fixture.seal();
 
     let before =
-        catalog_manifest::summarize_source_connection(&connection, source.clone()).unwrap();
-    connection
-        .execute(
-            "UPDATE file_entries
-             SET partition_index = CASE
-                 WHEN id IN ('root-0', 'file-0') THEN 0
-                 ELSE 1
-             END",
-            [],
-        )
-        .expect("materialize partition routing hints");
-    let after = catalog_manifest::summarize_source_connection(&connection, source).unwrap();
+        catalog_manifest::summarize_source_connection(&fixture.connection, source.clone()).unwrap();
+    for id in ["root-0", "file-0"] {
+        persistence_sqlite::source_fjall::set_partition_index(&fixture.connection, id, 0).unwrap();
+    }
+    for id in ["root-1", "file-1"] {
+        persistence_sqlite::source_fjall::set_partition_index(&fixture.connection, id, 1).unwrap();
+    }
+    let after = catalog_manifest::summarize_source_connection(&fixture.connection, source).unwrap();
 
     assert_eq!(before.file_count, after.file_count);
     assert_eq!(before.catalog_digest, after.catalog_digest);
+}
+
+fn catalog_dir(
+    source: &DataSource,
+    id: &str,
+    parent_id: Option<&str>,
+    path: &str,
+    name: &str,
+) -> FileEntry {
+    catalog_entry(
+        source,
+        id,
+        parent_id,
+        path,
+        name,
+        EntryType::Directory,
+        None,
+    )
+}
+
+fn catalog_file(
+    source: &DataSource,
+    id: &str,
+    parent_id: &str,
+    path: &str,
+    name: &str,
+) -> FileEntry {
+    catalog_entry(
+        source,
+        id,
+        Some(parent_id),
+        path,
+        name,
+        EntryType::File,
+        Some(42),
+    )
+}
+
+fn catalog_entry(
+    source: &DataSource,
+    id: &str,
+    parent_id: Option<&str>,
+    path: &str,
+    name: &str,
+    entry_type: EntryType,
+    size: Option<u64>,
+) -> FileEntry {
+    FileEntry {
+        id: FileEntryId(id.into()),
+        parent_id: parent_id.map(|value| FileEntryId(value.into())),
+        data_source_id: source.id.clone(),
+        path: path.into(),
+        name: name.into(),
+        entry_type,
+        size,
+        ext: name.rsplit_once('.').map(|(_, ext)| ext.into()),
+        deleted: false,
+        hidden: false,
+        system: false,
+        encrypted: false,
+        read_only: false,
+        archive: false,
+        unix_mode: None,
+        created_at: None,
+        modified_at: None,
+        accessed_at: None,
+        changed_at: None,
+        hash_sha256: None,
+    }
 }
 
 #[test]

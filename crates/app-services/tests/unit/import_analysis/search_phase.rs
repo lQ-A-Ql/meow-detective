@@ -1,11 +1,10 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use domain::DataSourcePlatform;
-use rusqlite::params;
+use domain::{DataSourcePlatform, EntryType};
 use tempfile::TempDir;
 
-use super::setup_source_db;
+use super::{insert_file_with_options, setup_source_db};
 use crate::import_analysis::{run_search_index_phase, SearchIndexPhaseOptions};
 
 #[test]
@@ -36,17 +35,39 @@ fn dedicated_search_phase_indexes_every_metadata_row_without_evidence_reads() {
     let (db_path, data_source_id) = setup_source_db(&tmp);
     let connection =
         persistence_sqlite::open_existing_source(&db_path).expect("open source database");
-    connection
-        .execute(
-            "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
-             VALUES
-             ('directory', ?1, 'Downloads/report-data', 'report-data', 'directory', NULL, NULL, 0, 0, 0, 0),
-             ('empty', ?1, 'Downloads/report.txt', 'report.txt', 'file', 0, 'txt', 0, 0, 0, 0),
-             ('huge', ?1, 'Downloads/archive.7z', 'archive.7z', 'file', ?2, '7z', 0, 0, 0, 1)",
-            params![data_source_id.0, 3_u64 * 1024 * 1024 * 1024],
-        )
-        .expect("insert metadata rows");
+    insert_file_with_options(
+        &connection,
+        "directory",
+        &data_source_id,
+        "Downloads/report-data",
+        "report-data",
+        EntryType::Directory,
+        None,
+        None,
+        false,
+    );
+    insert_file_with_options(
+        &connection,
+        "empty",
+        &data_source_id,
+        "Downloads/report.txt",
+        "report.txt",
+        EntryType::File,
+        Some(0),
+        Some("txt"),
+        false,
+    );
+    insert_file_with_options(
+        &connection,
+        "huge",
+        &data_source_id,
+        "Downloads/archive.7z",
+        "archive.7z",
+        EntryType::File,
+        Some(3_u64 * 1024 * 1024 * 1024),
+        Some("7z"),
+        true,
+    );
     drop(connection);
 
     let index_dir = tmp.path().join("search-index");

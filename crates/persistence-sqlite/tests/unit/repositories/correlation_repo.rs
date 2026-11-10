@@ -1,38 +1,45 @@
 use super::*;
-use crate::connection::open_in_memory;
+use domain::{Artifact, ArtifactId};
+use std::collections::BTreeMap;
 
-fn setup_db() -> Connection {
-    let conn = open_in_memory().unwrap();
-    conn.execute_batch(
-        "CREATE TABLE correlation_snapshots (
-            case_id TEXT PRIMARY KEY NOT NULL,
-            snapshot_json TEXT NOT NULL,
-            generated_at TEXT NOT NULL,
-            artifact_hash TEXT NOT NULL,
-            artifact_ids_json TEXT NOT NULL
-        );
-        CREATE TABLE correlation_edges_cache (
-            case_id TEXT NOT NULL,
-            edge_id TEXT NOT NULL,
-            edge_data TEXT NOT NULL,
-            PRIMARY KEY (case_id, edge_id)
-        );
-        CREATE TABLE artifacts (
-            id TEXT PRIMARY KEY NOT NULL,
-            case_id TEXT NOT NULL DEFAULT '',
-            title TEXT NOT NULL,
-            summary TEXT NOT NULL DEFAULT '',
-            attrs TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );",
+fn setup_db() -> (tempfile::TempDir, Connection) {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("source.db");
+    let conn = crate::open_or_create_source(&path).unwrap();
+    crate::source_fjall::configure_source_identity(&conn, "source-1").unwrap();
+    crate::source_fjall::open_store_for_write(&conn)
+        .unwrap()
+        .unwrap();
+    conn.execute(
+        "INSERT INTO data_sources(id,case_id,name,kind,source_path,imported_at)
+         VALUES('source-1','case-1','source','raw','source.raw','2026-01-01T00:00:00Z')",
+        [],
     )
     .unwrap();
-    conn
+    (root, conn)
+}
+
+fn artifact(id: &str) -> Artifact {
+    Artifact {
+        id: ArtifactId(id.into()),
+        family: "Correlation".into(),
+        source_object_id: None,
+        title: id.into(),
+        summary: id.into(),
+        extractor_id: None,
+        extractor_version: None,
+        confidence: None,
+        source_attribution: None,
+        created_at: chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+        attrs: BTreeMap::new(),
+    }
 }
 
 #[test]
 fn store_and_get_snapshot_cache() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
 
     let row = get_correlation_snapshot_cache(&conn, "case-1").unwrap();
     assert!(row.is_none());
@@ -57,7 +64,7 @@ fn store_and_get_snapshot_cache() {
 
 #[test]
 fn store_cache_overwrites_previous() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
 
     store_correlation_snapshot_cache(
         &conn,
@@ -87,7 +94,7 @@ fn store_cache_overwrites_previous() {
 
 #[test]
 fn clear_cache_removes_both_tables() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
 
     store_correlation_snapshot_cache(
         &conn,
@@ -99,7 +106,8 @@ fn clear_cache_removes_both_tables() {
     )
     .unwrap();
     conn.execute(
-        "INSERT INTO correlation_edges_cache (case_id, edge_id, edge_data) VALUES ('case-1', 'e1', '{}')",
+        "INSERT INTO correlation_edges_cache (edge_id, case_id, source_id, target_id)
+         VALUES ('e1', 'case-1', 'source', 'target')",
         [],
     )
     .unwrap();
@@ -122,19 +130,10 @@ fn clear_cache_removes_both_tables() {
 
 #[test]
 fn compute_artifact_hash_is_stable() {
-    let conn = setup_db();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title, created_at)
-         VALUES ('a1', 'case-1', 'Artifact 1', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title, created_at)
-         VALUES ('a2', 'case-1', 'Artifact 2', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
+    let (_root, conn) = setup_db();
+    crate::repositories::artifact_repo::ArtifactRepo::new(&conn)
+        .insert_batch(&[artifact("a1"), artifact("a2")], "case-1", "source-1")
+        .unwrap();
 
     let h1 = compute_artifact_hash_hex(&conn).unwrap();
     let h2 = compute_artifact_hash_hex(&conn).unwrap();
@@ -144,22 +143,16 @@ fn compute_artifact_hash_is_stable() {
 
 #[test]
 fn compute_artifact_hash_changes_when_data_changes() {
-    let conn = setup_db();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title, created_at)
-         VALUES ('a1', 'case-1', 'Artifact 1', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
+    let (_root, conn) = setup_db();
+    crate::repositories::artifact_repo::ArtifactRepo::new(&conn)
+        .insert_batch(&[artifact("a1")], "case-1", "source-1")
+        .unwrap();
 
     let h1 = compute_artifact_hash_hex(&conn).unwrap();
 
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title, created_at)
-         VALUES ('a2', 'case-1', 'Artifact 2', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
+    crate::repositories::artifact_repo::ArtifactRepo::new(&conn)
+        .insert_batch(&[artifact("a2")], "case-1", "source-1")
+        .unwrap();
 
     let h2 = compute_artifact_hash_hex(&conn).unwrap();
     assert_ne!(h1, h2);
@@ -167,17 +160,10 @@ fn compute_artifact_hash_changes_when_data_changes() {
 
 #[test]
 fn resolve_case_id_returns_first_distinct() {
-    let conn = setup_db();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title) VALUES ('a1', 'case-1', 'A1')",
-        [],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title) VALUES ('a2', 'case-1', 'A2')",
-        [],
-    )
-    .unwrap();
+    let (_root, conn) = setup_db();
+    crate::repositories::artifact_repo::ArtifactRepo::new(&conn)
+        .insert_batch(&[artifact("a1"), artifact("a2")], "case-1", "source-1")
+        .unwrap();
 
     let case_id = resolve_case_id(&conn).unwrap();
     assert_eq!(case_id.as_deref(), Some("case-1"));
@@ -185,24 +171,17 @@ fn resolve_case_id_returns_first_distinct() {
 
 #[test]
 fn resolve_case_id_returns_none_when_empty() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let case_id = resolve_case_id(&conn).unwrap();
     assert!(case_id.is_none());
 }
 
 #[test]
 fn collect_artifact_ids_returns_sorted() {
-    let conn = setup_db();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title) VALUES ('a2', 'case-1', 'A2')",
-        [],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title) VALUES ('a1', 'case-1', 'A1')",
-        [],
-    )
-    .unwrap();
+    let (_root, conn) = setup_db();
+    crate::repositories::artifact_repo::ArtifactRepo::new(&conn)
+        .insert_batch(&[artifact("a2"), artifact("a1")], "case-1", "source-1")
+        .unwrap();
 
     let ids = collect_artifact_ids(&conn).unwrap();
     assert_eq!(ids, vec!["a1", "a2"]);

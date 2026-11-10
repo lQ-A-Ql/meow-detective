@@ -27,6 +27,7 @@ pub use candidates::{
 };
 pub use classification::{classify_files_by_magic, classify_files_by_metadata};
 pub use error::AnalysisServiceError;
+pub(crate) use extraction::stage_native_records;
 pub(crate) use extraction::AnalysisExtractionExecution;
 pub use extraction::{
     extract_evtx_candidate, extract_linux_candidate, extract_registry_candidate,

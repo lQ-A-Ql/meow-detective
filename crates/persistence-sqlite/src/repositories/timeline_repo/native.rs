@@ -1,7 +1,7 @@
 use crate::{DbError, DbResult};
 use chrono::{DateTime, Utc};
 use domain::{TimelineEvent, TimelineEventId};
-use persistence_fjall::{ScanDirection, TimelinePage, TimelineRecordStore};
+use persistence_fjall::{ScanDirection, TimelinePage, TimelineRecordStore, TimelineTypeAfterQuery};
 use rusqlite::Connection;
 
 impl super::TimelineRepo<'_> {
@@ -9,9 +9,7 @@ impl super::TimelineRepo<'_> {
         if let Some(count) = count_filtered(self.conn, None, None, None)? {
             return Ok(count);
         }
-        self.conn
-            .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
-            .map_err(Into::into)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 }
 
@@ -288,10 +286,12 @@ fn timeline_page_after(
     let result = match event_type {
         Some(event_type) => repository.list_by_type_after(
             snapshot,
-            source_id,
-            event_type,
-            timestamp,
-            event_id,
+            TimelineTypeAfterQuery {
+                source_id,
+                event_type,
+                after_timestamp: timestamp,
+                after_id: event_id,
+            },
             ScanDirection::Forward,
             512,
         ),

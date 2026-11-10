@@ -4,10 +4,9 @@ use std::io::{Cursor, Read};
 use artifacts_android::{inspect_apk, parse_package_restrictions, AndroidPackageRestriction};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use domain::FileEntry;
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::Connection;
 use transport::dto::{AndroidPackageDto, AndroidPackageSummaryDto};
 
-use crate::analysis_service::candidates::row_to_file_entry_for_analysis;
 use crate::analysis_service::AnalysisServiceError;
 use crate::file_service::{RangeContentReader, SourceReadContext};
 
@@ -100,45 +99,29 @@ fn hydrate_package_restrictions(
 }
 
 fn find_restriction_files(connection: &Connection) -> Result<Vec<FileEntry>, AnalysisServiceError> {
-    if persistence_sqlite::source_fjall::has_source_store(connection)? {
-        let mut entries = Vec::new();
-        persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
-            None,
-            |entry| {
-                if !entry.deleted
-                    && !entry.is_directory()
-                    && entry
-                        .path
-                        .replace('\\', "/")
-                        .to_ascii_lowercase()
-                        .ends_with("package-restrictions.xml")
-                {
-                    entries.push(entry);
-                }
-                Ok(())
-            },
-        )?;
-        entries.sort_by(|left, right| {
-            left.path
-                .to_ascii_lowercase()
-                .cmp(&right.path.to_ascii_lowercase())
-        });
-        return Ok(entries);
-    }
-    let mut statement = connection.prepare(
-        "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256,
-                encrypted, read_only, archive, unix_mode
-         FROM file_entries
-         WHERE entry_type = 'file' COLLATE NOCASE
-           AND REPLACE(LOWER(path), '\\', '/') LIKE '%package-restrictions.xml'
-         ORDER BY path COLLATE NOCASE ASC",
+    let mut entries = Vec::new();
+    persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
+        None,
+        |entry| {
+            if !entry.deleted
+                && !entry.is_directory()
+                && entry
+                    .path
+                    .replace('\\', "/")
+                    .to_ascii_lowercase()
+                    .ends_with("package-restrictions.xml")
+            {
+                entries.push(entry);
+            }
+            Ok(())
+        },
     )?;
-    let files = statement
-        .query_map([], row_to_file_entry_for_analysis)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(AnalysisServiceError::from)?;
-    Ok(files)
+    entries.sort_by(|left, right| {
+        left.path
+            .to_ascii_lowercase()
+            .cmp(&right.path.to_ascii_lowercase())
+    });
+    Ok(entries)
 }
 
 fn insert_restriction(
@@ -256,97 +239,55 @@ fn find_exact_apk_file(
     connection: &Connection,
     path: &str,
 ) -> Result<Option<FileEntry>, AnalysisServiceError> {
-    if persistence_sqlite::source_fjall::has_source_store(connection)? {
-        let expected = path
-            .trim_start_matches('/')
-            .replace('\\', "/")
-            .to_ascii_lowercase();
-        let mut found = None;
-        persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
-            None,
-            |entry| {
-                let actual = entry
-                    .path
-                    .trim_start_matches('/')
-                    .replace('\\', "/")
-                    .to_ascii_lowercase();
-                if found.is_none()
-                    && !entry.deleted
-                    && !entry.is_directory()
-                    && actual.ends_with(&expected)
-                {
-                    found = Some(entry);
-                }
-                Ok(())
-            },
-        )?;
-        return Ok(found);
-    }
-    let suffix = escape_like_suffix(path.trim_start_matches('/'));
-    connection
-        .query_row(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted, read_only, archive, unix_mode
-             FROM file_entries
-             WHERE entry_type = 'file' COLLATE NOCASE
-               AND REPLACE(LOWER(path), '\\', '/') LIKE ?1 ESCAPE '\\'
-             ORDER BY LENGTH(path) ASC
-             LIMIT 1",
-            [format!("%{suffix}")],
-            row_to_file_entry_for_analysis,
-        )
-        .optional()
-        .map_err(Into::into)
+    let expected = path
+        .trim_start_matches('/')
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let mut found = None;
+    persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
+        None,
+        |entry| {
+            let actual = entry
+                .path
+                .trim_start_matches('/')
+                .replace('\\', "/")
+                .to_ascii_lowercase();
+            if found.is_none()
+                && !entry.deleted
+                && !entry.is_directory()
+                && actual.ends_with(&expected)
+            {
+                found = Some(entry);
+            }
+            Ok(())
+        },
+    )?;
+    Ok(found)
 }
 
 fn find_directory_apk_file(
     connection: &Connection,
     directory: &str,
 ) -> Result<Option<FileEntry>, AnalysisServiceError> {
-    if persistence_sqlite::source_fjall::has_source_store(connection)? {
-        let expected = directory
-            .trim_start_matches('/')
-            .replace('\\', "/")
-            .to_ascii_lowercase();
-        let mut found = None;
-        persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
-            None,
-            |entry| {
-                let actual = entry.path.replace('\\', "/").to_ascii_lowercase();
-                if found.is_none()
-                    && !entry.deleted
-                    && !entry.is_directory()
-                    && entry.name.to_ascii_lowercase().ends_with(".apk")
-                    && actual.starts_with(&format!("{expected}/"))
-                {
-                    found = Some(entry);
-                }
-                Ok(())
-            },
-        )?;
-        return Ok(found);
-    }
-    let prefix = escape_like_suffix(directory.trim_start_matches('/'));
-    connection
-        .query_row(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256, encrypted, read_only, archive, unix_mode
-             FROM file_entries
-             WHERE entry_type = 'file' COLLATE NOCASE
-               AND LOWER(name) LIKE '%.apk'
-               AND REPLACE(LOWER(path), '\\', '/') LIKE ?1 ESCAPE '\\'
-             ORDER BY LENGTH(path) ASC, path COLLATE NOCASE ASC
-             LIMIT 1",
-            [format!("%{prefix}/%")],
-            row_to_file_entry_for_analysis,
-        )
-        .optional()
-        .map_err(Into::into)
-}
-
-fn escape_like_suffix(path: &str) -> String {
-    path.replace('\\', "\\\\")
-        .replace('%', "\\%")
-        .replace('_', "\\_")
-        .to_ascii_lowercase()
+    let expected = directory
+        .trim_start_matches('/')
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let mut found = None;
+    persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
+        None,
+        |entry| {
+            let actual = entry.path.replace('\\', "/").to_ascii_lowercase();
+            if found.is_none()
+                && !entry.deleted
+                && !entry.is_directory()
+                && entry.name.to_ascii_lowercase().ends_with(".apk")
+                && actual.starts_with(&format!("{expected}/"))
+            {
+                found = Some(entry);
+            }
+            Ok(())
+        },
+    )?;
+    Ok(found)
 }

@@ -92,6 +92,26 @@ fn replacement_commits_records_counts_indexes_and_revision_together() {
 }
 
 #[test]
+fn empty_timeline_without_count_marker_reports_zero() {
+    let root = tempfile::tempdir().unwrap();
+    let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let snapshot = store.read_snapshot();
+
+    assert_eq!(
+        store
+            .count_by_time(&snapshot, "source", None, None)
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        store
+            .count_by_type(&snapshot, "source", "LOGON", None, None)
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
 fn streamed_replacement_rolls_back_every_batch_when_the_producer_fails() {
     let root = tempfile::tempdir().unwrap();
     let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();

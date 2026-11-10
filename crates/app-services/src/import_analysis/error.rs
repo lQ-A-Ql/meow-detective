@@ -15,6 +15,10 @@ pub enum ImportAnalysisError {
     #[error("persistence error: {0}")]
     Persistence(#[from] persistence_sqlite::DbError),
 
+    /// Shared source storage error while opening a native generation.
+    #[error("source storage error: {0}")]
+    Storage(#[from] crate::storage_runtime::StorageRuntimeError),
+
     /// Filesystem or thread-spawn I/O error.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -33,7 +37,9 @@ impl transport::ServiceErrorCategory for ImportAnalysisError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
             Self::UnsupportedPlatform(_) => transport::ErrorCategory::Unsupported,
-            Self::Db(_) | Self::Persistence(_) | Self::Io(_) => transport::ErrorCategory::Io,
+            Self::Db(_) | Self::Persistence(_) | Self::Storage(_) | Self::Io(_) => {
+                transport::ErrorCategory::Io
+            }
             Self::Staging(_) => transport::ErrorCategory::Validation,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }

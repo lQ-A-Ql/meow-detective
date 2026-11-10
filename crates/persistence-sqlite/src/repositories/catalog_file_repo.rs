@@ -1,4 +1,5 @@
 use crate::connection::{DbError, DbResult};
+use crate::repositories::file_repo::FileRepo;
 use crate::repositories::fingerprint_repo::ForensicFingerprintRepo;
 use domain::{EntryType, FileEntry};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -80,7 +81,7 @@ impl<'a> CatalogFileRepo<'a> {
 
     pub fn update_root_in_transaction(&self, entry: &FileEntry) -> DbResult<()> {
         if crate::source_fjall::open_store(self.conn)?.is_some() {
-            crate::source_fjall::upsert_files(self.conn, std::slice::from_ref(entry))?;
+            FileRepo::new(self.conn).update_root_metadata(entry)?;
             return Ok(());
         }
         self.conn.execute(

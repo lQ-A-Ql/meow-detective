@@ -136,14 +136,12 @@ fn partition_candidates_for_kind(
         Path::new(source_path),
         source_kind,
     );
-    if probe.candidates.is_empty() {
-        if let Some(candidate) = direct_exfat_partition_candidate(source_path, source_kind)? {
-            if expected_partition_index.is_none_or(|expected| expected == candidate.partition_index)
-            {
-                return Ok(vec![candidate]);
-            }
+    if let Some(candidate) = direct_exfat_partition_candidate(source_path, source_kind)? {
+        if expected_partition_index.is_none_or(|expected| expected == candidate.partition_index) {
+            return Ok(vec![candidate]);
         }
-
+    }
+    if probe.candidates.is_empty() {
         return Err(FileServiceError::other(
             "No supported filesystem detected in image",
         ));

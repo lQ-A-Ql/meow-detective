@@ -9,8 +9,9 @@ use crate::import_pipeline::{
     },
     ImportJobOptions,
 };
+crate::native_source_test_support!();
 use crate::{case_service, import_analysis, import_precheck, search_service, staging};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, job_repo::JobRepo};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -800,7 +801,8 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             let file_entries: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM file_entries",
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'file_entries'",
                 [],
                 |row| row.get(0),
             )?;
@@ -831,7 +833,8 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
             assert_eq!(generation.attempt_id, job_id.0);
             assert_eq!(generation.projection_batch_digest.len(), 64);
             let timeline_events: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM timeline_events",
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'timeline_events'",
                 [],
                 |row| row.get(0),
             )?;
@@ -982,21 +985,55 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
         .with_conn(|conn| {
             let _job_id = JobRepo::new(conn).create(&active.meta.id.0, "Raw import seam")?;
             let data_source_id = domain::DataSourceId("raw-ds-1".to_string());
-            conn.execute(
-                "INSERT INTO data_sources (id, case_id, name, kind, source_path)
-                 VALUES (?1, ?2, 'sample.raw', 'raw', 'C:/evidence/sample.raw')",
-                rusqlite::params![data_source_id.0, active.meta.id.0],
+            let data_source = domain::DataSource {
+                id: data_source_id.clone(),
+                name: "sample.raw".to_string(),
+                kind: domain::DataSourceKind::Raw,
+                source_path: std::path::PathBuf::from("C:/evidence/sample.raw"),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            };
+            let mut storage =
+                persistence_sqlite::repositories::datasource_repo::DataSourceStorage::source_db(
+                    &data_source_id.0,
+                    Some("windows"),
+                    None,
+                );
+            storage.import_state = "ready".to_string();
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+                .insert_with_storage(&active.meta.id, &data_source, &storage)?;
+            let source_db_path =
+                crate::source_db::source_db_path(&active.case_root, &data_source_id);
+            let source_conn = crate::source_db::open_source_db(&active.case_root, &data_source_id)
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&source_conn)
+                .upsert_source_local_metadata(&active.meta.id, &data_source)?;
+            persistence_sqlite::repositories::file_repo::FileRepo::new(&source_conn).insert_batch(
+                &[domain::FileEntry {
+                    id: domain::FileEntryId("raw-file-1".to_string()),
+                    parent_id: None,
+                    data_source_id: data_source_id.clone(),
+                    path: "/Users/Alice/note.txt".to_string(),
+                    name: "note.txt".to_string(),
+                    entry_type: domain::EntryType::File,
+                    size: Some(4096),
+                    ext: None,
+                    deleted: false,
+                    hidden: false,
+                    system: false,
+                    encrypted: false,
+                    read_only: false,
+                    archive: false,
+                    unix_mode: None,
+                    created_at: Some(chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()),
+                    modified_at: Some(chrono::Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap()),
+                    accessed_at: Some(chrono::Utc.with_ymd_and_hms(2026, 1, 3, 0, 0, 0).unwrap()),
+                    changed_at: Some(chrono::Utc.with_ymd_and_hms(2026, 1, 4, 0, 0, 0).unwrap()),
+                    hash_sha256: None,
+                }],
             )?;
-            conn.execute(
-                "INSERT INTO file_entries
-                 (id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted,
-                  created_at, modified_at, accessed_at, changed_at)
-                 VALUES
-                 ('raw-file-1', ?1, '/Users/Alice/note.txt', 'note.txt', 'file', 4096,
-                  NULL, 0, 0, 0, 0, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z',
-                  '2026-01-03T00:00:00Z', '2026-01-04T00:00:00Z')",
-                [&data_source_id.0],
-            )?;
+            test_support::mark_source_projection_complete(&source_conn, &data_source_id.0);
+            drop(source_conn);
             conn.execute(
                 "INSERT INTO graph_nodes
                  (id, case_id, node_type, label, summary, tags, created_at)
@@ -1009,7 +1046,7 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
                 import_analysis::PostImportPipelineOptions {
                     publication_lease: None,
                     case_root: active.case_root.clone(),
-                    db_path: active.case_root.join("app.db"),
+                    db_path: source_db_path.clone(),
                     case_id: active.meta.id.0.clone(),
                     data_source_id: data_source_id.clone(),
                     platform: domain::DataSourcePlatform::Windows,
@@ -1032,24 +1069,27 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
                 "Timeline: scheduled for import finalization. Artifacts: 0. Index: 1 indexed"
             );
             assert!(!counts.is_partial());
-            let before_query: i64 =
-                conn.query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))?;
-            assert_eq!(before_query, 0);
+            let source_conn = persistence_sqlite::open_existing_source(&source_db_path)?;
+            assert_eq!(
+                persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&source_conn)
+                    .count()?,
+                0
+            );
 
-            let page = crate::timeline_service::query_timeline(conn, 0, 10)
+            let page = crate::timeline_service::query_timeline(&source_conn, 0, 10)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(page.total, 0);
             assert!(page.items.is_empty());
 
             let first = crate::timeline_service::materialize_file_activity(
-                conn,
+                &source_conn,
                 domain::DataSourcePlatform::Windows,
                 cancel.as_ref(),
             )
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(first.inserted_count, 3);
 
-            let page = crate::timeline_service::query_timeline(conn, 0, 10)
+            let page = crate::timeline_service::query_timeline(&source_conn, 0, 10)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(page.total, 3);
             assert_eq!(
@@ -1065,11 +1105,11 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
             );
 
             let second = crate::timeline_service::materialize_file_activity(
-                conn,
+                &source_conn,
                 domain::DataSourcePlatform::Windows,
                 cancel.as_ref(),
             )
-                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(second.already_projected);
             assert_eq!(second.inserted_count, 0);
 

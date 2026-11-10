@@ -88,7 +88,7 @@ fn fixture() -> Fixture {
         };
         let mut storage =
             DataSourceStorage::source_db(source_id, Some("linux"), Some("ceph_osd".to_string()));
-        storage.import_state = "ready".to_string();
+        storage.import_state = "ready_metadata".to_string();
         DataSourceRepo::new(&case_conn)
             .insert_with_storage(&case_id, &source, &storage)
             .expect("register cluster member");
@@ -430,6 +430,14 @@ fn complete_cephfs_source_publishes_tree_and_bounded_preview() {
         persistence_sqlite::repositories::ceph_fs_capability_repo::CephFsSourceCapability::
             BoundedPreview
     );
+    assert!(
+        app_services::source_db::source_db_path(fixture.root.path(), &result.data_source.id)
+            .parent()
+            .unwrap()
+            .join("source.fjall")
+            .is_dir(),
+        "published CephFS source must have its native detail generation"
+    );
 
     let tree = get_file_tree_for_case(
         &fixture.case_conn,
@@ -679,7 +687,10 @@ fn ready_materialization_rejects_namespace_assembly_tampering() {
 
     let error = materialize_result(&fixture, true)
         .expect_err("tampered assembly must not be reported as ready");
-    assert!(matches!(error, CephFsSourceError::StalePublication));
+    assert!(
+        matches!(error, CephFsSourceError::StalePublication),
+        "unexpected assembly tamper error: {error:?}"
+    );
 }
 
 #[test]
@@ -702,7 +713,10 @@ fn ready_materialization_rejects_capability_downgrade() {
 
     let error = materialize_result(&fixture, true)
         .expect_err("downgraded capability must not be reported as ready");
-    assert!(matches!(error, CephFsSourceError::StalePublication));
+    assert!(
+        matches!(error, CephFsSourceError::StalePublication),
+        "unexpected capability downgrade error: {error:?}"
+    );
 }
 
 #[test]
@@ -736,14 +750,13 @@ fn ready_materialization_rejects_file_catalog_tampering() {
         app_services::source_db::source_db_path(fixture.root.path(), &result.data_source.id);
     let source_conn = persistence_sqlite::open_or_create_source(&source_path)
         .expect("open published source database for catalog tamper fixture");
-    source_conn
-        .execute(
-            "UPDATE file_entries
-             SET parent_id = NULL
-             WHERE id = ?1",
-            [FILE_ENTRY_ID],
-        )
-        .expect("tamper file catalog row");
+    assert!(persistence_sqlite::source_fjall::update_catalog_parent(
+        &source_conn,
+        FILE_ENTRY_ID,
+        None,
+        &result.data_source.id.0,
+    )
+    .expect("tamper file catalog row"));
     drop(source_conn);
 
     let error = materialize_result(&fixture, true)
@@ -771,10 +784,35 @@ fn incomplete_cephfs_namespace_is_retained_without_file_rows_or_ready_access() {
     assert!(source_path.is_file());
     let source_conn = persistence_sqlite::open_existing_source_read_only(&source_path)
         .expect("open retained incomplete source database");
-    let file_count: i64 = source_conn
-        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
-        .expect("count incomplete file rows");
-    assert_eq!(file_count, 0);
+    let detail_tables: i64 = source_conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_schema
+             WHERE type = 'table'
+               AND name IN ('file_entries', 'artifacts', 'timeline_events')",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count incomplete detail tables");
+    assert_eq!(detail_tables, 0);
+    let generation: String = source_conn
+        .query_row(
+            "SELECT value FROM source_meta WHERE key = 'fjall_root'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read incomplete generation binding");
+    let generation_path = source_path
+        .parent()
+        .expect("source database parent")
+        .join(&generation);
+    if generation_path.is_dir() {
+        assert!(
+            persistence_sqlite::repositories::file_repo::FileRepo::new(&source_conn)
+                .find_by_data_source(&result.data_source.id)
+                .expect("count incomplete file rows")
+                .is_empty()
+        );
+    }
     let assembly = persistence_sqlite::repositories::ceph_fs_namespace_assembly_repo::
         CephFsNamespaceAssemblyRepo::new(&source_conn)
         .find(FILESYSTEM_ID, &result.data_source.id.0)
@@ -877,7 +915,10 @@ fn stale_catalog_publication_is_not_reported_as_incomplete_namespace() {
         .expect("invalidate catalog publication");
 
     let error = materialize_result(&fixture, true).expect_err("stale publication must fail");
-    assert!(matches!(error, CephFsSourceError::StalePublication));
+    assert!(
+        matches!(error, CephFsSourceError::StalePublication),
+        "unexpected stale catalog error: {error:?}"
+    );
 }
 
 #[test]

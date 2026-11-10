@@ -1,4 +1,7 @@
 use super::*;
+crate::native_source_test_support!();
+use persistence_sqlite::repositories::file_repo::FileRepo;
+use test_support::NativeSourceFixture;
 
 #[test]
 fn reader_open_failure_aborts_the_mft_scan() {
@@ -35,50 +38,37 @@ fn reader_open_failure_aborts_the_mft_scan() {
 }
 
 #[test]
-fn second_batch_persistence_failure_rolls_back_the_first_batch() {
-    let connection = Connection::open_in_memory().unwrap();
-    persistence_sqlite::migrations::runner::run_source_all(&connection).unwrap();
-    connection
-        .execute_batch(
-            "CREATE TRIGGER reject_second_mft_batch
-             BEFORE INSERT ON file_entries
-             WHEN NEW.id = 'mft:2000'
-             BEGIN
-                 SELECT RAISE(ABORT, 'synthetic second batch failure');
-             END;",
-        )
-        .unwrap();
-    let transaction = connection.unchecked_transaction().unwrap();
+fn second_batch_failure_preserves_committed_first_batch_and_stops_pipeline() {
+    let fixture = NativeSourceFixture::new("source", "case-mft");
     let (sender, receiver) = bounded(2);
     sender.send(test_entries(0, MFT_DB_BATCH_SIZE)).unwrap();
-    sender.send(test_entries(MFT_DB_BATCH_SIZE, 1)).unwrap();
+    let mut invalid = test_entries(MFT_DB_BATCH_SIZE, 1);
+    invalid[0].id = domain::FileEntryId(String::new());
+    sender.send(invalid).unwrap();
     drop(sender);
 
     let processed = AtomicU64::new((MFT_DB_BATCH_SIZE + 1) as u64);
     let pipeline_stop = AtomicBool::new(false);
     let error = match collect_entries(
-        &transaction,
+        &fixture.connection,
         receiver,
         &processed,
         &pipeline_stop,
         (MFT_DB_BATCH_SIZE + 1) as u64,
         None,
     ) {
-        Ok(_) => panic!("the second batch must surface its original SQLite error"),
+        Ok(_) => panic!("the second batch must surface its native validation error"),
         Err(error) => error,
     };
 
-    assert!(error.to_string().contains("synthetic second batch failure"));
+    assert!(error.to_string().contains("identity fields are empty"));
     assert!(pipeline_stop.load(Ordering::Relaxed));
-    let rows_inside_transaction: i64 = transaction
-        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(rows_inside_transaction, MFT_DB_BATCH_SIZE as i64);
-    transaction.rollback().unwrap();
-    let rows_after_rollback: i64 = connection
-        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(rows_after_rollback, 0);
+    assert_eq!(
+        FileRepo::new(&fixture.connection)
+            .count_by_data_source(&DataSourceId("source".into()))
+            .unwrap(),
+        MFT_DB_BATCH_SIZE as u64
+    );
 }
 
 fn test_entries(start: usize, count: usize) -> Vec<FileEntry> {

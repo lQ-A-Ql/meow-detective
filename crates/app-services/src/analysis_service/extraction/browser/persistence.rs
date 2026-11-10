@@ -89,15 +89,19 @@ pub(in crate::analysis_service::extraction) fn persist(
     ensure_not_cancelled(cancel)?;
     batch.flush(&transaction, case_id, &source_id)?;
     let mut commit = batch.finish(Vec::new())?;
-    if let Some(generation) = commit.staged_generation.as_ref() {
-        persistence_sqlite::source_fjall::bind_generation(&transaction, &generation.name)?;
-    }
+    let generation = commit
+        .staged_generation
+        .as_ref()
+        .expect("browser analysis output generation is staged");
+    persistence_sqlite::source_fjall::bind_generation(&transaction, &generation.name)?;
     persist_checkpoint(&transaction, candidate, capability, &commit)?;
     ensure_not_cancelled(cancel)?;
     transaction.commit()?;
-    if let Some(mut generation) = commit.staged_generation.take() {
-        generation.commit();
-    }
+    commit
+        .staged_generation
+        .take()
+        .expect("browser analysis output generation is staged")
+        .commit();
     Ok(commit.observation)
 }
 

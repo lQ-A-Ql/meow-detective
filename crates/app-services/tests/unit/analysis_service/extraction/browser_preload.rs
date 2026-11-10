@@ -1,4 +1,52 @@
 use super::*;
+use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+
+fn native_source() -> (tempfile::TempDir, Connection) {
+    let root = tempfile::tempdir().expect("create native source root");
+    let source_dir = root.path().join("case/sources/source-1");
+    std::fs::create_dir_all(&source_dir).expect("create source directory");
+    let database_path = source_dir.join("source.db");
+    let connection =
+        persistence_sqlite::open_or_create_source(&database_path).expect("open source database");
+    persistence_sqlite::source_fjall::configure_source_identity(&connection, "source-1")
+        .expect("configure source identity");
+    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &database_path)
+        .expect("configure source details");
+    connection
+        .execute(
+            "INSERT INTO data_sources
+             (id, case_id, name, kind, source_path, imported_at)
+             VALUES ('source-1', 'case-1', 'source', 'e01', '', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .expect("register source");
+    (root, connection)
+}
+
+fn file_entry(id: &str, path: &str) -> FileEntry {
+    FileEntry {
+        id: FileEntryId(id.into()),
+        parent_id: None,
+        data_source_id: DataSourceId("source-1".into()),
+        path: path.into(),
+        name: path.rsplit('/').next().unwrap_or(path).into(),
+        entry_type: EntryType::File,
+        size: Some(0),
+        ext: path.rsplit_once('.').map(|(_, ext)| ext.into()),
+        deleted: false,
+        hidden: false,
+        system: false,
+        encrypted: false,
+        read_only: false,
+        archive: false,
+        unix_mode: None,
+        created_at: None,
+        modified_at: None,
+        accessed_at: None,
+        changed_at: None,
+        hash_sha256: None,
+    }
+}
 
 fn candidate(path: &str) -> EvidenceCandidate {
     EvidenceCandidate {
@@ -73,22 +121,7 @@ fn liuyang_preload_builds_app_bound_decryptor_via_service_path() {
         bytes
     };
 
-    // Minimal file_entries projection used by the preload queries. Paths use
-    // the production partition-prefix form so the LIKE/ends_with locators
-    // behave exactly as they do on a real case database.
-    let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
-    conn.execute_batch(
-        "CREATE TABLE file_entries(
-            id TEXT PRIMARY KEY,
-            data_source_id TEXT,
-            path TEXT,
-            entry_type TEXT,
-            size INTEGER,
-            partition_index INTEGER,
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
-        );",
-    )
-    .expect("create file_entries");
+    let (_source_root, conn) = native_source();
     let ntfs_paths = [
         "Windows/System32/config/SYSTEM",
         "Windows/System32/config/SAM",
@@ -101,13 +134,14 @@ fn liuyang_preload_builds_app_bound_decryptor_via_service_path() {
         "ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_32a3bf44-0767-4a67-8288-138d1cc50a88",
         "Program Files/Google/Chrome/Application/147.0.7727.102/elevation_service.exe",
     ];
-    for (index, path) in ntfs_paths.iter().enumerate() {
-        conn.execute(
-            "INSERT INTO file_entries VALUES (?1, 'source-1', ?2, 'file', 0, 2, 0)",
-            rusqlite::params![format!("file:{index}"), format!("[P2]/{path}")],
-        )
-        .expect("insert file entry");
-    }
+    let files = ntfs_paths
+        .iter()
+        .enumerate()
+        .map(|(index, path)| file_entry(&format!("file:{index}"), &format!("[P2]/{path}")))
+        .collect::<Vec<_>>();
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&conn)
+        .insert_batch(&files)
+        .expect("insert native file entries");
 
     let candidates = [
         "[P2]/Users/刘洋/AppData/Local/Google/Chrome/User Data/Default/Network/Cookies",
@@ -175,20 +209,8 @@ fn liuyang_preload_builds_app_bound_decryptor_via_service_path() {
 
 #[test]
 fn locate_by_suffix_tolerates_all_stored_path_forms() {
-    let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
-    conn.execute_batch(
-        "CREATE TABLE file_entries(
-            id TEXT PRIMARY KEY,
-            data_source_id TEXT,
-            path TEXT,
-            entry_type TEXT,
-            size INTEGER,
-            partition_index INTEGER,
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
-        );",
-    )
-    .expect("create file_entries");
-    for (index, path) in [
+    let (_source_root, conn) = native_source();
+    let files = [
         "Windows/System32/config/SYSTEM",
         "[P3]/Windows/System32/config/SAM",
         "/Windows/System32/config/SECURITY",
@@ -196,48 +218,42 @@ fn locate_by_suffix_tolerates_all_stored_path_forms() {
     ]
     .iter()
     .enumerate()
-    {
-        conn.execute(
-            "INSERT INTO file_entries VALUES (?1, 'source-1', ?2, 'file', 0, 3, 0)",
-            rusqlite::params![format!("file:{index}"), path],
-        )
-        .expect("insert file entry");
-    }
+    .map(|(index, path)| file_entry(&format!("file:{index}"), path))
+    .collect::<Vec<_>>();
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&conn)
+        .insert_batch(&files)
+        .expect("insert native file entries");
 
     assert!(
-        locate_by_suffix(&conn, "source-1", "/windows/system32/config/system").is_some(),
+        locate_by_suffix(&conn, "source-1", "/windows/system32/config/system")
+            .expect("locate bare relative path")
+            .is_some(),
         "bare relative path without partition prefix must be found"
     );
     assert!(
-        locate_by_suffix(&conn, "source-1", "/windows/system32/config/sam").is_some(),
+        locate_by_suffix(&conn, "source-1", "/windows/system32/config/sam")
+            .expect("locate partition-prefixed path")
+            .is_some(),
         "partition-prefixed path must still be found"
     );
     assert!(
-        locate_by_suffix(&conn, "source-1", "/windows/system32/config/security").is_some(),
+        locate_by_suffix(&conn, "source-1", "/windows/system32/config/security")
+            .expect("locate leading-slash path")
+            .is_some(),
         "leading-slash path must be found"
     );
     assert!(
-        locate_by_suffix(&conn, "source-1", "/windows/system32/config/software").is_none(),
+        locate_by_suffix(&conn, "source-1", "/windows/system32/config/software")
+            .expect("reject segment mismatch")
+            .is_none(),
         "segment-boundary mismatches must stay rejected"
     );
 }
 
 #[test]
 fn elevation_service_selection_is_bound_to_the_chromium_family() {
-    let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
-    conn.execute_batch(
-        "CREATE TABLE file_entries(
-            id TEXT PRIMARY KEY,
-            data_source_id TEXT,
-            path TEXT,
-            entry_type TEXT,
-            size INTEGER,
-            partition_index INTEGER,
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1))
-        );",
-    )
-    .expect("create file_entries");
-    for (id, path) in [
+    let (_source_root, conn) = native_source();
+    let files = [
         (
             "edge",
             "Program Files/Microsoft/Edge/Application/120/elevation_service.exe",
@@ -246,13 +262,13 @@ fn elevation_service_selection_is_bound_to_the_chromium_family() {
             "chrome",
             "Program Files/Google/Chrome/Application/147/elevation_service.exe",
         ),
-    ] {
-        conn.execute(
-            "INSERT INTO file_entries VALUES (?1, 'source-1', ?2, 'file', 16, 2, 0)",
-            rusqlite::params![id, path],
-        )
-        .expect("insert file entry");
-    }
+    ]
+    .into_iter()
+    .map(|(id, path)| file_entry(id, path))
+    .collect::<Vec<_>>();
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&conn)
+        .insert_batch(&files)
+        .expect("insert native file entries");
     let cancel = AtomicBool::new(false);
     let mut reader = |candidate: &EvidenceCandidate, _limit: usize| {
         Ok(CandidateSource::Bytes(
@@ -277,6 +293,6 @@ fn elevation_service_selection_is_bound_to_the_chromium_family() {
     )
     .expect("Edge elevation service");
 
-    assert_eq!(chrome, b"chrome");
-    assert_eq!(edge, b"edge");
+    assert_eq!(chrome.as_deref(), Some(b"chrome".as_slice()));
+    assert_eq!(edge.as_deref(), Some(b"edge".as_slice()));
 }

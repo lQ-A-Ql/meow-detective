@@ -4,15 +4,15 @@ use app_services::{
 };
 use domain::{
     Artifact, ArtifactId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance,
-    TimelineEvent, TimelineEventId,
+    EntryType, FileEntry, FileEntryId, TimelineEvent, TimelineEventId,
 };
 use persistence_fjall::{
-    encode_key, CatalogEntryType, FileEntryRecord, KeyPart, PersistMode, TimelineRecord,
-    VersionedEnvelope,
+    CatalogEntryType, FileEntryRecord, PersistMode, TimelineRecord, VersionedEnvelope,
 };
 use persistence_sqlite::repositories::{
     artifact_repo::ArtifactRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
+    file_repo::FileRepo,
     timeline_repo::TimelineRepo,
 };
 use transport::{ErrorCategory, ServiceErrorCategory};
@@ -177,17 +177,30 @@ fn scoped_reads_reject_importing_source_even_when_source_database_contains_rows(
         .with_conn(|case_conn| {
             register_source(case_conn, &active, "importing", "linux", "importing", true)?;
             let source_id = DataSourceId("importing".to_string());
-            let source_conn = source_db::open_registered_source_db(
-                case_conn,
-                &active.case_root,
-                &source_id,
-            )?;
-            source_conn.execute(
-                "INSERT INTO file_entries
-                 (id, parent_id, data_source_id, path, name, entry_type, size, deleted, hidden, system)
-                 VALUES ('file-1', NULL, 'importing', '/fixture.txt', 'fixture.txt', 'file', 7, 0, 0, 0)",
-                [],
-            )?;
+            let source_conn =
+                source_db::open_registered_source_db(case_conn, &active.case_root, &source_id)?;
+            FileRepo::new(&source_conn).insert_batch(&[FileEntry {
+                id: FileEntryId("file-1".to_string()),
+                parent_id: None,
+                data_source_id: source_id.clone(),
+                path: "/fixture.txt".to_string(),
+                name: "fixture.txt".to_string(),
+                entry_type: EntryType::File,
+                size: Some(7),
+                ext: Some("txt".to_string()),
+                deleted: false,
+                hidden: false,
+                system: false,
+                encrypted: false,
+                read_only: false,
+                archive: false,
+                unix_mode: None,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            }])?;
             ArtifactRepo::new(&source_conn).insert_batch(
                 &[Artifact {
                     id: ArtifactId("artifact-1".to_string()),
@@ -252,10 +265,7 @@ fn scoped_reads_reject_importing_source_even_when_source_database_contains_rows(
             ] {
                 assert!(message.contains("not ready"), "{message}");
             }
-            assert!(matches!(
-                file_error.category(),
-                ErrorCategory::Validation
-            ));
+            assert!(matches!(file_error.category(), ErrorCategory::Validation));
             assert!(matches!(
                 artifact_error.category(),
                 ErrorCategory::Validation
@@ -399,6 +409,7 @@ fn case_overview_aggregates_ready_source_facts_without_v2_or_graph_payloads() {
                 }],
                 &active.meta.id.0,
             )?;
+            publish_source(&source_conn, &source_id);
 
             let overview = v3_governance_service::get_case_overview_snapshot_for_case(
                 case_conn,
@@ -437,8 +448,6 @@ fn case_metrics_and_search_coverage_use_published_fjall_counts() {
             let source_id = DataSourceId("ready".to_string());
             let source_conn =
                 source_db::open_registered_source_db(case_conn, &active.case_root, &source_id)?;
-            TimelineRepo::new(&source_conn)
-                .insert_batch_with_case(&[timeline_event("sqlite-event")], &active.meta.id.0)?;
 
             let fjall =
                 source_db::open_registered_fjall_source_read_write(&active.case_root, &source_id)
@@ -464,24 +473,9 @@ fn case_metrics_and_search_coverage_use_published_fjall_counts() {
             fjall
                 .timeline_rebuild_count_indexes(&source_id.0, PersistMode::Buffer)
                 .map_err(service_error)?;
-            let marker = VersionedEnvelope::new(
-                "source_projection_complete",
-                1,
-                "projection:ready",
-                &source_id.0,
-                1,
-                source_id.0.as_bytes().to_vec(),
-            );
-            fjall
-                .write_envelope(
-                    persistence_fjall::KeyspaceName::Meta,
-                    encode_key("projection", &[KeyPart::Text(source_id.0.clone())])
-                        .map_err(service_error)?,
-                    &marker,
-                    PersistMode::SyncAll,
-                )
-                .map_err(service_error)?;
+            fjall.persist(PersistMode::SyncAll).map_err(service_error)?;
             drop(fjall);
+            publish_source(&source_conn, &source_id);
 
             let metrics = app_services::case_service::get_case_metrics_for_case(
                 case_conn,
@@ -513,22 +507,6 @@ fn case_metrics_and_search_coverage_use_published_fjall_counts() {
             Ok(())
         })
         .expect("read published Fjall aggregate counts");
-}
-
-fn timeline_event(id: &str) -> TimelineEvent {
-    TimelineEvent {
-        id: TimelineEventId(id.to_string()),
-        source_object_id: "file-1".to_string(),
-        event_type: "Fixture".to_string(),
-        timestamp: chrono::Utc::now(),
-        title: id.to_string(),
-        description: "fixture".to_string(),
-        parser_id: Some("fixture".to_string()),
-        parser_version: Some("1".to_string()),
-        confidence: Some(1.0),
-        source_attribution: Some("fixture".to_string()),
-        attrs: Default::default(),
-    }
 }
 
 fn timeline_record(id: &str) -> TimelineRecord {
@@ -613,10 +591,42 @@ fn register_source(
     if create_database {
         let source_conn = source_db::open_source_db(&active.case_root, &source.id)?;
         DataSourceRepo::new(&source_conn).upsert_source_local_metadata(&active.meta.id, &source)?;
+        if import_state == "ready" {
+            publish_source(&source_conn, &source.id);
+        }
     }
     Ok(())
 }
 
 fn service_error(error: impl std::fmt::Display) -> persistence_sqlite::DbError {
     persistence_sqlite::DbError::System(error.to_string())
+}
+
+fn publish_source(conn: &rusqlite::Connection, source_id: &DataSourceId) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+        .expect("open source store")
+        .expect("configured source store");
+    persistence_fjall::replace_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))
+        .expect("publish source generation");
+    let key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(source_id.0.clone())],
+    )
+    .expect("encode projection key");
+    let marker = VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{}", source_id.0),
+        &source_id.0,
+        1,
+        source_id.0.as_bytes().to_vec(),
+    );
+    store
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            PersistMode::SyncAll,
+        )
+        .expect("mark source projection complete");
 }

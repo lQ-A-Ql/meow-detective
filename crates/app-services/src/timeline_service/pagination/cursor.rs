@@ -14,7 +14,7 @@ use transport::{
 use super::super::{export::timeline_event_to_source_dto, TimelineQuery, TimelineServiceError};
 use crate::source_db;
 
-const CURSOR_PAYLOAD_VERSION: u8 = 2;
+const CURSOR_PAYLOAD_VERSION: u8 = 3;
 const CURSOR_KIND: &str = "timeline";
 const MAX_CURSOR_SOURCES: usize = 256;
 const MAX_CURSOR_VALUE_LENGTH: usize = 4_096;
@@ -69,7 +69,6 @@ impl TimelineConsumedKey {
 struct TimelineSourceState {
     source_id: String,
     revision: u64,
-    snapshot_high_water: i64,
     count: u64,
     consumed: u64,
     after: Option<TimelineConsumedKey>,
@@ -107,9 +106,8 @@ impl TimelineSourcePage {
             .after
             .as_ref()
             .map(TimelineConsumedKey::to_repo_key);
-        let rows = TimelineRepo::new(&self.connection).query_filtered_after_at_snapshot(
+        let rows = TimelineRepo::new(&self.connection).query_filtered_after(
             after.as_ref(),
-            self.state.snapshot_high_water,
             batch_size,
             context.time_start.as_deref(),
             context.time_end.as_deref(),
@@ -160,21 +158,13 @@ fn capture_cursor(
     for (source_id, connection) in connections {
         let repo = TimelineRepo::new(&connection);
         let revision = repo.cursor_revision()?;
-        let snapshot_high_water = repo.snapshot_high_water()?;
-        let count = repo.count_filtered_at_snapshot(
-            snapshot_high_water,
+        let count = repo.count_filtered(
             context.time_start.as_deref(),
             context.time_end.as_deref(),
             context.event_type.as_deref(),
         )?;
         total = total.saturating_add(count);
-        sources.push(new_source_page(
-            source_id,
-            connection,
-            revision,
-            snapshot_high_water,
-            count,
-        ));
+        sources.push(new_source_page(source_id, connection, revision, count));
     }
     let state = TimelinePageCursor {
         version: CURSOR_PAYLOAD_VERSION,
@@ -223,8 +213,7 @@ fn resume_cursor(
                 source_id.0
             )));
         }
-        let current_count = repo.count_filtered_at_snapshot(
-            source_state.snapshot_high_water,
+        let current_count = repo.count_filtered(
             context.time_start.as_deref(),
             context.time_end.as_deref(),
             context.event_type.as_deref(),
@@ -354,14 +343,12 @@ fn new_source_page(
     source_id: DataSourceId,
     connection: Connection,
     revision: u64,
-    snapshot_high_water: i64,
     count: u64,
 ) -> TimelineSourcePage {
     TimelineSourcePage {
         state: TimelineSourceState {
             source_id: source_id.0,
             revision,
-            snapshot_high_water,
             count,
             consumed: 0,
             after: None,
@@ -414,7 +401,6 @@ fn validate_source_state(
 ) -> Result<(), TimelineServiceError> {
     if source.source_id.is_empty()
         || source.source_id.len() > MAX_CURSOR_VALUE_LENGTH
-        || source.snapshot_high_water < 0
         || source.consumed > source.count
         || previous_source.is_some_and(|previous| previous >= source.source_id.as_str())
         || (source.consumed == 0) != source.after.is_none()

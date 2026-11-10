@@ -1,14 +1,6 @@
-use persistence_sqlite::{open_in_memory, repositories::staging_repo::StagingRepo, runner};
+use persistence_sqlite::repositories::staging_repo::StagingRepo;
 use rusqlite::{Connection, ErrorCode};
 use tempfile::TempDir;
-
-#[test]
-fn application_schema_enforces_read_only_boolean_contract() {
-    let application = open_in_memory().expect("open application database");
-    runner::run_all(&application).expect("run application migrations");
-    seed_application_source(&application);
-    assert_read_only_contract(&application, "app-file", "app-source", true);
-}
 
 #[test]
 fn fresh_and_upgraded_staging_schemas_default_read_only_to_false() {
@@ -103,19 +95,4 @@ fn assert_read_only_contract(
             Some(ErrorCode::ConstraintViolation)
         ));
     }
-}
-
-fn seed_application_source(conn: &Connection) {
-    conn.execute(
-        "INSERT INTO cases (id, name, created_at, updated_at)
-         VALUES ('case-1', 'case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .expect("insert application case");
-    conn.execute(
-        "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
-         VALUES ('app-source', 'case-1', 'source', 'e01', '', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .expect("insert data source");
 }

@@ -1,5 +1,6 @@
 use super::tier::TierStateMachine;
 use super::*;
+crate::native_source_test_support!();
 use super::{
     extractor_policy::registry_supports_file,
     finalize::{prepare_analysis_staging_startup, AnalysisStartupAction},
@@ -25,6 +26,7 @@ static TEST_HOOK_LOCK: Mutex<()> = Mutex::new(());
 mod search_phase;
 
 fn setup_source_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
+    std::fs::create_dir_all(tmp.path().join("artifacts").join("objects")).unwrap();
     let case_db_path = tmp.path().join("app.db");
     let case_conn = persistence_sqlite::open_or_create(&case_db_path).unwrap();
     runner::run_all(&case_conn).unwrap();
@@ -48,6 +50,9 @@ fn setup_source_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
     let data_source_id = DataSourceId("ds-1".to_string());
     let source_db_path = tmp.path().join("sources").join("ds-1").join("source.db");
     let source_conn = persistence_sqlite::open_or_create_source(&source_db_path).unwrap();
+    persistence_sqlite::source_fjall::configure_source_identity(&source_conn, "ds-1").unwrap();
+    persistence_sqlite::source_fjall::configure_source_fjall(&source_conn, &source_db_path)
+        .unwrap();
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(
             &CaseId("case-1".to_string()),
@@ -61,6 +66,7 @@ fn setup_source_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
             },
         )
         .unwrap();
+    test_support::mark_source_projection_complete(&source_conn, "ds-1");
     (source_db_path, data_source_id)
 }
 fn insert_file_with_type(
@@ -70,26 +76,63 @@ fn insert_file_with_type(
     path: &str,
     entry_type: &str,
 ) {
-    conn.execute(
-        "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, ext, deleted, modified_at, encrypted)
-             VALUES (?1, ?2, ?3, ?4, ?5, 12, 'txt', 0, ?6, 0)",
-        params![
-            id,
-            ds.0,
-            path,
-            path.rsplit('/').next().unwrap_or(path),
-            entry_type,
-            Utc.with_ymd_and_hms(2026, 1, 1, 1, 0, 0)
-                .unwrap()
-                .to_rfc3339()
-        ],
-    )
-    .unwrap();
+    insert_file_with_options(
+        conn,
+        id,
+        ds,
+        path,
+        path.rsplit('/').next().unwrap_or(path),
+        if entry_type.eq_ignore_ascii_case("directory") {
+            EntryType::Directory
+        } else {
+            EntryType::File
+        },
+        Some(12),
+        Some("txt"),
+        false,
+    );
 }
 
 fn insert_file(conn: &Connection, id: &str, ds: &DataSourceId, path: &str) {
     insert_file_with_type(conn, id, ds, path, "file");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_file_with_options(
+    conn: &Connection,
+    id: &str,
+    ds: &DataSourceId,
+    path: &str,
+    name: &str,
+    entry_type: EntryType,
+    size: Option<u64>,
+    ext: Option<&str>,
+    encrypted: bool,
+) {
+    persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+        .insert_batch(&[FileEntry {
+            id: FileEntryId(id.to_string()),
+            parent_id: None,
+            data_source_id: ds.clone(),
+            path: path.to_string(),
+            name: name.to_string(),
+            entry_type,
+            size,
+            ext: ext.map(str::to_string),
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: Some(Utc.with_ymd_and_hms(2026, 1, 1, 1, 0, 0).unwrap()),
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
+        .unwrap();
 }
 
 fn insert_staged_index_doc(conn: &Connection, file_id: &str, text: &str) {
@@ -264,12 +307,25 @@ fn setup_raw_source_db(
     raw_path: PathBuf,
 ) -> (PathBuf, DataSourceId) {
     let ds_id = DataSourceId(data_source_id.to_string());
+    let case_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
+    runner::run_all(&case_conn).unwrap();
+    case_conn
+        .execute(
+            "INSERT INTO cases (id, name, created_at, updated_at)
+             VALUES (?1, 'raw case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [case_id],
+        )
+        .unwrap();
+    drop(case_conn);
+    std::fs::create_dir_all(tmp.path().join("artifacts").join("objects")).unwrap();
     let db_path = tmp
         .path()
         .join("sources")
         .join(data_source_id)
         .join("source.db");
     let conn = persistence_sqlite::open_or_create_source(&db_path).unwrap();
+    persistence_sqlite::source_fjall::configure_source_identity(&conn, data_source_id).unwrap();
+    persistence_sqlite::source_fjall::configure_source_fjall(&conn, &db_path).unwrap();
     DataSourceRepo::new(&conn)
         .upsert_source_local_metadata(
             &CaseId(case_id.to_string()),
@@ -283,6 +339,7 @@ fn setup_raw_source_db(
             },
         )
         .unwrap();
+    test_support::mark_source_projection_complete(&conn, data_source_id);
     (db_path, ds_id)
 }
 
@@ -402,10 +459,12 @@ fn post_import_worker_staging_success_preserves_summary_and_counts() {
         .iter()
         .all(|(_, detail)| !detail.contains("Analysis staging:")));
     let source_conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
-    let timeline_count: i64 = source_conn
-        .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(timeline_count, 0);
+    assert_eq!(
+        persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&source_conn)
+            .count()
+            .unwrap(),
+        0
+    );
 }
 
 #[test]
@@ -867,13 +926,17 @@ fn analysis_text_indexing_raw_exfat_uses_bytes_only_reader() {
     let (db_path, ds_id) =
         setup_raw_source_db(&tmp, "case-raw-exfat-index", "ds-raw-exfat-index", raw_path);
     let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
-    conn.execute(
-            "INSERT INTO file_entries
-             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
-             VALUES ('file-raw-exfat-index', NULL, ?1, 'LARGE.TXT', 'LARGE.TXT', 'file', 1536, 'txt', 0, 0, 0, 0)",
-            params![ds_id.0],
-        )
-        .unwrap();
+    insert_file_with_options(
+        &conn,
+        "file-raw-exfat-index",
+        &ds_id,
+        "LARGE.TXT",
+        "LARGE.TXT",
+        EntryType::File,
+        Some(1536),
+        Some("txt"),
+        false,
+    );
     drop(conn);
 
     let mut options = analysis_options(
@@ -916,14 +979,17 @@ fn analysis_worker_uses_bounded_content_reads_for_each_consumer() {
 
     let (db_path, ds_id) = setup_source_db(&tmp);
     let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
-    conn.execute(
-            "INSERT INTO file_entries
-             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
-             VALUES ('file-cache-pf', NULL, ?1, 'Windows/Prefetch/APP.EXE-12345678.pf',
-                     'APP.EXE-12345678.pf', 'file', 17, 'txt', 0, 0, 0, 0)",
-            params![ds_id.0],
-        )
-        .unwrap();
+    insert_file_with_options(
+        &conn,
+        "file-cache-pf",
+        &ds_id,
+        "Windows/Prefetch/APP.EXE-12345678.pf",
+        "APP.EXE-12345678.pf",
+        EntryType::File,
+        Some(17),
+        Some("txt"),
+        false,
+    );
     drop(conn);
 
     let mut options = analysis_options(
@@ -960,17 +1026,17 @@ fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
         raw_path,
     );
     let conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
-    conn.execute(
-            "INSERT INTO file_entries
-             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
-             VALUES (?1, NULL, ?2, '$Recycle.Bin/$IABCDEF', '$IABCDEF', 'file', ?3, NULL, 0, 0, 0, 0)",
-            params![
-                image_file_name,
-                ds_id.0,
-                (infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES + 4096) as i64
-            ],
-        )
-        .unwrap();
+    insert_file_with_options(
+        &conn,
+        image_file_name,
+        &ds_id,
+        "$Recycle.Bin/$IABCDEF",
+        image_file_name,
+        EntryType::File,
+        Some(infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES + 4096),
+        None,
+        false,
+    );
     drop(conn);
 
     let mut options = analysis_options(
@@ -990,18 +1056,13 @@ fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
     assert_eq!(stats.warning_count, 0);
 
     let main_conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
-    let (artifact_type, source_object_id, summary): (String, String, String) = main_conn
-        .query_row(
-            "SELECT artifact_type, source_object_id, summary
-                 FROM artifacts
-                 WHERE source_object_id = '$IABCDEF'",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .unwrap();
-    assert_eq!(artifact_type, "RecycleBin");
-    assert_eq!(source_object_id, image_file_name);
-    assert!(summary.contains("deleted.txt"));
+    let artifacts = artifact_service::get_artifact_rows_from_db(&main_conn, None).unwrap();
+    let artifact = artifacts
+        .iter()
+        .find(|artifact| artifact.source_object_id.as_deref() == Some(image_file_name))
+        .expect("persisted RecycleBin artifact");
+    assert_eq!(artifact.artifact_type, "RecycleBin");
+    assert!(artifact.summary.contains("deleted.txt"));
 }
 
 #[test]

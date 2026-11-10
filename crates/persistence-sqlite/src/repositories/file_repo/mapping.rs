@@ -1,16 +1,5 @@
-use crate::{connection::DbResult, util::parse_opt_datetime};
+use crate::util::parse_opt_datetime;
 use domain::{DataSourceId, EntryType, FileEncryptionStatus, FileEntry, FileEntryId};
-
-pub(super) fn escape_like_literal(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len());
-    for ch in value.chars() {
-        if matches!(ch, '\\' | '%' | '_') {
-            escaped.push('\\');
-        }
-        escaped.push(ch);
-    }
-    escaped
-}
 
 pub(crate) fn row_to_file_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileEntry> {
     let entry_type: String = row.get(5)?;
@@ -63,14 +52,4 @@ pub fn file_encryption_status_from_row(
             Box::new(error),
         )
     })
-}
-
-pub(super) fn collect_entries(
-    rows: rusqlite::MappedRows<'_, impl FnMut(&rusqlite::Row) -> rusqlite::Result<FileEntry>>,
-) -> DbResult<Vec<FileEntry>> {
-    let mut entries = Vec::new();
-    for row in rows {
-        entries.push(row?);
-    }
-    Ok(entries)
 }

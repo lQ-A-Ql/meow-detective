@@ -1,7 +1,10 @@
 use super::*;
 use crate::analysis_service::extraction::reader::CandidateSource;
+crate::native_source_test_support!();
 use chrono::NaiveDate;
+use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use std::sync::atomic::AtomicBool;
+use test_support::NativeSourceFixture;
 
 fn naive(y: i32, m: u32, d: u32, hh: u32, mm: u32, ss: u32) -> NaiveDateTime {
     NaiveDate::from_ymd_opt(y, m, d)
@@ -9,45 +12,37 @@ fn naive(y: i32, m: u32, d: u32, hh: u32, mm: u32, ss: u32) -> NaiveDateTime {
         .expect("valid naive datetime")
 }
 
-fn conn_with_files(paths: &[&str]) -> Connection {
-    let conn = Connection::open_in_memory().expect("in-memory db");
-    conn.execute(
-        "CREATE TABLE file_entries (
-            id TEXT PRIMARY KEY,
-            parent_id TEXT,
-            data_source_id TEXT NOT NULL,
-            path TEXT NOT NULL,
-            name TEXT NOT NULL,
-            entry_type TEXT NOT NULL,
-            size INTEGER,
-            ext TEXT,
-            deleted INTEGER NOT NULL DEFAULT 0,
-            hidden INTEGER NOT NULL DEFAULT 0,
-            system INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT,
-            modified_at TEXT,
-            accessed_at TEXT,
-            changed_at TEXT,
-            hash_sha256 TEXT,
-            encrypted INTEGER,
-            read_only INTEGER NOT NULL DEFAULT 0,
-            archive INTEGER NOT NULL DEFAULT 0,
-            unix_mode INTEGER
-        )",
-        [],
-    )
-    .expect("create file_entries");
-    for (index, path) in paths.iter().enumerate() {
-        let name = path.rsplit('/').next().unwrap_or(path);
-        conn.execute(
-            "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, encrypted)
-             VALUES (?1, 'ds-tz', ?2, ?3, 'file', 128, 0)",
-            rusqlite::params![format!("tz-file-{index}"), path, name],
-        )
-        .expect("insert file entry");
-    }
-    conn
+fn conn_with_files(paths: &[&str]) -> NativeSourceFixture {
+    let fixture = NativeSourceFixture::new("ds-tz", "case-tz");
+    let files = paths
+        .iter()
+        .enumerate()
+        .map(|(index, path)| FileEntry {
+            id: FileEntryId(format!("tz-file-{index}")),
+            parent_id: None,
+            data_source_id: DataSourceId("ds-tz".into()),
+            path: (*path).into(),
+            name: path.rsplit('/').next().unwrap_or(path).into(),
+            entry_type: EntryType::File,
+            size: Some(128),
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        })
+        .collect::<Vec<_>>();
+    fixture.insert_files(&files);
+    fixture.seal();
+    fixture
 }
 
 fn bytes_reader(

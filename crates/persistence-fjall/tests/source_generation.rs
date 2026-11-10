@@ -1,7 +1,8 @@
 use persistence_fjall::{
-    publish_source_generation, scan_recovery_consistency, seal_source_generation,
-    verify_source_generation, BatchReceiptState, DatabaseConfig, KeyspaceName, PersistMode,
-    RecoveryScan, RecoveryState, SourceBuildLayout, SourceStore, WriteAction,
+    publish_source_generation, read_source_generation_manifest, replace_source_generation,
+    scan_recovery_consistency, seal_source_generation, verify_source_generation, BatchReceiptState,
+    DatabaseConfig, KeyspaceName, PersistMode, RecoveryScan, RecoveryState, SourceBuildLayout,
+    SourceStore, WriteAction,
 };
 
 fn put(keyspace: KeyspaceName, key: &[u8], value: &[u8]) -> WriteAction {
@@ -43,7 +44,7 @@ fn source_generation_manifest_survives_mutable_analysis_writes() {
     let layout =
         SourceBuildLayout::for_case_source(directory.path(), "source-1", "attempt-1").unwrap();
     std::fs::create_dir_all(layout.build_path()).unwrap();
-    let source = SourceStore::open(&layout.build_path(), DatabaseConfig::default()).unwrap();
+    let source = SourceStore::open(layout.build_path(), DatabaseConfig::default()).unwrap();
     source
         .database()
         .write_batch(
@@ -88,7 +89,7 @@ fn source_generation_manifest_survives_mutable_analysis_writes() {
     assert_eq!(manifest.attempt_id, "attempt-1");
     assert_eq!(manifest.projection_batch_digest, "a".repeat(64));
     assert_eq!(
-        persistence_fjall::source_generation_manifest_digest(&layout.build_path()).unwrap(),
+        persistence_fjall::source_generation_manifest_digest(layout.build_path()).unwrap(),
         digest
     );
 }
@@ -99,7 +100,7 @@ fn source_generation_manifest_rejects_catalog_changes() {
     let layout =
         SourceBuildLayout::for_case_source(directory.path(), "source-1", "attempt-1").unwrap();
     std::fs::create_dir_all(layout.build_path()).unwrap();
-    let source = SourceStore::open(&layout.build_path(), DatabaseConfig::default()).unwrap();
+    let source = SourceStore::open(layout.build_path(), DatabaseConfig::default()).unwrap();
     source
         .database()
         .write_batch(
@@ -120,6 +121,13 @@ fn source_generation_manifest_rejects_catalog_changes() {
         verify_source_generation(&source, "source-1"),
         Err(persistence_fjall::FjallStorageError::ManifestDigestMismatch { .. })
     ));
+    let manifest = read_source_generation_manifest(&source, "source-1").unwrap();
+    assert_eq!(manifest.attempt_id, "attempt-1");
+    assert_eq!(manifest.projection_batch_digest, "b".repeat(64));
+    replace_source_generation(&source, "source-1", "attempt-2", &"c".repeat(64)).unwrap();
+    let manifest = verify_source_generation(&source, "source-1").unwrap();
+    assert_eq!(manifest.attempt_id, "attempt-2");
+    assert_eq!(manifest.projection_batch_digest, "c".repeat(64));
 }
 
 #[test]
@@ -128,7 +136,7 @@ fn published_source_generation_reopens_and_verifies() {
     let layout =
         SourceBuildLayout::for_case_source(directory.path(), "source-1", "attempt-1").unwrap();
     std::fs::create_dir_all(layout.build_path()).unwrap();
-    let source = SourceStore::open(&layout.build_path(), DatabaseConfig::default()).unwrap();
+    let source = SourceStore::open(layout.build_path(), DatabaseConfig::default()).unwrap();
     source
         .database()
         .write_batch(
@@ -144,7 +152,7 @@ fn published_source_generation_reopens_and_verifies() {
     assert!(!receipt.reused);
     assert!(!layout.build_path().exists());
 
-    let published = SourceStore::open(&layout.published_path(), DatabaseConfig::default()).unwrap();
+    let published = SourceStore::open(layout.published_path(), DatabaseConfig::default()).unwrap();
     let manifest = verify_source_generation(&published, "source-1").unwrap();
     assert_eq!(manifest.attempt_id, "attempt-1");
     let receipt = published

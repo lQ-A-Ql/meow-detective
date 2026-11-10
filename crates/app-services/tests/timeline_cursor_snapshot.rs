@@ -59,6 +59,7 @@ fn equal_timestamp_pages_cross_lookahead_boundaries_and_exclude_later_backdated_
                     .map(|n| event(format!("event-{n:03}")))
                     .collect::<Vec<_>>();
                 TimelineRepo::new(&db).insert_batch_with_case(&events, &active.meta.id.0)?;
+                publish_source(&db, id);
             }
             let mut cursor = None;
             let mut ids = Vec::new();
@@ -108,6 +109,7 @@ fn source_retirement_invalidates_existing_cursor_with_a_validation_error() {
             TimelineRepo::new(&db).insert_batch_with_case(
                 &[event("first".into()), event("last".into())], &active.meta.id.0,
             )?;
+            publish_source(&db, id);
         }
         let first = timeline_service::query_timeline_for_case(
             conn, &active.case_root, &active.meta.id, 0, 1,
@@ -127,4 +129,33 @@ fn source_retirement_invalidates_existing_cursor_with_a_validation_error() {
         assert!(fresh.items.iter().all(|row| row.id.starts_with("ds:a:")));
         Ok(())
     }).unwrap();
+}
+
+fn publish_source(conn: &Connection, source_id: &str) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::replace_source_generation(&store, source_id, "fixture", &"a".repeat(64))
+        .unwrap();
+    let key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(source_id.to_string())],
+    )
+    .unwrap();
+    let marker = persistence_fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{source_id}"),
+        source_id,
+        1,
+        source_id.as_bytes().to_vec(),
+    );
+    store
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
 }

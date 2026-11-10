@@ -44,6 +44,7 @@ pub(crate) fn open_fresh_source_build_db(
     }
     let connection = persistence_sqlite::open_or_create_source(&build_path)?;
     persistence_sqlite::source_fjall::configure_source_identity(&connection, &data_source_id.0)?;
+    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &build_path)?;
     connection.pragma_update(
         None,
         "wal_autocheckpoint",
@@ -53,6 +54,31 @@ pub(crate) fn open_fresh_source_build_db(
 }
 
 pub(crate) fn finalize_source_build_db(conn: &Connection) -> DbResult<()> {
+    let source_id = persistence_sqlite::source_fjall::source_id(conn)?
+        .ok_or_else(|| DbError::System("source identity is missing".to_string()))?;
+    let database_path: String = conn.query_row(
+        "SELECT file FROM pragma_database_list WHERE name = 'main'",
+        [],
+        |row| row.get(0),
+    )?;
+    let generation_name: Option<String> = conn
+        .query_row(
+            "SELECT value FROM source_meta WHERE key = 'fjall_root'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let generation_exists = generation_name.as_deref().is_some_and(|name| {
+        Path::new(&database_path)
+            .parent()
+            .is_some_and(|parent| parent.join(name).is_dir())
+    });
+    if generation_exists {
+        let store = persistence_sqlite::source_fjall::open_store_for_write(conn)?
+            .ok_or_else(|| DbError::System("source store is missing".to_string()))?;
+        persistence_fjall::verify_source_generation(&store, &source_id)
+            .map_err(|error| DbError::System(error.to_string()))?;
+    }
     persistence_sqlite::source_fjall::bind_generation(conn, "source.fjall")?;
     super::verify_source_db_integrity(conn)?;
     super::checkpoint_source_db(conn)?;
@@ -102,6 +128,19 @@ pub(crate) fn publish_source_build_db(
         )));
     }
     remove_sqlite_sidecars(&build_path)?;
+    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+        case_root,
+        &data_source_id.0,
+        attempt_id,
+    )
+    .map_err(|error| DbError::System(error.to_string()))?;
+    if layout.build_path().is_dir() {
+        let _close_guard = crate::storage_runtime::close_source_store_at_path(&layout.build_path())
+            .map_err(|error| DbError::System(error.to_string()))?
+            .ok_or_else(|| DbError::System("native source build is still in use".to_string()))?;
+        persistence_fjall::publish_source_generation(layout.build_path(), layout.published_path())
+            .map_err(|error| DbError::System(error.to_string()))?;
+    }
     std::fs::rename(&build_path, &final_path)?;
     Ok(final_path)
 }

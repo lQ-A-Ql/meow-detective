@@ -9,29 +9,12 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0002_data_sources",
         include_str!("scripts/0002_data_sources.sql"),
     ),
-    (
-        "0003_file_entries",
-        include_str!("scripts/0003_file_entries.sql"),
-    ),
-    ("0004_artifacts", include_str!("scripts/0004_artifacts.sql")),
-    (
-        "0005_timeline_events",
-        include_str!("scripts/0005_timeline_events.sql"),
-    ),
     ("0006_jobs", include_str!("scripts/0006_jobs.sql")),
     ("0007_reports", include_str!("scripts/0007_reports.sql")),
     ("0008_tags", include_str!("scripts/0008_tags.sql")),
     (
         "0010_job_partition_progress",
         include_str!("scripts/0010_job_partition_progress.sql"),
-    ),
-    (
-        "0011_fix_timeline_case_id",
-        include_str!("scripts/0011_fix_timeline_case_id.sql"),
-    ),
-    (
-        "0012_add_indexes",
-        include_str!("scripts/0012_add_indexes.sql"),
     ),
     (
         "0013_create_partitions",
@@ -57,18 +40,6 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0019_data_source_provenance",
         include_str!("scripts/0019_data_source_provenance.sql"),
     ),
-    (
-        "0020_artifact_timeline_provenance",
-        include_str!("scripts/0020_artifact_timeline_provenance.sql"),
-    ),
-    (
-        "0021_timeline_query_indexes",
-        include_str!("scripts/0021_timeline_query_indexes.sql"),
-    ),
-    (
-        "0022_file_entry_visibility_flags",
-        include_str!("scripts/0022_file_entry_visibility_flags.sql"),
-    ),
     ("0023_graph", include_str!("scripts/0023_graph.sql")),
     ("0024_notebook", include_str!("scripts/0024_notebook.sql")),
     ("0025_batch", include_str!("scripts/0025_batch.sql")),
@@ -89,10 +60,6 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         include_str!("scripts/0029_entity_relationships.sql"),
     ),
     ("0030_custody", include_str!("scripts/0030_custody.sql")),
-    (
-        "0032_file_entry_type_nocase_index",
-        include_str!("scripts/0032_file_entry_type_nocase_index.sql"),
-    ),
     (
         "0034_data_source_storage",
         include_str!("scripts/0034_data_source_storage.sql"),
@@ -126,24 +93,8 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         include_str!("scripts/0041_cephfs_assembly_binding.sql"),
     ),
     (
-        "0042_file_entry_encrypted",
-        include_str!("scripts/0042_file_entry_encrypted.sql"),
-    ),
-    (
         "0043_bitlocker_restore_intents",
         include_str!("scripts/0043_bitlocker_restore_intents.sql"),
-    ),
-    (
-        "0044_file_entry_read_only",
-        include_str!("scripts/0044_file_entry_read_only.sql"),
-    ),
-    (
-        "0045_file_entry_archive",
-        include_str!("scripts/0045_file_entry_archive.sql"),
-    ),
-    (
-        "0046_file_entry_unix_mode",
-        include_str!("scripts/0046_file_entry_unix_mode.sql"),
     ),
     (
         "0047_forensic_fingerprints",
@@ -212,10 +163,6 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
     (
         "0063_evidence_tasks",
         include_str!("scripts/0063_evidence_tasks.sql"),
-    ),
-    (
-        "0064_file_browse_paging_index",
-        include_str!("scripts/0064_file_browse_paging_index.sql"),
     ),
     (
         "0065_mcp_task_bindings",

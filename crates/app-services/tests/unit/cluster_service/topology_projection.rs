@@ -1,3 +1,4 @@
+crate::native_source_test_support!();
 use crate::{
     cluster_service::{
         get_linux_evidence_set_summary, list_linux_evidence_sets, project_import_set_topology,
@@ -17,10 +18,12 @@ use persistence_sqlite::repositories::{
     file_repo::FileRepo,
     linux_import_set_repo::{LinuxImportSetMemberRecord, LinuxImportSetRecord, LinuxImportSetRepo},
 };
+use test_support::mark_source_projection_complete;
 
 #[test]
 fn projection_separates_pve_ceph_os_and_kubernetes_scopes() {
     let root = tempfile::TempDir::new().unwrap();
+    std::fs::create_dir_all(root.path().join("artifacts/objects")).unwrap();
     let conn = persistence_sqlite::open_or_create(&root.path().join("app.db")).unwrap();
     persistence_sqlite::runner::run_all(&conn).unwrap();
     let case_id = CaseId("case-topology-projection".to_string());
@@ -232,6 +235,7 @@ fn projection_separates_pve_ceph_os_and_kubernetes_scopes() {
 #[test]
 fn projection_refuses_an_incomplete_evidence_set_before_creating_scopes() {
     let root = tempfile::TempDir::new().unwrap();
+    std::fs::create_dir_all(root.path().join("artifacts/objects")).unwrap();
     let conn = persistence_sqlite::open_or_create(&root.path().join("app.db")).unwrap();
     persistence_sqlite::runner::run_all(&conn).unwrap();
     let case_id = CaseId("case-incomplete-evidence-set".to_string());
@@ -285,6 +289,7 @@ fn projection_refuses_an_incomplete_evidence_set_before_creating_scopes() {
 #[test]
 fn projection_does_not_create_kubernetes_scope_without_kubernetes_evidence() {
     let root = tempfile::TempDir::new().unwrap();
+    std::fs::create_dir_all(root.path().join("artifacts/objects")).unwrap();
     let conn = persistence_sqlite::open_or_create(&root.path().join("app.db")).unwrap();
     persistence_sqlite::runner::run_all(&conn).unwrap();
     let case_id = CaseId("case-no-kubernetes".to_string());
@@ -410,4 +415,16 @@ fn register_source(
         })
         .collect::<Vec<_>>();
     FileRepo::new(&source_conn).insert_batch(&entries).unwrap();
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::replace_source_generation(
+        &store,
+        source_id,
+        "topology-fixture",
+        &"a".repeat(64),
+    )
+    .unwrap();
+    drop(store);
+    mark_source_projection_complete(&source_conn, source_id);
 }

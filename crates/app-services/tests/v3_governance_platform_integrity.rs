@@ -170,6 +170,36 @@ fn register_source(
     ArtifactRepo::new(&source_conn)
         .insert_batch(&artifacts, &active.meta.id.0, source_id)
         .expect("insert source artifacts");
+    publish_source(&source_conn, &source.id);
+}
+
+fn publish_source(conn: &rusqlite::Connection, source_id: &DataSourceId) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+        .expect("open source store")
+        .expect("configured source store");
+    persistence_fjall::replace_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))
+        .expect("publish source generation");
+    let key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(source_id.0.clone())],
+    )
+    .expect("encode projection key");
+    let marker = persistence_fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{}", source_id.0),
+        &source_id.0,
+        1,
+        source_id.0.as_bytes().to_vec(),
+    );
+    store
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .expect("mark source projection complete");
 }
 
 fn integrity_gate(snapshot: &V3GovernanceSnapshotDto) -> &ReleaseGateEntryDto {

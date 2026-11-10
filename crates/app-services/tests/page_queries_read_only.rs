@@ -4,9 +4,13 @@ use app_services::{
     graph_service, infrastructure_graph_service, source_db, timeline_service,
     v2_governance_service, v3_governance_service,
 };
-use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
+use domain::{
+    DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
+    FileEntryId,
+};
 use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
+    file_repo::FileRepo,
     graph_repo::GraphRepo,
     timeline_repo::TimelineRepo,
 };
@@ -41,7 +45,30 @@ fn source(
     DataSourceRepo::new(&db)
         .upsert_source_local_metadata(case_id, &source)
         .unwrap();
-    db.execute("INSERT INTO file_entries(id,data_source_id,path,name,entry_type,size) VALUES('file',?1,'one.txt','one.txt','file',19)", [&id]).unwrap();
+    FileRepo::new(&db)
+        .insert_batch(&[FileEntry {
+            id: FileEntryId("file".into()),
+            parent_id: None,
+            data_source_id: source.id.clone(),
+            path: "one.txt".into(),
+            name: "one.txt".into(),
+            entry_type: EntryType::File,
+            size: Some(19),
+            ext: Some("txt".into()),
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
+        .unwrap();
     let event = domain::TimelineEvent {
         id: domain::TimelineEventId("event".into()),
         source_object_id: "file".into(),
@@ -58,8 +85,38 @@ fn source(
     TimelineRepo::new(&db)
         .insert_batch_with_case(&[event], &case_id.0)
         .unwrap();
+    publish_source_generation(&db, &source.id);
     db.pragma_update(None, "journal_mode", "DELETE").unwrap();
     source.id
+}
+
+fn publish_source_generation(conn: &Connection, source_id: &DataSourceId) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::seal_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))
+        .unwrap();
+    let key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(source_id.0.clone())],
+    )
+    .unwrap();
+    let marker = persistence_fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{}", source_id.0),
+        &source_id.0,
+        1,
+        source_id.0.as_bytes().to_vec(),
+    );
+    store
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
 }
 
 fn assert_source_unchanged(root: &Path, id: &DataSourceId, read: impl FnOnce()) {

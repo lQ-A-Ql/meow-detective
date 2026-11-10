@@ -7,8 +7,8 @@ use std::{
 use crate::search_metadata_projection::{MetadataProjection, SearchProjectionMarker};
 use persistence_fjall::{CatalogEntryType, ScanDirection};
 use persistence_fjall::{KeyPart, PersistMode, VersionedEnvelope};
-use rusqlite::{params, Connection};
-use search::{SearchFileDocument, SearchIndex, SearchMetadataWriter};
+use rusqlite::Connection;
+use search::{SearchIndex, SearchMetadataWriter};
 
 use super::{
     extractor_policy::validate_analysis_platform,
@@ -56,30 +56,18 @@ fn run_search_index_phase_with_page_size(
         .metadata_writer_for_new_generation()
         .map_err(|error| ImportAnalysisError::Other(format!("Open search writer: {error}")))?;
     let mut stats = SearchIndexPhaseStats::default();
-    if let Ok(source) = crate::source_db::open_registered_fjall_source_read_only(
+    let source = crate::source_db::open_registered_fjall_source_read_only(
         &options.case_root,
         &options.data_source_id,
-    ) {
-        let fjall_indexed = index_fjall_metadata_rows(
-            &source,
-            &options,
-            &projection,
-            page_size,
-            &mut writer,
-            &mut stats,
-        )?;
-        let _ = fjall_indexed;
-    } else {
-        stats.eligible_count = count_metadata_rows(&connection, &options)?;
-        index_metadata_rows(
-            &connection,
-            &options,
-            &projection,
-            page_size,
-            &mut writer,
-            &mut stats,
-        )?;
-    }
+    )?;
+    let _ = index_fjall_metadata_rows(
+        &source,
+        &options,
+        &projection,
+        page_size,
+        &mut writer,
+        &mut stats,
+    )?;
     writer
         .commit()
         .map_err(|error| ImportAnalysisError::Other(format!("Commit search index: {error}")))?;
@@ -111,12 +99,10 @@ fn write_search_marker(
     generation: &str,
     schema_version: u32,
 ) -> Result<(), ImportAnalysisError> {
-    let Ok(source) = crate::source_db::open_registered_fjall_source_read_write(
+    let source = crate::source_db::open_registered_fjall_source_read_write(
         &options.case_root,
         &options.data_source_id,
-    ) else {
-        return Ok(());
-    };
+    )?;
     let marker_payload = SearchProjectionMarker {
         source_id: options.data_source_id.0.clone(),
         input_revision: input_revision.to_owned(),
@@ -154,18 +140,6 @@ fn search_input_revision(conn: &Connection) -> Result<String, ImportAnalysisErro
         )
         .map(|revision| revision.to_string())
         .map_err(|error| ImportAnalysisError::Other(error.to_string()))
-}
-
-fn count_metadata_rows(
-    connection: &Connection,
-    options: &SearchIndexPhaseOptions,
-) -> Result<u64, ImportAnalysisError> {
-    let count: i64 = connection.query_row(
-        "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1",
-        [&options.data_source_id.0],
-        |row| row.get(0),
-    )?;
-    Ok(count.max(0) as u64)
 }
 
 fn index_fjall_metadata_rows(
@@ -242,92 +216,6 @@ fn index_fjall_metadata_rows(
         }
     }
     Ok(stats.indexed_count)
-}
-
-fn index_metadata_rows(
-    connection: &Connection,
-    options: &SearchIndexPhaseOptions,
-    projection: &MetadataProjection<'_>,
-    page_size: u64,
-    writer: &mut SearchMetadataWriter,
-    stats: &mut SearchIndexPhaseStats,
-) -> Result<(), ImportAnalysisError> {
-    let mut after_id = String::new();
-    loop {
-        ensure_not_cancelled(options)?;
-        let page = fetch_metadata_page(
-            connection,
-            &options.data_source_id.0,
-            &after_id,
-            page_size,
-            projection,
-        )?;
-        if page.scanned == 0 {
-            break;
-        }
-        after_id = page.last_id;
-        stats.failed_count = stats.failed_count.saturating_add(page.failed);
-        stats.indexed_count =
-            stats
-                .indexed_count
-                .saturating_add(writer.add_documents(&page.documents).map_err(|error| {
-                    ImportAnalysisError::Other(format!("Write search metadata: {error}"))
-                })?);
-        if page.scanned < page_size {
-            break;
-        }
-    }
-    Ok(())
-}
-
-struct MetadataPage {
-    documents: Vec<SearchFileDocument>,
-    last_id: String,
-    scanned: u64,
-    failed: u64,
-}
-
-fn fetch_metadata_page(
-    connection: &Connection,
-    data_source_id: &str,
-    after_id: &str,
-    page_size: u64,
-    projection: &MetadataProjection<'_>,
-) -> Result<MetadataPage, ImportAnalysisError> {
-    let mut statement = connection.prepare(
-        "SELECT id, path, name, entry_type, size, ext, modified_at,
-                deleted, hidden, system, encrypted, data_source_id
-         FROM file_entries
-         WHERE data_source_id = ?1 AND id > ?2
-         ORDER BY id ASC
-         LIMIT ?3",
-    )?;
-    let mut rows = statement.query(params![data_source_id, after_id, page_size])?;
-    let mut page = MetadataPage {
-        documents: Vec::with_capacity(page_size as usize),
-        last_id: after_id.to_string(),
-        scanned: 0,
-        failed: 0,
-    };
-    while let Some(row) = rows.next()? {
-        page.scanned = page.scanned.saturating_add(1);
-        let id = match row.get::<_, String>(0) {
-            Ok(id) if !id.is_empty() => id,
-            Ok(_) | Err(_) => {
-                page.failed = page.failed.saturating_add(1);
-                continue;
-            }
-        };
-        page.last_id = id.clone();
-        match projection.row(row, id) {
-            Ok(document) => page.documents.push(document),
-            Err(error) => {
-                page.failed = page.failed.saturating_add(1);
-                tracing::warn!(error = %error, "Skipping malformed file metadata during search indexing");
-            }
-        }
-    }
-    Ok(page)
 }
 
 struct IndexBuildGuard {

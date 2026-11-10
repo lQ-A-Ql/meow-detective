@@ -1,4 +1,5 @@
 use super::*;
+crate::native_source_test_support!();
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -64,10 +65,13 @@ fn register_source(
     let Some(file_path) = file_path else {
         return;
     };
-    let source_conn = persistence_sqlite::open_or_create_source(&crate::source_db::source_db_path(
-        case_root, &source.id,
-    ))
-    .expect("create source database");
+    let database_path = crate::source_db::source_db_path(case_root, &source.id);
+    let source_conn =
+        persistence_sqlite::open_or_create_source(&database_path).expect("create source database");
+    persistence_sqlite::source_fjall::configure_source_identity(&source_conn, &source.id.0)
+        .expect("configure source identity");
+    persistence_sqlite::source_fjall::configure_source_fjall(&source_conn, &database_path)
+        .expect("configure source details");
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(case_id, &source)
         .expect("store source-local metadata");
@@ -76,7 +80,7 @@ fn register_source(
         .insert_batch(&[FileEntry {
             id: FileEntryId(format!("{id}-file")),
             parent_id: None,
-            data_source_id: source.id,
+            data_source_id: source.id.clone(),
             path: file_path.to_string(),
             name: name.to_string(),
             entry_type: EntryType::File,
@@ -96,6 +100,18 @@ fn register_source(
             hash_sha256: None,
         }])
         .expect("insert source file");
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+        .expect("open source store")
+        .expect("configured source store");
+    persistence_fjall::replace_source_generation(
+        &store,
+        &source.id.0,
+        "report-source-fixture",
+        &"a".repeat(64),
+    )
+    .expect("seal report source fixture");
+    drop(store);
+    test_support::mark_source_projection_complete(&source_conn, &source.id.0);
 }
 
 #[test]

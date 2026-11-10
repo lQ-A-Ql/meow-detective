@@ -2,18 +2,16 @@
 //! browser preload pipeline. All failures degrade to warnings so the base
 //! v10/v11 decryption path keeps working.
 
-use super::browser_preload::{
-    locate_by_suffix, locator_from_entry, locator_from_row, read_locator,
-};
+use super::browser_preload::{locate_by_suffix, locator_from_entry, read_locator};
 use super::candidate_processing::CandidateSource;
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
+use crate::analysis_service::AnalysisServiceError;
 use artifacts_windows::dpapi::{
     derive_user_prekeys, derive_user_prekeys_from_password_sha1, parse_cng_system_key_file,
     ChromiumFamily,
 };
 use artifacts_windows::{decrypt_lsa_secrets, DpapiSystemKeys, LsaDecryptedSecrets, TbalSecret};
-use persistence_sqlite::repositories::file_repo::file_encryption_status_from_row;
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use sha1::{Digest, Sha1};
 use std::sync::atomic::AtomicBool;
 
@@ -79,11 +77,11 @@ pub(super) fn extend_prekeys_from_lsa_secrets(
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
     prekeys: &mut Vec<[u8; 20]>,
     warnings: &mut Vec<String>,
-) {
+) -> Result<(), AnalysisServiceError> {
     let Some(security) =
-        locate_by_suffix(conn, data_source_id, "/windows/system32/config/security")
+        locate_by_suffix(conn, data_source_id, "/windows/system32/config/security")?
     else {
-        return;
+        return Ok(());
     };
     let security_bytes = match read_locator(&security, cancel_token, file_reader) {
         Ok(bytes) => bytes,
@@ -91,7 +89,7 @@ pub(super) fn extend_prekeys_from_lsa_secrets(
             warnings.push(format!(
                 "SECURITY hive could not be read for offline LSA secrets: {error}"
             ));
-            return;
+            return Ok(());
         }
     };
     match decrypt_lsa_secrets(&security_bytes, seed.boot_key) {
@@ -100,6 +98,7 @@ pub(super) fn extend_prekeys_from_lsa_secrets(
             "offline LSA secret decryption was not available: {error}"
         )),
     }
+    Ok(())
 }
 
 fn apply_lsa_secrets(
@@ -145,8 +144,8 @@ pub(super) fn read_cng_chromekey_file(
     data_source_id: &str,
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
-) -> Option<Vec<u8>> {
-    for locator in locate_files_by_like(conn, data_source_id, "%/crypto/systemkeys/%") {
+) -> Result<Option<Vec<u8>>, AnalysisServiceError> {
+    for locator in locate_files_by_like(conn, data_source_id, "%/crypto/systemkeys/%")? {
         let Ok(bytes) = read_locator(&locator, cancel_token, file_reader) else {
             continue;
         };
@@ -154,10 +153,10 @@ pub(super) fn read_cng_chromekey_file(
             continue;
         };
         if cng.description.to_ascii_lowercase().contains("chromekey") {
-            return Some(bytes);
+            return Ok(Some(bytes));
         }
     }
-    None
+    Ok(None)
 }
 
 /// Read the Chrome/Edge `elevation_service.exe` used to bind the App-Bound XOR
@@ -168,70 +167,44 @@ pub(super) fn read_elevation_service(
     family: ChromiumFamily,
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
-) -> Option<Vec<u8>> {
+) -> Result<Option<Vec<u8>>, AnalysisServiceError> {
     let path_marker = match family {
         ChromiumFamily::Chrome => "/google/chrome/application/",
         ChromiumFamily::Edge => "/microsoft/edge/application/",
-        ChromiumFamily::Chromium => return None,
+        ChromiumFamily::Chromium => return Ok(None),
     };
-    let locator = locate_files_by_like(conn, data_source_id, "%/elevation_service.exe")
+    let locator = locate_files_by_like(conn, data_source_id, "%/elevation_service.exe")?
         .into_iter()
-        .find(|locator| normalize_evidence_path(&locator.path).contains(path_marker))?;
-    read_locator(&locator, cancel_token, file_reader).ok()
+        .find(|locator| normalize_evidence_path(&locator.path).contains(path_marker));
+    match locator {
+        Some(locator) => read_locator(&locator, cancel_token, file_reader).map(Some),
+        None => Ok(None),
+    }
 }
 
 fn locate_files_by_like(
     conn: &Connection,
     data_source_id: &str,
     like_pattern: &str,
-) -> Vec<EvidenceCandidate> {
-    if persistence_sqlite::source_fjall::has_source_store(conn).unwrap_or(false) {
-        let marker = like_pattern
-            .trim_matches('%')
-            .replace('\\', "/")
-            .to_ascii_lowercase();
-        let mut candidates = Vec::new();
-        if persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
-            .visit_all(Some(data_source_id), |entry| {
-                if !entry.deleted
-                    && !entry.is_directory()
-                    && normalize_evidence_path(&entry.path).contains(&marker)
-                {
-                    candidates.push(locator_from_entry(data_source_id, &entry, "BrowserPreload"));
-                }
-                Ok(())
-            })
-            .is_err()
-        {
-            return Vec::new();
-        }
-        candidates.sort_by_key(|candidate| candidate.path.len());
-        candidates.truncate(32);
-        return candidates;
-    }
-    let Ok(mut statement) = conn.prepare(
-        "SELECT id, path, COALESCE(size, 0), partition_index, encrypted
-         FROM file_entries
-         WHERE data_source_id = ?1 AND entry_type = 'file' COLLATE NOCASE
-           AND REPLACE(LOWER(path), '\\', '/') LIKE ?2
-         ORDER BY LENGTH(path) ASC
-         LIMIT 32",
-    ) else {
-        return Vec::new();
-    };
-    let Ok(rows) = statement.query_map(params![data_source_id, like_pattern], |row| {
-        let id: String = row.get(0)?;
-        let path: String = row.get(1)?;
-        let size: u64 = row.get(2)?;
-        let partition_index = row
-            .get::<_, Option<i64>>(3)?
-            .and_then(|value| usize::try_from(value).ok());
-        let encrypted = file_encryption_status_from_row(row, 4)?.blocks_content();
-        Ok((id, path, size, partition_index, encrypted))
-    }) else {
-        return Vec::new();
-    };
-    rows.flatten()
-        .map(|row| locator_from_row(data_source_id, row, "BrowserPreload"))
-        .collect()
+) -> Result<Vec<EvidenceCandidate>, AnalysisServiceError> {
+    let marker = like_pattern
+        .trim_matches('%')
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let mut candidates = Vec::new();
+    persistence_sqlite::repositories::file_repo::FileRepo::new(conn).visit_all(
+        Some(data_source_id),
+        |entry| {
+            if !entry.deleted
+                && !entry.is_directory()
+                && normalize_evidence_path(&entry.path).contains(&marker)
+            {
+                candidates.push(locator_from_entry(data_source_id, &entry, "BrowserPreload"));
+            }
+            Ok(())
+        },
+    )?;
+    candidates.sort_by_key(|candidate| candidate.path.len());
+    candidates.truncate(32);
+    Ok(candidates)
 }

@@ -1,44 +1,28 @@
 use app_services::analysis_service::{
     extract_system_info_for_case, get_evidence_classification_summary,
 };
-use domain::{DataSourceId, DataSourcePlatform, EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use domain::DataSourcePlatform;
 use transport::dto::AnalysisParseStatusDto;
+
+#[path = "support/native_analysis_fixture.rs"]
+mod native_analysis_fixture;
+
+use native_analysis_fixture::{source_file, NativeAnalysisFixture};
 
 const SOURCE_ID: &str = "source-provenance";
 
-fn source_connection() -> rusqlite::Connection {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
+fn source_connection() -> NativeAnalysisFixture {
+    NativeAnalysisFixture::new(SOURCE_ID, "case-provenance")
+}
+
+fn unknown_source_connection() -> rusqlite::Connection {
+    let connection = persistence_sqlite::open_in_memory().expect("open unknown source database");
     persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
     connection
 }
 
-fn insert_source_file(connection: &rusqlite::Connection, id: &str, path: &str) {
-    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
-    FileRepo::new(connection)
-        .insert_batch(&[FileEntry {
-            id: FileEntryId(id.to_string()),
-            parent_id: None,
-            data_source_id: DataSourceId(SOURCE_ID.to_string()),
-            path: path.to_string(),
-            name: name.to_string(),
-            entry_type: EntryType::File,
-            size: Some(4),
-            ext: path.rsplit_once('.').map(|(_, ext)| ext.to_string()),
-            deleted: false,
-            hidden: false,
-            system: false,
-            encrypted: false,
-            read_only: false,
-            archive: false,
-            unix_mode: None,
-            created_at: None,
-            modified_at: None,
-            accessed_at: None,
-            changed_at: None,
-            hash_sha256: None,
-        }])
-        .expect("insert source file");
+fn insert_source_file(connection: &NativeAnalysisFixture, id: &str, path: &str) {
+    connection.insert_file(source_file(SOURCE_ID, id, path, 4, false));
 }
 
 #[test]
@@ -83,7 +67,7 @@ fn system_info_provenance_never_discards_an_attributable_source_id() {
 
 #[test]
 fn system_info_omits_unavailable_provenance_when_source_is_unknown() {
-    let connection = source_connection();
+    let connection = unknown_source_connection();
 
     let info = extract_system_info_for_case(
         &connection,
@@ -97,5 +81,5 @@ fn system_info_omits_unavailable_provenance_when_source_is_unknown() {
     assert!(info
         .warnings
         .iter()
-        .any(|warning| warning.contains("Windows/System32/config/SYSTEM")));
+        .all(|warning| !warning.contains("Windows/System32/config/SYSTEM")));
 }

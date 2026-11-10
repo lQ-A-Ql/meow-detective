@@ -51,7 +51,6 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(&case.meta.id, &source)
         .unwrap();
-    drop(source_conn);
 
     let fjall = open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
     let base = Utc.with_ymd_and_hms(2026, 11, 2, 0, 0, 0).unwrap();
@@ -65,6 +64,13 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
     }
     fjall.persist(PersistMode::SyncAll).unwrap();
     drop(fjall);
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::seal_source_generation(&store, &source.id.0, "fixture", &"a".repeat(64))
+        .unwrap();
+    drop(store);
+    drop(source_conn);
 
     let incomplete = case
         .with_conn(|connection| {
@@ -83,12 +89,19 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
         })
-        .unwrap();
-    assert_eq!(incomplete.total, 0);
+        .expect_err("an incomplete source projection must fail closed");
+    assert!(incomplete
+        .to_string()
+        .contains("source details are not ready"));
 
     let fjall = open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
     projection_support::mark_source_projection_complete(&fjall, &source.id.0);
     drop(fjall);
+    let source_conn = open_source_db(&case.case_root, &source.id).unwrap();
+    let revision_before =
+        persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&source_conn)
+            .cursor_revision()
+            .unwrap();
 
     let first = case
         .with_conn(|connection| {
@@ -127,6 +140,14 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
         )
         .unwrap();
     drop(fjall);
+    let revision_after =
+        persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&source_conn)
+            .cursor_revision()
+            .unwrap();
+    assert_ne!(
+        revision_after, revision_before,
+        "timeline mutation must advance the cursor revision"
+    );
 
     let stale = case
         .with_conn(|connection| {

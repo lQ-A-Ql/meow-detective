@@ -1,6 +1,8 @@
 #[path = "support/evidence_case.rs"]
 mod fixture;
 use app_services::{content_index_service, search_service};
+use domain::{Artifact, ArtifactId, EntryType, FileEntryId};
+use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
 use std::sync::atomic::{AtomicBool, Ordering};
 use transport::commands::SearchFilesRequest;
 fn setup() -> fixture::EvidenceCase {
@@ -23,16 +25,76 @@ fn setup() -> fixture::EvidenceCase {
         ("d", "encoding.bin", vec![0xff, 0x80, 0x81]),
         ("e", "utf16.bin", utf16),
     ];
-    case.active.with_conn(|conn| {
-        let source=case.source(conn,"source",&evidence,domain::DataSourceKind::LogicalDirectory);
-        for (id,path,bytes) in files { std::fs::write(evidence.join(path),&bytes).unwrap(); fixture::entry(&source,"source",id,path,bytes.len() as u64); }
-        fixture::entry(&source,"source","f","missing.txt",20);
-        source.execute("INSERT INTO file_entries(id,data_source_id,path,name,entry_type,size) VALUES('g','source','empty','empty','directory',0)",[]).unwrap();
-        source.execute("INSERT INTO artifacts(id,case_id,data_source_id,artifact_type,source_object_id,extractor_id,title,summary,attrs) VALUES('artifact',?1,'source','test','a','test','artifactonly','structured annotation','{}')",[&case.active.meta.id.0]).unwrap();
-        let index=search::SearchIndex::create(&app_services::source_db::registered_source_index_dir(conn,&case.active.case_root,&domain::DataSourceId("source".into())).unwrap()).unwrap();
-        let mut writer=index.metadata_writer().unwrap();
-        writer.add_documents(&[search::SearchFileDocument {file_id:"a".into(),path:"named.txt".into(),name:"named.txt".into(),extension:"txt".into(),entry_type:"file".into(),size:Some(1),modified_at:None,deleted:false,hidden:false,system:false,encrypted:false}]).unwrap(); writer.commit().unwrap(); Ok(())
-    }).unwrap();
+    case.active
+        .with_conn(|conn| {
+            let source = case.source(
+                conn,
+                "source",
+                &evidence,
+                domain::DataSourceKind::LogicalDirectory,
+            );
+            for (id, path, bytes) in files {
+                std::fs::write(evidence.join(path), &bytes).unwrap();
+                fixture::entry(&source, "source", id, path, bytes.len() as u64);
+            }
+            fixture::entry(&source, "source", "f", "missing.txt", 20);
+            fixture::entry_with_metadata(
+                &source,
+                "source",
+                "g",
+                "empty",
+                0,
+                EntryType::Directory,
+                None,
+            );
+            ArtifactRepo::new(&source)
+                .insert_batch(
+                    &[Artifact {
+                        id: ArtifactId("artifact".into()),
+                        family: "test".into(),
+                        title: "artifactonly".into(),
+                        summary: "structured annotation".into(),
+                        source_object_id: Some(FileEntryId("a".into())),
+                        extractor_id: Some("test".into()),
+                        extractor_version: None,
+                        confidence: None,
+                        source_attribution: None,
+                        created_at: chrono::Utc::now(),
+                        attrs: Default::default(),
+                    }],
+                    &case.active.meta.id.0,
+                    "source",
+                )
+                .unwrap();
+            let index = search::SearchIndex::create(
+                &app_services::source_db::registered_source_index_dir(
+                    conn,
+                    &case.active.case_root,
+                    &domain::DataSourceId("source".into()),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let mut writer = index.metadata_writer().unwrap();
+            writer
+                .add_documents(&[search::SearchFileDocument {
+                    file_id: "a".into(),
+                    path: "named.txt".into(),
+                    name: "named.txt".into(),
+                    extension: "txt".into(),
+                    entry_type: "file".into(),
+                    size: Some(1),
+                    modified_at: None,
+                    deleted: false,
+                    hidden: false,
+                    system: false,
+                    encrypted: false,
+                }])
+                .unwrap();
+            writer.commit().unwrap();
+            Ok(())
+        })
+        .unwrap();
     case
 }
 fn search(

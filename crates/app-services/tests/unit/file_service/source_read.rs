@@ -1,8 +1,10 @@
 use super::*;
-use domain::FileEntryId;
+crate::native_source_test_support!();
+use domain::{DataSourceId as DomainDataSourceId, EntryType, FileEntry, FileEntryId};
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use tempfile::TempDir;
+use test_support::NativeSourceFixture;
 
 struct MemoryEvidence {
     cursor: Cursor<Vec<u8>>,
@@ -185,33 +187,46 @@ fn partition_metadata_fast_path_builds_and_caches_descriptor_without_file_entry_
 
 #[test]
 fn null_partition_candidate_falls_back_to_existing_file_id_reader() {
-    let source_conn = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&source_conn).expect("run source migrations");
     let evidence = TempDir::new().expect("create logical evidence");
     std::fs::write(evidence.path().join("fallback.txt"), b"fallback-by-id")
         .expect("write logical evidence");
-    insert_source(
-        &source_conn,
-        "logical-linux",
-        "logical_directory",
-        evidence.path().to_string_lossy().as_ref(),
-    );
-    source_conn
+    let fixture = NativeSourceFixture::new("logical-linux", "case-1");
+    fixture
+        .connection
         .execute(
-            "INSERT INTO file_entries
-             (id, data_source_id, path, name, entry_type, size, deleted, hidden, system,
-              encrypted, partition_index)
-             VALUES ('fallback-file', 'logical-linux', 'fallback.txt', 'fallback.txt',
-                     'file', 14, 0, 0, 0, 0, NULL)",
-            [],
+            "UPDATE data_sources SET kind='logical_directory', source_path=?1 WHERE id='logical-linux'",
+            [evidence.path().to_string_lossy().as_ref()],
         )
-        .expect("insert fallback file entry");
+        .unwrap();
+    fixture.insert_files(&[FileEntry {
+        id: FileEntryId("fallback-file".into()),
+        parent_id: None,
+        data_source_id: DomainDataSourceId("logical-linux".into()),
+        path: "fallback.txt".into(),
+        name: "fallback.txt".into(),
+        entry_type: EntryType::File,
+        size: Some(14),
+        ext: Some("txt".into()),
+        deleted: false,
+        hidden: false,
+        system: false,
+        encrypted: false,
+        read_only: false,
+        archive: false,
+        unix_mode: None,
+        created_at: None,
+        modified_at: None,
+        accessed_at: None,
+        changed_at: None,
+        hash_sha256: None,
+    }]);
+    fixture.seal();
     let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
     let case_root = TempDir::new().expect("create case root");
     let case_id = CaseId("case-1".to_string());
     let source_id = DataSourceId("logical-linux".to_string());
     let mut context = SourceReadContext::new(
-        &source_conn,
+        &fixture.connection,
         &case_conn,
         case_root.path(),
         &case_id,
@@ -237,20 +252,21 @@ fn null_partition_candidate_falls_back_to_existing_file_id_reader() {
 
 #[test]
 fn encrypted_metadata_hint_is_rejected_before_derived_runtime_initialization() {
-    let source_conn = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&source_conn).expect("run source migrations");
-    insert_source(
-        &source_conn,
-        "derived-linux",
-        "ceph_rbd",
-        "missing-derived.rbd",
-    );
+    let fixture = NativeSourceFixture::new("derived-linux", "case-1");
+    fixture
+        .connection
+        .execute(
+            "UPDATE data_sources SET kind='ceph_rbd', source_path='missing-derived.rbd' WHERE id='derived-linux'",
+            [],
+        )
+        .unwrap();
+    fixture.seal();
     let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
     let case_root = TempDir::new().expect("create case root");
     let case_id = CaseId("case-1".to_string());
     let source_id = DataSourceId("derived-linux".to_string());
     let mut context = SourceReadContext::new(
-        &source_conn,
+        &fixture.connection,
         &case_conn,
         case_root.path(),
         &case_id,

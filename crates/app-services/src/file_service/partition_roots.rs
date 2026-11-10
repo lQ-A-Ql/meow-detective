@@ -1,5 +1,7 @@
 use crate::datasource_service;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+use evidence_core::FsNode;
+use persistence_fjall::{CatalogRecordStore, CatalogStreamError};
 use persistence_sqlite::{repositories::file_repo::FileRepo, DbResult};
 use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;
@@ -87,7 +89,111 @@ pub fn replace_placeholder_root_with_real_and_cancel(
     let root = fs.root().map_err(|e| {
         persistence_sqlite::DbError::System(format!("Failed to read filesystem root: {}", e))
     })?;
+    if persistence_sqlite::source_fjall::source_id(conn)?.is_some() {
+        return replace_placeholder_native(
+            conn,
+            placeholder_id,
+            fs,
+            root_name_override,
+            progress_fn,
+            cancel_token,
+            &root,
+        );
+    }
+    replace_placeholder_sqlite(
+        conn,
+        placeholder_id,
+        fs,
+        root_name_override,
+        progress_fn,
+        cancel_token,
+        &root,
+    )
+}
 
+fn replace_placeholder_native(
+    conn: &Connection,
+    placeholder_id: &FileEntryId,
+    fs: &dyn evidence_core::FileSystemReader,
+    root_name_override: Option<&str>,
+    progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
+    root: &FsNode,
+) -> DbResult<super::EnumerationStats> {
+    let source_id = persistence_sqlite::source_fjall::source_id(conn)?
+        .ok_or_else(|| persistence_sqlite::DbError::System("source identity is missing".into()))?;
+    let source = persistence_sqlite::source_fjall::require_source_store(conn)?;
+    let manifest = persistence_fjall::read_source_generation_manifest(&source, &source_id)
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let repository = CatalogRecordStore::from_source_store((*source).clone());
+    let mut root_entry = repository
+        .get(&repository.read_snapshot(), &source_id, &placeholder_id.0)
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
+        .map(persistence_sqlite::source_fjall::file_entry)
+        .ok_or_else(|| {
+            persistence_sqlite::DbError::System("Partition placeholder root not found".to_string())
+        })?;
+    let partition_index = root_entry
+        .parent_id
+        .is_none()
+        .then(|| FileRepo::new(conn).find_partition_index_by_id(placeholder_id))
+        .transpose()?
+        .flatten()
+        .ok_or_else(|| {
+            persistence_sqlite::DbError::System(format!(
+                "Partition placeholder '{}' is missing partition_index",
+                placeholder_id.0
+            ))
+        })?;
+    apply_real_root_metadata(&mut root_entry, root, root_name_override);
+    let root_record = persistence_sqlite::source_fjall::file_record(&root_entry);
+    let mut walker = super::enumeration::ChildBatchWalker::new(root_entry.id.clone());
+    repository
+        .replace_subtree_streamed(
+            &source_id,
+            &root_record,
+            u32::try_from(partition_index).map_err(|_| {
+                persistence_sqlite::DbError::System("partition index exceeds Fjall range".into())
+            })?,
+            persistence_fjall::PersistMode::SyncAll,
+            || {
+                walker
+                    .next_batch(fs, &root_entry.data_source_id, progress_fn, cancel_token)
+                    .map(|batch| {
+                        batch.map(|entries| {
+                            entries
+                                .into_iter()
+                                .map(|entry| persistence_sqlite::source_fjall::file_record(&entry))
+                                .collect()
+                        })
+                    })
+            },
+        )
+        .map_err(|error| match error {
+            CatalogStreamError::Storage(error) => {
+                persistence_sqlite::DbError::System(error.to_string())
+            }
+            CatalogStreamError::Producer(error) => error,
+        })?;
+    persistence_fjall::replace_source_generation(
+        &source,
+        &source_id,
+        &format!("partition-{}", Uuid::new_v4()),
+        &manifest.projection_batch_digest,
+    )
+    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    Ok(walker.into_stats())
+}
+
+fn replace_placeholder_sqlite(
+    conn: &Connection,
+    placeholder_id: &FileEntryId,
+    fs: &dyn evidence_core::FileSystemReader,
+    root_name_override: Option<&str>,
+    progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
+    root: &FsNode,
+) -> DbResult<super::EnumerationStats> {
     let tx = conn.unchecked_transaction()?;
     let result = {
         let repo = FileRepo::new(&tx);
@@ -97,13 +203,7 @@ pub fn replace_placeholder_root_with_real_and_cancel(
             ));
         };
 
-        root_entry.path = String::new();
-        root_entry.name = root_name_override.unwrap_or(&root.name).to_string();
-        root_entry.created_at = root.created_at;
-        root_entry.modified_at = root.modified_at;
-        root_entry.accessed_at = root.accessed_at;
-        root_entry.hidden = root.hidden;
-        root_entry.system = root.system;
+        apply_real_root_metadata(&mut root_entry, root, root_name_override);
         let partition_index = repo
             .find_partition_index_by_id(placeholder_id)?
             .ok_or_else(|| {
@@ -137,6 +237,30 @@ pub fn replace_placeholder_root_with_real_and_cancel(
             Err(error)
         }
     }
+}
+
+fn apply_real_root_metadata(
+    entry: &mut FileEntry,
+    root: &FsNode,
+    root_name_override: Option<&str>,
+) {
+    entry.path = String::new();
+    entry.name = root_name_override.unwrap_or(&root.name).to_string();
+    entry.entry_type = EntryType::Directory;
+    entry.size = None;
+    entry.ext = None;
+    entry.deleted = false;
+    entry.hidden = root.hidden;
+    entry.system = root.system;
+    entry.encrypted = root.encrypted;
+    entry.read_only = root.read_only;
+    entry.archive = root.archive;
+    entry.unix_mode = root.unix_mode;
+    entry.created_at = root.created_at;
+    entry.modified_at = root.modified_at;
+    entry.accessed_at = root.accessed_at;
+    entry.changed_at = root.changed_at;
+    entry.hash_sha256 = None;
 }
 
 pub(crate) fn directory_depth(entry: &FileEntry) -> u32 {

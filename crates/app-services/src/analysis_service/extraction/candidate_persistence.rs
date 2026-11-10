@@ -11,9 +11,7 @@ use persistence_sqlite::repositories::{
         AnalysisScanRepo, CleanAnalysisCandidateScan, CompleteAnalysisCandidateScan,
         DiagnosticAnalysisCandidateScan,
     },
-    artifact_repo::ArtifactRepo,
     fingerprint_repo::ForensicFingerprintRepo,
-    timeline_repo::TimelineRepo,
 };
 use rusqlite::Connection;
 
@@ -40,11 +38,8 @@ impl CandidateOutputBatch {
         replacements: &[super::state::AnalysisOutputReplacement],
     ) -> Result<Self, AnalysisServiceError> {
         let native = native_output::begin_streaming(conn, data_source_id, replacements)?;
-        if native.is_none() {
-            delete_previous_outputs_for_replacements(conn, replacements)?;
-        }
         Ok(Self {
-            native,
+            native: Some(native),
             ..Self::default()
         })
     }
@@ -75,25 +70,18 @@ impl CandidateOutputBatch {
     ) -> Result<(), AnalysisServiceError> {
         if !self.artifacts.is_empty() {
             validate_artifact_source_attribution(&self.artifacts, source_id)?;
-            if let Some(native) = self.native.as_ref() {
-                persist_fingerprints(connection, case_id, source_id, &self.artifacts)?;
-                native.write_batch(&self.artifacts, &[])?;
-            } else {
-                ArtifactRepo::new(connection).insert_batch_in_transaction(
-                    &self.artifacts,
-                    case_id,
-                    source_id,
-                )?;
-            }
+            persist_fingerprints(connection, case_id, source_id, &self.artifacts)?;
+            self.native
+                .as_ref()
+                .expect("native analysis output generation is active")
+                .write_batch(&self.artifacts, &[])?;
             self.artifacts.clear();
         }
         if !self.timeline_events.is_empty() {
-            if let Some(native) = self.native.as_ref() {
-                native.write_batch(&[], &self.timeline_events)?;
-            } else {
-                TimelineRepo::new(connection)
-                    .insert_batch_with_case_in_transaction(&self.timeline_events, case_id)?;
-            }
+            self.native
+                .as_ref()
+                .expect("native analysis output generation is active")
+                .write_batch(&[], &self.timeline_events)?;
             self.timeline_events.clear();
         }
         Ok(())
@@ -103,7 +91,12 @@ impl CandidateOutputBatch {
         mut self,
         warnings: Vec<String>,
     ) -> Result<CandidateCommit, AnalysisServiceError> {
-        let staged_generation = self.native.take().map(|native| native.seal()).transpose()?;
+        let staged_generation = Some(
+            self.native
+                .take()
+                .expect("native analysis output generation is active")
+                .seal()?,
+        );
         Ok(CandidateCommit {
             observation: PersistedExtractionOutcome {
                 artifact_count: self.artifact_count,
@@ -130,39 +123,6 @@ fn persist_fingerprints(
                 case_id,
                 data_source_id,
             ))?;
-        }
-    }
-    Ok(())
-}
-
-fn delete_previous_outputs_for_replacements(
-    connection: &Connection,
-    replacements: &[super::state::AnalysisOutputReplacement],
-) -> Result<(), AnalysisServiceError> {
-    let artifacts = ArtifactRepo::new(connection);
-    let timeline = TimelineRepo::new(connection);
-    for replacement in replacements {
-        match &replacement.producer {
-            super::state::AnalysisOutputProducer::Prefix(prefix) => {
-                artifacts.delete_analysis_outputs_in_transaction(
-                    &replacement.source_object_id,
-                    prefix,
-                )?;
-                timeline.delete_analysis_outputs_in_transaction(
-                    &replacement.source_object_id,
-                    prefix,
-                )?;
-            }
-            super::state::AnalysisOutputProducer::ExtractorId(extractor_id) => {
-                artifacts.delete_analysis_outputs_by_extractor_in_transaction(
-                    &replacement.source_object_id,
-                    extractor_id,
-                )?;
-                timeline.delete_analysis_outputs_by_parser_in_transaction(
-                    &replacement.source_object_id,
-                    extractor_id,
-                )?;
-            }
         }
     }
     Ok(())

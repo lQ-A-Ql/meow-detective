@@ -131,6 +131,24 @@ pub fn verify_source_generation(
     Ok(manifest)
 }
 
+pub fn read_source_generation_manifest(
+    source: &SourceStore,
+    expected_source_id: &str,
+) -> Result<SourceGenerationManifest> {
+    validate_identity(expected_source_id)?;
+    let (manifest, _) = read_manifest(source.database().path())?;
+    if manifest.version != SOURCE_GENERATION_VERSION
+        || manifest.source_id != expected_source_id
+        || !valid_identity(&manifest.attempt_id)
+    {
+        return Err(FjallStorageError::InvalidEnvelope(
+            "source generation manifest identity is invalid".to_owned(),
+        ));
+    }
+    validate_digest(&manifest.projection_batch_digest)?;
+    Ok(manifest)
+}
+
 pub fn publish_source_generation(
     build_path: impl AsRef<Path>,
     published_path: impl AsRef<Path>,

@@ -10,20 +10,26 @@ use app_services::analysis_service::{
     MAX_REGISTRY_ANALYSIS_BYTES,
 };
 use domain::{
-    CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, DataSourcePlatform,
-    DataSourceProvenance, EntryType, FileEntry, FileEntryId,
+    Artifact, ArtifactId, CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind,
+    DataSourcePlatform, DataSourceProvenance, FileEntryId, TimelineEvent, TimelineEventId,
 };
 use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo,
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
+    timeline_repo::TimelineRepo,
 };
 use transport::{dto::AnalysisParseStatusDto, ErrorCategory, ServiceErrorCategory};
 
-fn source_connection() -> rusqlite::Connection {
-    let conn = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&conn).expect("run source migrations");
-    conn
+#[path = "support/native_analysis_fixture.rs"]
+mod native_analysis_fixture;
+
+use native_analysis_fixture::{source_file, NativeAnalysisFixture};
+
+const SOURCE_ID: &str = "source-test";
+
+fn source_connection() -> NativeAnalysisFixture {
+    NativeAnalysisFixture::new(SOURCE_ID, "case-analysis-platform")
 }
 
 fn empty_reader(_: &domain::FileEntryId) -> Result<Box<dyn Read>, std::io::Error> {
@@ -37,32 +43,42 @@ fn section_keys(run: &transport::dto::AnalysisExtractionRunDto) -> Vec<&str> {
         .collect()
 }
 
-fn insert_source_file(conn: &rusqlite::Connection, id: &str, path: &str) {
-    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
-    FileRepo::new(conn)
-        .insert_batch(&[FileEntry {
-            id: FileEntryId(id.to_string()),
-            parent_id: None,
-            data_source_id: DataSourceId("source-test".to_string()),
-            path: path.to_string(),
-            name: name.to_string(),
-            entry_type: EntryType::File,
-            size: Some(16),
-            ext: path.rsplit_once('.').map(|(_, ext)| ext.to_string()),
-            deleted: false,
-            hidden: false,
-            system: false,
-            encrypted: false,
-            read_only: false,
-            archive: false,
-            unix_mode: None,
-            created_at: None,
-            modified_at: None,
-            accessed_at: None,
-            changed_at: None,
-            hash_sha256: None,
-        }])
-        .expect("insert source file");
+fn insert_source_file(conn: &NativeAnalysisFixture, id: &str, path: &str) {
+    conn.insert_file(source_file(SOURCE_ID, id, path, 16, false));
+}
+
+fn analysis_artifact(id: &str, producer: &str, version: &str) -> Artifact {
+    Artifact {
+        id: ArtifactId(id.to_string()),
+        family: "LinuxWebFinding".to_string(),
+        title: id.to_string(),
+        summary: String::new(),
+        source_object_id: Some(FileEntryId("web-stale".to_string())),
+        extractor_id: Some(producer.to_string()),
+        extractor_version: Some(version.to_string()),
+        confidence: Some(0.9),
+        source_attribution: Some("native fixture".to_string()),
+        created_at: chrono::Utc::now(),
+        attrs: std::collections::BTreeMap::new(),
+    }
+}
+
+fn unrelated_timeline_event(id: &str, parser: &str) -> TimelineEvent {
+    TimelineEvent {
+        id: TimelineEventId(id.to_string()),
+        source_object_id: "web-stale".to_string(),
+        event_type: "linux.web".to_string(),
+        timestamp: chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .expect("parse event timestamp")
+            .with_timezone(&chrono::Utc),
+        title: id.to_string(),
+        description: String::new(),
+        parser_id: Some(parser.to_string()),
+        parser_version: Some("1.0.0".to_string()),
+        confidence: Some(0.9),
+        source_attribution: Some("native fixture".to_string()),
+        attrs: std::collections::BTreeMap::new(),
+    }
 }
 
 #[test]
@@ -312,30 +328,25 @@ fn clean_linux_web_candidate_is_materialized_and_skipped_on_retry() {
 fn stale_analysis_outputs_are_replaced_without_touching_other_producers() {
     let conn = source_connection();
     insert_source_file(&conn, "web-stale", "var/www/html/index.php");
-    conn.execute(
-        "INSERT INTO artifacts (
-            id, case_id, data_source_id, artifact_type, source_object_id,
-            extractor_id, extractor_version, title, summary, attrs
-         ) VALUES
-         ('old-analysis', 'case-linux-web', 'source-test', 'LinuxWebFinding',
-          'web-stale', 'linux.web.old', '0.9.0', 'old', '', '{}'),
-         ('third-party', 'case-linux-web', 'source-test', 'LinuxWebFinding',
-          'web-stale', 'vendor.web', '7.0.0', 'vendor', '', '{}')",
-        [],
-    )
-    .expect("insert stale and third-party artifacts");
-    conn.execute(
-        "INSERT INTO timeline_events (
-            id, case_id, source_object_id, event_type, ts, title,
-            parser_id, parser_version, attrs
-         ) VALUES
-         ('old-analysis-event', 'case-linux-web', 'web-stale', 'linux.web',
-          '2026-01-01T00:00:00Z', 'old', 'linux.web.old', '0.9.0', '{}'),
-         ('macb-event', 'case-linux-web', 'web-stale', 'MACB',
-          '2026-01-01T00:00:00Z', 'macb', 'timeline.macb', '1.0.0', '{}')",
-        [],
-    )
-    .expect("insert stale and unrelated timeline events");
+    ArtifactRepo::new(&conn)
+        .insert_batch(
+            &[
+                analysis_artifact("old-analysis", "linux.web.old", "0.9.0"),
+                analysis_artifact("third-party", "vendor.web", "7.0.0"),
+            ],
+            "case-linux-web",
+            SOURCE_ID,
+        )
+        .expect("insert stale and third-party artifacts");
+    TimelineRepo::new(&conn)
+        .insert_batch_with_case(
+            &[
+                unrelated_timeline_event("old-analysis-event", "linux.web.old"),
+                unrelated_timeline_event("macb-event", "timeline.macb"),
+            ],
+            "case-linux-web",
+        )
+        .expect("insert stale and unrelated timeline events");
     let reader_calls = Cell::new(0usize);
 
     run_analysis_extraction(
@@ -366,42 +377,24 @@ fn stale_analysis_outputs_are_replaced_without_touching_other_producers() {
     .expect("reuse current clean checkpoint");
 
     assert_eq!(reader_calls.get(), 1);
-    assert_eq!(
-        conn.query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE id = 'old-analysis'",
-            [],
-            |row| row.get::<_, i64>(0)
-        )
-        .expect("count stale artifact"),
-        0
-    );
-    assert_eq!(
-        conn.query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE id = 'third-party'",
-            [],
-            |row| row.get::<_, i64>(0)
-        )
-        .expect("count third-party artifact"),
-        1
-    );
-    assert_eq!(
-        conn.query_row(
-            "SELECT COUNT(*) FROM timeline_events WHERE id = 'old-analysis-event'",
-            [],
-            |row| row.get::<_, i64>(0)
-        )
-        .expect("count stale timeline event"),
-        0
-    );
-    assert_eq!(
-        conn.query_row(
-            "SELECT COUNT(*) FROM timeline_events WHERE id = 'macb-event'",
-            [],
-            |row| row.get::<_, i64>(0)
-        )
-        .expect("count MACB event"),
-        1
-    );
+    let artifacts = ArtifactRepo::new(&conn);
+    assert!(artifacts
+        .find_by_id("old-analysis")
+        .expect("look up stale artifact")
+        .is_none());
+    assert!(artifacts
+        .find_by_id("third-party")
+        .expect("look up third-party artifact")
+        .is_some());
+    let timeline = TimelineRepo::new(&conn);
+    assert!(timeline
+        .find_by_id("old-analysis-event")
+        .expect("look up stale timeline event")
+        .is_none());
+    assert!(timeline
+        .find_by_id("macb-event")
+        .expect("look up MACB event")
+        .is_some());
 }
 
 #[test]
@@ -610,8 +603,8 @@ fn extraction_cancellation_between_candidates_prevents_partial_persistence() {
 
     assert!(matches!(error, AnalysisServiceError::Cancelled));
     assert_eq!(reader_calls.load(Ordering::Relaxed), 1);
-    let artifact_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))
+    let artifact_count = ArtifactRepo::new(&conn)
+        .count()
         .expect("count persisted artifacts");
     assert_eq!(artifact_count, 0);
 }

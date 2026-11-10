@@ -4,7 +4,8 @@ use app_services::analysis_service::{
     evidence_candidates_for_categories, extract_linux_candidate, run_analysis_extraction,
     AnalysisServiceError, EvidenceCandidate,
 };
-use domain::FileEntryId;
+use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use transport::{ErrorCategory, ServiceErrorCategory};
 
 fn candidate(path: &str) -> EvidenceCandidate {
@@ -246,25 +247,10 @@ fn linux_sudo_log_extraction_produces_events() {
 
 #[test]
 fn candidate_discovery_recognizes_linux_paths() {
-    let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
-    conn.execute(
-        "CREATE TABLE file_entries (
-            id TEXT PRIMARY KEY,
-            data_source_id TEXT NOT NULL,
-            path TEXT NOT NULL,
-            size INTEGER,
-            partition_index INTEGER,
-            created_at TEXT,
-            modified_at TEXT,
-            accessed_at TEXT,
-            changed_at TEXT,
-            hash_sha256 TEXT,
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
-            entry_type TEXT NOT NULL
-        )",
-        [],
-    )
-    .expect("create table");
+    let root = tempfile::tempdir().expect("source root");
+    let source_id = DataSourceId("ds-test".into());
+    let conn = app_services::source_db::open_source_db(root.path(), &source_id)
+        .expect("open native source");
 
     let paths = [
         "/var/log/wtmp",
@@ -274,15 +260,36 @@ fn candidate_discovery_recognizes_linux_paths() {
         "/var/log/auth.log",
     ];
 
-    for (index, path) in paths.iter().enumerate() {
-        conn.execute(
-            "INSERT INTO file_entries
-             (id, data_source_id, path, size, encrypted, entry_type)
-             VALUES (?1, ?2, ?3, ?4, 0, 'file')",
-            rusqlite::params![format!("file-{index}"), "ds-test", path, 1024i64],
+    FileRepo::new(&conn)
+        .insert_batch(
+            &paths
+                .iter()
+                .enumerate()
+                .map(|(index, path)| FileEntry {
+                    id: FileEntryId(format!("file-{index}")),
+                    parent_id: None,
+                    data_source_id: source_id.clone(),
+                    path: (*path).into(),
+                    name: path.rsplit('/').next().unwrap_or(path).into(),
+                    entry_type: EntryType::File,
+                    size: Some(1024),
+                    ext: path.rsplit_once('.').map(|(_, ext)| ext.into()),
+                    deleted: false,
+                    hidden: false,
+                    system: false,
+                    encrypted: false,
+                    read_only: false,
+                    archive: false,
+                    unix_mode: None,
+                    created_at: None,
+                    modified_at: None,
+                    accessed_at: None,
+                    changed_at: None,
+                    hash_sha256: None,
+                })
+                .collect::<Vec<_>>(),
         )
-        .expect("insert");
-    }
+        .expect("insert native catalog records");
 
     let linux =
         evidence_candidates_for_categories(&conn, &["LinuxArtifacts"]).expect("discover linux");

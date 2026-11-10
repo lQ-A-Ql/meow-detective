@@ -125,6 +125,8 @@ pub fn merge_all_staging_to_main_with_catalog(
     progress_cb: Option<&dyn Fn(usize, usize)>,
     cancel_token: Option<&AtomicBool>,
 ) -> Result<StagingMergeStats, StagingError> {
+    persistence_sqlite::source_fjall::require_source_store(main_conn)
+        .map_err(|error| StagingError::Other(format!("Open native source storage: {error}")))?;
     let mut stats = StagingMergeStats::default();
     let mut merged_partitions = Vec::new();
     let total = manifest.partitions.len();
@@ -243,6 +245,8 @@ pub fn merge_analysis_staging_to_main_with_fjall(
     source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
     progress_cb: Option<&dyn Fn(usize, usize)>,
 ) -> Result<AnalysisMergeStats, StagingError> {
+    persistence_sqlite::source_fjall::require_source_store(main_conn)
+        .map_err(|error| StagingError::Other(format!("Open native source storage: {error}")))?;
     let mut stats = AnalysisMergeStats::default();
     let mut merged_workers = Vec::new();
     let total = worker_ids.len().max(1);

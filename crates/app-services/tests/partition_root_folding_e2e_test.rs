@@ -15,14 +15,24 @@
 //! in docs/archive/status/2026-06/pause-status-2026-06-11-file-tree-sorting.md.
 
 use app_services::{file_service, staging};
-use domain::{DataSourceId, EntryType, FileEntryId};
+use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use rusqlite::{params, Connection};
 use tempfile::TempDir;
 
 const DS_ID: &str = "ds-e2e-folding";
 
-fn seed_main_db(conn: &Connection) {
-    persistence_sqlite::runner::run_source_all(conn).unwrap();
+fn seed_source_connection(case_root: &std::path::Path) -> Connection {
+    let conn = app_services::source_db::open_source_db(case_root, &DataSourceId(DS_ID.to_string()))
+        .unwrap();
+    conn.execute(
+        "INSERT INTO data_sources
+         (id, case_id, name, kind, source_path, imported_at)
+         VALUES (?1, 'case-1', ?1, 'e01', 'disk.E01',
+                 '2026-01-01T00:00:00Z')",
+        [DS_ID],
+    )
+    .unwrap();
+    conn
 }
 
 fn seed_partitions_table(case_root: &std::path::Path) {
@@ -80,6 +90,65 @@ fn seed_partitions_table(case_root: &std::path::Path) {
         )
         .unwrap();
     storage.partition_projection_publish(DS_ID).unwrap();
+}
+
+fn source_storage(
+    case_root: &std::path::Path,
+) -> app_services::source_db::FjallReadWriteSourceStorageHandle {
+    app_services::source_db::open_fjall_source_read_write(case_root, DS_ID).unwrap()
+}
+
+fn publish_source_projection(conn: &Connection) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::seal_source_generation(&store, DS_ID, "fixture", &"a".repeat(64)).unwrap();
+    let key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(DS_ID.to_string())],
+    )
+    .unwrap();
+    let marker = persistence_fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{DS_ID}"),
+        DS_ID,
+        1,
+        DS_ID.as_bytes().to_vec(),
+    );
+    store
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
+}
+
+fn catalog_records(
+    storage: &app_services::source_db::FjallReadWriteSourceStorageHandle,
+) -> Vec<persistence_fjall::FileEntryRecord> {
+    let snapshot = storage.snapshot();
+    let mut cursor = None;
+    let mut records = Vec::new();
+    loop {
+        let page = storage
+            .catalog_list_all(
+                &snapshot,
+                DS_ID,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                512,
+            )
+            .unwrap();
+        records.extend(page.records);
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    records
 }
 
 /// NTFS-style staging DB: a synthetic `\` root (MFT record 5) with children
@@ -155,9 +224,9 @@ fn make_done_partition(index: usize, name: &str, file_count: u64) -> staging::Pa
 fn full_merge_yields_only_partition_roots_no_bare_fs_roots() {
     let tmp = TempDir::new().unwrap();
     let case_root = tmp.path();
-    let main_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
-    seed_main_db(&main_conn);
+    let main_conn = seed_source_connection(case_root);
     seed_partitions_table(case_root);
+    let storage = source_storage(case_root);
 
     // (A) Insert index-bound placeholder roots, exactly as the import pipeline does.
     file_service::insert_partition_placeholder_root(
@@ -190,7 +259,11 @@ fn full_merge_yields_only_partition_roots_no_bare_fs_roots() {
         .push(make_done_partition(1, "Partition 1 (FAT)", 1));
 
     // (B) Run the real merge.
-    staging::merge_all_staging_to_main(&main_conn, case_root, DS_ID, &manifest, None).unwrap();
+    staging::merge_all_staging_to_main_with_catalog(
+        &main_conn, case_root, DS_ID, &manifest, &storage, None, None,
+    )
+    .unwrap();
+    publish_source_projection(&main_conn);
 
     // (C) Build the tree and assert the first level is stable partition roots.
     let tree = file_service::get_file_tree_real_with_visibility(&main_conn, false).unwrap();
@@ -268,26 +341,18 @@ fn full_merge_yields_only_partition_roots_no_bare_fs_roots() {
     );
 
     // The synthetic `\` root must not exist anywhere in the merged main DB.
-    let bare_root_count: i64 = main_conn
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE name = '\\'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let records = catalog_records(&storage);
+    let bare_root_count = records.iter().filter(|record| record.name == "\\").count();
     assert_eq!(
         bare_root_count, 0,
         "synthetic `\\` root must be folded away"
     );
 
     // No placeholder marker paths must survive merge (all promoted to real roots).
-    let leftover_placeholders: i64 = main_conn
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE path GLOB '__partition_placeholder__/*'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let leftover_placeholders = records
+        .iter()
+        .filter(|record| record.path.starts_with("__partition_placeholder__/"))
+        .count();
     assert_eq!(
         leftover_placeholders, 0,
         "placeholder roots should be promoted to real partition roots after merge"
@@ -300,9 +365,9 @@ fn full_merge_yields_only_partition_roots_no_bare_fs_roots() {
 fn repeated_merge_is_idempotent_and_stays_folded() {
     let tmp = TempDir::new().unwrap();
     let case_root = tmp.path();
-    let main_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
-    seed_main_db(&main_conn);
+    let main_conn = seed_source_connection(case_root);
     seed_partitions_table(case_root);
+    let storage = source_storage(case_root);
 
     file_service::insert_partition_placeholder_root(
         &main_conn,
@@ -332,9 +397,17 @@ fn repeated_merge_is_idempotent_and_stays_folded() {
         .partitions
         .push(make_done_partition(1, "Partition 1 (FAT)", 1));
 
-    staging::merge_all_staging_to_main(&main_conn, case_root, DS_ID, &manifest, None).unwrap();
+    staging::merge_all_staging_to_main_with_catalog(
+        &main_conn, case_root, DS_ID, &manifest, &storage, None, None,
+    )
+    .unwrap();
+    publish_source_projection(&main_conn);
     // Second pass: staging DBs are now marked merged, so this is a no-op merge.
-    staging::merge_all_staging_to_main(&main_conn, case_root, DS_ID, &manifest, None).unwrap();
+    staging::merge_all_staging_to_main_with_catalog(
+        &main_conn, case_root, DS_ID, &manifest, &storage, None, None,
+    )
+    .unwrap();
+    publish_source_projection(&main_conn);
 
     let tree = file_service::get_file_tree_real_with_visibility(&main_conn, false).unwrap();
     let root_names: Vec<&str> = tree.iter().map(|node| node.name.as_str()).collect();
@@ -353,8 +426,7 @@ fn repeated_merge_is_idempotent_and_stays_folded() {
 #[test]
 fn redirected_lvm_placeholder_root_can_be_removed_on_resume_repair() {
     let tmp = TempDir::new().unwrap();
-    let main_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
-    seed_main_db(&main_conn);
+    let main_conn = seed_source_connection(tmp.path());
     let ds_id = DataSourceId(DS_ID.to_string());
 
     let storage = app_services::source_db::open_fjall_source_read_write(tmp.path(), DS_ID).unwrap();
@@ -420,13 +492,29 @@ fn redirected_lvm_placeholder_root_can_be_removed_on_resume_repair() {
         "queued",
     )
     .unwrap();
-    main_conn
-        .execute(
-            "INSERT INTO file_entries
-             (id, parent_id, data_source_id, path, name, entry_type, deleted, hidden, system)
-             VALUES ('root-lv', NULL, ?1, '', 'Partition 2 (XFS) - cl/root', 'directory', 0, 0, 0)",
-            params![DS_ID],
-        )
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&main_conn)
+        .insert_batch(&[FileEntry {
+            id: FileEntryId("root-lv".into()),
+            parent_id: None,
+            data_source_id: ds_id.clone(),
+            path: String::new(),
+            name: "Partition 2 (XFS) - cl/root".into(),
+            entry_type: EntryType::Directory,
+            size: None,
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
         .unwrap();
 
     let removed = file_service::remove_partition_placeholder_root(&main_conn, &ds_id, 1).unwrap();

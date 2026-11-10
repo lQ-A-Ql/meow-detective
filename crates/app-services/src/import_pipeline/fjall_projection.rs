@@ -178,38 +178,6 @@ pub(crate) fn mirror_analysis_records_before_sqlite_commit(
     projections::mirror_artifact_records_only(connection, source, source_id)
 }
 
-pub(crate) fn mirror_analysis_outputs_before_sqlite_commit(
-    case_connection: &Connection,
-    case_root: &std::path::Path,
-    case_id: &str,
-    source_connection: &rusqlite::Transaction<'_>,
-    source_id: &str,
-) -> Result<(), CommandError> {
-    let source_root = active_import_generation_root(case_root, case_id, source_id)?
-        .or_else(|| crate::source_db::fjall_source_storage_root(case_root, source_id).ok())
-        .ok_or_else(|| CommandError::internal("Fjall source generation is unavailable"))?;
-    let source = crate::storage_runtime::open_source_read_write_at_path(&source_root)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let analysis_revision = analysis_projection_revision(source_connection, source_id)?;
-    ensure_analysis_projection_building(&source, source_id)?;
-    apply_projection_records(
-        case_connection,
-        case_root,
-        case_id,
-        source_connection,
-        source_id,
-        &source,
-        false,
-        true,
-        false,
-    )?;
-    source
-        .persist(PersistMode::SyncAll)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    publish_projection_marker(&source, source_id, false, Some(&analysis_revision))?;
-    Ok(())
-}
-
 pub(crate) fn mark_catalog_projection_seeded(
     source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
     source_id: &str,
@@ -233,49 +201,6 @@ pub(crate) fn mark_catalog_projection_seeded(
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(())
-}
-
-pub(crate) fn begin_analysis_output_projection(
-    source_connection: &Connection,
-) -> Result<(), CommandError> {
-    let database_path: String = source_connection
-        .query_row("PRAGMA database_list", [], |row| row.get(2))
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let Some(case_root) = std::path::Path::new(&database_path)
-        .parent()
-        .and_then(std::path::Path::parent)
-        .and_then(std::path::Path::parent)
-    else {
-        return Ok(());
-    };
-    let mut statement = source_connection
-        .prepare("SELECT id FROM data_sources ORDER BY id LIMIT 2")
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let source_ids = statement
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|error| CommandError::internal(error.to_string()))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let source_id = match source_ids.as_slice() {
-        [source_id] => source_id.clone(),
-        [] => return Err(CommandError::internal("Source database has no data source")),
-        _ => {
-            return Err(CommandError::internal(
-                "Source database contains multiple data sources",
-            ))
-        }
-    };
-    let root = crate::source_db::fjall_source_storage_root(case_root, &source_id)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    if !root.is_dir() {
-        return Ok(());
-    }
-    let source = crate::source_db::open_registered_fjall_source_read_write(
-        case_root,
-        &domain::DataSourceId(source_id.clone()),
-    )
-    .map_err(|error| CommandError::internal(error.to_string()))?;
-    ensure_analysis_projection_building(&source, &source_id)
 }
 
 pub(crate) fn begin_partition_projection(

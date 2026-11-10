@@ -149,11 +149,16 @@ fn resume_cursor(
         let snapshot = source.snapshot();
         let revision = source.timeline_cursor_revision(&snapshot)?;
         let current_count = count_source(&source, &snapshot, &source_id.0, context)?;
-        if revision != source_state.revision && current_count <= source_state.count {
-            return Err(invalid_cursor(format!(
-                "timeline snapshot changed for source {}",
-                source_id.0
-            )));
+        if revision != source_state.revision {
+            let current_upper_bound =
+                source_upper_bound(&source, &snapshot, &source_id.0, context)?;
+            let crossed_frozen_boundary = current_upper_bound > source_state.snapshot_upper_bound;
+            if current_count <= source_state.count || crossed_frozen_boundary {
+                return Err(invalid_cursor(format!(
+                    "timeline snapshot changed for source {}",
+                    source_id.0
+                )));
+            }
         }
         let mut page = FjallSourcePage::from_state(source, snapshot, source_state.clone());
         if revision != source_state.revision {

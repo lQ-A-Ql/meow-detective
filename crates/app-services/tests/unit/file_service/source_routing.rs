@@ -1,9 +1,11 @@
 use super::*;
+crate::native_source_test_support!();
 use crate::file_service::{PreparedSourceReadState, SourceReadContext};
-use domain::{DataSourceId, FileEntryId};
+use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use persistence_sqlite::repositories::{
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
+    file_repo::FileRepo,
 };
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -63,16 +65,44 @@ fn insert_data_source(conn: &rusqlite::Connection, id: &str, name: &str) {
 }
 
 fn seed_source_db(case_root: &Path, data_source_id: &str) {
-    let conn =
-        crate::source_db::open_source_db(case_root, &DataSourceId(data_source_id.to_string()))
-            .unwrap();
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
-         VALUES ('file-1', NULL, ?1, '/', '/', 'directory', NULL, NULL, 0, 0, 0)",
-        [data_source_id],
+    let source_id = DataSourceId(data_source_id.to_string());
+    let conn = crate::source_db::open_source_db(case_root, &source_id).unwrap();
+    FileRepo::new(&conn)
+        .insert_batch(&[FileEntry {
+            id: FileEntryId("file-1".into()),
+            parent_id: None,
+            data_source_id: source_id.clone(),
+            path: String::new(),
+            name: "/".into(),
+            entry_type: EntryType::Directory,
+            size: None,
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
+        .unwrap();
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&conn)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::replace_source_generation(
+        &store,
+        data_source_id,
+        "source-routing-fixture",
+        &"a".repeat(64),
     )
     .unwrap();
+    drop(store);
+    test_support::mark_source_projection_complete(&conn, data_source_id);
 }
 
 #[test]

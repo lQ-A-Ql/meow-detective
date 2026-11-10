@@ -1,17 +1,22 @@
 use super::analysis_rows::system_info_rows;
 use super::json::raw_bundle::sanitize_bundle_component;
 use super::*;
+crate::native_source_test_support!();
 use domain::{
     Artifact, ArtifactId, CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, EntryType,
     FileEntry, FileEntryId, TimelineEvent, TimelineEventId,
 };
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo as TestArtifactRepo, case_repo::CaseRepo,
-    datasource_repo::DataSourceRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
+    artifact_repo::ArtifactRepo as TestArtifactRepo,
+    case_repo::CaseRepo,
+    datasource_repo::{DataSourceRepo, DataSourceStorage},
+    file_repo::FileRepo,
+    timeline_repo::TimelineRepo,
 };
-use persistence_sqlite::{open_in_memory, runner};
+use persistence_sqlite::runner;
 use std::collections::BTreeMap;
 use tempfile::TempDir;
+use test_support::mark_source_projection_complete;
 use transport::commands::ExportScopeDto;
 
 use transport::dto::{
@@ -20,7 +25,9 @@ use transport::dto::{
 };
 
 fn setup_report_case() -> (rusqlite::Connection, TempDir, CaseMeta, DataSourceId) {
-    let conn = open_in_memory().unwrap();
+    let tmp = TempDir::new().unwrap();
+    std::fs::create_dir_all(tmp.path().join("artifacts/objects")).unwrap();
+    let conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
     runner::run_all(&conn).unwrap();
     let case = CaseMeta {
         id: CaseId("case-report".to_string()),
@@ -33,23 +40,61 @@ fn setup_report_case() -> (rusqlite::Connection, TempDir, CaseMeta, DataSourceId
     };
     CaseRepo::new(&conn).create(&case).unwrap();
 
-    let tmp = TempDir::new().unwrap();
     let ds_id = DataSourceId("ds-report".to_string());
+    let evidence_root = tmp.path().join("evidence");
+    std::fs::create_dir_all(&evidence_root).unwrap();
+    let source = DataSource {
+        id: ds_id.clone(),
+        name: "logical".to_string(),
+        kind: DataSourceKind::LogicalDirectory,
+        source_path: evidence_root,
+        imported_at: chrono::Utc::now(),
+        provenance: domain::DataSourceProvenance::unknown(),
+    };
+    let mut storage = DataSourceStorage::source_db(
+        &ds_id.0,
+        Some(domain::DataSourcePlatform::Windows.as_storage_str()),
+        None,
+    );
+    storage.import_state = "ready".to_string();
     DataSourceRepo::new(&conn)
-        .insert(
-            &case.id,
-            &DataSource {
-                id: ds_id.clone(),
-                name: "logical".to_string(),
-                kind: DataSourceKind::LogicalDirectory,
-                source_path: tmp.path().to_path_buf(),
-                imported_at: chrono::Utc::now(),
-                provenance: domain::DataSourceProvenance::unknown(),
-            },
-        )
+        .insert_with_storage(&case.id, &source, &storage)
         .unwrap();
+    let source_conn = crate::source_db::open_source_db(tmp.path(), &ds_id).unwrap();
+    DataSourceRepo::new(&source_conn)
+        .upsert_source_local_metadata(&case.id, &source)
+        .unwrap();
+    seal_report_source(&source_conn, &ds_id.0);
 
     (conn, tmp, case, ds_id)
+}
+
+fn report_source_connection(
+    case_connection: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+) -> rusqlite::Connection {
+    let database_path: String = case_connection
+        .query_row("PRAGMA database_list", [], |row| row.get(2))
+        .expect("read case database path");
+    let case_root = std::path::Path::new(&database_path)
+        .parent()
+        .expect("case database has a parent");
+    crate::source_db::open_source_db(case_root, data_source_id).expect("open report source")
+}
+
+fn seal_report_source(connection: &rusqlite::Connection, source_id: &str) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+        .expect("open report source store")
+        .expect("configured report source store");
+    persistence_fjall::replace_source_generation(
+        &store,
+        source_id,
+        "report-fixture",
+        &"a".repeat(64),
+    )
+    .expect("seal report source");
+    drop(store);
+    mark_source_projection_complete(connection, source_id);
 }
 
 fn insert_file(conn: &rusqlite::Connection, ds_id: &DataSourceId, id: &str, path: &str) {
@@ -75,8 +120,10 @@ fn insert_file_with_hash(
     if let Some(parent) = disk_path.parent() {
         std::fs::create_dir_all(parent).unwrap();
     }
-    std::fs::write(&disk_path, format!("fixture:{id}")).unwrap();
-    FileRepo::new(conn)
+    let content = format!("fixture:{id}");
+    std::fs::write(&disk_path, &content).unwrap();
+    let source_conn = report_source_connection(conn, ds_id);
+    FileRepo::new(&source_conn)
         .insert_batch(&[FileEntry {
             id: FileEntryId(id.to_string()),
             parent_id: None,
@@ -84,7 +131,7 @@ fn insert_file_with_hash(
             path: path.to_string(),
             name: path.rsplit(['/', '\\']).next().unwrap_or(path).to_string(),
             entry_type: EntryType::File,
-            size: Some(4),
+            size: Some(content.len() as u64),
             ext: None,
             deleted: false,
             hidden: false,
@@ -100,6 +147,7 @@ fn insert_file_with_hash(
             hash_sha256: hash_sha256.map(|value| value.to_string()),
         }])
         .unwrap();
+    seal_report_source(&source_conn, &ds_id.0);
 }
 
 fn test_disk_relative_path(path: &str) -> std::path::PathBuf {
@@ -110,7 +158,9 @@ fn test_disk_relative_path(path: &str) -> std::path::PathBuf {
 }
 
 fn insert_timeline_event(conn: &rusqlite::Connection, case_id: &str) {
-    TimelineRepo::new(conn)
+    let source_id = DataSourceId("ds-report".into());
+    let source_conn = report_source_connection(conn, &source_id);
+    TimelineRepo::new(&source_conn)
         .insert_batch_with_case(
             &[TimelineEvent {
                 id: TimelineEventId("timeline-1".to_string()),
@@ -128,10 +178,13 @@ fn insert_timeline_event(conn: &rusqlite::Connection, case_id: &str) {
             case_id,
         )
         .unwrap();
+    seal_report_source(&source_conn, &source_id.0);
 }
 
 fn insert_timeline_event_with_provenance(conn: &rusqlite::Connection, case_id: &str) {
-    TimelineRepo::new(conn)
+    let source_id = DataSourceId("ds-report".into());
+    let source_conn = report_source_connection(conn, &source_id);
+    TimelineRepo::new(&source_conn)
         .insert_batch_with_case(
             &[TimelineEvent {
                 id: TimelineEventId("timeline-provenance".to_string()),
@@ -151,6 +204,7 @@ fn insert_timeline_event_with_provenance(conn: &rusqlite::Connection, case_id: &
             case_id,
         )
         .unwrap();
+    seal_report_source(&source_conn, &source_id.0);
 }
 
 fn insert_artifact_with_provenance(
@@ -158,7 +212,8 @@ fn insert_artifact_with_provenance(
     case_id: &str,
     ds_id: &DataSourceId,
 ) {
-    TestArtifactRepo::new(conn)
+    let source_conn = report_source_connection(conn, ds_id);
+    TestArtifactRepo::new(&source_conn)
         .insert_batch(
             &[Artifact {
                 id: ArtifactId("artifact-provenance".to_string()),
@@ -179,6 +234,35 @@ fn insert_artifact_with_provenance(
             &ds_id.0,
         )
         .unwrap();
+    seal_report_source(&source_conn, &ds_id.0);
+}
+
+fn insert_artifact_without_provenance(
+    conn: &rusqlite::Connection,
+    case_id: &str,
+    ds_id: &DataSourceId,
+) {
+    let source_conn = report_source_connection(conn, ds_id);
+    TestArtifactRepo::new(&source_conn)
+        .insert_batch(
+            &[Artifact {
+                id: ArtifactId("artifact-legacy".into()),
+                family: "legacy".into(),
+                title: "Legacy Artifact".into(),
+                summary: "legacy summary".into(),
+                source_object_id: None,
+                extractor_id: None,
+                extractor_version: None,
+                confidence: None,
+                source_attribution: None,
+                created_at: "2026-06-04T09:00:00Z".parse().unwrap(),
+                attrs: BTreeMap::new(),
+            }],
+            case_id,
+            &ds_id.0,
+        )
+        .unwrap();
+    seal_report_source(&source_conn, &ds_id.0);
 }
 
 fn insert_artifact_and_timeline_for_correlation(
@@ -187,7 +271,8 @@ fn insert_artifact_and_timeline_for_correlation(
     ds_id: &DataSourceId,
 ) {
     insert_file(conn, ds_id, "file-1", "C:/Windows/System32/cmd.exe");
-    TestArtifactRepo::new(conn)
+    let source_conn = report_source_connection(conn, ds_id);
+    TestArtifactRepo::new(&source_conn)
         .insert_batch(
             &[Artifact {
                 id: ArtifactId("artifact-correlation".to_string()),
@@ -206,7 +291,7 @@ fn insert_artifact_and_timeline_for_correlation(
             &ds_id.0,
         )
         .unwrap();
-    TimelineRepo::new(conn)
+    TimelineRepo::new(&source_conn)
         .insert_batch_with_case(
             &[TimelineEvent {
                 id: TimelineEventId("timeline-correlation".to_string()),
@@ -224,6 +309,7 @@ fn insert_artifact_and_timeline_for_correlation(
             case_id,
         )
         .unwrap();
+    seal_report_source(&source_conn, &ds_id.0);
 }
 
 #[test]
@@ -265,25 +351,32 @@ fn html_report_escapes_analysis_provenance() {
 fn csv_report_keeps_formula_sanitization_for_analysis_rows() {
     let (conn, tmp, case, ds_id) = setup_report_case();
     insert_file(&conn, &ds_id, "formula", "=SUM(A1:A2)");
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, data_source_id, artifact_type, title, summary, attrs, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        rusqlite::params![
-            "artifact-formula",
-            "case-report",
-            ds_id.0,
-            "lnk",
-            "=SUM(A1:A2)",
-            "formula title fixture",
-            "{}",
-            chrono::Utc::now().to_rfc3339(),
-        ],
-    )
-    .unwrap();
+    let source_conn = report_source_connection(&conn, &ds_id);
+    TestArtifactRepo::new(&source_conn)
+        .insert_batch(
+            &[Artifact {
+                id: ArtifactId("artifact-formula".into()),
+                family: "lnk".into(),
+                title: "=SUM(A1:A2)".into(),
+                summary: "formula title fixture".into(),
+                source_object_id: Some(FileEntryId("formula".into())),
+                extractor_id: Some("fixture.lnk".into()),
+                extractor_version: Some("1".into()),
+                confidence: None,
+                source_attribution: None,
+                created_at: chrono::Utc::now(),
+                attrs: BTreeMap::new(),
+            }],
+            &case.id.0,
+            &ds_id.0,
+        )
+        .unwrap();
+    seal_report_source(&source_conn, &ds_id.0);
 
     let file_name =
         generate_csv_artifacts(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default()).unwrap();
     let csv = std::fs::read_to_string(tmp.path().join(file_name)).unwrap();
+    eprintln!("formula csv:\n{csv}");
 
     assert!(csv.contains("\"analysis\""));
     assert!(csv.contains("provenance"));
@@ -344,14 +437,19 @@ fn json_export_scope_gates_registry_timeline_and_exports_raw_bundle() {
         overwrite: false,
     };
 
-    let file_name = generate_json_export(&conn, &case.id.0, tmp.path(), &scope).unwrap();
+    let output = tmp.path().join("reports");
+    std::fs::create_dir_all(&output).unwrap();
+    let file_name = generate_json_export(&conn, &case.id.0, &output, &scope).unwrap();
     let json: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(tmp.path().join(file_name)).unwrap())
-            .unwrap();
+        serde_json::from_str(&std::fs::read_to_string(output.join(file_name)).unwrap()).unwrap();
+    eprintln!(
+        "scope json:\n{}",
+        serde_json::to_string_pretty(&json).unwrap()
+    );
 
     assert!(json["timeline_events"].as_array().unwrap().is_empty());
-    assert!(json["analysis"]["systemInfo"].is_null());
-    assert!(!json["analysis"]["classifications"]
+    assert!(json["analysis"]["sources"][0]["systemInfo"].is_null());
+    assert!(!json["analysis"]["sources"][0]["classifications"]
         .as_array()
         .unwrap()
         .is_empty());
@@ -363,21 +461,22 @@ fn json_export_scope_gates_registry_timeline_and_exports_raw_bundle() {
             .as_str()
             .unwrap()
             .contains("rawFileExtraction exported")));
-    let bundle_dir = tmp
-        .path()
-        .join(json["rawExport"]["bundleDirectory"].as_str().unwrap());
+    let bundle_dir = output.join(json["rawExport"]["bundleDirectory"].as_str().unwrap());
     assert!(bundle_dir.exists());
     let manifest: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(bundle_dir.join("manifest.json")).unwrap())
             .unwrap();
     assert_eq!(manifest["exportedCount"].as_u64(), Some(1));
-    assert_eq!(manifest["files"][0]["fileId"], "system");
+    assert_eq!(manifest["files"][0]["fileId"], "ds:ds-report:system");
     assert_eq!(
         manifest["files"][0]["relativeSourcePath"],
         "Windows/System32/config/SYSTEM"
     );
     let hashes = std::fs::read_to_string(bundle_dir.join("SHA256SUMS.txt")).unwrap();
-    assert!(hashes.contains("files/ds-report/system-SYSTEM"));
+    let exported_path = manifest["files"][0]["exportedRelativePath"]
+        .as_str()
+        .expect("exported relative path");
+    assert!(hashes.contains(exported_path));
 }
 
 #[test]
@@ -396,19 +495,23 @@ fn json_export_scope_can_hide_file_classifications() {
     let json: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(tmp.path().join(file_name)).unwrap())
             .unwrap();
+    eprintln!(
+        "hide json:\n{}",
+        serde_json::to_string_pretty(&json).unwrap()
+    );
 
-    assert!(json["analysis"]["classifications"]
+    assert!(json["analysis"]["sources"][0]["classifications"]
         .as_array()
         .unwrap()
         .is_empty());
-    assert!(!json["analysis"]["systemInfo"].is_null());
+    assert!(!json["analysis"]["sources"][0]["systemInfo"].is_null());
 }
 
 #[test]
 fn json_raw_export_reports_unreadable_files_as_partial() {
     let (conn, tmp, case, ds_id) = setup_report_case();
     insert_file(&conn, &ds_id, "missing", "missing/file.bin");
-    std::fs::remove_file(tmp.path().join("missing").join("file.bin")).unwrap();
+    std::fs::remove_file(tmp.path().join("evidence").join("missing").join("file.bin")).unwrap();
     let scope = ExportScopeDto {
         file_system_metadata: true,
         registry: true,
@@ -557,7 +660,10 @@ fn report_exports_include_correlation_section() {
         .iter()
         .any(|item| item["scenario"] == "file_tree_expand"));
     assert_eq!(json["governance"]["benchmark"]["missingRequiredCount"], 0);
-    assert_eq!(json["correlation"]["leads"][0]["primaryFileId"], "file-1");
+    assert_eq!(
+        json["correlation"]["leads"][0]["primaryFileId"],
+        "ds:ds-report:file-1"
+    );
     assert!(json["correlation"]["leads"][0]["summary"]
         .as_str()
         .unwrap()
@@ -583,7 +689,7 @@ fn report_exports_include_correlation_section() {
     assert!(html.contains("governance gate=security-baseline"));
     assert!(html.contains("governance correlationFamily family=LNK"));
     assert!(html.contains("Correlation Leads"));
-    assert!(html.contains("primaryFileId=file-1"));
+    assert!(html.contains("primaryFileId=ds:ds-report:file-1"));
     assert!(html.contains("confidence=direct"));
 
     let csv_name =
@@ -612,21 +718,7 @@ fn report_exports_include_correlation_section() {
 #[test]
 fn report_exports_tolerate_legacy_missing_provenance() {
     let (conn, tmp, case, ds_id) = setup_report_case();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, data_source_id, artifact_type, title, summary, attrs, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        rusqlite::params![
-            "artifact-legacy",
-            case.id.0,
-            ds_id.0,
-            "legacy",
-            "Legacy Artifact",
-            "legacy summary",
-            "{}",
-            "2026-06-04T09:00:00Z",
-        ],
-    )
-    .unwrap();
+    insert_artifact_without_provenance(&conn, &case.id.0, &ds_id);
     insert_timeline_event(&conn, &case.id.0);
 
     let json_name =
@@ -805,6 +897,7 @@ fn csv_correlation_export_includes_all_columns() {
         generate_csv_correlation(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
             .unwrap();
     let csv = std::fs::read_to_string(tmp.path().join(file_name)).unwrap();
+    eprintln!("correlation csv:\n{csv}");
 
     // Verify header row contains all 9 columns
     assert!(csv.contains("lead_id,title,confidence,families,primary_file_path,supporting_node_count,match_signals_count,provenance_sources,caveats"));
@@ -813,7 +906,7 @@ fn csv_correlation_export_includes_all_columns() {
     assert!(csv.contains("\"cmd.exe 形成关联线索\""));
     assert!(csv.contains("\"direct\""));
     assert!(csv.contains("LNK"));
-    assert!(csv.contains("\"file-1\""));
+    assert!(csv.contains("\"ds:ds-report:file-1\""));
 
     // Verify history record was persisted (dedicated correlation CSV file)
     let history = get_report_history(&conn, &case.id.0);

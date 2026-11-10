@@ -51,34 +51,9 @@ impl<'a> TimelineProjectionRepo<'a> {
     }
 
     pub fn clear_file_activity_projection(&self, graph_tables_present: bool) -> DbResult<()> {
-        if graph_tables_present {
-            self.conn.execute_batch(
-                "DELETE FROM graph_edges
-                 WHERE source_id IN (
-                     SELECT id FROM timeline_events
-                     WHERE parser_id IN (
-                        'timeline.macb', 'timeline.file_created', 'timeline.file_modified',
-                        'timeline.file_accessed', 'timeline.file_deleted'
-                     )
-                 );
-                 DELETE FROM graph_nodes
-                 WHERE id IN (
-                     SELECT id FROM timeline_events
-                     WHERE parser_id IN (
-                        'timeline.macb', 'timeline.file_created', 'timeline.file_modified',
-                        'timeline.file_accessed', 'timeline.file_deleted'
-                     )
-                 );",
-            )?;
-        }
-        self.conn.execute(
-            "DELETE FROM timeline_events
-             WHERE parser_id IN (
-                'timeline.macb', 'timeline.file_created', 'timeline.file_modified',
-                'timeline.file_accessed', 'timeline.file_deleted'
-             )",
-            [],
-        )?;
-        Ok(())
+        let _ = graph_tables_present;
+        Err(crate::connection::DbError::System(
+            "timeline detail projection is owned by Fjall".into(),
+        ))
     }
 }

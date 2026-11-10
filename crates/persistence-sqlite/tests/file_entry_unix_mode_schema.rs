@@ -1,12 +1,13 @@
-use persistence_sqlite::{open_in_memory, runner};
+use persistence_sqlite::repositories::staging_repo::StagingRepo;
 use rusqlite::Connection;
+use tempfile::TempDir;
 
 #[test]
-fn application_schema_carries_nullable_unix_mode() {
-    let application = open_in_memory().expect("open application database");
-    runner::run_all(&application).expect("run application migrations");
-    seed_application_source(&application);
-    assert_unix_mode_contract(&application, "app-file", "app-source");
+fn staging_schema_carries_nullable_unix_mode() {
+    let temporary = TempDir::new().expect("create staging root");
+    let connection = StagingRepo::open_partition_staging_conn(temporary.path(), "unix-mode", 0)
+        .expect("open staging database");
+    assert_unix_mode_contract(&connection, "staging-file", "unix-mode");
 }
 
 fn assert_unix_mode_contract(conn: &Connection, file_id: &str, data_source_id: &str) {
@@ -50,19 +51,4 @@ fn assert_unix_mode_contract(conn: &Connection, file_id: &str, data_source_id: &
         )
         .expect("read persisted unix mode");
     assert_eq!(stored, Some(0o100644i64));
-}
-
-fn seed_application_source(conn: &Connection) {
-    conn.execute(
-        "INSERT INTO cases (id, name, created_at, updated_at)
-         VALUES ('case-1', 'case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .expect("insert application case");
-    conn.execute(
-        "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
-         VALUES ('app-source', 'case-1', 'source', 'e01', '', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .expect("insert data source");
 }

@@ -42,8 +42,21 @@ use transport::dto::ViewerRangeRequestDto;
 
 use super::{
     complete_browseable_evidence_set_job, continue_ceph_rbd_processing,
-    run_background_linux_evidence_set_import_until_browseable, BackgroundLinuxEvidenceSetImportJob,
+    BackgroundLinuxEvidenceSetImportJob,
 };
+
+fn run_background_linux_evidence_set_import_until_browseable(
+    job: BackgroundLinuxEvidenceSetImportJob,
+    app: Option<&tauri::AppHandle>,
+    cancel_token: Arc<AtomicBool>,
+) -> Result<Option<super::types::BrowseableEvidenceSetImport>, transport::CommandError> {
+    super::cluster::run_background_linux_evidence_set_import_with_scheduler(
+        job,
+        app,
+        cancel_token,
+        None,
+    )
+}
 
 const PVE_CLUSTER_ROOT_ENV: &str = "FORENSICS_PVE_CLUSTER_ROOT";
 const PVE_CASE_OUTPUT_ROOT_ENV: &str = "FORENSICS_PVE_CASE_OUTPUT_ROOT";
@@ -301,8 +314,7 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
         .find_members(&plan.import_set_id)
         .expect("query evidence-set members");
     eprintln!(
-        "PVE cluster outcome: runner={result:?}, state={}, ready={}, failed={}, error={:?}",
-        "ready",
+        "PVE cluster outcome: runner={result:?}, state=ready, ready={}, failed={}, error={:?}",
         import_set.len(),
         0,
         Option::<String>::None

@@ -23,40 +23,7 @@ ALTER TABLE data_sources_new RENAME TO data_sources;
 
 CREATE INDEX IF NOT EXISTS idx_data_sources_case_id ON data_sources(case_id);
 
--- 2. 重建 file_entries 表
-CREATE TABLE file_entries_new (
-    id TEXT PRIMARY KEY NOT NULL,
-    parent_id TEXT REFERENCES file_entries(id),
-    data_source_id TEXT NOT NULL REFERENCES data_sources(id) ON DELETE CASCADE,
-    path TEXT NOT NULL,
-    name TEXT NOT NULL,
-    entry_type TEXT NOT NULL,
-    size INTEGER,
-    ext TEXT,
-    deleted INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT,
-    modified_at TEXT,
-    accessed_at TEXT,
-    changed_at TEXT,
-    hash_sha256 TEXT
-);
-
-INSERT INTO file_entries_new (
-    id, parent_id, data_source_id, path, name, entry_type, size, ext,
-    deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-)
-SELECT
-    id, parent_id, data_source_id, path, name, entry_type, size, ext,
-    deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-FROM file_entries;
-DROP TABLE file_entries;
-ALTER TABLE file_entries_new RENAME TO file_entries;
-
-CREATE INDEX IF NOT EXISTS idx_file_entries_parent ON file_entries(parent_id);
-CREATE INDEX IF NOT EXISTS idx_file_entries_data_source ON file_entries(data_source_id);
-CREATE INDEX IF NOT EXISTS idx_file_entries_path ON file_entries(path);
-
--- 3. 重建 jobs 表
+-- 2. 重建 jobs 表
 CREATE TABLE jobs_new (
     id TEXT PRIMARY KEY NOT NULL,
     case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
@@ -89,7 +56,7 @@ ALTER TABLE jobs_new RENAME TO jobs;
 CREATE INDEX IF NOT EXISTS idx_jobs_case ON jobs(case_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 
--- 4. 重建 reports 表
+-- 3. 重建 reports 表
 CREATE TABLE reports_new (
     id TEXT PRIMARY KEY NOT NULL,
     case_id TEXT NOT NULL REFERENCES cases(id) ON DELETE CASCADE,

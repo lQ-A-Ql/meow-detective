@@ -2,13 +2,15 @@ use std::cell::Cell;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use domain::DataSourceId;
+crate::native_source_test_support!();
+use domain::{DataSourceId, TimelineEvent, TimelineEventId};
 use persistence_sqlite::{
     repositories::processing_phase_repo::{
         DataSourceProcessingPhaseRepo, ProcessingPhase, ProcessingPhaseState,
     },
     runner,
 };
+use test_support::NativeSourceFixture;
 
 use super::phase_execution::{run_cancellable_phase, run_phase};
 use super::phase_runner::ProcessingPhaseRunner;
@@ -370,26 +372,35 @@ fn projection_retry_only_reruns_the_failed_timeline_action() {
 
 #[test]
 fn timeline_counts_include_file_activity_and_analysis_events() {
-    let conn = setup_case_db();
-    conn.execute_batch(
-        "INSERT INTO timeline_events
-         (id, case_id, source_object_id, event_type, ts, title, description, parser_id, attrs)
-         VALUES
-         ('file-1', 'case-1', 'file-1', 'FILE_MODIFIED', '2026-01-01T00:00:00Z',
-          'modified', '', 'timeline.file_modified', '{}'),
-         ('file-2', 'case-1', 'file-2', 'FILE_ACCESSED', '2026-01-01T00:00:00Z',
-          'accessed', '', 'timeline.file_accessed', '{}'),
-         ('registry-1', 'case-1', 'file-1', 'REGISTRY_HIVE_LAST_WRITE', '2026-01-01T00:00:01Z',
-          'registry', '', 'registry.hive.v1', '{}'),
-         ('execution-1', 'case-1', 'file-1', 'FILE_EXECUTED', '2026-01-01T00:00:01Z',
-          'executed', '', 'registry.ntuser.v1', '{}'),
-         ('unsupported-1', 'case-1', 'file-2', 'SHELL_HISTORY', '2026-01-01T00:00:02Z',
-          'history', '', NULL, '{}');",
-    )
-    .expect("insert timeline fixtures");
+    let fixture = NativeSourceFixture::new(SOURCE_ID, "case-1");
+    let events = [
+        ("file-1", "FILE_MODIFIED", "timeline.file_modified"),
+        ("file-2", "FILE_ACCESSED", "timeline.file_accessed"),
+        ("registry-1", "REGISTRY_HIVE_LAST_WRITE", "registry.hive.v1"),
+        ("execution-1", "FILE_EXECUTED", "registry.ntuser.v1"),
+    ]
+    .into_iter()
+    .map(|(id, event_type, parser_id)| TimelineEvent {
+        id: TimelineEventId(id.into()),
+        source_object_id: id.into(),
+        event_type: event_type.into(),
+        timestamp: "2026-01-01T00:00:00Z".parse().unwrap(),
+        title: event_type.into(),
+        description: String::new(),
+        parser_id: Some(parser_id.into()),
+        parser_version: None,
+        confidence: None,
+        source_attribution: None,
+        attrs: std::collections::BTreeMap::new(),
+    })
+    .collect::<Vec<_>>();
+    persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&fixture.connection)
+        .insert_batch_with_case(&events, "case-1")
+        .unwrap();
 
     assert_eq!(
-        super::projections::timeline_event_counts(&conn).expect("count timeline events"),
+        super::projections::timeline_event_counts(&fixture.connection)
+            .expect("count timeline events"),
         (2, 2)
     );
 }

@@ -25,7 +25,8 @@ pub(crate) fn merge(
     let artifacts = ArtifactRecordStore::from_source_store((*store).clone());
     let timelines = TimelineRecordStore::from_source_store((*store).clone());
     let snapshot = staging.unchecked_transaction()?;
-    let mut artifact_count = 0;
+    let artifact_count = validate_artifacts(&snapshot, source_id)?;
+    let timeline_count = validate_timelines(&snapshot, source_id)?;
     let mut batch = Vec::with_capacity(PAGE_SIZE);
     let mut statement = snapshot.prepare(
         "SELECT id, artifact_type, file_id, display_name, summary, data_json,
@@ -34,7 +35,6 @@ pub(crate) fn merge(
     )?;
     for row in statement.query_map([], |row| artifact(row, source_id))? {
         batch.push(row?);
-        artifact_count += 1;
         if batch.len() == PAGE_SIZE {
             artifacts
                 .upsert_batch(&batch, PersistMode::Buffer)
@@ -47,7 +47,6 @@ pub(crate) fn merge(
         .upsert_batch(&batch, PersistMode::Buffer)
         .map_err(storage_error)?;
     super::fingerprints::artifacts(main, &batch, case_id, source_id)?;
-    let mut timeline_count = 0;
     let mut batch = Vec::with_capacity(PAGE_SIZE);
     let mut statement = snapshot.prepare(
         "SELECT id, file_id, event_type, timestamp, title, description,
@@ -56,7 +55,6 @@ pub(crate) fn merge(
     )?;
     for row in statement.query_map([], |row| timeline(row, source_id))? {
         batch.push(row?);
-        timeline_count += 1;
         if batch.len() == PAGE_SIZE {
             timelines
                 .upsert_batch(&batch, PersistMode::Buffer)
@@ -72,6 +70,34 @@ pub(crate) fn merge(
         .persist(PersistMode::SyncAll)
         .map_err(storage_error)?;
     Ok(Some((artifact_count, timeline_count)))
+}
+
+fn validate_artifacts(conn: &Connection, source_id: &str) -> DbResult<u64> {
+    let mut statement = conn.prepare(
+        "SELECT id, artifact_type, file_id, display_name, summary, data_json,
+                extractor_id, extractor_version, confidence, source_attribution, created_at
+         FROM artifact_rows ORDER BY id",
+    )?;
+    let mut count = 0u64;
+    for row in statement.query_map([], |row| artifact(row, source_id))? {
+        row?;
+        count += 1;
+    }
+    Ok(count)
+}
+
+fn validate_timelines(conn: &Connection, source_id: &str) -> DbResult<u64> {
+    let mut statement = conn.prepare(
+        "SELECT id, file_id, event_type, timestamp, title, description,
+                parser_id, parser_version, confidence, source_attribution, data_json
+         FROM timeline_rows ORDER BY id",
+    )?;
+    let mut count = 0u64;
+    for row in statement.query_map([], |row| timeline(row, source_id))? {
+        row?;
+        count += 1;
+    }
+    Ok(count)
 }
 
 fn storage_error(error: persistence_fjall::FjallStorageError) -> DbError {

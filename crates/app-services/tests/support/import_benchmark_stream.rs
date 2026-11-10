@@ -38,14 +38,20 @@ pub(super) fn profile(path: &Path, workers: usize) -> serde_json::Value {
         mode,
         |conn, case_conn, root, case, source, report| {
             let replacements = super::canonical_replacements(conn, case, source);
-            let normalizer = configure(conn, replacements);
-            let catalog = fingerprint(conn, &[super::queries::CATALOG], &normalizer);
+            let normalizer = configure(conn, replacements.clone());
+            let catalog = fingerprint_rows(
+                super::native_catalog_snapshot(conn, &replacements),
+                &normalizer,
+            );
             let graph = fingerprint(
                 conn,
                 &[super::queries::NODES, super::queries::EDGES],
                 &normalizer,
             );
-            let timeline = fingerprint(conn, &[super::queries::TIMELINE], &normalizer);
+            let timeline = fingerprint_rows(
+                super::native_timeline_snapshot(conn, &replacements),
+                &normalizer,
+            );
             assert!(
                 report.partition_aggregates.iter().any(|sample| {
                     sample.phase == super::Phase::MftRead && sample.scanned_records > 0
@@ -86,6 +92,13 @@ impl Normalizer {
                     .unwrap_or_else(|| capture[0].to_owned())
             })
             .into_owned()
+    }
+
+    pub(super) fn replacements(&self) -> Vec<(String, String)> {
+        self.identities
+            .iter()
+            .map(|(source, normalized)| (source.clone(), normalized.clone()))
+            .collect()
     }
 }
 
@@ -147,6 +160,32 @@ pub(super) fn fingerprint(
             hasher.update(b"\n");
             count += 1;
         }
+    }
+    Fingerprint {
+        rows: count,
+        sha256: hex::encode(hasher.finalize()),
+    }
+}
+
+pub(super) fn fingerprint_rows(rows: Vec<Vec<Value>>, normalizer: &Normalizer) -> Fingerprint {
+    let mut hasher = Sha256::new();
+    let mut count = 0;
+    for row in rows {
+        let values = row
+            .into_iter()
+            .map(|value| match value {
+                Value::Null => serde_json::json!(["null"]),
+                Value::Integer(value) => serde_json::json!(["integer", value]),
+                Value::Real(value) => serde_json::json!(["real", value]),
+                Value::Text(value) => {
+                    serde_json::json!(["text", normalizer.normalize(&value)])
+                }
+                Value::Blob(value) => serde_json::json!(["blob", hex::encode(value)]),
+            })
+            .collect::<Vec<_>>();
+        hasher.update(serde_json::to_vec(&values).unwrap());
+        hasher.update(b"\n");
+        count += 1;
     }
     Fingerprint {
         rows: count,

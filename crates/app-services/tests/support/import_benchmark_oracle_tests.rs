@@ -51,39 +51,36 @@ fn catalog_sidecar_localizes_each_business_field_mutation() {
     let path = temp.path().join("fixture.raw");
     std::fs::write(&path, fixture::image(32)).unwrap();
     with_import(&path, true, 1, |source, case, id, _| {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute("ATTACH ?1 AS original", [source.path().unwrap()])
+        let replacements = canonical_replacements(source, case, id);
+        let original = native_catalog_snapshot(source, &replacements);
+        let normalizer = streaming::configure(source, replacements);
+        let before = semantics::catalog_from_rows(&original);
+        let target = original
+            .iter()
+            .find(|row| matches!(&row[3], Value::Text(name) if name == "file-16.txt"))
+            .map(|row| match &row[0] {
+                Value::Text(id) => id.clone(),
+                _ => panic!("catalog id is not text"),
+            })
             .unwrap();
-        conn.execute_batch(
-            "CREATE TABLE file_entries AS SELECT * FROM original.file_entries; DETACH original",
-        )
-        .unwrap();
-        let normalizer = streaming::configure(&conn, canonical_replacements(&conn, case, id));
-        let before = semantics::catalog(&conn, &normalizer);
-        let target: String = conn
-            .query_row(
-                "SELECT id FROM file_entries WHERE name='file-16.txt'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        for (column, value) in [
-            ("path", "'changed/path'"),
-            ("parent_id", "'mft:0:999'"),
-            ("size", "987"),
-            ("modified_at", "'2026-10-16T12:00:00Z'"),
-            ("hidden", "1"),
+        for (column, index, value) in [
+            ("path", 2, Value::Text("changed/path".into())),
+            ("parent_id", 1, Value::Text("mft:0:999".into())),
+            ("size", 5, Value::Integer(987)),
+            (
+                "modified_at",
+                15,
+                Value::Text("2026-10-16T12:00:00Z".into()),
+            ),
+            ("hidden", 8, Value::Integer(1)),
         ] {
-            conn.execute_batch("SAVEPOINT mutation").unwrap();
-            assert_eq!(
-                conn.execute(
-                    &format!("UPDATE file_entries SET {column}={value} WHERE id=?1"),
-                    [&target]
-                )
-                .unwrap(),
-                1
-            );
-            let after = semantics::catalog(&conn, &normalizer);
+            let mut changed_rows = original.clone();
+            let row = changed_rows
+                .iter_mut()
+                .find(|row| matches!(&row[0], Value::Text(id) if id == &target))
+                .unwrap();
+            row[index] = value;
+            let after = semantics::catalog_from_rows(&changed_rows);
             let changed: Vec<_> = before["columns"]
                 .as_object()
                 .unwrap()
@@ -94,10 +91,9 @@ fn catalog_sidecar_localizes_each_business_field_mutation() {
                 .collect();
             assert_eq!(changed, [column], "field localization");
             assert_ne!(before["idHashBuckets"], after["idHashBuckets"]);
-            conn.execute_batch("ROLLBACK TO mutation; RELEASE mutation")
-                .unwrap();
-            assert_eq!(before, semantics::catalog(&conn, &normalizer));
+            assert_eq!(before, semantics::catalog_from_rows(&original));
         }
+        drop(normalizer);
     });
 }
 
@@ -210,19 +206,18 @@ fn actual_import_search_preview_extraction_and_projection_retry_are_stable() {
             }
             assert_eq!(
                 ids.len() as u64,
-                conn.query_row("SELECT COUNT(*) FROM timeline_events", [], |r| r
-                    .get::<_, u64>(0))
+                persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(conn)
+                    .count()
                     .unwrap()
             );
             let writable = source_db::open_source_db(root, &DataSourceId(source.into())).unwrap();
             let revision = SourceMetaRepo::new(&writable)
                 .read(TIMELINE_CURSOR_REVISION_KEY)
                 .unwrap();
-            let before = streaming::fingerprint(
-                conn,
-                &[queries::TIMELINE, queries::NODES, queries::EDGES],
-                &normalizer,
-            );
+            let mut before_rows = native_timeline_snapshot(conn, &normalizer.replacements());
+            before_rows.extend(snapshot(conn, queries::NODES, &normalizer.replacements()));
+            before_rows.extend(snapshot(conn, queries::EDGES, &normalizer.replacements()));
+            let before = streaming::fingerprint_rows(before_rows.clone(), &normalizer);
             let retry = timeline_service::materialize_file_activity(
                 &writable,
                 DataSourcePlatform::Windows,
@@ -236,17 +231,42 @@ fn actual_import_search_preview_extraction_and_projection_retry_are_stable() {
                     .read(TIMELINE_CURSOR_REVISION_KEY)
                     .unwrap()
             );
-            assert_eq!(
-                before,
-                streaming::fingerprint(
-                    conn,
-                    &[queries::TIMELINE, queries::NODES, queries::EDGES],
-                    &normalizer
-                )
-            );
-            SourceMetaRepo::new(&writable)
-                .write(TIMELINE_CURSOR_REVISION_KEY, "999999999")
+            assert_eq!(before, {
+                let mut after_rows = native_timeline_snapshot(conn, &normalizer.replacements());
+                after_rows.extend(snapshot(conn, queries::NODES, &normalizer.replacements()));
+                after_rows.extend(snapshot(conn, queries::EDGES, &normalizer.replacements()));
+                streaming::fingerprint_rows(after_rows, &normalizer)
+            });
+            let fjall = app_services::source_db::open_registered_fjall_source_read_write(
+                root,
+                &DataSourceId(source.into()),
+            )
+            .unwrap();
+            let invalidation_event = persistence_fjall::TimelineRecord {
+                id: "__cursor-invalidation__".into(),
+                data_source_id: source.into(),
+                source_object_id: "__probe__".into(),
+                event_type: "Fixture".into(),
+                timestamp: chrono::Utc::now(),
+                title: "cursor invalidation".into(),
+                description: String::new(),
+                parser_id: Some("fixture".into()),
+                parser_version: Some("1".into()),
+                confidence: Some(1.0),
+                source_attribution: None,
+                attrs: Default::default(),
+            };
+            fjall
+                .timeline_upsert(&invalidation_event, persistence_fjall::PersistMode::SyncAll)
                 .unwrap();
+            fjall
+                .timeline_delete(
+                    source,
+                    &invalidation_event.id,
+                    persistence_fjall::PersistMode::SyncAll,
+                )
+                .unwrap();
+            drop(fjall);
             assert!(timeline_service::query_timeline_filtered_for_case(
                 case_conn,
                 root,
@@ -257,12 +277,13 @@ fn actual_import_search_preview_extraction_and_projection_retry_are_stable() {
                 }
             )
             .is_err());
-            let id: String = conn
-                .query_row(
-                    "SELECT id FROM file_entries WHERE name='file-16.txt'",
-                    [],
-                    |r| r.get(0),
-                )
+            let id: String = native_catalog_snapshot(conn, &normalizer.replacements())
+                .iter()
+                .find(|row| matches!(&row[3], Value::Text(name) if name == "file-16.txt"))
+                .and_then(|row| match &row[0] {
+                    Value::Text(id) => Some(id.clone()),
+                    _ => None,
+                })
                 .unwrap();
             let global = format!("ds:{source}:{id}");
             let handle =

@@ -291,35 +291,6 @@ pub fn query_entity_nodes(
     Ok(rows)
 }
 
-/// Get artifact ids for a case.
-pub fn get_artifact_ids_for_case(conn: &Connection, case_id: &str) -> DbResult<Vec<String>> {
-    let mut stmt = conn.prepare("SELECT id FROM artifacts WHERE case_id = ?1")?;
-    let ids: Vec<String> = stmt
-        .query_map(params![case_id], |row| row.get::<_, String>(0))?
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(ids)
-}
-
-/// Get artifact rows (id, title, summary, attrs) for a case.
-pub fn get_artifact_rows_for_case(
-    conn: &Connection,
-    case_id: &str,
-) -> DbResult<Vec<(String, String, String, String)>> {
-    let mut stmt =
-        conn.prepare("SELECT id, title, summary, attrs FROM artifacts WHERE case_id = ?1")?;
-    let rows: Vec<(String, String, String, String)> = stmt
-        .query_map(params![case_id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(rows)
-}
-
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]

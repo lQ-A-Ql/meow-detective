@@ -16,7 +16,7 @@ use crate::source_db;
 
 mod offset;
 
-const CURSOR_PAYLOAD_VERSION: u8 = 2;
+const CURSOR_PAYLOAD_VERSION: u8 = 3;
 const CURSOR_KIND: &str = "artifact";
 const MAX_CURSOR_SOURCES: usize = 256;
 const MAX_CURSOR_VALUE_LENGTH: usize = 4_096;
@@ -59,7 +59,6 @@ impl ArtifactConsumedKey {
 struct ArtifactSourceState {
     source_id: String,
     revision: u64,
-    snapshot_high_water: i64,
     count: u64,
     consumed: u64,
     after: Option<ArtifactConsumedKey>,
@@ -97,10 +96,9 @@ impl ArtifactSourcePage {
             .after
             .as_ref()
             .map(ArtifactConsumedKey::to_repo_key);
-        let rows = ArtifactRepo::new(&self.connection).list_by_family_after_at_snapshot(
+        let rows = ArtifactRepo::new(&self.connection).list_by_family_after(
             family,
             after.as_ref(),
-            self.state.snapshot_high_water,
             batch_size,
         )?;
         self.exhausted = rows.len() < batch_size as usize;
@@ -183,17 +181,9 @@ fn capture_cursor(
     for (source_id, connection) in connections {
         let repo = ArtifactRepo::new(&connection);
         let revision = repo.cursor_revision()?;
-        let snapshot_high_water = repo.snapshot_high_water()?;
-        let count =
-            repo.count_for_family_at_snapshot(context.family.as_deref(), snapshot_high_water)?;
+        let count = repo.count_for_family(context.family.as_deref())?;
         total = total.saturating_add(count);
-        sources.push(new_source_page(
-            source_id,
-            connection,
-            revision,
-            snapshot_high_water,
-            count,
-        ));
+        sources.push(new_source_page(source_id, connection, revision, count));
     }
     let state = ArtifactPageCursor {
         version: CURSOR_PAYLOAD_VERSION,
@@ -242,10 +232,7 @@ fn resume_cursor(
                 source_id.0
             )));
         }
-        let current_count = repo.count_for_family_at_snapshot(
-            context.family.as_deref(),
-            source_state.snapshot_high_water,
-        )?;
+        let current_count = repo.count_for_family(context.family.as_deref())?;
         if current_count != source_state.count {
             return Err(invalid_cursor(format!(
                 "artifact snapshot changed for source {}",
@@ -371,14 +358,12 @@ fn new_source_page(
     source_id: DataSourceId,
     connection: Connection,
     revision: u64,
-    snapshot_high_water: i64,
     count: u64,
 ) -> ArtifactSourcePage {
     ArtifactSourcePage {
         state: ArtifactSourceState {
             source_id: source_id.0,
             revision,
-            snapshot_high_water,
             count,
             consumed: 0,
             after: None,
@@ -431,7 +416,6 @@ fn validate_source_state(
 ) -> Result<(), ArtifactServiceError> {
     if source.source_id.is_empty()
         || source.source_id.len() > MAX_CURSOR_VALUE_LENGTH
-        || source.snapshot_high_water < 0
         || source.consumed > source.count
         || previous_source.is_some_and(|previous| previous >= source.source_id.as_str())
         || (source.consumed == 0) != source.after.is_none()

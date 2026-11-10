@@ -1,8 +1,7 @@
 use super::*;
-use crate::{case_service, file_service};
+use crate::file_service;
 use base64::Engine;
 use evidence_core::LogicalFsReader;
-use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use tempfile::TempDir;
 
 fn with_logical_case_file(
@@ -15,36 +14,26 @@ fn with_logical_case_file(
     let evidence_dir = tmp.path().join("evidence");
     std::fs::create_dir_all(&evidence_dir).unwrap();
     std::fs::write(evidence_dir.join(file_name), content).unwrap();
-    let active =
-        case_service::create_case(&tmp.path().join("cases"), case_name, Some("tester")).unwrap();
-    let case_id = active.meta.id.clone();
-
-    active
-        .with_conn(|conn| {
-            let ds_id = domain::DataSourceId("ds-preview".to_string());
-            DataSourceRepo::new(conn).insert(
-                &case_id,
-                &domain::DataSource {
-                    id: ds_id.clone(),
-                    name: "evidence".to_string(),
-                    kind: domain::DataSourceKind::LogicalDirectory,
-                    source_path: evidence_dir.clone(),
-                    imported_at: chrono::Utc::now(),
-                    provenance: domain::DataSourceProvenance::unknown(),
-                },
-            )?;
-            let fs = LogicalFsReader::open(&evidence_dir, "evidence")
-                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-            file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
-            let file_id = persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
-                .find_by_data_source(&ds_id)?
-                .into_iter()
-                .find(|entry| entry.name == file_name)
-                .map(|entry| entry.id.0)
-                .expect("file should be enumerated");
-            test(conn, file_id)
-        })
+    let fixture = native_logical_source(
+        "ds-preview",
+        case_name,
+        evidence_dir.clone(),
+        domain::DataSourceKind::LogicalDirectory,
+    );
+    let ds_id = domain::DataSourceId(fixture.source_id.clone());
+    let fs = LogicalFsReader::open(&evidence_dir, "evidence")
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
         .unwrap();
+    file_service::enumerate_filesystem(&fixture.connection, &ds_id, &fs).unwrap();
+    fixture.seal();
+    let file_id = persistence_sqlite::repositories::file_repo::FileRepo::new(&fixture.connection)
+        .find_by_data_source(&ds_id)
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.name == file_name)
+        .map(|entry| entry.id.0)
+        .expect("file should be enumerated");
+    test(&fixture.connection, file_id).unwrap();
 }
 
 #[test]

@@ -88,3 +88,7 @@ pub mod timeline_service;
 pub mod v2_governance_service;
 pub mod v3_governance_service;
 pub mod wechat_key_service;
+
+#[cfg(test)]
+#[path = "../tests/unit/mod.rs"]
+mod tests;

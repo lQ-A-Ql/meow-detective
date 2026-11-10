@@ -29,6 +29,18 @@ struct PlatformMismatch {
 pub(super) fn build_platform_coverage(
     conn: &Connection,
 ) -> Result<PlatformCoverageDto, V3GovernanceError> {
+    if persistence_sqlite::source_fjall::source_id(conn)
+        .map_err(|error| V3GovernanceError::Other(error.to_string()))?
+        .is_none()
+    {
+        return Ok(coverage_dto(
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+            0,
+        ));
+    }
     let family_counts = ArtifactRepo::new(conn)
         .count_by_family()
         .map_err(|error| V3GovernanceError::Other(error.to_string()))?;

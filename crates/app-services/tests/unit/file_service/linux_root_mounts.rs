@@ -1,5 +1,6 @@
 use super::*;
 use crate::datasource_service::{ImageFilesystemKind, PartitionRecord, PartitionStatus};
+use domain::{EntryType, FileEntry, FileEntryId};
 use std::ops::Deref;
 
 const FS_UUID: &str = "10325476-98ba-dcfe-1122-334455667788";
@@ -59,11 +60,33 @@ fn setup() -> TestDb {
 }
 
 fn insert_fstab(conn: &Connection, source: &str, index: u32, path: &str, text: &str) {
-    conn.execute(
-        "INSERT INTO file_entries (id, data_source_id, partition_index, path, name, entry_type, size)
-         VALUES (?1, ?2, ?3, ?4, 'fstab', 'file', ?5)",
-        rusqlite::params![format!("{source}-{index}"), source, index, path, text.len()],
-    ).unwrap();
+    persistence_sqlite::source_fjall::upsert_files_with_partition(
+        conn,
+        &[FileEntry {
+            id: FileEntryId(format!("{source}-{index}")),
+            parent_id: None,
+            data_source_id: DataSourceId(source.into()),
+            path: path.into(),
+            name: "fstab".into(),
+            entry_type: EntryType::File,
+            size: Some(text.len() as u64),
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }],
+        index as usize,
+    )
+    .unwrap();
 }
 
 fn resolve(conn: &Connection, text: &str) -> Vec<LinuxRootMountDto> {
@@ -135,7 +158,35 @@ fn duplicate_uuid_or_conflicting_root_lines_never_confirm_a_target() {
 fn fstab_is_source_scoped_case_sensitive_and_requires_complete_bytes() {
     let conn = setup();
     let text = format!("UUID={FS_UUID} / ext4 defaults 0 1\n");
-    insert_fstab(&conn, "other", 1, "etc/fstab", &text);
+    assert!(
+        persistence_sqlite::source_fjall::upsert_files_with_partition(
+            &conn,
+            &[FileEntry {
+                id: FileEntryId("foreign-fstab".into()),
+                parent_id: None,
+                data_source_id: DataSourceId("other".into()),
+                path: "etc/fstab".into(),
+                name: "fstab".into(),
+                entry_type: EntryType::File,
+                size: Some(text.len() as u64),
+                ext: None,
+                deleted: false,
+                hidden: false,
+                system: false,
+                encrypted: false,
+                read_only: false,
+                archive: false,
+                unix_mode: None,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            }],
+            1,
+        )
+        .is_err()
+    );
     insert_fstab(&conn, "source", 2, "ETC/fstab", &text);
     assert!(resolve(&conn, &text).is_empty());
     insert_fstab(&conn, "source", 1, "etc/fstab", &text);

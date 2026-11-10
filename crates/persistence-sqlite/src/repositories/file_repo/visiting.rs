@@ -1,4 +1,4 @@
-use super::{mapping::row_to_file_entry, FileRepo, FILE_ENTRY_COLUMNS};
+use super::FileRepo;
 use crate::{DbError, DbResult};
 use domain::FileEntry;
 
@@ -8,9 +8,8 @@ impl FileRepo<'_> {
         source: Option<&str>,
         mut visit: impl FnMut(FileEntry) -> DbResult<()>,
     ) -> DbResult<()> {
-        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
-            let owner = crate::source_fjall::source_id(self.conn)?
-                .ok_or_else(|| DbError::System("source identity is missing".into()))?;
+        if let Some(owner) = crate::source_fjall::source_id(self.conn)? {
+            let store = crate::source_fjall::require_source_store(self.conn)?;
             if source.is_some_and(|source| source != owner) {
                 return Err(DbError::System("source catalog owner mismatch".into()));
             }
@@ -32,22 +31,14 @@ impl FileRepo<'_> {
                 }
             }
         }
-        let mut statement = self.conn.prepare(&format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE ?1 IS NULL OR data_source_id=?1 ORDER BY id"
-        ))?;
-        for row in statement.query_map([source], row_to_file_entry)? {
-            crate::read_operation::ensure_active()?;
-            visit(row?)?;
-        }
-        Ok(())
+        Err(DbError::System("source identity is missing".into()))
     }
 
     pub(super) fn native_count(&self, source: Option<&str>) -> DbResult<Option<u64>> {
-        let Some(store) = crate::source_fjall::open_store(self.conn)? else {
+        let Some(owner) = crate::source_fjall::source_id(self.conn)? else {
             return Ok(None);
         };
-        let owner = crate::source_fjall::source_id(self.conn)?
-            .ok_or_else(|| DbError::System("source identity is missing".into()))?;
+        let store = crate::source_fjall::require_source_store(self.conn)?;
         if source.is_some_and(|source| source != owner) {
             return Err(DbError::System("source catalog owner mismatch".into()));
         }

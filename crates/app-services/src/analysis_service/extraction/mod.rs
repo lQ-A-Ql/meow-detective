@@ -32,6 +32,7 @@ mod systemd_preload;
 
 pub use self::evtx::extract_evtx_candidate;
 pub use self::linux::extract_linux_candidate;
+pub(crate) use self::native_output::StagedGeneration as StagedSourceGeneration;
 pub(crate) use self::progress::ExtractionProgressUpdate;
 pub(crate) use self::reader::{encrypted_candidate_warning, CandidateSource};
 pub use self::registry::extract_registry_candidate;
@@ -47,7 +48,18 @@ pub use self::summary::{
     get_linux_artifact_summary, get_linux_system_config_page, get_plugin_family_entries,
     get_registry_extraction_summary, get_registry_structured_summary, list_plugin_modules,
 };
+use super::error::AnalysisServiceError;
 use domain::{Artifact, TimelineEvent};
+
+pub(crate) fn stage_native_records(
+    conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    source_id: &str,
+    artifacts: &[Artifact],
+    events: &[TimelineEvent],
+) -> Result<StagedSourceGeneration, AnalysisServiceError> {
+    native_output::stage(conn, case_root, source_id, artifacts, events, &[])
+}
 
 #[derive(Default)]
 pub struct ExtractionOutcome {

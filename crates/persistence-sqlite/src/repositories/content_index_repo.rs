@@ -44,20 +44,7 @@ impl<'a> ContentIndexRepo<'a> {
         if crate::source_fjall::source_id(self.conn)?.is_some() {
             return self.native_artifact_text(source, local, global);
         }
-        let mut statement=self.conn.prepare("SELECT substr(title || ' ' || summary || ' ' || attrs,1,65536) FROM artifacts WHERE data_source_id=?1 AND source_object_id IN (?2,?3) ORDER BY id LIMIT 128")?;
-        let rows = statement.query_map(params![source, local, global], |row| {
-            row.get::<_, String>(0)
-        })?;
-        let mut result = String::new();
-        for row in rows {
-            let text = row?;
-            if result.len() + text.len() > 1024 * 1024 {
-                break;
-            }
-            result.push_str(&text);
-            result.push('\n');
-        }
-        Ok(result)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     fn native_artifact_text(&self, source: &str, local: &str, global: &str) -> DbResult<String> {

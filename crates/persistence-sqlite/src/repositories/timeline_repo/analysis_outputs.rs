@@ -5,10 +5,8 @@
 //! (M2 provenance contract), so the shared `LIKE` prefix replacement cannot
 //! address them; plugin candidates replace outputs by exact id.
 
-use super::{TimelineRepo, TIMELINE_CURSOR_REVISION_KEY};
+use super::TimelineRepo;
 use crate::connection::DbResult;
-use crate::repositories::source_meta_repo::SourceMetaRepo;
-use rusqlite::params;
 
 impl TimelineRepo<'_> {
     /// Delete one source's timeline events produced by one exact parser id.
@@ -30,20 +28,8 @@ impl TimelineRepo<'_> {
                 )
                 .map_err(|error| crate::connection::DbError::System(error.to_string()));
         }
-        if crate::source_fjall::source_id(self.conn)?.is_some() {
-            return Err(crate::connection::DbError::System(
-                "source detail storage is missing".into(),
-            ));
-        }
-        let deleted = self.conn.execute(
-            "DELETE FROM timeline_events
-                 WHERE source_object_id = ?1
-                   AND parser_id = ?2",
-            params![source_object_id, parser_id],
-        )?;
-        if deleted > 0 {
-            SourceMetaRepo::new(self.conn).bump_revision(TIMELINE_CURSOR_REVISION_KEY)?;
-        }
-        Ok(deleted)
+        Err(crate::connection::DbError::System(
+            "source detail storage is missing".into(),
+        ))
     }
 }

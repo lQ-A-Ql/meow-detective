@@ -1,9 +1,14 @@
 use super::*;
-use domain::FileEntryId;
+use chrono::Utc;
+use domain::{Artifact, ArtifactId, FileEntryId, TimelineEvent, TimelineEventId};
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
-use rusqlite::{params, Connection};
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;
+use std::{
+    collections::BTreeMap,
+    io::{Cursor, Read, Seek, SeekFrom},
+    ops::Deref,
+};
 
 const CASE_ID: &str = "case-evtx";
 const DATA_SOURCE_ID: &str = "source-evtx";
@@ -192,9 +197,9 @@ fn persistence_sink_failure_rolls_back_replacement_and_checkpoint() {
     seed_previous_outputs(&connection, &candidate);
     connection
         .execute_batch(
-            "CREATE TEMP TRIGGER reject_new_evtx_artifact
-             BEFORE INSERT ON artifacts
-             WHEN NEW.id <> 'old-evtx-artifact'
+            "CREATE TRIGGER reject_new_evtx_fingerprint
+             BEFORE INSERT ON forensic_fingerprints
+             WHEN NEW.object_type = 'artifact'
              BEGIN
                  SELECT RAISE(ABORT, 'injected EVTX sink failure');
              END;",
@@ -221,19 +226,43 @@ fn persistence_sink_failure_rolls_back_replacement_and_checkpoint() {
     assert_no_candidate_checkpoint(&connection);
 }
 
-fn source_connection() -> Connection {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+struct SourceFixture {
+    _root: tempfile::TempDir,
+    connection: Connection,
+}
+
+impl Deref for SourceFixture {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.connection
+    }
+}
+
+fn source_connection() -> SourceFixture {
+    let root = tempfile::tempdir().expect("create source fixture");
+    let source_dir = root.path().join("case/sources").join(DATA_SOURCE_ID);
+    std::fs::create_dir_all(&source_dir).expect("create source directory");
+    let database_path = source_dir.join("source.db");
+    let connection =
+        persistence_sqlite::open_or_create_source(&database_path).expect("open source database");
+    persistence_sqlite::source_fjall::configure_source_identity(&connection, DATA_SOURCE_ID)
+        .expect("configure source identity");
+    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &database_path)
+        .expect("configure source details");
     connection
         .execute(
             "INSERT INTO data_sources
              (id, case_id, name, kind, source_path, imported_at)
              VALUES (?1, ?2, 'EVTX source', 'e01', 'evidence.E01',
                      '2026-07-26T00:00:00Z')",
-            params![DATA_SOURCE_ID, CASE_ID],
+            rusqlite::params![DATA_SOURCE_ID, CASE_ID],
         )
         .expect("insert source registration");
-    connection
+    SourceFixture {
+        _root: root,
+        connection,
+    }
 }
 
 fn candidate(size: usize) -> EvidenceCandidate {
@@ -279,27 +308,48 @@ fn assert_supported_event_exists_before(bytes: &[u8], cutoff: usize, path: &str)
 }
 
 fn seed_previous_outputs(connection: &Connection, candidate: &EvidenceCandidate) {
-    connection
-        .execute(
-            "INSERT INTO artifacts
-             (id, case_id, data_source_id, artifact_type, source_object_id,
-              extractor_id, title, summary, attrs)
-             VALUES ('old-evtx-artifact', ?1, ?2, 'EvtxBootShutdown', ?3,
-                     'evtx.previous', 'old artifact', 'old', '{}')",
-            params![CASE_ID, DATA_SOURCE_ID, candidate.file_id.0],
+    ArtifactRepo::new(connection)
+        .insert_batch(
+            &[Artifact {
+                id: ArtifactId("old-evtx-artifact".into()),
+                family: "EvtxBootShutdown".into(),
+                source_object_id: Some(candidate.file_id.clone()),
+                title: "old artifact".into(),
+                summary: "old".into(),
+                extractor_id: Some("evtx.previous".into()),
+                extractor_version: None,
+                confidence: None,
+                source_attribution: None,
+                created_at: Utc::now(),
+                attrs: BTreeMap::new(),
+            }],
+            CASE_ID,
+            DATA_SOURCE_ID,
         )
         .expect("seed old artifact");
-    connection
-        .execute(
-            "INSERT INTO timeline_events
-             (id, case_id, source_object_id, event_type, ts, title, description,
-              parser_id, attrs)
-             VALUES ('old-evtx-timeline', ?1, ?2, 'Boot',
-                     '2026-01-01T00:00:00Z', 'old timeline', 'old',
-                     'evtx.previous', '{}')",
-            params![CASE_ID, candidate.file_id.0],
+    TimelineRepo::new(connection)
+        .insert_batch_with_case(
+            &[TimelineEvent {
+                id: TimelineEventId("old-evtx-timeline".into()),
+                source_object_id: candidate.file_id.0.clone(),
+                event_type: "Boot".into(),
+                timestamp: "2026-01-01T00:00:00Z".parse().unwrap(),
+                title: "old timeline".into(),
+                description: "old".into(),
+                parser_id: Some("evtx.previous".into()),
+                parser_version: None,
+                confidence: None,
+                source_attribution: None,
+                attrs: BTreeMap::new(),
+            }],
+            CASE_ID,
         )
         .expect("seed old timeline event");
+    let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+        .expect("open source store")
+        .expect("configured source store");
+    persistence_fjall::seal_source_generation(&store, DATA_SOURCE_ID, "fixture", &"a".repeat(64))
+        .expect("seal source fixture");
 }
 
 fn assert_previous_outputs_unchanged(connection: &Connection, candidate: &EvidenceCandidate) {
@@ -344,13 +394,12 @@ fn assert_retry_replaces_previous_outputs(
     .expect("retry should execute");
     assert!(matches!(result, EvtxPersistenceResult::Persisted(_)));
 
-    let old_count: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE id = 'old-evtx-artifact'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("count old artifacts");
+    let old_count = ArtifactRepo::new(connection)
+        .list_analysis_outputs(&candidate.file_id.0, "evtx.")
+        .expect("list retry artifacts")
+        .into_iter()
+        .filter(|artifact| artifact.id.0 == "old-evtx-artifact")
+        .count();
     let checkpoint_count: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM source_meta

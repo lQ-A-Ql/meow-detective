@@ -104,13 +104,15 @@ fn seed_isolated_source(
         &case_id.0,
     )?;
 
-    for table in ["file_entries", "artifacts", "timeline_events"] {
-        let count: i64 =
-            source_conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
-                row.get(0)
-            })?;
-        assert_eq!(count, 1, "{table} should be stored in source.db");
-    }
+    assert_eq!(
+        FileRepo::new(&source_conn)
+            .find_by_data_source(&source.id)?
+            .len(),
+        1
+    );
+    assert_eq!(ArtifactRepo::new(&source_conn).count()?, 1);
+    assert_eq!(TimelineRepo::new(&source_conn).count()?, 1);
+    publish_source_projection(&source_conn, &source.id)?;
     source_db::checkpoint_source_db(&source_conn)?;
     drop(source_conn);
 
@@ -136,6 +138,39 @@ fn seed_isolated_source(
         staging_dir,
         evidence_marker,
     })
+}
+
+fn publish_source_projection(
+    conn: &rusqlite::Connection,
+    source_id: &DataSourceId,
+) -> persistence_sqlite::DbResult<()> {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)?.ok_or_else(|| {
+        persistence_sqlite::DbError::System("source store is missing".to_string())
+    })?;
+    persistence_fjall::replace_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(source_id.0.clone())],
+    )
+    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let marker = persistence_fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{}", source_id.0),
+        &source_id.0,
+        1,
+        source_id.0.as_bytes().to_vec(),
+    );
+    store
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    Ok(())
 }
 
 fn assert_seeded_source_survives(paths: &SeededSourcePaths) {
@@ -256,24 +291,6 @@ fn open_case_rejects_ready_source_schema_that_requires_migration() {
             DataSourceRepo::new(&source_conn)
                 .upsert_source_local_metadata(&active.meta.id, &source)?;
             source_conn.execute(
-                "INSERT INTO file_entries
-                 (id, parent_id, data_source_id, path, name, entry_type, partition_index)
-                 VALUES (?1, NULL, ?2, '', 'Partition 2 (XFS) - cl/root', 'directory', NULL)",
-                rusqlite::params!["root-2", source.id.0],
-            )?;
-            source_conn.execute(
-                "INSERT INTO file_entries
-                 (id, parent_id, data_source_id, path, name, entry_type, partition_index)
-                 VALUES (?1, ?2, ?3, 'etc', 'etc', 'directory', NULL)",
-                rusqlite::params!["etc", "root-2", source.id.0],
-            )?;
-            source_conn.execute(
-                "INSERT INTO file_entries
-                 (id, parent_id, data_source_id, path, name, entry_type, partition_index)
-                 VALUES (?1, ?2, ?3, 'etc/passwd', 'passwd', 'file', NULL)",
-                rusqlite::params!["passwd", "etc", source.id.0],
-            )?;
-            source_conn.execute(
                 "DELETE FROM schema_migrations
                  WHERE name = 'source_022_file_partition_index_repair'",
                 [],
@@ -315,28 +332,6 @@ fn case_platform_validation_rejects_retired_macos_without_blocking_deletion() {
     active
         .with_conn(|conn| {
             seed_isolated_source(conn, &case_root, &active.meta.id, &source, "macos")?;
-            FileRepo::new(conn).insert_batch(&[FileEntry {
-                id: FileEntryId("legacy-app-file".to_string()),
-                parent_id: None,
-                data_source_id: source.id.clone(),
-                path: "legacy.txt".to_string(),
-                name: "legacy.txt".to_string(),
-                entry_type: EntryType::File,
-                size: Some(1),
-                ext: Some("txt".to_string()),
-                deleted: false,
-                hidden: false,
-                system: false,
-                encrypted: false,
-                read_only: false,
-                archive: false,
-                unix_mode: None,
-                created_at: None,
-                modified_at: None,
-                accessed_at: None,
-                changed_at: None,
-                hash_sha256: None,
-            }])?;
             Ok(())
         })
         .expect("seed retired platform");
@@ -660,14 +655,14 @@ fn delete_data_source_in_removes_isolated_storage_and_writes_audit_log() {
 
             let retained_conn =
                 source_db::open_registered_source_db(conn, &case_root, &retained_source.id)?;
-            for table in ["file_entries", "artifacts", "timeline_events"] {
-                let count: i64 = retained_conn.query_row(
-                    &format!("SELECT COUNT(*) FROM {table}"),
-                    [],
-                    |row| row.get(0),
-                )?;
-                assert_eq!(count, 1, "{table} for the retained source must survive");
-            }
+            assert_eq!(
+                FileRepo::new(&retained_conn)
+                    .find_by_data_source(&retained_source.id)?
+                    .len(),
+                1
+            );
+            assert_eq!(ArtifactRepo::new(&retained_conn).count()?, 1);
+            assert_eq!(TimelineRepo::new(&retained_conn).count()?, 1);
 
             assert_eq!(
                 std::fs::read(&deleted_paths.evidence_marker)?,
@@ -1149,7 +1144,7 @@ fn drain_completes_when_jobs_finish_quickly() {
 }
 
 #[test]
-fn open_case_rejects_legacy_single_database_payloads() {
+fn open_case_rejects_global_detail_tables() {
     let tmp = TempDir::new().unwrap();
     let active = case_service::create_case(tmp.path(), "legacy_case", Some("tester")).unwrap();
     let case_root = active.case_root.clone();
@@ -1163,6 +1158,21 @@ fn open_case_rejects_legacy_single_database_payloads() {
                 [&active.meta.id.0],
             )?;
             conn.execute(
+                "CREATE TABLE IF NOT EXISTS file_entries (
+                    id TEXT PRIMARY KEY,
+                    parent_id TEXT,
+                    data_source_id TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    entry_type TEXT NOT NULL,
+                    size INTEGER,
+                    deleted INTEGER NOT NULL DEFAULT 0,
+                    hidden INTEGER NOT NULL DEFAULT 0,
+                    system INTEGER NOT NULL DEFAULT 0
+                 )",
+                [],
+            )?;
+            conn.execute(
                 "INSERT INTO file_entries
                  (id, parent_id, data_source_id, path, name, entry_type, size, deleted, hidden, system)
                  VALUES ('legacy-file', NULL, 'legacy-ds', '/', '/', 'directory', NULL, 0, 0, 0)",
@@ -1174,9 +1184,9 @@ fn open_case_rejects_legacy_single_database_payloads() {
     drop(active);
 
     let error = match case_service::open_case(&case_root) {
-        Ok(_) => panic!("legacy app.db payload should be rejected"),
+        Ok(_) => panic!("global detail tables should be rejected"),
         Err(error) => error,
     };
-    assert!(error.to_string().contains("legacy single-database"));
+    assert!(error.to_string().contains("forbidden global detail tables"));
     assert!(error.to_string().contains("re-import is required"));
 }

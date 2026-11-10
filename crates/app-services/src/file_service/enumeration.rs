@@ -103,16 +103,40 @@ fn enumerate_filesystem_with_root_name_and_cancel_internal(
     let root = fs.root().map_err(|e| {
         persistence_sqlite::DbError::System(format!("Failed to read filesystem root: {}", e))
     })?;
-
     if cancellation_requested(cancel_token) {
-        return Err(persistence_sqlite::DbError::System(
-            "Enumeration cancelled".to_string(),
-        ));
+        return Err(enumeration_cancelled_error());
     }
+    let root_entry = root_entry_for_filesystem(&root, data_source_id, root_name_override);
+    if catalog.is_none() {
+        if let Some(stats) = enumerate_native_catalog(
+            conn,
+            data_source_id,
+            fs,
+            &root_entry,
+            progress_fn,
+            cancel_token,
+        )? {
+            return Ok(stats);
+        }
+    }
+    enumerate_sqlite_catalog(
+        conn,
+        data_source_id,
+        fs,
+        &root_entry,
+        progress_fn,
+        cancel_token,
+        catalog,
+    )
+}
 
-    let root_id = FileEntryId(Uuid::new_v4().to_string());
-    let root_entry = FileEntry {
-        id: root_id.clone(),
+fn root_entry_for_filesystem(
+    root: &FsNode,
+    data_source_id: &DataSourceId,
+    root_name_override: Option<&str>,
+) -> FileEntry {
+    FileEntry {
+        id: FileEntryId(Uuid::new_v4().to_string()),
         parent_id: None,
         data_source_id: data_source_id.clone(),
         path: String::new(),
@@ -132,17 +156,75 @@ fn enumerate_filesystem_with_root_name_and_cancel_internal(
         accessed_at: root.accessed_at,
         changed_at: root.changed_at,
         hash_sha256: None,
-    };
+    }
+}
 
+fn enumerate_native_catalog(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    fs: &dyn FileSystemReader,
+    root_entry: &FileEntry,
+    progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
+) -> DbResult<Option<EnumerationStats>> {
+    let Some(store) = persistence_sqlite::source_fjall::open_store_for_write(conn)? else {
+        return Ok(None);
+    };
+    let source_id = persistence_sqlite::source_fjall::source_id(conn)?
+        .ok_or_else(|| DbError::System("source identity is missing".into()))?;
+    if source_id != data_source_id.0 {
+        return Err(DbError::System(
+            "enumeration source identity mismatch".into(),
+        ));
+    }
+    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let root_record = persistence_sqlite::source_fjall::file_record(root_entry);
+    let mut walker = ChildBatchWalker::new(root_entry.id.clone());
+    let result = repository.replace_subtree_streamed(
+        &source_id,
+        &root_record,
+        0,
+        persistence_fjall::PersistMode::SyncAll,
+        || {
+            walker
+                .next_batch(fs, data_source_id, progress_fn, cancel_token)
+                .map(|batch| {
+                    batch.map(|entries| {
+                        entries
+                            .iter()
+                            .map(persistence_sqlite::source_fjall::file_record)
+                            .collect()
+                    })
+                })
+        },
+    );
+    match result {
+        Ok(_) => Ok(Some(walker.into_stats())),
+        Err(persistence_fjall::CatalogStreamError::Storage(error)) => {
+            Err(DbError::System(error.to_string()))
+        }
+        Err(persistence_fjall::CatalogStreamError::Producer(error)) => Err(error),
+    }
+}
+
+fn enumerate_sqlite_catalog(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    fs: &dyn FileSystemReader,
+    root_entry: &FileEntry,
+    progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
+    catalog: Option<&crate::storage_runtime::ReadWriteSourceStorageHandle>,
+) -> DbResult<EnumerationStats> {
     let tx = conn.unchecked_transaction()?;
     let result = {
         let repo = FileRepo::new(&tx);
-        repo.insert_batch_unchecked(&[root_entry])?;
+        repo.insert_batch_unchecked(std::slice::from_ref(root_entry))?;
         walk_and_insert_children(
             &repo,
             fs,
             data_source_id,
-            root_id,
+            root_entry.id.clone(),
             progress_fn,
             cancel_token,
         )
@@ -200,58 +282,22 @@ pub(crate) fn walk_and_insert_children(
     progress_fn: Option<&dyn Fn(u32)>,
     cancel_token: Option<&AtomicBool>,
 ) -> DbResult<EnumerationStats> {
-    let mut state = EnumerationState::new(root_id);
-    while let Some((parent_id, dir_path)) = state.queue.pop_front() {
-        if cancellation_requested(cancel_token) {
-            return Err(enumeration_cancelled_error());
-        }
-
-        let children_result = fs.list_children(&dir_path);
-        state.extend_diagnostics(fs.take_diagnostics(), &dir_path);
-        let children = match children_result {
-            Ok(c) => c,
-            Err(e) => {
-                state.push_diagnostic(
-                    FileSystemDiagnostic::new(
-                        FileSystemDiagnosticKind::DirectoryUnreadable,
-                        format!("Cannot read '{}': {}", dir_path, e),
-                    )
-                    .with_default_path(&dir_path),
-                );
-                continue;
-            }
-        };
-
-        for child in children {
-            if cancellation_requested(cancel_token) {
-                return Err(enumeration_cancelled_error());
-            }
-
-            if child.name == "." || child.name == ".." {
-                continue;
-            }
-
-            state.process_child(repo, data_source_id, &parent_id, child, progress_fn)?;
-        }
+    let mut walker = ChildBatchWalker::new(root_id);
+    while let Some(batch) = walker.next_batch(fs, data_source_id, progress_fn, cancel_token)? {
+        repo.insert_batch_unchecked(&batch)?;
     }
-
-    state.finish(repo, progress_fn)?;
-    if cancellation_requested(cancel_token) {
-        return Err(enumeration_cancelled_error());
-    }
-
-    Ok(state.stats)
+    Ok(walker.into_stats())
 }
 
-struct EnumerationState {
+pub(crate) struct ChildBatchWalker {
     queue: VecDeque<(FileEntryId, String)>,
     stats: EnumerationStats,
-    batch: Vec<FileEntry>,
     total_processed: u64,
+    finished: bool,
 }
 
-impl EnumerationState {
-    fn new(root_id: FileEntryId) -> Self {
+impl ChildBatchWalker {
+    pub(crate) fn new(root_id: FileEntryId) -> Self {
         let mut queue = VecDeque::new();
         queue.push_back((root_id, String::new()));
         Self {
@@ -263,9 +309,80 @@ impl EnumerationState {
                 warnings: Vec::new(),
                 diagnostics: Vec::new(),
             },
-            batch: Vec::with_capacity(FILE_INSERT_BATCH_SIZE),
             total_processed: 0,
+            finished: false,
         }
+    }
+
+    pub(crate) fn next_batch(
+        &mut self,
+        fs: &dyn FileSystemReader,
+        data_source_id: &DataSourceId,
+        progress_fn: Option<&dyn Fn(u32)>,
+        cancel_token: Option<&AtomicBool>,
+    ) -> DbResult<Option<Vec<FileEntry>>> {
+        if self.finished {
+            return Ok(None);
+        }
+        let mut batch = Vec::with_capacity(FILE_INSERT_BATCH_SIZE);
+        while batch.len() < FILE_INSERT_BATCH_SIZE {
+            let Some((parent_id, dir_path)) = self.queue.pop_front() else {
+                self.finished = true;
+                if let Some(progress) = progress_fn {
+                    progress(100);
+                }
+                break;
+            };
+            if cancellation_requested(cancel_token) {
+                return Err(enumeration_cancelled_error());
+            }
+            let children_result = fs.list_children(&dir_path);
+            self.extend_diagnostics(fs.take_diagnostics(), &dir_path);
+            let children = match children_result {
+                Ok(children) => children,
+                Err(error) => {
+                    self.push_diagnostic(
+                        FileSystemDiagnostic::new(
+                            FileSystemDiagnosticKind::DirectoryUnreadable,
+                            format!("Cannot read '{dir_path}': {error}"),
+                        )
+                        .with_default_path(&dir_path),
+                    );
+                    continue;
+                }
+            };
+            for child in children {
+                if cancellation_requested(cancel_token) {
+                    return Err(enumeration_cancelled_error());
+                }
+                if child.name == "." || child.name == ".." {
+                    continue;
+                }
+                let id = FileEntryId(Uuid::new_v4().to_string());
+                let entry = file_entry_for_child(data_source_id, &parent_id, &id, &child);
+                if child.is_dir {
+                    self.stats.dir_count += 1;
+                    self.queue.push_back((id, child.path));
+                } else {
+                    self.stats.file_count += 1;
+                    self.stats.total_size = self.stats.total_size.saturating_add(child.size);
+                }
+                batch.push(entry);
+                self.total_processed = self.total_processed.saturating_add(1);
+                if self.total_processed.is_multiple_of(100) {
+                    if let Some(progress) = progress_fn {
+                        progress(compute_enumeration_progress(self.total_processed) as u32);
+                    }
+                }
+                if batch.len() == FILE_INSERT_BATCH_SIZE {
+                    break;
+                }
+            }
+        }
+        if cancellation_requested(cancel_token) {
+            return Err(enumeration_cancelled_error());
+        }
+        Ok((!batch.is_empty()).then_some(batch))
     }
 
     fn extend_diagnostics(&mut self, diagnostics: Vec<FileSystemDiagnostic>, directory_path: &str) {
@@ -279,48 +396,8 @@ impl EnumerationState {
         self.stats.diagnostics.push(diagnostic);
     }
 
-    fn process_child(
-        &mut self,
-        repo: &FileRepo<'_>,
-        data_source_id: &DataSourceId,
-        parent_id: &FileEntryId,
-        child: FsNode,
-        progress_fn: Option<&dyn Fn(u32)>,
-    ) -> DbResult<()> {
-        let id = FileEntryId(Uuid::new_v4().to_string());
-        let entry = file_entry_for_child(data_source_id, parent_id, &id, &child);
-
-        if child.is_dir {
-            self.stats.dir_count += 1;
-            self.queue.push_back((id, child.path));
-        } else {
-            self.stats.file_count += 1;
-            self.stats.total_size += child.size;
-        }
-
-        self.batch.push(entry);
-        self.total_processed += 1;
-        if self.batch.len() >= FILE_INSERT_BATCH_SIZE {
-            repo.insert_batch_unchecked(&self.batch)?;
-            self.batch.clear();
-        }
-        if self.total_processed.is_multiple_of(100) {
-            if let Some(ref pf) = progress_fn {
-                let pct = compute_enumeration_progress(self.total_processed);
-                pf(pct as u32);
-            }
-        }
-        Ok(())
-    }
-
-    fn finish(&mut self, repo: &FileRepo<'_>, progress_fn: Option<&dyn Fn(u32)>) -> DbResult<()> {
-        if !self.batch.is_empty() {
-            repo.insert_batch_unchecked(&self.batch)?;
-        }
-        if let Some(ref pf) = progress_fn {
-            pf(100);
-        }
-        Ok(())
+    pub(crate) fn into_stats(self) -> EnumerationStats {
+        self.stats
     }
 }
 

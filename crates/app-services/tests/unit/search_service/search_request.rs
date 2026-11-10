@@ -1,5 +1,7 @@
 use super::*;
+crate::native_source_test_support!();
 use crate::search_service::record_search_step;
+use test_support::mark_source_projection_complete;
 
 use chrono::Utc;
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
@@ -51,6 +53,7 @@ struct SearchRequestFixture {
 }
 
 fn setup_indexed_case(tmp: &TempDir) -> SearchRequestFixture {
+    std::fs::create_dir_all(tmp.path().join("artifacts/objects")).unwrap();
     let active =
         crate::case_service::create_case(&tmp.path().join("cases"), "search-request", None)
             .expect("create case");
@@ -113,6 +116,18 @@ fn setup_indexed_case(tmp: &TempDir) -> SearchRequestFixture {
                 .collect::<Vec<_>>(),
         )
         .unwrap();
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::replace_source_generation(
+        &store,
+        "ds-1",
+        "search-request-fixture",
+        &"a".repeat(64),
+    )
+    .unwrap();
+    drop(store);
+    mark_source_projection_complete(&source_conn, "ds-1");
     let index_dir = case_root.join("sources").join("ds-1").join("index");
     let index = search::SearchIndex::create(&index_dir).unwrap();
     let mut writer = index.metadata_writer().unwrap();

@@ -2,6 +2,7 @@ use domain::{Artifact, ArtifactId, CaseId, DataSourceId, GraphNode, NodeType};
 use evidence_core::carving::CarveCandidate;
 use persistence_sqlite::repositories::{
     artifact_repo::ArtifactRepo,
+    fingerprint_repo::ForensicFingerprintRepo,
     graph_repo::GraphRepo,
     source_meta_repo::{SourceMetaRepo, ARTIFACT_CURSOR_REVISION_KEY},
 };
@@ -12,17 +13,16 @@ use transport::{dto::CarvedArtifactDto, CommandError};
 
 pub(super) fn persist(
     conn: &Connection,
+    case_root: &std::path::Path,
     case: &CaseId,
     source: &DataSourceId,
     candidates: &[CarveCandidate],
     cancel: &AtomicBool,
 ) -> Result<Vec<CarvedArtifactDto>, CommandError> {
-    let transaction = conn
-        .unchecked_transaction()
-        .map_err(CommandError::from_service_error)?;
-    let repo = ArtifactRepo::new(&transaction);
+    let repo = ArtifactRepo::new(conn);
     let mut output = Vec::with_capacity(candidates.len());
     let mut nodes = Vec::new();
+    let mut artifacts = Vec::new();
     for candidate in candidates {
         let artifact = artifact(candidate)?;
         if let Some(previous) = repo
@@ -31,8 +31,6 @@ pub(super) fn persist(
         {
             output.push(super::access::dto(&previous, source)?);
         } else {
-            repo.insert_batch_in_transaction(std::slice::from_ref(&artifact), &case.0, &source.0)
-                .map_err(CommandError::from_service_error)?;
             nodes.push(GraphNode {
                 id: artifact.id.0.clone(),
                 case_id: case.0.clone(),
@@ -43,8 +41,21 @@ pub(super) fn persist(
                 created_at: artifact.created_at.to_rfc3339(),
             });
             output.push(super::access::dto(&artifact, source)?);
+            artifacts.push(artifact);
         }
     }
+    if artifacts.is_empty() {
+        return Ok(output);
+    }
+    let mut staged =
+        crate::analysis_service::stage_native_records(conn, case_root, &source.0, &artifacts, &[])
+            .map_err(|error| CommandError::internal(error.to_string()))?;
+    let transaction = conn
+        .unchecked_transaction()
+        .map_err(CommandError::from_service_error)?;
+    persistence_sqlite::source_fjall::bind_generation(&transaction, &staged.name)
+        .map_err(CommandError::from_service_error)?;
+    persist_artifact_fingerprints(&transaction, case, source, &artifacts)?;
     GraphRepo::new(&transaction)
         .insert_nodes_in_transaction(&nodes)
         .map_err(CommandError::from_service_error)?;
@@ -59,7 +70,31 @@ pub(super) fn persist(
     transaction
         .commit()
         .map_err(CommandError::from_service_error)?;
+    staged.commit();
     Ok(output)
+}
+
+fn persist_artifact_fingerprints(
+    conn: &rusqlite::Transaction<'_>,
+    case: &CaseId,
+    source: &DataSourceId,
+    artifacts: &[Artifact],
+) -> Result<(), CommandError> {
+    let repository = ForensicFingerprintRepo::new(conn);
+    if !repository
+        .is_available()
+        .map_err(CommandError::from_service_error)?
+    {
+        return Ok(());
+    }
+    for artifact in artifacts {
+        repository
+            .upsert_in_transaction(&domain::ForensicFingerprint::for_artifact(
+                artifact, &case.0, &source.0,
+            ))
+            .map_err(CommandError::from_service_error)?;
+    }
+    Ok(())
 }
 fn artifact(candidate: &CarveCandidate) -> Result<Artifact, CommandError> {
     let length = candidate

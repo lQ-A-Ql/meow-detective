@@ -48,6 +48,14 @@ pub struct TimelinePage {
     pub next_cursor: Option<Vec<u8>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct TimelineTypeAfterQuery<'a> {
+    pub source_id: &'a str,
+    pub event_type: &'a str,
+    pub after_timestamp: DateTime<Utc>,
+    pub after_id: &'a str,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum TimelineStreamError<E> {
     #[error(transparent)]
@@ -222,27 +230,24 @@ impl TimelineRecordStore {
     pub fn list_by_type_after(
         &self,
         snapshot: &SourceReadSnapshot,
-        source_id: &str,
-        event_type: &str,
-        after_timestamp: DateTime<Utc>,
-        after_id: &str,
+        query: TimelineTypeAfterQuery<'_>,
         direction: ScanDirection,
         limit: usize,
     ) -> Result<TimelinePage> {
         let prefix = encode_key(
             TYPE_FAMILY,
             &[
-                KeyPart::Text(source_id.to_owned()),
-                KeyPart::Text(event_type.to_owned()),
+                KeyPart::Text(query.source_id.to_owned()),
+                KeyPart::Text(query.event_type.to_owned()),
             ],
         )?;
         let cursor = encode_key(
             TYPE_FAMILY,
             &[
-                KeyPart::Text(source_id.to_owned()),
-                KeyPart::Text(event_type.to_owned()),
-                KeyPart::InverseU64(timestamp_sort_value(after_timestamp)),
-                KeyPart::Text(after_id.to_owned()),
+                KeyPart::Text(query.source_id.to_owned()),
+                KeyPart::Text(query.event_type.to_owned()),
+                KeyPart::InverseU64(timestamp_sort_value(query.after_timestamp)),
+                KeyPart::Text(query.after_id.to_owned()),
             ],
         )?;
         self.page_from_index(snapshot, &prefix, Some(&cursor), direction, limit)

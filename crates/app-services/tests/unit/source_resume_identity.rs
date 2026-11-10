@@ -1,13 +1,16 @@
 use super::{bind_source_view, ResumeIdentityError, SOURCE_VIEW_KEY};
 use crate::source_runtime::open_factory;
-use domain::{DataSourceId, DataSourceKind};
+use domain::{DataSourceId, DataSourceKind, EntryType, FileEntry, FileEntryId};
 use persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo;
 
 fn setup() -> (tempfile::TempDir, rusqlite::Connection, std::path::PathBuf) {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("source.raw");
     std::fs::write(&path, [0; 512]).unwrap();
-    let conn = persistence_sqlite::open_or_create_source(&temp.path().join("source.db")).unwrap();
+    let database_path = temp.path().join("source.db");
+    let conn = persistence_sqlite::open_or_create_source(&database_path).unwrap();
+    persistence_sqlite::source_fjall::configure_source_identity(&conn, "source").unwrap();
+    persistence_sqlite::source_fjall::configure_source_fjall(&conn, &database_path).unwrap();
     (temp, conn, path)
 }
 
@@ -71,7 +74,54 @@ fn unbound_existing_staging_is_never_adopted_as_a_verified_snapshot() {
 #[test]
 fn nonempty_unbound_catalog_cannot_bypass_the_staging_identity_check() {
     let (temp, conn, path) = setup();
-    conn.execute_batch("INSERT INTO file_entries(id,data_source_id,path,name,entry_type) VALUES('root','source','','','directory'),('file','source','a','a','file')").unwrap();
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&conn)
+        .insert_batch(&[
+            FileEntry {
+                id: FileEntryId("root".into()),
+                parent_id: None,
+                data_source_id: DataSourceId("source".into()),
+                path: String::new(),
+                name: String::new(),
+                entry_type: EntryType::Directory,
+                size: None,
+                ext: None,
+                deleted: false,
+                hidden: false,
+                system: false,
+                encrypted: false,
+                read_only: false,
+                archive: false,
+                unix_mode: None,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            },
+            FileEntry {
+                id: FileEntryId("file".into()),
+                parent_id: Some(FileEntryId("root".into())),
+                data_source_id: DataSourceId("source".into()),
+                path: "a".into(),
+                name: "a".into(),
+                entry_type: EntryType::File,
+                size: Some(0),
+                ext: None,
+                deleted: false,
+                hidden: false,
+                system: false,
+                encrypted: false,
+                read_only: false,
+                archive: false,
+                unix_mode: None,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            },
+        ])
+        .unwrap();
     let factory = open_factory(&path, &DataSourceKind::Raw).unwrap();
     assert!(matches!(
         bind_source_view(

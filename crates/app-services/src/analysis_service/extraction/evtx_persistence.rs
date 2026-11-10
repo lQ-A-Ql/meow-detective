@@ -79,9 +79,11 @@ fn persist_evtx_candidate_with_batch_size(
     match build_evtx_commit(&context, reader) {
         Ok(mut persisted) => {
             transaction.commit()?;
-            if let Some(mut generation) = persisted.staged_generation.take() {
-                generation.commit();
-            }
+            persisted
+                .staged_generation
+                .take()
+                .expect("EVTX analysis output generation is staged")
+                .commit();
             Ok(EvtxPersistenceResult::Persisted(persisted.observation))
         }
         Err(failure) => {
@@ -140,11 +142,13 @@ fn build_evtx_commit(
     let commit = batch
         .finish(summary.warnings)
         .map_err(EvtxTransactionFailure::Service)?;
-    if let Some(generation) = commit.staged_generation.as_ref() {
-        persistence_sqlite::source_fjall::bind_generation(context.conn, &generation.name).map_err(
-            |error| EvtxTransactionFailure::Service(AnalysisServiceError::Other(error.to_string())),
-        )?;
-    }
+    let generation = commit
+        .staged_generation
+        .as_ref()
+        .expect("EVTX analysis output generation is staged");
+    persistence_sqlite::source_fjall::bind_generation(context.conn, &generation.name).map_err(
+        |error| EvtxTransactionFailure::Service(AnalysisServiceError::Other(error.to_string())),
+    )?;
     persist_checkpoint(context.conn, context.candidate, context.capability, &commit)
         .map_err(EvtxTransactionFailure::Service)?;
     Ok(commit)

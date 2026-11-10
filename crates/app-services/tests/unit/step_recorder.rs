@@ -1,4 +1,5 @@
 use super::*;
+crate::native_source_test_support!();
 use crate::notebook_service;
 use domain::{CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
 use persistence_sqlite::repositories::{
@@ -9,6 +10,7 @@ use persistence_sqlite::repositories::{
     notebook_repo::StepFilters,
 };
 use persistence_sqlite::runner;
+use test_support::mark_source_projection_complete;
 
 struct TestCase {
     // Holds the tempdir alive for the case root's lifetime.
@@ -59,7 +61,15 @@ fn register_ready_source(case: &TestCase, case_id: &str, source_id: &str) -> std
         crate::source_db::source_db_path(&case.case_root, &DataSourceId(source_id.to_string()));
     std::fs::create_dir_all(source_path.parent().expect("source directory"))
         .expect("create source directory");
-    drop(persistence_sqlite::open_or_create_source(&source_path).expect("create source db"));
+    let source_conn =
+        persistence_sqlite::open_or_create_source(&source_path).expect("create source db");
+    persistence_sqlite::source_fjall::configure_source_identity(&source_conn, source_id)
+        .expect("configure source identity");
+    persistence_sqlite::source_fjall::configure_source_fjall(&source_conn, &source_path)
+        .expect("configure native source");
+    DataSourceRepo::new(&source_conn)
+        .upsert_source_local_metadata(&CaseId(case_id.to_string()), &source)
+        .expect("persist source-local metadata");
     source_path
 }
 
@@ -75,10 +85,12 @@ fn case_state_hash_is_deterministic() {
 #[test]
 fn case_state_hash_changes_when_counts_change() {
     let case = setup("case-hash-change");
-    let source_path = register_ready_source(&case, "case-hash-change", "ds-1");
+    let _source_path = register_ready_source(&case, "case-hash-change", "ds-1");
     let hash_before = compute_case_state_hash(&case.conn, &case.case_root, "case-hash-change");
 
-    let source_conn = persistence_sqlite::open_or_create_source(&source_path).unwrap();
+    let source_conn =
+        crate::source_db::open_source_db(&case.case_root, &DataSourceId("ds-1".to_string()))
+            .unwrap();
     FileRepo::new(&source_conn)
         .insert_batch(&[domain::FileEntry {
             id: domain::FileEntryId("fe-1".into()),
@@ -122,8 +134,36 @@ fn case_state_hash_changes_when_counts_change() {
             "ds-1",
         )
         .unwrap();
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+        .expect("open source store")
+        .expect("configured source store");
+    persistence_fjall::replace_source_generation(
+        &store,
+        "ds-1",
+        "step-recorder-fixture",
+        &"a".repeat(64),
+    )
+    .unwrap();
+    drop(store);
+    mark_source_projection_complete(&source_conn, "ds-1");
     drop(source_conn);
 
+    let ready_sources = crate::source_db::open_ready_source_connections_read_only(
+        &case.conn,
+        &case.case_root,
+        &CaseId("case-hash-change".to_string()),
+    )
+    .expect("open ready source in state hash");
+    assert_eq!(ready_sources.len(), 1);
+    let inventory_source = DataSourceId("ds-1".to_string());
+    assert_eq!(
+        crate::source_db::ready_source_catalog_count(&case.case_root, &inventory_source).unwrap(),
+        Some(1)
+    );
+    assert_eq!(
+        crate::source_db::ready_source_artifact_count(&case.case_root, &inventory_source).unwrap(),
+        Some(1)
+    );
     let hash_after = compute_case_state_hash(&case.conn, &case.case_root, "case-hash-change");
     assert_ne!(hash_before, hash_after);
     assert_eq!(hash_before.len(), 64);

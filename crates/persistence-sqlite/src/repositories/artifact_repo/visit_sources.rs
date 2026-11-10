@@ -1,4 +1,4 @@
-use super::{mapping::row_to_artifact, visiting, ArtifactRepo, ARTIFACT_SELECT_COLUMNS};
+use super::{visiting, ArtifactRepo};
 use crate::DbResult;
 use domain::Artifact;
 
@@ -57,27 +57,8 @@ impl ArtifactRepo<'_> {
             }
             return Ok(());
         }
-        let placeholders = (1..=source_object_ids.len())
-            .map(|index| format!("?{index}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let prefix_parameter = source_object_ids.len() + 1;
-        let sql = format!(
-            "SELECT {ARTIFACT_SELECT_COLUMNS} FROM artifacts
-             WHERE source_object_id IN ({placeholders})
-               AND extractor_id LIKE ?{prefix_parameter}
-             ORDER BY source_object_id ASC, rowid ASC"
-        );
-        let mut parameters = source_object_ids
-            .iter()
-            .map(|source_id| (*source_id).to_string())
-            .collect::<Vec<_>>();
-        parameters.push(format!("{producer_prefix}%"));
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(rusqlite::params_from_iter(parameters), row_to_artifact)?;
-        for row in rows {
-            visit(row?)?;
-        }
-        Ok(())
+        Err(crate::DbError::System(
+            "source detail storage is missing".into(),
+        ))
     }
 }

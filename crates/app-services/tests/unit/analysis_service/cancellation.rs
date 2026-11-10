@@ -32,8 +32,8 @@ fn cancellation_during_candidate_read_discards_uncommitted_outputs() {
 
     assert!(matches!(error, AnalysisServiceError::Cancelled));
     assert_eq!(reader_calls.load(Ordering::Relaxed), 1);
-    let artifact_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))
+    let artifact_count = ArtifactRepo::new(&conn)
+        .count()
         .expect("count analysis artifacts");
     assert_eq!(artifact_count, 0);
 }

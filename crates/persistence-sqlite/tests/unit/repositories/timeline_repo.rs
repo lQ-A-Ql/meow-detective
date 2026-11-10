@@ -2,70 +2,15 @@ use super::*;
 use domain::TimelineEventId;
 use std::collections::BTreeMap;
 
-fn setup_db() -> rusqlite::Connection {
-    let conn = crate::connection::open_in_memory().unwrap();
-    conn.execute_batch(
-        "CREATE TABLE timeline_events (
-            id TEXT PRIMARY KEY NOT NULL,
-            case_id TEXT NOT NULL DEFAULT '',
-            source_object_id TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            ts TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT NOT NULL DEFAULT '',
-            parser_id TEXT,
-            parser_version TEXT,
-            confidence REAL,
-            source_attribution TEXT,
-            attrs TEXT NOT NULL DEFAULT '{}'
-        );",
-    )
-    .unwrap();
-    conn
-}
-
-fn setup_legacy_db() -> rusqlite::Connection {
-    let conn = crate::connection::open_in_memory().unwrap();
-    conn.execute_batch(
-        "CREATE TABLE timeline_events (
-            id TEXT PRIMARY KEY NOT NULL,
-            case_id TEXT NOT NULL DEFAULT '',
-            source_object_id TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            ts TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT NOT NULL DEFAULT '',
-            attrs TEXT NOT NULL DEFAULT '{}'
-        );
-        ALTER TABLE timeline_events ADD COLUMN parser_id TEXT;
-        ALTER TABLE timeline_events ADD COLUMN parser_version TEXT;
-        ALTER TABLE timeline_events ADD COLUMN confidence REAL;
-        ALTER TABLE timeline_events ADD COLUMN source_attribution TEXT;",
-    )
-    .unwrap();
-    conn
-}
-
-fn setup_nullable_ts_db() -> rusqlite::Connection {
-    let conn = crate::connection::open_in_memory().unwrap();
-    conn.execute_batch(
-        "CREATE TABLE timeline_events (
-            id TEXT PRIMARY KEY NOT NULL,
-            case_id TEXT NOT NULL DEFAULT '',
-            source_object_id TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            ts TEXT,
-            title TEXT NOT NULL,
-            description TEXT NOT NULL DEFAULT '',
-            parser_id TEXT,
-            parser_version TEXT,
-            confidence REAL,
-            source_attribution TEXT,
-            attrs TEXT NOT NULL DEFAULT '{}'
-        );",
-    )
-    .unwrap();
-    conn
+fn setup_db() -> (tempfile::TempDir, rusqlite::Connection) {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("source.db");
+    let conn = crate::open_or_create_source(&path).unwrap();
+    crate::source_fjall::configure_source_identity(&conn, "source-1").unwrap();
+    crate::source_fjall::open_store_for_write(&conn)
+        .unwrap()
+        .unwrap();
+    (root, conn)
 }
 
 fn make_event(id: &str, event_type: &str, ts: &str) -> TimelineEvent {
@@ -92,7 +37,7 @@ fn ids(events: &[TimelineEvent]) -> Vec<String> {
 
 #[test]
 fn insert_batch_then_count_returns_correct_number() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let repo = TimelineRepo::new(&conn);
     let events = vec![
         make_event("e1", "file_create", "2025-01-01T00:00:00Z"),
@@ -100,172 +45,56 @@ fn insert_batch_then_count_returns_correct_number() {
         make_event("e3", "file_create", "2025-01-01T02:00:00Z"),
     ];
     repo.insert_batch(&events).unwrap();
-
     assert_eq!(repo.count().unwrap(), 3);
 }
 
 #[test]
 fn query_returns_events_ordered_by_timestamp() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let repo = TimelineRepo::new(&conn);
-    let events = vec![
+    repo.insert_batch(&[
         make_event("e1", "file_create", "2025-01-01T00:00:00Z"),
         make_event("e2", "file_modify", "2025-01-02T00:00:00Z"),
         make_event("e3", "file_delete", "2025-01-03T00:00:00Z"),
-    ];
-    repo.insert_batch(&events).unwrap();
-
-    let results = repo.query(0, 10).unwrap();
-    assert_eq!(results.len(), 3);
-    // ORDER BY ts DESC
-    assert_eq!(results[0].id.0, "e3");
-    assert_eq!(results[1].id.0, "e2");
-    assert_eq!(results[2].id.0, "e1");
-}
-
-#[test]
-fn query_large_unfiltered_uses_deterministic_timestamp_and_id_order() {
-    let conn = setup_db();
-    let repo = TimelineRepo::new(&conn);
-    let mut events = Vec::new();
-    for idx in (0..150).rev() {
-        let day = (idx % 5) + 1;
-        events.push(make_event(
-            &format!("event-{idx:03}"),
-            "file_modify",
-            &format!("2025-01-{day:02}T00:00:00Z"),
-        ));
-    }
-    repo.insert_batch(&events).unwrap();
-
-    let results = repo.query(0, 200).unwrap();
-    let result_ids = ids(&results);
-    let mut expected = events.clone();
-    expected.sort_by(|left, right| {
-        right
-            .timestamp
-            .cmp(&left.timestamp)
-            .then_with(|| left.id.0.cmp(&right.id.0))
-    });
-
-    assert_eq!(result_ids, ids(&expected));
+    ])
+    .unwrap();
+    assert_eq!(ids(&repo.query(0, 10).unwrap()), ["e3", "e2", "e1"]);
 }
 
 #[test]
 fn query_filtered_filters_by_event_type() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let repo = TimelineRepo::new(&conn);
-    let events = vec![
+    repo.insert_batch(&[
         make_event("e1", "file_create", "2025-01-01T00:00:00Z"),
         make_event("e2", "file_modify", "2025-01-02T00:00:00Z"),
         make_event("e3", "file_create", "2025-01-03T00:00:00Z"),
-    ];
-    repo.insert_batch(&events).unwrap();
-
+    ])
+    .unwrap();
     let results = repo
         .query_filtered(0, 10, None, None, Some("file_create"))
         .unwrap();
-    assert_eq!(results.len(), 2);
-    assert!(results.iter().all(|e| e.event_type == "file_create"));
-}
-
-#[test]
-fn query_filtered_for_case_type_and_time_is_deterministic() {
-    let conn = setup_db();
-    let repo = TimelineRepo::new(&conn);
-    let events = [
-        make_event("a-other-case", "file_create", "2025-01-04T00:00:00Z"),
-        make_event("b-outside-range", "file_create", "2025-01-01T00:00:00Z"),
-        make_event("c-wrong-type", "file_delete", "2025-01-03T00:00:00Z"),
-        make_event("d-match-later", "file_create", "2025-01-03T00:00:00Z"),
-        make_event("c-match-later", "file_create", "2025-01-03T00:00:00Z"),
-        make_event("e-match-earlier", "file_create", "2025-01-02T00:00:00Z"),
-    ];
-    repo.insert_batch_with_case(&events[0..1], "case-2")
-        .unwrap();
-    repo.insert_batch_with_case(&events[1..], "case-1").unwrap();
-
-    let results = repo
-        .query_filtered_for_case(
-            0,
-            10,
-            Some("case-1"),
-            Some("2025-01-02T00:00:00+00:00"),
-            Some("2025-01-03T23:59:59+00:00"),
-            Some("file_create"),
-        )
-        .unwrap();
-    let count = repo
-        .count_filtered_for_case(
-            Some("case-1"),
-            Some("2025-01-02T00:00:00+00:00"),
-            Some("2025-01-03T23:59:59+00:00"),
-            Some("file_create"),
-        )
-        .unwrap();
-
-    assert_eq!(count, 3);
-    assert_eq!(
-        ids(&results),
-        vec![
-            "c-match-later".to_string(),
-            "d-match-later".to_string(),
-            "e-match-earlier".to_string(),
-        ]
-    );
-}
-
-#[test]
-fn identical_timestamp_pagination_is_stable() {
-    let conn = setup_db();
-    let repo = TimelineRepo::new(&conn);
-    let events = vec![
-        make_event("same-04", "file_modify", "2025-01-01T00:00:00Z"),
-        make_event("same-02", "file_modify", "2025-01-01T00:00:00Z"),
-        make_event("same-05", "file_modify", "2025-01-01T00:00:00Z"),
-        make_event("same-01", "file_modify", "2025-01-01T00:00:00Z"),
-        make_event("same-03", "file_modify", "2025-01-01T00:00:00Z"),
-    ];
-    repo.insert_batch(&events).unwrap();
-
-    let page_one = repo.query(0, 2).unwrap();
-    let page_two = repo.query(2, 2).unwrap();
-    let page_three = repo.query(4, 2).unwrap();
-    let mut paged = ids(&page_one);
-    paged.extend(ids(&page_two));
-    paged.extend(ids(&page_three));
-
-    assert_eq!(
-        paged,
-        vec![
-            "same-01".to_string(),
-            "same-02".to_string(),
-            "same-03".to_string(),
-            "same-04".to_string(),
-            "same-05".to_string(),
-        ]
-    );
+    assert_eq!(ids(&results), ["e3", "e1"]);
 }
 
 #[test]
 fn keyset_pagination_preserves_timestamp_and_id_order_without_duplicates() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let repo = TimelineRepo::new(&conn);
-    let events = vec![
+    repo.insert_batch(&[
         make_event("same-04", "file_modify", "2025-01-03T00:00:00Z"),
         make_event("same-02", "file_modify", "2025-01-03T00:00:00Z"),
         make_event("same-03", "file_modify", "2025-01-03T00:00:00Z"),
         make_event("older-02", "file_modify", "2025-01-02T00:00:00Z"),
         make_event("older-01", "file_modify", "2025-01-02T00:00:00Z"),
-    ];
-    repo.insert_batch(&events).unwrap();
-
+    ])
+    .unwrap();
     let first = repo
         .query_filtered_after(None, 2, None, None, Some("file_modify"))
         .unwrap();
     let second = repo
         .query_filtered_after(
-            Some(&first.last().unwrap().sort_key),
+            first.last().map(|row| &row.sort_key),
             2,
             None,
             None,
@@ -274,29 +103,27 @@ fn keyset_pagination_preserves_timestamp_and_id_order_without_duplicates() {
         .unwrap();
     let third = repo
         .query_filtered_after(
-            Some(&second.last().unwrap().sort_key),
+            second.last().map(|row| &row.sort_key),
             2,
             None,
             None,
             Some("file_modify"),
         )
         .unwrap();
-    let actual = first
-        .into_iter()
-        .chain(second)
-        .chain(third)
-        .map(|row| row.event.id.0)
-        .collect::<Vec<_>>();
-
     assert_eq!(
-        actual,
-        vec!["same-02", "same-03", "same-04", "older-01", "older-02"]
+        first
+            .into_iter()
+            .chain(second)
+            .chain(third)
+            .map(|row| row.event.id.0)
+            .collect::<Vec<_>>(),
+        ["same-02", "same-03", "same-04", "older-01", "older-02"]
     );
 }
 
 #[test]
-fn snapshot_keyset_excludes_later_inserts_and_survives_consumed_prefix_deletion() {
-    let conn = setup_db();
+fn snapshot_keyset_rejects_later_writes_through_native_revision() {
+    let (_root, conn) = setup_db();
     let repo = TimelineRepo::new(&conn);
     repo.insert_batch(&[
         make_event("latest", "file_modify", "2025-01-03T00:00:00Z"),
@@ -304,151 +131,52 @@ fn snapshot_keyset_excludes_later_inserts_and_survives_consumed_prefix_deletion(
         make_event("oldest", "file_modify", "2025-01-01T00:00:00Z"),
     ])
     .unwrap();
-    let high_water = repo.snapshot_high_water().unwrap();
-    assert_eq!(
-        repo.count_filtered_at_snapshot(high_water, None, None, Some("file_modify"))
-            .unwrap(),
-        3
-    );
+    let revision = repo.cursor_revision().unwrap();
     let first = repo
-        .query_filtered_after_at_snapshot(None, high_water, 1, None, None, Some("file_modify"))
+        .query_filtered_after(None, 1, None, None, Some("file_modify"))
         .unwrap();
-
     repo.insert_batch(&[make_event(
         "inserted-after-snapshot",
         "file_modify",
         "2025-01-04T00:00:00Z",
     )])
     .unwrap();
-    assert_eq!(
-        repo.count_filtered_at_snapshot(high_water, None, None, Some("file_modify"))
-            .unwrap(),
-        3
-    );
-    conn.execute("DELETE FROM timeline_events WHERE id = 'latest'", [])
-        .unwrap();
-
-    let remaining = repo
-        .query_filtered_after_at_snapshot(
-            Some(&first[0].sort_key),
-            high_water,
-            10,
-            None,
-            None,
-            Some("file_modify"),
-        )
-        .unwrap();
-    assert_eq!(
-        remaining
-            .iter()
-            .map(|row| row.event.id.0.as_str())
-            .collect::<Vec<_>>(),
-        vec!["middle", "oldest"]
-    );
-}
-
-#[test]
-fn missing_timestamp_rows_sort_last_and_load_as_default_timestamp() {
-    let conn = setup_nullable_ts_db();
-    conn.execute_batch(
-        "INSERT INTO timeline_events (id, source_object_id, event_type, ts, title, description, attrs)
-         VALUES
-            ('missing-ts', 'src-1', 'file_modify', NULL, 'Missing', '', '{}'),
-            ('has-ts', 'src-1', 'file_modify', '2025-01-01T00:00:00Z', 'Has timestamp', '', '{}');",
-    )
-    .unwrap();
-    let repo = TimelineRepo::new(&conn);
-
-    let results = repo.query(0, 10).unwrap();
-
-    assert_eq!(
-        ids(&results),
-        vec!["has-ts".to_string(), "missing-ts".to_string()]
-    );
-    assert_eq!(
-        results[1].timestamp,
-        chrono::DateTime::<chrono::Utc>::default()
-    );
-}
-
-#[test]
-fn keyset_pagination_reaches_all_missing_timestamp_rows() {
-    let conn = setup_nullable_ts_db();
-    conn.execute_batch(
-        "INSERT INTO timeline_events (id, source_object_id, event_type, ts, title, description, attrs)
-         VALUES
-            ('dated-02', 'src-1', 'file_modify', '2025-01-02T00:00:00Z', 'Dated 2', '', '{}'),
-            ('dated-01', 'src-1', 'file_modify', '2025-01-01T00:00:00Z', 'Dated 1', '', '{}'),
-            ('missing-02', 'src-1', 'file_modify', NULL, 'Missing 2', '', '{}'),
-            ('missing-01', 'src-1', 'file_modify', NULL, 'Missing 1', '', '{}'),
-            ('missing-03', 'src-1', 'file_modify', NULL, 'Missing 3', '', '{}');",
-    )
-    .unwrap();
-    let repo = TimelineRepo::new(&conn);
-
-    let mut after = None;
-    let mut actual = Vec::new();
-    loop {
-        let page = repo
-            .query_filtered_after(after.as_ref(), 2, None, None, Some("file_modify"))
-            .unwrap();
-        if page.is_empty() {
-            break;
-        }
-        after = page.last().map(|row| row.sort_key.clone());
-        actual.extend(page.into_iter().map(|row| row.event.id.0));
-    }
-
-    assert_eq!(
-        actual,
-        vec![
-            "dated-02",
-            "dated-01",
-            "missing-01",
-            "missing-02",
-            "missing-03",
-        ]
-    );
+    assert_ne!(repo.cursor_revision().unwrap(), revision);
+    assert_eq!(first[0].event.id.0, "latest");
 }
 
 #[test]
 fn count_filtered_with_time_range() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let repo = TimelineRepo::new(&conn);
-    let events = vec![
+    repo.insert_batch(&[
         make_event("e1", "file_create", "2025-01-01T00:00:00Z"),
         make_event("e2", "file_modify", "2025-01-02T00:00:00Z"),
         make_event("e3", "file_delete", "2025-01-03T00:00:00Z"),
-    ];
-    repo.insert_batch(&events).unwrap();
-
-    // Count events on Jan 2 only (use +00:00 format to match to_rfc3339())
-    let count = repo
-        .count_filtered(
+    ])
+    .unwrap();
+    assert_eq!(
+        repo.count_filtered(
             Some("2025-01-02T00:00:00+00:00"),
             Some("2025-01-02T23:59:59+00:00"),
-            None,
+            None
         )
-        .unwrap();
-    assert_eq!(count, 1);
-
-    // Count all
-    let count_all = repo.count_filtered(None, None, None).unwrap();
-    assert_eq!(count_all, 3);
+        .unwrap(),
+        1
+    );
+    assert_eq!(repo.count_filtered(None, None, None).unwrap(), 3);
 }
 
 #[test]
 fn timeline_provenance_round_trips() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let repo = TimelineRepo::new(&conn);
     let mut event = make_event("e1", "file_modify", "2025-01-01T00:00:00Z");
     event.parser_id = Some("timeline.macb".to_string());
     event.parser_version = Some("1.2.3".to_string());
     event.confidence = Some(0.87);
     event.source_attribution = Some("modified_at".to_string());
-
     repo.insert_batch(&[event]).unwrap();
-
     let rows = repo.query(0, 10).unwrap();
     assert_eq!(rows[0].parser_id.as_deref(), Some("timeline.macb"));
     assert_eq!(rows[0].parser_version.as_deref(), Some("1.2.3"));
@@ -457,21 +185,10 @@ fn timeline_provenance_round_trips() {
 }
 
 #[test]
-fn timeline_missing_confidence_loads_as_unknown() {
-    let conn = setup_legacy_db();
-    conn.execute(
-        "INSERT INTO timeline_events (id, source_object_id, event_type, ts, title, description, attrs)
-         VALUES ('e1', 'src-1', 'file_modify', '2025-01-01T00:00:00Z', 'Modified', '', '{}')",
-        [],
-    )
-    .unwrap();
+fn find_by_id_returns_native_record() {
+    let (_root, conn) = setup_db();
     let repo = TimelineRepo::new(&conn);
-
-    let rows = repo.query(0, 10).unwrap();
-
-    assert_eq!(rows.len(), 1);
-    assert!(rows[0].parser_id.is_none());
-    assert!(rows[0].parser_version.is_none());
-    assert!(rows[0].confidence.is_none());
-    assert!(rows[0].source_attribution.is_none());
+    repo.insert_batch(&[make_event("event", "file_modify", "2025-01-01T00:00:00Z")])
+        .unwrap();
+    assert_eq!(repo.find_by_id("event").unwrap().unwrap().id.0, "event");
 }

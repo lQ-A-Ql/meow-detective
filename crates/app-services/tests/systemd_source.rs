@@ -1,6 +1,7 @@
 #[path = "support/evidence_case.rs"]
 mod fixture;
 use app_services::analysis_service::run_analysis_extraction_with_reader_limits;
+use domain::EntryType;
 use std::collections::HashMap;
 #[test]
 fn source_analysis_compiles_links_and_dropins_and_invalidates_multi_file_checkpoints() {
@@ -18,8 +19,15 @@ fn source_analysis_compiles_links_and_dropins_and_invalidates_multi_file_checkpo
         ];
         let mut bytes=HashMap::new();
         for (id,path,link,text) in rows {
-            fixture::entry(&source,"linux-services",id,path,text.len() as u64);
-            source.execute("UPDATE file_entries SET partition_index=0,unix_mode=?2 WHERE id=?1",rusqlite::params![id,if link{0o120777}else{0o100644}]).unwrap();
+            fixture::entry_with_metadata(
+                &source,
+                "linux-services",
+                id,
+                path,
+                text.len() as u64,
+                EntryType::File,
+                Some(if link { 0o120777 } else { 0o100644 }),
+            );
             bytes.insert(id.to_owned(),text.as_bytes().to_vec());
         }
         let run=|values:&HashMap<String,Vec<u8>>|run_analysis_extraction_with_reader_limits(&source,&case.active.meta.id.0,domain::DataSourcePlatform::Linux,&["LinuxArtifacts"],|id,maximum|->Result<Box<dyn std::io::Read>,std::io::Error>{let value=values.get(&id.0).expect("source-bound dependency");Ok(Box::new(std::io::Cursor::new(value[..value.len().min(maximum)].to_vec())))}).unwrap();

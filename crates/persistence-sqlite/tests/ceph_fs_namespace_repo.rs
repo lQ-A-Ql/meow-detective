@@ -1,5 +1,4 @@
 use persistence_sqlite::{
-    open_in_memory,
     repositories::ceph_fs_namespace_repo::{
         cephfs_namespace_projection_sha256, CephFsDentryRecord, CephFsFileLayoutRecord,
         CephFsInodeRecord, CephFsNamespaceDiagnosticRecord, CephFsNamespaceManifest,
@@ -10,13 +9,35 @@ use persistence_sqlite::{
     runner,
 };
 use rusqlite::Connection;
+use std::ops::Deref;
+use tempfile::TempDir;
 
 const SOURCE: &str = "cephfs-derived-a";
 const FILESYSTEM: &str = "ceph-fs:cluster-a:1:17:7";
 
-fn setup() -> Connection {
-    let conn = open_in_memory().expect("open source database");
+struct SourceFixture {
+    _root: TempDir,
+    connection: Connection,
+}
+
+impl Deref for SourceFixture {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.connection
+    }
+}
+
+fn setup() -> SourceFixture {
+    let root = tempfile::tempdir().expect("create source fixture root");
+    let path = root.path().join("source.db");
+    let conn = persistence_sqlite::open_or_create_source(&path).expect("open source database");
     runner::run_source_all(&conn).expect("run source migrations");
+    persistence_sqlite::source_fjall::configure_source_identity(&conn, SOURCE).unwrap();
+    persistence_sqlite::source_fjall::configure_source_fjall(&conn, &path).unwrap();
+    persistence_sqlite::source_fjall::open_store_for_write(&conn)
+        .unwrap()
+        .expect("initialize Fjall source generation");
     conn.execute(
         "INSERT INTO data_sources (
              id, case_id, name, kind, source_path, imported_at
@@ -25,7 +46,10 @@ fn setup() -> Connection {
         [SOURCE],
     )
     .unwrap();
-    conn
+    SourceFixture {
+        _root: root,
+        connection: conn,
+    }
 }
 
 fn projection(input_sha256: &str, complete: bool) -> CephFsNamespaceProjection {
@@ -319,11 +343,7 @@ fn insert_file_catalog(conn: &Connection) {
                 } else {
                     persistence_fjall::CatalogEntryType::File
                 },
-                size: if directory {
-                    None
-                } else {
-                    dentry.size.map(|size| size as u64)
-                },
+                size: if directory { None } else { dentry.size },
                 ext: None,
                 deleted: false,
                 hidden: false,
@@ -381,8 +401,13 @@ fn assert_catalog_invalid_after(
 #[test]
 fn published_catalog_verification_closes_the_file_entry_boundary() {
     let root = tempfile::tempdir().unwrap();
-    let conn = persistence_sqlite::open_or_create_source(&root.path().join("source.db")).unwrap();
+    let source_db_path = root.path().join("source.db");
+    let conn = persistence_sqlite::open_or_create_source(&source_db_path).unwrap();
     persistence_sqlite::source_fjall::configure_source_identity(&conn, SOURCE).unwrap();
+    persistence_sqlite::source_fjall::configure_source_fjall(&conn, &source_db_path).unwrap();
+    persistence_sqlite::source_fjall::open_store_for_write(&conn)
+        .unwrap()
+        .expect("initialize Fjall source generation");
     conn.execute("INSERT INTO data_sources (id,case_id,name,kind,source_path,imported_at) VALUES (?1,'case-1','CephFS','ceph_fs','cephfs://cluster-a/1','2026-07-20T00:00:00Z')", [SOURCE]).unwrap();
     let repo = CephFsNamespaceRepo::new(&conn);
     repo.replace(&projection(&"a".repeat(64), true)).unwrap();

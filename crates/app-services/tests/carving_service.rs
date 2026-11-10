@@ -1,11 +1,13 @@
 #[path = "support/evidence_case.rs"]
-#[allow(dead_code)]
 mod fixture;
 #[path = "support/import_ntfs_fixture.rs"]
 #[allow(dead_code)]
 mod ntfs_fixture;
 use app_services::carving_service::*;
 use domain::{DataSourceId, DataSourceKind};
+use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
+};
 use sha2::{Digest, Sha256};
 use std::{
     io::Write,
@@ -126,7 +128,7 @@ fn writer_failure_rolls_back_artifacts_and_stops_the_bounded_producer() {
         assert!(run_png_carving(conn,&case.active.case_root,&case.active.meta.id,&request("source"),&AtomicBool::new(false),&|_,_|{}).is_err());
         assert!(started.elapsed()<std::time::Duration::from_secs(5));
         let source=app_services::source_db::open_registered_source_db_read_only(conn,&case.active.case_root,&DataSourceId("source".into())).unwrap();
-        assert_eq!(source.query_row("SELECT COUNT(*) FROM artifacts",[],|r|r.get::<_,u32>(0)).unwrap(),0);
+        assert_eq!(ArtifactRepo::new(&source).count().unwrap(),0);
         assert_eq!(source.query_row("SELECT COUNT(*) FROM graph_nodes",[],|r|r.get::<_,u32>(0)).unwrap(),0);Ok(())
     }).unwrap();
 }
@@ -278,20 +280,20 @@ fn png_task_persists_idempotent_artifact_graph_and_search_without_file_or_timeli
                 &DataSourceId("source".into()),
             )
             .unwrap();
-            for (table, count) in [
-                ("artifacts", 1),
-                ("graph_nodes", 1),
-                ("file_entries", 0),
-                ("timeline_events", 0),
-            ] {
-                assert_eq!(
-                    source
-                        .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r
-                            .get::<_, u32>(0))
-                        .unwrap(),
-                    count
-                );
-            }
+            let source_id = DataSourceId("source".into());
+            assert_eq!(ArtifactRepo::new(&source).count().unwrap(), 1);
+            assert_eq!(
+                source
+                    .query_row("SELECT COUNT(*) FROM graph_nodes", [], |r| r
+                        .get::<_, u32>(0))
+                    .unwrap(),
+                1
+            );
+            assert!(FileRepo::new(&source)
+                .find_by_data_source(&source_id)
+                .unwrap()
+                .is_empty());
+            assert_eq!(TimelineRepo::new(&source).count().unwrap(), 0);
             let found = search_carved_artifacts(
                 conn,
                 &case.active.case_root,

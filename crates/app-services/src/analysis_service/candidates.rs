@@ -16,7 +16,7 @@ pub use common::{
 };
 pub(crate) use common::{
     evidence_candidates_for_categories_with_cancel, evidence_relative_path,
-    find_candidate_by_path_suffix, normalize_evidence_path, row_to_file_entry_for_analysis,
+    find_candidate_by_path_suffix, normalize_evidence_path,
 };
 pub use plugin::discover_plugin_candidates;
 pub use summary::get_evidence_classification_summary;

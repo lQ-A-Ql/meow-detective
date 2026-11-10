@@ -80,7 +80,7 @@ pub fn get_file_tree_for_case(
         crate::source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
     {
         let mut nodes = if let Some(nodes) =
-            crate::file_service::fjall_read::tree(case_root, &source_id, show_hidden)?
+            crate::file_service::fjall_read::tree(&source_conn, case_root, &source_id, show_hidden)?
         {
             nodes
         } else {
@@ -104,6 +104,7 @@ pub fn get_file_children_for_case(
     let (global_id, source_conn) =
         open_source_for_file_id(case_conn, case_root, case_id, parent_id)?;
     let mut children = if let Some(children) = crate::file_service::fjall_read::children(
+        &source_conn,
         case_root,
         &global_id.data_source_id,
         &global_id.local_id.0,

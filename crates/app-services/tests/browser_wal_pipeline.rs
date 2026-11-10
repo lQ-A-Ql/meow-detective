@@ -1,8 +1,13 @@
 use app_services::analysis_service::run_analysis_extraction;
 use domain::{DataSourceId, DataSourcePlatform, EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
-use rusqlite::{params, Connection};
+use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use rusqlite::Connection;
 use std::{cell::Cell, io::Read, path::Path};
+
+#[path = "support/native_analysis_fixture.rs"]
+mod native_analysis_fixture;
+
+use native_analysis_fixture::NativeAnalysisFixture;
 
 const SOURCE: &str = "browser-source";
 const HISTORY: &str = "[P1]/Users/A/AppData/Local/Google/Chrome/User Data/Default/History";
@@ -43,14 +48,15 @@ fn history(connection: &Connection, first: i64, last: i64) {
     transaction.commit().unwrap();
 }
 
-fn ids(connection: &Connection) -> Vec<String> {
-    connection
-        .prepare("SELECT id FROM artifacts WHERE artifact_type='BrowserHistory' ORDER BY id")
-        .unwrap()
-        .query_map([], |row| row.get(0))
-        .unwrap()
-        .collect::<rusqlite::Result<_>>()
-        .unwrap()
+fn ids(connection: &NativeAnalysisFixture) -> Vec<String> {
+    let mut artifacts = ArtifactRepo::new(connection)
+        .list_by_family(Some("BrowserHistory"))
+        .unwrap();
+    artifacts.sort_by(|left, right| left.id.0.cmp(&right.id.0));
+    artifacts
+        .into_iter()
+        .map(|artifact| artifact.id.0)
+        .collect()
 }
 
 #[test]
@@ -70,21 +76,9 @@ fn wal_discovery_full_streaming_checkpoint_reuse_and_failed_replacement_are_atom
     let wal = std::fs::read(workspace.path().join("input.sqlite-wal")).unwrap();
     std::fs::write(workspace.path().join("history"), &main).unwrap();
     std::fs::write(workspace.path().join("wal"), &wal).unwrap();
-    let connection = Connection::open(workspace.path().join("source.db")).unwrap();
-    persistence_sqlite::runner::run_source_all(&connection).unwrap();
-    connection
-        .execute(
-            "INSERT INTO data_sources(id,case_id,name,kind,source_path,imported_at)
-        VALUES(?1,'case-browser','Browser','directory',?2,'2026-10-26T00:00:00Z')",
-            params![SOURCE, workspace.path().to_str().unwrap()],
-        )
-        .unwrap();
-    FileRepo::new(&connection)
-        .insert_batch(&[
-            entry(workspace.path(), "history", HISTORY.into()),
-            entry(workspace.path(), "wal", format!("{HISTORY}-wal")),
-        ])
-        .unwrap();
+    let connection = NativeAnalysisFixture::new(SOURCE, "case-browser");
+    connection.insert_file(entry(workspace.path(), "history", HISTORY.into()));
+    connection.insert_file(entry(workspace.path(), "wal", format!("{HISTORY}-wal")));
     let reads = Cell::new(0);
     let mut reader = |id: &FileEntryId| -> Result<Box<dyn Read>, std::io::Error> {
         reads.set(reads.get() + 1);
@@ -100,14 +94,22 @@ fn wal_discovery_full_streaming_checkpoint_reuse_and_failed_replacement_are_atom
     .unwrap();
     assert_eq!(first.artifact_count, 2107, "{:?}", first.warnings);
     assert_eq!(ids(&connection).len(), 2107);
-    let raw: String = connection
-        .query_row(
-            "SELECT json_extract(attrs,'$.rawTimestamp') FROM artifacts
-        WHERE json_extract(attrs,'$.visitId')='2107'",
-            [],
-            |row| row.get(0),
-        )
+    let artifacts = ArtifactRepo::new(&connection)
+        .list_by_family(Some("BrowserHistory"))
         .unwrap();
+    let raw = artifacts
+        .iter()
+        .find(|artifact| {
+            artifact
+                .attrs
+                .get("visitId")
+                .is_some_and(|value| value.to_string().trim_matches('"') == "2107")
+        })
+        .and_then(|artifact| artifact.attrs.get("rawTimestamp"))
+        .expect("browser artifact raw timestamp")
+        .to_string()
+        .trim_matches('"')
+        .to_string();
     assert_eq!(raw, (13300000000000001i64 + 2107).to_string());
     assert_eq!(reads.get(), 2);
     let replay = run_analysis_extraction(
@@ -124,17 +126,17 @@ fn wal_discovery_full_streaming_checkpoint_reuse_and_failed_replacement_are_atom
     history(&writer, 2108, 2200);
     let updated = std::fs::read(workspace.path().join("input.sqlite-wal")).unwrap();
     std::fs::write(workspace.path().join("wal"), &updated).unwrap();
+    connection.update_file_metadata(
+        "wal",
+        updated.len() as u64,
+        infrastructure::hashing::sha256_bytes(&updated),
+    );
     connection
-        .execute(
-            "UPDATE file_entries SET size=?1,hash_sha256=?2 WHERE id='wal'",
-            params![
-                updated.len() as u64,
-                infrastructure::hashing::sha256_bytes(&updated)
-            ],
+        .execute_batch(
+            "CREATE TRIGGER stop_browser BEFORE INSERT ON forensic_fingerprints
+             BEGIN SELECT RAISE(ABORT,'native output commit failure'); END;",
         )
         .unwrap();
-    connection.execute_batch("CREATE TRIGGER stop_browser BEFORE INSERT ON artifacts
-        WHEN json_extract(NEW.attrs,'$.visitId')='700' BEGIN SELECT RAISE(ABORT,'write failure'); END;").unwrap();
     assert!(run_analysis_extraction(
         &connection,
         "case-browser",

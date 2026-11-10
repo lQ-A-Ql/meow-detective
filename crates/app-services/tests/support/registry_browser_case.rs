@@ -2,7 +2,10 @@ use app_services::{
     active_case::ActiveCase, bitlocker_runtime::BitLockerUnlockRegistry,
     file_service::PreviewRuntimeRegistry, registry_browser_service::RegistryBrowserContext,
 };
-use domain::{CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
+use domain::{
+    CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
+    FileEntryId,
+};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use std::{path::Path, sync::Arc};
 
@@ -67,5 +70,28 @@ impl BrowserCase {
 }
 pub fn entry(conn: &rusqlite::Connection, source: &str, id: &str, path: &str, size: u64) {
     let name = path.rsplit('/').next().unwrap();
-    conn.execute("INSERT INTO file_entries (id,data_source_id,path,name,entry_type,size,deleted,hidden,system,encrypted) VALUES (?1,?2,?3,?4,'file',?5,0,0,0,0)",rusqlite::params![id,source,path,name,size]).unwrap();
+    persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+        .insert_batch(&[FileEntry {
+            id: FileEntryId(id.to_string()),
+            parent_id: None,
+            data_source_id: DataSourceId(source.to_string()),
+            path: path.to_string(),
+            name: name.to_string(),
+            entry_type: EntryType::File,
+            size: Some(size),
+            ext: path.rsplit_once('.').map(|(_, ext)| ext.to_string()),
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
+        .unwrap();
 }

@@ -29,7 +29,7 @@ fn file_repository_writes_catalog_records_to_fjall_source_storage() {
         hash_sha256: None,
     };
     FileRepo::new(&connection)
-        .insert_batch(&[entry.clone()])
+        .insert_batch(std::slice::from_ref(&entry))
         .unwrap();
     assert_eq!(
         FileRepo::new(&connection)

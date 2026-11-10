@@ -38,13 +38,19 @@ pub(crate) fn bind_source_view(
 ) -> Result<(), ResumeIdentityError> {
     let repo = SourceMetaRepo::new(conn);
     let prior = repo.read(SOURCE_VIEW_KEY)?;
+    if !initialize_view && prior.is_none() {
+        return Err(ResumeIdentityError::Unbound);
+    }
     // Existence matters even if an interrupted/corrupt manifest cannot deserialize.
-    let has_work = crate::staging::staging_dir(case_root, &source.0).try_exists()?
-        || FileRepo::new(conn).count_by_data_source(source)? > 1;
+    let staging_exists = crate::staging::staging_dir(case_root, &source.0).try_exists()?;
+    if initialize_view && !staging_exists {
+        persistence_sqlite::source_fjall::open_store_for_write(conn)?;
+    }
+    let has_work = staging_exists || FileRepo::new(conn).count_by_data_source(source)? > 1;
     match (factory.metadata_identity(), prior) {
         (Some(identity), Some(expected)) if identity == expected => Ok(()),
         (Some(_), Some(_)) => Err(ResumeIdentityError::Changed),
-        (Some(_), None) if has_work || !initialize_view => Err(ResumeIdentityError::Unbound),
+        (Some(_), None) if has_work => Err(ResumeIdentityError::Unbound),
         (Some(identity), None) => Ok(repo.write(SOURCE_VIEW_KEY, identity)?),
         (None, _) if has_work || !initialize_view => Err(ResumeIdentityError::LiveDevice),
         (None, None) => Ok(()),

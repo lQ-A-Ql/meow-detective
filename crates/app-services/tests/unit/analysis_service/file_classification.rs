@@ -1,4 +1,52 @@
 use super::*;
+crate::native_source_test_support!();
+
+fn native_source(entries: &[FileEntry]) -> test_support::NativeSourceFixture {
+    let source_id = entries
+        .first()
+        .map(|entry| entry.data_source_id.clone())
+        .expect("at least one file");
+    let fixture = test_support::NativeSourceFixture::new(&source_id.0, "case-classification");
+    fixture.insert_files(entries);
+    fixture.seal();
+    fixture
+}
+
+fn native_source_with_unknown_encryption(entry: FileEntry) -> test_support::NativeSourceFixture {
+    let source_id = entry.data_source_id.clone();
+    let fixture = test_support::NativeSourceFixture::new(&source_id.0, "case-classification");
+    let record = persistence_fjall::FileEntryRecord {
+        id: entry.id.0,
+        parent_id: entry.parent_id.map(|id| id.0),
+        data_source_id: entry.data_source_id.0,
+        path: entry.path,
+        name: entry.name,
+        entry_type: persistence_fjall::CatalogEntryType::File,
+        size: entry.size,
+        ext: entry.ext,
+        deleted: entry.deleted,
+        hidden: entry.hidden,
+        system: entry.system,
+        read_only: entry.read_only,
+        archive: entry.archive,
+        encrypted: None,
+        created: entry.created_at,
+        modified: entry.modified_at,
+        accessed: entry.accessed_at,
+        changed: entry.changed_at,
+        hash_sha256: entry.hash_sha256,
+        partition_index: None,
+        unix_mode: entry.unix_mode,
+    };
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&fixture.connection)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::CatalogRecordStore::from_source_store((*store).clone())
+        .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+        .unwrap();
+    fixture.seal();
+    fixture
+}
 
 fn entry(name: &str, path: &str, ext: &str, size: u64) -> FileEntry {
     FileEntry {
@@ -151,38 +199,12 @@ fn metadata_fallback_marks_non_magic_rows() {
 
 #[test]
 fn classification_board_surfaces_header_read_failures() {
-    let conn = rusqlite::Connection::open_in_memory().expect("in-memory database");
-    conn.execute_batch(
-        "CREATE TABLE file_entries (
-            id TEXT PRIMARY KEY,
-            parent_id TEXT,
-            data_source_id TEXT NOT NULL,
-            path TEXT NOT NULL,
-            name TEXT NOT NULL,
-            entry_type TEXT NOT NULL,
-            size INTEGER,
-            ext TEXT,
-            deleted INTEGER NOT NULL DEFAULT 0,
-            hidden INTEGER NOT NULL DEFAULT 0,
-            system INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT,
-            modified_at TEXT,
-            accessed_at TEXT,
-            changed_at TEXT,
-            hash_sha256 TEXT,
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
-            read_only INTEGER NOT NULL DEFAULT 0,
-            archive INTEGER NOT NULL DEFAULT 0,
-            unix_mode INTEGER
-        );
-        INSERT INTO file_entries
-            (id, data_source_id, path, name, entry_type, size, ext, encrypted)
-        VALUES
-            ('file-1', 'ds-1', '[P2]/evidence.exe', 'evidence.exe', 'file', 100, 'exe', 0);",
-    )
-    .expect("seed file_entries");
+    let mut evidence = entry("evidence.exe", "[P2]/evidence.exe", "exe", 100);
+    evidence.id = FileEntryId("file-1".into());
+    evidence.data_source_id = domain::DataSourceId("ds-1".into());
+    let fixture = native_source(&[evidence]);
 
-    let board = build_file_classification_board(&conn, 1, |_file_id| {
+    let board = build_file_classification_board(&fixture.connection, 1, |_file_id| {
         Err::<Vec<u8>, _>("evidence read unavailable")
     })
     .expect("classification board");
@@ -196,40 +218,14 @@ fn classification_board_surfaces_header_read_failures() {
 
 #[test]
 fn encrypted_files_are_classified_without_reading_content_or_leaking_paths() {
-    let conn = rusqlite::Connection::open_in_memory().expect("in-memory database");
-    conn.execute_batch(
-        "CREATE TABLE file_entries (
-            id TEXT PRIMARY KEY,
-            parent_id TEXT,
-            data_source_id TEXT NOT NULL,
-            path TEXT NOT NULL,
-            name TEXT NOT NULL,
-            entry_type TEXT NOT NULL,
-            size INTEGER,
-            ext TEXT,
-            deleted INTEGER NOT NULL DEFAULT 0,
-            hidden INTEGER NOT NULL DEFAULT 0,
-            system INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT,
-            modified_at TEXT,
-            accessed_at TEXT,
-            changed_at TEXT,
-            hash_sha256 TEXT,
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
-            read_only INTEGER NOT NULL DEFAULT 0,
-            archive INTEGER NOT NULL DEFAULT 0,
-            unix_mode INTEGER
-        );
-        INSERT INTO file_entries
-            (id, data_source_id, path, name, entry_type, size, ext, encrypted)
-        VALUES
-            ('efs-file', 'ds-rbd', '[P2]/private/secret.txt', 'secret.txt',
-             'file', 100, 'txt', 1);",
-    )
-    .expect("seed encrypted file entry");
+    let mut encrypted = entry("secret.txt", "[P2]/private/secret.txt", "txt", 100);
+    encrypted.id = FileEntryId("efs-file".into());
+    encrypted.data_source_id = domain::DataSourceId("ds-rbd".into());
+    encrypted.encrypted = true;
+    let fixture = native_source(&[encrypted]);
     let mut read_calls = 0usize;
 
-    let board = build_file_classification_board(&conn, 1, |_file_id| {
+    let board = build_file_classification_board(&fixture.connection, 1, |_file_id| {
         read_calls += 1;
         Ok::<Vec<u8>, &str>(b"ciphertext".to_vec())
     })
@@ -251,40 +247,13 @@ fn encrypted_files_are_classified_without_reading_content_or_leaking_paths() {
 
 #[test]
 fn unknown_encryption_status_is_not_reported_as_efs() {
-    let conn = rusqlite::Connection::open_in_memory().expect("in-memory database");
-    conn.execute_batch(
-        "CREATE TABLE file_entries (
-            id TEXT PRIMARY KEY,
-            parent_id TEXT,
-            data_source_id TEXT NOT NULL,
-            path TEXT NOT NULL,
-            name TEXT NOT NULL,
-            entry_type TEXT NOT NULL,
-            size INTEGER,
-            ext TEXT,
-            deleted INTEGER NOT NULL DEFAULT 0,
-            hidden INTEGER NOT NULL DEFAULT 0,
-            system INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT,
-            modified_at TEXT,
-            accessed_at TEXT,
-            changed_at TEXT,
-            hash_sha256 TEXT,
-            encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
-            read_only INTEGER NOT NULL DEFAULT 0,
-            archive INTEGER NOT NULL DEFAULT 0,
-            unix_mode INTEGER
-        );
-        INSERT INTO file_entries
-            (id, data_source_id, path, name, entry_type, size, ext, encrypted)
-        VALUES
-            ('unknown-file', 'ds-unknown', '[P2]/private/unknown.txt', 'unknown.txt',
-             'file', 100, 'txt', NULL);",
-    )
-    .expect("seed unknown-encryption file entry");
+    let mut unknown = entry("unknown.txt", "[P2]/private/unknown.txt", "txt", 100);
+    unknown.id = FileEntryId("unknown-file".into());
+    unknown.data_source_id = domain::DataSourceId("ds-unknown".into());
+    let fixture = native_source_with_unknown_encryption(unknown);
     let mut read_calls = 0usize;
 
-    let board = build_file_classification_board(&conn, 1, |_file_id| {
+    let board = build_file_classification_board(&fixture.connection, 1, |_file_id| {
         read_calls += 1;
         Ok::<Vec<u8>, &str>(b"plaintext".to_vec())
     })

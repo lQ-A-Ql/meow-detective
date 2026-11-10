@@ -8,14 +8,14 @@ use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-pub(super) struct StagedGeneration {
-    pub(super) name: String,
+pub(crate) struct StagedGeneration {
+    pub(crate) name: String,
     path: PathBuf,
     committed: bool,
 }
 
 impl StagedGeneration {
-    pub(super) fn commit(&mut self) {
+    pub(crate) fn commit(&mut self) {
         self.committed = true;
     }
 }
@@ -93,10 +93,9 @@ pub(super) fn begin_streaming(
     conn: &Connection,
     source_id: &str,
     replacements: &[super::state::AnalysisOutputReplacement],
-) -> Result<Option<StreamingGeneration>, AnalysisServiceError> {
-    let Some(owner) = persistence_sqlite::source_fjall::source_id(conn)? else {
-        return Ok(None);
-    };
+) -> Result<StreamingGeneration, AnalysisServiceError> {
+    let owner = persistence_sqlite::source_fjall::source_id(conn)?
+        .ok_or_else(|| AnalysisServiceError::InvalidInput("source identity is missing".into()))?;
     if owner != source_id {
         return Err(AnalysisServiceError::InvalidInput(format!(
             "analysis output source '{}' does not match source detail owner '{}'",
@@ -115,7 +114,7 @@ pub(super) fn begin_streaming(
         .clone_to(layout.build_path(), DatabaseConfig::default())
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     delete_replacements(&staged, source_id, replacements)?;
-    Ok(Some(StreamingGeneration {
+    Ok(StreamingGeneration {
         staged: StagedGeneration {
             name: format!("source.fjall.build.{attempt}"),
             path: layout.build_path(),
@@ -124,7 +123,7 @@ pub(super) fn begin_streaming(
         store: staged,
         source_id: source_id.to_owned(),
         projection_batch_digest: manifest.projection_batch_digest,
-    }))
+    })
 }
 
 pub(super) fn stage(

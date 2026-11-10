@@ -10,11 +10,18 @@ use domain::{
 };
 use persistence_sqlite::repositories::{
     artifact_repo::ArtifactRepo, case_repo::CaseRepo, datasource_repo::DataSourceRepo,
-    file_repo::FileRepo,
+    file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
 use persistence_sqlite::{open_in_memory, runner};
 use rusqlite::{params, Connection};
-use std::{cell::Cell, collections::HashMap, io::Read, io::Write, path::Path, rc::Rc};
+use std::{
+    cell::Cell,
+    collections::{BTreeMap, HashMap},
+    io::Read,
+    io::Write,
+    path::Path,
+    rc::Rc,
+};
 use tempfile::TempDir;
 use testing::{builders::registry, fixtures};
 use transport::dto::{AnalysisParseStatusDto, EvtxEventViewDto};
@@ -81,10 +88,40 @@ fn setup_case_db() -> (Connection, TempDir, DataSourceId) {
         provenance: domain::DataSourceProvenance::unknown(),
     };
     DataSourceRepo::new(&conn)
-        .insert(&CaseId(case.id.0), &source)
+        .insert(&case.id, &source)
         .unwrap();
 
-    (conn, tmp, ds_id)
+    let source_connection = crate::source_db::open_source_db(tmp.path(), &ds_id).unwrap();
+    persistence_sqlite::source_fjall::open_store_for_write(&source_connection)
+        .unwrap()
+        .expect("initialize native source generation");
+    DataSourceRepo::new(&source_connection)
+        .upsert_source_local_metadata(&case.id, &source)
+        .unwrap();
+    (source_connection, tmp, ds_id)
+}
+
+fn insert_files(connection: &Connection, files: &[FileEntry]) {
+    FileRepo::new(connection)
+        .insert_batch(files)
+        .expect("insert native catalog files");
+    reseal_source_generation(connection);
+}
+
+fn reseal_source_generation(connection: &Connection) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+        .expect("open native source store")
+        .expect("native source store is configured");
+    let source_id = persistence_sqlite::source_fjall::source_id(connection)
+        .expect("read source identity")
+        .expect("source identity is configured");
+    persistence_fjall::replace_source_generation(
+        &store,
+        &source_id,
+        "analysis-fixture",
+        &"a".repeat(64),
+    )
+    .expect("seal native source generation");
 }
 
 #[test]
@@ -482,12 +519,13 @@ fn classification_uses_file_id_reader_and_limits_sample() {
 #[test]
 fn malformed_registry_hive_presence_keeps_system_fields_empty_with_provenance() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[
+    insert_files(
+        &conn,
+        &[
             file_with_ds("system", &ds_id, "Windows/System32/config/SYSTEM", 4096),
             file_with_ds("software", &ds_id, "Windows/System32/config/SOFTWARE", 4096),
-        ])
-        .unwrap();
+        ],
+    );
 
     let info =
         extract_system_info_for_case(&conn, |file_id, _max_bytes| match file_id.0.as_str() {
@@ -518,8 +556,9 @@ fn registry_hive_fields_are_parsed_with_field_provenance() {
         .expect("read tiny SYSTEM registry fixture");
     let software_hive = std::fs::read(fixtures::tiny_registry_software_hive())
         .expect("read tiny SOFTWARE registry fixture");
-    FileRepo::new(&conn)
-        .insert_batch(&[
+    insert_files(
+        &conn,
+        &[
             file_with_ds(
                 "system",
                 &ds_id,
@@ -532,8 +571,8 @@ fn registry_hive_fields_are_parsed_with_field_provenance() {
                 "Windows/System32/config/SOFTWARE",
                 software_hive.len() as u64,
             ),
-        ])
-        .unwrap();
+        ],
+    );
 
     let info = extract_system_info_for_case(&conn, |file_id, max_bytes| match file_id.0.as_str() {
         "system" => Ok(system_hive[..system_hive.len().min(max_bytes)].to_vec()),
@@ -617,14 +656,15 @@ fn windows_build_number_includes_update_build_revision_when_available() {
 #[test]
 fn corrupted_registry_hive_records_warning_without_facts() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[file_with_ds(
+    insert_files(
+        &conn,
+        &[file_with_ds(
             "system",
             &ds_id,
             "Windows/System32/config/SYSTEM",
             4,
-        )])
-        .unwrap();
+        )],
+    );
 
     let info =
         extract_system_info_for_case(&conn, |_file_id, _max_bytes| -> Result<Vec<u8>, String> {
@@ -642,14 +682,15 @@ fn corrupted_registry_hive_records_warning_without_facts() {
 #[test]
 fn malformed_evtx_source_is_not_parsed_and_generates_no_boot_records() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[file_with_ds(
+    insert_files(
+        &conn,
+        &[file_with_ds(
             "system-evtx",
             &ds_id,
             "Windows/System32/winevt/Logs/System.evtx",
             8192,
-        )])
-        .unwrap();
+        )],
+    );
 
     let info =
         extract_system_info_for_case(&conn, |_file_id, _max_bytes| -> Result<Vec<u8>, String> {
@@ -700,8 +741,9 @@ fn classification_carries_read_error_provenance() {
 #[test]
 fn evidence_discovery_maps_registry_evtx_prefetch_lnk_paths_to_categories() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[
+    insert_files(
+        &conn,
+        &[
             file_with_ds("system", &ds_id, "Windows/System32/config/SYSTEM", 10),
             file_with_ds(
                 "evtx",
@@ -725,8 +767,8 @@ fn evidence_discovery_maps_registry_evtx_prefetch_lnk_paths_to_categories() {
             ),
             file_with_ds("email-eml", &ds_id, "Users/alice/Inbox/message.eml", 70),
             file_with_ds("email-emlx", &ds_id, "Users/alice/Inbox/message.emlx", 80),
-        ])
-        .unwrap();
+        ],
+    );
 
     let candidates = discover_evidence_candidates(&conn).unwrap();
     assert_eq!(candidates.get("SystemInformation").map(Vec::len), Some(2));
@@ -741,14 +783,15 @@ fn evidence_discovery_maps_registry_evtx_prefetch_lnk_paths_to_categories() {
 #[test]
 fn targeted_evidence_scan_can_use_bounded_bytes_reader_without_full_open() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[file_with_ds(
+    insert_files(
+        &conn,
+        &[file_with_ds(
             "lnk",
             &ds_id,
             "Users/alice/AppData/Roaming/Microsoft/Windows/Recent/app.lnk",
             64,
-        )])
-        .unwrap();
+        )],
+    );
 
     let probe = BoundedBytesProbe::new(vec![0u8; 64]);
     let full_reader_probe = probe.clone();
@@ -783,14 +826,15 @@ fn targeted_evidence_scan_can_use_bounded_bytes_reader_without_full_open() {
 fn run_analysis_extraction_can_use_bounded_bytes_reader_without_full_open() {
     let (conn, _tmp, ds_id) = setup_case_db();
     let email = sample_email_bytes();
-    FileRepo::new(&conn)
-        .insert_batch(&[file_with_ds(
+    insert_files(
+        &conn,
+        &[file_with_ds(
             "email",
             &ds_id,
             "Users/alice/Mail/message.eml",
             email.len() as u64,
-        )])
-        .unwrap();
+        )],
+    );
 
     let probe = BoundedBytesProbe::new(email);
     let full_reader_probe = probe.clone();
@@ -821,14 +865,15 @@ fn run_analysis_extraction_can_use_bounded_bytes_reader_without_full_open() {
 fn linux_analysis_extraction_uses_smaller_text_log_read_cap() {
     let (conn, _tmp, ds_id) = setup_case_db();
     let auth_log = b"Jan 01 00:00:01 host sudo: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/id\n".to_vec();
-    FileRepo::new(&conn)
-        .insert_batch(&[file_with_ds(
+    insert_files(
+        &conn,
+        &[file_with_ds(
             "auth",
             &ds_id,
             "var/log/auth.log",
             64 * 1024 * 1024,
-        )])
-        .unwrap();
+        )],
+    );
 
     let probe = BoundedBytesProbe::new(auth_log);
     let reader_probe = probe.clone();
@@ -855,8 +900,9 @@ fn linux_analysis_extraction_uses_smaller_text_log_read_cap() {
 #[test]
 fn linux_analysis_passes_each_route_limit_to_the_evidence_reader() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[
+    insert_files(
+        &conn,
+        &[
             file_with_ds(
                 "journal",
                 &ds_id,
@@ -865,8 +911,8 @@ fn linux_analysis_passes_each_route_limit_to_the_evidence_reader() {
             ),
             file_with_ds("auth", &ds_id, "var/log/auth.log", 64 * 1024 * 1024),
             file_with_ds("cron", &ds_id, "etc/crontab", 8 * 1024 * 1024),
-        ])
-        .unwrap();
+        ],
+    );
 
     let observed = Rc::new(std::cell::RefCell::new(HashMap::new()));
     let observed_reader = Rc::clone(&observed);
@@ -905,8 +951,9 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
     let firefox_places = firefox_places_bytes();
     let email = sample_email_bytes();
 
-    FileRepo::new(&conn)
-        .insert_batch(&[
+    insert_files(
+        &conn,
+        &[
             file_with_ds(
                 "system",
                 &ds_id,
@@ -943,8 +990,8 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
                 "Users/alice/Mail/message.eml",
                 email.len() as u64,
             ),
-        ])
-        .unwrap();
+        ],
+    );
 
     let mut contents = HashMap::new();
     contents.insert("system".to_string(), system_hive);
@@ -975,35 +1022,24 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
     assert_eq!(run.artifact_count, 16);
     assert_eq!(run.timeline_event_count, 0);
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT artifact_type, COUNT(*)
-                 FROM artifacts
-                 GROUP BY artifact_type
-                 ORDER BY artifact_type",
-        )
-        .unwrap();
-    let counts = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
-        })
+    let counts = ArtifactRepo::new(&conn)
+        .count_by_family()
         .unwrap()
-        .collect::<Result<HashMap<_, _>, _>>()
-        .unwrap();
+        .into_iter()
+        .collect::<HashMap<_, _>>();
     assert_eq!(counts.get("RegistryValue").copied(), Some(8));
     assert_eq!(counts.get("RegistryHive").copied(), Some(2));
     assert_eq!(counts.get("BrowserHistory").copied(), Some(3));
     assert_eq!(counts.get("BrowserDownload").copied(), Some(2));
     assert_eq!(counts.get("EmailMessage").copied(), Some(1));
 
-    let timeline_case_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM timeline_events WHERE case_id = 'case-analysis'",
-            [],
-            |row| row.get(0),
-        )
+    let analysis_timeline_events = TimelineRepo::new(&conn)
+        .list_analysis_outputs_for_prefixes(&["registry.", "browser.", "email.", "analysis."])
         .unwrap();
-    assert_eq!(timeline_case_count, 0);
+    assert!(
+        analysis_timeline_events.is_empty(),
+        "structured analyzers must not create Timeline events in this fixture"
+    );
 
     let registry = get_registry_extraction_summary(&conn, 0, 20).unwrap();
     assert_eq!(registry.total, 10);
@@ -1067,30 +1103,29 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
         .body_preview
         .contains("first line of the message body"));
 
+    let second_reads = Rc::new(Cell::new(0usize));
+    let second_reads_reader = Rc::clone(&second_reads);
     let second_run = run_analysis_extraction_with_reader_limits(
         &conn,
         "case-analysis",
         W,
         &[],
-        |file_id, _read_limit| {
-            contents
-                .get(&file_id.0)
-                .cloned()
-                .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
-                .ok_or_else(|| format!("missing bytes for {}", file_id.0))
+        |_file_id, _read_limit| {
+            second_reads_reader.set(second_reads_reader.get() + 1);
+            Err("checkpoint replay must not read evidence".to_string())
         },
     )
     .unwrap();
-    assert_eq!(second_run.scanned_count, 0);
+    assert_eq!(second_run.scanned_count, 6);
+    assert_eq!(second_run.checkpoint_hit_count, 6);
+    assert_eq!(second_reads.get(), 0);
     assert_eq!(second_run.artifact_count, 16);
-    let artifact_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))
-        .unwrap();
-    let timeline_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
-        .unwrap();
+    let artifact_count = ArtifactRepo::new(&conn).count().unwrap();
     assert_eq!(artifact_count, 16);
-    assert_eq!(timeline_count, 0);
+    assert!(TimelineRepo::new(&conn)
+        .list_analysis_outputs_for_prefixes(&["registry.", "browser.", "email.", "analysis.",])
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -1099,14 +1134,15 @@ fn run_analysis_extraction_extracts_eventlogs_and_persists() {
     let evtx_bytes = std::fs::read(fixtures::tiny_system_evtx()).unwrap();
     let mut contents: HashMap<String, Vec<u8>> = HashMap::new();
     contents.insert("system-evtx".to_string(), evtx_bytes);
-    FileRepo::new(&conn)
-        .insert_batch(&[file_with_ds(
+    insert_files(
+        &conn,
+        &[file_with_ds(
             "system-evtx",
             &ds_id,
             "Windows/System32/winevt/Logs/System.evtx",
             1024,
-        )])
-        .unwrap();
+        )],
+    );
 
     let run = run_analysis_extraction_with_reader_limits(
         &conn,
@@ -1124,20 +1160,8 @@ fn run_analysis_extraction_extracts_eventlogs_and_persists() {
     .unwrap();
 
     assert_eq!(run.scanned_count, 1);
-    let artifact_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE case_id = 'case-analysis'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    let timeline_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM timeline_events WHERE case_id = 'case-analysis'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let artifact_count = ArtifactRepo::new(&conn).count().unwrap();
+    let timeline_count = TimelineRepo::new(&conn).count().unwrap();
     assert!(artifact_count > 0, "expected EVTX artifacts");
     assert_eq!(timeline_count, 0, "EVTX events must not enter Timeline");
 }
@@ -1196,8 +1220,9 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
     contents.insert("nginx-access".to_string(), nginx_access.as_bytes().to_vec());
     contents.insert("web-shell".to_string(), web_shell.as_bytes().to_vec());
     contents.insert("auth-rotated".to_string(), auth_rotated);
-    FileRepo::new(&conn)
-        .insert_batch(&[
+    insert_files(
+        &conn,
+        &[
             file_with_ds(
                 "bash-history",
                 &ds_id,
@@ -1303,8 +1328,8 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
                 web_shell.len() as u64,
             ),
             file_with_ds("auth-rotated", &ds_id, "var/log/auth.log.1.gz", 96),
-        ])
-        .unwrap();
+        ],
+    );
 
     let run = run_analysis_extraction_with_reader_limits(
         &conn,
@@ -1364,184 +1389,186 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
         web_section.artifact_count >= 5,
         "expected site, access log and findings from web inputs"
     );
-    let artifact_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxBashCommand'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let artifact_count = ArtifactRepo::new(&conn)
+        .count_by_family()
+        .unwrap()
+        .into_iter()
+        .find_map(|(family, count)| (family == "LinuxBashCommand").then_some(count))
+        .unwrap_or_default();
     assert!(artifact_count > 0, "expected LinuxBashCommand artifacts");
-    let journal_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxJournal'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    let sudo_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxSudoEvent'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let family_counts = ArtifactRepo::new(&conn)
+        .count_by_family()
+        .unwrap()
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+    let journal_count = family_counts
+        .get("LinuxJournal")
+        .copied()
+        .unwrap_or_default();
+    let sudo_count = family_counts
+        .get("LinuxSudoEvent")
+        .copied()
+        .unwrap_or_default();
     assert!(journal_count > 0, "expected generic LinuxJournal text logs");
-    let web_site_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxWebSite'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    let web_access_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxWebAccessLog'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    let web_finding_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxWebFinding'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let web_site_count = family_counts
+        .get("LinuxWebSite")
+        .copied()
+        .unwrap_or_default();
+    let artifacts = ArtifactRepo::new(&conn).list_by_family(None).unwrap();
+    let web_access_count = artifacts
+        .iter()
+        .filter(|artifact| artifact.family == "LinuxWebAccessLog")
+        .count() as u64;
+    let web_finding_count = artifacts
+        .iter()
+        .filter(|artifact| artifact.family == "LinuxWebFinding")
+        .count() as u64;
     assert_eq!(web_site_count, 1);
     assert_eq!(web_access_count, 1);
     assert!(
         web_finding_count >= 3,
         "expected SQLi, scanner and web shell findings"
     );
-    let package_action: String = conn
-        .query_row(
-            "SELECT json_extract(attrs, '$.action')
-             FROM artifacts
-             WHERE artifact_type = 'LinuxAptEvent'
-               AND json_extract(attrs, '$.sourcePath') = 'var/log/yum.log'
-             LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
+    let package_action = artifacts
+        .iter()
+        .find(|artifact| {
+            artifact.family == "LinuxAptEvent"
+                && artifact
+                    .attrs
+                    .get("sourcePath")
+                    .and_then(|value| value.as_str())
+                    == Some("var/log/yum.log")
+        })
+        .and_then(|artifact| artifact.attrs.get("action"))
+        .and_then(|value| value.as_str())
         .unwrap();
     assert_eq!(package_action, "install");
-    let package_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxAptEvent'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let package_count = artifacts
+        .iter()
+        .filter(|artifact| artifact.family == "LinuxAptEvent")
+        .count() as u64;
     assert_eq!(package_count, 1);
-    let ssh_line: String = conn
-        .query_row(
-            "SELECT json_extract(attrs, '$.line')
-             FROM artifacts
-             WHERE artifact_type = 'LinuxSystemConfig'
-               AND json_extract(attrs, '$.sourcePath') = 'home/alice/.ssh/authorized_keys'
-             LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
+    let ssh_line = artifacts
+        .iter()
+        .find(|artifact| {
+            artifact.family == "LinuxSystemConfig"
+                && artifact
+                    .attrs
+                    .get("sourcePath")
+                    .and_then(|value| value.as_str())
+                    == Some("home/alice/.ssh/authorized_keys")
+        })
+        .and_then(|artifact| artifact.attrs.get("line"))
+        .and_then(|value| value.as_str())
         .unwrap();
     assert_eq!(ssh_line, authorized_keys.trim());
     assert!(
         sudo_count > 0,
         "expected sudo artifact from gz rotated auth log"
     );
-    let system_config_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxSystemConfig'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let system_config_count = artifacts
+        .iter()
+        .filter(|artifact| artifact.family == "LinuxSystemConfig")
+        .count() as u64;
     assert!(
         system_config_count > 0,
         "expected LinuxSystemConfig artifacts"
     );
-    let root_uid: i64 = conn
-        .query_row(
-            "SELECT json_extract(attrs, '$.uid')
-             FROM artifacts
-             WHERE artifact_type = 'LinuxSystemConfig'
-               AND json_extract(attrs, '$.configKind') = 'passwdAccount'
-               AND json_extract(attrs, '$.username') = 'root'
-             LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
+    let root_uid = artifacts
+        .iter()
+        .find(|artifact| {
+            artifact.family == "LinuxSystemConfig"
+                && artifact
+                    .attrs
+                    .get("configKind")
+                    .and_then(|value| value.as_str())
+                    == Some("passwdAccount")
+                && artifact
+                    .attrs
+                    .get("username")
+                    .and_then(|value| value.as_str())
+                    == Some("root")
+        })
+        .and_then(|artifact| artifact.attrs.get("uid"))
+        .and_then(|value| value.as_i64())
         .unwrap();
     assert_eq!(root_uid, 0);
-    let pretty_name: String = conn
-        .query_row(
-            "SELECT json_extract(attrs, '$.prettyName')
-             FROM artifacts
-             WHERE artifact_type = 'LinuxSystemConfig'
-               AND json_extract(attrs, '$.configKind') = 'osRelease'
-             LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
+    let pretty_name = artifacts
+        .iter()
+        .find(|artifact| {
+            artifact.family == "LinuxSystemConfig"
+                && artifact
+                    .attrs
+                    .get("configKind")
+                    .and_then(|value| value.as_str())
+                    == Some("osRelease")
+        })
+        .and_then(|artifact| artifact.attrs.get("prettyName"))
+        .and_then(|value| value.as_str())
         .unwrap();
     assert_eq!(pretty_name, "CentOS Stream 9");
-    let pve_config_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts
-             WHERE artifact_type = 'LinuxSystemConfig'
-               AND json_extract(attrs, '$.configKind') = 'pveConfig'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let pve_config_count = artifacts
+        .iter()
+        .filter(|artifact| {
+            artifact.family == "LinuxSystemConfig"
+                && artifact
+                    .attrs
+                    .get("configKind")
+                    .and_then(|value| value.as_str())
+                    == Some("pveConfig")
+        })
+        .count() as u64;
     assert!(
         pve_config_count > 0,
         "expected PVE config artifacts from Proxmox paths"
     );
-    let pve_vm_memory: String = conn
-        .query_row(
-            "SELECT json_extract(attrs, '$.value')
-             FROM artifacts
-             WHERE artifact_type = 'LinuxSystemConfig'
-               AND json_extract(attrs, '$.pveConfigType') = 'pveQemuConfig'
-               AND json_extract(attrs, '$.key') = 'memory'
-             LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
+    let pve_vm_memory = artifacts
+        .iter()
+        .find(|artifact| {
+            artifact.family == "LinuxSystemConfig"
+                && artifact
+                    .attrs
+                    .get("pveConfigType")
+                    .and_then(|value| value.as_str())
+                    == Some("pveQemuConfig")
+                && artifact.attrs.get("key").and_then(|value| value.as_str()) == Some("memory")
+        })
+        .and_then(|artifact| artifact.attrs.get("value"))
+        .and_then(|value| value.as_str())
         .unwrap();
     assert_eq!(pve_vm_memory, "4096");
-    let pve_log_count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts
-             WHERE artifact_type = 'LinuxJournal'
-               AND json_extract(attrs, '$.logKind') = 'pve'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let pve_log_count = artifacts
+        .iter()
+        .filter(|artifact| {
+            artifact.family == "LinuxJournal"
+                && artifact
+                    .attrs
+                    .get("logKind")
+                    .and_then(|value| value.as_str())
+                    == Some("pve")
+        })
+        .count() as u64;
     assert!(
         pve_log_count > 0,
         "expected PVE logs to use generic text fallback"
     );
 
     let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
-    assert_eq!(summary.bash_command_count, artifact_count as u64);
+    assert_eq!(summary.bash_command_count, artifact_count);
     assert_eq!(
         summary.total_count,
-        artifact_count as u64
-            + journal_count as u64
-            + package_count as u64
-            + sudo_count as u64
-            + system_config_count as u64
-            + web_site_count as u64
-            + web_access_count as u64
-            + web_finding_count as u64
+        artifact_count
+            + journal_count
+            + package_count
+            + sudo_count
+            + system_config_count
+            + web_site_count
+            + web_access_count
+            + web_finding_count
     );
-    assert_eq!(summary.web_site_count, web_site_count as u64);
-    assert_eq!(summary.web_access_log_count, web_access_count as u64);
-    assert_eq!(summary.web_finding_count, web_finding_count as u64);
+    assert_eq!(summary.web_site_count, web_site_count);
+    assert_eq!(summary.web_access_log_count, web_access_count);
+    assert_eq!(summary.web_finding_count, web_finding_count);
     assert!(
         summary
             .journal_entries
@@ -1608,8 +1635,9 @@ fn get_linux_artifact_summary_derives_system_info_unpaged() {
     contents.insert("hostname".to_string(), hostname.as_bytes().to_vec());
     contents.insert("passwd".to_string(), passwd.as_bytes().to_vec());
     contents.insert("shadow".to_string(), shadow.as_bytes().to_vec());
-    FileRepo::new(&conn)
-        .insert_batch(&[
+    insert_files(
+        &conn,
+        &[
             file_with_ds("os-release", &ds_id, "cl/root/etc/os-release", 10),
             file_with_ds("hostname", &ds_id, "cl/root/etc/hostname", 10),
             file_with_ds("passwd", &ds_id, "cl/root/etc/passwd", 10),
@@ -1645,8 +1673,8 @@ fn get_linux_artifact_summary_derives_system_info_unpaged() {
                 "cl/root/opt/node_modules/example/lib/modules/index.d.ts",
                 10,
             ),
-        ])
-        .unwrap();
+        ],
+    );
 
     run_analysis_extraction_with_reader_limits(
         &conn,
@@ -1716,8 +1744,9 @@ fn get_linux_artifact_summary_derives_system_info_unpaged() {
 #[test]
 fn get_linux_artifact_summary_does_not_fabricate_info_from_kernel_paths() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[
+    insert_files(
+        &conn,
+        &[
             file_with_ds(
                 "module-xfs",
                 &ds_id,
@@ -1736,8 +1765,8 @@ fn get_linux_artifact_summary_does_not_fabricate_info_from_kernel_paths() {
                 "cl/root/lib/modules/5.14.0-100.el9.x86_64/modules.dep",
                 10,
             ),
-        ])
-        .unwrap();
+        ],
+    );
 
     let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
     assert!(
@@ -1749,8 +1778,9 @@ fn get_linux_artifact_summary_does_not_fabricate_info_from_kernel_paths() {
 #[test]
 fn get_linux_artifact_summary_extracts_valid_module_versions_without_nested_files() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[
+    insert_files(
+        &conn,
+        &[
             file_with_ds(
                 "module-xfs",
                 &ds_id,
@@ -1764,8 +1794,8 @@ fn get_linux_artifact_summary_extracts_valid_module_versions_without_nested_file
                 "[P2]/cl/root/opt/node_modules/example/lib/modules/package.json",
                 10,
             ),
-        ])
-        .unwrap();
+        ],
+    );
     let os_release = Artifact {
         id: ArtifactId("os-release-module-test".to_string()),
         family: "LinuxSystemConfig".to_string(),
@@ -1800,8 +1830,9 @@ fn get_linux_artifact_summary_extracts_valid_module_versions_without_nested_file
 #[test]
 fn discover_evidence_candidates_includes_linux_first_pass_paths() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[
+    insert_files(
+        &conn,
+        &[
             file_with_ds(
                 "passwd-prefixed",
                 &ds_id,
@@ -1842,8 +1873,8 @@ fn discover_evidence_candidates_includes_linux_first_pass_paths() {
             file_with_ds("pveproxy", &ds_id, "var/log/pveproxy/access.log", 10),
             file_with_ds("pvedaemon", &ds_id, "var/log/pvedaemon.log", 10),
             file_with_ds("pve-task", &ds_id, "var/log/pve/tasks/active", 10),
-        ])
-        .unwrap();
+        ],
+    );
 
     let candidates = discover_evidence_candidates(&conn).unwrap();
     let linux = candidates.get("LinuxArtifacts").unwrap();
@@ -1901,8 +1932,9 @@ fn discover_evidence_candidates_includes_linux_first_pass_paths() {
 #[test]
 fn linux_summary_reports_candidates_without_artifacts_and_truncation() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[
+    insert_files(
+        &conn,
+        &[
             file_with_ds(
                 "large-auth",
                 &ds_id,
@@ -1915,8 +1947,8 @@ fn linux_summary_reports_candidates_without_artifacts_and_truncation() {
                 "etc/systemd/system/backdoor.service",
                 128,
             ),
-        ])
-        .unwrap();
+        ],
+    );
 
     let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
 
@@ -1941,14 +1973,15 @@ fn linux_summary_reports_candidates_without_artifacts_and_truncation() {
 #[test]
 fn evidence_summary_reports_candidate_found_without_parser_run() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[file_with_ds(
+    insert_files(
+        &conn,
+        &[file_with_ds(
             "system",
             &ds_id,
             "Windows/System32/config/SYSTEM",
             10,
-        )])
-        .unwrap();
+        )],
+    );
 
     let summary = get_evidence_classification_summary(&conn, W).unwrap();
     let system = summary
@@ -1965,19 +1998,32 @@ fn evidence_summary_reports_candidate_found_without_parser_run() {
 #[test]
 fn evidence_summary_reports_parsed_when_artifacts_exist() {
     let (conn, _tmp, ds_id) = setup_case_db();
-    FileRepo::new(&conn)
-        .insert_batch(&[file_with_ds(
+    insert_files(
+        &conn,
+        &[file_with_ds(
             "pf",
             &ds_id,
             "Windows/Prefetch/CMD.EXE-12345678.pf",
             10,
-        )])
-        .unwrap();
-    conn.execute(
-            "INSERT INTO artifacts
-             (id, case_id, data_source_id, artifact_type, source_object_id, title, summary, attrs, created_at)
-             VALUES ('artifact-1', 'case-analysis', ?1, 'Prefetch', 'pf', 'Prefetch: CMD.EXE', 'summary', '{}', '2026-01-01T00:00:00Z')",
-            [&ds_id.0],
+        )],
+    );
+    ArtifactRepo::new(&conn)
+        .insert_batch(
+            &[Artifact {
+                id: ArtifactId("artifact-1".into()),
+                family: "Prefetch".into(),
+                source_object_id: Some(FileEntryId("pf".into())),
+                title: "Prefetch: CMD.EXE".into(),
+                summary: "summary".into(),
+                extractor_id: None,
+                extractor_version: None,
+                confidence: None,
+                source_attribution: None,
+                created_at: "2026-01-01T00:00:00Z".parse().unwrap(),
+                attrs: BTreeMap::new(),
+            }],
+            "case-analysis",
+            &ds_id.0,
         )
         .unwrap();
 

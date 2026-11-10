@@ -3,6 +3,7 @@ use app_services::{
     import_pipeline::{enumerate_partition_with_fs, PartitionEnumerationRequest},
 };
 use evidence_core::{filesystem::root_node, FileSystemReader, FsNode};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use std::collections::HashMap;
 use std::io::{self, Cursor, Read};
 
@@ -60,9 +61,28 @@ fn node(name: &str, path: &str, is_dir: bool) -> FsNode {
 
 #[test]
 fn candidate_without_preseeded_placeholder_materializes_partition_subtree() {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_source_all(&conn).unwrap();
+    let root = tempfile::tempdir().unwrap();
     let data_source_id = domain::DataSourceId("ds-candidate".to_string());
+    let conn = app_services::source_db::open_source_db(root.path(), &data_source_id).unwrap();
+    conn.execute(
+        "INSERT INTO data_sources
+         (id, case_id, name, kind, source_path, imported_at)
+         VALUES (?1, 'case-1', ?1, 'e01', 'source.E01',
+                 '2026-01-01T00:00:00Z')",
+        [&data_source_id.0],
+    )
+    .unwrap();
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&conn)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::seal_source_generation(
+        &store,
+        &data_source_id.0,
+        "fixture",
+        &"a".repeat(64),
+    )
+    .unwrap();
+    drop(store);
     let candidate = ImageFilesystemCandidate {
         partition_index: Some(4),
         partition_name: None,
@@ -88,20 +108,24 @@ fn candidate_without_preseeded_placeholder_materializes_partition_subtree() {
 
     assert_eq!(stats.dir_count, 2);
     assert_eq!(stats.file_count, 1);
-    let rows: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE partition_index = 4",
-            [],
-            |row| row.get(0),
-        )
+    let records = FileRepo::new(&conn)
+        .find_by_data_source(&data_source_id)
         .unwrap();
+    let rows = records
+        .iter()
+        .filter(|record| {
+            persistence_sqlite::source_fjall::partition_index(&conn, &record.id.0).unwrap()
+                == Some(4)
+        })
+        .count();
     assert_eq!(rows, 3);
-    let missing: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE partition_index IS NULL",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let missing = records
+        .iter()
+        .filter(|record| {
+            persistence_sqlite::source_fjall::partition_index(&conn, &record.id.0)
+                .unwrap()
+                .is_none()
+        })
+        .count();
     assert_eq!(missing, 0);
 }

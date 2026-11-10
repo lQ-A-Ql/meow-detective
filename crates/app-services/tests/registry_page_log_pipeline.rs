@@ -73,14 +73,48 @@ fn entry(root: &Path, id: &str, path: &str) -> FileEntry {
 }
 
 fn product(conn: &Connection) -> String {
-    let raw: String = conn.query_row(
-        "SELECT attrs FROM artifacts WHERE artifact_type='RegistryValue' AND json_extract(attrs,'$.field')='productName'",
-        [], |row| row.get(0),
-    ).unwrap();
-    serde_json::from_str::<serde_json::Value>(&raw).unwrap()["data"]
+    let artifacts = app_services::artifact_service::get_artifact_rows_from_db(conn, None).unwrap();
+    artifacts
+        .into_iter()
+        .find(|artifact| {
+            artifact.artifact_type == "RegistryValue"
+                && artifact.attrs.get("field").and_then(|value| value.as_str())
+                    == Some("productName")
+        })
+        .unwrap()
+        .attrs["data"]
         .as_str()
         .unwrap()
-        .into()
+        .to_string()
+}
+
+fn publish_source(conn: &Connection, source_id: &DataSourceId) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::replace_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))
+        .unwrap();
+    let key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(source_id.0.clone())],
+    )
+    .unwrap();
+    let marker = persistence_fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{}", source_id.0),
+        &source_id.0,
+        1,
+        source_id.0.as_bytes().to_vec(),
+    );
+    store
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
 }
 
 #[test]
@@ -98,8 +132,9 @@ fn discovery_reads_actual_companion_files_and_log_changes_expire_the_checkpoint(
         log(&base, value, "NEW-OS", false),
     )
     .unwrap();
-    let conn = Connection::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_source_all(&conn).unwrap();
+    let source_root = tempfile::tempdir().unwrap();
+    let source_id = DataSourceId("source-1".into());
+    let conn = app_services::source_db::open_source_db(source_root.path(), &source_id).unwrap();
     conn.execute(
         "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
          VALUES ('source-1', 'case-1', 'Registry files', 'directory', ?1, '2026-10-25T00:00:00Z')",
@@ -120,6 +155,7 @@ fn discovery_reads_actual_companion_files_and_log_changes_expire_the_checkpoint(
             ),
         ])
         .unwrap();
+    publish_source(&conn, &source_id);
     let reads = Cell::new(0);
     let mut reader = |id: &FileEntryId| -> Result<Box<dyn Read>, std::io::Error> {
         reads.set(reads.get() + 1);
@@ -146,11 +182,14 @@ fn discovery_reads_actual_companion_files_and_log_changes_expire_the_checkpoint(
     assert_eq!(reads.get(), 2);
     let updated = log(&base, value, "ALT-OS", true);
     std::fs::write(workspace.path().join("log"), &updated).unwrap();
-    conn.execute(
-        "UPDATE file_entries SET hash_sha256=?1 WHERE id='log'",
-        params![infrastructure::hashing::sha256_bytes(&updated)],
-    )
-    .unwrap();
+    let mut updated_log = entry(
+        workspace.path(),
+        "log",
+        "[P1]/Windows/System32/config/SOFTWARE.LOG1",
+    );
+    updated_log.hash_sha256 = Some(infrastructure::hashing::sha256_bytes(&updated));
+    FileRepo::new(&conn).insert_batch(&[updated_log]).unwrap();
+    publish_source(&conn, &source_id);
     run_analysis_extraction(
         &conn,
         "case-1",
@@ -161,6 +200,14 @@ fn discovery_reads_actual_companion_files_and_log_changes_expire_the_checkpoint(
     .unwrap();
     assert_eq!(product(&conn), "ALT-OS");
     assert_eq!(reads.get(), 4);
-    let count: u64 = conn.query_row("SELECT COUNT(*) FROM artifacts WHERE artifact_type='RegistryValue' AND json_extract(attrs,'$.field')='productName'", [], |row| row.get(0)).unwrap();
+    let count = app_services::artifact_service::get_artifact_rows_from_db(&conn, None)
+        .unwrap()
+        .into_iter()
+        .filter(|artifact| {
+            artifact.artifact_type == "RegistryValue"
+                && artifact.attrs.get("field").and_then(|value| value.as_str())
+                    == Some("productName")
+        })
+        .count() as u64;
     assert_eq!(count, 1);
 }

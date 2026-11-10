@@ -3,35 +3,61 @@ use super::streaming::Normalizer;
 use rusqlite::{types::Value, Connection};
 use serde_json::{json, Value as Json};
 use sha2::{Digest, Sha256};
-use std::path::Path;
+use std::{collections::HashSet, path::Path};
 
 pub(super) fn catalog(conn: &Connection, normalizer: &Normalizer) -> Json {
-    let mut statement = conn
-        .prepare(&format!(
-            "{} ORDER BY benchmark_identity(id)",
-            super::queries::CATALOG
-        ))
-        .unwrap();
-    let names: Vec<String> = statement
-        .column_names()
-        .iter()
-        .map(|v| (*v).into())
-        .collect();
+    catalog_from_rows(&super::native_catalog_snapshot(
+        conn,
+        &normalizer.replacements(),
+    ))
+}
+
+pub(super) fn catalog_from_rows(rows: &[Vec<Value>]) -> Json {
+    const NAMES: [&str; 20] = [
+        "id",
+        "parent_id",
+        "path",
+        "name",
+        "entry_type",
+        "size",
+        "ext",
+        "deleted",
+        "hidden",
+        "system",
+        "read_only",
+        "archive",
+        "unix_mode",
+        "encrypted",
+        "created_at",
+        "modified_at",
+        "accessed_at",
+        "changed_at",
+        "hash_sha256",
+        "partition_index",
+    ];
+    let names = NAMES.map(str::to_string).to_vec();
     let mut columns = vec![Sha256::new(); names.len()];
     let mut buckets = vec![Sha256::new(); 64];
     let mut counts = [0u64; 5]; // files, dirs, deleted, roots, missing parents
-    let mut rows = statement.query([]).unwrap();
-    while let Some(row) = rows.next().unwrap() {
-        let id: String = row.get(0).unwrap();
-        let id = normalizer.normalize(&id);
+    let ids = rows
+        .iter()
+        .filter_map(|row| match row.first() {
+            Some(Value::Text(id)) => Some(id.clone()),
+            _ => None,
+        })
+        .collect::<HashSet<_>>();
+    for row in rows {
+        let id = match row.first() {
+            Some(Value::Text(id)) => id.clone(),
+            _ => panic!("benchmark catalog id is not text"),
+        };
         let bucket = Sha256::digest(id.as_bytes())[0] as usize % buckets.len();
-        for (i, column) in columns.iter_mut().enumerate() {
-            let value: Value = row.get(i).unwrap();
+        for (column, value) in columns.iter_mut().zip(row.iter()) {
             let cell = match value {
                 Value::Null => json!(["null"]),
                 Value::Integer(n) => json!(["integer", n]),
                 Value::Real(n) => json!(["real", n]),
-                Value::Text(s) => json!(["text", normalizer.normalize(&s)]),
+                Value::Text(s) => json!(["text", s]),
                 Value::Blob(b) => json!(["blob", hex::encode(b)]),
             };
             let bytes = serde_json::to_vec(&cell).unwrap();
@@ -42,13 +68,18 @@ pub(super) fn catalog(conn: &Connection, normalizer: &Normalizer) -> Json {
             buckets[bucket].update(&bytes);
             buckets[bucket].update(b"\n");
         }
-        let kind: String = row.get(4).unwrap();
+        let kind = match &row[4] {
+            Value::Text(value) => value.as_str(),
+            _ => panic!("benchmark catalog entry type is not text"),
+        };
         counts[0] += u64::from(kind == "file");
         counts[1] += u64::from(kind == "directory");
-        counts[2] += u64::from(row.get::<_, bool>(7).unwrap());
-        counts[3] += u64::from(row.get::<_, Option<String>>(1).unwrap().is_none());
+        counts[2] += u64::from(matches!(&row[7], Value::Integer(1)));
+        counts[3] += u64::from(matches!(&row[1], Value::Null));
+        if let Value::Text(parent_id) = &row[1] {
+            counts[4] += u64::from(!ids.contains(parent_id));
+        }
     }
-    counts[4] = conn.query_row("SELECT COUNT(*) FROM file_entries c LEFT JOIN file_entries p ON c.parent_id=p.id WHERE c.parent_id IS NOT NULL AND p.id IS NULL", [], |r| r.get(0)).unwrap();
     let column_hashes: serde_json::Map<String, Json> = names
         .into_iter()
         .zip(columns)
@@ -93,10 +124,13 @@ pub(super) fn capture(
         })
         .unwrap_or_default();
     let mut expected = [0u8; 32];
-    let mut statement = conn.prepare("SELECT id FROM file_entries").unwrap();
+    let rows = super::native_catalog_snapshot(conn, &normalizer.replacements());
     let mut count = 0u64;
-    for id in statement.query_map([], |r| r.get::<_, String>(0)).unwrap() {
-        add_id(&mut expected, &normalizer.normalize(&id.unwrap()));
+    for id in rows.iter().filter_map(|row| match row.first() {
+        Some(Value::Text(id)) => Some(id),
+        _ => None,
+    }) {
+        add_id(&mut expected, id);
         count += 1;
     }
     assert_eq!(results[0]["documents"], count);
@@ -179,10 +213,42 @@ fn preview(
     source: &str,
     normalizer: &Normalizer,
 ) -> Vec<Json> {
-    let mut statement = conn.prepare("SELECT id FROM file_entries WHERE entry_type='file' AND deleted=0 AND encrypted=0 AND size BETWEEN 1 AND 65536 AND name NOT LIKE '$%' ORDER BY path,id LIMIT 3").unwrap();
-    let ids = statement.query_map([], |r| r.get::<_, String>(0)).unwrap();
-    ids.map(|id| {
-        let id = id.unwrap();
+    let mut rows = super::native_catalog_snapshot(conn, &normalizer.replacements())
+        .into_iter()
+        .filter(|row| {
+            matches!(&row[4], Value::Text(kind) if kind == "file")
+                && matches!(&row[7], Value::Integer(0))
+                && matches!(&row[13], Value::Integer(0))
+                && matches!(&row[5], Value::Integer(size) if (1..=65_536).contains(size))
+                && !matches!(&row[3], Value::Text(name) if name.starts_with('$'))
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| {
+        let left_path = match &left[2] {
+            Value::Text(value) => value,
+            _ => "",
+        };
+        let right_path = match &right[2] {
+            Value::Text(value) => value,
+            _ => "",
+        };
+        let left_id = match &left[0] {
+            Value::Text(value) => value,
+            _ => "",
+        };
+        let right_id = match &right[0] {
+            Value::Text(value) => value,
+            _ => "",
+        };
+        left_path
+            .cmp(right_path)
+            .then_with(|| left_id.cmp(right_id))
+    });
+    rows.into_iter().take(3).map(|row| {
+        let id = match &row[0] {
+            Value::Text(value) => value.clone(),
+            _ => panic!("benchmark preview id is not text"),
+        };
         let global = format!("ds:{source}:{id}");
         let case = domain::CaseId(case.into());
         let preview = app_services::file_service::text_preview_for_source_case(case_conn, root, &case, &global, Some(65536));

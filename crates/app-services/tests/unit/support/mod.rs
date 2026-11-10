@@ -1,0 +1,125 @@
+#[macro_export]
+macro_rules! native_source_test_support {
+    () => {
+        mod test_support {
+            #![allow(dead_code)]
+
+            use domain::FileEntry;
+            use rusqlite::Connection;
+            use std::ops::Deref;
+
+            pub(crate) struct NativeSourceFixture {
+                _root: tempfile::TempDir,
+                pub(crate) connection: Connection,
+                pub(crate) source_id: String,
+                pub(crate) source_dir: std::path::PathBuf,
+            }
+
+            impl NativeSourceFixture {
+                pub(crate) fn new(source_id: &str, case_id: &str) -> Self {
+                    let root = tempfile::tempdir().expect("create native source root");
+                    let case_root = root.path().join("case");
+                    std::fs::create_dir_all(case_root.join("artifacts/objects"))
+                        .expect("create case artifact storage");
+                    let source_dir = case_root.join("sources").join(source_id);
+                    std::fs::create_dir_all(&source_dir).expect("create native source directory");
+                    let database_path = source_dir.join("source.db");
+                    let connection = persistence_sqlite::open_or_create_source(&database_path)
+                        .expect("open native source database");
+                    persistence_sqlite::source_fjall::configure_source_identity(
+                        &connection,
+                        source_id,
+                    )
+                    .expect("configure native source identity");
+                    persistence_sqlite::source_fjall::configure_source_fjall(
+                        &connection,
+                        &database_path,
+                    )
+                    .expect("configure native source details");
+                    connection
+                        .execute(
+                            "INSERT INTO data_sources
+                             (id, case_id, name, kind, source_path, imported_at)
+                             VALUES (?1, ?2, ?1, 'directory', 'evidence',
+                                     '2026-01-01T00:00:00Z')",
+                            rusqlite::params![source_id, case_id],
+                        )
+                        .expect("register native source");
+                    let fixture = Self {
+                        _root: root,
+                        connection,
+                        source_id: source_id.to_owned(),
+                        source_dir,
+                    };
+                    fixture.refresh_generation();
+                    fixture
+                }
+
+                pub(crate) fn insert_files(&self, files: &[FileEntry]) {
+                    persistence_sqlite::repositories::file_repo::FileRepo::new(&self.connection)
+                        .insert_batch(files)
+                        .expect("insert native catalog records");
+                    self.refresh_generation();
+                }
+
+                pub(crate) fn seal(&self) {
+                    self.refresh_generation();
+                }
+
+                fn refresh_generation(&self) {
+                    let store =
+                        persistence_sqlite::source_fjall::open_store_for_write(&self.connection)
+                            .expect("open native source store")
+                            .expect("configured native source store");
+                    persistence_fjall::replace_source_generation(
+                        &store,
+                        &self.source_id,
+                        "fixture",
+                        &"a".repeat(64),
+                    )
+                    .expect("seal native source fixture");
+                    drop(store);
+                    mark_source_projection_complete(&self.connection, &self.source_id);
+                }
+            }
+
+            impl Deref for NativeSourceFixture {
+                type Target = Connection;
+
+                fn deref(&self) -> &Self::Target {
+                    &self.connection
+                }
+            }
+
+            pub(crate) fn mark_source_projection_complete(
+                connection: &Connection,
+                source_id: &str,
+            ) {
+                let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+                    .expect("open native source store")
+                    .expect("configured native source store");
+                let key = persistence_fjall::encode_key(
+                    "projection",
+                    &[persistence_fjall::KeyPart::Text(source_id.to_owned())],
+                )
+                .expect("encode projection key");
+                let marker = persistence_fjall::VersionedEnvelope::new(
+                    "source_projection_complete",
+                    1,
+                    format!("projection:{source_id}"),
+                    source_id,
+                    1,
+                    source_id.as_bytes().to_vec(),
+                );
+                store
+                    .write_envelope(
+                        persistence_fjall::KeyspaceName::Meta,
+                        key,
+                        &marker,
+                        persistence_fjall::PersistMode::SyncAll,
+                    )
+                    .expect("mark source projection complete");
+            }
+        }
+    };
+}

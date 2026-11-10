@@ -1,31 +1,27 @@
 mod staging_support;
 
 use app_services::staging::{
-    get_staging_meta, merge_all_staging_to_main, merge_all_staging_to_main_with_cancel,
-    merge_all_staging_to_main_with_catalog, merge_all_staging_to_main_with_stats,
-    merge_analysis_staging_to_main, merge_analysis_staging_to_main_with_fjall,
-    open_analysis_staging, open_partition_staging, set_staging_meta, set_worker_meta, StagingError,
-    StagingManifest,
+    get_staging_meta, merge_all_staging_to_main_with_catalog,
+    merge_analysis_staging_to_main_with_fjall, open_analysis_staging, open_partition_staging,
+    set_staging_meta, set_worker_meta, StagingError, StagingManifest,
 };
 use rusqlite::params;
-use staging_support::{
-    attached_db_names, create_main_analysis_tables, create_main_file_entries_table, done_partition,
-};
+use staging_support::{attached_db_names, done_partition, NativeSourceFixture};
 
 #[test]
 fn staging_merge_honors_cancellation_before_writing() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::connection::open_in_memory().unwrap();
-    create_main_file_entries_table(&main);
+    let source = NativeSourceFixture::new(tmp.path(), "ds-cancel");
     let mut manifest = StagingManifest::create("ds-cancel", "/test.E01", "E01");
     manifest.partitions.push(done_partition(0, "P0", 1));
     let cancelled = std::sync::atomic::AtomicBool::new(true);
 
-    let error = match merge_all_staging_to_main_with_cancel(
-        &main,
+    let error = match merge_all_staging_to_main_with_catalog(
+        &source.conn,
         tmp.path(),
         "ds-cancel",
         &manifest,
+        &source.storage,
         None,
         Some(&cancelled),
     ) {
@@ -34,18 +30,14 @@ fn staging_merge_honors_cancellation_before_writing() {
     };
 
     assert!(matches!(error, StagingError::Cancelled));
-    let total: i64 = main
-        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(total, 0);
+    assert!(source.catalog_records().is_empty());
 }
 
 #[test]
 fn staging_merge_combines_two_partitions_and_reports_progress() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::connection::open_in_memory().unwrap();
-    create_main_file_entries_table(&main);
     let ds_id = "ds-two-part";
+    let source = NativeSourceFixture::new(tmp.path(), ds_id);
 
     for (partition, rows) in [(0, 3), (1, 2)] {
         let staging = open_partition_staging(tmp.path(), ds_id, partition).unwrap();
@@ -71,59 +63,48 @@ fn staging_merge_combines_two_partitions_and_reports_progress() {
     let progress = std::sync::Mutex::new(Vec::new());
     let callback = |completed, total| progress.lock().unwrap().push((completed, total));
 
-    let stats =
-        merge_all_staging_to_main_with_stats(&main, tmp.path(), ds_id, &manifest, Some(&callback))
-            .unwrap();
+    let stats = merge_all_staging_to_main_with_catalog(
+        &source.conn,
+        tmp.path(),
+        ds_id,
+        &manifest,
+        &source.storage,
+        Some(&callback),
+        None,
+    )
+    .unwrap();
 
     assert_eq!(stats.staging_rows, 5);
     assert_eq!(stats.merged_rows, 5);
     assert_eq!(stats.ignored_rows, 0);
     assert_eq!(*progress.lock().unwrap(), vec![(1, 2), (2, 2)]);
-    let total: i64 = main
-        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(total, 7);
-    let missing_partition_index: i64 = main
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE partition_index IS NULL",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    let unexpected_partition_index: i64 = main
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE partition_index NOT IN (0, 1)",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let records = source.catalog_records();
+    assert_eq!(records.len(), 7);
+    let missing_partition_index = records
+        .iter()
+        .filter(|record| record.partition_index.is_none())
+        .count();
+    let unexpected_partition_index = records
+        .iter()
+        .filter(|record| !matches!(record.partition_index, Some(0 | 1)))
+        .count();
     assert_eq!(missing_partition_index, 0);
     assert_eq!(unexpected_partition_index, 0);
-    let unknown_encryption_rows: i64 = main
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries
-             WHERE entry_type = 'file' COLLATE NOCASE AND encrypted IS NULL",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
+    let unknown_encryption_rows = records
+        .iter()
+        .filter(|record| {
+            matches!(record.entry_type, persistence_fjall::CatalogEntryType::File)
+                && record.encrypted.is_none()
+        })
+        .count();
     assert_eq!(unknown_encryption_rows, 5);
 }
 
 #[test]
 fn staging_merge_projects_fjall_before_committing_sqlite_projection() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_source_all(&main).unwrap();
     let ds_id = "ds-fjall-first";
-    main.execute(
-        "INSERT INTO data_sources
-         (id, case_id, name, kind, source_path, imported_at)
-         VALUES (?1, 'case-1', 'source', 'e01', 'source.E01', datetime('now'))",
-        [ds_id],
-    )
-    .unwrap();
-    let fjall = app_services::source_db::open_fjall_source_read_write(tmp.path(), ds_id).unwrap();
+    let source = NativeSourceFixture::new(tmp.path(), ds_id);
     let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
     staging
         .execute(
@@ -136,36 +117,38 @@ fn staging_merge_projects_fjall_before_committing_sqlite_projection() {
     let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
     manifest.partitions.push(done_partition(0, "P0", 1));
 
-    merge_all_staging_to_main_with_catalog(&main, tmp.path(), ds_id, &manifest, &fjall, None, None)
-        .unwrap();
+    merge_all_staging_to_main_with_catalog(
+        &source.conn,
+        tmp.path(),
+        ds_id,
+        &manifest,
+        &source.storage,
+        None,
+        None,
+    )
+    .unwrap();
 
-    let sqlite_count: i64 = main
+    let detail_tables: i64 = source
+        .conn
         .query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1",
-            [ds_id],
+            "SELECT COUNT(*) FROM sqlite_schema
+             WHERE type = 'table'
+               AND name IN ('file_entries', 'artifacts', 'timeline_events')",
+            [],
             |row| row.get(0),
         )
         .unwrap();
-    let fjall_page = fjall
-        .catalog_list_all(
-            &fjall.snapshot(),
-            ds_id,
-            None,
-            persistence_fjall::ScanDirection::Forward,
-            32,
-        )
-        .unwrap();
-    assert_eq!(sqlite_count, 2);
-    assert_eq!(fjall_page.records.len(), 2);
-    assert!(fjall_page.records.iter().any(|record| record.id == "f1"));
+    assert_eq!(detail_tables, 0);
+    let records = source.catalog_records();
+    assert_eq!(records.len(), 2);
+    assert!(records.iter().any(|record| record.id == "f1"));
 }
 
 #[test]
 fn staging_merge_preserves_encrypted_file_flag() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::connection::open_in_memory().unwrap();
-    create_main_file_entries_table(&main);
     let ds_id = "ds-encrypted";
+    let source = NativeSourceFixture::new(tmp.path(), ds_id);
     let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
     staging
         .execute(
@@ -179,26 +162,31 @@ fn staging_merge_preserves_encrypted_file_flag() {
     let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
     manifest.partitions.push(done_partition(0, "NTFS", 1));
 
-    merge_all_staging_to_main(&main, tmp.path(), ds_id, &manifest, None).unwrap();
+    merge_all_staging_to_main_with_catalog(
+        &source.conn,
+        tmp.path(),
+        ds_id,
+        &manifest,
+        &source.storage,
+        None,
+        None,
+    )
+    .unwrap();
 
-    let (read_only, encrypted): (bool, bool) = main
-        .query_row(
-            "SELECT read_only <> 0, encrypted <> 0
-             FROM file_entries WHERE id = 'efs-file'",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
+    let record = source
+        .catalog_records()
+        .into_iter()
+        .find(|record| record.id == "efs-file")
         .unwrap();
-    assert!(read_only);
-    assert!(encrypted);
+    assert!(record.read_only);
+    assert_eq!(record.encrypted, Some(true));
 }
 
 #[test]
 fn staging_merge_is_idempotent_after_merged_marker() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::connection::open_in_memory().unwrap();
-    create_main_file_entries_table(&main);
     let ds_id = "ds-idempotent";
+    let source = NativeSourceFixture::new(tmp.path(), ds_id);
     let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
     staging
         .execute(
@@ -212,11 +200,31 @@ fn staging_merge_is_idempotent_after_merged_marker() {
     manifest.partitions.push(done_partition(0, "P0", 1));
 
     assert_eq!(
-        merge_all_staging_to_main(&main, tmp.path(), ds_id, &manifest, None).unwrap(),
+        merge_all_staging_to_main_with_catalog(
+            &source.conn,
+            tmp.path(),
+            ds_id,
+            &manifest,
+            &source.storage,
+            None,
+            None,
+        )
+        .unwrap()
+        .merged_rows,
         1
     );
     assert_eq!(
-        merge_all_staging_to_main(&main, tmp.path(), ds_id, &manifest, None).unwrap(),
+        merge_all_staging_to_main_with_catalog(
+            &source.conn,
+            tmp.path(),
+            ds_id,
+            &manifest,
+            &source.storage,
+            None,
+            None,
+        )
+        .unwrap()
+        .merged_rows,
         0
     );
     let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
@@ -229,15 +237,32 @@ fn staging_merge_is_idempotent_after_merged_marker() {
 #[test]
 fn staging_merge_conflict_is_visible_and_rolls_back() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::connection::open_in_memory().unwrap();
-    create_main_file_entries_table(&main);
     let ds_id = "ds-conflict";
-    main.execute(
-        "INSERT INTO file_entries (id, data_source_id, path, name, entry_type)
-         VALUES ('existing', ?1, '/existing', 'existing', 'file')",
-        [ds_id],
-    )
-    .unwrap();
+    let source = NativeSourceFixture::new(tmp.path(), ds_id);
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&source.conn)
+        .insert_batch(&[domain::FileEntry {
+            id: domain::FileEntryId("existing".into()),
+            parent_id: None,
+            data_source_id: domain::DataSourceId(ds_id.into()),
+            path: "/existing".into(),
+            name: "existing".into(),
+            entry_type: domain::EntryType::File,
+            size: None,
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
+        .unwrap();
     let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
     staging
         .execute(
@@ -250,17 +275,23 @@ fn staging_merge_conflict_is_visible_and_rolls_back() {
     let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
     manifest.partitions.push(done_partition(0, "P0", 1));
 
-    let error = merge_all_staging_to_main_with_stats(&main, tmp.path(), ds_id, &manifest, None)
-        .unwrap_err();
+    let error = merge_all_staging_to_main_with_catalog(
+        &source.conn,
+        tmp.path(),
+        ds_id,
+        &manifest,
+        &source.storage,
+        None,
+        None,
+    )
+    .unwrap_err();
     assert!(error.to_string().contains("Merge partition 0"));
-    let path: String = main
-        .query_row(
-            "SELECT path FROM file_entries WHERE id = 'existing'",
-            [],
-            |row| row.get(0),
-        )
+    let record = source
+        .catalog_records()
+        .into_iter()
+        .find(|record| record.id == "existing")
         .unwrap();
-    assert_eq!(path, "/existing");
+    assert_eq!(record.path, "/existing");
     let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
     assert_ne!(
         get_staging_meta(&staging, "merged").unwrap().as_deref(),
@@ -271,9 +302,10 @@ fn staging_merge_conflict_is_visible_and_rolls_back() {
 #[test]
 fn staging_merge_failure_rolls_back_and_detaches_database() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::connection::open_in_memory().unwrap();
+    let main = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
     persistence_sqlite::migrations::runner::run_all(&main).unwrap();
     let ds_id = "ds-failure";
+    let foreign_source = NativeSourceFixture::new(tmp.path(), "foreign-source");
     let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
     staging
         .execute(
@@ -286,18 +318,20 @@ fn staging_merge_failure_rolls_back_and_detaches_database() {
     let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
     manifest.partitions.push(done_partition(0, "P0", 1));
 
-    let error = merge_all_staging_to_main(&main, tmp.path(), ds_id, &manifest, None)
-        .expect_err("an app-db-shaped target must be rejected before staging attach");
+    let error = merge_all_staging_to_main_with_catalog(
+        &main,
+        tmp.path(),
+        ds_id,
+        &manifest,
+        &foreign_source.storage,
+        None,
+        None,
+    )
+    .expect_err("an app-db-shaped target must be rejected before reading staging");
     assert!(
-        error
-            .to_string()
-            .contains("source merge target is not a source database"),
+        error.to_string().contains("source identity is missing"),
         "unexpected merge target error: {error}"
     );
-    let count: i64 = main
-        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(count, 0);
     assert!(!attached_db_names(&main)
         .iter()
         .any(|name| name == "staging"));
@@ -306,9 +340,8 @@ fn staging_merge_failure_rolls_back_and_detaches_database() {
 #[test]
 fn staging_merge_skips_previously_merged_and_empty_databases() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::connection::open_in_memory().unwrap();
-    create_main_file_entries_table(&main);
     let ds_id = "ds-skip";
+    let source = NativeSourceFixture::new(tmp.path(), ds_id);
     let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
     set_staging_meta(&staging, "merged", "true").unwrap();
     drop(staging);
@@ -319,7 +352,17 @@ fn staging_merge_skips_previously_merged_and_empty_databases() {
     manifest.partitions.push(done_partition(1, "P1", 0));
 
     assert_eq!(
-        merge_all_staging_to_main(&main, tmp.path(), ds_id, &manifest, None).unwrap(),
+        merge_all_staging_to_main_with_catalog(
+            &source.conn,
+            tmp.path(),
+            ds_id,
+            &manifest,
+            &source.storage,
+            None,
+            None,
+        )
+        .unwrap()
+        .merged_rows,
         0
     );
 }
@@ -327,8 +370,7 @@ fn staging_merge_skips_previously_merged_and_empty_databases() {
 #[test]
 fn staging_analysis_merge_skips_already_merged_worker() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::connection::open_in_memory().unwrap();
-    create_main_analysis_tables(&main);
+    let source = NativeSourceFixture::new(tmp.path(), "ds-analysis");
     let worker = open_analysis_staging(tmp.path(), "ds-analysis", 0).unwrap();
     worker
         .execute(
@@ -341,13 +383,14 @@ fn staging_analysis_merge_skips_already_merged_worker() {
     set_worker_meta(&worker, "merged", "true").unwrap();
     drop(worker);
 
-    let stats = merge_analysis_staging_to_main(
-        &main,
+    let stats = merge_analysis_staging_to_main_with_fjall(
+        &source.conn,
         tmp.path(),
         "ds-analysis",
         &[0],
         "case-1",
         &tmp.path().join("index"),
+        &source.storage,
         None,
     )
     .unwrap();
@@ -357,15 +400,7 @@ fn staging_analysis_merge_skips_already_merged_worker() {
 #[test]
 fn staging_analysis_projects_fjall_before_sqlite_commit() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_source_all(&main).unwrap();
-    main.execute(
-        "INSERT INTO data_sources
-         (id, case_id, name, kind, source_path, imported_at)
-         VALUES ('ds-analysis-fjall', 'case-1', 'source', 'e01', 'source.E01', datetime('now'))",
-        [],
-    )
-    .unwrap();
+    let source = NativeSourceFixture::new(tmp.path(), "ds-analysis-fjall");
     let worker = open_analysis_staging(tmp.path(), "ds-analysis-fjall", 0).unwrap();
     worker
         .execute(
@@ -376,38 +411,37 @@ fn staging_analysis_projects_fjall_before_sqlite_commit() {
         )
         .unwrap();
     drop(worker);
-    let fjall =
-        app_services::source_db::open_fjall_source_read_write(tmp.path(), "ds-analysis-fjall")
-            .unwrap();
 
     let stats = merge_analysis_staging_to_main_with_fjall(
-        &main,
+        &source.conn,
         tmp.path(),
         "ds-analysis-fjall",
         &[0],
         "case-1",
         &tmp.path().join("index"),
-        &fjall,
+        &source.storage,
         None,
     )
     .unwrap();
     assert_eq!(stats.artifact_count, 1);
-    assert_eq!(
-        main.query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE id = 'artifact-fjall'",
+    let detail_tables: i64 = source
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_schema
+             WHERE type = 'table'
+               AND name IN ('file_entries', 'artifacts', 'timeline_events')",
             [],
-            |row| row.get::<_, i64>(0),
+            |row| row.get(0),
         )
-        .unwrap(),
-        1
-    );
-    drop(fjall);
-    let fjall =
-        app_services::source_db::open_fjall_source_read_only(tmp.path(), "ds-analysis-fjall")
-            .unwrap();
-    let snapshot = fjall.snapshot();
-    assert!(fjall
-        .artifact_get(&snapshot, "ds-analysis-fjall", "artifact-fjall")
+        .unwrap();
+    assert_eq!(detail_tables, 0);
+    let store = persistence_sqlite::source_fjall::open_store(&source.conn)
+        .unwrap()
+        .unwrap();
+    let artifacts = persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+    let snapshot = artifacts.read_snapshot();
+    assert!(artifacts
+        .get(&snapshot, "ds-analysis-fjall", "artifact-fjall")
         .unwrap()
         .is_some());
 }
@@ -415,8 +449,7 @@ fn staging_analysis_projects_fjall_before_sqlite_commit() {
 #[test]
 fn staging_analysis_index_merge_is_paged() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::connection::open_in_memory().unwrap();
-    create_main_analysis_tables(&main);
+    let source = NativeSourceFixture::new(tmp.path(), "ds-analysis");
     let worker = open_analysis_staging(tmp.path(), "ds-analysis", 0).unwrap();
     for index in 0..55 {
         worker
@@ -433,13 +466,14 @@ fn staging_analysis_index_merge_is_paged() {
     }
     drop(worker);
 
-    let stats = merge_analysis_staging_to_main(
-        &main,
+    let stats = merge_analysis_staging_to_main_with_fjall(
+        &source.conn,
         tmp.path(),
         "ds-analysis",
         &[0],
         "case-1",
         &tmp.path().join("index"),
+        &source.storage,
         None,
     )
     .unwrap();
@@ -449,20 +483,7 @@ fn staging_analysis_index_merge_is_paged() {
 #[test]
 fn staging_analysis_merge_failure_rolls_back_and_detaches_database() {
     let tmp = tempfile::TempDir::new().unwrap();
-    let main = persistence_sqlite::connection::open_in_memory().unwrap();
-    main.execute_batch(
-        "CREATE TABLE artifacts (
-            id TEXT PRIMARY KEY NOT NULL, case_id TEXT NOT NULL DEFAULT '',
-            data_source_id TEXT NOT NULL DEFAULT '', artifact_type TEXT NOT NULL,
-            source_object_id TEXT, extractor_id TEXT, extractor_version TEXT,
-            confidence REAL, source_attribution TEXT, title TEXT NOT NULL,
-            summary TEXT NOT NULL DEFAULT '', attrs TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        INSERT INTO artifacts (id, case_id, data_source_id, artifact_type, title)
-        VALUES ('existing', 'case-1', 'ds-analysis', 'x', 'existing');",
-    )
-    .unwrap();
+    let source = NativeSourceFixture::new(tmp.path(), "ds-analysis");
     let worker = open_analysis_staging(tmp.path(), "ds-analysis", 0).unwrap();
     worker
         .execute(
@@ -472,23 +493,37 @@ fn staging_analysis_merge_failure_rolls_back_and_detaches_database() {
             [],
         )
         .unwrap();
+    worker
+        .execute(
+            "INSERT INTO timeline_rows
+             (id, file_id, timestamp, event_type, title)
+             VALUES ('bad-event', 'f1', 'not-a-timestamp', 'Test', 'Bad')",
+            [],
+        )
+        .unwrap();
     drop(worker);
 
-    assert!(merge_analysis_staging_to_main(
-        &main,
+    assert!(merge_analysis_staging_to_main_with_fjall(
+        &source.conn,
         tmp.path(),
         "ds-analysis",
         &[0],
         "case-1",
         &tmp.path().join("index"),
+        &source.storage,
         None,
     )
     .is_err());
-    let count: i64 = main
-        .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))
+    let store = persistence_sqlite::source_fjall::open_store(&source.conn)
+        .unwrap()
         .unwrap();
-    assert_eq!(count, 1);
-    assert!(!attached_db_names(&main)
+    let artifacts = persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+    let snapshot = artifacts.read_snapshot();
+    assert!(artifacts
+        .get(&snapshot, "ds-analysis", "a1")
+        .unwrap()
+        .is_none());
+    assert!(!attached_db_names(&source.conn)
         .iter()
         .any(|name| name == "analysis_stage"));
 }

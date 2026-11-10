@@ -31,54 +31,139 @@ pub(super) struct CephFsSourceBuildRequest<'a> {
 pub(super) fn build_source_database(
     request: CephFsSourceBuildRequest<'_>,
 ) -> CephFsSourceResult<MaterializedCephFsSource> {
-    let CephFsSourceBuildRequest {
-        case_root,
-        case_id,
-        source,
-        attempt_id,
-        projection,
-        file_entries,
-        assembly,
-        capability,
-        lineage_fingerprint,
-    } = request;
-    let connection =
-        crate::source_db::open_fresh_source_build_db(case_root, &source.id, attempt_id)?;
+    let connection = crate::source_db::open_fresh_source_build_db(
+        request.case_root,
+        &request.source.id,
+        request.attempt_id,
+    )?;
     let build = (|| {
-        DataSourceRepo::new(&connection).upsert_source_local_metadata(case_id, source)?;
-        CephFsNamespaceRepo::new(&connection).replace(projection)?;
-        CephFsNamespaceAssemblyRepo::new(&connection).replace(&assembly_record(
-            source,
-            &projection.manifest.filesystem_identity,
-            assembly,
-        )?)?;
-        CephFsSourceCapabilityRepo::new(&connection).replace(&capability_record(
-            source,
-            capability,
-            lineage_fingerprint,
-            &projection.manifest.projection_sha256,
-            &projection.manifest.filesystem_identity,
-            assembly,
-        ))?;
-        if projection.manifest.published {
-            FileRepo::new(&connection).insert_batch(file_entries)?;
-            verify_file_catalog(
-                &connection,
-                projection,
-                &source.id,
-                &source.name,
-                file_entries,
-            )?;
-        } else if FileRepo::new(&connection).count_all()? != 0 {
-            return Err(CephFsSourceError::InconsistentState(
-                "incomplete CephFS namespace wrote file tree rows".to_string(),
-            ));
-        }
+        write_projection_metadata(&connection, &request)?;
+        write_catalog_generation(&connection, &request)?;
         crate::source_db::finalize_source_build_db(&connection)?;
-        Ok(summary(source, projection, file_entries, capability))
+        Ok(summary(
+            request.source,
+            request.projection,
+            request.file_entries,
+            request.capability,
+        ))
     })();
     drop(connection);
     build
+}
+
+fn write_projection_metadata(
+    connection: &rusqlite::Connection,
+    request: &CephFsSourceBuildRequest<'_>,
+) -> CephFsSourceResult<()> {
+    DataSourceRepo::new(connection)
+        .upsert_source_local_metadata(request.case_id, request.source)?;
+    CephFsNamespaceRepo::new(connection).replace(request.projection)?;
+    CephFsNamespaceAssemblyRepo::new(connection).replace(&assembly_record(
+        request.source,
+        &request.projection.manifest.filesystem_identity,
+        request.assembly,
+    )?)?;
+    CephFsSourceCapabilityRepo::new(connection).replace(&capability_record(
+        request.source,
+        request.capability,
+        request.lineage_fingerprint,
+        &request.projection.manifest.projection_sha256,
+        &request.projection.manifest.filesystem_identity,
+        request.assembly,
+    ))?;
+    Ok(())
+}
+
+fn write_catalog_generation(
+    connection: &rusqlite::Connection,
+    request: &CephFsSourceBuildRequest<'_>,
+) -> CephFsSourceResult<()> {
+    if request.projection.manifest.published {
+        FileRepo::new(connection).insert_batch(request.file_entries)?;
+        verify_file_catalog(
+            connection,
+            request.projection,
+            &request.source.id,
+            &request.source.name,
+            request.file_entries,
+        )?;
+        publish_native_catalog(connection, request)?;
+    } else if !request.file_entries.is_empty() {
+        return Err(CephFsSourceError::InconsistentState(
+            "incomplete CephFS namespace wrote file tree rows".to_string(),
+        ));
+    } else {
+        remove_incomplete_source_build(request)?;
+    }
+    Ok(())
+}
+
+fn publish_native_catalog(
+    connection: &rusqlite::Connection,
+    request: &CephFsSourceBuildRequest<'_>,
+) -> CephFsSourceResult<()> {
+    let store =
+        persistence_sqlite::source_fjall::open_store_for_write(connection)?.ok_or_else(|| {
+            CephFsSourceError::InconsistentState(
+                "CephFS native source store is missing".to_string(),
+            )
+        })?;
+    let projection_digest = hex::encode(persistence_fjall::digest(
+        request.projection.manifest.projection_sha256.as_bytes(),
+    ));
+    persistence_fjall::seal_source_generation(
+        &store,
+        &request.source.id.0,
+        request.attempt_id,
+        &projection_digest,
+    )
+    .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
+    let key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(
+            request.source.id.0.clone(),
+        )],
+    )
+    .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
+    let marker = persistence_fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{}", request.source.id.0),
+        &request.source.id.0,
+        1,
+        request.source.id.0.as_bytes().to_vec(),
+    );
+    store
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
+    Ok(())
+}
+
+fn remove_incomplete_source_build(
+    request: &CephFsSourceBuildRequest<'_>,
+) -> CephFsSourceResult<()> {
+    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+        request.case_root,
+        &request.source.id.0,
+        request.attempt_id,
+    )
+    .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
+    if layout.build_path().is_dir() {
+        let _close_guard = crate::storage_runtime::close_source_store_at_path(&layout.build_path())
+            .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?
+            .ok_or_else(|| {
+                CephFsSourceError::InconsistentState(
+                    "incomplete CephFS source store is still in use".to_string(),
+                )
+            })?;
+        std::fs::remove_dir_all(layout.build_path())?;
+    }
+    Ok(())
 }
 
 fn verify_file_catalog(

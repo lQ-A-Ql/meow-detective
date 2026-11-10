@@ -95,9 +95,20 @@ impl TimelineRecordStore {
             return Ok(0);
         }
         if !counts_ready(snapshot, source_id)? {
-            return timeline_count_ranges::legacy_count(
-                snapshot, source_id, event_type, start, end,
-            );
+            let prefix = encode_key(RECORD_FAMILY, &[KeyPart::Text(source_id.to_owned())])?;
+            let empty = snapshot
+                .keyset(
+                    KeyspaceName::TimelineRecords,
+                    &prefix,
+                    None,
+                    ScanDirection::Forward,
+                    1,
+                )?
+                .is_empty();
+            if empty {
+                return Ok(0);
+            }
+            return Err(FjallStorageError::TimelineIndexCorrupt);
         }
         if start.is_none() && end.is_none() {
             return read_count(snapshot, source_id, event_type, "total");

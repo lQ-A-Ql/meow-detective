@@ -1,6 +1,8 @@
 use super::{nodes::list_nodes_after_sql, Direction, GraphNodePageCursor, GraphRepo};
 use crate::{connection::open_in_memory, runner};
-use domain::{EdgeType, GraphEdge, GraphNode, NodeType};
+use domain::{
+    DataSourceId, EdgeType, EntryType, FileEntry, FileEntryId, GraphEdge, GraphNode, NodeType,
+};
 use rusqlite::{params, Connection};
 
 fn setup() -> (&'static Connection, GraphRepo<'static>) {
@@ -15,6 +17,76 @@ fn setup() -> (&'static Connection, GraphRepo<'static>) {
         .unwrap();
     let repo = GraphRepo::new(conn_ref);
     (conn_ref, repo)
+}
+
+fn setup_native_file_tree() -> (&'static Connection, GraphRepo<'static>) {
+    let root = Box::leak(Box::new(tempfile::tempdir().unwrap()));
+    let database_path = root.path().join("source.db");
+    let conn = Box::leak(Box::new(
+        crate::open_or_create_source(&database_path).unwrap(),
+    ));
+    crate::source_fjall::configure_source_identity(conn, "ds-1").unwrap();
+    crate::source_fjall::configure_source_fjall(conn, &database_path).unwrap();
+    conn.execute(
+        "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
+         VALUES ('ds-1', 'case-1', 'source', 'raw', 'source.img', '2026-01-01T00:00:00Z')",
+        [],
+    )
+    .unwrap();
+    let source_id = DataSourceId("ds-1".into());
+    crate::repositories::file_repo::FileRepo::new(conn)
+        .insert_batch(&[
+            FileEntry {
+                id: FileEntryId("root".into()),
+                parent_id: None,
+                data_source_id: source_id.clone(),
+                path: String::new(),
+                name: "Partition 1".into(),
+                entry_type: EntryType::Directory,
+                size: None,
+                ext: None,
+                deleted: false,
+                hidden: false,
+                system: false,
+                encrypted: false,
+                read_only: false,
+                archive: false,
+                unix_mode: None,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            },
+            FileEntry {
+                id: FileEntryId("child".into()),
+                parent_id: Some(FileEntryId("root".into())),
+                data_source_id: source_id,
+                path: "etc/passwd".into(),
+                name: "passwd".into(),
+                entry_type: EntryType::File,
+                size: Some(64),
+                ext: None,
+                deleted: false,
+                hidden: false,
+                system: false,
+                encrypted: false,
+                read_only: false,
+                archive: false,
+                unix_mode: None,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            },
+        ])
+        .unwrap();
+    let store = crate::source_fjall::require_source_store(conn).unwrap();
+    persistence_fjall::seal_source_generation(&store, "ds-1", "graph-fixture", &"a".repeat(64))
+        .unwrap();
+    let repo = GraphRepo::new(conn);
+    (conn, repo)
 }
 
 fn make_node(id: &str, node_type: NodeType, label: &str) -> GraphNode {
@@ -367,22 +439,7 @@ fn empty_batch_returns_zero() {
 
 #[test]
 fn project_file_tree_uses_source_rows_for_nodes_and_contains_edges() {
-    let (conn, repo) = setup();
-    conn.execute(
-        "INSERT INTO data_sources (id, case_id, name, kind, source_path)
-         VALUES ('ds-1', 'case-1', 'source', 'raw', 'source.img')",
-        [],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO file_entries
-            (id, parent_id, data_source_id, path, name, entry_type)
-         VALUES
-            ('root', NULL, 'ds-1', '', 'Partition 1', 'directory'),
-            ('child', 'root', 'ds-1', 'etc/passwd', 'passwd', 'file')",
-        [],
-    )
-    .unwrap();
+    let (_conn, repo) = setup_native_file_tree();
 
     let counts = repo
         .project_file_tree("ds-1", "2026-07-16T00:00:00Z")

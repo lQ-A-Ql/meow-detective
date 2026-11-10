@@ -16,6 +16,18 @@ fn sanitize_csv_cell(s: &str) -> String {
 pub struct CsvExporter;
 
 impl CsvExporter {
+    pub fn export_artifact_headers(writer: &mut impl Write, headers: &[&str]) -> io::Result<()> {
+        writeln!(writer, "{}", headers.join(","))
+    }
+
+    pub fn export_artifact_row(writer: &mut impl Write, row: &[String]) -> io::Result<()> {
+        let escaped: Vec<String> = row
+            .iter()
+            .map(|cell| format!("\"{}\"", sanitize_csv_cell(cell).replace('"', "\"\"")))
+            .collect();
+        writeln!(writer, "{}", escaped.join(","))
+    }
+
     pub fn export_artifacts(
         writer: &mut impl Write,
         headers: &[&str],

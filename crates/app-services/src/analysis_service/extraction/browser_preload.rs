@@ -10,9 +10,7 @@ use artifacts_windows::dpapi::{
     decrypt_master_key_file, ChromiumDecryptor, ChromiumFamily, DecryptedMasterKey,
 };
 use artifacts_windows::{extract_boot_key, extract_sam_fields};
-use domain::FileEntryId;
-use persistence_sqlite::repositories::file_repo::file_encryption_status_from_row;
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 
@@ -95,9 +93,9 @@ fn prepare_source_context(
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
     context: &mut BrowserPreloadContext,
 ) -> Result<(), AnalysisServiceError> {
-    let system = locate_by_suffix(conn, data_source_id, "/windows/system32/config/system")
+    let system = locate_by_suffix(conn, data_source_id, "/windows/system32/config/system")?
         .ok_or_else(|| AnalysisServiceError::Other("SYSTEM hive was not found".to_string()))?;
-    let sam = locate_by_suffix(conn, data_source_id, "/windows/system32/config/sam")
+    let sam = locate_by_suffix(conn, data_source_id, "/windows/system32/config/sam")?
         .ok_or_else(|| AnalysisServiceError::Other("SAM hive was not found".to_string()))?;
     let system_bytes = read_locator(&system, cancel_token, file_reader)?;
     let sam_bytes = read_locator(&sam, cancel_token, file_reader)?;
@@ -121,14 +119,14 @@ fn prepare_source_context(
         file_reader,
         &mut prekeys,
         &mut context.warnings,
-    );
+    )?;
     if prekeys.is_empty() {
         return Err(AnalysisServiceError::Other(
             "no usable user DPAPI pre-key was derived".to_string(),
         ));
     }
 
-    let master_keys = load_master_keys(conn, data_source_id, &prekeys, cancel_token, file_reader);
+    let master_keys = load_master_keys(conn, data_source_id, &prekeys, cancel_token, file_reader)?;
     if master_keys.is_empty() {
         return Err(AnalysisServiceError::Other(
             "no DPAPI master key could be decrypted".to_string(),
@@ -161,7 +159,7 @@ fn install_profile_decryptors(
     for root in roots {
         ensure_not_cancelled(cancel_token)?;
         let local_state_path = format!("{root}/local state");
-        let Some(local_state) = locate_by_suffix(conn, data_source_id, &local_state_path) else {
+        let Some(local_state) = locate_by_suffix(conn, data_source_id, &local_state_path)? else {
             context.warnings.push(format!(
                 "Chromium Local State was not found for profile root {root}"
             ));
@@ -178,18 +176,21 @@ fn install_profile_decryptors(
         };
         let family = chromium_family_for_root(&root);
         let (cng_key_file, elevation_exe) = if family == ChromiumFamily::Chrome {
-            let materials = chrome_materials.get_or_insert_with(|| {
-                (
-                    read_cng_chromekey_file(conn, data_source_id, cancel_token, file_reader),
+            if chrome_materials.is_none() {
+                chrome_materials = Some((
+                    read_cng_chromekey_file(conn, data_source_id, cancel_token, file_reader)?,
                     read_elevation_service(
                         conn,
                         data_source_id,
                         ChromiumFamily::Chrome,
                         cancel_token,
                         file_reader,
-                    ),
-                )
-            });
+                    )?,
+                ));
+            }
+            let materials = chrome_materials
+                .as_ref()
+                .expect("Chrome materials were initialized");
             (materials.0.as_deref(), materials.1.as_deref())
         } else {
             (None, None)
@@ -262,8 +263,8 @@ fn load_master_keys(
     prekeys: &[[u8; 20]],
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
-) -> Vec<DecryptedMasterKey> {
-    let locators = locate_master_key_files(conn, data_source_id);
+) -> Result<Vec<DecryptedMasterKey>, AnalysisServiceError> {
+    let locators = locate_master_key_files(conn, data_source_id)?;
     let mut recovered = HashMap::<String, DecryptedMasterKey>::new();
     for locator in locators {
         if ensure_not_cancelled(cancel_token).is_err() {
@@ -278,7 +279,7 @@ fn load_master_keys(
                 .or_insert(master_key);
         }
     }
-    recovered.into_values().collect()
+    Ok(recovered.into_values().collect())
 }
 
 pub(super) fn read_locator(
@@ -337,57 +338,23 @@ pub(super) fn locate_by_suffix(
     conn: &Connection,
     data_source_id: &str,
     suffix: &str,
-) -> Option<EvidenceCandidate> {
-    if persistence_sqlite::source_fjall::has_source_store(conn).ok()? {
-        let normalized_suffix = suffix.replace('\\', "/").to_ascii_lowercase();
-        let mut found = None;
-        persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
-            .visit_all(Some(data_source_id), |entry| {
-                if found.is_none()
-                    && !entry.deleted
-                    && !entry.is_directory()
-                    && normalize_evidence_path(&entry.path).ends_with(&normalized_suffix)
-                {
-                    found = Some(locator_from_entry(data_source_id, &entry, "BrowserPreload"));
-                }
-                Ok(())
-            })
-            .ok()?;
-        return found;
-    }
-    // The LIKE prefilter must tolerate every stored path form (partition-
-    // prefixed `[P3]/…`, leading-slash, drive-letter, and bare relative
-    // paths); the ends_with check on the normalized path below is the actual
-    // boundary-precise filter.
-    let pattern = format!("%{}", suffix.trim_start_matches('/').to_ascii_lowercase());
-    let mut statement = conn
-        .prepare(
-            "SELECT id, path, COALESCE(size, 0), partition_index, encrypted
-             FROM file_entries
-             WHERE data_source_id = ?1 AND entry_type = 'file' COLLATE NOCASE
-               AND REPLACE(LOWER(path), '\\', '/') LIKE ?2
-             ORDER BY LENGTH(path) ASC",
-        )
-        .ok()?;
-    let rows = statement
-        .query_map(params![data_source_id, pattern], |row| {
-            let id: String = row.get(0)?;
-            let path: String = row.get(1)?;
-            let size: u64 = row.get(2)?;
-            let partition_index = row
-                .get::<_, Option<i64>>(3)?
-                .and_then(|value| usize::try_from(value).ok());
-            let encrypted = file_encryption_status_from_row(row, 4)?.blocks_content();
-            Ok((id, path, size, partition_index, encrypted))
-        })
-        .ok()?;
-    for row in rows.flatten() {
-        let (_, path, _, _, _) = &row;
-        if normalize_evidence_path(path).ends_with(suffix) {
-            return Some(locator_from_row(data_source_id, row, "BrowserPreload"));
-        }
-    }
-    None
+) -> Result<Option<EvidenceCandidate>, AnalysisServiceError> {
+    let normalized_suffix = suffix.replace('\\', "/").to_ascii_lowercase();
+    let mut found = None;
+    persistence_sqlite::repositories::file_repo::FileRepo::new(conn).visit_all(
+        Some(data_source_id),
+        |entry| {
+            if found.is_none()
+                && !entry.deleted
+                && !entry.is_directory()
+                && normalize_evidence_path(&entry.path).ends_with(&normalized_suffix)
+            {
+                found = Some(locator_from_entry(data_source_id, &entry, "BrowserPreload"));
+            }
+            Ok(())
+        },
+    )?;
+    Ok(found)
 }
 
 pub(super) fn locator_from_entry(
@@ -412,28 +379,6 @@ pub(super) fn locator_from_entry(
         evidence_kind: "browser_preload".to_owned(),
         parser: "browser.dpapi".to_owned(),
         category: category.to_owned(),
-    }
-}
-
-pub(super) fn locator_from_row(
-    data_source_id: &str,
-    row: (String, String, u64, Option<usize>, bool),
-    category: &str,
-) -> EvidenceCandidate {
-    let (id, path, size, partition_index, encrypted) = row;
-    EvidenceCandidate {
-        file_id: FileEntryId(id),
-        data_source_id: data_source_id.to_string(),
-        partition_index,
-        path,
-        size,
-        encrypted,
-        content_identity: format!("browser-preload:{data_source_id}:{size}:{encrypted}"),
-        companions: Vec::new(),
-        modified_at: None,
-        evidence_kind: "browser_preload".to_string(),
-        parser: "browser.dpapi".to_string(),
-        category: category.to_string(),
     }
 }
 

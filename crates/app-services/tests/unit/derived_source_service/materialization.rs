@@ -2,7 +2,9 @@ use std::path::PathBuf;
 
 use super::*;
 use crate::derived_source_service::catalog_manifest::persist_current_source_manifest;
-use domain::{DataSourceKind, DataSourcePlatform, DataSourceProvenance};
+use domain::{
+    DataSourceKind, DataSourcePlatform, DataSourceProvenance, EntryType, FileEntry, FileEntryId,
+};
 use persistence_sqlite::repositories::catalog_publication_repo::{
     seal_for, CatalogPublicationRepo,
 };
@@ -182,17 +184,11 @@ fn setup_recoverable_catalog(
     DataSourceRepo::new(&source_connection)
         .upsert_source_local_metadata(&CaseId("case-1".to_string()), &source)
         .expect("insert source-local metadata");
-    source_connection
-        .execute(
-            "INSERT INTO file_entries (
-                id, parent_id, data_source_id, path, name, entry_type, size,
-                deleted, hidden, system, partition_index
-             ) VALUES
-             ('root', NULL, ?1, '', 'root', 'directory', NULL, 0, 0, 0, 0),
-             ('file', 'root', ?1, 'etc/passwd', 'passwd', 'file', 42, 0, 0, 0, 0)",
-            [&source.id.0],
-        )
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&source_connection)
+        .insert_batch(&catalog_rows(&source))
         .expect("insert source catalog");
+    persistence_sqlite::source_fjall::set_partition_index(&source_connection, "root", 0).unwrap();
+    persistence_sqlite::source_fjall::set_partition_index(&source_connection, "file", 0).unwrap();
     let fjall_source = crate::source_db::open_fjall_source_read_write(case_root, &source.id.0)
         .expect("open Fjall source storage");
     fjall_source
@@ -542,9 +538,16 @@ fn catalog_recovery_rejects_file_tree_drift_without_deleting_source() {
     let source_path = crate::source_db::source_db_path(temp.path(), &source.id);
     let source_connection =
         crate::source_db::open_source_db(temp.path(), &source.id).expect("open source database");
-    source_connection
-        .execute("DELETE FROM file_entries WHERE id = 'file'", [])
-        .expect("delete catalog row");
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_connection)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::CatalogRecordStore::from_source_store((*store).clone())
+        .delete(
+            &source.id.0,
+            "file",
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
     crate::source_db::checkpoint_source_db(&source_connection).expect("checkpoint source database");
     drop(source_connection);
 
@@ -561,6 +564,55 @@ fn catalog_recovery_rejects_file_tree_drift_without_deleting_source() {
         .find_storage(&source.id)
         .expect("query source registration")
         .is_some());
+}
+
+fn catalog_rows(source: &DataSource) -> Vec<FileEntry> {
+    vec![
+        FileEntry {
+            id: FileEntryId("root".into()),
+            parent_id: None,
+            data_source_id: source.id.clone(),
+            path: String::new(),
+            name: "root".into(),
+            entry_type: EntryType::Directory,
+            size: None,
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        },
+        FileEntry {
+            id: FileEntryId("file".into()),
+            parent_id: Some(FileEntryId("root".into())),
+            data_source_id: source.id.clone(),
+            path: "etc/passwd".into(),
+            name: "passwd".into(),
+            entry_type: EntryType::File,
+            size: Some(42),
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        },
+    ]
 }
 
 #[test]

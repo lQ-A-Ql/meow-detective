@@ -1,17 +1,6 @@
-use persistence_sqlite::{open_in_memory, repositories::staging_repo::StagingRepo, runner};
+use persistence_sqlite::repositories::staging_repo::StagingRepo;
 use rusqlite::{Connection, ErrorCode};
 use tempfile::TempDir;
-
-const APPLICATION_ENCRYPTION_MIGRATION: &str =
-    include_str!("../src/migrations/scripts/0042_file_entry_encrypted.sql");
-
-#[test]
-fn application_schema_preserves_unknown_encryption_classification() {
-    let application = open_in_memory().expect("open application database");
-    runner::run_all(&application).expect("run application migrations");
-    seed_application_source(&application);
-    assert_encrypted_column_contract(&application, "app-file", "app-source");
-}
 
 #[test]
 fn fresh_and_upgraded_staging_schemas_share_the_encrypted_column_contract() {
@@ -54,40 +43,6 @@ fn fresh_and_upgraded_staging_schemas_share_the_encrypted_column_contract() {
         .expect("read upgraded staging status");
     assert_eq!(historical_status, None);
     assert_encrypted_column_contract(&upgraded, "upgraded-file", "upgraded");
-}
-
-#[test]
-fn historical_application_rows_remain_unknown_after_encryption_migration() {
-    for migration in [APPLICATION_ENCRYPTION_MIGRATION] {
-        let connection = Connection::open_in_memory().expect("open legacy database");
-        connection
-            .execute_batch(
-                "CREATE TABLE file_entries (
-                    id TEXT PRIMARY KEY NOT NULL,
-                    data_source_id TEXT NOT NULL,
-                    path TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    entry_type TEXT NOT NULL
-                );
-                INSERT INTO file_entries
-                    (id, data_source_id, path, name, entry_type)
-                VALUES ('historical', 'source-1', 'old.bin', 'old.bin', 'file');",
-            )
-            .expect("seed historical row");
-
-        connection
-            .execute_batch(migration)
-            .expect("apply encryption migration");
-
-        let status: Option<i64> = connection
-            .query_row(
-                "SELECT encrypted FROM file_entries WHERE id = 'historical'",
-                [],
-                |row| row.get(0),
-            )
-            .expect("read migrated state");
-        assert_eq!(status, None);
-    }
 }
 
 fn assert_encrypted_column_contract(conn: &Connection, file_id: &str, data_source_id: &str) {
@@ -151,19 +106,4 @@ fn assert_encrypted_column_contract(conn: &Connection, file_id: &str, data_sourc
         error.sqlite_error_code(),
         Some(ErrorCode::ConstraintViolation)
     ));
-}
-
-fn seed_application_source(conn: &Connection) {
-    conn.execute(
-        "INSERT INTO cases (id, name, created_at, updated_at)
-         VALUES ('case-1', 'case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .expect("insert application case");
-    conn.execute(
-        "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
-         VALUES ('app-source', 'case-1', 'source', 'e01', '', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .expect("insert application source");
 }

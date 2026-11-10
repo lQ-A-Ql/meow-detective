@@ -1,41 +1,16 @@
-use crate::file_service::visibility::visibility_flags_for_node;
-use crossbeam_channel::{unbounded, Receiver, Sender};
+mod producer;
+mod workers;
+
+use crossbeam_channel::unbounded;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use evidence_core::{FileSystemDiagnostic, FileSystemDiagnosticKind, FileSystemReader, FsNode};
-use infrastructure::constants::FILE_INSERT_BATCH_SIZE;
+use evidence_core::FileSystemReader;
 use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
+use producer::{DirectoryWork, ParallelBatchProducer, WorkerResult};
 use rusqlite::Connection;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
-
-struct DirectoryWork {
-    parent_id: FileEntryId,
-    path: String,
-}
-
-struct DirectoryResult {
-    parent_id: FileEntryId,
-    path: String,
-    children: Vec<FsNode>,
-    diagnostics: Vec<FileSystemDiagnostic>,
-}
-
-enum WorkerResult {
-    Directory(DirectoryResult),
-    Fatal(String),
-}
-
-struct WorkerRuntime<'a> {
-    reader_factory: Arc<dyn Fn() -> DbResult<Box<dyn FileSystemReader>> + Send + Sync>,
-    work_tx: Sender<DirectoryWork>,
-    work_rx: Receiver<DirectoryWork>,
-    result_tx: Sender<WorkerResult>,
-    result_rx: Receiver<WorkerResult>,
-    progress_fn: Option<&'a dyn Fn(u32)>,
-    cancel_token: Option<&'a AtomicBool>,
-    stop: Arc<AtomicBool>,
-}
+use workers::{cancellation_requested, run_workers, spawn_worker, WorkerRuntime};
 
 pub fn enumerate_filesystem_parallel_with_factory(
     conn: &Connection,
@@ -79,6 +54,18 @@ pub fn enumerate_filesystem_parallel_with_factory(
         hash_sha256: None,
     };
 
+    if persistence_sqlite::source_fjall::open_store_for_write(conn)?.is_some() {
+        return enumerate_native_parallel(
+            conn,
+            data_source_id,
+            worker_count,
+            reader_factory,
+            root_entry,
+            progress_fn,
+            cancel_token,
+        );
+    }
+
     let worker_count = worker_count.max(1);
     let (work_tx, work_rx) = unbounded::<DirectoryWork>();
     let (result_tx, result_rx) = unbounded::<WorkerResult>();
@@ -112,22 +99,32 @@ pub fn enumerate_filesystem_parallel_with_factory(
     Ok(stats)
 }
 
-fn run_workers<'a>(
-    repo: &FileRepo<'_>,
+fn enumerate_native_parallel(
+    conn: &Connection,
     data_source_id: &DataSourceId,
     worker_count: usize,
-    runtime: WorkerRuntime<'a>,
+    reader_factory: Arc<dyn Fn() -> DbResult<Box<dyn FileSystemReader>> + Send + Sync>,
+    root_entry: FileEntry,
+    progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
 ) -> DbResult<crate::file_service::EnumerationStats> {
-    let WorkerRuntime {
-        reader_factory,
-        work_tx,
-        work_rx,
-        result_tx,
-        result_rx,
-        progress_fn,
-        cancel_token,
-        stop,
-    } = runtime;
+    let source_id = persistence_sqlite::source_fjall::source_id(conn)?
+        .ok_or_else(|| DbError::System("source identity is missing".into()))?;
+    if source_id != data_source_id.0 {
+        return Err(DbError::System(
+            "enumeration source identity mismatch".into(),
+        ));
+    }
+    let worker_count = worker_count.max(1);
+    let (work_tx, work_rx) = unbounded::<DirectoryWork>();
+    let (result_tx, result_rx) = unbounded::<WorkerResult>();
+    let stop = Arc::new(AtomicBool::new(false));
+    work_tx
+        .send(DirectoryWork {
+            parent_id: root_entry.id.clone(),
+            path: String::new(),
+        })
+        .map_err(|_| DbError::System("Parallel filesystem work queue closed".to_string()))?;
     std::thread::scope(|scope| {
         for _ in 0..worker_count {
             spawn_worker(
@@ -139,223 +136,42 @@ fn run_workers<'a>(
             );
         }
         drop(result_tx);
-        let result = enumerate_results(
-            repo,
-            data_source_id,
-            &work_tx,
-            &result_rx,
+        let store = persistence_sqlite::source_fjall::open_store_for_write(conn)?
+            .ok_or_else(|| DbError::System("source detail storage is missing".into()))?;
+        let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+        let root_record = persistence_sqlite::source_fjall::file_record(&root_entry);
+        let mut producer = ParallelBatchProducer::new(
+            work_tx,
+            result_rx,
             progress_fn,
             cancel_token,
-            &stop,
+            Arc::clone(&stop),
+        );
+        let result = repository.replace_subtree_streamed(
+            &source_id,
+            &root_record,
+            0,
+            persistence_fjall::PersistMode::SyncAll,
+            || {
+                producer.next_batch(data_source_id).map(|batch| {
+                    batch.map(|entries| {
+                        entries
+                            .iter()
+                            .map(persistence_sqlite::source_fjall::file_record)
+                            .collect()
+                    })
+                })
+            },
         );
         if result.is_err() {
             stop.store(true, Ordering::Release);
         }
-        drop(work_tx);
-        result
+        match result {
+            Ok(_) => Ok(producer.into_stats()),
+            Err(persistence_fjall::CatalogStreamError::Storage(error)) => {
+                Err(DbError::System(error.to_string()))
+            }
+            Err(persistence_fjall::CatalogStreamError::Producer(error)) => Err(error),
+        }
     })
-}
-
-fn spawn_worker<'scope, 'env>(
-    scope: &'scope std::thread::Scope<'scope, 'env>,
-    work_rx: Receiver<DirectoryWork>,
-    result_tx: Sender<WorkerResult>,
-    factory: Arc<dyn Fn() -> DbResult<Box<dyn FileSystemReader>> + Send + Sync>,
-    stop: Arc<AtomicBool>,
-) {
-    scope.spawn(move || {
-        let reader = match factory() {
-            Ok(reader) => reader,
-            Err(error) => {
-                stop.store(true, Ordering::Release);
-                let _ = result_tx.send(WorkerResult::Fatal(error.to_string()));
-                return;
-            }
-        };
-        while let Ok(work) = work_rx.recv() {
-            if stop.load(Ordering::Acquire) {
-                return;
-            }
-            let children = reader.list_children(&work.path).map_err(|error| {
-                FileSystemDiagnostic::new(
-                    FileSystemDiagnosticKind::DirectoryUnreadable,
-                    format!("Cannot read '{}': {}", work.path, error),
-                )
-                .with_default_path(&work.path)
-            });
-            let mut diagnostics = reader
-                .take_diagnostics()
-                .into_iter()
-                .map(|diagnostic| diagnostic.with_default_path(&work.path))
-                .collect::<Vec<_>>();
-            let children = match children {
-                Ok(children) => children,
-                Err(diagnostic) => {
-                    diagnostics.push(diagnostic);
-                    Vec::new()
-                }
-            };
-            if result_tx
-                .send(WorkerResult::Directory(DirectoryResult {
-                    parent_id: work.parent_id,
-                    path: work.path,
-                    children,
-                    diagnostics,
-                }))
-                .is_err()
-            {
-                return;
-            }
-        }
-    });
-}
-
-fn enumerate_results(
-    repo: &FileRepo<'_>,
-    data_source_id: &DataSourceId,
-    work_tx: &Sender<DirectoryWork>,
-    result_rx: &Receiver<WorkerResult>,
-    progress_fn: Option<&dyn Fn(u32)>,
-    cancel_token: Option<&AtomicBool>,
-    stop: &Arc<AtomicBool>,
-) -> DbResult<crate::file_service::EnumerationStats> {
-    let mut pending = 1usize;
-    let mut batch = Vec::with_capacity(FILE_INSERT_BATCH_SIZE);
-    let mut processed = 0u64;
-    let mut files = 0u64;
-    let mut dirs = 1u64;
-    let mut total_size = 0u64;
-    let mut warnings = Vec::new();
-    let mut diagnostics = Vec::new();
-    while pending > 0 {
-        if cancellation_requested(cancel_token) {
-            stop.store(true, Ordering::Release);
-            return Err(DbError::System("Enumeration cancelled".to_string()));
-        }
-        let result = result_rx.recv().map_err(|_| {
-            stop.store(true, Ordering::Release);
-            DbError::System("Parallel filesystem workers stopped".to_string())
-        })?;
-        let result = match result {
-            WorkerResult::Directory(result) => result,
-            WorkerResult::Fatal(error) => {
-                stop.store(true, Ordering::Release);
-                return Err(DbError::System(error));
-            }
-        };
-        pending = pending.saturating_sub(1);
-        for diagnostic in result.diagnostics {
-            tracing::warn!(path = %result.path, message = %diagnostic.message, "Filesystem enumeration diagnostic");
-            warnings.push(diagnostic.message.clone());
-            diagnostics.push(diagnostic);
-        }
-        for child in result.children {
-            if child.name == "." || child.name == ".." {
-                continue;
-            }
-            let id = FileEntryId(Uuid::new_v4().to_string());
-            if child.is_dir {
-                pending = pending.saturating_add(1);
-                dirs = dirs.saturating_add(1);
-                work_tx
-                    .send(DirectoryWork {
-                        parent_id: id.clone(),
-                        path: child.path.clone(),
-                    })
-                    .map_err(|_| {
-                        DbError::System("Parallel filesystem work queue closed".to_string())
-                    })?;
-            } else {
-                files = files.saturating_add(1);
-                total_size = total_size.saturating_add(child.size);
-            }
-            batch.push(file_entry_for_child(
-                data_source_id,
-                &result.parent_id,
-                &id,
-                &child,
-            ));
-            processed = processed.saturating_add(1);
-            if batch.len() >= FILE_INSERT_BATCH_SIZE {
-                repo.insert_batch_unchecked(&batch)?;
-                batch.clear();
-            }
-            if processed.is_multiple_of(100) {
-                if let Some(progress_fn) = progress_fn {
-                    progress_fn(compute_enumeration_progress(processed));
-                }
-            }
-        }
-    }
-    if !batch.is_empty() {
-        repo.insert_batch_unchecked(&batch)?;
-    }
-    if cancellation_requested(cancel_token) {
-        stop.store(true, Ordering::Release);
-        return Err(DbError::System("Enumeration cancelled".to_string()));
-    }
-    if let Some(progress_fn) = progress_fn {
-        progress_fn(100);
-    }
-    Ok(crate::file_service::EnumerationStats {
-        file_count: files,
-        dir_count: dirs,
-        total_size,
-        warnings,
-        diagnostics,
-    })
-}
-
-fn cancellation_requested(cancel_token: Option<&AtomicBool>) -> bool {
-    cancel_token.is_some_and(|token| token.load(Ordering::Relaxed))
-}
-
-fn compute_enumeration_progress(processed: u64) -> u32 {
-    if processed < 100 {
-        processed as u32
-    } else if processed < 1000 {
-        (50 + (processed - 100) * 30 / 900) as u32
-    } else {
-        (80 + (processed - 1000).min(5000) * 15 / 5000) as u32
-    }
-}
-
-fn file_entry_for_child(
-    data_source_id: &DataSourceId,
-    parent_id: &FileEntryId,
-    id: &FileEntryId,
-    child: &FsNode,
-) -> FileEntry {
-    let (hidden, system) = visibility_flags_for_node(child);
-    FileEntry {
-        id: id.clone(),
-        parent_id: Some(parent_id.clone()),
-        data_source_id: data_source_id.clone(),
-        path: child.path.clone(),
-        name: child.name.clone(),
-        entry_type: if child.is_dir {
-            EntryType::Directory
-        } else {
-            EntryType::File
-        },
-        size: (!child.is_dir).then_some(child.size),
-        ext: child
-            .name
-            .rsplit('.')
-            .next()
-            .filter(|extension| *extension != child.name)
-            .map(str::to_string),
-        deleted: false,
-        hidden,
-        system,
-        encrypted: child.encrypted,
-        read_only: child.read_only,
-        archive: child.archive,
-        unix_mode: child.unix_mode,
-        created_at: child.created_at,
-        modified_at: child.modified_at,
-        accessed_at: child.accessed_at,
-        changed_at: child.changed_at,
-        hash_sha256: None,
-    }
 }

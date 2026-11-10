@@ -24,7 +24,7 @@ pub fn get_file_tree_real_with_visibility(
 ) -> Result<Vec<FileTreeNodeDto>, FileServiceError> {
     if let Some((case_root, source_id)) = crate::file_service::fjall_read::source_context(conn) {
         if let Some(nodes) =
-            crate::file_service::fjall_read::tree(&case_root, &source_id, show_hidden)?
+            crate::file_service::fjall_read::tree(conn, &case_root, &source_id, show_hidden)?
         {
             return Ok(nodes);
         }
@@ -114,6 +114,7 @@ pub fn get_file_children_lazy_with_visibility(
 ) -> Result<FileChildrenDto, FileServiceError> {
     if let Some((case_root, source_id)) = crate::file_service::fjall_read::source_context(conn) {
         if let Some(children) = crate::file_service::fjall_read::children(
+            conn,
             &case_root,
             &source_id,
             parent_id,

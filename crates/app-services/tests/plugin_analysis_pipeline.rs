@@ -10,14 +10,15 @@ use app_services::analysis_service::{
 };
 use app_services::plugin_loader::load_plugins_from_dirs;
 use artifacts_core::{ArtifactContext, ArtifactExtractor, VecSink};
-use domain::FileEntryId;
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, file_repo::FileRepo};
 use std::collections::BTreeMap;
 use std::sync::atomic::AtomicBool;
 
-fn source_connection() -> rusqlite::Connection {
-    let connection = persistence_sqlite::open_in_memory().expect("open source database");
-    persistence_sqlite::runner::run_source_all(&connection).expect("run source migrations");
+fn source_connection(root: &std::path::Path) -> rusqlite::Connection {
+    let source_id = DataSourceId("source-1".into());
+    let connection =
+        app_services::source_db::open_source_db(root, &source_id).expect("open source database");
     connection
         .execute(
             "INSERT INTO data_sources
@@ -44,18 +45,32 @@ fn fixture_plugin_flows_from_discovery_to_summary() {
         .collect();
 
     // 1. Candidate discovery: the declared "*.mfx" suffix pattern hits.
-    let conn = source_connection();
-    conn.execute(
-        "INSERT INTO file_entries (
-            id, parent_id, data_source_id, path, name, entry_type, size,
-            deleted, hidden, system, encrypted
-         ) VALUES (
-            'file-mfx', NULL, 'source-1', '[P0]/Evidence/FOO.MFX', 'FOO.MFX',
-            'file', 64, 0, 0, 0, 0
-         )",
-        [],
-    )
-    .expect("insert plugin-matched file entry");
+    let source_root = tempfile::tempdir().unwrap();
+    let conn = source_connection(source_root.path());
+    FileRepo::new(&conn)
+        .insert_batch(&[FileEntry {
+            id: FileEntryId("file-mfx".into()),
+            parent_id: None,
+            data_source_id: DataSourceId("source-1".into()),
+            path: "[P0]/Evidence/FOO.MFX".into(),
+            name: "FOO.MFX".into(),
+            entry_type: EntryType::File,
+            size: Some(64),
+            ext: Some("mfx".into()),
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
+        .expect("insert plugin-matched file entry");
     let candidates = discover_plugin_candidates(&conn, &plugin_refs, &AtomicBool::new(false))
         .expect("discover plugin candidates");
     assert_eq!(candidates.len(), 1);

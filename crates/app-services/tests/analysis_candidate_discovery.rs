@@ -1,40 +1,33 @@
 use app_services::analysis_service::{
-    discover_evidence_candidates, evidence_candidates_for_categories, AnalysisServiceError,
+    discover_evidence_candidates, evidence_candidates_for_categories,
 };
-use rusqlite::{params, Connection};
 
-fn candidate_db() -> Connection {
-    let connection = Connection::open_in_memory().expect("open in-memory candidate database");
-    connection
-        .execute_batch(
-            "CREATE TABLE file_entries (
-                id TEXT PRIMARY KEY,
-                data_source_id TEXT NOT NULL,
-                path TEXT NOT NULL,
-                size INTEGER,
-                partition_index INTEGER,
-                created_at TEXT,
-                modified_at TEXT,
-                accessed_at TEXT,
-                changed_at TEXT,
-                hash_sha256 TEXT,
-                encrypted INTEGER CHECK (encrypted IS NULL OR encrypted IN (0, 1)),
-                entry_type TEXT NOT NULL
-            );",
-        )
-        .expect("create candidate schema");
-    connection
+#[path = "support/native_analysis_fixture.rs"]
+mod native_analysis_fixture;
+
+use native_analysis_fixture::{source_file, NativeAnalysisFixture};
+
+const SOURCE_ID: &str = "source-1";
+
+fn candidate_db() -> NativeAnalysisFixture {
+    NativeAnalysisFixture::new(SOURCE_ID, "case-candidates")
 }
 
-fn insert_file(connection: &Connection, id: &str, path: &str) {
-    connection
-        .execute(
-            "INSERT INTO file_entries
-             (id, data_source_id, path, size, encrypted, entry_type)
-             VALUES (?1, 'source-1', ?2, 1, 0, 'file')",
-            params![id, path],
-        )
-        .expect("insert candidate file");
+fn insert_file(fixture: &NativeAnalysisFixture, id: &str, path: &str) {
+    fixture.insert_file(source_file(SOURCE_ID, id, path, 1, false));
+}
+
+fn insert_partitioned_file(
+    fixture: &NativeAnalysisFixture,
+    id: &str,
+    path: &str,
+    encrypted: bool,
+    partition_index: usize,
+) {
+    fixture.insert_partitioned_file(
+        source_file(SOURCE_ID, id, path, 12, encrypted),
+        partition_index,
+    );
 }
 
 #[test]
@@ -115,14 +108,7 @@ fn linux_only_discovery_returns_no_windows_candidates() {
 #[test]
 fn discovery_carries_file_entry_partition_index() {
     let connection = candidate_db();
-    connection
-        .execute(
-            "INSERT INTO file_entries
-             (id, data_source_id, path, size, partition_index, entry_type)
-             VALUES ('linux-web', 'source-1', 'var/www/html/index.php', 12, 7, 'file')",
-            [],
-        )
-        .expect("insert partition-bound candidate");
+    insert_partitioned_file(&connection, "linux-web", "var/www/html/index.php", false, 7);
 
     let candidates = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
         .expect("discover partition-bound candidate");
@@ -134,38 +120,27 @@ fn discovery_carries_file_entry_partition_index() {
 #[test]
 fn discovery_preserves_efs_encryption_fact_and_identity() {
     let connection = candidate_db();
-    connection
-        .execute(
-            "INSERT INTO file_entries
-             (id, data_source_id, path, size, partition_index, encrypted, entry_type)
-             VALUES ('encrypted-web', 'source-1', 'var/www/html/secret.php', 12, 7, 1, 'file')",
-            [],
-        )
-        .expect("insert encrypted candidate");
+    insert_partitioned_file(
+        &connection,
+        "encrypted-web",
+        "var/www/html/secret.php",
+        true,
+        7,
+    );
 
     let encrypted = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
         .expect("discover encrypted candidate")
         .remove(0);
     assert!(encrypted.encrypted);
 
-    connection
-        .execute(
-            "UPDATE file_entries SET encrypted = NULL WHERE id = 'encrypted-web'",
-            [],
-        )
-        .expect("mark encryption status unknown");
+    connection.set_encryption("encrypted-web", None);
     let unknown = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
         .expect("discover unknown-status candidate")
         .remove(0);
     assert!(unknown.encrypted, "unknown candidate must fail closed");
     assert_ne!(encrypted.content_identity, unknown.content_identity);
 
-    connection
-        .execute(
-            "UPDATE file_entries SET encrypted = 0 WHERE id = 'encrypted-web'",
-            [],
-        )
-        .expect("clear encryption flag");
+    connection.set_encryption("encrypted-web", Some(false));
     let unencrypted = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
         .expect("rediscover unencrypted candidate")
         .remove(0);
@@ -176,39 +151,13 @@ fn discovery_preserves_efs_encryption_fact_and_identity() {
 }
 
 #[test]
-fn discovery_rejects_negative_partition_index() {
+fn native_partition_index_rejects_value_above_supported_range() {
     let connection = candidate_db();
-    connection
-        .execute(
-            "INSERT INTO file_entries
-             (id, data_source_id, path, size, partition_index, entry_type)
-             VALUES ('negative', 'source-1', 'var/www/negative.php', 12, -1, 'file')",
-            [],
-        )
-        .expect("insert negative partition index");
-
-    let error = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
-        .expect_err("negative partition index must fail");
-
-    assert!(matches!(error, AnalysisServiceError::InvalidInput(_)));
-    assert!(error.to_string().contains("partition_index -1"));
-}
-
-#[test]
-fn discovery_rejects_partition_index_above_supported_range() {
-    let connection = candidate_db();
-    connection
-        .execute(
-            "INSERT INTO file_entries
-             (id, data_source_id, path, size, partition_index, entry_type)
-             VALUES ('oversized', 'source-1', 'var/www/oversized.php', 12, 4294967296, 'file')",
-            [],
-        )
-        .expect("insert oversized partition index");
-
-    let error = evidence_candidates_for_categories(&connection, &["LinuxArtifacts"])
-        .expect_err("oversized partition index must fail");
-
-    assert!(matches!(error, AnalysisServiceError::InvalidInput(_)));
-    assert!(error.to_string().contains("partition_index 4294967296"));
+    connection.reject_partition_index_above_u32(source_file(
+        SOURCE_ID,
+        "oversized",
+        "var/www/oversized.php",
+        12,
+        false,
+    ));
 }

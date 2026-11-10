@@ -11,8 +11,10 @@ use persistence_sqlite::repositories::{
 fn member_inventory_reads_source_catalog_without_writing_it() {
     let tmp = tempfile::TempDir::new().unwrap();
     let source_id = DataSourceId("k8s-source".to_string());
-    let connection =
-        persistence_sqlite::open_or_create_source(&tmp.path().join("source.db")).unwrap();
+    let database_path = tmp.path().join("source.db");
+    let connection = persistence_sqlite::open_or_create_source(&database_path).unwrap();
+    persistence_sqlite::source_fjall::configure_source_identity(&connection, &source_id.0).unwrap();
+    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &database_path).unwrap();
     FileRepo::new(&connection)
         .insert_batch(&[FileEntry {
             id: FileEntryId("file-manifest".to_string()),

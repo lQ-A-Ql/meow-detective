@@ -1,45 +1,39 @@
 #![allow(dead_code)]
 
 use app_services::staging::{PartitionEntry, PartitionStatus, StagingManifest};
+use persistence_fjall::{FileEntryRecord, ScanDirection};
 use rusqlite::{params, Connection};
 
-pub fn create_main_file_entries_table(conn: &Connection) {
-    persistence_sqlite::runner::run_source_all(conn).unwrap();
+pub struct NativeSourceFixture {
+    pub conn: Connection,
+    pub storage: app_services::source_db::FjallReadWriteSourceStorageHandle,
+    pub source_id: String,
 }
 
-pub fn create_main_analysis_tables(conn: &Connection) {
-    conn.execute_batch(
-        "CREATE TABLE artifacts (
-            id TEXT PRIMARY KEY NOT NULL,
-            case_id TEXT NOT NULL DEFAULT '',
-            data_source_id TEXT NOT NULL DEFAULT '',
-            artifact_type TEXT NOT NULL,
-            source_object_id TEXT,
-            extractor_id TEXT,
-            extractor_version TEXT,
-            confidence REAL,
-            source_attribution TEXT,
-            title TEXT NOT NULL,
-            summary TEXT NOT NULL DEFAULT '',
-            attrs TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        CREATE TABLE timeline_events (
-            id TEXT PRIMARY KEY NOT NULL,
-            case_id TEXT NOT NULL DEFAULT '',
-            source_object_id TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            ts TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT NOT NULL DEFAULT '',
-            parser_id TEXT,
-            parser_version TEXT,
-            confidence REAL,
-            source_attribution TEXT,
-            attrs TEXT NOT NULL DEFAULT '{}'
-        );",
-    )
-    .unwrap();
+impl NativeSourceFixture {
+    pub fn new(case_root: &std::path::Path, source_id: &str) -> Self {
+        let id = domain::DataSourceId(source_id.to_string());
+        let conn = app_services::source_db::open_source_db(case_root, &id).unwrap();
+        conn.execute(
+            "INSERT INTO data_sources
+             (id, case_id, name, kind, source_path, imported_at)
+             VALUES (?1, 'case-1', ?1, 'e01', 'source.E01',
+                     '2026-01-01T00:00:00Z')",
+            [source_id],
+        )
+        .unwrap();
+        let storage =
+            app_services::source_db::open_fjall_source_read_write(case_root, source_id).unwrap();
+        Self {
+            conn,
+            storage,
+            source_id: source_id.to_string(),
+        }
+    }
+
+    pub fn catalog_records(&self) -> Vec<FileEntryRecord> {
+        catalog_records(&self.conn)
+    }
 }
 
 pub fn done_partition(index: usize, name: &str, file_count: u64) -> PartitionEntry {
@@ -97,14 +91,45 @@ pub fn seed_placeholder(
     .0
 }
 
+pub fn catalog_records(conn: &Connection) -> Vec<FileEntryRecord> {
+    let source_id = persistence_sqlite::source_fjall::source_id(conn)
+        .unwrap()
+        .expect("source identity");
+    let store = persistence_sqlite::source_fjall::open_store(conn)
+        .unwrap()
+        .expect("source store");
+    let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let snapshot = catalog.read_snapshot();
+    let mut cursor = None;
+    let mut records = Vec::new();
+    loop {
+        let page = catalog
+            .list_all(
+                &snapshot,
+                &source_id,
+                cursor.as_deref(),
+                ScanDirection::Forward,
+                512,
+            )
+            .unwrap();
+        records.extend(page.records);
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    records.sort_by(|left, right| left.id.cmp(&right.id));
+    records
+}
+
 pub fn first_level_roots(main_conn: &Connection) -> Vec<String> {
-    let mut stmt = main_conn
-        .prepare("SELECT name FROM file_entries WHERE parent_id IS NULL ORDER BY name")
-        .unwrap();
-    stmt.query_map([], |row| row.get::<_, String>(0))
-        .unwrap()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap()
+    let mut roots = catalog_records(main_conn)
+        .into_iter()
+        .filter(|record| record.parent_id.is_none())
+        .map(|record| record.name)
+        .collect::<Vec<_>>();
+    roots.sort();
+    roots
 }
 
 pub fn attached_db_names(conn: &Connection) -> Vec<String> {

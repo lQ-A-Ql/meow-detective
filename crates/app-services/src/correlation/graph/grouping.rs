@@ -79,6 +79,9 @@ pub(crate) fn build_rule_groups(
     artifacts: &[ArtifactRowDto],
     timelines: &[TimelineEventDto],
 ) -> Result<Vec<CorrelationRuleGroup>, CorrelationError> {
+    if artifacts.is_empty() {
+        return Ok(Vec::new());
+    }
     let files = crate::analysis_service::collect_file_entries(conn)
         .map_err(|error| CorrelationError::Other(error.to_string()))?;
     let timeline_map = group_timelines(timelines);

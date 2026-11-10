@@ -14,22 +14,6 @@ use std::{
     time::Duration,
 };
 
-const ARTIFACTS_SCHEMA: &str =
-    include_str!("../../../persistence-sqlite/src/migrations/scripts/0004_artifacts.sql");
-
-fn in_memory_db_with_artifacts() -> rusqlite::Connection {
-    let conn = persistence_sqlite::connection::open_in_memory().unwrap();
-    conn.execute_batch(ARTIFACTS_SCHEMA).unwrap();
-    conn.execute_batch(
-        "ALTER TABLE artifacts ADD COLUMN extractor_id TEXT;
-         ALTER TABLE artifacts ADD COLUMN extractor_version TEXT;
-         ALTER TABLE artifacts ADD COLUMN confidence REAL;
-         ALTER TABLE artifacts ADD COLUMN source_attribution TEXT;",
-    )
-    .unwrap();
-    conn
-}
-
 fn in_memory_case_db() -> rusqlite::Connection {
     let conn = persistence_sqlite::connection::open_in_memory().unwrap();
     persistence_sqlite::runner::run_all(&conn).unwrap();
@@ -108,7 +92,71 @@ fn register_ready_source(
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(&domain::CaseId("case-1".to_string()), &source)
         .unwrap();
+    seal_source(&source_conn);
     source_conn
+}
+
+fn open_fixture_source(
+    case_root: &std::path::Path,
+    source_id: &DataSourceId,
+) -> rusqlite::Connection {
+    let connection = crate::source_db::open_source_db(case_root, source_id).unwrap();
+    seal_source(&connection);
+    connection
+}
+
+fn seal_source(connection: &rusqlite::Connection) {
+    let Some(store) = persistence_sqlite::source_fjall::open_store_for_write(connection).unwrap()
+    else {
+        return;
+    };
+    let source_id = persistence_sqlite::source_fjall::source_id(connection)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::replace_source_generation(
+        &store,
+        &source_id,
+        "artifact-fixture",
+        &"a".repeat(64),
+    )
+    .unwrap();
+    let key = persistence_fjall::encode_key(
+        "projection",
+        &[persistence_fjall::KeyPart::Text(source_id.clone())],
+    )
+    .unwrap();
+    let marker = persistence_fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{source_id}"),
+        &source_id,
+        1,
+        source_id.as_bytes().to_vec(),
+    );
+    store
+        .write_envelope(
+            persistence_fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
+}
+
+fn delete_native_artifact(connection: &rusqlite::Connection, artifact_id: &str) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+        .unwrap()
+        .unwrap();
+    let source_id = persistence_sqlite::source_fjall::source_id(connection)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone())
+        .delete(
+            &source_id,
+            artifact_id,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
 }
 
 fn make_file(id: &str, path: &str) -> FileEntry {
@@ -140,6 +188,7 @@ fn insert_files(conn: &rusqlite::Connection, files: &[FileEntry]) {
     persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
         .insert_batch(files)
         .unwrap();
+    seal_source(conn);
 }
 
 #[test]
@@ -161,7 +210,8 @@ fn registry_and_unmatched_extraction_are_stable() {
 
 #[test]
 fn artifact_persistence_and_queries_preserve_family_data() {
-    let conn = in_memory_db_with_artifacts();
+    let root = tempfile::TempDir::new().unwrap();
+    let conn = open_fixture_source(root.path(), &DataSourceId("ds-1".into()));
     let artifacts = vec![
         make_artifact("Prefetch", "pf-1"),
         make_artifact("Prefetch", "pf-2"),
@@ -188,7 +238,8 @@ fn artifact_persistence_and_queries_preserve_family_data() {
 
 #[test]
 fn empty_artifact_batch_is_a_noop() {
-    let conn = in_memory_db_with_artifacts();
+    let root = tempfile::TempDir::new().unwrap();
+    let conn = open_fixture_source(root.path(), &DataSourceId("ds-1".into()));
     store_artifacts(&conn, &[], "case-1", "ds-1").unwrap();
     assert!(get_artifact_rows_from_db(&conn, None).unwrap().is_empty());
 }
@@ -198,7 +249,7 @@ fn case_queries_route_ready_sources_and_scope_ids() {
     let temp = tempfile::TempDir::new().unwrap();
     let case_conn = in_memory_case_db();
     let source_id = DataSourceId("ds-1".to_string());
-    let source_conn = crate::source_db::open_source_db(temp.path(), &source_id).unwrap();
+    let source_conn = open_fixture_source(temp.path(), &source_id);
     store_artifacts(
         &source_conn,
         &[make_artifact("LinuxBashCommand", "bash-history")],
@@ -233,7 +284,7 @@ fn case_artifact_pages_merge_sources_with_stable_order_and_offsets() {
     let temp = tempfile::TempDir::new().unwrap();
     let case_conn = in_memory_case_db();
     let first_source = DataSourceId("ds-1".to_string());
-    let first_conn = crate::source_db::open_source_db(temp.path(), &first_source).unwrap();
+    let first_conn = open_fixture_source(temp.path(), &first_source);
     let second_conn = register_ready_source(&case_conn, temp.path(), "ds-2");
     store_artifacts(
         &first_conn,
@@ -299,8 +350,7 @@ fn case_artifact_pages_merge_sources_with_stable_order_and_offsets() {
 fn legacy_case_artifact_rows_keep_the_existing_thousand_row_cap() {
     let temp = tempfile::TempDir::new().unwrap();
     let case_conn = in_memory_case_db();
-    let source =
-        crate::source_db::open_source_db(temp.path(), &DataSourceId("ds-1".to_string())).unwrap();
+    let source = open_fixture_source(temp.path(), &DataSourceId("ds-1".to_string()));
     let artifacts = (0..1_001)
         .map(|index| {
             make_artifact_at(
@@ -324,11 +374,11 @@ fn legacy_case_artifact_rows_keep_the_existing_thousand_row_cap() {
 }
 
 #[test]
-fn case_artifact_cursor_freezes_snapshot_and_tracks_only_consumed_keys() {
+fn case_artifact_cursor_rejects_new_rows_after_the_snapshot() {
     let temp = tempfile::TempDir::new().unwrap();
     let case_conn = in_memory_case_db();
     let first_source = DataSourceId("ds-1".to_string());
-    let first_conn = crate::source_db::open_source_db(temp.path(), &first_source).unwrap();
+    let first_conn = open_fixture_source(temp.path(), &first_source);
     let second_conn = register_ready_source(&case_conn, temp.path(), "ds-2");
     store_artifacts(
         &first_conn,
@@ -375,8 +425,7 @@ fn case_artifact_cursor_freezes_snapshot_and_tracks_only_consumed_keys() {
         .next_cursor
         .expect("cursor for remaining snapshot rows");
 
-    let second_conn =
-        crate::source_db::open_source_db(temp.path(), &DataSourceId("ds-2".to_string())).unwrap();
+    let second_conn = open_fixture_source(temp.path(), &DataSourceId("ds-2".to_string()));
     store_artifacts(
         &second_conn,
         &[make_artifact_at("inserted-later", "2026-06-05T00:00:00Z")],
@@ -386,7 +435,7 @@ fn case_artifact_cursor_freezes_snapshot_and_tracks_only_consumed_keys() {
     .unwrap();
     drop(second_conn);
 
-    let second = get_artifact_rows_page_with_cursor_for_case(
+    let stale_append = get_artifact_rows_page_with_cursor_for_case(
         &case_conn,
         temp.path(),
         &case_id,
@@ -395,17 +444,13 @@ fn case_artifact_cursor_freezes_snapshot_and_tracks_only_consumed_keys() {
         10,
         Some(&cursor),
     )
-    .unwrap();
-    assert_eq!(second.total, 4);
-    assert_eq!(
-        second
-            .items
-            .iter()
-            .map(|row| row.id.as_str())
-            .collect::<Vec<_>>(),
-        vec!["ds:ds-2:same-a", "ds:ds-1:old"]
-    );
-    assert!(second.next_cursor.is_none());
+    .unwrap_err();
+    match stale_append {
+        ArtifactServiceError::InvalidInput(message) => {
+            assert!(message.contains("artifact snapshot changed"));
+        }
+        other => panic!("expected stale cursor validation error, got {other}"),
+    }
 
     let wrong_family = get_artifact_rows_page_with_cursor_for_case(
         &case_conn,
@@ -461,7 +506,7 @@ fn case_artifact_cursor_rejects_offset_and_deleted_unconsumed_rows() {
     let temp = tempfile::TempDir::new().unwrap();
     let case_conn = in_memory_case_db();
     let source_id = DataSourceId("ds-1".to_string());
-    let source_conn = crate::source_db::open_source_db(temp.path(), &source_id).unwrap();
+    let source_conn = open_fixture_source(temp.path(), &source_id);
     store_artifacts(
         &source_conn,
         &[
@@ -503,10 +548,8 @@ fn case_artifact_cursor_rejects_offset_and_deleted_unconsumed_rows() {
         ArtifactServiceError::InvalidInput(_)
     ));
 
-    let source_conn = crate::source_db::open_source_db(temp.path(), &source_id).unwrap();
-    source_conn
-        .execute("DELETE FROM artifacts WHERE id = 'oldest'", [])
-        .unwrap();
+    let source_conn = open_fixture_source(temp.path(), &source_id);
+    delete_native_artifact(&source_conn, "oldest");
     drop(source_conn);
 
     let stale = get_artifact_rows_page_with_cursor_for_case(
@@ -532,7 +575,7 @@ fn case_artifact_cursor_rejects_equal_count_replacement() {
     let temp = tempfile::TempDir::new().unwrap();
     let case_conn = in_memory_case_db();
     let source_id = DataSourceId("ds-1".to_string());
-    let source_conn = crate::source_db::open_source_db(temp.path(), &source_id).unwrap();
+    let source_conn = open_fixture_source(temp.path(), &source_id);
     let mut originals = vec![
         make_artifact_at("newest", "2026-06-03T00:00:00Z"),
         make_artifact_at("middle", "2026-06-02T00:00:00Z"),
@@ -558,7 +601,7 @@ fn case_artifact_cursor_rejects_equal_count_replacement() {
     .unwrap();
     let cursor = first.next_cursor.expect("cursor for remaining rows");
 
-    let source_conn = crate::source_db::open_source_db(temp.path(), &source_id).unwrap();
+    let source_conn = open_fixture_source(temp.path(), &source_id);
     let transaction = source_conn.unchecked_transaction().unwrap();
     let repository =
         persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(&transaction);
@@ -605,7 +648,7 @@ fn case_artifact_page_refills_each_source_across_multiple_batches() {
     let temp = tempfile::TempDir::new().unwrap();
     let case_conn = in_memory_case_db();
     let first_source = DataSourceId("ds-1".to_string());
-    let first_conn = crate::source_db::open_source_db(temp.path(), &first_source).unwrap();
+    let first_conn = open_fixture_source(temp.path(), &first_source);
     let second_conn = register_ready_source(&case_conn, temp.path(), "ds-2");
     let first = (0..300)
         .map(|index| {
@@ -768,7 +811,8 @@ fn parallel_extraction_bounds_prepared_evidence_to_one_batch() {
 
 #[test]
 fn targeted_scan_skips_unsupported_candidate_without_reading() {
-    let conn = in_memory_case_db();
+    let root = tempfile::tempdir().unwrap();
+    let conn = open_fixture_source(root.path(), &DataSourceId("ds-1".into()));
     insert_files(
         &conn,
         &[make_file(
@@ -790,7 +834,8 @@ fn targeted_scan_skips_unsupported_candidate_without_reading() {
 
 #[test]
 fn targeted_scan_records_read_error_and_deduplicates_existing_source() {
-    let conn = in_memory_case_db();
+    let root = tempfile::tempdir().unwrap();
+    let conn = open_fixture_source(root.path(), &DataSourceId("ds-1".into()));
     insert_files(
         &conn,
         &[make_file("pf-1", "Windows/Prefetch/CMD.EXE-12345678.pf")],
@@ -802,13 +847,10 @@ fn targeted_scan_records_read_error_and_deduplicates_existing_source() {
     assert_eq!(stats.warning_count, 1);
     assert!(stats.warnings[0].contains("reader unavailable"));
 
-    conn.execute(
-        "INSERT INTO artifacts
-         (id, case_id, data_source_id, artifact_type, source_object_id, title, summary, attrs, created_at)
-         VALUES ('artifact-1', 'case-1', 'ds-1', 'Prefetch', 'pf-1', 'Prefetch', 'summary', '{}', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
+    let mut existing = make_artifact_at("artifact-1", "2026-01-01T00:00:00Z");
+    existing.family = "Prefetch".to_string();
+    existing.source_object_id = Some(FileEntryId("pf-1".to_string()));
+    store_artifacts(&conn, &[existing], "case-1", "ds-1").unwrap();
     let reads = AtomicUsize::new(0);
     let stats = run_targeted_evidence_scan(&conn, "case-1", &["ProgramExecution"], |_| {
         reads.fetch_add(1, Ordering::Relaxed);

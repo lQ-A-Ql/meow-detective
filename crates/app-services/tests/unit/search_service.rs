@@ -1,7 +1,12 @@
 use super::*;
+crate::native_source_test_support!();
+use test_support::mark_source_projection_complete;
 
 use chrono::Utc;
-use domain::{CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
+use domain::{
+    CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
+    FileEntryId,
+};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use search::SearchFileDocument;
 use tempfile::TempDir;
@@ -10,6 +15,7 @@ use transport::commands::{
 };
 
 fn setup_case(tmp: &TempDir, source_ids: &[&str]) -> rusqlite::Connection {
+    std::fs::create_dir_all(tmp.path().join("artifacts/objects")).unwrap();
     let connection = persistence_sqlite::connection::open_in_memory().unwrap();
     persistence_sqlite::runner::run_all(&connection).unwrap();
     let case = domain::CaseMeta {
@@ -47,34 +53,52 @@ fn setup_case(tmp: &TempDir, source_ids: &[&str]) -> rusqlite::Connection {
 fn insert_entries(tmp: &TempDir, source_id: &str, documents: &[SearchFileDocument]) {
     let id = DataSourceId(source_id.to_string());
     let connection = crate::source_db::open_source_db(tmp.path(), &id).unwrap();
-    for document in documents {
-        connection
-            .execute(
-                "INSERT INTO file_entries
-                 (id, data_source_id, path, name, entry_type, size, ext, modified_at,
-                  deleted, hidden, system, encrypted)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-                rusqlite::params![
-                    document.file_id,
-                    source_id,
-                    document.path,
-                    document.name,
-                    document.entry_type,
-                    document.size,
-                    (!document.extension.is_empty()).then_some(document.extension.clone()),
-                    document.modified_at.map(|value| {
-                        chrono::DateTime::<Utc>::from_timestamp_millis(value)
-                            .unwrap()
-                            .to_rfc3339()
-                    }),
-                    i32::from(document.deleted),
-                    i32::from(document.hidden),
-                    i32::from(document.system),
-                    i32::from(document.encrypted),
-                ],
-            )
-            .unwrap();
-    }
+    let entries = documents
+        .iter()
+        .map(|document| FileEntry {
+            id: FileEntryId(document.file_id.clone()),
+            parent_id: None,
+            data_source_id: id.clone(),
+            path: document.path.clone(),
+            name: document.name.clone(),
+            entry_type: if document.entry_type.eq_ignore_ascii_case("directory") {
+                EntryType::Directory
+            } else {
+                EntryType::File
+            },
+            size: document.size,
+            ext: (!document.extension.is_empty()).then(|| document.extension.clone()),
+            deleted: document.deleted,
+            hidden: document.hidden,
+            system: document.system,
+            encrypted: document.encrypted,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: document
+                .modified_at
+                .and_then(chrono::DateTime::<Utc>::from_timestamp_millis),
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        })
+        .collect::<Vec<_>>();
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&connection)
+        .insert_batch(&entries)
+        .unwrap();
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&connection)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::replace_source_generation(
+        &store,
+        source_id,
+        "search-fixture",
+        &"a".repeat(64),
+    )
+    .unwrap();
+    drop(store);
+    mark_source_projection_complete(&connection, source_id);
     let index_dir = tmp.path().join("sources").join(source_id).join("index");
     let index = search::SearchIndex::create(&index_dir).unwrap();
     let mut writer = index.metadata_writer().unwrap();

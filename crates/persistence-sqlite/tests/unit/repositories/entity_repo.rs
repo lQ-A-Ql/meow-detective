@@ -58,13 +58,6 @@ fn setup_db() -> Connection {
             confidence REAL NOT NULL DEFAULT 0.0,
             evidence_edge_ids TEXT NOT NULL DEFAULT '[]',
             created_at TEXT NOT NULL
-        );
-        CREATE TABLE artifacts (
-            id TEXT PRIMARY KEY NOT NULL,
-            case_id TEXT NOT NULL,
-            title TEXT NOT NULL,
-            summary TEXT NOT NULL DEFAULT '',
-            attrs TEXT NOT NULL DEFAULT '{}'
         );",
     )
     .unwrap();
@@ -302,47 +295,4 @@ fn entity_relationship_upsert() {
     assert_eq!(source, "entity-alice");
     assert_eq!(target, "entity-bob");
     assert_eq!(rel_type, "communicates_with");
-}
-
-#[test]
-fn get_artifact_ids_for_case_returns_correct_ids() {
-    let conn = setup_db();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title) VALUES ('a1', 'case-1', 'Artifact 1')",
-        [],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title) VALUES ('a2', 'case-2', 'Artifact 2')",
-        [],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title) VALUES ('a3', 'case-1', 'Artifact 3')",
-        [],
-    )
-    .unwrap();
-
-    let ids = get_artifact_ids_for_case(&conn, "case-1").unwrap();
-    assert_eq!(ids.len(), 2);
-    assert!(ids.contains(&"a1".to_string()));
-    assert!(ids.contains(&"a3".to_string()));
-}
-
-#[test]
-fn get_artifact_rows_for_case_includes_attrs() {
-    let conn = setup_db();
-    conn.execute(
-        "INSERT INTO artifacts (id, case_id, title, summary, attrs)
-         VALUES ('a1', 'case-1', 'Title', 'Summary', '{\"hostname\":\"PC1\"}')",
-        [],
-    )
-    .unwrap();
-
-    let rows = get_artifact_rows_for_case(&conn, "case-1").unwrap();
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].0, "a1");
-    assert_eq!(rows[0].1, "Title");
-    assert_eq!(rows[0].2, "Summary");
-    assert!(rows[0].3.contains("PC1"));
 }

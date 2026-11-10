@@ -1,9 +1,7 @@
 use super::native_output;
-use super::state::{AnalysisOutputProducer, ExtractionState};
+use super::state::ExtractionState;
 use crate::analysis_service::error::AnalysisServiceError;
-use persistence_sqlite::repositories::{
-    analysis_scan_repo::AnalysisScanRepo, artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo,
-};
+use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
 use rusqlite::Connection;
 use std::time::Instant;
 
@@ -33,37 +31,36 @@ pub(super) fn persist_outputs(
     let diagnostic_scans = std::mem::take(&mut state.diagnostic_scans);
     let complete_scans = std::mem::take(&mut state.complete_scans);
     let data_source_id = resolve_output_data_source_id(conn)?;
+    validate_artifact_source_attribution(&artifacts, &data_source_id)?;
     let database_path: String = conn
         .query_row("PRAGMA database_list", [], |row| row.get(2))
         .unwrap_or_default();
     let case_root = std::path::Path::new(&database_path)
         .parent()
         .and_then(std::path::Path::parent)
-        .and_then(std::path::Path::parent);
-    let native_ready = case_root.is_some()
-        && !database_path.is_empty()
-        && persistence_sqlite::source_fjall::open_store(conn)?.is_some();
-    let native_generation = native_ready
-        .then(|| {
-            native_output::stage(
-                conn,
-                case_root.expect("native source has a case root"),
-                &data_source_id,
-                &artifacts,
-                &events,
-                &replacements,
+        .and_then(std::path::Path::parent)
+        .ok_or_else(|| {
+            AnalysisServiceError::InvalidInput(
+                "analysis output requires a file-backed case source database".into(),
             )
-        })
-        .transpose()?;
-    validate_artifact_source_attribution(&artifacts, &data_source_id)?;
+        })?;
+    persistence_sqlite::source_fjall::open_store(conn)?.ok_or_else(|| {
+        AnalysisServiceError::InvalidInput("source detail storage is missing".into())
+    })?;
+    let native_generation = native_output::stage(
+        conn,
+        case_root,
+        &data_source_id,
+        &artifacts,
+        &events,
+        &replacements,
+    )?;
     commit_outputs(
         conn,
         case_id,
         &data_source_id,
         native_generation,
         &artifacts,
-        &events,
-        &replacements,
         &clean_scans,
         &diagnostic_scans,
         &complete_scans,
@@ -75,77 +72,23 @@ fn commit_outputs(
     conn: &Connection,
     case_id: &str,
     data_source_id: &str,
-    native_generation: Option<native_output::StagedGeneration>,
+    native_generation: native_output::StagedGeneration,
     artifacts: &[domain::Artifact],
-    events: &[domain::TimelineEvent],
-    replacements: &[super::state::AnalysisOutputReplacement],
     clean_scans: &[persistence_sqlite::repositories::analysis_scan_repo::CleanAnalysisCandidateScan],
     diagnostic_scans: &[persistence_sqlite::repositories::analysis_scan_repo::DiagnosticAnalysisCandidateScan],
     complete_scans: &[persistence_sqlite::repositories::analysis_scan_repo::CompleteAnalysisCandidateScan],
 ) -> Result<(), AnalysisServiceError> {
-    if native_generation.is_none() {
-        crate::import_pipeline::begin_analysis_output_projection(conn)
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-    }
     let transaction = conn.unchecked_transaction()?;
-    let artifact_repo = ArtifactRepo::new(&transaction);
-    let timeline_repo = TimelineRepo::new(&transaction);
-    if let Some(generation) = native_generation.as_ref() {
-        persistence_sqlite::source_fjall::bind_generation(&transaction, &generation.name)?;
-    }
-    if native_generation.is_some() {
-        persist_native_fingerprints(&transaction, case_id, data_source_id, artifacts)?;
-    }
-    if native_generation.is_none() {
-        replace_legacy_outputs(&artifact_repo, &timeline_repo, replacements)?;
-    }
-    if native_generation.is_none() {
-        if !artifacts.is_empty() {
-            artifact_repo.insert_batch_in_transaction(artifacts, case_id, data_source_id)?;
-        }
-        if !events.is_empty() {
-            timeline_repo.insert_batch_with_case_in_transaction(events, case_id)?;
-        }
-    }
+    persistence_sqlite::source_fjall::bind_generation(&transaction, &native_generation.name)?;
+    persist_native_fingerprints(&transaction, case_id, data_source_id, artifacts)?;
     AnalysisScanRepo::new(&transaction).insert_all_checkpoint_batch_in_transaction(
         clean_scans,
         diagnostic_scans,
         complete_scans,
     )?;
-    let data_source_id = data_source_id.to_owned();
-    let database_path: String = conn
-        .query_row("PRAGMA database_list", [], |row| row.get(2))
-        .unwrap_or_default();
-    let case_root = std::path::Path::new(&database_path)
-        .parent()
-        .and_then(std::path::Path::parent)
-        .and_then(std::path::Path::parent);
-    if native_generation.is_none() {
-        if let Some(case_root) = case_root {
-            let fjall_root =
-                crate::source_db::fjall_source_storage_root(case_root, &data_source_id)
-                    .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-            if fjall_root.is_dir() {
-                let case_connection =
-                    crate::connection::open_existing_case_db(&case_root.join("app.db"))
-                        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-                crate::import_pipeline::mirror_analysis_outputs_before_sqlite_commit(
-                    &case_connection,
-                    case_root,
-                    case_id,
-                    &transaction,
-                    &data_source_id,
-                )
-                .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-            }
-        }
-    }
     transaction.commit()?;
-    if let Some(mut generation) = native_generation {
-        generation.commit();
-        return Ok(());
-    }
-    mirror_published_outputs(conn, case_id)?;
+    let mut native_generation = native_generation;
+    native_generation.commit();
     Ok(())
 }
 
@@ -165,70 +108,6 @@ fn persist_native_fingerprints(
         }
     }
     Ok(())
-}
-
-fn replace_legacy_outputs(
-    artifact_repo: &ArtifactRepo<'_>,
-    timeline_repo: &TimelineRepo<'_>,
-    replacements: &[super::state::AnalysisOutputReplacement],
-) -> Result<(), AnalysisServiceError> {
-    for replacement in replacements {
-        match &replacement.producer {
-            AnalysisOutputProducer::Prefix(prefix) => {
-                artifact_repo.delete_analysis_outputs_in_transaction(
-                    &replacement.source_object_id,
-                    prefix,
-                )?;
-                timeline_repo.delete_analysis_outputs_in_transaction(
-                    &replacement.source_object_id,
-                    prefix,
-                )?;
-            }
-            AnalysisOutputProducer::ExtractorId(extractor_id) => {
-                artifact_repo.delete_analysis_outputs_by_extractor_in_transaction(
-                    &replacement.source_object_id,
-                    extractor_id,
-                )?;
-                timeline_repo.delete_analysis_outputs_by_parser_in_transaction(
-                    &replacement.source_object_id,
-                    extractor_id,
-                )?;
-            }
-        }
-    }
-    Ok(())
-}
-
-fn mirror_published_outputs(conn: &Connection, case_id: &str) -> Result<(), AnalysisServiceError> {
-    let database_path: String = conn
-        .query_row("PRAGMA database_list", [], |row| row.get(2))
-        .unwrap_or_default();
-    let Some(case_root) = std::path::Path::new(&database_path)
-        .parent()
-        .and_then(std::path::Path::parent)
-        .and_then(std::path::Path::parent)
-    else {
-        return Ok(());
-    };
-    let source_id = resolve_output_data_source_id(conn)?;
-    let fjall_root = crate::source_db::fjall_source_storage_root(case_root, &source_id)
-        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-    if !fjall_root.is_dir() {
-        return Ok(());
-    }
-    let case_connection = match persistence_sqlite::open_existing(&case_root.join("app.db")) {
-        Ok(connection) => connection,
-        Err(_) => return Ok(()),
-    };
-    crate::import_pipeline::mirror_analysis_outputs_from_connections(
-        &case_connection,
-        case_root,
-        case_id,
-        conn,
-        &source_id,
-    )
-    .map(|_| ())
-    .map_err(|error| AnalysisServiceError::Other(error.to_string()))
 }
 
 pub(super) fn resolve_output_data_source_id(

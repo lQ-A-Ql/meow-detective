@@ -17,6 +17,10 @@ fn source_connection(root: &std::path::Path) -> Connection {
     let path = root.join("source.db");
     let connection = persistence_sqlite::open_or_create_source(&path).unwrap();
     persistence_sqlite::source_fjall::configure_source_identity(&connection, "source-1").unwrap();
+    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &path).unwrap();
+    persistence_sqlite::source_fjall::open_store_for_write(&connection)
+        .unwrap()
+        .expect("initialize Fjall source generation");
     connection
 }
 
@@ -47,7 +51,7 @@ fn source_detail_records_are_written_only_to_fjall() {
         hash_sha256: Some("a".repeat(64)),
     };
     FileRepo::new(&connection)
-        .insert_batch(&[entry.clone()])
+        .insert_batch(std::slice::from_ref(&entry))
         .unwrap();
 
     let artifact = Artifact {

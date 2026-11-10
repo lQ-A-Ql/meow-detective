@@ -153,6 +153,30 @@ pub fn set_partition_index(
     Ok(true)
 }
 
+pub fn assign_partition_index_to_subtree(
+    conn: &Connection,
+    root_id: &str,
+    partition: usize,
+) -> crate::DbResult<Option<usize>> {
+    let Some(store) = open_store_for_write(conn)? else {
+        return Ok(None);
+    };
+    let repository = CatalogRecordStore::from_source_store((*store).clone());
+    let owner = source_id(conn)?
+        .ok_or_else(|| crate::DbError::System("source identity is missing".into()))?;
+    let partition = u32::try_from(partition)
+        .map_err(|_| crate::DbError::System("partition index exceeds Fjall range".into()))?;
+    repository
+        .assign_partition_to_subtree(
+            &owner,
+            root_id,
+            partition,
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .map(Some)
+        .map_err(|error| crate::DbError::System(error.to_string()))
+}
+
 pub fn update_catalog_path(
     conn: &Connection,
     record_id: &str,
@@ -214,6 +238,24 @@ pub fn require_source_store(conn: &Connection) -> crate::DbResult<Arc<SourceStor
 }
 
 pub fn open_store(conn: &Connection) -> crate::DbResult<Option<Arc<SourceStore>>> {
+    open_store_with_policy(conn, false)
+}
+
+pub fn open_store_for_write(conn: &Connection) -> crate::DbResult<Option<Arc<SourceStore>>> {
+    let query_only: bool = conn.pragma_query_value(None, "query_only", |row| row.get(0))?;
+    if query_only || conn.is_readonly(rusqlite::DatabaseName::Main)? {
+        return Err(crate::DbError::Io(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "source connection is read-only",
+        )));
+    }
+    open_store_with_policy(conn, true)
+}
+
+fn open_store_with_policy(
+    conn: &Connection,
+    create_missing: bool,
+) -> crate::DbResult<Option<Arc<SourceStore>>> {
     let root: Option<String> = match conn.query_row(
         "SELECT value FROM source_meta WHERE key = ?1",
         [FJALL_ROOT_KEY],
@@ -235,7 +277,14 @@ pub fn open_store(conn: &Connection) -> crate::DbResult<Option<Arc<SourceStore>>
             }
         }
     };
-    let Some(name) = root else { return Ok(None) };
+    let Some(name) = root else {
+        if source_id(conn)?.is_some() {
+            return Err(crate::DbError::System(
+                "source detail storage is missing".into(),
+            ));
+        }
+        return Ok(None);
+    };
     if name != "source.fjall" && !name.starts_with("source.fjall.build.") {
         return Err(crate::DbError::System(
             "invalid source generation name".into(),
@@ -256,8 +305,7 @@ pub fn open_store(conn: &Connection) -> crate::DbResult<Option<Arc<SourceStore>>
         .ok_or_else(|| crate::DbError::System("source database has no directory".into()))?;
     let path = parent.join(name);
     if !path.is_dir() {
-        let query_only: bool = conn.pragma_query_value(None, "query_only", |row| row.get(0))?;
-        if query_only || conn.is_readonly(rusqlite::DatabaseName::Main)? {
+        if !create_missing {
             return Err(crate::DbError::System(
                 "source generation directory is missing".into(),
             ));
@@ -269,18 +317,7 @@ pub fn open_store(conn: &Connection) -> crate::DbResult<Option<Arc<SourceStore>>
         .map_err(|error| crate::DbError::System(error.to_string()))
 }
 
-pub fn open_store_for_write(conn: &Connection) -> crate::DbResult<Option<Arc<SourceStore>>> {
-    let query_only: bool = conn.pragma_query_value(None, "query_only", |row| row.get(0))?;
-    if query_only || conn.is_readonly(rusqlite::DatabaseName::Main)? {
-        return Err(crate::DbError::Io(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "source connection is read-only",
-        )));
-    }
-    open_store(conn)
-}
-
-pub(crate) fn file_record(entry: &FileEntry) -> FileEntryRecord {
+pub fn file_record(entry: &FileEntry) -> FileEntryRecord {
     FileEntryRecord {
         id: entry.id.0.clone(),
         parent_id: entry.parent_id.as_ref().map(|id| id.0.clone()),
@@ -309,7 +346,7 @@ pub(crate) fn file_record(entry: &FileEntry) -> FileEntryRecord {
     }
 }
 
-pub(crate) fn file_entry(record: FileEntryRecord) -> FileEntry {
+pub fn file_entry(record: FileEntryRecord) -> FileEntry {
     FileEntry {
         id: FileEntryId(record.id),
         parent_id: record.parent_id.map(FileEntryId),

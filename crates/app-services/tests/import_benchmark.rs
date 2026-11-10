@@ -23,8 +23,8 @@ use app_services::{
     },
     import_precheck, source_db,
 };
-use domain::{DataSourceId, DataSourcePlatform};
-use persistence_sqlite::repositories::job_repo::JobRepo;
+use domain::{DataSourceId, DataSourcePlatform, EntryType, FileEntry, FileEntryId};
+use persistence_sqlite::repositories::{file_repo::FileRepo, job_repo::JobRepo};
 use rusqlite::{types::Value, Connection};
 use sha2::{Digest, Sha256};
 use std::io::Read;
@@ -80,6 +80,11 @@ struct ImportResult {
     report: ImportBenchmarkReportDto,
 }
 
+struct CatalogFixture {
+    _root: tempfile::TempDir,
+    conn: Connection,
+}
+
 fn import(path: &Path, profiling: bool) -> ImportResult {
     import_with_workers(path, profiling, 1)
 }
@@ -91,10 +96,10 @@ fn import_with_workers(path: &Path, profiling: bool, workers: usize) -> ImportRe
         workers,
         |source, case_id, source_id, report| {
             let replacements = canonical_replacements(source, case_id, source_id);
-            let catalog = snapshot(source, queries::CATALOG, &replacements);
+            let catalog = native_catalog_snapshot(source, &replacements);
             let mut graph = snapshot(source, queries::NODES, &replacements);
             graph.extend(snapshot(source, queries::EDGES, &replacements));
-            let timeline = snapshot(source, queries::TIMELINE, &replacements);
+            let timeline = native_timeline_snapshot(source, &replacements);
             ImportResult {
                 catalog,
                 graph,
@@ -218,13 +223,13 @@ fn canonical_replacements(
     case_id: &str,
     source_id: &str,
 ) -> Vec<(String, String)> {
-    let roots: Vec<String> = conn
-        .prepare("SELECT id FROM file_entries WHERE parent_id IS NULL ORDER BY partition_index")
-        .unwrap()
-        .query_map([], |row| row.get(0))
-        .unwrap()
-        .collect::<Result<_, _>>()
-        .unwrap();
+    let records = native_catalog_records(conn);
+    let mut roots = records
+        .iter()
+        .filter(|record| record.parent_id.is_none())
+        .map(|record| record.id.clone())
+        .collect::<Vec<_>>();
+    roots.sort();
     let mut replacements = vec![
         (source_id.into(), "__source__".into()),
         (case_id.into(), "__case__".into()),
@@ -235,23 +240,14 @@ fn canonical_replacements(
             .enumerate()
             .map(|(i, id)| (id, format!("__root_{i}__"))),
     );
-    let mut statement = conn.prepare(
-        "SELECT id, partition_index, path FROM file_entries WHERE parent_id IS NOT NULL AND length(id) = 36 AND id GLOB '[0-9a-fA-F]*'"
-    ).unwrap();
-    let mut rows = statement.query([]).unwrap();
     let mut identities = std::collections::HashSet::new();
     let mut replacement_bytes = 0usize;
-    while let Some(row) = rows.next().unwrap() {
-        let id: String = row.get(0).unwrap();
-        let partition: Option<i64> = row.get(1).unwrap();
-        let path: String = row.get(2).unwrap();
-        if uuid::Uuid::parse_str(&id).is_ok_and(|id| id.get_version_num() == 4) {
-            let stable = format!(
-                "__file_{}:{}:{}__",
-                partition.unwrap_or(-1),
-                path.len(),
-                path
-            );
+    for record in records.iter().filter(|record| record.parent_id.is_some()) {
+        let id = &record.id;
+        let partition = record.partition_index.map(i64::from).unwrap_or(-1);
+        let path = &record.path;
+        if uuid::Uuid::parse_str(id).is_ok_and(|id| id.get_version_num() == 4) {
+            let stable = format!("__file_{}:{}:{}__", partition, path.len(), path);
             assert!(
                 identities.insert(stable.clone()),
                 "ambiguous generated-file identity in benchmark oracle"
@@ -261,20 +257,188 @@ fn canonical_replacements(
                 replacements.len() < 100_000 && replacement_bytes <= 64 * 1024 * 1024,
                 "benchmark UUID normalization map exceeds its 64 MiB / 100k-entry limit"
             );
-            replacements.push((id, stable));
+            replacements.push((id.clone(), stable));
         }
     }
     replacements
 }
 
+fn native_catalog_records(conn: &Connection) -> Vec<persistence_fjall::FileEntryRecord> {
+    let source_id = persistence_sqlite::source_fjall::source_id(conn)
+        .unwrap()
+        .expect("source identity");
+    let store = persistence_sqlite::source_fjall::require_source_store(conn).unwrap();
+    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let snapshot = repository.read_snapshot();
+    let mut cursor = None;
+    let mut records = Vec::new();
+    loop {
+        let page = repository
+            .list_all(
+                &snapshot,
+                &source_id,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                512,
+            )
+            .unwrap();
+        records.extend(page.records);
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    records
+}
+
+fn native_catalog_snapshot(
+    conn: &Connection,
+    replacements: &[(String, String)],
+) -> Vec<Vec<Value>> {
+    let rows = native_catalog_records(conn)
+        .into_iter()
+        .map(|record| {
+            vec![
+                Value::Text(record.id),
+                record.parent_id.map(Value::Text).unwrap_or(Value::Null),
+                Value::Text(record.path),
+                Value::Text(record.name),
+                Value::Text(
+                    match record.entry_type {
+                        persistence_fjall::CatalogEntryType::File => "file",
+                        persistence_fjall::CatalogEntryType::Directory => "directory",
+                    }
+                    .into(),
+                ),
+                record
+                    .size
+                    .map(|value| Value::Integer(value as i64))
+                    .unwrap_or(Value::Null),
+                record.ext.map(Value::Text).unwrap_or(Value::Null),
+                Value::Integer(record.deleted as i64),
+                Value::Integer(record.hidden as i64),
+                Value::Integer(record.system as i64),
+                Value::Integer(record.read_only as i64),
+                Value::Integer(record.archive as i64),
+                record
+                    .unix_mode
+                    .map(|value| Value::Integer(value as i64))
+                    .unwrap_or(Value::Null),
+                record
+                    .encrypted
+                    .map(|value| Value::Integer(value as i64))
+                    .unwrap_or(Value::Null),
+                record
+                    .created
+                    .map(|value| Value::Text(value.to_rfc3339()))
+                    .unwrap_or(Value::Null),
+                record
+                    .modified
+                    .map(|value| Value::Text(value.to_rfc3339()))
+                    .unwrap_or(Value::Null),
+                record
+                    .accessed
+                    .map(|value| Value::Text(value.to_rfc3339()))
+                    .unwrap_or(Value::Null),
+                record
+                    .changed
+                    .map(|value| Value::Text(value.to_rfc3339()))
+                    .unwrap_or(Value::Null),
+                record.hash_sha256.map(Value::Text).unwrap_or(Value::Null),
+                record
+                    .partition_index
+                    .map(|value| Value::Integer(value as i64))
+                    .unwrap_or(Value::Null),
+            ]
+        })
+        .collect();
+    snapshot_rows(rows, replacements)
+}
+
+fn native_timeline_snapshot(
+    conn: &Connection,
+    replacements: &[(String, String)],
+) -> Vec<Vec<Value>> {
+    let source_id = persistence_sqlite::source_fjall::source_id(conn)
+        .unwrap()
+        .expect("source identity");
+    let store = persistence_sqlite::source_fjall::require_source_store(conn).unwrap();
+    let repository = persistence_fjall::TimelineRecordStore::from_source_store((*store).clone());
+    let snapshot = repository.read_snapshot();
+    let mut cursor = None;
+    let mut records = Vec::new();
+    loop {
+        let page = repository
+            .list_by_source(
+                &snapshot,
+                &source_id,
+                cursor.as_deref(),
+                persistence_fjall::ScanDirection::Forward,
+                512,
+            )
+            .unwrap();
+        records.extend(page.records);
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    let rows = records
+        .into_iter()
+        .map(|record| {
+            vec![
+                Value::Text(record.id),
+                Value::Text(record.source_object_id),
+                Value::Text(record.event_type),
+                Value::Text(record.timestamp.to_rfc3339()),
+                Value::Text(record.title),
+                Value::Text(record.description),
+                record.parser_id.map(Value::Text).unwrap_or(Value::Null),
+                record
+                    .parser_version
+                    .map(Value::Text)
+                    .unwrap_or(Value::Null),
+                record
+                    .confidence
+                    .map(|value| Value::Real(value as f64))
+                    .unwrap_or(Value::Null),
+                record
+                    .source_attribution
+                    .map(Value::Text)
+                    .unwrap_or(Value::Null),
+                Value::Text(serde_json::to_string(&record.attrs).unwrap()),
+            ]
+        })
+        .collect();
+    snapshot_rows(rows, replacements)
+}
+
+fn native_edges_snapshot(conn: &Connection, replacements: &[(String, String)]) -> Vec<Vec<Value>> {
+    let rows = native_catalog_records(conn)
+        .into_iter()
+        .filter_map(|record| {
+            let parent_id = record.parent_id?;
+            Some(vec![
+                Value::Text(format!("contains:{parent_id}:{}", record.id)),
+                Value::Text(record.id),
+            ])
+        })
+        .collect();
+    snapshot_rows(rows, replacements)
+}
+
 fn snapshot(conn: &Connection, sql: &str, replacements: &[(String, String)]) -> Vec<Vec<Value>> {
     let mut statement = conn.prepare(sql).unwrap();
     let columns = statement.column_count();
-    let mut rows: Vec<Vec<Value>> = statement
+    let rows: Vec<Vec<Value>> = statement
         .query_map([], |row| (0..columns).map(|index| row.get(index)).collect())
         .unwrap()
         .collect::<Result<_, _>>()
         .unwrap();
+    snapshot_rows(rows, replacements)
+}
+
+fn snapshot_rows(mut rows: Vec<Vec<Value>>, replacements: &[(String, String)]) -> Vec<Vec<Value>> {
     let identities: std::collections::HashMap<_, _> = replacements
         .iter()
         .map(|(id, stable)| (id.as_str(), stable.as_str()))
@@ -377,7 +541,6 @@ fn verify_report(report: &ImportBenchmarkReportDto, record_count: u64) {
         Phase::SourceMetadataInitialize,
         Phase::RuntimePrepare,
         Phase::WorkspaceAdmission,
-        Phase::BulkLoadBegin,
         Phase::Catalog,
         Phase::Finalize,
         Phase::OutcomePersistence,
@@ -419,7 +582,6 @@ fn verify_report(report: &ImportBenchmarkReportDto, record_count: u64) {
         Phase::SourceMetadataInitialize,
         Phase::RuntimePrepare,
         Phase::WorkspaceAdmission,
-        Phase::BulkLoadBegin,
         Phase::Catalog,
         Phase::Analysis,
         Phase::Finalize,
@@ -568,43 +730,137 @@ fn mft_profile_counts_invalid_records_and_the_short_final_chunk() {
 
 #[test]
 fn oracle_normalizes_generated_generic_ids_and_preserves_native_mft_ids() {
-    fn catalog() -> Connection {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch("CREATE TABLE file_entries (id TEXT PRIMARY KEY, parent_id TEXT, path TEXT, partition_index INTEGER)").unwrap();
-        let root = uuid::Uuid::new_v4().to_string();
-        let generated = uuid::Uuid::new_v4().to_string();
+    fn catalog() -> CatalogFixture {
+        let fixture_root = tempfile::tempdir().unwrap();
+        let source_id = DataSourceId("source".into());
+        let conn =
+            app_services::source_db::open_source_db(fixture_root.path(), &source_id).unwrap();
         conn.execute(
-            "INSERT INTO file_entries VALUES (?1,NULL,'[P1]',1)",
-            [&root],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO file_entries VALUES (?1,?2,'[P1]/note.txt',1)",
-            [&generated, &root],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO file_entries VALUES ('mft:1:25',?1,'[P1]/native.txt',1)",
-            [&root],
-        )
-        .unwrap();
-        conn
-    }
-    let first = catalog();
-    let second = catalog();
-    let a = canonical_replacements(&first, "case", "source");
-    let b = canonical_replacements(&second, "case", "source");
-    let sql = "SELECT id,parent_id,path FROM file_entries";
-    assert_eq!(snapshot(&first, sql, &a), snapshot(&second, sql, &b));
-    let edges = "SELECT 'contains:' || parent_id || ':' || id, id FROM file_entries WHERE parent_id IS NOT NULL";
-    assert_eq!(snapshot(&first, edges, &a), snapshot(&second, edges, &b));
-    second
-        .execute(
-            "UPDATE file_entries SET id='mft:1:26' WHERE id='mft:1:25'",
+            "INSERT INTO data_sources
+             (id, case_id, name, kind, source_path, imported_at)
+             VALUES ('source', 'case', 'source', 'raw', 'source.raw',
+                     '2026-01-01T00:00:00Z')",
             [],
         )
         .unwrap();
-    assert_ne!(snapshot(&first, sql, &a), snapshot(&second, sql, &b));
+        let root = uuid::Uuid::new_v4().to_string();
+        let generated = uuid::Uuid::new_v4().to_string();
+        let entries = [
+            FileEntry {
+                id: FileEntryId(root.clone()),
+                parent_id: None,
+                data_source_id: source_id.clone(),
+                path: "[P1]".into(),
+                name: "P1".into(),
+                entry_type: EntryType::Directory,
+                size: None,
+                ext: None,
+                deleted: false,
+                hidden: false,
+                system: false,
+                encrypted: false,
+                read_only: false,
+                archive: false,
+                unix_mode: None,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            },
+            FileEntry {
+                id: FileEntryId(generated.clone()),
+                parent_id: Some(FileEntryId(root.clone())),
+                data_source_id: source_id.clone(),
+                path: "[P1]/note.txt".into(),
+                name: "note.txt".into(),
+                entry_type: EntryType::File,
+                size: Some(1),
+                ext: Some("txt".into()),
+                deleted: false,
+                hidden: false,
+                system: false,
+                encrypted: false,
+                read_only: false,
+                archive: false,
+                unix_mode: None,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            },
+            FileEntry {
+                id: FileEntryId("mft:1:25".into()),
+                parent_id: Some(FileEntryId(root.clone())),
+                data_source_id: source_id.clone(),
+                path: "[P1]/native.txt".into(),
+                name: "native.txt".into(),
+                entry_type: EntryType::File,
+                size: Some(1),
+                ext: Some("txt".into()),
+                deleted: false,
+                hidden: false,
+                system: false,
+                encrypted: false,
+                read_only: false,
+                archive: false,
+                unix_mode: None,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            },
+        ];
+        FileRepo::new(&conn).insert_batch(&entries).unwrap();
+        for id in [root.as_str(), generated.as_str(), "mft:1:25"] {
+            FileRepo::new(&conn)
+                .set_partition_index_by_id(&FileEntryId(id.to_string()), 1)
+                .unwrap();
+        }
+        CatalogFixture {
+            _root: fixture_root,
+            conn,
+        }
+    }
+    let first = catalog();
+    let second = catalog();
+    let a = canonical_replacements(&first.conn, "case", "source");
+    let b = canonical_replacements(&second.conn, "case", "source");
+    assert_eq!(
+        native_catalog_snapshot(&first.conn, &a),
+        native_catalog_snapshot(&second.conn, &b)
+    );
+    assert_eq!(
+        native_edges_snapshot(&first.conn, &a),
+        native_edges_snapshot(&second.conn, &b)
+    );
+    assert!(native_catalog_snapshot(&first.conn, &a)
+        .iter()
+        .any(|row| row.contains(&Value::Text("mft:1:25".into()))));
+    let store = persistence_sqlite::source_fjall::require_source_store(&second.conn).unwrap();
+    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let snapshot_value = repository.read_snapshot();
+    let mut record = repository
+        .get(&snapshot_value, "source", "mft:1:25")
+        .unwrap()
+        .unwrap();
+    repository
+        .delete(
+            "source",
+            "mft:1:25",
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
+    record.id = "mft:1:26".into();
+    repository
+        .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+        .unwrap();
+    assert_ne!(
+        native_catalog_snapshot(&first.conn, &a),
+        native_catalog_snapshot(&second.conn, &b)
+    );
 }
 
 #[test]
@@ -662,33 +918,73 @@ fn parallel_raw_and_e01_keep_the_serial_catalog_graph_and_timeline() {
 }
 
 #[test]
-fn cancellation_before_enumeration_keeps_source_indexes_and_skips_runtime_open() {
+fn cancellation_before_enumeration_keeps_native_source_control_without_runtime_open() {
     let temporary = tempfile::tempdir().unwrap();
     let image = temporary.path().join("cancel.raw");
     std::fs::write(&image, fixture::image(96)).unwrap();
     let active =
         case_service::create_case(&temporary.path().join("cases"), "cancel", None).unwrap();
-    active.with_conn(|conn| {
-        let job = JobRepo::new(conn).create(&active.meta.id.0, "cancel")?;
-        let config = import_precheck::prepare_import_source_config_from_path(
-            &image.to_string_lossy(), DataSourcePlatform::Windows).unwrap();
-        let cancel = Arc::new(AtomicBool::new(true));
-        let options = ImportJobOptions { projection_policy: Default::default(), event_sink: None, cancel_token: &cancel,
-            max_import_workers: Some(4), max_analysis_workers: Some(1),
-            analysis_mode: ImportAnalysisMode::MetadataOnly, defer_linux_artifacts: false };
-        let profiler = ImportProfiler::default();
-        assert!(execute_import_job_profiled(conn, &active.meta.id, &active.case_root,
-            config, &job, options, &profiler).is_err());
-        let (source_id, state): (String, String) = conn.query_row(
-            "SELECT id, import_state FROM data_sources", [], |row| Ok((row.get(0)?, row.get(1)?)))?;
-        assert_eq!(state, "failed");
-        let source = source_db::open_registered_source_db_read_only(conn, &active.case_root, &DataSourceId(source_id))?;
-        let active_indexes: bool = source.query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='idx_source_file_entries_path')", [], |row| row.get(0))?;
-        assert!(active_indexes);
-        assert!(!profiler.report().samples.iter().any(|sample| sample.phase == Phase::MftReaderOpen));
-        Ok(())
-    }).unwrap();
+    active
+        .with_conn(|conn| {
+            let job = JobRepo::new(conn).create(&active.meta.id.0, "cancel")?;
+            let config = import_precheck::prepare_import_source_config_from_path(
+                &image.to_string_lossy(),
+                DataSourcePlatform::Windows,
+            )
+            .unwrap();
+            let cancel = Arc::new(AtomicBool::new(true));
+            let options = ImportJobOptions {
+                projection_policy: Default::default(),
+                event_sink: None,
+                cancel_token: &cancel,
+                max_import_workers: Some(4),
+                max_analysis_workers: Some(1),
+                analysis_mode: ImportAnalysisMode::MetadataOnly,
+                defer_linux_artifacts: false,
+            };
+            let profiler = ImportProfiler::default();
+            assert!(execute_import_job_profiled(
+                conn,
+                &active.meta.id,
+                &active.case_root,
+                config,
+                &job,
+                options,
+                &profiler
+            )
+            .is_err());
+            let (source_id, state): (String, String) =
+                conn.query_row("SELECT id, import_state FROM data_sources", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })?;
+            assert_eq!(state, "failed");
+            let source = source_db::open_registered_source_db_read_only(
+                conn,
+                &active.case_root,
+                &DataSourceId(source_id),
+            )?;
+            let detail_tables: i64 = source.query_row(
+                "SELECT COUNT(*) FROM sqlite_schema
+             WHERE type = 'table'
+               AND name IN ('file_entries', 'artifacts', 'timeline_events')",
+                [],
+                |row| row.get(0),
+            )?;
+            assert_eq!(detail_tables, 0);
+            let generation: String = source.query_row(
+                "SELECT value FROM source_meta WHERE key = 'fjall_root'",
+                [],
+                |row| row.get(0),
+            )?;
+            assert!(generation == "source.fjall" || generation.starts_with("source.fjall.build."));
+            assert!(!profiler
+                .report()
+                .samples
+                .iter()
+                .any(|sample| sample.phase == Phase::MftReaderOpen));
+            Ok(())
+        })
+        .unwrap();
 }
 
 #[test]

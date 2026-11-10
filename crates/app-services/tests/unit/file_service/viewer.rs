@@ -2,6 +2,7 @@ use super::*;
 use super::{
     descriptor::descriptor_is_fresh, range::api::read_file_bytes_for_descriptor_with_context,
 };
+crate::native_source_test_support!();
 use crate::e01_reader_cache::{E01_READER_CACHE, E01_READER_CACHE_PER_CASE_MAX_SIZE};
 use crate::file_service::{
     preview_runtime::{PreparedFile, PreviewRuntimeRegistry, PreviewSession},
@@ -11,17 +12,166 @@ use domain::{
     CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
     FileEntryId,
 };
-use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
-use rusqlite::params;
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::ops::Range;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use test_support::NativeSourceFixture;
 use transport::dto::ViewerRangeRequestDto;
 
 #[path = "preview.rs"]
 mod preview_tests;
+
+fn native_logical_source(
+    source_id: &str,
+    case_id: &str,
+    source_path: std::path::PathBuf,
+    kind: DataSourceKind,
+) -> NativeSourceFixture {
+    let fixture = NativeSourceFixture::new(source_id, case_id);
+    DataSourceRepo::new(&fixture.connection)
+        .upsert_source_local_metadata(
+            &CaseId(case_id.into()),
+            &DataSource {
+                id: DataSourceId(source_id.into()),
+                name: source_id.into(),
+                kind,
+                source_path,
+                imported_at: chrono::Utc::now(),
+                provenance: DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+    fixture
+}
+
+fn insert_native_preview_file(
+    fixture: &NativeSourceFixture,
+    id: &str,
+    path: &str,
+    size: u64,
+    parent_id: Option<&str>,
+    encrypted: Option<bool>,
+    partition_index: Option<u32>,
+) {
+    let entry = FileEntry {
+        id: FileEntryId(id.into()),
+        parent_id: parent_id.map(|value| FileEntryId(value.into())),
+        data_source_id: DataSourceId(fixture.source_id.clone()),
+        path: path.into(),
+        name: path.rsplit('/').next().unwrap_or(path).into(),
+        entry_type: EntryType::File,
+        size: Some(size),
+        ext: path.rsplit_once('.').map(|(_, ext)| ext.into()),
+        deleted: false,
+        hidden: false,
+        system: false,
+        encrypted: encrypted.unwrap_or(true),
+        read_only: false,
+        archive: false,
+        unix_mode: None,
+        created_at: None,
+        modified_at: None,
+        accessed_at: None,
+        changed_at: None,
+        hash_sha256: None,
+    };
+    persistence_sqlite::repositories::file_repo::FileRepo::new(&fixture.connection)
+        .insert_batch(&[entry])
+        .unwrap();
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&fixture.connection)
+        .unwrap()
+        .unwrap();
+    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let mut record = repository
+        .get(&repository.read_snapshot(), &fixture.source_id, id)
+        .unwrap()
+        .unwrap();
+    record.encrypted = encrypted;
+    record.partition_index = partition_index;
+    repository
+        .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+        .unwrap();
+}
+
+fn set_native_encryption(fixture: &NativeSourceFixture, id: &str, encrypted: Option<bool>) {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&fixture.connection)
+        .unwrap()
+        .unwrap();
+    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let mut record = repository
+        .get(&repository.read_snapshot(), &fixture.source_id, id)
+        .unwrap()
+        .unwrap();
+    record.encrypted = encrypted;
+    repository
+        .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+        .unwrap();
+}
+
+fn insert_native_partition(fixture: &NativeSourceFixture, index: u32, filesystem: &str) {
+    let source_path: String = fixture
+        .connection
+        .query_row(
+            "SELECT source_path FROM data_sources WHERE id = ?1",
+            [&fixture.source_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let length = std::fs::metadata(source_path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(2 * 1024 * 1024);
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&fixture.connection)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::PartitionRecordStore::from_source_store((*store).clone())
+        .replace_by_source(
+            &fixture.source_id,
+            &[persistence_fjall::PartitionRecord {
+                id: format!("partition-{index}"),
+                data_source_id: fixture.source_id.clone(),
+                partition_index: index,
+                name: format!("Partition {index}"),
+                kind_label: filesystem.into(),
+                status: "supported".into(),
+                type_guid: None,
+                offset: 0,
+                length,
+                filesystem: Some(filesystem.into()),
+                unlock_hint: None,
+                lvm_vg_uuid: None,
+                lvm_vg_name: None,
+                lvm_lv_uuid: None,
+                lvm_lv_name: None,
+                lvm_pv_offsets_json: None,
+                lvm_pv_sources_json: None,
+                gpt_disk_guid: None,
+                gpt_partition_uuid: None,
+                filesystem_uuid: None,
+            }],
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
+    drop(store);
+    let case_root = fixture
+        .source_dir
+        .parent()
+        .and_then(std::path::Path::parent)
+        .unwrap();
+    let storage =
+        crate::source_db::open_fjall_source_read_write(case_root, &fixture.source_id).unwrap();
+    storage
+        .partition_projection_publish(&fixture.source_id)
+        .unwrap();
+    let partitions = crate::partition_query_service::PartitionQueryRepo::new(&fixture.connection)
+        .find_by_data_source(&fixture.source_id)
+        .unwrap();
+    assert!(partitions
+        .iter()
+        .any(|partition| partition.partition_index == index));
+}
 
 fn read_file_bytes_for_descriptor(
     descriptor: &PreviewDescriptor,
@@ -824,38 +974,32 @@ fn logical_directory_mid_file_range_uses_seek_not_linear_skip() {
     let bytes: Vec<u8> = (0u8..64).collect();
     std::fs::write(evidence_dir.join("sample.bin"), &bytes).unwrap();
 
-    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
-
     let ds_id = DataSourceId("ds-logical-range".to_string());
-    DataSourceRepo::new(&conn)
-        .upsert_source_local_metadata(
-            &CaseId("case-range".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "logical evidence".to_string(),
-                kind: DataSourceKind::LogicalDirectory,
-                source_path: evidence_dir,
-                imported_at: chrono::Utc::now(),
-                provenance: DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
-
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
-         VALUES ('file-sample', NULL, ?1, 'sample.bin', 'sample.bin', 'file', ?2, 'bin', 0, 0, 0, 0)",
-        params![ds_id.0, bytes.len() as i64],
-    )
-    .unwrap();
+    let fixture = native_logical_source(
+        &ds_id.0,
+        "case-range",
+        evidence_dir,
+        DataSourceKind::LogicalDirectory,
+    );
+    insert_native_preview_file(
+        &fixture,
+        "file-sample",
+        "sample.bin",
+        bytes.len() as u64,
+        None,
+        Some(false),
+        None,
+    );
+    fixture.seal();
+    let conn = &fixture.connection;
 
     let range_bytes =
-        read_file_bytes_for_case(&conn, &FileEntryId("file-sample".to_string()), 17, 12).unwrap();
+        read_file_bytes_for_case(conn, &FileEntryId("file-sample".to_string()), 17, 12).unwrap();
 
     assert_eq!(range_bytes, bytes[17..29].to_vec());
 
     let response = read_file_range_for_case(
-        &conn,
+        conn,
         &ViewerRangeRequestDto {
             handle_id: "file:file-sample".to_string(),
             offset: 17,
@@ -888,36 +1032,30 @@ fn efs_encrypted_entry_is_rejected_by_all_read_entry_points() {
     let evidence_dir = dir.path().join("evidence");
     std::fs::create_dir_all(&evidence_dir).unwrap();
     std::fs::write(evidence_dir.join("encrypted.bin"), b"ciphertext").unwrap();
-    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
     let ds_id = DataSourceId("ds-efs-read".to_string());
-    DataSourceRepo::new(&conn)
-        .upsert_source_local_metadata(
-            &CaseId("case-efs-read".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "EFS evidence".to_string(),
-                kind: DataSourceKind::LogicalDirectory,
-                source_path: evidence_dir,
-                imported_at: chrono::Utc::now(),
-                provenance: DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext,
-          deleted, hidden, system, encrypted)
-         VALUES ('file-efs', NULL, ?1, 'encrypted.bin', 'encrypted.bin', 'file',
-                 10, 'bin', 0, 0, 0, 1)",
-        params![ds_id.0],
-    )
-    .unwrap();
+    let fixture = native_logical_source(
+        &ds_id.0,
+        "case-efs-read",
+        evidence_dir,
+        DataSourceKind::LogicalDirectory,
+    );
+    insert_native_preview_file(
+        &fixture,
+        "file-efs",
+        "encrypted.bin",
+        10,
+        None,
+        Some(true),
+        None,
+    );
+    fixture.seal();
+    let conn = &fixture.connection;
     let file_id = FileEntryId("file-efs".to_string());
 
     for result in [
-        open_file_handle_real(&conn, &file_id.0).map(|_| ()),
-        read_file_bytes_for_case(&conn, &file_id, 0, 4).map(|_| ()),
-        open_file_content_by_id(&conn, &file_id).map(|_| ()),
+        open_file_handle_real(conn, &file_id.0).map(|_| ()),
+        read_file_bytes_for_case(conn, &file_id, 0, 4).map(|_| ()),
+        open_file_content_by_id(conn, &file_id).map(|_| ()),
     ] {
         assert!(matches!(result, Err(FileServiceError::Unsupported(_))));
     }
@@ -929,7 +1067,7 @@ fn efs_encrypted_entry_is_rejected_by_all_read_entry_points() {
     fn discard_cache_write(_: &str, _: &serde_json::Value) {}
 
     let case_context_error = open_file_handle_real(
-        (&conn, "case-efs-read", cache_miss, discard_cache_write),
+        (conn, "case-efs-read", cache_miss, discard_cache_write),
         &file_id.0,
     )
     .unwrap_err();
@@ -945,49 +1083,35 @@ fn unknown_encryption_entry_is_rejected_with_reenumeration_guidance() {
     let evidence_dir = dir.path().join("evidence");
     std::fs::create_dir_all(&evidence_dir).unwrap();
     std::fs::write(evidence_dir.join("unknown.pdf"), b"%PDF-1.7").unwrap();
-    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
     let ds_id = DataSourceId("ds-unknown-read".to_string());
-    DataSourceRepo::new(&conn)
-        .upsert_source_local_metadata(
-            &CaseId("case-unknown-read".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "Unclassified evidence".to_string(),
-                kind: DataSourceKind::LogicalDirectory,
-                source_path: evidence_dir,
-                imported_at: chrono::Utc::now(),
-                provenance: DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext,
-          deleted, hidden, system)
-         VALUES ('file-unknown', NULL, ?1, 'unknown.pdf', 'unknown.pdf', 'file',
-                 8, 'pdf', 0, 0, 0)",
-        params![ds_id.0],
-    )
-    .unwrap();
+    let fixture = native_logical_source(
+        &ds_id.0,
+        "case-unknown-read",
+        evidence_dir,
+        DataSourceKind::LogicalDirectory,
+    );
+    insert_native_preview_file(&fixture, "file-unknown", "unknown.pdf", 8, None, None, None);
+    fixture.seal();
+    let conn = &fixture.connection;
     let file_id = FileEntryId("file-unknown".to_string());
 
     let errors = [
-        open_file_handle_real(&conn, &file_id.0)
+        open_file_handle_real(conn, &file_id.0)
             .map(|_| ())
             .unwrap_err(),
-        read_file_bytes_for_case(&conn, &file_id, 0, 4)
+        read_file_bytes_for_case(conn, &file_id, 0, 4)
             .map(|_| ())
             .unwrap_err(),
-        open_file_content_by_id(&conn, &file_id)
+        open_file_content_by_id(conn, &file_id)
             .map(|_| ())
             .unwrap_err(),
-        media_preview_plan_for_file(&conn, &file_id.0)
+        media_preview_plan_for_file(conn, &file_id.0)
             .map(|_| ())
             .unwrap_err(),
-        document_preview_for_file(&conn, &file_id.0)
+        document_preview_for_file(conn, &file_id.0)
             .map(|_| ())
             .unwrap_err(),
-        get_file_path_for_entry(&conn, &file_id.0)
+        get_file_path_for_entry(conn, &file_id.0)
             .map(|_| ())
             .unwrap_err(),
     ];
@@ -1006,30 +1130,24 @@ fn logical_directory_repeated_range_uses_preview_descriptor_cache() {
     let bytes: Vec<u8> = (0u8..64).collect();
     std::fs::write(evidence_dir.join("sample.bin"), &bytes).unwrap();
 
-    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
-
     let ds_id = DataSourceId("ds-logical-cache".to_string());
-    DataSourceRepo::new(&conn)
-        .upsert_source_local_metadata(
-            &CaseId("case-cache".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "logical evidence".to_string(),
-                kind: DataSourceKind::LogicalDirectory,
-                source_path: evidence_dir,
-                imported_at: chrono::Utc::now(),
-                provenance: DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
-
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
-         VALUES ('file-cache-sample', NULL, ?1, 'sample.bin', 'sample.bin', 'file', ?2, 'bin', 0, 0, 0, 0)",
-        params![ds_id.0, bytes.len() as i64],
-    )
-    .unwrap();
+    let fixture = native_logical_source(
+        &ds_id.0,
+        "case-cache",
+        evidence_dir,
+        DataSourceKind::LogicalDirectory,
+    );
+    insert_native_preview_file(
+        &fixture,
+        "file-cache-sample",
+        "sample.bin",
+        bytes.len() as u64,
+        None,
+        Some(false),
+        None,
+    );
+    fixture.seal();
+    let conn = &fixture.connection;
 
     let file_id = FileEntryId("file-cache-sample".to_string());
     let cache = std::cell::RefCell::new(HashMap::<String, serde_json::Value>::new());
@@ -1049,7 +1167,7 @@ fn logical_directory_repeated_range_uses_preview_descriptor_cache() {
             cache.borrow_mut().insert(key.to_string(), value.clone());
         };
         read_file_bytes_for_case(
-            (&conn, "case-cache", get_cache, set_cache),
+            (conn, "case-cache", get_cache, set_cache),
             &file_id,
             offset,
             length,
@@ -1071,11 +1189,7 @@ fn logical_directory_repeated_range_uses_preview_descriptor_cache() {
     assert_eq!(third, bytes[29..36].to_vec());
     assert_eq!(set_calls.get(), 2);
 
-    conn.execute(
-        "UPDATE file_entries SET encrypted = 1 WHERE id = ?1",
-        params![file_id.0],
-    )
-    .unwrap();
+    set_native_encryption(&fixture, &file_id.0, Some(true));
     let error = read_with_cache(0, 8).unwrap_err();
     assert!(matches!(error, FileServiceError::Unsupported(_)));
 }
@@ -1084,38 +1198,48 @@ fn setup_e01_preview_routing_case(
     file_id: &str,
     partition_index: Option<i64>,
     root_name: &str,
-) -> (tempfile::TempDir, rusqlite::Connection, domain::FileEntryId) {
-    let dir = tempfile::TempDir::new().unwrap();
+) -> (NativeSourceFixture, domain::FileEntryId) {
     let data_source_id = DataSourceId("ds-preview-routing".to_string());
-    let conn = crate::source_db::open_source_db(dir.path(), &data_source_id).unwrap();
-    DataSourceRepo::new(&conn)
-        .upsert_source_local_metadata(
-            &CaseId("case-preview-routing".to_string()),
-            &DataSource {
-                id: data_source_id.clone(),
-                name: "routing evidence".to_string(),
-                kind: DataSourceKind::E01,
-                source_path: dir.path().join("routing.E01"),
-                imported_at: chrono::Utc::now(),
-                provenance: DataSourceProvenance::unknown(),
-            },
-        )
+    let fixture = native_logical_source(
+        &data_source_id.0,
+        "case-preview-routing",
+        std::path::PathBuf::from("routing.E01"),
+        DataSourceKind::E01,
+    );
+    FileRepo::new(&fixture.connection)
+        .insert_batch(&[FileEntry {
+            id: FileEntryId("wrong-root".into()),
+            parent_id: None,
+            data_source_id: data_source_id.clone(),
+            path: "[P9]".into(),
+            name: root_name.into(),
+            entry_type: EntryType::Directory,
+            size: None,
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
         .unwrap();
-
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, deleted, hidden, system, partition_index)
-         VALUES ('wrong-root', NULL, ?1, '[P9]', ?2, 'directory', 0, 0, 0, NULL)",
-        params![data_source_id.0, root_name],
-    )
-    .unwrap();
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted, partition_index)
-         VALUES (?1, 'wrong-root', ?2, '[P4]/target.bin', 'target.bin', 'file', 16, 'bin', 0, 0, 0, 0, ?3)",
-        params![file_id, data_source_id.0, partition_index],
-    )
-    .unwrap();
+    insert_native_preview_file(
+        &fixture,
+        file_id,
+        "[P4]/target.bin",
+        16,
+        Some("wrong-root"),
+        Some(false),
+        partition_index.and_then(|value| u32::try_from(value).ok()),
+    );
+    fixture.seal();
 
     let partitions = [2u32, 4u32].map(|partition_index| persistence_fjall::PartitionRecord {
         id: format!("routing-partition-{partition_index}"),
@@ -1139,8 +1263,13 @@ fn setup_e01_preview_routing_case(
         gpt_partition_uuid: None,
         filesystem_uuid: None,
     });
+    let case_root = fixture
+        .source_dir
+        .parent()
+        .and_then(std::path::Path::parent)
+        .unwrap();
     let storage =
-        crate::source_db::open_fjall_source_read_write(dir.path(), &data_source_id.0).unwrap();
+        crate::source_db::open_fjall_source_read_write(case_root, &data_source_id.0).unwrap();
     storage
         .partition_replace_by_source(
             &data_source_id.0,
@@ -1152,35 +1281,51 @@ fn setup_e01_preview_routing_case(
         .partition_projection_publish(&data_source_id.0)
         .unwrap();
 
-    (dir, conn, FileEntryId(file_id.to_string()))
+    (fixture, FileEntryId(file_id.to_string()))
 }
 
 #[test]
 fn preview_descriptor_uses_persisted_partition_index() {
-    let (_dir, conn, file_id) =
+    let (fixture, file_id) =
         setup_e01_preview_routing_case("mft:2:42", Some(4), "Partition 9 (NTFS)");
 
-    let descriptor = preview_descriptor_for_case(&conn, "case-preview-routing", &file_id).unwrap();
+    let descriptor =
+        preview_descriptor_for_case(&fixture.connection, "case-preview-routing", &file_id).unwrap();
 
     assert_eq!(descriptor.partition_index, Some(4));
     assert_eq!(descriptor.partition_candidates.len(), 1);
     assert_eq!(descriptor.partition_candidates[0].partition_index, 4);
-    assert!(descriptor_is_fresh(&conn, &file_id, &descriptor));
+    assert!(descriptor_is_fresh(
+        &fixture.connection,
+        &file_id,
+        &descriptor
+    ));
 
-    conn.execute(
-        "UPDATE file_entries SET partition_index = 2 WHERE id = ?1",
-        params![file_id.0],
-    )
-    .unwrap();
-    assert!(!descriptor_is_fresh(&conn, &file_id, &descriptor));
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&fixture.connection)
+        .unwrap()
+        .unwrap();
+    let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let mut record = catalog
+        .get(&catalog.read_snapshot(), &fixture.source_id, &file_id.0)
+        .unwrap()
+        .unwrap();
+    record.partition_index = Some(2);
+    catalog
+        .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+        .unwrap();
+    assert!(!descriptor_is_fresh(
+        &fixture.connection,
+        &file_id,
+        &descriptor
+    ));
 }
 
 #[test]
 fn preview_descriptor_rejects_entries_without_partition_metadata() {
-    let (_dir, conn, file_id) =
+    let (fixture, file_id) =
         setup_e01_preview_routing_case("legacy-file-id", None, "Partition 2 (NTFS)");
 
-    let error = preview_descriptor_for_case(&conn, "case-preview-routing", &file_id)
+    let error = preview_descriptor_for_case(&fixture.connection, "case-preview-routing", &file_id)
         .expect_err("partition metadata is required");
     assert!(error
         .to_string()
@@ -1189,10 +1334,10 @@ fn preview_descriptor_rejects_entries_without_partition_metadata() {
 
 #[test]
 fn preview_descriptor_fails_closed_without_exact_partition_index() {
-    let (_dir, conn, file_id) =
+    let (fixture, file_id) =
         setup_e01_preview_routing_case("legacy-file-id", None, "Evidence Root");
 
-    let error = preview_descriptor_for_case(&conn, "case-preview-routing", &file_id)
+    let error = preview_descriptor_for_case(&fixture.connection, "case-preview-routing", &file_id)
         .expect_err("ambiguous partition routing must fail closed");
 
     assert!(error
@@ -1208,35 +1353,29 @@ fn header_read_cache_reuses_preview_descriptor_across_chunks() {
     let bytes = vec![b'A'; infrastructure::constants::MAX_RANGE_LENGTH + 17];
     std::fs::write(evidence_dir.join("large.bin"), &bytes).unwrap();
 
-    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
-
     let ds_id = DataSourceId("ds-header-cache".to_string());
-    DataSourceRepo::new(&conn)
-        .upsert_source_local_metadata(
-            &CaseId("case-header-cache".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "logical evidence".to_string(),
-                kind: DataSourceKind::LogicalDirectory,
-                source_path: evidence_dir,
-                imported_at: chrono::Utc::now(),
-                provenance: DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
-
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
-         VALUES ('file-header-cache', NULL, ?1, 'large.bin', 'large.bin', 'file', ?2, 'bin', 0, 0, 0, 0)",
-        params![ds_id.0, bytes.len() as i64],
-    )
-    .unwrap();
+    let fixture = native_logical_source(
+        &ds_id.0,
+        "case-header-cache",
+        evidence_dir,
+        DataSourceKind::LogicalDirectory,
+    );
+    insert_native_preview_file(
+        &fixture,
+        "file-header-cache",
+        "large.bin",
+        bytes.len() as u64,
+        None,
+        Some(false),
+        None,
+    );
+    fixture.seal();
+    let conn = &fixture.connection;
 
     let cache = FileHeaderReadCache::new("case-header-cache");
     let read = cache
         .read_file_header_by_id(
-            &conn,
+            conn,
             &FileEntryId("file-header-cache".to_string()),
             bytes.len(),
         )
@@ -1245,7 +1384,7 @@ fn header_read_cache_reuses_preview_descriptor_across_chunks() {
     assert_eq!(read, bytes);
 
     let again = cache
-        .read_file_header_by_id(&conn, &FileEntryId("file-header-cache".to_string()), 8)
+        .read_file_header_by_id(conn, &FileEntryId("file-header-cache".to_string()), 8)
         .unwrap();
     assert_eq!(again, bytes[..8].to_vec());
 }
@@ -1864,33 +2003,28 @@ fn raw_exfat_mid_file_range_uses_exfat_range_reader_without_materialize() {
     let raw_path = dir.path().join("exfat.raw");
     write_exfat_raw_fixture(&raw_path).unwrap();
 
-    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
-
     let ds_id = DataSourceId("ds-raw-exfat-range".to_string());
-    DataSourceRepo::new(&conn)
-        .upsert_source_local_metadata(
-            &CaseId("case-raw-exfat-range".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "raw exfat evidence".to_string(),
-                kind: DataSourceKind::Raw,
-                source_path: raw_path,
-                imported_at: chrono::Utc::now(),
-                provenance: DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
-
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
-         VALUES ('file-raw-exfat-large', NULL, ?1, 'LARGE.BIN', 'LARGE.BIN', 'file', ?2, 'bin', 0, 0, 0, 0)",
-        params![ds_id.0, 1536i64],
-    )
-    .unwrap();
+    let fixture = native_logical_source(
+        &ds_id.0,
+        "case-raw-exfat-range",
+        raw_path,
+        DataSourceKind::Raw,
+    );
+    insert_native_preview_file(
+        &fixture,
+        "file-raw-exfat-large",
+        "LARGE.BIN",
+        1536,
+        None,
+        Some(false),
+        Some(0),
+    );
+    insert_native_partition(&fixture, 0, "EXFAT");
+    fixture.seal();
+    let conn = &fixture.connection;
 
     let bytes = read_file_bytes_for_case(
-        &conn,
+        conn,
         &FileEntryId("file-raw-exfat-large".to_string()),
         512 + 7,
         9,
@@ -1900,7 +2034,7 @@ fn raw_exfat_mid_file_range_uses_exfat_range_reader_without_materialize() {
     assert_eq!(bytes, vec![b'B'; 9]);
 
     let response = read_file_range_for_case(
-        &conn,
+        conn,
         &ViewerRangeRequestDto {
             handle_id: "file:file-raw-exfat-large".to_string(),
             offset: 512 + 7,
@@ -1912,13 +2046,9 @@ fn raw_exfat_mid_file_range_uses_exfat_range_reader_without_materialize() {
     assert_eq!(response.raw_bytes.unwrap(), vec![b'B'; 9]);
     assert!(response.lines.is_empty());
 
-    conn.execute(
-        "UPDATE file_entries SET encrypted = 1 WHERE id = 'file-raw-exfat-large'",
-        [],
-    )
-    .unwrap();
+    set_native_encryption(&fixture, "file-raw-exfat-large", Some(true));
     let error = read_file_bytes_for_case(
-        &conn,
+        conn,
         &FileEntryId("file-raw-exfat-large".to_string()),
         512 + 7,
         9,
@@ -1927,7 +2057,7 @@ fn raw_exfat_mid_file_range_uses_exfat_range_reader_without_materialize() {
     assert!(matches!(error, FileServiceError::Unsupported(_)));
 
     let error = read_file_range_for_case(
-        &conn,
+        conn,
         &ViewerRangeRequestDto {
             handle_id: "file:file-raw-exfat-large".to_string(),
             offset: 512 + 7,
@@ -1944,34 +2074,28 @@ fn raw_exfat_text_header_reads_via_bytes_only_fast_path() {
     let raw_path = dir.path().join("exfat.raw");
     write_exfat_raw_fixture(&raw_path).unwrap();
 
-    let conn = persistence_sqlite::open_or_create_source(&dir.path().join("source.db")).unwrap();
-
     let ds_id = DataSourceId("ds-raw-exfat-header".to_string());
-    DataSourceRepo::new(&conn)
-        .upsert_source_local_metadata(
-            &CaseId("case-raw-exfat-header".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "raw exfat evidence".to_string(),
-                kind: DataSourceKind::Raw,
-                source_path: raw_path,
-                imported_at: chrono::Utc::now(),
-                provenance: DataSourceProvenance::unknown(),
-            },
-        )
+    let fixture = native_logical_source(
+        &ds_id.0,
+        "case-raw-exfat-header",
+        raw_path,
+        DataSourceKind::Raw,
+    );
+    insert_native_preview_file(
+        &fixture,
+        "file-raw-exfat-header",
+        "LARGE.BIN",
+        1536,
+        None,
+        Some(false),
+        Some(0),
+    );
+    insert_native_partition(&fixture, 0, "EXFAT");
+    fixture.seal();
+    let conn = &fixture.connection;
+
+    let bytes = read_file_header_by_id(conn, &FileEntryId("file-raw-exfat-header".to_string()), 16)
         .unwrap();
-
-    conn.execute(
-        "INSERT INTO file_entries
-         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, encrypted)
-         VALUES ('file-raw-exfat-header', NULL, ?1, 'LARGE.BIN', 'LARGE.BIN', 'file', ?2, 'bin', 0, 0, 0, 0)",
-        params![ds_id.0, 1536i64],
-    )
-    .unwrap();
-
-    let bytes =
-        read_file_header_by_id(&conn, &FileEntryId("file-raw-exfat-header".to_string()), 16)
-            .unwrap();
 
     assert_eq!(bytes, vec![b'A'; 16]);
 }

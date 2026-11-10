@@ -7,7 +7,7 @@ const ARTIFACT_ITEM_DOMAIN_B: &[u8] = b"analysis-artifact-item-v3:b";
 const TIMELINE_ITEM_DOMAIN_A: &[u8] = b"analysis-timeline-item-v3:a";
 const TIMELINE_ITEM_DOMAIN_B: &[u8] = b"analysis-timeline-item-v3:b";
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub(super) struct OutputDigestAccumulator {
     artifacts: MultisetAccumulator,
     timeline_events: MultisetAccumulator,
@@ -30,7 +30,7 @@ impl OutputDigestAccumulator {
         );
     }
 
-    pub(super) fn finish(self) -> String {
+    pub(super) fn finish(&self) -> String {
         let mut hasher = Sha256::new();
         update_digest_field(&mut hasher, DIGEST_DOMAIN);
         self.artifacts.finish_into(&mut hasher);
@@ -53,7 +53,7 @@ pub(super) fn output_digest_for_outputs<'a>(
     accumulator.finish()
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 struct MultisetAccumulator {
     count: u64,
     sum_a: [u8; 32],

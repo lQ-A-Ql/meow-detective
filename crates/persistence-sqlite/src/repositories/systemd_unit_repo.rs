@@ -1,6 +1,6 @@
 use crate::DbResult;
 use persistence_fjall::{CatalogEntryType, CatalogRecordStore};
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 pub struct SystemdCatalogRow {
     pub file_id: String,
     pub source_id: String,
@@ -22,20 +22,7 @@ impl<'a> SystemdUnitRepo<'a> {
         if crate::source_fjall::source_id(self.conn)?.is_some() {
             return self.native_catalog_page(source, after);
         }
-        let mut statement=self.conn.prepare("SELECT id,data_source_id,partition_index,path,name,COALESCE(size,0),unix_mode,encrypted FROM file_entries WHERE data_source_id=?1 AND id>?2 AND deleted=0 AND (replace(path,char(92),'/') LIKE '%/systemd/%' OR name IN ('lib','usr','local','etc','run','systemd')) ORDER BY id LIMIT 512")?;
-        let rows = statement.query_map(params![source, after], |row| {
-            Ok(SystemdCatalogRow {
-                file_id: row.get(0)?,
-                source_id: row.get(1)?,
-                partition_index: row.get(2)?,
-                path: row.get(3)?,
-                name: row.get(4)?,
-                size: row.get(5)?,
-                unix_mode: row.get(6)?,
-                encrypted: row.get(7)?,
-            })
-        })?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     fn native_catalog_page(&self, source: &str, after: &str) -> DbResult<Vec<SystemdCatalogRow>> {
