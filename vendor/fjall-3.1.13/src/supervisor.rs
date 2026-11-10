@@ -11,7 +11,7 @@ use crate::{
     snapshot_tracker::SnapshotTracker,
     write_buffer_manager::WriteBufferManager,
 };
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 pub struct SupervisorInner {
     pub db_config: crate::Config,
@@ -32,7 +32,6 @@ pub struct SupervisorInner {
     /// Tracks journal size and garbage collects sealed journals when possible
     pub(crate) journal_manager: Arc<RwLock<JournalManager>>,
 
-    pub(crate) backpressure_lock: Mutex<()>,
 }
 
 #[derive(Clone)]

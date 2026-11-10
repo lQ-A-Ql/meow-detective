@@ -16,7 +16,6 @@ use crate::{
     ingestion::Ingestion,
     locked_file::LockedFileGuard,
     poison::PoisonSignal,
-    stats::Stats,
     supervisor::Supervisor,
     worker_pool::WorkerMessage,
     Database, Guard, Iter,
@@ -82,9 +81,6 @@ pub struct KeyspaceInner {
     pub tree: AnyTree,
 
     pub(crate) supervisor: Supervisor,
-
-    /// Database-level stats
-    pub(crate) stats: Arc<Stats>,
 
     pub(crate) worker_messager: flume::Sender<WorkerMessage>,
 
@@ -318,7 +314,6 @@ impl Keyspace {
             is_deleted: AtomicBool::default(),
             is_poisoned: db.is_poisoned.clone(),
             lock_file: db.lock_file.clone(),
-            stats: db.stats.clone(),
         }))
     }
 
@@ -359,7 +354,6 @@ impl Keyspace {
             tree,
             is_deleted: AtomicBool::default(),
             is_poisoned: db.is_poisoned.clone(),
-            stats: db.stats.clone(),
             lock_file: db.lock_file.clone(),
         })))
     }

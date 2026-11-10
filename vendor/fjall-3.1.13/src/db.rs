@@ -27,7 +27,7 @@ use lsm_tree::{AbstractTree, SequenceNumberCounter};
 use std::{
     fs::remove_dir_all,
     path::Path,
-    sync::{atomic::AtomicUsize, Arc, Mutex, RwLock},
+    sync::{atomic::AtomicUsize, Arc, RwLock},
 };
 
 pub type Keyspaces = HashMap<KeyspaceKey, Keyspace>;
@@ -644,7 +644,6 @@ impl Database {
             snapshot_tracker: SnapshotTracker::new(visible_seqno),
             journal: active_journal,
             journal_manager: Arc::new(RwLock::new(journal_manager)),
-            backpressure_lock: Mutex::default(),
             seqno,
         });
 
@@ -920,7 +919,6 @@ impl Database {
             snapshot_tracker: SnapshotTracker::new(visible_seqno),
             journal,
             journal_manager: Arc::new(RwLock::new(JournalManager::new())),
-            backpressure_lock: Mutex::default(),
             seqno,
         });
 
