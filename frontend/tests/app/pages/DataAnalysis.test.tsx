@@ -788,11 +788,11 @@ describe('DataAnalysis page', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
 
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(4));
-    expect(mutateAsync).toHaveBeenNthCalledWith(1, { dataSourceId: 'ds-win', categories: ['Registry'] });
-    expect(mutateAsync).toHaveBeenNthCalledWith(2, { dataSourceId: 'ds-win', categories: ['BrowserHistory'] });
-    expect(mutateAsync).toHaveBeenNthCalledWith(3, { dataSourceId: 'ds-win', categories: ['Email'] });
-    expect(mutateAsync).toHaveBeenNthCalledWith(4, { dataSourceId: 'ds-win', categories: ['EventLogs'] });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(mutateAsync).toHaveBeenCalledWith({
+      dataSourceId: 'ds-win',
+      categories: ['Registry', 'BrowserHistory', 'Email', 'EventLogs'],
+    });
     expect(mutateAsync).not.toHaveBeenCalledWith({ dataSourceId: 'ds-win', categories: ['LinuxArtifacts'] });
   });
 
@@ -833,19 +833,18 @@ describe('DataAnalysis page', () => {
       Email: 3,
       EventLogs: 4,
     };
-    const mutateAsync = vi.fn().mockImplementation(async (request: { categories: string[] }) => {
-      const key = request.categories[0];
-      return {
+    const mutateAsync = vi.fn().mockResolvedValue({
         status: 'parsed',
         scannedCount: 8,
         checkpointHitCount: 0,
         artifactCount: 158,
         timelineEventCount: 3,
-        sections: [extractionSection(key, sectionArtifactCounts[key])],
+        sections: Object.entries(sectionArtifactCounts).map(([key, artifactCount]) =>
+          extractionSection(key, artifactCount),
+        ),
         generatedAt: '2026-06-01T10:15:00Z',
         warnings: [],
-      };
-    });
+      });
     mocks.extractionRun.mockReturnValue({
       data: undefined,
       error: null,
@@ -858,7 +857,7 @@ describe('DataAnalysis page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
 
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(useAnalysisStore.getState().extractionProgress.EventLogs.status).toBe('success'));
     expect(useAnalysisStore.getState().extractionProgress.Registry.artifactCount).toBe(1);
     expect(useAnalysisStore.getState().extractionProgress.BrowserHistory.artifactCount).toBe(2);

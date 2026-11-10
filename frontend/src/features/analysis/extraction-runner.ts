@@ -49,22 +49,26 @@ export async function runSelectedSourceExtraction(
   options.resetProgress();
   try {
     const categories = options.categories ?? EXTRACTION_CATEGORIES_BY_PLATFORM[source.platform];
+    if (!sourceEpoch.isCurrent(operation)) return;
     for (const category of categories) {
-      if (!sourceEpoch.isCurrent(operation)) return;
       markRunning(category, options.updateProgress);
-      try {
-        const run = await options.execute({
-          dataSourceId: source.id,
-          categories: [category],
-          browserPassword: category === 'BrowserHistory' ? options.browserPassword : undefined,
-        });
-        if (!sourceEpoch.isCurrent(operation)) return;
+    }
+    try {
+      const run = await options.execute({
+        dataSourceId: source.id,
+        categories: [...categories],
+        browserPassword: categories.includes('BrowserHistory') ? options.browserPassword : undefined,
+      });
+      if (!sourceEpoch.isCurrent(operation)) return;
+      for (const category of categories) {
         applyRun(category, run, options.updateProgress);
-      } catch (error) {
-        if (!sourceEpoch.isCurrent(operation)) return;
-        markFailed(category, error, options.updateProgress);
-        options.setRefreshError(error);
       }
+    } catch (error) {
+      if (!sourceEpoch.isCurrent(operation)) return;
+      for (const category of categories) {
+        markFailed(category, error, options.updateProgress);
+      }
+      options.setRefreshError(error);
     }
   } finally {
     sourceEpoch.finish(operation);
