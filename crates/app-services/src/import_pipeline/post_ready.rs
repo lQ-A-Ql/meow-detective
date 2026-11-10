@@ -13,7 +13,7 @@ pub(super) fn finish(
         super::runtime::validate_current(ctx.runtime.as_deref())?;
         let lease = ctx.runtime.as_ref().map(|r| r.publication_lease());
         let _source = lease.as_ref().map(|l| l.fence_connection(source));
-        let message = auto_extract_linux_artifacts(ctx, ds, source, message)?;
+        let message = auto_extract_platform_artifacts(ctx, ds, source, message)?;
         super::phases::emit_data_source_ready(ctx, ds)?;
         Ok(message)
     })();
@@ -23,36 +23,57 @@ pub(super) fn finish(
     result
 }
 
-fn auto_extract_linux_artifacts(
+fn auto_extract_platform_artifacts(
     ctx: &mut ImportJobContext<'_>,
     data_source: &domain::DataSource,
     source_conn: &rusqlite::Connection,
     mut message: String,
 ) -> Result<String, CommandError> {
-    let should_run = ctx.import_config.platform == domain::DataSourcePlatform::Linux
-        && matches!(
-            ctx.content_kind,
-            crate::import_pipeline::context::ImportContentKind::Filesystem
-        )
-        && ctx.import_config.import_set.is_none()
+    let should_run = matches!(
+        ctx.import_config.platform,
+        domain::DataSourcePlatform::Linux | domain::DataSourcePlatform::Windows
+    ) && matches!(
+        ctx.content_kind,
+        crate::import_pipeline::context::ImportContentKind::Filesystem
+    ) && ctx.import_config.import_set.is_none()
         && !ctx.options.defer_linux_artifacts
         && !ctx.options.cancel_token.load(Ordering::Relaxed);
     if !should_run {
         return Ok(message);
     }
-    ctx.report_job_progress(96, "Linux artifact analysis started automatically")?;
+    let platform_label = match ctx.import_config.platform {
+        domain::DataSourcePlatform::Linux => "Linux",
+        domain::DataSourcePlatform::Windows => "Windows",
+        _ => unreachable!("platform was checked above"),
+    };
+    ctx.report_job_progress(
+        96,
+        &format!("{platform_label} artifact analysis started automatically"),
+    )?;
     let mut runtime = crate::analysis_service::AnalysisSourceReadRuntime::default();
     if let Some(source) = &ctx.runtime {
         runtime = runtime.with_publication(source.publication_lease());
     }
-    match crate::analysis_service::run_import_source_extraction(
-        ctx.conn,
-        ctx.case_root,
-        ctx.case_id,
-        &data_source.id,
-        &runtime,
-        ctx.options.cancel_token.clone(),
-    ) {
+    let run = if ctx.import_config.platform == domain::DataSourcePlatform::Linux {
+        crate::analysis_service::run_import_source_extraction(
+            ctx.conn,
+            ctx.case_root,
+            ctx.case_id,
+            &data_source.id,
+            &runtime,
+            ctx.options.cancel_token.clone(),
+        )
+    } else {
+        crate::analysis_service::run_source_analysis_extraction_with_cancel(
+            ctx.conn,
+            ctx.case_root,
+            ctx.case_id,
+            &data_source.id,
+            &["Registry", "BrowserHistory", "Email", "EventLogs"],
+            ctx.options.cancel_token.clone(),
+        )
+    };
+    match run {
         Ok(run) => {
             let facts = crate::cluster_service::collect_linux_evidence_facts(
                 ctx.conn,
@@ -68,7 +89,7 @@ fn auto_extract_linux_artifacts(
                 tracing::warn!(data_source_id = %data_source.id.0, %error, "Linux evidence facts cache could not be persisted");
             }
             message.push_str(&format!(
-                "; Linux artifacts auto-analyzed: artifacts={} timeline={}",
+                "; {platform_label} artifacts auto-analyzed: artifacts={} timeline={}",
                 run.artifact_count, run.timeline_event_count
             ));
         }

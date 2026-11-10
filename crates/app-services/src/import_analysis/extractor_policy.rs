@@ -8,9 +8,10 @@ use crate::artifact_service::{self, ArtifactExtractionStats, ArtifactServiceErro
 
 /// Platform-owned artifact extractor selection for post-import analysis.
 ///
-/// Linux analysis deliberately has no generic registry here. Its structured
-/// extractors run through the Linux analysis service, while shared timeline
-/// projection and text indexing remain available in this pipeline.
+/// Platform-specific artifact extraction runs after Catalog publication. The
+/// generic import workers keep metadata indexing and shared timeline work;
+/// structured Windows and Linux parsers run through their source analysis
+/// services so each source publishes one durable analysis result.
 pub(super) struct PlatformExtractorPolicy {
     registry: Option<ExtractorRegistry>,
 }
@@ -18,9 +19,7 @@ pub(super) struct PlatformExtractorPolicy {
 impl PlatformExtractorPolicy {
     pub(super) fn for_platform(platform: DataSourcePlatform) -> Result<Self, ImportAnalysisError> {
         match platform {
-            DataSourcePlatform::Windows => Ok(Self {
-                registry: Some(artifact_service::create_registry()),
-            }),
+            DataSourcePlatform::Windows => Ok(Self { registry: None }),
             DataSourcePlatform::Linux => Ok(Self { registry: None }),
             DataSourcePlatform::Android => Ok(Self { registry: None }),
             DataSourcePlatform::Unknown => Err(unsupported_platform(platform)),

@@ -768,7 +768,7 @@ describe('DataAnalysis page', () => {
     }));
   });
 
-  it('runs only Windows extraction categories from the Windows view', async () => {
+  it('does not expose a manual Windows extraction action', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({
       status: 'parsed',
       scannedCount: 8,
@@ -786,17 +786,11 @@ describe('DataAnalysis page', () => {
     });
 
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
-
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-    expect(mutateAsync).toHaveBeenCalledWith({
-      dataSourceId: 'ds-win',
-      categories: ['Registry', 'BrowserHistory', 'Email', 'EventLogs'],
-    });
-    expect(mutateAsync).not.toHaveBeenCalledWith({ dataSourceId: 'ds-win', categories: ['LinuxArtifacts'] });
+    expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
-  it('runs only Linux extraction categories from the Linux view', async () => {
+  it('does not expose a manual Linux extraction action', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({
       status: 'parsed',
       scannedCount: 8,
@@ -820,10 +814,8 @@ describe('DataAnalysis page', () => {
     renderPage();
     fireEvent.click(screen.getByLabelText('Linux Server'));
     await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
-    fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
-
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-    expect(mutateAsync).toHaveBeenCalledWith({ dataSourceId: 'ds-linux', categories: ['LinuxArtifacts'] });
+    expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it('tracks Windows per-section extraction progress for the bottom drawer', async () => {
@@ -855,15 +847,8 @@ describe('DataAnalysis page', () => {
 
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
-
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(useAnalysisStore.getState().extractionProgress.EventLogs.status).toBe('success'));
-    expect(useAnalysisStore.getState().extractionProgress.Registry.artifactCount).toBe(1);
-    expect(useAnalysisStore.getState().extractionProgress.BrowserHistory.artifactCount).toBe(2);
-    expect(useAnalysisStore.getState().extractionProgress.Email.artifactCount).toBe(3);
-    expect(useAnalysisStore.getState().extractionProgress.EventLogs.artifactCount).toBe(4);
-    expect(screen.getByLabelText('Windows Evidence / 注册表').textContent).toContain('1');
+    expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it('tracks independent Linux extraction progress for the bottom drawer', async () => {
@@ -904,13 +889,8 @@ describe('DataAnalysis page', () => {
     fireEvent.click(screen.getByLabelText('Linux Server'));
     await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
 
-    fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(useAnalysisStore.getState().extractionProgress.LinuxMysqlServices.status).toBe('success'));
-    expect(useAnalysisStore.getState().extractionProgress.LinuxJournal.artifactCount).toBe(1);
-    expect(useAnalysisStore.getState().extractionProgress.LinuxLogin.artifactCount).toBe(2);
-    expect(useAnalysisStore.getState().extractionProgress.LinuxCommands.artifactCount).toBe(3);
-    expect(useAnalysisStore.getState().extractionProgress.LinuxMysqlServices.artifactCount).toBe(9);
+    expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it('switches to the matching platform view when selecting a data source', async () => {
@@ -1106,27 +1086,8 @@ describe('DataAnalysis page', () => {
 
     renderPage();
     await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
-    fireEvent.click(screen.getByRole('button', { name: /运行分析/ }));
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-
-    act(() => useAnalysisStore.getState().setSelectedDataSourceId('ds-linux'));
-    await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
-    await act(async () => {
-      run.resolve({
-        status: 'parsed',
-        scannedCount: 99,
-        checkpointHitCount: 0,
-        artifactCount: 99,
-        timelineEventCount: 99,
-        generatedAt: '2026-06-03T10:00:00Z',
-        warnings: [],
-        sections: [extractionSection('Registry', 99)],
-      });
-      await run.promise;
-    });
-
-    expect(mutateAsync).toHaveBeenCalledTimes(1);
-    expect(useAnalysisStore.getState().extractionProgress.Registry.artifactCount).toBe(0);
+    expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it('does not download a summary produced for an obsolete source generation', async () => {

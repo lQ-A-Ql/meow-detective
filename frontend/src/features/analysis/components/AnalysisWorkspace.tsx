@@ -51,6 +51,7 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
           onRunExtraction={model.selectedPlatform === 'android'
             ? model.runAndroidAnalysis
             : model.runExtraction}
+          showRunExtraction={model.selectedPlatform === 'android'}
           selectedDataSourceId={model.selectedDataSourceId}
         />
 

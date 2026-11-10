@@ -132,6 +132,7 @@ export function AnalysisHeader({
   extractionPending,
   onRefresh,
   onRunExtraction,
+  showRunExtraction = false,
   selectedDataSourceId,
 }: {
   loading: boolean;
@@ -139,6 +140,7 @@ export function AnalysisHeader({
   extractionPending: boolean;
   onRefresh: () => void;
   onRunExtraction: () => void;
+  showRunExtraction?: boolean;
   selectedDataSourceId?: string;
 }) {
   const { t } = useTranslation();
@@ -153,12 +155,14 @@ export function AnalysisHeader({
             disabled={!hasCase || loading || !selectedDataSourceId}
             className="border-0 bg-transparent text-[12px] hover:bg-forensics-hover"
           ><ActionIcon name="refresh" /></Button></Tooltip>
-          <Tooltip content={t('analysis.header.run')}><Button aria-label={t('analysis.header.run')}
-            type="button"
-            onClick={onRunExtraction}
-            disabled={!hasCase || extractionPending || !selectedDataSourceId}
-            className="border-0 bg-forensics-ink text-[12px] text-white hover:bg-forensics-ink-2"
-          ><ActionIcon name="play" /></Button></Tooltip>
+          {showRunExtraction ? (
+            <Tooltip content={t('analysis.header.run')}><Button aria-label={t('analysis.header.run')}
+              type="button"
+              onClick={onRunExtraction}
+              disabled={!hasCase || extractionPending || !selectedDataSourceId}
+              className="border-0 bg-forensics-ink text-[12px] text-white hover:bg-forensics-ink-2"
+            ><ActionIcon name="play" /></Button></Tooltip>
+          ) : null}
         </div>
       </div>
     </ContextBar>

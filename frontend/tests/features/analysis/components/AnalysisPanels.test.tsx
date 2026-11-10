@@ -220,7 +220,7 @@ describe('AnalysisPanels sub-components', () => {
   });
 
   describe('AnalysisHeader', () => {
-    it('renders header with buttons', () => {
+    it('renders the refresh action without a manual source-analysis run action', () => {
       render(
         createElement(AnalysisHeader, {
           loading: false,
@@ -230,10 +230,10 @@ describe('AnalysisPanels sub-components', () => {
           onRunExtraction: () => {},
         }),
       );
-      expect(screen.getByRole('button', { name: /运行分析/ })).toBeDefined();
+      expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
       expect(screen.queryByRole('button', { name: /加载演示案件/ })).toBeNull();
       expect(screen.getByRole('button', { name: /刷新/ })).toBeDefined();
-      expect(screen.getByRole('button', { name: /运行分析/ })).toBeDefined();
+      expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
     });
 
     it('asks for a data source before running source-bound analysis', () => {
@@ -247,7 +247,7 @@ describe('AnalysisPanels sub-components', () => {
         }),
       );
         expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(true);
-      expect(screen.getByRole('button', { name: /运行分析/ }).hasAttribute('disabled')).toBe(true);
+      expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
     });
 
     it('shows source-bound analysis notice once a data source is selected', () => {
@@ -259,6 +259,7 @@ describe('AnalysisPanels sub-components', () => {
           onRefresh: () => {},
           onRunExtraction: () => {},
           selectedDataSourceId: 'ds-1',
+          showRunExtraction: true,
         }),
       );
         expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(false);

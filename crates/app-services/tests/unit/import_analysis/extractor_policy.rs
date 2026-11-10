@@ -26,11 +26,11 @@ fn prefetch_entry() -> FileEntry {
 }
 
 #[test]
-fn windows_policy_enables_registered_windows_extractors() {
+fn windows_policy_defers_registered_extractors_to_source_analysis() {
     let policy =
         PlatformExtractorPolicy::for_platform(DataSourcePlatform::Windows).expect("Windows policy");
 
-    assert!(policy.should_extract(&prefetch_entry()));
+    assert!(!policy.should_extract(&prefetch_entry()));
 }
 
 #[test]
