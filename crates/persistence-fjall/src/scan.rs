@@ -6,6 +6,8 @@ use crate::{
 use fjall::Readable;
 use std::ops::{Bound, RangeBounds};
 
+const MAX_SCAN_PAGE_ENTRIES: usize = 4096;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScanDirection {
     Forward,
@@ -86,6 +88,12 @@ impl SourceReadSnapshot {
         if limit == 0 {
             return Ok(Vec::new());
         }
+        if limit > MAX_SCAN_PAGE_ENTRIES {
+            return Err(FjallStorageError::InvalidEnvelope(format!(
+                "scan page limit exceeds {} entries",
+                MAX_SCAN_PAGE_ENTRIES
+            )));
+        }
         let start = cursor
             .map(|cursor| Bound::Excluded(cursor.to_vec()))
             .unwrap_or(bounds.start);
@@ -159,6 +167,12 @@ impl SourceReadSnapshot {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<Vec<SnapshotEntry>> {
+        if limit > MAX_SCAN_PAGE_ENTRIES {
+            return Err(FjallStorageError::InvalidEnvelope(format!(
+                "scan page limit exceeds {} entries",
+                MAX_SCAN_PAGE_ENTRIES
+            )));
+        }
         if let Some(cursor) = cursor {
             if !cursor.starts_with(prefix) {
                 return Err(FjallStorageError::InvalidEnvelope(

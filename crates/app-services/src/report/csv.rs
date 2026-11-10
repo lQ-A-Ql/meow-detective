@@ -33,6 +33,12 @@ pub fn generate_csv_artifacts(
     output_dir: &Path,
     scope: &ExportScopeDto,
 ) -> Result<String, ReportError> {
+    if let Some(case_root) = case_root_from_connection(conn) {
+        let case = persistence_sqlite::repositories::case_repo::CaseRepo::new(conn)
+            .find_by_id(&domain::CaseId(case_id.to_owned()))?
+            .ok_or_else(|| ReportError::Other("Case not found".to_owned()))?;
+        return generate_csv_artifacts_for_case(conn, &case, &case_root, output_dir, scope);
+    }
     let rows_data: Vec<Vec<String>> = ArtifactRepo::new(conn)
         .list_all_records()?
         .into_iter()
@@ -96,11 +102,25 @@ pub fn generate_csv_artifacts(
     execute_report_export(conn, case_id, "report-files", &file_name, || {
         let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
         write_report_atomically(&path, scope.overwrite, |file| {
-            CsvExporter::export_artifacts(file, ARTIFACT_HEADERS, &rows_data)
-                .map_err(|e| ReportError::Other(e.to_string()))
+            CsvExporter::export_artifact_headers(file, ARTIFACT_HEADERS)
+                .map_err(|e| ReportError::Other(e.to_string()))?;
+            for row in rows_data {
+                CsvExporter::export_artifact_row(file, &row)
+                    .map_err(|e| ReportError::Other(e.to_string()))?;
+            }
+            Ok(())
         })
     })?;
     Ok(file_name)
+}
+
+fn case_root_from_connection(conn: &Connection) -> Option<std::path::PathBuf> {
+    let path = conn
+        .query_row("PRAGMA database_list", [], |row| row.get::<_, String>(2))
+        .ok()?;
+    std::path::Path::new(&path)
+        .parent()
+        .map(std::path::Path::to_path_buf)
 }
 
 pub fn generate_csv_artifacts_for_case(
@@ -110,12 +130,7 @@ pub fn generate_csv_artifacts_for_case(
     output_dir: &Path,
     scope: &ExportScopeDto,
 ) -> Result<String, ReportError> {
-    let artifacts =
-        crate::artifact_service::get_artifact_rows_for_case(conn, case_root, &case.id, None)?;
-    let mut rows_data = artifacts
-        .iter()
-        .map(source_artifact_row)
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut rows_data = case_artifact_rows(conn, case_root, &case.id)?;
     let analysis = current_analysis_for_case(conn, case_root, &case.id)?;
     let governance = super::current_governance_for_case(conn, case_root, &case.id.0)?;
     let correlation = current_correlation_for_case(conn, case_root, &case.id)?;
@@ -130,11 +145,27 @@ pub fn generate_csv_artifacts_for_case(
     execute_report_export(conn, &case.id.0, "report-files", &file_name, || {
         let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
         write_report_atomically(&path, scope.overwrite, |file| {
-            CsvExporter::export_artifacts(file, ARTIFACT_HEADERS, &rows_data)
-                .map_err(|e| ReportError::Other(e.to_string()))
+            CsvExporter::export_artifact_headers(file, ARTIFACT_HEADERS)
+                .map_err(|e| ReportError::Other(e.to_string()))?;
+            for row in rows_data {
+                CsvExporter::export_artifact_row(file, &row)
+                    .map_err(|e| ReportError::Other(e.to_string()))?;
+            }
+            Ok(())
         })
     })?;
     Ok(file_name)
+}
+
+fn case_artifact_rows(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<Vec<Vec<String>>, ReportError> {
+    crate::artifact_service::get_artifact_rows_for_case(conn, case_root, case_id, None)?
+        .iter()
+        .map(source_artifact_row)
+        .collect()
 }
 
 fn source_artifact_row(
@@ -192,6 +223,12 @@ pub fn generate_csv_correlation(
     output_dir: &Path,
     scope: &ExportScopeDto,
 ) -> Result<String, ReportError> {
+    if let Some(case_root) = case_root_from_connection(conn) {
+        let case = persistence_sqlite::repositories::case_repo::CaseRepo::new(conn)
+            .find_by_id(&domain::CaseId(case_id.to_owned()))?
+            .ok_or_else(|| ReportError::Other("Case not found".to_owned()))?;
+        return generate_csv_correlation_for_case(conn, &case, &case_root, output_dir, scope);
+    }
     let correlation = current_correlation(conn)?;
 
     let rows: Vec<Vec<String>> = correlation

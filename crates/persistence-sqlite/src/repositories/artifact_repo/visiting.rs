@@ -1,20 +1,14 @@
-use super::{row_to_artifact, ArtifactRepo, ARTIFACT_SELECT_COLUMNS};
+use super::{push_bounded, ArtifactRepo, MAX_ARTIFACT_QUERY_ROWS};
 use crate::{DbError, DbResult};
 use domain::{Artifact, ArtifactId, FileEntryId};
 use persistence_fjall::{ArtifactRecord, ArtifactRecordStore, ScanDirection};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
-pub(super) fn records(conn: &rusqlite::Connection) -> DbResult<Option<Vec<ArtifactRecord>>> {
-    let Some(source_id) = crate::source_fjall::source_id(conn)? else {
-        return Ok(None);
-    };
-    let Some(store) = crate::source_fjall::open_store(conn)? else {
-        if crate::source_fjall::source_id(conn)?.is_some() {
-            return Err(DbError::System("source detail storage is missing".into()));
-        }
-        return Ok(None);
-    };
+pub(super) fn records(conn: &rusqlite::Connection) -> DbResult<Vec<ArtifactRecord>> {
+    let source_id = crate::source_fjall::source_id(conn)?
+        .ok_or_else(|| DbError::System("source identity is missing".into()))?;
+    let store = crate::source_fjall::require_source_store(conn)?;
     let repository = ArtifactRecordStore::from_source_store((*store).clone());
     let snapshot = repository.read_snapshot();
     let mut cursor = None;
@@ -30,10 +24,12 @@ pub(super) fn records(conn: &rusqlite::Connection) -> DbResult<Option<Vec<Artifa
                 512,
             )
             .map_err(|error| DbError::System(error.to_string()))?;
-        records.extend(page.records);
+        for record in page.records {
+            push_bounded(&mut records, record)?;
+        }
         cursor = page.next_cursor;
         if cursor.is_none() {
-            return Ok(Some(records));
+            return Ok(records);
         }
     }
 }
@@ -102,53 +98,58 @@ impl ArtifactRepo<'_> {
                 }
             }
         }
-        if crate::source_fjall::source_id(self.conn)?.is_some() {
-            return Err(DbError::System("source detail storage is missing".into()));
-        }
-        let mut statement = self.conn.prepare(&format!(
-            "SELECT {ARTIFACT_SELECT_COLUMNS} FROM artifacts
-             WHERE source_object_id = ?1 ORDER BY id"
-        ))?;
-        for row in statement.query_map([source_object_id], row_to_artifact)? {
-            crate::read_operation::ensure_active()?;
-            visit(row?)?;
-        }
-        Ok(())
+        Err(DbError::System("source detail storage is missing".into()))
     }
 
     pub fn count_by_source_object(&self, object: &str) -> DbResult<u64> {
-        let mut count = 0;
-        self.visit_by_family(None, |artifact| {
-            if artifact
-                .source_object_id
-                .as_ref()
-                .is_some_and(|id| id.0 == object)
-            {
-                count += 1;
-            }
+        let mut count = 0u64;
+        self.visit_by_source_object(object, |_| {
+            count = count.saturating_add(1);
             Ok(())
         })?;
         Ok(count)
     }
 
     pub fn list_all_records(&self) -> DbResult<Vec<ArtifactRecord>> {
-        if let Some(records) = self::records(self.conn)? {
-            return Ok(records);
+        self::records(self.conn)
+    }
+
+    pub fn visit_all_records(
+        &self,
+        mut visit: impl FnMut(ArtifactRecord) -> DbResult<()>,
+    ) -> DbResult<()> {
+        let source_id = crate::source_fjall::source_id(self.conn)?
+            .ok_or_else(|| DbError::System("source identity is missing".into()))?;
+        let store = crate::source_fjall::require_source_store(self.conn)?;
+        let repository = ArtifactRecordStore::from_source_store((*store).clone());
+        let snapshot = repository.read_snapshot();
+        let mut cursor = None;
+        loop {
+            crate::read_operation::ensure_active()?;
+            let page = repository
+                .list_by_source(
+                    &snapshot,
+                    &source_id,
+                    cursor.as_deref(),
+                    ScanDirection::Forward,
+                    512,
+                )
+                .map_err(|error| DbError::System(error.to_string()))?;
+            for record in page.records {
+                visit(record)?;
+            }
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                return Ok(());
+            }
         }
-        let mut records = Vec::new();
-        self.visit_by_family(None, |artifact| {
-            records.push(crate::source_fjall::artifact_record(&artifact, ""));
-            Ok(())
-        })?;
-        Ok(records)
     }
     pub fn find_by_family_raw(&self, family: &str) -> DbResult<Vec<(String, String)>> {
         let mut records = Vec::new();
         self.visit_by_family(Some(family), |artifact| {
             let attrs = serde_json::to_string(&artifact.attrs)
                 .map_err(|error| DbError::System(error.to_string()))?;
-            records.push((artifact.id.0, attrs));
-            Ok(())
+            push_bounded(&mut records, (artifact.id.0, attrs))
         })?;
         Ok(records)
     }
@@ -161,6 +162,11 @@ impl ArtifactRepo<'_> {
                     .extractor_id
                     .filter(|id| id.eq_ignore_ascii_case(parser))
                 {
+                    if versions.len() >= MAX_ARTIFACT_QUERY_ROWS {
+                        return Err(DbError::System(
+                            "artifact extractor query exceeds the bounded row limit".into(),
+                        ));
+                    }
                     versions.push((id, artifact.extractor_version));
                 }
             }
@@ -208,15 +214,6 @@ impl ArtifactRepo<'_> {
                 }
             }
         }
-        let mut statement = self.conn.prepare(&format!(
-            "SELECT {ARTIFACT_SELECT_COLUMNS} FROM artifacts
-             WHERE ?1 IS NULL OR artifact_type = ?1 ORDER BY id"
-        ))?;
-        let rows = statement.query_map([family], row_to_artifact)?;
-        for row in rows {
-            crate::read_operation::ensure_active()?;
-            visit(row?)?;
-        }
-        Ok(())
+        Err(DbError::System("source detail storage is missing".into()))
     }
 }

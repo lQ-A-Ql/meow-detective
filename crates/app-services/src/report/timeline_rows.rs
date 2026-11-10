@@ -6,6 +6,7 @@ use std::path::Path;
 use transport::dto::TimelineEventDto;
 
 const REPORT_TIMELINE_PAGE_SIZE: u32 = 500;
+const MAX_REPORT_TIMELINE_ROWS: usize = 100_000;
 
 pub(crate) fn load_full_timeline_for_case(
     case_conn: &Connection,
@@ -29,6 +30,11 @@ pub(crate) fn load_full_timeline_for_case(
             },
         )?;
         events.extend(page.items);
+        if events.len() > MAX_REPORT_TIMELINE_ROWS {
+            return Err(ReportError::Other(
+                "timeline report exceeds the bounded row limit".to_string(),
+            ));
+        }
         let Some(next_cursor) = page.next_cursor else {
             break;
         };

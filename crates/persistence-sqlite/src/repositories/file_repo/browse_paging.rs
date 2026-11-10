@@ -1,8 +1,8 @@
+use super::FileRepo;
 use crate::connection::DbResult;
 use domain::{FileEntry, FileEntryId};
-use rusqlite::params;
 
-use super::{mapping::collect_entries, mapping::row_to_file_entry, FileRepo, FILE_ENTRY_COLUMNS};
+const MAX_SORTABLE_CHILD_ENTRIES: u64 = 8_192;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileSortKey {
@@ -25,30 +25,41 @@ impl FileRepo<'_> {
         show_hidden: bool,
     ) -> DbResult<u64> {
         if crate::source_fjall::source_id(self.conn)?.is_some() {
-            let entries = match parent_id {
-                Some(parent_id) => self.find_children_visible(parent_id, show_hidden)?,
-                None => self.find_root_entries_visible(show_hidden)?,
-            };
-            return Ok(entries.len() as u64);
+            let owner = crate::source_fjall::source_id(self.conn)?
+                .ok_or_else(|| crate::DbError::System("source identity is missing".into()))?;
+            let store = crate::source_fjall::require_source_store(self.conn)?;
+            let catalog =
+                persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+            let snapshot = catalog.read_snapshot();
+            let mut cursor = None;
+            let mut count = 0u64;
+            loop {
+                crate::read_operation::ensure_active()?;
+                let page = catalog
+                    .list_by_parent(
+                        &snapshot,
+                        &owner,
+                        parent_id.map(|id| id.0.as_str()),
+                        cursor.as_deref(),
+                        persistence_fjall::ScanDirection::Forward,
+                        512,
+                    )
+                    .map_err(|error| crate::DbError::System(error.to_string()))?;
+                count = count.saturating_add(
+                    page.records
+                        .iter()
+                        .filter(|record| {
+                            !record.deleted && (show_hidden || (!record.hidden && !record.system))
+                        })
+                        .count() as u64,
+                );
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    return Ok(count);
+                }
+            }
         }
-        let parent = if parent_id.is_some() {
-            "parent_id = ?1"
-        } else {
-            "parent_id IS NULL"
-        };
-        let visibility = if show_hidden {
-            ""
-        } else {
-            " AND hidden = 0 AND system = 0"
-        };
-        let sql = format!("SELECT COUNT(*) FROM file_entries WHERE {parent}{visibility}");
-        let count = match parent_id {
-            Some(parent_id) => self
-                .conn
-                .query_row(&sql, params![parent_id.0], |row| row.get::<_, i64>(0))?,
-            None => self.conn.query_row(&sql, [], |row| row.get::<_, i64>(0))?,
-        };
-        Ok(count as u64)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn entries_need_natural_sort(
@@ -58,44 +69,43 @@ impl FileRepo<'_> {
         sort_key: FileSortKey,
     ) -> DbResult<bool> {
         if crate::source_fjall::source_id(self.conn)?.is_some() {
-            let entries = match parent_id {
-                Some(parent_id) => self.find_children_visible(parent_id, show_hidden)?,
-                None => self.find_root_entries_visible(show_hidden)?,
-            };
-            return Ok(entries.iter().any(|entry| match sort_key {
-                FileSortKey::Ext => {
-                    contains_ascii_digit(&entry.name)
-                        || entry.ext.as_deref().is_some_and(contains_ascii_digit)
+            match sort_key {
+                FileSortKey::Size | FileSortKey::ModifiedAt => return Ok(false),
+                FileSortKey::Name | FileSortKey::Ext => {}
+            }
+            let count = self.count_entries_visible(parent_id, show_hidden)?;
+            let mut offset = 0u64;
+            while offset < count {
+                let entries = self
+                    .fjall_child_page(
+                        None,
+                        parent_id.map(|id| id.0.as_str()),
+                        offset,
+                        512,
+                        false,
+                        !show_hidden,
+                    )?
+                    .unwrap_or_default();
+                if entries.is_empty() {
+                    return Err(crate::DbError::System(
+                        "catalog child count changed during natural sort check".into(),
+                    ));
                 }
-                FileSortKey::Name => contains_ascii_digit(&entry.name),
-                FileSortKey::Size | FileSortKey::ModifiedAt => false,
-            }));
+                offset = offset.saturating_add(entries.len() as u64);
+                if entries.iter().any(|entry| match sort_key {
+                    FileSortKey::Ext => {
+                        contains_ascii_digit(&entry.name)
+                            || entry.ext.as_deref().is_some_and(contains_ascii_digit)
+                    }
+                    FileSortKey::Name => contains_ascii_digit(&entry.name),
+                    FileSortKey::Size | FileSortKey::ModifiedAt => false,
+                }) {
+                    return Ok(true);
+                }
+            }
+            return Ok(false);
         }
-        let parent = if parent_id.is_some() {
-            "parent_id = ?1"
-        } else {
-            "parent_id IS NULL"
-        };
-        let visibility = if show_hidden {
-            ""
-        } else {
-            " AND hidden = 0 AND system = 0"
-        };
-        let field = match sort_key {
-            FileSortKey::Ext => "(name GLOB '*[0-9]*' OR ext GLOB '*[0-9]*')",
-            FileSortKey::Name => "name GLOB '*[0-9]*'",
-            FileSortKey::Size | FileSortKey::ModifiedAt => return Ok(false),
-        };
-        let sql = format!(
-            "SELECT EXISTS(SELECT 1 FROM file_entries WHERE {parent}{visibility} AND {field} GLOB '*[0-9]*')"
-        );
-        let value = match parent_id {
-            Some(parent_id) => self
-                .conn
-                .query_row(&sql, params![parent_id.0], |row| row.get(0))?,
-            None => self.conn.query_row(&sql, [], |row| row.get(0))?,
-        };
-        Ok(value)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_entries_page_visible_ordered(
@@ -108,13 +118,25 @@ impl FileRepo<'_> {
         sort_direction: FileSortDirection,
     ) -> DbResult<Vec<FileEntry>> {
         if crate::source_fjall::source_id(self.conn)?.is_some() {
-            let mut entries = match parent_id {
-                Some(parent_id) => self.find_children(parent_id)?,
-                None => self.find_root_entries()?,
-            };
-            if !show_hidden {
-                entries.retain(|entry| !entry.hidden && !entry.system);
+            let total = self.count_entries_visible(parent_id, show_hidden)?;
+            let window = offset.checked_add(u64::from(limit)).ok_or_else(|| {
+                crate::DbError::System("file page window exceeds the bounded catalog range".into())
+            })?;
+            if total > MAX_SORTABLE_CHILD_ENTRIES || window > MAX_SORTABLE_CHILD_ENTRIES {
+                return Err(crate::DbError::System(format!(
+                    "ordered catalog page exceeds the bounded limit of {MAX_SORTABLE_CHILD_ENTRIES} rows"
+                )));
             }
+            let mut entries = self
+                .fjall_child_page(
+                    None,
+                    parent_id.map(|id| id.0.as_str()),
+                    0,
+                    u32::try_from(total).unwrap_or(0),
+                    false,
+                    !show_hidden,
+                )?
+                .unwrap_or_default();
             sort_native_entries(&mut entries, sort_key, sort_direction);
             return Ok(entries
                 .into_iter()
@@ -122,59 +144,7 @@ impl FileRepo<'_> {
                 .take(limit as usize)
                 .collect());
         }
-        let parent = if parent_id.is_some() {
-            "parent_id = ?1"
-        } else {
-            "parent_id IS NULL"
-        };
-        let visibility = if show_hidden {
-            ""
-        } else {
-            " AND hidden = 0 AND system = 0"
-        };
-        let key = match sort_key {
-            FileSortKey::Name => "name COLLATE NOCASE",
-            FileSortKey::Size => "COALESCE(size, 0)",
-            FileSortKey::ModifiedAt => "modified_at",
-            FileSortKey::Ext => "COALESCE(ext, '') COLLATE NOCASE",
-        };
-        let direction = match sort_direction {
-            FileSortDirection::Asc => "ASC",
-            FileSortDirection::Desc => "DESC",
-        };
-        let raw_key_tie = if matches!(sort_key, FileSortKey::Ext) {
-            format!("COALESCE(ext, '') {direction},")
-        } else {
-            String::new()
-        };
-        let null_order = if matches!(sort_key, FileSortKey::ModifiedAt) {
-            match sort_direction {
-                FileSortDirection::Asc => "(modified_at IS NOT NULL) ASC,",
-                FileSortDirection::Desc => "(modified_at IS NOT NULL) DESC,",
-            }
-        } else {
-            ""
-        };
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
-             WHERE {parent}{visibility}
-             ORDER BY CASE WHEN entry_type = 'directory' COLLATE NOCASE THEN 0 ELSE 1 END ASC,
-                      CASE WHEN hidden = 0 AND system = 0 AND deleted = 0 THEN 0
-                           WHEN deleted = 0 THEN 1 WHEN hidden = 0 AND system = 0 THEN 2 ELSE 3 END ASC,
-                      {null_order} {key} {direction}, {raw_key_tie} name COLLATE NOCASE ASC, name ASC, id ASC
-             LIMIT ?{limit_param} OFFSET ?{offset_param}",
-            limit_param = if parent_id.is_some() { 2 } else { 1 },
-            offset_param = if parent_id.is_some() { 3 } else { 2 },
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = match parent_id {
-            Some(parent_id) => statement.query_map(
-                params![parent_id.0, limit as i64, offset as i64],
-                row_to_file_entry,
-            )?,
-            None => statement.query_map(params![limit as i64, offset as i64], row_to_file_entry)?,
-        };
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 }
 

@@ -85,7 +85,7 @@ fn name_cmp(a: &FileEntry, b: &FileEntry) -> CmpOrdering {
     natural_cmp(&a.name, &b.name)
 }
 
-fn compare_entries(
+pub(crate) fn compare_entries(
     a: &FileEntry,
     b: &FileEntry,
     sort_key: FileSortKeyDto,

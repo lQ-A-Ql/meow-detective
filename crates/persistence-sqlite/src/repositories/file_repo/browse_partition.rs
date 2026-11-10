@@ -1,10 +1,6 @@
-use super::{
-    mapping::{collect_entries, row_to_file_entry},
-    FileRepo, FILE_ENTRY_COLUMNS,
-};
+use super::FileRepo;
 use crate::{DbError, DbResult};
 use domain::{DataSourceId, FileEntry, FileEntryId};
-use rusqlite::{params, OptionalExtension};
 
 impl FileRepo<'_> {
     pub(super) fn native_partition_path(
@@ -14,12 +10,13 @@ impl FileRepo<'_> {
         paths: &[String],
         case_insensitive: bool,
     ) -> DbResult<Option<Option<FileEntry>>> {
-        let Some(store) = crate::source_fjall::open_store(self.conn)? else {
+        let Some(owner) = crate::source_fjall::source_id(self.conn)? else {
             return Ok(None);
         };
-        if crate::source_fjall::source_id(self.conn)?.as_deref() != Some(&source.0) {
+        if owner != source.0 {
             return Err(DbError::System("catalog source identity mismatch".into()));
         }
+        let store = crate::source_fjall::require_source_store(self.conn)?;
         let partition = u32::try_from(partition)
             .map_err(|_| DbError::System("partition index exceeds Fjall range".into()))?;
         let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
@@ -82,12 +79,7 @@ impl FileRepo<'_> {
             });
             return Ok(entries);
         }
-        let mut statement = self.conn.prepare_cached(&format!("SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id=?1 AND data_source_id=?2 AND partition_index=?3 AND deleted=0 ORDER BY entry_type ASC,name COLLATE NOCASE ASC,id ASC"))?;
-        let rows = statement.query_map(
-            params![parent.0, source.0, partition as u64],
-            row_to_file_entry,
-        )?;
-        collect_entries(rows)
+        Err(DbError::System("source identity is missing".into()))
     }
 
     pub fn find_root_for_partition(
@@ -98,7 +90,7 @@ impl FileRepo<'_> {
         if let Some(entries) = self.native_partition_entries(source, None, partition)? {
             return Ok(entries.into_iter().min_by(|a, b| a.id.0.cmp(&b.id.0)));
         }
-        self.conn.query_row(&format!("SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL AND data_source_id=?1 AND partition_index=?2 AND deleted=0 ORDER BY id ASC LIMIT 1"),params![source.0,partition as u64],row_to_file_entry).optional().map_err(Into::into)
+        Err(DbError::System("source identity is missing".into()))
     }
 
     pub fn find_children_page_for_partition(
@@ -122,12 +114,7 @@ impl FileRepo<'_> {
                 .take(limit as usize)
                 .collect());
         }
-        let mut statement = self.conn.prepare(&format!("SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id=?1 AND data_source_id=?2 AND partition_index=?3 AND deleted=0 ORDER BY entry_type ASC,name ASC LIMIT ?4 OFFSET ?5"))?;
-        let rows = statement.query_map(
-            params![parent.0, source.0, partition as u64, limit, offset],
-            row_to_file_entry,
-        )?;
-        collect_entries(rows)
+        Err(DbError::System("source identity is missing".into()))
     }
 
     fn native_partition_entries(
@@ -136,12 +123,12 @@ impl FileRepo<'_> {
         parent: Option<&FileEntryId>,
         partition: usize,
     ) -> DbResult<Option<Vec<FileEntry>>> {
-        let Some(store) = crate::source_fjall::open_store(self.conn)? else {
-            return Ok(None);
-        };
-        if crate::source_fjall::source_id(self.conn)?.as_deref() != Some(&source.0) {
+        let owner = crate::source_fjall::source_id(self.conn)?
+            .ok_or_else(|| DbError::System("source identity is missing".into()))?;
+        if owner != source.0 {
             return Err(DbError::System("catalog source identity mismatch".into()));
         }
+        let store = crate::source_fjall::require_source_store(self.conn)?;
         let partition = u32::try_from(partition)
             .map_err(|_| DbError::System("partition index exceeds Fjall range".into()))?;
         let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
@@ -165,6 +152,11 @@ impl FileRepo<'_> {
                     .filter(|record| record.partition_index == Some(partition) && !record.deleted)
                     .map(crate::source_fjall::file_entry),
             );
+            if entries.len() > super::MAX_FILE_QUERY_ROWS {
+                return Err(DbError::System(
+                    "partition catalog query exceeds the bounded row limit".into(),
+                ));
+            }
             cursor = page.next_cursor;
             if cursor.is_none() {
                 return Ok(Some(entries));

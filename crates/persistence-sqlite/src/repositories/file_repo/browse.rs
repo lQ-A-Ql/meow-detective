@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
-use crate::{connection::DbResult, sql_builder::placeholders};
+use crate::connection::DbResult;
 use domain::{DataSourceId, FileEntry, FileEntryId};
-use rusqlite::params;
 
-use super::{mapping::collect_entries, mapping::row_to_file_entry, FileRepo, FILE_ENTRY_COLUMNS};
+use super::FileRepo;
 
 impl FileRepo<'_> {
     pub fn find_children(&self, parent_id: &FileEntryId) -> DbResult<Vec<FileEntry>> {
@@ -12,12 +11,7 @@ impl FileRepo<'_> {
             sort_entries(&mut entries);
             return Ok(entries);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 ORDER BY entry_type ASC, name ASC",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(params![parent_id.0], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_children_page(
@@ -33,15 +27,7 @@ impl FileRepo<'_> {
                 .take(limit as usize)
                 .collect());
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 ORDER BY entry_type ASC, name ASC, id ASC LIMIT ?2 OFFSET ?3",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(
-            params![parent_id.0, limit as i64, offset as i64],
-            row_to_file_entry,
-        )?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_children_visible(
@@ -56,25 +42,14 @@ impl FileRepo<'_> {
             entries.retain(|entry| !entry.hidden && !entry.system);
             return Ok(entries);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
-             WHERE parent_id = ?1 AND hidden = 0 AND system = 0",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(params![parent_id.0], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn count_children(&self, parent_id: &FileEntryId) -> DbResult<u64> {
         if let Some(entries) = self.fjall_entries_by_parent(None, Some(&parent_id.0))? {
             return Ok(entries.len() as u64);
         }
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1",
-            params![parent_id.0],
-            |row| row.get(0),
-        )?;
-        Ok(count as u64)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_root_entries(&self) -> DbResult<Vec<FileEntry>> {
@@ -82,12 +57,7 @@ impl FileRepo<'_> {
             sort_entries(&mut entries);
             return Ok(entries);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map([], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_root_entries_page(&self, offset: u64, limit: u32) -> DbResult<Vec<FileEntry>> {
@@ -99,12 +69,7 @@ impl FileRepo<'_> {
                 .take(limit as usize)
                 .collect());
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC, id ASC LIMIT ?1 OFFSET ?2",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(params![limit as i64, offset as i64], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_root_entries_visible(&self, show_hidden: bool) -> DbResult<Vec<FileEntry>> {
@@ -115,25 +80,14 @@ impl FileRepo<'_> {
             entries.retain(|entry| !entry.hidden && !entry.system);
             return Ok(entries);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
-             WHERE parent_id IS NULL AND hidden = 0 AND system = 0",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map([], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn count_root_entries(&self) -> DbResult<u64> {
         if let Some(entries) = self.fjall_entries_by_parent(None, None)? {
             return Ok(entries.len() as u64);
         }
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE parent_id IS NULL",
-            [],
-            |row| row.get(0),
-        )?;
-        Ok(count as u64)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_child_directories(&self, parent_id: &FileEntryId) -> DbResult<Vec<FileEntry>> {
@@ -142,12 +96,7 @@ impl FileRepo<'_> {
             entries.sort_by(|left, right| left.name.cmp(&right.name));
             return Ok(entries);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(params![parent_id.0], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_child_directories_page(
@@ -163,15 +112,7 @@ impl FileRepo<'_> {
                 .take(limit as usize)
                 .collect());
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC LIMIT ?2 OFFSET ?3",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(
-            params![parent_id.0, limit as i64, offset as i64],
-            row_to_file_entry,
-        )?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_child_directories_visible(
@@ -186,13 +127,7 @@ impl FileRepo<'_> {
             entries.retain(|entry| !entry.hidden && !entry.system);
             return Ok(entries);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
-             WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE AND hidden = 0 AND system = 0",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(params![parent_id.0], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn count_child_directories_visible(
@@ -206,17 +141,7 @@ impl FileRepo<'_> {
         {
             return Ok(entries.len() as u64);
         }
-        let visibility = if show_hidden {
-            ""
-        } else {
-            " AND hidden = 0 AND system = 0"
-        };
-        let sql = format!(
-            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE{visibility}"
-        );
-        Ok(self
-            .conn
-            .query_row(&sql, params![parent_id.0], |row| row.get::<_, i64>(0))? as u64)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_child_directories_page_visible(
@@ -236,20 +161,7 @@ impl FileRepo<'_> {
                 .take(limit as usize)
                 .collect());
         }
-        let visibility = if show_hidden {
-            ""
-        } else {
-            " AND hidden = 0 AND system = 0"
-        };
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE{visibility} ORDER BY name COLLATE NOCASE ASC, id ASC LIMIT ?2 OFFSET ?3"
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(
-            params![parent_id.0, limit as i64, offset as i64],
-            row_to_file_entry,
-        )?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn child_directories_need_natural_sort(
@@ -263,29 +175,14 @@ impl FileRepo<'_> {
                 .iter()
                 .any(|entry| entry.name.bytes().any(|byte| byte.is_ascii_digit())));
         }
-        let visibility = if show_hidden {
-            ""
-        } else {
-            " AND hidden = 0 AND system = 0"
-        };
-        let sql = format!(
-            "SELECT EXISTS(SELECT 1 FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE{visibility} AND name GLOB '*[0-9]*')"
-        );
-        Ok(self
-            .conn
-            .query_row(&sql, params![parent_id.0], |row| row.get(0))?)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn count_child_directories(&self, parent_id: &FileEntryId) -> DbResult<u64> {
         if let Some(entries) = self.find_child_directories(parent_id).map(Some)? {
             return Ok(entries.len() as u64);
         }
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE",
-            params![parent_id.0],
-            |row| row.get(0),
-        )?;
-        Ok(count as u64)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_roots(&self, data_source_id: &DataSourceId) -> DbResult<Vec<FileEntry>> {
@@ -294,12 +191,7 @@ impl FileRepo<'_> {
             sort_entries(&mut entries);
             return Ok(entries);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE data_source_id = ?1 AND parent_id IS NULL ORDER BY entry_type ASC, name ASC",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(params![data_source_id.0], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_by_data_source(&self, data_source_id: &DataSourceId) -> DbResult<Vec<FileEntry>> {
@@ -307,35 +199,24 @@ impl FileRepo<'_> {
             sort_entries(&mut entries);
             return Ok(entries);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE data_source_id = ?1 ORDER BY entry_type ASC, name ASC",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(params![data_source_id.0], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_root_directories(&self) -> DbResult<Vec<FileEntry>> {
-        if let Some(mut entries) = self.fjall_entries(None)? {
-            entries.retain(|entry| {
-                entry.is_directory()
-                    && (entry.parent_id.is_none() || entry.parent_id.as_ref() == Some(&entry.id))
-            });
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            let mut entries = self
+                .fjall_entries_by_parent(None, None)?
+                .unwrap_or_default()
+                .into_iter()
+                .filter(FileEntry::is_directory)
+                .collect::<Vec<_>>();
+            entries.extend(self.fjall_orphan_directories()?.unwrap_or_default());
+            entries.sort_by(|left, right| left.id.0.cmp(&right.id.0));
+            entries.dedup_by(|left, right| left.id == right.id);
             entries.sort_by(|left, right| left.name.cmp(&right.name));
             return Ok(entries);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries AS entry
-             WHERE (entry.parent_id IS NULL OR entry.parent_id = entry.id OR NOT EXISTS (
-                 SELECT 1 FROM file_entries AS parent
-                 WHERE parent.id = entry.parent_id AND parent.data_source_id = entry.data_source_id
-             ))
-               AND entry.entry_type = 'directory' COLLATE NOCASE
-             ORDER BY entry.name ASC",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map([], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_root_directories_visible(&self, show_hidden: bool) -> DbResult<Vec<FileEntry>> {
@@ -346,31 +227,14 @@ impl FileRepo<'_> {
             entries.retain(|entry| !entry.hidden && !entry.system);
             return Ok(entries);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries AS entry
-             WHERE (entry.parent_id IS NULL OR entry.parent_id = entry.id OR NOT EXISTS (
-                 SELECT 1 FROM file_entries AS parent
-                 WHERE parent.id = entry.parent_id AND parent.data_source_id = entry.data_source_id
-             ))
-               AND entry.entry_type = 'directory' COLLATE NOCASE
-               AND entry.hidden = 0 AND entry.system = 0
-             ORDER BY entry.name ASC",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map([], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn has_child_directories(&self, parent_id: &FileEntryId) -> DbResult<bool> {
         if let Some(entries) = self.find_child_directories(parent_id).map(Some)? {
             return Ok(!entries.is_empty());
         }
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE",
-            params![parent_id.0],
-            |row| row.get(0),
-        )?;
-        Ok(count > 0)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn count_child_directories_batch(
@@ -399,46 +263,46 @@ impl FileRepo<'_> {
         if parent_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        if crate::source_fjall::source_id(self.conn)?.is_some() {
-            let mut result = HashMap::new();
-            for parent_id in parent_ids {
-                let count = self
-                    .fjall_entries_by_parent(None, Some(&parent_id.0))?
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|entry| {
-                        entry.is_directory() && (!visible_only || (!entry.hidden && !entry.system))
-                    })
-                    .count();
-                if count > 0 {
-                    result.insert(parent_id.0.clone(), count as i64);
+        let owner = crate::source_fjall::source_id(self.conn)?
+            .ok_or_else(|| crate::DbError::System("source identity is missing".into()))?;
+        let store = crate::source_fjall::require_source_store(self.conn)?;
+        let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+        let snapshot = catalog.read_snapshot();
+        let mut result = HashMap::new();
+        for parent_id in parent_ids {
+            let mut cursor = None;
+            let mut count = 0u64;
+            loop {
+                crate::read_operation::ensure_active()?;
+                let page = catalog
+                    .list_directories_by_parent(
+                        &snapshot,
+                        &owner,
+                        Some(&parent_id.0),
+                        cursor.as_deref(),
+                        persistence_fjall::ScanDirection::Forward,
+                        512,
+                    )
+                    .map_err(|error| crate::DbError::System(error.to_string()))?;
+                count = count.saturating_add(
+                    page.records
+                        .iter()
+                        .filter(|record| {
+                            !record.deleted && (!visible_only || (!record.hidden && !record.system))
+                        })
+                        .count() as u64,
+                );
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    break;
                 }
             }
-            return Ok(result);
-        }
-        let visibility = if visible_only {
-            " AND hidden = 0 AND system = 0"
-        } else {
-            ""
-        };
-        let sql = format!(
-            "SELECT parent_id, COUNT(*) FROM file_entries
-             WHERE parent_id IN ({}) AND entry_type = 'directory' COLLATE NOCASE{visibility}
-             GROUP BY parent_id",
-            placeholders(1, parent_ids.len())
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let parameters = parent_ids
-            .iter()
-            .map(|id| id.0.as_str())
-            .collect::<Vec<_>>();
-        let rows = statement.query_map(rusqlite::params_from_iter(parameters.iter()), |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-        })?;
-        let mut result = HashMap::new();
-        for row in rows {
-            let (parent_id, count) = row?;
-            result.insert(parent_id, count);
+            if count > 0 {
+                let count = i64::try_from(count).map_err(|_| {
+                    crate::DbError::System("child directory count exceeds SQLite range".into())
+                })?;
+                result.insert(parent_id.0.clone(), count);
+            }
         }
         Ok(result)
     }

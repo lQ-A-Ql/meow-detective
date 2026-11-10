@@ -12,6 +12,8 @@ use super::{
     ArtifactServiceError,
 };
 
+const MAX_CASE_ARTIFACT_ROWS: usize = 1_000;
+
 mod pagination;
 
 pub use pagination::{
@@ -102,10 +104,11 @@ pub fn get_artifact_rows_for_case(
                     ),
                 }
                 .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;
-                rows.extend(page.records.into_iter().map(|record| {
+                for record in page.records {
                     projected = true;
-                    artifact_record_to_dto(record, &source_id)
-                }));
+                    rows.push(artifact_record_to_dto(record, &source_id));
+                }
+                trim_artifact_rows(&mut rows);
                 cursor = page.next_cursor;
                 if cursor.is_none() {
                     break;
@@ -115,21 +118,23 @@ pub fn get_artifact_rows_for_case(
                 continue;
             }
         }
-        rows.extend(
-            ArtifactRepo::new(&source_conn)
-                .list_by_family(family)?
-                .iter()
-                .map(|artifact| artifact_to_source_dto(artifact, &source_id)),
-        );
+        for artifact in ArtifactRepo::new(&source_conn).list_by_family(family)? {
+            rows.push(artifact_to_source_dto(&artifact, &source_id));
+            trim_artifact_rows(&mut rows);
+        }
     }
+    trim_artifact_rows(&mut rows);
+    Ok(rows)
+}
+
+fn trim_artifact_rows(rows: &mut Vec<ArtifactRowDto>) {
     rows.sort_by(|left, right| {
         right
             .created_at
             .cmp(&left.created_at)
             .then_with(|| left.id.cmp(&right.id))
     });
-    rows.truncate(1_000);
-    Ok(rows)
+    rows.truncate(MAX_CASE_ARTIFACT_ROWS);
 }
 
 pub(crate) fn artifact_record_to_dto(

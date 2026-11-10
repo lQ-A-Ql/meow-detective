@@ -2,12 +2,7 @@ use crate::connection::DbResult;
 use domain::{DataSourceId, FileEncryptionStatus, FileEntry, FileEntryId};
 use rusqlite::params;
 
-use super::{
-    mapping::{
-        collect_entries, escape_like_literal, file_encryption_status_from_row, row_to_file_entry,
-    },
-    FileRepo, FILE_ENTRY_COLUMNS,
-};
+use super::{push_bounded, FileRepo};
 
 impl FileRepo<'_> {
     pub fn find_ancestor_chain(
@@ -15,12 +10,11 @@ impl FileRepo<'_> {
         entry_id: &FileEntryId,
         max_depth: usize,
     ) -> DbResult<(Vec<FileEntry>, bool)> {
-        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+        if let Some(owner) = crate::source_fjall::source_id(self.conn)? {
+            let store = crate::source_fjall::require_source_store(self.conn)?;
             let catalog =
                 persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
             let snapshot = catalog.read_snapshot();
-            let owner = crate::source_fjall::source_id(self.conn)?
-                .ok_or_else(|| crate::DbError::System("source identity is missing".into()))?;
             let mut chain = Vec::new();
             let mut current = Some(entry_id.0.clone());
             let mut visited = std::collections::BTreeSet::new();
@@ -43,37 +37,7 @@ impl FileRepo<'_> {
             let complete = chain.first().is_some_and(|entry| entry.parent_id.is_none());
             return Ok((chain, complete));
         }
-        let sql = "WITH RECURSIVE ancestors(id, parent_id, depth) AS (
-                 SELECT id, parent_id, 0 FROM file_entries WHERE id = ?1
-                 UNION ALL
-                 SELECT parent.id, parent.parent_id, ancestors.depth + 1
-                 FROM file_entries AS parent
-                 JOIN ancestors ON parent.id = ancestors.parent_id
-                 WHERE ancestors.depth < ?2
-             )
-             SELECT file_entries.id, file_entries.parent_id, file_entries.data_source_id,
-                    file_entries.path, file_entries.name, file_entries.entry_type,
-                    file_entries.size, file_entries.ext, file_entries.deleted,
-                    file_entries.hidden, file_entries.system, file_entries.created_at,
-                    file_entries.modified_at, file_entries.accessed_at,
-                    file_entries.changed_at, file_entries.hash_sha256,
-                    file_entries.encrypted, file_entries.read_only,
-                    file_entries.archive, file_entries.unix_mode, ancestors.depth
-             FROM file_entries JOIN ancestors ON ancestors.id = file_entries.id
-             ORDER BY ancestors.depth DESC";
-        let mut statement = self.conn.prepare(sql)?;
-        let rows = statement.query_map(
-            params![entry_id.0, max_depth as i64],
-            super::mapping::row_to_file_entry,
-        )?;
-        let mut entries = Vec::new();
-        for row in rows {
-            entries.push(row?);
-        }
-        let complete = entries
-            .last()
-            .is_some_and(|entry| entry.parent_id.is_none());
-        Ok((entries, complete))
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_by_partition_and_path(
@@ -93,32 +57,9 @@ impl FileRepo<'_> {
         {
             return Ok(entry);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
-             WHERE data_source_id = ?1 AND partition_index = ?2
-               AND deleted = 0
-               AND path IN (?3, ?4, ?5)
-             LIMIT 1",
-        );
-        let normalized = path.trim_start_matches('/');
-        let partition_prefixed = format!("[P{partition_index}]/{normalized}");
-        let leading_slash = format!("/{normalized}");
-        let result = self.conn.query_row(
-            &sql,
-            params![
-                data_source_id.0,
-                partition_index as u64,
-                path,
-                partition_prefixed,
-                leading_slash
-            ],
-            row_to_file_entry,
-        );
-        match result {
-            Ok(entry) => Ok(Some(entry)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(error) => Err(error.into()),
-        }
+        Err(crate::DbError::System(
+            "source detail storage is missing".into(),
+        ))
     }
 
     /// Case-insensitive variant for well-known Windows system paths: NTFS
@@ -141,32 +82,9 @@ impl FileRepo<'_> {
         {
             return Ok(entry);
         }
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
-             WHERE data_source_id = ?1 AND partition_index = ?2
-               AND deleted = 0
-               AND path IN (?3, ?4, ?5) COLLATE NOCASE
-             LIMIT 1",
-        );
-        let normalized = path.trim_start_matches('/');
-        let partition_prefixed = format!("[P{partition_index}]/{normalized}");
-        let leading_slash = format!("/{normalized}");
-        let result = self.conn.query_row(
-            &sql,
-            params![
-                data_source_id.0,
-                partition_index as u64,
-                normalized,
-                partition_prefixed,
-                leading_slash
-            ],
-            row_to_file_entry,
-        );
-        match result {
-            Ok(entry) => Ok(Some(entry)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(error) => Err(error.into()),
-        }
+        Err(crate::DbError::System(
+            "source detail storage is missing".into(),
+        ))
     }
 
     pub fn find_by_path_prefix(
@@ -174,71 +92,60 @@ impl FileRepo<'_> {
         data_source_id: &DataSourceId,
         prefix: &str,
     ) -> DbResult<Vec<FileEntry>> {
-        if let Some(mut entries) = self.fjall_entries(Some(&data_source_id.0))? {
-            entries.retain(|entry| entry.path.starts_with(prefix));
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            crate::source_fjall::require_source_store(self.conn)?;
+            let mut entries = Vec::new();
+            self.visit_all(Some(&data_source_id.0), |entry| {
+                if entry.path.starts_with(prefix) {
+                    push_bounded(&mut entries, entry)?;
+                }
+                Ok(())
+            })?;
             entries.sort_by(|left, right| left.path.cmp(&right.path));
             return Ok(entries);
         }
-        let pattern = format!("{}%", escape_like_literal(prefix));
-        let sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE data_source_id = ?1 AND path LIKE ?2 ESCAPE '\\' ORDER BY path ASC",
-        );
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(params![data_source_id.0, pattern], row_to_file_entry)?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn count_by_data_source(&self, data_source_id: &DataSourceId) -> DbResult<u64> {
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            crate::source_fjall::require_source_store(self.conn)?;
+        }
         if let Some(count) = self.native_count(Some(&data_source_id.0))? {
             return Ok(count);
         }
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1",
-            params![data_source_id.0],
-            |row| row.get(0),
-        )?;
-        Ok(count as u64)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn count_all(&self) -> DbResult<u64> {
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            crate::source_fjall::require_source_store(self.conn)?;
+        }
         if let Some(count) = self.native_count(None)? {
             return Ok(count);
         }
-        let count: i64 = self
-            .conn
-            .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
-        Ok(count as u64)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_by_id(&self, id: &FileEntryId) -> DbResult<Option<FileEntry>> {
-        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
+        if let Some(source_id) = crate::source_fjall::source_id(self.conn)? {
+            let store = crate::source_fjall::require_source_store(self.conn)?;
             let snapshot = store.database().read_snapshot();
             let source = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
-            let source_id = crate::source_fjall::source_id(self.conn)?.ok_or_else(|| {
-                crate::connection::DbError::System("source identity is missing".into())
-            })?;
             return source
                 .get(&snapshot, &source_id, &id.0)
                 .map(|record| record.map(crate::source_fjall::file_entry))
                 .map_err(|error| crate::connection::DbError::System(error.to_string()));
         }
-        let sql = format!("SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE id = ?1");
-        let mut statement = self.conn.prepare(&sql)?;
-        match statement.query_row(params![id.0], row_to_file_entry) {
-            Ok(entry) => Ok(Some(entry)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(error) => Err(error.into()),
-        }
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_encryption_status(
         &self,
         id: &FileEntryId,
     ) -> DbResult<Option<FileEncryptionStatus>> {
-        if let Some(store) = crate::source_fjall::open_store(self.conn)? {
-            let owner = crate::source_fjall::source_id(self.conn)?.ok_or_else(|| {
-                crate::connection::DbError::System("source identity is missing".into())
-            })?;
+        if let Some(owner) = crate::source_fjall::source_id(self.conn)? {
+            let store = crate::source_fjall::require_source_store(self.conn)?;
             let repository =
                 persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
             return repository
@@ -252,37 +159,14 @@ impl FileRepo<'_> {
                 })
                 .map_err(|error| crate::connection::DbError::System(error.to_string()));
         }
-        let result = self.conn.query_row(
-            "SELECT encrypted FROM file_entries WHERE id = ?1",
-            params![id.0],
-            |row| file_encryption_status_from_row(row, 0),
-        );
-        match result {
-            Ok(status) => Ok(Some(status)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(error) => Err(error.into()),
-        }
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_partition_index_by_id(&self, id: &FileEntryId) -> DbResult<Option<usize>> {
         if crate::source_fjall::source_id(self.conn)?.is_some() {
             return crate::source_fjall::partition_index(self.conn, &id.0);
         }
-        let result = self.conn.query_row(
-            "SELECT partition_index FROM file_entries WHERE id = ?1",
-            params![id.0],
-            |row| row.get::<_, Option<i64>>(0),
-        );
-        match result {
-            Ok(Some(index)) => usize::try_from(index).map(Some).map_err(|_| {
-                crate::connection::DbError::System(format!(
-                    "File entry '{}' has invalid partition index {}",
-                    id.0, index
-                ))
-            }),
-            Ok(None) | Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(error) => Err(error.into()),
-        }
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn set_partition_index_by_id(
@@ -293,16 +177,7 @@ impl FileRepo<'_> {
         if crate::source_fjall::set_partition_index(self.conn, &id.0, partition_index)? {
             return Ok(());
         }
-        let partition_index = i64::try_from(partition_index).map_err(|_| {
-            crate::connection::DbError::System(format!(
-                "Partition index is too large for SQLite: {partition_index}"
-            ))
-        })?;
-        self.conn.execute(
-            "UPDATE file_entries SET partition_index = ?1 WHERE id = ?2",
-            params![partition_index, id.0],
-        )?;
-        Ok(())
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn assign_partition_index_to_subtree(
@@ -310,27 +185,14 @@ impl FileRepo<'_> {
         root_id: &FileEntryId,
         partition_index: usize,
     ) -> DbResult<usize> {
-        let partition_index = i64::try_from(partition_index).map_err(|_| {
-            crate::connection::DbError::System(format!(
-                "Partition index is too large for SQLite: {partition_index}"
-            ))
-        })?;
-        let updated = self.conn.execute(
-            "WITH RECURSIVE subtree(id, data_source_id) AS (
-                 SELECT id, data_source_id FROM file_entries WHERE id = ?1
-                 UNION
-                 SELECT child.id, child.data_source_id
-                 FROM file_entries AS child
-                 JOIN subtree AS parent
-                   ON child.parent_id = parent.id
-                  AND child.data_source_id = parent.data_source_id
-             )
-             UPDATE file_entries
-             SET partition_index = ?2
-             WHERE id IN (SELECT id FROM subtree)",
-            params![root_id.0, partition_index],
-        )?;
-        Ok(updated)
+        if let Some(updated) = crate::source_fjall::assign_partition_index_to_subtree(
+            self.conn,
+            &root_id.0,
+            partition_index,
+        )? {
+            return Ok(updated);
+        }
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     /// Find non-deleted file entries whose path contains every fragment
@@ -341,34 +203,26 @@ impl FileRepo<'_> {
         data_source_id: &DataSourceId,
         fragments: &[&str],
     ) -> DbResult<Vec<FileEntry>> {
-        if let Some(mut entries) = self.fjall_entries(Some(&data_source_id.0))? {
-            entries.retain(|entry| {
-                !entry.deleted
-                    && fragments
-                        .iter()
-                        .all(|fragment| entry.path.contains(fragment))
-            });
-            entries.sort_by(|left, right| left.path.cmp(&right.path));
-            return Ok(entries);
-        }
         if fragments.is_empty() {
             return Ok(Vec::new());
         }
-        let mut sql = format!(
-            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE data_source_id = ?1 AND deleted = 0"
-        );
-        let mut values: Vec<String> = Vec::with_capacity(fragments.len());
-        for (index, fragment) in fragments.iter().enumerate() {
-            sql.push_str(&format!(" AND path LIKE ?{} ESCAPE '\\'", index + 2));
-            values.push(format!("%{}%", escape_like_literal(fragment)));
+        if crate::source_fjall::source_id(self.conn)?.is_some() {
+            crate::source_fjall::require_source_store(self.conn)?;
+            let mut entries = Vec::new();
+            self.visit_all(Some(&data_source_id.0), |entry| {
+                if !entry.deleted
+                    && fragments
+                        .iter()
+                        .all(|fragment| entry.path.contains(fragment))
+                {
+                    push_bounded(&mut entries, entry)?;
+                }
+                Ok(())
+            })?;
+            entries.sort_by(|left, right| left.path.cmp(&right.path));
+            return Ok(entries);
         }
-        sql.push_str(" ORDER BY path ASC");
-        let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(
-            rusqlite::params_from_iter(std::iter::once(data_source_id.0.clone()).chain(values)),
-            row_to_file_entry,
-        )?;
-        collect_entries(rows)
+        Err(crate::DbError::System("source identity is missing".into()))
     }
 
     pub fn find_data_source_location(

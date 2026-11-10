@@ -2,50 +2,15 @@ use super::*;
 use domain::ArtifactId;
 use std::collections::BTreeMap;
 
-fn setup_db() -> rusqlite::Connection {
-    let conn = crate::connection::open_in_memory().unwrap();
-    conn.execute_batch(
-        "CREATE TABLE artifacts (
-            id TEXT PRIMARY KEY NOT NULL,
-            case_id TEXT NOT NULL DEFAULT '',
-            data_source_id TEXT NOT NULL DEFAULT '',
-            artifact_type TEXT NOT NULL,
-            source_object_id TEXT,
-            extractor_id TEXT,
-            extractor_version TEXT,
-            confidence REAL,
-            source_attribution TEXT,
-            title TEXT NOT NULL,
-            summary TEXT NOT NULL DEFAULT '',
-            attrs TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );",
-    )
-    .unwrap();
-    conn
-}
-
-fn setup_legacy_db() -> rusqlite::Connection {
-    let conn = crate::connection::open_in_memory().unwrap();
-    conn.execute_batch(
-        "CREATE TABLE artifacts (
-            id TEXT PRIMARY KEY NOT NULL,
-            case_id TEXT NOT NULL DEFAULT '',
-            data_source_id TEXT NOT NULL DEFAULT '',
-            artifact_type TEXT NOT NULL,
-            source_object_id TEXT,
-            title TEXT NOT NULL,
-            summary TEXT NOT NULL DEFAULT '',
-            attrs TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        ALTER TABLE artifacts ADD COLUMN extractor_id TEXT;
-        ALTER TABLE artifacts ADD COLUMN extractor_version TEXT;
-        ALTER TABLE artifacts ADD COLUMN confidence REAL;
-        ALTER TABLE artifacts ADD COLUMN source_attribution TEXT;",
-    )
-    .unwrap();
-    conn
+fn setup_db() -> (tempfile::TempDir, rusqlite::Connection) {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("source.db");
+    let conn = crate::open_or_create_source(&path).unwrap();
+    crate::source_fjall::configure_source_identity(&conn, "ds-1").unwrap();
+    crate::source_fjall::open_store_for_write(&conn)
+        .unwrap()
+        .unwrap();
+    (root, conn)
 }
 
 fn make_artifact(id: &str, family: &str) -> Artifact {
@@ -74,187 +39,136 @@ fn make_artifact_at(id: &str, family: &str, created_at: &str) -> Artifact {
 
 #[test]
 fn insert_batch_then_count_returns_correct_number() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let repo = ArtifactRepo::new(&conn);
-    let artifacts = vec![
-        make_artifact("a1", "evtx"),
-        make_artifact("a2", "prefetch"),
-        make_artifact("a3", "evtx"),
-    ];
-    repo.insert_batch(&artifacts, "case-1", "ds-1").unwrap();
-
+    repo.insert_batch(
+        &[
+            make_artifact("a1", "evtx"),
+            make_artifact("a2", "prefetch"),
+            make_artifact("a3", "evtx"),
+        ],
+        "case-1",
+        "ds-1",
+    )
+    .unwrap();
     assert_eq!(repo.count().unwrap(), 3);
 }
 
 #[test]
 fn families_returns_distinct_types() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let repo = ArtifactRepo::new(&conn);
-    let artifacts = vec![
-        make_artifact("a1", "evtx"),
-        make_artifact("a2", "prefetch"),
-        make_artifact("a3", "evtx"),
-    ];
-    repo.insert_batch(&artifacts, "case-1", "ds-1").unwrap();
-
-    let families = repo.families().unwrap();
-    assert_eq!(families, vec!["evtx", "prefetch"]);
+    repo.insert_batch(
+        &[
+            make_artifact("a1", "evtx"),
+            make_artifact("a2", "prefetch"),
+            make_artifact("a3", "evtx"),
+        ],
+        "case-1",
+        "ds-1",
+    )
+    .unwrap();
+    assert_eq!(repo.families().unwrap(), ["evtx", "prefetch"]);
 }
 
 #[test]
 fn count_by_family_returns_grouped_counts() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let repo = ArtifactRepo::new(&conn);
-    let artifacts = vec![
-        make_artifact("a1", "evtx"),
-        make_artifact("a2", "prefetch"),
-        make_artifact("a3", "evtx"),
-    ];
-    repo.insert_batch(&artifacts, "case-1", "ds-1").unwrap();
-
-    let counts = repo.count_by_family().unwrap();
+    repo.insert_batch(
+        &[
+            make_artifact("a1", "evtx"),
+            make_artifact("a2", "prefetch"),
+            make_artifact("a3", "evtx"),
+        ],
+        "case-1",
+        "ds-1",
+    )
+    .unwrap();
     assert_eq!(
-        counts,
+        repo.count_by_family().unwrap(),
         vec![("evtx".to_string(), 2), ("prefetch".to_string(), 1)]
     );
 }
 
 #[test]
 fn list_by_family_filters_correctly() {
-    let conn = setup_db();
-    let repo = ArtifactRepo::new(&conn);
-    let artifacts = vec![
-        make_artifact("a1", "evtx"),
-        make_artifact("a2", "prefetch"),
-        make_artifact("a3", "evtx"),
-    ];
-    repo.insert_batch(&artifacts, "case-1", "ds-1").unwrap();
-
-    let evtx = repo.list_by_family(Some("evtx")).unwrap();
-    assert_eq!(evtx.len(), 2);
-    assert!(evtx.iter().all(|a| a.family == "evtx"));
-
-    let all = repo.list_by_family(None).unwrap();
-    assert_eq!(all.len(), 3);
-}
-
-#[test]
-fn list_by_family_keyset_is_stable_and_count_matches_filter() {
-    let conn = setup_db();
-    let repo = ArtifactRepo::new(&conn);
-    let artifacts = vec![
-        make_artifact_at("a-latest-b", "evtx", "2026-06-03T00:00:00Z"),
-        make_artifact_at("other", "prefetch", "2026-06-04T00:00:00Z"),
-        make_artifact_at("a-old", "evtx", "2026-06-01T00:00:00Z"),
-        make_artifact_at("a-latest-a", "evtx", "2026-06-03T00:00:00Z"),
-        make_artifact_at("a-middle", "evtx", "2026-06-02T00:00:00Z"),
-    ];
-    repo.insert_batch(&artifacts, "case-1", "ds-1").unwrap();
-
-    let high_water = repo.snapshot_high_water().unwrap();
-    let first_page = repo
-        .list_by_family_after_at_snapshot(Some("evtx"), None, high_water, 2)
-        .unwrap();
-    let second_page = repo
-        .list_by_family_after_at_snapshot(
-            Some("evtx"),
-            Some(&first_page.last().unwrap().sort_key),
-            high_water,
-            2,
-        )
-        .unwrap();
-
-    assert_eq!(
-        repo.count_for_family_at_snapshot(Some("evtx"), high_water)
-            .unwrap(),
-        4
-    );
-    assert_eq!(
-        repo.count_for_family_at_snapshot(None, high_water).unwrap(),
-        5
-    );
-    assert_eq!(
-        first_page
-            .iter()
-            .map(|row| row.artifact.id.0.as_str())
-            .collect::<Vec<_>>(),
-        vec!["a-latest-a", "a-latest-b"]
-    );
-    assert_eq!(
-        second_page
-            .iter()
-            .map(|row| row.artifact.id.0.as_str())
-            .collect::<Vec<_>>(),
-        vec!["a-middle", "a-old"]
-    );
-}
-
-#[test]
-fn snapshot_keyset_excludes_later_inserts_and_survives_consumed_prefix_deletion() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let repo = ArtifactRepo::new(&conn);
     repo.insert_batch(
         &[
-            make_artifact_at("latest", "evtx", "2026-06-03T00:00:00Z"),
-            make_artifact_at("middle", "evtx", "2026-06-02T00:00:00Z"),
-            make_artifact_at("oldest", "evtx", "2026-06-01T00:00:00Z"),
+            make_artifact("a1", "evtx"),
+            make_artifact("a2", "prefetch"),
+            make_artifact("a3", "evtx"),
         ],
         "case-1",
         "ds-1",
     )
     .unwrap();
-    let high_water = repo.snapshot_high_water().unwrap();
-    assert_eq!(
-        repo.count_for_family_at_snapshot(Some("evtx"), high_water)
-            .unwrap(),
-        3
-    );
-    let first = repo
-        .list_by_family_after_at_snapshot(Some("evtx"), None, high_water, 1)
-        .unwrap();
+    let evtx = repo.list_by_family(Some("evtx")).unwrap();
+    assert_eq!(evtx.len(), 2);
+    assert!(evtx.iter().all(|artifact| artifact.family == "evtx"));
+    assert_eq!(repo.list_by_family(None).unwrap().len(), 3);
+}
 
+#[test]
+fn list_by_family_keyset_is_stable_and_count_matches_filter() {
+    let (_root, conn) = setup_db();
+    let repo = ArtifactRepo::new(&conn);
     repo.insert_batch(
-        &[make_artifact_at(
-            "inserted-after-snapshot",
-            "evtx",
-            "2026-06-04T00:00:00Z",
-        )],
+        &[
+            make_artifact_at("a-latest-b", "evtx", "2026-06-03T00:00:00Z"),
+            make_artifact_at("other", "prefetch", "2026-06-04T00:00:00Z"),
+            make_artifact_at("a-old", "evtx", "2026-06-01T00:00:00Z"),
+            make_artifact_at("a-latest-a", "evtx", "2026-06-03T00:00:00Z"),
+            make_artifact_at("a-middle", "evtx", "2026-06-02T00:00:00Z"),
+        ],
         "case-1",
         "ds-1",
     )
     .unwrap();
-    assert_eq!(
-        repo.count_for_family_at_snapshot(Some("evtx"), high_water)
-            .unwrap(),
-        3
-    );
-    conn.execute("DELETE FROM artifacts WHERE id = 'latest'", [])
+    let first = repo.list_by_family_after(None, None, 2).unwrap();
+    let second = repo
+        .list_by_family_after(Some("evtx"), Some(&first.last().unwrap().sort_key), 2)
         .unwrap();
-
-    let remaining = repo
-        .list_by_family_after_at_snapshot(Some("evtx"), Some(&first[0].sort_key), high_water, 10)
-        .unwrap();
+    assert_eq!(repo.count_for_family(Some("evtx")).unwrap(), 4);
+    assert_eq!(repo.count_for_family(None).unwrap(), 5);
     assert_eq!(
-        remaining
+        first
             .iter()
             .map(|row| row.artifact.id.0.as_str())
             .collect::<Vec<_>>(),
-        vec!["middle", "oldest"]
+        ["other", "a-latest-a"]
+    );
+    assert_eq!(
+        second
+            .iter()
+            .map(|row| row.artifact.id.0.as_str())
+            .collect::<Vec<_>>(),
+        ["a-latest-b", "a-middle"]
     );
 }
 
 #[test]
+fn artifact_page_rejects_unbounded_limit() {
+    let (_root, conn) = setup_db();
+    let repo = ArtifactRepo::new(&conn);
+    repo.insert_batch(&[make_artifact("a1", "evtx")], "case-1", "ds-1")
+        .unwrap();
+    let error = repo.list_by_family_after(None, None, 1_025).unwrap_err();
+    assert!(error.to_string().contains("bounded page limit"));
+}
+
+#[test]
 fn artifact_provenance_round_trips() {
-    let conn = setup_db();
+    let (_root, conn) = setup_db();
     let repo = ArtifactRepo::new(&conn);
     let mut artifact = make_artifact("a1", "prefetch");
     artifact.extractor_id = Some("prefetch".to_string());
     artifact.extractor_version = Some("1.2.3".to_string());
     artifact.confidence = Some(0.93);
     artifact.source_attribution = Some("Windows/Prefetch/CMD.EXE.pf".to_string());
-
     repo.insert_batch(&[artifact], "case-1", "ds-1").unwrap();
-
     let rows = repo.list_by_family(Some("prefetch")).unwrap();
     assert_eq!(rows[0].extractor_id.as_deref(), Some("prefetch"));
     assert_eq!(rows[0].extractor_version.as_deref(), Some("1.2.3"));
@@ -266,18 +180,12 @@ fn artifact_provenance_round_trips() {
 }
 
 #[test]
-fn artifact_null_provenance_loads_as_missing() {
-    let conn = setup_legacy_db();
-    conn.execute(
-        "INSERT INTO artifacts (id, artifact_type, title, summary, attrs, created_at)
-         VALUES ('a1', 'legacy', 'Legacy', '', '{}', '2026-06-04T00:00:00Z')",
-        [],
-    )
-    .unwrap();
+fn artifact_missing_provenance_round_trips_as_none() {
+    let (_root, conn) = setup_db();
     let repo = ArtifactRepo::new(&conn);
-
+    repo.insert_batch(&[make_artifact("a1", "legacy")], "case-1", "ds-1")
+        .unwrap();
     let rows = repo.list_by_family(Some("legacy")).unwrap();
-
     assert_eq!(rows.len(), 1);
     assert!(rows[0].extractor_id.is_none());
     assert!(rows[0].extractor_version.is_none());

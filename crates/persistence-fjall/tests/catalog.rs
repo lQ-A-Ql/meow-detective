@@ -102,6 +102,60 @@ fn catalog_counts_and_binary_id_feed_follow_atomic_changes() {
 }
 
 #[test]
+fn catalog_rejects_unbounded_page_requests() {
+    let root = tempfile::tempdir().unwrap();
+    let store = CatalogRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let snapshot = store.read_snapshot();
+
+    let error = store
+        .list_by_parent(
+            &snapshot,
+            "s",
+            None,
+            None,
+            ScanDirection::Forward,
+            usize::MAX,
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("scan page limit exceeds"));
+}
+
+#[test]
+fn partition_assignment_streams_the_full_subtree_in_one_revision() {
+    let root = tempfile::tempdir().unwrap();
+    let store = CatalogRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let mut directory = record("source", "dir", None, "dir", "dir");
+    directory.entry_type = CatalogEntryType::Directory;
+    let mut child_directory = record("source", "child", Some("dir"), "child", "dir/child");
+    child_directory.entry_type = CatalogEntryType::Directory;
+    let file = record("source", "file", Some("child"), "file", "dir/child/file");
+    store
+        .upsert_batch(&[directory, child_directory, file], PersistMode::SyncAll)
+        .unwrap();
+    let before = store.read_snapshot();
+    let revision = store.cursor_revision(&before).unwrap();
+
+    let updated = store
+        .assign_partition_to_subtree("source", "dir", 7, PersistMode::SyncAll)
+        .unwrap();
+
+    assert_eq!(updated, 3);
+    let after = store.read_snapshot();
+    for id in ["dir", "child", "file"] {
+        assert_eq!(
+            store
+                .get(&after, "source", id)
+                .unwrap()
+                .unwrap()
+                .partition_index,
+            Some(7)
+        );
+    }
+    assert_eq!(store.count(&after, Some("source")).unwrap(), 3);
+    assert_eq!(store.cursor_revision(&after).unwrap(), revision + 1);
+}
+
+#[test]
 fn file_feed_uses_binary_path_and_id_order_with_stable_snapshot() {
     let root = tempfile::tempdir().unwrap();
     let store = CatalogRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();

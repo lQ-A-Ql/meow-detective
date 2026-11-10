@@ -81,26 +81,11 @@ pub fn compute_artifact_hash_hex(conn: &Connection) -> DbResult<String> {
         })?;
         return Ok(hex::encode(hasher.finalize()));
     }
-    let mut stmt = conn.prepare("SELECT id, created_at FROM artifacts ORDER BY id")?;
-    let mut hasher = Sha256::new();
-    let rows = stmt.query_map([], |row| {
-        let id: String = row.get(0)?;
-        let created_at: String = row.get(1)?;
-        Ok((id, created_at))
-    })?;
-    for row in rows {
-        let (id, created_at) = row?;
-        hasher.update(id.as_bytes());
-        hasher.update(b"|");
-        hasher.update(created_at.as_bytes());
-        hasher.update(b"\n");
-    }
-    Ok(hex::encode(hasher.finalize()))
+    Err(DbError::System("source identity is missing".into()))
 }
 
 /// Resolve the case_id from the artifacts table (returns the first distinct id).
 pub fn resolve_case_id(conn: &Connection) -> DbResult<Option<String>> {
-    use rusqlite::OptionalExtension;
     if let Some(source_id) = crate::source_fjall::source_id(conn)? {
         let artifact_count = super::artifact_repo::ArtifactRepo::new(conn).count()?;
         if artifact_count == 0 {
@@ -119,33 +104,27 @@ pub fn resolve_case_id(conn: &Connection) -> DbResult<Option<String>> {
             )),
         };
     }
-    conn.query_row(
-        "SELECT DISTINCT case_id FROM artifacts LIMIT 1",
-        [],
-        |row| row.get::<_, String>(0),
-    )
-    .optional()
-    .map_err(DbError::from)
+    Err(DbError::System("source identity is missing".into()))
 }
 
 /// Collect all artifact IDs ordered by id.
 pub fn collect_artifact_ids(conn: &Connection) -> DbResult<Vec<String>> {
     if crate::source_fjall::source_id(conn)?.is_some() {
+        const MAX_ARTIFACT_IDS: usize = 100_000;
         let mut ids = Vec::new();
         super::artifact_repo::ArtifactRepo::new(conn).visit_by_family(None, |artifact| {
+            if ids.len() >= MAX_ARTIFACT_IDS {
+                return Err(DbError::System(
+                    "correlation artifact id query exceeds the bounded row limit".into(),
+                ));
+            }
             ids.push(artifact.id.0);
             Ok(())
         })?;
         ids.sort();
         return Ok(ids);
     }
-    let mut stmt = conn.prepare("SELECT id FROM artifacts ORDER BY id")?;
-    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
-    let mut ids = Vec::new();
-    for row in rows {
-        ids.push(row?);
-    }
-    Ok(ids)
+    Err(DbError::System("source identity is missing".into()))
 }
 
 // ── Types ─────────────────────────────────────────────────────────────

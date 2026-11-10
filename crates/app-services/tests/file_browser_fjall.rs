@@ -146,20 +146,28 @@ fn file_browser_fjall_matches_visibility_sorting_and_orphan_root_rules() {
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(&case.meta.id, &source)
         .unwrap();
-    drop(source_conn);
 
     let fjall =
         source_db::open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
     write_catalog(&fjall);
     drop(fjall);
+    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+        .unwrap()
+        .unwrap();
+    persistence_fjall::seal_source_generation(&store, &source.id.0, "fixture", &"a".repeat(64))
+        .unwrap();
+    drop(store);
+    drop(source_conn);
 
     let incomplete_tree = case
         .with_conn(|connection| {
             file_service::get_file_tree_for_case(connection, &case.case_root, &case.meta.id, false)
                 .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
         })
-        .unwrap();
-    assert!(incomplete_tree.is_empty());
+        .expect_err("an incomplete source projection must fail closed");
+    assert!(incomplete_tree
+        .to_string()
+        .contains("source details are not ready"));
 
     let fjall =
         source_db::open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
@@ -193,4 +201,22 @@ fn file_browser_fjall_matches_visibility_sorting_and_orphan_root_rules() {
     assert_eq!(rows.rows[0].id, scoped("dir"));
     assert_eq!(rows.rows[1].id, scoped("normal"));
     assert_eq!(rows.rows[2].id, scoped("deleted"));
+
+    let bounded = case
+        .with_conn(|connection| {
+            file_service::get_file_rows_for_case(
+                connection,
+                &case.case_root,
+                &case.meta.id,
+                &GetFileRowsRequest {
+                    parent_id: Some(scoped("root")),
+                    offset: 8_192,
+                    limit: 1,
+                    ..Default::default()
+                },
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .expect_err("file browser offsets beyond the bounded window must fail closed");
+    assert!(bounded.to_string().contains("bounded catalog window"));
 }
