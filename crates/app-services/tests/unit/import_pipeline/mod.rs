@@ -1227,11 +1227,11 @@ fn e01_full_import() {
                 .filter(|record| {
                     record.entry_type == persistence_fjall::CatalogEntryType::Directory
                         && record.name.eq_ignore_ascii_case("System32")
-                        && normalized_path(record)
-                            .split('/')
-                            .filter(|segment| !segment.is_empty())
-                            .count()
-                            <= 2
+                        && {
+                            let path = normalized_path(record);
+                            (path == "system32" || path.ends_with("/system32"))
+                                && !path.contains("windows/system32")
+                        }
                 })
                 .count() as i64;
             let root_windows = catalog
