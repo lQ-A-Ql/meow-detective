@@ -78,6 +78,7 @@ pub(super) fn merge_finished_analysis_staging(
         }),
     )
     .map_err(|e| ImportAnalysisError::Staging(e.to_string()))?;
+    drop(fjall_source);
     stats.artifact_count = merge_stats.artifact_count;
     stats.timeline_count = merge_stats.timeline_count;
     bump_search_input_revision(&source)?;
