@@ -17,6 +17,7 @@ mod platforms;
 mod provenance;
 mod summary;
 mod system_info;
+mod system_info_candidates;
 mod use_cases;
 pub(crate) use candidates::evidence_relative_path;
 

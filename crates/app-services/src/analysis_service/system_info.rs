@@ -1,8 +1,8 @@
-use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::provenance::{
     entry_provenance, registry_field_provenance, REGISTRY_SOFTWARE_PARSER, REGISTRY_SYSTEM_PARSER,
 };
 use crate::analysis_service::system_info_boot::inspect_evtx_boot_source;
+use crate::analysis_service::system_info_candidates::find_system_info_candidates;
 use crate::analysis_service::MAX_REGISTRY_ANALYSIS_BYTES;
 use domain::{FileEntry, FileEntryId};
 use rusqlite::Connection;
@@ -138,58 +138,6 @@ pub fn extract_system_info_for_case<E: std::fmt::Display>(
         provenance,
         field_provenance: extraction.field_provenance,
     }
-}
-
-#[derive(Default)]
-struct SystemInfoCandidates {
-    system_hive: Option<FileEntry>,
-    software_hive: Option<FileEntry>,
-    system_evtx: Option<FileEntry>,
-}
-
-fn find_system_info_candidates(
-    conn: &Connection,
-) -> Result<SystemInfoCandidates, AnalysisServiceError> {
-    let entries = crate::analysis_service::collect_file_entries(conn)?;
-    let mut candidates = SystemInfoCandidates::default();
-    for entry in entries.into_iter().filter(FileEntry::is_file) {
-        let path = entry.path.to_ascii_lowercase().replace('\\', "/");
-        select_candidate(
-            &mut candidates.system_hive,
-            entry.clone(),
-            &path,
-            "windows/system32/config/system",
-        );
-        select_candidate(
-            &mut candidates.software_hive,
-            entry.clone(),
-            &path,
-            "windows/system32/config/software",
-        );
-        select_candidate(
-            &mut candidates.system_evtx,
-            entry,
-            &path,
-            "windows/system32/winevt/logs/system.evtx",
-        );
-    }
-    Ok(candidates)
-}
-
-fn select_candidate(
-    selected: &mut Option<FileEntry>,
-    entry: FileEntry,
-    normalized_path: &str,
-    suffix: &str,
-) {
-    if !normalized_path.ends_with(suffix)
-        || selected
-            .as_ref()
-            .is_some_and(|current| current.path.len() <= entry.path.len())
-    {
-        return;
-    }
-    *selected = Some(entry);
 }
 
 fn find_unique_data_source_id(conn: &Connection) -> Option<String> {
