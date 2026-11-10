@@ -294,7 +294,8 @@ MD reader 创建后，按现有顺序运行：
 2026-11-11 实测结果：
 
 - `pve_cluster_mdraid_reader_exposes_btrfs_root` 通过，`@rootfs/etc/passwd`、`os-release`、`hostname` 可读。
-- `mdraid_btrfs_catalog_materializes_to_completion` 通过，Debug 构建完成 `304,162` 条 Catalog 记录，`materialize_mdraid_array` 耗时约 `81.633` 秒，最终状态为 `ready`。
+- `mdraid_btrfs_catalog_materializes_to_completion` 在 Release 构建连续两次完成相同的 `581,619` 条 Catalog 记录，状态均为 `ready`。
+- 两次 `materialize_mdraid_array` 耗时分别为 `31.824` 秒和 `31.748` 秒；进程峰值 RSS 均为 `1,869 MiB`，测试当前 RSS 约 `32 MiB`。
 - 旧日志中的 95% 停滞不再出现。
 
 ### 现有质量检查
