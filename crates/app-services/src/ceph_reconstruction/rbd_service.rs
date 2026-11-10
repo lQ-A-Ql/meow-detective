@@ -106,7 +106,7 @@ pub fn find_rbd_header_from_case_storage(
                     },
                     None,
                     ScanDirection::Forward,
-                    MAX_HEADERS.saturating_add(1),
+                    MAX_HEADERS,
                 )
                 .map_err(|error| RbdReconstructionError::Catalog {
                     inventory_id: replica.inventory_id.clone(),

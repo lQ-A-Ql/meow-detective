@@ -6,7 +6,7 @@ use crate::{
 use fjall::Readable;
 use std::ops::{Bound, RangeBounds};
 
-const MAX_SCAN_PAGE_ENTRIES: usize = 4096;
+const MAX_SCAN_PAGE_ENTRIES: usize = 8_192;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScanDirection {
