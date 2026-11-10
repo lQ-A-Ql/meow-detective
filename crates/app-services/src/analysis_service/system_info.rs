@@ -6,6 +6,7 @@ use crate::analysis_service::system_info_boot::inspect_evtx_boot_source;
 use crate::analysis_service::MAX_REGISTRY_ANALYSIS_BYTES;
 use domain::{FileEntry, FileEntryId};
 use rusqlite::Connection;
+use std::time::Instant;
 use transport::dto::analysis::{
     AnalysisBootRecordDto, AnalysisFieldProvenanceDto, AnalysisNetworkAdapterDto,
     AnalysisProvenanceDto,
@@ -66,8 +67,17 @@ pub fn extract_system_info_for_case<E: std::fmt::Display>(
         data_source_id: data_source_id.as_deref(),
     };
 
+    let candidate_started = Instant::now();
+    tracing::info!("Windows system information candidate discovery started");
     match find_system_info_candidates(conn) {
         Ok(candidates) => {
+            tracing::info!(
+                elapsed_ms = candidate_started.elapsed().as_millis(),
+                system = candidates.system_hive.is_some(),
+                software = candidates.software_hive.is_some(),
+                system_evtx = candidates.system_evtx.is_some(),
+                "Windows system information candidate discovery completed"
+            );
             let system_hive = candidates.system_hive.as_ref();
             let software_hive = candidates.software_hive.as_ref();
             let system_evtx = candidates.system_evtx.as_ref();
@@ -216,6 +226,8 @@ fn inspect_registry_hive<E: std::fmt::Display>(
         return;
     };
 
+    let started = Instant::now();
+    tracing::info!(parser, path = %entry.path, "Windows system information registry parse started");
     let (parsed_any, parser_warnings) = match read_header_fn(&entry.id, MAX_REGISTRY_ANALYSIS_BYTES)
     {
         Ok(bytes) => inspect_registry_bytes(&bytes, entry, parser, extraction),
@@ -233,6 +245,13 @@ fn inspect_registry_hive<E: std::fmt::Display>(
         },
         parser_warnings,
     ));
+    tracing::info!(
+        parser,
+        path = %entry.path,
+        elapsed_ms = started.elapsed().as_millis(),
+        parsed = parsed_any,
+        "Windows system information registry parse completed"
+    );
 }
 
 fn inspect_registry_bytes(
