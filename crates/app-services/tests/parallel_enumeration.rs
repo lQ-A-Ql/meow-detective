@@ -117,6 +117,42 @@ impl FileSystemReader for FaultyFs {
     }
 }
 
+struct WideFs {
+    width: usize,
+}
+
+impl FileSystemReader for WideFs {
+    fn root(&self) -> io::Result<FsNode> {
+        Ok(fs_node_without_timestamps("wide", true, 0))
+    }
+
+    fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
+        if !path.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok((0..self.width)
+            .map(|index| {
+                let name = format!("file-{index:04}.bin");
+                let mut node = fs_node_without_timestamps(name.clone(), false, 1);
+                node.path = name;
+                node
+            })
+            .collect())
+    }
+
+    fn open_file(&self, _path: &str) -> io::Result<Box<dyn io::Read>> {
+        Ok(Box::new(io::Cursor::new(Vec::new())))
+    }
+
+    fn open_file_seekable(&self, _path: &str) -> io::Result<Box<dyn ReadSeek>> {
+        Ok(Box::new(io::Cursor::new(Vec::new())))
+    }
+
+    fn data_source_name(&self) -> &str {
+        "wide"
+    }
+}
+
 fn source_entry_count(connection: &rusqlite::Connection, source_id: &DataSourceId) -> usize {
     FileRepo::new(connection)
         .find_by_data_source(source_id)
@@ -261,4 +297,26 @@ fn worker_factory_failure_returns_without_leaking_entries() {
         .expect("worker factory failure must fail the transaction");
     assert!(error.to_string().contains("factory failed"));
     assert_eq!(source_entry_count(&connection, &source_id), 0);
+}
+
+#[test]
+fn native_enumeration_preserves_children_across_output_batches() {
+    let root = tempfile::tempdir().unwrap();
+    let source_id = DataSourceId("parallel-wide-batch".to_string());
+    let connection = native_source(root.path(), &source_id.0);
+    let factory = Arc::new(|| Ok(Box::new(WideFs { width: 1_500 }) as Box<dyn FileSystemReader>));
+
+    let stats = enumerate_filesystem_parallel_with_factory(
+        &connection,
+        &source_id,
+        4,
+        factory,
+        None,
+        None,
+        None,
+    )
+    .expect("wide directory should enumerate completely");
+
+    assert_eq!(stats.file_count, 1_500);
+    assert_eq!(source_entry_count(&connection, &source_id), 1_501);
 }

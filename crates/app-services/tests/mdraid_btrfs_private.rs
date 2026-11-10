@@ -54,8 +54,10 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
         .find_storage(&source.id)
         .expect("read storage")
         .expect("source storage");
+    let rss_mb = app_services::import_analysis::current_rss_mb();
+    let peak_rss_mb = app_services::import_analysis::peak_rss_mb();
     eprintln!(
-        "MD RAID Btrfs: records={count} elapsed_ms={} state={}",
+        "MD RAID Btrfs: records={count} elapsed_ms={} state={} rss_mb={rss_mb} peak_rss_mb={peak_rss_mb}",
         elapsed.as_millis(),
         storage.import_state
     );

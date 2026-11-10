@@ -4,6 +4,7 @@ use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use evidence_core::{FileSystemDiagnostic, FsNode};
 use infrastructure::constants::FILE_INSERT_BATCH_SIZE;
 use persistence_sqlite::{DbError, DbResult};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -45,6 +46,9 @@ pub(super) struct ParallelBatchProducer<'a> {
     total_size: u64,
     warnings: Vec<String>,
     diagnostics: Vec<FileSystemDiagnostic>,
+    pending_children: VecDeque<FsNode>,
+    current_parent_id: Option<FileEntryId>,
+    current_depth: u32,
     finished: bool,
 }
 
@@ -69,6 +73,9 @@ impl<'a> ParallelBatchProducer<'a> {
             total_size: 0,
             warnings: Vec::new(),
             diagnostics: Vec::new(),
+            pending_children: VecDeque::new(),
+            current_parent_id: None,
+            current_depth: 0,
             finished: false,
         }
     }
@@ -81,10 +88,56 @@ impl<'a> ParallelBatchProducer<'a> {
             return Ok(None);
         }
         let mut batch = Vec::with_capacity(FILE_INSERT_BATCH_SIZE);
-        while batch.len() < FILE_INSERT_BATCH_SIZE {
+        loop {
             if cancellation_requested(self.cancel_token) {
                 self.stop.store(true, Ordering::Release);
                 return Err(DbError::System("Enumeration cancelled".to_string()));
+            }
+            if let Some(child) = self.pending_children.pop_front() {
+                if child.name == "." || child.name == ".." {
+                    continue;
+                }
+                let parent_id = self
+                    .current_parent_id
+                    .as_ref()
+                    .expect("queued children retain their parent")
+                    .clone();
+                let id = FileEntryId(Uuid::new_v4().to_string());
+                if child.is_dir {
+                    let child_depth = checked_child_depth(self.current_depth, &child.path)?;
+                    self.pending = self.pending.saturating_add(1);
+                    self.dirs = self.dirs.saturating_add(1);
+                    self.work_tx
+                        .as_ref()
+                        .expect("parallel work queue remains open while work is pending")
+                        .send(DirectoryWork {
+                            parent_id: id.clone(),
+                            path: child.path.clone(),
+                            depth: child_depth,
+                        })
+                        .map_err(|_| {
+                            DbError::System("Parallel filesystem work queue closed".to_string())
+                        })?;
+                } else {
+                    self.files = self.files.saturating_add(1);
+                    self.total_size = self.total_size.saturating_add(child.size);
+                }
+                batch.push(file_entry_for_child(
+                    data_source_id,
+                    &parent_id,
+                    &id,
+                    &child,
+                ));
+                self.processed = self.processed.saturating_add(1);
+                if self.processed.is_multiple_of(100) {
+                    if let Some(progress_fn) = self.progress_fn {
+                        progress_fn(compute_enumeration_progress(self.processed));
+                    }
+                }
+                if batch.len() == FILE_INSERT_BATCH_SIZE {
+                    break;
+                }
+                continue;
             }
             if self.pending == 0 {
                 self.finished = true;
@@ -111,46 +164,9 @@ impl<'a> ParallelBatchProducer<'a> {
                 self.warnings.push(diagnostic.message.clone());
                 self.diagnostics.push(diagnostic);
             }
-            for child in result.children {
-                if child.name == "." || child.name == ".." {
-                    continue;
-                }
-                let id = FileEntryId(Uuid::new_v4().to_string());
-                if child.is_dir {
-                    let child_depth = checked_child_depth(result.depth, &child.path)?;
-                    self.pending = self.pending.saturating_add(1);
-                    self.dirs = self.dirs.saturating_add(1);
-                    self.work_tx
-                        .as_ref()
-                        .expect("parallel work queue remains open while work is pending")
-                        .send(DirectoryWork {
-                            parent_id: id.clone(),
-                            path: child.path.clone(),
-                            depth: child_depth,
-                        })
-                        .map_err(|_| {
-                            DbError::System("Parallel filesystem work queue closed".to_string())
-                        })?;
-                } else {
-                    self.files = self.files.saturating_add(1);
-                    self.total_size = self.total_size.saturating_add(child.size);
-                }
-                batch.push(file_entry_for_child(
-                    data_source_id,
-                    &result.parent_id,
-                    &id,
-                    &child,
-                ));
-                self.processed = self.processed.saturating_add(1);
-                if self.processed.is_multiple_of(100) {
-                    if let Some(progress_fn) = self.progress_fn {
-                        progress_fn(compute_enumeration_progress(self.processed));
-                    }
-                }
-                if batch.len() == FILE_INSERT_BATCH_SIZE {
-                    break;
-                }
-            }
+            self.current_parent_id = Some(result.parent_id);
+            self.current_depth = result.depth;
+            self.pending_children.extend(result.children);
         }
         if cancellation_requested(self.cancel_token) {
             self.stop.store(true, Ordering::Release);
