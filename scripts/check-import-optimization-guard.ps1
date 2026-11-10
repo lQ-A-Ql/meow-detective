@@ -17,7 +17,7 @@ $numericMergeOwnerPath = Join-Path $repoRoot "crates/persistence-sqlite/src/repo
 $numericMergePath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/ntfs_staging/merge.sql"
 # Import finalization owns the bounded file-activity Timeline projection.
 $pipelineFinalizePath = Join-Path $repoRoot "crates/app-services/src/import_pipeline/phases/finalize.rs"
-$timelineProjectionPath = Join-Path $repoRoot "crates/app-services/src/timeline_service/projection.rs"
+$timelineProjectionPath = Join-Path $repoRoot "crates/app-services/src/timeline_service/projection_fjall.rs"
 # Post-import skip logging lives in the analysis worker pool.
 $workerPoolPath = Join-Path $repoRoot "crates/app-services/src/import_analysis/worker_pool.rs"
 $appStatePath = Join-Path $repoRoot "apps/desktop/src-tauri/src/state/app_state.rs"
@@ -76,10 +76,12 @@ if ($pipelineFinalize -notmatch 'ImportContentKind::Filesystem' -or
   throw "Filesystem imports must finalize the narrowed file-activity Timeline projection before becoming ready"
 }
 foreach ($pattern in @(
-    'const\s+SOURCE_BATCH_SIZE:\s*u32\s*=\s*10_000',
-    'insert_file_activity_batched',
+    'catalog\.list_all\(',
+    'ScanDirection::Forward',
+    '512',
+    'replace_by_parser_prefix_streamed',
     'DataSourcePlatform::Windows',
-    'DataSourcePlatform::Linux'
+    'platform\s*!=\s*DataSourcePlatform::Windows'
   )) {
   if ($timelineProjection -notmatch $pattern) {
     throw "Timeline finalization lost its bounded or platform-specific projection policy: $pattern"

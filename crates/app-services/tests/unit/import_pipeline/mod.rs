@@ -773,7 +773,7 @@ fn image_import_without_supported_filesystem_fails_closed() {
 }
 
 #[test]
-fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
+fn logical_import_post_pipeline_indexes_marker_and_defers_artifact() {
     let tmp = TempDir::new().unwrap();
     let evidence_dir = tmp.path().join("evidence");
     std::fs::create_dir_all(&evidence_dir).unwrap();
@@ -904,11 +904,6 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
             assert_eq!(file_search.items[0].name, "notes.txt");
             assert!(file_search.coverage.complete);
 
-            let artifact_repo = ArtifactRepo::new(&source_conn);
-            assert!(artifact_repo.count()? > 0);
-            let families = artifact_repo.families()?;
-            assert!(families.iter().any(|family| family == "Prefetch"));
-
             let metrics = case_service::get_case_metrics_for_case(
                 conn,
                 &active.case_root,
@@ -918,7 +913,7 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
             assert_eq!(metrics.data_source_count, 1);
             assert!(metrics.indexed_file_count > 0);
             assert!(metrics.timeline_event_count > 0);
-            assert!(metrics.artifact_count > 0);
+            assert_eq!(metrics.artifact_count, 0);
 
             Ok(())
         })

@@ -1007,7 +1007,7 @@ fn analysis_worker_uses_bounded_content_reads_for_each_consumer() {
 }
 
 #[test]
-fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
+fn analysis_artifact_extraction_defers_windows_parser_to_source_analysis() {
     let _hook_guard = TEST_HOOK_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let tmp = TempDir::new().unwrap();
     let raw_path = tmp.path().join("artifact-exfat.raw");
@@ -1051,18 +1051,13 @@ fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
     let stats = run_import_analysis_staging(options, None).unwrap();
 
     assert_eq!(stats.processed_count, 1);
-    assert_eq!(stats.artifact_count, 1);
+    assert_eq!(stats.artifact_count, 0);
     assert_eq!(stats.indexed_count, 1);
     assert_eq!(stats.warning_count, 0);
 
     let main_conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     let artifacts = artifact_service::get_artifact_rows_from_db(&main_conn, None).unwrap();
-    let artifact = artifacts
-        .iter()
-        .find(|artifact| artifact.source_object_id.as_deref() == Some(image_file_name))
-        .expect("persisted RecycleBin artifact");
-    assert_eq!(artifact.artifact_type, "RecycleBin");
-    assert!(artifact.summary.contains("deleted.txt"));
+    assert!(artifacts.is_empty());
 }
 
 #[test]
