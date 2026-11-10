@@ -146,12 +146,14 @@ fn load_persisted_mdraid_arrays(
         .map(|source| {
             let payload = std::fs::read(&source.source_path)?;
             let plan = serde_json::from_slice::<super::mdraid::MdRaidArrayPlan>(&payload)?;
-            if !plan.members.iter().any(|member| {
-                member
-                    .lvm_identity
+            if !plan.members.iter().any(|member| match &member.origin {
+                super::mdraid::MdRaidMemberOrigin::Lvm { identity, .. } => identity
                     .pv_sources
                     .iter()
-                    .any(|pv| member_paths.contains(&pv.source_path))
+                    .any(|pv| member_paths.contains(&pv.source_path)),
+                super::mdraid::MdRaidMemberOrigin::Direct { source_path, .. } => {
+                    member_paths.contains(source_path)
+                }
             }) {
                 return Ok(None);
             }
@@ -170,8 +172,8 @@ fn load_persisted_mdraid_arrays(
                     .into_iter()
                     .map(|member| LinuxMdRaidMemberDto {
                         dev_number: member.superblock.dev_number,
-                        vg_name: member.vg_name,
-                        lv_name: member.lv_name,
+                        vg_name: member.origin.vg_name(),
+                        lv_name: member.origin.lv_name(),
                         data_offset_sectors: member.superblock.data_offset_sectors,
                         data_size_sectors: member.superblock.data_size_sectors,
                         super_offset_sectors: member.superblock.super_offset_sectors,

@@ -1,17 +1,11 @@
-use fs_lvm::mdraid::{read_superblock, MdRaidSuperblock};
-use std::io::{Read, Seek};
-
-const MD_V1_CANDIDATE_OFFSETS: &[u64] = &[4096];
+use fs_lvm::mdraid::{probe_superblock, MdRaidSuperblock};
+use std::io::{Read, Seek, SeekFrom};
 
 pub(super) fn probe_nested_mdraid<R: Read + Seek + ?Sized>(
     reader: &mut R,
 ) -> Option<MdRaidSuperblock> {
-    for offset in MD_V1_CANDIDATE_OFFSETS {
-        if let Ok(superblock) = read_superblock(reader, *offset) {
-            return Some(superblock);
-        }
-    }
-    None
+    let size = reader.seek(SeekFrom::End(0)).ok()?;
+    probe_superblock(reader, size).map(|probe| probe.superblock)
 }
 
 pub(super) fn format_mdraid_candidate(superblock: &MdRaidSuperblock) -> String {

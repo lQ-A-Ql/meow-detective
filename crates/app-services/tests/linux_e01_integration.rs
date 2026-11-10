@@ -17,7 +17,8 @@ use app_services::{
         run_analysis_extraction_with_reader_limits,
     },
     cluster_service::{
-        discover_linux_evidence_set_mdraid, open_mdraid0_reader, plan_linux_evidence_set_import,
+        discover_linux_evidence_set_mdraid, open_mdraid_reader, plan_linux_evidence_set_import,
+        MdRaidMemberOrigin,
     },
     datasource_service::{
         detect_image_filesystem, expand_lvm_pool_candidates,
@@ -3297,24 +3298,40 @@ fn pve_cluster_mdraid_plan_groups_members_across_vgs() {
         vec![0, 1]
     );
     assert!(array.capacity_mismatch);
-    assert_eq!(array.members[0].vg_name, "root");
-    assert_eq!(array.members[0].lv_name, "data");
-    assert_eq!(array.members[1].vg_name, "volum");
-    assert_eq!(array.members[1].lv_name, "root");
+    assert!(matches!(
+        &array.members[0].origin,
+        MdRaidMemberOrigin::Lvm {
+            vg_name,
+            lv_name,
+            ..
+        } if vg_name == "root" && lv_name == "data"
+    ));
+    assert!(matches!(
+        &array.members[1].origin,
+        MdRaidMemberOrigin::Lvm {
+            vg_name,
+            lv_name,
+            ..
+        } if vg_name == "volum" && lv_name == "root"
+    ));
 }
 
 #[test]
 #[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real multi-PV Linux E01 sample directory"]
 fn pve_cluster_mdraid_reader_exposes_btrfs_root() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter("warn,app_services=debug")
+        .with_test_writer()
+        .try_init();
     let root = pve_cluster_root();
     let plan = plan_linux_evidence_set_import(&root, Some("mdraid-btrfs".to_string()))
         .expect("MD RAID evidence set should be planned");
-    let array = discover_linux_evidence_set_mdraid(&plan)
-        .expect("discover MD RAID arrays")
+    let arrays = discover_linux_evidence_set_mdraid(&plan).expect("discover MD RAID arrays");
+    let array = arrays
         .into_iter()
         .find(|array| array.name == "mac:0")
         .expect("mac:0 RAID array should be discovered");
-    let mut reader = open_mdraid0_reader(&array).expect("open MD RAID0 reader");
+    let mut reader = open_mdraid_reader(&array).expect("open MD RAID reader");
     reader
         .seek(std::io::SeekFrom::Start(0x10000 + 0x40))
         .expect("seek to Btrfs superblock magic");

@@ -42,6 +42,7 @@ impl EvidenceReader for MemoryReader {
 
 fn superblock(dev_number: u32) -> MdRaidSuperblock {
     MdRaidSuperblock {
+        metadata_version: MdRaidMetadataVersion::V1_2,
         major_version: 1,
         feature_map: 0,
         array_uuid: [7; 16],
@@ -56,12 +57,51 @@ fn superblock(dev_number: u32) -> MdRaidSuperblock {
         super_offset_sectors: 8,
         dev_number,
         device_uuid: [dev_number as u8; 16],
+        events: 10,
+        recovery_offset_sectors: u64::MAX,
+        resync_offset_sectors: u64::MAX,
+        reshape_position_sectors: u64::MAX,
+        dev_roles: vec![0, 1],
+        checksum_valid: true,
+    }
+}
+
+fn raid_superblock(
+    level: i32,
+    layout: u32,
+    raid_disks: u32,
+    slot: u32,
+    device_uuid: u8,
+    data_size_sectors: u64,
+) -> MdRaidSuperblock {
+    MdRaidSuperblock {
+        metadata_version: MdRaidMetadataVersion::V1_2,
+        major_version: 1,
+        feature_map: 0,
+        array_uuid: [7; 16],
+        name: "test".to_string(),
+        level,
+        layout,
+        size_sectors: data_size_sectors,
+        chunk_sectors: 1,
+        raid_disks,
+        data_offset_sectors: 1,
+        data_size_sectors,
+        super_offset_sectors: 8,
+        dev_number: slot,
+        device_uuid: [device_uuid; 16],
+        events: 10,
+        recovery_offset_sectors: u64::MAX,
+        resync_offset_sectors: u64::MAX,
+        reshape_position_sectors: u64::MAX,
+        dev_roles: (0..raid_disks).map(|slot| slot as u16).collect(),
+        checksum_valid: true,
     }
 }
 
 #[test]
 fn parses_v1_superblock_fields() {
-    let mut bytes = [0u8; 256];
+    let mut bytes = [0u8; 260];
     bytes[0..4].copy_from_slice(&0xa92b4efcu32.to_le_bytes());
     bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
     bytes[16..32].fill(7);
@@ -74,6 +114,11 @@ fn parses_v1_superblock_fields() {
     bytes[136..144].copy_from_slice(&4u64.to_le_bytes());
     bytes[144..152].copy_from_slice(&8u64.to_le_bytes());
     bytes[160..164].copy_from_slice(&1u32.to_le_bytes());
+    bytes[220..224].copy_from_slice(&2u32.to_le_bytes());
+    bytes[256..258].copy_from_slice(&0u16.to_le_bytes());
+    bytes[258..260].copy_from_slice(&1u16.to_le_bytes());
+    let checksum = v1_checksum(&bytes);
+    bytes[216..220].copy_from_slice(&checksum.to_le_bytes());
     let parsed = parse_superblock(&bytes).unwrap();
     assert_eq!(parsed.array_uuid, [7; 16]);
     assert_eq!(parsed.name, "test");
@@ -90,7 +135,7 @@ fn raid0_reader_interleaves_member_chunks() {
     first[1024..1536].fill(b'C');
     second[512..1024].fill(b'B');
     second[1024..1536].fill(b'D');
-    let reader = MdRaid0Reader::open(vec![
+    let reader = MdRaidReader::open(vec![
         MdRaidMember::new(superblock(0), Box::new(MemoryReader::new(first))),
         MdRaidMember::new(superblock(1), Box::new(MemoryReader::new(second))),
     ])
@@ -106,7 +151,7 @@ fn raid0_reader_interleaves_member_chunks() {
 
 #[test]
 fn raid0_reader_rejects_missing_member() {
-    let result = MdRaid0Reader::open(vec![MdRaidMember::new(
+    let result = MdRaidReader::open(vec![MdRaidMember::new(
         superblock(0),
         Box::new(MemoryReader::new(vec![0; 4096])),
     )]);
@@ -123,7 +168,7 @@ fn raid0_reader_uses_unequal_member_tail_zone() {
     second[1024..1536].fill(b'D');
     second[2560..3072].fill(b'E');
     second[3072..3584].fill(b'F');
-    let mut reader = MdRaid0Reader::open(vec![
+    let mut reader = MdRaidReader::open(vec![
         MdRaidMember::new(superblock(0), Box::new(MemoryReader::new(first))),
         MdRaidMember::new(
             MdRaidSuperblock {
@@ -142,4 +187,98 @@ fn raid0_reader_uses_unequal_member_tail_zone() {
     assert_eq!(&output[1536..2048], vec![b'D'; 512].as_slice());
     assert_eq!(&output[4096..4608], vec![b'E'; 512].as_slice());
     assert_eq!(&output[4608..5120], vec![b'F'; 512].as_slice());
+}
+
+#[test]
+fn raid5_reader_reconstructs_a_missing_data_member() {
+    let first = vec![b'A'; 512];
+    let second = vec![b'B'; 512];
+    let parity = first
+        .iter()
+        .zip(&second)
+        .map(|(left, right)| left ^ right)
+        .collect::<Vec<_>>();
+    let mut members = Vec::new();
+    for (slot, payload) in [(0u32, first), (2u32, parity)] {
+        let mut bytes = vec![0u8; 512 + 1024];
+        bytes[512..1024].copy_from_slice(&payload);
+        members.push(MdRaidMember::new(
+            raid_superblock(5, 2, 3, slot, slot as u8 + 1, 2),
+            Box::new(MemoryReader::new(bytes)),
+        ));
+    }
+    let mut reader = MdRaidReader::open(members).unwrap();
+    let mut expected = vec![b'A'; 512];
+    expected.extend_from_slice(&vec![b'B'; 512]);
+    let mut output = vec![0u8; expected.len()];
+    reader.read_exact(&mut output).unwrap();
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn raid6_reader_reconstructs_two_missing_data_members() {
+    let disks = [vec![1u8; 512], vec![2u8; 512], vec![3u8; 512]];
+    let parity = disks.iter().fold(vec![0u8; 512], |mut parity, disk| {
+        for (target, byte) in parity.iter_mut().zip(disk) {
+            *target ^= byte;
+        }
+        parity
+    });
+    let mut q = vec![0u8; 512];
+    for (position, disk) in disks.iter().enumerate() {
+        let coefficient = if position == 0 { 1 } else { 1 << position };
+        for (target, byte) in q.iter_mut().zip(disk) {
+            *target ^= gf_multiply(*byte, coefficient);
+        }
+    }
+    let mut members = Vec::new();
+    for (slot, payload) in [(0u32, disks[0].clone()), (3u32, parity), (4u32, q)] {
+        let mut bytes = vec![0u8; 512 + 1536];
+        bytes[512..1024].copy_from_slice(&payload);
+        members.push(MdRaidMember::new(
+            raid_superblock(6, 5, 5, slot, slot as u8 + 1, 2),
+            Box::new(MemoryReader::new(bytes)),
+        ));
+    }
+    let mut reader = MdRaidReader::open(members).unwrap();
+    let mut output = vec![0u8; 1536];
+    reader.read_exact(&mut output).unwrap();
+    assert_eq!(&output[..512], vec![1u8; 512]);
+    assert_eq!(&output[512..1024], vec![2u8; 512]);
+    assert_eq!(&output[1024..1536], vec![3u8; 512]);
+}
+
+#[test]
+fn raid10_near_two_reads_adjacent_mirrors() {
+    let mut members = Vec::new();
+    for slot in 0..4u32 {
+        let mut bytes = vec![0u8; 512 + 2048];
+        bytes[512..1024].fill(b'A' + slot as u8);
+        bytes[1024..1536].fill(b'E' + slot as u8);
+        members.push(MdRaidMember::new(
+            raid_superblock(10, 0x102, 4, slot, slot as u8 + 1, 4),
+            Box::new(MemoryReader::new(bytes)),
+        ));
+    }
+    let mut reader = MdRaidReader::open(members).unwrap();
+    let mut output = vec![0u8; 1024];
+    reader.read_exact(&mut output).unwrap();
+    assert_eq!(&output[..512], vec![b'A'; 512]);
+    assert_eq!(&output[512..1024], vec![b'C'; 512]);
+}
+
+fn gf_multiply(mut left: u8, mut right: u8) -> u8 {
+    let mut product = 0u8;
+    for _ in 0..8 {
+        if right & 1 != 0 {
+            product ^= left;
+        }
+        let high = left & 0x80;
+        left <<= 1;
+        if high != 0 {
+            left ^= 0x1d;
+        }
+        right >>= 1;
+    }
+    product
 }

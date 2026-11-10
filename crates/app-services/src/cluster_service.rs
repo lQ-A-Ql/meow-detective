@@ -69,9 +69,9 @@ pub use manifest_parser::{
     parse_static_pod_manifests, ManifestContainer, StaticPodManifestSummary,
 };
 pub use mdraid::{
-    discover_linux_evidence_set_mdraid, mdraid_descriptor_path, open_mdraid0_reader,
-    open_persisted_mdraid_reader, write_mdraid_descriptor, MdRaidArrayPlan, MdRaidMemberPlan,
-    MdRaidPlanError,
+    discover_linux_evidence_set_mdraid, mdraid_descriptor_path, open_mdraid_reader,
+    open_persisted_mdraid_reader, write_mdraid_descriptor, MdRaidArrayPlan, MdRaidMemberOrigin,
+    MdRaidMemberPlan, MdRaidPlanError,
 };
 pub use mdraid_materialization::{
     materialize_linux_evidence_set_mdraid, materialize_mdraid_array,

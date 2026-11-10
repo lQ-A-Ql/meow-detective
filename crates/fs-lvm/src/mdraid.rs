@@ -1,13 +1,18 @@
-//! Read-only Linux MD RAID v1 metadata and RAID0 logical reads.
+//! Read-only Linux MD RAID metadata and logical-volume reads.
 
 use std::io::{Read, Seek, SeekFrom};
-use std::path::PathBuf;
 
-use evidence_core::{EvidenceReader, ReaderInfo};
+use evidence_core::EvidenceReader;
+
+mod reader;
+mod v090;
+
+pub use reader::{MdRaidReader, RaidMemberGeometry};
 
 const MD_SB_MAGIC: u32 = 0xa92b4efc;
 const MD_SB_V1_MIN_BYTES: usize = 256;
 const SECTOR_SIZE: u64 = 512;
+const ROLE_MAX: u16 = 0xff00;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MdRaidError {
@@ -42,6 +47,7 @@ pub enum MdRaidError {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MdRaidSuperblock {
+    pub metadata_version: MdRaidMetadataVersion,
     pub major_version: u32,
     pub feature_map: u32,
     pub array_uuid: [u8; 16],
@@ -56,6 +62,27 @@ pub struct MdRaidSuperblock {
     pub super_offset_sectors: u64,
     pub dev_number: u32,
     pub device_uuid: [u8; 16],
+    pub events: u64,
+    pub recovery_offset_sectors: u64,
+    pub resync_offset_sectors: u64,
+    pub reshape_position_sectors: u64,
+    pub dev_roles: Vec<u16>,
+    pub checksum_valid: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MdRaidMetadataVersion {
+    V0_90,
+    V1_0,
+    V1_1,
+    V1_2,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MdRaidSuperblockProbe {
+    pub superblock: MdRaidSuperblock,
+    pub byte_offset: u64,
 }
 
 impl MdRaidSuperblock {
@@ -68,6 +95,19 @@ impl MdRaidSuperblock {
             .checked_mul(SECTOR_SIZE)
             .filter(|value| *value != 0)
             .ok_or(MdRaidError::InvalidChunkSize)
+    }
+
+    pub fn slot_index(&self) -> Option<u32> {
+        let role = *self.dev_roles.get(self.dev_number as usize)?;
+        (role < ROLE_MAX && u32::from(role) < self.raid_disks).then_some(u32::from(role))
+    }
+
+    pub fn is_active_slot(&self) -> bool {
+        self.slot_index().is_some()
+    }
+
+    pub fn is_rebuilding(&self) -> bool {
+        self.recovery_offset_sectors != u64::MAX
     }
 }
 
@@ -83,6 +123,13 @@ impl MdRaidMember {
 }
 
 pub fn parse_superblock(bytes: &[u8]) -> Result<MdRaidSuperblock, MdRaidError> {
+    parse_superblock_version(bytes, MdRaidMetadataVersion::V1_2)
+}
+
+pub fn parse_superblock_version(
+    bytes: &[u8],
+    metadata_version: MdRaidMetadataVersion,
+) -> Result<MdRaidSuperblock, MdRaidError> {
     if bytes.len() < MD_SB_V1_MIN_BYTES {
         return Err(MdRaidError::Truncated);
     }
@@ -98,11 +145,21 @@ pub fn parse_superblock(bytes: &[u8]) -> Result<MdRaidSuperblock, MdRaidError> {
     if level != 0 {
         return Err(MdRaidError::UnsupportedLevel(level));
     }
-    let chunk_sectors = read_u32(bytes, 88)?;
-    if chunk_sectors == 0 {
-        return Err(MdRaidError::InvalidChunkSize);
+    let max_dev = read_u32(bytes, 220)? as usize;
+    let role_end = MD_SB_V1_MIN_BYTES
+        .checked_add(max_dev.checked_mul(2).ok_or(MdRaidError::SizeOverflow)?)
+        .ok_or(MdRaidError::SizeOverflow)?;
+    if bytes.len() < role_end {
+        return Err(MdRaidError::Truncated);
+    }
+    let stored_checksum = read_u32(bytes, 216)?;
+    let computed_checksum = v1_checksum(&bytes[..role_end]);
+    let mut dev_roles = Vec::with_capacity(max_dev);
+    for index in 0..max_dev {
+        dev_roles.push(read_u16(bytes, MD_SB_V1_MIN_BYTES + index * 2)?);
     }
     Ok(MdRaidSuperblock {
+        metadata_version,
         major_version,
         feature_map: read_u32(bytes, 8)?,
         array_uuid: read_array(bytes, 16)?,
@@ -110,13 +167,19 @@ pub fn parse_superblock(bytes: &[u8]) -> Result<MdRaidSuperblock, MdRaidError> {
         level,
         layout: read_u32(bytes, 76)?,
         size_sectors: read_u64(bytes, 80)?,
-        chunk_sectors,
+        chunk_sectors: read_u32(bytes, 88)?,
         raid_disks: read_u32(bytes, 92)?,
         data_offset_sectors: read_u64(bytes, 128)?,
         data_size_sectors: read_u64(bytes, 136)?,
         super_offset_sectors: read_u64(bytes, 144)?,
         dev_number: read_u32(bytes, 160)?,
         device_uuid: read_array(bytes, 168)?,
+        events: read_u64(bytes, 200)?,
+        recovery_offset_sectors: read_u64(bytes, 152)?,
+        resync_offset_sectors: read_u64(bytes, 208)?,
+        reshape_position_sectors: read_u64(bytes, 104)?,
+        dev_roles,
+        checksum_valid: stored_checksum == computed_checksum,
     })
 }
 
@@ -124,228 +187,76 @@ pub fn read_superblock<R: Read + Seek + ?Sized>(
     reader: &mut R,
     offset: u64,
 ) -> Result<MdRaidSuperblock, MdRaidError> {
-    let absolute = offset.checked_add(0).ok_or(MdRaidError::SizeOverflow)?;
-    reader.seek(SeekFrom::Start(absolute))?;
-    let mut bytes = [0u8; MD_SB_V1_MIN_BYTES];
-    reader.read_exact(&mut bytes)?;
-    parse_superblock(&bytes)
+    read_superblock_version(reader, offset, MdRaidMetadataVersion::V1_2)
 }
 
-pub struct MdRaid0Reader {
-    members: Vec<MdRaidMember>,
-    zones: Vec<Raid0Zone>,
-    info: ReaderInfo,
-    chunk_bytes: u64,
-    layout: u32,
-    logical_size: u64,
-    position: u64,
+pub fn read_superblock_version<R: Read + Seek + ?Sized>(
+    reader: &mut R,
+    offset: u64,
+    metadata_version: MdRaidMetadataVersion,
+) -> Result<MdRaidSuperblock, MdRaidError> {
+    reader.seek(SeekFrom::Start(offset))?;
+    let mut header = [0u8; MD_SB_V1_MIN_BYTES];
+    reader.read_exact(&mut header)?;
+    let max_dev = read_u32(&header, 220)? as usize;
+    let role_bytes = max_dev.checked_mul(2).ok_or(MdRaidError::SizeOverflow)?;
+    let mut bytes = vec![0u8; MD_SB_V1_MIN_BYTES + role_bytes];
+    bytes[..MD_SB_V1_MIN_BYTES].copy_from_slice(&header);
+    if role_bytes > 0 {
+        reader.read_exact(&mut bytes[MD_SB_V1_MIN_BYTES..])?;
+    }
+    parse_superblock_version(&bytes, metadata_version)
 }
 
-struct Raid0Zone {
-    logical_start: u64,
-    logical_end: u64,
-    device_start: u64,
-    members: Vec<usize>,
-}
-
-impl MdRaid0Reader {
-    pub fn open(members: Vec<MdRaidMember>) -> Result<Self, MdRaidError> {
-        let first = members.first().ok_or(MdRaidError::EmptyMembers)?;
-        let first_layout = first.superblock.layout;
-        if first.superblock.raid_disks == 0 {
-            return Err(MdRaidError::EmptyMembers);
-        }
-        if members.len() != first.superblock.raid_disks as usize {
-            return Err(MdRaidError::MemberCount {
-                expected: first.superblock.raid_disks,
-                actual: members.len(),
-            });
-        }
-        let chunk_bytes = first.superblock.chunk_bytes()?;
-        let mut by_number = vec![usize::MAX; members.len()];
-        let mut member_sizes = vec![0u64; members.len()];
-        for (index, member) in members.iter().enumerate() {
-            let sb = &member.superblock;
-            if !sb.is_raid0() {
-                return Err(MdRaidError::UnsupportedLevel(sb.level));
-            }
-            if sb.array_uuid != first.superblock.array_uuid
-                || sb.raid_disks != first.superblock.raid_disks
-                || sb.chunk_sectors != first.superblock.chunk_sectors
-                || sb.layout != first.superblock.layout
-            {
-                return Err(MdRaidError::MetadataConflict(
-                    "array UUID, member count, chunk, or layout differs".to_string(),
-                ));
-            }
-            let number =
-                usize::try_from(sb.dev_number).map_err(|_| MdRaidError::NonContiguousMembers)?;
-            if number >= by_number.len() || by_number[number] != usize::MAX {
-                return Err(MdRaidError::NonContiguousMembers);
-            }
-            by_number[number] = index;
-            member_sizes[number] =
-                sb.data_size_sectors / u64::from(sb.chunk_sectors) * u64::from(sb.chunk_sectors);
-            let data_end = sb
-                .data_offset_sectors
-                .checked_add(sb.data_size_sectors)
-                .ok_or(MdRaidError::InvalidDataRange)?
-                .checked_mul(SECTOR_SIZE)
-                .ok_or(MdRaidError::InvalidDataRange)?;
-            if data_end > member.reader.info().size {
-                return Err(MdRaidError::InvalidDataRange);
-            }
-        }
-        if by_number.contains(&usize::MAX) || member_sizes.contains(&0) {
-            return Err(MdRaidError::NonContiguousMembers);
-        }
-        let zones = build_zones(&member_sizes, chunk_bytes, &by_number)?;
-        let logical_size = zones
-            .last()
-            .map(|zone| zone.logical_end)
-            .ok_or(MdRaidError::EmptyMembers)?;
-        let array_id = format_hex(&first.superblock.array_uuid);
-        Ok(Self {
-            members,
-            zones,
-            info: ReaderInfo {
-                path: PathBuf::from(format!("mdraid0://{array_id}")),
-                size: logical_size,
-                kind: "Linux MD RAID0".to_string(),
-            },
-            chunk_bytes,
-            layout: first_layout,
-            logical_size,
-            position: 0,
-        })
-    }
-
-    pub fn logical_size(&self) -> u64 {
-        self.logical_size
-    }
-
-    fn read_at_inner(&mut self, mut logical: u64, mut output: &mut [u8]) -> std::io::Result<usize> {
-        let mut total = 0usize;
-        while !output.is_empty() && logical < self.logical_size {
-            let zone = self
-                .zones
-                .iter()
-                .find(|zone| logical < zone.logical_end)
-                .ok_or_else(|| std::io::Error::other("MD RAID logical offset is outside zones"))?;
-            let zone_logical = logical - zone.logical_start;
-            let stripe = zone_logical / self.chunk_bytes;
-            let within = zone_logical % self.chunk_bytes;
-            let global_stripe = logical / self.chunk_bytes;
-            let member_number = if self.layout_is_original() {
-                (global_stripe as usize) % zone.members.len()
-            } else {
-                (stripe as usize) % zone.members.len()
-            };
-            let member_index = zone.members[member_number];
-            let member = &mut self.members[member_index];
-            let member_chunk = stripe / zone.members.len() as u64;
-            let member_offset = member
-                .superblock
-                .data_offset_sectors
-                .checked_mul(SECTOR_SIZE)
-                .and_then(|base| base.checked_add(zone.device_start))
-                .and_then(|base| base.checked_add(member_chunk.checked_mul(self.chunk_bytes)?))
-                .and_then(|base| base.checked_add(within))
-                .ok_or_else(|| std::io::Error::other("MD RAID offset overflow"))?;
-            let available = (self.chunk_bytes - within)
-                .min(self.logical_size - logical)
-                .min(output.len() as u64) as usize;
-            member.reader.seek(SeekFrom::Start(member_offset))?;
-            member.reader.read_exact(&mut output[..available])?;
-            total += available;
-            logical += available as u64;
-            output = &mut output[available..];
-        }
-        Ok(total)
-    }
-
-    fn layout_is_original(&self) -> bool {
-        self.layout == 1
-    }
-}
-
-fn build_zones(
-    member_sizes: &[u64],
-    chunk_bytes: u64,
-    by_number: &[usize],
-) -> Result<Vec<Raid0Zone>, MdRaidError> {
-    let mut thresholds = member_sizes.to_vec();
-    thresholds.sort_unstable();
-    thresholds.dedup();
-    let mut zones = Vec::new();
-    let mut device_start_sectors = 0u64;
-    let mut logical_start = 0u64;
-    let chunk_sectors = chunk_bytes / SECTOR_SIZE;
-    for threshold in thresholds {
-        let members = member_sizes
-            .iter()
-            .enumerate()
-            .filter_map(|(number, size)| (*size >= threshold).then_some(by_number[number]))
-            .collect::<Vec<_>>();
-        if members.is_empty() || threshold <= device_start_sectors || chunk_sectors == 0 {
+pub fn probe_superblock<R: Read + Seek + ?Sized>(
+    reader: &mut R,
+    device_bytes: u64,
+) -> Option<MdRaidSuperblockProbe> {
+    let sectors = device_bytes / SECTOR_SIZE;
+    let tail_sector = sectors.saturating_sub(16) & !7;
+    let versioned_offsets = [
+        (4096u64, 8u64, MdRaidMetadataVersion::V1_2),
+        (0u64, 0u64, MdRaidMetadataVersion::V1_1),
+        (
+            tail_sector.saturating_mul(SECTOR_SIZE),
+            tail_sector,
+            MdRaidMetadataVersion::V1_0,
+        ),
+    ];
+    for (byte_offset, sector, version) in versioned_offsets {
+        if byte_offset.checked_add(MD_SB_V1_MIN_BYTES as u64)? > device_bytes {
             continue;
         }
-        let zone_sectors = threshold
-            .checked_sub(device_start_sectors)
-            .and_then(|length| length.checked_mul(members.len() as u64))
-            .ok_or(MdRaidError::SizeOverflow)?;
-        let logical_end = logical_start
-            .checked_add(
-                zone_sectors
-                    .checked_mul(SECTOR_SIZE)
-                    .ok_or(MdRaidError::SizeOverflow)?,
-            )
-            .ok_or(MdRaidError::SizeOverflow)?;
-        zones.push(Raid0Zone {
-            logical_start,
-            logical_end,
-            device_start: device_start_sectors * SECTOR_SIZE,
-            members,
-        });
-        logical_start = logical_end;
-        device_start_sectors = threshold;
-    }
-    Ok(zones)
-}
-
-impl Read for MdRaid0Reader {
-    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-        let read = self.read_at_inner(self.position, buffer)?;
-        self.position = self.position.saturating_add(read as u64);
-        Ok(read)
-    }
-}
-
-impl Seek for MdRaid0Reader {
-    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
-        let next = match position {
-            SeekFrom::Start(value) => value,
-            SeekFrom::End(value) => signed_seek(self.logical_size, value)?,
-            SeekFrom::Current(value) => signed_seek(self.position, value)?,
+        let Ok(superblock) = read_superblock_version(reader, byte_offset, version) else {
+            continue;
         };
-        self.position = next;
-        Ok(next)
+        if superblock.checksum_valid
+            && superblock.super_offset_sectors == sector
+            && is_supported_level(superblock.level)
+        {
+            return Some(MdRaidSuperblockProbe {
+                superblock,
+                byte_offset,
+            });
+        }
     }
+    let v090_sector = sectors.checked_sub(128).map(|value| value & !127)?;
+    let v090_offset = v090_sector.checked_mul(SECTOR_SIZE)?;
+    if v090_offset.checked_add(4096)? <= device_bytes {
+        if let Ok(superblock) = v090::read_superblock(reader, v090_offset, v090_sector) {
+            if superblock.checksum_valid && is_supported_level(superblock.level) {
+                return Some(MdRaidSuperblockProbe {
+                    superblock,
+                    byte_offset: v090_offset,
+                });
+            }
+        }
+    }
+    None
 }
 
-impl EvidenceReader for MdRaid0Reader {
-    fn info(&self) -> &ReaderInfo {
-        &self.info
-    }
-}
-
-fn signed_seek(base: u64, offset: i64) -> std::io::Result<u64> {
-    if offset >= 0 {
-        base.checked_add(offset as u64)
-    } else {
-        base.checked_sub(offset.unsigned_abs())
-    }
-    .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "seek outside MD RAID"))
+fn is_supported_level(level: i32) -> bool {
+    matches!(level, -1 | 0 | 1 | 4 | 5 | 6 | 10)
 }
 
 fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, MdRaidError> {
@@ -353,6 +264,14 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, MdRaidError> {
         .get(offset..offset + 4)
         .and_then(|value| value.try_into().ok())
         .map(u32::from_le_bytes)
+        .ok_or(MdRaidError::Truncated)
+}
+
+fn read_u16(bytes: &[u8], offset: usize) -> Result<u16, MdRaidError> {
+    bytes
+        .get(offset..offset + 2)
+        .and_then(|value| value.try_into().ok())
+        .map(u16::from_le_bytes)
         .ok_or(MdRaidError::Truncated)
 }
 
@@ -387,6 +306,29 @@ fn format_hex(bytes: &[u8]) -> String {
         output.push(HEX[(byte & 0x0f) as usize] as char);
     }
     output
+}
+
+pub fn v1_checksum(bytes: &[u8]) -> u32 {
+    let (words, remainder) = bytes.as_chunks::<4>();
+    let mut sum = 0u64;
+    for (index, word) in words.iter().enumerate() {
+        if index != 54 {
+            sum += u64::from(u32::from_le_bytes(*word));
+        }
+    }
+    if let [low, high] = remainder {
+        sum += u64::from(u16::from_le_bytes([*low, *high]));
+    }
+    ((sum & 0xffff_ffff) + (sum >> 32)) as u32
+}
+
+pub(super) fn signed_seek(base: u64, offset: i64) -> std::io::Result<u64> {
+    if offset >= 0 {
+        base.checked_add(offset as u64)
+    } else {
+        base.checked_sub(offset.unsigned_abs())
+    }
+    .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "seek outside MD RAID"))
 }
 
 #[cfg(test)]

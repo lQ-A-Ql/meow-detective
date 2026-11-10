@@ -7,6 +7,7 @@ use fs_lvm::mdraid::MdRaidSuperblock;
 
 fn plan() -> MdRaidArrayPlan {
     let superblock = MdRaidSuperblock {
+        metadata_version: fs_lvm::mdraid::MdRaidMetadataVersion::V1_2,
         major_version: 1,
         feature_map: 0,
         array_uuid: [7; 16],
@@ -21,6 +22,12 @@ fn plan() -> MdRaidArrayPlan {
         super_offset_sectors: 8,
         dev_number: 0,
         device_uuid: [8; 16],
+        events: 10,
+        recovery_offset_sectors: u64::MAX,
+        resync_offset_sectors: u64::MAX,
+        reshape_position_sectors: u64::MAX,
+        dev_roles: vec![0],
+        checksum_valid: true,
     };
     let identity = LvmLogicalVolumeIdentity {
         vg_uuid: "vg-1".to_string(),
@@ -47,11 +54,13 @@ fn plan() -> MdRaidArrayPlan {
         capacity_mismatch: false,
         members: vec![MdRaidMemberPlan {
             superblock,
-            vg_name: "vg".to_string(),
-            vg_uuid: "vg-1".to_string(),
-            lv_name: "lv".to_string(),
-            lv_uuid: "lv-1".to_string(),
-            lvm_identity: identity,
+            origin: app_services::cluster_service::MdRaidMemberOrigin::Lvm {
+                vg_name: "vg".to_string(),
+                vg_uuid: "vg-1".to_string(),
+                lv_name: "lv".to_string(),
+                lv_uuid: "lv-1".to_string(),
+                identity,
+            },
         }],
     }
 }
