@@ -1219,19 +1219,23 @@ fn e01_full_import() {
             let file_count = catalog.len() as i64;
             eprintln!("  File entries: {}", file_count);
             assert!(file_count > 0, "Expected file entries, got 0");
+            let normalized_path = |record: &FileEntryRecord| {
+                record.path.replace('\\', "/").to_ascii_lowercase()
+            };
             let root_system32 = catalog
                 .iter()
                 .filter(|record| {
-                    record.parent_id.is_none()
+                    record.entry_type == persistence_fjall::CatalogEntryType::Directory
                         && record.name.eq_ignore_ascii_case("System32")
+                        && !normalized_path(record).contains("/windows/")
                 })
                 .count() as i64;
             let root_windows = catalog
                 .iter()
                 .filter(|record| {
-                    record.parent_id.is_none()
-                        && record.entry_type == persistence_fjall::CatalogEntryType::Directory
+                    record.entry_type == persistence_fjall::CatalogEntryType::Directory
                         && record.name.eq_ignore_ascii_case("Windows")
+                        && normalized_path(record).ends_with("/windows")
                 })
                 .count() as i64;
             let system_hives = catalog
@@ -1269,7 +1273,10 @@ fn e01_full_import() {
                 let count = catalog
                     .iter()
                     .filter(|record| {
-                        record.parent_id.is_none() && record.name.eq_ignore_ascii_case(expected)
+                        record.name.eq_ignore_ascii_case(expected)
+                            && normalized_path(record).ends_with(
+                                &format!("/{}", expected.to_ascii_lowercase()),
+                            )
                     })
                     .count() as i64;
                 assert!(count >= 1, "Expected modern NTFS name {expected:?}");
@@ -1278,7 +1285,10 @@ fn e01_full_import() {
                 let count = catalog
                     .iter()
                     .filter(|record| {
-                        record.parent_id.is_none() && record.name.eq_ignore_ascii_case(dos_alias)
+                        record.name.eq_ignore_ascii_case(dos_alias)
+                            && normalized_path(record).ends_with(
+                                &format!("/{}", dos_alias.to_ascii_lowercase()),
+                            )
                     })
                     .count() as i64;
                 assert_eq!(count, 0, "Unexpected DOS alias {dos_alias:?}");
