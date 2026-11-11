@@ -1,4 +1,4 @@
-import { Boxes, Database, GitBranch, Network, Server } from 'lucide-react';
+import { Boxes, Database, GitBranch, Network, Server }  from '@/components/icons';
 import type { TFunction } from 'i18next';
 import { MetricCard } from '@/components/data-display';
 import type { InfrastructureGraphNode } from '@/types/models';

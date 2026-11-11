@@ -1,4 +1,4 @@
-import { Activity } from 'lucide-react';
+import { Activity }  from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
 import { StatGrid, MetricCard } from '@/components/data-display';

@@ -1,4 +1,4 @@
-import { Clock, Cpu, Database, HardDrive, Shield, Usb, Wifi } from 'lucide-react';
+import { Clock, Cpu, Database, HardDrive, Shield, Usb, Wifi }  from '@/components/icons';
 
 export const REGISTRY_ANALYSIS_TABS = [
   { key: 'users', labelKey: 'analysis.registry.tabs.users', icon: Shield },

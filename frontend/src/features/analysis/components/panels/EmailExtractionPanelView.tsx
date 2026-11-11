@@ -23,7 +23,7 @@ import {
   ChevronUp,
   Mail,
   Paperclip,
-} from 'lucide-react';
+}  from '@/components/icons';
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 

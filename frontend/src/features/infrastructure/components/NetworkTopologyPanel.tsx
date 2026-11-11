@@ -1,4 +1,4 @@
-import { ChevronRight, Network } from 'lucide-react';
+import { ChevronRight, Network }  from '@/components/icons';
 import type { TFunction } from 'i18next';
 import { EmptyState, PanelFrame } from '@/components/data-display';
 import type { InfrastructureGraphEdge, InfrastructureGraphNode } from '@/types/models';

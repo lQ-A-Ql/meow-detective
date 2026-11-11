@@ -1,4 +1,4 @@
-import { Check, CircleAlert, Minus } from 'lucide-react';
+import { Check, CircleAlert, Minus }  from '@/components/icons';
 import type { TFunction } from 'i18next';
 import { PanelFrame } from '@/components/data-display';
 import { statusLabel, statusVariant, type EvidenceStatus } from '../model/cluster-status-map';

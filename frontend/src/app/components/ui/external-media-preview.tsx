@@ -1,5 +1,5 @@
 import { useState, type ImgHTMLAttributes } from 'react';
-import { AlertTriangle, ImageOff } from 'lucide-react';
+import { AlertTriangle, ImageOff }  from '@/components/icons';
 import { Badge } from './badge';
 import { cn } from './utils';
 

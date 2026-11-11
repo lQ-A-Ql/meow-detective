@@ -1,4 +1,4 @@
-import { Bookmark, Image, Search, UserRoundCheck, UserRoundX } from 'lucide-react';
+import { Bookmark, Image, Search, UserRoundCheck, UserRoundX }  from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';

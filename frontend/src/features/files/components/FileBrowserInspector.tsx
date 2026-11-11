@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Download, History } from 'lucide-react';
+import { Download, History }  from '@/components/icons';
 import { IconButton } from '@/components/controls/IconButton';
 
 import {

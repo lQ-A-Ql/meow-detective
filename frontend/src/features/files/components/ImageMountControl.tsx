@@ -1,4 +1,4 @@
-import { HardDriveDownload } from 'lucide-react';
+import { HardDriveDownload }  from '@/components/icons';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';

@@ -1,4 +1,4 @@
-import { Activity, BarChart3, Shield } from 'lucide-react';
+import { Activity, BarChart3, Shield }  from '@/components/icons';
 import { ImportDataAction } from '@/components/layout/EmptyStateActions';
 import { useTranslation } from 'react-i18next';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';

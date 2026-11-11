@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { ChevronDown, ChevronUp, Terminal } from 'lucide-react';
+import { ChevronDown, ChevronUp, Terminal }  from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import type { useResizableHeight } from '@/hooks/use-resizable-height';

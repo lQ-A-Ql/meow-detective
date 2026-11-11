@@ -1,7 +1,7 @@
 import { memo, useCallback } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle }  from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import type { ApiErrorDto } from '@/types/models';

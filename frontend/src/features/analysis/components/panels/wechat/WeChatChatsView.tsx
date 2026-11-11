@@ -1,4 +1,4 @@
-import { Image, Link, MessageSquare, Mic, Search, Smile, Video } from 'lucide-react';
+import { Image, Link, MessageSquare, Mic, Search, Smile, Video }  from '@/components/icons';
 import { ListRow } from '@/components/lists/ListRow';
 import { useTranslation } from 'react-i18next';
 

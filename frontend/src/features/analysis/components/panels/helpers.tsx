@@ -12,7 +12,7 @@ import {
   Monitor,
   Play,
   Shield,
-} from 'lucide-react';
+}  from '@/components/icons';
 import { Progress } from '@/app/components/ui/progress';
 import { EmptyState, MetricCard, StatGrid } from '@/components/data-display';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';

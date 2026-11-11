@@ -1,6 +1,6 @@
 import { StepRail } from '@/components/wizard/StepRail';
 import { useTranslation } from 'react-i18next';
-import { Monitor, Server, Smartphone } from 'lucide-react';
+import { Monitor, Server, Smartphone }  from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';

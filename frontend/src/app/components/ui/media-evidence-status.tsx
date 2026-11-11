@@ -1,4 +1,4 @@
-import { FileWarning, KeyRound, Link2Off } from 'lucide-react';
+import { FileWarning, KeyRound, Link2Off }  from '@/components/icons';
 import { Badge } from './badge';
 import { cn } from './utils';
 

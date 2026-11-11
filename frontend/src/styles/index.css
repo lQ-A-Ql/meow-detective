@@ -1,5 +1,6 @@
 @import './fonts.css';
 @import './tailwind.css';
+@import '@fortawesome/fontawesome-svg-core/styles.css' layer(base);
 @import './theme.css';
 @import './controls.css';
 @import './workspace.css';

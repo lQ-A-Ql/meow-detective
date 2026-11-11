@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, BarChart3, CheckCircle2, Database } from 'lucide-react';
+import { AlertTriangle, BarChart3, CheckCircle2, Database }  from '@/components/icons';
 import type {
   ReleaseScorecard,
   V2GovernanceSnapshot,

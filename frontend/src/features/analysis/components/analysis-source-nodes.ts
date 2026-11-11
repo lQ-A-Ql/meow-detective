@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { AppWindow,Container,Database,FileClock,FileText,FileX2,Globe,Mail,Monitor,Server,ServerCog,Shield,Smartphone } from 'lucide-react';
+import { AppWindow,Container,Database,FileClock,FileText,FileX2,Globe,Mail,Monitor,Server,ServerCog,Shield,Smartphone }  from '@/components/icons';
 import type { AndroidAnalysisTabKey,AnalysisTabKey,ExtractionCategory,LinuxAnalysisTabKey } from '../types';
 export type SourceTreeNode = {
   labelKey: string;

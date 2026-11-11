@@ -1,5 +1,5 @@
 import { useState, type HTMLAttributes } from 'react';
-import { ImageOff } from 'lucide-react';
+import { ImageOff }  from '@/components/icons';
 import { SvgRenderer } from './svg-renderer';
 import { cn } from './utils';
 

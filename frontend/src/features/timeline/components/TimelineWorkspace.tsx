@@ -1,4 +1,4 @@
-import { Clock, ZoomIn, ZoomOut } from 'lucide-react';
+import { Clock, ZoomIn, ZoomOut }  from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';

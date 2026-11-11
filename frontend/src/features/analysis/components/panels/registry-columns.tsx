@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle }  from '@/components/icons';
 import type {
   InstalledSoftware,
   NetworkProfileEntry,

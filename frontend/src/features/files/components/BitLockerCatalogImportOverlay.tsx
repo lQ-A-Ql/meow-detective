@@ -1,4 +1,4 @@
-import { LoaderCircle } from 'lucide-react';
+import { LoaderCircle }  from '@/components/icons';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Progress } from '@/app/components/ui/progress';
 import type { BitLockerCatalogImportLifecycle } from '@/features/files/hooks/use-bitlocker-volume';

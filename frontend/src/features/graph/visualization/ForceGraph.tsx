@@ -1,4 +1,4 @@
-import { Minus, RotateCcw, Target, Plus } from 'lucide-react';
+import { Minus, RotateCcw, Target, Plus }  from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/app/components/ui/button';

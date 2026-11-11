@@ -1,4 +1,4 @@
-import { Activity, BarChart3, GitBranch, Layers, Shield } from 'lucide-react';
+import { Activity, BarChart3, GitBranch, Layers, Shield }  from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { GraphVisualizationContainer } from '@/features/graph/containers/GraphVisualizationContainer';
 import { MetricCard, StatGrid } from '@/components/data-display';

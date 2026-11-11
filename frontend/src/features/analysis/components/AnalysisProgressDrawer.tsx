@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Activity } from 'lucide-react';
+import { Activity }  from '@/components/icons';
 import { AnalysisExtractionProgress } from '@/features/analysis/components/AnalysisPanels';
 import type { AnalysisExtractionProgressInfo } from '@/features/analysis/types';
 import type { DataSourceSummary } from '@/types/models';

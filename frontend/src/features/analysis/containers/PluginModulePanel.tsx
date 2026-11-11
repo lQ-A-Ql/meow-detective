@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Puzzle } from 'lucide-react';
+import { Puzzle }  from '@/components/icons';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { usePluginFamilyEntries } from '@/features/analysis/hooks';

@@ -1,4 +1,4 @@
-import { GitBranch, Layers } from 'lucide-react';
+import { GitBranch, Layers }  from '@/components/icons';
 import { ImportDataAction } from '@/components/layout/EmptyStateActions';
 import { useTranslation } from 'react-i18next';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';

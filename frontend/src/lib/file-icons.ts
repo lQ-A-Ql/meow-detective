@@ -19,13 +19,13 @@ import {
   FileAudio,
   Database,
   Settings,
-  type LucideIcon,
-} from 'lucide-react';
+  type IconComponent,
+}  from '@/components/icons';
 import { fileIconColor } from '@/design/file-icon-tokens';
 import i18n from '@/i18n';
 
 export interface FileIconInfo {
-  icon: LucideIcon;
+  icon: IconComponent;
   color: string;
 }
 

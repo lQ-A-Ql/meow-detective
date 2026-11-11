@@ -1,4 +1,4 @@
-import { Server } from 'lucide-react';
+import { Server }  from '@/components/icons';
 import { ListRow } from '@/components/lists/ListRow';
 import type { TFunction } from 'i18next';
 

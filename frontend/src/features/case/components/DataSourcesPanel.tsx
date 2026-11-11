@@ -1,4 +1,4 @@
-import { PencilLine, Trash2 } from 'lucide-react';
+import { PencilLine, Trash2 }  from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';

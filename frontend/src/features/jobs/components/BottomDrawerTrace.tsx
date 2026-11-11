@@ -1,4 +1,4 @@
-import { Clock3 } from 'lucide-react';
+import { Clock3 }  from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import type { TraceItem } from '@/types/models';

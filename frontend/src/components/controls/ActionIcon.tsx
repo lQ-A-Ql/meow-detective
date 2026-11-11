@@ -1,26 +1,119 @@
-import { actionIconAssets, type ActionIconName } from '@/assets/icons/actions';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
+import {
+  faArrowLeft,
+  faArrowUp,
+  faCheck,
+  faCheckDouble,
+  faChevronDown,
+  faChevronLeft,
+  faChevronRight,
+  faChevronUp,
+  faCircleInfo,
+  faCircleQuestion,
+  faClock,
+  faClockRotateLeft,
+  faCompress,
+  faCopy,
+  faDownload,
+  faEraser,
+  faExpand,
+  faEye,
+  faEyeSlash,
+  faFile,
+  faFileArrowDown,
+  faFilter,
+  faFloppyDisk,
+  faFolder,
+  faFolderOpen,
+  faHardDrive,
+  faHashtag,
+  faKey,
+  faList,
+  faLock,
+  faLockOpen,
+  faMagnifyingGlass,
+  faMagnifyingGlassMinus,
+  faMagnifyingGlassPlus,
+  faMemory,
+  faPause,
+  faPen,
+  faPlay,
+  faPlug,
+  faPlus,
+  faRotate,
+  faRotateLeft,
+  faShareNodes,
+  faShield,
+  faShieldHalved,
+  faTrashCan,
+  faTriangleExclamation,
+  faUpload,
+  faVolumeHigh,
+  faXmark,
+  faArrowsToDot,
+} from '@fortawesome/free-solid-svg-icons';
 
-/**
- * Action artwork follows the same mechanism as the rail icons: a local SVG used as a CSS mask so
- * the button keeps tinting it with currentColor. The url() must stay quoted - Vite appends an
- * ?import query in dev and an unquoted token would drop the whole mask declaration.
- */
+const actionIcons = {
+  'arrow-up': faArrowUp,
+  'arrow-left': faArrowLeft,
+  'chevron-up': faChevronUp,
+  'chevron-down': faChevronDown,
+  'chevron-left': faChevronLeft,
+  'chevron-right': faChevronRight,
+  close: faXmark,
+  check: faCheck,
+  plus: faPlus,
+  refresh: faRotate,
+  download: faDownload,
+  upload: faUpload,
+  play: faPlay,
+  pause: faPause,
+  save: faFloppyDisk,
+  trash: faTrashCan,
+  pencil: faPen,
+  copy: faCopy,
+  eye: faEye,
+  'eye-off': faEyeSlash,
+  'hard-drive': faHardDrive,
+  'folder-open': faFolderOpen,
+  folder: faFolder,
+  file: faFile,
+  hash: faHashtag,
+  'hash-md5': faHashtag,
+  'hash-sha1': faHashtag,
+  'hash-sha256': faHashtag,
+  'hash-sm3': faHashtag,
+  filter: faFilter,
+  history: faClockRotateLeft,
+  restore: faRotateLeft,
+  lock: faLock,
+  unlock: faLockOpen,
+  erase: faEraser,
+  plug: faPlug,
+  volume: faVolumeHigh,
+  help: faCircleQuestion,
+  'select-all': faCheckDouble,
+  info: faCircleInfo,
+  warning: faTriangleExclamation,
+  search: faMagnifyingGlass,
+  shield: faShield,
+  'shield-check': faShieldHalved,
+  clock: faClock,
+  list: faList,
+  maximize: faExpand,
+  minimize: faCompress,
+  'zoom-in': faMagnifyingGlassPlus,
+  'zoom-out': faMagnifyingGlassMinus,
+  fit: faArrowsToDot,
+  share: faShareNodes,
+  'file-download': faFileArrowDown,
+  key: faKey,
+  memory: faMemory,
+} as const satisfies Record<string, IconDefinition>;
+
+export type ActionIconName = keyof typeof actionIcons;
+
 export function ActionIcon({ name, className = 'size-[15px]' }: { name: ActionIconName; className?: string }) {
-  const mask = `url("${actionIconAssets[name]}")`;
-  return (
-    <span
-      aria-hidden="true"
-      className={`inline-block shrink-0 bg-current ${className}`}
-      style={{
-        maskImage: mask,
-        WebkitMaskImage: mask,
-        maskRepeat: 'no-repeat',
-        WebkitMaskRepeat: 'no-repeat',
-        maskPosition: 'center',
-        WebkitMaskPosition: 'center',
-        maskSize: 'contain',
-        WebkitMaskSize: 'contain',
-      }}
-    />
-  );
+  return <FontAwesomeIcon icon={actionIcons[name]} className={`shrink-0 ${className}`} />;
 }

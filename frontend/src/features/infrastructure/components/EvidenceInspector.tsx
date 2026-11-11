@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { X }  from '@/components/icons';
 import type { TFunction } from 'i18next';
 import { Button } from '@/app/components/ui/button';
 import { KeyValueField, PanelFrame } from '@/components/data-display';

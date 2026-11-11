@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw }  from '@/components/icons';
 /**
  * DenseDataTable - 密集数据表格组件 (性能优化版)
  *

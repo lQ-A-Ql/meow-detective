@@ -1,4 +1,4 @@
-import { Archive, Monitor, Server, Folder, Database, HardDrive } from 'lucide-react';
+import { Archive, Monitor, Server, Folder, Database, HardDrive }  from '@/components/icons';
 import i18n from '@/i18n';
 import type { DataSourceSummary } from '@/types/models';
 

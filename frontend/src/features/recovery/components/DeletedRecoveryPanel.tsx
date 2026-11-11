@@ -1,4 +1,4 @@
-import { LoaderCircle, Search, X } from 'lucide-react';
+import { LoaderCircle, Search, X }  from '@/components/icons';
 import { digestIconNameForHash } from '@/lib/digest-icon';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';

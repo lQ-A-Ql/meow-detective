@@ -1,4 +1,4 @@
-import { Bookmark, ContactRound, FileSearch, Image, Images, LoaderCircle, MessageCircle } from 'lucide-react';
+import { Bookmark, ContactRound, FileSearch, Image, Images, LoaderCircle, MessageCircle }  from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import type { WeChatWorkspaceModel, WeChatWorkspaceView } from '@/features/analysis/wechat/types';

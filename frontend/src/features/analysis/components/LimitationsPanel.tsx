@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle }  from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import type { KnownLimitation } from '@/types/models';
 

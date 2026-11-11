@@ -1,5 +1,5 @@
 import { Children, isValidElement } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import type { IconComponent }  from '@/components/icons';
 import type { ReactNode } from 'react';
 import { cn } from '@/app/components/ui/utils';
 
@@ -7,7 +7,7 @@ export interface MetricCardProps {
   label: ReactNode;
   value: ReactNode;
   subtitle?: ReactNode;
-  icon?: LucideIcon;
+  icon?: IconComponent;
   mono?: boolean;
   align?: 'left' | 'center';
   size?: 'sm' | 'md' | 'lg';

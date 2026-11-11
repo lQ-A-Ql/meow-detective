@@ -1,7 +1,7 @@
 import {
   LoaderCircle,
   Power,
-} from 'lucide-react';
+}  from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { SidebarIcon } from '@/components/navigation/SidebarIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';

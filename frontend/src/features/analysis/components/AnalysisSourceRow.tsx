@@ -1,4 +1,4 @@
-import { Puzzle } from 'lucide-react';
+import { Puzzle }  from '@/components/icons';
 import { TreeRow } from '@/components/tree/TreeRow';
 import { useTranslation } from 'react-i18next';
 

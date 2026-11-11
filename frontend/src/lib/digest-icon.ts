@@ -1,4 +1,4 @@
-import type { ActionIconName } from '@/assets/icons/actions';
+import type { ActionIconName } from '@/components/controls/ActionIcon';
 
 /** One place that decides which drawn hash icon an algorithm uses. */
 export function digestIconName(algorithm: string): ActionIconName {

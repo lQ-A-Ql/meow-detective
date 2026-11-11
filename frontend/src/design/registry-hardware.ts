@@ -1,4 +1,4 @@
-import { Cpu, MemoryStick, Monitor, CircuitBoard, Microchip } from 'lucide-react';
+import { Cpu, MemoryStick, Monitor, CircuitBoard, Microchip }  from '@/components/icons';
 
 export const REGISTRY_HARDWARE_GROUPS = [
   { kind: 'cpu', icon: Cpu }, { kind: 'gpu', icon: Monitor }, { kind: 'ram', icon: MemoryStick },

@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, HardDrive } from 'lucide-react';
+import { Download, HardDrive }  from '@/components/icons';
 import {
   ContextMenu,
   ContextMenuContent,

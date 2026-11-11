@@ -1,4 +1,4 @@
-import { Activity } from 'lucide-react';
+import { Activity }  from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import type { TFunction } from 'i18next';

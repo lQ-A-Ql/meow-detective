@@ -1,6 +1,6 @@
 
 import type { TFunction } from 'i18next';
-import { HardDrive } from 'lucide-react';
+import { HardDrive }  from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { EmptyState, PanelFrame } from '@/components/data-display';
 import type { InfrastructureGraphNode } from '@/types/models';

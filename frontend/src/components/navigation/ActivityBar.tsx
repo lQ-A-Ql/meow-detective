@@ -45,7 +45,7 @@ function RailItem({ link, model }: { link: NavigationLink; model: NavigationMode
         className={cn(railItemClass, 'focus-visible:outline-none', isActive && 'text-forensics-red-ink')}
       >
         <span className={cn(railDiscClass, isActive && railActiveDiscClass)}>
-          <SidebarIcon name={iconByPage[link.page]} selected={isActive} className="size-[21px]" />
+          <SidebarIcon name={iconByPage[link.page]} className="size-[21px]" />
         </span>
       </NavLink>
     </Tooltip>
@@ -93,7 +93,7 @@ export function ActivityBar({
             className={railItemClass}
           >
             <span className={cn(railDiscClass, isSettings && railActiveDiscClass)}>
-              <SidebarIcon name="settings" selected={isSettings} className="size-[21px]" />
+              <SidebarIcon name="settings" className="size-[21px]" />
             </span>
           </Button>
         </Tooltip>

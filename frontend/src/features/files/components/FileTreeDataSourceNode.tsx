@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Monitor, ChevronDown, ChevronRight } from 'lucide-react';
+import { Monitor, ChevronDown, ChevronRight }  from '@/components/icons';
 import type { FileTreeNode, DataSourceSummary } from '@/types/models';
 import { sourceKindLabel, sourceKindIcon } from '@/lib/data-source-utils';
 

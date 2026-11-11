@@ -1,4 +1,4 @@
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle }  from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import type { DrawerIssue } from '@/features/jobs/model/bottom-drawer-model';

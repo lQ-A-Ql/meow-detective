@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import { Database, ShieldAlert } from 'lucide-react';
+import { Database, ShieldAlert }  from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Button } from '@/app/components/ui/button';
 import { PanelFrame } from '@/components/data-display';

@@ -1,7 +1,7 @@
 import type { useCorrelationWorkspaceModel } from '../use-correlation-workspace-model';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { GitBranch, Link2, ListFilter, Network, Search } from 'lucide-react';
+import { GitBranch, Link2, ListFilter, Network, Search }  from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';

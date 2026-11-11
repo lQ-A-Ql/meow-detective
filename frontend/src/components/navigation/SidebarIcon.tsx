@@ -1,48 +1,39 @@
-import { sidebarIconAssets, sidebarSelectedIconAssets } from '@/assets/icons/sidebar';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
+import {
+  faChartLine,
+  faChartPie,
+  faClipboardCheck,
+  faComputer,
+  faCubes,
+  faFileLines,
+  faFolderTree,
+  faGear,
+  faHouse,
+  faListCheck,
+  faMagnifyingGlass,
+  faNetworkWired,
+  faTimeline,
+} from '@fortawesome/free-solid-svg-icons';
 
-export type SidebarIconName =
-  | 'home'
-  | 'files'
-  | 'emulation'
-  | 'analysis'
-  | 'infrastructure'
-  | 'v2'
-  | 'v3'
-  | 'search'
-  | 'timeline'
-  | 'artifacts'
-  | 'reports'
-  | 'settings'
-  | 'jobs';
+const sidebarIcons = {
+  home: faHouse,
+  files: faFolderTree,
+  emulation: faComputer,
+  analysis: faChartLine,
+  infrastructure: faNetworkWired,
+  v2: faClipboardCheck,
+  v3: faChartPie,
+  search: faMagnifyingGlass,
+  timeline: faTimeline,
+  artifacts: faCubes,
+  reports: faFileLines,
+  settings: faGear,
+  jobs: faListCheck,
+} as const satisfies Record<string, IconDefinition>;
 
-/**
- * The activity bar icons are local SVG assets used as CSS masks, so the artwork stays in the
- * asset folder and the rail can tint it with currentColor.
- *
- * The url() value MUST be quoted: Vite appends a `?import` query to dev asset URLs, and an
- * unquoted CSS <url> token cannot contain "?", so the browser would drop the whole
- * mask-image declaration and the span would paint its background as a solid block.
- */
-export function SidebarIcon({ name, selected = false, className = '' }: { name: SidebarIconName; selected?: boolean; className?: string }) {
-  const selectedAsset = selected ? sidebarSelectedIconAssets[name] : undefined;
-  const mask = `url("${selectedAsset ?? sidebarIconAssets[name]}")`;
-  return (
-    <span
-      aria-hidden="true"
-      data-slot="sidebar-icon"
-      data-icon={name}
-      data-inverse={selectedAsset ? 'true' : undefined}
-      className={`inline-block shrink-0 bg-current ${className}`}
-      style={{
-        maskImage: mask,
-        WebkitMaskImage: mask,
-        maskRepeat: 'no-repeat',
-        WebkitMaskRepeat: 'no-repeat',
-        maskPosition: 'center',
-        WebkitMaskPosition: 'center',
-        maskSize: 'contain',
-        WebkitMaskSize: 'contain',
-      }}
-    />
-  );
+export type SidebarIconName = keyof typeof sidebarIcons;
+
+export function SidebarIcon({ name, className = '' }: { name: SidebarIconName; className?: string }) {
+  return <FontAwesomeIcon icon={sidebarIcons[name]} className={`shrink-0 ${className}`} />;
 }

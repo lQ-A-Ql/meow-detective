@@ -19,7 +19,7 @@ import {
   Video,
   SkipBack,
   SkipForward,
-} from 'lucide-react';
+}  from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
 import { useTranslation } from 'react-i18next';

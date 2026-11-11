@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, CheckCircle2, Database, Shield } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Database, Shield }  from '@/components/icons';
 import { MetricCard } from '@/components/data-display';
 import type {
   ErrorTaxonomyEntry,

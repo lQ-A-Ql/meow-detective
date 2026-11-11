@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Gauge, Target, Database } from 'lucide-react';
+import { Gauge, Target, Database }  from '@/components/icons';
 import type {
   BenchmarkRequiredCheck,
   BenchmarkSummary,

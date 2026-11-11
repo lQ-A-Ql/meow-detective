@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw }  from '@/components/icons';
 import { TableCell, TableRow } from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
 

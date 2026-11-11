@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { FileText } from 'lucide-react';
+import { FileText }  from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
