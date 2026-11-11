@@ -23,6 +23,31 @@ impl TimelineRecordStore {
         Ok(())
     }
 
+    pub fn upsert_batch_independent(
+        &self,
+        records: &[TimelineRecord],
+        mode: PersistMode,
+    ) -> Result<()> {
+        if records.is_empty() {
+            return Ok(());
+        }
+        let mut actions = Vec::with_capacity(records.len().saturating_mul(8));
+        for record in records {
+            validate_record(record)?;
+            let record_key = record_key(&record.data_source_id, &record.id)?;
+            actions.push(record_action(record)?);
+            for index in index_keys(record)? {
+                actions.push(WriteAction::Put {
+                    keyspace: KeyspaceName::TimelineIndexes,
+                    key: index,
+                    value: record_key.clone(),
+                });
+            }
+        }
+        self.source_store.database().write_batch(&actions, mode)?;
+        Ok(())
+    }
+
     pub fn delete_by_source_object_where<F>(
         &self,
         source_id: &str,

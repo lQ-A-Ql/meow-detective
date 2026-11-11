@@ -20,6 +20,38 @@ impl ArtifactRecordStore {
         Ok(())
     }
 
+    pub fn upsert_batch_independent(
+        &self,
+        records: &[ArtifactRecord],
+        mode: PersistMode,
+    ) -> Result<()> {
+        if records.is_empty() {
+            return Ok(());
+        }
+        let mut actions = Vec::with_capacity(records.len().saturating_mul(4));
+        for record in records {
+            validate(record)?;
+            let payload = serde_json::to_vec(record)
+                .map_err(|error| crate::FjallStorageError::Serialization(error.to_string()))?;
+            let envelope = VersionedEnvelope::new(
+                RECORD_KIND,
+                SCHEMA_VERSION,
+                &record.id,
+                &record.data_source_id,
+                1,
+                payload,
+            );
+            actions.push(WriteAction::Put {
+                keyspace: KeyspaceName::ArtifactRecords,
+                key: record_key(&record.data_source_id, &record.id)?,
+                value: envelope.encode()?,
+            });
+            actions.extend(index_writes(record)?);
+        }
+        self.source_store.database().write_batch(&actions, mode)?;
+        Ok(())
+    }
+
     pub fn delete_by_source_object_where<F>(
         &self,
         source_id: &str,

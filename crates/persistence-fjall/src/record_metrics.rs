@@ -62,6 +62,20 @@ pub(crate) fn append(
     Ok(())
 }
 
+pub(crate) fn set(
+    actions: &mut Vec<WriteAction>,
+    domain: &str,
+    source: Option<&str>,
+    value: u64,
+) -> Result<()> {
+    actions.push(WriteAction::Put {
+        keyspace: KeyspaceName::Meta,
+        key: key(domain, source)?,
+        value: value.to_be_bytes().to_vec(),
+    });
+    Ok(())
+}
+
 pub(crate) fn revision(snapshot: &SourceReadSnapshot, domain: &str) -> Result<u64> {
     read(snapshot, &encode_key(&format!("{domain}.revision"), &[])?)
 }

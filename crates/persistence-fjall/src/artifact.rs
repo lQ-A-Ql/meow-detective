@@ -46,6 +46,48 @@ impl ArtifactRecordStore {
     pub fn count(&self, snapshot: &SourceReadSnapshot, source: Option<&str>) -> Result<u64> {
         crate::record_metrics::count(snapshot, "artifact", source)
     }
+    pub fn rebuild_metrics_for_source(&self, source_id: &str, mode: PersistMode) -> Result<()> {
+        let snapshot = self.read_snapshot();
+        let previous_source = crate::record_metrics::count(&snapshot, "artifact", Some(source_id))?;
+        let previous_total = crate::record_metrics::count(&snapshot, "artifact", None)?;
+        let mut record_count = 0u64;
+        let mut cursor = None;
+        loop {
+            let page = self.list_by_source(
+                &snapshot,
+                source_id,
+                cursor.as_deref(),
+                ScanDirection::Forward,
+                512,
+            )?;
+            record_count = record_count.saturating_add(page.records.len() as u64);
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                break;
+            }
+        }
+        let mut actions = Vec::new();
+        crate::record_metrics::set(&mut actions, "artifact", Some(source_id), record_count)?;
+        crate::record_metrics::set(
+            &mut actions,
+            "artifact",
+            None,
+            previous_total
+                .checked_sub(previous_source)
+                .ok_or_else(|| {
+                    FjallStorageError::InvalidEnvelope(
+                        "artifact aggregate count is smaller than its source count".into(),
+                    )
+                })?
+                .checked_add(record_count)
+                .ok_or_else(|| {
+                    FjallStorageError::InvalidEnvelope("artifact aggregate count overflowed".into())
+                })?,
+        )?;
+        actions.push(self.revision_action(&snapshot)?);
+        self.source_store.database().write_batch(&actions, mode)?;
+        Ok(())
+    }
     pub fn cursor_revision(&self, snapshot: &SourceReadSnapshot) -> Result<u64> {
         let key = encode_key("artifact.revision", &[])?;
         let Some(value) = snapshot.get(KeyspaceName::Meta, &key)? else {

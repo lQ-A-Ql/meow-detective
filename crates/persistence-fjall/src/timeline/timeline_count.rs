@@ -80,6 +80,17 @@ impl TimelineRecordStore {
             });
         }
         actions.push(count_schema_marker_action(source_id)?);
+        let revision = self
+            .cursor_revision(&snapshot)?
+            .checked_add(1)
+            .ok_or_else(|| {
+                FjallStorageError::InvalidEnvelope("timeline revision overflowed".into())
+            })?;
+        actions.push(WriteAction::Put {
+            keyspace: KeyspaceName::Meta,
+            key: super::revision_key("timeline")?,
+            value: revision.to_be_bytes().to_vec(),
+        });
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(())
     }

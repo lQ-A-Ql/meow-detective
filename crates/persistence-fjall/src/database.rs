@@ -101,25 +101,26 @@ impl SingleWriterTxDatabase {
     ) -> Result<WriteBatchReceipt> {
         let batch_digest = digest_actions(actions);
         let receipt_key = [b"batch/".as_slice(), batch_digest.as_slice()].concat();
-        let mut transaction = self.inner.engine.write_tx().durability(Some(mode.into()));
+        let database = self.inner.engine.inner().clone();
+        let mut batch = database.batch().durability(Some(mode.into()));
         for action in actions {
             match action {
                 WriteAction::Put {
                     keyspace,
                     key,
                     value,
-                } => transaction.insert(self.keyspace(*keyspace), key.clone(), value.clone()),
+                } => batch.insert(self.keyspace(*keyspace).inner(), key.clone(), value.clone()),
                 WriteAction::Delete { keyspace, key } => {
-                    transaction.remove(self.keyspace(*keyspace), key.clone())
+                    batch.remove(self.keyspace(*keyspace).inner(), key.clone())
                 }
             }
         }
-        transaction.insert(
-            self.keyspace(KeyspaceName::Batches),
+        batch.insert(
+            self.keyspace(KeyspaceName::Batches).inner(),
             receipt_key,
             actions.len().to_be_bytes().to_vec(),
         );
-        transaction.commit()?;
+        batch.commit()?;
         Ok(WriteBatchReceipt {
             operation_count: actions.len(),
             batch_digest,
