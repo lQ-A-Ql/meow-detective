@@ -30,22 +30,8 @@ fn auto_extract_platform_artifacts(
     source_conn: &rusqlite::Connection,
     mut message: String,
 ) -> Result<String, CommandError> {
-    let should_run = matches!(
-        ctx.import_config.platform,
-        domain::DataSourcePlatform::Linux | domain::DataSourcePlatform::Windows
-    ) && matches!(
-        ctx.content_kind,
-        crate::import_pipeline::context::ImportContentKind::Filesystem
-    ) && ctx.import_config.import_set.is_none()
-        && !ctx.options.defer_linux_artifacts
-        && !ctx.options.cancel_token.load(Ordering::Relaxed);
-    if !should_run {
+    let Some((platform_label, categories)) = analysis_plan(ctx) else {
         return Ok(message);
-    }
-    let platform_label = match ctx.import_config.platform {
-        domain::DataSourcePlatform::Linux => "Linux",
-        domain::DataSourcePlatform::Windows => "Windows",
-        _ => unreachable!("platform was checked above"),
     };
     ctx.report_job_progress(
         96,
@@ -55,59 +41,22 @@ fn auto_extract_platform_artifacts(
     if let Some(source) = &ctx.runtime {
         runtime = runtime.with_publication(source.publication_lease());
     }
-    let categories = match ctx.import_config.platform {
-        domain::DataSourcePlatform::Linux => &["LinuxArtifacts"][..],
-        domain::DataSourcePlatform::Windows => {
-            &["Registry", "BrowserHistory", "Email", "EventLogs"][..]
-        }
-        _ => unreachable!("platform was checked above"),
-    };
     let analysis_started = Instant::now();
-    let mut last_phase = None;
     let event_sink = ctx.event_sink();
     let job_id = ctx.job_id.0.as_str();
-    let mut audit_progress = |progress: transport::dto::AnalysisExtractionProgressDto| {
-        if last_phase != Some(progress.phase) {
-            last_phase = Some(progress.phase);
-            super::emit::emit_job_progress(
-                event_sink,
-                job_id,
-                96,
-                &format!(
-                    "analysis-audit: phase={:?} elapsedMs={}",
-                    progress.phase,
-                    analysis_started.elapsed().as_millis()
-                ),
-            );
-        }
-        if progress.phase == transport::dto::AnalysisExtractionPhaseDto::Completed {
-            super::emit::emit_job_progress(
-                event_sink,
-                job_id,
-                96,
-                &format!(
-                    "analysis-audit: category={} candidates={} processed={} artifacts={} timeline={} checkpoints={} elapsedMs={}",
-                    progress.category,
-                    progress.total_candidates,
-                    progress.processed_candidates,
-                    progress.artifact_count,
-                    progress.timeline_event_count,
-                    progress.checkpoint_hit_count,
-                    analysis_started.elapsed().as_millis()
-                ),
-            );
-        }
-    };
+    let mut audit_progress = AnalysisAuditProgress::new(event_sink, job_id, analysis_started);
     let run = crate::analysis_service::run_import_source_extraction(
-        ctx.conn,
-        ctx.case_root,
-        ctx.case_id,
-        &data_source.id,
-        categories,
-        &runtime,
-        ctx.options.cancel_token.clone(),
-        job_id,
-        &mut audit_progress,
+        crate::analysis_service::ImportSourceExtractionRequest {
+            case_conn: ctx.conn,
+            case_root: ctx.case_root,
+            case_id: ctx.case_id,
+            source: &data_source.id,
+            categories,
+            runtime: &runtime,
+            cancel_token: ctx.options.cancel_token.clone(),
+            run_id: job_id,
+        },
+        |progress| audit_progress.emit(progress),
     );
     match run {
         Ok(execution) => {
@@ -165,4 +114,82 @@ fn auto_extract_platform_artifacts(
         }
     }
     Ok(message)
+}
+
+fn analysis_plan(ctx: &ImportJobContext<'_>) -> Option<(&'static str, &'static [&'static str])> {
+    let should_run = matches!(
+        ctx.import_config.platform,
+        domain::DataSourcePlatform::Linux | domain::DataSourcePlatform::Windows
+    ) && matches!(
+        ctx.content_kind,
+        crate::import_pipeline::context::ImportContentKind::Filesystem
+    ) && ctx.import_config.import_set.is_none()
+        && !ctx.options.defer_linux_artifacts
+        && !ctx.options.cancel_token.load(Ordering::Relaxed);
+    if !should_run {
+        return None;
+    }
+    match ctx.import_config.platform {
+        domain::DataSourcePlatform::Linux => Some(("Linux", &["LinuxArtifacts"][..])),
+        domain::DataSourcePlatform::Windows => Some((
+            "Windows",
+            &["Registry", "BrowserHistory", "Email", "EventLogs"][..],
+        )),
+        _ => unreachable!("platform was checked above"),
+    }
+}
+
+struct AnalysisAuditProgress<'a> {
+    event_sink: Option<&'a dyn super::emit::ImportEventSink>,
+    job_id: &'a str,
+    started: Instant,
+    last_phase: Option<transport::dto::AnalysisExtractionPhaseDto>,
+}
+
+impl<'a> AnalysisAuditProgress<'a> {
+    fn new(
+        event_sink: Option<&'a dyn super::emit::ImportEventSink>,
+        job_id: &'a str,
+        started: Instant,
+    ) -> Self {
+        Self {
+            event_sink,
+            job_id,
+            started,
+            last_phase: None,
+        }
+    }
+
+    fn emit(&mut self, progress: transport::dto::AnalysisExtractionProgressDto) {
+        if self.last_phase != Some(progress.phase) {
+            self.last_phase = Some(progress.phase);
+            super::emit::emit_job_progress(
+                self.event_sink,
+                self.job_id,
+                96,
+                &format!(
+                    "analysis-audit: phase={:?} elapsedMs={}",
+                    progress.phase,
+                    self.started.elapsed().as_millis()
+                ),
+            );
+        }
+        if progress.phase == transport::dto::AnalysisExtractionPhaseDto::Completed {
+            super::emit::emit_job_progress(
+                self.event_sink,
+                self.job_id,
+                96,
+                &format!(
+                    "analysis-audit: category={} candidates={} processed={} artifacts={} timeline={} checkpoints={} elapsedMs={}",
+                    progress.category,
+                    progress.total_candidates,
+                    progress.processed_candidates,
+                    progress.artifact_count,
+                    progress.timeline_event_count,
+                    progress.checkpoint_hit_count,
+                    self.started.elapsed().as_millis()
+                ),
+            );
+        }
+    }
 }

@@ -70,6 +70,46 @@ impl<'a> ArtifactRepo<'a> {
         self.list_by_family_after_with_snapshot(family, after, None, limit)
     }
 
+    pub fn list_by_family_created_window(
+        &self,
+        family: &str,
+        offset: u64,
+        limit: u32,
+    ) -> DbResult<Vec<Artifact>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let requested = offset
+            .checked_add(u64::from(limit))
+            .ok_or_else(|| crate::DbError::System("artifact page range overflowed".into()))?;
+        let mut after = None;
+        let mut skipped = 0u64;
+        let mut artifacts = Vec::with_capacity(limit as usize);
+        loop {
+            let remaining = requested.saturating_sub(skipped + artifacts.len() as u64);
+            if remaining == 0 {
+                return Ok(artifacts);
+            }
+            let page_limit = remaining.min(u64::from(MAX_ARTIFACT_PAGE_SIZE)) as u32;
+            let page = self.list_by_family_after(Some(family), after.as_ref(), page_limit)?;
+            let page_len = page.len();
+            for row in page {
+                after = Some(row.sort_key);
+                if skipped < offset {
+                    skipped = skipped.saturating_add(1);
+                    continue;
+                }
+                if artifacts.len() >= limit as usize {
+                    return Ok(artifacts);
+                }
+                artifacts.push(row.artifact);
+            }
+            if page_len < page_limit as usize {
+                return Ok(artifacts);
+            }
+        }
+    }
+
     pub fn count_for_family(&self, family: Option<&str>) -> DbResult<u64> {
         self.count_for_family_with_snapshot(family, None)
     }

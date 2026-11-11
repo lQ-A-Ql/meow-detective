@@ -14,7 +14,6 @@ pub(super) enum Order {
     Created,
     Event,
     Id,
-    Line,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -132,7 +131,6 @@ fn key(artifact: &Artifact, order: Order) -> Key {
             -i128::from(integer(artifact.attrs.get("recordId"))),
         ),
         Order::Id => (None, 0),
-        Order::Line => (None, i128::from(integer(artifact.attrs.get("lineNumber")))),
     };
     Key(Reverse(time), sequence, artifact.id.0.clone())
 }
@@ -151,7 +149,7 @@ pub(super) fn host_config(artifact: &Artifact, kind: &str) -> bool {
             .is_none_or(Value::is_null)
 }
 
-fn row(artifact: Artifact) -> AnalysisArtifactRow {
+pub(super) fn row(artifact: Artifact) -> AnalysisArtifactRow {
     AnalysisArtifactRow {
         id: artifact.id.0,
         source_object_id: artifact.source_object_id.map(|id| id.0),

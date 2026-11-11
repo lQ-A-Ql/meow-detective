@@ -96,12 +96,49 @@ pub fn get_source_evtx_summary(
     let source = open_for_capability(case_conn, case_root, case_id, data_source_id, "EventLogs")?;
     get_evtx_event_summary(&source.connection, view, offset, limit)
 }
-paged_summary!(
-    get_source_linux_summary,
-    "LinuxArtifacts",
-    LinuxArtifactSummaryDto,
-    get_linux_artifact_summary
-);
+pub fn get_source_linux_summary(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    offset: u64,
+    limit: u32,
+) -> Result<LinuxArtifactSummaryDto, AnalysisServiceError> {
+    let source = open_for_capability(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        "LinuxArtifacts",
+    )?;
+    let _storage = open_linux_storage(case_root, data_source_id)?;
+    get_linux_artifact_summary(&source.connection, offset, limit)
+}
+
+pub fn materialize_source_linux_summary(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> Result<LinuxArtifactSummaryDto, AnalysisServiceError> {
+    let source = open_for_capability(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        "LinuxArtifacts",
+    )?;
+    let _storage = open_linux_storage(case_root, data_source_id)?;
+    crate::analysis_service::warm_linux_artifact_summary(&source.connection, 200)
+}
+
+fn open_linux_storage(
+    case_root: &Path,
+    data_source_id: &DataSourceId,
+) -> Result<crate::source_db::FjallReadOnlySourceStorageHandle, AnalysisServiceError> {
+    crate::source_db::open_registered_fjall_source_read_only(case_root, data_source_id)
+        .map_err(|error| AnalysisServiceError::Other(error.to_string()))
+}
 
 pub fn get_source_linux_system_config_page(
     case_conn: &Connection,

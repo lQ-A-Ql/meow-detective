@@ -1,6 +1,6 @@
 use super::artifact_query::count_analysis_artifacts;
 use super::{ExtractionOutcome, PluginExtractFailure};
-use crate::analysis_service::candidates::EvidenceCandidate;
+use crate::analysis_service::candidates::{EvidenceCandidate, LinuxCatalogMetadata};
 use crate::analysis_service::capability::{
     find_capability, AnalysisCapability, CHECKPOINT_VERSIONS,
 };
@@ -104,6 +104,7 @@ pub(super) struct ExtractionState {
     pub(super) clean_scans: Vec<CleanAnalysisCandidateScan>,
     pub(super) diagnostic_scans: Vec<DiagnosticAnalysisCandidateScan>,
     pub(super) complete_scans: Vec<CompleteAnalysisCandidateScan>,
+    pub(super) linux_catalog: Option<LinuxCatalogMetadata>,
     pub(super) checkpoint_hit_count: u64,
     pub(super) retryable_failure_count: u64,
     plugin_failures: Vec<PluginExtractFailure>,
@@ -127,10 +128,15 @@ impl ExtractionState {
             clean_scans: Vec::new(),
             diagnostic_scans: Vec::new(),
             complete_scans: Vec::new(),
+            linux_catalog: None,
             checkpoint_hit_count: 0,
             retryable_failure_count: 0,
             plugin_failures: Vec::new(),
         }
+    }
+
+    pub(super) fn record_linux_catalog(&mut self, catalog: LinuxCatalogMetadata) {
+        self.linux_catalog = Some(catalog);
     }
 
     pub(super) fn record_persisted_outcome(

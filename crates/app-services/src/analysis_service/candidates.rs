@@ -15,8 +15,12 @@ pub use common::{
     EvidenceCandidate, EvidenceCategoryDef,
 };
 pub(crate) use common::{
-    evidence_candidates_for_categories_with_cancel, evidence_relative_path,
+    evidence_candidates_for_categories_with_cancel_and_linux_catalog, evidence_relative_path,
     find_candidate_by_path_suffix, normalize_evidence_path,
+};
+pub(crate) use linux::{
+    collect_linux_artifact_catalog, LinuxArtifactCatalogSummary, LinuxCatalogMetadata,
+    LINUX_CATALOG_METADATA_KEY,
 };
 pub use plugin::discover_plugin_candidates;
 pub use summary::get_evidence_classification_summary;

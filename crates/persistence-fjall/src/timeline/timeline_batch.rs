@@ -10,6 +10,10 @@ use crate::{
 };
 use std::collections::{BTreeMap, HashMap};
 
+mod stream;
+
+use self::stream::{record_action, stream_action, stream_delete};
+
 impl TimelineRecordStore {
     pub fn upsert_batch(&self, records: &[TimelineRecord], mode: PersistMode) -> Result<()> {
         if records.is_empty() {
@@ -476,44 +480,4 @@ fn validate_replacement_record(
         ));
     }
     Ok(())
-}
-
-fn stream_delete(writer: &mut WriteStream<'_>, record: &TimelineRecord) -> Result<()> {
-    writer.delete(
-        KeyspaceName::TimelineRecords,
-        record_key(&record.data_source_id, &record.id)?,
-    );
-    for index in index_keys(record)? {
-        writer.delete(KeyspaceName::TimelineIndexes, index);
-    }
-    Ok(())
-}
-
-fn stream_action(writer: &mut WriteStream<'_>, action: WriteAction) {
-    match action {
-        WriteAction::Put {
-            keyspace,
-            key,
-            value,
-        } => writer.put(keyspace, key, value),
-        WriteAction::Delete { keyspace, key } => writer.delete(keyspace, key),
-    }
-}
-
-fn record_action(record: &TimelineRecord) -> Result<WriteAction> {
-    let payload = serde_json::to_vec(record)
-        .map_err(|error| crate::FjallStorageError::Serialization(error.to_string()))?;
-    let envelope = VersionedEnvelope::new(
-        RECORD_KIND,
-        SCHEMA_VERSION,
-        &record.id,
-        &record.data_source_id,
-        1,
-        payload,
-    );
-    Ok(WriteAction::Put {
-        keyspace: KeyspaceName::TimelineRecords,
-        key: record_key(&record.data_source_id, &record.id)?,
-        value: envelope.encode()?,
-    })
 }

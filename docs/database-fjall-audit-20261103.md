@@ -38,6 +38,7 @@
 | 17 | 恢复诊断错误使用 operation 外键 | 已完成 | 写入恢复状态前校验 operation 归属。 |
 | 18 | Analysis 写入受单写事务锁串行限制 | 已完成 | 独立记录批次改用 Fjall `Database::batch`；4 worker 并发写入回归通过；共享指标在代际封存前一次重建。 |
 | 19 | Source SQLite 残留指纹业务明细 | 已完成 | `forensic_fingerprints` 从 source migration 删除；导入、Catalog/Analysis staging 合并和 hash 更新不再写 source SQLite；旧 SQL detail fallback 已删除。 |
+| 20 | Linux 摘要冷加载重复遍历 Catalog、Artifact 和候选检查点 | 已完成 | 候选与 kernel catalog 在分析发现阶段随 Catalog 单次流式遍历记录到 source 控制元数据；Artifact 单次聚合生成 counts、首页和系统信息；Fjall Meta 按 Artifact revision 与分析检查点 revision 缓存静态摘要及分页。导入 finalize 预热 `offset=0, limit=200`，后续页使用 family-created 索引读取。真实检材冷进程读缓存 `1,697 ms`，Artifact `49,461`；原接口超过 MCP `30 s` 超时。 |
 
 ## 第一项验收表
 
@@ -76,6 +77,11 @@
 - `cargo test -j 1 -p app-services --test file_browser_fjall`：1 通过、0 失败。
 - `cargo test -j 1 -p persistence-sqlite --test source_detail_repo_fail_closed`：2 通过。
 - `cargo test -j 1 -p app-services --test import_benchmark`：12 通过、4 忽略、0 失败。
+- `cargo test -p app-services linux_summary --lib`：3 通过、0 失败；覆盖 Artifact 单次聚合、来源缓存首页、family 索引下一页、Catalog 元数据与 kernel 版本恢复。
+- `cargo test -p app-services file_service::source_read --lib`：18 通过、0 失败；覆盖无 FileEntry 的 `mft` inode 与分区 descriptor 快路径。
+- `cargo test -p app-services --test linux_identity_pipeline raw_ext4_import_catalog_and_artifact_identity_agree_on_primary_file_and_symlink`：1 通过、0 失败；验证导入 finalize 预热 Linux 摘要。
+- `cargo test -p app-services --test page_queries_read_only`：6 通过、0 失败；Linux 摘要查询继续使用只读来源句柄。
+- 真实 Linux `检材3.E01`：Artifact `49,461`，已有摘要缓存的新进程读取 `1,697 ms`；导入后调试构建预热 `15,651 ms`，预热位于导入完成阶段。
 - 定向导入、staging、Carving、文件浏览、Timeline、CephFS、来源发布和来源隔离测试均通过；各命令结果详见本次修复记录。
 - `cargo clippy --workspace --all-targets -- -D warnings`、`cargo fmt --all -- --check`、模块规模、函数规模、测试布局三项仓库门禁通过。
 - 完整 `cargo test -p app-services --no-fail-fast` 由于 Windows 为 144 个集成测试目标逐个链接，执行时间过长而停止；相关测试目标随后分组执行。没有将该完整命令标记通过。

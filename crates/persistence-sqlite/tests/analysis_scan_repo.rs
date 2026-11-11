@@ -12,6 +12,7 @@ fn clean_candidate_scan_round_trips_and_invalidates_on_size_change() {
     let connection = open_in_memory().expect("open source database");
     runner::run_source_all(&connection).expect("run source migrations");
     let repository = AnalysisScanRepo::new(&connection);
+    assert_eq!(repository.revision().unwrap(), 0);
     let scan = CleanAnalysisCandidateScan {
         source_object_id: "inode-42".to_string(),
         capability_key: "LinuxWebServices".to_string(),
@@ -23,6 +24,7 @@ fn clean_candidate_scan_round_trips_and_invalidates_on_size_change() {
     repository
         .insert_clean_batch(std::slice::from_ref(&scan))
         .expect("insert clean scan");
+    assert_eq!(repository.revision().unwrap(), 1);
 
     assert!(repository
         .is_clean("inode-42", "LinuxWebServices", "1.0.0", 4096, "content-v1",)

@@ -17,7 +17,7 @@ fn cancellation_drops_the_unpublished_generation_without_changing_published_outp
         crate::analysis_service::extraction::state::AnalysisOutputReplacement {
             source_object_id: candidate.file_id.0.clone(),
             producer: crate::analysis_service::extraction::state::AnalysisOutputProducer::Prefix(
-                "browser.".into(),
+                "browser.",
             ),
         },
     ];

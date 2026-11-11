@@ -3,12 +3,11 @@ use rusqlite::Connection;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use transport::dto::AnalysisParseStatusDto;
-mod linux;
 mod selection;
 
-pub(super) use linux::{query_linux_kernel_image_versions, query_linux_module_dir_versions};
-use selection::{count, host_config, integer, select, Order};
+use selection::{count, host_config, select, Order};
 
+#[derive(Clone)]
 pub(super) struct AnalysisArtifactRow {
     pub(super) id: String,
     pub(super) source_object_id: Option<String>,
@@ -108,26 +107,6 @@ pub(super) fn count_artifacts_by_type(
     count(conn, Some(&[artifact_type]), |_| true)
 }
 
-pub(super) fn count_artifacts_by_type_and_extractor(
-    conn: &Connection,
-    artifact_type: &str,
-    extractor_id: &str,
-) -> Result<u64, AnalysisServiceError> {
-    count(conn, Some(&[artifact_type]), |artifact| {
-        artifact.extractor_id.as_deref() == Some(extractor_id)
-    })
-}
-
-pub(super) fn count_artifacts_by_type_excluding_extractor(
-    conn: &Connection,
-    artifact_type: &str,
-    extractor_id: &str,
-) -> Result<u64, AnalysisServiceError> {
-    count(conn, Some(&[artifact_type]), |artifact| {
-        artifact.extractor_id.as_deref() != Some(extractor_id)
-    })
-}
-
 pub(super) fn count_artifacts_by_family_prefix(
     conn: &Connection,
     prefix: &str,
@@ -145,6 +124,21 @@ pub(super) fn query_artifact_rows(
     limit: u32,
 ) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
     select(conn, families, |_| true, Order::Created, offset, limit)
+}
+
+pub(super) fn query_artifact_rows_created_window(
+    conn: &Connection,
+    family: &str,
+    offset: u64,
+    limit: u32,
+) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
+    Ok(
+        persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(conn)
+            .list_by_family_created_window(family, offset, limit)?
+            .into_iter()
+            .map(selection::row)
+            .collect(),
+    )
 }
 
 pub(super) fn query_evtx_artifact_rows(
@@ -188,32 +182,6 @@ pub(super) fn count_linux_system_config_by_kind(
     })
 }
 
-pub(super) fn count_linux_user_accounts(conn: &Connection) -> Result<u64, AnalysisServiceError> {
-    count(conn, Some(&["LinuxSystemConfig"]), |artifact| {
-        host_config(artifact, "passwdAccount") && integer(artifact.attrs.get("uid")) >= 1000
-    })
-}
-
-pub(super) fn count_linux_locked_shadow_accounts(
-    conn: &Connection,
-) -> Result<u64, AnalysisServiceError> {
-    count(conn, Some(&["LinuxSystemConfig"]), |artifact| {
-        host_config(artifact, "shadowAccount")
-            && artifact
-                .attrs
-                .get("locked")
-                .is_some_and(|value| value.as_bool() == Some(true) || value.as_i64() == Some(1))
-    })
-}
-
-pub(super) fn query_linux_system_config_by_kind(
-    conn: &Connection,
-    config_kind: &str,
-    limit: u32,
-) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
-    query_linux_system_config_by_kind_paged(conn, config_kind, 0, limit)
-}
-
 pub(super) fn count_linux_system_config_by_kind_paged(
     conn: &Connection,
     config_kind: &str,
@@ -233,43 +201,6 @@ pub(super) fn query_linux_system_config_by_kind_paged(
         |artifact| host_config(artifact, config_kind),
         Order::Id,
         offset,
-        limit,
-    )
-}
-
-pub(super) fn query_linux_account_rows(
-    conn: &Connection,
-) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
-    select(
-        conn,
-        &["LinuxSystemConfig"],
-        |artifact| host_config(artifact, "passwdAccount") || host_config(artifact, "shadowAccount"),
-        Order::Id,
-        0,
-        u32::MAX,
-    )
-}
-
-pub(super) fn query_linux_hostname_rows(
-    conn: &Connection,
-    limit: u32,
-) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
-    select(
-        conn,
-        &["LinuxSystemConfig"],
-        |artifact| {
-            artifact
-                .attrs
-                .get("overlayContext")
-                .is_none_or(Value::is_null)
-                && artifact
-                    .attrs
-                    .get("sourcePath")
-                    .and_then(Value::as_str)
-                    .is_some_and(|path| path == "etc/hostname" || path.ends_with("/etc/hostname"))
-        },
-        Order::Line,
-        0,
         limit,
     )
 }

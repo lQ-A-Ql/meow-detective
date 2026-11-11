@@ -118,7 +118,7 @@ fn evtx_pagination_matches_sqlite_timestamp_sequence_oracle() {
 }
 
 #[test]
-fn linux_summary_preserves_host_filtering_numbers_and_line_order() {
+fn linux_system_config_page_preserves_host_filtering() {
     let root = tempfile::tempdir().unwrap();
     let conn = source(root.path());
     let records = vec![
@@ -161,10 +161,6 @@ fn linux_summary_preserves_host_filtering_numbers_and_line_order() {
     ArtifactRepo::new(&conn)
         .insert_batch(&records, "case", "source")
         .unwrap();
-    assert_eq!(count_linux_user_accounts(&conn).unwrap(), 1);
-    assert_eq!(count_linux_locked_shadow_accounts(&conn).unwrap(), 2);
-    assert_eq!(query_linux_account_rows(&conn).unwrap().len(), 4);
-    assert_eq!(query_linux_hostname_rows(&conn, 1).unwrap()[0].id, "line-1");
     assert_eq!(
         query_linux_system_config_by_kind_paged(&conn, "passwdAccount", 1, 1).unwrap()[0].id,
         "user"

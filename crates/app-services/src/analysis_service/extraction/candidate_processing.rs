@@ -40,9 +40,15 @@ const SCHEDULER_LOG_INTERVAL: Duration = Duration::from_secs(1);
 
 mod browser_preparation;
 mod checkpoint;
+mod completion;
 mod panic_diagnostics;
 mod routing;
 mod source_preparation;
+
+use completion::{
+    extract_bytes, is_unsupported_linux_candidate, log_scheduler_snapshot,
+    persist_candidate_outcome,
+};
 
 use checkpoint::checkpoint_key;
 use panic_diagnostics::PanicDiagnostics;
@@ -406,20 +412,6 @@ fn parse_candidate(
     }
 }
 
-fn extract_bytes(
-    candidate: &EvidenceCandidate,
-    bytes: &[u8],
-    browser_preload: &BrowserPreloadContext,
-    linux_log_time: &LinuxLogTimeContext,
-) -> ExtractionOutcome {
-    match candidate.category.as_str() {
-        "BrowserHistory" => extract_browser_candidate(candidate, bytes, browser_preload),
-        "Email" => extract_email_candidate(candidate, bytes),
-        LINUX_UMBRELLA_KEY => extract_linux_candidate_with_time(candidate, bytes, linux_log_time),
-        _ => ExtractionOutcome::default(),
-    }
-}
-
 fn apply_candidate<F>(
     coordinator: &mut CandidateCoordinator<'_, '_, '_, F>,
     completion: CandidateCompletion,
@@ -504,36 +496,4 @@ where
         .progress
         .finish_candidate(capability, &candidate, result);
     ensure_not_cancelled(coordinator.context.cancel_token)
-}
-
-fn persist_candidate_outcome(
-    output: &StreamingGeneration,
-    outcome: ExtractionOutcome,
-    plugin_failures: Vec<super::PluginExtractFailure>,
-) -> CandidateCompletionKind {
-    match output.persist_outcome(outcome) {
-        Ok(observation) => CandidateCompletionKind::Persisted {
-            observation,
-            plugin_failures,
-        },
-        Err(error) => CandidateCompletionKind::Failed(error),
-    }
-}
-
-fn is_unsupported_linux_candidate(candidate: &EvidenceCandidate) -> bool {
-    candidate.category == LINUX_UMBRELLA_KEY
-        && linux_candidate_support(&normalize_evidence_path(&candidate.path))
-            == LinuxCandidateSupport::Unsupported
-}
-
-fn log_scheduler_snapshot(snapshot: SchedulerSnapshot, policy: ExtractionSchedulingPolicy) {
-    tracing::info!(
-        submitted = snapshot.submitted,
-        completed = snapshot.completed,
-        active_or_queued = snapshot.in_flight_items,
-        in_flight_bytes = snapshot.in_flight_bytes,
-        worker_budget = policy.worker_count,
-        rss_mb = crate::runtime_resources::current_rss_mb(),
-        "Analysis extraction scheduler heartbeat"
-    );
 }

@@ -1,7 +1,9 @@
 use super::native_output;
 use super::state::ExtractionState;
+use crate::analysis_service::candidates::LINUX_CATALOG_METADATA_KEY;
 use crate::analysis_service::error::AnalysisServiceError;
 use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
+use persistence_sqlite::repositories::analysis_scan_repo::ANALYSIS_SCAN_REVISION_KEY;
 use rusqlite::Connection;
 
 pub(super) fn commit_analysis_control(
@@ -12,6 +14,7 @@ pub(super) fn commit_analysis_control(
     let clean_scans = std::mem::take(&mut state.clean_scans);
     let diagnostic_scans = std::mem::take(&mut state.diagnostic_scans);
     let complete_scans = std::mem::take(&mut state.complete_scans);
+    let linux_catalog = state.linux_catalog.take();
     let transaction = conn.unchecked_transaction()?;
     persistence_sqlite::source_fjall::bind_generation(&transaction, &native_generation.name)?;
     AnalysisScanRepo::new(&transaction).insert_all_checkpoint_batch_in_transaction(
@@ -19,6 +22,15 @@ pub(super) fn commit_analysis_control(
         &diagnostic_scans,
         &complete_scans,
     )?;
+    if let Some(catalog) = linux_catalog {
+        let value = serde_json::to_string(&catalog).map_err(|error| {
+            AnalysisServiceError::Other(format!("encode Linux analysis catalog: {error}"))
+        })?;
+        let metadata =
+            persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(&transaction);
+        metadata.write(LINUX_CATALOG_METADATA_KEY, &value)?;
+        metadata.bump_revision(ANALYSIS_SCAN_REVISION_KEY)?;
+    }
     transaction.commit()?;
     native_generation.commit();
     Ok(())

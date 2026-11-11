@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 const CLEAN_SCAN_KEY_PREFIX: &str = "analysis_candidate_scan:clean:";
 const DIAGNOSTIC_SCAN_KEY_PREFIX: &str = "analysis_candidate_scan:diagnostic:";
 const COMPLETE_SCAN_KEY_PREFIX: &str = "analysis_candidate_scan:complete:";
+pub const ANALYSIS_SCAN_REVISION_KEY: &str = "analysis-candidate-scan:revision:v1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CleanAnalysisCandidateScan {
@@ -131,6 +132,9 @@ impl<'a> AnalysisScanRepo<'a> {
         if !self.source_meta_available()? {
             return Ok(());
         }
+        if clean_scans.is_empty() && diagnostic_scans.is_empty() && complete_scans.is_empty() {
+            return Ok(());
+        }
         self.clear_superseded_checkpoint_variants(clean_scans, diagnostic_scans, complete_scans)?;
         let mut statement = self.conn.prepare_cached(
             "INSERT INTO source_meta (key, value)
@@ -167,6 +171,8 @@ impl<'a> AnalysisScanRepo<'a> {
                 encode_complete_scan(scan),
             ])?;
         }
+        crate::repositories::source_meta_repo::SourceMetaRepo::new(self.conn)
+            .bump_revision(ANALYSIS_SCAN_REVISION_KEY)?;
         Ok(())
     }
 
@@ -263,6 +269,11 @@ impl<'a> AnalysisScanRepo<'a> {
         let prefix = version_key_prefix(COMPLETE_SCAN_KEY_PREFIX, extractor_version);
         let rows = statement.query_map([format!("{prefix}%")], |row| row.get::<_, String>(0))?;
         rows.map(|row| decode_complete_scan(&row?)).collect()
+    }
+
+    pub fn revision(&self) -> DbResult<u64> {
+        crate::repositories::source_meta_repo::SourceMetaRepo::new(self.conn)
+            .read_revision(ANALYSIS_SCAN_REVISION_KEY)
     }
 
     fn source_meta_available(&self) -> DbResult<bool> {

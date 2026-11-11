@@ -1,16 +1,13 @@
-use crate::analysis_service::candidates::{
-    evidence_candidates_for_categories, normalize_evidence_path,
-};
-use crate::analysis_service::error::AnalysisServiceError;
+use crate::analysis_service::candidates::{normalize_evidence_path, LinuxArtifactCatalogSummary};
 use crate::analysis_service::extraction::linux::{
     linux_candidate_read_limit, linux_candidate_support,
 };
 use crate::analysis_service::extraction::linux_sections::LinuxCandidateSupport;
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
-use rusqlite::Connection;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use transport::dto::AnalysisParseStatusDto;
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct LinuxSummaryObservability {
     pub(super) candidate_count: u64,
     pub(super) coverage_ratio: f32,
@@ -20,15 +17,15 @@ pub(super) struct LinuxSummaryObservability {
 }
 
 pub(super) fn linux_summary_observability(
-    conn: &Connection,
+    catalog: &LinuxArtifactCatalogSummary,
     total_count: u64,
-) -> Result<LinuxSummaryObservability, AnalysisServiceError> {
-    let candidates = evidence_candidates_for_categories(conn, &["LinuxArtifacts"])?;
-    let candidate_count = candidates.len() as u64;
-    let parsed_sources = linux_parsed_source_ids(conn)?;
-    let parsed_candidate_count = candidates
+    parsed_sources: &HashSet<String>,
+) -> LinuxSummaryObservability {
+    let candidate_count = catalog.candidates.len() as u64;
+    let parsed_candidate_count = catalog
+        .candidates
         .iter()
-        .filter(|candidate| parsed_sources.contains_key(&candidate.file_id.0))
+        .filter(|candidate| parsed_sources.contains(&candidate.file_id))
         .count() as u64;
     let coverage_ratio = if candidate_count == 0 {
         if total_count > 0 {
@@ -52,26 +49,33 @@ pub(super) fn linux_summary_observability(
 
     let mut truncated = false;
     let mut warnings = Vec::new();
-    let unsupported_count = candidates
+    let unsupported_count = catalog
+        .candidates
         .iter()
         .filter(|candidate| {
-            matches!(
-                linux_candidate_support(&normalize_evidence_path(&candidate.path)),
-                LinuxCandidateSupport::Unsupported
-            )
+            !candidate.path.is_empty()
+                && matches!(
+                    linux_candidate_support(&normalize_evidence_path(&candidate.path)),
+                    LinuxCandidateSupport::Unsupported
+                )
         })
         .count() as u64;
-    let text_fallback_count = candidates
+    let text_fallback_count = catalog
+        .candidates
         .iter()
         .filter(|candidate| {
-            matches!(
-                linux_candidate_support(&normalize_evidence_path(&candidate.path)),
-                LinuxCandidateSupport::TextFallback
-            )
+            !candidate.path.is_empty()
+                && matches!(
+                    linux_candidate_support(&normalize_evidence_path(&candidate.path)),
+                    LinuxCandidateSupport::TextFallback
+                )
         })
         .count() as u64;
 
-    for candidate in &candidates {
+    for candidate in &catalog.candidates {
+        if candidate.path.is_empty() {
+            continue;
+        }
         let normalized_path = normalize_evidence_path(&candidate.path);
         let source_limit = linux_candidate_read_limit(&normalized_path);
         if candidate.size > source_limit as u64 {
@@ -93,43 +97,13 @@ pub(super) fn linux_summary_observability(
         ));
     }
 
-    Ok(LinuxSummaryObservability {
+    LinuxSummaryObservability {
         candidate_count,
         coverage_ratio,
         truncated,
         warnings,
         coverage_notes,
-    })
-}
-
-fn linux_parsed_source_ids(
-    conn: &Connection,
-) -> Result<HashMap<String, u64>, AnalysisServiceError> {
-    let mut ids = HashMap::new();
-    for family in [
-        "LinuxJournal",
-        "LinuxWtmp",
-        "LinuxBashCommand",
-        "LinuxAptEvent",
-        "LinuxCronJob",
-        "LinuxSudoEvent",
-        "LinuxSystemConfig",
-        "LinuxWebSite",
-        "LinuxWebAccessLog",
-        "LinuxWebErrorLog",
-        "LinuxWebFinding",
-        "LinuxMysqlConfig",
-        "LinuxMysqlLogEntry",
-        "LinuxMysqlFinding",
-    ] {
-        ArtifactRepo::new(conn).visit_by_family(Some(family), |artifact| {
-            if let Some(source_id) = artifact.source_object_id {
-                *ids.entry(source_id.0).or_insert(0) += 1;
-            }
-            Ok(())
-        })?;
     }
-    Ok(ids)
 }
 
 pub(super) fn linux_summary_status(

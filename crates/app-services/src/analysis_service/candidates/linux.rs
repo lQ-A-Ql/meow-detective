@@ -1,4 +1,199 @@
-use super::common::{EvidenceCategoryDef, EvidencePathPattern};
+use super::common::{
+    evidence_path_matches, normalize_evidence_path, EvidenceCandidate, EvidenceCategoryDef,
+    EvidencePathPattern,
+};
+use crate::analysis_service::error::AnalysisServiceError;
+use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
+use persistence_sqlite::repositories::file_repo::FileRepo;
+use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub(crate) struct LinuxArtifactCatalogCandidate {
+    pub file_id: String,
+    pub path: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct LinuxArtifactCatalogSummary {
+    pub candidates: Vec<LinuxArtifactCatalogCandidate>,
+    pub kernel_image_versions: Vec<String>,
+    pub kernel_module_versions: Vec<String>,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+pub(crate) struct LinuxKernelCatalog {
+    pub(crate) image_versions: Vec<String>,
+    pub(crate) module_versions: Vec<String>,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+pub(crate) struct LinuxCatalogMetadata {
+    pub(crate) candidates: Vec<LinuxArtifactCatalogCandidate>,
+    pub(crate) kernel_image_versions: Vec<String>,
+    pub(crate) kernel_module_versions: Vec<String>,
+}
+
+impl LinuxCatalogMetadata {
+    pub(crate) fn from_discovery(
+        candidates: &[EvidenceCandidate],
+        kernel: Option<LinuxKernelCatalog>,
+    ) -> Self {
+        let kernel = kernel.unwrap_or_default();
+        Self {
+            candidates: candidates
+                .iter()
+                .filter(|candidate| candidate.category == "LinuxArtifacts")
+                .map(|candidate| LinuxArtifactCatalogCandidate {
+                    file_id: candidate.file_id.0.clone(),
+                    path: candidate.path.clone(),
+                    size: candidate.size,
+                })
+                .collect(),
+            kernel_image_versions: kernel.image_versions,
+            kernel_module_versions: kernel.module_versions,
+        }
+    }
+}
+
+pub(crate) fn collect_linux_artifact_catalog(
+    conn: &Connection,
+) -> Result<LinuxArtifactCatalogSummary, AnalysisServiceError> {
+    if let Some(summary) = collect_linux_artifact_catalog_from_checkpoints(conn)? {
+        return Ok(summary);
+    }
+    collect_linux_artifact_catalog_uncached(conn)
+}
+
+fn collect_linux_artifact_catalog_from_checkpoints(
+    conn: &Connection,
+) -> Result<Option<LinuxArtifactCatalogSummary>, AnalysisServiceError> {
+    let metadata = persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(conn)
+        .read(LINUX_CATALOG_METADATA_KEY)?
+        .map(|value| serde_json::from_str::<LinuxCatalogMetadata>(&value))
+        .transpose()
+        .map_err(|error| {
+            AnalysisServiceError::Other(format!("decode Linux catalog metadata: {error}"))
+        })?;
+    if let Some(metadata) = metadata {
+        return Ok(Some(LinuxArtifactCatalogSummary {
+            candidates: metadata.candidates,
+            kernel_image_versions: metadata.kernel_image_versions,
+            kernel_module_versions: metadata.kernel_module_versions,
+        }));
+    }
+    let repository = AnalysisScanRepo::new(conn);
+    let mut candidates = HashMap::<String, LinuxArtifactCatalogCandidate>::new();
+    let mut seen = HashSet::new();
+    for version in crate::analysis_service::capability::CHECKPOINT_VERSIONS {
+        for scan in repository.list_clean_for_version(version)? {
+            if scan.capability_key.starts_with("Linux")
+                && seen.insert(scan.source_object_id.clone())
+            {
+                candidates.insert(
+                    scan.source_object_id.clone(),
+                    LinuxArtifactCatalogCandidate {
+                        file_id: scan.source_object_id,
+                        path: String::new(),
+                        size: scan.source_size,
+                    },
+                );
+            }
+        }
+        for scan in repository.list_diagnostics_for_version(version)? {
+            if scan.capability_key.starts_with("Linux")
+                && seen.insert(scan.source_object_id.clone())
+            {
+                candidates.insert(
+                    scan.source_object_id.clone(),
+                    LinuxArtifactCatalogCandidate {
+                        file_id: scan.source_object_id,
+                        path: String::new(),
+                        size: scan.source_size,
+                    },
+                );
+            }
+        }
+        for scan in repository.list_complete_for_version(version)? {
+            if scan.capability_key.starts_with("Linux")
+                && seen.insert(scan.source_object_id.clone())
+            {
+                candidates.insert(
+                    scan.source_object_id.clone(),
+                    LinuxArtifactCatalogCandidate {
+                        file_id: scan.source_object_id,
+                        path: String::new(),
+                        size: scan.source_size,
+                    },
+                );
+            }
+        }
+    }
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+    let mut candidates = candidates.into_values().collect::<Vec<_>>();
+    candidates.sort_by(|left, right| left.file_id.cmp(&right.file_id));
+    Ok(Some(LinuxArtifactCatalogSummary {
+        candidates,
+        kernel_image_versions: Vec::new(),
+        kernel_module_versions: Vec::new(),
+    }))
+}
+
+fn collect_linux_artifact_catalog_uncached(
+    conn: &Connection,
+) -> Result<LinuxArtifactCatalogSummary, AnalysisServiceError> {
+    let mut summary = LinuxArtifactCatalogSummary::default();
+    let mut kernel = LinuxKernelCatalog::default();
+    FileRepo::new(conn).visit_all(None, |entry| {
+        let normalized = normalize_evidence_path(&entry.path);
+        observe_kernel_paths(&normalized, &mut kernel);
+        if entry.is_file()
+            && evidence_path_matches(&normalized, LINUX_ARTIFACTS_CATEGORY_DEF.patterns)
+        {
+            summary.candidates.push(LinuxArtifactCatalogCandidate {
+                file_id: entry.id.0,
+                path: entry.path,
+                size: entry.size.unwrap_or_default(),
+            });
+        }
+        Ok(())
+    })?;
+    summary.kernel_image_versions = kernel.image_versions;
+    summary.kernel_module_versions = kernel.module_versions;
+    Ok(summary)
+}
+
+pub(crate) const LINUX_CATALOG_METADATA_KEY: &str = "linux.summary.catalog:v1";
+
+pub(super) fn observe_kernel_paths(path: &str, catalog: &mut LinuxKernelCatalog) {
+    if let Some(version) = path
+        .strip_prefix("/boot/vmlinuz-")
+        .or_else(|| path.strip_prefix("/vmlinuz-"))
+        .filter(|version| is_kernel_version_candidate(version))
+    {
+        catalog.image_versions.push(version.to_string());
+    }
+    if let Some(version) = path
+        .strip_prefix("/lib/modules/")
+        .or_else(|| path.strip_prefix("/usr/lib/modules/"))
+        .and_then(|suffix| suffix.split('/').next())
+        .filter(|version| is_kernel_version_candidate(version))
+    {
+        catalog.module_versions.push(version.to_string());
+    }
+}
+
+fn is_kernel_version_candidate(value: &str) -> bool {
+    !value.is_empty()
+        && value.starts_with(|character: char| character.is_ascii_digit())
+        && value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || ".+-_~".contains(character))
+}
 
 pub(super) const LINUX_ARTIFACTS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
     category: "LinuxArtifacts",

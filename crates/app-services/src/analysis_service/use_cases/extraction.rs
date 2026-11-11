@@ -343,29 +343,38 @@ fn record_extraction_metrics(
     execution.rados_read_metrics = source_reader.rados_read_metrics();
 }
 
+pub(crate) struct ImportSourceExtractionRequest<'a> {
+    pub(crate) case_conn: &'a Connection,
+    pub(crate) case_root: &'a Path,
+    pub(crate) case_id: &'a CaseId,
+    pub(crate) source: &'a DataSourceId,
+    pub(crate) categories: &'a [&'a str],
+    pub(crate) runtime: &'a AnalysisSourceReadRuntime,
+    pub(crate) cancel_token: Arc<AtomicBool>,
+    pub(crate) run_id: &'a str,
+}
+
 pub(crate) fn run_import_source_extraction(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    source: &DataSourceId,
-    categories: &[&str],
-    runtime: &AnalysisSourceReadRuntime,
-    cancel_token: Arc<AtomicBool>,
-    run_id: &str,
+    request: ImportSourceExtractionRequest<'_>,
     mut progress: impl FnMut(AnalysisExtractionProgressDto),
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     let mut emit = |update: ExtractionProgressUpdate| {
-        progress(analysis_progress_dto(case_id, source, run_id, update));
+        progress(analysis_progress_dto(
+            request.case_id,
+            request.source,
+            request.run_id,
+            update,
+        ));
     };
     run_source_analysis_extraction_execution_with_progress(
-        case_conn,
-        case_root,
-        case_id,
-        source,
-        categories,
+        request.case_conn,
+        request.case_root,
+        request.case_id,
+        request.source,
+        request.categories,
         AnalysisExecutionControl {
-            cancel_token,
-            source_runtime: runtime,
+            cancel_token: request.cancel_token,
+            source_runtime: request.runtime,
             progress: &mut emit,
             browser_password: None,
         },

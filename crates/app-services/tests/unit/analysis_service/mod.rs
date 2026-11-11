@@ -1552,6 +1552,12 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
         pve_log_count > 0,
         "expected PVE logs to use generic text fallback"
     );
+    let linux_catalog =
+        persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(&conn)
+            .read(crate::analysis_service::candidates::LINUX_CATALOG_METADATA_KEY)
+            .unwrap()
+            .expect("Linux extraction should persist its candidate catalog");
+    assert!(linux_catalog.contains("home/alice/.bash_history"));
 
     let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
     assert_eq!(summary.bash_command_count, artifact_count);
@@ -1617,6 +1623,140 @@ fn get_linux_artifact_summary_reports_not_found_without_artifacts() {
     assert_eq!(summary.coverage_ratio, 0.0);
     assert!(summary.bash_commands.is_empty());
     assert!(summary.system_info.is_none());
+}
+
+#[test]
+fn linux_summary_warm_cache_serves_first_page_and_family_index_for_followup_pages() {
+    let (conn, _tmp, ds_id) = setup_case_db();
+    let now = Utc::now();
+    let artifacts = (0..300)
+        .map(|index| Artifact {
+            id: ArtifactId(format!("bash-{index}")),
+            family: "LinuxBashCommand".to_string(),
+            title: format!("bash command {index}"),
+            summary: "command history".to_string(),
+            source_object_id: Some(FileEntryId(format!("history-{index}"))),
+            extractor_id: Some("linux.bash_history".to_string()),
+            extractor_version: Some("test".to_string()),
+            confidence: Some(1.0),
+            source_attribution: Some("home/alice/.bash_history".to_string()),
+            created_at: now - chrono::Duration::milliseconds((300 - index) as i64),
+            attrs: serde_json::from_value(serde_json::json!({
+                "sourcePath": "home/alice/.bash_history",
+                "command": format!("command-{index}"),
+                "lineNumber": index + 1
+            }))
+            .unwrap(),
+        })
+        .collect::<Vec<_>>();
+    ArtifactRepo::new(&conn)
+        .insert_batch(&artifacts, "case-analysis", &ds_id.0)
+        .unwrap();
+
+    let warmed = warm_linux_artifact_summary(&conn, 200).unwrap();
+    let cached = get_linux_artifact_summary(&conn, 0, 200).unwrap();
+    let second_page = get_linux_artifact_summary(&conn, 200, 200).unwrap();
+
+    assert_eq!(warmed.total_count, 300);
+    assert_eq!(warmed.bash_commands.len(), 200);
+    assert_eq!(cached.generated_at, warmed.generated_at);
+    assert_eq!(cached.bash_commands[0].command, "command-299");
+    assert_eq!(second_page.generated_at, warmed.generated_at);
+    assert_eq!(second_page.bash_commands.len(), 100);
+    assert_eq!(second_page.bash_commands[0].command, "command-99");
+
+    ArtifactRepo::new(&conn)
+        .insert_batch(
+            &[Artifact {
+                id: ArtifactId("bash-invalidates-cache".to_string()),
+                family: "LinuxBashCommand".to_string(),
+                title: "new bash command".to_string(),
+                summary: "command history".to_string(),
+                source_object_id: Some(FileEntryId("history-new".to_string())),
+                extractor_id: Some("linux.bash_history".to_string()),
+                extractor_version: Some("test".to_string()),
+                confidence: Some(1.0),
+                source_attribution: Some("home/alice/.bash_history".to_string()),
+                created_at: Utc::now(),
+                attrs: serde_json::from_value(serde_json::json!({
+                    "sourcePath": "home/alice/.bash_history",
+                    "command": "command-new",
+                    "lineNumber": 301
+                }))
+                .unwrap(),
+            }],
+            "case-analysis",
+            &ds_id.0,
+        )
+        .unwrap();
+
+    let invalidated = get_linux_artifact_summary(&conn, 0, 10).unwrap();
+    assert_eq!(invalidated.total_count, 301);
+    assert_ne!(invalidated.generated_at, warmed.generated_at);
+}
+
+#[test]
+fn linux_summary_catalog_collects_candidates_and_kernel_versions_together() {
+    let (conn, _tmp, ds_id) = setup_case_db();
+    insert_files(
+        &conn,
+        &[
+            file_with_ds("auth", &ds_id, "cl/root/var/log/auth.log", 64),
+            file_with_ds(
+                "kernel-image",
+                &ds_id,
+                "cl/root/boot/vmlinuz-6.8.0-107-generic",
+                64,
+            ),
+            file_with_ds(
+                "kernel-module",
+                &ds_id,
+                "cl/root/lib/modules/6.8.0-107-generic/kernel/fs/ext4/ext4.ko",
+                64,
+            ),
+            file_with_ds("lookalike", &ds_id, "cl/root/home/alice/notes.txt", 64),
+        ],
+    );
+
+    let catalog =
+        crate::analysis_service::candidates::collect_linux_artifact_catalog(&conn).unwrap();
+
+    assert_eq!(catalog.candidates.len(), 1);
+    assert_eq!(catalog.candidates[0].file_id, "auth");
+    assert_eq!(
+        catalog.kernel_image_versions,
+        vec!["6.8.0-107-generic".to_string()]
+    );
+    assert_eq!(
+        catalog.kernel_module_versions,
+        vec!["6.8.0-107-generic".to_string()]
+    );
+
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let (candidates, kernel) =
+        crate::analysis_service::candidates::evidence_candidates_for_categories_with_cancel_and_linux_catalog(
+            &conn,
+            &["LinuxArtifacts"],
+            &cancel,
+        )
+        .unwrap();
+    let metadata = crate::analysis_service::candidates::LinuxCatalogMetadata::from_discovery(
+        &candidates,
+        kernel,
+    );
+    persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(&conn)
+        .write(
+            crate::analysis_service::candidates::LINUX_CATALOG_METADATA_KEY,
+            &serde_json::to_string(&metadata).unwrap(),
+        )
+        .unwrap();
+    let persisted =
+        crate::analysis_service::candidates::collect_linux_artifact_catalog(&conn).unwrap();
+    assert_eq!(persisted.candidates[0].path, "cl/root/var/log/auth.log");
+    assert_eq!(
+        persisted.kernel_image_versions,
+        vec!["6.8.0-107-generic".to_string()]
+    );
 }
 
 #[test]

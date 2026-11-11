@@ -1,3 +1,4 @@
+use super::linux::LinuxKernelCatalog;
 use super::{evidence_category_defs, UNSUPPORTED_MACOS_CATEGORY};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::error::AnalysisServiceError;
@@ -10,7 +11,7 @@ use std::sync::atomic::AtomicBool;
 
 mod catalog;
 mod path_matching;
-use catalog::collect_file_entries_from_fjall;
+use catalog::{collect_file_entries_from_fjall, visit_file_entries_from_fjall};
 
 pub(crate) use path_matching::evidence_path_matches;
 pub(crate) use path_matching::evidence_relative_path;
@@ -99,6 +100,11 @@ pub struct EvidenceCandidate {
     pub modified_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+pub(crate) struct EvidenceCandidateDiscovery {
+    pub(crate) candidates: HashMap<String, Vec<EvidenceCandidate>>,
+    pub(crate) linux_kernel_catalog: Option<LinuxKernelCatalog>,
+}
+
 pub fn collect_file_entries(conn: &Connection) -> Result<Vec<FileEntry>, AnalysisServiceError> {
     collect_file_entries_from_fjall(conn)
 }
@@ -126,29 +132,93 @@ pub fn discover_evidence_candidates(
 ) -> Result<HashMap<String, Vec<EvidenceCandidate>>, AnalysisServiceError> {
     let cancel_token = AtomicBool::new(false);
     discover_evidence_candidates_with_definitions(conn, evidence_category_defs(), &cancel_token)
+        .map(|discovery| discovery.candidates)
 }
 
 fn discover_evidence_candidates_with_definitions(
     conn: &Connection,
     definitions: &[EvidenceCategoryDef],
     cancel_token: &AtomicBool,
-) -> Result<HashMap<String, Vec<EvidenceCandidate>>, AnalysisServiceError> {
-    ensure_not_cancelled(cancel_token)?;
-    let mut candidates = definitions
-        .iter()
-        .map(|definition| (definition.category.to_string(), Vec::new()))
-        .collect::<HashMap<_, _>>();
-    let entries = collect_file_entries(conn)?;
-    let mut companions = super::companion_index::CompanionIndex::default();
-    let repository = FileRepo::new(conn);
+) -> Result<EvidenceCandidateDiscovery, AnalysisServiceError> {
+    let mut discovery = CandidateDiscovery::new(definitions, conn);
+    visit_file_entries_from_fjall(conn, |entry| discovery.visit_entry(entry, cancel_token))?;
+    discovery.finish(cancel_token)
+}
 
-    for entry in entries {
+struct CandidateDiscovery<'a, 'conn> {
+    definitions: &'a [EvidenceCategoryDef],
+    repository: FileRepo<'conn>,
+    candidates: HashMap<String, Vec<EvidenceCandidate>>,
+    companions: super::companion_index::CompanionIndex,
+    requires_companions: bool,
+    linux_kernel_catalog: Option<LinuxKernelCatalog>,
+}
+
+impl<'a, 'conn> CandidateDiscovery<'a, 'conn> {
+    fn new(definitions: &'a [EvidenceCategoryDef], conn: &'conn Connection) -> Self {
+        Self {
+            definitions,
+            repository: FileRepo::new(conn),
+            candidates: definitions
+                .iter()
+                .map(|definition| (definition.category.to_string(), Vec::new()))
+                .collect(),
+            companions: super::companion_index::CompanionIndex::default(),
+            requires_companions: definitions
+                .iter()
+                .any(|definition| matches!(definition.category, "Registry" | "BrowserHistory")),
+            linux_kernel_catalog: definitions
+                .iter()
+                .any(|definition| definition.category == "LinuxArtifacts")
+                .then(LinuxKernelCatalog::default),
+        }
+    }
+
+    fn visit_entry(
+        &mut self,
+        entry: FileEntry,
+        cancel_token: &AtomicBool,
+    ) -> Result<(), AnalysisServiceError> {
         ensure_not_cancelled(cancel_token)?;
         if !entry.is_file() {
-            continue;
+            return Ok(());
         }
-        let partition_index = repository.find_partition_index_by_id(&entry.id)?;
-        let encryption_status = repository
+        let normalized = normalize_evidence_path(&entry.path);
+        if let Some(catalog) = &mut self.linux_kernel_catalog {
+            super::linux::observe_kernel_paths(&normalized, catalog);
+        }
+        let matches_candidate = self.definitions.iter().any(|definition| {
+            !definition.patterns.is_empty()
+                && evidence_path_matches(&normalized, definition.patterns)
+                && definition
+                    .matcher
+                    .is_none_or(|matcher| matcher(&normalized))
+        });
+        let matches_companion = self.requires_companions
+            && super::companion_index::CompanionIndex::matches(&entry.path);
+        if matches_candidate || matches_companion {
+            self.record_candidate(
+                entry,
+                normalized,
+                matches_candidate,
+                matches_companion,
+                cancel_token,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn record_candidate(
+        &mut self,
+        entry: FileEntry,
+        normalized: String,
+        matches_candidate: bool,
+        matches_companion: bool,
+        cancel_token: &AtomicBool,
+    ) -> Result<(), AnalysisServiceError> {
+        let partition_index = self.repository.find_partition_index_by_id(&entry.id)?;
+        let encryption_status = self
+            .repository
             .find_encryption_status(&entry.id)?
             .ok_or_else(|| AnalysisServiceError::Other("analysis candidate disappeared".into()))?;
         let file_id = entry.id.0;
@@ -171,9 +241,8 @@ fn discover_evidence_candidates_with_definitions(
                 entry.hash_sha256,
             ],
         );
-        let modified_at = entry.modified_at;
-        if super::companion_index::CompanionIndex::matches(&path) {
-            companions.insert(
+        if matches_companion {
+            self.companions.insert(
                 &data_source_id,
                 partition_index,
                 EvidenceCompanion {
@@ -185,33 +254,45 @@ fn discover_evidence_candidates_with_definitions(
                 },
             );
         }
-        add_matching_candidates(
-            &mut candidates,
-            definitions,
-            CandidateRow {
-                file_id: &file_id,
-                data_source_id: &data_source_id,
-                partition_index,
-                path: &path,
-                size,
-                encrypted,
-                content_identity: &content_identity,
-                modified_at,
-            },
-            cancel_token,
-        )?;
+        if matches_candidate {
+            add_matching_candidates(
+                &mut self.candidates,
+                self.definitions,
+                &normalized,
+                CandidateRow {
+                    file_id: &file_id,
+                    data_source_id: &data_source_id,
+                    partition_index,
+                    path: &path,
+                    size,
+                    encrypted,
+                    content_identity: &content_identity,
+                    modified_at: entry.modified_at,
+                },
+                cancel_token,
+            )?;
+        }
+        Ok(())
     }
 
-    for category in ["Registry", "BrowserHistory"] {
-        if let Some(group) = candidates.get_mut(category) {
-            for candidate in group {
-                ensure_not_cancelled(cancel_token)?;
-                companions.attach(candidate)?;
+    fn finish(
+        mut self,
+        cancel_token: &AtomicBool,
+    ) -> Result<EvidenceCandidateDiscovery, AnalysisServiceError> {
+        for category in ["Registry", "BrowserHistory"] {
+            if let Some(group) = self.candidates.get_mut(category) {
+                for candidate in group {
+                    ensure_not_cancelled(cancel_token)?;
+                    self.companions.attach(candidate)?;
+                }
             }
         }
+        ensure_not_cancelled(cancel_token)?;
+        Ok(EvidenceCandidateDiscovery {
+            candidates: self.candidates,
+            linux_kernel_catalog: self.linux_kernel_catalog,
+        })
     }
-    ensure_not_cancelled(cancel_token)?;
-    Ok(candidates)
 }
 
 struct CandidateRow<'a> {
@@ -228,21 +309,21 @@ struct CandidateRow<'a> {
 fn add_matching_candidates(
     candidates: &mut HashMap<String, Vec<EvidenceCandidate>>,
     definitions: &[EvidenceCategoryDef],
+    normalized: &str,
     row: CandidateRow<'_>,
     cancel_token: &AtomicBool,
 ) -> Result<(), AnalysisServiceError> {
-    let normalized = normalize_evidence_path(row.path);
     for definition in definitions {
         ensure_not_cancelled(cancel_token)?;
         if definition.patterns.is_empty()
-            || !evidence_path_matches(&normalized, definition.patterns)
+            || !evidence_path_matches(normalized, definition.patterns)
             || definition
                 .matcher
-                .is_some_and(|matcher| !matcher(&normalized))
+                .is_some_and(|matcher| !matcher(normalized))
         {
             continue;
         }
-        let (evidence_kind, parser) = candidate_kind_and_parser(definition, &normalized);
+        let (evidence_kind, parser) = candidate_kind_and_parser(definition, normalized);
         candidates
             .entry(definition.category.to_string())
             .or_default()
@@ -369,21 +450,31 @@ pub(crate) fn evidence_candidates_for_categories_with_cancel(
     categories: &[&str],
     cancel_token: &AtomicBool,
 ) -> Result<Vec<EvidenceCandidate>, AnalysisServiceError> {
+    evidence_candidates_for_categories_with_cancel_and_linux_catalog(conn, categories, cancel_token)
+        .map(|(candidates, _)| candidates)
+}
+
+pub(crate) fn evidence_candidates_for_categories_with_cancel_and_linux_catalog(
+    conn: &Connection,
+    categories: &[&str],
+    cancel_token: &AtomicBool,
+) -> Result<(Vec<EvidenceCandidate>, Option<LinuxKernelCatalog>), AnalysisServiceError> {
     ensure_supported_analysis_categories(categories)?;
     ensure_not_cancelled(cancel_token)?;
     let definitions = selected_evidence_category_defs(categories);
     if definitions.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), None));
     }
-    let discovered =
+    let discovery =
         discover_evidence_candidates_with_definitions(conn, &definitions, cancel_token)?;
     ensure_not_cancelled(cancel_token)?;
-    Ok(categories
+    let candidates = categories
         .iter()
-        .filter_map(|category| discovered.get(*category))
+        .filter_map(|category| discovery.candidates.get(*category))
         .flatten()
         .cloned()
-        .collect())
+        .collect();
+    Ok((candidates, discovery.linux_kernel_catalog))
 }
 
 fn selected_evidence_category_defs(categories: &[&str]) -> Vec<EvidenceCategoryDef> {

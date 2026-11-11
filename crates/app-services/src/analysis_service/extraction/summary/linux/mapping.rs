@@ -1,15 +1,18 @@
+mod entries;
+
+use super::aggregate::LinuxSummaryFamily;
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::extraction::artifact_query::{
-    count_artifacts_by_type, count_artifacts_by_type_and_extractor,
-    count_artifacts_by_type_excluding_extractor, query_artifact_rows, AnalysisArtifactRow,
+    query_artifact_rows_created_window, AnalysisArtifactRow,
 };
 use crate::analysis_service::extraction::attr_mapping::{
     bool_attr, i32_attr, optional_bool_attr, optional_string_attr, optional_u32_attr, string_attr,
     u64_attr,
 };
 use crate::source_db::encode_source_scoped_id;
-use domain::DataSourceId;
+use domain::{Artifact, DataSourceId};
 use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use transport::dto::{
@@ -19,6 +22,7 @@ use transport::dto::{
     LinuxWebFindingDto, LinuxWebSiteDto,
 };
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub(super) struct LinuxCounts {
     pub(super) journal: u64,
     /// Text-log fallback records (syslog/messages/auth/audit/pve) share the
@@ -41,28 +45,30 @@ pub(super) struct LinuxCounts {
 }
 
 impl LinuxCounts {
-    pub(super) fn load(conn: &Connection) -> Result<Self, AnalysisServiceError> {
-        Ok(Self {
-            journal: count_artifacts_by_type_and_extractor(conn, "LinuxJournal", "linux.journal")?,
-            text_log: count_artifacts_by_type_excluding_extractor(
-                conn,
-                "LinuxJournal",
-                "linux.journal",
-            )?,
-            login: count_artifacts_by_type(conn, "LinuxWtmp")?,
-            bash_command: count_artifacts_by_type(conn, "LinuxBashCommand")?,
-            apt_event: count_artifacts_by_type(conn, "LinuxAptEvent")?,
-            cron_job: count_artifacts_by_type(conn, "LinuxCronJob")?,
-            sudo_event: count_artifacts_by_type(conn, "LinuxSudoEvent")?,
-            system_config: count_artifacts_by_type(conn, "LinuxSystemConfig")?,
-            web_site: count_artifacts_by_type(conn, "LinuxWebSite")?,
-            web_access_log: count_artifacts_by_type(conn, "LinuxWebAccessLog")?,
-            web_error_log: count_artifacts_by_type(conn, "LinuxWebErrorLog")?,
-            web_finding: count_artifacts_by_type(conn, "LinuxWebFinding")?,
-            mysql_config: count_artifacts_by_type(conn, "LinuxMysqlConfig")?,
-            mysql_log: count_artifacts_by_type(conn, "LinuxMysqlLogEntry")?,
-            mysql_finding: count_artifacts_by_type(conn, "LinuxMysqlFinding")?,
-        })
+    pub(super) fn record(&mut self, artifact: &Artifact) {
+        match artifact.family.as_str() {
+            "LinuxJournal" => {
+                if artifact.extractor_id.as_deref() == Some("linux.journal") {
+                    self.journal = self.journal.saturating_add(1);
+                } else {
+                    self.text_log = self.text_log.saturating_add(1);
+                }
+            }
+            "LinuxWtmp" => self.login = self.login.saturating_add(1),
+            "LinuxBashCommand" => self.bash_command = self.bash_command.saturating_add(1),
+            "LinuxAptEvent" => self.apt_event = self.apt_event.saturating_add(1),
+            "LinuxCronJob" => self.cron_job = self.cron_job.saturating_add(1),
+            "LinuxSudoEvent" => self.sudo_event = self.sudo_event.saturating_add(1),
+            "LinuxSystemConfig" => self.system_config = self.system_config.saturating_add(1),
+            "LinuxWebSite" => self.web_site = self.web_site.saturating_add(1),
+            "LinuxWebAccessLog" => self.web_access_log = self.web_access_log.saturating_add(1),
+            "LinuxWebErrorLog" => self.web_error_log = self.web_error_log.saturating_add(1),
+            "LinuxWebFinding" => self.web_finding = self.web_finding.saturating_add(1),
+            "LinuxMysqlConfig" => self.mysql_config = self.mysql_config.saturating_add(1),
+            "LinuxMysqlLogEntry" => self.mysql_log = self.mysql_log.saturating_add(1),
+            "LinuxMysqlFinding" => self.mysql_finding = self.mysql_finding.saturating_add(1),
+            _ => {}
+        }
     }
 
     pub(super) fn total(&self) -> u64 {
@@ -99,54 +105,6 @@ pub(super) struct LinuxEntries {
     pub(super) mysql_configs: Vec<LinuxMysqlConfigDto>,
     pub(super) mysql_logs: Vec<LinuxMysqlLogEntryDto>,
     pub(super) mysql_findings: Vec<LinuxMysqlFindingDto>,
-}
-
-impl LinuxEntries {
-    pub(super) fn load(
-        conn: &Connection,
-        offset: u64,
-        limit: u32,
-    ) -> Result<Self, AnalysisServiceError> {
-        let journal = map_journal(query(conn, "LinuxJournal", offset, limit)?);
-        let login = map_logins(query(conn, "LinuxWtmp", offset, limit)?);
-        let bash_commands = map_bash_commands(query(conn, "LinuxBashCommand", offset, limit)?);
-        let apt_events = map_apt_events(query(conn, "LinuxAptEvent", offset, limit)?);
-        let cron_jobs = map_cron_jobs(query(conn, "LinuxCronJob", offset, limit)?);
-        let sudo_events = map_sudo_events(query(conn, "LinuxSudoEvent", offset, limit)?);
-        let system_configs = map_system_configs(query(conn, "LinuxSystemConfig", offset, limit)?);
-        let web_sites = map_web_sites(query(conn, "LinuxWebSite", offset, limit)?);
-        let web_access_logs = map_web_access_logs(query(conn, "LinuxWebAccessLog", offset, limit)?);
-        let web_error_logs = map_web_error_logs(query(conn, "LinuxWebErrorLog", offset, limit)?);
-        let web_findings = map_web_findings(query(conn, "LinuxWebFinding", offset, limit)?);
-        let mysql_configs = map_mysql_configs(query(conn, "LinuxMysqlConfig", offset, limit)?);
-        let mysql_logs = map_mysql_logs(query(conn, "LinuxMysqlLogEntry", offset, limit)?);
-        let mysql_findings = map_mysql_findings(query(conn, "LinuxMysqlFinding", offset, limit)?);
-        Ok(Self {
-            journal,
-            login,
-            bash_commands,
-            apt_events,
-            cron_jobs,
-            sudo_events,
-            system_configs,
-            web_sites,
-            web_access_logs,
-            web_error_logs,
-            web_findings,
-            mysql_configs,
-            mysql_logs,
-            mysql_findings,
-        })
-    }
-}
-
-fn query(
-    conn: &Connection,
-    artifact_type: &str,
-    offset: u64,
-    limit: u32,
-) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
-    query_artifact_rows(conn, &[artifact_type], offset, limit)
 }
 
 fn map_journal(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxJournalEntryDto> {

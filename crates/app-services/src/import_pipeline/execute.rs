@@ -168,12 +168,7 @@ fn execute_import_job_internal(
         Ok(message)
     })();
 
-    let ready_state = match ctx.content_kind {
-        crate::import_pipeline::context::ImportContentKind::Filesystem => "ready",
-        crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata => {
-            "ready_metadata"
-        }
-    };
+    let ready_state = ready_state(ctx.content_kind);
     let message = profile::measure_optional(profiling.as_ref(), Phase::OutcomePersistence, || {
         super::runtime::persist_outcome(&ctx, &ds, ready_state, result)
     })?;
@@ -195,6 +190,15 @@ fn execute_import_job_internal(
     );
     cleanup.start();
     Ok((message, counts))
+}
+
+fn ready_state(kind: crate::import_pipeline::context::ImportContentKind) -> &'static str {
+    match kind {
+        crate::import_pipeline::context::ImportContentKind::Filesystem => "ready",
+        crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata => {
+            "ready_metadata"
+        }
+    }
 }
 
 fn mark_projection_committed(

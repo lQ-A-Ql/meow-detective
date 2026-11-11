@@ -1,32 +1,23 @@
-use crate::analysis_service::error::AnalysisServiceError;
-use crate::analysis_service::extraction::artifact_query::{
-    count_linux_locked_shadow_accounts, count_linux_system_config_by_kind,
-    count_linux_user_accounts, query_linux_account_rows, query_linux_hostname_rows,
-    query_linux_kernel_image_versions, query_linux_module_dir_versions,
-    query_linux_system_config_by_kind, AnalysisArtifactRow,
-};
+use super::aggregate::LinuxSystemInputs;
+use crate::analysis_service::candidates::LinuxArtifactCatalogSummary;
 use crate::analysis_service::extraction::attr_mapping::{
     optional_bool_attr, optional_string_attr, optional_u32_attr, string_attr,
 };
-use rusqlite::Connection;
+use domain::Artifact;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use transport::dto::{LinuxAccountDto, LinuxSystemInfoDto};
 
 /// Build the unpaged host overview: os-release identity, `/etc/hostname`,
-/// kernel versions, and passwd/shadow account details. Derived from dedicated
-/// small queries so it stays correct regardless of the summary entry paging
-/// window.
-pub(super) fn load_linux_system_info(
-    conn: &Connection,
-) -> Result<Option<LinuxSystemInfoDto>, AnalysisServiceError> {
+/// kernel versions, and passwd/shadow account details.
+pub(super) fn derive_linux_system_info(
+    catalog: &LinuxArtifactCatalogSummary,
+    inputs: &LinuxSystemInputs,
+) -> Option<LinuxSystemInfoDto> {
     // `/etc/os-release` is authoritative; `/usr/lib/os-release` is its
-    // distribution-provided fallback. Artifact IDs are random UUIDs, so
-    // ordering by ID cannot express that filesystem precedence.
-    let mut os_release_rows = query_linux_system_config_by_kind(conn, "osRelease", 64)?;
-    os_release_rows.sort_by_key(os_release_source_rank);
-    let os_release = os_release_rows.into_iter().next();
-    let (os_pretty_name, os_id, os_version_id) = match os_release {
+    // distribution-provided fallback. The aggregate selects that precedence
+    // while scanning the source once.
+    let (os_pretty_name, os_id, os_version_id) = match &inputs.os_release {
         Some(row) => (
             optional_string_attr(&row.attrs, "prettyName"),
             optional_string_attr(&row.attrs, "osId"),
@@ -34,69 +25,41 @@ pub(super) fn load_linux_system_info(
         ),
         None => (None, None, None),
     };
-
-    // Hostname rows are generic text-config records; the first non-empty line
-    // of the file is the hostname.
-    let hostname = query_linux_hostname_rows(conn, 4)?
-        .iter()
-        .filter_map(|row| optional_string_attr(&row.attrs, "line"))
-        .map(|line| line.trim().to_string())
-        .find(|line| !line.is_empty());
-
-    let account_count = count_linux_system_config_by_kind(conn, "passwdAccount")?;
-    let user_account_count = count_linux_user_accounts(conn)?;
-    let locked_account_count = count_linux_locked_shadow_accounts(conn)?;
-    let kernel_versions = load_kernel_versions(conn)?;
-    let accounts = merge_linux_accounts(&query_linux_account_rows(conn)?);
-
     let has_identity = os_pretty_name.is_some()
         || os_id.is_some()
         || os_version_id.is_some()
-        || hostname.is_some();
+        || inputs.hostname.is_some();
     // Kernel paths are only supporting evidence. A random nested `lib/modules`
     // directory must not fabricate a host overview when no Linux host artifact
     // (os-release, hostname, passwd, or shadow) was extracted.
-    if !has_identity && account_count == 0 && accounts.is_empty() {
-        return Ok(None);
+    if !has_identity && inputs.account_count == 0 && inputs.accounts.is_empty() {
+        return None;
     }
 
-    Ok(Some(LinuxSystemInfoDto {
+    Some(LinuxSystemInfoDto {
         os_pretty_name,
         os_id,
         os_version_id,
-        hostname,
-        account_count,
-        user_account_count,
-        locked_account_count,
-        kernel_versions,
-        accounts,
-    }))
+        hostname: inputs
+            .hostname
+            .as_ref()
+            .map(|(_, hostname)| hostname.clone()),
+        account_count: inputs.account_count,
+        user_account_count: inputs.user_account_count,
+        locked_account_count: inputs.locked_account_count,
+        kernel_versions: load_kernel_versions(catalog),
+        accounts: merge_linux_accounts(&inputs.accounts),
+    })
 }
 
-fn os_release_source_rank(row: &AnalysisArtifactRow) -> (u8, String) {
-    let path = optional_string_attr(&row.attrs, "sourcePath").unwrap_or_default();
-    let normalized = path.trim_start_matches('/');
-    let rank = if normalized == "etc/os-release" || normalized.ends_with("/etc/os-release") {
-        0
-    } else if normalized == "usr/lib/os-release" || normalized.ends_with("/usr/lib/os-release") {
-        1
-    } else {
-        2
-    };
-    (rank, path)
-}
-
-/// Kernel versions from `boot/vmlinuz-*` file names, falling back to
-/// `/lib/modules/<version>` directory names when no kernel image is present
-/// (e.g. container-style root filesystems). Newest version first.
-fn load_kernel_versions(conn: &Connection) -> Result<Vec<String>, AnalysisServiceError> {
-    let mut versions = query_linux_kernel_image_versions(conn)?;
+fn load_kernel_versions(catalog: &LinuxArtifactCatalogSummary) -> Vec<String> {
+    let mut versions = catalog.kernel_image_versions.clone();
     if versions.is_empty() {
-        versions = query_linux_module_dir_versions(conn)?;
+        versions = catalog.kernel_module_versions.clone();
     }
     versions.sort_by(|left, right| compare_kernel_versions(right, left));
     versions.dedup();
-    Ok(versions)
+    versions
 }
 
 /// Compare kernel version strings chunk by chunk: digit runs compare
@@ -140,7 +103,7 @@ fn take_number(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> u64 {
 /// Merge passwdAccount rows (identity fields) with shadowAccount rows
 /// (password state) by username. Sorted by uid ascending; shadow-only
 /// accounts (no uid) go last, ordered by name.
-fn merge_linux_accounts(rows: &[AnalysisArtifactRow]) -> Vec<LinuxAccountDto> {
+fn merge_linux_accounts(rows: &[Artifact]) -> Vec<LinuxAccountDto> {
     let mut accounts: Vec<LinuxAccountDto> = Vec::new();
     let mut index_by_username: HashMap<String, usize> = HashMap::new();
     for row in rows {

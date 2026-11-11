@@ -16,8 +16,8 @@ pub use classification::{classify_source_files, get_file_classification_board};
 pub use evidence::{
     get_source_evidence_summary, run_source_evidence_scan, run_source_evidence_scan_with_cancel,
 };
-pub(crate) use extraction::run_import_source_extraction;
 pub(crate) use extraction::run_source_analysis_extraction_execution_with_cancel;
+pub(crate) use extraction::{run_import_source_extraction, ImportSourceExtractionRequest};
 pub use extraction::{
     run_source_analysis_extraction, run_source_analysis_extraction_with_cancel,
     run_source_analysis_extraction_with_progress,
@@ -28,6 +28,7 @@ pub use queries::{
     get_source_linux_summary, get_source_linux_system_config_page,
     get_source_plugin_family_entries, get_source_plugin_modules,
     get_source_registry_structured_summary, get_source_registry_summary,
+    materialize_source_linux_summary,
 };
 pub use runtime::AnalysisSourceReadRuntime;
 pub use summary::generate_source_analysis_summary;

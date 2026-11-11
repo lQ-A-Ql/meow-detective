@@ -93,6 +93,32 @@ impl SourceStore {
             .map(|value| VersionedEnvelope::decode(&value))
             .transpose()
     }
+
+    pub fn read_raw(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        keyspace: KeyspaceName,
+        key: &[u8],
+    ) -> Result<Option<Vec<u8>>> {
+        snapshot.get(keyspace, key)
+    }
+
+    pub fn write_raw(
+        &self,
+        keyspace: KeyspaceName,
+        key: Vec<u8>,
+        value: Vec<u8>,
+        mode: PersistMode,
+    ) -> Result<WriteBatchReceipt> {
+        self.database.write_batch(
+            &[WriteAction::Put {
+                keyspace,
+                key,
+                value,
+            }],
+            mode,
+        )
+    }
 }
 
 /// Opens one process-wide SourceStore for a Fjall directory.

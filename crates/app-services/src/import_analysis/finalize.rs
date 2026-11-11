@@ -81,6 +81,26 @@ pub(super) fn merge_finished_analysis_staging(
     drop(fjall_source);
     stats.artifact_count = merge_stats.artifact_count;
     stats.timeline_count = merge_stats.timeline_count;
+    if options.platform == domain::DataSourcePlatform::Linux {
+        if let Some(cb) = progress_cb {
+            cb(
+                91,
+                "Materializing Linux analysis summary: phase=analysis-summary state=running",
+            );
+        }
+        let summary_started = Instant::now();
+        crate::analysis_service::warm_linux_artifact_summary(&source, 200)
+            .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+        if let Some(cb) = progress_cb {
+            cb(
+                91,
+                &format!(
+                    "Linux analysis summary ready: phase=analysis-summary state=completed elapsedMs={}",
+                    summary_started.elapsed().as_millis()
+                ),
+            );
+        }
+    }
     bump_search_input_revision(&source)?;
     let search_stats = rebuild_file_metadata_index(options, progress_cb)?;
     apply_search_stats(&mut stats, search_stats);

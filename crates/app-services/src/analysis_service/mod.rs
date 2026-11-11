@@ -29,6 +29,7 @@ pub use candidates::{
 pub use classification::{classify_files_by_magic, classify_files_by_metadata};
 pub use error::AnalysisServiceError;
 pub(crate) use extraction::stage_native_records;
+pub(crate) use extraction::warm_linux_artifact_summary;
 pub(crate) use extraction::AnalysisExtractionExecution;
 pub use extraction::{
     extract_evtx_candidate, extract_linux_candidate, extract_registry_candidate,
@@ -46,7 +47,6 @@ pub use platforms::{
 pub use summary::generate_analysis_summary;
 pub use system_info::extract_system_info_for_case;
 mod system_info_boot;
-pub(crate) use use_cases::run_import_source_extraction;
 pub(crate) use use_cases::run_source_analysis_extraction_execution_with_cancel;
 pub use use_cases::{
     classify_source_files, generate_source_analysis_summary, get_file_classification_board,
@@ -55,13 +55,14 @@ pub use use_cases::{
     get_source_linux_summary, get_source_linux_system_config_page,
     get_source_plugin_family_entries, get_source_plugin_modules,
     get_source_registry_structured_summary, get_source_registry_summary, get_source_system_info,
-    run_source_analysis_extraction, run_source_analysis_extraction_with_cancel,
-    run_source_analysis_extraction_with_progress,
+    materialize_source_linux_summary, run_source_analysis_extraction,
+    run_source_analysis_extraction_with_cancel, run_source_analysis_extraction_with_progress,
     run_source_analysis_extraction_with_progress_and_cancel, run_source_android_analysis,
     run_source_android_analysis_with_cancel, run_source_evidence_scan,
     run_source_evidence_scan_with_cancel, AnalysisExtractionProgressContext,
     AnalysisSourceReadRuntime,
 };
+pub(crate) use use_cases::{run_import_source_extraction, ImportSourceExtractionRequest};
 
 pub const DEFAULT_SAMPLE_SIZE: u32 = 1000;
 pub const MAX_SAMPLE_SIZE: u32 = 5000;

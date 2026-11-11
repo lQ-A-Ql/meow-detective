@@ -41,6 +41,7 @@ pub use self::runner::{
 pub(crate) use self::runner::{
     run_analysis_extraction_with_source_and_progress, AnalysisExtractionExecution,
 };
+pub(crate) use self::summary::warm_linux_artifact_summary;
 pub use self::summary::{
     get_browser_history_summary, get_email_extraction_summary, get_evtx_event_summary,
     get_linux_artifact_summary, get_linux_system_config_page, get_plugin_family_entries,
