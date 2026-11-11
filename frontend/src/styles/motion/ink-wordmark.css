@@ -1,9 +1,14 @@
 @keyframes ink-write {
-  to { stroke-dashoffset: 0; }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 @keyframes ink-fill {
-  to { fill: currentColor; stroke-width: 0; }
+  to {
+    fill: currentColor;
+    stroke-width: 0;
+  }
 }
 
 .artistic-title__wordmark use {
@@ -14,7 +19,8 @@
   stroke-linejoin: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  animation: ink-write 420ms cubic-bezier(.65, 0, .35, 1) calc(var(--stroke-index) * 75ms) forwards,
+  animation:
+    ink-write 420ms cubic-bezier(0.65, 0, 0.35, 1) calc(var(--stroke-index) * 75ms) forwards,
     ink-fill 240ms ease-out calc(var(--stroke-index) * 75ms + 340ms) forwards;
 }
 

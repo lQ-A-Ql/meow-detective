@@ -61,100 +61,133 @@ describe('V3Dashboard', () => {
 
     global.requestAnimationFrame = vi.fn(() => 0);
     mocks.useCurrentCase.mockReturnValue(queryState({ id: 'case-1' }));
-    mocks.useCaseOverviewSnapshot.mockReturnValue(queryState({
-      generatedAt: '2026-06-12T00:00:00Z',
-      dataSources: [
-      {
-        id: 'ds-1',
-        name: 'sample.e01',
-        kind: 'e01',
-        sourcePath: 'E:/cases/sample.e01',
-        importedAt: '2026-06-12T00:00:00Z',
-        platform: 'windows',
-        fileCount: 1234,
-        readerKind: 'ewf',
-        partitions: [
-          { index: 0, name: 'NTFS', kindLabel: 'Filesystem', status: 'ok', offset: 0, length: 1073741824 },
+    mocks.useCaseOverviewSnapshot.mockReturnValue(
+      queryState({
+        generatedAt: '2026-06-12T00:00:00Z',
+        dataSources: [
+          {
+            id: 'ds-1',
+            name: 'sample.e01',
+            kind: 'e01',
+            sourcePath: 'E:/cases/sample.e01',
+            importedAt: '2026-06-12T00:00:00Z',
+            platform: 'windows',
+            fileCount: 1234,
+            readerKind: 'ewf',
+            partitions: [
+              { index: 0, name: 'NTFS', kindLabel: 'Filesystem', status: 'ok', offset: 0, length: 1073741824 },
+            ],
+          },
+          {
+            id: 'ds-2',
+            name: 'disk.raw',
+            kind: 'raw',
+            sourcePath: 'E:/cases/disk.raw',
+            importedAt: '2026-06-12T00:00:00Z',
+            platform: 'windows',
+            fileCount: 567,
+            readerKind: 'raw',
+            partitions: [
+              { index: 0, name: 'NTFS', kindLabel: 'Filesystem', status: 'ok', offset: 0, length: 536870912 },
+              { index: 1, name: 'FAT32', kindLabel: 'Filesystem', status: 'ok', offset: 536870912, length: 536870912 },
+            ],
+          },
         ],
-      },
-      {
-        id: 'ds-2',
-        name: 'disk.raw',
-        kind: 'raw',
-        sourcePath: 'E:/cases/disk.raw',
-        importedAt: '2026-06-12T00:00:00Z',
-        platform: 'windows',
-        fileCount: 567,
-        readerKind: 'raw',
-        partitions: [
-          { index: 0, name: 'NTFS', kindLabel: 'Filesystem', status: 'ok', offset: 0, length: 536870912 },
-          { index: 1, name: 'FAT32', kindLabel: 'Filesystem', status: 'ok', offset: 536870912, length: 536870912 },
+        timelineEventCount: 3200,
+        artifactFamilyCounts: [
+          { family: 'LNK', count: 85 },
+          { family: 'Prefetch', count: 52 },
+          { family: 'EVTX', count: 1200 },
+          { family: 'Registry', count: 340 },
         ],
-      },
-      ],
-      timelineEventCount: 3200,
-      artifactFamilyCounts: [
-        { family: 'LNK', count: 85 },
-        { family: 'Prefetch', count: 52 },
-        { family: 'EVTX', count: 1200 },
-        { family: 'Registry', count: 340 },
-      ],
-      correlationStatistics: {
-        nodeCount: 15,
-        edgeCount: 8,
-        clusterCount: 7,
-        leadCount: 9,
-        familyCoverage: [
-          { family: 'LNK', displayName: 'LNK', status: 'covered', leadCount: 1, highConfidenceLeadCount: 1, reviewLeadCount: 0, clusterCount: 1, sampleSignals: ['LNK target path matches file path'] },
-          { family: 'Prefetch', displayName: 'Prefetch', status: 'missing', leadCount: 0, highConfidenceLeadCount: 0, reviewLeadCount: 0, clusterCount: 0, sampleSignals: [] },
+        correlationStatistics: {
+          nodeCount: 15,
+          edgeCount: 8,
+          clusterCount: 7,
+          leadCount: 9,
+          familyCoverage: [
+            {
+              family: 'LNK',
+              displayName: 'LNK',
+              status: 'covered',
+              leadCount: 1,
+              highConfidenceLeadCount: 1,
+              reviewLeadCount: 0,
+              clusterCount: 1,
+              sampleSignals: ['LNK target path matches file path'],
+            },
+            {
+              family: 'Prefetch',
+              displayName: 'Prefetch',
+              status: 'missing',
+              leadCount: 0,
+              highConfidenceLeadCount: 0,
+              reviewLeadCount: 0,
+              clusterCount: 0,
+              sampleSignals: [],
+            },
+          ],
+        },
+        platformCoverage: {
+          windowsArtifactFamilies: 4,
+          linuxArtifactFamilies: 0,
+          crossPlatformArtifactFamilies: 0,
+          unknownArtifactFamilies: 0,
+          totalFamilies: 4,
+          windowsFamilies: ['LNK', 'Prefetch', 'EVTX', 'Registry'],
+          linuxFamilies: [],
+          crossPlatformFamilies: [],
+          unknownFamilies: [],
+        },
+        rulePackCoverage: {
+          loadedPacks: [
+            { name: 'v2-standard', version: '1.0.0', author: 'Meow_Detective', ruleCount: 10, scope: ['correlation'] },
+          ],
+          totalRuleCount: 10,
+          loadStatus: 'loaded',
+          executionStatus: 'not_executed',
+        },
+        batchStatus: { activeJobs: 0, completedJobs: 0, failedJobs: 0, queuedJobs: 0, totalJobs: 0 },
+      }),
+    );
+    mocks.useGraphSnapshot.mockReturnValue(
+      queryState({
+        nodeCountByType: { file: 150, artifact: 42, timeline: 255 },
+        edgeCountByType: { pathMatch: 38, timeCorrelation: 15, parentChild: 147 },
+        totalNodes: 392,
+        totalEdges: 277,
+        density: 0.0026,
+        largestComponentSize: 180,
+        dataSourceCount: 2,
+        crossSourceEntityCount: 1,
+        crossSourceEdgeCount: 2,
+        seedIds: ['case:entity:alice'],
+        projectionBuiltAt: '2026-08-02T00:00:00Z',
+      }),
+    );
+    mocks.useGraphQuery.mockReturnValue(
+      queryState({
+        nodes: [
+          { id: 'file-1', nodeType: 'file', label: 'root', summary: 'Root directory' },
+          { id: 'art-1', nodeType: 'artifact', label: 'LNK artifact', summary: '' },
         ],
-      },
-      platformCoverage: {
-        windowsArtifactFamilies: 4,
-        linuxArtifactFamilies: 0,
-        crossPlatformArtifactFamilies: 0,
-        unknownArtifactFamilies: 0,
-        totalFamilies: 4,
-        windowsFamilies: ['LNK', 'Prefetch', 'EVTX', 'Registry'],
-        linuxFamilies: [],
-        crossPlatformFamilies: [],
-        unknownFamilies: [],
-      },
-      rulePackCoverage: {
-        loadedPacks: [{ name: 'v2-standard', version: '1.0.0', author: 'Meow_Detective', ruleCount: 10, scope: ['correlation'] }],
-        totalRuleCount: 10,
-        loadStatus: 'loaded',
-        executionStatus: 'not_executed',
-      },
-      batchStatus: { activeJobs: 0, completedJobs: 0, failedJobs: 0, queuedJobs: 0, totalJobs: 0 },
-    }));
-    mocks.useGraphSnapshot.mockReturnValue(queryState({
-      nodeCountByType: { file: 150, artifact: 42, timeline: 255 },
-      edgeCountByType: { pathMatch: 38, timeCorrelation: 15, parentChild: 147 },
-      totalNodes: 392,
-      totalEdges: 277,
-      density: 0.0026,
-      largestComponentSize: 180,
-      dataSourceCount: 2,
-      crossSourceEntityCount: 1,
-      crossSourceEdgeCount: 2,
-      seedIds: ['case:entity:alice'],
-      projectionBuiltAt: '2026-08-02T00:00:00Z',
-    }));
-    mocks.useGraphQuery.mockReturnValue(queryState({
-      nodes: [
-        { id: 'file-1', nodeType: 'file', label: 'root', summary: 'Root directory' },
-        { id: 'art-1', nodeType: 'artifact', label: 'LNK artifact', summary: '' },
-      ],
-      edges: [
-        { id: 'edge-1', edgeType: 'references', sourceId: 'art-1', targetId: 'file-1', confidence: 0.9, provenance: [] },
-      ],
-      nodeCount: 2,
-      edgeCount: 1,
-      truncated: true,
-      maxDepthReached: 2,
-      dataSourceIds: ['ds-1', 'ds-2'],
-    }));
+        edges: [
+          {
+            id: 'edge-1',
+            edgeType: 'references',
+            sourceId: 'art-1',
+            targetId: 'file-1',
+            confidence: 0.9,
+            provenance: [],
+          },
+        ],
+        nodeCount: 2,
+        edgeCount: 1,
+        truncated: true,
+        maxDepthReached: 2,
+        dataSourceIds: ['ds-1', 'ds-2'],
+      }),
+    );
     mocks.useNodeNeighborhood.mockReturnValue(queryState({ nodes: [], edges: [] }));
     mocks.useProvenanceChain.mockReturnValue(queryState([]));
   });

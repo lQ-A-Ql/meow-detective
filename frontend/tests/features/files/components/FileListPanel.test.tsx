@@ -26,11 +26,14 @@ const DIRECTORY: FileEntryRow = {
 };
 
 beforeEach(() => {
-  vi.stubGlobal('ResizeObserver', class {
-    observe = vi.fn();
-    disconnect = vi.fn();
-    unobserve = vi.fn();
-  });
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+    },
+  );
 });
 
 function renderPanel(
@@ -132,9 +135,9 @@ describe('formatEntryAttributes', () => {
   const base: FileEntryRow = { ...FILE };
 
   it('maps directories to D regardless of attribute bits', () => {
-    expect(
-      formatEntryAttributes({ ...DIRECTORY, readOnly: true, hidden: true, system: true, archive: true }),
-    ).toBe('D');
+    expect(formatEntryAttributes({ ...DIRECTORY, readOnly: true, hidden: true, system: true, archive: true })).toBe(
+      'D',
+    );
   });
 
   it('maps files with no attribute bits to -', () => {
@@ -144,17 +147,13 @@ describe('formatEntryAttributes', () => {
   it('concatenates set bits in R/H/S/A order', () => {
     expect(formatEntryAttributes({ ...base, archive: true, readOnly: true })).toBe('RA');
     expect(formatEntryAttributes({ ...base, system: true, hidden: true })).toBe('HS');
-    expect(
-      formatEntryAttributes({ ...base, readOnly: true, hidden: true, system: true, archive: true }),
-    ).toBe('RHSA');
+    expect(formatEntryAttributes({ ...base, readOnly: true, hidden: true, system: true, archive: true })).toBe('RHSA');
   });
 
   it('renders ls -l form when unixMode is present', () => {
     expect(formatEntryAttributes({ ...base, unixMode: 0o100644 })).toBe('-rw-r--r--');
     expect(formatEntryAttributes({ ...DIRECTORY, unixMode: 0o040755 })).toBe('drwxr-xr-x');
     expect(formatEntryAttributes({ ...base, unixMode: 0o120777 })).toBe('lrwxrwxrwx');
-    expect(formatEntryAttributes({ ...base, unixMode: 0o100600, readOnly: true })).toBe(
-      '-rw-------',
-    );
+    expect(formatEntryAttributes({ ...base, unixMode: 0o100600, readOnly: true })).toBe('-rw-------');
   });
 });

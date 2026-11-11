@@ -1,4 +1,4 @@
-import { Server }  from '@/components/icons';
+import { Server } from '@/components/icons';
 import { ListRow } from '@/components/lists/ListRow';
 import type { TFunction } from 'i18next';
 
@@ -29,17 +29,27 @@ export function WorkloadEvidencePanel({
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {groups.map(([kind, items]) => (
             <div key={kind} className="bg-transparent px-3 py-3">
-              <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-xs text-forensics-text"><Server size={14} />{kindLabel(kind, t)}</div><span className="font-mono text-[11px] text-forensics-muted">{items.length}</span></div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-forensics-text">
+                  <Server size={14} />
+                  {kindLabel(kind, t)}
+                </div>
+                <span className="font-mono text-[11px] text-forensics-muted">{items.length}</span>
+              </div>
               <div className="mt-3 space-y-1">
-                {items.slice(0, 4).map((node) => <ListRow
-                  key={node.id}
-                  selected={selectedId === node.id}
-                  onActivate={() => onSelect(node.id)}
-                  ariaLabel={node.name}
-                  className="h-6 gap-3 py-1 text-[11px]"
-                  label={node.name}
-                  meta={<span className="shrink-0 text-[10px] text-forensics-ink-3">{stateLabel(node.status, t)}</span>}
-                />)}
+                {items.slice(0, 4).map((node) => (
+                  <ListRow
+                    key={node.id}
+                    selected={selectedId === node.id}
+                    onActivate={() => onSelect(node.id)}
+                    ariaLabel={node.name}
+                    className="h-6 gap-3 py-1 text-[11px]"
+                    label={node.name}
+                    meta={
+                      <span className="shrink-0 text-[10px] text-forensics-ink-3">{stateLabel(node.status, t)}</span>
+                    }
+                  />
+                ))}
               </div>
             </div>
           ))}

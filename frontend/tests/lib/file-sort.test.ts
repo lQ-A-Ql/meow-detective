@@ -57,10 +57,7 @@ describe('sortFileEntries', () => {
   });
 
   it('keeps status buckets fixed under descending sort', () => {
-    const rows = [
-      row({ id: '1', name: 'aaa.txt', hidden: true }),
-      row({ id: '2', name: 'zzz.txt' }),
-    ];
+    const rows = [row({ id: '1', name: 'aaa.txt', hidden: true }), row({ id: '2', name: 'zzz.txt' })];
     const ordered = sortFileEntries(rows, 'name', 'desc').map((r) => r.name);
     // Normal bucket precedes hidden bucket regardless of direction.
     expect(ordered).toEqual(['zzz.txt', 'aaa.txt']);

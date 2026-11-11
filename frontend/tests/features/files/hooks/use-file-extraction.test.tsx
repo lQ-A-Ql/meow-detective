@@ -1,12 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type {
-  EventEnvelope,
-  FileEntryRow,
-  FileExtractionProgress,
-  FileExtractionResult,
-} from '@/types/models';
+import type { EventEnvelope, FileEntryRow, FileExtractionProgress, FileExtractionResult } from '@/types/models';
 
 const mocks = vi.hoisted(() => ({
   extractFileToPath: vi.fn(),
@@ -106,57 +101,65 @@ describe('useFileExtractionModel', () => {
     act(() => {
       void result.current.submit();
     });
-    await waitFor(() => expect(mocks.extractFileToPath).toHaveBeenCalledWith({
-      operationId: 'extract-operation-1',
-      fileId: FILE.id,
-      destinationPath: 'D:/exports/evidence.bin',
-      overwrite: false,
-    }));
-
-    act(() => progressListener?.({
-      eventId: 'event-ignored',
-      topic: 'file-extract-progress',
-      ts: '2026-07-28T00:00:00Z',
-      payload: {
-        operationId: 'another-operation',
-        fileId: FILE.id,
-        phase: 'copying',
-        bytesWritten: 2048,
-        totalBytes: 4096,
-        percent: 50,
-      },
-    }));
-    expect(result.current.progress).toBeUndefined();
-
-    act(() => progressListener?.({
-      eventId: 'event-progress',
-      topic: 'file-extract-progress',
-      ts: '2026-07-28T00:00:01Z',
-      payload: {
+    await waitFor(() =>
+      expect(mocks.extractFileToPath).toHaveBeenCalledWith({
         operationId: 'extract-operation-1',
         fileId: FILE.id,
-        phase: 'copying',
-        bytesWritten: 2048,
-        totalBytes: 4096,
-        percent: 50,
-      },
-    }));
+        destinationPath: 'D:/exports/evidence.bin',
+        overwrite: false,
+      }),
+    );
+
+    act(() =>
+      progressListener?.({
+        eventId: 'event-ignored',
+        topic: 'file-extract-progress',
+        ts: '2026-07-28T00:00:00Z',
+        payload: {
+          operationId: 'another-operation',
+          fileId: FILE.id,
+          phase: 'copying',
+          bytesWritten: 2048,
+          totalBytes: 4096,
+          percent: 50,
+        },
+      }),
+    );
+    expect(result.current.progress).toBeUndefined();
+
+    act(() =>
+      progressListener?.({
+        eventId: 'event-progress',
+        topic: 'file-extract-progress',
+        ts: '2026-07-28T00:00:01Z',
+        payload: {
+          operationId: 'extract-operation-1',
+          fileId: FILE.id,
+          phase: 'copying',
+          bytesWritten: 2048,
+          totalBytes: 4096,
+          percent: 50,
+        },
+      }),
+    );
     expect(result.current.progress?.bytesWritten).toBe(2048);
     expect(result.current.progress?.percent).toBe(50);
 
-    act(() => progressListener?.({
-      eventId: 'event-finalizing',
-      topic: 'file-extract-progress',
-      ts: '2026-07-28T00:00:02Z',
-      payload: {
-        operationId: 'extract-operation-1',
-        fileId: FILE.id,
-        phase: 'finalizing',
-        bytesWritten: 4096,
-        totalBytes: 4096,
-        percent: 100,
-      },
-    }));
+    act(() =>
+      progressListener?.({
+        eventId: 'event-finalizing',
+        topic: 'file-extract-progress',
+        ts: '2026-07-28T00:00:02Z',
+        payload: {
+          operationId: 'extract-operation-1',
+          fileId: FILE.id,
+          phase: 'finalizing',
+          bytesWritten: 4096,
+          totalBytes: 4096,
+          percent: 100,
+        },
+      }),
+    );
     expect(result.current.progress?.phase).toBe('finalizing');
 
     await act(async () => {

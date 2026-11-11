@@ -1,10 +1,5 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import {
-  getTimelineEventById,
-  getTimelineEvents,
-  getTimelineFacets,
-  TimelineRequest,
-} from '@/lib/api/timeline';
+import { getTimelineEventById, getTimelineEvents, getTimelineFacets, TimelineRequest } from '@/lib/api/timeline';
 import type { TimelineFacetsRequest } from '@/types/timeline';
 import { timelineQueryKeys } from '@/features/cache-invalidation';
 import { useCurrentCase } from '@/features/case/hooks';
@@ -33,11 +28,12 @@ export function useInfiniteTimelineEvents(
       'infinite',
     ],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => getTimelineEvents({
-      ...request,
-      limit: pageSize,
-      cursor: pageParam,
-    }),
+    queryFn: ({ pageParam }) =>
+      getTimelineEvents({
+        ...request,
+        limit: pageSize,
+        cursor: pageParam,
+      }),
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
   });

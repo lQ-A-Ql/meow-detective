@@ -51,9 +51,7 @@ describe('artifacts hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     caseState.id = 'case-1';
-    mocks.getArtifactFamilies.mockResolvedValue([
-      { family: 'Registry', displayName: 'Registry', count: 10 },
-    ]);
+    mocks.getArtifactFamilies.mockResolvedValue([{ family: 'Registry', displayName: 'Registry', count: 10 }]);
     mocks.getArtifactRows.mockResolvedValue([
       { id: 'a1', family: 'Registry', source: 'SYSTEM', summary: 'Test artifact' },
     ]);
@@ -61,9 +59,7 @@ describe('artifacts hooks', () => {
       total: 1,
       items: [{ id: 'a1', family: 'Registry', source: 'SYSTEM', summary: 'Test artifact' }],
     });
-    mocks.getArtifactFamilyCounts.mockResolvedValue([
-      { family: 'Registry', count: 10 },
-    ]);
+    mocks.getArtifactFamilyCounts.mockResolvedValue([{ family: 'Registry', count: 10 }]);
     mocks.getArtifactById.mockResolvedValue({
       id: 'a1',
       family: 'Registry',
@@ -138,12 +134,7 @@ describe('artifacts hooks', () => {
       nextResult = await result.current.fetchNextPage();
     });
 
-    expect(mocks.getArtifactRowsPage).toHaveBeenNthCalledWith(
-      2,
-      'Registry',
-      'artifact-cursor-1',
-      2,
-    );
+    expect(mocks.getArtifactRowsPage).toHaveBeenNthCalledWith(2, 'Registry', 'artifact-cursor-1', 2);
     expect(nextResult?.data?.pages.flatMap((page) => page.items)).toHaveLength(3);
     expect(nextResult?.hasNextPage).toBe(false);
   });

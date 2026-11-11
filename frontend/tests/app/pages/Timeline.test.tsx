@@ -60,13 +60,7 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
-    createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      createElement(Timeline),
-    ),
-  );
+  return render(createElement(QueryClientProvider, { client: queryClient }, createElement(Timeline)));
 }
 
 const emptyTimelineResult: PagedResponse<TimelineEvent> = { items: [], total: 0 };
@@ -123,20 +117,22 @@ describe('Timeline page', () => {
 
   it('renders event list when data is available', () => {
     mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(populatedTimelineResult));
-    mocks.timelineFacets.mockReturnValue(queryState({
-      data: {
-        totalEvents: 2,
-        eventTypes: [
-          { value: 'FileAccess', count: 1 },
-          { value: 'RegistryModified', count: 1 },
-        ],
-        dataSources: [
-          { value: 'source-1', count: 1 },
-          { value: 'source-2', count: 1 },
-        ],
-        histogram: [],
-      },
-    }));
+    mocks.timelineFacets.mockReturnValue(
+      queryState({
+        data: {
+          totalEvents: 2,
+          eventTypes: [
+            { value: 'FileAccess', count: 1 },
+            { value: 'RegistryModified', count: 1 },
+          ],
+          dataSources: [
+            { value: 'source-1', count: 1 },
+            { value: 'source-2', count: 1 },
+          ],
+          histogram: [],
+        },
+      }),
+    );
 
     renderPage();
 
@@ -157,27 +153,29 @@ describe('Timeline page', () => {
 
   it('filters the event table when a timeline bucket is selected', () => {
     mocks.infiniteTimelineEvents.mockReturnValue(infiniteQueryState(populatedTimelineResult));
-    mocks.timelineFacets.mockReturnValue(queryState({
-      data: {
-        totalEvents: 2,
-        startTs: '2026-06-01T10:00:00Z',
-        endTs: '2026-06-01T12:00:00Z',
-        eventTypes: [],
-        dataSources: [{ value: 'source-1', count: 2 }],
-        histogram: [
-          {
-            startTs: '2026-06-01T10:00:00Z',
-            endTs: '2026-06-01T11:00:00Z',
-            count: 1,
-          },
-          {
-            startTs: '2026-06-01T11:00:00Z',
-            endTs: '2026-06-01T12:00:00Z',
-            count: 1,
-          },
-        ],
-      },
-    }));
+    mocks.timelineFacets.mockReturnValue(
+      queryState({
+        data: {
+          totalEvents: 2,
+          startTs: '2026-06-01T10:00:00Z',
+          endTs: '2026-06-01T12:00:00Z',
+          eventTypes: [],
+          dataSources: [{ value: 'source-1', count: 2 }],
+          histogram: [
+            {
+              startTs: '2026-06-01T10:00:00Z',
+              endTs: '2026-06-01T11:00:00Z',
+              count: 1,
+            },
+            {
+              startTs: '2026-06-01T11:00:00Z',
+              endTs: '2026-06-01T12:00:00Z',
+              count: 1,
+            },
+          ],
+        },
+      }),
+    );
 
     renderPage();
     fireEvent.click(screen.getAllByRole('button', { name: '筛选该时间区间，共 1 条事件' })[0]);

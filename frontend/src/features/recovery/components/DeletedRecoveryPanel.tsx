@@ -1,4 +1,4 @@
-import { LoaderCircle, Search, X }  from '@/components/icons';
+import { LoaderCircle, Search, X } from '@/components/icons';
 import { digestIconNameForHash } from '@/lib/digest-icon';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
@@ -8,13 +8,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/app/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { EmptyState, KeyValueField } from '@/components/data-display';
 import { DenseDataTable, type DenseColumn } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
@@ -38,7 +32,12 @@ function formatBytes(bytes: number) {
 
 function rangeLabel(range: RecoveryProvenanceRange) {
   const end = range.logicalOffset + range.length;
-  return `#${range.ordinal} 0x${range.logicalOffset.toString(16).toUpperCase()}-0x${Math.max(range.logicalOffset, end - 1).toString(16).toUpperCase()}`;
+  return `#${range.ordinal} 0x${range.logicalOffset.toString(16).toUpperCase()}-0x${Math.max(
+    range.logicalOffset,
+    end - 1,
+  )
+    .toString(16)
+    .toUpperCase()}`;
 }
 
 function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
@@ -51,106 +50,123 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
   return (
     <ScrollArea className="min-h-0 flex-1" viewportClassName="p-3">
       <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-2 text-[11px]">
-        <KeyValueField label="Inode / MFT" value={recovery.inode} mono />
-        {recovery.mftSequence !== undefined ? (
-          <KeyValueField label="MFT sequence" value={String(recovery.mftSequence)} mono />
-        ) : null}
-        <KeyValueField label={t('recovery.fields.completeness')} value={t(`recovery.completeness.${recovery.completeness}`)} />
-        <KeyValueField label={t('recovery.fields.declaredSize')} value={formatBytes(recovery.declaredSize)} />
-        <KeyValueField label={t('recovery.fields.recoverable')} value={formatBytes(recovery.recoverableBytes)} />
-        <KeyValueField label={t('recovery.fields.method')} value={recovery.recoveryMethod} />
-        <KeyValueField label={t('recovery.fields.confidence')} value={`${Math.round(recovery.confidence * 100)}%`} />
-      </div>
-
-      <KeyValueField
-        label={t('recovery.fields.originalPath')}
-        value={recovery.originalPath}
-        mono
-        valueClassName="break-all"
-      />
-
-      {recovery.contentMd5 || recovery.contentSha1 || recovery.contentSha256 ? (
-        <div className="space-y-2 border-t border-forensics-border-light pt-3">
-          {recovery.contentMd5 ? (
-            <KeyValueField label="MD5" value={recovery.contentMd5} mono valueClassName="break-all" />
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <KeyValueField label="Inode / MFT" value={recovery.inode} mono />
+          {recovery.mftSequence !== undefined ? (
+            <KeyValueField label="MFT sequence" value={String(recovery.mftSequence)} mono />
           ) : null}
-          {recovery.contentSha1 ? (
-            <KeyValueField label="SHA-1" value={recovery.contentSha1} mono valueClassName="break-all" />
-          ) : null}
-          {recovery.contentSha256 ? (
-            <KeyValueField label="SHA-256" value={recovery.contentSha256} mono valueClassName="break-all" />
-          ) : null}
-        </div>
-      ) : null}
-
-      {recovery.warnings.length > 0 ? (
-        <div className="border border-forensics-warning-border bg-forensics-warning-bg p-2 text-[11px] text-forensics-warning-text">
-          {recovery.warnings.slice(0, 3).map((warning) => <div key={warning}>{warning}</div>)}
-        </div>
-      ) : null}
-
-      {model.contentRanges.length > 0 ? (
-        <div className="flex items-end gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 text-[10px] text-forensics-muted-light">{t('recovery.verifiedRanges')}</div>
-            <Select
-              value={model.selectedRangeOrdinal?.toString()}
-              onValueChange={(value) => model.selectRange(Number(value))}
-            >
-              <SelectTrigger size="xs" variant="mono">
-                <SelectValue placeholder={t('recovery.selectRange')} />
-              </SelectTrigger>
-              <SelectContent>
-                {model.contentRanges.map((range) => (
-                  <SelectItem key={range.ordinal} value={range.ordinal.toString()}>
-                    {rangeLabel(range)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Tooltip content={t('recovery.read')}><Button aria-label={t('recovery.read')}
-            type="button"
-            size="xs"
-            variant="forensicsOutline"
-            disabled={model.reading || model.selectedRangeOrdinal === undefined}
-            onClick={model.readSelectedRange}
-          ><ActionIcon name="restore" /></Button></Tooltip>
-        </div>
-      ) : (
-        <EmptyState className="p-3">{t('recovery.noVerifiedRange')}</EmptyState>
-      )}
-
-      {model.preview ? (
-        <div className="h-64 min-h-64 overflow-hidden border border-forensics-border">
-          <HexViewer
-            lines={[]}
-            rawBytes={model.preview.bytes}
-            baseOffset={model.preview.offset}
-            fileSize={model.preview.declaredSize}
-            loadedRanges={[{
-              start: model.preview.offset,
-              end: model.preview.offset + model.preview.bytes.length,
-            }]}
+          <KeyValueField
+            label={t('recovery.fields.completeness')}
+            value={t(`recovery.completeness.${recovery.completeness}`)}
           />
+          <KeyValueField label={t('recovery.fields.declaredSize')} value={formatBytes(recovery.declaredSize)} />
+          <KeyValueField label={t('recovery.fields.recoverable')} value={formatBytes(recovery.recoverableBytes)} />
+          <KeyValueField label={t('recovery.fields.method')} value={recovery.recoveryMethod} />
+          <KeyValueField label={t('recovery.fields.confidence')} value={`${Math.round(recovery.confidence * 100)}%`} />
         </div>
-      ) : null}
 
-      <Tooltip content={t('recovery.exportFull')}><Button aria-label={t('recovery.exportFull')}
-        type="button"
-        size="sm"
-        variant="forensicsPrimary"
-        disabled={recovery.completeness !== 'complete' || model.exporting}
-        onClick={model.exportSelected}
-      ><ActionIcon name="restore" /></Button></Tooltip>
+        <KeyValueField
+          label={t('recovery.fields.originalPath')}
+          value={recovery.originalPath}
+          mono
+          valueClassName="break-all"
+        />
 
-      {model.lastExport ? (
-        <div className="space-y-1 border border-forensics-success-border bg-forensics-success-bg p-2 text-[10px] text-forensics-success-text">
-          <div>{t('recovery.exported', { bytes: formatBytes(model.lastExport.bytesWritten) })}</div>
-          <div className="break-all font-mono">SHA-256: {model.lastExport.sha256}</div>
-        </div>
-      ) : null}
+        {recovery.contentMd5 || recovery.contentSha1 || recovery.contentSha256 ? (
+          <div className="space-y-2 border-t border-forensics-border-light pt-3">
+            {recovery.contentMd5 ? (
+              <KeyValueField label="MD5" value={recovery.contentMd5} mono valueClassName="break-all" />
+            ) : null}
+            {recovery.contentSha1 ? (
+              <KeyValueField label="SHA-1" value={recovery.contentSha1} mono valueClassName="break-all" />
+            ) : null}
+            {recovery.contentSha256 ? (
+              <KeyValueField label="SHA-256" value={recovery.contentSha256} mono valueClassName="break-all" />
+            ) : null}
+          </div>
+        ) : null}
+
+        {recovery.warnings.length > 0 ? (
+          <div className="border border-forensics-warning-border bg-forensics-warning-bg p-2 text-[11px] text-forensics-warning-text">
+            {recovery.warnings.slice(0, 3).map((warning) => (
+              <div key={warning}>{warning}</div>
+            ))}
+          </div>
+        ) : null}
+
+        {model.contentRanges.length > 0 ? (
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 text-[10px] text-forensics-muted-light">{t('recovery.verifiedRanges')}</div>
+              <Select
+                value={model.selectedRangeOrdinal?.toString()}
+                onValueChange={(value) => model.selectRange(Number(value))}
+              >
+                <SelectTrigger size="xs" variant="mono">
+                  <SelectValue placeholder={t('recovery.selectRange')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {model.contentRanges.map((range) => (
+                    <SelectItem key={range.ordinal} value={range.ordinal.toString()}>
+                      {rangeLabel(range)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Tooltip content={t('recovery.read')}>
+              <Button
+                aria-label={t('recovery.read')}
+                type="button"
+                size="xs"
+                variant="forensicsOutline"
+                disabled={model.reading || model.selectedRangeOrdinal === undefined}
+                onClick={model.readSelectedRange}
+              >
+                <ActionIcon name="restore" />
+              </Button>
+            </Tooltip>
+          </div>
+        ) : (
+          <EmptyState className="p-3">{t('recovery.noVerifiedRange')}</EmptyState>
+        )}
+
+        {model.preview ? (
+          <div className="h-64 min-h-64 overflow-hidden border border-forensics-border">
+            <HexViewer
+              lines={[]}
+              rawBytes={model.preview.bytes}
+              baseOffset={model.preview.offset}
+              fileSize={model.preview.declaredSize}
+              loadedRanges={[
+                {
+                  start: model.preview.offset,
+                  end: model.preview.offset + model.preview.bytes.length,
+                },
+              ]}
+            />
+          </div>
+        ) : null}
+
+        <Tooltip content={t('recovery.exportFull')}>
+          <Button
+            aria-label={t('recovery.exportFull')}
+            type="button"
+            size="sm"
+            variant="forensicsPrimary"
+            disabled={recovery.completeness !== 'complete' || model.exporting}
+            onClick={model.exportSelected}
+          >
+            <ActionIcon name="restore" />
+          </Button>
+        </Tooltip>
+
+        {model.lastExport ? (
+          <div className="space-y-1 border border-forensics-success-border bg-forensics-success-bg p-2 text-[10px] text-forensics-success-text">
+            <div>{t('recovery.exported', { bytes: formatBytes(model.lastExport.bytesWritten) })}</div>
+            <div className="break-all font-mono">SHA-256: {model.lastExport.sha256}</div>
+          </div>
+        ) : null}
       </div>
     </ScrollArea>
   );
@@ -159,57 +175,54 @@ function CandidateDetail({ model }: { model: DeletedRecoveryViewModel }) {
 // Module-level columns: stable reference keeps DenseDataTable row memoization
 // intact across model state updates.
 function recoveryColumns(t: ReturnType<typeof useTranslation>['t']): DenseColumn<DeletedFileRecovery>[] {
-return [
-  {
-    key: 'partition',
-    title: t('recovery.columns.partition'),
-    className: 'w-[64px]',
-    render: (row) => `P${row.partitionIndex}`,
-  },
-  {
-    key: 'inode',
-    title: t('recovery.columns.inode'),
-    className: 'w-[110px]',
-    render: (row) => row.inode,
-  },
-  {
-    key: 'path',
-    title: t('recovery.columns.originalPath'),
-    className: 'min-w-[240px]',
-    render: (row) => row.originalPath ?? '-',
-  },
-  {
-    key: 'size',
-    title: t('recovery.columns.size'),
-    className: 'w-[90px]',
-    render: (row) => formatBytes(row.declaredSize),
-  },
-  {
-    key: 'completeness',
-    title: t('recovery.columns.completeness'),
-    className: 'w-[100px]',
-    render: (row) => t(`recovery.completeness.${row.completeness}`),
-  },
-  {
-    key: 'confidence',
-    title: t('recovery.columns.confidence'),
-    className: 'w-[75px]',
-    render: (row) => `${Math.round(row.confidence * 100)}%`,
-  },
-];
+  return [
+    {
+      key: 'partition',
+      title: t('recovery.columns.partition'),
+      className: 'w-[64px]',
+      render: (row) => `P${row.partitionIndex}`,
+    },
+    {
+      key: 'inode',
+      title: t('recovery.columns.inode'),
+      className: 'w-[110px]',
+      render: (row) => row.inode,
+    },
+    {
+      key: 'path',
+      title: t('recovery.columns.originalPath'),
+      className: 'min-w-[240px]',
+      render: (row) => row.originalPath ?? '-',
+    },
+    {
+      key: 'size',
+      title: t('recovery.columns.size'),
+      className: 'w-[90px]',
+      render: (row) => formatBytes(row.declaredSize),
+    },
+    {
+      key: 'completeness',
+      title: t('recovery.columns.completeness'),
+      className: 'w-[100px]',
+      render: (row) => t(`recovery.completeness.${row.completeness}`),
+    },
+    {
+      key: 'confidence',
+      title: t('recovery.columns.confidence'),
+      className: 'w-[75px]',
+      render: (row) => `${Math.round(row.confidence * 100)}%`,
+    },
+  ];
 }
 
 export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewModel }) {
   const { t } = useTranslation();
   const columns = recoveryColumns(t);
-  const handleRowClick = useCallback(
-    (row: DeletedFileRecovery) => model.selectRecovery(row.id),
-    [model],
-  );
+  const handleRowClick = useCallback((row: DeletedFileRecovery) => model.selectRecovery(row.id), [model]);
   return (
     <div className="flex h-full min-h-[36rem] flex-col gap-3">
-        {model.pngCarving ? <PngCarvingPanel model={model.pngCarving} /> : null}
-        {model.zipCarving ? <PngCarvingPanel model={model.zipCarving} format="zip" /> : null}
+      {model.pngCarving ? <PngCarvingPanel model={model.pngCarving} /> : null}
+      {model.zipCarving ? <PngCarvingPanel model={model.zipCarving} format="zip" /> : null}
 
       {model.partitions.length === 0 ? (
         <EmptyState>{t('recovery.noPartitions')}</EmptyState>
@@ -233,18 +246,23 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
               </SelectContent>
             </Select>
           </div>
-          <Tooltip content={t('recovery.rescan')}><Button aria-label={t('recovery.rescan')}
-            type="button"
-            size="sm"
-            variant="forensicsPrimary"
-            disabled={model.scanning || model.selectedPartitionIndex === undefined}
-            onClick={model.runScan}
-          ><ActionIcon name="play" /></Button></Tooltip>
+          <Tooltip content={t('recovery.rescan')}>
+            <Button
+              aria-label={t('recovery.rescan')}
+              type="button"
+              size="sm"
+              variant="forensicsPrimary"
+              disabled={model.scanning || model.selectedPartitionIndex === undefined}
+              onClick={model.runScan}
+            >
+              <ActionIcon name="play" />
+            </Button>
+          </Tooltip>
           {model.page ? (
             <div className="ml-auto flex items-center gap-2 text-[11px] text-forensics-muted">
               <Badge variant="outline">{model.page.scan.filesystemType.toUpperCase()}</Badge>
-                <span>{t('recovery.transactions', { count: model.page.scan.transactionCount })}</span>
-                <span>{t('recovery.candidates', { count: model.total })}</span>
+              <span>{t('recovery.transactions', { count: model.page.scan.transactionCount })}</span>
+              <span>{t('recovery.candidates', { count: model.total })}</span>
             </div>
           ) : null}
         </div>
@@ -286,24 +304,28 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
               ) : null}
             </div>
             {model.hashQuery && !model.hashQueryValid ? (
-              <div className="mt-1 text-[10px] text-forensics-error-text">
-                {t('recovery.hashSearch.invalid')}
-              </div>
+              <div className="mt-1 text-[10px] text-forensics-error-text">{t('recovery.hashSearch.invalid')}</div>
             ) : null}
             {model.hashSearchError ? (
               <div className="mt-1 text-[10px] text-forensics-error-text">{model.hashSearchError}</div>
             ) : null}
           </div>
-          <Tooltip content={t('recovery.hashSearch.submit')}><Button aria-label={t('recovery.hashSearch.submit')}
-            disabled={!model.hashQueryValid || model.hashSearching}
-            size="sm"
-            type="button"
-            variant="forensicsOutline"
-            onClick={model.runHashSearch}
-          ><ActionIcon name={digestIconNameForHash(model.hashQuery)} /></Button></Tooltip>
+          <Tooltip content={t('recovery.hashSearch.submit')}>
+            <Button
+              aria-label={t('recovery.hashSearch.submit')}
+              disabled={!model.hashQueryValid || model.hashSearching}
+              size="sm"
+              type="button"
+              variant="forensicsOutline"
+              onClick={model.runHashSearch}
+            >
+              <ActionIcon name={digestIconNameForHash(model.hashQuery)} />
+            </Button>
+          </Tooltip>
           {model.hashSearch ? (
             <Badge variant="outline" className="mt-1">
-              {HASH_ALGORITHM_LABELS[model.hashSearch.algorithm]} · {t('recovery.hashSearch.matches', { count: model.hashSearch.matches.length })}
+              {HASH_ALGORITHM_LABELS[model.hashSearch.algorithm]} ·{' '}
+              {t('recovery.hashSearch.matches', { count: model.hashSearch.matches.length })}
             </Badge>
           ) : null}
         </div>
@@ -316,7 +338,10 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
       ) : null}
 
       {model.failures.map((failure) => (
-        <div key={`${failure.partitionIndex}:${failure.code}`} className="border border-forensics-warning-border bg-forensics-warning-bg p-3 text-[11px] text-forensics-warning-text">
+        <div
+          key={`${failure.partitionIndex}:${failure.code}`}
+          className="border border-forensics-warning-border bg-forensics-warning-bg p-3 text-[11px] text-forensics-warning-text"
+        >
           P{failure.partitionIndex} {failure.filesystemType}: {failure.message}
         </div>
       ))}
@@ -333,24 +358,50 @@ export function DeletedRecoveryPanel({ model }: { model: DeletedRecoveryViewMode
           <div className="flex min-h-0 min-w-0 flex-col border-r border-forensics-border">
             <DenseDataTableFrame layout="fill" variant="plain">
               <DenseDataTable
-              columns={columns}
-              rows={model.recoveries}
-              getRowKey={(row) => row.id}
-              selectedRowKey={model.selectedRecoveryId}
-              onRowClick={handleRowClick}
-              emptyTitle={t('recovery.empty.noCandidates')}
-              emptyDescription={t('recovery.empty.noCandidatesDescription')}
+                columns={columns}
+                rows={model.recoveries}
+                getRowKey={(row) => row.id}
+                selectedRowKey={model.selectedRecoveryId}
+                onRowClick={handleRowClick}
+                emptyTitle={t('recovery.empty.noCandidates')}
+                emptyDescription={t('recovery.empty.noCandidatesDescription')}
               />
             </DenseDataTableFrame>
             <div className="flex shrink-0 items-center justify-between border-t border-forensics-line px-2 py-1 text-[10px] text-forensics-muted">
               <span>
                 {model.hashSearch
                   ? t('recovery.pagination.hashMatches', { shown: model.recoveries.length, total: model.total })
-                  : t('recovery.pagination.range', { start: model.page?.offset ?? 0, end: (model.page?.offset ?? 0) + model.recoveries.length, total: model.total })}
+                  : t('recovery.pagination.range', {
+                      start: model.page?.offset ?? 0,
+                      end: (model.page?.offset ?? 0) + model.recoveries.length,
+                      total: model.total,
+                    })}
               </span>
               <div className="flex gap-1">
-                <Tooltip content={t('recovery.pagination.previous')}><Button aria-label={t('recovery.pagination.previous')} type="button" size="xs" variant="forensicsGhost" disabled={!model.hasPreviousPage} onClick={model.previousPage}><ActionIcon name="chevron-left" /></Button></Tooltip>
-                <Tooltip content={t('recovery.pagination.next')}><Button aria-label={t('recovery.pagination.next')} type="button" size="xs" variant="forensicsGhost" disabled={!model.hasNextPage} onClick={model.nextPage}><ActionIcon name="chevron-right" /></Button></Tooltip>
+                <Tooltip content={t('recovery.pagination.previous')}>
+                  <Button
+                    aria-label={t('recovery.pagination.previous')}
+                    type="button"
+                    size="xs"
+                    variant="forensicsGhost"
+                    disabled={!model.hasPreviousPage}
+                    onClick={model.previousPage}
+                  >
+                    <ActionIcon name="chevron-left" />
+                  </Button>
+                </Tooltip>
+                <Tooltip content={t('recovery.pagination.next')}>
+                  <Button
+                    aria-label={t('recovery.pagination.next')}
+                    type="button"
+                    size="xs"
+                    variant="forensicsGhost"
+                    disabled={!model.hasNextPage}
+                    onClick={model.nextPage}
+                  >
+                    <ActionIcon name="chevron-right" />
+                  </Button>
+                </Tooltip>
               </div>
             </div>
           </div>

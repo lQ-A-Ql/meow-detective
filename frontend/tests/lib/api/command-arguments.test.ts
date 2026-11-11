@@ -51,7 +51,10 @@ function rustCommandArguments(): Map<string, Set<string>> {
         const param = rawParam.trim();
         const separator = param.indexOf(':');
         if (separator < 0) continue;
-        const paramName = param.slice(0, separator).trim().replace(/^(?:mut|ref)\s+/, '');
+        const paramName = param
+          .slice(0, separator)
+          .trim()
+          .replace(/^(?:mut|ref)\s+/, '');
         const type = param.slice(separator + 1);
         if (!/^[a-z_][a-z0-9_]*$/.test(paramName)) continue;
         // Framework-injected handles are not part of the JSON payload.
@@ -100,10 +103,26 @@ function literalKeys(literal: string): string[] | undefined {
       else if (ch === quote) quote = undefined;
       continue;
     }
-    if (ch === '"' || ch === "'" || ch === '\u0060') { quote = ch; continue; }
-    if (ch === '{' || ch === '(' || ch === '[') { depth += 1; token = ''; continue; }
-    if (ch === '}' || ch === ')' || ch === ']') { flush(); depth -= 1; token = ''; continue; }
-    if (ch === ',' && depth === 1) { flush(); token = ''; continue; }
+    if (ch === '"' || ch === "'" || ch === '\u0060') {
+      quote = ch;
+      continue;
+    }
+    if (ch === '{' || ch === '(' || ch === '[') {
+      depth += 1;
+      token = '';
+      continue;
+    }
+    if (ch === '}' || ch === ')' || ch === ']') {
+      flush();
+      depth -= 1;
+      token = '';
+      continue;
+    }
+    if (ch === ',' && depth === 1) {
+      flush();
+      token = '';
+      continue;
+    }
     if (depth === 1) token += ch;
   }
   return keys;
@@ -124,7 +143,10 @@ function callSites(): { file: string; constant?: string; keys: string[] }[] {
         if (ch === '{') depth += 1;
         else if (ch === '}') {
           depth -= 1;
-          if (depth === 0) { cursor += 1; break; }
+          if (depth === 0) {
+            cursor += 1;
+            break;
+          }
         } else if (depth === 0 && (ch === ';' || ch === '\n')) break;
       }
       sites.push({
@@ -163,7 +185,16 @@ describe('Tauri command argument contract', () => {
       checked += 1;
       for (const key of site.keys) {
         if (!accepted.has(key)) {
-          mismatches.push(site.file + ': ' + command + ' does not accept "' + key + '" (accepts: ' + [...accepted].sort().join(', ') + ')');
+          mismatches.push(
+            site.file +
+              ': ' +
+              command +
+              ' does not accept "' +
+              key +
+              '" (accepts: ' +
+              [...accepted].sort().join(', ') +
+              ')',
+          );
         }
       }
     }

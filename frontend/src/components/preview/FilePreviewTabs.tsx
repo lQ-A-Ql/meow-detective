@@ -1,10 +1,7 @@
 import { useMemo } from 'react';
 import { HexPreviewContent } from './containers/HexPreviewContentContainer';
 
-
 import { useTranslation } from 'react-i18next';
-
-
 
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { ViewerTabFrame } from '@/components/tabs/ViewerTabFrame';
@@ -102,24 +99,18 @@ function DocumentSectionBody({ section }: { section: DocumentSection }) {
   const { t } = useTranslation();
   const table = useMemo(() => {
     if (!section.table) return undefined;
-    const columns: DenseColumn<{ key: string; cells: string[] }>[] = section.table.columns.map(
-      (title, index) => ({
-        key: `c${index}`,
-        title,
-        render: (row) => row.cells[index] ?? '',
-      }),
-    );
+    const columns: DenseColumn<{ key: string; cells: string[] }>[] = section.table.columns.map((title, index) => ({
+      key: `c${index}`,
+      title,
+      render: (row) => row.cells[index] ?? '',
+    }));
     const rows = section.table.rows.map((cells, index) => ({ key: String(index), cells }));
     return { columns, rows };
   }, [section.table]);
 
   if (table) {
     return (
-      <DenseDataTableFrame
-        rowCount={table.rows.length}
-        maxHeight="compact"
-        variant="plain"
-      >
+      <DenseDataTableFrame rowCount={table.rows.length} maxHeight="compact" variant="plain">
         <DenseDataTable
           rows={table.rows}
           columns={table.columns}
@@ -139,20 +130,14 @@ function DocumentSectionBody({ section }: { section: DocumentSection }) {
   );
 }
 
-function DocumentPreviewContent({
-  documentPreview,
-}: {
-  documentPreview: DocumentPreviewResponse;
-}) {
+function DocumentPreviewContent({ documentPreview }: { documentPreview: DocumentPreviewResponse }) {
   const { t } = useTranslation();
   return (
     <ScrollArea className="h-full" viewportClassName="px-3 py-2">
       <div className="relative isolate min-h-full">
         <div className="relative">
           <div className="mb-2 flex items-center gap-2 text-[11px] text-forensics-muted">
-            <span className="rounded bg-forensics-info-bg px-1.5 py-0.5 uppercase">
-              {documentPreview.kind}
-            </span>
+            <span className="rounded bg-forensics-info-bg px-1.5 py-0.5 uppercase">{documentPreview.kind}</span>
             <span>{documentPreview.summary}</span>
             {documentPreview.truncated ? <span>{t('preview.document.truncated')}</span> : null}
           </div>
@@ -243,20 +228,11 @@ function KindPreviewContent({
   mediaUrl,
   documentPreview,
   selectedFile,
-}: Pick<
-  FilePreviewTabsProps,
-  'previewKind' | 'imagePreview' | 'mediaUrl' | 'documentPreview' | 'selectedFile'
->) {
+}: Pick<FilePreviewTabsProps, 'previewKind' | 'imagePreview' | 'mediaUrl' | 'documentPreview' | 'selectedFile'>) {
   const { t } = useTranslation();
   if (previewKind === 'image') {
     if (imagePreview?.dataUrl) {
-      return (
-        <ImageViewer
-          src={imagePreview.dataUrl}
-          mimeType={imagePreview.mimeType}
-          fileName={selectedFile?.name}
-        />
-      );
+      return <ImageViewer src={imagePreview.dataUrl} mimeType={imagePreview.mimeType} fileName={selectedFile?.name} />;
     }
     return (
       <div className="flex h-full items-center justify-center text-forensics-muted-light">
@@ -275,18 +251,10 @@ function KindPreviewContent({
     );
   }
   if (previewKind === 'video' || previewKind === 'audio') {
-    return (
-      <MediaPreviewContent
-        mediaType={previewKind}
-        mediaUrl={mediaUrl}
-        fileName={selectedFile?.name}
-      />
-    );
+    return <MediaPreviewContent mediaType={previewKind} mediaUrl={mediaUrl} fileName={selectedFile?.name} />;
   }
   return (
-    <div className="flex h-full items-center justify-center text-forensics-muted-light">
-      {t('preview.selectMedia')}
-    </div>
+    <div className="flex h-full items-center justify-center text-forensics-muted-light">{t('preview.selectMedia')}</div>
   );
 }
 
@@ -377,9 +345,7 @@ export function FilePreviewTabs({
               content: (
                 <div className="space-y-2 font-mono text-[11px] text-forensics-text-secondary">
                   <div>handle_id: {fileHandle?.handleId ?? viewer?.handle.handleId ?? '-'}</div>
-                  <div>
-                    size: {fileHandle?.size ?? viewer?.handle.size ?? selectedFile?.size ?? '-'}
-                  </div>
+                  <div>size: {fileHandle?.size ?? viewer?.handle.size ?? selectedFile?.size ?? '-'}</div>
                   <div>mime: {fileHandle?.mime ?? viewer?.handle.mime ?? '-'}</div>
                   <div>path: {selectedFile?.path ?? '-'}</div>
                   {previewKind === 'image' ? <ImageMetadataPanel metadata={imageMetadata} /> : null}

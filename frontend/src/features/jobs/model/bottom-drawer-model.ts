@@ -80,12 +80,7 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
   const queryIssues = [
     buildQueryIssue('jobs', input.t('bottomDrawer.issues.sources.jobs'), input.jobsError, input.t),
     buildQueryIssue('warnings', input.t('bottomDrawer.issues.sources.warnings'), input.warningsError, input.t),
-    buildQueryIssue(
-      'dataSources',
-      input.t('bottomDrawer.issues.sources.dataSources'),
-      input.dataSourcesError,
-      input.t,
-    ),
+    buildQueryIssue('dataSources', input.t('bottomDrawer.issues.sources.dataSources'), input.dataSourcesError, input.t),
     buildQueryIssue('trace', input.t('bottomDrawer.issues.sources.trace'), input.traceError, input.t),
   ].filter((issue): issue is DrawerIssue => Boolean(issue));
   const processingIssues = buildDataSourceProcessingIssues(dataSources, input.t);
@@ -170,9 +165,7 @@ function buildApiErrorMeta(apiError: ApiErrorDto | undefined, source: string, t:
   if (apiError.recoverable !== undefined) {
     meta.push({
       label: t('bottomDrawer.issues.meta.recoverable'),
-      value: apiError.recoverable
-        ? t('bottomDrawer.issues.recoverable.yes')
-        : t('bottomDrawer.issues.recoverable.no'),
+      value: apiError.recoverable ? t('bottomDrawer.issues.recoverable.yes') : t('bottomDrawer.issues.recoverable.no'),
     });
   }
   return meta;
@@ -246,43 +239,42 @@ function jobIssueMeta(job: JobSnapshot, t: TFunction): DrawerIssueMeta[] {
 }
 
 function buildDataSourceProcessingIssues(dataSources: DataSourceSummary[], t: TFunction): DrawerIssue[] {
-  return dataSources.flatMap((source) =>
-    source.processing?.phases.flatMap((phase) => {
-      const warningDetails = stringArray(phase.stats.warningDetails);
-      const warningCount = numericValue(phase.stats.warningCount, warningDetails.length);
-      const issues: DrawerIssue[] = [];
-      if (phase.state === 'failed' || phase.state === 'deferred') {
-        issues.push({
-          id: `source-phase-${source.id}-${phase.phase}-${phase.state}`,
-          severity: phase.state === 'failed' ? 'error' : 'warning',
-          title: `${source.name} / ${phase.phase}`,
-          detail: phase.lastError || `${phase.phase} ${phase.state}`,
-          meta: [
-            { label: t('bottomDrawer.issues.meta.source'), value: source.id },
-            { label: t('bottomDrawer.issues.meta.phase'), value: phase.phase },
-            { label: t('bottomDrawer.issues.meta.status'), value: phase.state },
-          ],
-        });
-      }
-      if (warningCount > 0) {
-        const truncated = phase.stats.warningDetailsTruncated === true;
-        issues.push({
-          id: `source-phase-${source.id}-${phase.phase}-warnings`,
-          severity: 'warning',
-          title: `${source.name} / ${phase.phase}`,
-          detail: warningDetails[0] || `${warningCount} processing warning(s)`,
-          meta: [
-            { label: t('bottomDrawer.issues.meta.source'), value: source.id },
-            { label: t('bottomDrawer.issues.meta.phase'), value: phase.phase },
-            { label: t('bottomDrawer.labels.warnings'), value: warningCount.toString() },
-          ],
-          details: warningDetails.length > 0
-            ? `${warningDetails.join('\n')}${truncated ? '\n...' : ''}`
-            : undefined,
-        });
-      }
-      return issues;
-    }) ?? [],
+  return dataSources.flatMap(
+    (source) =>
+      source.processing?.phases.flatMap((phase) => {
+        const warningDetails = stringArray(phase.stats.warningDetails);
+        const warningCount = numericValue(phase.stats.warningCount, warningDetails.length);
+        const issues: DrawerIssue[] = [];
+        if (phase.state === 'failed' || phase.state === 'deferred') {
+          issues.push({
+            id: `source-phase-${source.id}-${phase.phase}-${phase.state}`,
+            severity: phase.state === 'failed' ? 'error' : 'warning',
+            title: `${source.name} / ${phase.phase}`,
+            detail: phase.lastError || `${phase.phase} ${phase.state}`,
+            meta: [
+              { label: t('bottomDrawer.issues.meta.source'), value: source.id },
+              { label: t('bottomDrawer.issues.meta.phase'), value: phase.phase },
+              { label: t('bottomDrawer.issues.meta.status'), value: phase.state },
+            ],
+          });
+        }
+        if (warningCount > 0) {
+          const truncated = phase.stats.warningDetailsTruncated === true;
+          issues.push({
+            id: `source-phase-${source.id}-${phase.phase}-warnings`,
+            severity: 'warning',
+            title: `${source.name} / ${phase.phase}`,
+            detail: warningDetails[0] || `${warningCount} processing warning(s)`,
+            meta: [
+              { label: t('bottomDrawer.issues.meta.source'), value: source.id },
+              { label: t('bottomDrawer.issues.meta.phase'), value: phase.phase },
+              { label: t('bottomDrawer.labels.warnings'), value: warningCount.toString() },
+            ],
+            details: warningDetails.length > 0 ? `${warningDetails.join('\n')}${truncated ? '\n...' : ''}` : undefined,
+          });
+        }
+        return issues;
+      }) ?? [],
   );
 }
 

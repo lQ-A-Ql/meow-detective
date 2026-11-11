@@ -1,6 +1,6 @@
 import { StepRail } from '@/components/wizard/StepRail';
 import { useTranslation } from 'react-i18next';
-import { Monitor, Server, Smartphone }  from '@/components/icons';
+import { Monitor, Server, Smartphone } from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
@@ -15,13 +15,7 @@ import {
   DialogTitle,
 } from '@/app/components/ui/dialog';
 import { ToggleGroup, ToggleGroupItem } from '@/app/components/ui/toggle-group';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/app/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import type { ImportTargetPlatform } from '@/types/models';
 import { formatBytes } from '@/lib/format-bytes';
 
@@ -37,7 +31,32 @@ const PLATFORM_CARDS: { value: ImportTargetPlatform; icon: typeof Monitor; subti
 
 export function ImportDataSourceDialogView({ model }: { model: ImportWizardModel }) {
   const { t } = useTranslation();
-  const { open, step, platform, sourceKind, name, path, error, disks, disksLoading, importing, sourceOptions, confirmRows, setName, setPath, selectPlatform, selectSource, handleOpenChange, goToStep, goNext, goBack, pickFile, pickDirectory, pickLinuxEvidenceSetDirectory, handleImport } = model;
+  const {
+    open,
+    step,
+    platform,
+    sourceKind,
+    name,
+    path,
+    error,
+    disks,
+    disksLoading,
+    importing,
+    sourceOptions,
+    confirmRows,
+    setName,
+    setPath,
+    selectPlatform,
+    selectSource,
+    handleOpenChange,
+    goToStep,
+    goNext,
+    goBack,
+    pickFile,
+    pickDirectory,
+    pickLinuxEvidenceSetDirectory,
+    handleImport,
+  } = model;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -74,7 +93,7 @@ export function ImportDataSourceDialogView({ model }: { model: ImportWizardModel
                       key={card.value}
                       value={card.value}
                       aria-label={card.value === 'windows' ? 'Windows' : card.value === 'linux' ? 'Linux' : 'Android'}
-                    className="h-28 flex-col items-start justify-start gap-2 border border-forensics-line bg-forensics-paper px-4 py-4 text-left transition-colors data-[state=on]:border-forensics-red data-[state=on]:bg-forensics-red-tint"
+                      className="h-28 flex-col items-start justify-start gap-2 border border-forensics-line bg-forensics-paper px-4 py-4 text-left transition-colors data-[state=on]:border-forensics-red data-[state=on]:bg-forensics-red-tint"
                     >
                       <span className="flex items-center gap-2 text-[13px] font-medium text-forensics-ink">
                         <Icon size={16} />
@@ -140,7 +159,13 @@ export function ImportDataSourceDialogView({ model }: { model: ImportWizardModel
                     {sourceKind === 'localDisk' ? (
                       <Select value={path} onValueChange={setPath}>
                         <SelectTrigger id="ds-path" aria-label={t('importDataSource.fields.localDisk')}>
-                          <SelectValue placeholder={disksLoading ? t('importDataSource.buttons.importing') : t('importDataSource.placeholders.localDisk')} />
+                          <SelectValue
+                            placeholder={
+                              disksLoading
+                                ? t('importDataSource.buttons.importing')
+                                : t('importDataSource.placeholders.localDisk')
+                            }
+                          />
                         </SelectTrigger>
                         <SelectContent>
                           {disks.map((disk) => (
@@ -158,13 +183,25 @@ export function ImportDataSourceDialogView({ model }: { model: ImportWizardModel
                         placeholder={t('importDataSource.placeholders.path')}
                       />
                     )}
-                    {sourceKind === 'auto' ? <Tooltip content={t('importDataSource.buttons.file')}>
-                      <Button type="button" variant="forensicsOutline" aria-label={t('importDataSource.buttons.file')} onClick={() => void pickFile()}>
-                        <ActionIcon name="file" />
-                      </Button>
-                    </Tooltip> : null}
+                    {sourceKind === 'auto' ? (
+                      <Tooltip content={t('importDataSource.buttons.file')}>
+                        <Button
+                          type="button"
+                          variant="forensicsOutline"
+                          aria-label={t('importDataSource.buttons.file')}
+                          onClick={() => void pickFile()}
+                        >
+                          <ActionIcon name="file" />
+                        </Button>
+                      </Tooltip>
+                    ) : null}
                     <Tooltip content={t('importDataSource.buttons.directory')}>
-                      <Button type="button" variant="forensicsOutline" aria-label={t('importDataSource.buttons.directory')} onClick={() => void pickDirectory()}>
+                      <Button
+                        type="button"
+                        variant="forensicsOutline"
+                        aria-label={t('importDataSource.buttons.directory')}
+                        onClick={() => void pickDirectory()}
+                      >
                         <ActionIcon name="folder" />
                       </Button>
                     </Tooltip>
@@ -209,21 +246,32 @@ export function ImportDataSourceDialogView({ model }: { model: ImportWizardModel
         </div>
 
         <DialogFooter className="flex items-center justify-between gap-2 border-t border-forensics-line bg-forensics-base px-6 py-4">
-          <span className="text-[11px] text-forensics-ink-3">{path.trim() || t('importDataSource.confirmValues.notFilled')}</span>
+          <span className="text-[11px] text-forensics-ink-3">
+            {path.trim() || t('importDataSource.confirmValues.notFilled')}
+          </span>
           <div className="flex items-center gap-2">
             {step !== 'platform' ? (
               <Tooltip content={t('importDataSource.buttons.back')}>
-                <Button type="button" variant="forensicsGhost" aria-label={t('importDataSource.buttons.back')} onClick={goBack}>
+                <Button
+                  type="button"
+                  variant="forensicsGhost"
+                  aria-label={t('importDataSource.buttons.back')}
+                  onClick={goBack}
+                >
                   <ActionIcon name="chevron-left" />
                 </Button>
               </Tooltip>
             ) : null}
             {step === 'confirm' ? (
-              <Tooltip content={importing ? t('importDataSource.buttons.importing') : t('importDataSource.buttons.import')}>
+              <Tooltip
+                content={importing ? t('importDataSource.buttons.importing') : t('importDataSource.buttons.import')}
+              >
                 <Button
                   type="button"
                   variant="forensicsPrimary"
-                  aria-label={importing ? t('importDataSource.buttons.importing') : t('importDataSource.buttons.import')}
+                  aria-label={
+                    importing ? t('importDataSource.buttons.importing') : t('importDataSource.buttons.import')
+                  }
                   disabled={importing}
                   onClick={handleImport}
                 >
@@ -232,7 +280,12 @@ export function ImportDataSourceDialogView({ model }: { model: ImportWizardModel
               </Tooltip>
             ) : (
               <Tooltip content={t('importDataSource.buttons.next')}>
-                <Button type="button" variant="forensicsPrimary" aria-label={t('importDataSource.buttons.next')} onClick={goNext}>
+                <Button
+                  type="button"
+                  variant="forensicsPrimary"
+                  aria-label={t('importDataSource.buttons.next')}
+                  onClick={goNext}
+                >
                   <ActionIcon name="chevron-right" />
                 </Button>
               </Tooltip>

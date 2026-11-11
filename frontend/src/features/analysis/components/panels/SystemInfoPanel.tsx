@@ -1,13 +1,11 @@
-import { Clock, Monitor, Network, RefreshCw }  from '@/components/icons';
+import { Clock, Monitor, Network, RefreshCw } from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { ContextBar } from '@/components/layout/ContextBar';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { BrandEmptyState } from '@/components/brand';
-import type {
-  AnalysisSystemInfo,
-} from '@/types/models';
+import type { AnalysisSystemInfo } from '@/types/models';
 import {
   EmptyLine,
   FieldProvenancePanel,
@@ -28,9 +26,7 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
     provenance: [],
     fieldProvenance: [],
   };
-  const parserFailures = info.provenance.filter(
-    (item) => item.status !== 'parsed' && item.warnings.length > 0,
-  );
+  const parserFailures = info.provenance.filter((item) => item.status !== 'parsed' && item.warnings.length > 0);
 
   return (
     <div className="space-y-6">
@@ -43,9 +39,7 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
           <StatusPill status={info.status} />
           {info.warnings[0] ? <span>{info.warnings[0]}</span> : null}
         </div>
-        {parserFailures.length > 0 ? (
-          <WarningList warnings={[t('analysisPanels.systemInfo.parserFailures')]} />
-        ) : null}
+        {parserFailures.length > 0 ? <WarningList warnings={[t('analysisPanels.systemInfo.parserFailures')]} /> : null}
         {info.warnings.length > 1 ? <WarningList warnings={info.warnings.slice(0, 3)} /> : null}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <InfoCard label={t('analysisPanels.systemInfo.computerName')} value={info.computerName} />
@@ -76,9 +70,7 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
             {info.networkAdapters.map((adapter) => (
               <div key={adapter.name} className="rounded-none bg-transparent p-3">
                 <div className="text-[12px] font-light">{adapter.name}</div>
-                <div className="mt-1 font-mono text-[11px] text-forensics-muted">
-                  MAC: {adapter.macAddress ?? '-'}
-                </div>
+                <div className="mt-1 font-mono text-[11px] text-forensics-muted">MAC: {adapter.macAddress ?? '-'}</div>
                 <div className="font-mono text-[11px] text-forensics-muted">
                   IP: {adapter.ipAddresses.join(', ') || '-'}
                 </div>
@@ -112,9 +104,7 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
                   <span className="text-forensics-muted-lighter">{boot.source}</span>
                 </div>
                 {boot.note ? <div className="mt-2 text-[11px] text-forensics-muted">{boot.note}</div> : null}
-                <div className="mt-2 text-[11px] text-forensics-muted">
-                  {formatProvenanceSummary(boot.provenance)}
-                </div>
+                <div className="mt-2 text-[11px] text-forensics-muted">{formatProvenanceSummary(boot.provenance)}</div>
               </div>
             ))}
           </div>
@@ -148,20 +138,30 @@ export function AnalysisHeader({
     <ContextBar align="end">
       <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Tooltip content={t('analysis.header.refresh')}><Button aria-label={t('analysis.header.refresh')}
-            type="button"
-            variant="outline"
-            onClick={onRefresh}
-            disabled={!hasCase || loading || !selectedDataSourceId}
-            className="border-0 bg-transparent text-[12px] hover:bg-forensics-hover"
-          ><ActionIcon name="refresh" /></Button></Tooltip>
-          {showRunExtraction ? (
-            <Tooltip content={t('analysis.header.run')}><Button aria-label={t('analysis.header.run')}
+          <Tooltip content={t('analysis.header.refresh')}>
+            <Button
+              aria-label={t('analysis.header.refresh')}
               type="button"
-              onClick={onRunExtraction}
-              disabled={!hasCase || extractionPending || !selectedDataSourceId}
-              className="border-0 bg-forensics-ink text-[12px] text-white hover:bg-forensics-ink-2"
-            ><ActionIcon name="play" /></Button></Tooltip>
+              variant="outline"
+              onClick={onRefresh}
+              disabled={!hasCase || loading || !selectedDataSourceId}
+              className="border-0 bg-transparent text-[12px] hover:bg-forensics-hover"
+            >
+              <ActionIcon name="refresh" />
+            </Button>
+          </Tooltip>
+          {showRunExtraction ? (
+            <Tooltip content={t('analysis.header.run')}>
+              <Button
+                aria-label={t('analysis.header.run')}
+                type="button"
+                onClick={onRunExtraction}
+                disabled={!hasCase || extractionPending || !selectedDataSourceId}
+                className="border-0 bg-forensics-ink text-[12px] text-white hover:bg-forensics-ink-2"
+              >
+                <ActionIcon name="play" />
+              </Button>
+            </Tooltip>
           ) : null}
         </div>
       </div>
@@ -182,23 +182,22 @@ export function AnalysisEmptyState() {
   );
 }
 
-export function AnalysisErrorBanner({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}) {
+export function AnalysisErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
   const { t } = useTranslation();
   return (
     <div className="mb-4 flex items-center justify-between gap-3 rounded-none border border-forensics-error-border bg-forensics-error-bg p-3 text-[12px] text-forensics-error-text">
       <span>{message}</span>
-      <Tooltip content={t('viewer.error.retry')}><Button aria-label={t('viewer.error.retry')}
-        type="button"
-        variant="outline"
-        onClick={onRetry}
-        className="shrink-0 rounded-none border-forensics-error-border bg-forensics-surface text-[12px] text-forensics-error-text hover:bg-forensics-error-bg"
-      ><ActionIcon name="refresh" /></Button></Tooltip>
+      <Tooltip content={t('viewer.error.retry')}>
+        <Button
+          aria-label={t('viewer.error.retry')}
+          type="button"
+          variant="outline"
+          onClick={onRetry}
+          className="shrink-0 rounded-none border-forensics-error-border bg-forensics-surface text-[12px] text-forensics-error-text hover:bg-forensics-error-bg"
+        >
+          <ActionIcon name="refresh" />
+        </Button>
+      </Tooltip>
     </div>
   );
 }

@@ -29,11 +29,7 @@ describe('DenseDataTableFrame', () => {
 
   it('includes a frame header and supports the compact maximum', () => {
     const { container } = render(
-      <DenseDataTableFrame
-        rowCount={2}
-        header={<div>group</div>}
-        maxHeight="compact"
-      >
+      <DenseDataTableFrame rowCount={2} header={<div>group</div>} maxHeight="compact">
         <div>table</div>
       </DenseDataTableFrame>,
     );

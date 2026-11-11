@@ -11,7 +11,9 @@
       align-items: center;
     }
     .ui-form-row > [data-slot='field-hint'],
-    .ui-form-row > [data-slot='field-error'] { grid-column: 2; }
+    .ui-form-row > [data-slot='field-error'] {
+      grid-column: 2;
+    }
   }
 
   .ui-focus:focus-visible {

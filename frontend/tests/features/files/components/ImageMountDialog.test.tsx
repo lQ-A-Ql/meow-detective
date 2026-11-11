@@ -12,15 +12,17 @@ const source: DataSourceSummary = {
   importedAt: '2026-08-04T00:00:00Z',
   platform: 'windows',
   importState: 'ready',
-  partitions: [{
-    index: 3,
-    name: 'Windows',
-    kindLabel: 'Basic data partition',
-    status: 'ready',
-    offset: 0,
-    length: 1024 * 1024,
-    filesystem: 'NTFS',
-  }],
+  partitions: [
+    {
+      index: 3,
+      name: 'Windows',
+      kindLabel: 'Basic data partition',
+      status: 'ready',
+      offset: 0,
+      length: 1024 * 1024,
+      filesystem: 'NTFS',
+    },
+  ],
 };
 
 function createModel(overrides: Partial<ImageMountModel> = {}): ImageMountModel {
@@ -95,10 +97,14 @@ describe('ImageMountDialog', () => {
   });
 
   it('shows the selected PE ISO as the preferred emulation boot source', () => {
-    render(<ImageMountDialog model={createModel({
-      mountMode: 'emulation',
-      recoveryIsoPath: 'C:\\Tools\\WinPE.iso',
-    })} />);
+    render(
+      <ImageMountDialog
+        model={createModel({
+          mountMode: 'emulation',
+          recoveryIsoPath: 'C:\\Tools\\WinPE.iso',
+        })}
+      />,
+    );
 
     expect(screen.getByText('启动镜像仿真')).toBeInTheDocument();
     expect(screen.getByDisplayValue('C:\\Tools\\WinPE.iso')).toBeInTheDocument();

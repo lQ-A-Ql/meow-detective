@@ -47,14 +47,8 @@ function DenseDataTableRowBase<T>({
           key={column.key}
           className={`h-[var(--dense-row-height)] px-2 py-1 align-middle ${column.className ?? ''}`}
         >
-          <HorizontalScroll
-            variant="cell"
-            revealOnHover
-            className="whitespace-nowrap text-inherit"
-          >
-            <div className="min-w-full w-max select-text pr-2">
-              {column.render(row)}
-            </div>
+          <HorizontalScroll variant="cell" revealOnHover className="whitespace-nowrap text-inherit">
+            <div className="min-w-full w-max select-text pr-2">{column.render(row)}</div>
           </HorizontalScroll>
         </TableCell>
       ))}
@@ -63,6 +57,4 @@ function DenseDataTableRowBase<T>({
   return renderRowContextMenu?.(row, tableRow) ?? tableRow;
 }
 
-export const DenseDataTableRow = memo(DenseDataTableRowBase) as <T>(
-  props: DenseDataTableRowProps<T>,
-) => ReactElement;
+export const DenseDataTableRow = memo(DenseDataTableRowBase) as <T>(props: DenseDataTableRowProps<T>) => ReactElement;

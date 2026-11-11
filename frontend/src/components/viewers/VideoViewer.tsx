@@ -9,17 +9,7 @@
  */
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import {
-  Play,
-  Pause,
-  Volume2,
-  VolumeX,
-  Maximize,
-  Minimize,
-  Video,
-  SkipBack,
-  SkipForward,
-}  from '@/components/icons';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Video, SkipBack, SkipForward } from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
 import { useTranslation } from 'react-i18next';
@@ -81,14 +71,14 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
   }, [isPlaying, t]);
 
   // 快进/快退
-  const skip = useCallback((seconds: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = Math.max(
-        0,
-        Math.min(duration, videoRef.current.currentTime + seconds)
-      );
-    }
-  }, [duration]);
+  const skip = useCallback(
+    (seconds: number) => {
+      if (videoRef.current) {
+        videoRef.current.currentTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + seconds));
+      }
+    },
+    [duration],
+  );
 
   // 切换静音
   const toggleMute = useCallback(() => {
@@ -137,7 +127,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
     const handleError = () => {
       const mediaError = video.error;
       let errorMsg = t('media.errors.videoLoad');
-      
+
       if (mediaError) {
         switch (mediaError.code) {
           case MediaError.MEDIA_ERR_ABORTED:
@@ -154,7 +144,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
             break;
         }
       }
-      
+
       setError(errorMsg);
       setIsLoading(false);
     };
@@ -188,35 +178,43 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
     <div ref={containerRef} className="flex flex-col h-full bg-forensics-900">
       {/* 视频区域 */}
       <div className="flex-1 flex items-center justify-center relative">
-        {isLoading && (
-          <div className="absolute text-white text-[14px]">{t('media.loading')}</div>
-        )}
-        {error && (
-          <div className="absolute text-forensics-error-text text-[14px]">{error}</div>
-        )}
-        <video
-          ref={videoRef}
-          src={src}
-          className="max-w-full max-h-full"
-          onClick={togglePlay}
-          playsInline
-        />
+        {isLoading && <div className="absolute text-white text-[14px]">{t('media.loading')}</div>}
+        {error && <div className="absolute text-forensics-error-text text-[14px]">{error}</div>}
+        <video ref={videoRef} src={src} className="max-w-full max-h-full" onClick={togglePlay} playsInline />
       </div>
 
       {/* 控制栏 */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-forensics-850 text-white text-[12px] shrink-0">
         {/* 播放/暂停 */}
-        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={togglePlay} aria-label={isPlaying ? t('media.controls.pause') : t('media.controls.play')}>
+        <Button
+          type="button"
+          variant="mediaControl"
+          size="mediaIcon"
+          onClick={togglePlay}
+          aria-label={isPlaying ? t('media.controls.pause') : t('media.controls.play')}
+        >
           {isPlaying ? <Pause size={18} /> : <Play size={18} />}
         </Button>
 
         {/* 快退 */}
-        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={() => skip(-10)} aria-label={t('media.controls.skipBack')}>
+        <Button
+          type="button"
+          variant="mediaControl"
+          size="mediaIcon"
+          onClick={() => skip(-10)}
+          aria-label={t('media.controls.skipBack')}
+        >
           <SkipBack size={16} />
         </Button>
 
         {/* 快进 */}
-        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={() => skip(10)} aria-label={t('media.controls.skipForward')}>
+        <Button
+          type="button"
+          variant="mediaControl"
+          size="mediaIcon"
+          onClick={() => skip(10)}
+          aria-label={t('media.controls.skipForward')}
+        >
           <SkipForward size={16} />
         </Button>
 
@@ -240,7 +238,13 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
         </span>
 
         {/* 音量 */}
-        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={toggleMute} aria-label={isMuted ? t('media.controls.unmute') : t('media.controls.mute')}>
+        <Button
+          type="button"
+          variant="mediaControl"
+          size="mediaIcon"
+          onClick={toggleMute}
+          aria-label={isMuted ? t('media.controls.unmute') : t('media.controls.mute')}
+        >
           {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
         </Button>
         <Slider
@@ -258,7 +262,13 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
         />
 
         {/* 全屏 */}
-        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={toggleFullscreen} aria-label={isFullscreen ? t('media.controls.exitFullscreen') : t('media.controls.fullscreen')}>
+        <Button
+          type="button"
+          variant="mediaControl"
+          size="mediaIcon"
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? t('media.controls.exitFullscreen') : t('media.controls.fullscreen')}
+        >
           {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
         </Button>
       </div>

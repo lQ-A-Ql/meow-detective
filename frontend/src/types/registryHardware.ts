@@ -1,6 +1,8 @@
 import type { RegistryBrowserSource } from './registryBrowser';
 
-export interface RegistryHardwareRequest { sessionId: string; }
+export interface RegistryHardwareRequest {
+  sessionId: string;
+}
 
 export interface RegistryHardwareDevice {
   kind: string;

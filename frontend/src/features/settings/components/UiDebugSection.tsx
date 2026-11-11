@@ -7,10 +7,7 @@ interface UiDebugSectionProps {
   setSettings: React.Dispatch<React.SetStateAction<LocalSettings>>;
 }
 
-export function UiDebugSection({
-  devEventTrace,
-  setSettings,
-}: UiDebugSectionProps) {
+export function UiDebugSection({ devEventTrace, setSettings }: UiDebugSectionProps) {
   const { t } = useTranslation();
 
   return (

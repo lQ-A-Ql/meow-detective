@@ -127,19 +127,19 @@ describe('files hooks', () => {
     it('does not reuse another parent directory page while switching branches', async () => {
       const firstPage = deferred<FileChildrenPage>();
       const secondPage = deferred<FileChildrenPage>();
-      mocks.getFileChildrenPage
-        .mockReturnValueOnce(firstPage.promise)
-        .mockReturnValueOnce(secondPage.promise);
+      mocks.getFileChildrenPage.mockReturnValueOnce(firstPage.promise).mockReturnValueOnce(secondPage.promise);
 
-      const { result, rerender } = renderHook(
-        ({ parentId }: { parentId?: string }) => useFileChildrenPage(parentId),
-        { initialProps: { parentId: 'parent-a' }, wrapper: createWrapper() },
-      );
+      const { result, rerender } = renderHook(({ parentId }: { parentId?: string }) => useFileChildrenPage(parentId), {
+        initialProps: { parentId: 'parent-a' },
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => expect(mocks.getFileChildrenPage).toHaveBeenCalledWith('parent-a', 0, 500, false));
       await act(async () => {
         firstPage.resolve({
-          children: [{ id: 'child-a', name: 'A', depth: 1, hasChildren: false, deleted: false, hidden: false, system: false }],
+          children: [
+            { id: 'child-a', name: 'A', depth: 1, hasChildren: false, deleted: false, hidden: false, system: false },
+          ],
           totalCount: 1,
           offset: 0,
           limit: 500,
@@ -290,14 +290,12 @@ describe('files hooks', () => {
 
   describe('preview hook gating', () => {
     it('keeps handle and hex range calls idle when disabled', () => {
-      const { result: handleResult } = renderHook(
-        () => useFileHandle('file-disabled', false),
-        { wrapper: createWrapper() },
-      );
-      const { result: viewerResult } = renderHook(
-        () => useFileViewer('file-disabled', false),
-        { wrapper: createWrapper() },
-      );
+      const { result: handleResult } = renderHook(() => useFileHandle('file-disabled', false), {
+        wrapper: createWrapper(),
+      });
+      const { result: viewerResult } = renderHook(() => useFileViewer('file-disabled', false), {
+        wrapper: createWrapper(),
+      });
 
       expect(handleResult.current.fetchStatus).toBe('idle');
       expect(viewerResult.current.fetchStatus).toBe('idle');
@@ -306,18 +304,15 @@ describe('files hooks', () => {
     });
 
     it('keeps text, image, and media preview calls idle when disabled', () => {
-      const { result: textResult } = renderHook(
-        () => useTextPreview('file-disabled', false),
-        { wrapper: createWrapper() },
-      );
-      const { result: imageResult } = renderHook(
-        () => useImagePreview('file-disabled', false),
-        { wrapper: createWrapper() },
-      );
-      const { result: mediaResult } = renderHook(
-        () => useMediaUrl('file-disabled', false),
-        { wrapper: createWrapper() },
-      );
+      const { result: textResult } = renderHook(() => useTextPreview('file-disabled', false), {
+        wrapper: createWrapper(),
+      });
+      const { result: imageResult } = renderHook(() => useImagePreview('file-disabled', false), {
+        wrapper: createWrapper(),
+      });
+      const { result: mediaResult } = renderHook(() => useMediaUrl('file-disabled', false), {
+        wrapper: createWrapper(),
+      });
 
       expect(textResult.current.fetchStatus).toBe('idle');
       expect(imageResult.current.fetchStatus).toBe('idle');
@@ -342,10 +337,10 @@ describe('files hooks', () => {
         rawBytes: [0x41],
       });
 
-      const { result, rerender, unmount } = renderHook(
-        ({ enabled }) => useFileViewer('file-tab-toggle', enabled),
-        { initialProps: { enabled: true }, wrapper: createWrapper() },
-      );
+      const { result, rerender, unmount } = renderHook(({ enabled }) => useFileViewer('file-tab-toggle', enabled), {
+        initialProps: { enabled: true },
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       rerender({ enabled: false });
@@ -558,40 +553,43 @@ describe('files hooks', () => {
       }
     });
 
-    it.each(['PREVIEW_HANDLE_EXPIRED', 'PREVIEW_SCOPE_CHANGED'])('re-opens for %s and retries the range', async (code) => {
-      mocks.openFileHandle
-        .mockResolvedValueOnce({ handleId: 'file:stale-1', size: 2 * 1024 * 1024, mime: undefined })
-        .mockResolvedValueOnce({ handleId: 'file:stale-2', size: 2 * 1024 * 1024, mime: undefined });
-      mocks.readFileRange
-        .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x41] })
-        .mockRejectedValueOnce({
-          code,
-          message: 'Preview handle expired or invalid',
-          category: 'validation',
-          recoverable: true,
-        })
-        .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x42] })
-        .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x43, 0x44] });
+    it.each(['PREVIEW_HANDLE_EXPIRED', 'PREVIEW_SCOPE_CHANGED'])(
+      're-opens for %s and retries the range',
+      async (code) => {
+        mocks.openFileHandle
+          .mockResolvedValueOnce({ handleId: 'file:stale-1', size: 2 * 1024 * 1024, mime: undefined })
+          .mockResolvedValueOnce({ handleId: 'file:stale-2', size: 2 * 1024 * 1024, mime: undefined });
+        mocks.readFileRange
+          .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x41] })
+          .mockRejectedValueOnce({
+            code,
+            message: 'Preview handle expired or invalid',
+            category: 'validation',
+            recoverable: true,
+          })
+          .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x42] })
+          .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x43, 0x44] });
 
-      const { result } = renderHook(() => useFileViewer('file:stale'), {
-        wrapper: createWrapper(),
-      });
+        const { result } = renderHook(() => useFileViewer('file:stale'), {
+          wrapper: createWrapper(),
+        });
 
-      await waitFor(() => expect(result.current.data?.hasMoreAfter).toBe(true));
-      await act(async () => {
-        await result.current.loadNextRange();
-      });
+        await waitFor(() => expect(result.current.data?.hasMoreAfter).toBe(true));
+        await act(async () => {
+          await result.current.loadNextRange();
+        });
 
-      await waitFor(() => expect(result.current.data?.baseOffset).toBe(64 * 1024));
-      expect(mocks.openFileHandle).toHaveBeenCalledTimes(2);
-      expect(mocks.readFileRange).toHaveBeenLastCalledWith({
-        handleId: 'file:stale-2',
-        offset: 64 * 1024,
-        length: 64 * 1024,
-      });
-      expect(result.current.data?.rawBytes).toEqual([0x43, 0x44]);
-      expect(result.current.data?.error).toBeUndefined();
-    });
+        await waitFor(() => expect(result.current.data?.baseOffset).toBe(64 * 1024));
+        expect(mocks.openFileHandle).toHaveBeenCalledTimes(2);
+        expect(mocks.readFileRange).toHaveBeenLastCalledWith({
+          handleId: 'file:stale-2',
+          offset: 64 * 1024,
+          length: 64 * 1024,
+        });
+        expect(result.current.data?.rawBytes).toEqual([0x43, 0x44]);
+        expect(result.current.data?.error).toBeUndefined();
+      },
+    );
 
     it('surfaces the typed range error message instead of a generic placeholder', async () => {
       mocks.openFileHandle.mockResolvedValue({
@@ -599,14 +597,12 @@ describe('files hooks', () => {
         size: 2 * 1024 * 1024,
         mime: undefined,
       });
-      mocks.readFileRange
-        .mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x41] })
-        .mockRejectedValueOnce({
-          code: 'COMMAND_READ_FILE_RANGE_FAILED',
-          message: 'Unsupported filesystem layout',
-          category: 'internal',
-          recoverable: true,
-        });
+      mocks.readFileRange.mockResolvedValueOnce({ kind: 'hex', lines: [], rawBytes: [0x41] }).mockRejectedValueOnce({
+        code: 'COMMAND_READ_FILE_RANGE_FAILED',
+        message: 'Unsupported filesystem layout',
+        category: 'internal',
+        recoverable: true,
+      });
 
       const { result } = renderHook(() => useFileViewer('file:range-error'), {
         wrapper: createWrapper(),

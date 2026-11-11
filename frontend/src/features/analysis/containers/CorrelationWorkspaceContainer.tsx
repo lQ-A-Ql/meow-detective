@@ -9,11 +9,7 @@ interface CorrelationWorkspaceContainerProps {
   refreshing?: boolean;
 }
 
-export function CorrelationWorkspaceContainer({
-  snapshot,
-  onRefresh,
-  refreshing,
-}: CorrelationWorkspaceContainerProps) {
+export function CorrelationWorkspaceContainer({ snapshot, onRefresh, refreshing }: CorrelationWorkspaceContainerProps) {
   const navigate = useNavigate();
   const setSelectedFileId = useSelectionStore((state) => state.setSelectedFileId);
   const setSelectedArtifactId = useSelectionStore((state) => state.setSelectedArtifactId);

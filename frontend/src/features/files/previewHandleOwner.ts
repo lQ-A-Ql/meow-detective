@@ -38,11 +38,7 @@ export function usePreviewHandleOwner(scopeKey: string) {
   return owner;
 }
 
-export async function adoptPreviewHandle(
-  owner: PreviewHandleOwner,
-  handleId: string,
-  signal?: AbortSignal,
-) {
+export async function adoptPreviewHandle(owner: PreviewHandleOwner, handleId: string, signal?: AbortSignal) {
   if (owner.disposed || signal?.aborted) {
     await closeFileHandle(handleId).catch(() => undefined);
     throw cancelledPreviewRequest();
@@ -63,11 +59,7 @@ export async function releasePreviewHandle(owner: PreviewHandleOwner, handleId?:
   await closeFileHandle(handleId).catch(() => undefined);
 }
 
-export async function ensurePreviewRequestActive(
-  owner: PreviewHandleOwner,
-  handleId: string,
-  signal: AbortSignal,
-) {
+export async function ensurePreviewRequestActive(owner: PreviewHandleOwner, handleId: string, signal: AbortSignal) {
   if (owner.disposed || signal.aborted) {
     await releasePreviewHandle(owner, handleId);
     throw cancelledPreviewRequest();

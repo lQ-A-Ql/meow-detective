@@ -1,17 +1,11 @@
-import { defineConfig, loadEnv } from 'vite'
-import path from 'path'
-import tailwindcss from '@tailwindcss/vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig, loadEnv } from 'vite';
+import path from 'path';
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 
-const REACT_PACKAGES = new Set([
-  'react',
-  'react-dom',
-  'scheduler',
-  'react-router',
-  'react-router-dom',
-])
+const REACT_PACKAGES = new Set(['react', 'react-dom', 'scheduler', 'react-router', 'react-router-dom']);
 
-const STYLE_EXTENSIONS = ['.css', '.scss', '.sass', '.less', '.styl']
+const STYLE_EXTENSIONS = ['.css', '.scss', '.sass', '.less', '.styl'];
 
 /**
  * Resolves the installed package name owning a module id, or undefined for app
@@ -20,33 +14,29 @@ const STYLE_EXTENSIONS = ['.css', '.scss', '.sass', '.less', '.styl']
  * the real package rather than the store directory.
  */
 function packageNameFromModuleId(id: string): string | undefined {
-  const normalized = id.replace(/\\/g, '/').split('?')[0]
+  const normalized = id.replace(/\\/g, '/').split('?')[0];
   if (STYLE_EXTENSIONS.some((extension) => normalized.endsWith(extension))) {
-    return undefined
+    return undefined;
   }
-  const marker = '/node_modules/'
-  const markerIndex = normalized.lastIndexOf(marker)
-  if (markerIndex === -1) return undefined
-  const segments = normalized.slice(markerIndex + marker.length).split('/')
-  const [first, second] = segments
-  if (!first) return undefined
-  if (first.startsWith('@')) return second ? `${first}/${second}` : undefined
-  return first
+  const marker = '/node_modules/';
+  const markerIndex = normalized.lastIndexOf(marker);
+  if (markerIndex === -1) return undefined;
+  const segments = normalized.slice(markerIndex + marker.length).split('/');
+  const [first, second] = segments;
+  if (!first) return undefined;
+  if (first.startsWith('@')) return second ? `${first}/${second}` : undefined;
+  return first;
 }
 
 function vendorChunkFor(packageName: string): string {
-  if (REACT_PACKAGES.has(packageName)) return 'vendor-react'
-  if (packageName.startsWith('@tanstack/')) return 'vendor-query'
-  if (packageName.startsWith('@radix-ui/')) return 'vendor-radix'
-  if (packageName.startsWith('@fortawesome/')) return 'vendor-icons'
-  if (
-    packageName === 'i18next' ||
-    packageName === 'react-i18next' ||
-    packageName.startsWith('i18next-')
-  ) {
-    return 'vendor-i18n'
+  if (REACT_PACKAGES.has(packageName)) return 'vendor-react';
+  if (packageName.startsWith('@tanstack/')) return 'vendor-query';
+  if (packageName.startsWith('@radix-ui/')) return 'vendor-radix';
+  if (packageName.startsWith('@fortawesome/')) return 'vendor-icons';
+  if (packageName === 'i18next' || packageName === 'react-i18next' || packageName.startsWith('i18next-')) {
+    return 'vendor-i18n';
   }
-  return 'vendor'
+  return 'vendor';
 }
 
 /**
@@ -59,16 +49,16 @@ function vendorChunkFor(packageName: string): string {
  *   2. mocks/tauri-core.ts throws if it is ever evaluated in a production bundle.
  */
 export default defineConfig(({ mode, command }) => {
-  const env = loadEnv(mode, process.cwd(), 'VITE_')
-  const mockRequested = mode === 'mock' || env.VITE_MOCK === 'true'
+  const env = loadEnv(mode, process.cwd(), 'VITE_');
+  const mockRequested = mode === 'mock' || env.VITE_MOCK === 'true';
 
   if (mockRequested && command !== 'serve') {
     throw new Error(
       `Mock mode is dev-server only (pnpm dev:mock); refusing to run "${command}" so mock fixtures cannot be bundled into a build.`,
-    )
+    );
   }
 
-  const mockEnabled = mockRequested && command === 'serve'
+  const mockEnabled = mockRequested && command === 'serve';
 
   return {
     plugins: [
@@ -100,12 +90,12 @@ export default defineConfig(({ mode, command }) => {
            * excluded so CSS emission is unchanged.
            */
           manualChunks(id) {
-            const packageName = packageNameFromModuleId(id)
-            if (!packageName) return undefined
-            return vendorChunkFor(packageName)
+            const packageName = packageNameFromModuleId(id);
+            if (!packageName) return undefined;
+            return vendorChunkFor(packageName);
           },
         },
       },
     },
-  }
-})
+  };
+});

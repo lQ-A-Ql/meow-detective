@@ -42,7 +42,7 @@ vi.mock('@/lib/api/emulation', () => ({
 
 vi.mock('@/lib/platform/dialog', () => ({
   openDialog: mocks.openDialog,
-  singleDialogPath: (value: unknown) => typeof value === 'string' ? value : null,
+  singleDialogPath: (value: unknown) => (typeof value === 'string' ? value : null),
 }));
 
 function queryResult(data: unknown) {
@@ -69,16 +69,20 @@ describe('useEmulationWorkspaceModel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.currentCase.mockReturnValue(queryResult({ id: 'case-1', name: '仿真案件' }));
-    mocks.dataSources.mockReturnValue(queryResult([{
-      id: 'source-1',
-      name: '早起王的PC镜像',
-      kind: 'e01',
-      platform: 'windows',
-      importState: 'ready',
-      sourcePath: 'E:\\evidence.E01',
-      importedAt: '2026-08-06T00:00:00Z',
-      partitions: [],
-    }]));
+    mocks.dataSources.mockReturnValue(
+      queryResult([
+        {
+          id: 'source-1',
+          name: '早起王的PC镜像',
+          kind: 'e01',
+          platform: 'windows',
+          importState: 'ready',
+          sourcePath: 'E:\\evidence.E01',
+          importedAt: '2026-08-06T00:00:00Z',
+          partitions: [],
+        },
+      ]),
+    );
     mocks.listSessions.mockResolvedValue([]);
     mocks.preflight.mockResolvedValue({
       dataSourceId: 'source-1',
@@ -202,13 +206,15 @@ describe('useEmulationWorkspaceModel', () => {
   it('releases the prepared session when OSDATA cleanup is refused', async () => {
     mocks.preflight.mockResolvedValue({
       dataSourceId: 'source-1',
-      installs: [{
-        partitionIndex: 2,
-        osdataPresent: true,
-        osdataEmpty: false,
-        samPresent: false,
-        utilmanBypassAvailable: false,
-      }],
+      installs: [
+        {
+          partitionIndex: 2,
+          osdataPresent: true,
+          osdataEmpty: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+        },
+      ],
       recommendedBootRoute: 'recoveryMedia',
     });
     mocks.cleanupOsdata.mockResolvedValue({ sessionId: 'emulation-1', state: 'refusedNonEmpty' });
@@ -227,28 +233,30 @@ describe('useEmulationWorkspaceModel', () => {
   });
 
   it('resets the OSDATA cleanup opt-in when the selected source changes', async () => {
-    mocks.dataSources.mockReturnValue(queryResult([
-      {
-        id: 'source-1',
-        name: '早起王的PC镜像',
-        kind: 'e01',
-        platform: 'windows',
-        importState: 'ready',
-        sourcePath: 'E:\\evidence.E01',
-        importedAt: '2026-08-06T00:00:00Z',
-        partitions: [],
-      },
-      {
-        id: 'source-2',
-        name: '第二镜像',
-        kind: 'raw',
-        platform: 'windows',
-        importState: 'ready',
-        sourcePath: 'E:\\second.dd',
-        importedAt: '2026-08-06T00:00:00Z',
-        partitions: [],
-      },
-    ]));
+    mocks.dataSources.mockReturnValue(
+      queryResult([
+        {
+          id: 'source-1',
+          name: '早起王的PC镜像',
+          kind: 'e01',
+          platform: 'windows',
+          importState: 'ready',
+          sourcePath: 'E:\\evidence.E01',
+          importedAt: '2026-08-06T00:00:00Z',
+          partitions: [],
+        },
+        {
+          id: 'source-2',
+          name: '第二镜像',
+          kind: 'raw',
+          platform: 'windows',
+          importState: 'ready',
+          sourcePath: 'E:\\second.dd',
+          importedAt: '2026-08-06T00:00:00Z',
+          partitions: [],
+        },
+      ]),
+    );
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.selectedSourceId).toBe('source-1'));
 
@@ -260,26 +268,32 @@ describe('useEmulationWorkspaceModel', () => {
   });
 
   function useLinuxEfiSource(bootRiskNotes: string[] = ['no-efi-fallback']) {
-    mocks.dataSources.mockReturnValue(queryResult([{
-      id: 'source-1',
-      name: 'Kali 镜像',
-      kind: 'e01',
-      platform: 'linux',
-      importState: 'ready',
-      sourcePath: 'E:\\kali.E01',
-      importedAt: '2026-08-06T00:00:00Z',
-      partitions: [],
-    }]));
+    mocks.dataSources.mockReturnValue(
+      queryResult([
+        {
+          id: 'source-1',
+          name: 'Kali 镜像',
+          kind: 'e01',
+          platform: 'linux',
+          importState: 'ready',
+          sourcePath: 'E:\\kali.E01',
+          importedAt: '2026-08-06T00:00:00Z',
+          partitions: [],
+        },
+      ]),
+    );
     mocks.preflight.mockResolvedValue({
       dataSourceId: 'source-1',
-      installs: [{
-        partitionIndex: 2,
-        platform: 'linux',
-        osdataPresent: false,
-        samPresent: false,
-        utilmanBypassAvailable: false,
-        bootRiskNotes,
-      }],
+      installs: [
+        {
+          partitionIndex: 2,
+          platform: 'linux',
+          osdataPresent: false,
+          samPresent: false,
+          utilmanBypassAvailable: false,
+          bootRiskNotes,
+        },
+      ],
       recommendedBootRoute: 'directSystem',
     });
   }
@@ -303,10 +317,12 @@ describe('useEmulationWorkspaceModel', () => {
     });
 
     expect(mocks.installEfiFallback).toHaveBeenCalledWith('emulation-1');
-    expect(mocks.installEfiFallback.mock.invocationCallOrder[0])
-      .toBeGreaterThan(mocks.prepare.mock.invocationCallOrder[0]!);
-    expect(mocks.installEfiFallback.mock.invocationCallOrder[0])
-      .toBeLessThan(mocks.launch.mock.invocationCallOrder[0]!);
+    expect(mocks.installEfiFallback.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mocks.prepare.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.installEfiFallback.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.launch.mock.invocationCallOrder[0]!,
+    );
   });
 
   it('skips the EFI fallback install when the investigator unchecks it', async () => {
@@ -337,10 +353,10 @@ describe('useEmulationWorkspaceModel', () => {
     });
 
     expect(mocks.repairFsJournals).toHaveBeenCalledWith('emulation-1');
-    expect(mocks.repairFsJournals.mock.invocationCallOrder[0])
-      .toBeGreaterThan(mocks.prepare.mock.invocationCallOrder[0]!);
-    expect(mocks.repairFsJournals.mock.invocationCallOrder[0])
-      .toBeLessThan(mocks.launch.mock.invocationCallOrder[0]!);
+    expect(mocks.repairFsJournals.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mocks.prepare.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.repairFsJournals.mock.invocationCallOrder[0]).toBeLessThan(mocks.launch.mock.invocationCallOrder[0]!);
   });
 
   it('repairs dirty ext4 journals after prepare and before launch', async () => {
@@ -354,10 +370,10 @@ describe('useEmulationWorkspaceModel', () => {
     });
 
     expect(mocks.repairFsJournals).toHaveBeenCalledWith('emulation-1');
-    expect(mocks.repairFsJournals.mock.invocationCallOrder[0])
-      .toBeGreaterThan(mocks.prepare.mock.invocationCallOrder[0]!);
-    expect(mocks.repairFsJournals.mock.invocationCallOrder[0])
-      .toBeLessThan(mocks.launch.mock.invocationCallOrder[0]!);
+    expect(mocks.repairFsJournals.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mocks.prepare.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.repairFsJournals.mock.invocationCallOrder[0]).toBeLessThan(mocks.launch.mock.invocationCallOrder[0]!);
   });
 
   it('rechecks an unverified XFS log before launch', async () => {
@@ -376,9 +392,7 @@ describe('useEmulationWorkspaceModel', () => {
 
   it('requires a resolved Linux account after a bypass partition is selected', async () => {
     useLinuxEfiSource([]);
-    mocks.linuxAccounts.mockResolvedValue([
-      { username: 'root', hasPassword: true, locked: false },
-    ]);
+    mocks.linuxAccounts.mockResolvedValue([{ username: 'root', hasPassword: true, locked: false }]);
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.canStart).toBe(true));
 
@@ -427,13 +441,15 @@ describe('useEmulationWorkspaceModel', () => {
   it('does not install the EFI fallback for windows sources even when the note appears', async () => {
     mocks.preflight.mockResolvedValue({
       dataSourceId: 'source-1',
-      installs: [{
-        partitionIndex: 2,
-        osdataPresent: false,
-        samPresent: true,
-        utilmanBypassAvailable: true,
-        bootRiskNotes: ['no-efi-fallback'],
-      }],
+      installs: [
+        {
+          partitionIndex: 2,
+          osdataPresent: false,
+          samPresent: true,
+          utilmanBypassAvailable: true,
+          bootRiskNotes: ['no-efi-fallback'],
+        },
+      ],
       recommendedBootRoute: 'directSystem',
     });
     const { result } = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });

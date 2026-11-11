@@ -16,34 +16,25 @@ export const PROJECTION_EVENT_TOPICS = [
 export const timelineQueryKeys = {
   root: ['timeline'] as const,
   eventsRoot: ['timeline', 'events'] as const,
-  events: (request?: {
-    offset?: number;
-    limit?: number;
-    timeStart?: string;
-    timeEnd?: string;
-    eventType?: string;
-  }) => [
-    'timeline',
-    'events',
-    request?.offset ?? 0,
-    request?.limit ?? 100,
-    request?.timeStart ?? null,
-    request?.timeEnd ?? null,
-    request?.eventType ?? null,
-  ] as const,
-  facets: (request?: {
-    timeStart?: string;
-    timeEnd?: string;
-    eventType?: string;
-    bucketCount?: number;
-  }) => [
-    'timeline',
-    'facets',
-    request?.timeStart ?? null,
-    request?.timeEnd ?? null,
-    request?.eventType ?? null,
-    request?.bucketCount ?? 60,
-  ] as const,
+  events: (request?: { offset?: number; limit?: number; timeStart?: string; timeEnd?: string; eventType?: string }) =>
+    [
+      'timeline',
+      'events',
+      request?.offset ?? 0,
+      request?.limit ?? 100,
+      request?.timeStart ?? null,
+      request?.timeEnd ?? null,
+      request?.eventType ?? null,
+    ] as const,
+  facets: (request?: { timeStart?: string; timeEnd?: string; eventType?: string; bucketCount?: number }) =>
+    [
+      'timeline',
+      'facets',
+      request?.timeStart ?? null,
+      request?.timeEnd ?? null,
+      request?.eventType ?? null,
+      request?.bucketCount ?? 60,
+    ] as const,
 };
 
 export const projectionQueryKeys = {
@@ -85,11 +76,7 @@ const importProjectionKeys: ProjectionKey[] = [
   'linuxEvidenceSetEvents',
 ];
 
-const postJobProjectionKeys: ProjectionKey[] = [
-  ...importProjectionKeys,
-  'jobWarnings',
-  'jobTrace',
-];
+const postJobProjectionKeys: ProjectionKey[] = [...importProjectionKeys, 'jobWarnings', 'jobTrace'];
 
 const partialResultProjectionKeys: Record<PartialResultKind, ProjectionKey[]> = {
   fileTree: ['files', 'caseDataSources'],
@@ -150,7 +137,10 @@ export function invalidatePostJobProjectionQueries(queryClient: QueryInvalidator
   invalidateProjectionKeys(queryClient, postJobProjectionKeys);
 }
 
-export function invalidatePartialResultQueries(queryClient: QueryInvalidator, result: Pick<PartialResult, 'kind' | 'freshness'>) {
+export function invalidatePartialResultQueries(
+  queryClient: QueryInvalidator,
+  result: Pick<PartialResult, 'kind' | 'freshness'>,
+) {
   if (result.freshness === 'deferred') {
     return;
   }
@@ -158,7 +148,10 @@ export function invalidatePartialResultQueries(queryClient: QueryInvalidator, re
   scheduleProjectionInvalidation(queryClient, partialResultProjectionKeys[result.kind]);
 }
 
-export function invalidateCacheStatusQueries(queryClient: QueryInvalidator, status: Pick<IndexCacheStatus, 'cacheKey' | 'state'>) {
+export function invalidateCacheStatusQueries(
+  queryClient: QueryInvalidator,
+  status: Pick<IndexCacheStatus, 'cacheKey' | 'state'>,
+) {
   if (status.state === 'deferred' || status.state === 'pending') {
     return;
   }

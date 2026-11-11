@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp }  from '@/components/icons';
+import { ChevronDown, ChevronUp } from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Tooltip } from '@/app/components/ui/tooltip';
@@ -8,8 +8,8 @@ import { HexViewer } from '@/components/viewers/HexViewer';
 import type { useHexPreviewModel } from '@/hooks/use-hex-preview-model';
 import { formatBytes } from '@/lib/format-bytes';
 export function HexPreviewContentView({ model }: { model: ReturnType<typeof useHexPreviewModel> }) {
- const { t } = useTranslation();
- const { viewer, onHexJumpInputChange, onHexJump, inspectorExpanded, handleNeedMoreRange, toggleInspector } = model;
+  const { t } = useTranslation();
+  const { viewer, onHexJumpInputChange, onHexJump, inspectorExpanded, handleNeedMoreRange, toggleInspector } = model;
   if (!viewer) {
     return <div className="text-forensics-muted">{t('viewer.hex.empty')}</div>;
   }
@@ -35,9 +35,7 @@ export function HexPreviewContentView({ model }: { model: ReturnType<typeof useH
           onNeedMoreRange={handleNeedMoreRange}
         />
       </div>
-      {viewer.error ? (
-        <div className="mt-2 shrink-0 text-[10px] text-forensics-error-text">{viewer.error}</div>
-      ) : null}
+      {viewer.error ? <div className="mt-2 shrink-0 text-[10px] text-forensics-error-text">{viewer.error}</div> : null}
       <div className="mt-2 shrink-0 border border-forensics-border bg-forensics-panel">
         <Button
           type="button"
@@ -53,10 +51,8 @@ export function HexPreviewContentView({ model }: { model: ReturnType<typeof useH
             </span>
             <span>
               {t('preview.hex.loaded')}{' '}
-              {formatBytes(
-                viewer.loadedRanges.reduce((total, range) => total + (range.end - range.start), 0),
-              )}{' '}
-              / {formatBytes(viewer.fileSize)}
+              {formatBytes(viewer.loadedRanges.reduce((total, range) => total + (range.end - range.start), 0))} /{' '}
+              {formatBytes(viewer.fileSize)}
             </span>
             <span>offset={viewer.activeOffset.toString(16).toUpperCase().padStart(8, '0')}</span>
           </div>
@@ -73,19 +69,22 @@ export function HexPreviewContentView({ model }: { model: ReturnType<typeof useH
                 className="w-32"
                 placeholder="0x0"
               />
-              <Tooltip content={t('preview.hex.jump')}><Button aria-label={t('preview.hex.jump')}
-                type="button"
-                variant="forensicsOutline"
-                size="compact"
-                onClick={() => {
-                  void onHexJump();
-                }}
-              ><ActionIcon name="chevron-left" /></Button></Tooltip>
+              <Tooltip content={t('preview.hex.jump')}>
+                <Button
+                  aria-label={t('preview.hex.jump')}
+                  type="button"
+                  variant="forensicsOutline"
+                  size="compact"
+                  onClick={() => {
+                    void onHexJump();
+                  }}
+                >
+                  <ActionIcon name="chevron-left" />
+                </Button>
+              </Tooltip>
             </div>
             <div className="mt-2">
-              {viewer.mode === 'chunked'
-                ? t('preview.hex.chunkedHint')
-                : t('preview.hex.fullHint')}
+              {viewer.mode === 'chunked' ? t('preview.hex.chunkedHint') : t('preview.hex.fullHint')}
             </div>
           </div>
         ) : null}

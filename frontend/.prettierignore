@@ -1,0 +1,6 @@
+dist
+coverage
+node_modules
+src/ttf
+pnpm-lock.yaml
+*.md

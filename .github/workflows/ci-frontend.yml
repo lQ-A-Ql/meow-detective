@@ -39,6 +39,8 @@ jobs:
         run: pnpm --dir frontend typecheck
       - name: Lint
         run: pnpm --dir frontend lint
+      - name: Format check
+        run: pnpm --dir frontend format:check
       - name: Frontend architecture guard (layering, UI primitives, centralised assets)
         shell: pwsh
         run: |

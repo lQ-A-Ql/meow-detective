@@ -1,11 +1,5 @@
 export type AnalysisParseStatus =
-  | 'parsed'
-  | 'partial'
-  | 'notParsed'
-  | 'unavailable'
-  | 'candidateFound'
-  | 'notFound'
-  | 'failed';
+  'parsed' | 'partial' | 'notParsed' | 'unavailable' | 'candidateFound' | 'notFound' | 'failed';
 
 export interface AnalysisProvenance {
   dataSourceId: string;
@@ -128,12 +122,7 @@ export interface AnalysisExtractionRequest {
 }
 
 export type AnalysisExtractionPhase =
-  | 'discovering'
-  | 'preparing'
-  | 'extracting'
-  | 'persisting'
-  | 'completed'
-  | 'failed';
+  'discovering' | 'preparing' | 'extracting' | 'persisting' | 'completed' | 'failed';
 
 export interface AnalysisExtractionProgress {
   runId: string;

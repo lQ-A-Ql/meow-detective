@@ -9,7 +9,12 @@ export function resetSearchContext(cache: QueryClient, currentCase: CaseSummary 
   cache.removeQueries({ queryKey: ['search'] });
   void cache.cancelQueries({ queryKey: ['files', 'jump-context'] });
   cache.removeQueries({ queryKey: ['files', 'jump-context'] });
-  useSelectionStore.setState({ selectedDirectoryId: undefined, selectedFileId: undefined,
-    selectedSearchHitId: undefined, selectedArtifactId: undefined, selectedTimelineId: undefined });
+  useSelectionStore.setState({
+    selectedDirectoryId: undefined,
+    selectedFileId: undefined,
+    selectedSearchHitId: undefined,
+    selectedArtifactId: undefined,
+    selectedTimelineId: undefined,
+  });
   cache.setQueryData(['case', 'current'], currentCase);
 }

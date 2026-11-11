@@ -27,7 +27,6 @@ export function useEventLogPanelModel({
   loadContextKey?: string;
   loadStateKey?: string | number;
 }) {
-
   const { t } = useTranslation();
 
   const [localActiveTab, setLocalActiveTab] = useState<EventLogTabKey>('boot');
@@ -38,7 +37,6 @@ export function useEventLogPanelModel({
     setLocalActiveTab(tab);
     onActiveViewChange?.(tab);
   };
-
 
   const info = summary ?? {
     status: 'unavailable' as const,
@@ -60,17 +58,13 @@ export function useEventLogPanelModel({
     generatedAt: '',
   };
 
-  const tableLoadContextKey = JSON.stringify([
-    loadContextKey ?? null,
-    activeTab,
-    info.generatedAt,
-  ]);
-
+  const tableLoadContextKey = JSON.stringify([loadContextKey ?? null, activeTab, info.generatedAt]);
 
   const logonEvents = useMemo(
-    () => info.securityEvents.filter((e: EvtxSecurityEvent) =>
-      ['logonSuccess', 'logonFailure', 'explicitCredentials'].includes(e.kind),
-    ),
+    () =>
+      info.securityEvents.filter((e: EvtxSecurityEvent) =>
+        ['logonSuccess', 'logonFailure', 'explicitCredentials'].includes(e.kind),
+      ),
     [info.securityEvents],
   );
 
@@ -80,10 +74,27 @@ export function useEventLogPanelModel({
   );
 
   const accountEvents = useMemo(
-    () => info.securityEvents.filter((e: EvtxSecurityEvent) =>
-      ['scheduledTaskCreated', 'scheduledTaskModified', 'accountCreated', 'groupMemberAdded'].includes(e.kind),
-    ),
+    () =>
+      info.securityEvents.filter((e: EvtxSecurityEvent) =>
+        ['scheduledTaskCreated', 'scheduledTaskModified', 'accountCreated', 'groupMemberAdded'].includes(e.kind),
+      ),
     [info.securityEvents],
   );
-return { hasMore, loadingMore, loadMoreFailed, onLoadMore, onRetryLoadMore, loadContextKey, loadStateKey, t, activeTab, setActiveTab, info, tableLoadContextKey, logonEvents, processEvents, accountEvents };
+  return {
+    hasMore,
+    loadingMore,
+    loadMoreFailed,
+    onLoadMore,
+    onRetryLoadMore,
+    loadContextKey,
+    loadStateKey,
+    t,
+    activeTab,
+    setActiveTab,
+    info,
+    tableLoadContextKey,
+    logonEvents,
+    processEvents,
+    accountEvents,
+  };
 }

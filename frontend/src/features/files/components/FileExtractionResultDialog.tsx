@@ -1,4 +1,4 @@
-import { AlertTriangle, CircleCheck }  from '@/components/icons';
+import { AlertTriangle, CircleCheck } from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
@@ -40,15 +40,19 @@ export function FileExtractionResultDialog({ model }: FileExtractionResultDialog
             />
             <KeyValueField
               label={t('fileBrowser.extraction.sizeVerification')}
-              value={model.result.sizeVerified
-                ? t('fileBrowser.extraction.sizeVerified')
-                : t('fileBrowser.extraction.sizeMismatch')}
+              value={
+                model.result.sizeVerified
+                  ? t('fileBrowser.extraction.sizeVerified')
+                  : t('fileBrowser.extraction.sizeMismatch')
+              }
             />
             <KeyValueField
               label={t('fileBrowser.extraction.auditRecord')}
-              value={model.result.auditPersisted
-                ? t('fileBrowser.extraction.auditWritten')
-                : t('fileBrowser.extraction.auditWriteFailed')}
+              value={
+                model.result.auditPersisted
+                  ? t('fileBrowser.extraction.auditWritten')
+                  : t('fileBrowser.extraction.auditWriteFailed')
+              }
             />
             <KeyValueField
               className="sm:col-span-2"
@@ -70,7 +74,16 @@ export function FileExtractionResultDialog({ model }: FileExtractionResultDialog
         ) : null}
 
         <DialogFooter>
-          <Tooltip content={t('fileBrowser.extraction.confirm')}><Button aria-label={t('fileBrowser.extraction.confirm')} type="button" variant="forensicsPrimary" onClick={() => model.setResultOpen(false)}><ActionIcon name="download" /></Button></Tooltip>
+          <Tooltip content={t('fileBrowser.extraction.confirm')}>
+            <Button
+              aria-label={t('fileBrowser.extraction.confirm')}
+              type="button"
+              variant="forensicsPrimary"
+              onClick={() => model.setResultOpen(false)}
+            >
+              <ActionIcon name="download" />
+            </Button>
+          </Tooltip>
         </DialogFooter>
       </DialogContent>
     </Dialog>

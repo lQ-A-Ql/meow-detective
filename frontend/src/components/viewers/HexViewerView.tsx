@@ -2,9 +2,26 @@ import type { useHexViewerModel } from '../../hooks/use-hex-viewer-model';
 import { HexByteRow } from '@/components/viewers/HexByteRow';
 
 export function HexViewerView({ model }: { model: ReturnType<typeof useHexViewerModel> }) {
-const { lineHeight, loadedRanges, t, containerRef, handlePointerLeave, hoveredOffset, selection, rowCount, visibleRange, visibleLines, handleScroll, handlePointerMove, handlePointerDown, finishPointerSelection, handleKeyDown, offsetWidth, selectionStart, selectionEnd } = model;
-
-
+  const {
+    lineHeight,
+    loadedRanges,
+    t,
+    containerRef,
+    handlePointerLeave,
+    hoveredOffset,
+    selection,
+    rowCount,
+    visibleRange,
+    visibleLines,
+    handleScroll,
+    handlePointerMove,
+    handlePointerDown,
+    finishPointerSelection,
+    handleKeyDown,
+    offsetWidth,
+    selectionStart,
+    selectionEnd,
+  } = model;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-forensics-surface font-mono text-[12px]">
@@ -57,7 +74,15 @@ const { lineHeight, loadedRanges, t, containerRef, handlePointerLeave, hoveredOf
 
       {loadedRanges?.length ? (
         <div className="shrink-0 border-t border-forensics-border bg-forensics-panel px-3 py-1 text-[10px] text-forensics-muted">
-          {t('viewer.hex.loadedRanges')}: {loadedRanges.map((range) => `0x${range.start.toString(16).toUpperCase()}-0x${Math.max(range.start, range.end - 1).toString(16).toUpperCase()}`).join(', ')}
+          {t('viewer.hex.loadedRanges')}:{' '}
+          {loadedRanges
+            .map(
+              (range) =>
+                `0x${range.start.toString(16).toUpperCase()}-0x${Math.max(range.start, range.end - 1)
+                  .toString(16)
+                  .toUpperCase()}`,
+            )
+            .join(', ')}
         </div>
       ) : null}
     </div>

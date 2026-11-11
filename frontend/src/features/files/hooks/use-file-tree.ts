@@ -25,11 +25,7 @@ import {
   readFileTreeExpansion,
   writeFileTreeExpansion,
 } from '@/features/files/file-tree-expansion-store';
-import type {
-  DataSourcePartition,
-  DataSourceSummary,
-  FileTreeNode,
-} from '@/types/models';
+import type { DataSourcePartition, DataSourceSummary, FileTreeNode } from '@/types/models';
 
 const MAX_TREE_CACHE_SIZE = 100;
 
@@ -43,15 +39,10 @@ function rootsForDataSource(
   if (!hasSourceTaggedRoots && dataSources?.length === 1) {
     return roots.map((node) => ({ ...node, depth: 1, dataSourceId }));
   }
-  return roots
-    .filter((node) => node.dataSourceId === dataSourceId)
-    .map((node) => ({ ...node, depth: 1 }));
+  return roots.filter((node) => node.dataSourceId === dataSourceId).map((node) => ({ ...node, depth: 1 }));
 }
 
-function normalizeChildrenForParent(
-  children: FileTreeNode[],
-  parent: FileTreeNode | undefined,
-) {
+function normalizeChildrenForParent(children: FileTreeNode[], parent: FileTreeNode | undefined) {
   const normalized = rebaseTreeNodeDepths(children, parent?.depth ?? -1);
   if (!parent) return normalized;
   return normalized.filter((child) => child.id !== parent.id);
@@ -92,15 +83,19 @@ export function useFileTree({
   deferInitialSelection = false,
 }: UseFileTreeOptions) {
   const expansionScope = caseId ?? DEFAULT_FILE_TREE_SCOPE;
-  const [expandedDirectoryIds, setExpandedDirectoryIdsState] = useState<string[]>(
-    () => readFileTreeExpansion(expansionScope),
+  const [expandedDirectoryIds, setExpandedDirectoryIdsState] = useState<string[]>(() =>
+    readFileTreeExpansion(expansionScope),
   );
   const [treeChildren, setTreeChildren] = useState<Record<string, FileTreeNode[]>>({});
   const [treeChildOffsets, setTreeChildOffsets] = useState<Record<string, number>>({});
   const [filterQuery, setFilterQuery] = useState('');
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const expansionScopeRef = useRef(expansionScope);
-  const { width: treeWidth, isResizing, onResizeStart } = useResizablePanel({
+  const {
+    width: treeWidth,
+    isResizing,
+    onResizeStart,
+  } = useResizablePanel({
     defaultWidth: 224,
     minWidth: 160,
     maxWidth: 400,
@@ -186,10 +181,7 @@ export function useFileTree({
       for (const ds of dataSources) {
         const dsId = dataSourceNodeId(ds.id);
         const parent = wrappedRootTree.find((node) => node.id === dsId);
-        next[dsId] = normalizeChildrenForParent(
-          rootsForDataSource(rootTree, ds.id, dataSources),
-          parent,
-        );
+        next[dsId] = normalizeChildrenForParent(rootsForDataSource(rootTree, ds.id, dataSources), parent);
       }
       return next;
     });
@@ -214,9 +206,7 @@ export function useFileTree({
   useEffect(() => {
     if (wrappedRootTree.length > 0 && wrappedRootTree[0].hasChildren) {
       setExpandedDirectoryIds((current) =>
-        current.includes(wrappedRootTree[0].id)
-          ? current
-          : [...current, wrappedRootTree[0].id],
+        current.includes(wrappedRootTree[0].id) ? current : [...current, wrappedRootTree[0].id],
       );
     }
   }, [setExpandedDirectoryIds, wrappedRootTree]);
@@ -240,11 +230,7 @@ export function useFileTree({
         parentIds.add(node.id);
       }
     }
-    if (
-      activeDirectoryId
-      && !activeDirectoryIsDataSource
-      && expandedIdSet.has(activeDirectoryId)
-    ) {
+    if (activeDirectoryId && !activeDirectoryIsDataSource && expandedIdSet.has(activeDirectoryId)) {
       parentIds.add(activeDirectoryId);
     }
     // A programmatic reveal knows the ancestor ids before they are reachable, so
@@ -256,14 +242,7 @@ export function useFileTree({
       parentId,
       offset: treeChildOffsets[parentId] ?? 0,
     }));
-  }, [
-    activeDirectoryId,
-    activeDirectoryIsDataSource,
-    expandedIdSet,
-    flatTree,
-    revealDirectoryIds,
-    treeChildOffsets,
-  ]);
+  }, [activeDirectoryId, activeDirectoryIsDataSource, expandedIdSet, flatTree, revealDirectoryIds, treeChildOffsets]);
 
   const branchQueries = useFileChildrenBranches(branchRequests, pageLimit, showHidden, caseId);
 
@@ -285,29 +264,23 @@ export function useFileTree({
         const page = branchQueries[index]?.data;
         if (!page) continue;
         const parent =
-          findTreeNode(request.parentId, rootNodes, next)
-          ?? findTreeNode(request.parentId, rootNodes, current);
+          findTreeNode(request.parentId, rootNodes, next) ?? findTreeNode(request.parentId, rootNodes, current);
         const normalized = normalizeChildrenForParent(page.children, parent);
         const pathChild = jumpPathChildren.get(request.parentId);
         const jumpChild = pathChild ? normalizeChildrenForParent([pathChild], parent)[0] : undefined;
-        const normalizedWithJumpChild = jumpChild && !normalized.some((node) => node.id === jumpChild.id)
-          ? [...normalized, jumpChild]
-          : normalized;
+        const normalizedWithJumpChild =
+          jumpChild && !normalized.some((node) => node.id === jumpChild.id) ? [...normalized, jumpChild] : normalized;
         const previous = next[request.parentId] ?? current[request.parentId] ?? [];
-        const merged = request.offset > 0 || jumpChild
-          ? mergeTreeNodePages(previous, normalizedWithJumpChild)
-          : normalizedWithJumpChild;
+        const merged =
+          request.offset > 0 || jumpChild
+            ? mergeTreeNodePages(previous, normalizedWithJumpChild)
+            : normalizedWithJumpChild;
         if (sameTreeNodeList(previous, merged)) continue;
         if (!current[request.parentId] && Object.keys(current).length >= MAX_TREE_CACHE_SIZE) {
           // Keep every expanded, visible branch resident. Evicting an ancestor
           // would make its whole subtree disappear despite its expanded state.
           const pinnedIds = new Set(Object.keys(current).filter(isDataSourceTreeNodeId));
-          const evictKey = findEvictableTreeCacheKey(
-            rootNodes,
-            current,
-            expandedIdSet,
-            pinnedIds,
-          );
+          const evictKey = findEvictableTreeCacheKey(rootNodes, current, expandedIdSet, pinnedIds);
           if (evictKey) {
             const { [evictKey]: _dropped, ...rest } = next;
             next = rest;
@@ -320,23 +293,13 @@ export function useFileTree({
     });
     // `showHidden` is included so cached branches are re-merged after the
     // visibility-reset wipe even when the query data reference is unchanged.
-  }, [
-    branchQueries,
-    branchRequests,
-    expandedIdSet,
-    jumpPathChildren,
-    rootNodes,
-    showHidden,
-    treeChildren,
-  ]);
+  }, [branchQueries, branchRequests, expandedIdSet, jumpPathChildren, rootNodes, showHidden, treeChildren]);
 
   useEffect(() => {
     if (!selectedDirectoryId && !deferInitialSelection && rootNodes[0]?.id) {
       setSelectedDirectoryId(rootNodes[0].id);
       setExpandedDirectoryIds((current) =>
-        current.includes(rootNodes[0].id)
-          ? current
-          : [...current, rootNodes[0].id]
+        current.includes(rootNodes[0].id) ? current : [...current, rootNodes[0].id],
       );
     }
   }, [deferInitialSelection, rootNodes, selectedDirectoryId, setExpandedDirectoryIds, setSelectedDirectoryId]);
@@ -345,9 +308,7 @@ export function useFileTree({
     () => branchRequests.findIndex((request) => request.parentId === activeDirectoryId),
     [activeDirectoryId, branchRequests],
   );
-  const activeChildrenPage = activeBranchIndex >= 0
-    ? branchQueries[activeBranchIndex]?.data
-    : undefined;
+  const activeChildrenPage = activeBranchIndex >= 0 ? branchQueries[activeBranchIndex]?.data : undefined;
 
   const currentDirectory = flatTree.find((node) => node.id === activeDirectoryId);
   const parentDirectory = useMemo(() => {
@@ -378,7 +339,7 @@ export function useFileTree({
       }
       return nodeName;
     },
-    [dataSources, partitions]
+    [dataSources, partitions],
   );
 
   // Keep node object references stable: selection/expansion flags are derived
@@ -387,9 +348,7 @@ export function useFileTree({
   const filteredTreeNodes = useMemo(() => {
     if (!filterQuery.trim()) return flatTree;
     const query = filterQuery.toLowerCase();
-    return flatTree.filter((node) =>
-      node.name.toLowerCase().includes(query)
-    );
+    return flatTree.filter((node) => node.name.toLowerCase().includes(query));
   }, [flatTree, filterQuery]);
 
   const toggleDirectory = useCallback(
@@ -397,12 +356,10 @@ export function useFileTree({
       setSelectedDirectoryId(node.id);
       setSelectedFileId(undefined);
       setExpandedDirectoryIds((current) =>
-        current.includes(node.id)
-          ? current.filter((id) => id !== node.id)
-          : [...current, node.id]
+        current.includes(node.id) ? current.filter((id) => id !== node.id) : [...current, node.id],
       );
     },
-    [setExpandedDirectoryIds, setSelectedDirectoryId, setSelectedFileId]
+    [setExpandedDirectoryIds, setSelectedDirectoryId, setSelectedFileId],
   );
   const handleNodeOpen = useCallback(
     (nodeId: string) => {
@@ -414,11 +371,16 @@ export function useFileTree({
         setSelectedFileId(undefined);
       }
     },
-    [flatTree, toggleDirectory, setSelectedDirectoryId, setSelectedFileId]
+    [flatTree, toggleDirectory, setSelectedDirectoryId, setSelectedFileId],
   );
-  const keyboardNodes = useMemo(() => filteredTreeNodes.map((node) => ({
-    ...node, expanded: expandedIdSet.has(node.id),
-  })), [expandedIdSet, filteredTreeNodes]);
+  const keyboardNodes = useMemo(
+    () =>
+      filteredTreeNodes.map((node) => ({
+        ...node,
+        expanded: expandedIdSet.has(node.id),
+      })),
+    [expandedIdSet, filteredTreeNodes],
+  );
   useFileTreeReveal(filteredTreeNodes, activeDirectoryId, treeContainerRef);
   useFileTreeKeyboard({
     nodes: keyboardNodes,
@@ -428,23 +390,17 @@ export function useFileTree({
       setSelectedFileId(undefined);
     },
     onNodeToggle: (id) =>
-      setExpandedDirectoryIds((current) =>
-        current.includes(id)
-          ? current.filter((i) => i !== id)
-          : [...current, id]
-      ),
+      setExpandedDirectoryIds((current) => (current.includes(id) ? current.filter((i) => i !== id) : [...current, id])),
     onNodeOpen: handleNodeOpen,
     scrollContainerRef: treeContainerRef,
   });
 
-  const activeTreeChildrenLoaded = activeDirectoryId
-    ? (treeChildren[activeDirectoryId]?.length ?? 0)
-    : 0;
+  const activeTreeChildrenLoaded = activeDirectoryId ? (treeChildren[activeDirectoryId]?.length ?? 0) : 0;
   const canLoadMoreTreeChildren = Boolean(
     activeDirectoryId &&
-      !activeDirectoryIsDataSource &&
-      activeChildrenPage?.truncated &&
-      activeTreeChildrenLoaded < (activeChildrenPage?.totalCount ?? 0)
+    !activeDirectoryIsDataSource &&
+    activeChildrenPage?.truncated &&
+    activeTreeChildrenLoaded < (activeChildrenPage?.totalCount ?? 0),
   );
   const loadMoreActiveTreeChildren = useCallback(() => {
     if (!activeDirectoryId || activeDirectoryIsDataSource) return;
@@ -462,13 +418,12 @@ export function useFileTree({
   // materializing even when its query already resolved - the merge lands in the next
   // commit - so it must keep the tree unsettled until the walk reaches the deepest
   // expanded level.
-  const branchesMaterialized = branchRequests.every(
-    (request) => treeChildren[request.parentId] !== undefined,
-  );
-  const treeSettled = rootTree !== undefined
-    && !rootTreeFetching
-    && !branchQueries.some((query) => query.isFetching)
-    && branchesMaterialized;
+  const branchesMaterialized = branchRequests.every((request) => treeChildren[request.parentId] !== undefined);
+  const treeSettled =
+    rootTree !== undefined &&
+    !rootTreeFetching &&
+    !branchQueries.some((query) => query.isFetching) &&
+    branchesMaterialized;
 
   return {
     rootTree: rootNodes,

@@ -1,4 +1,3 @@
-
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { IconButton } from '@/components/controls/IconButton';
 import type { ReactNode } from 'react';
@@ -19,8 +18,15 @@ interface LaunchPanelProps {
   model: EmulationWorkspaceModel;
 }
 
-export function LaunchPanelShell({ model, recoveryHint, inspection, maintenance }: LaunchPanelProps & {
-  recoveryHint?: string; inspection?: ReactNode; maintenance?: ReactNode;
+export function LaunchPanelShell({
+  model,
+  recoveryHint,
+  inspection,
+  maintenance,
+}: LaunchPanelProps & {
+  recoveryHint?: string;
+  inspection?: ReactNode;
+  maintenance?: ReactNode;
 }) {
   const { t } = useTranslation();
   return (
@@ -58,9 +64,7 @@ export function SourceSelectField({ model }: LaunchPanelProps) {
           ))}
         </SelectContent>
       </Select>
-      {model.sourceOptions.length === 0 ? (
-        <FieldHint>{t('emulationPage.launch.noSources')}</FieldHint>
-      ) : null}
+      {model.sourceOptions.length === 0 ? <FieldHint>{t('emulationPage.launch.noSources')}</FieldHint> : null}
     </Field>
   );
 }
@@ -71,11 +75,18 @@ export function RecoveryIsoField({ model, hint }: LaunchPanelProps & { hint?: st
     <Field>
       <FieldLabel htmlFor="emulation-pe-iso">{t('emulationPage.launch.recoveryIso')}</FieldLabel>
       <div className="flex min-w-0 items-center gap-2">
-        <Input id="emulation-pe-iso" value={model.recoveryIsoPath} readOnly
-          placeholder={t('emulationPage.launch.recoveryPlaceholder')} variant="path" />
-        {model.recoveryIsoPath ? <IconButton label={t('emulationPage.actions.clearIso')} onClick={model.clearRecoveryIso}>
-          <ActionIcon name="close" />
-        </IconButton> : null}
+        <Input
+          id="emulation-pe-iso"
+          value={model.recoveryIsoPath}
+          readOnly
+          placeholder={t('emulationPage.launch.recoveryPlaceholder')}
+          variant="path"
+        />
+        {model.recoveryIsoPath ? (
+          <IconButton label={t('emulationPage.actions.clearIso')} onClick={model.clearRecoveryIso}>
+            <ActionIcon name="close" />
+          </IconButton>
+        ) : null}
         <IconButton label={t('emulationPage.actions.chooseIso')} onClick={() => void model.pickRecoveryIso()}>
           <ActionIcon name="folder-open" />
         </IconButton>
@@ -114,38 +125,82 @@ export function OptionsFieldset({ model }: LaunchPanelProps) {
       <Field>
         <div className="flex items-center justify-between gap-3">
           <FieldLabel htmlFor="emulation-cores">{t('emulationPage.launch.optionCores')}</FieldLabel>
-          <output htmlFor="emulation-cores" aria-label={t('emulationPage.launch.optionCores')} className="font-mono text-[12px] text-forensics-ink">{model.options.processorCount}</output>
+          <output
+            htmlFor="emulation-cores"
+            aria-label={t('emulationPage.launch.optionCores')}
+            className="font-mono text-[12px] text-forensics-ink"
+          >
+            {model.options.processorCount}
+          </output>
         </div>
-        <Slider id="emulation-cores" className="h-6" min={1} max={64} step={1} value={[model.options.processorCount]}
-          onValueChange={([value]) => { if (value !== undefined) model.setResourceValue('processorCount', value); }}
-          aria-label={t('emulationPage.launch.optionCores')} />
+        <Slider
+          id="emulation-cores"
+          className="h-6"
+          min={1}
+          max={64}
+          step={1}
+          value={[model.options.processorCount]}
+          onValueChange={([value]) => {
+            if (value !== undefined) model.setResourceValue('processorCount', value);
+          }}
+          aria-label={t('emulationPage.launch.optionCores')}
+        />
       </Field>
       <Field>
         <div className="flex items-center justify-between gap-3">
           <FieldLabel htmlFor="emulation-memory">{t('emulationPage.launch.optionMemory')}</FieldLabel>
-          <output htmlFor="emulation-memory" aria-label={t('emulationPage.launch.optionMemory')} className="font-mono text-[12px] text-forensics-ink">{model.options.memoryMib}</output>
+          <output
+            htmlFor="emulation-memory"
+            aria-label={t('emulationPage.launch.optionMemory')}
+            className="font-mono text-[12px] text-forensics-ink"
+          >
+            {model.options.memoryMib}
+          </output>
         </div>
-        <Slider id="emulation-memory" className="h-6" min={512} max={65536} step={512}
+        <Slider
+          id="emulation-memory"
+          className="h-6"
+          min={512}
+          max={65536}
+          step={512}
           value={[Math.min(65536, Math.max(512, model.options.memoryMib))]}
-          onValueChange={([value]) => { if (value !== undefined) model.setResourceValue('memoryMib', value); }}
-          aria-label={t('emulationPage.launch.optionMemory')} />
+          onValueChange={([value]) => {
+            if (value !== undefined) model.setResourceValue('memoryMib', value);
+          }}
+          aria-label={t('emulationPage.launch.optionMemory')}
+        />
       </Field>
       <Field>
         <FieldLabel htmlFor="emulation-network-mode">{t('emulationPage.launch.optionNetworkMode')}</FieldLabel>
-        <Select value={model.options.networkMode} onValueChange={(value) => model.selectNetworkMode(value as EmulationNetworkMode)}>
-          <SelectTrigger id="emulation-network-mode" aria-label={t('emulationPage.launch.optionNetworkMode')}><SelectValue /></SelectTrigger>
-          <SelectContent>{(['off', 'hostOnly', 'nat', 'bridged'] as const).map((mode) => (
-            <SelectItem key={mode} value={mode}>{t(`emulationPage.launch.networkModes.${mode}`)}</SelectItem>
-          ))}</SelectContent>
+        <Select
+          value={model.options.networkMode}
+          onValueChange={(value) => model.selectNetworkMode(value as EmulationNetworkMode)}
+        >
+          <SelectTrigger id="emulation-network-mode" aria-label={t('emulationPage.launch.optionNetworkMode')}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(['off', 'hostOnly', 'nat', 'bridged'] as const).map((mode) => (
+              <SelectItem key={mode} value={mode}>
+                {t(`emulationPage.launch.networkModes.${mode}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
       </Field>
       <div className="grid gap-3 sm:grid-cols-2">
-        {([
-          ['clipboard', 'emulationPage.launch.optionClipboard'],
-          ['timeSync', 'emulationPage.launch.optionTimeSync'],
-        ] as const).map(([key, labelKey]) => (
+        {(
+          [
+            ['clipboard', 'emulationPage.launch.optionClipboard'],
+            ['timeSync', 'emulationPage.launch.optionTimeSync'],
+          ] as const
+        ).map(([key, labelKey]) => (
           <label key={key} className="flex items-center gap-2 text-[12px] text-forensics-text-secondary">
-            <Checkbox checked={model.options[key]} onCheckedChange={() => model.toggleOption(key)} aria-label={t(labelKey)} />
+            <Checkbox
+              checked={model.options[key]}
+              onCheckedChange={() => model.toggleOption(key)}
+              aria-label={t(labelKey)}
+            />
             {t(labelKey)}
           </label>
         ))}
@@ -207,15 +262,30 @@ export function StartButton({ model }: LaunchPanelProps) {
   const { t } = useTranslation();
   return (
     <>
-      <IconButton label={t(model.starting ? 'emulationPage.actions.starting' : 'emulationPage.actions.start')}
-        variant="solid" onClick={() => void model.start()} disabled={!model.canStart}>
-        <ActionIcon name={model.starting ? 'refresh' : 'play'} className={model.starting ? 'size-[15px] animate-spin' : 'size-[15px]'} />
+      <IconButton
+        label={t(model.starting ? 'emulationPage.actions.starting' : 'emulationPage.actions.start')}
+        variant="solid"
+        onClick={() => void model.start()}
+        disabled={!model.canStart}
+      >
+        <ActionIcon
+          name={model.starting ? 'refresh' : 'play'}
+          className={model.starting ? 'size-[15px] animate-spin' : 'size-[15px]'}
+        />
       </IconButton>
-      <ConfirmationDialog open={model.directBootConfirmationOpen}
-        onOpenChange={(open) => { if (!open) model.cancelDirectBoot(); }}
-        title={t('emulationPage.boot.directBootTitle')} description={t('emulationPage.boot.directBootConfirm')}
-        cancelLabel={t('common.cancel')} confirmLabel={t('emulationPage.boot.directBootAction')}
-        onConfirm={() => void model.confirmDirectBoot()} pending={model.starting} destructive />
+      <ConfirmationDialog
+        open={model.directBootConfirmationOpen}
+        onOpenChange={(open) => {
+          if (!open) model.cancelDirectBoot();
+        }}
+        title={t('emulationPage.boot.directBootTitle')}
+        description={t('emulationPage.boot.directBootConfirm')}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('emulationPage.boot.directBootAction')}
+        onConfirm={() => void model.confirmDirectBoot()}
+        pending={model.starting}
+        destructive
+      />
     </>
   );
 }

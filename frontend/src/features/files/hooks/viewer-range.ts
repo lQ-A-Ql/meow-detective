@@ -80,9 +80,11 @@ export function isStalePreviewHandleError(error: unknown) {
   }
   const message = errorMessage(error, '').toLowerCase();
   if (!message) return false;
-  return (message.includes('handle') || message.includes('session'))
-    && (message.includes('expired')
-      || message.includes('invalid')
-      || message.includes('not found')
-      || message.includes('unavailable'));
+  return (
+    (message.includes('handle') || message.includes('session')) &&
+    (message.includes('expired') ||
+      message.includes('invalid') ||
+      message.includes('not found') ||
+      message.includes('unavailable'))
+  );
 }

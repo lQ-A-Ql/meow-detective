@@ -5,12 +5,7 @@ export interface SvgRendererProps extends Omit<ImgHTMLAttributes<HTMLImageElemen
   dataBase64: string;
 }
 
-export function SvgRenderer({
-  dataBase64,
-  alt = '',
-  className,
-  ...props
-}: SvgRendererProps) {
+export function SvgRenderer({ dataBase64, alt = '', className, ...props }: SvgRendererProps) {
   return (
     <img
       src={`data:image/svg+xml;base64,${dataBase64}`}

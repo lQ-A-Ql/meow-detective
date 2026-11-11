@@ -3,12 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { EMULATION_SESSIONS_QUERY_KEY } from '@/features/emulation/query-keys';
-import {
-  launchEmulation,
-  listEmulationSessions,
-  prepareEmulation,
-  releaseEmulation,
-} from '@/lib/api/emulation';
+import { launchEmulation, listEmulationSessions, prepareEmulation, releaseEmulation } from '@/lib/api/emulation';
 import { listMounts, mountImage, mountPhysicalImage, unmountImage } from '@/lib/api/mount';
 import { errorMessage } from '@/lib/errors';
 import { openDialog as openPlatformDialog, singleDialogPath } from '@/lib/platform/dialog';
@@ -24,14 +19,36 @@ const MOUNT_QUERY_KEY = ['mounts'] as const;
 type ImageAccessMode = MountMode | 'emulation';
 
 const MOUNT_POINT_OPTIONS: readonly string[] = [
-  'A:', 'B:', 'C:', 'D:', 'E:', 'F:', 'G:', 'H:', 'I:', 'J:', 'K:', 'L:', 'M:',
-  'N:', 'O:', 'P:', 'Q:', 'R:', 'S:', 'T:', 'U:', 'V:', 'W:', 'X:', 'Y:', 'Z:',
+  'A:',
+  'B:',
+  'C:',
+  'D:',
+  'E:',
+  'F:',
+  'G:',
+  'H:',
+  'I:',
+  'J:',
+  'K:',
+  'L:',
+  'M:',
+  'N:',
+  'O:',
+  'P:',
+  'Q:',
+  'R:',
+  'S:',
+  'T:',
+  'U:',
+  'V:',
+  'W:',
+  'X:',
+  'Y:',
+  'Z:',
 ] as const;
 
 function isActiveMount(status: MountStatus) {
-  return status.state === 'preparing'
-    || status.state === 'mounted'
-    || status.state === 'unmounting';
+  return status.state === 'preparing' || status.state === 'mounted' || status.state === 'unmounting';
 }
 
 function isActiveEmulation(status: EmulationSessionStatus) {
@@ -65,14 +82,14 @@ export function useImageMountModel() {
     queryKey: MOUNT_QUERY_KEY,
     queryFn: listMounts,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
-    refetchInterval: (query) => query.state.data?.some(isActiveMount) ? 1500 : false,
+    refetchInterval: (query) => (query.state.data?.some(isActiveMount) ? 1500 : false),
     retry: false,
   });
   const emulationQuery = useQuery({
     queryKey: EMULATION_SESSIONS_QUERY_KEY,
     queryFn: listEmulationSessions,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
-    refetchInterval: (query) => query.state.data?.some(isActiveEmulation) ? 1500 : false,
+    refetchInterval: (query) => (query.state.data?.some(isActiveEmulation) ? 1500 : false),
     retry: false,
   });
 
@@ -86,22 +103,21 @@ export function useImageMountModel() {
   const partitions = useMemo(() => selectedSource?.partitions ?? [], [selectedSource]);
   const selectedPartition = findSelectedPartition(selectedSource, selectedPartitionIndex);
   const selectedMount = useMemo(
-    () => mountsQuery.data?.find((mount) => {
-      if (mountMode === 'emulation') {
-        return false;
-      }
-      if (mount.target.dataSourceId !== selectedSourceId || mount.target.mode !== mountMode) {
-        return false;
-      }
-      return mountMode === 'physicalDisk'
-        || String(mount.target.partitionIndex) === selectedPartitionIndex;
-    }),
+    () =>
+      mountsQuery.data?.find((mount) => {
+        if (mountMode === 'emulation') {
+          return false;
+        }
+        if (mount.target.dataSourceId !== selectedSourceId || mount.target.mode !== mountMode) {
+          return false;
+        }
+        return mountMode === 'physicalDisk' || String(mount.target.partitionIndex) === selectedPartitionIndex;
+      }),
     [mountMode, mountsQuery.data, selectedPartitionIndex, selectedSourceId],
   );
   const selectedEmulation = useMemo(
-    () => emulationQuery.data?.find((session) => (
-      session.dataSourceId === selectedSourceId && isActiveEmulation(session)
-    )),
+    () =>
+      emulationQuery.data?.find((session) => session.dataSourceId === selectedSourceId && isActiveEmulation(session)),
     [emulationQuery.data, selectedSourceId],
   );
 
@@ -187,22 +203,26 @@ export function useImageMountModel() {
     void mountsQuery.refetch();
   }, [emulationMutation, mountMutation, mountsQuery, releaseEmulationMutation, unmountMutation]);
 
-  const setDialogOpenSafely = useCallback((open: boolean) => {
-    if (!open && (
-      mountMutation.isPending
-      || unmountMutation.isPending
-      || emulationMutation.isPending
-      || releaseEmulationMutation.isPending
-    )) {
-      return;
-    }
-    setDialogOpen(open);
-  }, [
-    emulationMutation.isPending,
-    mountMutation.isPending,
-    releaseEmulationMutation.isPending,
-    unmountMutation.isPending,
-  ]);
+  const setDialogOpenSafely = useCallback(
+    (open: boolean) => {
+      if (
+        !open &&
+        (mountMutation.isPending ||
+          unmountMutation.isPending ||
+          emulationMutation.isPending ||
+          releaseEmulationMutation.isPending)
+      ) {
+        return;
+      }
+      setDialogOpen(open);
+    },
+    [
+      emulationMutation.isPending,
+      mountMutation.isPending,
+      releaseEmulationMutation.isPending,
+      unmountMutation.isPending,
+    ],
+  );
 
   const submit = useCallback(async () => {
     if (mountMode === 'emulation') {
@@ -217,9 +237,12 @@ export function useImageMountModel() {
     await mountMutation.mutateAsync();
   }, [emulationMutation, mountMode, mountMutation, recoveryIsoPath.length]);
 
-  const unmount = useCallback(async (mountId: string) => {
-    await unmountMutation.mutateAsync(mountId);
-  }, [unmountMutation]);
+  const unmount = useCallback(
+    async (mountId: string) => {
+      await unmountMutation.mutateAsync(mountId);
+    },
+    [unmountMutation],
+  );
   const pickRecoveryIso = useCallback(async () => {
     const selected = await openPlatformDialog({
       directory: false,
@@ -231,9 +254,12 @@ export function useImageMountModel() {
       setRecoveryIsoPath(path);
     }
   }, []);
-  const releaseSelectedEmulation = useCallback(async (sessionId: string) => {
-    await releaseEmulationMutation.mutateAsync(sessionId);
-  }, [releaseEmulationMutation]);
+  const releaseSelectedEmulation = useCallback(
+    async (sessionId: string) => {
+      await releaseEmulationMutation.mutateAsync(sessionId);
+    },
+    [releaseEmulationMutation],
+  );
 
   return {
     dialogOpen,
@@ -265,23 +291,22 @@ export function useImageMountModel() {
     emulationSessions: emulationQuery.data ?? [],
     selectedEmulation,
     isLoadingMounts: mountsQuery.isLoading,
-    isSubmitting: mountMutation.isPending
-      || unmountMutation.isPending
-      || emulationMutation.isPending
-      || releaseEmulationMutation.isPending,
+    isSubmitting:
+      mountMutation.isPending ||
+      unmountMutation.isPending ||
+      emulationMutation.isPending ||
+      releaseEmulationMutation.isPending,
     isMounting: mountMutation.isPending,
     isUnmounting: unmountMutation.isPending,
     isEmulating: emulationMutation.isPending,
     isReleasingEmulation: releaseEmulationMutation.isPending,
-    error: mountMutation.error || unmountMutation.error || emulationMutation.error || releaseEmulationMutation.error
-      ? errorMessage(
-        mountMutation.error
-          ?? unmountMutation.error
-          ?? emulationMutation.error
-          ?? releaseEmulationMutation.error,
-        t('fileBrowser.mount.operationFailed'),
-      )
-      : undefined,
+    error:
+      mountMutation.error || unmountMutation.error || emulationMutation.error || releaseEmulationMutation.error
+        ? errorMessage(
+            mountMutation.error ?? unmountMutation.error ?? emulationMutation.error ?? releaseEmulationMutation.error,
+            t('fileBrowser.mount.operationFailed'),
+          )
+        : undefined,
     submit,
     unmount,
     releaseEmulation: releaseSelectedEmulation,

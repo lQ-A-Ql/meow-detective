@@ -25,21 +25,23 @@ describe('AnalysisProgressDrawer', () => {
       <AnalysisProgressDrawer
         source={linuxSource}
         extractionRunning={false}
-        progress={[{
-          label: 'Linux 日志提取',
-          status: 'success',
-          scannedCount: 456,
-          artifactCount: 123,
-          timelineEventCount: 12,
-          warnings: [],
-          totalCandidateCount: 456,
-          processedCandidateCount: 456,
-          structuredCandidateCount: 123,
-          unsupportedCandidateCount: 0,
-          textFallbackCandidateCount: 0,
-          warningCandidateCount: 0,
-          checkpointHitCount: 0,
-        }]}
+        progress={[
+          {
+            label: 'Linux 日志提取',
+            status: 'success',
+            scannedCount: 456,
+            artifactCount: 123,
+            timelineEventCount: 12,
+            warnings: [],
+            totalCandidateCount: 456,
+            processedCandidateCount: 456,
+            structuredCandidateCount: 123,
+            unsupportedCandidateCount: 0,
+            textFallbackCandidateCount: 0,
+            warningCandidateCount: 0,
+            checkpointHitCount: 0,
+          },
+        ]}
       />,
     );
 

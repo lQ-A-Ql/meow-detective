@@ -14,12 +14,22 @@ interface FileBrowserCoordinatorOptions {
   onShowHidden: (value: boolean) => void;
   location: ReturnType<typeof useFileBrowserLocation>;
   tree: Pick<ReturnType<typeof useFileTree>, 'setExpandedDirectoryIds'>;
-  pagination: Pick<ReturnType<typeof useFilePagination>,
-    'rowsOffset' | 'setRowsOffset' | 'rows' | 'rowsReady' | 'goToPreviousRows' | 'goToNextRows' | 'handleSort'>;
+  pagination: Pick<
+    ReturnType<typeof useFilePagination>,
+    'rowsOffset' | 'setRowsOffset' | 'rows' | 'rowsReady' | 'goToPreviousRows' | 'goToNextRows' | 'handleSort'
+  >;
 }
 
-export function useFileBrowserCoordinator({ caseId, selectedDirectoryId, selectedFileId,
-  showHidden, onShowHidden, location, tree, pagination }: FileBrowserCoordinatorOptions) {
+export function useFileBrowserCoordinator({
+  caseId,
+  selectedDirectoryId,
+  selectedFileId,
+  showHidden,
+  onShowHidden,
+  location,
+  tree,
+  pagination,
+}: FileBrowserCoordinatorOptions) {
   const setSelectedDirectoryId = location.selectDirectory;
   const setSelectedFileId = location.selectFile;
   // `tree` and `pagination` are hook result objects rebuilt on every render. Each
@@ -56,8 +66,16 @@ export function useFileBrowserCoordinator({ caseId, selectedDirectoryId, selecte
       return;
     }
     useFileNavigationStore.getState().consume(pending);
-  }, [location.pendingJump, onShowHidden, rowsOffset, selectedDirectoryId, selectedFileId,
-    setExpandedDirectoryIds, setRowsOffset, showHidden]);
+  }, [
+    location.pendingJump,
+    onShowHidden,
+    rowsOffset,
+    selectedDirectoryId,
+    selectedFileId,
+    setExpandedDirectoryIds,
+    setRowsOffset,
+    showHidden,
+  ]);
 
   useEffect(() => {
     const context = location.directoryContext;
@@ -71,26 +89,42 @@ export function useFileBrowserCoordinator({ caseId, selectedDirectoryId, selecte
       const next = [...new Set([...current, ...directoryExpansionIds(context)])];
       return next.length === current.length ? current : next;
     });
-  }, [location.directoryContext, location.pendingJump, setExpandedDirectoryIds,
-    setSelectedDirectoryId, showHidden]);
+  }, [location.directoryContext, location.pendingJump, setExpandedDirectoryIds, setSelectedDirectoryId, showHidden]);
 
   useEffect(() => {
-    if (selectedFileId && pagination.rowsReady && !location.pendingJump
-      && !pagination.rows?.some((row) => row.id === selectedFileId)
-      && useFileNavigationStore.getState().request?.caseId !== caseId) {
+    if (
+      selectedFileId &&
+      pagination.rowsReady &&
+      !location.pendingJump &&
+      !pagination.rows?.some((row) => row.id === selectedFileId) &&
+      useFileNavigationStore.getState().request?.caseId !== caseId
+    ) {
       setSelectedFileId(undefined);
     }
-  }, [caseId, location.pendingJump, location.requestPending, pagination.rows, pagination.rowsReady,
-    selectedFileId, setSelectedFileId]);
+  }, [
+    caseId,
+    location.pendingJump,
+    location.requestPending,
+    pagination.rows,
+    pagination.rowsReady,
+    selectedFileId,
+    setSelectedFileId,
+  ]);
 
-  const setShowHidden = useCallback((value: boolean) => {
-    setSelectedFileId(undefined);
-    onShowHidden(value);
-  }, [onShowHidden, setSelectedFileId]);
-  const handleSort = useCallback((key: string) => {
-    setSelectedFileId(undefined);
-    paginationHandleSort(key);
-  }, [paginationHandleSort, setSelectedFileId]);
+  const setShowHidden = useCallback(
+    (value: boolean) => {
+      setSelectedFileId(undefined);
+      onShowHidden(value);
+    },
+    [onShowHidden, setSelectedFileId],
+  );
+  const handleSort = useCallback(
+    (key: string) => {
+      setSelectedFileId(undefined);
+      paginationHandleSort(key);
+    },
+    [paginationHandleSort, setSelectedFileId],
+  );
   const goToPreviousRows = useCallback(() => {
     setSelectedFileId(undefined);
     paginationGoToPreviousRows();
@@ -99,14 +133,17 @@ export function useFileBrowserCoordinator({ caseId, selectedDirectoryId, selecte
     setSelectedFileId(undefined);
     paginationGoToNextRows();
   }, [paginationGoToNextRows, setSelectedFileId]);
-  const activateEntry = useCallback((row: FileEntryRow) => {
-    if (row.entryType === 'directory') {
-      setSelectedDirectoryId(row.id);
-      setExpandedDirectoryIds((current) => current.includes(row.id) ? current : [...current, row.id]);
-    } else {
-      setSelectedFileId(row.id);
-    }
-  }, [setExpandedDirectoryIds, setSelectedDirectoryId, setSelectedFileId]);
+  const activateEntry = useCallback(
+    (row: FileEntryRow) => {
+      if (row.entryType === 'directory') {
+        setSelectedDirectoryId(row.id);
+        setExpandedDirectoryIds((current) => (current.includes(row.id) ? current : [...current, row.id]));
+      } else {
+        setSelectedFileId(row.id);
+      }
+    },
+    [setExpandedDirectoryIds, setSelectedDirectoryId, setSelectedFileId],
+  );
 
   return { setShowHidden, handleSort, goToPreviousRows, goToNextRows, activateEntry };
 }

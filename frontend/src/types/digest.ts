@@ -1,10 +1,4 @@
-export type DigestScope =
-  | 'containerFile'
-  | 'containerSet'
-  | 'logicalDisk'
-  | 'partition'
-  | 'file'
-  | 'derivedEvidence';
+export type DigestScope = 'containerFile' | 'containerSet' | 'logicalDisk' | 'partition' | 'file' | 'derivedEvidence';
 
 export type DigestAlgorithm = 'md5' | 'sha1' | 'sha256' | 'sm3';
 

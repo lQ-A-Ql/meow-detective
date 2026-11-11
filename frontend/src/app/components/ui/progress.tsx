@@ -1,7 +1,7 @@
-import * as React from "react";
-import * as ProgressPrimitive from "@radix-ui/react-progress";
+import * as React from 'react';
+import * as ProgressPrimitive from '@radix-ui/react-progress';
 
-import { cn } from "./utils";
+import { cn } from './utils';
 
 function Progress({
   className,
@@ -15,18 +15,12 @@ function Progress({
     <ProgressPrimitive.Root
       data-slot="progress"
       value={resolvedValue}
-      className={cn(
-        "bg-forensics-border-light relative h-1 w-full overflow-hidden rounded-full",
-        className,
-      )}
+      className={cn('bg-forensics-border-light relative h-1 w-full overflow-hidden rounded-full', className)}
       {...props}
     >
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
-        className={cn(
-          "bg-forensics-ink h-full w-full flex-1",
-          indeterminate && "animate-pulse",
-        )}
+        className={cn('bg-forensics-ink h-full w-full flex-1', indeterminate && 'animate-pulse')}
         style={indeterminate ? undefined : { transform: `translateX(-${100 - (value || 0)}%)` }}
       />
     </ProgressPrimitive.Root>

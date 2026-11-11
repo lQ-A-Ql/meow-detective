@@ -9,10 +9,7 @@ import {
   type DataSourcePlatform,
 } from '@/lib/data-source-utils';
 
-function dataSource(
-  platform: DataSourceSummary['platform'],
-  overrides: Partial<DataSourceSummary>,
-): DataSourceSummary {
+function dataSource(platform: DataSourceSummary['platform'], overrides: Partial<DataSourceSummary>): DataSourceSummary {
   return {
     id: `source-${platform}`,
     name: `${platform} source`,
@@ -27,24 +24,24 @@ function dataSource(
 describe('data source platform selection', () => {
   it('exposes only backend-supported persisted platform values', () => {
     expectTypeOf<DataSourcePlatform>().toEqualTypeOf<'windows' | 'linux' | 'android'>();
-    expectTypeOf<DataSourceSummary['platform']>().toEqualTypeOf<
-      'windows' | 'linux' | 'android'
-    >();
+    expectTypeOf<DataSourceSummary['platform']>().toEqualTypeOf<'windows' | 'linux' | 'android'>();
   });
 
   it('keeps persisted Windows platform despite Linux-looking metadata', () => {
     const source = dataSource('windows', {
       name: 'ubuntu-pve',
       sourcePath: '/home/ubuntu/server.raw',
-      partitions: [{
-        index: 1,
-        name: 'Linux LVM',
-        kindLabel: 'LVM',
-        status: 'supported',
-        offset: 0,
-        length: 1024,
-        filesystem: 'xfs',
-      }],
+      partitions: [
+        {
+          index: 1,
+          name: 'Linux LVM',
+          kindLabel: 'LVM',
+          status: 'supported',
+          offset: 0,
+          length: 1024,
+          filesystem: 'xfs',
+        },
+      ],
     });
 
     expect(inferDataSourcePlatform(source)).toBe('windows');
@@ -55,15 +52,17 @@ describe('data source platform selection', () => {
     const source = dataSource('linux', {
       name: 'Windows 11 disk',
       sourcePath: 'C:/evidence/windows.E01',
-      partitions: [{
-        index: 1,
-        name: 'Windows data',
-        kindLabel: 'Basic data',
-        status: 'supported',
-        offset: 0,
-        length: 1024,
-        filesystem: 'NTFS',
-      }],
+      partitions: [
+        {
+          index: 1,
+          name: 'Windows data',
+          kindLabel: 'Basic data',
+          status: 'supported',
+          offset: 0,
+          length: 1024,
+          filesystem: 'NTFS',
+        },
+      ],
     });
 
     expect(inferDataSourcePlatform(source)).toBe('linux');

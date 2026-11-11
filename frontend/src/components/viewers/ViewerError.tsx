@@ -1,7 +1,7 @@
 import { memo, useCallback } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { AlertCircle }  from '@/components/icons';
+import { AlertCircle } from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { useTranslation } from 'react-i18next';
 import type { ApiErrorDto } from '@/types/models';
@@ -14,11 +14,7 @@ interface ViewerErrorProps {
 }
 
 function copyErrorToClipboard(error: ApiErrorDto) {
-  const lines = [
-    `Code: ${error.code}`,
-    `Message: ${error.message}`,
-    `Category: ${error.category ?? 'unknown'}`,
-  ];
+  const lines = [`Code: ${error.code}`, `Message: ${error.message}`, `Category: ${error.category ?? 'unknown'}`];
   if (error.suggestion) lines.push(`Suggestion: ${error.suggestion}`);
   void navigator.clipboard.writeText(lines.join('\n'));
 }
@@ -36,34 +32,38 @@ export const ViewerError = memo(function ViewerError({ error, onRetry }: ViewerE
           [{error.code}] {t('viewer.error.title')}
         </h3>
 
-        <p className="mb-4 text-[13px] leading-relaxed text-forensics-muted">
-          {error.message}
-        </p>
+        <p className="mb-4 text-[13px] leading-relaxed text-forensics-muted">{error.message}</p>
 
         {error.suggestion && (
           <div className="mb-4 rounded-none border border-forensics-warning-border bg-forensics-warning-bg px-4 py-3 text-left">
-            <p className="text-[12px] leading-relaxed text-forensics-warning-text">
-              💡 {error.suggestion}
-            </p>
+            <p className="text-[12px] leading-relaxed text-forensics-warning-text">💡 {error.suggestion}</p>
           </div>
         )}
 
         <div className="flex items-center justify-center gap-2">
-          <Tooltip content={t('viewer.error.copyDetails')}><Button
-            type="button"
-            variant="forensicsOutline"
-            size="xs"
-            onClick={handleCopy}
-            aria-label={t('viewer.error.copyDetails')}
-          ><ActionIcon name="copy" /></Button></Tooltip>
-          {error.recoverable && onRetry && (
-            <Tooltip content={t('viewer.error.retryPreview')}><Button
+          <Tooltip content={t('viewer.error.copyDetails')}>
+            <Button
               type="button"
-              variant="forensicsPrimary"
+              variant="forensicsOutline"
               size="xs"
-              onClick={onRetry}
-              aria-label={t('viewer.error.retryPreview')}
-            ><ActionIcon name="refresh" /></Button></Tooltip>
+              onClick={handleCopy}
+              aria-label={t('viewer.error.copyDetails')}
+            >
+              <ActionIcon name="copy" />
+            </Button>
+          </Tooltip>
+          {error.recoverable && onRetry && (
+            <Tooltip content={t('viewer.error.retryPreview')}>
+              <Button
+                type="button"
+                variant="forensicsPrimary"
+                size="xs"
+                onClick={onRetry}
+                aria-label={t('viewer.error.retryPreview')}
+              >
+                <ActionIcon name="refresh" />
+              </Button>
+            </Tooltip>
           )}
         </div>
       </div>

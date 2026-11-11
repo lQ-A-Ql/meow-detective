@@ -7,7 +7,11 @@ export function currentCase() {
 }
 
 export function createCase(request: Record<string, unknown>) {
-  current = { ...fixture.currentCase, id: 'case-created-preview', name: String(request.name ?? fixture.currentCase.name) };
+  current = {
+    ...fixture.currentCase,
+    id: 'case-created-preview',
+    name: String(request.name ?? fixture.currentCase.name),
+  };
   return current;
 }
 

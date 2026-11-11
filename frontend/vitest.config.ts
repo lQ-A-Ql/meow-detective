@@ -23,13 +23,7 @@ export default defineConfig({
       // could never fail the gate. Include the whole source tree and keep the thresholds
       // below what the suite genuinely reaches today.
       include: ['src/**/*.{ts,tsx}'],
-      exclude: [
-        'src/**/*.d.ts',
-        'src/main.tsx',
-        'src/vite-env.d.ts',
-        'src/i18n/**',
-        'src/app/components/ui/**',
-      ],
+      exclude: ['src/**/*.d.ts', 'src/main.tsx', 'src/vite-env.d.ts', 'src/i18n/**', 'src/app/components/ui/**'],
       // Real values with the full source tree included are roughly
       // lines 72 / statements 69 / functions 64 / branches 62; the gate sits just below so a
       // regression fails while ordinary refactoring does not.

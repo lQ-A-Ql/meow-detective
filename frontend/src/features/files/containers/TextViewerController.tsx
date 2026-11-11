@@ -14,6 +14,15 @@ export function TextViewerController(props: TextViewerProps) {
     return { line, rowIndex: viewport.range.start + offset, ranges, active: ranges.some((range) => range.active) };
   });
   const onSearchKeyDown = useTextSearchKeyboard(model, viewport.viewportRef);
-  return <TextViewerView encoding={props.encoding} isTruncated={props.isTruncated} model={model}
-    viewport={viewport} gutterWidth={gutterWidth} rows={rows} onSearchKeyDown={onSearchKeyDown} />;
+  return (
+    <TextViewerView
+      encoding={props.encoding}
+      isTruncated={props.isTruncated}
+      model={model}
+      viewport={viewport}
+      gutterWidth={gutterWidth}
+      rows={rows}
+      onSearchKeyDown={onSearchKeyDown}
+    />
+  );
 }

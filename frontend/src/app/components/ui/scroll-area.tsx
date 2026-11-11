@@ -1,16 +1,13 @@
-import * as React from "react";
-import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
+import * as React from 'react';
+import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area';
 
-import { cn } from "./utils";
+import { cn } from './utils';
 
 interface ScrollAreaProps extends React.ComponentProps<typeof ScrollAreaPrimitive.Root> {
   viewportRef?: React.Ref<HTMLDivElement>;
   viewportClassName?: string;
   viewportTestId?: string;
-  viewportProps?: Omit<
-    React.ComponentProps<typeof ScrollAreaPrimitive.Viewport>,
-    "children" | "className" | "ref"
-  >;
+  viewportProps?: Omit<React.ComponentProps<typeof ScrollAreaPrimitive.Viewport>, 'children' | 'className' | 'ref'>;
   showHorizontalScrollbar?: boolean;
 }
 
@@ -25,17 +22,13 @@ function ScrollArea({
   ...props
 }: ScrollAreaProps) {
   return (
-    <ScrollAreaPrimitive.Root
-      data-slot="scroll-area"
-      className={cn("relative", className)}
-      {...props}
-    >
+    <ScrollAreaPrimitive.Root data-slot="scroll-area" className={cn('relative', className)} {...props}>
       <ScrollAreaPrimitive.Viewport
         ref={viewportRef}
         data-slot="scroll-area-viewport"
         data-testid={viewportTestId}
         className={cn(
-          "ui-control-motion focus-visible:ring-ring/20 size-full rounded-none scrollbar-none focus:outline-none focus-visible:ring-1",
+          'ui-control-motion focus-visible:ring-ring/20 size-full rounded-none scrollbar-none focus:outline-none focus-visible:ring-1',
           viewportClassName,
         )}
         {...viewportProps}
@@ -51,7 +44,7 @@ function ScrollArea({
 
 function ScrollBar({
   className,
-  orientation = "vertical",
+  orientation = 'vertical',
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>) {
   return (
@@ -59,11 +52,9 @@ function ScrollBar({
       data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
-        "flex touch-none p-px transition-colors select-none",
-        orientation === "vertical" &&
-          "h-full w-2.5 border-l border-l-transparent",
-        orientation === "horizontal" &&
-          "h-2.5 flex-col border-t border-t-transparent",
+        'flex touch-none p-px transition-colors select-none',
+        orientation === 'vertical' && 'h-full w-2.5 border-l border-l-transparent',
+        orientation === 'horizontal' && 'h-2.5 flex-col border-t border-t-transparent',
         className,
       )}
       {...props}

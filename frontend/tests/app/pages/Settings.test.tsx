@@ -64,9 +64,7 @@ describe('Settings page', () => {
     render(<Settings />);
 
     expect(await screen.findByDisplayValue('D:\\Cases')).toBeTruthy();
-    expect((screen.getByLabelText('镜像搜索路径') as HTMLInputElement).value).toBe(
-      'D:\\Images; E:\\Evidence',
-    );
+    expect((screen.getByLabelText('镜像搜索路径') as HTMLInputElement).value).toBe('D:\\Images; E:\\Evidence');
     expect(screen.getByLabelText('事件调试日志').getAttribute('data-state')).toBe('checked');
   });
 
@@ -114,9 +112,7 @@ describe('Settings page', () => {
     render(<Settings />);
 
     expect(await screen.findByDisplayValue('C:\\Meow_Detective\\cases')).toBeTruthy();
-    expect((screen.getByLabelText('镜像搜索路径') as HTMLInputElement).value).toBe(
-      'E:\\cases\\; D:\\images\\',
-    );
+    expect((screen.getByLabelText('镜像搜索路径') as HTMLInputElement).value).toBe('E:\\cases\\; D:\\images\\');
   });
 
   it('rejects invalid image search path lists before saving', async () => {

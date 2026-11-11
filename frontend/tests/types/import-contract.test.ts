@@ -14,9 +14,7 @@ import type {
 describe('import progress contract models', () => {
   it('requires an explicit supported platform for data-source imports', () => {
     expectTypeOf<ImportTargetPlatform>().toEqualTypeOf<'windows' | 'linux' | 'android'>();
-    expectTypeOf<ImportDataSourceRequest['platform']>().toEqualTypeOf<
-      'windows' | 'linux' | 'android'
-    >();
+    expectTypeOf<ImportDataSourceRequest['platform']>().toEqualTypeOf<'windows' | 'linux' | 'android'>();
 
     const request = {
       sourcePath: 'D:/evidence/windows.E01',
@@ -111,7 +109,14 @@ describe('import progress contract models', () => {
       safeToClose: false,
       detail: 'Draining import workers',
     } satisfies JobCancellation;
-    const states: JobCancellation['state'][] = ['notRequested', 'requested', 'acknowledged', 'draining', 'cancelled', 'timedOut'];
+    const states: JobCancellation['state'][] = [
+      'notRequested',
+      'requested',
+      'acknowledged',
+      'draining',
+      'cancelled',
+      'timedOut',
+    ];
 
     expect(cancellation.state).toBe('draining');
     expect(cancellation.safeToClose).toBe(false);

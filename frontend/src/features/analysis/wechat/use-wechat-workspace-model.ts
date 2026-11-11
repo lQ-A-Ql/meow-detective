@@ -72,14 +72,8 @@ export function useWeChatWorkspaceModel(dataSourceId: string): WeChatWorkspaceMo
     family: 'WeChatSearchRecord',
   });
 
-  const contacts = useMemo(
-    () => mapWeChatContacts(contactsQuery.data?.entries ?? []),
-    [contactsQuery.data],
-  );
-  const media = useMemo(
-    () => mapWeChatSupplemental(mediaQuery.data?.entries ?? []),
-    [mediaQuery.data],
-  );
+  const contacts = useMemo(() => mapWeChatContacts(contactsQuery.data?.entries ?? []), [contactsQuery.data]);
+  const media = useMemo(() => mapWeChatSupplemental(mediaQuery.data?.entries ?? []), [mediaQuery.data]);
   const messages = useMemo(
     () => linkWeChatMessageMedia(mapWeChatMessages(messagesQuery.data?.entries ?? []), media),
     [media, messagesQuery.data],
@@ -89,10 +83,7 @@ export function useWeChatWorkspaceModel(dataSourceId: string): WeChatWorkspaceMo
     [contacts, messages, sessionsQuery.data],
   );
   const moments = useMemo(
-    () => linkWeChatMomentMedia(
-      mapWeChatMoments(momentsQuery.data?.entries ?? [], contacts),
-      media,
-    ),
+    () => linkWeChatMomentMedia(mapWeChatMoments(momentsQuery.data?.entries ?? [], contacts), media),
     [contacts, media, momentsQuery.data],
   );
   const favorites = useMemo(
@@ -106,12 +97,13 @@ export function useWeChatWorkspaceModel(dataSourceId: string): WeChatWorkspaceMo
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filteredConversations = normalizedSearch
     ? conversations.filter((conversation) =>
-        [conversation.displayName, conversation.talker, conversation.summary]
-          .some((value) => value.toLocaleLowerCase().includes(normalizedSearch)))
+        [conversation.displayName, conversation.talker, conversation.summary].some((value) =>
+          value.toLocaleLowerCase().includes(normalizedSearch),
+        ),
+      )
     : conversations;
-  const selectedConversation = filteredConversations.find(
-    (conversation) => conversation.talker === requestedTalker,
-  ) ?? filteredConversations[0];
+  const selectedConversation =
+    filteredConversations.find((conversation) => conversation.talker === requestedTalker) ?? filteredConversations[0];
   const messageLoad = familyLoadState(messagesQuery);
   const sessionLoad = familyLoadState(sessionsQuery);
   const momentLoad = familyLoadState(momentsQuery);
@@ -130,8 +122,7 @@ export function useWeChatWorkspaceModel(dataSourceId: string): WeChatWorkspaceMo
       favoritesQuery,
       mediaQuery,
       searchRecordsQuery,
-    ]
-      .some((query) => query.isLoading),
+    ].some((query) => query.isLoading),
     conversations: filteredConversations,
     selectedConversation,
     selectConversation: setRequestedTalker,

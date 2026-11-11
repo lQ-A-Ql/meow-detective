@@ -89,10 +89,10 @@ describe('useRecoverWeChatKeys', () => {
     mocks.recoverWeChatKeys.mockResolvedValue(result);
     const queryClient = createQueryClient();
     queryClient.setQueryData(['analysis', 'plugin-modules', 'case-1', 'ds-1'], []);
-    queryClient.setQueryData(
-      ['analysis', 'plugin-family-entries', 'case-1', 'ds-1', 'wechat', 'Chat'],
-      { pages: [], pageParams: [] },
-    );
+    queryClient.setQueryData(['analysis', 'plugin-family-entries', 'case-1', 'ds-1', 'wechat', 'Chat'], {
+      pages: [],
+      pageParams: [],
+    });
 
     const { result: hook } = renderHook(() => useRecoverWeChatKeys(), {
       wrapper: createWrapper(queryClient),
@@ -101,13 +101,10 @@ describe('useRecoverWeChatKeys', () => {
 
     expect(mocks.recoverWeChatKeys).toHaveBeenCalledWith('ds-1', 'D:/dump.raw');
     await waitFor(() => expect(hook.current.data).toEqual(result));
+    expect(queryClient.getQueryState(['analysis', 'plugin-modules', 'case-1', 'ds-1'])?.isInvalidated).toBe(true);
     expect(
-      queryClient.getQueryState(['analysis', 'plugin-modules', 'case-1', 'ds-1'])?.isInvalidated,
-    ).toBe(true);
-    expect(
-      queryClient.getQueryState(
-        ['analysis', 'plugin-family-entries', 'case-1', 'ds-1', 'wechat', 'Chat'],
-      )?.isInvalidated,
+      queryClient.getQueryState(['analysis', 'plugin-family-entries', 'case-1', 'ds-1', 'wechat', 'Chat'])
+        ?.isInvalidated,
     ).toBe(true);
   });
 
@@ -122,9 +119,9 @@ describe('useRecoverWeChatKeys', () => {
     const { result } = renderHook(() => useRecoverWeChatKeys(), {
       wrapper: createWrapper(queryClient),
     });
-    await expect(
-      result.current.mutateAsync({ dataSourceId: 'ds-1', dumpPath: 'D:/dump.raw' }),
-    ).rejects.toMatchObject({ message: 'dump 读取失败' });
+    await expect(result.current.mutateAsync({ dataSourceId: 'ds-1', dumpPath: 'D:/dump.raw' })).rejects.toMatchObject({
+      message: 'dump 读取失败',
+    });
     await waitFor(() => expect(result.current.isError).toBe(true));
   });
 });

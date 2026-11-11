@@ -6,10 +6,23 @@ import i18n from '@/i18n';
 
 describe('MCP host settings controls', () => {
   it('displays the host panel only while the section is expanded', () => {
-    const panel = <McpHostToolsPanelView t={i18n.t}
-      status={{ settings: { enabled: true, disabledTools: [] }, running: true, endpoint: 'http://127.0.0.1:3001/mcp' }}
-      loading={false} copied={false} copyError={false} onEnable={() => {}} onCopy={() => {}}
-      onRetry={() => {}} toolList={null} />;
+    const panel = (
+      <McpHostToolsPanelView
+        t={i18n.t}
+        status={{
+          settings: { enabled: true, disabledTools: [] },
+          running: true,
+          endpoint: 'http://127.0.0.1:3001/mcp',
+        }}
+        loading={false}
+        copied={false}
+        copyError={false}
+        onEnable={() => {}}
+        onCopy={() => {}}
+        onRetry={() => {}}
+        toolList={null}
+      />
+    );
     const { rerender } = render(<McpSectionView t={i18n.t} expanded onToggle={() => {}} hostToolList={panel} />);
     expect(screen.getByText('http://127.0.0.1:3001/mcp')).toBeVisible();
     rerender(<McpSectionView t={i18n.t} expanded={false} onToggle={() => {}} hostToolList={panel} />);
@@ -19,10 +32,27 @@ describe('MCP host settings controls', () => {
   it('copies the endpoint and disables the host through its controls', () => {
     let copies = 0;
     let enabled = true;
-    render(<McpHostToolsPanelView t={i18n.t}
-      status={{ settings: { enabled: true, disabledTools: [] }, running: true, endpoint: 'http://127.0.0.1:3001/mcp' }}
-      loading={false} copied={false} copyError={false} onEnable={(value) => { enabled = value; }}
-      onCopy={() => { copies += 1; }} onRetry={() => {}} toolList={null} />);
+    render(
+      <McpHostToolsPanelView
+        t={i18n.t}
+        status={{
+          settings: { enabled: true, disabledTools: [] },
+          running: true,
+          endpoint: 'http://127.0.0.1:3001/mcp',
+        }}
+        loading={false}
+        copied={false}
+        copyError={false}
+        onEnable={(value) => {
+          enabled = value;
+        }}
+        onCopy={() => {
+          copies += 1;
+        }}
+        onRetry={() => {}}
+        toolList={null}
+      />,
+    );
     const copy = screen.getByRole('button', { name: '复制连接地址' });
     expect(copy.textContent).toBe('');
     fireEvent.click(copy);

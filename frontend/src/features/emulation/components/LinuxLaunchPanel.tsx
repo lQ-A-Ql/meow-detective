@@ -23,15 +23,18 @@ function LinuxBypassFieldset({ model }: LinuxLaunchPanelProps) {
           value={model.bypassPartition === undefined ? 'none' : String(model.bypassPartition)}
           onValueChange={(value) => model.selectBypassPartition(value === 'none' ? undefined : Number(value))}
         >
-          <SelectTrigger id="emulation-linux-partition" variant="forensics" aria-label={t('emulationPage.bypass.partition')}>
+          <SelectTrigger
+            id="emulation-linux-partition"
+            variant="forensics"
+            aria-label={t('emulationPage.bypass.partition')}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">{t('emulationPage.bypass.none')}</SelectItem>
             {linuxInstalls.map((install) => (
               <SelectItem key={install.partitionIndex} value={String(install.partitionIndex)}>
-                [P{install.partitionIndex}]
-                {` · ${t('emulationPage.preflight.linuxInstall')}`}
+                [P{install.partitionIndex}]{` · ${t('emulationPage.preflight.linuxInstall')}`}
               </SelectItem>
             ))}
           </SelectContent>
@@ -45,7 +48,11 @@ function LinuxBypassFieldset({ model }: LinuxLaunchPanelProps) {
             onValueChange={(value) => model.selectLinuxUsername(value === 'none' ? undefined : value)}
             disabled={model.linuxAccountsLoading}
           >
-            <SelectTrigger id="emulation-linux-account" variant="forensics" aria-label={t('emulationPage.bypass.account')}>
+            <SelectTrigger
+              id="emulation-linux-account"
+              variant="forensics"
+              aria-label={t('emulationPage.bypass.account')}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -67,23 +74,19 @@ function LinuxBypassFieldset({ model }: LinuxLaunchPanelProps) {
         </div>
       ) : null}
       {model.bypassPartition !== undefined && model.linuxAccountsError ? (
-        <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
-          {model.linuxAccountsError}
-        </div>
+        <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">{model.linuxAccountsError}</div>
       ) : null}
-      {model.bypassPartition !== undefined
-        && !model.linuxAccountsError
-        && !model.linuxAccountsLoading
-        && model.linuxAccounts.length === 0 ? (
-        <div className="pt-1 text-[10px] leading-4 text-forensics-muted">
-          {t('emulationPage.bypass.noAccounts')}
-        </div>
+      {model.bypassPartition !== undefined &&
+      !model.linuxAccountsError &&
+      !model.linuxAccountsLoading &&
+      model.linuxAccounts.length === 0 ? (
+        <div className="pt-1 text-[10px] leading-4 text-forensics-muted">{t('emulationPage.bypass.noAccounts')}</div>
       ) : null}
-      {model.bypassPartition !== undefined
-        && !model.linuxAccountsError
-        && !model.linuxAccountsLoading
-        && model.linuxAccounts.length > 0
-        && !model.linuxUsername ? (
+      {model.bypassPartition !== undefined &&
+      !model.linuxAccountsError &&
+      !model.linuxAccountsLoading &&
+      model.linuxAccounts.length > 0 &&
+      !model.linuxUsername ? (
         <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
           {t('emulationPage.bypass.selectLinuxAccount')}
         </div>
@@ -95,14 +98,18 @@ function LinuxBypassFieldset({ model }: LinuxLaunchPanelProps) {
 function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
   const { t } = useTranslation();
   if (!model.preflight || model.preflight.installs.length === 0) return null;
-  const hasDirtyXfsLog = model.preflight.installs
-    .some((install) => (install.bootRiskNotes ?? []).includes('xfs-log-dirty'));
-  const hasUnverifiedXfsLog = model.preflight.installs
-    .some((install) => (install.bootRiskNotes ?? []).includes('xfs-log-unverified'));
-  const hasDirtyExt4Journal = model.preflight.installs
-    .some((install) => (install.bootRiskNotes ?? []).includes('ext4-journal-dirty'));
-  const hasUnverifiedExt4Journal = model.preflight.installs
-    .some((install) => (install.bootRiskNotes ?? []).includes('ext4-journal-unverified'));
+  const hasDirtyXfsLog = model.preflight.installs.some((install) =>
+    (install.bootRiskNotes ?? []).includes('xfs-log-dirty'),
+  );
+  const hasUnverifiedXfsLog = model.preflight.installs.some((install) =>
+    (install.bootRiskNotes ?? []).includes('xfs-log-unverified'),
+  );
+  const hasDirtyExt4Journal = model.preflight.installs.some((install) =>
+    (install.bootRiskNotes ?? []).includes('ext4-journal-dirty'),
+  );
+  const hasUnverifiedExt4Journal = model.preflight.installs.some((install) =>
+    (install.bootRiskNotes ?? []).includes('ext4-journal-unverified'),
+  );
   return (
     <div className="space-y-3">
       <div className="text-[11px] text-forensics-muted">{t('emulationPage.preflight.title')}</div>
@@ -165,7 +172,9 @@ function LinuxPreflightList({ model }: LinuxLaunchPanelProps) {
           {t('emulationPage.preflight.ext4JournalUnverifiedHint')}
         </div>
       ) : null}
-      {model.preflight.installs.some((install) => (install.bootRiskNotes ?? []).includes('custom-service-always-restart')) ? (
+      {model.preflight.installs.some((install) =>
+        (install.bootRiskNotes ?? []).includes('custom-service-always-restart'),
+      ) ? (
         <div className="pt-1 text-[10px] leading-4 text-forensics-warning-text">
           {t('emulationPage.preflight.customServiceRestartHint')}
         </div>
@@ -225,12 +234,17 @@ function FsRepairRow({ model }: LinuxLaunchPanelProps) {
 export function LinuxLaunchPanel({ model }: LinuxLaunchPanelProps) {
   const { t } = useTranslation();
   return (
-    <LaunchPanelShell model={model} recoveryHint={t('emulationPage.launch.liveIsoHint')}
+    <LaunchPanelShell
+      model={model}
+      recoveryHint={t('emulationPage.launch.liveIsoHint')}
       inspection={<LinuxPreflightList model={model} />}
-      maintenance={<>
-        <LinuxBypassFieldset model={model} />
-        <FsRepairRow model={model} />
-        <EfiFallbackRow model={model} />
-      </>} />
+      maintenance={
+        <>
+          <LinuxBypassFieldset model={model} />
+          <FsRepairRow model={model} />
+          <EfiFallbackRow model={model} />
+        </>
+      }
+    />
   );
 }

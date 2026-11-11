@@ -57,10 +57,49 @@ const summary = (overrides: Partial<LinuxEvidenceSetSummary> = {}): LinuxEvidenc
   failedCount: 0,
   capabilityLevel: 'metadata_only',
   members: [
-    { memberIndex: 0, sourceName: 'node-a', sourcePath: 'node-a.E01', sourceKind: 'e01', importState: 'ready', hashStatus: 'hashed', provenanceStatus: 'complete', addresses: [], roles: [], services: [], containers: [], diagnostics: [] },
-    { memberIndex: 1, sourceName: 'node-b', sourcePath: 'node-b.E01', sourceKind: 'e01', importState: 'ready', hashStatus: 'hashed', provenanceStatus: 'complete', addresses: [], roles: [], services: [], containers: [], diagnostics: [] },
+    {
+      memberIndex: 0,
+      sourceName: 'node-a',
+      sourcePath: 'node-a.E01',
+      sourceKind: 'e01',
+      importState: 'ready',
+      hashStatus: 'hashed',
+      provenanceStatus: 'complete',
+      addresses: [],
+      roles: [],
+      services: [],
+      containers: [],
+      diagnostics: [],
+    },
+    {
+      memberIndex: 1,
+      sourceName: 'node-b',
+      sourcePath: 'node-b.E01',
+      sourceKind: 'e01',
+      importState: 'ready',
+      hashStatus: 'hashed',
+      provenanceStatus: 'complete',
+      addresses: [],
+      roles: [],
+      services: [],
+      containers: [],
+      diagnostics: [],
+    },
   ],
-  scopes: [{ id: 'scope:os', kind: 'os', name: 'node-a', identityState: 'candidate', status: 'partial', evidenceCompleteness: 'partial', memberCount: 1, memberSourceIds: ['a'], memberRoles: [{ dataSourceId: 'a', role: 'os_root', memberIndex: 0, confidence: 'candidate' }], diagnostics: [] }],
+  scopes: [
+    {
+      id: 'scope:os',
+      kind: 'os',
+      name: 'node-a',
+      identityState: 'candidate',
+      status: 'partial',
+      evidenceCompleteness: 'partial',
+      memberCount: 1,
+      memberSourceIds: ['a'],
+      memberRoles: [{ dataSourceId: 'a', role: 'os_root', memberIndex: 0, confidence: 'candidate' }],
+      diagnostics: [],
+    },
+  ],
   edges: [],
   derivedSources: [],
   diagnostics: [],
@@ -139,18 +178,52 @@ describe('evidenceStatus', () => {
 
 describe('capabilitiesForSummary', () => {
   it('derives levels and statuses from scopes and ready derived sources', () => {
-    const capabilities = capabilitiesForSummary(summary({
-      scopes: [
-        scope({ id: 'scope:host', kind: 'physical_host', status: 'ready', identityState: 'verified', evidenceCompleteness: 'complete', diagnostics: ['host diagnostic'] }),
-        scope({ id: 'scope:pve', kind: 'pve', status: 'partial', identityState: 'proven', evidenceCompleteness: 'complete' }),
-        scope({ id: 'scope:ceph', kind: 'ceph', status: 'partial', evidenceCompleteness: 'partial' }),
-        scope({ id: 'scope:k8s', kind: 'kubernetes', status: 'partial', identityState: 'candidate', evidenceCompleteness: 'partial', diagnostics: ['k8s note'] }),
-      ],
-      derivedSources: [
-        { dataSourceId: 'rbd-1', kind: 'CEPH_RBD', importState: 'ready', provenanceStatus: 'complete', sourcePath: '/dev/rbd0' },
-        { dataSourceId: 'fs-1', kind: 'cephfs', importState: 'ready', provenanceStatus: 'candidate', sourcePath: '/mnt/cephfs' },
-      ],
-    }));
+    const capabilities = capabilitiesForSummary(
+      summary({
+        scopes: [
+          scope({
+            id: 'scope:host',
+            kind: 'physical_host',
+            status: 'ready',
+            identityState: 'verified',
+            evidenceCompleteness: 'complete',
+            diagnostics: ['host diagnostic'],
+          }),
+          scope({
+            id: 'scope:pve',
+            kind: 'pve',
+            status: 'partial',
+            identityState: 'proven',
+            evidenceCompleteness: 'complete',
+          }),
+          scope({ id: 'scope:ceph', kind: 'ceph', status: 'partial', evidenceCompleteness: 'partial' }),
+          scope({
+            id: 'scope:k8s',
+            kind: 'kubernetes',
+            status: 'partial',
+            identityState: 'candidate',
+            evidenceCompleteness: 'partial',
+            diagnostics: ['k8s note'],
+          }),
+        ],
+        derivedSources: [
+          {
+            dataSourceId: 'rbd-1',
+            kind: 'CEPH_RBD',
+            importState: 'ready',
+            provenanceStatus: 'complete',
+            sourcePath: '/dev/rbd0',
+          },
+          {
+            dataSourceId: 'fs-1',
+            kind: 'cephfs',
+            importState: 'ready',
+            provenanceStatus: 'candidate',
+            sourcePath: '/mnt/cephfs',
+          },
+        ],
+      }),
+    );
 
     expect(capabilities.map((item) => item.kind)).toEqual(['linux_host', 'pve', 'ceph', 'rbd', 'cephfs', 'kubernetes']);
     expect(capabilities.find((item) => item.kind === 'linux_host')).toEqual({
@@ -159,17 +232,39 @@ describe('capabilitiesForSummary', () => {
       status: 'ready',
       diagnostics: ['host diagnostic'],
     });
-    expect(capabilities.find((item) => item.kind === 'pve')).toMatchObject({ level: 'metadata-only', status: 'proven' });
-    expect(capabilities.find((item) => item.kind === 'ceph')).toMatchObject({ level: 'metadata-only', status: 'partial' });
-    expect(capabilities.find((item) => item.kind === 'rbd')).toEqual({ kind: 'rbd', level: 'bounded-preview', status: 'complete', diagnostics: [] });
-    expect(capabilities.find((item) => item.kind === 'cephfs')).toEqual({ kind: 'cephfs', level: 'bounded-preview', status: 'candidate', diagnostics: [] });
-    expect(capabilities.find((item) => item.kind === 'kubernetes')).toMatchObject({ level: 'metadata-only', status: 'candidate', diagnostics: ['k8s note'] });
+    expect(capabilities.find((item) => item.kind === 'pve')).toMatchObject({
+      level: 'metadata-only',
+      status: 'proven',
+    });
+    expect(capabilities.find((item) => item.kind === 'ceph')).toMatchObject({
+      level: 'metadata-only',
+      status: 'partial',
+    });
+    expect(capabilities.find((item) => item.kind === 'rbd')).toEqual({
+      kind: 'rbd',
+      level: 'bounded-preview',
+      status: 'complete',
+      diagnostics: [],
+    });
+    expect(capabilities.find((item) => item.kind === 'cephfs')).toEqual({
+      kind: 'cephfs',
+      level: 'bounded-preview',
+      status: 'candidate',
+      diagnostics: [],
+    });
+    expect(capabilities.find((item) => item.kind === 'kubernetes')).toMatchObject({
+      level: 'metadata-only',
+      status: 'candidate',
+      diagnostics: ['k8s note'],
+    });
   });
 
   it('treats an os scope as the host fallback when no physical_host scope exists', () => {
-    const host = capabilitiesForSummary(summary({
-      scopes: [scope({ kind: 'os', status: 'ready', identityState: 'verified' })],
-    })).find((item) => item.kind === 'linux_host');
+    const host = capabilitiesForSummary(
+      summary({
+        scopes: [scope({ kind: 'os', status: 'ready', identityState: 'verified' })],
+      }),
+    ).find((item) => item.kind === 'linux_host');
 
     expect(host).toMatchObject({ level: 'metadata-browseable', status: 'ready' });
   });
@@ -221,11 +316,19 @@ describe('capabilitiesForSummary', () => {
   });
 
   it('keeps a derived source visible as metadata-only when it is not import-ready', () => {
-    const capabilities = capabilitiesForSummary(summary({
-      derivedSources: [
-        { dataSourceId: 'rbd-1', kind: 'ceph_rbd', importState: 'importing', provenanceStatus: 'partial', sourcePath: '/dev/rbd0' },
-      ],
-    }));
+    const capabilities = capabilitiesForSummary(
+      summary({
+        derivedSources: [
+          {
+            dataSourceId: 'rbd-1',
+            kind: 'ceph_rbd',
+            importState: 'importing',
+            provenanceStatus: 'partial',
+            sourcePath: '/dev/rbd0',
+          },
+        ],
+      }),
+    );
 
     expect(capabilities.find((item) => item.kind === 'rbd')).toEqual({
       kind: 'rbd',
@@ -257,23 +360,29 @@ describe('provenanceState', () => {
   });
 
   it('treats a pending member hash or a failed member count as incomplete', () => {
-    expect(provenanceState(summary({
-      manifestDigest: 'sha256:abc',
-      members: [member({ hashStatus: 'pending' })],
-      scopes: [scope({ evidenceCompleteness: 'complete' })],
-    }))).toBe('partial');
+    expect(
+      provenanceState(
+        summary({
+          manifestDigest: 'sha256:abc',
+          members: [member({ hashStatus: 'pending' })],
+          scopes: [scope({ evidenceCompleteness: 'complete' })],
+        }),
+      ),
+    ).toBe('partial');
     expect(provenanceState(summary({ failedCount: 1 }))).toBe('failed');
   });
 });
 
 describe('trustStages', () => {
   it('marks every stage complete for a clean, fully hashed evidence set', () => {
-    const stages = trustStages(summary({
-      manifestDigest: 'sha256:abc',
-      members: [member({ dataSourceId: 'a' }), member({ memberIndex: 1, dataSourceId: 'b' })],
-      scopes: [scope({ evidenceCompleteness: 'complete' })],
-      derivedSources: [],
-    }));
+    const stages = trustStages(
+      summary({
+        manifestDigest: 'sha256:abc',
+        members: [member({ dataSourceId: 'a' }), member({ memberIndex: 1, dataSourceId: 'b' })],
+        scopes: [scope({ evidenceCompleteness: 'complete' })],
+        derivedSources: [],
+      }),
+    );
 
     expect(stages).toEqual([
       { key: 'manifest', status: 'complete' },
@@ -299,10 +408,20 @@ describe('trustStages', () => {
   });
 
   it('keeps topology pending without scopes and lineage partial with derived sources', () => {
-    const stages = trustStages(summary({
-      scopes: [],
-      derivedSources: [{ dataSourceId: 'rbd-1', kind: 'ceph_rbd', importState: 'ready', provenanceStatus: 'complete', sourcePath: '/dev/rbd0' }],
-    }));
+    const stages = trustStages(
+      summary({
+        scopes: [],
+        derivedSources: [
+          {
+            dataSourceId: 'rbd-1',
+            kind: 'ceph_rbd',
+            importState: 'ready',
+            provenanceStatus: 'complete',
+            sourcePath: '/dev/rbd0',
+          },
+        ],
+      }),
+    );
 
     expect(stages.find((stage) => stage.key === 'topology')?.status).toBe('pending');
     expect(stages.find((stage) => stage.key === 'lineage')?.status).toBe('partial');
@@ -310,10 +429,14 @@ describe('trustStages', () => {
 
   it('mirrors the report gate to the overall provenance state', () => {
     expect(trustStages(summary()).find((stage) => stage.key === 'report')?.status).toBe('partial');
-    expect(trustStages(summary({
-      manifestDigest: 'sha256:abc',
-      members: [member({ dataSourceId: 'a' })],
-      scopes: [scope({ evidenceCompleteness: 'complete' })],
-    })).find((stage) => stage.key === 'report')?.status).toBe('complete');
+    expect(
+      trustStages(
+        summary({
+          manifestDigest: 'sha256:abc',
+          members: [member({ dataSourceId: 'a' })],
+          scopes: [scope({ evidenceCompleteness: 'complete' })],
+        }),
+      ).find((stage) => stage.key === 'report')?.status,
+    ).toBe('complete');
   });
 });

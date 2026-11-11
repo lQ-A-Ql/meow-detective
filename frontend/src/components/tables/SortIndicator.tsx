@@ -4,7 +4,7 @@
  * 在表头显示排序方向箭头。
  */
 
-import { ArrowUp, ArrowDown, ArrowUpDown }  from '@/components/icons';
+import { ArrowUp, ArrowDown, ArrowUpDown } from '@/components/icons';
 
 interface SortIndicatorProps {
   /** 是否是当前排序列 */

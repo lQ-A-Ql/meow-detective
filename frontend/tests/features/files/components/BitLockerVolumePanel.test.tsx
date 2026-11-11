@@ -92,12 +92,7 @@ describe('BitLockerVolumePanel', () => {
 
   it('delegates memory image recovery to the feature model', () => {
     const unlockFromMemoryImage = vi.fn().mockResolvedValue(true);
-    render(
-      <BitLockerVolumePanel
-        partition={partition}
-        model={model({ unlockFromMemoryImage })}
-      />,
-    );
+    render(<BitLockerVolumePanel partition={partition} model={model({ unlockFromMemoryImage })} />);
 
     fireEvent.click(screen.getByRole('button', { name: /从内存镜像恢复并验证/ }));
     expect(unlockFromMemoryImage).toHaveBeenCalledTimes(1);
@@ -132,12 +127,7 @@ describe('BitLockerVolumePanel', () => {
 
   it('delegates dictionary selection to the feature model', () => {
     const startDictionaryAttack = vi.fn().mockResolvedValue(true);
-    render(
-      <BitLockerVolumePanel
-        partition={partition}
-        model={model({ startDictionaryAttack })}
-      />,
-    );
+    render(<BitLockerVolumePanel partition={partition} model={model({ startDictionaryAttack })} />);
 
     fireEvent.click(screen.getByRole('button', { name: /导入密码字典并尝试/ }));
     expect(startDictionaryAttack).toHaveBeenCalledTimes(1);
@@ -146,17 +136,29 @@ describe('BitLockerVolumePanel', () => {
 
   it('passes optional GPU mode when selected', () => {
     const startDictionaryAttack = vi.fn().mockResolvedValue(true);
-    render(<BitLockerVolumePanel partition={partition} model={model({startDictionaryAttack})} />);
+    render(<BitLockerVolumePanel partition={partition} model={model({ startDictionaryAttack })} />);
     fireEvent.click(screen.getByRole('checkbox', { name: /GPU/ }));
     fireEvent.click(screen.getByRole('button', { name: /导入密码字典并尝试/ }));
     expect(startDictionaryAttack).toHaveBeenCalledWith('gpu');
   });
 
   it('explains unavailable GPU mode and offers CPU retry', () => {
-    render(<BitLockerVolumePanel partition={partition} model={model({ dictionaryAttack: {
-      taskId: 'gpu-task', phase: 'failed', backend: 'gpu', testedCandidates: 0,
-      bytesProcessed: 0, totalBytes: 100, error: 'BITLOCKER_GPU_UNAVAILABLE',
-    } })} />);
+    render(
+      <BitLockerVolumePanel
+        partition={partition}
+        model={model({
+          dictionaryAttack: {
+            taskId: 'gpu-task',
+            phase: 'failed',
+            backend: 'gpu',
+            testedCandidates: 0,
+            bytesProcessed: 0,
+            totalBytes: 100,
+            error: 'BITLOCKER_GPU_UNAVAILABLE',
+          },
+        })}
+      />,
+    );
     expect(screen.getByText(/未检测到可用 GPU/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /导入密码字典并尝试/ })).toBeEnabled();
   });
@@ -182,9 +184,7 @@ describe('BitLockerVolumePanel', () => {
     );
 
     expect(screen.getByText(/已从内存 VMK 重构恢复密码/)).toBeInTheDocument();
-    expect(
-      screen.getByText('111111-222222-333333-444444-555555-666666-777777-888888'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('111111-222222-333333-444444-555555-666666-777777-888888')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '复制恢复密码' })).toBeInTheDocument();
   });
 

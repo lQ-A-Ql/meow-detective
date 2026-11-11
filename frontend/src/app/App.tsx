@@ -5,10 +5,7 @@ import { router } from './routes';
 export default function App() {
   return (
     <ErrorBoundary>
-      <div
-        className="contents"
-        onContextMenu={(event) => event.preventDefault()}
-      >
+      <div className="contents" onContextMenu={(event) => event.preventDefault()}>
         <RouterProvider router={router} />
       </div>
     </ErrorBoundary>

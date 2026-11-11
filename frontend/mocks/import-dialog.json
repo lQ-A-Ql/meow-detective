@@ -13,9 +13,7 @@
       { "id": "auto", "label": "单源镜像" },
       { "id": "linuxEvidenceSet", "label": "Linux 证据集合" }
     ],
-    "android": [
-      { "id": "auto", "label": "单源镜像" }
-    ]
+    "android": [{ "id": "auto", "label": "单源镜像" }]
   },
   "localDisks": [
     { "diskNumber": 0, "path": "\\\\.\\PhysicalDrive0", "size": 512000000000 },

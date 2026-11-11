@@ -1,7 +1,7 @@
-import * as React from "react";
-import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
+import * as React from 'react';
+import * as ContextMenuPrimitive from '@radix-ui/react-context-menu';
 
-import { cn } from "./utils";
+import { cn } from './utils';
 
 function ContextMenu(props: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
@@ -11,16 +11,13 @@ function ContextMenuTrigger(props: React.ComponentProps<typeof ContextMenuPrimit
   return <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />;
 }
 
-function ContextMenuContent({
-  className,
-  ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
+function ContextMenuContent({ className, ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Content
         data-slot="context-menu-content"
         className={cn(
-          "ui-overlay-surface ui-overlay-motion text-popover-foreground z-50 min-w-44 overflow-hidden rounded-ctl border border-forensics-border p-1",
+          'ui-overlay-surface ui-overlay-motion text-popover-foreground z-50 min-w-44 overflow-hidden rounded-ctl border border-forensics-border p-1',
           className,
         )}
         {...props}
@@ -56,33 +53,27 @@ function ContextMenuLabel({
     <ContextMenuPrimitive.Label
       data-slot="context-menu-label"
       data-inset={inset}
-      className={cn(
-        "px-2 py-1.5 text-[11px] font-light text-forensics-muted data-[inset=true]:pl-8",
-        className,
-      )}
+      className={cn('px-2 py-1.5 text-[11px] font-light text-forensics-muted data-[inset=true]:pl-8', className)}
       {...props}
     />
   );
 }
 
-function ContextMenuSeparator({
-  className,
-  ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Separator>) {
+function ContextMenuSeparator({ className, ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Separator>) {
   return (
     <ContextMenuPrimitive.Separator
       data-slot="context-menu-separator"
-      className={cn("bg-forensics-border -mx-1 my-1 h-px", className)}
+      className={cn('bg-forensics-border -mx-1 my-1 h-px', className)}
       {...props}
     />
   );
 }
 
-function ContextMenuShortcut({ className, ...props }: React.ComponentProps<"span">) {
+function ContextMenuShortcut({ className, ...props }: React.ComponentProps<'span'>) {
   return (
     <span
       data-slot="context-menu-shortcut"
-      className={cn("ml-auto font-mono text-[10px] text-forensics-muted", className)}
+      className={cn('ml-auto font-mono text-[10px] text-forensics-muted', className)}
       {...props}
     />
   );

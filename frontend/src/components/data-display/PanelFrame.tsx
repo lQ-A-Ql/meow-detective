@@ -3,13 +3,7 @@ import { cn } from '@/app/components/ui/utils';
 
 export function PanelFrame({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section
-      data-slot="panel-frame"
-      className={cn(
-        'min-w-0 bg-transparent p-4',
-        className,
-      )}
-    >
+    <section data-slot="panel-frame" className={cn('min-w-0 bg-transparent p-4', className)}>
       {children}
     </section>
   );

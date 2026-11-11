@@ -16,7 +16,10 @@ interface TimelineHistogramProps {
 export function TimelineHistogram({ bars, onSelectRange }: TimelineHistogramProps) {
   const { t } = useTranslation();
   return (
-    <div className="relative flex h-16 min-h-16 w-full items-end gap-px overflow-hidden rounded-ctl bg-forensics-panel-strong px-2 pt-2" aria-label={t('timeline.histogram.label')}>
+    <div
+      className="relative flex h-16 min-h-16 w-full items-end gap-px overflow-hidden rounded-ctl bg-forensics-panel-strong px-2 pt-2"
+      aria-label={t('timeline.histogram.label')}
+    >
       <div className="pointer-events-none absolute inset-x-2 top-1/3 border-t border-forensics-line/60" />
       <div className="pointer-events-none absolute inset-x-2 top-2/3 border-t border-forensics-line/60" />
       <div className="pointer-events-none absolute inset-x-2 bottom-0 border-t border-forensics-line-2" />
@@ -32,7 +35,9 @@ export function TimelineHistogram({ bars, onSelectRange }: TimelineHistogramProp
             aria-label={t('timeline.histogram.selectRange', { count: bar.count })}
             title={t('timeline.histogram.barTitle', { range: rangeLabel, count: bar.count })}
             className={`group relative z-[1] h-full min-w-0 flex-1 ${hasRange ? 'cursor-pointer' : 'cursor-default'}`}
-            onClick={() => { if (hasRange) onSelectRange(bar); }}
+            onClick={() => {
+              if (hasRange) onSelectRange(bar);
+            }}
             onKeyDown={(event) => {
               if (hasRange && (event.key === 'Enter' || event.key === ' ')) {
                 event.preventDefault();

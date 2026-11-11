@@ -73,11 +73,12 @@ export function useLinuxArtifactSummary(request: OptionalAnalysisPageRequest = {
       request.source?.platform ?? null,
       limit,
     ],
-    queryFn: ({ pageParam }) => getLinuxArtifactSummary({
-      dataSourceId: dataSourceId ?? '',
-      offset: pageParam,
-      limit,
-    }),
+    queryFn: ({ pageParam }) =>
+      getLinuxArtifactSummary({
+        dataSourceId: dataSourceId ?? '',
+        offset: pageParam,
+        limit,
+      }),
     initialPageParam: request.offset ?? 0,
     getNextPageParam: (lastPage, pages) => {
       const lastPageItemCount = LINUX_ENTRY_FAMILIES.reduce(
@@ -85,14 +86,13 @@ export function useLinuxArtifactSummary(request: OptionalAnalysisPageRequest = {
         0,
       );
       if (lastPageItemCount === 0) return undefined;
-      return hasUnloadedEntries(pages)
-        ? (request.offset ?? 0) + pages.length * limit
-        : undefined;
+      return hasUnloadedEntries(pages) ? (request.offset ?? 0) + pages.length * limit : undefined;
     },
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && request.source?.platform === 'linux',
+    enabled:
+      currentCase.isSuccess &&
+      Boolean(currentCase.data) &&
+      Boolean(dataSourceId) &&
+      request.source?.platform === 'linux',
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });

@@ -26,13 +26,7 @@ function makeSnapshot(overrides: Partial<CorrelationSnapshot> = {}): Correlation
 }
 
 function renderWorkspace(snapshot: CorrelationSnapshot) {
-  return render(
-    createElement(
-      MemoryRouter,
-      {},
-      createElement(CorrelationWorkspace, { snapshot }),
-    ),
-  );
+  return render(createElement(MemoryRouter, {}, createElement(CorrelationWorkspace, { snapshot })));
 }
 
 describe('CorrelationWorkspace', () => {

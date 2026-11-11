@@ -39,9 +39,11 @@ export async function startTauriEventBridge(): Promise<void> {
   ];
 
   const listeners = await Promise.all(
-    topics.map((topic) => listen<EventEnvelope>(topic, (event) => {
-      eventBus.publishEvent(event.payload);
-    })),
+    topics.map((topic) =>
+      listen<EventEnvelope>(topic, (event) => {
+        eventBus.publishEvent(event.payload);
+      }),
+    ),
   );
   unlisteners.push(...listeners);
 }

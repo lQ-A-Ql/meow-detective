@@ -1,4 +1,4 @@
-import { LoaderCircle }  from '@/components/icons';
+import { LoaderCircle } from '@/components/icons';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Progress } from '@/app/components/ui/progress';
 import type { BitLockerCatalogImportLifecycle } from '@/features/files/hooks/use-bitlocker-volume';
@@ -10,8 +10,11 @@ interface BitLockerCatalogImportOverlayProps {
   titleLabel: string;
 }
 
-export function BitLockerCatalogImportOverlay({ elapsedSeconds, phaseLabel, titleLabel }: BitLockerCatalogImportOverlayProps) {
-
+export function BitLockerCatalogImportOverlay({
+  elapsedSeconds,
+  phaseLabel,
+  titleLabel,
+}: BitLockerCatalogImportOverlayProps) {
   return (
     <div
       className="absolute inset-0 z-40 grid place-items-center bg-forensics-surface/90 p-6 backdrop-blur-[1px]"
@@ -29,14 +32,8 @@ export function BitLockerCatalogImportOverlay({ elapsedSeconds, phaseLabel, titl
         </CardHeader>
         <CardContent className="space-y-3 px-5 pb-5">
           <div className="text-[12px] text-forensics-text-secondary">{phaseLabel}</div>
-          <Progress
-            indeterminate
-            aria-label={phaseLabel}
-            className="h-1.5"
-          />
-          <div className="font-mono text-[10px] text-forensics-muted-light">
-            {elapsedSeconds}s
-          </div>
+          <Progress indeterminate aria-label={phaseLabel} className="h-1.5" />
+          <div className="font-mono text-[10px] text-forensics-muted-light">{elapsedSeconds}s</div>
         </CardContent>
       </Card>
     </div>

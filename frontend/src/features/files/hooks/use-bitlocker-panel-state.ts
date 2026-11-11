@@ -5,10 +5,12 @@ import type { BitLockerUnlockMethod, BitLockerVolumeModel } from './use-bitlocke
 async function wipeClipboardSecret(password?: string) {
   if (!password || !navigator.clipboard) return;
   try {
-    if (!navigator.clipboard.readText || await navigator.clipboard.readText() === password) {
+    if (!navigator.clipboard.readText || (await navigator.clipboard.readText()) === password) {
       await navigator.clipboard.writeText('');
     }
-  } catch { /* Clipboard access can be denied by the operating system. */ }
+  } catch {
+    /* Clipboard access can be denied by the operating system. */
+  }
 }
 /** Own transient credentials and bounded clipboard lifetime outside the view. */
 export function useBitLockerPanelState(model: BitLockerVolumeModel) {
@@ -56,8 +58,14 @@ export function useBitLockerPanelState(model: BitLockerVolumeModel) {
   };
 
   return {
-    method, setMethod, credential, setCredential, dictionaryBackend, setDictionaryBackend,
-    passwordCopied, copyRecoveredPassword,
+    method,
+    setMethod,
+    credential,
+    setCredential,
+    dictionaryBackend,
+    setDictionaryBackend,
+    passwordCopied,
+    copyRecoveredPassword,
     canSubmit: Boolean(credential) && !model.unlocking && !model.memoryUnlocking && !model.dictionaryAttacking,
     submitCredential: () => {
       const submitted = credential;

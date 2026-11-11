@@ -47,9 +47,7 @@ describe('useSearchPreviewModel', () => {
   it('keeps preview content disabled until a hit is clicked and disables it on close', () => {
     const { result } = renderHook(() => useSearchPreviewModel());
 
-    expect(mocks.useFilePreview).toHaveBeenLastCalledWith(
-      expect.objectContaining({ selectedFile: undefined }),
-    );
+    expect(mocks.useFilePreview).toHaveBeenLastCalledWith(expect.objectContaining({ selectedFile: undefined }));
     expect(result.current.open).toBe(false);
 
     act(() => result.current.openHit(textHit));
@@ -63,9 +61,7 @@ describe('useSearchPreviewModel', () => {
 
     act(() => result.current.onOpenChange(false));
     expect(result.current.open).toBe(false);
-    expect(mocks.useFilePreview).toHaveBeenLastCalledWith(
-      expect.objectContaining({ selectedFile: undefined }),
-    );
+    expect(mocks.useFilePreview).toHaveBeenLastCalledWith(expect.objectContaining({ selectedFile: undefined }));
   });
 
   it('opens directory hits as index-backed metadata without enabling file content', () => {
@@ -75,8 +71,6 @@ describe('useSearchPreviewModel', () => {
 
     expect(result.current.viewerTab).toBe('metadata');
     expect(result.current.selectedFile?.entryType).toBe('directory');
-    expect(mocks.useFilePreview).toHaveBeenLastCalledWith(
-      expect.objectContaining({ selectedFile: undefined }),
-    );
+    expect(mocks.useFilePreview).toHaveBeenLastCalledWith(expect.objectContaining({ selectedFile: undefined }));
   });
 });

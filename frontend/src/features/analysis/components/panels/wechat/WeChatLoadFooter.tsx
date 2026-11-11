@@ -1,4 +1,4 @@
-import { LoaderCircle, RefreshCw }  from '@/components/icons';
+import { LoaderCircle, RefreshCw } from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
@@ -14,14 +14,13 @@ export function WeChatLoadFooter({ state }: { state: WeChatLoadState }) {
         {t('wechatWorkspace.loaded', { loaded: state.loaded, total: state.total })}
       </span>
       {state.failed ? (
-        <Tooltip content={t('wechatWorkspace.retry')}><Button aria-label={t('wechatWorkspace.retry')} variant="forensicsGhost" size="xs" onClick={state.retry}><ActionIcon name="refresh" /></Button></Tooltip>
+        <Tooltip content={t('wechatWorkspace.retry')}>
+          <Button aria-label={t('wechatWorkspace.retry')} variant="forensicsGhost" size="xs" onClick={state.retry}>
+            <ActionIcon name="refresh" />
+          </Button>
+        </Tooltip>
       ) : state.hasMore ? (
-        <Button
-          variant="forensicsGhost"
-          size="xs"
-          disabled={state.loadingMore}
-          onClick={state.loadMore}
-        >
+        <Button variant="forensicsGhost" size="xs" disabled={state.loadingMore} onClick={state.loadMore}>
           {state.loadingMore ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
           {t(state.loadingMore ? 'wechatWorkspace.loadingMore' : 'wechatWorkspace.loadMore')}
         </Button>

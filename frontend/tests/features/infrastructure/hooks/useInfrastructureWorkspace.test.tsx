@@ -56,8 +56,20 @@ const graph: InfrastructureGraph = {
   ],
   edges: [
     { sourceId: 'host-1', targetId: 'vm-1', relationKind: 'boots', confidence: 'candidate', provenanceJson: '{}' },
-    { sourceId: 'vm-1', targetId: 'ceph-1', relationKind: 'consumes_storage', confidence: 'candidate', provenanceJson: '{}' },
-    { sourceId: 'log-1', targetId: 'host-1', relationKind: 'derived_from', confidence: 'candidate', provenanceJson: '{}' },
+    {
+      sourceId: 'vm-1',
+      targetId: 'ceph-1',
+      relationKind: 'consumes_storage',
+      confidence: 'candidate',
+      provenanceJson: '{}',
+    },
+    {
+      sourceId: 'log-1',
+      targetId: 'host-1',
+      relationKind: 'derived_from',
+      confidence: 'candidate',
+      provenanceJson: '{}',
+    },
   ],
   networkFacts: [
     {
@@ -99,7 +111,10 @@ describe('useInfrastructureWorkspace', () => {
 
     // Analysis evidence is not painted into the host network view.
     expect(result.current.networkTopology.nodes.map((item) => item.id)).toEqual(['host-1', 'vm-1', 'ceph-1']);
-    expect(result.current.networkTopology.edges.map((edge) => edge.relationKind)).toEqual(['boots', 'consumes_storage']);
+    expect(result.current.networkTopology.edges.map((edge) => edge.relationKind)).toEqual([
+      'boots',
+      'consumes_storage',
+    ]);
     expect(result.current.networkFacts).toHaveLength(1);
   });
 

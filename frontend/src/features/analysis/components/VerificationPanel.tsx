@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Gauge, Target, Database }  from '@/components/icons';
+import { Gauge, Target, Database } from '@/components/icons';
 import type {
   BenchmarkRequiredCheck,
   BenchmarkSummary,
@@ -15,10 +15,7 @@ function cardTone(result: VerificationChainStatus['result']) {
   return 'border-forensics-border bg-forensics-surface';
 }
 
-function resultLabel(
-  result: VerificationChainStatus['result'],
-  t: ReturnType<typeof useTranslation>['t'],
-) {
+function resultLabel(result: VerificationChainStatus['result'], t: ReturnType<typeof useTranslation>['t']) {
   switch (result) {
     case 'passed':
       return t('v2Governance.verification.resultPassed');
@@ -86,7 +83,10 @@ export function VerificationDashboard({ snapshot }: { snapshot: import('@/types/
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
               <Metric label={t('v2Governance.verification.maturity')} value={maturityLabel(chain.maturity)} />
-              <Metric label={t('v2Governance.verification.guaranteeLevel')} value={guaranteeLabel(chain.guaranteeLevel)} />
+              <Metric
+                label={t('v2Governance.verification.guaranteeLevel')}
+                value={guaranteeLabel(chain.guaranteeLevel)}
+              />
               <Metric label={t('v2Governance.verification.fixtureTier')} value={chain.fixtureTier} />
               <Metric label={t('v2Governance.verification.sampleCount')} value={chain.verifiedSampleCount.toString()} />
             </div>
@@ -123,15 +123,23 @@ export function BenchmarkPanel({ benchmark }: { benchmark: BenchmarkSummary }) {
           <Metric label={t('v2Governance.benchmark.lastVerified')} value={benchmark.lastVerifiedAt} />
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Metric label={t('v2Governance.benchmark.requiredCovered')} value={benchmark.coveredRequiredCount.toString()} />
-          <Metric label={t('v2Governance.benchmark.requiredMissing')} value={benchmark.missingRequiredCount.toString()} />
+          <Metric
+            label={t('v2Governance.benchmark.requiredCovered')}
+            value={benchmark.coveredRequiredCount.toString()}
+          />
+          <Metric
+            label={t('v2Governance.benchmark.requiredMissing')}
+            value={benchmark.missingRequiredCount.toString()}
+          />
           <Metric label={t('v2Governance.benchmark.exceeded')} value={benchmark.exceededRequiredCount.toString()} />
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
           {benchmark.scenarios.map((scenario) => (
             <div key={`${scenario.datasetLevel}-${scenario.scenario}`} className="bg-transparent py-3">
               <div className="text-[12px] font-light text-forensics-text">{scenario.scenario}</div>
-              <div className="mt-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">{scenario.datasetLevel}</div>
+              <div className="mt-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">
+                {scenario.datasetLevel}
+              </div>
               <div className="mt-3 text-[22px] font-light text-forensics-text">{scenario.p95Ms}ms</div>
               <div className="mt-1 text-[11px] text-forensics-muted">
                 {t('v2Governance.benchmark.memoryPeak', {
@@ -145,10 +153,7 @@ export function BenchmarkPanel({ benchmark }: { benchmark: BenchmarkSummary }) {
           <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">Required Checks</div>
           <div className="space-y-2">
             {benchmark.requiredChecks.map((check) => (
-              <BenchmarkRequiredCheckRow
-                key={`${check.datasetLevel}-${check.scenario}`}
-                check={check}
-              />
+              <BenchmarkRequiredCheckRow key={`${check.datasetLevel}-${check.scenario}`} check={check} />
             ))}
           </div>
         </div>
@@ -178,14 +183,15 @@ export function SupportMatrixPanel({ entries }: { entries: ParserSupportMatrixEn
                 {maturityLabel(entry.maturity)}
               </span>
             </div>
-            <div className="mt-3 py-2 text-[11px] text-forensics-text-tertiary">
-              {entry.guaranteeSummary}
-            </div>
+            <div className="mt-3 py-2 text-[11px] text-forensics-text-tertiary">{entry.guaranteeSummary}</div>
             <div className="mt-3">
               <div className="text-[10px] uppercase tracking-wider text-forensics-muted-light">Verified Samples</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {entry.verifiedSamples.map((sample) => (
-                  <span key={`${entry.chain}-${sample}`} className="rounded-none bg-transparent px-2 py-1 text-[10px] text-forensics-text-tertiary">
+                  <span
+                    key={`${entry.chain}-${sample}`}
+                    className="rounded-none bg-transparent px-2 py-1 text-[10px] text-forensics-text-tertiary"
+                  >
                     {sample}
                   </span>
                 ))}
@@ -234,16 +240,16 @@ function benchmarkCheckLabel(status: BenchmarkRequiredCheck['status']) {
 function BenchmarkRequiredCheckRow({ check }: { check: BenchmarkRequiredCheck }) {
   const { t } = useTranslation();
   const measured =
-    typeof check.measuredP95Ms === 'number'
-      ? `${check.measuredP95Ms}ms`
-      : t('v2Governance.benchmark.notMeasured');
+    typeof check.measuredP95Ms === 'number' ? `${check.measuredP95Ms}ms` : t('v2Governance.benchmark.notMeasured');
 
   return (
     <div className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="font-light text-forensics-text">{check.scenario}</div>
-          <div className="mt-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">{check.datasetLevel}</div>
+          <div className="mt-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">
+            {check.datasetLevel}
+          </div>
         </div>
         <span className={`rounded-none border px-2 py-0.5 text-[10px] font-mono ${benchmarkCheckTone(check.status)}`}>
           {benchmarkCheckLabel(check.status)}

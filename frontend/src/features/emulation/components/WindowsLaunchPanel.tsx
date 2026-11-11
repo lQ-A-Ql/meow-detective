@@ -23,7 +23,11 @@ function WindowsBypassFieldset({ model }: WindowsLaunchPanelProps) {
           value={model.bypassPartition === undefined ? 'none' : String(model.bypassPartition)}
           onValueChange={(value) => model.selectBypassPartition(value === 'none' ? undefined : Number(value))}
         >
-          <SelectTrigger id="emulation-windows-partition" variant="forensics" aria-label={t('emulationPage.bypass.partition')}>
+          <SelectTrigger
+            id="emulation-windows-partition"
+            variant="forensics"
+            aria-label={t('emulationPage.bypass.partition')}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -45,7 +49,11 @@ function WindowsBypassFieldset({ model }: WindowsLaunchPanelProps) {
               onValueChange={(value) => model.selectBypassRid(value === 'none' ? undefined : Number(value))}
               disabled={model.bypassAccountsLoading}
             >
-              <SelectTrigger id="emulation-windows-account" variant="forensics" aria-label={t('emulationPage.bypass.account')}>
+              <SelectTrigger
+                id="emulation-windows-account"
+                variant="forensics"
+                aria-label={t('emulationPage.bypass.account')}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -66,7 +74,11 @@ function WindowsBypassFieldset({ model }: WindowsLaunchPanelProps) {
               value={model.bypassAction}
               onValueChange={(value) => model.selectBypassAction(value as typeof model.bypassAction)}
             >
-              <SelectTrigger id="emulation-windows-action" variant="forensics" aria-label={t('emulationPage.bypass.action')}>
+              <SelectTrigger
+                id="emulation-windows-action"
+                variant="forensics"
+                aria-label={t('emulationPage.bypass.action')}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -91,14 +103,16 @@ function WindowsPreflightList({ model }: WindowsLaunchPanelProps) {
         <div key={install.partitionIndex} className="flex flex-wrap items-center gap-2 text-[11px]">
           <span className="font-mono text-forensics-text">[P{install.partitionIndex}]</span>
           <Badge variant={install.osdataPresent ? 'secondary' : 'outline'}>
-            {t(install.osdataPresent
-              ? 'emulationPage.preflight.osdataPresent'
-              : 'emulationPage.preflight.osdataAbsent')}
+            {t(
+              install.osdataPresent ? 'emulationPage.preflight.osdataPresent' : 'emulationPage.preflight.osdataAbsent',
+            )}
           </Badge>
           <Badge variant={install.utilmanBypassAvailable ? 'default' : 'outline'}>
-            {t(install.utilmanBypassAvailable
-              ? 'emulationPage.preflight.bypassAvailable'
-              : 'emulationPage.preflight.bypassUnavailable')}
+            {t(
+              install.utilmanBypassAvailable
+                ? 'emulationPage.preflight.bypassAvailable'
+                : 'emulationPage.preflight.bypassUnavailable',
+            )}
           </Badge>
         </div>
       ))}
@@ -131,14 +145,14 @@ function MaintenanceToolRow({ model }: WindowsLaunchPanelProps) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-[11px]">
       <Badge variant={model.preflight.maintenanceToolAvailable ? 'default' : 'secondary'}>
-        {t(model.preflight.maintenanceToolAvailable
-          ? 'emulationPage.maintenance.toolAvailable'
-          : 'emulationPage.maintenance.toolMissing')}
+        {t(
+          model.preflight.maintenanceToolAvailable
+            ? 'emulationPage.maintenance.toolAvailable'
+            : 'emulationPage.maintenance.toolMissing',
+        )}
       </Badge>
       {!model.preflight.maintenanceToolAvailable ? (
-        <span className="text-[10px] text-forensics-muted">
-          {t('emulationPage.maintenance.buildHint')}
-        </span>
+        <span className="text-[10px] text-forensics-muted">{t('emulationPage.maintenance.buildHint')}</span>
       ) : null}
     </div>
   );
@@ -147,13 +161,20 @@ function MaintenanceToolRow({ model }: WindowsLaunchPanelProps) {
 export function WindowsLaunchPanel({ model }: WindowsLaunchPanelProps) {
   const { t } = useTranslation();
   return (
-    <LaunchPanelShell model={model} maintenance={<WindowsBypassFieldset model={model} />}
-      inspection={<>
-        <WindowsPreflightList model={model} />
-        <MaintenanceToolRow model={model} />
-        {model.recoveryIsoPath && model.preflight?.maintenanceToolAvailable === false ? (
-          <div className="text-[11px] text-forensics-warning-text">{t('emulationPage.maintenance.peWithoutTool')}</div>
-        ) : null}
-      </>} />
+    <LaunchPanelShell
+      model={model}
+      maintenance={<WindowsBypassFieldset model={model} />}
+      inspection={
+        <>
+          <WindowsPreflightList model={model} />
+          <MaintenanceToolRow model={model} />
+          {model.recoveryIsoPath && model.preflight?.maintenanceToolAvailable === false ? (
+            <div className="text-[11px] text-forensics-warning-text">
+              {t('emulationPage.maintenance.peWithoutTool')}
+            </div>
+          ) : null}
+        </>
+      }
+    />
   );
 }

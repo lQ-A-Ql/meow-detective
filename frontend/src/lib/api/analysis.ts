@@ -58,9 +58,7 @@ export async function runEvidenceClassification(
   });
 }
 
-export async function runAnalysisExtraction(
-  request: AnalysisExtractionRequest,
-): Promise<AnalysisExtractionRun> {
+export async function runAnalysisExtraction(request: AnalysisExtractionRequest): Promise<AnalysisExtractionRun> {
   return apiClient.request(COMMANDS.analysis.RUN_ANALYSIS_EXTRACTION, { request });
 }
 
@@ -74,9 +72,7 @@ export async function getRegistryStructuredSummary(dataSourceId: string): Promis
   return apiClient.request(COMMANDS.analysis.GET_REGISTRY_STRUCTURED_SUMMARY, { request: { dataSourceId } });
 }
 
-export async function getBrowserHistorySummary(
-  request: AnalysisExtractionPageRequest,
-): Promise<BrowserHistorySummary> {
+export async function getBrowserHistorySummary(request: AnalysisExtractionPageRequest): Promise<BrowserHistorySummary> {
   return apiClient.request(COMMANDS.analysis.GET_BROWSER_HISTORY_SUMMARY, { request });
 }
 
@@ -86,15 +82,11 @@ export async function getEmailExtractionSummary(
   return apiClient.request(COMMANDS.analysis.GET_EMAIL_EXTRACTION_SUMMARY, { request });
 }
 
-export async function getEvtxEventSummary(
-  request: EvtxEventPageRequest,
-): Promise<EvtxEventSummary> {
+export async function getEvtxEventSummary(request: EvtxEventPageRequest): Promise<EvtxEventSummary> {
   return apiClient.request(COMMANDS.analysis.GET_EVTX_EVENT_SUMMARY, { request });
 }
 
-export async function getLinuxArtifactSummary(
-  request: AnalysisExtractionPageRequest,
-): Promise<LinuxArtifactSummary> {
+export async function getLinuxArtifactSummary(request: AnalysisExtractionPageRequest): Promise<LinuxArtifactSummary> {
   return apiClient.request(COMMANDS.analysis.GET_LINUX_ARTIFACT_SUMMARY, { request });
 }
 
@@ -106,9 +98,7 @@ export async function getV3GovernanceSnapshot(): Promise<V3GovernanceSnapshot> {
   return apiClient.request(COMMANDS.analysis.GET_V3_GOVERNANCE_SNAPSHOT);
 }
 
-export async function getLinuxEvidenceSetSummary(
-  importSetId: string,
-): Promise<LinuxEvidenceSetSummary> {
+export async function getLinuxEvidenceSetSummary(importSetId: string): Promise<LinuxEvidenceSetSummary> {
   return apiClient.request(COMMANDS.analysis.GET_LINUX_EVIDENCE_SET_SUMMARY, {
     request: { importSetId },
   });
@@ -128,9 +118,7 @@ export async function getLinuxEvidenceEvents(
   });
 }
 
-export async function runKubernetesClusterAnalysis(
-  importSetId: string,
-): Promise<KubernetesAnalysisRun> {
+export async function runKubernetesClusterAnalysis(importSetId: string): Promise<KubernetesAnalysisRun> {
   return apiClient.request(COMMANDS.analysis.RUN_KUBERNETES_CLUSTER_ANALYSIS, {
     request: { importSetId },
   });
@@ -144,9 +132,7 @@ export async function getAndroidDeviceInfo(dataSourceId: string): Promise<Androi
   return apiClient.request(COMMANDS.analysis.GET_ANDROID_DEVICE_INFO, { request: { dataSourceId } });
 }
 
-export async function getAndroidPackageSummary(
-  request: AnalysisExtractionPageRequest,
-): Promise<AndroidPackageSummary> {
+export async function getAndroidPackageSummary(request: AnalysisExtractionPageRequest): Promise<AndroidPackageSummary> {
   return apiClient.request(COMMANDS.analysis.GET_ANDROID_PACKAGE_SUMMARY, { request });
 }
 
@@ -158,9 +144,7 @@ export async function listPluginModules(dataSourceId: string): Promise<PluginMod
   return apiClient.request(COMMANDS.analysis.LIST_PLUGIN_MODULES, { request: { dataSourceId } });
 }
 
-export async function getPluginFamilyEntries(
-  request: PluginFamilyEntriesRequest,
-): Promise<PluginFamilyEntries> {
+export async function getPluginFamilyEntries(request: PluginFamilyEntriesRequest): Promise<PluginFamilyEntries> {
   return apiClient.request(COMMANDS.analysis.GET_PLUGIN_FAMILY_ENTRIES, { request });
 }
 
@@ -168,10 +152,7 @@ export async function listPluginActions(pluginId: string): Promise<PluginActionD
   return apiClient.request(COMMANDS.analysis.LIST_PLUGIN_ACTIONS, { request: { pluginId } });
 }
 
-export async function recoverWeChatKeys(
-  dataSourceId: string,
-  dumpPath: string,
-): Promise<WeChatKeyRecoveryResult> {
+export async function recoverWeChatKeys(dataSourceId: string, dumpPath: string): Promise<WeChatKeyRecoveryResult> {
   return apiClient.request(COMMANDS.analysis.RECOVER_WECHAT_KEYS, {
     request: { dataSourceId, dumpPath },
   });

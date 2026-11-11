@@ -70,16 +70,18 @@ const TreeNodeRow = memo(function TreeNodeRow({
       onToggle={() => onToggle(node)}
       toggleLabel={displayNodeName(node.name, node.depth, node.dataSourceId)}
       connector={node.depth > 0 ? <TreeConnector depth={node.depth} isLast={isLast} /> : null}
-      icon={<FileIconWithStatusOverlay
-        name={node.name}
-        entryType={node.entryType}
-        status={node.status}
-        expanded={expanded}
-        deleted={node.deleted}
-        hidden={node.hidden}
-        system={node.system}
-        size={12}
-      />}
+      icon={
+        <FileIconWithStatusOverlay
+          name={node.name}
+          entryType={node.entryType}
+          status={node.status}
+          expanded={expanded}
+          deleted={node.deleted}
+          hidden={node.hidden}
+          system={node.system}
+          size={12}
+        />
+      }
       label={displayNodeName(node.name, node.depth, node.dataSourceId)}
       meta={
         node.status && node.status !== 'ready' ? (
@@ -114,31 +116,42 @@ export function FileTreePanel({
 }: FileTreePanelProps) {
   const { t } = useTranslation();
   const sourceMap = useMemo(() => new Map((dataSources ?? []).map((source) => [source.id, source])), [dataSources]);
-  const virtualNodes = useMemo(() => filteredTreeNodes.map((node) => ({
-    ...node,
-    active: node.id === activeDirectoryId,
-    expanded: expandedIds.has(node.id),
-  })), [activeDirectoryId, expandedIds, filteredTreeNodes]);
-  const renderNode = useCallback((node: FileTreeNode & { active?: boolean; expanded?: boolean }, isLast: boolean) => {
-    const isDataSourceNode = node.depth === 0 && node.id.startsWith('data-source:');
-    if (isDataSourceNode) {
-      return <FileTreeDataSourceNode
-        compositeNavigation
-        node={node}
-        expanded={Boolean(node.expanded)}
-        dataSource={sourceMap.get(dataSourceIdFromNodeId(node.id))}
-        onClick={() => toggleDirectory(node)}
-      />;
-    }
-    return <TreeNodeRow
-      node={node}
-      active={Boolean(node.active)}
-      expanded={Boolean(node.expanded)}
-      isLast={isLast}
-      displayNodeName={displayNodeName}
-      onToggle={toggleDirectory}
-    />;
-  }, [displayNodeName, sourceMap, toggleDirectory]);
+  const virtualNodes = useMemo(
+    () =>
+      filteredTreeNodes.map((node) => ({
+        ...node,
+        active: node.id === activeDirectoryId,
+        expanded: expandedIds.has(node.id),
+      })),
+    [activeDirectoryId, expandedIds, filteredTreeNodes],
+  );
+  const renderNode = useCallback(
+    (node: FileTreeNode & { active?: boolean; expanded?: boolean }, isLast: boolean) => {
+      const isDataSourceNode = node.depth === 0 && node.id.startsWith('data-source:');
+      if (isDataSourceNode) {
+        return (
+          <FileTreeDataSourceNode
+            compositeNavigation
+            node={node}
+            expanded={Boolean(node.expanded)}
+            dataSource={sourceMap.get(dataSourceIdFromNodeId(node.id))}
+            onClick={() => toggleDirectory(node)}
+          />
+        );
+      }
+      return (
+        <TreeNodeRow
+          node={node}
+          active={Boolean(node.active)}
+          expanded={Boolean(node.expanded)}
+          isLast={isLast}
+          displayNodeName={displayNodeName}
+          onToggle={toggleDirectory}
+        />
+      );
+    },
+    [displayNodeName, sourceMap, toggleDirectory],
+  );
   return (
     <div
       className="border-r border-forensics-divider bg-forensics-panel flex h-full min-h-0 flex-col shrink-0 relative overflow-hidden"
@@ -168,16 +181,18 @@ export function FileTreePanel({
             })}
           </div>
         ) : null}
-        {filteredTreeNodes.length > 0 ? <VirtualFileTree
-          nodes={virtualNodes}
-          onNodeClick={toggleDirectory}
-          scrollContainerRef={treeContainerRef}
-          renderNode={renderNode}
-          viewportClassName="overflow-x-hidden py-1 font-mono text-[11px] select-none"
-          viewportTabIndex={0}
-          itemSize={28}
-          overscan={10}
-        /> : null}
+        {filteredTreeNodes.length > 0 ? (
+          <VirtualFileTree
+            nodes={virtualNodes}
+            onNodeClick={toggleDirectory}
+            scrollContainerRef={treeContainerRef}
+            renderNode={renderNode}
+            viewportClassName="overflow-x-hidden py-1 font-mono text-[11px] select-none"
+            viewportTabIndex={0}
+            itemSize={28}
+            overscan={10}
+          />
+        ) : null}
         {canLoadMoreTreeChildren ? (
           <div className="px-2 py-2">
             <div className="flex items-center justify-between rounded-none border border-forensics-border bg-forensics-surface px-2 py-1.5 text-[10px] text-forensics-muted">
@@ -187,14 +202,19 @@ export function FileTreePanel({
                   total: activeChildrenPage?.totalCount ?? activeTreeChildrenLoaded,
                 })}
               </span>
-              <Tooltip content={t('fileBrowser.tree.loadMore')}><Button aria-label={t('fileBrowser.tree.loadMore')}
-                type="button"
-                variant="outline"
-                size="sm"
-                className="text-[10px]"
-                onClick={loadMoreActiveTreeChildren}
-                data-testid="load-more-tree-children"
-              ><ActionIcon name="folder-open" /></Button></Tooltip>
+              <Tooltip content={t('fileBrowser.tree.loadMore')}>
+                <Button
+                  aria-label={t('fileBrowser.tree.loadMore')}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-[10px]"
+                  onClick={loadMoreActiveTreeChildren}
+                  data-testid="load-more-tree-children"
+                >
+                  <ActionIcon name="folder-open" />
+                </Button>
+              </Tooltip>
             </div>
           </div>
         ) : null}

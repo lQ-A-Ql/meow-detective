@@ -1,4 +1,4 @@
-import { PencilLine, Trash2 }  from '@/components/icons';
+import { PencilLine, Trash2 } from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
@@ -56,10 +56,14 @@ export function DataSourcesPanel({
   const { t } = useTranslation();
   return (
     <>
-      {showHeader ? <div className="flex h-10 shrink-0 items-center justify-between px-4 text-[10px] uppercase tracking-[0.08em] text-forensics-ink-3">
-        <span>{t('caseHome.dataSources.title')}</span>
-        <span className="font-mono text-[10px] text-forensics-muted-light">{t('caseHome.count', { count: dataSources?.length ?? 0 })}</span>
-      </div> : null}
+      {showHeader ? (
+        <div className="flex h-10 shrink-0 items-center justify-between px-4 text-[10px] uppercase tracking-[0.08em] text-forensics-ink-3">
+          <span>{t('caseHome.dataSources.title')}</span>
+          <span className="font-mono text-[10px] text-forensics-muted-light">
+            {t('caseHome.count', { count: dataSources?.length ?? 0 })}
+          </span>
+        </div>
+      ) : null}
       <ScrollArea className="min-h-0 flex-1">
         {dataSources?.length ? (
           dataSources.map((source) => {
@@ -79,21 +83,31 @@ export function DataSourcesPanel({
                           inputSize="compact"
                           className="flex-1"
                         />
-                        <Tooltip content={t('caseHome.actions.save')}><Button aria-label={t('caseHome.actions.save')}
-                          type="button"
-                          variant="forensicsOutline"
-                          size="compact"
-                          onClick={() => onRename(source.id, editingDataSourceName.trim())}
-                        ><ActionIcon name="save" /></Button></Tooltip>
-                        <Tooltip content={t('caseHome.actions.cancel')}><Button aria-label={t('caseHome.actions.cancel')}
-                          type="button"
-                          variant="forensicsGhost"
-                          size="compact"
-                          onClick={() => {
-                            setEditingDataSourceId(undefined);
-                            setEditingDataSourceName('');
-                          }}
-                        ><ActionIcon name="close" /></Button></Tooltip>
+                        <Tooltip content={t('caseHome.actions.save')}>
+                          <Button
+                            aria-label={t('caseHome.actions.save')}
+                            type="button"
+                            variant="forensicsOutline"
+                            size="compact"
+                            onClick={() => onRename(source.id, editingDataSourceName.trim())}
+                          >
+                            <ActionIcon name="save" />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={t('caseHome.actions.cancel')}>
+                          <Button
+                            aria-label={t('caseHome.actions.cancel')}
+                            type="button"
+                            variant="forensicsGhost"
+                            size="compact"
+                            onClick={() => {
+                              setEditingDataSourceId(undefined);
+                              setEditingDataSourceName('');
+                            }}
+                          >
+                            <ActionIcon name="close" />
+                          </Button>
+                        </Tooltip>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
@@ -120,7 +134,9 @@ export function DataSourcesPanel({
                         </Button>
                       </div>
                     )}
-                    <div className="mt-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">{source.kind}</div>
+                    <div className="mt-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">
+                      {source.kind}
+                    </div>
                     <div className="mt-1 text-[11px] text-forensics-muted font-mono break-all">{source.sourcePath}</div>
                     {source.gptDiskGuid ? (
                       <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
@@ -129,23 +145,57 @@ export function DataSourcesPanel({
                     ) : null}
                     <LinuxRootMounts model={createLinuxRootMountViewModel(source, t)} />
                     {['e01', 'raw', 'local_disk'].includes(source.kind) ? (
-                      <div className="mt-2 border border-forensics-warning-border bg-forensics-warning-bg px-2.5 py-2" data-testid={`physical-disk-hash-${source.id}`}>
+                      <div
+                        className="mt-2 border border-forensics-warning-border bg-forensics-warning-bg px-2.5 py-2"
+                        data-testid={`physical-disk-hash-${source.id}`}
+                      >
                         <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-forensics-warning-text">
                           <span>{t('caseHome.dataSources.physicalDiskHash')}</span>
                         </div>
-                        <div className="mt-1 text-[10px] text-forensics-muted">{t('caseHome.dataSources.physicalDiskHashHint')}</div>
+                        <div className="mt-1 text-[10px] text-forensics-muted">
+                          {t('caseHome.dataSources.physicalDiskHashHint')}
+                        </div>
                         <div className="mt-2 grid grid-cols-2 gap-1">
                           {DIGEST_ALGORITHMS.map(({ value, label }) => (
-                            <Button aria-label={label} key={value} type="button" shape="row" variant="forensicsOutline" disabled={logicalDiskDigestLoading} onClick={() => onCalculateLogicalDiskDigest?.(source.id, value)}>
+                            <Button
+                              aria-label={label}
+                              key={value}
+                              type="button"
+                              shape="row"
+                              variant="forensicsOutline"
+                              disabled={logicalDiskDigestLoading}
+                              onClick={() => onCalculateLogicalDiskDigest?.(source.id, value)}
+                            >
                               <ActionIcon name="play" />
                               <span className="min-w-0 truncate font-mono text-[10px]">{label}</span>
                             </Button>
                           ))}
                         </div>
-                        {logicalDiskDigestTask && logicalDiskDigestSourceId === source.id ? <EvidenceTaskStatus model={logicalDiskDigestTask} /> : null}
-                        {logicalDiskDigestError && logicalDiskDigestSourceId === source.id ? <div className="mt-1.5 text-[10px] text-forensics-error-text">{logicalDiskDigestError}</div> : null}
-                        {source.originalDiskSha256 ? <div className="mt-1.5 space-y-1 font-mono text-[10px]"><div>SHA256</div><div className="break-all text-forensics-text">{source.originalDiskSha256}</div></div> : null}
-                        {logicalDiskDigest && logicalDiskDigestSourceId === source.id ? <div className="mt-1.5 space-y-1 font-mono text-[10px]"><div>{logicalDiskDigest.algorithm.toUpperCase()} · {logicalDiskDigest.byteLength} bytes</div><div className="break-all text-forensics-text" data-testid={`physical-disk-digest-${source.id}`}>{logicalDiskDigest.value}</div></div> : null}
+                        {logicalDiskDigestTask && logicalDiskDigestSourceId === source.id ? (
+                          <EvidenceTaskStatus model={logicalDiskDigestTask} />
+                        ) : null}
+                        {logicalDiskDigestError && logicalDiskDigestSourceId === source.id ? (
+                          <div className="mt-1.5 text-[10px] text-forensics-error-text">{logicalDiskDigestError}</div>
+                        ) : null}
+                        {source.originalDiskSha256 ? (
+                          <div className="mt-1.5 space-y-1 font-mono text-[10px]">
+                            <div>SHA256</div>
+                            <div className="break-all text-forensics-text">{source.originalDiskSha256}</div>
+                          </div>
+                        ) : null}
+                        {logicalDiskDigest && logicalDiskDigestSourceId === source.id ? (
+                          <div className="mt-1.5 space-y-1 font-mono text-[10px]">
+                            <div>
+                              {logicalDiskDigest.algorithm.toUpperCase()} · {logicalDiskDigest.byteLength} bytes
+                            </div>
+                            <div
+                              className="break-all text-forensics-text"
+                              data-testid={`physical-disk-digest-${source.id}`}
+                            >
+                              {logicalDiskDigest.value}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                     {source.processing ? (
@@ -157,7 +207,10 @@ export function DataSourcesPanel({
                           {t(`caseHome.processing.${source.processing.state}`)}
                         </span>
                         <span className="font-mono text-forensics-muted">
-                          {t('caseHome.processing.phase', { ready: source.processing.readyCount, total: source.processing.totalCount })}
+                          {t('caseHome.processing.phase', {
+                            ready: source.processing.readyCount,
+                            total: source.processing.totalCount,
+                          })}
                         </span>
                         {source.processing.failedCount > 0 ? (
                           <span className="font-mono text-forensics-error-text">
@@ -193,7 +246,10 @@ export function DataSourcesPanel({
                                   : t('caseHome.partitions.unsupported');
 
                             return (
-                              <div key={`${source.id}-${partition.index}`} className={`border-l-2 border-forensics-line-2 px-3 py-2 text-[11px] ${statusTone}`}>
+                              <div
+                                key={`${source.id}-${partition.index}`}
+                                className={`border-l-2 border-forensics-line-2 px-3 py-2 text-[11px] ${statusTone}`}
+                              >
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
                                     <div className="text-forensics-text font-light">
@@ -201,13 +257,23 @@ export function DataSourcesPanel({
                                     </div>
                                     <div className="mt-1 text-forensics-text-tertiary">{partition.name}</div>
                                     <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted">
-                                      {t('caseHome.partitions.offsetLength', { offset: partition.offset, length: partitionLengthLabel(partition.length, t('caseHome.partitions.lengthUnknown')) })}
+                                      {t('caseHome.partitions.offsetLength', {
+                                        offset: partition.offset,
+                                        length: partitionLengthLabel(
+                                          partition.length,
+                                          t('caseHome.partitions.lengthUnknown'),
+                                        ),
+                                      })}
                                     </div>
                                     <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
-                                      {t('caseHome.partitions.gptPartitionUuid', { value: partition.gptPartitionUuid ?? t('caseHome.partitions.uuidNotRecorded') })}
+                                      {t('caseHome.partitions.gptPartitionUuid', {
+                                        value: partition.gptPartitionUuid ?? t('caseHome.partitions.uuidNotRecorded'),
+                                      })}
                                     </div>
                                     <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
-                                      {t('caseHome.partitions.filesystemUuid', { value: partition.filesystemUuid ?? t('caseHome.partitions.uuidNotRecorded') })}
+                                      {t('caseHome.partitions.filesystemUuid', {
+                                        value: partition.filesystemUuid ?? t('caseHome.partitions.uuidNotRecorded'),
+                                      })}
                                     </div>
                                     {partition.typeGuid ? (
                                       <div className="mt-1 font-mono text-[10px] break-all text-forensics-muted-light">
@@ -221,9 +287,7 @@ export function DataSourcesPanel({
                                     ) : null}
                                   </div>
                                   <div className="shrink-0 text-right">
-                                    <div className="text-[10px] uppercase tracking-wider font-light">
-                                      {statusLabel}
-                                    </div>
+                                    <div className="text-[10px] uppercase tracking-wider font-light">{statusLabel}</div>
                                     <div className="mt-1 font-mono text-[10px] text-forensics-muted-light">
                                       {partitionDisplayLabel(partition)}
                                     </div>

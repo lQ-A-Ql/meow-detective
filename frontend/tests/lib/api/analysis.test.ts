@@ -61,10 +61,9 @@ describe('analysis API', () => {
   it('getEvidenceClassificationSummary calls the correct command', async () => {
     requestMock.mockResolvedValueOnce({} as never);
     await getEvidenceClassificationSummary('ds-1');
-    expect(requestMock).toHaveBeenCalledWith(
-      COMMANDS.analysis.GET_EVIDENCE_CLASSIFICATION_SUMMARY,
-      { request: { dataSourceId: 'ds-1' } },
-    );
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_EVIDENCE_CLASSIFICATION_SUMMARY, {
+      request: { dataSourceId: 'ds-1' },
+    });
   });
 
   it('runEvidenceClassification sends categories in request', async () => {
@@ -95,37 +94,33 @@ describe('analysis API', () => {
   it('getRegistryExtractionSummary sends page request', async () => {
     requestMock.mockResolvedValueOnce({} as never);
     await getRegistryExtractionSummary({ dataSourceId: 'ds-1', offset: 10, limit: 20 });
-    expect(requestMock).toHaveBeenCalledWith(
-      COMMANDS.analysis.GET_REGISTRY_EXTRACTION_SUMMARY,
-      { request: { dataSourceId: 'ds-1', offset: 10, limit: 20 } },
-    );
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_REGISTRY_EXTRACTION_SUMMARY, {
+      request: { dataSourceId: 'ds-1', offset: 10, limit: 20 },
+    });
   });
 
   it('getRegistryStructuredSummary calls the correct command', async () => {
     requestMock.mockResolvedValueOnce({} as never);
     await getRegistryStructuredSummary('ds-1');
-    expect(requestMock).toHaveBeenCalledWith(
-      COMMANDS.analysis.GET_REGISTRY_STRUCTURED_SUMMARY,
-      { request: { dataSourceId: 'ds-1' } },
-    );
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_REGISTRY_STRUCTURED_SUMMARY, {
+      request: { dataSourceId: 'ds-1' },
+    });
   });
 
   it('getBrowserHistorySummary sends page request', async () => {
     requestMock.mockResolvedValueOnce({} as never);
     await getBrowserHistorySummary({ dataSourceId: 'ds-1', offset: 5 });
-    expect(requestMock).toHaveBeenCalledWith(
-      COMMANDS.analysis.GET_BROWSER_HISTORY_SUMMARY,
-      { request: { dataSourceId: 'ds-1', offset: 5 } },
-    );
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_BROWSER_HISTORY_SUMMARY, {
+      request: { dataSourceId: 'ds-1', offset: 5 },
+    });
   });
 
   it('getEmailExtractionSummary sends page request', async () => {
     requestMock.mockResolvedValueOnce({} as never);
     await getEmailExtractionSummary({ dataSourceId: 'ds-1', offset: 3 });
-    expect(requestMock).toHaveBeenCalledWith(
-      COMMANDS.analysis.GET_EMAIL_EXTRACTION_SUMMARY,
-      { request: { dataSourceId: 'ds-1', offset: 3 } },
-    );
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_EMAIL_EXTRACTION_SUMMARY, {
+      request: { dataSourceId: 'ds-1', offset: 3 },
+    });
   });
 
   it('getV2GovernanceSnapshot calls the correct command', async () => {
@@ -156,8 +151,12 @@ describe('analysis API', () => {
     requestMock.mockResolvedValueOnce({} as never).mockResolvedValueOnce([] as never);
     await getLinuxEvidenceSetSummary('set-1');
     await getLinuxEvidenceEvents('set-1', 10, 25);
-    expect(requestMock).toHaveBeenNthCalledWith(1, COMMANDS.analysis.GET_LINUX_EVIDENCE_SET_SUMMARY, { request: { importSetId: 'set-1' } });
-    expect(requestMock).toHaveBeenNthCalledWith(2, COMMANDS.analysis.GET_LINUX_EVIDENCE_EVENTS, { request: { importSetId: 'set-1', offset: 10, limit: 25 } });
+    expect(requestMock).toHaveBeenNthCalledWith(1, COMMANDS.analysis.GET_LINUX_EVIDENCE_SET_SUMMARY, {
+      request: { importSetId: 'set-1' },
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(2, COMMANDS.analysis.GET_LINUX_EVIDENCE_EVENTS, {
+      request: { importSetId: 'set-1', offset: 10, limit: 25 },
+    });
   });
 
   it('getCorrelationSnapshot calls the correct command', async () => {

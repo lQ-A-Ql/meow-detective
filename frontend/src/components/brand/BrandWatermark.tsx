@@ -12,7 +12,11 @@ export interface BrandWatermarkProps {
 export function BrandWatermark({ motif, className, layout = 'motif' }: BrandWatermarkProps) {
   if (layout === 'banner') {
     return (
-      <div aria-hidden="true" data-slot="brand-banner" className={cn('brand-watermark brand-banner pointer-events-none select-none', className)}>
+      <div
+        aria-hidden="true"
+        data-slot="brand-banner"
+        className={cn('brand-watermark brand-banner pointer-events-none select-none', className)}
+      >
         <div className="brand-banner-edge brand-banner-edge-left">
           <AssetSlot role={motif} className="brand-banner-art" />
         </div>
@@ -23,7 +27,5 @@ export function BrandWatermark({ motif, className, layout = 'motif' }: BrandWate
     );
   }
 
-  return (
-    <AssetSlot role={motif} className={cn('brand-watermark', className)} />
-  );
+  return <AssetSlot role={motif} className={cn('brand-watermark', className)} />;
 }

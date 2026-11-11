@@ -1,13 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '@/lib/api/client';
 import { COMMANDS } from '@/lib/api/commands';
-import {
-  getMountStatus,
-  listMounts,
-  mountImage,
-  mountPhysicalImage,
-  unmountImage,
-} from '@/lib/api/mount';
+import { getMountStatus, listMounts, mountImage, mountPhysicalImage, unmountImage } from '@/lib/api/mount';
 
 vi.mock('@/lib/api/client', () => ({
   apiClient: {

@@ -13,8 +13,11 @@ configure({ asyncUtilTimeout: 5000 });
 vi.setConfig({ testTimeout: 15000 });
 function preview(client = createRegistryBrowserMock()) {
   const query = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  return render(<QueryClientProvider client={query}><RegistryBrowserContainer client={client} context={context}
-    initialKeyPath="Microsoft\\Windows\\CurrentVersion" /></QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={query}>
+      <RegistryBrowserContainer client={client} context={context} initialKeyPath="Microsoft\\Windows\\CurrentVersion" />
+    </QueryClientProvider>,
+  );
 }
 
 describe('registry browser P0 workspace', () => {
@@ -22,15 +25,24 @@ describe('registry browser P0 workspace', () => {
     const base = createRegistryBrowserMock();
     let revision = 'synthetic-v1';
     let expire = true;
-    const client = { ...base,
-      listHives: vi.fn(async (request) => ({ ...await base.listHives(request), sourceRevision: revision })),
-      openHive: vi.fn(async (request) => { const session = await base.openHive(request); return { ...session, source: { ...session.source, sourceRevision: revision } }; }),
+    const client = {
+      ...base,
+      listHives: vi.fn(async (request) => ({ ...(await base.listHives(request)), sourceRevision: revision })),
+      openHive: vi.fn(async (request) => {
+        const session = await base.openHive(request);
+        return { ...session, source: { ...session.source, sourceRevision: revision } };
+      }),
       readValueRange: vi.fn(async (request) => {
-        if (expire) { expire = false; revision = 'synthetic-v2'; throw { code: 'expiredSession' }; }
+        if (expire) {
+          expire = false;
+          revision = 'synthetic-v2';
+          throw { code: 'expiredSession' };
+        }
         return base.readValueRange(request);
       }),
     } satisfies typeof base;
-    preview(client); await screen.findByText('ProductName');
+    preview(client);
+    await screen.findByText('ProductName');
     fireEvent.click(screen.getByText('Sequence'));
     await screen.findByText('浏览会话已失效，请重新打开配置单元');
     expect(screen.queryByText('ProductName')).not.toBeInTheDocument();
@@ -51,7 +63,8 @@ describe('registry browser P0 workspace', () => {
   });
 
   it('retains distinct user hives and clears the previous user value on switch', async () => {
-    preview(); await screen.findByText('ProductName');
+    preview();
+    await screen.findByText('ProductName');
     fireEvent.click(screen.getByRole('treeitem', { name: 'NTUSER.DAT · Synthetic-A' }));
     await screen.findByText('ProfileLabel');
     const values = screen.getByRole('region', { name: '当前键的值' });
@@ -64,7 +77,8 @@ describe('registry browser P0 workspace', () => {
   it('loads a bounded range on value selection and preserves u64 text exactly', async () => {
     const client = createRegistryBrowserMock();
     const read = vi.spyOn(client, 'readValueRange');
-    preview(client); await screen.findByText('ProductName');
+    preview(client);
+    await screen.findByText('ProductName');
     expect(read).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText('Sequence'));
     const detail = screen.getByRole('region', { name: '所选值详情' });
@@ -73,12 +87,17 @@ describe('registry browser P0 workspace', () => {
     fireEvent.click(screen.getByText('LargePayload'));
     await waitFor(() => expect(screen.getByRole('button', { name: '下一段字节' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '下一段字节' }));
-    await waitFor(() => expect(read).toHaveBeenLastCalledWith(expect.objectContaining({ valueId: 'large', offset: 65536, length: 65536 })));
+    await waitFor(() =>
+      expect(read).toHaveBeenLastCalledWith(
+        expect.objectContaining({ valueId: 'large', offset: 65536, length: 65536 }),
+      ),
+    );
     await waitFor(() => expect(screen.getByRole('button', { name: '下一段字节' })).toBeDisabled());
   });
 
   it('shows partial coverage and a corrupt key as different states', async () => {
-    preview(); await screen.findByText('ProductName');
+    preview();
+    await screen.findByText('ProductName');
     fireEvent.click(screen.getByRole('treeitem', { name: 'PartialValues' }));
     await screen.findByText('部分值未能读取，不能视为完整结果');
     expect(screen.getByText('UnknownType')).toBeInTheDocument();
@@ -88,15 +107,18 @@ describe('registry browser P0 workspace', () => {
   });
 
   it('moves keyboard focus without changing selection and ignores path input keys', async () => {
-    preview(); await screen.findByText('ProductName');
+    preview();
+    await screen.findByText('ProductName');
     const current = screen.getByRole('treeitem', { name: 'CurrentVersion' });
-    current.focus(); fireEvent.keyDown(current, { key: 'ArrowLeft' });
+    current.focus();
+    fireEvent.keyDown(current, { key: 'ArrowLeft' });
     expect(screen.getByRole('treeitem', { name: 'Windows' })).toHaveFocus();
     expect(current).toHaveAttribute('aria-selected', 'true');
     fireEvent.keyDown(screen.getByRole('treeitem', { name: 'Windows' }), { key: 'ArrowRight' });
     expect(current).toHaveFocus();
     const input = screen.getByRole('textbox', { name: 'Hive 内键路径' });
-    input.focus(); fireEvent.keyDown(input, { key: 'ArrowDown' });
+    input.focus();
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(input).toHaveFocus();
   });
 
@@ -104,11 +126,18 @@ describe('registry browser P0 workspace', () => {
     const client = createRegistryBrowserMock();
     let sessionId = '';
     const open = client.openHive;
-    client.openHive = async (request) => { const session = await open(request); sessionId = session.sessionId; return session; };
-    preview(client); await screen.findByText('ProductName');
+    client.openHive = async (request) => {
+      const session = await open(request);
+      sessionId = session.sessionId;
+      return session;
+    };
+    preview(client);
+    await screen.findByText('ProductName');
     const empty = await client.resolveKey({ sessionId, keyPath: 'EmptyKey' });
     let resolve!: (key: RegistryKeyMetadata) => void;
-    const pending = new Promise<RegistryKeyMetadata>((done) => { resolve = done; });
+    const pending = new Promise<RegistryKeyMetadata>((done) => {
+      resolve = done;
+    });
     vi.spyOn(client, 'resolveKey').mockReturnValueOnce(pending);
     const input = screen.getByRole('textbox', { name: 'Hive 内键路径' });
     fireEvent.change(input, { target: { value: 'EmptyKey' } });
@@ -116,7 +145,10 @@ describe('registry browser P0 workspace', () => {
     expect(screen.getByRole('button', { name: '定位键' })).toBeDisabled();
     fireEvent.click(screen.getByRole('treeitem', { name: 'PartialValues' }));
     await screen.findByText('UnknownType');
-    await act(async () => { resolve(empty); await pending; });
+    await act(async () => {
+      resolve(empty);
+      await pending;
+    });
     expect(input).toHaveValue('PartialValues');
     expect(screen.getByRole('button', { name: '定位键' })).toBeEnabled();
     expect(screen.queryByText('此键没有值')).not.toBeInTheDocument();

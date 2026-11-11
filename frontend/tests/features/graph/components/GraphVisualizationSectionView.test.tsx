@@ -63,9 +63,7 @@ const canvasRef: RefObject<HTMLDivElement> = { current: null };
 const canvasSize = { width: 640, height: 480 };
 
 function renderView(model: GraphVisualizationModel) {
-  return render(
-    <GraphVisualizationSectionView model={model} canvasRef={canvasRef} canvasSize={canvasSize} />,
-  );
+  return render(<GraphVisualizationSectionView model={model} canvasRef={canvasRef} canvasSize={canvasSize} />);
 }
 
 describe('GraphVisualizationSectionView', () => {
@@ -135,9 +133,7 @@ describe('GraphVisualizationSectionView', () => {
     expect(model.selectAllEdgeTypes).toHaveBeenCalledWith(true);
 
     const allSelected = makeModel({ hasNodes: true, selectedEdgeTypes: [...ALL_EDGE_TYPES] });
-    rerender(
-      <GraphVisualizationSectionView model={allSelected} canvasRef={canvasRef} canvasSize={canvasSize} />,
-    );
+    rerender(<GraphVisualizationSectionView model={allSelected} canvasRef={canvasRef} canvasSize={canvasSize} />);
     fireEvent.click(screen.getByRole('button', { name: '全选 / 清空' }));
     expect(allSelected.selectAllEdgeTypes).toHaveBeenCalledWith(false);
   });
@@ -231,9 +227,7 @@ describe('GraphVisualizationSectionView', () => {
     expect(screen.getByText('节点').parentElement).toHaveTextContent('12');
     expect(screen.getByText('边').parentElement).toHaveTextContent('20');
     expect(screen.getByText('密度').parentElement).toHaveTextContent('0.3');
-    expect(
-      screen.getByText('当前图窗口已达到节点或关系预算，请缩小深度或关系类型。'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('当前图窗口已达到节点或关系预算，请缩小深度或关系类型。')).toBeInTheDocument();
   });
 
   it('omits snapshot statistics and the truncation warning when absent', () => {
@@ -241,8 +235,6 @@ describe('GraphVisualizationSectionView', () => {
     renderView(model);
 
     expect(screen.queryByText('数据源')).toBeNull();
-    expect(
-      screen.queryByText('当前图窗口已达到节点或关系预算，请缩小深度或关系类型。'),
-    ).toBeNull();
+    expect(screen.queryByText('当前图窗口已达到节点或关系预算，请缩小深度或关系类型。')).toBeNull();
   });
 });

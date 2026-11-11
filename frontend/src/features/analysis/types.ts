@@ -23,12 +23,7 @@ export {
 
 export type AnalysisPlatformView = DataSourceSummary['platform'];
 
-const WINDOWS_EXTRACTION_CATEGORIES: ExtractionCategory[] = [
-  'Registry',
-  'BrowserHistory',
-  'Email',
-  'EventLogs',
-];
+const WINDOWS_EXTRACTION_CATEGORIES: ExtractionCategory[] = ['Registry', 'BrowserHistory', 'Email', 'EventLogs'];
 
 export const LINUX_PROGRESS_CATEGORIES: ExtractionCategory[] = [
   'LinuxJournal',

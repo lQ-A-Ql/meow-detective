@@ -3,11 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HexViewer } from '@/components/viewers/HexViewer';
 
 beforeEach(() => {
-  vi.stubGlobal('ResizeObserver', class {
-    observe = vi.fn();
-    disconnect = vi.fn();
-    unobserve = vi.fn();
-  });
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+    },
+  );
 });
 
 describe('HexViewer', () => {
@@ -35,11 +38,7 @@ describe('HexViewer', () => {
   it('renders when ResizeObserver is unavailable', () => {
     vi.unstubAllGlobals();
 
-    render(
-      <HexViewer
-        lines={['00000000  4D 5A 90 00 03 00 00 00  04 00 00 00 FF FF 00 00']}
-      />
-    );
+    render(<HexViewer lines={['00000000  4D 5A 90 00 03 00 00 00  04 00 00 00 FF FF 00 00']} />);
 
     expect(screen.getByText('00000000')).toBeDefined();
     expect(screen.getByTestId('hex-byte-0')).toHaveTextContent('4D');
@@ -76,13 +75,7 @@ describe('HexViewer', () => {
     });
     const onNeedMoreRange = vi.fn();
 
-    render(
-      <HexViewer
-        lines={lines}
-        lineHeight={20}
-        onNeedMoreRange={onNeedMoreRange}
-      />,
-    );
+    render(<HexViewer lines={lines} lineHeight={20} onNeedMoreRange={onNeedMoreRange} />);
 
     const scrollContainer = screen.getByTestId('hex-scroll-container');
     fireEvent.scroll(scrollContainer, {
@@ -135,14 +128,7 @@ describe('HexViewer', () => {
   });
 
   it('links Hex and ASCII highlighting by absolute byte offset', () => {
-    render(
-      <HexViewer
-        lines={[]}
-        rawBytes={[0x41, 0x42, 0x00]}
-        baseOffset={32}
-        fileSize={35}
-      />,
-    );
+    render(<HexViewer lines={[]} rawBytes={[0x41, 0x42, 0x00]} baseOffset={32} fileSize={35} />);
 
     const hex = screen.getByTestId('hex-byte-33');
     const ascii = screen.getByTestId('ascii-byte-33');
@@ -176,14 +162,7 @@ describe('HexViewer', () => {
   });
 
   it('does not jump highlighting to the active first byte over cell gaps', () => {
-    render(
-      <HexViewer
-        lines={[]}
-        rawBytes={[0x41, 0x42, 0x43]}
-        baseOffset={64}
-        activeOffset={64}
-      />,
-    );
+    render(<HexViewer lines={[]} rawBytes={[0x41, 0x42, 0x43]} baseOffset={64} activeOffset={64} />);
 
     const container = screen.getByTestId('hex-scroll-container');
     fireEvent.pointerMove(screen.getByTestId('hex-byte-66'));
@@ -199,13 +178,7 @@ describe('HexViewer', () => {
   });
 
   it('selects a linked Hex and ASCII byte range by plain pointer drag', () => {
-    render(
-      <HexViewer
-        lines={[]}
-        rawBytes={[0x41, 0x42, 0x43, 0x44, 0x45, 0x46]}
-        baseOffset={16}
-      />,
-    );
+    render(<HexViewer lines={[]} rawBytes={[0x41, 0x42, 0x43, 0x44, 0x45, 0x46]} baseOffset={16} />);
 
     fireEvent.pointerDown(screen.getByTestId('hex-byte-17'), { button: 0, pointerId: 2 });
     fireEvent.pointerMove(screen.getByTestId('ascii-byte-20'), { buttons: 1, pointerId: 2 });
@@ -220,13 +193,7 @@ describe('HexViewer', () => {
   });
 
   it('ends plain pointer selection when the pointer is released outside the viewer', () => {
-    render(
-      <HexViewer
-        lines={[]}
-        rawBytes={[0x41, 0x42, 0x43, 0x44]}
-        baseOffset={32}
-      />,
-    );
+    render(<HexViewer lines={[]} rawBytes={[0x41, 0x42, 0x43, 0x44]} baseOffset={32} />);
 
     fireEvent.pointerDown(screen.getByTestId('hex-byte-32'), { button: 0, pointerId: 3 });
     fireEvent.pointerMove(screen.getByTestId('hex-byte-34'), { buttons: 1, pointerId: 3 });
@@ -238,13 +205,7 @@ describe('HexViewer', () => {
   });
 
   it('ends plain pointer selection when the window loses focus', () => {
-    render(
-      <HexViewer
-        lines={[]}
-        rawBytes={[0x41, 0x42, 0x43, 0x44]}
-        baseOffset={48}
-      />,
-    );
+    render(<HexViewer lines={[]} rawBytes={[0x41, 0x42, 0x43, 0x44]} baseOffset={48} />);
 
     fireEvent.pointerDown(screen.getByTestId('hex-byte-48'), { button: 0, pointerId: 4 });
     fireEvent.pointerMove(screen.getByTestId('hex-byte-50'), { buttons: 1, pointerId: 4 });
@@ -257,9 +218,7 @@ describe('HexViewer', () => {
 
   it('preserves selection when only the compatibility lines wrapper changes', () => {
     const rawBytes = [0x41, 0x42, 0x43];
-    const { rerender } = render(
-      <HexViewer lines={['first wrapper']} rawBytes={rawBytes} baseOffset={80} />,
-    );
+    const { rerender } = render(<HexViewer lines={['first wrapper']} rawBytes={rawBytes} baseOffset={80} />);
 
     fireEvent.pointerDown(screen.getByTestId('hex-byte-81'), { button: 0, pointerId: 5 });
     fireEvent.pointerUp(window, { pointerId: 5 });

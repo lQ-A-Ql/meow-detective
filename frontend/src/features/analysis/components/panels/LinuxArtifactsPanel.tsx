@@ -43,15 +43,7 @@ interface LinuxFamilyProgress {
 }
 
 /** "已加载 X / 共 Y" plus a truncation warning when the backend capped results. */
-function LoadProgressLine({
-  loaded,
-  total,
-  truncated,
-}: {
-  loaded: number;
-  total: number;
-  truncated: boolean;
-}) {
+function LoadProgressLine({ loaded, total, truncated }: { loaded: number; total: number; truncated: boolean }) {
   const { t } = useTranslation();
   const showTruncated = truncated && total > 0;
   if (loaded >= total && !showTruncated) {
@@ -59,13 +51,9 @@ function LoadProgressLine({
   }
   return (
     <div className="flex flex-wrap items-center gap-2 px-1 text-[11px]">
-      <span className="font-mono text-forensics-muted">
-        {t('linuxArtifacts.loadProgress', { loaded, total })}
-      </span>
+      <span className="font-mono text-forensics-muted">{t('linuxArtifacts.loadProgress', { loaded, total })}</span>
       {showTruncated ? (
-        <span className="text-forensics-warning-text">
-          {t('linuxArtifacts.truncatedWarning')}
-        </span>
+        <span className="text-forensics-warning-text">{t('linuxArtifacts.truncatedWarning')}</span>
       ) : null}
     </div>
   );
@@ -183,11 +171,7 @@ export function LinuxArtifactsPanel({
     emptyDescription: string,
   ) => (
     <div className="space-y-1">
-      <LoadProgressLine
-        loaded={family.loaded}
-        total={family.total}
-        truncated={info.truncated}
-      />
+      <LoadProgressLine loaded={family.loaded} total={family.total} truncated={info.truncated} />
       <DenseDataTableFrame rowCount={rows.length}>
         <DenseDataTable
           rows={rows}

@@ -9,11 +9,7 @@ import {
 } from '@/features/analysis/types';
 import { errorMessage } from '@/lib/errors';
 import { statusFromRun } from '@/stores/analysis-store';
-import type {
-  AnalysisExtractionRequest,
-  AnalysisExtractionRun,
-  DataSourceSummary,
-} from '@/types/models';
+import type { AnalysisExtractionRequest, AnalysisExtractionRun, DataSourceSummary } from '@/types/models';
 
 type ProgressPatch = Partial<Omit<AnalysisExtractionProgressInfo, 'label'>>;
 type ProgressUpdater = (category: ExtractionCategory, patch: ProgressPatch) => void;
@@ -34,9 +30,7 @@ interface RunSelectedSourceExtractionOptions {
   browserPassword?: string;
 }
 
-export async function runSelectedSourceExtraction(
-  options: RunSelectedSourceExtractionOptions,
-) {
+export async function runSelectedSourceExtraction(options: RunSelectedSourceExtractionOptions) {
   const { source, sourceEpoch, sourceContextKey } = options;
   if (!source) return;
   const operation = sourceEpoch.begin(sourceContextKey);
@@ -87,11 +81,7 @@ function markRunning(category: ExtractionCategory, update: ProgressUpdater) {
   update(category, { status: 'running', warnings: [], error: undefined });
 }
 
-function applyRun(
-  category: ExtractionCategory,
-  run: AnalysisExtractionRun,
-  update: ProgressUpdater,
-) {
+function applyRun(category: ExtractionCategory, run: AnalysisExtractionRun, update: ProgressUpdater) {
   let hasRequestedSection = false;
   let sectionArtifactCount = 0;
   for (const section of run.sections ?? []) {

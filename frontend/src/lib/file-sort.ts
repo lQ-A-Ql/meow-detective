@@ -107,7 +107,7 @@ export function naturalCompare(a: string, b: string): number {
 export function sortFileEntries(
   rows: FileEntryRow[],
   sortKey: FileSortKey = 'name',
-  direction: FileSortDirection = 'asc'
+  direction: FileSortDirection = 'asc',
 ): FileEntryRow[] {
   const len = rows.length;
   if (len <= 1) return rows;

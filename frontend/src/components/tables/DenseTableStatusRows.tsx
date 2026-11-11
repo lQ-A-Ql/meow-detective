@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { RefreshCw }  from '@/components/icons';
+import { RefreshCw } from '@/components/icons';
 import { TableCell, TableRow } from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
 
@@ -44,12 +44,15 @@ export function DenseTableStatusRows({
           <div className="flex items-center justify-center gap-2 text-forensics-error-text">
             <span>{initialLoadErrorText}</span>
             {onRetryInitialLoad ? (
-              <Button aria-label={retryInitialLoadLabel}
+              <Button
+                aria-label={retryInitialLoadLabel}
                 type="button"
                 variant="forensicsOutline"
                 size="compact"
                 onClick={onRetryInitialLoad}
-              ><RefreshCw size={15} /></Button>
+              >
+                <RefreshCw size={15} />
+              </Button>
             ) : null}
           </div>
         </TableCell>
@@ -61,15 +64,9 @@ export function DenseTableStatusRows({
       <TableRow className="hover:bg-transparent">
         <TableCell colSpan={columnCount} className="px-4 py-8">
           <div className="space-y-1 text-center font-serif">
-            <div className="text-[12px] font-light text-forensics-text">
-              {emptyTitle}
-            </div>
-            <div className="text-[11px] text-forensics-muted">
-              {emptyDescription}
-            </div>
-            {emptyAction ? (
-              <div className="mt-3 flex justify-center gap-2">{emptyAction}</div>
-            ) : null}
+            <div className="text-[12px] font-light text-forensics-text">{emptyTitle}</div>
+            <div className="text-[11px] text-forensics-muted">{emptyDescription}</div>
+            {emptyAction ? <div className="mt-3 flex justify-center gap-2">{emptyAction}</div> : null}
           </div>
         </TableCell>
       </TableRow>
@@ -78,10 +75,7 @@ export function DenseTableStatusRows({
   if (visibleCount === 0) {
     return (
       <TableRow className="hover:bg-transparent">
-        <TableCell
-          colSpan={columnCount}
-          className="px-4 py-8 text-center text-[11px] text-forensics-muted"
-        >
+        <TableCell colSpan={columnCount} className="px-4 py-8 text-center text-[11px] text-forensics-muted">
           {noMatchText}
         </TableCell>
       </TableRow>

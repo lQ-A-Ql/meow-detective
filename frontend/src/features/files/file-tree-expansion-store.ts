@@ -31,9 +31,7 @@ export function writeFileTreeExpansion(scope: string, ids: readonly string[]): v
   // not turn into hundreds of children queries when the page remounts.
   expansionByScope.set(
     scope,
-    ids.length <= MAX_REMEMBERED_BRANCHES
-      ? [...ids]
-      : ids.slice(ids.length - MAX_REMEMBERED_BRANCHES),
+    ids.length <= MAX_REMEMBERED_BRANCHES ? [...ids] : ids.slice(ids.length - MAX_REMEMBERED_BRANCHES),
   );
 }
 

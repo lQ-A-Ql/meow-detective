@@ -1,4 +1,4 @@
-import { BarChart3, Shield }  from '@/components/icons';
+import { BarChart3, Shield } from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { DashboardQueryState } from '@/features/dashboard/components/DashboardQueryState';
 import { StatGrid, MetricCard } from '@/components/data-display';
@@ -19,13 +19,24 @@ export function ArtifactStatsSection({
   return (
     <section>
       <DashboardQueryState isLoading={isLoading} isError={isError} error={error} hasData={data !== undefined}>
-        <StatGrid collapseZeros hiddenNote={(hidden) => t('dashboard.metricsHidden', { count: hidden })} className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatGrid
+          collapseZeros
+          hiddenNote={(hidden) => t('dashboard.metricsHidden', { count: hidden })}
+          className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4"
+        >
           <MetricCard label={t('dashboard.artifacts.familyCount')} value={data?.length ?? 0} icon={Shield} size="lg" />
-          <MetricCard label={t('dashboard.artifacts.recordCount')} value={data?.reduce((sum, a) => sum + a.count, 0) ?? 0} icon={BarChart3} size="lg" />
+          <MetricCard
+            label={t('dashboard.artifacts.recordCount')}
+            value={data?.reduce((sum, a) => sum + a.count, 0) ?? 0}
+            icon={BarChart3}
+            size="lg"
+          />
         </StatGrid>
         {data && data.length > 0 ? (
           <div className="mt-3 rounded-none bg-transparent p-4">
-            <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.artifacts.details')}</div>
+            <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-forensics-muted-light">
+              {t('dashboard.artifacts.details')}
+            </div>
             <div className="flex flex-wrap gap-2">
               {data.map((a) => (
                 <div key={a.family} className="flex items-center gap-1.5 rounded-none bg-transparent px-2 py-1 text-xs">

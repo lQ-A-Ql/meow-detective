@@ -1,18 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type {
-  DeletedFileRecovery,
-  DeletedRecoveryPage,
-  RecoveryProvenanceRange,
-} from '@/types/models';
+import type { DeletedFileRecovery, DeletedRecoveryPage, RecoveryProvenanceRange } from '@/types/models';
 import { DeletedRecoveryPanel } from '@/features/recovery/components/DeletedRecoveryPanel';
 import type { DeletedRecoveryViewModel } from '@/features/recovery/types';
 
 const recoveryId = `recovery:${'a'.repeat(64)}`;
 
-function candidate(
-  overrides: Partial<DeletedFileRecovery> = {},
-): DeletedFileRecovery {
+function candidate(overrides: Partial<DeletedFileRecovery> = {}): DeletedFileRecovery {
   return {
     id: recoveryId,
     dataSourceId: 'source-linux',
@@ -60,15 +54,17 @@ function page(recoveries: DeletedFileRecovery[]): DeletedRecoveryPage {
 
 function model(overrides: Partial<DeletedRecoveryViewModel> = {}): DeletedRecoveryViewModel {
   return {
-    partitions: [{
-      index: 2,
-      name: 'root',
-      kindLabel: 'Linux filesystem',
-      status: 'ready',
-      offset: 0,
-      length: 1024 * 1024,
-      filesystem: 'ext4',
-    }],
+    partitions: [
+      {
+        index: 2,
+        name: 'root',
+        kindLabel: 'Linux filesystem',
+        status: 'ready',
+        offset: 0,
+        length: 1024 * 1024,
+        filesystem: 'ext4',
+      },
+    ],
     selectedPartitionIndex: 2,
     selectPartition: vi.fn(),
     state: 'unscanned',
@@ -118,14 +114,18 @@ describe('DeletedRecoveryPanel', () => {
   it('keeps metadata-only XFS candidates non-readable and non-exportable', () => {
     const recovery = candidate({ filesystemType: 'xfs' });
     const resultPage = page([recovery]);
-    render(<DeletedRecoveryPanel model={model({
-      state: 'ready',
-      page: resultPage,
-      recoveries: [recovery],
-      total: 1,
-      selectedRecovery: recovery,
-      selectedRecoveryId: recovery.id,
-    })} />);
+    render(
+      <DeletedRecoveryPanel
+        model={model({
+          state: 'ready',
+          page: resultPage,
+          recoveries: [recovery],
+          total: 1,
+          selectedRecovery: recovery,
+          selectedRecoveryId: recovery.id,
+        })}
+      />,
+    );
 
     expect(screen.getByText('该候选没有可读取的已验证内容区间')).toBeDefined();
     expect(screen.getByRole('button', { name: /导出完整恢复文件|导出恢复文件/ }).hasAttribute('disabled')).toBe(true);
@@ -138,14 +138,18 @@ describe('DeletedRecoveryPanel', () => {
       mftSequence: 9,
       recoveryMethod: 'ntfs_mft_metadata',
     });
-    render(<DeletedRecoveryPanel model={model({
-      state: 'ready',
-      page: page([recovery]),
-      recoveries: [recovery],
-      total: 1,
-      selectedRecovery: recovery,
-      selectedRecoveryId: recovery.id,
-    })} />);
+    render(
+      <DeletedRecoveryPanel
+        model={model({
+          state: 'ready',
+          page: page([recovery]),
+          recoveries: [recovery],
+          total: 1,
+          selectedRecovery: recovery,
+          selectedRecoveryId: recovery.id,
+        })}
+      />,
+    );
 
     expect(screen.getByText('MFT sequence')).toBeDefined();
     expect(screen.getByText('9')).toBeDefined();
@@ -159,18 +163,22 @@ describe('DeletedRecoveryPanel', () => {
     });
     const setHashQuery = vi.fn();
     const runHashSearch = vi.fn();
-    render(<DeletedRecoveryPanel model={model({
-      state: 'ready',
-      page: page([recovery]),
-      recoveries: [recovery],
-      total: 1,
-      selectedRecovery: recovery,
-      selectedRecoveryId: recovery.id,
-      hashQuery: 'a'.repeat(32),
-      hashQueryValid: true,
-      setHashQuery,
-      runHashSearch,
-    })} />);
+    render(
+      <DeletedRecoveryPanel
+        model={model({
+          state: 'ready',
+          page: page([recovery]),
+          recoveries: [recovery],
+          total: 1,
+          selectedRecovery: recovery,
+          selectedRecoveryId: recovery.id,
+          hashQuery: 'a'.repeat(32),
+          hashQueryValid: true,
+          setHashQuery,
+          runHashSearch,
+        })}
+      />,
+    );
 
     expect(screen.getByText('MD5')).toBeDefined();
     expect(screen.getByText('SHA-1')).toBeDefined();
@@ -201,17 +209,21 @@ describe('DeletedRecoveryPanel', () => {
       provenanceRanges: [range],
     });
     const readSelectedRange = vi.fn();
-    render(<DeletedRecoveryPanel model={model({
-      state: 'ready',
-      page: page([recovery]),
-      recoveries: [recovery],
-      total: 1,
-      selectedRecovery: recovery,
-      selectedRecoveryId: recovery.id,
-      contentRanges: [range],
-      selectedRangeOrdinal: 3,
-      readSelectedRange,
-    })} />);
+    render(
+      <DeletedRecoveryPanel
+        model={model({
+          state: 'ready',
+          page: page([recovery]),
+          recoveries: [recovery],
+          total: 1,
+          selectedRecovery: recovery,
+          selectedRecoveryId: recovery.id,
+          contentRanges: [range],
+          selectedRangeOrdinal: 3,
+          readSelectedRange,
+        })}
+      />,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: '读取' }));
 

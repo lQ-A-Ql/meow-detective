@@ -17,7 +17,16 @@
   "confirmTitle": "Update application and restart",
   "confirmDescription": "Finish tasks, release mounts and close the case first. The app downloads and verifies the update, exits, replaces itself and restarts. Only the application EXE changes; cases, evidence and settings are preserved.",
   "later": "Later",
-  "phases": { "idle": "", "checking": "Checking for updates…", "current": "You are up to date.", "available": "An update is available.", "downloading": "Downloading update…", "verifying": "Verifying signature and version…", "restarting": "Exiting and restarting…", "failed": "Update incomplete." },
+  "phases": {
+    "idle": "",
+    "checking": "Checking for updates…",
+    "current": "You are up to date.",
+    "available": "An update is available.",
+    "downloading": "Downloading update…",
+    "verifying": "Verifying signature and version…",
+    "restarting": "Exiting and restarting…",
+    "failed": "Update incomplete."
+  },
   "errors": {
     "closeCase": "Close the current case before updating.",
     "busy": "Tasks, mounts or emulation sessions are still active. Finish them and retry.",

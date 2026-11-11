@@ -27,12 +27,8 @@ function createWrapper() {
 describe('reports hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getReportTemplates.mockResolvedValue([
-      { id: 'tpl-1', name: 'Summary Report', format: 'html' },
-    ]);
-    mocks.getReportHistory.mockResolvedValue([
-      { id: 'rpt-1', templateId: 'tpl-1', createdAt: '2026-06-01T10:00:00Z' },
-    ]);
+    mocks.getReportTemplates.mockResolvedValue([{ id: 'tpl-1', name: 'Summary Report', format: 'html' }]);
+    mocks.getReportHistory.mockResolvedValue([{ id: 'rpt-1', templateId: 'tpl-1', createdAt: '2026-06-01T10:00:00Z' }]);
   });
 
   it('fetches report templates', async () => {
@@ -53,9 +49,7 @@ describe('reports hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBeDefined();
-    expect(result.current.data![0]).toEqual(
-      expect.objectContaining({ id: 'tpl-1', name: 'Summary Report' }),
-    );
+    expect(result.current.data![0]).toEqual(expect.objectContaining({ id: 'tpl-1', name: 'Summary Report' }));
   });
 
   it('fetches report history', async () => {

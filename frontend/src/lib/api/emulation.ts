@@ -16,9 +16,7 @@ import type {
   PrepareEmulationRequest,
 } from '@/types/models';
 
-export async function prepareEmulation(
-  request: PrepareEmulationRequest,
-): Promise<EmulationSessionStatus> {
+export async function prepareEmulation(request: PrepareEmulationRequest): Promise<EmulationSessionStatus> {
   return apiClient.request<EmulationSessionStatus>(COMMANDS.emulation.PREPARE, { request });
 }
 
@@ -36,9 +34,7 @@ export async function getEmulationBypassAccounts(
   });
 }
 
-export async function applyEmulationBypass(
-  request: EmulationBypassApplyRequest,
-): Promise<EmulationBypassResult> {
+export async function applyEmulationBypass(request: EmulationBypassApplyRequest): Promise<EmulationBypassResult> {
   return apiClient.request<EmulationBypassResult>(COMMANDS.emulation.APPLY_BYPASS, { request });
 }
 
@@ -72,22 +68,12 @@ export async function launchEmulation(sessionId: string): Promise<EmulationSessi
   return apiClient.request<EmulationSessionStatus>(COMMANDS.emulation.LAUNCH, { sessionId });
 }
 
-export async function installEmulationEfiFallback(
-  sessionId: string,
-): Promise<EmulationEfiFallbackResult> {
-  return apiClient.request<EmulationEfiFallbackResult>(
-    COMMANDS.emulation.INSTALL_EFI_FALLBACK,
-    { sessionId },
-  );
+export async function installEmulationEfiFallback(sessionId: string): Promise<EmulationEfiFallbackResult> {
+  return apiClient.request<EmulationEfiFallbackResult>(COMMANDS.emulation.INSTALL_EFI_FALLBACK, { sessionId });
 }
 
-export async function repairEmulationFsJournals(
-  sessionId: string,
-): Promise<EmulationFsRepairResult> {
-  return apiClient.request<EmulationFsRepairResult>(
-    COMMANDS.emulation.REPAIR_FS_JOURNALS,
-    { sessionId },
-  );
+export async function repairEmulationFsJournals(sessionId: string): Promise<EmulationFsRepairResult> {
+  return apiClient.request<EmulationFsRepairResult>(COMMANDS.emulation.REPAIR_FS_JOURNALS, { sessionId });
 }
 
 export async function getEmulationStatus(sessionId: string): Promise<EmulationSessionStatus> {

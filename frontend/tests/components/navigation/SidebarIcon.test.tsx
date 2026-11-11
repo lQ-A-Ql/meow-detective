@@ -2,7 +2,21 @@ import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { SidebarIcon } from '@/components/navigation/SidebarIcon';
 
-const names = ['home', 'files', 'emulation', 'analysis', 'infrastructure', 'v2', 'v3', 'search', 'timeline', 'artifacts', 'reports', 'settings', 'jobs'] as const;
+const names = [
+  'home',
+  'files',
+  'emulation',
+  'analysis',
+  'infrastructure',
+  'v2',
+  'v3',
+  'search',
+  'timeline',
+  'artifacts',
+  'reports',
+  'settings',
+  'jobs',
+] as const;
 
 describe('SidebarIcon', () => {
   it('renders a Font Awesome svg that inherits the rail color', () => {

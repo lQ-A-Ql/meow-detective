@@ -18,23 +18,13 @@ describe('VideoViewer', () => {
   });
 
   it('displays mime type in status bar', () => {
-    render(
-      <VideoViewer
-        src="evidence-media://handle/dGVzdA"
-        mimeType="video/mp4"
-      />,
-    );
+    render(<VideoViewer src="evidence-media://handle/dGVzdA" mimeType="video/mp4" />);
 
     expect(screen.getByText('video/mp4')).toBeDefined();
   });
 
   it('displays file name when provided', () => {
-    render(
-      <VideoViewer
-        src="evidence-media://handle/dGVzdA"
-        fileName="sample.mp4"
-      />,
-    );
+    render(<VideoViewer src="evidence-media://handle/dGVzdA" fileName="sample.mp4" />);
 
     expect(screen.getByText('sample.mp4')).toBeDefined();
   });

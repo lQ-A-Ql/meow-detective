@@ -23,11 +23,7 @@ export function InteractionLock({ locked, children, className }: InteractionLock
   }, [locked]);
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(className, locked && 'pointer-events-none select-none')}
-      aria-busy={locked}
-    >
+    <div ref={containerRef} className={cn(className, locked && 'pointer-events-none select-none')} aria-busy={locked}>
       {children}
     </div>
   );

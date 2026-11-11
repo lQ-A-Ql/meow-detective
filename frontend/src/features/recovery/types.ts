@@ -8,12 +8,7 @@ import type {
   RecoveryProvenanceRange,
 } from '@/types/models';
 
-export type DeletedRecoveryViewState =
-  | 'unsupported'
-  | 'unscanned'
-  | 'loading'
-  | 'ready'
-  | 'error';
+export type DeletedRecoveryViewState = 'unsupported' | 'unscanned' | 'loading' | 'ready' | 'error';
 
 export interface DeletedRecoveryPreviewWindow {
   recoveryId: string;

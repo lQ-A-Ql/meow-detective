@@ -20,108 +20,106 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
     <WorkspaceFrame>
       {model.hasCase ? (
         <WorkspaceCard className="flex w-52 shrink-0" aria-label={t('analysis.sidebar.treeLabel')}>
-        <AnalysisSourceSidebar
-          dataSources={model.readyDataSources}
-          selectedDataSourceId={model.selectedDataSourceId}
-          disabled={model.analysisMutationPending}
-          progress={model.labeledExtractionProgress}
-          linuxNodeCounts={model.linuxNodeCounts}
-          activeWindowsTab={model.activeTab}
-          activeLinuxTab={model.activeLinuxTab}
-          activeAndroidTab={model.activeAndroidTab}
-          onSelectDataSource={model.selectDataSource}
-          onWindowsTabChange={model.setActiveTab}
-          onLinuxTabChange={model.setActiveLinuxTab}
-          onAndroidTabChange={model.setActiveAndroidTab}
-          pluginModules={model.pluginModules}
-          activePluginId={model.activePluginId}
-          onSelectPluginModule={model.selectPluginModule}
-        />
+          <AnalysisSourceSidebar
+            dataSources={model.readyDataSources}
+            selectedDataSourceId={model.selectedDataSourceId}
+            disabled={model.analysisMutationPending}
+            progress={model.labeledExtractionProgress}
+            linuxNodeCounts={model.linuxNodeCounts}
+            activeWindowsTab={model.activeTab}
+            activeLinuxTab={model.activeLinuxTab}
+            activeAndroidTab={model.activeAndroidTab}
+            onSelectDataSource={model.selectDataSource}
+            onWindowsTabChange={model.setActiveTab}
+            onLinuxTabChange={model.setActiveLinuxTab}
+            onAndroidTabChange={model.setActiveAndroidTab}
+            pluginModules={model.pluginModules}
+            activePluginId={model.activePluginId}
+            onSelectPluginModule={model.selectPluginModule}
+          />
         </WorkspaceCard>
       ) : null}
       <WorkspaceCard className="flex flex-1 flex-col" aria-label={t('analysis.sidebar.treeLabel')}>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <AnalysisHeader
-          loading={model.loading}
-          hasCase={model.hasCase}
-          extractionPending={model.selectedPlatform === 'android'
-            ? model.analysisMutationPending
-            : model.extractionPending}
-          onRefresh={model.refresh}
-          onRunExtraction={model.selectedPlatform === 'android'
-            ? model.runAndroidAnalysis
-            : model.runExtraction}
-          showRunExtraction={model.selectedPlatform === 'android'}
-          selectedDataSourceId={model.selectedDataSourceId}
-        />
+          <AnalysisHeader
+            loading={model.loading}
+            hasCase={model.hasCase}
+            extractionPending={
+              model.selectedPlatform === 'android' ? model.analysisMutationPending : model.extractionPending
+            }
+            onRefresh={model.refresh}
+            onRunExtraction={model.selectedPlatform === 'android' ? model.runAndroidAnalysis : model.runExtraction}
+            showRunExtraction={model.selectedPlatform === 'android'}
+            selectedDataSourceId={model.selectedDataSourceId}
+          />
 
-        {!model.hasCase && model.currentCaseIsSuccess ? (
-          <AnalysisEmptyState />
-        ) : model.selectedPlatform === 'windows' ? (
-          <WindowsAnalysisView
-            activeTab={model.activeTab}
-            onActiveTabChange={model.setActiveTab}
-            error={model.windowsError ? errorMessage(model.windowsError) : undefined}
-            onRetry={model.refresh}
-            loading={model.loading}
-            systemInfo={model.systemInfo}
-            evidenceSummary={model.evidenceSummary}
-            registrySummary={model.registrySummary}
-            registryStructured={model.registryStructured}
-            browserSummary={model.browserSummary}
-            onRunBrowserPasswordExtraction={model.runBrowserPasswordExtraction}
-            emailSummary={model.emailSummary}
-            eventLogSummary={model.eventLogSummary}
-            eventLogView={model.eventLogView}
-            eventLogLoadContextKey={model.eventLogLoadContextKey}
-            onEventLogViewChange={model.setEventLogView}
-            classificationBoard={model.classificationBoard}
-            evidencePending={model.evidencePending}
-            onRunEvidence={model.runEvidenceScan}
-            summaryPending={model.summaryPending}
-            onDownloadSummary={model.downloadSummary}
-            recoveryModel={model.recoveryModel}
-            pluginModules={model.pluginModules}
-            activePluginId={model.activePluginId}
-            dataSourceId={model.selectedDataSourceId}
-          />
-        ) : model.selectedPlatform === 'linux' ? (
-          <LinuxAnalysisView
-            activeTab={model.activeLinuxTab}
-            onActiveTabChange={model.setActiveLinuxTab}
-            error={model.linuxError ? errorMessage(model.linuxError) : undefined}
-            onRetry={model.refresh}
-            loading={model.loading}
-            summary={model.linuxSummary}
-            summaryLoading={model.linuxSummaryLoading}
-            extractionRunning={model.extractionRunning}
-            recoveryModel={model.recoveryModel}
-            hasMore={model.linuxSummaryHasMore}
-            loadingMore={model.linuxSummaryLoadingMore}
-            loadMoreFailed={model.linuxSummaryLoadMoreFailed}
-            loadStateKey={model.linuxSummaryLoadStateKey}
-            loadContextKey={model.linuxLoadContextKey}
-            onLoadMore={model.loadMoreLinuxSummary}
-            onRetryLoadMore={model.retryLinuxSummaryLoad}
-            pluginModules={model.pluginModules}
-            activePluginId={model.activePluginId}
-            dataSourceId={model.selectedDataSourceId}
-          />
-        ) : model.selectedPlatform === 'android' ? (
-          <AndroidAnalysisView
-            deviceInfo={model.androidDeviceInfo}
-            packageSummary={model.androidPackages}
-            activePanel={model.activeAndroidTab}
-            loading={model.loading || model.androidLoading}
-            running={model.androidAnalysisRunning}
-            lastRun={model.androidAnalysisLastRun}
-            error={model.androidError ? errorMessage(model.androidError) : undefined}
-            hasMore={model.androidPackagesHasMore}
-            loadingMore={model.androidPackagesLoadingMore}
-            onRetry={model.refresh}
-            onLoadMore={model.loadMoreAndroidPackages}
-          />
-        ) : null}
+          {!model.hasCase && model.currentCaseIsSuccess ? (
+            <AnalysisEmptyState />
+          ) : model.selectedPlatform === 'windows' ? (
+            <WindowsAnalysisView
+              activeTab={model.activeTab}
+              onActiveTabChange={model.setActiveTab}
+              error={model.windowsError ? errorMessage(model.windowsError) : undefined}
+              onRetry={model.refresh}
+              loading={model.loading}
+              systemInfo={model.systemInfo}
+              evidenceSummary={model.evidenceSummary}
+              registrySummary={model.registrySummary}
+              registryStructured={model.registryStructured}
+              browserSummary={model.browserSummary}
+              onRunBrowserPasswordExtraction={model.runBrowserPasswordExtraction}
+              emailSummary={model.emailSummary}
+              eventLogSummary={model.eventLogSummary}
+              eventLogView={model.eventLogView}
+              eventLogLoadContextKey={model.eventLogLoadContextKey}
+              onEventLogViewChange={model.setEventLogView}
+              classificationBoard={model.classificationBoard}
+              evidencePending={model.evidencePending}
+              onRunEvidence={model.runEvidenceScan}
+              summaryPending={model.summaryPending}
+              onDownloadSummary={model.downloadSummary}
+              recoveryModel={model.recoveryModel}
+              pluginModules={model.pluginModules}
+              activePluginId={model.activePluginId}
+              dataSourceId={model.selectedDataSourceId}
+            />
+          ) : model.selectedPlatform === 'linux' ? (
+            <LinuxAnalysisView
+              activeTab={model.activeLinuxTab}
+              onActiveTabChange={model.setActiveLinuxTab}
+              error={model.linuxError ? errorMessage(model.linuxError) : undefined}
+              onRetry={model.refresh}
+              loading={model.loading}
+              summary={model.linuxSummary}
+              summaryLoading={model.linuxSummaryLoading}
+              extractionRunning={model.extractionRunning}
+              recoveryModel={model.recoveryModel}
+              hasMore={model.linuxSummaryHasMore}
+              loadingMore={model.linuxSummaryLoadingMore}
+              loadMoreFailed={model.linuxSummaryLoadMoreFailed}
+              loadStateKey={model.linuxSummaryLoadStateKey}
+              loadContextKey={model.linuxLoadContextKey}
+              onLoadMore={model.loadMoreLinuxSummary}
+              onRetryLoadMore={model.retryLinuxSummaryLoad}
+              pluginModules={model.pluginModules}
+              activePluginId={model.activePluginId}
+              dataSourceId={model.selectedDataSourceId}
+            />
+          ) : model.selectedPlatform === 'android' ? (
+            <AndroidAnalysisView
+              deviceInfo={model.androidDeviceInfo}
+              packageSummary={model.androidPackages}
+              activePanel={model.activeAndroidTab}
+              loading={model.loading || model.androidLoading}
+              running={model.androidAnalysisRunning}
+              lastRun={model.androidAnalysisLastRun}
+              error={model.androidError ? errorMessage(model.androidError) : undefined}
+              hasMore={model.androidPackagesHasMore}
+              loadingMore={model.androidPackagesLoadingMore}
+              onRetry={model.refresh}
+              onLoadMore={model.loadMoreAndroidPackages}
+            />
+          ) : null}
         </div>
       </WorkspaceCard>
     </WorkspaceFrame>

@@ -5,11 +5,7 @@ import { extractFileToPath } from '@/lib/api/files';
 import { errorMessage } from '@/lib/errors';
 import { subscribeToEvent } from '@/lib/events/subscribers';
 import { saveDialog } from '@/lib/platform/dialog';
-import type {
-  FileEntryRow,
-  FileExtractionProgress,
-  FileExtractionResult,
-} from '@/types/models';
+import type { FileEntryRow, FileExtractionProgress, FileExtractionResult } from '@/types/models';
 
 function validateDestinationPath(value: string) {
   const path = value.trim();
@@ -56,34 +52,34 @@ export function useFileExtractionModel() {
   });
 
   useEffect(() => {
-    const unsubscribe = subscribeToEvent<FileExtractionProgress>(
-      'file-extract-progress',
-      (event) => {
-        if (event.payload.operationId === operationIdRef.current) {
-          setProgress(event.payload);
-        }
-      },
-    );
+    const unsubscribe = subscribeToEvent<FileExtractionProgress>('file-extract-progress', (event) => {
+      if (event.payload.operationId === operationIdRef.current) {
+        setProgress(event.payload);
+      }
+    });
     return () => {
       unsubscribe();
     };
   }, []);
 
-  const openForFile = useCallback((nextFile: FileEntryRow) => {
-    if (nextFile.entryType !== 'file' || inFlightRef.current) {
-      return;
-    }
-    operationIdRef.current = undefined;
-    resetExtraction();
-    setFile(nextFile);
-    setDestinationPathState('');
-    setValidationError(undefined);
-    setInteractionError(undefined);
-    setProgress(undefined);
-    setResult(undefined);
-    setResultOpen(false);
-    setFormOpen(true);
-  }, [resetExtraction]);
+  const openForFile = useCallback(
+    (nextFile: FileEntryRow) => {
+      if (nextFile.entryType !== 'file' || inFlightRef.current) {
+        return;
+      }
+      operationIdRef.current = undefined;
+      resetExtraction();
+      setFile(nextFile);
+      setDestinationPathState('');
+      setValidationError(undefined);
+      setInteractionError(undefined);
+      setProgress(undefined);
+      setResult(undefined);
+      setResultOpen(false);
+      setFormOpen(true);
+    },
+    [resetExtraction],
+  );
 
   const setDestinationPath = useCallback((value: string) => {
     setDestinationPathState(value);
@@ -134,11 +130,14 @@ export function useFileExtractionModel() {
     }
   }, [destinationPath, file, mutateAsync]);
 
-  const setFormOpenSafely = useCallback((open: boolean) => {
-    if (!inFlightRef.current && !isPending) {
-      setFormOpen(open);
-    }
-  }, [isPending]);
+  const setFormOpenSafely = useCallback(
+    (open: boolean) => {
+      if (!inFlightRef.current && !isPending) {
+        setFormOpen(open);
+      }
+    },
+    [isPending],
+  );
 
   return {
     file,
@@ -146,9 +145,9 @@ export function useFileExtractionModel() {
     resultOpen,
     destinationPath,
     validationError,
-    error: interactionError ?? (extractionError
-      ? errorMessage(extractionError, i18n.t('fileBrowser.extraction.failed'))
-      : undefined),
+    error:
+      interactionError ??
+      (extractionError ? errorMessage(extractionError, i18n.t('fileBrowser.extraction.failed')) : undefined),
     progress,
     result,
     isExtracting: isPending,

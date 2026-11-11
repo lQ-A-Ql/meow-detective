@@ -9,11 +9,14 @@ export function useMdRaidImportEntry() {
   const [open, setOpen] = useState(false);
   const openDialog = useCallback(() => setOpen(true), []);
 
-  const importRaidEvidence = useCallback((request: ImportDataSourceRequest) => {
-    importMutation.mutate(request, {
-      onSuccess: () => setOpen(false),
-    });
-  }, [importMutation]);
+  const importRaidEvidence = useCallback(
+    (request: ImportDataSourceRequest) => {
+      importMutation.mutate(request, {
+        onSuccess: () => setOpen(false),
+      });
+    },
+    [importMutation],
+  );
 
   return {
     open,

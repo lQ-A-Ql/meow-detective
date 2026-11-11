@@ -1,11 +1,5 @@
 export type EdgeType =
-  | 'contains'
-  | 'references'
-  | 'correlatesWith'
-  | 'derivesFrom'
-  | 'precedes'
-  | 'cites'
-  | 'annotates';
+  'contains' | 'references' | 'correlatesWith' | 'derivesFrom' | 'precedes' | 'cites' | 'annotates';
 
 export type NodeType = 'file' | 'artifact' | 'timelineEvent' | 'entity' | 'lead' | 'notebookEntry';
 

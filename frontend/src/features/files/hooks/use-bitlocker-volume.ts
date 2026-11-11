@@ -71,11 +71,7 @@ const CATALOG_QUERY_KEYS = [
 ] as const;
 
 async function refreshFileCatalogQueries(queryClient: ReturnType<typeof useQueryClient>) {
-  await Promise.all(
-    CATALOG_QUERY_KEYS.map((queryKey) =>
-      queryClient.invalidateQueries({ queryKey }),
-    ),
-  );
+  await Promise.all(CATALOG_QUERY_KEYS.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
 }
 
 export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolumeModel {
@@ -141,17 +137,13 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
   const dictionaryAttackPhase = dictionaryAttack?.phase;
 
   useEffect(() => {
-    if (!target || !dictionaryAttackPhase
-      || !['queued', 'running', 'cancelling'].includes(dictionaryAttackPhase)) {
+    if (!target || !dictionaryAttackPhase || !['queued', 'running', 'cancelling'].includes(dictionaryAttackPhase)) {
       return;
     }
     let active = true;
     const poll = async () => {
       try {
-        const next = await getBitLockerDictionaryAttackStatus(
-          target.dataSourceId,
-          target.partitionIndex,
-        );
+        const next = await getBitLockerDictionaryAttackStatus(target.dataSourceId, target.partitionIndex);
         if (!active || !next) {
           return;
         }
@@ -173,29 +165,29 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     };
   }, [dictionaryAttackPhase, inspect, target]);
 
-  const unlock = useCallback(async (method: BitLockerUnlockMethod, credential: string) => {
-    if (!target || !credential) {
-      return false;
-    }
-    setUnlocking(true);
-    setError(undefined);
-    try {
-      const next = method === 'password'
-        ? await unlockBitLockerWithPassword(target.dataSourceId, target.partitionIndex, credential)
-        : await unlockBitLockerWithRecoveryPassword(
-          target.dataSourceId,
-          target.partitionIndex,
-          credential,
-        );
-      setStatus(next);
-      return true;
-    } catch (reason) {
-      setError(safeErrorMessage(reason));
-      return false;
-    } finally {
-      setUnlocking(false);
-    }
-  }, [target]);
+  const unlock = useCallback(
+    async (method: BitLockerUnlockMethod, credential: string) => {
+      if (!target || !credential) {
+        return false;
+      }
+      setUnlocking(true);
+      setError(undefined);
+      try {
+        const next =
+          method === 'password'
+            ? await unlockBitLockerWithPassword(target.dataSourceId, target.partitionIndex, credential)
+            : await unlockBitLockerWithRecoveryPassword(target.dataSourceId, target.partitionIndex, credential);
+        setStatus(next);
+        return true;
+      } catch (reason) {
+        setError(safeErrorMessage(reason));
+        return false;
+      } finally {
+        setUnlocking(false);
+      }
+    },
+    [target],
+  );
 
   const restore = useCallback(async () => {
     if (!target) {
@@ -220,20 +212,18 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     }
     setError(undefined);
     try {
-      const memoryImagePath = singleDialogPath(await openDialog({
-        multiple: false,
-        directory: false,
-        filters: [{ name: 'Windows memory image', extensions: ['mem', 'raw', 'dmp', 'bin'] }],
-      }));
+      const memoryImagePath = singleDialogPath(
+        await openDialog({
+          multiple: false,
+          directory: false,
+          filters: [{ name: 'Windows memory image', extensions: ['mem', 'raw', 'dmp', 'bin'] }],
+        }),
+      );
       if (!memoryImagePath) {
         return false;
       }
       setMemoryUnlocking(true);
-      setStatus(await unlockBitLockerWithMemoryImage(
-        target.dataSourceId,
-        target.partitionIndex,
-        memoryImagePath,
-      ));
+      setStatus(await unlockBitLockerWithMemoryImage(target.dataSourceId, target.partitionIndex, memoryImagePath));
       return true;
     } catch (reason) {
       setError(safeErrorMessage(reason));
@@ -252,10 +242,7 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     setCatalogImport({ phase: 'catalog', startedAt });
     setError(undefined);
     try {
-      const result = await importUnlockedBitLockerCatalog(
-        target.dataSourceId,
-        target.partitionIndex,
-      );
+      const result = await importUnlockedBitLockerCatalog(target.dataSourceId, target.partitionIndex);
       setCatalogImport({ phase: 'refreshing', startedAt });
       await refreshFileCatalogQueries(queryClient);
       setCatalog(result);
@@ -305,52 +292,65 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     }
   }, [target]);
 
-  const startDictionaryAttack = useCallback(async (backend: BitLockerDictionaryBackend = 'cpu') => {
-    if (!target || dictionaryAttack?.phase === 'queued' || dictionaryAttack?.phase === 'running' || dictionaryAttack?.phase === 'cancelling') {
-      return false;
-    }
-    setError(undefined);
-    try {
-      const selectedPath = singleDialogPath(await openDialog({
-        multiple: false,
-        directory: false,
-        filters: [{
-          name: 'BitLocker password dictionary',
-          extensions: ['txt', 'dic', 'lst'],
-        }],
-      }));
-      if (!selectedPath) {
+  const startDictionaryAttack = useCallback(
+    async (backend: BitLockerDictionaryBackend = 'cpu') => {
+      if (
+        !target ||
+        dictionaryAttack?.phase === 'queued' ||
+        dictionaryAttack?.phase === 'running' ||
+        dictionaryAttack?.phase === 'cancelling'
+      ) {
         return false;
       }
-      const next = await startBitLockerDictionaryAttack(
-        target.dataSourceId,
-        target.partitionIndex,
-        selectedPath,
-        backend,
-      );
-      setDictionaryAttack(next);
-      if (next.phase === 'found') {
-        await inspect();
+      setError(undefined);
+      try {
+        const selectedPath = singleDialogPath(
+          await openDialog({
+            multiple: false,
+            directory: false,
+            filters: [
+              {
+                name: 'BitLocker password dictionary',
+                extensions: ['txt', 'dic', 'lst'],
+              },
+            ],
+          }),
+        );
+        if (!selectedPath) {
+          return false;
+        }
+        const next = await startBitLockerDictionaryAttack(
+          target.dataSourceId,
+          target.partitionIndex,
+          selectedPath,
+          backend,
+        );
+        setDictionaryAttack(next);
+        if (next.phase === 'found') {
+          await inspect();
+        }
+        return true;
+      } catch (reason) {
+        setError(safeErrorMessage(reason));
+        return false;
       }
-      return true;
-    } catch (reason) {
-      setError(safeErrorMessage(reason));
-      return false;
-    }
-  }, [dictionaryAttack?.phase, inspect, target]);
+    },
+    [dictionaryAttack?.phase, inspect, target],
+  );
 
   const cancelDictionaryAttack = useCallback(async () => {
-    if (!target || !dictionaryAttackPhase
-      || !['queued', 'running'].includes(dictionaryAttackPhase) || dictionaryCancelling) {
+    if (
+      !target ||
+      !dictionaryAttackPhase ||
+      !['queued', 'running'].includes(dictionaryAttackPhase) ||
+      dictionaryCancelling
+    ) {
       return false;
     }
     setDictionaryCancelling(true);
     setError(undefined);
     try {
-      const cancelled = await cancelBitLockerDictionaryAttack(
-        target.dataSourceId,
-        target.partitionIndex,
-      );
+      const cancelled = await cancelBitLockerDictionaryAttack(target.dataSourceId, target.partitionIndex);
       return cancelled;
     } catch (reason) {
       setError(safeErrorMessage(reason));
@@ -368,7 +368,10 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     memoryUnlocking,
     importing,
     dictionaryAttack,
-    dictionaryAttacking: dictionaryAttack?.phase === 'queued' || dictionaryAttack?.phase === 'running' || dictionaryAttack?.phase === 'cancelling',
+    dictionaryAttacking:
+      dictionaryAttack?.phase === 'queued' ||
+      dictionaryAttack?.phase === 'running' ||
+      dictionaryAttack?.phase === 'cancelling',
     dictionaryCancelling,
     catalogImport,
     error,

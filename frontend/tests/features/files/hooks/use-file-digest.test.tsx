@@ -10,7 +10,13 @@ import type { DigestAlgorithm, EvidenceDigest } from '@/types/digest';
 vi.mock('@/lib/api/digest', () => ({ calculateEvidenceDigest: vi.fn() }));
 const clients: QueryClient[] = [];
 const target = { caseId: 'case-a', fileId: 'ds:source-a:mft:0:42', available: true };
-const digest: EvidenceDigest = { scope: 'file', algorithm: 'sha256', value: 'a'.repeat(64), byteLength: 3, status: 'completed' };
+const digest: EvidenceDigest = {
+  scope: 'file',
+  algorithm: 'sha256',
+  value: 'a'.repeat(64),
+  byteLength: 3,
+  status: 'completed',
+};
 
 function Wrapper({ children }: { children: ReactNode }) {
   const [client] = useState(() => {
@@ -18,27 +24,42 @@ function Wrapper({ children }: { children: ReactNode }) {
     clients.push(created);
     return created;
   });
-  return <StrictMode><QueryClientProvider client={client}>{children}</QueryClientProvider></StrictMode>;
+  return (
+    <StrictMode>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </StrictMode>
+  );
 }
 
 function deferred() {
   let resolve!: (value: EvidenceDigest) => void;
   let reject!: (error: unknown) => void;
-  const promise = new Promise<EvidenceDigest>((done, fail) => { resolve = done; reject = fail; });
+  const promise = new Promise<EvidenceDigest>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
   return { promise, resolve, reject };
 }
 
-beforeEach(() => { vi.mocked(calculateEvidenceDigest).mockReset(); });
-afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.clear()); });
+beforeEach(() => {
+  vi.mocked(calculateEvidenceDigest).mockReset();
+});
+afterEach(() => {
+  cleanup();
+  clients.splice(0).forEach((client) => client.clear());
+});
 
 describe('file digest identity', () => {
-  it.each<DigestAlgorithm>(['md5', 'sha1', 'sha256', 'sm3'])('keeps the %s request bound to the clicked file', async (algorithm) => {
-    vi.mocked(calculateEvidenceDigest).mockResolvedValue({ ...digest, algorithm });
-    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper: Wrapper });
-    act(() => hook.result.current.mutate(algorithm));
-    await waitFor(() => expect(hook.result.current.data?.algorithm).toBe(algorithm));
-    expect(calculateEvidenceDigest).toHaveBeenCalledWith({ scope: 'file', algorithm, fileId: target.fileId });
-  });
+  it.each<DigestAlgorithm>(['md5', 'sha1', 'sha256', 'sm3'])(
+    'keeps the %s request bound to the clicked file',
+    async (algorithm) => {
+      vi.mocked(calculateEvidenceDigest).mockResolvedValue({ ...digest, algorithm });
+      const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper: Wrapper });
+      act(() => hook.result.current.mutate(algorithm));
+      await waitFor(() => expect(hook.result.current.data?.algorithm).toBe(algorithm));
+      expect(calculateEvidenceDigest).toHaveBeenCalledWith({ scope: 'file', algorithm, fileId: target.fileId });
+    },
+  );
 
   it('clears a completed result when a different file is selected', async () => {
     vi.mocked(calculateEvidenceDigest).mockResolvedValue(digest);
@@ -102,7 +123,9 @@ describe('file digest identity', () => {
   });
 
   it.each([
-    { ...target, caseId: undefined }, { ...target, fileId: undefined }, { ...target, available: false },
+    { ...target, caseId: undefined },
+    { ...target, fileId: undefined },
+    { ...target, available: false },
   ])('does not call the API for an unavailable target', (props) => {
     const hook = renderHook(() => useFileDigest(props), { wrapper: Wrapper });
     act(() => hook.result.current.mutate('sha256'));

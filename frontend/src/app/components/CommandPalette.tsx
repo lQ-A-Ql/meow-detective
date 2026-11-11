@@ -51,7 +51,10 @@ export function CommandPalette({ commands }: { commands: CommandPaletteItem[] })
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-forensics-text/10 pt-24" onMouseDown={() => setOpen(false)}>
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-forensics-text/10 pt-24"
+      onMouseDown={() => setOpen(false)}
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -62,40 +65,58 @@ export function CommandPalette({ commands }: { commands: CommandPaletteItem[] })
         <Input
           autoFocus
           value={query}
-          onChange={(event) => { setQuery(event.target.value); setActive(0); }}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setActive(0);
+          }}
           onKeyDown={(event) => {
-            if (event.key === 'ArrowDown') { event.preventDefault(); setActive((i) => Math.min(i + 1, filtered.length - 1)); }
-            if (event.key === 'ArrowUp') { event.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
-            if (event.key === 'Enter') { event.preventDefault(); runAt(activeIndex); }
+            if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              setActive((i) => Math.min(i + 1, filtered.length - 1));
+            }
+            if (event.key === 'ArrowUp') {
+              event.preventDefault();
+              setActive((i) => Math.max(i - 1, 0));
+            }
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              runAt(activeIndex);
+            }
           }}
           placeholder={t('commandPalette.placeholder')}
           aria-label={t('commandPalette.placeholder')}
           className="h-11 w-full rounded-none border-0 border-b border-forensics-border bg-transparent px-4 text-[13px] text-forensics-text"
         />
-        <div role="listbox" aria-label={t('commandPalette.label')} className="max-h-80 overflow-y-auto scrollbar-none py-1">
+        <div
+          role="listbox"
+          aria-label={t('commandPalette.label')}
+          className="max-h-80 overflow-y-auto scrollbar-none py-1"
+        >
           {filtered.length === 0 ? (
             <div className="px-4 py-6 text-center text-[12px] text-forensics-muted">{t('commandPalette.empty')}</div>
-          ) : filtered.map((command, index) => (
-            <div
-              key={command.id}
-             
-             
-             
-              role="option"
-              aria-selected={index === activeIndex}
-              onMouseEnter={() => setActive(index)}
-              onClick={() => runAt(index)}
-              className={cn(
-                'flex h-auto w-full items-center justify-between gap-3 rounded-none px-4 py-2 text-left text-[12px] text-forensics-text',
-                index === activeIndex ? 'bg-forensics-hover' : 'bg-transparent',
-              )}
-            >
-              <span>{command.label}</span>
-              <span className="text-[10px] uppercase tracking-wide text-forensics-muted-light">{command.group}</span>
-            </div>
-          ))}
+          ) : (
+            filtered.map((command, index) => (
+              <div
+                key={command.id}
+
+                role="option"
+                aria-selected={index === activeIndex}
+                onMouseEnter={() => setActive(index)}
+                onClick={() => runAt(index)}
+                className={cn(
+                  'flex h-auto w-full items-center justify-between gap-3 rounded-none px-4 py-2 text-left text-[12px] text-forensics-text',
+                  index === activeIndex ? 'bg-forensics-hover' : 'bg-transparent',
+                )}
+              >
+                <span>{command.label}</span>
+                <span className="text-[10px] uppercase tracking-wide text-forensics-muted-light">{command.group}</span>
+              </div>
+            ))
+          )}
         </div>
-        <div className="border-t border-forensics-border px-4 py-2 text-[10px] text-forensics-muted-light">{t('commandPalette.hint')}</div>
+        <div className="border-t border-forensics-border px-4 py-2 text-[10px] text-forensics-muted-light">
+          {t('commandPalette.hint')}
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { FileText, Shield }  from '@/components/icons';
+import { FileText, Shield } from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
@@ -49,12 +49,17 @@ export function EvidenceClassificationPanel({
             {t('analysisPanels.classification.description')}
           </div>
         </div>
-        <Tooltip content={t('analysisPanels.classification.run')}><Button aria-label={t('analysisPanels.classification.run')}
-          type="button"
-          onClick={onRun}
-          disabled={pending}
-          className="rounded-none border border-forensics-text bg-forensics-text text-[12px] text-white hover:bg-forensics-text-secondary"
-        ><ActionIcon name="play" /></Button></Tooltip>
+        <Tooltip content={t('analysisPanels.classification.run')}>
+          <Button
+            aria-label={t('analysisPanels.classification.run')}
+            type="button"
+            onClick={onRun}
+            disabled={pending}
+            className="rounded-none border border-forensics-text bg-forensics-text text-[12px] text-white hover:bg-forensics-text-secondary"
+          >
+            <ActionIcon name="play" />
+          </Button>
+        </Tooltip>
       </div>
 
       <SummaryStrip
@@ -89,9 +94,15 @@ export function EvidenceClassificationPanel({
                 </div>
 
                 <div className="mb-3 grid grid-cols-2 gap-2 text-[11px]">
-                  <Metric label={t('infrastructure.states.candidate')} value={t('analysisPanels.classification.metricCandidateCount', { count: category.fileCount })} />
+                  <Metric
+                    label={t('infrastructure.states.candidate')}
+                    value={t('analysisPanels.classification.metricCandidateCount', { count: category.fileCount })}
+                  />
                   <Metric label={t('common.sort.size')} value={formatSize(category.totalSize)} />
-                  <Metric label="Artifact" value={t('analysisPanels.classification.metricArtifactCount', { count: category.artifactCount })} />
+                  <Metric
+                    label="Artifact"
+                    value={t('analysisPanels.classification.metricArtifactCount', { count: category.artifactCount })}
+                  />
                   <Metric label={t('graph.details.confidence')} value={`${Math.round(category.confidence * 100)}%`} />
                 </div>
 
@@ -102,8 +113,12 @@ export function EvidenceClassificationPanel({
                     {category.sources.slice(0, 4).map((source) => (
                       <div key={source.fileId} className="bg-transparent px-3 py-2">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="truncate font-mono text-[11px] text-forensics-text-secondary">{source.path}</div>
-                          <span className="shrink-0 text-[10px] text-forensics-muted">{statusLabel(source.status)}</span>
+                          <div className="truncate font-mono text-[11px] text-forensics-text-secondary">
+                            {source.path}
+                          </div>
+                          <span className="shrink-0 text-[10px] text-forensics-muted">
+                            {statusLabel(source.status)}
+                          </span>
                         </div>
                         <div className="mt-1 flex flex-wrap gap-2 font-mono text-[10px] text-forensics-muted-light">
                           <span>{source.evidenceKind}</span>
@@ -126,24 +141,23 @@ export function EvidenceClassificationPanel({
   );
 }
 
-export function AnalysisReportPanel({
-  pending,
-  onDownload,
-}: {
-  pending: boolean;
-  onDownload: () => void;
-}) {
+export function AnalysisReportPanel({ pending, onDownload }: { pending: boolean; onDownload: () => void }) {
   const { t } = useTranslation();
   return (
     <div className="flex h-64 flex-col items-center justify-center gap-4">
       <FileText size={48} className="text-forensics-muted-lighter" />
       <div className="text-[14px] text-forensics-muted">{t('analysisPanels.report.title')}</div>
-      <Tooltip content={t('analysisPanels.report.download')}><Button aria-label={t('analysisPanels.report.download')}
-        type="button"
-        onClick={onDownload}
-        disabled={pending}
-        className="rounded-none bg-forensics-text text-[12px] text-white hover:bg-forensics-text-secondary"
-      ><ActionIcon name="download" /></Button></Tooltip>
+      <Tooltip content={t('analysisPanels.report.download')}>
+        <Button
+          aria-label={t('analysisPanels.report.download')}
+          type="button"
+          onClick={onDownload}
+          disabled={pending}
+          className="rounded-none bg-forensics-text text-[12px] text-white hover:bg-forensics-text-secondary"
+        >
+          <ActionIcon name="download" />
+        </Button>
+      </Tooltip>
     </div>
   );
 }

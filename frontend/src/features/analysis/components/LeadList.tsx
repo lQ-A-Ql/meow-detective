@@ -1,8 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import type {
-  CorrelationFamilyCoverage,
-  CorrelationLead,
-} from '@/types/models';
+import type { CorrelationFamilyCoverage, CorrelationLead } from '@/types/models';
 import { Button } from '@/app/components/ui/button';
 import {
   confidenceLabel,
@@ -23,9 +20,7 @@ export function CorrelationFamilyCoveragePanel({ items }: { items: CorrelationFa
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <div className="text-[12px] font-light text-forensics-text">{t('correlation.lead.coverageTitle')}</div>
-          <div className="mt-1 text-[11px] text-forensics-muted">
-            {t('correlation.lead.coverageDescription')}
-          </div>
+          <div className="mt-1 text-[11px] text-forensics-muted">{t('correlation.lead.coverageDescription')}</div>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
@@ -52,7 +47,9 @@ export function CorrelationFamilyCoveragePanel({ items }: { items: CorrelationFa
             </div>
             {item.sampleSignals.length > 0 ? (
               <div className="mt-3 rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
-                <div className="mb-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">Observed Signals</div>
+                <div className="mb-1 text-[10px] uppercase tracking-wider text-forensics-muted-light">
+                  Observed Signals
+                </div>
                 <div className="space-y-1">
                   {item.sampleSignals.map((signal) => (
                     <div key={`${item.family}-${signal}`}>{signal}</div>
@@ -157,13 +154,12 @@ export function LeadCard({
       {lead.provenance.length > 0 ? (
         <div className="mt-3 space-y-2 text-[11px] text-forensics-text-tertiary">
           {lead.provenance.slice(0, 3).map((item) => (
-            <div
-              key={`${lead.id}-${item.sourceKind}-${item.sourceRecordId}`}
-              className="bg-transparent px-3 py-2"
-            >
+            <div key={`${lead.id}-${item.sourceKind}-${item.sourceRecordId}`} className="bg-transparent px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-light text-forensics-text">{item.sourceLabel}</span>
-                <span className="font-mono text-[10px] text-forensics-muted-light">{translateGuarantee(item.guaranteeLevel)}</span>
+                <span className="font-mono text-[10px] text-forensics-muted-light">
+                  {translateGuarantee(item.guaranteeLevel)}
+                </span>
               </div>
               <div className="mt-1 break-all text-forensics-muted">
                 {item.sourceKind} · {item.sourceRecordId}

@@ -7,12 +7,7 @@ import { useFileNavigation } from '@/features/files/hooks/use-file-navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchSelection } from '@/features/search/use-search-page-model';
 import { useSearchPreviewModel } from '@/features/search/use-search-preview-model';
-import type {
-  SearchFileHit,
-  SearchRequestOptions,
-  SearchSortDirection,
-  SearchSortKey,
-} from '@/types/models';
+import type { SearchFileHit, SearchRequestOptions, SearchSortDirection, SearchSortKey } from '@/types/models';
 
 /**
  * A single click opens the preview dialog, a double click locates the file in the
@@ -50,15 +45,25 @@ export function useSearchWorkspaceModel() {
     setOptions(DEFAULT_OPTIONS);
     setExtensionInputState('');
   }
-  const indexSources = useMemo(() => (dataSources ?? []).filter((source) => !source.importState || source.importState === 'ready'), [dataSources]);
+  const indexSources = useMemo(
+    () => (dataSources ?? []).filter((source) => !source.importState || source.importState === 'ready'),
+    [dataSources],
+  );
   const [indexTarget, setIndexTarget] = useState<{ caseId?: string; sourceId?: string }>({ caseId });
-  const indexSourceId = indexTarget.caseId === caseId && indexSources.some((source) => source.id === indexTarget.sourceId)
-    ? indexTarget.sourceId : indexSources[0]?.id;
+  const indexSourceId =
+    indexTarget.caseId === caseId && indexSources.some((source) => source.id === indexTarget.sourceId)
+      ? indexTarget.sourceId
+      : indexSources[0]?.id;
   const contentIndex = useContentIndexModel(caseId, indexSourceId);
   const fileNavigation = useFileNavigation(caseId);
   const searchQuery = useInfiniteSearchResults(caseId, activeQuery, 100, options);
   const searchHits = useMemo(
-    () => Array.from(new Map(searchQuery.data?.pages.flatMap((page) => page.items).map((hit) => [hit.fileId, hit] as const) ?? []).values()),
+    () =>
+      Array.from(
+        new Map(
+          searchQuery.data?.pages.flatMap((page) => page.items).map((hit) => [hit.fileId, hit] as const) ?? [],
+        ).values(),
+      ),
     [searchQuery.data],
   );
   const firstPage = searchQuery.data?.pages[0];
@@ -67,7 +72,8 @@ export function useSearchWorkspaceModel() {
   const { openHit: openHitPreview } = preview;
   const selectedHit = searchHits.find((hit) => hit.fileId === selectedSearchHitId);
   const pages = searchQuery.data?.pages;
-  const localLimitReached = searchHits.length >= MAX_LOADED_SEARCH_RESULTS && Boolean(pages?.[pages.length - 1]?.nextCursor);
+  const localLimitReached =
+    searchHits.length >= MAX_LOADED_SEARCH_RESULTS && Boolean(pages?.[pages.length - 1]?.nextCursor);
 
   useEffect(() => {
     const nextQuery = urlQuery?.trim() || DEFAULT_QUERY;
@@ -82,8 +88,14 @@ export function useSearchWorkspaceModel() {
   }, [activeQuery, queryInput]);
 
   useEffect(() => {
-    const extensions = Array.from(new Set(extensionInput.split(/[;,\s]+/)
-      .map((extension) => extension.trim().replace(/^\.+/, '').toLowerCase()).filter(Boolean)));
+    const extensions = Array.from(
+      new Set(
+        extensionInput
+          .split(/[;,\s]+/)
+          .map((extension) => extension.trim().replace(/^\.+/, '').toLowerCase())
+          .filter(Boolean),
+      ),
+    );
     if (extensions.join(';') === options.extensions.join(';')) return;
     const timer = window.setTimeout(() => setOptions((current) => ({ ...current, extensions })), 180);
     return () => window.clearTimeout(timer);
@@ -104,28 +116,36 @@ export function useSearchWorkspaceModel() {
     }
   }, []);
   useEffect(() => cancelPendingPreview, [cancelPendingPreview]);
-  const onHitRowClick = useCallback((hit: SearchFileHit) => {
-    setSelectedSearchHitId(hit.fileId);
-    cancelPendingPreview();
-    pendingPreviewTimer.current = window.setTimeout(() => {
-      pendingPreviewTimer.current = undefined;
-      openHitPreview(hit);
-    }, SINGLE_CLICK_PREVIEW_DELAY_MS);
-  }, [cancelPendingPreview, openHitPreview, setSelectedSearchHitId]);
+  const onHitRowClick = useCallback(
+    (hit: SearchFileHit) => {
+      setSelectedSearchHitId(hit.fileId);
+      cancelPendingPreview();
+      pendingPreviewTimer.current = window.setTimeout(() => {
+        pendingPreviewTimer.current = undefined;
+        openHitPreview(hit);
+      }, SINGLE_CLICK_PREVIEW_DELAY_MS);
+    },
+    [cancelPendingPreview, openHitPreview, setSelectedSearchHitId],
+  );
   const previewSelected = useCallback(() => {
     cancelPendingPreview();
     if (selectedHit) openHitPreview(selectedHit);
   }, [cancelPendingPreview, selectedHit, openHitPreview]);
-  const jumpToFile = useCallback((hit: SearchFileHit) => {
-    cancelPendingPreview();
-    setSelectedSearchHitId(hit.fileId);
-    preview.onOpenChange(false);
-    fileNavigation.jump(hit.fileId);
-  }, [cancelPendingPreview, fileNavigation, preview, setSelectedSearchHitId]);
+  const jumpToFile = useCallback(
+    (hit: SearchFileHit) => {
+      cancelPendingPreview();
+      setSelectedSearchHitId(hit.fileId);
+      preview.onOpenChange(false);
+      fileNavigation.jump(hit.fileId);
+    },
+    [cancelPendingPreview, fileNavigation, preview, setSelectedSearchHitId],
+  );
   const loadNextPage = useCallback(() => {
     if (searchQuery.hasNextPage && !searchQuery.isFetching) void searchQuery.fetchNextPage();
   }, [searchQuery]);
-  const retry = useCallback(() => { void searchQuery.refetch(); }, [searchQuery]);
+  const retry = useCallback(() => {
+    void searchQuery.refetch();
+  }, [searchQuery]);
   const clearQuery = useCallback(() => setQueryInput(''), []);
   const toggleSort = useCallback((key: string) => {
     const sortKey = key as SearchSortKey;
@@ -138,13 +158,18 @@ export function useSearchWorkspaceModel() {
 
   return {
     activeQuery,
-    contentIndex: { ...contentIndex, build: () => {
-      setIndexTarget({ caseId, sourceId: indexSourceId });
-      contentIndex.build();
-    } },
+    contentIndex: {
+      ...contentIndex,
+      build: () => {
+        setIndexTarget({ caseId, sourceId: indexSourceId });
+        contentIndex.build();
+      },
+    },
     indexSources,
     indexSourceId,
-    setIndexSourceId: (sourceId: string) => { if (!contentIndex.loading) setIndexTarget({ caseId, sourceId }); },
+    setIndexSourceId: (sourceId: string) => {
+      if (!contentIndex.loading) setIndexTarget({ caseId, sourceId });
+    },
     clearQuery,
     coverage: firstPage?.coverage,
     dataSources: dataSources ?? [],
@@ -166,7 +191,10 @@ export function useSearchWorkspaceModel() {
     preview,
     queryInput,
     retry,
-    refresh: () => { void cache.resetQueries({ queryKey: ['search', caseId] }); contentIndex.refresh(); },
+    refresh: () => {
+      void cache.resetQueries({ queryKey: ['search', caseId] });
+      contentIndex.refresh();
+    },
     searchHits,
     searchQueryStateKey: searchQuery.dataUpdatedAt,
     searchTookMs: searchQuery.data?.pages.reduce((total, page) => total + page.tookMs, 0) ?? 0,

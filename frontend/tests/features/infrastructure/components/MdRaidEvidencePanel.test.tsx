@@ -23,7 +23,26 @@ describe('MdRaidEvidencePanel', () => {
 
   it('opens the persisted array file tree', () => {
     const onOpenFiles = vi.fn();
-    render(<MdRaidEvidencePanel arrays={[{ arrayUuid: 'array-1', name: 'md0', level: 0, layout: 1, chunkSectors: 1024, raidDisks: 2, minDataSizeSectors: 10, capacityMismatch: false, filesystem: 'candidate', members: [] }]} t={translate} onOpenFiles={onOpenFiles} />);
+    render(
+      <MdRaidEvidencePanel
+        arrays={[
+          {
+            arrayUuid: 'array-1',
+            name: 'md0',
+            level: 0,
+            layout: 1,
+            chunkSectors: 1024,
+            raidDisks: 2,
+            minDataSizeSectors: 10,
+            capacityMismatch: false,
+            filesystem: 'candidate',
+            members: [],
+          },
+        ]}
+        t={translate}
+        onOpenFiles={onOpenFiles}
+      />,
+    );
 
     screen.getByRole('button', { name: 'infrastructure.workspace.mdraid.openFiles' }).click();
 
@@ -34,21 +53,37 @@ describe('MdRaidEvidencePanel', () => {
     render(
       <MdRaidEvidencePanel
         t={translate}
-        arrays={[{
-          arrayUuid: 'array-1',
-          name: 'mac:0',
-          level: 0,
-          layout: 1,
-          chunkSectors: 1024,
-          raidDisks: 2,
-          minDataSizeSectors: 10,
-          capacityMismatch: true,
-          filesystem: 'candidate',
-          members: [
-            { devNumber: 0, vgName: 'root', lvName: 'data', dataOffsetSectors: 67584, dataSizeSectors: 12, superOffsetSectors: 8 },
-            { devNumber: 1, vgName: 'volum', lvName: 'root', dataOffsetSectors: 67584, dataSizeSectors: 10, superOffsetSectors: 8 },
-          ],
-        }]}
+        arrays={[
+          {
+            arrayUuid: 'array-1',
+            name: 'mac:0',
+            level: 0,
+            layout: 1,
+            chunkSectors: 1024,
+            raidDisks: 2,
+            minDataSizeSectors: 10,
+            capacityMismatch: true,
+            filesystem: 'candidate',
+            members: [
+              {
+                devNumber: 0,
+                vgName: 'root',
+                lvName: 'data',
+                dataOffsetSectors: 67584,
+                dataSizeSectors: 12,
+                superOffsetSectors: 8,
+              },
+              {
+                devNumber: 1,
+                vgName: 'volum',
+                lvName: 'root',
+                dataOffsetSectors: 67584,
+                dataSizeSectors: 10,
+                superOffsetSectors: 8,
+              },
+            ],
+          },
+        ]}
       />,
     );
     expect(screen.getByText('root/data')).toBeInTheDocument();

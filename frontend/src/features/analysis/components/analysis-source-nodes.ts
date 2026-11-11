@@ -1,6 +1,20 @@
 import type { ComponentType } from 'react';
-import { AppWindow,Container,Database,FileClock,FileText,FileX2,Globe,Mail,Monitor,Server,ServerCog,Shield,Smartphone }  from '@/components/icons';
-import type { AndroidAnalysisTabKey,AnalysisTabKey,ExtractionCategory,LinuxAnalysisTabKey } from '../types';
+import {
+  AppWindow,
+  Container,
+  Database,
+  FileClock,
+  FileText,
+  FileX2,
+  Globe,
+  Mail,
+  Monitor,
+  Server,
+  ServerCog,
+  Shield,
+  Smartphone,
+} from '@/components/icons';
+import type { AndroidAnalysisTabKey, AnalysisTabKey, ExtractionCategory, LinuxAnalysisTabKey } from '../types';
 export type SourceTreeNode = {
   labelKey: string;
   icon: ComponentType<{ size?: number | string; className?: string }>;
@@ -35,9 +49,19 @@ export const LINUX_NODES: SourceTreeNode[] = [
   { labelKey: 'analysis.sidebar.linuxPackages', icon: Database, category: 'LinuxPackages', linuxTab: 'packages' },
   { labelKey: 'analysis.sidebar.linuxCron', icon: FileClock, category: 'LinuxCron', linuxTab: 'cron' },
   { labelKey: 'analysis.sidebar.linuxSudo', icon: Shield, category: 'LinuxSudo', linuxTab: 'sudo' },
-  { labelKey: 'analysis.sidebar.linuxSystemConfig', icon: Database, category: 'LinuxSystemConfig', linuxTab: 'systemConfig' },
+  {
+    labelKey: 'analysis.sidebar.linuxSystemConfig',
+    icon: Database,
+    category: 'LinuxSystemConfig',
+    linuxTab: 'systemConfig',
+  },
   { labelKey: 'analysis.sidebar.linuxWebServices', icon: Globe, category: 'LinuxWebServices', linuxTab: 'webServices' },
-  { labelKey: 'analysis.sidebar.linuxMysqlServices', icon: Database, category: 'LinuxMysqlServices', linuxTab: 'mysqlServices' },
+  {
+    labelKey: 'analysis.sidebar.linuxMysqlServices',
+    icon: Database,
+    category: 'LinuxMysqlServices',
+    linuxTab: 'mysqlServices',
+  },
   { labelKey: 'analysis.sidebar.linuxServices', icon: ServerCog, category: 'LinuxSystemConfig', linuxTab: 'services' },
   { labelKey: 'analysis.sidebar.linuxDocker', icon: Container, category: 'LinuxSystemConfig', linuxTab: 'docker' },
   { labelKey: 'analysis.sidebar.deletedRecovery', icon: FileX2, linuxTab: 'deletedRecovery' },
@@ -47,4 +71,3 @@ export const ANDROID_NODES: SourceTreeNode[] = [
   { labelKey: 'analysis.android.deviceTab', icon: Smartphone, androidTab: 'device' },
   { labelKey: 'analysis.android.packagesTab', icon: AppWindow, androidTab: 'packages' },
 ];
-

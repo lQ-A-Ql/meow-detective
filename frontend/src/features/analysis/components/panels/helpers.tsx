@@ -12,20 +12,14 @@ import {
   Monitor,
   Play,
   Shield,
-}  from '@/components/icons';
+} from '@/components/icons';
 import { Progress } from '@/app/components/ui/progress';
 import { EmptyState, MetricCard, StatGrid } from '@/components/data-display';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import i18n from '@/i18n';
-import {
-  AnalysisFieldProvenance,
-  AnalysisProvenance,
-} from '@/types/models';
-import type {
-  AnalysisExtractionProgressInfo,
-  AnalysisExtractionProgressState,
-} from '@/features/analysis/types';
+import { AnalysisFieldProvenance, AnalysisProvenance } from '@/types/models';
+import type { AnalysisExtractionProgressInfo, AnalysisExtractionProgressState } from '@/features/analysis/types';
 
 export const CATEGORY_ICONS: Record<string, typeof Monitor> = {
   Executables: Shield,
@@ -125,30 +119,30 @@ function extractionProgressLabel(status: AnalysisExtractionProgressState) {
   }
 }
 
-export function AnalysisExtractionProgress({
-  progress,
-}: {
-  progress?: AnalysisExtractionProgressInfo;
-}) {
+export function AnalysisExtractionProgress({ progress }: { progress?: AnalysisExtractionProgressInfo }) {
   if (!progress) {
     return null;
   }
   const totalCandidates = progress.totalCandidateCount ?? 0;
   const processedCandidates = progress.processedCandidateCount ?? progress.scannedCount;
-  const value = totalCandidates > 0
-    ? Math.min(100, Math.round((processedCandidates / totalCandidates) * 100))
-    : progress.status === 'success'
-      ? 100
-      : 0;
-  const tone = progress.status === 'failed'
-    ? 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text'
-    : progress.status === 'partial'
-      ? 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text'
-      : 'border-forensics-border bg-forensics-surface text-forensics-text-tertiary';
+  const value =
+    totalCandidates > 0
+      ? Math.min(100, Math.round((processedCandidates / totalCandidates) * 100))
+      : progress.status === 'success'
+        ? 100
+        : 0;
+  const tone =
+    progress.status === 'failed'
+      ? 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text'
+      : progress.status === 'partial'
+        ? 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text'
+        : 'border-forensics-border bg-forensics-surface text-forensics-text-tertiary';
   return (
     <div className={`min-w-0 max-w-full overflow-hidden rounded-none border px-3 py-2 ${tone}`}>
       <div className="mb-2 flex min-w-0 items-center justify-between gap-3 text-[11px]">
-        <span className="min-w-0 truncate font-light text-forensics-text" title={progress.label}>{progress.label}</span>
+        <span className="min-w-0 truncate font-light text-forensics-text" title={progress.label}>
+          {progress.label}
+        </span>
         <span className="shrink-0 font-mono">
           {totalCandidates > 0
             ? `${processedCandidates}/${totalCandidates} (${value}%)`
@@ -158,17 +152,19 @@ export function AnalysisExtractionProgress({
       <Progress value={value} className="h-1.5 rounded-none bg-forensics-surface" />
       <div className="mt-2 flex flex-wrap gap-3 font-mono text-[10px]">
         <span>scanned={progress.scannedCount}</span>
-        {totalCandidates > 0 ? <span>candidates={processedCandidates}/{totalCandidates}</span> : null}
+        {totalCandidates > 0 ? (
+          <span>
+            candidates={processedCandidates}/{totalCandidates}
+          </span>
+        ) : null}
         <span>artifacts={progress.artifactCount}</span>
         <span>timeline={progress.timelineEventCount}</span>
-        {progress.unsupportedCandidateCount ? (
-          <span>unsupported={progress.unsupportedCandidateCount}</span>
-        ) : null}
-        {progress.textFallbackCandidateCount ? (
-          <span>fallback={progress.textFallbackCandidateCount}</span>
-        ) : null}
+        {progress.unsupportedCandidateCount ? <span>unsupported={progress.unsupportedCandidateCount}</span> : null}
+        {progress.textFallbackCandidateCount ? <span>fallback={progress.textFallbackCandidateCount}</span> : null}
       </div>
-      {progress.detail ? <div className="mt-1 break-words text-[11px] text-forensics-muted">{progress.detail}</div> : null}
+      {progress.detail ? (
+        <div className="mt-1 break-words text-[11px] text-forensics-muted">{progress.detail}</div>
+      ) : null}
       {progress.currentPath ? (
         <div className="mt-1 truncate font-mono text-[10px] text-forensics-muted" title={progress.currentPath}>
           {progress.currentPath}
@@ -264,7 +260,10 @@ export function ProvenancePanel({
       {provenance.length > 0 ? (
         <div className="space-y-2">
           {provenance.map((item, index) => (
-            <div key={`${item.parser}-${item.artifactPath}-${index}`} className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-muted">
+            <div
+              key={`${item.parser}-${item.artifactPath}-${index}`}
+              className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-muted"
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <StatusPill status={item.status} />
                 <span className="font-mono text-forensics-text-secondary">{item.parser || '-'}</span>
@@ -273,7 +272,9 @@ export function ProvenancePanel({
               <div className="mt-1 font-mono text-[10px] text-forensics-muted-light">
                 dataSource={item.dataSourceId || '-'} · parsedAt={item.parsedAt || '-'}
               </div>
-              {item.warnings.length > 0 ? <div className="mt-1 text-forensics-warning-text">{item.warnings.join('；')}</div> : null}
+              {item.warnings.length > 0 ? (
+                <div className="mt-1 text-forensics-warning-text">{item.warnings.join('；')}</div>
+              ) : null}
             </div>
           ))}
         </div>
@@ -291,36 +292,36 @@ type Translate = (key: string, options?: Record<string, unknown>) => string;
 // across panel re-renders.
 function fieldProvenanceColumns(t: Translate): DenseColumn<AnalysisFieldProvenance>[] {
   return [
-  {
-    key: 'field',
-    title: t('analysisPanels.fieldProvenance.field'),
-    className: 'w-[160px]',
-    render: (item) => item.field,
-  },
-  {
-    key: 'hive',
-    title: t('analysis.registry.columns.hivePath'),
-    className: 'min-w-[220px]',
-    render: (item) => item.hivePath || '-',
-  },
-  {
-    key: 'key',
-    title: t('analysis.registry.columns.keyPath'),
-    className: 'min-w-[300px]',
-    render: (item) => item.keyPath || '-',
-  },
-  {
-    key: 'value',
-    title: t('analysis.registry.columns.valueName'),
-    className: 'w-[140px]',
-    render: (item) => item.valueName || '-',
-  },
-  {
-    key: 'parser',
-    title: t('analysis.registry.columns.parser'),
-    className: 'w-[160px]',
-    render: (item) => item.parser || '-',
-  },
+    {
+      key: 'field',
+      title: t('analysisPanels.fieldProvenance.field'),
+      className: 'w-[160px]',
+      render: (item) => item.field,
+    },
+    {
+      key: 'hive',
+      title: t('analysis.registry.columns.hivePath'),
+      className: 'min-w-[220px]',
+      render: (item) => item.hivePath || '-',
+    },
+    {
+      key: 'key',
+      title: t('analysis.registry.columns.keyPath'),
+      className: 'min-w-[300px]',
+      render: (item) => item.keyPath || '-',
+    },
+    {
+      key: 'value',
+      title: t('analysis.registry.columns.valueName'),
+      className: 'w-[140px]',
+      render: (item) => item.valueName || '-',
+    },
+    {
+      key: 'parser',
+      title: t('analysis.registry.columns.parser'),
+      className: 'w-[160px]',
+      render: (item) => item.parser || '-',
+    },
   ];
 }
 
@@ -368,7 +369,9 @@ export function InfoCard({ label, value }: { label: string; value?: string }) {
 }
 
 export function StatCard({ label, value }: { label: string; value: string }) {
-  return <MetricCard label={label} value={value} mono={false} align="center" size="lg" className="bg-forensics-panel" />;
+  return (
+    <MetricCard label={label} value={value} mono={false} align="center" size="lg" className="bg-forensics-panel" />
+  );
 }
 
 export function Metric({ label, value }: { label: string; value: string }) {

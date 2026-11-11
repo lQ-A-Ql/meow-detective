@@ -1,12 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import { Download, History }  from '@/components/icons';
+import { Download, History } from '@/components/icons';
 import { IconButton } from '@/components/controls/IconButton';
 
-import {
-  InspectorPane,
-  InspectorSection,
-  InspectorValue,
-} from '@/components/layout/InspectorPane';
+import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
 import type { FileEntryRow, FileTreeNode } from '@/types/models';
 import type { DataSourcePartition } from '@/types/models';
 import { BitLockerVolumePanelController } from '@/features/files/containers/BitLockerVolumePanelController';
@@ -42,7 +38,10 @@ interface FileBrowserInspectorProps {
   ntfsTechnicalUnsupported?: boolean;
   ntfsTechnicalRuns?: ReturnType<typeof ntfsInspectorRuns>;
   retryNtfsTechnical?: () => void;
-  ntfsNavigation?: Pick<ReturnType<typeof useNtfsTechnicalFile>, 'hex' | 'selectHex' | 'setDecoded' | 'previousRuns' | 'nextRuns'>;
+  ntfsNavigation?: Pick<
+    ReturnType<typeof useNtfsTechnicalFile>,
+    'hex' | 'selectHex' | 'setDecoded' | 'previousRuns' | 'nextRuns'
+  >;
   evidenceDigest: ReturnType<typeof useEvidenceDigestModel>;
 }
 
@@ -73,11 +72,7 @@ export function FileBrowserInspector({
   const { t } = useTranslation();
 
   return (
-    <InspectorPane
-      className="hidden lg:flex"
-      kind={t('inspectorKind.file')}
-      widthClassName="w-80"
-    >
+    <InspectorPane className="hidden lg:flex" kind={t('inspectorKind.file')} widthClassName="w-80">
       <div className="space-y-5">
         {bitLockerPartition && bitLocker ? (
           <BitLockerVolumePanelController key={bitLockerTargetKey} partition={bitLockerPartition} model={bitLocker} />
@@ -87,35 +82,19 @@ export function FileBrowserInspector({
         </InspectorSection>
 
         <InspectorSection title={t('fileBrowser.inspector.sections.path')}>
-          <InspectorValue
-            value={
-              selectedFile?.path ??
-              activeDirectoryPath ??
-              currentDirectory?.name ??
-              '-'
-            }
-            mono
-          />
+          <InspectorValue value={selectedFile?.path ?? activeDirectoryPath ?? currentDirectory?.name ?? '-'} mono />
         </InspectorSection>
 
         <InspectorSection title={t('fileBrowser.inspector.sections.timestamps')}>
           <div className="font-mono text-[11px] grid grid-cols-[30px_1fr] gap-1">
             <div className="text-forensics-muted-light">{t('fileBrowser.inspector.timestamp.modified')}</div>
-            <div className="text-forensics-text-secondary">
-              {selectedFile?.modifiedAt ?? '-'}
-            </div>
+            <div className="text-forensics-text-secondary">{selectedFile?.modifiedAt ?? '-'}</div>
             <div className="text-forensics-muted-light">{t('fileBrowser.inspector.timestamp.accessed')}</div>
-            <div className="text-forensics-text-secondary">
-              {selectedFile?.accessedAt ?? '-'}
-            </div>
+            <div className="text-forensics-text-secondary">{selectedFile?.accessedAt ?? '-'}</div>
             <div className="text-forensics-muted-light">{t('fileBrowser.inspector.timestamp.changed')}</div>
-            <div className="text-forensics-text-secondary">
-              {selectedFile?.changedAt ?? '-'}
-            </div>
+            <div className="text-forensics-text-secondary">{selectedFile?.changedAt ?? '-'}</div>
             <div className="text-forensics-muted-light">{t('fileBrowser.inspector.timestamp.created')}</div>
-            <div className="text-forensics-text-secondary">
-              {selectedFile?.createdAt ?? '-'}
-            </div>
+            <div className="text-forensics-text-secondary">{selectedFile?.createdAt ?? '-'}</div>
           </div>
         </InspectorSection>
 
@@ -124,7 +103,16 @@ export function FileBrowserInspector({
         </InspectorSection>
 
         <EvidenceDigestInspector model={evidenceDigest} />
-        <NtfsTechnicalInspector technical={ntfsTechnical} eligible={ntfsTechnicalEligible} loading={ntfsTechnicalLoading} errorText={ntfsTechnicalErrorText} unsupported={ntfsTechnicalUnsupported} runs={ntfsTechnicalRuns} onRetry={retryNtfsTechnical} navigation={ntfsNavigation} />
+        <NtfsTechnicalInspector
+          technical={ntfsTechnical}
+          eligible={ntfsTechnicalEligible}
+          loading={ntfsTechnicalLoading}
+          errorText={ntfsTechnicalErrorText}
+          unsupported={ntfsTechnicalUnsupported}
+          runs={ntfsTechnicalRuns}
+          onRetry={retryNtfsTechnical}
+          navigation={ntfsNavigation}
+        />
 
         {selectedFile?.entryType === 'file' && (imageMetadata || imageMetadataLoading || imageMetadataError) ? (
           <ImageMetadataInspector

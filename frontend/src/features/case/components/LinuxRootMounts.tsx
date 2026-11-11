@@ -5,7 +5,9 @@ export function LinuxRootMounts({ model }: { model: ReturnType<typeof createLinu
   return (
     <div className="mt-2 space-y-1 text-[10px] text-forensics-muted-light">
       {model.entries.map((entry) => (
-        <div key={entry.id} className="break-all font-mono">{entry.text}</div>
+        <div key={entry.id} className="break-all font-mono">
+          {entry.text}
+        </div>
       ))}
       <div>{model.hint}</div>
     </div>

@@ -26,7 +26,8 @@ export function useLinuxClusterWorkspaceModel() {
     queryKey: ['linux-evidence-set-summary', currentCase.data?.id ?? null, selectedSetId ?? null],
     queryFn: () => getLinuxEvidenceSetSummary(selectedSetId as string),
     enabled: Boolean(selectedSetId),
-    refetchInterval: (query) => (query.state.data?.members ?? []).some((member) => member.hashStatus === 'pending') ? 2_000 : false,
+    refetchInterval: (query) =>
+      (query.state.data?.members ?? []).some((member) => member.hashStatus === 'pending') ? 2_000 : false,
   });
   const events = useQuery({
     queryKey: ['linux-evidence-set-events', currentCase.data?.id ?? null, selectedSetId ?? null],
@@ -53,10 +54,7 @@ export function useLinuxClusterWorkspaceModel() {
       { fileCount: 0, evidenceSize: 0 },
     );
   }, [sourceMetadata, summary.data?.members]);
-  const capabilities = useMemo(
-    () => (summary.data ? capabilitiesForSummary(summary.data) : []),
-    [summary.data],
-  );
+  const capabilities = useMemo(() => (summary.data ? capabilitiesForSummary(summary.data) : []), [summary.data]);
   const provenance = summary.data ? provenanceState(summary.data) : 'partial';
   const fallback = !evidenceSets.isLoading && (evidenceSets.data?.length ?? 0) === 0;
   return {

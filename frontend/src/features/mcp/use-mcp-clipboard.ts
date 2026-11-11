@@ -5,11 +5,14 @@ export function useMcpClipboard() {
   const [copyError, setCopyError] = useState(false);
   const copy = useCallback(async (value: string) => {
     try {
-      if (!navigator.clipboard) { setCopyError(true); return; }
+      if (!navigator.clipboard) {
+        setCopyError(true);
+        return;
+      }
       await navigator.clipboard.writeText(value);
       setCopiedValue(value);
       setCopyError(false);
-      window.setTimeout(() => setCopiedValue((current) => current === value ? undefined : current), 1500);
+      window.setTimeout(() => setCopiedValue((current) => (current === value ? undefined : current)), 1500);
     } catch {
       setCopyError(true);
     }

@@ -20,10 +20,7 @@ export function BrandEmptyState({
         className,
       )}
     >
-      <BrandWatermark
-        motif="file-preview"
-        className="watermark-empty"
-      />
+      <BrandWatermark motif="file-preview" className="watermark-empty" />
       <div className="relative font-serif text-[15px] font-light tracking-wide text-forensics-text">{title}</div>
       {description ? (
         <div className="relative mt-2 text-[12px] leading-6 text-forensics-muted">{description}</div>

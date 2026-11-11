@@ -1,10 +1,4 @@
-import {
-  ComponentPropsWithoutRef,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { ComponentPropsWithoutRef, useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/app/components/ui/utils';
 import './HorizontalScroll.css';
 
@@ -115,15 +109,10 @@ export function HorizontalScroll({
 
   const trackWidth = metrics.clientWidth;
   const maxScroll = Math.max(0, metrics.scrollWidth - metrics.clientWidth);
-  const thumbRatio =
-    metrics.scrollWidth > 0 ? metrics.clientWidth / metrics.scrollWidth : 1;
+  const thumbRatio = metrics.scrollWidth > 0 ? metrics.clientWidth / metrics.scrollWidth : 1;
   const thumbWidth = Math.max(32, trackWidth * thumbRatio);
-  const thumbLeft =
-    maxScroll > 0
-      ? (metrics.scrollLeft / maxScroll) * (trackWidth - thumbWidth)
-      : 0;
-  const showThumb =
-    metrics.scrollWidth > metrics.clientWidth && trackWidth > 0;
+  const thumbLeft = maxScroll > 0 ? (metrics.scrollLeft / maxScroll) * (trackWidth - thumbWidth) : 0;
+  const showThumb = metrics.scrollWidth > metrics.clientWidth && trackWidth > 0;
 
   // Only a cell that actually overflows needs its own scroll listener for the thumb.
   useEffect(() => {
@@ -173,11 +162,7 @@ export function HorizontalScroll({
     >
       <div
         ref={innerRef}
-        className={cn(
-          'scrollbar-thin-glow-scroll flex',
-          variant === 'cell' && 'block h-full',
-          className,
-        )}
+        className={cn('scrollbar-thin-glow-scroll flex', variant === 'cell' && 'block h-full', className)}
         tabIndex={showThumb ? 0 : undefined}
         {...props}
       >

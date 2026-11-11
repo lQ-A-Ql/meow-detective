@@ -59,10 +59,12 @@ describe('LinuxArtifactsPanel', () => {
   it('does not present the persisted coverage summary as live extraction progress', () => {
     const note = 'Structured output coverage is 414 of 749 Linux artifact candidate source(s).';
     const summary = baseSummary({ coverageNotes: [note] });
-    const { container, rerender } = render(createElement(LinuxArtifactsPanel, {
-      summary,
-      extractionRunning: true,
-    }));
+    const { container, rerender } = render(
+      createElement(LinuxArtifactsPanel, {
+        summary,
+        extractionRunning: true,
+      }),
+    );
 
     expect(screen.queryByText(note)).toBeNull();
     rerender(createElement(LinuxArtifactsPanel, { summary, extractionRunning: false }));
@@ -134,10 +136,18 @@ describe('LinuxArtifactsPanel', () => {
     const summary = baseSummary({
       loginCount: 1,
       totalCount: 1,
-      loginRecords: [{
-        artifactId: 'legacy-wtmp', fileId: 'file-legacy', sourcePath: '/var/log/wtmp',
-        user: 'root', terminal: 'tty1', host: '', pid: 0, recordType: 0,
-      }],
+      loginRecords: [
+        {
+          artifactId: 'legacy-wtmp',
+          fileId: 'file-legacy',
+          sourcePath: '/var/log/wtmp',
+          user: 'root',
+          terminal: 'tty1',
+          host: '',
+          pid: 0,
+          recordType: 0,
+        },
+      ],
     });
     render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'login' }));
     expect(screen.getByText('/var/log/wtmp')).toBeDefined();
@@ -421,9 +431,7 @@ describe('LinuxArtifactsPanel', () => {
   it('falls back to a hint when artifacts exist without system info', () => {
     const summary = baseSummary({ journalCount: 2, totalCount: 2 });
     render(createElement(LinuxArtifactsPanel, { summary }));
-    expect(
-      screen.getByText('已发现 Linux 痕迹，但未解析到系统基本信息（os-release/主机名/账户）。'),
-    ).toBeDefined();
+    expect(screen.getByText('已发现 Linux 痕迹，但未解析到系统基本信息（os-release/主机名/账户）。')).toBeDefined();
   });
 
   it('renders the kernel versions card and the account table on overview', () => {

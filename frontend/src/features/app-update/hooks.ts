@@ -28,7 +28,9 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         const elapsed = Date.now() - previous;
         if (previous > 0 && elapsed >= 0 && elapsed < UPDATE_CHECK_INTERVAL_MS) return;
         localStorage.setItem(UPDATE_STORAGE_KEY, String(Date.now()));
-      } catch { /* Storage restrictions must not prevent offline use. */ }
+      } catch {
+        /* Storage restrictions must not prevent offline use. */
+      }
     }
     set({ phase: 'checking', errorKey: undefined });
     try {
@@ -44,11 +46,15 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     set({ phase: 'downloading', progress: undefined, errorKey: undefined });
     try {
       await installAppUpdate(info.available.version, (progress) => {
-        const phase = ['verifying', 'restarting'].includes(progress.phase) ? progress.phase as 'verifying' | 'restarting' : 'downloading';
+        const phase = ['verifying', 'restarting'].includes(progress.phase)
+          ? (progress.phase as 'verifying' | 'restarting')
+          : 'downloading';
         set({ phase, progress });
       });
       set({ phase: 'restarting' });
-    } catch (error) { set({ phase: 'failed', errorKey: errorKey(error) }); }
+    } catch (error) {
+      set({ phase: 'failed', errorKey: errorKey(error) });
+    }
   },
 }));
 
@@ -60,5 +66,7 @@ export async function initializeAppUpdates() {
     const info = await getAppUpdateInfo();
     useUpdateStore.setState({ info });
     if (info.configured) await useUpdateStore.getState().check(true);
-  } catch { /* No update transport in browser previews; keep normal startup. */ }
+  } catch {
+    /* No update transport in browser previews; keep normal startup. */
+  }
 }

@@ -58,7 +58,11 @@ import { useSearchWorkspaceModel } from '@/features/search/use-search-workspace-
 function wrapper(initialEntry = '/search') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return function SearchRouter({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={client}><MemoryRouter initialEntries={[initialEntry]}>{children}</MemoryRouter></QueryClientProvider>;
+    return (
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[initialEntry]}>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
   };
 }
 

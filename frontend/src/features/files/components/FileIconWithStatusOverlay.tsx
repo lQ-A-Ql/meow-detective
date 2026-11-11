@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { EyeOff, X }  from '@/components/icons';
+import { EyeOff, X } from '@/components/icons';
 import { getFileIcon } from '@/lib/file-icons';
 import { TokenIcon } from '@/components/data-display';
 

@@ -27,22 +27,23 @@ export function useFileDigest({ caseId, fileId, available }: FileDigestTarget) {
   if (selection.key !== key) {
     setSelection({ key, epoch: selection.epoch + 1 });
   }
-  const mutation = useMutation<
-    { operation: DigestOperation; digest: EvidenceDigest },
-    unknown,
-    DigestOperation
-  >({
+  const mutation = useMutation<{ operation: DigestOperation; digest: EvidenceDigest }, unknown, DigestOperation>({
     mutationFn: async (operation) => ({
       operation,
       digest: await calculateEvidenceDigest({
-        scope: 'file', algorithm: operation.algorithm, fileId: operation.fileId,
+        scope: 'file',
+        algorithm: operation.algorithm,
+        fileId: operation.fileId,
       }),
     }),
   });
   const operation = mutation.variables;
-  const current = key !== undefined && selection.key === key
-    && operation?.key === key && operation.epoch === selection.epoch
-    && operation.attempt === attempt.current;
+  const current =
+    key !== undefined &&
+    selection.key === key &&
+    operation?.key === key &&
+    operation.epoch === selection.epoch &&
+    operation.attempt === attempt.current;
   const result = current && mutation.data?.operation === operation ? mutation.data.digest : undefined;
 
   return {

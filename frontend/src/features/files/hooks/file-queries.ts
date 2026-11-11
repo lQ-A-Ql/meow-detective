@@ -1,11 +1,5 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
-import {
-  getFileChildren,
-  getFileChildrenPage,
-  getFileRows,
-  getFileRowsPage,
-  getFileTree,
-} from '@/lib/api/files';
+import { getFileChildren, getFileChildrenPage, getFileRows, getFileRowsPage, getFileTree } from '@/lib/api/files';
 import type { FileSortKey, FileSortDirection } from '@/lib/file-sort';
 import { fileJumpQuery } from './file-jump-query';
 
@@ -14,7 +8,7 @@ export function useFileTree(showHidden = false, caseId?: string) {
     queryKey: ['files', 'tree', caseId ?? null, showHidden],
     queryFn: () => getFileTree(showHidden),
     staleTime: 10_000, // reduced from Infinity to pick up post-import tree updates
-    placeholderData: (previous, query) => query?.queryKey[2] === (caseId ?? null) ? previous : undefined,
+    placeholderData: (previous, query) => (query?.queryKey[2] === (caseId ?? null) ? previous : undefined),
   });
 }
 
@@ -36,7 +30,17 @@ export function useFileRowsPage(
   caseId?: string,
 ) {
   return useQuery({
-    queryKey: ['files', 'rows-page', caseId ?? null, parentId ?? null, offset, limit, showHidden, sortKey, sortDirection],
+    queryKey: [
+      'files',
+      'rows-page',
+      caseId ?? null,
+      parentId ?? null,
+      offset,
+      limit,
+      showHidden,
+      sortKey,
+      sortDirection,
+    ],
     queryFn: () => getFileRowsPage(parentId, offset, limit, showHidden, sortKey, sortDirection),
     enabled: parentId !== undefined,
   });
@@ -62,13 +66,7 @@ export function useFileChildren(parentId?: string, showHidden = false, caseId?: 
   });
 }
 
-export function useFileChildrenPage(
-  parentId?: string,
-  offset = 0,
-  limit = 500,
-  showHidden = false,
-  caseId?: string,
-) {
+export function useFileChildrenPage(parentId?: string, offset = 0, limit = 500, showHidden = false, caseId?: string) {
   return useQuery({
     queryKey: ['files', 'children-page', caseId ?? null, parentId, offset, limit, showHidden],
     queryFn: () => getFileChildrenPage(parentId!, offset, limit, showHidden),

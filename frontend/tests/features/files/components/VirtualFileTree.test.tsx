@@ -33,7 +33,7 @@ describe('VirtualFileTree', () => {
     const { container } = render(
       <div style={{ height: '280px' }}>
         <VirtualFileTree nodes={nodes} onNodeClick={vi.fn()} itemSize={28} overscan={2} />
-      </div>
+      </div>,
     );
 
     const renderedButtons = container.querySelectorAll('button');

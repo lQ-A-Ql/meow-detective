@@ -1,10 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  getDocumentPreview,
-  getImageMetadata,
-  getImagePreview,
-  getTextPreview,
-} from '@/lib/api/files';
+import { getDocumentPreview, getImageMetadata, getImagePreview, getTextPreview } from '@/lib/api/files';
 import { PREVIEW_STALE_TIME } from './preview-constants';
 
 /**

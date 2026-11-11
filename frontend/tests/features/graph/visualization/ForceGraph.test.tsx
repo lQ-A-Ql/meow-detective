@@ -16,12 +16,7 @@ function makeNode(id: string, label = id): GraphNode {
   };
 }
 
-function makeEdge(
-  id: string,
-  sourceId: string,
-  targetId: string,
-  edgeType: EdgeType = 'references',
-): GraphEdge {
+function makeEdge(id: string, sourceId: string, targetId: string, edgeType: EdgeType = 'references'): GraphEdge {
   return {
     id,
     caseId: 'case-1',
@@ -72,26 +67,26 @@ function viewport(graph: HTMLElement): SVGGElement {
 }
 
 function parseTransform(element: Element): { x: number; y: number; k: number } {
-  const match = /translate\(([-\d.]+) ([-\d.]+)\) scale\(([-\d.]+)\)/.exec(
-    element.getAttribute('transform') ?? '',
-  );
+  const match = /translate\(([-\d.]+) ([-\d.]+)\) scale\(([-\d.]+)\)/.exec(element.getAttribute('transform') ?? '');
   if (!match) throw new Error(`Unexpected transform: ${element.getAttribute('transform')}`);
   return { x: Number(match[1]), y: Number(match[2]), k: Number(match[3]) };
 }
 
-function renderGraph(overrides: {
-  nodes?: GraphNode[];
-  edges?: GraphEdge[];
-  selectedNodeId?: string;
-  selectedEdgeId?: string;
-  onNodeClick?: (node: GraphNode) => void;
-  onNodeDoubleClick?: (node: GraphNode) => void;
-  onEdgeClick?: (edge: GraphEdge) => void;
-  onBackgroundClick?: () => void;
-  width?: number;
-  height?: number;
-  running?: boolean;
-} = {}) {
+function renderGraph(
+  overrides: {
+    nodes?: GraphNode[];
+    edges?: GraphEdge[];
+    selectedNodeId?: string;
+    selectedEdgeId?: string;
+    onNodeClick?: (node: GraphNode) => void;
+    onNodeDoubleClick?: (node: GraphNode) => void;
+    onEdgeClick?: (edge: GraphEdge) => void;
+    onBackgroundClick?: () => void;
+    width?: number;
+    height?: number;
+    running?: boolean;
+  } = {},
+) {
   const props = {
     nodes: overrides.nodes ?? [],
     edges: overrides.edges ?? [],
@@ -107,7 +102,11 @@ function renderGraph(overrides: {
   };
   const view = render(<ForceGraph {...props} />);
   const graph = screen.getByRole('img', { name: '关系图谱力导向图' });
-  return { ...view, graph, rerenderGraph: (next: Partial<typeof props>) => view.rerender(<ForceGraph {...props} {...next} />) };
+  return {
+    ...view,
+    graph,
+    rerenderGraph: (next: Partial<typeof props>) => view.rerender(<ForceGraph {...props} {...next} />),
+  };
 }
 
 describe('ForceGraph', () => {
@@ -189,12 +188,8 @@ describe('ForceGraph', () => {
     const edgeGroups = Array.from(graph.querySelectorAll('g[data-edge]'));
     expect(edgeGroups).toHaveLength(1);
     const line = edgeGroups[0].querySelector('line')!;
-    expect(Number(line.getAttribute('x1'))).toBeCloseTo(
-      deterministicNodePosition('n1', 640, 480).x,
-    );
-    expect(Number(line.getAttribute('x2'))).toBeCloseTo(
-      deterministicNodePosition('n2', 640, 480).x,
-    );
+    expect(Number(line.getAttribute('x1'))).toBeCloseTo(deterministicNodePosition('n1', 640, 480).x);
+    expect(Number(line.getAttribute('x2'))).toBeCloseTo(deterministicNodePosition('n2', 640, 480).x);
     expect(line.getAttribute('stroke-width')).toBe('1.5');
   });
 
@@ -252,14 +247,8 @@ describe('ForceGraph', () => {
   });
 
   it('highlights the selected node and keeps its label on crowded graphs', () => {
-    const nodes = Array.from({ length: 41 }, (_, index) =>
-      makeNode(`n${index}`, `Node ${index}`),
-    );
-    const edges = [
-      makeEdge('e1', 'n0', 'n1'),
-      makeEdge('e2', 'n0', 'n2'),
-      makeEdge('e3', 'n0', 'n3'),
-    ];
+    const nodes = Array.from({ length: 41 }, (_, index) => makeNode(`n${index}`, `Node ${index}`));
+    const edges = [makeEdge('e1', 'n0', 'n1'), makeEdge('e2', 'n0', 'n2'), makeEdge('e3', 'n0', 'n3')];
     const { graph } = renderGraph({ nodes, edges, selectedNodeId: 'n40' });
 
     const groups = Array.from(graph.querySelectorAll('g[data-node]'));
@@ -276,9 +265,7 @@ describe('ForceGraph', () => {
   });
 
   it('hides low-degree labels when the graph exceeds the label budget', () => {
-    const nodes = Array.from({ length: 41 }, (_, index) =>
-      makeNode(`n${index}`, `Node ${index}`),
-    );
+    const nodes = Array.from({ length: 41 }, (_, index) => makeNode(`n${index}`, `Node ${index}`));
     const { graph } = renderGraph({ nodes });
 
     const groups = Array.from(graph.querySelectorAll('g[data-node]'));

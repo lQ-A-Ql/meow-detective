@@ -1,4 +1,4 @@
-import { ChevronRight, Database, FileCheck2, HardDrive, ShieldCheck, Weight }  from '@/components/icons';
+import { ChevronRight, Database, FileCheck2, HardDrive, ShieldCheck, Weight } from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import type { TFunction } from 'i18next';
@@ -37,35 +37,131 @@ export function ClusterEvidenceHeader({
     <header className="shrink-0 border-b border-forensics-divider bg-forensics-surface px-5 py-4 lg:px-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-forensics-muted">{t('infrastructure.workspace.eyebrow')}</div>
+          <div className="text-[10px] uppercase tracking-[0.16em] text-forensics-muted">
+            {t('infrastructure.workspace.eyebrow')}
+          </div>
           <h1 className="mt-1 text-xl font-light text-forensics-text">{t('infrastructure.workspace.title')}</h1>
-          <p className="mt-1 max-w-3xl text-xs leading-5 text-forensics-muted">{t('infrastructure.workspace.subtitle')}</p>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-forensics-muted">
+            {t('infrastructure.workspace.subtitle')}
+          </p>
         </div>
         <div className="flex max-w-full flex-wrap items-end justify-end gap-2">
           <div className="grid gap-1 text-left text-[10px] uppercase tracking-wide text-forensics-muted">
             <span>{t('infrastructure.workspace.evidenceSet')}</span>
             <Select value={selectedSetId ?? ''} onValueChange={onSelectSet}>
-              <SelectTrigger aria-label={t('infrastructure.workspace.evidenceSet')} variant="forensics" size="sm" className="min-w-56"><SelectValue placeholder={t('infrastructure.workspace.noEvidenceSet')} /></SelectTrigger>
-              <SelectContent>{sets.map((item) => <SelectItem key={item.importSetId} value={item.importSetId}>{item.name} · {item.state}</SelectItem>)}</SelectContent>
+              <SelectTrigger
+                aria-label={t('infrastructure.workspace.evidenceSet')}
+                variant="forensics"
+                size="sm"
+                className="min-w-56"
+              >
+                <SelectValue placeholder={t('infrastructure.workspace.noEvidenceSet')} />
+              </SelectTrigger>
+              <SelectContent>
+                {sets.map((item) => (
+                  <SelectItem key={item.importSetId} value={item.importSetId}>
+                    {item.name} · {item.state}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
-          <Tooltip content={t('infrastructure.workspace.openTimeline')}><Button aria-label={t('infrastructure.workspace.openTimeline')} type="button" variant="forensicsOutline" size="sm" onClick={onOpenTimeline}><ActionIcon name="history" /></Button></Tooltip>
+          <Tooltip content={t('infrastructure.workspace.openTimeline')}>
+            <Button
+              aria-label={t('infrastructure.workspace.openTimeline')}
+              type="button"
+              variant="forensicsOutline"
+              size="sm"
+              onClick={onOpenTimeline}
+            >
+              <ActionIcon name="history" />
+            </Button>
+          </Tooltip>
         </div>
       </div>
       <div className="mt-5 grid grid-cols-2 border-y border-forensics-border sm:grid-cols-4 xl:grid-cols-9">
-        <MetricCard icon={Database} label={t('infrastructure.workspace.metrics.members')} value={summary?.memberCount ?? 0} size="sm" className="border-0 border-r" />
-        <MetricCard icon={FileCheck2} label={t('infrastructure.workspace.metrics.ready')} value={summary?.readyCount ?? 0} size="sm" className="border-0 border-r" />
-        <MetricCard icon={HardDrive} label={t('infrastructure.workspace.metrics.files')} value={evidenceStats.fileCount.toLocaleString()} size="sm" className="border-0 border-r" />
-        <MetricCard icon={Weight} label={t('infrastructure.workspace.metrics.size')} value={evidenceStats.evidenceSize ? formatBytes(evidenceStats.evidenceSize) : '—'} size="sm" className="border-0 border-r" />
-        <MetricCard icon={ShieldCheck} label={t('infrastructure.workspace.metrics.provenance')} value={<StatusBadge label={statusLabel(provenance, t)} variant={statusVariant(provenance)} />} size="sm" className="border-0 border-r" />
-        <MetricCard label={t('infrastructure.workspace.metrics.report')} value={provenance === 'complete' ? t('infrastructure.workspace.reportReady') : t('infrastructure.workspace.reportPartial')} size="sm" className="border-0 border-r" />
-        <MetricCard label={t('infrastructure.workspace.metrics.scopes')} value={summary?.scopes.length ?? 0} size="sm" className="border-0 border-r" />
-        <MetricCard label={t('infrastructure.workspace.metrics.derived')} value={summary?.derivedSources.length ?? 0} size="sm" className="border-0 border-r" />
-        <MetricCard label={t('infrastructure.workspace.metrics.events')} value={eventCount} size="sm" className="border-0" />
+        <MetricCard
+          icon={Database}
+          label={t('infrastructure.workspace.metrics.members')}
+          value={summary?.memberCount ?? 0}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          icon={FileCheck2}
+          label={t('infrastructure.workspace.metrics.ready')}
+          value={summary?.readyCount ?? 0}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          icon={HardDrive}
+          label={t('infrastructure.workspace.metrics.files')}
+          value={evidenceStats.fileCount.toLocaleString()}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          icon={Weight}
+          label={t('infrastructure.workspace.metrics.size')}
+          value={evidenceStats.evidenceSize ? formatBytes(evidenceStats.evidenceSize) : '—'}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          icon={ShieldCheck}
+          label={t('infrastructure.workspace.metrics.provenance')}
+          value={<StatusBadge label={statusLabel(provenance, t)} variant={statusVariant(provenance)} />}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          label={t('infrastructure.workspace.metrics.report')}
+          value={
+            provenance === 'complete'
+              ? t('infrastructure.workspace.reportReady')
+              : t('infrastructure.workspace.reportPartial')
+          }
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          label={t('infrastructure.workspace.metrics.scopes')}
+          value={summary?.scopes.length ?? 0}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          label={t('infrastructure.workspace.metrics.derived')}
+          value={summary?.derivedSources.length ?? 0}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          label={t('infrastructure.workspace.metrics.events')}
+          value={eventCount}
+          size="sm"
+          className="border-0"
+        />
       </div>
-      {summary?.diagnostics.length ? <div className="mt-3 flex items-start gap-2 text-xs text-forensics-muted"><ChevronRight size={14} className="mt-0.5 shrink-0" /><span>{summary.diagnostics[0]}</span></div> : null}
-      {summary?.manifestDigest ? <div className="mt-2 text-[10px] text-forensics-muted">{t('infrastructure.workspace.manifest')}: <span className="font-mono text-forensics-text-secondary">schema {summary.manifestSchemaVersion ?? '?'} · {summary.manifestDigest.slice(0, 16)}…</span></div> : null}
-      <div className="mt-2 text-right text-[10px] text-forensics-muted">{t('infrastructure.workspace.caseLabel')}: <span className="font-mono text-forensics-text-secondary">{caseName}</span></div>
+      {summary?.diagnostics.length ? (
+        <div className="mt-3 flex items-start gap-2 text-xs text-forensics-muted">
+          <ChevronRight size={14} className="mt-0.5 shrink-0" />
+          <span>{summary.diagnostics[0]}</span>
+        </div>
+      ) : null}
+      {summary?.manifestDigest ? (
+        <div className="mt-2 text-[10px] text-forensics-muted">
+          {t('infrastructure.workspace.manifest')}:{' '}
+          <span className="font-mono text-forensics-text-secondary">
+            schema {summary.manifestSchemaVersion ?? '?'} · {summary.manifestDigest.slice(0, 16)}…
+          </span>
+        </div>
+      ) : null}
+      <div className="mt-2 text-right text-[10px] text-forensics-muted">
+        {t('infrastructure.workspace.caseLabel')}:{' '}
+        <span className="font-mono text-forensics-text-secondary">{caseName}</span>
+      </div>
     </header>
   );
 }

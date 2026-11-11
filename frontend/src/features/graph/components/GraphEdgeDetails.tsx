@@ -27,11 +27,15 @@ export function GraphEdgeDetails({ edge, nodeMap, provenance, provenanceLoading,
       </div>
       <div className="space-y-1">
         <div className="text-[10px] text-forensics-muted">{t('graph.details.source')}</div>
-        <div className="break-all rounded-none bg-transparent p-1.5 font-mono text-[10px]">{source?.label ?? edge.sourceId}</div>
+        <div className="break-all rounded-none bg-transparent p-1.5 font-mono text-[10px]">
+          {source?.label ?? edge.sourceId}
+        </div>
       </div>
       <div className="space-y-1">
         <div className="text-[10px] text-forensics-muted">{t('graph.details.target')}</div>
-        <div className="break-all rounded-none bg-transparent p-1.5 font-mono text-[10px]">{target?.label ?? edge.targetId}</div>
+        <div className="break-all rounded-none bg-transparent p-1.5 font-mono text-[10px]">
+          {target?.label ?? edge.targetId}
+        </div>
       </div>
       <div className="space-y-1">
         <div className="text-[10px] text-forensics-muted">{t('graph.details.provenance')}</div>
@@ -40,16 +44,41 @@ export function GraphEdgeDetails({ edge, nodeMap, provenance, provenanceLoading,
           <div className="space-y-1">
             {provenance.map((entry, index) => (
               <div key={`${entry.edgeId}-${index}`} className="rounded-none bg-transparent p-1.5">
-                {entry.sourceParser ? <div>{t('graph.details.parser')}: {entry.sourceParser}</div> : null}
-                {entry.sourceRuleId ? <div>{t('graph.details.rule')}: {entry.sourceRuleId}</div> : null}
-                {entry.parserVersion ? <div>{t('graph.details.version')}: {entry.parserVersion}</div> : null}
+                {entry.sourceParser ? (
+                  <div>
+                    {t('graph.details.parser')}: {entry.sourceParser}
+                  </div>
+                ) : null}
+                {entry.sourceRuleId ? (
+                  <div>
+                    {t('graph.details.rule')}: {entry.sourceRuleId}
+                  </div>
+                ) : null}
+                {entry.parserVersion ? (
+                  <div>
+                    {t('graph.details.version')}: {entry.parserVersion}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
         ) : null}
-        {!provenanceLoading && !provenance?.length ? <div className="text-forensics-muted">{t('graph.details.noProvenance')}</div> : null}
+        {!provenanceLoading && !provenance?.length ? (
+          <div className="text-forensics-muted">{t('graph.details.noProvenance')}</div>
+        ) : null}
       </div>
-      <Tooltip content={t('graph.actions.close')}><Button aria-label={t('graph.actions.close')} type="button" size="sm" variant="ghost" onClick={onClose} className="text-[10px]"><ActionIcon name="close" /></Button></Tooltip>
+      <Tooltip content={t('graph.actions.close')}>
+        <Button
+          aria-label={t('graph.actions.close')}
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={onClose}
+          className="text-[10px]"
+        >
+          <ActionIcon name="close" />
+        </Button>
+      </Tooltip>
     </div>
   );
 }

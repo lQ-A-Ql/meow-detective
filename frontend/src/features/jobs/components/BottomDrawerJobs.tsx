@@ -33,16 +33,25 @@ export function BottomDrawerJobs({ model, analysisProgress }: BottomDrawerJobsPr
       </div>
       <div className="min-w-0 space-y-3 overflow-hidden">
         {analysisProgress}
-        <ImportStatusPanel
-          importSignals={model.importSignals}
-          evidenceHashStatus={model.evidenceHashStatus}
-        />
-        {model.runningJobs.map((job) => <JobStatusCard key={job.id} job={job} tone="running" />)}
-        {model.completedJobs.map((job) => <JobStatusCard key={job.id} job={job} tone="completed" />)}
-        {model.failedJobs.map((job) => <JobStatusCard key={job.id} job={job} tone="failed" />)}
-        {model.warningJobs.map((job) => <JobStatusCard key={job.id} job={job} tone="warning" />)}
-        {model.cancellingJobs.map((job) => <JobStatusCard key={job.id} job={job} tone="cancelling" />)}
-        {model.cancelledJobs.map((job) => <JobStatusCard key={job.id} job={job} tone="cancelled" />)}
+        <ImportStatusPanel importSignals={model.importSignals} evidenceHashStatus={model.evidenceHashStatus} />
+        {model.runningJobs.map((job) => (
+          <JobStatusCard key={job.id} job={job} tone="running" />
+        ))}
+        {model.completedJobs.map((job) => (
+          <JobStatusCard key={job.id} job={job} tone="completed" />
+        ))}
+        {model.failedJobs.map((job) => (
+          <JobStatusCard key={job.id} job={job} tone="failed" />
+        ))}
+        {model.warningJobs.map((job) => (
+          <JobStatusCard key={job.id} job={job} tone="warning" />
+        ))}
+        {model.cancellingJobs.map((job) => (
+          <JobStatusCard key={job.id} job={job} tone="cancelling" />
+        ))}
+        {model.cancelledJobs.map((job) => (
+          <JobStatusCard key={job.id} job={job} tone="cancelled" />
+        ))}
       </div>
     </ScrollArea>
   );

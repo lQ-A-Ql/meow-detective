@@ -17,7 +17,10 @@ const NETWORK_NODE_KINDS = new Set([
 ]);
 
 /** Projects the evidence graph into an environment/network view. */
-export function buildNetworkTopology(graph: Pick<InfrastructureGraph, 'nodes' | 'edges'>, networkFacts: InfrastructureNetworkFact[] = []): NetworkTopology {
+export function buildNetworkTopology(
+  graph: Pick<InfrastructureGraph, 'nodes' | 'edges'>,
+  networkFacts: InfrastructureNetworkFact[] = [],
+): NetworkTopology {
   const nodes = graph.nodes.filter((node) => NETWORK_NODE_KINDS.has(node.kind));
   const nodeIds = new Set(nodes.map((node) => node.id));
   const edges = graph.edges.filter((edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId));
@@ -25,12 +28,16 @@ export function buildNetworkTopology(graph: Pick<InfrastructureGraph, 'nodes' | 
   return { nodes, edges: [...edges, ...deriveNetworkLinks(nodes, networkFacts)] };
 }
 
-function deriveNetworkLinks(nodes: InfrastructureGraphNode[], facts: InfrastructureNetworkFact[]): InfrastructureGraphEdge[] {
+function deriveNetworkLinks(
+  nodes: InfrastructureGraphNode[],
+  facts: InfrastructureNetworkFact[],
+): InfrastructureGraphEdge[] {
   const nodeIds = new Set(nodes.map((node) => node.id));
   const addressOwners = new Map<string, { nodeId: string; factId: string }>();
   const ambiguousAddresses = new Set<string>();
   for (const fact of facts) {
-    if (!nodeIds.has(fact.environmentObjectId) || !['interface_address', 'hostname_mapping'].includes(fact.factKind)) continue;
+    if (!nodeIds.has(fact.environmentObjectId) || !['interface_address', 'hostname_mapping'].includes(fact.factKind))
+      continue;
     const address = normalizeAddress(fact.value);
     if (!address || ambiguousAddresses.has(address)) continue;
     const previous = addressOwners.get(address);

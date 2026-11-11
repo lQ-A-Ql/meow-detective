@@ -4,14 +4,19 @@ import type { InfrastructureGraphEdge, InfrastructureGraphNode } from '@/types/m
 import { drawNetworkTopology } from './visualization/draw-network-topology';
 import { hitNetworkNode, layoutNetworkNodes, networkCanvasHeight } from './visualization/network-layout';
 
-export function useNetworkTopologyCanvasModel({ nodes, edges, selectedId, onSelect, t }: {
+export function useNetworkTopologyCanvasModel({
+  nodes,
+  edges,
+  selectedId,
+  onSelect,
+  t,
+}: {
   nodes: InfrastructureGraphNode[];
   edges: InfrastructureGraphEdge[];
   selectedId?: string;
   onSelect: (id: string) => void;
   t: TFunction;
 }) {
-
   const containerRef = useRef<HTMLDivElement>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -19,7 +24,6 @@ export function useNetworkTopologyCanvasModel({ nodes, edges, selectedId, onSele
   const [size, setSize] = useState({ width: 920, height: networkCanvasHeight(nodes) });
 
   const points = useMemo(() => layoutNetworkNodes(nodes, size.width, size.height), [nodes, size.height, size.width]);
-
 
   useEffect(() => {
     const element = containerRef.current;
@@ -30,7 +34,6 @@ export function useNetworkTopologyCanvasModel({ nodes, edges, selectedId, onSele
     observer.observe(element);
     return () => observer.disconnect();
   }, [nodes]);
-
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -43,10 +46,15 @@ export function useNetworkTopologyCanvasModel({ nodes, edges, selectedId, onSele
     drawNetworkTopology(context, canvas, size, nodes, edges, points, selectedId, t);
   }, [edges, nodes, points, selectedId, size, t]);
 
-
   const handleClick = (event: MouseEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    onSelect(hitNetworkNode(points, ((event.clientX - rect.left) / rect.width) * size.width, ((event.clientY - rect.top) / rect.height) * size.height) ?? '');
+    onSelect(
+      hitNetworkNode(
+        points,
+        ((event.clientX - rect.left) / rect.width) * size.width,
+        ((event.clientY - rect.top) / rect.height) * size.height,
+      ) ?? '',
+    );
   };
-return { t, containerRef, canvasRef, handleClick };
+  return { t, containerRef, canvasRef, handleClick };
 }

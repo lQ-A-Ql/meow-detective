@@ -14,12 +14,16 @@ export function JobStatusCard({ job, tone }: JobStatusCardProps) {
   return (
     <div className={`${className} min-w-0 max-w-full overflow-hidden`}>
       <div className="flex min-w-0 items-center justify-between gap-3">
-        <span className={`min-w-0 truncate ${tone === 'running' || tone === 'cancelling' ? 'font-light text-forensics-text' : 'font-light'}`}>
+        <span
+          className={`min-w-0 truncate ${tone === 'running' || tone === 'cancelling' ? 'font-light text-forensics-text' : 'font-light'}`}
+        >
           {job.name}
         </span>
         <span className="min-w-0 truncate text-right text-forensics-muted-light">{job.detail}</span>
       </div>
-      <div className="mt-1 truncate opacity-80">{job.scope || (tone === 'failed' ? t('bottomDrawer.jobs.failedFallback') : '')}</div>
+      <div className="mt-1 truncate opacity-80">
+        {job.scope || (tone === 'failed' ? t('bottomDrawer.jobs.failedFallback') : '')}
+      </div>
       <JobOutcomeBadges job={job} />
       {tone === 'running' && job.currentPartition ? <PartitionProgress job={job} /> : null}
       {tone === 'running' ? <OverallProgress job={job} /> : null}
@@ -53,7 +57,9 @@ function PartitionProgress({ job }: { job: JobSnapshot }) {
         </div>
         <span className="w-8 text-right font-mono text-[10px] text-forensics-text-tertiary">{progress}%</span>
       </div>
-      <div className="mt-1 break-words text-[11px] font-light text-forensics-text-secondary">{job.currentPartition}</div>
+      <div className="mt-1 break-words text-[11px] font-light text-forensics-text-secondary">
+        {job.currentPartition}
+      </div>
     </div>
   );
 }

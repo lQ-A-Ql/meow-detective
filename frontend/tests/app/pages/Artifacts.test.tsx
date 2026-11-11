@@ -60,13 +60,7 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
-    createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      createElement(Artifacts),
-    ),
-  );
+  return render(createElement(QueryClientProvider, { client: queryClient }, createElement(Artifacts)));
 }
 
 const emptyRows: unknown[] = [];
@@ -108,9 +102,7 @@ describe('Artifacts page', () => {
       selectedArtifactFamily: 'LNK',
       selectedArtifactId: undefined,
     });
-    mocks.artifactFamilies.mockReturnValue(
-      queryState({ data: ['LNK', 'Prefetch', 'JumpList'] }),
-    );
+    mocks.artifactFamilies.mockReturnValue(queryState({ data: ['LNK', 'Prefetch', 'JumpList'] }));
     mocks.artifactFamilyCounts.mockReturnValue(
       queryState({
         data: [
@@ -148,12 +140,8 @@ describe('Artifacts page', () => {
 
     renderPage();
 
-    expect(
-      screen.getAllByText('C:\\Users\\admin\\Desktop\\secret.lnk').length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText('C:\\Users\\admin\\Recent\\report.lnk').length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText('C:\\Users\\admin\\Desktop\\secret.lnk').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('C:\\Users\\admin\\Recent\\report.lnk').length).toBeGreaterThan(0);
     expect(screen.getAllByText('D:\\Documents\\classified.pdf').length).toBeGreaterThan(0);
     expect(screen.getAllByText('E:\\Work\\report.xlsx').length).toBeGreaterThan(0);
   });

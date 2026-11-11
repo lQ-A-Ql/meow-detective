@@ -73,18 +73,20 @@ describe('Reports hash caveat visibility', () => {
     mocks.templates.mockReturnValue(queryState([{ id: 'summary', name: 'Summary', description: 'Case summary' }]));
     mocks.history.mockReturnValue(queryState([]));
     mocks.importSignals.mockReturnValue({ partialResults: [] });
-    mocks.dataSources.mockReturnValue(queryState([
-      {
-        id: 'ds-1',
-        name: 'Evidence Source',
-        kind: 'raw',
-        sourcePath: 'D:/private/evidence.raw',
-        importedAt: '2026-06-05T10:00:00Z',
-        platform: 'windows',
-        hashStatus: 'pending',
-        partitions: [],
-      },
-    ]));
+    mocks.dataSources.mockReturnValue(
+      queryState([
+        {
+          id: 'ds-1',
+          name: 'Evidence Source',
+          kind: 'raw',
+          sourcePath: 'D:/private/evidence.raw',
+          importedAt: '2026-06-05T10:00:00Z',
+          platform: 'windows',
+          hashStatus: 'pending',
+          partitions: [],
+        },
+      ]),
+    );
 
     renderReports();
 

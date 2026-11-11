@@ -18,13 +18,6 @@ export function AnalysisProgressDrawerContainer() {
     return null;
   }
 
-  const items = PROGRESS_CATEGORIES_BY_PLATFORM[selectedSource.platform]
-    .map((category) => progress[category]);
-  return (
-    <AnalysisProgressDrawer
-      source={selectedSource}
-      progress={items}
-      extractionRunning={extractionRunning}
-    />
-  );
+  const items = PROGRESS_CATEGORIES_BY_PLATFORM[selectedSource.platform].map((category) => progress[category]);
+  return <AnalysisProgressDrawer source={selectedSource} progress={items} extractionRunning={extractionRunning} />;
 }

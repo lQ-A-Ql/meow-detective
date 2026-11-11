@@ -37,9 +37,7 @@ function NameList({ label, names }: { label: string; names: string[] }) {
   return (
     <div className="mt-1 text-[11px]">
       <span className="text-forensics-muted">{label}:</span>
-      <span className="ml-1 break-all font-mono text-forensics-text-secondary">
-        {names.join(', ')}
-      </span>
+      <span className="ml-1 break-all font-mono text-forensics-text-secondary">{names.join(', ')}</span>
     </div>
   );
 }
@@ -72,20 +70,23 @@ function RecoveryResult({
       <NameList label={t('pluginModule.actions.unmatched')} names={result.unmatchedDbNames} />
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className="text-forensics-muted">{t('pluginModule.actions.rerunHint')}</span>
-        <Tooltip content={t('pluginModule.actions.rerun')}><Button aria-label={t('pluginModule.actions.rerun')}
-          type="button"
-          variant="forensicsOutline"
-          size="xs"
-          disabled={rerunPending}
-          onClick={onRerun}
-        ><ActionIcon name="play" /></Button></Tooltip>
+        <Tooltip content={t('pluginModule.actions.rerun')}>
+          <Button
+            aria-label={t('pluginModule.actions.rerun')}
+            type="button"
+            variant="forensicsOutline"
+            size="xs"
+            disabled={rerunPending}
+            onClick={onRerun}
+          >
+            <ActionIcon name="play" />
+          </Button>
+        </Tooltip>
         {rerunDone && !rerunPending ? (
           <span className="text-forensics-success-text">{t('pluginModule.actions.rerunDone')}</span>
         ) : null}
       </div>
-      {rerunError ? (
-        <div className="mt-1 break-words text-forensics-error-text">{errorMessage(rerunError)}</div>
-      ) : null}
+      {rerunError ? <div className="mt-1 break-words text-forensics-error-text">{errorMessage(rerunError)}</div> : null}
     </div>
   );
 }
@@ -128,16 +129,12 @@ function PluginActionCard({
     }
     setInputError('');
     rerun.reset();
-    const result = await recovery
-      .mutateAsync({ dataSourceId, dumpPath: trimmed })
-      .catch(() => undefined);
+    const result = await recovery.mutateAsync({ dataSourceId, dumpPath: trimmed }).catch(() => undefined);
     if (result) onRecoveredKeys(result.recoveredKeys);
   }
 
   async function handleRerun() {
-    await rerun
-      .mutateAsync({ dataSourceId, categories: PLUGIN_RERUN_CATEGORIES })
-      .catch(() => undefined);
+    await rerun.mutateAsync({ dataSourceId, categories: PLUGIN_RERUN_CATEGORIES }).catch(() => undefined);
   }
 
   return (
@@ -160,40 +157,44 @@ function PluginActionCard({
               setInputError('');
             }}
           />
-          <Tooltip content={t('pluginModule.actions.selectFile')}><Button aria-label={t('pluginModule.actions.selectFile')}
-            type="button"
-            variant="forensicsOutline"
-            size="xs"
-            disabled={running}
-            onClick={() => {
-              void handlePickFile();
-            }}
-          ><ActionIcon name="plug" /></Button></Tooltip>
+          <Tooltip content={t('pluginModule.actions.selectFile')}>
+            <Button
+              aria-label={t('pluginModule.actions.selectFile')}
+              type="button"
+              variant="forensicsOutline"
+              size="xs"
+              disabled={running}
+              onClick={() => {
+                void handlePickFile();
+              }}
+            >
+              <ActionIcon name="plug" />
+            </Button>
+          </Tooltip>
         </div>
       ) : null}
       <div className="mt-2 flex items-center gap-2">
-        <Tooltip content={t('pluginModule.actions.run')}><Button aria-label={t('pluginModule.actions.run')}
-          type="button"
-          variant="forensicsPrimary"
-          size="xs"
-          disabled={!supported || running}
-          onClick={() => {
-            void handleRun();
-          }}
-        ><ActionIcon name="play" /></Button></Tooltip>
+        <Tooltip content={t('pluginModule.actions.run')}>
+          <Button
+            aria-label={t('pluginModule.actions.run')}
+            type="button"
+            variant="forensicsPrimary"
+            size="xs"
+            disabled={!supported || running}
+            onClick={() => {
+              void handleRun();
+            }}
+          >
+            <ActionIcon name="play" />
+          </Button>
+        </Tooltip>
         {!supported ? (
-          <span className="text-[11px] text-forensics-muted">
-            {t('pluginModule.actions.unsupported')}
-          </span>
+          <span className="text-[11px] text-forensics-muted">{t('pluginModule.actions.unsupported')}</span>
         ) : null}
       </div>
-      {inputError ? (
-        <div className="mt-1 text-[11px] text-forensics-error-text">{inputError}</div>
-      ) : null}
+      {inputError ? <div className="mt-1 text-[11px] text-forensics-error-text">{inputError}</div> : null}
       {recovery.error ? (
-        <div className="mt-1 break-words text-[11px] text-forensics-error-text">
-          {errorMessage(recovery.error)}
-        </div>
+        <div className="mt-1 break-words text-[11px] text-forensics-error-text">{errorMessage(recovery.error)}</div>
       ) : null}
       {recovery.data ? (
         <RecoveryResult
@@ -238,9 +239,7 @@ export function PluginActionsSection({
 
   return (
     <section>
-      <div className="mb-2 text-[12px] font-light text-forensics-text">
-        {t('pluginModule.actions.title')}
-      </div>
+      <div className="mb-2 text-[12px] font-light text-forensics-text">{t('pluginModule.actions.title')}</div>
       <div className="space-y-2">
         {actions.map((action) => (
           <PluginActionCard

@@ -10,11 +10,7 @@ export type GraphData = {
   truncated: boolean;
 };
 
-export function mergeGraphData(
-  previous: GraphData,
-  newNodes: GraphNode[],
-  newEdges: GraphEdge[],
-): GraphData {
+export function mergeGraphData(previous: GraphData, newNodes: GraphNode[], newEdges: GraphEdge[]): GraphData {
   const nodeMap = buildNodeMap(previous.nodes);
   const edgeMap = buildEdgeMap(previous.edges);
   const nodes = [...previous.nodes];

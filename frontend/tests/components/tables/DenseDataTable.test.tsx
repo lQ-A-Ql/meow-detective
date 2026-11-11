@@ -18,11 +18,14 @@ const columns: DenseColumn<Row>[] = [
 ];
 
 beforeEach(() => {
-  vi.stubGlobal('ResizeObserver', class {
-    observe = vi.fn();
-    disconnect = vi.fn();
-    unobserve = vi.fn();
-  });
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+    },
+  );
 });
 
 function getScrollViewport(container: HTMLElement) {
@@ -40,13 +43,7 @@ describe('DenseDataTable', () => {
       name: `Row ${index}`,
     }));
 
-    const { container } = render(
-      <DenseDataTable
-        columns={columns}
-        rows={rows}
-        getRowKey={(row) => row.id}
-      />
-    );
+    const { container } = render(<DenseDataTable columns={columns} rows={rows} getRowKey={(row) => row.id} />);
 
     const bodyRows = container.querySelectorAll('tbody tr');
     expect(bodyRows.length).toBeLessThan(100);
@@ -60,13 +57,7 @@ describe('DenseDataTable', () => {
       name: `Row ${index}`,
     }));
 
-    const { container } = render(
-      <DenseDataTable
-        columns={columns}
-        rows={rows}
-        getRowKey={(row) => row.id}
-      />
-    );
+    const { container } = render(<DenseDataTable columns={columns} rows={rows} getRowKey={(row) => row.id} />);
 
     const scrollContainer = getScrollViewport(container);
 
@@ -146,11 +137,7 @@ describe('DenseDataTable', () => {
     expect(cellScroller).not.toBeNull();
     expect(cellScroller?.className).toContain('scrollbar-thin-glow--reveal-on-hover');
     expect(cellScroller?.querySelector('.select-text')?.textContent).toContain('A long value');
-    expect(
-      cellScroller
-        ?.querySelector('.scrollbar-thin-glow-scroll')
-        ?.getAttribute('tabindex'),
-    ).toBeNull();
+    expect(cellScroller?.querySelector('.scrollbar-thin-glow-scroll')?.getAttribute('tabindex')).toBeNull();
   });
 
   it('keeps dynamic columns readable in horizontal scroll mode', () => {
@@ -256,12 +243,8 @@ describe('DenseDataTable', () => {
   });
 
   it('continues loading when the current page does not fill the viewport', () => {
-    const clientHeight = vi
-      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
-      .mockReturnValue(600);
-    const scrollHeight = vi
-      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
-      .mockReturnValue(310);
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(310);
     const onReachEnd = vi.fn();
 
     render(
@@ -283,12 +266,8 @@ describe('DenseDataTable', () => {
   });
 
   it('restarts automatic continuation when the load context changes at the same row count', () => {
-    const clientHeight = vi
-      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
-      .mockReturnValue(600);
-    const scrollHeight = vi
-      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
-      .mockReturnValue(310);
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(310);
     const onReachEnd = vi.fn();
     const firstRows = Array.from({ length: 10 }, (_, index) => ({
       id: `first-${index}`,
@@ -349,12 +328,7 @@ describe('DenseDataTable', () => {
       name: `Second ${index}`,
     }));
     const { container, rerender } = render(
-      <DenseDataTable
-        columns={columns}
-        rows={firstRows}
-        getRowKey={(row) => row.id}
-        loadContextKey="query:first"
-      />,
+      <DenseDataTable columns={columns} rows={firstRows} getRowKey={(row) => row.id} loadContextKey="query:first" />,
     );
     const scrollContainer = getScrollViewport(container);
 
@@ -362,12 +336,7 @@ describe('DenseDataTable', () => {
     expect(container.textContent).toContain('First 9999');
 
     rerender(
-      <DenseDataTable
-        columns={columns}
-        rows={secondRows}
-        getRowKey={(row) => row.id}
-        loadContextKey="query:second"
-      />,
+      <DenseDataTable columns={columns} rows={secondRows} getRowKey={(row) => row.id} loadContextKey="query:second" />,
     );
 
     expect(scrollContainer.scrollTop).toBe(0);
@@ -385,13 +354,7 @@ describe('DenseDataTable', () => {
       name: `Row ${index}`,
     }));
     const { container, rerender } = render(
-      <DenseDataTable
-        columns={columns}
-        rows={rows}
-        getRowKey={(row) => row.id}
-        hasMore
-        onReachEnd={onReachEnd}
-      />,
+      <DenseDataTable columns={columns} rows={rows} getRowKey={(row) => row.id} hasMore onReachEnd={onReachEnd} />,
     );
     const scrollContainer = getScrollViewport(container);
     Object.defineProperties(scrollContainer, {
@@ -452,12 +415,8 @@ describe('DenseDataTable', () => {
 
   it('retries a failed short page once and keeps an explicit retry control', async () => {
     vi.useFakeTimers();
-    const clientHeight = vi
-      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
-      .mockReturnValue(600);
-    const scrollHeight = vi
-      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
-      .mockReturnValue(310);
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(310);
     const onReachEnd = vi.fn();
 
     render(
@@ -492,13 +451,7 @@ describe('DenseDataTable', () => {
       name: `Row ${index}`,
     }));
     const { container, rerender } = render(
-      <DenseDataTable
-        columns={columns}
-        rows={rows}
-        getRowKey={(row) => row.id}
-        hasMore
-        onReachEnd={onReachEnd}
-      />,
+      <DenseDataTable columns={columns} rows={rows} getRowKey={(row) => row.id} hasMore onReachEnd={onReachEnd} />,
     );
     const scrollContainer = getScrollViewport(container);
     Object.defineProperties(scrollContainer, {
@@ -520,13 +473,7 @@ describe('DenseDataTable', () => {
       />,
     );
     rerender(
-      <DenseDataTable
-        columns={columns}
-        rows={rows}
-        getRowKey={(row) => row.id}
-        hasMore
-        onReachEnd={onReachEnd}
-      />,
+      <DenseDataTable columns={columns} rows={rows} getRowKey={(row) => row.id} hasMore onReachEnd={onReachEnd} />,
     );
 
     fireEvent.scroll(scrollContainer, { target: { scrollTop: 2_500 } });
@@ -580,13 +527,7 @@ const filterColumns: DenseColumn<FilterRow>[] = [
 
 describe('DenseDataTable filterable toolbar', () => {
   it('stays hidden and leaves rows untouched when filterable is not set', () => {
-    render(
-      <DenseDataTable
-        columns={filterColumns}
-        rows={filterRows}
-        getRowKey={(row) => row.id}
-      />,
-    );
+    render(<DenseDataTable columns={filterColumns} rows={filterRows} getRowKey={(row) => row.id} />);
 
     expect(screen.queryByPlaceholderText('搜索已加载行…')).toBeNull();
     expect(screen.getByText('Alpha')).toBeDefined();
@@ -597,14 +538,7 @@ describe('DenseDataTable filterable toolbar', () => {
   it('narrows rows by debounced case-insensitive keyword search', () => {
     vi.useFakeTimers();
     try {
-      render(
-        <DenseDataTable
-          columns={filterColumns}
-          rows={filterRows}
-          getRowKey={(row) => row.id}
-          filterable
-        />,
-      );
+      render(<DenseDataTable columns={filterColumns} rows={filterRows} getRowKey={(row) => row.id} filterable />);
 
       fireEvent.change(screen.getByPlaceholderText('搜索已加载行…'), {
         target: { value: 'ALPHA' },
@@ -626,14 +560,7 @@ describe('DenseDataTable filterable toolbar', () => {
   });
 
   it('filters rows through the single-select column dropdown', () => {
-    render(
-      <DenseDataTable
-        columns={filterColumns}
-        rows={filterRows}
-        getRowKey={(row) => row.id}
-        filterable
-      />,
-    );
+    render(<DenseDataTable columns={filterColumns} rows={filterRows} getRowKey={(row) => row.id} filterable />);
 
     fireEvent.click(screen.getByRole('combobox', { name: 'Kind' }));
     fireEvent.click(screen.getByRole('option', { name: 'syslog' }));
@@ -652,14 +579,7 @@ describe('DenseDataTable filterable toolbar', () => {
   it('shows a no-match hint when filters exclude every loaded row', () => {
     vi.useFakeTimers();
     try {
-      render(
-        <DenseDataTable
-          columns={filterColumns}
-          rows={filterRows}
-          getRowKey={(row) => row.id}
-          filterable
-        />,
-      );
+      render(<DenseDataTable columns={filterColumns} rows={filterRows} getRowKey={(row) => row.id} filterable />);
 
       fireEvent.change(screen.getByPlaceholderText('搜索已加载行…'), {
         target: { value: 'no-such-row' },
@@ -713,7 +633,15 @@ describe('DenseDataTable keyboard and copy contract', () => {
   it('moves the keyboard cursor and opens the focused row with Enter', () => {
     const onRowClick = vi.fn();
     const { container } = render(
-      <DenseDataTable columns={textColumns} rows={[{ id: 'a', name: 'alpha' }, { id: 'b', name: 'beta' }]} getRowKey={(row) => row.id} onRowClick={onRowClick} />,
+      <DenseDataTable
+        columns={textColumns}
+        rows={[
+          { id: 'a', name: 'alpha' },
+          { id: 'b', name: 'beta' },
+        ]}
+        getRowKey={(row) => row.id}
+        onRowClick={onRowClick}
+      />,
     );
     const viewport = getScrollViewport(container);
 
@@ -730,7 +658,14 @@ describe('DenseDataTable keyboard and copy contract', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
     const { container } = render(
-      <DenseDataTable columns={textColumns} rows={[{ id: 'a', name: 'alpha' }, { id: 'b', name: 'beta' }]} getRowKey={(row) => row.id} />,
+      <DenseDataTable
+        columns={textColumns}
+        rows={[
+          { id: 'a', name: 'alpha' },
+          { id: 'b', name: 'beta' },
+        ]}
+        getRowKey={(row) => row.id}
+      />,
     );
     const viewport = getScrollViewport(container);
 

@@ -18,6 +18,17 @@ export function ImportDataAction() {
 export function RunAnalysisAction({ onClick, disabled = false }: { onClick: () => void; disabled?: boolean }) {
   const { t } = useTranslation();
   return (
-    <Tooltip content={t('analysis.header.run')}><Button aria-label={t('analysis.header.run')} type="button" variant="outline" size="sm" onClick={onClick} disabled={disabled}><ActionIcon name="play" /></Button></Tooltip>
+    <Tooltip content={t('analysis.header.run')}>
+      <Button
+        aria-label={t('analysis.header.run')}
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onClick}
+        disabled={disabled}
+      >
+        <ActionIcon name="play" />
+      </Button>
+    </Tooltip>
   );
 }

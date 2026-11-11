@@ -373,7 +373,8 @@ describe('analysis hooks', () => {
           gateId: 'core-fixture-regression',
           title: '核心 fixture 回归',
           status: 'warning',
-          evidence: 'coreChains=7, passed=6, partialOrPending=1, failed=0, maturity[ga=1, beta=7, experimental=6, unsupported=0]',
+          evidence:
+            'coreChains=7, passed=6, partialOrPending=1, failed=0, maturity[ga=1, beta=7, experimental=6, unsupported=0]',
           detail: '仍有未全量通过链路：E01 镜像读取。',
         },
       ],
@@ -529,13 +530,19 @@ describe('analysis hooks', () => {
     const wrapper = createWrapper();
     const registry = renderHook(() => useRegistryExtractionSummary({ source: windowsSource }), { wrapper });
     const browser = renderHook(() => useBrowserHistorySummary({ source: windowsSource, limit: 50 }), { wrapper });
-    const email = renderHook(() => useEmailExtractionSummary({ source: windowsSource, offset: 10, limit: 25 }), { wrapper });
+    const email = renderHook(() => useEmailExtractionSummary({ source: windowsSource, offset: 10, limit: 25 }), {
+      wrapper,
+    });
 
     await waitFor(() => expect(registry.result.current.isSuccess).toBe(true));
     await waitFor(() => expect(browser.result.current.isSuccess).toBe(true));
     await waitFor(() => expect(email.result.current.isSuccess).toBe(true));
 
-    expect(mocks.getRegistryExtractionSummary).toHaveBeenCalledWith({ dataSourceId: 'ds-windows', offset: 0, limit: 200 });
+    expect(mocks.getRegistryExtractionSummary).toHaveBeenCalledWith({
+      dataSourceId: 'ds-windows',
+      offset: 0,
+      limit: 200,
+    });
     expect(mocks.getBrowserHistorySummary).toHaveBeenCalledWith({ dataSourceId: 'ds-windows', offset: 0, limit: 50 });
     expect(mocks.getEmailExtractionSummary).toHaveBeenCalledWith({ dataSourceId: 'ds-windows', offset: 10, limit: 25 });
   });
@@ -546,16 +553,19 @@ describe('analysis hooks', () => {
       data: { id: 'case-1' },
     });
 
-    const { result } = renderHook(() => ({
-      system: useAnalysisSystemInfo(linuxSource),
-      evidence: useEvidenceClassificationSummary(linuxSource),
-      registry: useRegistryExtractionSummary({ source: linuxSource }),
-      registryStructured: useRegistryStructuredSummary(linuxSource),
-      browser: useBrowserHistorySummary({ source: linuxSource }),
-      email: useEmailExtractionSummary({ source: linuxSource }),
-      eventLogs: useEvtxEventSummary({ source: linuxSource }),
-      classificationBoard: useFileClassificationBoard(linuxSource),
-    }), { wrapper: createWrapper() });
+    const { result } = renderHook(
+      () => ({
+        system: useAnalysisSystemInfo(linuxSource),
+        evidence: useEvidenceClassificationSummary(linuxSource),
+        registry: useRegistryExtractionSummary({ source: linuxSource }),
+        registryStructured: useRegistryStructuredSummary(linuxSource),
+        browser: useBrowserHistorySummary({ source: linuxSource }),
+        email: useEmailExtractionSummary({ source: linuxSource }),
+        eventLogs: useEvtxEventSummary({ source: linuxSource }),
+        classificationBoard: useFileClassificationBoard(linuxSource),
+      }),
+      { wrapper: createWrapper() },
+    );
 
     expect(Object.values(result.current).every((query) => query.fetchStatus === 'idle')).toBe(true);
     expect(mocks.getSystemInfo).not.toHaveBeenCalled();
@@ -587,22 +597,23 @@ describe('analysis hooks', () => {
       otherCount: 0,
       totalCount: 1,
       bootEvents: [],
-      securityEvents: [{
-        timestamp: '2026-07-22T00:00:00Z',
-        eventId: 4688,
-        recordId: 1,
-        kind: 'processCreated',
-        sourcePath: 'Security.evtx',
-      }],
+      securityEvents: [
+        {
+          timestamp: '2026-07-22T00:00:00Z',
+          eventId: 4688,
+          recordId: 1,
+          kind: 'processCreated',
+          sourcePath: 'Security.evtx',
+        },
+      ],
       applicationEvents: [],
       generatedAt: '2026-07-22T00:00:00Z',
       warnings: [],
     });
 
-    const { result } = renderHook(
-      () => useEvtxEventSummary({ source: windowsSource, view: 'process' }),
-      { wrapper: createWrapper() },
-    );
+    const { result } = renderHook(() => useEvtxEventSummary({ source: windowsSource, view: 'process' }), {
+      wrapper: createWrapper(),
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mocks.getEvtxEventSummary).toHaveBeenCalledWith({
@@ -621,10 +632,9 @@ describe('analysis hooks', () => {
       data: { id: 'case-1' },
     });
 
-    const { result } = renderHook(
-      () => useLinuxArtifactSummary({ source: windowsSource }),
-      { wrapper: createWrapper() },
-    );
+    const { result } = renderHook(() => useLinuxArtifactSummary({ source: windowsSource }), {
+      wrapper: createWrapper(),
+    });
 
     expect(result.current.fetchStatus).toBe('idle');
     expect(mocks.getLinuxArtifactSummary).not.toHaveBeenCalled();
@@ -636,10 +646,7 @@ describe('analysis hooks', () => {
       data: { id: 'case-1' },
     });
 
-    const { result } = renderHook(
-      () => useLinuxArtifactSummary({ source: linuxSource }),
-      { wrapper: createWrapper() },
-    );
+    const { result } = renderHook(() => useLinuxArtifactSummary({ source: linuxSource }), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mocks.getLinuxArtifactSummary).toHaveBeenCalledWith({
@@ -662,23 +669,24 @@ describe('analysis hooks', () => {
       logKind: 'journald',
     });
     mocks.getLinuxArtifactSummary
-      .mockResolvedValueOnce(linuxSummaryFixture({
-        status: 'parsed',
-        journalCount: 2,
-        totalCount: 2,
-        journalEntries: [entry('j-1')],
-      }))
-      .mockResolvedValueOnce(linuxSummaryFixture({
-        status: 'parsed',
-        journalCount: 2,
-        totalCount: 2,
-        journalEntries: [entry('j-2')],
-      }));
+      .mockResolvedValueOnce(
+        linuxSummaryFixture({
+          status: 'parsed',
+          journalCount: 2,
+          totalCount: 2,
+          journalEntries: [entry('j-1')],
+        }),
+      )
+      .mockResolvedValueOnce(
+        linuxSummaryFixture({
+          status: 'parsed',
+          journalCount: 2,
+          totalCount: 2,
+          journalEntries: [entry('j-2')],
+        }),
+      );
 
-    const { result } = renderHook(
-      () => useLinuxArtifactSummary({ source: linuxSource }),
-      { wrapper: createWrapper() },
-    );
+    const { result } = renderHook(() => useLinuxArtifactSummary({ source: linuxSource }), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.journalEntries).toHaveLength(1);
@@ -728,11 +736,13 @@ describe('analysis hooks', () => {
       data: { id: 'case-1' },
     });
     let extracted = false;
-    mocks.getLinuxArtifactSummary.mockImplementation(async () => linuxSummaryFixture({
-      status: extracted ? 'parsed' : 'candidateFound',
-      bashCommandCount: extracted ? 4 : 0,
-      totalCount: extracted ? 4 : 0,
-    }));
+    mocks.getLinuxArtifactSummary.mockImplementation(async () =>
+      linuxSummaryFixture({
+        status: extracted ? 'parsed' : 'candidateFound',
+        bashCommandCount: extracted ? 4 : 0,
+        totalCount: extracted ? 4 : 0,
+      }),
+    );
     mocks.runAnalysisExtraction.mockImplementation(async () => {
       extracted = true;
       return {
@@ -871,22 +881,27 @@ describe('plugin analysis hooks', () => {
 
   it('pages plugin family entries until the family is fully loaded', async () => {
     mocks.getPluginFamilyEntries
-      .mockResolvedValueOnce(pluginFamilyPageFixture({
-        totalCount: 2,
-        entries: [pluginEntryFixture('a1')],
-      }))
-      .mockResolvedValueOnce(pluginFamilyPageFixture({
-        totalCount: 2,
-        entries: [pluginEntryFixture('a2')],
-      }));
+      .mockResolvedValueOnce(
+        pluginFamilyPageFixture({
+          totalCount: 2,
+          entries: [pluginEntryFixture('a1')],
+        }),
+      )
+      .mockResolvedValueOnce(
+        pluginFamilyPageFixture({
+          totalCount: 2,
+          entries: [pluginEntryFixture('a2')],
+        }),
+      );
 
     const { result } = renderHook(
-      () => usePluginFamilyEntries({
-        dataSourceId: 'ds-windows',
-        pluginId: 'plugin-prefetch',
-        family: 'ProgramExecution',
-        limit: 1,
-      }),
+      () =>
+        usePluginFamilyEntries({
+          dataSourceId: 'ds-windows',
+          pluginId: 'plugin-prefetch',
+          family: 'ProgramExecution',
+          limit: 1,
+        }),
       { wrapper: createWrapper() },
     );
 
@@ -907,10 +922,9 @@ describe('plugin analysis hooks', () => {
   });
 
   it('keeps plugin family entries idle without plugin or family selection', () => {
-    const { result } = renderHook(
-      () => usePluginFamilyEntries({ dataSourceId: 'ds-windows' }),
-      { wrapper: createWrapper() },
-    );
+    const { result } = renderHook(() => usePluginFamilyEntries({ dataSourceId: 'ds-windows' }), {
+      wrapper: createWrapper(),
+    });
 
     expect(result.current.fetchStatus).toBe('idle');
     expect(mocks.getPluginFamilyEntries).not.toHaveBeenCalled();

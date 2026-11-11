@@ -1,10 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { CollapsibleSection } from '@/components/layout/CollapsibleSection';
 import { ClassificationSubcategoryTable } from './ClassificationSubcategoryTable';
-import type {
-  ClassifiedFileRow,
-  FileClassificationBoard as FileClassificationBoardData,
-} from '@/types/models';
+import type { ClassifiedFileRow, FileClassificationBoard as FileClassificationBoardData } from '@/types/models';
 import {
   CATEGORY_COLORS,
   CATEGORY_ICONS,

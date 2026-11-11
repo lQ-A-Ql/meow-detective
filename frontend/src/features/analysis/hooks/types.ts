@@ -2,9 +2,6 @@ import type { AnalysisExtractionPageRequest, DataSourceSummary } from '@/types/m
 
 export type AnalysisSource = Pick<DataSourceSummary, 'id' | 'platform'>;
 
-export type OptionalAnalysisPageRequest = Omit<
-  Partial<AnalysisExtractionPageRequest>,
-  'dataSourceId'
-> & {
+export type OptionalAnalysisPageRequest = Omit<Partial<AnalysisExtractionPageRequest>, 'dataSourceId'> & {
   source?: AnalysisSource;
 };

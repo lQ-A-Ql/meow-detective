@@ -1,14 +1,7 @@
 import type { ReactNode } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { IconButton } from '@/components/controls/IconButton';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from './dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog';
 
 export interface ConfirmationDialogProps {
   open: boolean;
@@ -50,7 +43,14 @@ export function ConfirmationDialog({
           >
             <ActionIcon name="close" />
           </IconButton>
-          <IconButton variant={destructive ? 'destructive' : 'solid'} onClick={onConfirm} disabled={pending} label={confirmLabel}><ActionIcon name="check" /></IconButton>
+          <IconButton
+            variant={destructive ? 'destructive' : 'solid'}
+            onClick={onConfirm}
+            disabled={pending}
+            label={confirmLabel}
+          >
+            <ActionIcon name="check" />
+          </IconButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

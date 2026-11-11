@@ -38,10 +38,7 @@ describe('useEvidenceDigestModel', () => {
   it('passes explicit force recompute to the digest task', () => {
     const source = { id: 'source-1', name: 'Evidence' } as DataSourceSummary;
     const file = { id: 'file-1', entryType: 'file' } as FileEntryRow;
-    const { result } = renderHook(
-      () => useEvidenceDigestModel('case-1', file, source),
-      { wrapper: wrapper() },
-    );
+    const { result } = renderHook(() => useEvidenceDigestModel('case-1', file, source), { wrapper: wrapper() });
 
     act(() => result.current.setForceRecompute(true));
     act(() => result.current.calculate('sha256'));

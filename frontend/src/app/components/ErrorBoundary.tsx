@@ -53,18 +53,28 @@ class ErrorBoundaryBase extends Component<Props, State> {
               {this.state.error?.message ?? t('errorBoundary.unknownError')}
             </div>
             <div className="flex gap-3 justify-center">
-              <Tooltip content={t('errorBoundary.reload')}><Button aria-label={t('errorBoundary.reload')}
-                type="button"
-                variant="forensicsSurface"
-                size="sm"
-                onClick={this.handleReload}
-              ><ActionIcon name="refresh" /></Button></Tooltip>
-              <Tooltip content={t('errorBoundary.recover')}><Button aria-label={t('errorBoundary.recover')}
-                type="button"
-                variant="forensicsLink"
-                size="sm"
-                onClick={this.handleReset}
-              ><ActionIcon name="restore" /></Button></Tooltip>
+              <Tooltip content={t('errorBoundary.reload')}>
+                <Button
+                  aria-label={t('errorBoundary.reload')}
+                  type="button"
+                  variant="forensicsSurface"
+                  size="sm"
+                  onClick={this.handleReload}
+                >
+                  <ActionIcon name="refresh" />
+                </Button>
+              </Tooltip>
+              <Tooltip content={t('errorBoundary.recover')}>
+                <Button
+                  aria-label={t('errorBoundary.recover')}
+                  type="button"
+                  variant="forensicsLink"
+                  size="sm"
+                  onClick={this.handleReset}
+                >
+                  <ActionIcon name="restore" />
+                </Button>
+              </Tooltip>
             </div>
           </div>
         </div>

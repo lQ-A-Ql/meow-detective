@@ -9,7 +9,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search }  from '@/components/icons';
+import { Search } from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { Button } from '@/app/components/ui/button';
@@ -24,11 +24,7 @@ interface TreeSearchProps {
   debounceMs?: number;
 }
 
-export function TreeSearch({
-  onFilter,
-  placeholder,
-  debounceMs = 150,
-}: TreeSearchProps) {
+export function TreeSearch({ onFilter, placeholder, debounceMs = 150 }: TreeSearchProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
 
@@ -49,10 +45,7 @@ export function TreeSearch({
   return (
     <div className="border-b border-forensics-divider px-2 py-1.5">
       <div className="relative">
-        <Search
-          size={12}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-forensics-muted-lighter"
-        />
+        <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-forensics-muted-lighter" />
         <Input
           type="text"
           value={query}

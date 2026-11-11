@@ -1,14 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import type {
-  CorrelationCluster,
-} from '@/types/models';
+import type { CorrelationCluster } from '@/types/models';
 import { Button } from '@/app/components/ui/button';
-import {
-  confidenceLabel,
-  confidenceTone,
-  FamilyPills,
-  Metric,
-} from './correlation-helpers';
+import { confidenceLabel, confidenceTone, FamilyPills, Metric } from './correlation-helpers';
 
 export function ClusterCard({
   cluster,
@@ -18,10 +11,9 @@ export function ClusterCard({
   onJump: (route: string, targetId: string) => void;
 }) {
   const { t } = useTranslation();
-  const primaryJump =
-    cluster.primaryFileId
-      ? { route: '/files', targetId: cluster.primaryFileId, label: t('correlation.cluster.viewPrimaryFile') }
-      : undefined;
+  const primaryJump = cluster.primaryFileId
+    ? { route: '/files', targetId: cluster.primaryFileId, label: t('correlation.cluster.viewPrimaryFile') }
+    : undefined;
 
   return (
     <div className="rounded-none bg-transparent p-4">

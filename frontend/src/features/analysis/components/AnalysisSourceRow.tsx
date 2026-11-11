@@ -1,7 +1,6 @@
-import { Puzzle }  from '@/components/icons';
+import { Puzzle } from '@/components/icons';
 import { TreeRow } from '@/components/tree/TreeRow';
 import { useTranslation } from 'react-i18next';
-
 
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { dataSourcePlatformLabel, sourceKindIconLarge } from '@/lib/data-source-utils';
@@ -33,19 +32,26 @@ export function AnalysisSourceRow({ row, model, onSelectOrToggle }: Props) {
         toggleLabel={t(row.expanded ? 'analysis.sidebar.collapseSource' : 'analysis.sidebar.expandSource')}
         icon={<SourceIcon size={12} className="shrink-0 text-forensics-ink-3" />}
         label={source.name}
-        meta={source.fileCount !== undefined ? <span className="font-mono text-[9px] text-forensics-ink-3">{source.fileCount}</span> : null}
+        meta={
+          source.fileCount !== undefined ? (
+            <span className="font-mono text-[9px] text-forensics-ink-3">{source.fileCount}</span>
+          ) : null
+        }
         className="h-7 text-[11px]"
       />
     );
   }
   if (row.kind === 'platform' || row.kind === 'pluginGroup') {
-    return <div className="ml-3 border-l border-forensics-border-light py-0.5 pl-2 text-[9px] text-forensics-muted-light">
-      {row.kind === 'platform' ? dataSourcePlatformLabel(source) : t('pluginModule.groupTitle')}
-    </div>;
+    return (
+      <div className="ml-3 border-l border-forensics-border-light py-0.5 pl-2 text-[9px] text-forensics-muted-light">
+        {row.kind === 'platform' ? dataSourcePlatformLabel(source) : t('pluginModule.groupTitle')}
+      </div>
+    );
   }
   if (row.kind === 'plugin') {
     const { module } = row;
-    const active = model.activePluginId === module.pluginId &&
+    const active =
+      model.activePluginId === module.pluginId &&
       (source.platform === 'windows' ? model.activeWindowsTab === 'plugin' : model.activeLinuxTab === 'plugin');
     return (
       <div className="ml-3 border-l border-forensics-border-light pl-1">
@@ -73,10 +79,16 @@ export function AnalysisSourceRow({ row, model, onSelectOrToggle }: Props) {
   }
   const { node } = row;
   const Icon = node.icon;
-  const active = selected && (source.platform === 'windows' ? node.windowsTab === model.activeWindowsTab
-    : source.platform === 'linux' ? node.linuxTab === model.activeLinuxTab : node.androidTab === model.activeAndroidTab);
+  const active =
+    selected &&
+    (source.platform === 'windows'
+      ? node.windowsTab === model.activeWindowsTab
+      : source.platform === 'linux'
+        ? node.linuxTab === model.activeLinuxTab
+        : node.androidTab === model.activeAndroidTab);
   const progress = selected && node.category ? model.progress[node.category] : undefined;
-  const summaryCount = selected && source.platform === 'linux' && node.linuxTab ? model.linuxNodeCounts?.[node.linuxTab] : undefined;
+  const summaryCount =
+    selected && source.platform === 'linux' && node.linuxTab ? model.linuxNodeCounts?.[node.linuxTab] : undefined;
   const count = summaryCount ?? (progress && progress.status !== 'idle' ? progress.artifactCount : undefined);
   const label = t(node.labelKey);
   return (

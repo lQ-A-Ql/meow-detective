@@ -7,10 +7,12 @@ export function isApiErrorDto(value: unknown): value is ApiErrorDto {
   }
 
   const candidate = value as Partial<ApiErrorDto>;
-  return typeof candidate.code === 'string'
-    && typeof candidate.message === 'string'
-    && (candidate.category === undefined || typeof candidate.category === 'string')
-    && (candidate.recoverable === undefined || typeof candidate.recoverable === 'boolean');
+  return (
+    typeof candidate.code === 'string' &&
+    typeof candidate.message === 'string' &&
+    (candidate.category === undefined || typeof candidate.category === 'string') &&
+    (candidate.recoverable === undefined || typeof candidate.recoverable === 'boolean')
+  );
 }
 
 export function errorMessage(error: unknown, fallback = i18n.t('common.errors.unknownApi')) {

@@ -1,8 +1,4 @@
-import type {
-  CorrelationConfidence,
-  CorrelationCoverageStatus,
-  CorrelationLead,
-} from '@/types/models';
+import type { CorrelationConfidence, CorrelationCoverageStatus, CorrelationLead } from '@/types/models';
 import { MetricCard } from '@/components/data-display';
 
 export function confidenceLabel(value: CorrelationConfidence) {

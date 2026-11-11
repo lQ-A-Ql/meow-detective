@@ -5,6 +5,12 @@ import { RegistryHardwareContainer } from './RegistryHardwareContainer';
 export function NativeRegistryHardwareContainer({ dataSourceId }: { dataSourceId: string }) {
   const context = useNativeRegistryContext(dataSourceId);
   const { t } = useTranslation();
-  return context ? <RegistryHardwareContainer key={`${context.caseId}:${context.dataSourceId}:${context.sourceRevision}`} context={context} />
-    : <p className="registry-browser-message">{t('registryBrowser.errors.sourceUnavailable')}</p>;
+  return context ? (
+    <RegistryHardwareContainer
+      key={`${context.caseId}:${context.dataSourceId}:${context.sourceRevision}`}
+      context={context}
+    />
+  ) : (
+    <p className="registry-browser-message">{t('registryBrowser.errors.sourceUnavailable')}</p>
+  );
 }

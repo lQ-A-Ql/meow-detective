@@ -1,9 +1,4 @@
-export type NotebookEntryType =
-  | 'observation'
-  | 'hypothesis'
-  | 'finding'
-  | 'actionItem'
-  | 'conclusion';
+export type NotebookEntryType = 'observation' | 'hypothesis' | 'finding' | 'actionItem' | 'conclusion';
 
 export type NotebookEntryStatus = 'draft' | 'reviewed' | 'final';
 

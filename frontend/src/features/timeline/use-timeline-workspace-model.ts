@@ -1,9 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import {
-  useInfiniteTimelineEvents,
-  useTimelineEventById,
-  useTimelineFacets,
-} from '@/features/timeline/hooks';
+import { useInfiniteTimelineEvents, useTimelineEventById, useTimelineFacets } from '@/features/timeline/hooks';
 import { useTimelineSelectionModel } from '@/features/timeline/use-timeline-page-model';
 import type { TimelineEvent } from '@/types/models';
 
@@ -81,22 +77,13 @@ export function useTimelineWorkspaceModel() {
   });
   const { fetchNextPage, refetch: refetchTimeline } = timelineQuery;
   const { refetch: refetchFacets } = facetsQuery;
-  const loadContextKey = JSON.stringify([
-    normalizedTimeStart ?? null,
-    normalizedTimeEnd ?? null,
-    eventType || null,
-  ]);
+  const loadContextKey = JSON.stringify([normalizedTimeStart ?? null, normalizedTimeEnd ?? null, eventType || null]);
   const events = useMemo(
     () => (timelineQuery.data?.pages ?? []).flatMap((page) => page?.items ?? []),
     [timelineQuery.data],
   );
   const totalEvents = facetsQuery.data?.totalEvents ?? 0;
-  const {
-    eventLookupId,
-    jumpToSource,
-    selectedTimelineId,
-    setSelectedTimelineId,
-  } = useTimelineSelectionModel();
+  const { eventLookupId, jumpToSource, selectedTimelineId, setSelectedTimelineId } = useTimelineSelectionModel();
   const selectedTimelineEvent = useTimelineEventById(eventLookupId);
 
   const selectedEvent =
@@ -178,16 +165,19 @@ export function useTimelineWorkspaceModel() {
     },
     [setSelectedTimelineId],
   );
-  const selectTimeRange = useCallback((start: string, end: string) => {
-    const nextStart = toDateTimeLocal(start);
-    const nextEnd = toDateTimeLocal(end);
-    if (!nextStart || !nextEnd) return;
-    setSelectedTimelineId(undefined);
-    setDraftTimeStart(nextStart);
-    setDraftTimeEnd(nextEnd);
-    setTimeStart(nextStart);
-    setTimeEnd(nextEnd);
-  }, [setSelectedTimelineId]);
+  const selectTimeRange = useCallback(
+    (start: string, end: string) => {
+      const nextStart = toDateTimeLocal(start);
+      const nextEnd = toDateTimeLocal(end);
+      if (!nextStart || !nextEnd) return;
+      setSelectedTimelineId(undefined);
+      setDraftTimeStart(nextStart);
+      setDraftTimeEnd(nextEnd);
+      setTimeStart(nextStart);
+      setTimeEnd(nextEnd);
+    },
+    [setSelectedTimelineId],
+  );
   const loadNextPage = useCallback(() => {
     void fetchNextPage();
   }, [fetchNextPage]);

@@ -19,30 +19,52 @@ import { registryFiletimeUtc, registryValueRows } from './value-model';
 import { recoveryFailureDetails } from './recovery-model';
 import type { RegistryBrowserContext, RegistryDetailTab, RegistryTreeNode } from './types';
 
-export function useRegistryBrowserModel(client: RegistryBrowserClient, context: RegistryBrowserContext, initialKeyPath = '') {
+export function useRegistryBrowserModel(
+  client: RegistryBrowserClient,
+  context: RegistryBrowserContext,
+  initialKeyPath = '',
+) {
   const { t } = useTranslation();
   const instanceId = useId();
   const hives = useRegistryHives(client, context);
   const [view, setView] = useState<RegistryHiveView>('base');
   const pendingViewPath = useRef<{ view: RegistryHiveView; fileId: string; path: string }>();
-  const hive = useRegistrySession(client, { ...context, sourceRevision: hives.data?.sourceRevision ?? context.sourceRevision });
+  const hive = useRegistrySession(client, {
+    ...context,
+    sourceRevision: hives.data?.sourceRevision ?? context.sourceRevision,
+  });
   const session = hive.session;
   const openHiveSession = hive.openHive;
   const expireSession = hive.expire;
   useRegistrySessionCache(session?.sessionId);
   const tree = useRegistryTree(client, session);
-  const [selection, setSelection] = useState<{ sessionId: string; key: RegistryKeyMetadata; initialValuesCursor?: string }>();
+  const [selection, setSelection] = useState<{
+    sessionId: string;
+    key: RegistryKeyMetadata;
+    initialValuesCursor?: string;
+  }>();
   const selectedKey = selection?.sessionId === session?.sessionId ? selection?.key : session?.rootKey;
   const [valueSelection, setValueSelection] = useState<{ sessionId: string; keyId: string; valueId: string }>();
-  const values = useRegistryValues(client, session, selectedKey, selection?.sessionId === session?.sessionId ? selection?.initialValuesCursor : undefined);
+  const values = useRegistryValues(
+    client,
+    session,
+    selectedKey,
+    selection?.sessionId === session?.sessionId ? selection?.initialValuesCursor : undefined,
+  );
   const rawValues = useMemo(() => values.data?.pages.flatMap((page) => page.values) ?? [], [values.data]);
-  const selectedValue = valueSelection && valueSelection.sessionId === session?.sessionId && valueSelection.keyId === selectedKey?.keyId
-    ? rawValues.find((value) => value.valueId === valueSelection.valueId) : undefined;
+  const selectedValue =
+    valueSelection && valueSelection.sessionId === session?.sessionId && valueSelection.keyId === selectedKey?.keyId
+      ? rawValues.find((value) => value.valueId === valueSelection.valueId)
+      : undefined;
   const [offset, setOffset] = useState(0);
   const range = useRegistryValueRange(client, session, selectedKey, selectedValue, offset);
-  const expired = registryBrowserErrorCode(values.error) === 'expiredSession'
-    || registryBrowserErrorCode(range.error) === 'expiredSession' || Object.values(tree.errors).includes('expiredSession');
-  useEffect(() => { if (expired) expireSession(); }, [expired, expireSession]);
+  const expired =
+    registryBrowserErrorCode(values.error) === 'expiredSession' ||
+    registryBrowserErrorCode(range.error) === 'expiredSession' ||
+    Object.values(tree.errors).includes('expiredSession');
+  useEffect(() => {
+    if (expired) expireSession();
+  }, [expired, expireSession]);
   const [detailTab, setDetailTab] = useState<RegistryDetailTab>('decoded');
   const [filter, setFilter] = useState('');
   const registrySearch = useRegistrySearch(session);
@@ -53,21 +75,45 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   const navigationEpoch = useRef(0);
   const activeSession = useRef(session?.sessionId);
   activeSession.current = session?.sessionId;
-  useEffect(() => () => { navigationEpoch.current += 1; }, []);
-  const selectKey = useCallback((key: RegistryKeyMetadata) => {
-    if (!session) return;
-    navigationEpoch.current += 1;
-    setLocating(false);
-    setSelection({ sessionId: session.sessionId, key }); setPathInput(key.path);
-    setPathError(undefined); setValueSelection(undefined); setOffset(0); setCopyStatus(undefined);
-  }, [session]);
-  const openHive = useCallback(async (fileId: string, revision?: string, requestedView = view) => {
-    if (pendingViewPath.current && (pendingViewPath.current.fileId !== fileId || pendingViewPath.current.view !== requestedView)) pendingViewPath.current = undefined;
-    navigationEpoch.current += 1;
-    setLocating(false); setCopyStatus(undefined);
-    setSelection(undefined); setValueSelection(undefined); setOffset(0); setPathInput(''); setPathError(undefined);
-    return openHiveSession(fileId, revision, requestedView);
-  }, [openHiveSession, view]);
+  useEffect(
+    () => () => {
+      navigationEpoch.current += 1;
+    },
+    [],
+  );
+  const selectKey = useCallback(
+    (key: RegistryKeyMetadata) => {
+      if (!session) return;
+      navigationEpoch.current += 1;
+      setLocating(false);
+      setSelection({ sessionId: session.sessionId, key });
+      setPathInput(key.path);
+      setPathError(undefined);
+      setValueSelection(undefined);
+      setOffset(0);
+      setCopyStatus(undefined);
+    },
+    [session],
+  );
+  const openHive = useCallback(
+    async (fileId: string, revision?: string, requestedView = view) => {
+      if (
+        pendingViewPath.current &&
+        (pendingViewPath.current.fileId !== fileId || pendingViewPath.current.view !== requestedView)
+      )
+        pendingViewPath.current = undefined;
+      navigationEpoch.current += 1;
+      setLocating(false);
+      setCopyStatus(undefined);
+      setSelection(undefined);
+      setValueSelection(undefined);
+      setOffset(0);
+      setPathInput('');
+      setPathError(undefined);
+      return openHiveSession(fileId, revision, requestedView);
+    },
+    [openHiveSession, view],
+  );
   const activate = (node: RegistryTreeNode) => {
     if (node.key && session?.hive.fileId === node.hive.fileId) selectKey(node.key);
     else void openHive(node.hive.fileId);
@@ -76,45 +122,70 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     if (node.key && session?.hive.fileId === node.hive.fileId) tree.toggle(node.key);
     else void openHive(node.hive.fileId);
   };
-  const nodes = filterRegistryTree(registryTreeNodes(hives.data?.hives ?? [], session, tree.pages,
-    tree.expanded, tree.loading, tree.errors, instanceId), filter);
+  const nodes = filterRegistryTree(
+    registryTreeNodes(
+      hives.data?.hives ?? [],
+      session,
+      tree.pages,
+      tree.expanded,
+      tree.loading,
+      tree.errors,
+      instanceId,
+    ),
+    filter,
+  );
   const keyboard = useRegistryTreeKeyboard(nodes, activate, toggle);
   const viewport = useRegistryTreeViewport(flattenRegistryTree(nodes), keyboard);
   const loadTreePage = tree.load;
   const expandTreeKey = tree.expand;
   const setTreeKeyboardFocus = keyboard.setFocusedId;
-  const locate = useCallback(async (path: string) => {
-    if (!session) return;
-    const token = ++navigationEpoch.current;
-    const sessionId = session.sessionId;
-    const parts = path.split('\\').filter(Boolean);
-    setLocating(true); setPathError(undefined);
-    try {
-      const key = await client.resolveKey({ sessionId, keyPath: parts.join('\\') });
-      for (let depth = 0; depth < parts.length; depth++) {
-        const parent = depth === 0 ? session.rootKey
-          : await client.resolveKey({ sessionId, keyPath: parts.slice(0, depth).join('\\') });
-        if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
-        const childPath = parts.slice(0, depth + 1).join('\\').toLowerCase();
-        let page = await loadTreePage(parent);
-        while (page?.nextCursor && !page.keys.some((child) => child.path.toLowerCase() === childPath)) {
+  const locate = useCallback(
+    async (path: string) => {
+      if (!session) return;
+      const token = ++navigationEpoch.current;
+      const sessionId = session.sessionId;
+      const parts = path.split('\\').filter(Boolean);
+      setLocating(true);
+      setPathError(undefined);
+      try {
+        const key = await client.resolveKey({ sessionId, keyPath: parts.join('\\') });
+        for (let depth = 0; depth < parts.length; depth++) {
+          const parent =
+            depth === 0
+              ? session.rootKey
+              : await client.resolveKey({ sessionId, keyPath: parts.slice(0, depth).join('\\') });
           if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
-          page = await loadTreePage(parent, page.nextCursor);
+          const childPath = parts
+            .slice(0, depth + 1)
+            .join('\\')
+            .toLowerCase();
+          let page = await loadTreePage(parent);
+          while (page?.nextCursor && !page.keys.some((child) => child.path.toLowerCase() === childPath)) {
+            if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
+            page = await loadTreePage(parent, page.nextCursor);
+          }
+          expandTreeKey(parent);
         }
-        expandTreeKey(parent);
+        if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
+        setSelection({ sessionId, key });
+        setPathInput(key.path);
+        setValueSelection(undefined);
+        setOffset(0);
+        setTreeKeyboardFocus(key.keyId);
+        return key;
+      } catch (error) {
+        if (token === navigationEpoch.current && activeSession.current === sessionId) setPathError(error);
+      } finally {
+        if (token === navigationEpoch.current) setLocating(false);
       }
-      if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
-      setSelection({ sessionId, key }); setPathInput(key.path); setValueSelection(undefined); setOffset(0);
-      setTreeKeyboardFocus(key.keyId);
-      return key;
-    } catch (error) {
-      if (token === navigationEpoch.current && activeSession.current === sessionId) setPathError(error);
-    } finally { if (token === navigationEpoch.current) setLocating(false); }
-  }, [client, session, loadTreePage, expandTreeKey, setTreeKeyboardFocus]);
+    },
+    [client, session, loadTreePage, expandTreeKey, setTreeKeyboardFocus],
+  );
   const initialDone = useRef(false);
   useEffect(() => {
     if (!initialDone.current && hives.data?.hives.length) {
-      initialDone.current = true; void openHive(hives.data.hives[0].fileId);
+      initialDone.current = true;
+      void openHive(hives.data.hives[0].fileId);
     }
   }, [hives.data, openHive]);
   const initialPathDone = useRef(false);
@@ -127,13 +198,18 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   }, [locate, session]);
   useEffect(() => {
     if (session && initialKeyPath && !initialPathDone.current) {
-      initialPathDone.current = true; void locate(initialKeyPath);
+      initialPathDone.current = true;
+      void locate(initialKeyPath);
     }
   }, [initialKeyPath, locate, session]);
   const copy = async (text: string) => {
     const token = navigationEpoch.current;
-    try { await navigator.clipboard.writeText(text); if (token === navigationEpoch.current) setCopyStatus(t('registryBrowser.copied')); }
-    catch { if (token === navigationEpoch.current) setCopyStatus(t('registryBrowser.copyFailed')); }
+    try {
+      await navigator.clipboard.writeText(text);
+      if (token === navigationEpoch.current) setCopyStatus(t('registryBrowser.copied'));
+    } catch {
+      if (token === navigationEpoch.current) setCopyStatus(t('registryBrowser.copyFailed'));
+    }
   };
   const locateSearchHit = async (hit: RegistrySearchHit) => {
     if (!session) return;
@@ -142,18 +218,29 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     if (!key || activeSession.current !== sessionId || !client.locateSearchHit) return;
     const token = navigationEpoch.current;
     try {
-      const target = await client.locateSearchHit({ sessionId, keyPath: hit.path, keyCellOffset: hit.keyCellOffset ?? key.cellOffset, ...(hit.kind === 'value' ? { valueCellOffset: hit.cellOffset, valueIndex: hit.valueIndex } : {}) });
+      const target = await client.locateSearchHit({
+        sessionId,
+        keyPath: hit.path,
+        keyCellOffset: hit.keyCellOffset ?? key.cellOffset,
+        ...(hit.kind === 'value' ? { valueCellOffset: hit.cellOffset, valueIndex: hit.valueIndex } : {}),
+      });
       if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
       setSelection({ sessionId, key: target.key, initialValuesCursor: target.valuesCursor });
-      setValueSelection(target.value ? { sessionId, keyId: target.key.keyId, valueId: target.value.valueId } : undefined);
+      setValueSelection(
+        target.value ? { sessionId, keyId: target.key.keyId, valueId: target.value.valueId } : undefined,
+      );
       setOffset(hit.dataOffset ?? 0);
-    } catch (error) { if (token === navigationEpoch.current && activeSession.current === sessionId) setPathError(error); }
+    } catch (error) {
+      if (token === navigationEpoch.current && activeSession.current === sessionId) setPathError(error);
+    }
   };
-  const errorText = (error: unknown) => error ? t(`registryBrowser.errors.${registryBrowserErrorCode(error)}`) : undefined;
+  const errorText = (error: unknown) =>
+    error ? t(`registryBrowser.errors.${registryBrowserErrorCode(error)}`) : undefined;
   const pages = values.data?.pages ?? [];
   const keyTime = registryFiletimeUtc(selectedKey?.lastWriteFiletime) ?? t('registryBrowser.unknown');
   const selectedValueLabel = selectedValue
-    ? registryValueRows([selectedValue], t)[0].displayName : t('registryBrowser.detailsTitle');
+    ? registryValueRows([selectedValue], t)[0].displayName
+    : t('registryBrowser.detailsTitle');
   const provenance = [
     [t('registryBrowser.viewLabel'), t(view === 'base' ? 'registryBrowser.baseView' : 'registryBrowser.recoveredView')],
     [t('registryBrowser.baseHash'), session?.recovery?.baseSha256],
@@ -167,34 +254,75 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     [t('registryBrowser.lastWrite'), keyTime],
     [t('registryBrowser.filetime'), selectedKey?.lastWriteFiletime],
   ].map(([name, value]) => ({ name: name!, value: value ?? t('registryBrowser.unknown') }));
-  const rangeSummary = range.data ? t('registryBrowser.range', {
-    offset: range.data.offset.toLocaleString(), loaded: range.data.bytes.length.toLocaleString(), total: range.data.totalLength.toLocaleString(),
-  }) : t('registryBrowser.previewOnly');
+  const rangeSummary = range.data
+    ? t('registryBrowser.range', {
+        offset: range.data.offset.toLocaleString(),
+        loaded: range.data.bytes.length.toLocaleString(),
+        total: range.data.totalLength.toLocaleString(),
+      })
+    : t('registryBrowser.previewOnly');
   return {
-    t, instanceId, context, hives, session, selectedKey, selectedValue, range, values,
-    registrySearch, locateSearchHit,
-    nodes, keyboard, viewport, activate, toggle, openHive, selectKey, filter, setFilter,
-    pathInput, setPathInput, locate, locating, detailTab, setDetailTab, offset, provenance, rangeSummary, selectedValueLabel,
+    t,
+    instanceId,
+    context,
+    hives,
+    session,
+    selectedKey,
+    selectedValue,
+    range,
+    values,
+    registrySearch,
+    locateSearchHit,
+    nodes,
+    keyboard,
+    viewport,
+    activate,
+    toggle,
+    openHive,
+    selectKey,
+    filter,
+    setFilter,
+    pathInput,
+    setPathInput,
+    locate,
+    locating,
+    detailTab,
+    setDetailTab,
+    offset,
+    provenance,
+    rangeSummary,
+    selectedValueLabel,
     previousRange: () => setOffset((value) => Math.max(0, value - REGISTRY_BROWSER_LAYOUT.valueRangeBytes)),
     nextRange: () => setOffset((value) => value + REGISTRY_BROWSER_LAYOUT.valueRangeBytes),
     rows: registryValueRows(rawValues, t),
-    loadedCount: rawValues.length, declaredCount: pages[0]?.coverage.declaredCount ?? selectedKey?.valueCount ?? 0,
+    loadedCount: rawValues.length,
+    declaredCount: pages[0]?.coverage.declaredCount ?? selectedKey?.valueCount ?? 0,
     partial: pages.some((page) => page.coverage.status === 'partial'),
     selectValue: (valueId: string) => {
-      if (session && selectedKey) setValueSelection({ sessionId: session.sessionId, keyId: selectedKey.keyId, valueId });
-      setOffset(0); setDetailTab('decoded'); setCopyStatus(undefined);
+      if (session && selectedKey)
+        setValueSelection({ sessionId: session.sessionId, keyId: selectedKey.keyId, valueId });
+      setOffset(0);
+      setDetailTab('decoded');
+      setCopyStatus(undefined);
     },
-    opening: hive.opening, requestedFileId: hive.requestedFileId,
-    hiveError: errorText(hive.error), hivesError: errorText(hives.error), pathError: errorText(pathError),
-    valuesError: errorText(values.error), rangeError: errorText(range.error),
+    opening: hive.opening,
+    requestedFileId: hive.requestedFileId,
+    hiveError: errorText(hive.error),
+    hivesError: errorText(hives.error),
+    pathError: errorText(pathError),
+    valuesError: errorText(values.error),
+    rangeError: errorText(range.error),
     retryHive: async () => {
       if (!hive.requestedFileId) return;
       const current = await hives.refetch();
       if (current.data) await openHive(hive.requestedFileId, current.data.pages[0].sourceRevision);
     },
-    loadChildren: (node: RegistryTreeNode) => { if (node.key) void tree.load(node.key, node.nextCursor); },
+    loadChildren: (node: RegistryTreeNode) => {
+      if (node.key) void tree.load(node.key, node.nextCursor);
+    },
     copyPath: () => void copy([session?.hive.name, selectedKey?.path].filter(Boolean).join('\\')),
-    copyValue: () => void copy(range.data?.decodedText ?? ''), copyStatus,
+    copyValue: () => void copy(range.data?.decodedText ?? ''),
+    copyStatus,
     keyTime,
     view,
     recovery: session?.recovery ?? recoveryFailureDetails(hive.error),

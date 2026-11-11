@@ -15,10 +15,16 @@ export function useFileNavigation(caseId?: string) {
   const owner = useRef({ caseId, attempt: 0 });
   if (owner.current.caseId !== caseId) owner.current = { caseId, attempt: 0 };
   const mutation = useMutation({
-    mutationFn: async (operation: { owner: typeof owner.current; attempt: number; fileId: string; request: FileNavigationRequest }) => {
+    mutationFn: async (operation: {
+      owner: typeof owner.current;
+      attempt: number;
+      fileId: string;
+      request: FileNavigationRequest;
+    }) => {
       const { fileSortKey, fileSortDirection } = useUiStore.getState();
-      const context = await cache.fetchQuery(fileJumpQuery(operation.owner.caseId, operation.fileId,
-        true, 500, fileSortKey, fileSortDirection));
+      const context = await cache.fetchQuery(
+        fileJumpQuery(operation.owner.caseId, operation.fileId, true, 500, fileSortKey, fileSortDirection),
+      );
       return { operation, context };
     },
     onSuccess: ({ operation, context }) => {
@@ -28,9 +34,10 @@ export function useFileNavigation(caseId?: string) {
       navigate('/files');
     },
   });
-  const current = mutation.variables?.owner === owner.current
-    && mutation.variables.attempt === owner.current.attempt
-    && mutation.variables.request === activeRequest;
+  const current =
+    mutation.variables?.owner === owner.current &&
+    mutation.variables.attempt === owner.current.attempt &&
+    mutation.variables.request === activeRequest;
   return {
     pending: current && mutation.isPending,
     errorText: current && mutation.error ? errorMessage(mutation.error) : undefined,

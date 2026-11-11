@@ -7,7 +7,10 @@ describe('text preview indexing', () => {
     const content = 'item\r\n'.repeat(1000);
     const index = indexTextDocument(content);
     expect(index.totalLines).toBe(1001);
-    expect(index.pages).toEqual([{ startOffset: 0, firstLineNumber: 1 }, { startOffset: content.length, firstLineNumber: 1001 }]);
+    expect(index.pages).toEqual([
+      { startOffset: 0, firstLineNumber: 1 },
+      { startOffset: content.length, firstLineNumber: 1001 },
+    ]);
     expect(readTextPage(content, index, 0).lines[0].content).toBe('item');
     expect(readTextPage(content, index, 1).lines[0].content).toBe('');
     expect(pageForOffset(index, content.length)).toBe(1);
@@ -57,7 +60,8 @@ describe('text preview indexing', () => {
     expect(page.lines.every((line) => line.content.length <= 8192)).toBe(true);
     expect(page.lines[0].endOffset).toBe(8190);
     expect(page.lines[1].content).toBe('needle end');
-    expect(searchRangesForLine(search, page.lines[1].startOffset, page.lines[1].endOffset, 0))
-      .toEqual([{ start: 0, end: 6, matchIndex: 0, active: true }]);
+    expect(searchRangesForLine(search, page.lines[1].startOffset, page.lines[1].endOffset, 0)).toEqual([
+      { start: 0, end: 6, matchIndex: 0, active: true },
+    ]);
   });
 });

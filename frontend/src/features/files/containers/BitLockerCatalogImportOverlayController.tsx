@@ -6,6 +6,16 @@ import { BitLockerCatalogImportOverlay } from '../components/BitLockerCatalogImp
 export function BitLockerCatalogImportOverlayController({ lifecycle }: { lifecycle: BitLockerCatalogImportLifecycle }) {
   const { t } = useTranslation();
   const elapsedSeconds = useElapsedSeconds(lifecycle.startedAt);
-  const phaseLabel = lifecycle.phase === 'refreshing' ? t('fileBrowser.bitlockerImport.refreshing') : t('fileBrowser.bitlockerImport.cataloging');
-  return <BitLockerCatalogImportOverlay lifecycle={lifecycle} elapsedSeconds={elapsedSeconds} phaseLabel={phaseLabel} titleLabel={t('fileBrowser.bitlockerImport.title')} />;
+  const phaseLabel =
+    lifecycle.phase === 'refreshing'
+      ? t('fileBrowser.bitlockerImport.refreshing')
+      : t('fileBrowser.bitlockerImport.cataloging');
+  return (
+    <BitLockerCatalogImportOverlay
+      lifecycle={lifecycle}
+      elapsedSeconds={elapsedSeconds}
+      phaseLabel={phaseLabel}
+      titleLabel={t('fileBrowser.bitlockerImport.title')}
+    />
+  );
 }

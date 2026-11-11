@@ -17,7 +17,16 @@
   "confirmTitle": "更新应用并重启",
   "confirmDescription": "请先结束所有任务、释放挂载并关闭案件。程序将下载并校验签名，然后退出、替换自身并重启。更新只替换程序 EXE；案件、检材和设置保留。",
   "later": "暂不更新",
-  "phases": { "idle": "", "checking": "正在检查更新…", "current": "当前已是最新版本。", "available": "新版本可用。", "downloading": "正在下载更新…", "verifying": "正在校验签名和版本…", "restarting": "正在退出并重启…", "failed": "更新未完成。" },
+  "phases": {
+    "idle": "",
+    "checking": "正在检查更新…",
+    "current": "当前已是最新版本。",
+    "available": "新版本可用。",
+    "downloading": "正在下载更新…",
+    "verifying": "正在校验签名和版本…",
+    "restarting": "正在退出并重启…",
+    "failed": "更新未完成。"
+  },
   "errors": {
     "closeCase": "请关闭当前案件后再更新。",
     "busy": "有任务、挂载或仿真会话尚未结束，请完成后重试。",

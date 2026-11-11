@@ -27,7 +27,11 @@ export function KeyValueField({
       <div className={cn('flex min-w-0 gap-2', className)}>
         <span className="shrink-0 text-forensics-muted-light">{label}:</span>
         <span
-          className={cn('min-w-0 truncate text-forensics-text-secondary', mono && 'font-mono text-[10px]', valueClassName)}
+          className={cn(
+            'min-w-0 truncate text-forensics-text-secondary',
+            mono && 'font-mono text-[10px]',
+            valueClassName,
+          )}
           title={typeof displayValue === 'string' ? displayValue : undefined}
         >
           {displayValue}
@@ -39,7 +43,13 @@ export function KeyValueField({
   return (
     <div className={cn('flex min-w-0 flex-col gap-1 py-2', className)}>
       <span className="text-[11px] text-forensics-muted">{label}</span>
-      <span className={cn('min-w-0 break-words text-[12px] text-forensics-ink', mono && 'font-mono text-[11px]', valueClassName)}>
+      <span
+        className={cn(
+          'min-w-0 break-words text-[12px] text-forensics-ink',
+          mono && 'font-mono text-[11px]',
+          valueClassName,
+        )}
+      >
         {displayValue}
       </span>
     </div>

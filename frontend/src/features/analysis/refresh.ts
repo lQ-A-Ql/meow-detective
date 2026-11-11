@@ -14,11 +14,12 @@ export async function refreshAnalysisQueries(
   windowsQueries: readonly QueryRefetch[],
   linuxQueries: readonly QueryRefetch[] = [],
 ): Promise<void> {
-  const results = platform === 'windows'
-    ? await Promise.all(windowsQueries.map((query) => query()))
-    : platform === 'linux'
-      ? await Promise.all(linuxQueries.map((query) => query()))
-      : [];
+  const results =
+    platform === 'windows'
+      ? await Promise.all(windowsQueries.map((query) => query()))
+      : platform === 'linux'
+        ? await Promise.all(linuxQueries.map((query) => query()))
+        : [];
   const error = results.map(queryError).find(Boolean);
   if (error) {
     throw error;

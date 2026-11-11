@@ -1,7 +1,7 @@
 import type { useCorrelationWorkspaceModel } from '../use-correlation-workspace-model';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { GitBranch, Link2, ListFilter, Network, Search }  from '@/components/icons';
+import { GitBranch, Link2, ListFilter, Network, Search } from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
@@ -13,9 +13,31 @@ import { LeadDetailPanel } from './LeadDetail';
 import { ClusterCard } from './ClusterView';
 
 export function CorrelationWorkspaceView({ model }: { model: ReturnType<typeof useCorrelationWorkspaceModel> }) {
-const { onRefresh, refreshing, t, snapshot, setSelectedLeadId, leadSearch, setLeadSearch, focusMode, setFocusMode, confidenceFilter, setConfidenceFilter, filteredLeads, jumpToTarget, selectedLead, primaryFileNode, selectedSupportingNodes, selectedLeadEdges, relatedClusters, filteredClusters, distributionNodes, reviewLeadCount, highConfidenceLeadCount, coveredFamilyCount } = model;
-
-
+  const {
+    onRefresh,
+    refreshing,
+    t,
+    snapshot,
+    setSelectedLeadId,
+    leadSearch,
+    setLeadSearch,
+    focusMode,
+    setFocusMode,
+    confidenceFilter,
+    setConfidenceFilter,
+    filteredLeads,
+    jumpToTarget,
+    selectedLead,
+    primaryFileNode,
+    selectedSupportingNodes,
+    selectedLeadEdges,
+    relatedClusters,
+    filteredClusters,
+    distributionNodes,
+    reviewLeadCount,
+    highConfidenceLeadCount,
+    coveredFamilyCount,
+  } = model;
 
   return (
     <section className="space-y-4">
@@ -25,13 +47,19 @@ const { onRefresh, refreshing, t, snapshot, setSelectedLeadId, leadSearch, setLe
           {t('correlation.workspace.title')}
         </div>
         {onRefresh ? (
-          <Tooltip content={t('correlation.workspace.refresh')}><Button aria-label={t('correlation.workspace.refresh')}
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onRefresh}
-            className="rounded-none border-forensics-border bg-forensics-surface text-[12px] hover:bg-forensics-panel-strong"
-           disabled={refreshing}><ActionIcon name="refresh" /></Button></Tooltip>
+          <Tooltip content={t('correlation.workspace.refresh')}>
+            <Button
+              aria-label={t('correlation.workspace.refresh')}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              className="rounded-none border-forensics-border bg-forensics-surface text-[12px] hover:bg-forensics-panel-strong"
+              disabled={refreshing}
+            >
+              <ActionIcon name="refresh" />
+            </Button>
+          </Tooltip>
         ) : null}
       </div>
 
@@ -181,7 +209,9 @@ const { onRefresh, refreshing, t, snapshot, setSelectedLeadId, leadSearch, setLe
           )}
 
           <div className="rounded-none bg-transparent p-4">
-            <div className="mb-3 text-[12px] font-light text-forensics-text">{t('correlation.workspace.nodesTitle')}</div>
+            <div className="mb-3 text-[12px] font-light text-forensics-text">
+              {t('correlation.workspace.nodesTitle')}
+            </div>
             <div className="space-y-2 text-[11px] text-forensics-text-tertiary">
               {distributionNodes.map((node) => (
                 <div key={node.id} className="bg-transparent px-3 py-2">
@@ -196,7 +226,9 @@ const { onRefresh, refreshing, t, snapshot, setSelectedLeadId, leadSearch, setLe
           </div>
 
           <div className="rounded-none bg-transparent p-4">
-            <div className="mb-3 text-[12px] font-light text-forensics-text">{t('correlation.workspace.boundariesTitle')}</div>
+            <div className="mb-3 text-[12px] font-light text-forensics-text">
+              {t('correlation.workspace.boundariesTitle')}
+            </div>
             <ul className="space-y-2 text-[11px] text-forensics-text-tertiary">
               <li>{t('correlation.workspace.boundarySourceObject')}</li>
               <li>{t('correlation.workspace.boundaryNavigational')}</li>

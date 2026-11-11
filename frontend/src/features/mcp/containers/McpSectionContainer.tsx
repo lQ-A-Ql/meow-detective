@@ -6,6 +6,12 @@ import { McpHostToolsPanelContainer } from './McpHostToolsPanelContainer';
 export function McpSectionContainer() {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
-  return <McpSectionView t={t} expanded={expanded} onToggle={() => setExpanded((value) => !value)}
-    hostToolList={<McpHostToolsPanelContainer />} />;
+  return (
+    <McpSectionView
+      t={t}
+      expanded={expanded}
+      onToggle={() => setExpanded((value) => !value)}
+      hostToolList={<McpHostToolsPanelContainer />}
+    />
+  );
 }

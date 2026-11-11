@@ -34,6 +34,11 @@ export function useMcpActivityModel(enabled: boolean) {
     jobs: available ? jobs.data : undefined,
     error: available && (metrics.isError || jobs.isError),
     loading: metrics.isFetching || jobs.isFetching,
-    refresh: () => { if (available) { void metrics.refetch(); void jobs.refetch(); } },
+    refresh: () => {
+      if (available) {
+        void metrics.refetch();
+        void jobs.refetch();
+      }
+    },
   };
 }

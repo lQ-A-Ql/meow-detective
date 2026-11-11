@@ -33,12 +33,7 @@ interface UseDenseTableFilterArgs<T> {
   resetKey?: string;
 }
 
-export function useDenseTableFilter<T>({
-  columns,
-  rows,
-  enabled,
-  resetKey,
-}: UseDenseTableFilterArgs<T>) {
+export function useDenseTableFilter<T>({ columns, rows, enabled, resetKey }: UseDenseTableFilterArgs<T>) {
   const [keywordInput, setKeywordInput] = useState('');
   const [keyword, setKeyword] = useState('');
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
@@ -54,10 +49,7 @@ export function useDenseTableFilter<T>({
     setColumnFilters({});
   }, [resetKey]);
 
-  const searchableColumns = useMemo(
-    () => (enabled ? columns.filter(hasTextAccessor) : []),
-    [columns, enabled],
-  );
+  const searchableColumns = useMemo(() => (enabled ? columns.filter(hasTextAccessor) : []), [columns, enabled]);
   const filterableColumns = useMemo(
     () => (enabled ? columns.filter((column) => column.filterable).filter(hasTextAccessor) : []),
     [columns, enabled],
@@ -94,9 +86,8 @@ export function useDenseTableFilter<T>({
     if (!enabled || !filterActive) return rows;
     return rows.filter((row) => {
       if (
-        normalizedKeyword
-        && !searchableColumns.some((column) =>
-          column.text(row).toLowerCase().includes(normalizedKeyword))
+        normalizedKeyword &&
+        !searchableColumns.some((column) => column.text(row).toLowerCase().includes(normalizedKeyword))
       ) {
         return false;
       }
@@ -105,15 +96,7 @@ export function useDenseTableFilter<T>({
         return column ? column.text(row) === value : true;
       });
     });
-  }, [
-    activeSelections,
-    enabled,
-    filterActive,
-    filterableColumns,
-    normalizedKeyword,
-    rows,
-    searchableColumns,
-  ]);
+  }, [activeSelections, enabled, filterActive, filterableColumns, normalizedKeyword, rows, searchableColumns]);
 
   const setSelectValue = (key: string, value: string) => {
     setColumnFilters((current) => ({ ...current, [key]: value }));

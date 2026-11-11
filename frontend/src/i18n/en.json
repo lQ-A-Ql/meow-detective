@@ -2,12 +2,32 @@
   "evidenceTask": {
     "scanned": "Scanned {{processed}} entries",
     "entries": "{{processed}} / {{total}} entries",
-    "states": { "queued": "Queued", "running": "Processing evidence", "cancelling": "Cancelling", "completed": "Completed", "failed": "Failed", "cancelled": "Cancelled" },
+    "states": {
+      "queued": "Queued",
+      "running": "Processing evidence",
+      "cancelling": "Cancelling",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
     "progress": "{{processed}} / {{total}} bytes",
     "progressLabel": "Evidence task progress",
     "failed": "Evidence task failed ({{code}}). Retry to create a new attempt."
   },
-  "evidenceDigest": { "scope": "Digest scope", "revision": "Evidence revision", "stale": "Evidence has changed; recalculate this result", "historyFailed": "Digest history could not be read", "scopes": { "containerFile": "Container file", "containerSet": "Container set", "logicalDisk": "Logical disk", "partition": "Partition", "file": "Logical file", "derivedEvidence": "Derived evidence" } },
+  "evidenceDigest": {
+    "scope": "Digest scope",
+    "revision": "Evidence revision",
+    "stale": "Evidence has changed; recalculate this result",
+    "historyFailed": "Digest history could not be read",
+    "scopes": {
+      "containerFile": "Container file",
+      "containerSet": "Container set",
+      "logicalDisk": "Logical disk",
+      "partition": "Partition",
+      "file": "Logical file",
+      "derivedEvidence": "Derived evidence"
+    }
+  },
   "nestedEvidence": { "title": "Nested evidence import", "openResult": "Browse derived evidence" },
   "contentIndex": {
     "build": "Build content index",
@@ -542,7 +562,11 @@
       "actions": "Related actions"
     },
     "rangeTo": "to",
-    "rangeSelector": { "label": "Drag the timeline to select a range", "start": "Drag range start", "end": "Drag range end" },
+    "rangeSelector": {
+      "label": "Drag the timeline to select a range",
+      "start": "Drag range start",
+      "end": "Drag range end"
+    },
     "histogram": {
       "label": "Event density plot",
       "noRange": "No time range",
@@ -740,7 +764,12 @@
         "previousRuns": "Previous runs",
         "nextRuns": "Next runs",
         "runPage": "Page {{page}} / {{pages}}",
-        "attributeTypes": { "16": "$STANDARD_INFORMATION", "32": "$ATTRIBUTE_LIST", "48": "$FILE_NAME", "128": "$DATA" },
+        "attributeTypes": {
+          "16": "$STANDARD_INFORMATION",
+          "32": "$ATTRIBUTE_LIST",
+          "48": "$FILE_NAME",
+          "128": "$DATA"
+        },
         "inode": "MFT inode",
         "recordOffset": "Record offset",
         "attributes": "Attributes",
@@ -959,7 +988,11 @@
     }
   },
   "importDataSource": {
-    "platforms": { "windowsSubtitle": "NTFS / Registry / EVTX", "linuxSubtitle": "XFS / LVM / systemd", "androidSubtitle": "Sparse / ext4 / F2FS / EROFS" },
+    "platforms": {
+      "windowsSubtitle": "NTFS / Registry / EVTX",
+      "linuxSubtitle": "XFS / LVM / systemd",
+      "androidSubtitle": "Sparse / ext4 / F2FS / EROFS"
+    },
     "openButton": "Import Data Source",
     "raidEntry": "Import RAID Images",
     "title": "Import Data Source",
@@ -1414,7 +1447,11 @@
         "chunk": "Chunk size",
         "members": "Members",
         "filesystem": "Next filesystem",
-        "filesystemStatus": { "candidate": "Filesystem candidate", "confirmed": "Filesystem confirmed", "unknown": "Filesystem unknown" },
+        "filesystemStatus": {
+          "candidate": "Filesystem candidate",
+          "confirmed": "Filesystem confirmed",
+          "unknown": "Filesystem unknown"
+        },
         "device": "Device",
         "dataSize": "Usable data",
         "dataOffset": "Data offset (sectors)",
@@ -2088,7 +2125,10 @@
     "title": "Image emulation",
     "statusTitle": "Virtual machine status",
     "activeSummary": "{{count}} active virtual machines",
-    "settings": { "title": "Emulation settings", "description": "Configure boot media, guest resources and offline system options." },
+    "settings": {
+      "title": "Emulation settings",
+      "description": "Configure boot media, guest resources and offline system options."
+    },
     "emptyCase": "Open a case to manage image emulation sessions.",
     "loading": "Loading emulation state...",
     "metrics": {
@@ -2347,8 +2387,8 @@
       "webServices": "Web Services",
       "coverage": "Coverage",
       "truncated": "Truncated",
-      "mysqlServices": "MySQL Services"
-      ,"services": "Service runtime",
+      "mysqlServices": "MySQL Services",
+      "services": "Service runtime",
       "docker": "Docker"
     },
     "tabs": {
@@ -2422,12 +2462,12 @@
       "username": "Username",
       "locked": "Locked",
       "hasPassword": "Has Password",
-      "statusCode": "Status code"
-      ,"service": "Service"
-      ,"image": "Image"
-      ,"repository": "Repository"
-      ,"tag": "Tag"
-      ,"digest": "Digest"
+      "statusCode": "Status code",
+      "service": "Service",
+      "image": "Image",
+      "repository": "Repository",
+      "tag": "Tag",
+      "digest": "Digest"
     },
     "values": {
       "yes": "Yes",

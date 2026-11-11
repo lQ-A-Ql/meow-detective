@@ -2,8 +2,11 @@ import { useEffect, type RefObject } from 'react';
 import { TREE_NODE_HEIGHT } from '@/lib/constants';
 import type { FileTreeNode } from '@/types/models';
 
-export function useFileTreeReveal(nodes: readonly FileTreeNode[], selectedId: string | undefined,
-  viewport: RefObject<HTMLDivElement | null>) {
+export function useFileTreeReveal(
+  nodes: readonly FileTreeNode[],
+  selectedId: string | undefined,
+  viewport: RefObject<HTMLDivElement | null>,
+) {
   useEffect(() => {
     const container = viewport.current;
     const index = nodes.findIndex((node) => node.id === selectedId);

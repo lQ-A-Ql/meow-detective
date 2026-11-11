@@ -33,14 +33,14 @@ export const visualizationTokens = {
   },
 } as const;
 
-export type InfrastructureVisualizationPalette = Record<
-  keyof typeof visualizationTokens.infrastructure,
-  string
->;
+export type InfrastructureVisualizationPalette = Record<keyof typeof visualizationTokens.infrastructure, string>;
 
 export function resolveInfrastructureVisualizationPalette(element: Element): InfrastructureVisualizationPalette {
   const computed = window.getComputedStyle(element);
   return Object.fromEntries(
-    Object.entries(visualizationTokens.infrastructure).map(([name, token]) => [name, computed.getPropertyValue(token).trim()]),
+    Object.entries(visualizationTokens.infrastructure).map(([name, token]) => [
+      name,
+      computed.getPropertyValue(token).trim(),
+    ]),
   ) as InfrastructureVisualizationPalette;
 }

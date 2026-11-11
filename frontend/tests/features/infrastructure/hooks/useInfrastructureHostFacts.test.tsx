@@ -60,11 +60,13 @@ describe('useInfrastructureHostFacts', () => {
   });
 
   it('reads host facts only for ready Linux sources and keeps the preferred OS name', async () => {
-    mocks.dataSources.mockReturnValue(queryResult([
-      source(),
-      source({ id: 'source-2', importState: 'importing' }),
-      source({ id: 'source-3', platform: 'windows' }),
-    ]));
+    mocks.dataSources.mockReturnValue(
+      queryResult([
+        source(),
+        source({ id: 'source-2', importState: 'importing' }),
+        source({ id: 'source-3', platform: 'windows' }),
+      ]),
+    );
     mocks.artifactSummary.mockResolvedValue({
       systemInfo: {
         hostname: 'node-a',

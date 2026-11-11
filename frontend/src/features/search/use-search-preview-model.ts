@@ -27,10 +27,7 @@ export function useSearchPreviewModel(caseId?: string) {
   const [selection, setSelection] = useState<{ caseId?: string; hit?: SearchFileHit }>({ caseId });
   const previewHit = selection.caseId === caseId ? selection.hit : undefined;
   const [viewerTab, setViewerTab] = useState<PreviewViewerTab>('metadata');
-  const selectedFile = useMemo(
-    () => (previewHit ? toFileEntryRow(previewHit) : undefined),
-    [previewHit],
-  );
+  const selectedFile = useMemo(() => (previewHit ? toFileEntryRow(previewHit) : undefined), [previewHit]);
   const previewableFile = selectedFile?.entryType === 'file' ? selectedFile : undefined;
   const preview = useFilePreview({
     selectedFile: previewableFile,
@@ -38,14 +35,20 @@ export function useSearchPreviewModel(caseId?: string) {
     caseId,
   });
 
-  const openHit = useCallback((hit: SearchFileHit) => {
-    const file = toFileEntryRow(hit);
-    setViewerTab(getDefaultFilePreviewTab(file));
-    setSelection({ caseId, hit });
-  }, [caseId]);
-  const onOpenChange = useCallback((open: boolean) => {
-    if (!open) setSelection({ caseId });
-  }, [caseId]);
+  const openHit = useCallback(
+    (hit: SearchFileHit) => {
+      const file = toFileEntryRow(hit);
+      setViewerTab(getDefaultFilePreviewTab(file));
+      setSelection({ caseId, hit });
+    },
+    [caseId],
+  );
+  const onOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) setSelection({ caseId });
+    },
+    [caseId],
+  );
 
   return {
     ...preview,

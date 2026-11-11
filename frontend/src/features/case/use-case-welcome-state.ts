@@ -10,7 +10,12 @@ export function useCaseWelcomeState(props: CaseWelcomeFormsProps) {
   const canOpen = !busy && Boolean(props.openCasePath.trim());
 
   return {
-    mode, recentOpen, setRecentOpen, busy, canCreate, canOpen,
+    mode,
+    recentOpen,
+    setRecentOpen,
+    busy,
+    canCreate,
+    canOpen,
     selectMode(value: string) {
       if (value === 'create' || value === 'open') setMode(value);
     },

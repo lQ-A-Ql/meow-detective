@@ -56,13 +56,7 @@ function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
-    createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      createElement(DataAnalysis),
-    ),
-  );
+  return render(createElement(QueryClientProvider, { client: queryClient }, createElement(DataAnalysis)));
 }
 
 function queryState(overrides: Record<string, unknown> = {}) {
@@ -147,135 +141,143 @@ describe('DataAnalysis page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAnalysisStore.getState().reset();
-    mocks.currentCase.mockReturnValue(queryState({
-      data: { id: 'case-1', name: 'Case 1' },
-    }));
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [windowsDataSource],
-    }));
-    mocks.systemInfo.mockReturnValue(queryState({
-      data: {
-        computerName: 'BETA-LAB',
-        osVersion: 'Windows Evidence Edition 24H2',
-        buildNumber: '26000',
-        networkAdapters: [],
-        bootHistory: [
-          {
-            timestamp: '2026-06-01T08:15:00Z',
-            bootType: 'eventLogStarted',
-            source: 'Windows/System32/winevt/Logs/System.evtx',
-            eventId: 6005,
-            recordId: 42,
-            note: 'EventLog 6005 candidate; indicates the Event Log service started, not a direct boot assertion.',
-            provenance: {
+    mocks.currentCase.mockReturnValue(
+      queryState({
+        data: { id: 'case-1', name: 'Case 1' },
+      }),
+    );
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource],
+      }),
+    );
+    mocks.systemInfo.mockReturnValue(
+      queryState({
+        data: {
+          computerName: 'BETA-LAB',
+          osVersion: 'Windows Evidence Edition 24H2',
+          buildNumber: '26000',
+          networkAdapters: [],
+          bootHistory: [
+            {
+              timestamp: '2026-06-01T08:15:00Z',
+              bootType: 'eventLogStarted',
+              source: 'Windows/System32/winevt/Logs/System.evtx',
+              eventId: 6005,
+              recordId: 42,
+              note: 'EventLog 6005 candidate; indicates the Event Log service started, not a direct boot assertion.',
+              provenance: {
+                dataSourceId: 'ds-1',
+                artifactPath: 'Windows/System32/winevt/Logs/System.evtx',
+                parser: 'evtx.boot_shutdown',
+                parsedAt: '2026-06-01T10:00:00Z',
+                status: 'parsed',
+                warnings: [],
+              },
+            },
+          ],
+          status: 'parsed',
+          warnings: ['开关机历史来自 EVTX EventLog/User32 candidate events。'],
+          provenance: [
+            {
               dataSourceId: 'ds-1',
-              artifactPath: 'Windows/System32/winevt/Logs/System.evtx',
-              parser: 'evtx.boot_shutdown',
+              artifactPath: 'Windows/System32/config/SYSTEM',
+              parser: 'registry.system',
               parsedAt: '2026-06-01T10:00:00Z',
               status: 'parsed',
               warnings: [],
             },
-          },
-        ],
-        status: 'parsed',
-        warnings: ['开关机历史来自 EVTX EventLog/User32 candidate events。'],
-        provenance: [
-          {
-            dataSourceId: 'ds-1',
-            artifactPath: 'Windows/System32/config/SYSTEM',
-            parser: 'registry.system',
-            parsedAt: '2026-06-01T10:00:00Z',
-            status: 'parsed',
-            warnings: [],
-          },
-          {
-            dataSourceId: 'ds-1',
-            artifactPath: 'Windows/System32/config/SOFTWARE',
-            parser: 'registry.software',
-            parsedAt: '2026-06-01T10:00:00Z',
-            status: 'parsed',
-            warnings: [],
-          },
-        ],
-        fieldProvenance: [
-          {
-            field: 'computerName',
-            valueName: 'ComputerName',
-            keyPath: 'ControlSet001\\Control\\ComputerName\\ComputerName',
-            hivePath: 'Windows/System32/config/SYSTEM',
-            parser: 'registry.system',
-          },
-          {
-            field: 'osVersion',
-            valueName: 'ProductName',
-            keyPath: 'Microsoft\\Windows NT\\CurrentVersion',
-            hivePath: 'Windows/System32/config/SOFTWARE',
-            parser: 'registry.software',
-          },
-        ],
-      },
-    }));
-    mocks.evidenceSummary.mockReturnValue(queryState({
-      data: {
-        status: 'candidateFound',
-        generatedAt: '2026-06-01T10:00:00Z',
-        warnings: [],
-        totals: {
-          categoryCount: 3,
-          candidateFileCount: 4,
-          totalSize: 8192,
-          artifactCount: 1,
+            {
+              dataSourceId: 'ds-1',
+              artifactPath: 'Windows/System32/config/SOFTWARE',
+              parser: 'registry.software',
+              parsedAt: '2026-06-01T10:00:00Z',
+              status: 'parsed',
+              warnings: [],
+            },
+          ],
+          fieldProvenance: [
+            {
+              field: 'computerName',
+              valueName: 'ComputerName',
+              keyPath: 'ControlSet001\\Control\\ComputerName\\ComputerName',
+              hivePath: 'Windows/System32/config/SYSTEM',
+              parser: 'registry.system',
+            },
+            {
+              field: 'osVersion',
+              valueName: 'ProductName',
+              keyPath: 'Microsoft\\Windows NT\\CurrentVersion',
+              hivePath: 'Windows/System32/config/SOFTWARE',
+              parser: 'registry.software',
+            },
+          ],
         },
-        categories: [
-          {
-            category: 'SystemInformation',
-            displayName: '系统信息',
-            status: 'parsed',
-            fileCount: 2,
-            totalSize: 4096,
+      }),
+    );
+    mocks.evidenceSummary.mockReturnValue(
+      queryState({
+        data: {
+          status: 'candidateFound',
+          generatedAt: '2026-06-01T10:00:00Z',
+          warnings: [],
+          totals: {
+            categoryCount: 3,
+            candidateFileCount: 4,
+            totalSize: 8192,
             artifactCount: 1,
-            confidence: 0.95,
-            warnings: [],
-            sources: [
-              {
-                fileId: 'system',
-                path: 'Windows/System32/config/SYSTEM',
-                size: 2048,
-                evidenceKind: 'registry_hive',
-                parser: 'registry.system_info',
-                status: 'parsed',
-                artifactCount: 1,
-                warnings: [],
-              },
-            ],
-            provenance: [],
           },
-          {
-            category: 'EventLogs',
-            displayName: '事件日志',
-            status: 'candidateFound',
-            fileCount: 1,
-            totalSize: 4096,
-            artifactCount: 0,
-            confidence: 0.65,
-            warnings: ['已发现候选文件；尚未运行证据分类解析。'],
-            sources: [
-              {
-                fileId: 'evtx',
-                path: 'Windows/System32/winevt/Logs/System.evtx',
-                size: 4096,
-                evidenceKind: 'event_log',
-                parser: 'evtx.boot_shutdown',
-                status: 'candidateFound',
-                artifactCount: 0,
-                warnings: [],
-              },
-            ],
-            provenance: [],
-          },
-        ],
-      },
-    }));
+          categories: [
+            {
+              category: 'SystemInformation',
+              displayName: '系统信息',
+              status: 'parsed',
+              fileCount: 2,
+              totalSize: 4096,
+              artifactCount: 1,
+              confidence: 0.95,
+              warnings: [],
+              sources: [
+                {
+                  fileId: 'system',
+                  path: 'Windows/System32/config/SYSTEM',
+                  size: 2048,
+                  evidenceKind: 'registry_hive',
+                  parser: 'registry.system_info',
+                  status: 'parsed',
+                  artifactCount: 1,
+                  warnings: [],
+                },
+              ],
+              provenance: [],
+            },
+            {
+              category: 'EventLogs',
+              displayName: '事件日志',
+              status: 'candidateFound',
+              fileCount: 1,
+              totalSize: 4096,
+              artifactCount: 0,
+              confidence: 0.65,
+              warnings: ['已发现候选文件；尚未运行证据分类解析。'],
+              sources: [
+                {
+                  fileId: 'evtx',
+                  path: 'Windows/System32/winevt/Logs/System.evtx',
+                  size: 4096,
+                  evidenceKind: 'event_log',
+                  parser: 'evtx.boot_shutdown',
+                  status: 'candidateFound',
+                  artifactCount: 0,
+                  warnings: [],
+                },
+              ],
+              provenance: [],
+            },
+          ],
+        },
+      }),
+    );
     mocks.evidenceScan.mockReturnValue({
       error: null,
       isPending: false,
@@ -297,230 +299,250 @@ describe('DataAnalysis page', () => {
       }),
       reset: vi.fn(),
     });
-    mocks.registrySummary.mockReturnValue(queryState({
-      data: {
-        status: 'parsed',
-        total: 2,
-        generatedAt: '2026-06-01T10:10:00Z',
-        warnings: [],
-        values: [
-          {
-            artifactId: 'reg-1',
-            fileId: 'file-system',
-            sourcePath: 'Windows/System32/config/SYSTEM',
-            hivePath: 'SYSTEM',
-            keyPath: 'ControlSet001\\Control\\ComputerName\\ComputerName',
-            valueName: 'ComputerName',
-            valueType: 'REG_SZ',
-            data: 'BETA-LAB',
-            parser: 'registry.key_values',
-            createdAt: '2026-06-01T10:10:00Z',
-          },
-          {
-            artifactId: 'reg-2',
-            fileId: 'file-software',
-            sourcePath: 'Windows/System32/config/SOFTWARE',
-            hivePath: 'SOFTWARE',
-            keyPath: 'Microsoft\\Windows NT\\CurrentVersion',
-            valueName: 'ProductName',
-            valueType: 'REG_SZ',
-            data: 'Windows Evidence Edition 24H2',
-            parser: 'registry.key_values',
-            createdAt: '2026-06-01T10:10:00Z',
-          },
-        ],
-      },
-    }));
+    mocks.registrySummary.mockReturnValue(
+      queryState({
+        data: {
+          status: 'parsed',
+          total: 2,
+          generatedAt: '2026-06-01T10:10:00Z',
+          warnings: [],
+          values: [
+            {
+              artifactId: 'reg-1',
+              fileId: 'file-system',
+              sourcePath: 'Windows/System32/config/SYSTEM',
+              hivePath: 'SYSTEM',
+              keyPath: 'ControlSet001\\Control\\ComputerName\\ComputerName',
+              valueName: 'ComputerName',
+              valueType: 'REG_SZ',
+              data: 'BETA-LAB',
+              parser: 'registry.key_values',
+              createdAt: '2026-06-01T10:10:00Z',
+            },
+            {
+              artifactId: 'reg-2',
+              fileId: 'file-software',
+              sourcePath: 'Windows/System32/config/SOFTWARE',
+              hivePath: 'SOFTWARE',
+              keyPath: 'Microsoft\\Windows NT\\CurrentVersion',
+              valueName: 'ProductName',
+              valueType: 'REG_SZ',
+              data: 'Windows Evidence Edition 24H2',
+              parser: 'registry.key_values',
+              createdAt: '2026-06-01T10:10:00Z',
+            },
+          ],
+        },
+      }),
+    );
     mocks.registryStructured.mockReturnValue(queryState());
-    mocks.browserSummary.mockReturnValue(queryState({
-      data: {
-        status: 'parsed',
-        visitTotal: 3,
-        downloadTotal: 1,
-        cookieTotal: 0,
-        sessionTotal: 0,
-        passwordTotal: 0,
-        generatedAt: '2026-06-01T10:12:00Z',
-        warnings: [],
-        visits: [
-          {
-            artifactId: 'visit-1',
-            fileId: 'file-chrome-history',
-            sourcePath: 'Users/Admin/AppData/Local/Google/Chrome/User Data/Default/History',
-            browser: 'Chrome',
-            profile: 'Default',
-            url: 'https://example.com/incident-playbook',
-            title: 'Incident Response Playbook',
-            visitTime: '2026-05-11T13:58:00Z',
-            visitCount: 3,
-          },
-          {
-            artifactId: 'visit-2',
-            fileId: 'file-edge-history',
-            sourcePath: 'Users/Admin/AppData/Local/Microsoft/Edge/User Data/Profile 1/History',
-            browser: 'Edge',
-            profile: 'Profile 1',
-            url: 'https://login.microsoftonline.com/',
-            title: 'Sign in to your account',
-            visitTime: '2026-05-11T14:02:10Z',
-            visitCount: 2,
-          },
-          {
-            artifactId: 'visit-3',
-            fileId: 'file-firefox-places',
-            sourcePath: 'Users/Admin/AppData/Roaming/Mozilla/Firefox/Profiles/abcd.default/places.sqlite',
-            browser: 'Firefox',
-            profile: 'abcd.default',
-            url: 'https://developer.mozilla.org/',
-            title: 'MDN Web Docs',
-            visitTime: '2026-05-11T14:08:40Z',
-            visitCount: 1,
-          },
-        ],
-        downloads: [
-          {
-            artifactId: 'download-1',
-            fileId: 'file-chrome-history',
-            sourcePath: 'Users/Admin/AppData/Local/Google/Chrome/User Data/Default/History',
-            browser: 'Chrome',
-            profile: 'Default',
-            url: 'https://example.com/tools/triage.zip',
-            targetPath: 'C:/Users/Admin/Downloads/triage.zip',
-            startTime: '2026-05-11T14:18:00Z',
-            totalBytes: 7340032,
-          },
-        ],
-        cookies: [],
-        sessions: [],
-        passwords: [],
-      },
-    }));
-    mocks.emailSummary.mockReturnValue(queryState({
-      data: {
-        status: 'parsed',
-        total: 2,
-        generatedAt: '2026-06-01T10:14:00Z',
-        warnings: [],
-        messages: [
-          {
-            artifactId: 'mail-1',
-            fileId: 'file-mail-1',
-            sourcePath: 'Users/Admin/Documents/incident-response.eml',
-            sentAt: '2026-05-11T12:40:00Z',
-            from: 'alice@example.com',
-            to: ['dfir@example.com'],
-            cc: ['lead@example.com'],
-            bcc: ['hidden@example.com'],
-            replyTo: 'reply@example.com',
-            returnPath: '<alice@example.com>',
-            subject: 'Initial triage notes',
-            messageId: '<mock-incident-1@example.com>',
-            inReplyTo: '<parent@example.com>',
-            references: ['<parent@example.com>'],
-            attachments: ['triage.csv'],
-            attachmentDetails: [
-              {
-                fileName: 'triage.csv',
-                size: 1024,
-                mimeType: 'text/csv',
-                contentId: '<att-1>',
-              },
-            ],
-            headers: [
-              { name: 'From', value: 'alice@example.com' },
-              { name: 'Subject', value: 'Initial triage notes' },
-            ],
-            bodyPreview: 'Please review the initial triage notes.',
-            bodyPlain: 'Please review the initial triage notes.',
-            bodyHtml: '<p>Please review the initial triage notes.</p>',
-            xMailer: 'TestMailer/1.0',
-            xOriginatingIp: '192.168.1.1',
-            attachmentCount: 1,
-            isDeleted: false,
-          },
-          {
-            artifactId: 'mail-2',
-            fileId: 'file-mail-2',
-            sourcePath: 'Users/Admin/Documents/forwarded-alert.emlx',
-            sentAt: '2026-05-11T13:05:00Z',
-            from: 'soc@example.com',
-            to: ['admin@example.com'],
-            cc: [],
-            bcc: [],
-            subject: 'Forwarded security alert',
-            messageId: '<mock-alert-2@example.com>',
-            references: [],
-            attachments: [],
-            attachmentDetails: [],
-            headers: [],
-            bodyPreview: 'Endpoint alert was forwarded from the SOC queue.',
-            attachmentCount: 0,
-            isDeleted: false,
-          },
-        ],
-      },
-    }));
-    mocks.eventLogSummary.mockReturnValue(queryState({
-      data: {
-        status: 'parsed',
-        pageTotal: 1,
-        bootShutdownCount: 1,
-        logonLogoffCount: 0,
-        privilegeEscalationCount: 0,
-        processExecutionCount: 0,
-        accountManagementCount: 0,
-        scheduledTaskCount: 0,
-        applicationCrashCount: 0,
-        softwareInstallationCount: 0,
-        otherCount: 0,
-        totalCount: 1,
-        bootEvents: [
-          { eventId: 6005, kind: 'boot', timestamp: '2026-06-01T08:00:00Z', provider: 'EventLog', recordId: 1, sourcePath: 'System.evtx', note: 'System started' },
-        ],
-        securityEvents: [],
-        applicationEvents: [],
-        warnings: [],
-        generatedAt: '2026-06-01T10:14:00Z',
-      },
-    }));
-    mocks.linuxSummary.mockReturnValue(queryState({
-      data: {
-        status: 'notFound',
-        journalCount: 0,
-        loginCount: 0,
-        bashCommandCount: 0,
-        aptEventCount: 0,
-        cronJobCount: 0,
-        sudoEventCount: 0,
-        systemConfigCount: 0,
-        webSiteCount: 0,
-        webAccessLogCount: 0,
-        webErrorLogCount: 0,
-        webFindingCount: 0,
-        mysqlConfigCount: 0,
-        mysqlLogCount: 0,
-        mysqlFindingCount: 0,
-        totalCount: 0,
-        truncated: false,
-        coverageRatio: 0,
-        journalEntries: [],
-        loginRecords: [],
-        bashCommands: [],
-        aptEvents: [],
-        cronJobs: [],
-        sudoEvents: [],
-        systemConfigs: [],
-        warnings: [],
-        generatedAt: '2026-06-01T10:14:00Z',
-      },
-    }));
-    mocks.androidDeviceInfo.mockReturnValue(queryState({
-      data: {
-        status: 'notParsed',
-        facts: [],
-        warnings: [],
-      },
-    }));
+    mocks.browserSummary.mockReturnValue(
+      queryState({
+        data: {
+          status: 'parsed',
+          visitTotal: 3,
+          downloadTotal: 1,
+          cookieTotal: 0,
+          sessionTotal: 0,
+          passwordTotal: 0,
+          generatedAt: '2026-06-01T10:12:00Z',
+          warnings: [],
+          visits: [
+            {
+              artifactId: 'visit-1',
+              fileId: 'file-chrome-history',
+              sourcePath: 'Users/Admin/AppData/Local/Google/Chrome/User Data/Default/History',
+              browser: 'Chrome',
+              profile: 'Default',
+              url: 'https://example.com/incident-playbook',
+              title: 'Incident Response Playbook',
+              visitTime: '2026-05-11T13:58:00Z',
+              visitCount: 3,
+            },
+            {
+              artifactId: 'visit-2',
+              fileId: 'file-edge-history',
+              sourcePath: 'Users/Admin/AppData/Local/Microsoft/Edge/User Data/Profile 1/History',
+              browser: 'Edge',
+              profile: 'Profile 1',
+              url: 'https://login.microsoftonline.com/',
+              title: 'Sign in to your account',
+              visitTime: '2026-05-11T14:02:10Z',
+              visitCount: 2,
+            },
+            {
+              artifactId: 'visit-3',
+              fileId: 'file-firefox-places',
+              sourcePath: 'Users/Admin/AppData/Roaming/Mozilla/Firefox/Profiles/abcd.default/places.sqlite',
+              browser: 'Firefox',
+              profile: 'abcd.default',
+              url: 'https://developer.mozilla.org/',
+              title: 'MDN Web Docs',
+              visitTime: '2026-05-11T14:08:40Z',
+              visitCount: 1,
+            },
+          ],
+          downloads: [
+            {
+              artifactId: 'download-1',
+              fileId: 'file-chrome-history',
+              sourcePath: 'Users/Admin/AppData/Local/Google/Chrome/User Data/Default/History',
+              browser: 'Chrome',
+              profile: 'Default',
+              url: 'https://example.com/tools/triage.zip',
+              targetPath: 'C:/Users/Admin/Downloads/triage.zip',
+              startTime: '2026-05-11T14:18:00Z',
+              totalBytes: 7340032,
+            },
+          ],
+          cookies: [],
+          sessions: [],
+          passwords: [],
+        },
+      }),
+    );
+    mocks.emailSummary.mockReturnValue(
+      queryState({
+        data: {
+          status: 'parsed',
+          total: 2,
+          generatedAt: '2026-06-01T10:14:00Z',
+          warnings: [],
+          messages: [
+            {
+              artifactId: 'mail-1',
+              fileId: 'file-mail-1',
+              sourcePath: 'Users/Admin/Documents/incident-response.eml',
+              sentAt: '2026-05-11T12:40:00Z',
+              from: 'alice@example.com',
+              to: ['dfir@example.com'],
+              cc: ['lead@example.com'],
+              bcc: ['hidden@example.com'],
+              replyTo: 'reply@example.com',
+              returnPath: '<alice@example.com>',
+              subject: 'Initial triage notes',
+              messageId: '<mock-incident-1@example.com>',
+              inReplyTo: '<parent@example.com>',
+              references: ['<parent@example.com>'],
+              attachments: ['triage.csv'],
+              attachmentDetails: [
+                {
+                  fileName: 'triage.csv',
+                  size: 1024,
+                  mimeType: 'text/csv',
+                  contentId: '<att-1>',
+                },
+              ],
+              headers: [
+                { name: 'From', value: 'alice@example.com' },
+                { name: 'Subject', value: 'Initial triage notes' },
+              ],
+              bodyPreview: 'Please review the initial triage notes.',
+              bodyPlain: 'Please review the initial triage notes.',
+              bodyHtml: '<p>Please review the initial triage notes.</p>',
+              xMailer: 'TestMailer/1.0',
+              xOriginatingIp: '192.168.1.1',
+              attachmentCount: 1,
+              isDeleted: false,
+            },
+            {
+              artifactId: 'mail-2',
+              fileId: 'file-mail-2',
+              sourcePath: 'Users/Admin/Documents/forwarded-alert.emlx',
+              sentAt: '2026-05-11T13:05:00Z',
+              from: 'soc@example.com',
+              to: ['admin@example.com'],
+              cc: [],
+              bcc: [],
+              subject: 'Forwarded security alert',
+              messageId: '<mock-alert-2@example.com>',
+              references: [],
+              attachments: [],
+              attachmentDetails: [],
+              headers: [],
+              bodyPreview: 'Endpoint alert was forwarded from the SOC queue.',
+              attachmentCount: 0,
+              isDeleted: false,
+            },
+          ],
+        },
+      }),
+    );
+    mocks.eventLogSummary.mockReturnValue(
+      queryState({
+        data: {
+          status: 'parsed',
+          pageTotal: 1,
+          bootShutdownCount: 1,
+          logonLogoffCount: 0,
+          privilegeEscalationCount: 0,
+          processExecutionCount: 0,
+          accountManagementCount: 0,
+          scheduledTaskCount: 0,
+          applicationCrashCount: 0,
+          softwareInstallationCount: 0,
+          otherCount: 0,
+          totalCount: 1,
+          bootEvents: [
+            {
+              eventId: 6005,
+              kind: 'boot',
+              timestamp: '2026-06-01T08:00:00Z',
+              provider: 'EventLog',
+              recordId: 1,
+              sourcePath: 'System.evtx',
+              note: 'System started',
+            },
+          ],
+          securityEvents: [],
+          applicationEvents: [],
+          warnings: [],
+          generatedAt: '2026-06-01T10:14:00Z',
+        },
+      }),
+    );
+    mocks.linuxSummary.mockReturnValue(
+      queryState({
+        data: {
+          status: 'notFound',
+          journalCount: 0,
+          loginCount: 0,
+          bashCommandCount: 0,
+          aptEventCount: 0,
+          cronJobCount: 0,
+          sudoEventCount: 0,
+          systemConfigCount: 0,
+          webSiteCount: 0,
+          webAccessLogCount: 0,
+          webErrorLogCount: 0,
+          webFindingCount: 0,
+          mysqlConfigCount: 0,
+          mysqlLogCount: 0,
+          mysqlFindingCount: 0,
+          totalCount: 0,
+          truncated: false,
+          coverageRatio: 0,
+          journalEntries: [],
+          loginRecords: [],
+          bashCommands: [],
+          aptEvents: [],
+          cronJobs: [],
+          sudoEvents: [],
+          systemConfigs: [],
+          warnings: [],
+          generatedAt: '2026-06-01T10:14:00Z',
+        },
+      }),
+    );
+    mocks.androidDeviceInfo.mockReturnValue(
+      queryState({
+        data: {
+          status: 'notParsed',
+          facts: [],
+          warnings: [],
+        },
+      }),
+    );
     mocks.androidPackageSummary.mockReturnValue({
       ...queryState({
         data: {
@@ -547,43 +569,45 @@ describe('DataAnalysis page', () => {
       }),
       reset: vi.fn(),
     });
-    mocks.classifications.mockReturnValue(queryState({
-      data: {
-        status: 'parsed',
-        generatedAt: '2026-06-01T10:14:00Z',
-        totalFiles: 1,
-        totalSize: 4,
-        magicClassifiedCount: 1,
-        metadataClassifiedCount: 0,
-        warnings: [],
-        groups: [
-          {
-            category: 'documents',
-            displayName: '文档',
-            fileCount: 1,
-            totalSize: 4,
-            subcategories: [
-              {
-                name: 'PDF 文档',
-                fileCount: 1,
-                totalSize: 4,
-                truncated: false,
-                files: [
-                  {
-                    fileId: 'file-1',
-                    name: 'doc.pdf',
-                    path: '[P3]/Users/test/doc.pdf',
-                    size: 4,
-                    magicType: 'PDF',
-                    classificationSource: 'magic',
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    }));
+    mocks.classifications.mockReturnValue(
+      queryState({
+        data: {
+          status: 'parsed',
+          generatedAt: '2026-06-01T10:14:00Z',
+          totalFiles: 1,
+          totalSize: 4,
+          magicClassifiedCount: 1,
+          metadataClassifiedCount: 0,
+          warnings: [],
+          groups: [
+            {
+              category: 'documents',
+              displayName: '文档',
+              fileCount: 1,
+              totalSize: 4,
+              subcategories: [
+                {
+                  name: 'PDF 文档',
+                  fileCount: 1,
+                  totalSize: 4,
+                  truncated: false,
+                  files: [
+                    {
+                      fileId: 'file-1',
+                      name: 'doc.pdf',
+                      path: '[P3]/Users/test/doc.pdf',
+                      size: 4,
+                      magicType: 'PDF',
+                      classificationSource: 'magic',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
     mocks.summaryMutation.mockReturnValue({
       error: null,
       isPending: false,
@@ -669,9 +693,11 @@ describe('DataAnalysis page', () => {
   });
 
   it('renders Linux artifacts as a separate platform view instead of a Windows tab', async () => {
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [windowsDataSource, linuxDataSource],
-    }));
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource, linuxDataSource],
+      }),
+    );
 
     renderPage();
     fireEvent.click(screen.getByLabelText('Linux Server'));
@@ -691,48 +717,52 @@ describe('DataAnalysis page', () => {
   });
 
   it('places Linux summary counts on their source tree nodes', async () => {
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [windowsDataSource, linuxDataSource],
-    }));
-    mocks.linuxSummary.mockReturnValue(queryState({
-      data: {
-        status: 'parsed',
-        journalCount: 223,
-        textLogCount: 27,
-        loginCount: 143,
-        bashCommandCount: 50,
-        aptEventCount: 0,
-        cronJobCount: 0,
-        sudoEventCount: 0,
-        systemConfigCount: 2939,
-        webSiteCount: 1,
-        webAccessLogCount: 16,
-        webErrorLogCount: 0,
-        webFindingCount: 0,
-        mysqlConfigCount: 1,
-        mysqlLogCount: 474,
-        mysqlFindingCount: 0,
-        totalCount: 31232,
-        truncated: false,
-        coverageRatio: 1,
-        journalEntries: [],
-        loginRecords: [],
-        bashCommands: [],
-        aptEvents: [],
-        cronJobs: [],
-        sudoEvents: [],
-        systemConfigs: [],
-        webSites: [],
-        webAccessLogs: [],
-        webErrorLogs: [],
-        webFindings: [],
-        mysqlConfigs: [],
-        mysqlLogs: [],
-        mysqlFindings: [],
-        warnings: [],
-        generatedAt: '2026-07-20T03:09:47Z',
-      },
-    }));
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource, linuxDataSource],
+      }),
+    );
+    mocks.linuxSummary.mockReturnValue(
+      queryState({
+        data: {
+          status: 'parsed',
+          journalCount: 223,
+          textLogCount: 27,
+          loginCount: 143,
+          bashCommandCount: 50,
+          aptEventCount: 0,
+          cronJobCount: 0,
+          sudoEventCount: 0,
+          systemConfigCount: 2939,
+          webSiteCount: 1,
+          webAccessLogCount: 16,
+          webErrorLogCount: 0,
+          webFindingCount: 0,
+          mysqlConfigCount: 1,
+          mysqlLogCount: 474,
+          mysqlFindingCount: 0,
+          totalCount: 31232,
+          truncated: false,
+          coverageRatio: 1,
+          journalEntries: [],
+          loginRecords: [],
+          bashCommands: [],
+          aptEvents: [],
+          cronJobs: [],
+          sudoEvents: [],
+          systemConfigs: [],
+          webSites: [],
+          webAccessLogs: [],
+          webErrorLogs: [],
+          webFindings: [],
+          mysqlConfigs: [],
+          mysqlLogs: [],
+          mysqlFindings: [],
+          warnings: [],
+          generatedAt: '2026-07-20T03:09:47Z',
+        },
+      }),
+    );
 
     renderPage();
     fireEvent.click(screen.getByLabelText('Linux Server'));
@@ -762,10 +792,12 @@ describe('DataAnalysis page', () => {
     expect(screen.getAllByText('已发现候选').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /开始证据分类/ }));
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({
-      dataSourceId: 'ds-win',
-      categories: [],
-    }));
+    await waitFor(() =>
+      expect(mutateAsync).toHaveBeenCalledWith({
+        dataSourceId: 'ds-win',
+        categories: [],
+      }),
+    );
   });
 
   it('does not expose a manual Windows extraction action', async () => {
@@ -807,9 +839,11 @@ describe('DataAnalysis page', () => {
       reset: vi.fn(),
     });
 
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [windowsDataSource, linuxDataSource],
-    }));
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource, linuxDataSource],
+      }),
+    );
 
     renderPage();
     fireEvent.click(screen.getByLabelText('Linux Server'));
@@ -826,17 +860,17 @@ describe('DataAnalysis page', () => {
       EventLogs: 4,
     };
     const mutateAsync = vi.fn().mockResolvedValue({
-        status: 'parsed',
-        scannedCount: 8,
-        checkpointHitCount: 0,
-        artifactCount: 158,
-        timelineEventCount: 3,
-        sections: Object.entries(sectionArtifactCounts).map(([key, artifactCount]) =>
-          extractionSection(key, artifactCount),
-        ),
-        generatedAt: '2026-06-01T10:15:00Z',
-        warnings: [],
-      });
+      status: 'parsed',
+      scannedCount: 8,
+      checkpointHitCount: 0,
+      artifactCount: 158,
+      timelineEventCount: 3,
+      sections: Object.entries(sectionArtifactCounts).map(([key, artifactCount]) =>
+        extractionSection(key, artifactCount),
+      ),
+      generatedAt: '2026-06-01T10:15:00Z',
+      warnings: [],
+    });
     mocks.extractionRun.mockReturnValue({
       data: undefined,
       error: null,
@@ -881,9 +915,11 @@ describe('DataAnalysis page', () => {
       mutateAsync,
       reset: vi.fn(),
     });
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [windowsDataSource, linuxDataSource],
-    }));
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource, linuxDataSource],
+      }),
+    );
 
     renderPage();
     fireEvent.click(screen.getByLabelText('Linux Server'));
@@ -894,9 +930,11 @@ describe('DataAnalysis page', () => {
   });
 
   it('switches to the matching platform view when selecting a data source', async () => {
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [windowsDataSource, linuxDataSource],
-    }));
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource, linuxDataSource],
+      }),
+    );
 
     renderPage();
     fireEvent.click(screen.getByLabelText('Linux Server'));
@@ -906,9 +944,11 @@ describe('DataAnalysis page', () => {
   });
 
   it('navigates to a source child from the sidebar tree', async () => {
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [windowsDataSource, linuxDataSource],
-    }));
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource, linuxDataSource],
+      }),
+    );
 
     renderPage();
     fireEvent.click(screen.getByLabelText('Linux Server / 系统日志'));
@@ -936,9 +976,11 @@ describe('DataAnalysis page', () => {
       name: 'Unsupported Platform',
       platform: 'macos' as DataSourceSummary['platform'],
     } satisfies DataSourceSummary;
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [pendingSource, failedSource, unsupportedSource, linuxDataSource],
-    }));
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [pendingSource, failedSource, unsupportedSource, linuxDataSource],
+      }),
+    );
 
     renderPage();
 
@@ -967,9 +1009,11 @@ describe('DataAnalysis page', () => {
       } else {
         mocks.summaryMutation.mockReturnValue(pendingMutation);
       }
-      mocks.dataSources.mockReturnValue(queryState({
-        data: [windowsDataSource, linuxDataSource],
-      }));
+      mocks.dataSources.mockReturnValue(
+        queryState({
+          data: [windowsDataSource, linuxDataSource],
+        }),
+      );
 
       renderPage();
       await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
@@ -1014,9 +1058,11 @@ describe('DataAnalysis page', () => {
       mutateAsync: vi.fn(),
       reset: summaryReset,
     });
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [windowsDataSource, linuxDataSource],
-    }));
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource, linuxDataSource],
+      }),
+    );
 
     renderPage();
     await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
@@ -1042,9 +1088,11 @@ describe('DataAnalysis page', () => {
       mutateAsync,
       reset: vi.fn(),
     });
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [windowsDataSource, linuxDataSource],
-    }));
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource, linuxDataSource],
+      }),
+    );
 
     renderPage();
     fireEvent.click(screen.getByLabelText('Windows Evidence / 证据分类'));
@@ -1080,9 +1128,11 @@ describe('DataAnalysis page', () => {
       mutateAsync,
       reset: vi.fn(),
     });
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [windowsDataSource, linuxDataSource],
-    }));
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource, linuxDataSource],
+      }),
+    );
 
     renderPage();
     await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
@@ -1099,9 +1149,11 @@ describe('DataAnalysis page', () => {
       mutateAsync,
       reset: vi.fn(),
     });
-    mocks.dataSources.mockReturnValue(queryState({
-      data: [windowsDataSource, linuxDataSource],
-    }));
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource, linuxDataSource],
+      }),
+    );
 
     renderPage();
     fireEvent.click(screen.getByLabelText('Windows Evidence / 报告'));
@@ -1199,9 +1251,7 @@ describe('DataAnalysis page', () => {
 
     // Click the first email row to expand the detail card.
     fireEvent.click(screen.getByText('Initial triage notes'));
-    await waitFor(() =>
-      expect(screen.getByText('Message-ID:')).toBeDefined(),
-    );
+    await waitFor(() => expect(screen.getByText('Message-ID:')).toBeDefined());
     expect(screen.getByText('<mock-incident-1@example.com>')).toBeDefined();
     expect(screen.getAllByText('lead@example.com').length).toBeGreaterThan(0);
     expect(screen.getAllByText('hidden@example.com').length).toBeGreaterThan(0);
@@ -1217,25 +1267,27 @@ describe('DataAnalysis page', () => {
   });
 
   it('renders notParsed system info without fake facts', () => {
-    mocks.systemInfo.mockReturnValue(queryState({
-      data: {
-        networkAdapters: [],
-        bootHistory: [],
-        status: 'notParsed',
-        warnings: ['Registry hive 缺失或损坏，系统字段未解析。'],
-        provenance: [
-          {
-            dataSourceId: 'ds-1',
-            artifactPath: 'Windows/System32/config/SYSTEM',
-            parser: 'registry.system',
-            parsedAt: '2026-06-01T10:00:00Z',
-            status: 'notParsed',
-            warnings: ['registry hive shorter than base block'],
-          },
-        ],
-        fieldProvenance: [],
-      },
-    }));
+    mocks.systemInfo.mockReturnValue(
+      queryState({
+        data: {
+          networkAdapters: [],
+          bootHistory: [],
+          status: 'notParsed',
+          warnings: ['Registry hive 缺失或损坏，系统字段未解析。'],
+          provenance: [
+            {
+              dataSourceId: 'ds-1',
+              artifactPath: 'Windows/System32/config/SYSTEM',
+              parser: 'registry.system',
+              parsedAt: '2026-06-01T10:00:00Z',
+              status: 'notParsed',
+              warnings: ['registry hive shorter than base block'],
+            },
+          ],
+          fieldProvenance: [],
+        },
+      }),
+    );
 
     renderPage();
 

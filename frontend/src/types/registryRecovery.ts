@@ -1,7 +1,18 @@
 export type RegistryRecoveryStatus = 'notNeeded' | 'recovered' | 'partial' | 'failed';
 export type RegistryLogSlot = 'log1' | 'log2';
 export type RegistryLogFormat = 'hvle' | 'dirt';
-export type RegistryLogStatus = 'applied' | 'notNeeded' | 'stale' | 'invalid' | 'unavailable' | 'duplicate' | 'notSelected' | 'missing' | 'ambiguous' | 'locked' | 'tooLarge';
+export type RegistryLogStatus =
+  | 'applied'
+  | 'notNeeded'
+  | 'stale'
+  | 'invalid'
+  | 'unavailable'
+  | 'duplicate'
+  | 'notSelected'
+  | 'missing'
+  | 'ambiguous'
+  | 'locked'
+  | 'tooLarge';
 export interface RegistryLogProvenance {
   slot: RegistryLogSlot;
   status: RegistryLogStatus;

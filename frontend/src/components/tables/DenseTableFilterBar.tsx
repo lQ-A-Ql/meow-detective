@@ -43,10 +43,7 @@ export function DenseTableFilterBar({
         className="min-w-[180px] flex-1 bg-forensics-surface"
       />
       {selects.map((select) => (
-        <div
-          key={select.key}
-          className="flex items-center gap-1 text-forensics-text-tertiary"
-        >
+        <div key={select.key} className="flex items-center gap-1 text-forensics-text-tertiary">
           <span className="shrink-0">{select.label}</span>
           <Select
             value={select.value || '__all__'}
@@ -57,11 +54,11 @@ export function DenseTableFilterBar({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">{t('denseTable.filterAll')}</SelectItem>
-            {select.options.map((option) => (
-              <SelectItem key={option} value={option}>
-                {option}
-              </SelectItem>
-            ))}
+              {select.options.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -69,9 +66,7 @@ export function DenseTableFilterBar({
       {filterActive ? (
         <span className="font-mono text-forensics-muted">
           {t('denseTable.filterSummary', { filtered: filteredCount, loaded: loadedCount })}
-          <span className="ml-1 text-forensics-muted-light">
-            {t('denseTable.filterScopeNote')}
-          </span>
+          <span className="ml-1 text-forensics-muted-light">{t('denseTable.filterScopeNote')}</span>
         </span>
       ) : null}
     </div>

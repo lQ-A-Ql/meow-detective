@@ -61,19 +61,26 @@ describe('ImportDataSourceDialog', () => {
   });
 
   it('supports a Linux RAID import preset', () => {
-    render(createElement(ImportDataSourceDialog, {
-      ...baseProps,
-      initialPlatform: 'linux',
-      initialSourceKind: 'linuxEvidenceSet',
-      initialStep: 'config',
-    }));
+    render(
+      createElement(ImportDataSourceDialog, {
+        ...baseProps,
+        initialPlatform: 'linux',
+        initialSourceKind: 'linuxEvidenceSet',
+        initialStep: 'config',
+      }),
+    );
 
     expect(screen.getByText(/至少两个 E01\/RAW/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '文件' })).toBeNull();
     fireEvent.change(screen.getAllByRole('textbox')[1], { target: { value: 'L:/RAID' } });
     advanceToConfirm();
     clickImport();
-    expect(baseProps.onImport).toHaveBeenCalledWith({ sourcePath: 'L:/RAID', sourceKind: 'linuxEvidenceSet', platform: 'linux', profile: undefined });
+    expect(baseProps.onImport).toHaveBeenCalledWith({
+      sourcePath: 'L:/RAID',
+      sourceKind: 'linuxEvidenceSet',
+      platform: 'linux',
+      profile: undefined,
+    });
   });
 
   it('preserves the shared dialog fixed viewport positioning', () => {
@@ -244,9 +251,9 @@ describe('ImportDataSourceDialog', () => {
   });
 
   it('loads and submits a selected local physical disk', async () => {
-    const listLocalDisks = vi.fn().mockResolvedValue([
-      { diskNumber: 0, path: '\\\\.\\PhysicalDrive0', size: 128 * 1024 ** 3 },
-    ]);
+    const listLocalDisks = vi
+      .fn()
+      .mockResolvedValue([{ diskNumber: 0, path: '\\\\.\\PhysicalDrive0', size: 128 * 1024 ** 3 }]);
     render(createElement(ImportDataSourceDialog, { ...baseProps, listLocalDisks }));
 
     advanceToSource();

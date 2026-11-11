@@ -1,4 +1,4 @@
-import { Eye, EyeOff }  from '@/components/icons';
+import { Eye, EyeOff } from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '@/components/controls/IconButton';
 

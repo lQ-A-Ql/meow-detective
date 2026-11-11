@@ -1,7 +1,11 @@
 import { apiClient } from './client';
 import { COMMANDS } from './commands';
 import type { CarvedArtifactPage, CarvedRange, CarvedExport } from '@/types/carving';
-export function searchCarvedArtifacts(dataSourceId: string, query: string, cursor?: string): Promise<CarvedArtifactPage> {
+export function searchCarvedArtifacts(
+  dataSourceId: string,
+  query: string,
+  cursor?: string,
+): Promise<CarvedArtifactPage> {
   return apiClient.request(COMMANDS.carving.SEARCH, { request: { dataSourceId, query, cursor } });
 }
 export function readCarvedArtifactRange(artifactId: string): Promise<CarvedRange> {

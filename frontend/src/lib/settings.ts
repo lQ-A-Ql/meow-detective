@@ -74,14 +74,10 @@ function normalizeSettings(value: unknown): LocalSettings {
   return {
     caseRoot: typeof candidate.caseRoot === 'string' ? candidate.caseRoot : defaultSettings.caseRoot,
     imageSearchPaths:
-      typeof candidate.imageSearchPaths === 'string'
-        ? candidate.imageSearchPaths
-        : defaultSettings.imageSearchPaths,
+      typeof candidate.imageSearchPaths === 'string' ? candidate.imageSearchPaths : defaultSettings.imageSearchPaths,
     devEventTrace: candidate.devEventTrace === true,
     maxImportWorkers:
-      typeof candidate.maxImportWorkers === 'string'
-        ? candidate.maxImportWorkers
-        : defaultSettings.maxImportWorkers,
+      typeof candidate.maxImportWorkers === 'string' ? candidate.maxImportWorkers : defaultSettings.maxImportWorkers,
     maxAnalysisWorkers:
       typeof candidate.maxAnalysisWorkers === 'string'
         ? candidate.maxAnalysisWorkers
@@ -90,9 +86,7 @@ function normalizeSettings(value: unknown): LocalSettings {
       ? candidate.importAnalysisMode
       : defaultSettings.importAnalysisMode,
     hexChunkBytes:
-      typeof candidate.hexChunkBytes === 'string'
-        ? candidate.hexChunkBytes
-        : defaultSettings.hexChunkBytes,
+      typeof candidate.hexChunkBytes === 'string' ? candidate.hexChunkBytes : defaultSettings.hexChunkBytes,
     maxViewerRangeLength:
       typeof candidate.maxViewerRangeLength === 'string'
         ? candidate.maxViewerRangeLength

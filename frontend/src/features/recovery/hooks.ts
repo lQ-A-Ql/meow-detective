@@ -19,23 +19,14 @@ import type {
   DeletedFileRecovery,
   RecoveryProvenanceRange,
 } from '@/types/models';
-import type {
-  DeletedRecoveryPreviewWindow,
-  DeletedRecoveryViewModel,
-  DeletedRecoveryViewState,
-} from './types';
+import type { DeletedRecoveryPreviewWindow, DeletedRecoveryViewModel, DeletedRecoveryViewState } from './types';
 
 const PAGE_SIZE = 100;
 const MAX_READ_LENGTH = 1024 * 1024;
 
-function isSupportedPartition(
-  partition: DataSourcePartition,
-  platform: DataSourceSummary['platform'],
-) {
+function isSupportedPartition(partition: DataSourcePartition, platform: DataSourceSummary['platform']) {
   const filesystem = partition.filesystem?.trim().toLowerCase();
-  return platform === 'windows'
-    ? filesystem === 'ntfs'
-    : filesystem === 'ext4' || filesystem === 'xfs';
+  return platform === 'windows' ? filesystem === 'ntfs' : filesystem === 'ext4' || filesystem === 'xfs';
 }
 
 function isMissingScan(error: unknown) {
@@ -62,10 +53,8 @@ function verifiedContentRanges(recovery?: DeletedFileRecovery) {
     return [];
   }
   return recovery.provenanceRanges.filter(
-    (range) => range.rangeRole === 'content'
-      && range.length > 0
-      && range.allocationState === 'free'
-      && Boolean(range.sha256),
+    (range) =>
+      range.rangeRole === 'content' && range.length > 0 && range.allocationState === 'free' && Boolean(range.sha256),
   );
 }
 
@@ -74,17 +63,30 @@ export function useDeletedRecoveryModel(
   enabled: boolean,
 ): DeletedRecoveryViewModel {
   const currentCase = useCurrentCase();
-  const pngCarving = usePngCarvingModel(currentCase.data?.id,
-    source && (source.kind === 'raw' || source.kind === 'e01') && (!source.importState || source.importState === 'ready') ? source.id : undefined, enabled);
-  const zipCarving = useZipCarvingModel(currentCase.data?.id,
-    source && (source.kind === 'raw' || source.kind === 'e01') && (!source.importState || source.importState === 'ready') ? source.id : undefined, enabled);
+  const pngCarving = usePngCarvingModel(
+    currentCase.data?.id,
+    source &&
+      (source.kind === 'raw' || source.kind === 'e01') &&
+      (!source.importState || source.importState === 'ready')
+      ? source.id
+      : undefined,
+    enabled,
+  );
+  const zipCarving = useZipCarvingModel(
+    currentCase.data?.id,
+    source &&
+      (source.kind === 'raw' || source.kind === 'e01') &&
+      (!source.importState || source.importState === 'ready')
+      ? source.id
+      : undefined,
+    enabled,
+  );
   const queryClient = useQueryClient();
   const partitions = useMemo(
-    () => source?.platform === 'windows' || source?.platform === 'linux'
-      ? (source.partitions ?? []).filter(
-          (partition) => isSupportedPartition(partition, source.platform),
-        )
-      : [],
+    () =>
+      source?.platform === 'windows' || source?.platform === 'linux'
+        ? (source.partitions ?? []).filter((partition) => isSupportedPartition(partition, source.platform))
+        : [],
     [source],
   );
   const partitionIdentity = partitions.map((partition) => partition.index).join(',');
@@ -123,17 +125,13 @@ export function useDeletedRecoveryModel(
   ] as const;
   const recoveryQuery = useQuery({
     queryKey,
-    queryFn: () => listDeletedRecoveries(
-      source?.id ?? '',
-      selectedPartitionIndex ?? 0,
-      offset,
-      PAGE_SIZE,
-    ),
-    enabled: enabled
-      && currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && (source?.platform === 'windows' || source?.platform === 'linux')
-      && selectedPartitionIndex !== undefined,
+    queryFn: () => listDeletedRecoveries(source?.id ?? '', selectedPartitionIndex ?? 0, offset, PAGE_SIZE),
+    enabled:
+      enabled &&
+      currentCase.isSuccess &&
+      Boolean(currentCase.data) &&
+      (source?.platform === 'windows' || source?.platform === 'linux') &&
+      selectedPartitionIndex !== undefined,
     retry: false,
   });
 
@@ -151,13 +149,8 @@ export function useDeletedRecoveryModel(
   });
 
   const scanMutation = useMutation({
-    mutationFn: ({
-      dataSourceId,
-      partitionIndex,
-    }: {
-      dataSourceId: string;
-      partitionIndex: number;
-    }) => runDeletedRecovery(dataSourceId, partitionIndex),
+    mutationFn: ({ dataSourceId, partitionIndex }: { dataSourceId: string; partitionIndex: number }) =>
+      runDeletedRecovery(dataSourceId, partitionIndex),
     onSuccess: async (result, request) => {
       if (request.dataSourceId !== sourceIdRef.current || result.dataSourceId !== request.dataSourceId) {
         return;
@@ -173,13 +166,7 @@ export function useDeletedRecoveryModel(
   });
 
   const readMutation = useMutation({
-    mutationFn: async ({
-      recovery,
-      range,
-    }: {
-      recovery: DeletedFileRecovery;
-      range: RecoveryProvenanceRange;
-    }) => {
+    mutationFn: async ({ recovery, range }: { recovery: DeletedFileRecovery; range: RecoveryProvenanceRange }) => {
       const response = await readDeletedRecoveryRange(
         recovery.dataSourceId,
         recovery.id,
@@ -213,12 +200,7 @@ export function useDeletedRecoveryModel(
       if (!destinationPath) {
         return undefined;
       }
-      const result = await exportDeletedRecovery(
-        recovery.dataSourceId,
-        recovery.id,
-        destinationPath,
-        false,
-      );
+      const result = await exportDeletedRecovery(recovery.dataSourceId, recovery.id, destinationPath, false);
       return { dataSourceId: recovery.dataSourceId, result };
     },
     onSuccess: (outcome) => {
@@ -238,24 +220,12 @@ export function useDeletedRecoveryModel(
     resetReadMutation();
     resetExportMutation();
     resetHashMutation();
-  }, [
-    partitionIdentity,
-    resetExportMutation,
-    resetHashMutation,
-    resetReadMutation,
-    resetScanMutation,
-    source?.id,
-  ]);
+  }, [partitionIdentity, resetExportMutation, resetHashMutation, resetReadMutation, resetScanMutation, source?.id]);
 
-  const hashSearch = hashMutation.variables?.dataSourceId === source?.id
-    ? hashMutation.data
-    : undefined;
+  const hashSearch = hashMutation.variables?.dataSourceId === source?.id ? hashMutation.data : undefined;
   const recoveries = hashSearch?.matches ?? recoveryQuery.data?.recoveries ?? [];
   const selectedRecovery = recoveries.find((recovery) => recovery.id === selectedRecoveryId);
-  const contentRanges = useMemo(
-    () => verifiedContentRanges(selectedRecovery),
-    [selectedRecovery],
-  );
+  const contentRanges = useMemo(() => verifiedContentRanges(selectedRecovery), [selectedRecovery]);
 
   useEffect(() => {
     if (selectedRecoveryId && !selectedRecovery) {
@@ -289,24 +259,17 @@ export function useDeletedRecoveryModel(
     state = 'unscanned';
   }
 
-  const scanError = scanMutation.variables?.dataSourceId === source?.id
-    ? scanMutation.error
-    : undefined;
-  const readError = readMutation.variables?.recovery.dataSourceId === source?.id
-    ? readMutation.error
-    : undefined;
-  const exportError = exportMutation.variables?.dataSourceId === source?.id
-    ? exportMutation.error
-    : undefined;
-  const hashError = hashMutation.variables?.dataSourceId === source?.id
-    ? hashMutation.error
-    : undefined;
+  const scanError = scanMutation.variables?.dataSourceId === source?.id ? scanMutation.error : undefined;
+  const readError = readMutation.variables?.recovery.dataSourceId === source?.id ? readMutation.error : undefined;
+  const exportError = exportMutation.variables?.dataSourceId === source?.id ? exportMutation.error : undefined;
+  const hashError = hashMutation.variables?.dataSourceId === source?.id ? hashMutation.error : undefined;
   const operationError = scanError ?? readError ?? exportError;
-  const error = recoveryQuery.error && !missingScan
-    ? errorMessage(recoveryQuery.error)
-    : operationError
-      ? errorMessage(operationError)
-      : undefined;
+  const error =
+    recoveryQuery.error && !missingScan
+      ? errorMessage(recoveryQuery.error)
+      : operationError
+        ? errorMessage(operationError)
+        : undefined;
   const selectedRange = contentRanges.find((range) => range.ordinal === selectedRangeOrdinal);
   const scanResult = scanMutation.data;
   const exportResult = exportMutation.data;
@@ -360,9 +323,7 @@ export function useDeletedRecoveryModel(
       setPreview(undefined);
     },
     preview,
-    lastExport: exportResult && exportResult.dataSourceId === source?.id
-      ? exportResult.result
-      : undefined,
+    lastExport: exportResult && exportResult.dataSourceId === source?.id ? exportResult.result : undefined,
     hashQuery,
     hashQueryValid: isValidRecoveryHash(hashQuery),
     hashSearch,

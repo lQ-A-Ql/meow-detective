@@ -25,7 +25,17 @@ export function RouteErrorBoundary() {
       <div className="w-full max-w-lg border border-forensics-border bg-forensics-panel p-8 text-center">
         <div className="mb-3 font-serif text-2xl text-forensics-text">{t('errorBoundary.title')}</div>
         <div className="mb-4 font-mono text-[13px] leading-6 break-all text-forensics-muted">{message}</div>
-        <Tooltip content={t('errorBoundary.reload')}><Button aria-label={t('errorBoundary.reload')} type="button" variant="forensicsSurface" size="sm" onClick={() => window.location.reload()}><ActionIcon name="refresh" /></Button></Tooltip>
+        <Tooltip content={t('errorBoundary.reload')}>
+          <Button
+            aria-label={t('errorBoundary.reload')}
+            type="button"
+            variant="forensicsSurface"
+            size="sm"
+            onClick={() => window.location.reload()}
+          >
+            <ActionIcon name="refresh" />
+          </Button>
+        </Tooltip>
       </div>
     </div>
   );

@@ -5,7 +5,9 @@ export function useElementSize<T extends HTMLElement>() {
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
+    const observer = new ResizeObserver(([entry]) =>
+      setSize({ width: entry.contentRect.width, height: entry.contentRect.height }),
+    );
     observer.observe(element);
     return () => observer.disconnect();
   }, []);

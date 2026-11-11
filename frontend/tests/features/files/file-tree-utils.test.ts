@@ -23,10 +23,7 @@ function node(id: string, depth: number): FileTreeNode {
 
 describe('file-tree-utils', () => {
   it('rebases backend child depths under the active parent depth', () => {
-    const result = rebaseTreeNodeDepths(
-      [node('efi', 1), node('EFI', 2)],
-      1,
-    );
+    const result = rebaseTreeNodeDepths([node('efi', 1), node('EFI', 2)], 1);
 
     expect(result.map((item) => item.depth)).toEqual([2, 3]);
   });
@@ -54,11 +51,7 @@ describe('file-tree-utils', () => {
     ]);
     expect(findTreeNode('child', [root], children)).toBe(child);
     expect(findTreeRoot('child', [root], children)).toBe(root);
-    expect(Array.from(collectTreeNodeIds([root], children))).toEqual([
-      'root',
-      'child',
-      'sibling',
-    ]);
+    expect(Array.from(collectTreeNodeIds([root], children))).toEqual(['root', 'child', 'sibling']);
   });
 
   it('flattens a deeply nested tree without consuming the JavaScript call stack', () => {
@@ -69,11 +62,7 @@ describe('file-tree-utils', () => {
       children[nodes[index].id] = [nodes[index + 1]];
     }
 
-    const flattened = flattenExpandedTree(
-      [nodes[0]],
-      children,
-      new Set(nodes.map((entry) => entry.id)),
-    );
+    const flattened = flattenExpandedTree([nodes[0]], children, new Set(nodes.map((entry) => entry.id)));
 
     expect(flattened).toHaveLength(depth);
     expect(flattened.at(-1)?.id).toBe(`node-${depth - 1}`);
@@ -90,14 +79,7 @@ describe('file-tree-utils', () => {
       collapsed: [],
     };
 
-    expect(
-      findEvictableTreeCacheKey(
-        [root],
-        children,
-        new Set(['root', 'expanded']),
-        new Set(),
-      ),
-    ).toBe('collapsed');
+    expect(findEvictableTreeCacheKey([root], children, new Set(['root', 'expanded']), new Set())).toBe('collapsed');
   });
 
   it('keeps the cache intact when every entry renders an expanded branch', () => {
@@ -108,13 +90,6 @@ describe('file-tree-utils', () => {
       branch: [],
     };
 
-    expect(
-      findEvictableTreeCacheKey(
-        [root],
-        children,
-        new Set(['root', 'branch']),
-        new Set(),
-      ),
-    ).toBeUndefined();
+    expect(findEvictableTreeCacheKey([root], children, new Set(['root', 'branch']), new Set())).toBeUndefined();
   });
 });

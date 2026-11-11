@@ -36,18 +36,12 @@ function toApiError(error: unknown, fallbackCode: string): ApiErrorDto {
   };
 }
 
-async function invokeTauriCommand<T>(
-  command: string,
-  payload?: Record<string, unknown>,
-): Promise<T> {
+async function invokeTauriCommand<T>(command: string, payload?: Record<string, unknown>): Promise<T> {
   return invoke<T>(command, payload);
 }
 
 class ApiClient {
-  async request<T>(
-    command: string,
-    payload?: Record<string, unknown>,
-  ) {
+  async request<T>(command: string, payload?: Record<string, unknown>) {
     try {
       return await invokeTauriCommand<T>(command, payload);
     } catch (error) {

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
-
 interface TimelineRangeSelectorProps {
   domainStart?: string;
   domainEnd?: string;
@@ -13,16 +12,13 @@ interface TimelineRangeSelectorProps {
   rangeLabel: string;
 }
 
-
 type DragMode = 'start' | 'end' | 'window';
-
 
 function timestamp(value?: string) {
   if (!value) return undefined;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
-
 
 function iso(value: number) {
   return new Date(value).toISOString();
@@ -37,7 +33,6 @@ export function useTimelineRangeSelectorModel({
   endLabel,
   rangeLabel,
 }: TimelineRangeSelectorProps) {
-
   const trackRef = useRef<HTMLDivElement>(null);
 
   const localRangeRef = useRef<{ start: number; end: number }>();
@@ -56,14 +51,15 @@ export function useTimelineRangeSelectorModel({
 
   const valid = domainStartMs !== undefined && domainEndMs !== undefined && domainEndMs > domainStartMs;
 
-  const startRatio = valid && selectedStartMs !== undefined
-    ? Math.max(0, Math.min(1, (selectedStartMs - domainStartMs) / (domainEndMs - domainStartMs)))
-    : 0;
+  const startRatio =
+    valid && selectedStartMs !== undefined
+      ? Math.max(0, Math.min(1, (selectedStartMs - domainStartMs) / (domainEndMs - domainStartMs)))
+      : 0;
 
-  const endRatio = valid && selectedEndMs !== undefined
-    ? Math.max(0, Math.min(1, (selectedEndMs - domainStartMs) / (domainEndMs - domainStartMs)))
-    : 1;
-
+  const endRatio =
+    valid && selectedEndMs !== undefined
+      ? Math.max(0, Math.min(1, (selectedEndMs - domainStartMs) / (domainEndMs - domainStartMs)))
+      : 1;
 
   useEffect(() => {
     if (!drag) return undefined;
@@ -74,8 +70,16 @@ export function useTimelineRangeSelectorModel({
       const delta = (ratio - drag.anchor) * (domainEndMs - domainStartMs);
       let nextStart = drag.start;
       let nextEnd = drag.end;
-      if (drag.mode === 'start') nextStart = Math.min(drag.end - 1, Math.max(domainStartMs, domainStartMs + ratio * (domainEndMs - domainStartMs)));
-      if (drag.mode === 'end') nextEnd = Math.max(drag.start + 1, Math.min(domainEndMs, domainStartMs + ratio * (domainEndMs - domainStartMs)));
+      if (drag.mode === 'start')
+        nextStart = Math.min(
+          drag.end - 1,
+          Math.max(domainStartMs, domainStartMs + ratio * (domainEndMs - domainStartMs)),
+        );
+      if (drag.mode === 'end')
+        nextEnd = Math.max(
+          drag.start + 1,
+          Math.min(domainEndMs, domainStartMs + ratio * (domainEndMs - domainStartMs)),
+        );
       if (drag.mode === 'window') {
         const length = drag.end - drag.start;
         nextStart = Math.max(domainStartMs, Math.min(domainEndMs - length, drag.start + delta));
@@ -99,9 +103,15 @@ export function useTimelineRangeSelectorModel({
     };
   }, [domainEndMs, domainStartMs, drag, onChange, valid]);
 
-
   function begin(mode: DragMode, event: ReactPointerEvent) {
-    if (!valid || domainStartMs === undefined || domainEndMs === undefined || selectedStartMs === undefined || selectedEndMs === undefined) return;
+    if (
+      !valid ||
+      domainStartMs === undefined ||
+      domainEndMs === undefined ||
+      selectedStartMs === undefined ||
+      selectedEndMs === undefined
+    )
+      return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const rect = trackRef.current?.getBoundingClientRect();
@@ -115,5 +125,5 @@ export function useTimelineRangeSelectorModel({
     localRangeRef.current = { start: selectedStartMs, end: selectedEndMs };
     setLocalRange({ start: selectedStartMs, end: selectedEndMs });
   }
-return { domainStart, domainEnd, startLabel, endLabel, rangeLabel, trackRef, valid, startRatio, endRatio, begin };
+  return { domainStart, domainEnd, startLabel, endLabel, rangeLabel, trackRef, valid, startRatio, endRatio, begin };
 }

@@ -11,6 +11,18 @@ import appUpdateEn from './app-update/en.json';
 
 /** One composition point for centrally owned, independently maintained copy modules. */
 export const i18nTranslations = {
-  'zh-CN': { ...zhCN, registryBrowser: registryBrowserZh, carving: carvingZh, registryHardware: registryHardwareZh, appUpdate: appUpdateZh },
-  en: { ...en, registryBrowser: registryBrowserEn, carving: carvingEn, registryHardware: registryHardwareEn, appUpdate: appUpdateEn },
+  'zh-CN': {
+    ...zhCN,
+    registryBrowser: registryBrowserZh,
+    carving: carvingZh,
+    registryHardware: registryHardwareZh,
+    appUpdate: appUpdateZh,
+  },
+  en: {
+    ...en,
+    registryBrowser: registryBrowserEn,
+    carving: carvingEn,
+    registryHardware: registryHardwareEn,
+    appUpdate: appUpdateEn,
+  },
 };

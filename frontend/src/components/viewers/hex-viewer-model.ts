@@ -19,11 +19,7 @@ export function formatAsciiByte(byte: number) {
   return byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.';
 }
 
-export function formatByteWindowLine(
-  rawBytes: number[],
-  rowIndex: number,
-  baseOffset: number,
-): HexParsedLine {
+export function formatByteWindowLine(rawBytes: number[], rowIndex: number, baseOffset: number): HexParsedLine {
   const rowStart = rowIndex * BYTES_PER_ROW;
   return {
     offset: formatOffset(baseOffset + rowStart),

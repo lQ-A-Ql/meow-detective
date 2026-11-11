@@ -35,24 +35,14 @@ describe('projection cache invalidation', () => {
   });
 
   it('subscribes every terminal job event to projection invalidation', () => {
-    expect(PROJECTION_EVENT_TOPICS).toEqual(expect.arrayContaining([
-      'job-completed',
-      'job-failed',
-      'job-cancelled',
-    ]));
+    expect(PROJECTION_EVENT_TOPICS).toEqual(expect.arrayContaining(['job-completed', 'job-failed', 'job-cancelled']));
   });
 
   it('uses one canonical timeline events query key builder', () => {
     expect(timelineQueryKeys.events()).toEqual(['timeline', 'events', 0, 100, null, null, null]);
-    expect(timelineQueryKeys.events({ offset: 10, limit: 25, timeStart: 'a', timeEnd: 'b', eventType: 'FileAccess' })).toEqual([
-      'timeline',
-      'events',
-      10,
-      25,
-      'a',
-      'b',
-      'FileAccess',
-    ]);
+    expect(
+      timelineQueryKeys.events({ offset: 10, limit: 25, timeStart: 'a', timeEnd: 'b', eventType: 'FileAccess' }),
+    ).toEqual(['timeline', 'events', 10, 25, 'a', 'b', 'FileAccess']);
   });
 
   it('invalidates the import projections used by files, timeline, artifacts, search, and analysis', () => {
@@ -118,11 +108,7 @@ describe('projection cache invalidation', () => {
     invalidatePartialResultQueries(queryClient, result);
     vi.advanceTimersByTime(300);
 
-    expect(invalidatedKeys(invalidateSpy)).toEqual([
-      ['case', 'metrics'],
-      ['case', 'data-sources'],
-      ['reports'],
-    ]);
+    expect(invalidatedKeys(invalidateSpy)).toEqual([['case', 'metrics'], ['case', 'data-sources'], ['reports']]);
   });
 
   it('does not invalidate deferred partial results', () => {

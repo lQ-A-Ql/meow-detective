@@ -2,7 +2,8 @@ import manifest from '@/assets/anime/manifest.json';
 import { watermarkArtwork, type WatermarkArtwork } from '@/assets/anime/watermarks';
 import { cn } from '@/app/components/ui/utils';
 
-export type AssetRole = 'brand-mark' | 'archive-scene' | 'investigator-portrait' | 'evidence-motif' | 'texture' | WatermarkArtwork;
+export type AssetRole =
+  'brand-mark' | 'archive-scene' | 'investigator-portrait' | 'evidence-motif' | 'texture' | WatermarkArtwork;
 export type { WatermarkArtwork };
 
 const slots: Partial<Record<AssetRole, string | null>> = { ...manifest.slots, ...watermarkArtwork };
@@ -15,12 +16,7 @@ const slots: Partial<Record<AssetRole, string | null>> = { ...manifest.slots, ..
 export function AssetSlot({ role, className, opacity }: { role: AssetRole; className?: string; opacity?: number }) {
   const source = slots[role];
   if (!source) {
-    return (
-      <div
-        aria-hidden="true"
-        className={cn('asset-slot-fallback pointer-events-none select-none', className)}
-      />
-    );
+    return <div aria-hidden="true" className={cn('asset-slot-fallback pointer-events-none select-none', className)} />;
   }
   return (
     <img

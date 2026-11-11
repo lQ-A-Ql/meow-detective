@@ -6,12 +6,7 @@ export type CorrelationConfidence = 'direct' | 'strong' | 'weak' | 'heuristic';
 export type CorrelationNodeKind = 'file' | 'artifact' | 'timelineEvent';
 
 export type CorrelationEdgeKind =
-  | 'sourceReference'
-  | 'sharedSourceObject'
-  | 'temporalContext'
-  | 'pathMatch'
-  | 'nameMatch'
-  | 'recoveredOriginalPath';
+  'sourceReference' | 'sharedSourceObject' | 'temporalContext' | 'pathMatch' | 'nameMatch' | 'recoveredOriginalPath';
 
 export interface CorrelationJumpTarget {
   route: string;

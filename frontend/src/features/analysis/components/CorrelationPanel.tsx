@@ -1,9 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, BarChart3, CheckCircle2, Database }  from '@/components/icons';
-import type {
-  ReleaseScorecard,
-  V2GovernanceSnapshot,
-} from '@/types/models';
+import { AlertTriangle, BarChart3, CheckCircle2, Database } from '@/components/icons';
+import type { ReleaseScorecard, V2GovernanceSnapshot } from '@/types/models';
 import { Metric, MessageBlock } from './V2GovernancePanels';
 
 function coverageTone(status: 'covered' | 'review' | 'missing') {
@@ -49,7 +46,9 @@ export function ReleaseScorecardPanel({
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
         <div className="rounded-none bg-transparent p-4">
-          <div className="text-[11px] uppercase tracking-wider text-forensics-muted-light">{t('v2Governance.scorecard.overall')}</div>
+          <div className="text-[11px] uppercase tracking-wider text-forensics-muted-light">
+            {t('v2Governance.scorecard.overall')}
+          </div>
           <div className="mt-2 flex items-end gap-3">
             <div className="text-[40px] font-light text-forensics-text">{scorecard.totalScore}</div>
             <div className="mb-1 rounded-none border border-forensics-border px-2 py-0.5 font-mono text-[12px] text-forensics-text-tertiary">
@@ -58,8 +57,14 @@ export function ReleaseScorecardPanel({
           </div>
           <div className="mt-4 space-y-2">
             <Metric label={t('v2Governance.verification.title')} value={scorecard.verificationScore.toString()} />
-            <Metric label={t('v2Governance.scorecard.dimensionCorrelation')} value={scorecard.correlationScore.toString()} />
-            <Metric label={t('v2Governance.scorecard.dimensionPerformance')} value={scorecard.performanceScore.toString()} />
+            <Metric
+              label={t('v2Governance.scorecard.dimensionCorrelation')}
+              value={scorecard.correlationScore.toString()}
+            />
+            <Metric
+              label={t('v2Governance.scorecard.dimensionPerformance')}
+              value={scorecard.performanceScore.toString()}
+            />
             <Metric label={t('v2Governance.security.title')} value={scorecard.securityScore.toString()} />
           </div>
         </div>
@@ -71,21 +76,60 @@ export function ReleaseScorecardPanel({
               {t('v2Governance.scorecard.runtimeSignals')}
             </div>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Metric label={t('v2Governance.scorecard.evidenceSources')} value={runtimeSummary.dataSourceCount.toString()} />
-              <Metric label={t('v2Governance.scorecard.hashed')} value={runtimeSummary.hashedDataSourceCount.toString()} />
-              <Metric label={t('v2Governance.scorecard.pendingHash')} value={runtimeSummary.pendingHashDataSourceCount.toString()} />
+              <Metric
+                label={t('v2Governance.scorecard.evidenceSources')}
+                value={runtimeSummary.dataSourceCount.toString()}
+              />
+              <Metric
+                label={t('v2Governance.scorecard.hashed')}
+                value={runtimeSummary.hashedDataSourceCount.toString()}
+              />
+              <Metric
+                label={t('v2Governance.scorecard.pendingHash')}
+                value={runtimeSummary.pendingHashDataSourceCount.toString()}
+              />
               <Metric label={t('v2Governance.scorecard.reportCount')} value={runtimeSummary.reportCount.toString()} />
-              <Metric label={t('v2Governance.scorecard.correlationLeads')} value={runtimeSummary.correlationLeadCount.toString()} />
-              <Metric label={t('v2Governance.scorecard.highConfidenceLeads')} value={runtimeSummary.correlationHighConfidenceLeadCount.toString()} />
-              <Metric label={t('v2Governance.scorecard.reviewLeads')} value={runtimeSummary.correlationReviewLeadCount.toString()} />
-              <Metric label={t('v2Governance.scorecard.correlationClusters')} value={runtimeSummary.correlationClusterCount.toString()} />
-              <Metric label={t('correlation.metrics.ruleFamilies')} value={runtimeSummary.correlationRuleFamilyCount.toString()} />
-              <Metric label={t('correlation.metrics.coveredFamilies')} value={runtimeSummary.correlationCoveredFamilyCount.toString()} />
-              <Metric label={t('v2Governance.scorecard.highConfidenceFamilies')} value={runtimeSummary.correlationHighConfidenceFamilyCount.toString()} />
-              <Metric label={t('v2Governance.scorecard.runningJobs')} value={runtimeSummary.runningJobCount.toString()} />
-              <Metric label={t('v2Governance.scorecard.partialJobs')} value={runtimeSummary.partialJobCount.toString()} />
+              <Metric
+                label={t('v2Governance.scorecard.correlationLeads')}
+                value={runtimeSummary.correlationLeadCount.toString()}
+              />
+              <Metric
+                label={t('v2Governance.scorecard.highConfidenceLeads')}
+                value={runtimeSummary.correlationHighConfidenceLeadCount.toString()}
+              />
+              <Metric
+                label={t('v2Governance.scorecard.reviewLeads')}
+                value={runtimeSummary.correlationReviewLeadCount.toString()}
+              />
+              <Metric
+                label={t('v2Governance.scorecard.correlationClusters')}
+                value={runtimeSummary.correlationClusterCount.toString()}
+              />
+              <Metric
+                label={t('correlation.metrics.ruleFamilies')}
+                value={runtimeSummary.correlationRuleFamilyCount.toString()}
+              />
+              <Metric
+                label={t('correlation.metrics.coveredFamilies')}
+                value={runtimeSummary.correlationCoveredFamilyCount.toString()}
+              />
+              <Metric
+                label={t('v2Governance.scorecard.highConfidenceFamilies')}
+                value={runtimeSummary.correlationHighConfidenceFamilyCount.toString()}
+              />
+              <Metric
+                label={t('v2Governance.scorecard.runningJobs')}
+                value={runtimeSummary.runningJobCount.toString()}
+              />
+              <Metric
+                label={t('v2Governance.scorecard.partialJobs')}
+                value={runtimeSummary.partialJobCount.toString()}
+              />
               <Metric label={t('v2Governance.scorecard.failedJobs')} value={runtimeSummary.failedJobCount.toString()} />
-              <Metric label={t('v2Governance.scorecard.warningDataSources')} value={runtimeSummary.warningDataSourceCount.toString()} />
+              <Metric
+                label={t('v2Governance.scorecard.warningDataSources')}
+                value={runtimeSummary.warningDataSourceCount.toString()}
+              />
             </div>
             <div className="mt-3 bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
               {t('v2Governance.scorecard.snapshotStatus', {
@@ -95,19 +139,29 @@ export function ReleaseScorecardPanel({
               })}
             </div>
             <div className="mt-4 bg-transparent p-3">
-              <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">Correlation Family Coverage</div>
+              <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">
+                Correlation Family Coverage
+              </div>
               <div className="space-y-2">
                 {runtimeSummary.correlationFamilyCoverage.map((item) => (
-                  <div key={item.family} className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
+                  <div
+                    key={item.family}
+                    className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary"
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <div className="font-light text-forensics-text">{item.displayName}</div>
-                      <span className={`rounded-none border px-2 py-0.5 text-[10px] font-mono ${coverageTone(item.status)}`}>
+                      <span
+                        className={`rounded-none border px-2 py-0.5 text-[10px] font-mono ${coverageTone(item.status)}`}
+                      >
                         {coverageLabel(item.status)}
                       </span>
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
                       <Metric label="Lead" value={item.leadCount.toString()} />
-                      <Metric label={t('correlation.metrics.highConfidence')} value={item.highConfidenceLeadCount.toString()} />
+                      <Metric
+                        label={t('correlation.metrics.highConfidence')}
+                        value={item.highConfidenceLeadCount.toString()}
+                      />
                       <Metric label={t('dashboard.status.review')} value={item.reviewLeadCount.toString()} />
                       <Metric label="Cluster" value={item.clusterCount.toString()} />
                     </div>
@@ -118,7 +172,9 @@ export function ReleaseScorecardPanel({
                         ))}
                       </div>
                     ) : (
-                      <div className="mt-2 text-[11px] text-forensics-muted">{t('v2Governance.scorecard.familyEmpty')}</div>
+                      <div className="mt-2 text-[11px] text-forensics-muted">
+                        {t('v2Governance.scorecard.familyEmpty')}
+                      </div>
                     )}
                   </div>
                 ))}
@@ -127,7 +183,9 @@ export function ReleaseScorecardPanel({
           </div>
 
           <div className="rounded-none bg-transparent p-4">
-            <div className="mb-3 text-[12px] font-light text-forensics-text">{t('v2Governance.scorecard.breakdownTitle')}</div>
+            <div className="mb-3 text-[12px] font-light text-forensics-text">
+              {t('v2Governance.scorecard.breakdownTitle')}
+            </div>
             <div className="space-y-3">
               {scorecard.breakdown.map((entry) => (
                 <div key={entry.dimension} className="bg-transparent p-3">
@@ -144,7 +202,9 @@ export function ReleaseScorecardPanel({
                       ))}
                     </div>
                   ) : (
-                    <div className="mt-2 text-[11px] text-forensics-muted">{t('v2Governance.scorecard.noDeductions')}</div>
+                    <div className="mt-2 text-[11px] text-forensics-muted">
+                      {t('v2Governance.scorecard.noDeductions')}
+                    </div>
                   )}
                 </div>
               ))}

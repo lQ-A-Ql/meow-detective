@@ -5,18 +5,37 @@ import { ShellContainer } from '@/features/shell/containers/ShellContainer';
 
 const state = vi.hoisted(() => ({ current: null as { id: string } | null, toggleDrawer: vi.fn() }));
 vi.mock('@/features/case/hooks', () => ({ useCurrentCase: () => ({ data: state.current }) }));
-vi.mock('@/features/shell/use-navigation-model', () => ({ useNavigationModel: () => ({
-  links: [{ to: '/', page: 'home' }, { to: '/files', page: 'files' }], toggleDrawer: state.toggleDrawer,
-}) }));
-vi.mock('@/features/shell/containers/ActivityBarContainer', () => ({ ActivityBarContainer: () => <nav aria-label="workspace navigation" /> }));
-vi.mock('@/features/jobs/containers/BottomDrawerContainer', () => ({ BottomDrawerContainer: () => <div role="region" aria-label="job drawer" /> }));
+vi.mock('@/features/shell/use-navigation-model', () => ({
+  useNavigationModel: () => ({
+    links: [
+      { to: '/', page: 'home' },
+      { to: '/files', page: 'files' },
+    ],
+    toggleDrawer: state.toggleDrawer,
+  }),
+}));
+vi.mock('@/features/shell/containers/ActivityBarContainer', () => ({
+  ActivityBarContainer: () => <nav aria-label="workspace navigation" />,
+}));
+vi.mock('@/features/jobs/containers/BottomDrawerContainer', () => ({
+  BottomDrawerContainer: () => <div role="region" aria-label="job drawer" />,
+}));
 
 function shell(path = '/') {
-  return <MemoryRouter initialEntries={[path]}><ShellContainer><span>page</span></ShellContainer></MemoryRouter>;
+  return (
+    <MemoryRouter initialEntries={[path]}>
+      <ShellContainer>
+        <span>page</span>
+      </ShellContainer>
+    </MemoryRouter>
+  );
 }
 
 describe('case entry chrome', () => {
-  beforeEach(() => { state.current = null; state.toggleDrawer.mockClear(); });
+  beforeEach(() => {
+    state.current = null;
+    state.toggleDrawer.mockClear();
+  });
   it('hides navigation and jobs only for the empty root entry and restores them when a case opens', () => {
     const result = render(shell());
     expect(screen.queryByRole('navigation')).toBeNull();

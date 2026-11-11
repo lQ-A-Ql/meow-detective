@@ -12,10 +12,30 @@ import fixture from '../../../mocks/registry-browser/data.json';
 const context = { caseId: fixture.caseId, dataSourceId: fixture.dataSourceId, sourceRevision: 'synthetic-v1' };
 const keyPath = 'ControlSet001\\Services\\mssmbios\\Data';
 const records: RegistryHardwareDevice[] = [
-  { kind: 'cpu', deviceId: 'cpu-1', name: 'Fixture CPU', manufacturer: 'CPU Vendor',
-    properties: { coreCount: '8', threadCount: '16', maxSpeedMhz: '4200' }, keyPath, valueName: 'SMBiosData', sourceOffset: 8 },
-  { kind: 'gpu', deviceId: 'gpu-1', name: 'Fixture GPU', properties: { capacityBytes: '12884901888' }, keyPath: 'ControlSet001\\Control\\Class\\display\\0000' },
-  { kind: 'ram', deviceId: 'ram-1', name: 'DIMM_A1', properties: { capacityBytes: '17179869184', memoryType: 'DDR5', configuredSpeedMtS: '6000' }, keyPath },
+  {
+    kind: 'cpu',
+    deviceId: 'cpu-1',
+    name: 'Fixture CPU',
+    manufacturer: 'CPU Vendor',
+    properties: { coreCount: '8', threadCount: '16', maxSpeedMhz: '4200' },
+    keyPath,
+    valueName: 'SMBiosData',
+    sourceOffset: 8,
+  },
+  {
+    kind: 'gpu',
+    deviceId: 'gpu-1',
+    name: 'Fixture GPU',
+    properties: { capacityBytes: '12884901888' },
+    keyPath: 'ControlSet001\\Control\\Class\\display\\0000',
+  },
+  {
+    kind: 'ram',
+    deviceId: 'ram-1',
+    name: 'DIMM_A1',
+    properties: { capacityBytes: '17179869184', memoryType: 'DDR5', configuredSpeedMtS: '6000' },
+    keyPath,
+  },
   { kind: 'ram', deviceId: 'ram-2', name: 'DIMM_A2', properties: {}, keyPath },
 ];
 
@@ -26,20 +46,36 @@ function hardwareClient(): RegistryHardwareClient {
     ...base,
     listHives: vi.fn(async (request) => {
       const page = await base.listHives(request);
-      return { ...page, hives: [{ ...page.hives[0], name: 'SYSTEM', evidencePath: '[P0]/Windows/System32/config/SYSTEM' }], nextCursor: undefined };
+      return {
+        ...page,
+        hives: [{ ...page.hives[0], name: 'SYSTEM', evidencePath: '[P0]/Windows/System32/config/SYSTEM' }],
+        nextCursor: undefined,
+      };
     }),
     openHive: vi.fn(async (request) => {
-      const opened = await base.openHive(request); sessions.set(opened.sessionId, opened.source);
-      return { ...opened, hive: { ...opened.hive, name: 'SYSTEM', evidencePath: '[P0]/Windows/System32/config/SYSTEM' } };
+      const opened = await base.openHive(request);
+      sessions.set(opened.sessionId, opened.source);
+      return {
+        ...opened,
+        hive: { ...opened.hive, name: 'SYSTEM', evidencePath: '[P0]/Windows/System32/config/SYSTEM' },
+      };
     }),
-    readHardware: vi.fn(async (request) => ({ source: sessions.get(request.sessionId)!, devices: records, warnings: [] })),
+    readHardware: vi.fn(async (request) => ({
+      source: sessions.get(request.sessionId)!,
+      devices: records,
+      warnings: [],
+    })),
     closeHive: vi.fn(base.closeHive),
   };
 }
 
 function preview(client: RegistryHardwareClient) {
   const query = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  return render(<QueryClientProvider client={query}><RegistryHardwareContainer client={client} context={context} /></QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={query}>
+      <RegistryHardwareContainer client={client} context={context} />
+    </QueryClientProvider>,
+  );
 }
 
 describe('registry system hardware', () => {
@@ -63,7 +99,8 @@ describe('registry system hardware', () => {
     const client = hardwareClient();
     const read = client.readHardware;
     client.readHardware = vi.fn(async (request) => {
-      const result = await read(request); return { ...result, source: { ...result.source, sourceRevision: 'foreign-revision' } };
+      const result = await read(request);
+      return { ...result, source: { ...result.source, sourceRevision: 'foreign-revision' } };
     });
     preview(client);
     await screen.findByText('浏览会话已失效，请重新打开配置单元');
@@ -76,7 +113,10 @@ describe('registry system hardware', () => {
     let finish: ((session: RegistryHiveSession) => void) | undefined;
     let opened: RegistryHiveSession | undefined;
     client.openHive = vi.fn(async (request) => {
-      opened = await open(request); return new Promise<RegistryHiveSession>((resolve) => { finish = resolve; });
+      opened = await open(request);
+      return new Promise<RegistryHiveSession>((resolve) => {
+        finish = resolve;
+      });
     });
     const view = preview(client);
     await waitFor(() => expect(finish).toBeDefined());

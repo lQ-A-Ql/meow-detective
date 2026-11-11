@@ -1,4 +1,4 @@
-import { Image, Link, MessageSquare, Mic, Search, Smile, Video }  from '@/components/icons';
+import { Image, Link, MessageSquare, Mic, Search, Smile, Video } from '@/components/icons';
 import { ListRow } from '@/components/lists/ListRow';
 import { useTranslation } from 'react-i18next';
 
@@ -7,11 +7,7 @@ import { InlineMedia } from '@/app/components/ui/inline-media';
 import { ExternalMediaPreview } from '@/app/components/ui/external-media-preview';
 import { MediaEvidenceStatus } from '@/app/components/ui/media-evidence-status';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import type {
-  WeChatConversation,
-  WeChatLoadState,
-  WeChatMessage,
-} from '@/features/analysis/wechat/types';
+import type { WeChatConversation, WeChatLoadState, WeChatMessage } from '@/features/analysis/wechat/types';
 import { WeChatIdentity } from './WeChatIdentity';
 import { WeChatLoadFooter } from './WeChatLoadFooter';
 
@@ -19,9 +15,12 @@ function formatTime(value: string | undefined, locale: string, dateOnly = false)
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(locale, dateOnly
-    ? { year: 'numeric', month: '2-digit', day: '2-digit' }
-    : { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+  return new Intl.DateTimeFormat(
+    locale,
+    dateOnly
+      ? { year: 'numeric', month: '2-digit', day: '2-digit' }
+      : { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' },
+  ).format(date);
 }
 
 function messageIcon(message: WeChatMessage) {
@@ -48,23 +47,19 @@ function MessageBody({ message }: { message: WeChatMessage }) {
   const supplementalReplies = [message.sourceXmlText, message.packedInfoXmlText]
     .filter((value): value is string => Boolean(value && value !== readableText))
     .filter((value, index, values) => values.indexOf(value) === index);
-  const referencedContent = typeof message.referencedMessage?.content === 'string'
-    ? message.referencedMessage.content
-    : undefined;
+  const referencedContent =
+    typeof message.referencedMessage?.content === 'string' ? message.referencedMessage.content : undefined;
   const opaqueLocator = message.mediaLocator ?? message.thumbnailLocator;
   if (message.mediaKind) {
-    const detail = message.appTitle
-      ?? message.appDescription
-      ?? message.mediaItems[0]?.title
-      ?? message.mediaItems[0]?.description;
-    const reference = message.appUrl
-      ?? message.mediaUrl
-      ?? message.mediaItems[0]?.url
-      ?? message.thumbnailUrl
-      ?? message.mediaMd5;
+    const detail =
+      message.appTitle ?? message.appDescription ?? message.mediaItems[0]?.title ?? message.mediaItems[0]?.description;
+    const reference =
+      message.appUrl ?? message.mediaUrl ?? message.mediaItems[0]?.url ?? message.thumbnailUrl ?? message.mediaMd5;
     const externalMediaUrl = message.thumbnailUrl ?? message.mediaUrl;
     const localMediaStatus = message.localMedia
-      ? message.localMedia.state === 'encrypted' ? 'linked-encrypted' : 'linked-unavailable'
+      ? message.localMedia.state === 'encrypted'
+        ? 'linked-encrypted'
+        : 'linked-unavailable'
       : undefined;
     const localMediaStatusLabel = message.localMedia
       ? message.localMedia.state === 'encrypted'
@@ -123,11 +118,7 @@ function MessageBody({ message }: { message: WeChatMessage }) {
         </div>
         {detail ? <div className="mt-1 break-words text-[12px]">{detail}</div> : null}
         {!message.inlineMedia && !externalMediaUrl && !localMediaStatus ? (
-          <MediaEvidenceStatus
-            status="unlinked"
-            label={t('wechatWorkspace.localMediaUnlinked')}
-            className="mt-2"
-          />
+          <MediaEvidenceStatus status="unlinked" label={t('wechatWorkspace.localMediaUnlinked')} className="mt-2" />
         ) : null}
         {replyTarget ? (
           <div className="mt-1 text-[10px] text-forensics-muted">
@@ -169,7 +160,10 @@ function MessageBody({ message }: { message: WeChatMessage }) {
           ) : null}
         </p>
         {supplementalReplies.map((reply) => (
-          <p key={reply} className="mt-1 whitespace-pre-wrap break-words border-l border-forensics-border-strong pl-2 text-[11px] leading-5">
+          <p
+            key={reply}
+            className="mt-1 whitespace-pre-wrap break-words border-l border-forensics-border-strong pl-2 text-[11px] leading-5"
+          >
             {reply}
           </p>
         ))}
@@ -199,17 +193,11 @@ function MessageStream({ conversation }: { conversation: WeChatConversation }) {
       {conversation.messages.map((message) => {
         const day = formatTime(message.createTimeUtc, i18n.language, true);
         const showDay = Boolean(day && day !== previousDay);
-        const direction = message.isSend === true
-          ? 'outgoing'
-          : message.isSend === false
-            ? 'incoming'
-            : 'unknown';
+        const direction = message.isSend === true ? 'outgoing' : message.isSend === false ? 'incoming' : 'unknown';
         previousDay = day || previousDay;
         return (
           <div key={message.artifactId}>
-            {showDay ? (
-              <div className="mb-3 text-center font-mono text-[10px] text-forensics-muted">{day}</div>
-            ) : null}
+            {showDay ? <div className="mb-3 text-center font-mono text-[10px] text-forensics-muted">{day}</div> : null}
             <article
               className={`flex ${direction === 'outgoing' ? 'justify-end' : direction === 'incoming' ? 'justify-start' : 'justify-center'}`}
               title={`${message.sourcePath}\n${message.artifactId}`}
@@ -221,13 +209,19 @@ function MessageStream({ conversation }: { conversation: WeChatConversation }) {
                   </div>
                 ) : null}
                 {direction === 'unknown' ? (
-                  <div className="mb-1 text-center text-[9px] text-forensics-muted">{t('wechatWorkspace.unknownDirection')}</div>
+                  <div className="mb-1 text-center text-[9px] text-forensics-muted">
+                    {t('wechatWorkspace.unknownDirection')}
+                  </div>
                 ) : null}
-                <div className={direction === 'outgoing'
-                  ? 'border border-forensics-border-strong bg-forensics-800 px-3 py-2 text-white'
-                  : direction === 'incoming'
-                    ? 'bg-transparent px-3 py-2 text-forensics-text'
-                    : 'border border-dashed border-forensics-border-strong bg-forensics-panel px-3 py-2 text-forensics-text'}>
+                <div
+                  className={
+                    direction === 'outgoing'
+                      ? 'border border-forensics-border-strong bg-forensics-800 px-3 py-2 text-white'
+                      : direction === 'incoming'
+                        ? 'bg-transparent px-3 py-2 text-forensics-text'
+                        : 'border border-dashed border-forensics-border-strong bg-forensics-panel px-3 py-2 text-forensics-text'
+                  }
+                >
                   <MessageBody message={message} />
                 </div>
                 <div className="mt-1 font-mono text-[9px] text-forensics-muted">
@@ -284,26 +278,28 @@ export function WeChatChatsView({
                 className="h-14 items-start gap-3 px-3 py-2"
                 ariaLabel={conversation.displayName}
                 icon={<WeChatIdentity name={conversation.displayName} />}
-                label={<>
-                <span className="min-w-0 flex-1 text-left">
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[12px] text-forensics-text">{conversation.displayName}</span>
-                    <span className="shrink-0 font-mono text-[9px] text-forensics-muted">
-                      {formatTime(conversation.lastTimestampUtc, i18n.language)}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-[10px] text-forensics-muted">
-                      {conversation.summary || conversation.talker}
-                    </span>
-                    {conversation.unreadCount > 0 ? (
-                      <span className="min-w-4 border border-forensics-border-strong px-1 text-center font-mono text-[9px] text-forensics-text-secondary">
-                        {conversation.unreadCount}
+                label={
+                  <>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate text-[12px] text-forensics-text">{conversation.displayName}</span>
+                        <span className="shrink-0 font-mono text-[9px] text-forensics-muted">
+                          {formatTime(conversation.lastTimestampUtc, i18n.language)}
+                        </span>
                       </span>
-                    ) : null}
-                  </span>
-                  </span>
-                </>}
+                      <span className="mt-0.5 flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-[10px] text-forensics-muted">
+                          {conversation.summary || conversation.talker}
+                        </span>
+                        {conversation.unreadCount > 0 ? (
+                          <span className="min-w-4 border border-forensics-border-strong px-1 text-center font-mono text-[9px] text-forensics-text-secondary">
+                            {conversation.unreadCount}
+                          </span>
+                        ) : null}
+                      </span>
+                    </span>
+                  </>
+                }
               />
             ))}
             {conversations.length === 0 ? (
@@ -322,7 +318,8 @@ export function WeChatChatsView({
               <div className="min-w-0">
                 <div className="truncate text-[12px] text-forensics-text">{selectedConversation.displayName}</div>
                 <div className="truncate font-mono text-[9px] text-forensics-muted">
-                  {selectedConversation.talker} · {t('wechatWorkspace.messageCount', { count: selectedConversation.messages.length })}
+                  {selectedConversation.talker} ·{' '}
+                  {t('wechatWorkspace.messageCount', { count: selectedConversation.messages.length })}
                 </div>
               </div>
             </header>

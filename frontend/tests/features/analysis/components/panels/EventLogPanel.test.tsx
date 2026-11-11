@@ -38,7 +38,15 @@ describe('EventLogPanel', () => {
       otherCount: 0,
       totalCount: 1,
       bootEvents: [
-        { eventId: 6005, kind: 'eventLogStarted', timestamp: '2026-06-01T08:00:00Z', provider: 'EventLog', recordId: 1, sourcePath: 'System.evtx', note: 'System started' },
+        {
+          eventId: 6005,
+          kind: 'eventLogStarted',
+          timestamp: '2026-06-01T08:00:00Z',
+          provider: 'EventLog',
+          recordId: 1,
+          sourcePath: 'System.evtx',
+          note: 'System started',
+        },
       ],
       securityEvents: [],
       applicationEvents: [],
@@ -51,15 +59,41 @@ describe('EventLogPanel', () => {
 
   it('labels operating-system lifecycle boundaries distinctly', () => {
     const summary: EvtxEventSummary = {
-      status: 'parsed', bootShutdownCount: 2, logonLogoffCount: 0,
+      status: 'parsed',
+      bootShutdownCount: 2,
+      logonLogoffCount: 0,
       pageTotal: 2,
-      privilegeEscalationCount: 0, processExecutionCount: 0, accountManagementCount: 0,
-      scheduledTaskCount: 0, applicationCrashCount: 0, softwareInstallationCount: 0,
-      otherCount: 0, totalCount: 2, securityEvents: [], applicationEvents: [], warnings: [],
+      privilegeEscalationCount: 0,
+      processExecutionCount: 0,
+      accountManagementCount: 0,
+      scheduledTaskCount: 0,
+      applicationCrashCount: 0,
+      softwareInstallationCount: 0,
+      otherCount: 0,
+      totalCount: 2,
+      securityEvents: [],
+      applicationEvents: [],
+      warnings: [],
       generatedAt: '2026-06-01T10:00:00Z',
       bootEvents: [
-        { eventId: 12, kind: 'operatingSystemStarted', timestamp: '2026-06-01T08:00:00Z', provider: 'Microsoft-Windows-Kernel-General', recordId: 1, sourcePath: 'System.evtx', note: 'startup' },
-        { eventId: 13, kind: 'operatingSystemShutdown', timestamp: '2026-06-01T18:00:00Z', provider: 'Microsoft-Windows-Kernel-General', recordId: 2, sourcePath: 'System.evtx', note: 'shutdown' },
+        {
+          eventId: 12,
+          kind: 'operatingSystemStarted',
+          timestamp: '2026-06-01T08:00:00Z',
+          provider: 'Microsoft-Windows-Kernel-General',
+          recordId: 1,
+          sourcePath: 'System.evtx',
+          note: 'startup',
+        },
+        {
+          eventId: 13,
+          kind: 'operatingSystemShutdown',
+          timestamp: '2026-06-01T18:00:00Z',
+          provider: 'Microsoft-Windows-Kernel-General',
+          recordId: 2,
+          sourcePath: 'System.evtx',
+          note: 'shutdown',
+        },
       ],
     };
     render(createElement(EventLogPanel, { summary }));
@@ -88,13 +122,13 @@ describe('EventLogPanel', () => {
   it('routes a failed continuation through query recovery instead of the stale cursor', () => {
     const onLoadMore = vi.fn();
     const onRetryLoadMore = vi.fn();
-    const { container, rerender } = render(createElement(EventLogPanel, {
-      hasMore: true,
-      onLoadMore,
-    }));
-    const activeContent = container.querySelector(
-      '[data-slot="tabs-content"][data-state="active"]',
+    const { container, rerender } = render(
+      createElement(EventLogPanel, {
+        hasMore: true,
+        onLoadMore,
+      }),
     );
+    const activeContent = container.querySelector('[data-slot="tabs-content"][data-state="active"]');
     const scrollContainer = activeContent?.querySelector('[data-slot="scroll-area-viewport"]');
     expect(scrollContainer).toBeInstanceOf(HTMLDivElement);
     Object.defineProperties(scrollContainer as HTMLDivElement, {
@@ -107,12 +141,14 @@ describe('EventLogPanel', () => {
     });
     expect(onLoadMore).toHaveBeenCalledTimes(1);
 
-    rerender(createElement(EventLogPanel, {
-      hasMore: true,
-      loadMoreFailed: true,
-      onLoadMore,
-      onRetryLoadMore,
-    }));
+    rerender(
+      createElement(EventLogPanel, {
+        hasMore: true,
+        loadMoreFailed: true,
+        onLoadMore,
+        onRetryLoadMore,
+      }),
+    );
     fireEvent.scroll(scrollContainer as HTMLDivElement, {
       target: { scrollTop: 2_500 },
     });

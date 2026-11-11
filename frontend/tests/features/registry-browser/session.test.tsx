@@ -13,13 +13,24 @@ describe('registry hive session scope', () => {
     const old = await base.openHive({ fileId: fixture.hives[0].fileId, view: 'base' });
     const current = await base.openHive({ fileId: fixture.hives[1].fileId, view: 'base' });
     let resolveOld!: (session: RegistryHiveSession) => void;
-    const pending = new Promise<RegistryHiveSession>((resolve) => { resolveOld = resolve; });
-    const client = { ...base, openHive: vi.fn().mockReturnValueOnce(pending).mockResolvedValueOnce(current),
-      closeHive: vi.fn(base.closeHive) };
+    const pending = new Promise<RegistryHiveSession>((resolve) => {
+      resolveOld = resolve;
+    });
+    const client = {
+      ...base,
+      openHive: vi.fn().mockReturnValueOnce(pending).mockResolvedValueOnce(current),
+      closeHive: vi.fn(base.closeHive),
+    };
     const hook = renderHook(() => useRegistrySession(client, context));
-    act(() => { void hook.result.current.openHive(old.hive.fileId); void hook.result.current.openHive(current.hive.fileId); });
+    act(() => {
+      void hook.result.current.openHive(old.hive.fileId);
+      void hook.result.current.openHive(current.hive.fileId);
+    });
     await waitFor(() => expect(hook.result.current.session?.sessionId).toBe(current.sessionId));
-    await act(async () => { resolveOld(old); await pending; });
+    await act(async () => {
+      resolveOld(old);
+      await pending;
+    });
     expect(hook.result.current.session?.hive.name).toBe('SYSTEM');
     expect(client.closeHive).toHaveBeenCalledWith({ sessionId: old.sessionId });
     hook.unmount();
@@ -32,7 +43,9 @@ describe('registry hive session scope', () => {
     const foreign = { ...response, source: { ...response.source, caseId: 'different-synthetic-case' } };
     const client = { ...base, openHive: vi.fn().mockResolvedValue(foreign), closeHive: vi.fn(base.closeHive) };
     const hook = renderHook(() => useRegistrySession(client, context));
-    await act(async () => { await hook.result.current.openHive(fixture.hives[0].fileId); });
+    await act(async () => {
+      await hook.result.current.openHive(fixture.hives[0].fileId);
+    });
     expect(hook.result.current.session).toBeUndefined();
     expect(hook.result.current.error).toMatchObject({ code: 'expiredSession' });
     expect(client.closeHive).toHaveBeenCalledWith({ sessionId: response.sessionId });

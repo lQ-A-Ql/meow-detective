@@ -8,25 +8,71 @@ import type { InfrastructureHostFact } from '../types';
 import type { InfrastructureNetworkFact } from '@/types/infrastructure';
 import { statusLabel, statusVariant } from '../model/cluster-status-map';
 
-export function MemberEvidenceTable({ members, sourceMetadata, scopes, hostFacts, networkFacts, selectedIndex, onSelect, t }: { members: LinuxEvidenceSetMemberSummary[]; sourceMetadata: Map<string, DataSourceSummary>; scopes: LinuxTopologyScopeSummary[]; hostFacts: Map<string, InfrastructureHostFact>; networkFacts: InfrastructureNetworkFact[]; selectedIndex?: number; onSelect: (index: number) => void; t: TFunction }) {
-  const roleBySource = new Map(scopes.flatMap((scope) => scope.memberRoles.map((member) => [member.dataSourceId, member.role] as const)));
+export function MemberEvidenceTable({
+  members,
+  sourceMetadata,
+  scopes,
+  hostFacts,
+  networkFacts,
+  selectedIndex,
+  onSelect,
+  t,
+}: {
+  members: LinuxEvidenceSetMemberSummary[];
+  sourceMetadata: Map<string, DataSourceSummary>;
+  scopes: LinuxTopologyScopeSummary[];
+  hostFacts: Map<string, InfrastructureHostFact>;
+  networkFacts: InfrastructureNetworkFact[];
+  selectedIndex?: number;
+  onSelect: (index: number) => void;
+  t: TFunction;
+}) {
+  const roleBySource = new Map(
+    scopes.flatMap((scope) => scope.memberRoles.map((member) => [member.dataSourceId, member.role] as const)),
+  );
   const columns: SummaryTableColumn[] = [
-    { key: 'member', label: t('infrastructure.workspace.members.member'), className: 'max-w-64 truncate font-mono text-forensics-text' },
+    {
+      key: 'member',
+      label: t('infrastructure.workspace.members.member'),
+      className: 'max-w-64 truncate font-mono text-forensics-text',
+    },
     { key: 'kind', label: t('infrastructure.workspace.members.kind'), className: 'text-forensics-muted' },
     { key: 'import', label: t('infrastructure.workspace.members.import') },
     { key: 'files', label: t('infrastructure.workspace.members.files'), className: 'font-mono text-forensics-text' },
-    { key: 'hostname', label: t('infrastructure.workspace.members.hostname'), className: 'max-w-36 truncate text-forensics-text' },
-    { key: 'os', label: t('infrastructure.workspace.members.os'), className: 'max-w-48 truncate text-[10px] text-forensics-muted' },
-    { key: 'address', label: t('infrastructure.workspace.members.address'), className: 'max-w-36 truncate font-mono text-[10px] text-forensics-muted' },
+    {
+      key: 'hostname',
+      label: t('infrastructure.workspace.members.hostname'),
+      className: 'max-w-36 truncate text-forensics-text',
+    },
+    {
+      key: 'os',
+      label: t('infrastructure.workspace.members.os'),
+      className: 'max-w-48 truncate text-[10px] text-forensics-muted',
+    },
+    {
+      key: 'address',
+      label: t('infrastructure.workspace.members.address'),
+      className: 'max-w-36 truncate font-mono text-[10px] text-forensics-muted',
+    },
     { key: 'role', label: t('infrastructure.workspace.members.role') },
     { key: 'hash', label: t('infrastructure.workspace.members.hash') },
   ];
   const rows: SummaryTableRow[] = members.map((member) => {
     const source = member.dataSourceId ? sourceMetadata.get(member.dataSourceId) : undefined;
     const hostFact = member.dataSourceId ? hostFacts.get(member.dataSourceId) : undefined;
-    const addresses = member.addresses.length ? member.addresses : networkFacts.filter((fact) => fact.dataSourceId === member.dataSourceId && fact.factKind === 'interface_address').map((fact) => fact.value);
+    const addresses = member.addresses.length
+      ? member.addresses
+      : networkFacts
+          .filter((fact) => fact.dataSourceId === member.dataSourceId && fact.factKind === 'interface_address')
+          .map((fact) => fact.value);
     const role = member.roles[0] ?? (member.dataSourceId ? roleBySource.get(member.dataSourceId) : undefined);
-    const os = [member.operatingSystem ?? hostFact?.operatingSystem, member.osVersion ?? hostFact?.operatingSystemVersion, member.kernelVersion ?? hostFact?.kernelVersion].filter(Boolean).join(' / ');
+    const os = [
+      member.operatingSystem ?? hostFact?.operatingSystem,
+      member.osVersion ?? hostFact?.operatingSystemVersion,
+      member.kernelVersion ?? hostFact?.kernelVersion,
+    ]
+      .filter(Boolean)
+      .join(' / ');
     const hostname = member.hostname ?? hostFact?.hostname;
     return {
       key: member.memberIndex,
@@ -36,12 +82,20 @@ export function MemberEvidenceTable({ members, sourceMetadata, scopes, hostFacts
       cells: [
         { content: `${member.memberIndex + 1}. ${member.sourceName}`, title: member.sourcePath },
         member.sourceKind.toUpperCase(),
-        <StatusBadge key="import" label={statusLabel(member.importState, t)} variant={statusVariant(member.importState)} />,
+        <StatusBadge
+          key="import"
+          label={statusLabel(member.importState, t)}
+          variant={statusVariant(member.importState)}
+        />,
         source?.fileCount?.toLocaleString() ?? '—',
         { content: hostname ?? '—', title: hostname },
         { content: os || '—', title: os },
         { content: addresses.join(', ') || '—', title: addresses.join(', ') },
-        <StatusBadge key="role" label={t(`infrastructure.workspace.topology.roles.${role ?? 'unknown'}`, { defaultValue: role ?? 'unknown' })} variant="outline" />,
+        <StatusBadge
+          key="role"
+          label={t(`infrastructure.workspace.topology.roles.${role ?? 'unknown'}`, { defaultValue: role ?? 'unknown' })}
+          variant="outline"
+        />,
         <StatusBadge key="hash" label={statusLabel(member.hashStatus, t)} variant={statusVariant(member.hashStatus)} />,
       ],
     };

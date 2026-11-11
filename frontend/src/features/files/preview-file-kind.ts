@@ -5,13 +5,45 @@ const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'i
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'avi', 'mkv']);
 const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'flac', 'aac', 'ogg']);
 const DOCUMENT_EXTENSIONS = new Set([
-  'pdf', 'docx', 'xlsx', 'pptx', 'sqlite', 'sqlite3', 'db', 'db3',
-  'doc', 'xls', 'ppt',
+  'pdf',
+  'docx',
+  'xlsx',
+  'pptx',
+  'sqlite',
+  'sqlite3',
+  'db',
+  'db3',
+  'doc',
+  'xls',
+  'ppt',
 ]);
 const TEXT_EXTENSIONS = new Set([
-  'txt', 'log', 'md', 'csv', 'json', 'jsonl', 'xml', 'html', 'htm',
-  'yaml', 'yml', 'toml', 'ini', 'conf', 'cfg', 'ps1', 'bat', 'cmd',
-  'sh', 'py', 'js', 'jsx', 'ts', 'tsx', 'css', 'sql',
+  'txt',
+  'log',
+  'md',
+  'csv',
+  'json',
+  'jsonl',
+  'xml',
+  'html',
+  'htm',
+  'yaml',
+  'yml',
+  'toml',
+  'ini',
+  'conf',
+  'cfg',
+  'ps1',
+  'bat',
+  'cmd',
+  'sh',
+  'py',
+  'js',
+  'jsx',
+  'ts',
+  'tsx',
+  'css',
+  'sql',
 ]);
 
 type PreviewFileIdentity = Pick<FileEntryRow, 'entryType' | 'ext' | 'name'>;
@@ -21,9 +53,7 @@ function extensionFor(file: Pick<PreviewFileIdentity, 'ext' | 'name'>): string {
   return extension?.toLowerCase().replace(/^\.+/, '') ?? '';
 }
 
-export function getFilePreviewKind(
-  file: Pick<PreviewFileIdentity, 'ext' | 'name'>,
-): FilePreviewKind | undefined {
+export function getFilePreviewKind(file: Pick<PreviewFileIdentity, 'ext' | 'name'>): FilePreviewKind | undefined {
   const extension = extensionFor(file);
   if (IMAGE_EXTENSIONS.has(extension)) return 'image';
   if (VIDEO_EXTENSIONS.has(extension)) return 'video';

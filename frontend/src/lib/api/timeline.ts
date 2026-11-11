@@ -17,9 +17,7 @@ export interface TimelineRequest {
   cursor?: string;
 }
 
-export async function getTimelineEvents(
-  request?: TimelineRequest,
-): Promise<PagedResponse<TimelineEvent>> {
+export async function getTimelineEvents(request?: TimelineRequest): Promise<PagedResponse<TimelineEvent>> {
   return apiClient.request(
     COMMANDS.timeline.GET_TIMELINE_EVENTS,
     request
@@ -41,9 +39,7 @@ export async function getTimelineEventById(eventId: string): Promise<TimelineEve
   return apiClient.request(COMMANDS.timeline.GET_TIMELINE_EVENT_BY_ID, { request: { eventId } });
 }
 
-export async function getTimelineFacets(
-  request?: TimelineFacetsRequest,
-): Promise<TimelineFacets> {
+export async function getTimelineFacets(request?: TimelineFacetsRequest): Promise<TimelineFacets> {
   return apiClient.request(COMMANDS.timeline.GET_TIMELINE_FACETS, {
     request: {
       timeStart: request?.timeStart,

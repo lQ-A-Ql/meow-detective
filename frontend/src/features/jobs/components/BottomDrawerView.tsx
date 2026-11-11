@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { ChevronDown, ChevronUp, Terminal }  from '@/components/icons';
+import { ChevronDown, ChevronUp, Terminal } from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import type { useResizableHeight } from '@/hooks/use-resizable-height';
@@ -14,7 +14,11 @@ export interface BottomDrawerProps {
   analysisProgress?: ReactNode;
 }
 
-export function BottomDrawerView({ model, analysisProgress, resize }: BottomDrawerProps & { resize: ReturnType<typeof useResizableHeight> }) {
+export function BottomDrawerView({
+  model,
+  analysisProgress,
+  resize,
+}: BottomDrawerProps & { resize: ReturnType<typeof useResizableHeight> }) {
   const { t } = useTranslation();
   const { height, isResizing, onResizeStart } = resize;
 
@@ -34,11 +38,25 @@ export function BottomDrawerView({ model, analysisProgress, resize }: BottomDraw
             </span>
           </div>
           <div className="hidden shrink-0 items-center gap-3 whitespace-nowrap border-l border-forensics-divider px-3 text-forensics-text-tertiary 2xl:flex">
-            <span><span className="text-forensics-text">{model.runningJobs.length}</span> {t('bottomDrawer.jobs.running')}</span>
-            <span><span className={model.errorIssues.length ? 'text-forensics-error-text' : 'text-forensics-text'}>{model.errorIssues.length}</span> {t('bottomDrawer.issues.errors')}</span>
-            <span><span className="text-forensics-text">{model.warningIssues.length}</span> {t('bottomDrawer.jobs.warnings')}</span>
-            <span><span className="text-forensics-text">{model.jobSkippedCount}</span> {t('bottomDrawer.jobs.skipped')}</span>
-            <span><span className="text-forensics-text">{model.trace.length}</span> {t('bottomDrawer.jobs.trace')}</span>
+            <span>
+              <span className="text-forensics-text">{model.runningJobs.length}</span> {t('bottomDrawer.jobs.running')}
+            </span>
+            <span>
+              <span className={model.errorIssues.length ? 'text-forensics-error-text' : 'text-forensics-text'}>
+                {model.errorIssues.length}
+              </span>{' '}
+              {t('bottomDrawer.issues.errors')}
+            </span>
+            <span>
+              <span className="text-forensics-text">{model.warningIssues.length}</span>{' '}
+              {t('bottomDrawer.jobs.warnings')}
+            </span>
+            <span>
+              <span className="text-forensics-text">{model.jobSkippedCount}</span> {t('bottomDrawer.jobs.skipped')}
+            </span>
+            <span>
+              <span className="text-forensics-text">{model.trace.length}</span> {t('bottomDrawer.jobs.trace')}
+            </span>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">

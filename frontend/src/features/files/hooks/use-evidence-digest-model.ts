@@ -6,8 +6,20 @@ import type { DataSourceSummary, FileEntryRow } from '@/types/models';
 import type { DigestAlgorithm, DigestScope } from '@/types/digest';
 import { parseSourceScopedFileId } from '../source-scoped-file-id';
 
-export const DIGEST_SCOPES: DigestScope[] = ['containerFile', 'containerSet', 'logicalDisk', 'partition', 'file', 'derivedEvidence'];
-export function useEvidenceDigestModel(caseId: string | undefined, file: FileEntryRow | undefined, source: DataSourceSummary | undefined, partitionIndex?: number) {
+export const DIGEST_SCOPES: DigestScope[] = [
+  'containerFile',
+  'containerSet',
+  'logicalDisk',
+  'partition',
+  'file',
+  'derivedEvidence',
+];
+export function useEvidenceDigestModel(
+  caseId: string | undefined,
+  file: FileEntryRow | undefined,
+  source: DataSourceSummary | undefined,
+  partitionIndex?: number,
+) {
   const scoped = parseSourceScopedFileId(file?.id);
   const sourceId = scoped?.sourceId ?? source?.id;
   const owner = JSON.stringify([caseId, sourceId, file?.id, partitionIndex]);
@@ -18,7 +30,10 @@ export function useEvidenceDigestModel(caseId: string | undefined, file: FileEnt
   const task = useEvidenceTask(caseId, owner);
   const cache = useQueryClient();
   const historyKey = ['evidence-digests', caseId, sourceId, file?.id, partitionIndex];
-  const history = useQuery({ queryKey: historyKey, enabled: !!caseId && !!sourceId, retry: false,
+  const history = useQuery({
+    queryKey: historyKey,
+    enabled: !!caseId && !!sourceId,
+    retry: false,
     queryFn: () => listEvidenceDigests({ dataSourceId: sourceId!, fileId: file?.id, partitionIndex }),
   });
   useEffect(() => {
@@ -28,12 +43,35 @@ export function useEvidenceDigestModel(caseId: string | undefined, file: FileEnt
       void cache.invalidateQueries({ queryKey: ['files'] });
     }
   }, [task.task?.state, task.task?.taskId, task.request, cache, caseId, sourceId]);
-  const available = !!caseId && !!sourceId && (scope !== 'file' || file?.entryType === 'file') && (scope !== 'partition' || partitionIndex !== undefined);
-  return { ...task, scope, forceRecompute, available, scopes: DIGEST_SCOPES,
-    results: history.data?.filter((result) => result.digest.scope === scope) ?? [], historyLoading: history.isFetching,
+  const available =
+    !!caseId &&
+    !!sourceId &&
+    (scope !== 'file' || file?.entryType === 'file') &&
+    (scope !== 'partition' || partitionIndex !== undefined);
+  return {
+    ...task,
+    scope,
+    forceRecompute,
+    available,
+    scopes: DIGEST_SCOPES,
+    results: history.data?.filter((result) => result.digest.scope === scope) ?? [],
+    historyLoading: history.isFetching,
     historyError: history.error,
     setScope: (scope: DigestScope) => setSelection({ owner, scope }),
     setForceRecompute: (force: boolean) => setForceSelection({ owner, force }),
-    calculate: (algorithm: DigestAlgorithm) => { if (available) task.start({ kind: 'digest', request: { scope, algorithm, dataSourceId: sourceId, ...(scope === 'file' ? { fileId: file?.id } : {}), ...(scope === 'partition' ? { partitionIndex } : {}), ...(forceRecompute ? { forceRecompute: true } : {}) } }); },
+    calculate: (algorithm: DigestAlgorithm) => {
+      if (available)
+        task.start({
+          kind: 'digest',
+          request: {
+            scope,
+            algorithm,
+            dataSourceId: sourceId,
+            ...(scope === 'file' ? { fileId: file?.id } : {}),
+            ...(scope === 'partition' ? { partitionIndex } : {}),
+            ...(forceRecompute ? { forceRecompute: true } : {}),
+          },
+        });
+    },
   };
 }

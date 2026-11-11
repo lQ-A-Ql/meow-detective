@@ -9,12 +9,7 @@ interface UseFilePaginationOptions {
   caseId?: string;
 }
 
-export function useFilePagination({
-  activeDirectoryId,
-  pageLimit,
-  showHidden,
-  caseId,
-}: UseFilePaginationOptions) {
+export function useFilePagination({ activeDirectoryId, pageLimit, showHidden, caseId }: UseFilePaginationOptions) {
   const fileSortKey = useUiStore((s) => s.fileSortKey);
   const fileSortDirection = useUiStore((s) => s.fileSortDirection);
   const setFileSortKey = useUiStore((s) => s.setFileSortKey);
@@ -25,23 +20,23 @@ export function useFilePagination({
   const currentOwner = owner.current;
   const [page, setPage] = useState({ owner: currentOwner, offset: 0 });
   const rowsOffset = page.owner === currentOwner ? page.offset : 0;
-  const setRowsOffset = useCallback((value: SetStateAction<number>) => {
-    setPage((current) => {
-      if (owner.current !== currentOwner) return current;
-      const previous = current.owner === currentOwner ? current.offset : 0;
-      return { owner: currentOwner, offset: typeof value === 'function' ? value(previous) : value };
-    });
-  }, [currentOwner]);
-
-  const { data: rowsPage, isSuccess: rowsReady, error: rowsError, refetch: retryRows } = useFileRowsPage(
-    activeDirectoryId,
-    rowsOffset,
-    pageLimit,
-    showHidden,
-    fileSortKey,
-    fileSortDirection,
-    caseId,
+  const setRowsOffset = useCallback(
+    (value: SetStateAction<number>) => {
+      setPage((current) => {
+        if (owner.current !== currentOwner) return current;
+        const previous = current.owner === currentOwner ? current.offset : 0;
+        return { owner: currentOwner, offset: typeof value === 'function' ? value(previous) : value };
+      });
+    },
+    [currentOwner],
   );
+
+  const {
+    data: rowsPage,
+    isSuccess: rowsReady,
+    error: rowsError,
+    refetch: retryRows,
+  } = useFileRowsPage(activeDirectoryId, rowsOffset, pageLimit, showHidden, fileSortKey, fileSortDirection, caseId);
   const rows = rowsPage?.rows;
 
   const handleSort = useCallback(
@@ -52,34 +47,24 @@ export function useFilePagination({
         setFileSortKey(key as 'name' | 'size' | 'modifiedAt' | 'ext');
       }
     },
-    [fileSortKey, setFileSortKey, toggleFileSortDirection]
+    [fileSortKey, setFileSortKey, toggleFileSortDirection],
   );
 
-  const executableCount = rows?.filter((row) =>
-    ['exe', 'dll'].includes(
-      (row.ext ?? row.name.split('.').pop() ?? '').toLowerCase()
-    )
-  ).length ?? 0;
+  const executableCount =
+    rows?.filter((row) => ['exe', 'dll'].includes((row.ext ?? row.name.split('.').pop() ?? '').toLowerCase())).length ??
+    0;
   const sortedRows = rows ?? [];
-  const activeDirectoryPath = rows?.find(
-    (row) => row.id === activeDirectoryId
-  )?.path;
+  const activeDirectoryPath = rows?.find((row) => row.id === activeDirectoryId)?.path;
 
   const canGoToPreviousRows = rowsOffset > 0;
-  const canGoToNextRows = Boolean(
-    rowsPage && rowsPage.offset + rowsPage.limit < rowsPage.totalCount
-  );
+  const canGoToNextRows = Boolean(rowsPage && rowsPage.offset + rowsPage.limit < rowsPage.totalCount);
   const goToPreviousRows = useCallback(
     () => setRowsOffset((current) => Math.max(0, current - pageLimit)),
-    [pageLimit, setRowsOffset]
+    [pageLimit, setRowsOffset],
   );
   const goToNextRows = useCallback(() => {
     if (!rowsPage) return;
-    setRowsOffset((current) =>
-      current + rowsPage.limit < rowsPage.totalCount
-        ? current + pageLimit
-        : current
-    );
+    setRowsOffset((current) => (current + rowsPage.limit < rowsPage.totalCount ? current + pageLimit : current));
   }, [rowsPage, pageLimit, setRowsOffset]);
 
   return {

@@ -9,7 +9,7 @@
  */
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Play, Pause, Volume2, VolumeX, Music, SkipBack, SkipForward }  from '@/components/icons';
+import { Play, Pause, Volume2, VolumeX, Music, SkipBack, SkipForward } from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { Slider } from '@/app/components/ui/slider';
 import { useTranslation } from 'react-i18next';
@@ -69,14 +69,14 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
   }, [isPlaying, t]);
 
   // 快进/快退
-  const skip = useCallback((seconds: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = Math.max(
-        0,
-        Math.min(duration, audioRef.current.currentTime + seconds)
-      );
-    }
-  }, [duration]);
+  const skip = useCallback(
+    (seconds: number) => {
+      if (audioRef.current) {
+        audioRef.current.currentTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + seconds));
+      }
+    },
+    [duration],
+  );
 
   // 切换静音
   const toggleMute = useCallback(() => {
@@ -102,7 +102,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
     const handleError = () => {
       const mediaError = audio.error;
       let errorMsg = t('media.errors.audioLoad');
-      
+
       if (mediaError) {
         switch (mediaError.code) {
           case MediaError.MEDIA_ERR_ABORTED:
@@ -119,7 +119,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
             break;
         }
       }
-      
+
       setError(errorMsg);
       setIsLoading(false);
     };
@@ -159,19 +159,13 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
       </div>
 
       {/* 文件名 */}
-      {fileName && (
-        <div className="text-[14px] font-light mb-2 text-center truncate">
-          {fileName}
-        </div>
-      )}
+      {fileName && <div className="text-[14px] font-light mb-2 text-center truncate">{fileName}</div>}
 
       {/* 加载/错误状态 */}
       {isLoading && (
         <div className="text-center text-forensics-muted-lighter text-[12px] mb-4">{t('media.loading')}</div>
       )}
-      {error && (
-        <div className="text-center text-forensics-error-text text-[12px] mb-4">{error}</div>
-      )}
+      {error && <div className="text-center text-forensics-error-text text-[12px] mb-4">{error}</div>}
 
       {/* 进度条 */}
       <Slider
@@ -183,7 +177,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
           if (audioRef.current) audioRef.current.currentTime = time;
           setCurrentTime(time);
         }}
-          aria-label={t('media.audioProgress')}
+        aria-label={t('media.audioProgress')}
         className="mb-4"
       />
 
@@ -253,9 +247,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
           aria-label={t('media.volume')}
           className="w-24"
         />
-        <span className="text-[10px] text-forensics-muted w-8">
-          {Math.round((isMuted ? 0 : volume) * 100)}%
-        </span>
+        <span className="text-[10px] text-forensics-muted w-8">{Math.round((isMuted ? 0 : volume) * 100)}%</span>
       </div>
 
       {/* 文件信息 */}

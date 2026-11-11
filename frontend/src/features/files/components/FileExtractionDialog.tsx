@@ -1,4 +1,3 @@
-
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
@@ -24,14 +23,16 @@ export interface FileExtractionDialogProps {
 export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
   const { t } = useTranslation();
   const totalBytes = model.progress?.totalBytes;
-  const copiedBytesText = totalBytes === undefined
-    ? undefined
-    : `${formatBytes(model.progress?.bytesWritten ?? 0)} / ${formatBytes(totalBytes)}`;
-  const progressText = model.progress?.phase === 'finalizing'
-    ? t('fileBrowser.extraction.copying', {
-      copied: copiedBytesText ?? formatBytes(model.progress.bytesWritten),
-    })
-    : copiedBytesText ?? t('fileBrowser.extraction.preparing');
+  const copiedBytesText =
+    totalBytes === undefined
+      ? undefined
+      : `${formatBytes(model.progress?.bytesWritten ?? 0)} / ${formatBytes(totalBytes)}`;
+  const progressText =
+    model.progress?.phase === 'finalizing'
+      ? t('fileBrowser.extraction.copying', {
+          copied: copiedBytesText ?? formatBytes(model.progress.bytesWritten),
+        })
+      : (copiedBytesText ?? t('fileBrowser.extraction.preparing'));
 
   return (
     <Dialog open={model.formOpen} onOpenChange={model.setFormOpen}>
@@ -62,13 +63,18 @@ export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
                 disabled={model.isExtracting}
                 autoComplete="off"
               />
-              <Tooltip content={t('fileBrowser.extraction.browse')}><Button aria-label={t('fileBrowser.extraction.browse')}
-                type="button"
-                variant="forensicsOutline"
-                size="sm"
-                onClick={() => void model.browseDestination()}
-                disabled={model.isExtracting}
-              ><ActionIcon name="download" /></Button></Tooltip>
+              <Tooltip content={t('fileBrowser.extraction.browse')}>
+                <Button
+                  aria-label={t('fileBrowser.extraction.browse')}
+                  type="button"
+                  variant="forensicsOutline"
+                  size="sm"
+                  onClick={() => void model.browseDestination()}
+                  disabled={model.isExtracting}
+                >
+                  <ActionIcon name="download" />
+                </Button>
+              </Tooltip>
             </FieldRow>
             <FieldHint>{t('fileBrowser.extraction.noOverwriteHint')}</FieldHint>
             {model.validationError ? <FieldError>{model.validationError}</FieldError> : null}
@@ -93,13 +99,27 @@ export function FileExtractionDialog({ model }: FileExtractionDialogProps) {
           {model.error ? <FieldError role="alert">{model.error}</FieldError> : null}
 
           <DialogFooter>
-            <Tooltip content={t('common.cancel')}><Button aria-label={t('common.cancel')}
-              type="button"
-              variant="forensicsGhost"
-              onClick={() => model.setFormOpen(false)}
-              disabled={model.isExtracting}
-            ><ActionIcon name="close" /></Button></Tooltip>
-            <Tooltip content={t('fileBrowser.extraction.start')}><Button aria-label={t('fileBrowser.extraction.start')} type="submit" variant="forensicsPrimary" disabled={model.isExtracting}><ActionIcon name="download" /></Button></Tooltip>
+            <Tooltip content={t('common.cancel')}>
+              <Button
+                aria-label={t('common.cancel')}
+                type="button"
+                variant="forensicsGhost"
+                onClick={() => model.setFormOpen(false)}
+                disabled={model.isExtracting}
+              >
+                <ActionIcon name="close" />
+              </Button>
+            </Tooltip>
+            <Tooltip content={t('fileBrowser.extraction.start')}>
+              <Button
+                aria-label={t('fileBrowser.extraction.start')}
+                type="submit"
+                variant="forensicsPrimary"
+                disabled={model.isExtracting}
+              >
+                <ActionIcon name="download" />
+              </Button>
+            </Tooltip>
           </DialogFooter>
         </form>
       </DialogContent>

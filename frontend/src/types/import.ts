@@ -11,14 +11,7 @@ export type ImportPhase =
   | 'finalize';
 
 export type ImportPhaseState =
-  | 'pending'
-  | 'running'
-  | 'completed'
-  | 'skipped'
-  | 'cancelling'
-  | 'cancelled'
-  | 'failed'
-  | 'partial';
+  'pending' | 'running' | 'completed' | 'skipped' | 'cancelling' | 'cancelled' | 'failed' | 'partial';
 
 export interface ImportPhaseMetrics {
   elapsedMs: number;

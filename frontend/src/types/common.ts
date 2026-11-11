@@ -8,15 +8,7 @@ export interface ApiErrorDto {
 }
 
 export type ErrorCategory =
-  | 'validation'
-  | 'unsupported'
-  | 'io'
-  | 'parser'
-  | 'security'
-  | 'external'
-  | 'timeout'
-  | 'cancelled'
-  | 'internal';
+  'validation' | 'unsupported' | 'io' | 'parser' | 'security' | 'external' | 'timeout' | 'cancelled' | 'internal';
 
 export interface AppSettings {
   caseRoot: string;

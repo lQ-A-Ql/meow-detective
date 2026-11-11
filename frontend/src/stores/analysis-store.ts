@@ -55,9 +55,7 @@ type AnalysisState = {
   selectedDataSourceId?: string;
   activePluginId?: string;
 
-  setExtractionProgress: (
-    progress: Record<ExtractionCategory, Omit<AnalysisExtractionProgressInfo, 'label'>>,
-  ) => void;
+  setExtractionProgress: (progress: Record<ExtractionCategory, Omit<AnalysisExtractionProgressInfo, 'label'>>) => void;
   updateExtractionProgress: (
     category: ExtractionCategory,
     patch: Partial<Omit<AnalysisExtractionProgressInfo, 'label'>>,
@@ -110,8 +108,7 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       },
     })),
 
-  resetExtractionProgress: () =>
-    set({ extractionProgress: createDefaultProgress() }),
+  resetExtractionProgress: () => set({ extractionProgress: createDefaultProgress() }),
 
   setExtractionRunning: (running) => set({ extractionRunning: running }),
 

@@ -19,13 +19,19 @@ import {
   releaseEmulation,
 } from '@/lib/api/emulation';
 import { errorMessage } from '@/lib/errors';
-import type { DataSourceSummary, EmulationBypassAccount, EmulationBypassAction, EmulationLinuxAccount, EmulationNetworkMode, EmulationOptions, EmulationPreflight, EmulationSessionStatus, EmulationState } from '@/types/models';
+import type {
+  DataSourceSummary,
+  EmulationBypassAccount,
+  EmulationBypassAction,
+  EmulationLinuxAccount,
+  EmulationNetworkMode,
+  EmulationOptions,
+  EmulationPreflight,
+  EmulationSessionStatus,
+  EmulationState,
+} from '@/types/models';
 
-const ACTIVE_STATES = new Set<EmulationState>([
-  'descriptorReady',
-  'running',
-  'quiescing',
-]);
+const ACTIVE_STATES = new Set<EmulationState>(['descriptorReady', 'running', 'quiescing']);
 
 export interface EmulationSourceView {
   id: string;
@@ -110,8 +116,10 @@ function isActiveSession(session: EmulationSessionStatus): boolean {
 }
 
 function isEmulationSource(source: DataSourceSummary): boolean {
-  return (source.kind === 'e01' || source.kind === 'raw' || source.kind === 'md_raid')
-    && (source.importState === 'ready' || source.importState === 'ready_metadata');
+  return (
+    (source.kind === 'e01' || source.kind === 'raw' || source.kind === 'md_raid') &&
+    (source.importState === 'ready' || source.importState === 'ready_metadata')
+  );
 }
 
 function toSourceView(source: DataSourceSummary): EmulationSourceView {
@@ -151,7 +159,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     queryKey: EMULATION_SESSIONS_QUERY_KEY,
     queryFn: listEmulationSessions,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
-    refetchInterval: (query) => query.state.data?.some(isActiveSession) ? 1500 : false,
+    refetchInterval: (query) => (query.state.data?.some(isActiveSession) ? 1500 : false),
     retry: false,
   });
   const sourceOptions = useMemo(
@@ -171,9 +179,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     enabled: Boolean(selectedSourceId),
     retry: false,
   });
-  const bypassIsLinux = (preflightQuery.data?.installs ?? []).find(
-    (install) => install.partitionIndex === bypassPartition,
-  )?.platform === 'linux';
+  const bypassIsLinux =
+    (preflightQuery.data?.installs ?? []).find((install) => install.partitionIndex === bypassPartition)?.platform ===
+    'linux';
   const bypassAccountsQuery = useQuery({
     queryKey: ['emulation', 'bypass-accounts', currentCase.data?.id ?? null, selectedSourceId, bypassPartition],
     queryFn: () => getEmulationBypassAccounts(selectedSourceId, bypassPartition!),
@@ -205,37 +213,46 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     void queryClient.invalidateQueries({ queryKey: EMULATION_SESSIONS_QUERY_KEY });
   }, [queryClient]);
   const osdataCleanupPartitions = useMemo(
-    () => (preflightQuery.data?.installs ?? [])
-      .filter((install) => install.osdataPresent)
-      .map((install) => install.partitionIndex),
+    () =>
+      (preflightQuery.data?.installs ?? [])
+        .filter((install) => install.osdataPresent)
+        .map((install) => install.partitionIndex),
     [preflightQuery.data],
   );
   const needsEfiFallback = useMemo(
-    () => (preflightQuery.data?.installs ?? [])
-      .some((install) => (install.bootRiskNotes ?? []).includes('no-efi-fallback')),
+    () =>
+      (preflightQuery.data?.installs ?? []).some((install) =>
+        (install.bootRiskNotes ?? []).includes('no-efi-fallback'),
+      ),
     [preflightQuery.data],
   );
   const needsFsRepair = useMemo(
-    () => (preflightQuery.data?.installs ?? [])
-      .some((install) => (install.bootRiskNotes ?? [])
-        .some((note) => note === 'xfs-log-dirty'
-          || note === 'xfs-log-unverified'
-          || note === 'ext4-journal-dirty'
-          || note === 'ext4-journal-unverified')),
+    () =>
+      (preflightQuery.data?.installs ?? []).some((install) =>
+        (install.bootRiskNotes ?? []).some(
+          (note) =>
+            note === 'xfs-log-dirty' ||
+            note === 'xfs-log-unverified' ||
+            note === 'ext4-journal-dirty' ||
+            note === 'ext4-journal-unverified',
+        ),
+      ),
     [preflightQuery.data],
   );
   const selectedSource = sourceOptions.find((source) => source.id === selectedSourceId);
   const isLinuxSource = selectedSource?.platform === 'LINUX';
-  const preflightReady = Boolean(selectedSourceId)
-    && preflightQuery.isSuccess
-    && !preflightQuery.isFetching
-    && preflightQuery.data?.dataSourceId === selectedSourceId;
-  const linuxBypassReady = bypassPartition === undefined
-    || !bypassIsLinux
-    || (!linuxAccountsQuery.isFetching
-      && !linuxAccountsQuery.error
-      && Boolean(linuxUsername)
-      && linuxAccountsQuery.data?.some((account) => account.username === linuxUsername));
+  const preflightReady =
+    Boolean(selectedSourceId) &&
+    preflightQuery.isSuccess &&
+    !preflightQuery.isFetching &&
+    preflightQuery.data?.dataSourceId === selectedSourceId;
+  const linuxBypassReady =
+    bypassPartition === undefined ||
+    !bypassIsLinux ||
+    (!linuxAccountsQuery.isFetching &&
+      !linuxAccountsQuery.error &&
+      Boolean(linuxUsername) &&
+      linuxAccountsQuery.data?.some((account) => account.username === linuxUsername));
   const sourceBootPolicy = derivedBootPolicy(preflightQuery.data, Boolean(recoveryIsoPath));
   const startMutation = useMutation({
     mutationFn: async (allowDirectBoot: boolean) => {
@@ -315,20 +332,24 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
         active: isActiveSession(session),
         releasable: session.state !== 'released',
       }))
-      .sort((left, right) => Number(right.active) - Number(left.active)
-        || left.sourceName.localeCompare(right.sourceName)
-        || left.sessionId.localeCompare(right.sessionId));
+      .sort(
+        (left, right) =>
+          Number(right.active) - Number(left.active) ||
+          left.sourceName.localeCompare(right.sourceName) ||
+          left.sessionId.localeCompare(right.sessionId),
+      );
   }, [sessionsQuery.data, sourceOptions]);
   const activeSourceIds = useMemo(
     () => new Set(sessions.filter((session) => session.active).map((session) => session.dataSourceId)),
     [sessions],
   );
-  const combinedError = currentCase.error
-    ?? dataSourcesQuery.error
-    ?? sessionsQuery.error
-    ?? preflightQuery.error
-    ?? startMutation.error
-    ?? releaseMutation.error;
+  const combinedError =
+    currentCase.error ??
+    dataSourcesQuery.error ??
+    sessionsQuery.error ??
+    preflightQuery.error ??
+    startMutation.error ??
+    releaseMutation.error;
 
   const pickRecoveryIso = useCallback(async () => {
     const selected = await openPlatformDialog({
@@ -374,9 +395,12 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     setDirectBootConfirmationOpen(false);
     await startMutation.mutateAsync(true);
   }, [startMutation]);
-  const release = useCallback(async (sessionId: string) => {
-    await releaseMutation.mutateAsync(sessionId);
-  }, [releaseMutation]);
+  const release = useCallback(
+    async (sessionId: string) => {
+      await releaseMutation.mutateAsync(sessionId);
+    },
+    [releaseMutation],
+  );
   const refresh = useCallback(async () => {
     await Promise.all([dataSourcesQuery.refetch(), sessionsQuery.refetch()]);
   }, [dataSourcesQuery, sessionsQuery]);
@@ -433,13 +457,14 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
       runningCount: sessions.filter((session) => session.state === 'running').length,
       failedCount: sessions.filter((session) => session.state === 'failedCleanupPending').length,
     },
-    canStart: Boolean(selectedSourceId)
-      && preflightReady
-      && sourceBootPolicy.allowed
-      && Boolean(linuxBypassReady)
-      && !activeSourceIds.has(selectedSourceId)
-      && !startMutation.isPending
-      && !releaseMutation.isPending,
+    canStart:
+      Boolean(selectedSourceId) &&
+      preflightReady &&
+      sourceBootPolicy.allowed &&
+      Boolean(linuxBypassReady) &&
+      !activeSourceIds.has(selectedSourceId) &&
+      !startMutation.isPending &&
+      !releaseMutation.isPending,
     starting: startMutation.isPending,
     releasingSessionId: releaseMutation.isPending ? releaseMutation.variables : undefined,
     refreshing: dataSourcesQuery.isFetching || sessionsQuery.isFetching,

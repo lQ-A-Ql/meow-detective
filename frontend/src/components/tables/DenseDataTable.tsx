@@ -1,4 +1,4 @@
-import { RefreshCw }  from '@/components/icons';
+import { RefreshCw } from '@/components/icons';
 /**
  * DenseDataTable - 密集数据表格组件 (性能优化版)
  *
@@ -8,25 +8,10 @@ import { RefreshCw }  from '@/components/icons';
  * 3. 虚拟滚动支持大列表
  */
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-} from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  useVirtualizer,
-  type Rect,
-  type Virtualizer,
-} from '@tanstack/react-virtual';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/app/components/ui/table';
+import { useVirtualizer, type Rect, type Virtualizer } from '@tanstack/react-virtual';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { DenseDataTableRow } from './DenseDataTableRow';
@@ -44,10 +29,7 @@ const OVERSCAN_ROWS = 8;
 const DEFAULT_CONTAINER_HEIGHT = 600;
 const AUTOMATIC_RETRY_DELAY_MS = 500;
 
-function observeTableViewport(
-  instance: Virtualizer<HTMLDivElement, Element>,
-  onRectChange: (rect: Rect) => void,
-) {
+function observeTableViewport(instance: Virtualizer<HTMLDivElement, Element>, onRectChange: (rect: Rect) => void) {
   const viewport = instance.scrollElement;
   if (!viewport) return undefined;
 
@@ -141,17 +123,11 @@ export function DenseDataTable<T>({
     (key: string) => {
       onSort?.(key);
     },
-    [onSort]
+    [onSort],
   );
 
   const requestMore = useCallback(() => {
-    if (
-      !hasMore
-      || loadingMore
-      || loadMoreFailed
-      || !onReachEnd
-      || requestedRowCountRef.current === rows.length
-    ) {
+    if (!hasMore || loadingMore || loadMoreFailed || !onReachEnd || requestedRowCountRef.current === rows.length) {
       return;
     }
 
@@ -161,12 +137,7 @@ export function DenseDataTable<T>({
 
   const runLoadMoreRecovery = useCallback(() => {
     const recovery = onRetryLoadMore ?? onReachEnd;
-    if (
-      !hasMore
-      || loadingMore
-      || !recovery
-      || retryInFlightRef.current
-    ) {
+    if (!hasMore || loadingMore || !recovery || retryInFlightRef.current) {
       return;
     }
 
@@ -180,8 +151,12 @@ export function DenseDataTable<T>({
       return;
     }
     void Promise.resolve(result).then(
-      () => { retryInFlightRef.current = false; },
-      () => { retryInFlightRef.current = false; },
+      () => {
+        retryInFlightRef.current = false;
+      },
+      () => {
+        retryInFlightRef.current = false;
+      },
     );
   }, [hasMore, loadingMore, onReachEnd, onRetryLoadMore, rows.length]);
 
@@ -258,13 +233,16 @@ export function DenseDataTable<T>({
     rows.length,
   ]);
 
-  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    const container = event.currentTarget;
-    const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (remaining <= DENSE_TABLE_ROW_HEIGHT * OVERSCAN_ROWS) {
-      requestMore();
-    }
-  }, [requestMore]);
+  const handleScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      const container = event.currentTarget;
+      const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (remaining <= DENSE_TABLE_ROW_HEIGHT * OVERSCAN_ROWS) {
+        requestMore();
+      }
+    },
+    [requestMore],
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -274,22 +252,11 @@ export function DenseDataTable<T>({
     const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
     if (remaining > DENSE_TABLE_ROW_HEIGHT * OVERSCAN_ROWS) return;
     requestMore();
-  }, [
-    hasMore,
-    loadContextKey,
-    loadMoreFailed,
-    loadingMore,
-    onReachEnd,
-    requestMore,
-    rows.length,
-  ]);
+  }, [hasMore, loadContextKey, loadMoreFailed, loadingMore, onReachEnd, requestMore, rows.length]);
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const topSpacerHeight = virtualRows[0]?.start ?? 0;
-  const bottomSpacerHeight = Math.max(
-    0,
-    rowVirtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0),
-  );
+  const bottomSpacerHeight = Math.max(0, rowVirtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0));
   const tableStyle = horizontalScroll
     ? {
         width: `${Math.max(columns.length, 1) * minColumnWidth}px`,
@@ -297,7 +264,13 @@ export function DenseDataTable<T>({
       }
     : undefined;
 
-  const { focusedIndex, handleKeyDown } = useDenseTableKeyboard({ columns, visibleRows, onRowClick, loadContextKey, scrollToIndex: rowVirtualizer.scrollToIndex });
+  const { focusedIndex, handleKeyDown } = useDenseTableKeyboard({
+    columns,
+    visibleRows,
+    onRowClick,
+    loadContextKey,
+    scrollToIndex: rowVirtualizer.scrollToIndex,
+  });
 
   const table = (
     <ScrollArea
@@ -339,10 +312,7 @@ export function DenseDataTable<T>({
                     {column.title}
                   </span>
                   {column.sortable && (
-                    <SortIndicator
-                      active={sortKey === (column.sortKey ?? column.key)}
-                      direction={sortDirection}
-                    />
+                    <SortIndicator active={sortKey === (column.sortKey ?? column.key)} direction={sortDirection} />
                   )}
                 </div>
               </TableHead>
@@ -365,11 +335,7 @@ export function DenseDataTable<T>({
           />
           {visibleRows.length > 0 && topSpacerHeight > 0 ? (
             <TableRow aria-hidden="true" className="hover:bg-transparent">
-              <TableCell
-                colSpan={columns.length}
-                className="border-r-0 p-0"
-                style={{ height: topSpacerHeight }}
-              />
+              <TableCell colSpan={columns.length} className="border-r-0 p-0" style={{ height: topSpacerHeight }} />
             </TableRow>
           ) : null}
           {virtualRows.map((virtualRow) => {
@@ -392,19 +358,12 @@ export function DenseDataTable<T>({
           })}
           {visibleRows.length > 0 && bottomSpacerHeight > 0 ? (
             <TableRow aria-hidden="true" className="hover:bg-transparent">
-              <TableCell
-                colSpan={columns.length}
-                className="border-r-0 p-0"
-                style={{ height: bottomSpacerHeight }}
-              />
+              <TableCell colSpan={columns.length} className="border-r-0 p-0" style={{ height: bottomSpacerHeight }} />
             </TableRow>
           ) : null}
           {loadingMore ? (
             <TableRow aria-live="polite" className="hover:bg-transparent">
-              <TableCell
-                colSpan={columns.length}
-                className="border-r-0 px-3 py-2 text-center text-forensics-muted"
-              >
+              <TableCell colSpan={columns.length} className="border-r-0 px-3 py-2 text-center text-forensics-muted">
                 {t('denseTable.loadingMore')}
               </TableCell>
             </TableRow>
@@ -417,12 +376,15 @@ export function DenseDataTable<T>({
               >
                 <div className="flex items-center justify-center gap-2">
                   <span>{loadMoreErrorText}</span>
-                  <Button aria-label={retryLoadMoreLabel}
+                  <Button
+                    aria-label={retryLoadMoreLabel}
                     type="button"
                     variant="forensicsOutline"
                     size="compact"
                     onClick={retryMore}
-                  ><RefreshCw size={15} /></Button>
+                  >
+                    <RefreshCw size={15} />
+                  </Button>
                 </div>
               </TableCell>
             </TableRow>

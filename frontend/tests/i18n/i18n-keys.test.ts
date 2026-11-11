@@ -27,9 +27,14 @@ function literalKeys(source: string): string[] {
 }
 
 function resolveKey(locale: Record<string, unknown>, key: string): boolean {
-  return key.split('.').reduce<unknown>((node, part) => (
-    node && typeof node === 'object' ? (node as Record<string, unknown>)[part] : undefined
-  ), locale) !== undefined;
+  return (
+    key
+      .split('.')
+      .reduce<unknown>(
+        (node, part) => (node && typeof node === 'object' ? (node as Record<string, unknown>)[part] : undefined),
+        locale,
+      ) !== undefined
+  );
 }
 
 function missingFor(localeName: keyof typeof i18nTranslations, keys: Set<string>): string[] {
@@ -41,7 +46,9 @@ describe('translation keys', () => {
   it('resolves every literal t() key in both locales', () => {
     const keys = new Set(sourceFiles(srcRoot).flatMap((file) => literalKeys(fs.readFileSync(file, 'utf8'))));
 
-    expect({ missingZh: missingFor('zh-CN', keys), missingEn: missingFor('en', keys) })
-      .toEqual({ missingZh: [], missingEn: [] });
+    expect({ missingZh: missingFor('zh-CN', keys), missingEn: missingFor('en', keys) }).toEqual({
+      missingZh: [],
+      missingEn: [],
+    });
   });
 });

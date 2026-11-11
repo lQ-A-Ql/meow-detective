@@ -37,9 +37,20 @@ describe('reports API', () => {
 
   it('exportHtmlReport sends scope with overwrite defaulting to false', async () => {
     requestMock.mockResolvedValueOnce('/reports/out.html' as never);
-    const result = await exportHtmlReport({ fileSystemMetadata: true, registry: true, fullTimeline: true, rawFileExtraction: false });
+    const result = await exportHtmlReport({
+      fileSystemMetadata: true,
+      registry: true,
+      fullTimeline: true,
+      rawFileExtraction: false,
+    });
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.reports.EXPORT_HTML_REPORT, {
-      scope: { fileSystemMetadata: true, registry: true, fullTimeline: true, rawFileExtraction: false, overwrite: false },
+      scope: {
+        fileSystemMetadata: true,
+        registry: true,
+        fullTimeline: true,
+        rawFileExtraction: false,
+        overwrite: false,
+      },
     });
     expect(result).toBe('/reports/out.html');
   });
@@ -54,9 +65,18 @@ describe('reports API', () => {
 
   it('exportHtmlReport honors overwrite option', async () => {
     requestMock.mockResolvedValueOnce('/reports/out.html' as never);
-    await exportHtmlReport({ fileSystemMetadata: true, registry: true, fullTimeline: true, rawFileExtraction: false }, { overwrite: true });
+    await exportHtmlReport(
+      { fileSystemMetadata: true, registry: true, fullTimeline: true, rawFileExtraction: false },
+      { overwrite: true },
+    );
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.reports.EXPORT_HTML_REPORT, {
-      scope: { fileSystemMetadata: true, registry: true, fullTimeline: true, rawFileExtraction: false, overwrite: true },
+      scope: {
+        fileSystemMetadata: true,
+        registry: true,
+        fullTimeline: true,
+        rawFileExtraction: false,
+        overwrite: true,
+      },
     });
   });
 
@@ -64,7 +84,13 @@ describe('reports API', () => {
     requestMock.mockResolvedValueOnce('/reports/out.csv' as never);
     await exportCsvReport({ fileSystemMetadata: true, registry: false, fullTimeline: true, rawFileExtraction: false });
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.reports.EXPORT_CSV_REPORT, {
-      scope: { fileSystemMetadata: true, registry: false, fullTimeline: true, rawFileExtraction: false, overwrite: false },
+      scope: {
+        fileSystemMetadata: true,
+        registry: false,
+        fullTimeline: true,
+        rawFileExtraction: false,
+        overwrite: false,
+      },
     });
   });
 
@@ -72,7 +98,13 @@ describe('reports API', () => {
     requestMock.mockResolvedValueOnce('/reports/out.json' as never);
     await exportJsonReport({ fileSystemMetadata: false, registry: true, fullTimeline: false, rawFileExtraction: true });
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.reports.EXPORT_JSON_REPORT, {
-      scope: { fileSystemMetadata: false, registry: true, fullTimeline: false, rawFileExtraction: true, overwrite: false },
+      scope: {
+        fileSystemMetadata: false,
+        registry: true,
+        fullTimeline: false,
+        rawFileExtraction: true,
+        overwrite: false,
+      },
     });
   });
 
@@ -83,7 +115,13 @@ describe('reports API', () => {
       { overwrite: true },
     );
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.reports.EXPORT_CSV_CORRELATION_REPORT, {
-      scope: { fileSystemMetadata: false, registry: true, fullTimeline: true, rawFileExtraction: false, overwrite: true },
+      scope: {
+        fileSystemMetadata: false,
+        registry: true,
+        fullTimeline: true,
+        rawFileExtraction: false,
+        overwrite: true,
+      },
     });
   });
 });

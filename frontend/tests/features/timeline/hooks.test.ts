@@ -48,12 +48,7 @@ vi.mock('@/features/cache-invalidation', async (importOriginal) => {
         request?.timeEnd ?? null,
         request?.eventType ?? null,
       ],
-      facets: (request?: {
-        timeStart?: string;
-        timeEnd?: string;
-        eventType?: string;
-        bucketCount?: number;
-      }) => [
+      facets: (request?: { timeStart?: string; timeEnd?: string; eventType?: string; bucketCount?: number }) => [
         'timeline',
         'facets',
         request?.timeStart ?? null,
@@ -160,10 +155,7 @@ describe('timeline hooks', () => {
         });
 
       const request = { eventType: 'FileCreate' };
-      const { result } = renderHook(
-        () => useInfiniteTimelineEvents(request, 2),
-        { wrapper: createWrapper() },
-      );
+      const { result } = renderHook(() => useInfiniteTimelineEvents(request, 2), { wrapper: createWrapper() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mocks.getTimelineEvents).toHaveBeenNthCalledWith(1, {
@@ -234,10 +226,7 @@ describe('timeline hooks', () => {
       };
       mocks.getTimelineFacets.mockResolvedValue(facets);
 
-      const { result } = renderHook(
-        () => useTimelineFacets({ bucketCount: 60 }),
-        { wrapper: createWrapper() },
-      );
+      const { result } = renderHook(() => useTimelineFacets({ bucketCount: 60 }), { wrapper: createWrapper() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toEqual(facets);

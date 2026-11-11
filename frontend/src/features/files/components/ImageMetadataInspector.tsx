@@ -30,11 +30,25 @@ export function ImageMetadataInspector({ metadata, loading, error, onRetry }: Im
 
   return (
     <InspectorSection title={t('fileBrowser.inspector.sections.imageMetadata')}>
-      {loading ? <div className="text-[11px] text-forensics-muted">{t('fileBrowser.inspector.imageMetadata.loading')}</div> : null}
+      {loading ? (
+        <div className="text-[11px] text-forensics-muted">{t('fileBrowser.inspector.imageMetadata.loading')}</div>
+      ) : null}
       {!loading && error ? (
         <div className="space-y-2">
           <div className="text-[11px] text-forensics-error-text">{error.message}</div>
-          {onRetry ? <Tooltip content={t('fileBrowser.inspector.imageMetadata.retry')}><Button aria-label={t('fileBrowser.inspector.imageMetadata.retry')} type="button" size="xs" variant="forensicsOutline" onClick={onRetry}><ActionIcon name="refresh" /></Button></Tooltip> : null}
+          {onRetry ? (
+            <Tooltip content={t('fileBrowser.inspector.imageMetadata.retry')}>
+              <Button
+                aria-label={t('fileBrowser.inspector.imageMetadata.retry')}
+                type="button"
+                size="xs"
+                variant="forensicsOutline"
+                onClick={onRetry}
+              >
+                <ActionIcon name="refresh" />
+              </Button>
+            </Tooltip>
+          ) : null}
         </div>
       ) : null}
       {!loading && !error && metadata ? (
@@ -43,22 +57,40 @@ export function ImageMetadataInspector({ metadata, loading, error, onRetry }: Im
           {metadata.status === 'present' ? (
             <div className="space-y-1.5">
               <MetadataField label={t('fileBrowser.inspector.imageMetadata.format')} value={metadata.format} />
-              <MetadataField label={t('fileBrowser.inspector.imageMetadata.dimensions')} value={metadata.width !== undefined && metadata.height !== undefined ? `${metadata.width} × ${metadata.height}` : undefined} />
-              <MetadataField label={t('fileBrowser.inspector.imageMetadata.orientation')} value={metadata.orientation} />
+              <MetadataField
+                label={t('fileBrowser.inspector.imageMetadata.dimensions')}
+                value={
+                  metadata.width !== undefined && metadata.height !== undefined
+                    ? `${metadata.width} × ${metadata.height}`
+                    : undefined
+                }
+              />
+              <MetadataField
+                label={t('fileBrowser.inspector.imageMetadata.orientation')}
+                value={metadata.orientation}
+              />
               <MetadataField label={t('fileBrowser.inspector.imageMetadata.make')} value={metadata.make} />
               <MetadataField label={t('fileBrowser.inspector.imageMetadata.model')} value={metadata.model} />
               <MetadataField label={t('fileBrowser.inspector.imageMetadata.software')} value={metadata.software} />
-              <MetadataField label={t('fileBrowser.inspector.imageMetadata.dateTimeOriginal')} value={metadata.dateTimeOriginal} />
+              <MetadataField
+                label={t('fileBrowser.inspector.imageMetadata.dateTimeOriginal')}
+                value={metadata.dateTimeOriginal}
+              />
               <MetadataField label={t('fileBrowser.inspector.imageMetadata.createDate')} value={metadata.createDate} />
               <MetadataField label={t('fileBrowser.inspector.imageMetadata.modifyDate')} value={metadata.modifyDate} />
               <MetadataField label={t('fileBrowser.inspector.imageMetadata.lensModel')} value={metadata.lensModel} />
               <MetadataField label={t('fileBrowser.inspector.imageMetadata.latitude')} value={metadata.latitude} />
               <MetadataField label={t('fileBrowser.inspector.imageMetadata.longitude')} value={metadata.longitude} />
               <MetadataField label={t('fileBrowser.inspector.imageMetadata.altitude')} value={metadata.altitude} />
-              <MetadataField label={t('fileBrowser.inspector.imageMetadata.gpsDateTime')} value={metadata.gpsDateTime} />
+              <MetadataField
+                label={t('fileBrowser.inspector.imageMetadata.gpsDateTime')}
+                value={metadata.gpsDateTime}
+              />
             </div>
           ) : (
-            <div className="text-[11px] leading-5 text-forensics-muted">{t(`fileBrowser.inspector.imageMetadata.statuses.${metadata.status}`)}</div>
+            <div className="text-[11px] leading-5 text-forensics-muted">
+              {t(`fileBrowser.inspector.imageMetadata.statuses.${metadata.status}`)}
+            </div>
           )}
         </div>
       ) : null}

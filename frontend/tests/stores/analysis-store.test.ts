@@ -22,9 +22,7 @@ describe('analysis-store', () => {
   it('seeds every extraction category with empty idle progress', () => {
     const { extractionProgress } = useAnalysisStore.getState();
 
-    expect(Object.keys(extractionProgress).sort()).toEqual(
-      [...ANALYSIS_EXTRACTION_CATEGORIES].sort(),
-    );
+    expect(Object.keys(extractionProgress).sort()).toEqual([...ANALYSIS_EXTRACTION_CATEGORIES].sort());
     for (const category of ANALYSIS_EXTRACTION_CATEGORIES) {
       expect(extractionProgress[category]).toEqual({
         status: 'idle',

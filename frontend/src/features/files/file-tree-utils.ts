@@ -26,8 +26,7 @@ export function mergeFileTreePath(
   for (let index = 0; index < path.length; index += 1) {
     const parentId = index === 0 ? source?.id : path[index - 1].id;
     if (!parentId) continue;
-    const node = path[index].depth === firstDepth + index
-      ? path[index] : { ...path[index], depth: firstDepth + index };
+    const node = path[index].depth === firstDepth + index ? path[index] : { ...path[index], depth: firstDepth + index };
     const previous = next[parentId] ?? [];
     const merged = mergeTreeNodePages(previous, [node]);
     if (merged === previous) continue;
@@ -66,10 +65,7 @@ export function sameTreeNodeList(left: FileTreeNode[], right: FileTreeNode[]) {
   return true;
 }
 
-export function mergeTreeNodePages(
-  existing: FileTreeNode[],
-  incoming: FileTreeNode[],
-) {
+export function mergeTreeNodePages(existing: FileTreeNode[], incoming: FileTreeNode[]) {
   const merged = [...existing];
   const indexById = new Map(existing.map((node, index) => [node.id, index]));
   let changed = false;
@@ -92,10 +88,7 @@ export function mergeTreeNodePages(
   return changed ? merged : existing;
 }
 
-export function rebaseTreeNodeDepths(
-  nodes: FileTreeNode[],
-  parentDepth: number,
-) {
+export function rebaseTreeNodeDepths(nodes: FileTreeNode[], parentDepth: number) {
   if (nodes.length === 0) {
     return nodes;
   }
@@ -155,9 +148,7 @@ export function findEvictableTreeCacheKey(
       .map((node) => node.id),
   );
 
-  return Object.keys(childrenById).find(
-    (nodeId) => !pinnedIds.has(nodeId) && !visibleExpandedIds.has(nodeId),
-  );
+  return Object.keys(childrenById).find((nodeId) => !pinnedIds.has(nodeId) && !visibleExpandedIds.has(nodeId));
 }
 
 export function findTreeNode(
@@ -191,9 +182,7 @@ export function findTreeRoot(
 ) {
   if (!nodeId) return undefined;
   const visited = new Set<string>();
-  const stack = roots
-    .map((root) => ({ node: root, root }))
-    .reverse();
+  const stack = roots.map((root) => ({ node: root, root })).reverse();
 
   while (stack.length > 0) {
     const current = stack.pop();
@@ -210,10 +199,7 @@ export function findTreeRoot(
   return undefined;
 }
 
-export function collectTreeNodeIds(
-  roots: readonly FileTreeNode[],
-  childrenById: TreeChildrenById,
-) {
+export function collectTreeNodeIds(roots: readonly FileTreeNode[], childrenById: TreeChildrenById) {
   const ids = new Set<string>();
   const stack = [...roots].reverse();
 

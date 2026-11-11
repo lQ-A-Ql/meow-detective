@@ -9,9 +9,6 @@ import type { ReactNode, Ref } from 'react';
 import { VirtualList } from '@/components/lists/VirtualList';
 import { TreeRow } from '@/components/tree/TreeRow';
 
-
-
-
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { FileIconWithStatusOverlay } from '@/features/files/components/FileIconWithStatusOverlay';
 import type { FileTreeNode } from '@/types/models';
@@ -43,17 +40,28 @@ export function VirtualFileTree({
   viewportClassName,
   viewportTabIndex,
 }: VirtualFileTreeProps) {
-  return <VirtualList items={nodes} getItemKey={(node) => node.id} estimateSize={itemSize} overscan={overscan} fixedSize treeContent className="min-h-0 flex-1" scrollContainerRef={scrollContainerRef} viewportClassName={viewportClassName ?? 'overflow-x-hidden'} viewportTabIndex={viewportTabIndex}
-    renderItem={(node, index) => {
+  return (
+    <VirtualList
+      items={nodes}
+      getItemKey={(node) => node.id}
+      estimateSize={itemSize}
+      overscan={overscan}
+      fixedSize
+      treeContent
+      className="min-h-0 flex-1"
+      scrollContainerRef={scrollContainerRef}
+      viewportClassName={viewportClassName ?? 'overflow-x-hidden'}
+      viewportTabIndex={viewportTabIndex}
+      renderItem={(node, index) => {
+        if (!node) return null;
 
-          if (!node) return null;
+        const isLast = index === nodes.length - 1 || (nodes[index + 1]?.depth ?? 0) < node.depth;
 
-          const isLast =
-            index === nodes.length - 1 ||
-            (nodes[index + 1]?.depth ?? 0) < node.depth;
-
-          return <div className="h-full">
-              {renderNode ? renderNode(node, isLast) : (
+        return (
+          <div className="h-full">
+            {renderNode ? (
+              renderNode(node, isLast)
+            ) : (
               <TreeRow
                 depth={node.depth}
                 expanded={node.expanded}
@@ -88,7 +96,10 @@ export function VirtualFileTree({
                   ) : null
                 }
               />
-              )}
-          </div>;
-        }} />;
+            )}
+          </div>
+        );
+      }}
+    />
+  );
 }

@@ -26,7 +26,10 @@ export function StepRail({
 }) {
   const currentIndex = steps.findIndex((step) => step.id === currentId);
   return (
-    <nav aria-label={ariaLabel} className={cn('h-full w-full min-w-0 border-r border-forensics-line bg-forensics-soft', className)}>
+    <nav
+      aria-label={ariaLabel}
+      className={cn('h-full w-full min-w-0 border-r border-forensics-line bg-forensics-soft', className)}
+    >
       <ol role="tablist" aria-orientation="vertical" className="flex h-full flex-col">
         {steps.map((step, index) => {
           const isCurrent = index === currentIndex;
@@ -50,7 +53,9 @@ export function StepRail({
                 }}
                 className={cn(
                   'relative flex h-full w-full min-w-0 items-center gap-3 border-l-2 px-4 text-[12px] outline-none focus-visible:ring-1 focus-visible:ring-forensics-red',
-                  isLocked ? 'border-l-transparent text-forensics-ink-4' : 'cursor-pointer text-forensics-ink-2 hover:bg-forensics-hover',
+                  isLocked
+                    ? 'border-l-transparent text-forensics-ink-4'
+                    : 'cursor-pointer text-forensics-ink-2 hover:bg-forensics-hover',
                   isDone && 'border-l-forensics-ink-4',
                   isCurrent && 'border-l-forensics-red bg-forensics-red-tint text-forensics-red-ink',
                 )}

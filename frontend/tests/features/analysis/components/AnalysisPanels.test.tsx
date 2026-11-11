@@ -65,7 +65,19 @@ describe('AnalysisPanels sub-components', () => {
         extensionTotal: 0,
         generatedAt: '2026-06-01T10:00:00Z',
         warnings: [],
-        visits: [{ artifactId: 'v1', fileId: 'f1', sourcePath: '/path', browser: 'Chrome', profile: 'Default', url: 'https://example.com', title: 'Example', visitTime: '2026-06-01T10:00:00Z', visitCount: 1 }],
+        visits: [
+          {
+            artifactId: 'v1',
+            fileId: 'f1',
+            sourcePath: '/path',
+            browser: 'Chrome',
+            profile: 'Default',
+            url: 'https://example.com',
+            title: 'Example',
+            visitTime: '2026-06-01T10:00:00Z',
+            visitCount: 1,
+          },
+        ],
         downloads: [],
         cookies: [],
         sessions: [],
@@ -116,31 +128,46 @@ describe('AnalysisPanels sub-components', () => {
     });
 
     it('renders groups and subcategory rows', () => {
-      render(createElement(FileClassificationBoard, {
-        onSelect: vi.fn(),
-        board: {
-          status: 'parsed',
-          generatedAt: '2026-07-24T00:00:00Z',
-          totalFiles: 1,
-          totalSize: 4,
-          magicClassifiedCount: 1,
-          metadataClassifiedCount: 0,
-          warnings: [],
-          groups: [{
-            category: 'documents',
-            displayName: '文档',
-            fileCount: 1,
+      render(
+        createElement(FileClassificationBoard, {
+          onSelect: vi.fn(),
+          board: {
+            status: 'parsed',
+            generatedAt: '2026-07-24T00:00:00Z',
+            totalFiles: 1,
             totalSize: 4,
-            subcategories: [{
-              name: 'PDF 文档',
-              fileCount: 1,
-              totalSize: 4,
-              truncated: false,
-              files: [{ fileId: 'f1', name: 'doc.pdf', path: '[P3]/x/doc.pdf', size: 4, magicType: 'PDF', classificationSource: 'magic' }],
-            }],
-          }],
-        },
-      }));
+            magicClassifiedCount: 1,
+            metadataClassifiedCount: 0,
+            warnings: [],
+            groups: [
+              {
+                category: 'documents',
+                displayName: '文档',
+                fileCount: 1,
+                totalSize: 4,
+                subcategories: [
+                  {
+                    name: 'PDF 文档',
+                    fileCount: 1,
+                    totalSize: 4,
+                    truncated: false,
+                    files: [
+                      {
+                        fileId: 'f1',
+                        name: 'doc.pdf',
+                        path: '[P3]/x/doc.pdf',
+                        size: 4,
+                        magicType: 'PDF',
+                        classificationSource: 'magic',
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      );
       expect(screen.getByText('文档')).toBeDefined();
       expect(screen.getByText('PDF 文档')).toBeDefined();
       expect(screen.getByText('doc.pdf')).toBeDefined();
@@ -178,18 +205,20 @@ describe('AnalysisPanels sub-components', () => {
     });
 
     it('renders the real processed-to-total ratio instead of a fixed running value', () => {
-      render(createElement(AnalysisExtractionProgress, {
-        progress: {
-          label: 'Linux journal',
-          status: 'running',
-          scannedCount: 414,
-          artifactCount: 120,
-          timelineEventCount: 42,
-          warnings: [],
-          totalCandidateCount: 749,
-          processedCandidateCount: 414,
-        },
-      }));
+      render(
+        createElement(AnalysisExtractionProgress, {
+          progress: {
+            label: 'Linux journal',
+            status: 'running',
+            scannedCount: 414,
+            artifactCount: 120,
+            timelineEventCount: 42,
+            warnings: [],
+            totalCandidateCount: 749,
+            processedCandidateCount: 414,
+          },
+        }),
+      );
 
       expect(screen.getByText('414/749 (55%)')).toBeDefined();
       expect(screen.queryByText('50%')).toBeNull();
@@ -246,7 +275,7 @@ describe('AnalysisPanels sub-components', () => {
           onRunExtraction: () => {},
         }),
       );
-        expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(true);
+      expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(true);
       expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
     });
 
@@ -262,7 +291,7 @@ describe('AnalysisPanels sub-components', () => {
           showRunExtraction: true,
         }),
       );
-        expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(false);
+      expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(false);
       expect(screen.getByRole('button', { name: /运行分析/ }).hasAttribute('disabled')).toBe(false);
     });
   });

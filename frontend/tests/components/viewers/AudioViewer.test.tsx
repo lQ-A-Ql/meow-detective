@@ -18,23 +18,13 @@ describe('AudioViewer', () => {
   });
 
   it('displays mime type in info section', () => {
-    render(
-      <AudioViewer
-        src="evidence-media://handle/dGVzdA"
-        mimeType="audio/mpeg"
-      />,
-    );
+    render(<AudioViewer src="evidence-media://handle/dGVzdA" mimeType="audio/mpeg" />);
 
     expect(screen.getByText('audio/mpeg')).toBeDefined();
   });
 
   it('displays file name when provided', () => {
-    render(
-      <AudioViewer
-        src="evidence-media://handle/dGVzdA"
-        fileName="recording.mp3"
-      />,
-    );
+    render(<AudioViewer src="evidence-media://handle/dGVzdA" fileName="recording.mp3" />);
 
     expect(screen.getByText('recording.mp3')).toBeDefined();
   });

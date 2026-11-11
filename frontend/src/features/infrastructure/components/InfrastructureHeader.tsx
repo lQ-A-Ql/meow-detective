@@ -1,4 +1,4 @@
-import { Boxes, Database, GitBranch, Network, Server }  from '@/components/icons';
+import { Boxes, Database, GitBranch, Network, Server } from '@/components/icons';
 import type { TFunction } from 'i18next';
 import { MetricCard } from '@/components/data-display';
 import type { InfrastructureGraphNode } from '@/types/models';
@@ -19,22 +19,62 @@ export function InfrastructureHeader({
   const hosts = nodes.filter((node) => node.kind === 'physical_host').length;
   const storage = nodes.filter((node) => node.domain === 'storage').length;
   const workloads = nodes.filter((node) => node.domain === 'analysis').length;
-  const infrastructure = nodes.filter((node) => ['pve', 'kubernetes', 'ceph', 'ceph_cluster'].includes(node.kind)).length;
+  const infrastructure = nodes.filter((node) =>
+    ['pve', 'kubernetes', 'ceph', 'ceph_cluster'].includes(node.kind),
+  ).length;
   return (
     <header className="shrink-0 border-b border-forensics-divider bg-forensics-surface px-5 py-4 lg:px-7">
       <div className="flex flex-wrap items-start justify-end gap-4">
         <div className="max-w-full border-l border-forensics-divider pl-3 text-right text-xs text-forensics-text">
-          <div className="text-[10px] uppercase tracking-wide text-forensics-muted">{t('infrastructure.caseLabel')}</div>
+          <div className="text-[10px] uppercase tracking-wide text-forensics-muted">
+            {t('infrastructure.caseLabel')}
+          </div>
           <div className="mt-1 max-w-64 truncate">{caseName}</div>
         </div>
       </div>
       <div className="mt-5 grid grid-cols-2 border-y border-forensics-border sm:grid-cols-3 xl:grid-cols-6">
-        <MetricCard icon={Server} label={t('infrastructure.metrics.hosts')} value={hosts} size="sm" className="border-0 border-r" />
-        <MetricCard icon={Boxes} label={t('infrastructure.metrics.infrastructure')} value={infrastructure} size="sm" className="border-0 border-r" />
-        <MetricCard icon={Database} label={t('infrastructure.metrics.storage')} value={storage} size="sm" className="border-0 border-r" />
-        <MetricCard icon={Boxes} label={t('infrastructure.metrics.workloads')} value={workloads} size="sm" className="border-0 border-r" />
-        <MetricCard icon={Network} label={t('infrastructure.metrics.relations')} value={relationCount} size="sm" className="border-0 border-r" />
-        <MetricCard icon={GitBranch} label={t('infrastructure.metrics.hostLinks')} value={networkLinkCount} size="sm" className="border-0" />
+        <MetricCard
+          icon={Server}
+          label={t('infrastructure.metrics.hosts')}
+          value={hosts}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          icon={Boxes}
+          label={t('infrastructure.metrics.infrastructure')}
+          value={infrastructure}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          icon={Database}
+          label={t('infrastructure.metrics.storage')}
+          value={storage}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          icon={Boxes}
+          label={t('infrastructure.metrics.workloads')}
+          value={workloads}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          icon={Network}
+          label={t('infrastructure.metrics.relations')}
+          value={relationCount}
+          size="sm"
+          className="border-0 border-r"
+        />
+        <MetricCard
+          icon={GitBranch}
+          label={t('infrastructure.metrics.hostLinks')}
+          value={networkLinkCount}
+          size="sm"
+          className="border-0"
+        />
       </div>
     </header>
   );

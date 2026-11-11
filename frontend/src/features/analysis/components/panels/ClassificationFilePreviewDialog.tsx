@@ -1,11 +1,7 @@
 import { FilePreviewDialog } from '@/components/preview/FilePreviewDialog';
 import type { FileClassificationBoardModel } from '@/features/analysis/use-file-classification-board-model';
 
-export function ClassificationFilePreviewDialog({
-  model,
-}: {
-  model: FileClassificationBoardModel;
-}) {
+export function ClassificationFilePreviewDialog({ model }: { model: FileClassificationBoardModel }) {
   return (
     <FilePreviewDialog
       open={model.open}

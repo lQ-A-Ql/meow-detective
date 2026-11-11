@@ -77,11 +77,8 @@ const mocks = vi.hoisted(() => ({
   // quick visibility A→B→A toggle never produces a new rootTree reference.
   useFileTreeQuery: vi.fn(() => ({ data: rootTree })),
   useFileChildrenBranches: vi.fn(
-    (
-      branches: Array<{ parentId: string; offset: number }>,
-      _limit: number,
-      _showHidden: boolean,
-    ) => branches.map((branch) => childrenPage(branch.parentId)),
+    (branches: Array<{ parentId: string; offset: number }>, _limit: number, _showHidden: boolean) =>
+      branches.map((branch) => childrenPage(branch.parentId)),
   ),
 }));
 
@@ -211,9 +208,7 @@ describe('useFileTree branch materialization', () => {
 
     // `partition-root-0` is reachable (it is rendered), so its children are fetched and
     // `dir-a` becomes visible; `dir-a` then requests its own children.
-    expect(renderedIds(result.current.treeNodes)).toEqual(
-      expect.arrayContaining(['partition-root-0', 'dir-a']),
-    );
+    expect(renderedIds(result.current.treeNodes)).toEqual(expect.arrayContaining(['partition-root-0', 'dir-a']));
     expect(result.current.currentDirectory?.id).toBe('dir-b');
   });
 });

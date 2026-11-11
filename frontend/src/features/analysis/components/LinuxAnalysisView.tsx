@@ -54,9 +54,8 @@ export function LinuxAnalysisView({
   dataSourceId,
 }: LinuxAnalysisViewProps) {
   const { t } = useTranslation();
-  const activePluginModule = activeTab === 'plugin'
-    ? pluginModules?.find((module) => module.pluginId === activePluginId)
-    : undefined;
+  const activePluginModule =
+    activeTab === 'plugin' ? pluginModules?.find((module) => module.pluginId === activePluginId) : undefined;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-0">
@@ -66,16 +65,10 @@ export function LinuxAnalysisView({
           <DeletedRecoveryPanel model={recoveryModel} />
         ) : activeTab === 'plugin' ? (
           activePluginModule && dataSourceId ? (
-            <PluginModulePanel
-              dataSourceId={dataSourceId}
-              module={activePluginModule}
-              loadContextKey={dataSourceId}
-            />
+            <PluginModulePanel dataSourceId={dataSourceId} module={activePluginModule} loadContextKey={dataSourceId} />
           ) : null
         ) : loading || summaryLoading ? (
-          <AnalysisLoadingPanel
-            text={loading ? t('analysis.loading.case') : t('analysis.loading.linuxArtifacts')}
-          />
+          <AnalysisLoadingPanel text={loading ? t('analysis.loading.case') : t('analysis.loading.linuxArtifacts')} />
         ) : (
           <LinuxArtifactsPanel
             summary={summary}

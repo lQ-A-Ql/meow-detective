@@ -1,5 +1,5 @@
 import { useState, type HTMLAttributes } from 'react';
-import { ImageOff }  from '@/components/icons';
+import { ImageOff } from '@/components/icons';
 import { SvgRenderer } from './svg-renderer';
 import { cn } from './utils';
 
@@ -16,22 +16,17 @@ export interface InlineMediaProps extends HTMLAttributes<HTMLDivElement> {
   mediaClassName?: string;
 }
 
-export function InlineMedia({
-  media,
-  alt = '',
-  className,
-  mediaClassName,
-  ...props
-}: InlineMediaProps) {
+export function InlineMedia({ media, alt = '', className, mediaClassName, ...props }: InlineMediaProps) {
   const [failed, setFailed] = useState(false);
   const source = `data:${media.mimeType};base64,${media.dataBase64}`;
   const sharedClassName = cn(
     'block max-w-full border border-forensics-border bg-forensics-panel object-contain',
     mediaClassName,
   );
-  const unsupported = !media.mimeType.startsWith('image/')
-    && !media.mimeType.startsWith('audio/')
-    && !media.mimeType.startsWith('video/');
+  const unsupported =
+    !media.mimeType.startsWith('image/') &&
+    !media.mimeType.startsWith('audio/') &&
+    !media.mimeType.startsWith('video/');
   return (
     <div className={cn('min-w-0', className)} {...props}>
       {failed || unsupported ? (
@@ -57,16 +52,16 @@ export function InlineMedia({
         />
       ) : null}
       {!failed && !unsupported && media.mimeType.startsWith('image/') && media.mimeType !== 'image/svg+xml' ? (
-        <img
-          src={source}
-          alt={alt}
-          loading="lazy"
-          className={sharedClassName}
-          onError={() => setFailed(true)}
-        />
+        <img src={source} alt={alt} loading="lazy" className={sharedClassName} onError={() => setFailed(true)} />
       ) : null}
       {!failed && !unsupported && media.mimeType.startsWith('audio/') ? (
-        <audio controls preload="metadata" src={source} className={cn('max-w-full', mediaClassName)} onError={() => setFailed(true)} />
+        <audio
+          controls
+          preload="metadata"
+          src={source}
+          className={cn('max-w-full', mediaClassName)}
+          onError={() => setFailed(true)}
+        />
       ) : null}
       {!failed && !unsupported && media.mimeType.startsWith('video/') ? (
         <video controls preload="metadata" src={source} className={sharedClassName} onError={() => setFailed(true)} />

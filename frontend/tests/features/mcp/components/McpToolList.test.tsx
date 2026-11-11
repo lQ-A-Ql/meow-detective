@@ -4,7 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
     getTotalSize: () => count * estimateSize(),
-    getVirtualItems: () => Array.from({ length: count }, (_, index) => ({ index, key: index, size: estimateSize(), start: index * estimateSize() })),
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, index) => ({
+        index,
+        key: index,
+        size: estimateSize(),
+        start: index * estimateSize(),
+      })),
     scrollToOffset: vi.fn(),
   }),
 }));
@@ -14,15 +20,27 @@ import { McpToolList } from '@/features/mcp/components/McpToolList';
 describe('McpToolList', () => {
   it('filters tools and sends edited JSON arguments', async () => {
     const onTestTool = vi.fn().mockResolvedValue({ success: true, data: { ok: true } });
-    render(<McpToolList
-      tools={[
-        { name: 'queryTimeline', description: 'Query timeline', inputSchema: { type: 'object', properties: { limit: { type: 'number' } }, required: ['limit'] }, outputSchema: { type: 'object' } },
-        { name: 'searchFiles', description: 'Search files', inputSchema: { type: 'object' }, outputSchema: { type: 'object' } },
-      ]}
-      loading={false}
-      onRefresh={vi.fn()}
-      onTestTool={onTestTool}
-    />);
+    render(
+      <McpToolList
+        tools={[
+          {
+            name: 'queryTimeline',
+            description: 'Query timeline',
+            inputSchema: { type: 'object', properties: { limit: { type: 'number' } }, required: ['limit'] },
+            outputSchema: { type: 'object' },
+          },
+          {
+            name: 'searchFiles',
+            description: 'Search files',
+            inputSchema: { type: 'object' },
+            outputSchema: { type: 'object' },
+          },
+        ]}
+        loading={false}
+        onRefresh={vi.fn()}
+        onTestTool={onTestTool}
+      />,
+    );
 
     expect(screen.getByText('queryTimeline')).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText('搜索工具名称或描述'), { target: { value: 'search' } });
@@ -40,7 +58,14 @@ describe('McpToolList', () => {
 
   it('shows invalid JSON without calling the tool', async () => {
     const onTestTool = vi.fn();
-    render(<McpToolList tools={[{ name: 'lookup', description: '', inputSchema: { type: 'object' }, outputSchema: { type: 'object' } }]} loading={false} onRefresh={vi.fn()} onTestTool={onTestTool} />);
+    render(
+      <McpToolList
+        tools={[{ name: 'lookup', description: '', inputSchema: { type: 'object' }, outputSchema: { type: 'object' } }]}
+        loading={false}
+        onRefresh={vi.fn()}
+        onTestTool={onTestTool}
+      />,
+    );
     fireEvent.click(screen.getByRole('button', { name: /lookup/ }));
     fireEvent.change(screen.getByRole('textbox', { name: 'lookup 参数' }), { target: { value: '{broken' } });
     fireEvent.click(screen.getByRole('button', { name: '测试工具' }));

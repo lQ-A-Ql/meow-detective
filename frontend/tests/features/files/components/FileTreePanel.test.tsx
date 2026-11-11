@@ -45,24 +45,28 @@ describe('FileTreePanel', () => {
       <FileTreePanel
         {...createProps({
           treeLoading: true,
-          filteredTreeNodes: [{
-            id: 'data-source:ds-1',
-            name: '测试镜像',
-            depth: 0,
-            hasChildren: true,
-            dataSourceId: 'ds-1',
-            deleted: false,
-            hidden: false,
-            system: false,
-          }],
-          dataSources: [{
-            id: 'ds-1',
-            name: '测试镜像',
-            kind: 'e01',
-            sourcePath: 'E:/images/test.E01',
-            importedAt: '2026-08-01T00:00:00Z',
-            platform: 'windows',
-          }],
+          filteredTreeNodes: [
+            {
+              id: 'data-source:ds-1',
+              name: '测试镜像',
+              depth: 0,
+              hasChildren: true,
+              dataSourceId: 'ds-1',
+              deleted: false,
+              hidden: false,
+              system: false,
+            },
+          ],
+          dataSources: [
+            {
+              id: 'ds-1',
+              name: '测试镜像',
+              kind: 'e01',
+              sourcePath: 'E:/images/test.E01',
+              importedAt: '2026-08-01T00:00:00Z',
+              platform: 'windows',
+            },
+          ],
         })}
       />,
     );

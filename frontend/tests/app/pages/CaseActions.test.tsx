@@ -33,11 +33,7 @@ describe('CaseWelcomeForms', () => {
 
   it('enables create button and invokes onCreateCase when fields are filled', () => {
     const onCreateCase = vi.fn();
-    render(
-      <CaseWelcomeForms
-        {...baseWelcomeProps({ caseRoot: 'C:\\cases', caseName: 'case-1', onCreateCase })}
-      />,
-    );
+    render(<CaseWelcomeForms {...baseWelcomeProps({ caseRoot: 'C:\\cases', caseName: 'case-1', onCreateCase })} />);
 
     const createButton = screen.getByRole('button', { name: '创建案件' }) as HTMLButtonElement;
     expect(createButton.disabled).toBe(false);
@@ -95,9 +91,7 @@ describe('CaseWelcomeForms', () => {
     render(
       <CaseWelcomeForms
         {...baseWelcomeProps({
-          recentCases: [
-            { caseRoot: 'C:\\cases\\case-1', name: 'Case One', openedAt: '2026-06-01' },
-          ],
+          recentCases: [{ caseRoot: 'C:\\cases\\case-1', name: 'Case One', openedAt: '2026-06-01' }],
           onOpenCase,
         })}
       />,
@@ -119,9 +113,7 @@ describe('CaseWelcomeForms', () => {
     render(
       <CaseWelcomeForms
         {...baseWelcomeProps({
-          recentCases: [
-            { caseRoot: 'C:\\cases\\case-1', name: 'Case One', openedAt: '2026-06-01' },
-          ],
+          recentCases: [{ caseRoot: 'C:\\cases\\case-1', name: 'Case One', openedAt: '2026-06-01' }],
           onRequestDeleteCase,
           onOpenCase,
         })}
@@ -143,7 +135,11 @@ describe('CaseWelcomeForms', () => {
     const onRequestDeleteCase = vi.fn();
     const onOpenCase = vi.fn();
     const cases = [
-      { caseRoot: 'D:/cases/' + 'long-parent-directory/'.repeat(12) + 'first', name: 'Same name', openedAt: '2026-10-19' },
+      {
+        caseRoot: 'D:/cases/' + 'long-parent-directory/'.repeat(12) + 'first',
+        name: 'Same name',
+        openedAt: '2026-10-19',
+      },
       { caseRoot: 'E:/cases/second', name: 'Same name', openedAt: '2026-10-18' },
     ];
     render(<CaseWelcomeForms {...baseWelcomeProps({ recentCases: cases, onRequestDeleteCase, onOpenCase })} />);

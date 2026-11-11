@@ -28,7 +28,10 @@ export function useInfrastructureWorkspace() {
   );
   const nodeNames = useMemo(() => new Map(nodes.map((node) => [node.id, node.name])), [nodes]);
   const networkFacts = useMemo(() => graph.data?.networkFacts ?? [], [graph.data]);
-  const networkTopology = useMemo(() => buildNetworkTopology({ nodes, edges }, networkFacts), [edges, networkFacts, nodes]);
+  const networkTopology = useMemo(
+    () => buildNetworkTopology({ nodes, edges }, networkFacts),
+    [edges, networkFacts, nodes],
+  );
 
   return {
     currentCase,

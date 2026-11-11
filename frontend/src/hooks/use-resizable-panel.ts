@@ -60,9 +60,12 @@ export function useResizablePanel({
    */
   const dragCleanupRef = useRef<(() => void) | undefined>(undefined);
 
-  useEffect(() => () => {
-    dragCleanupRef.current?.();
-  }, []);
+  useEffect(
+    () => () => {
+      dragCleanupRef.current?.();
+    },
+    [],
+  );
 
   // 保存宽度
   useEffect(() => {
@@ -105,7 +108,7 @@ export function useResizablePanel({
       document.addEventListener('mouseup', handleMouseUp);
       dragCleanupRef.current = stopListening;
     },
-    [width, minWidth, maxWidth]
+    [width, minWidth, maxWidth],
   );
 
   return { width, isResizing, onResizeStart };

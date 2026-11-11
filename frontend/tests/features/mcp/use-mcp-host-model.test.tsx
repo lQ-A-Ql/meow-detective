@@ -139,12 +139,8 @@ describe('useMcpHostModel', () => {
 
     expect(mocks.setMcpHostSettings).toHaveBeenCalledTimes(1);
     expect(mocks.setMcpHostSettings.mock.calls[0][0]).toEqual(nextSettings);
-    await waitFor(() =>
-      expect(setQueryData).toHaveBeenCalledWith(statusKey, updatedStatus),
-    );
-    await waitFor(() =>
-      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: statusKey }),
-    );
+    await waitFor(() => expect(setQueryData).toHaveBeenCalledWith(statusKey, updatedStatus));
+    await waitFor(() => expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: statusKey }));
   });
 
   it('reports mutation failures without rejecting save', async () => {

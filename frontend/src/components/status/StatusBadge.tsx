@@ -8,6 +8,16 @@ type StatusBadgeProps = {
 };
 
 export function StatusBadge({ label, variant = 'outline', tone }: StatusBadgeProps) {
-  const color = tone === 'success' ? 'text-forensics-success-text' : tone === 'error' ? 'text-forensics-error-text' : 'text-forensics-muted';
-  return <Badge variant={variant} className={tone ? color : undefined}>{tone ? <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" /> : null}{label}</Badge>;
+  const color =
+    tone === 'success'
+      ? 'text-forensics-success-text'
+      : tone === 'error'
+        ? 'text-forensics-error-text'
+        : 'text-forensics-muted';
+  return (
+    <Badge variant={variant} className={tone ? color : undefined}>
+      {tone ? <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" /> : null}
+      {label}
+    </Badge>
+  );
 }

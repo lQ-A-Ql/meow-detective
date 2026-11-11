@@ -45,32 +45,54 @@ export function SettingsWorkspace({ model, update }: SettingsWorkspaceProps) {
       </WorkspaceCard>
       <WorkspaceCard className="relative isolate flex min-h-0 flex-1 flex-col">
         <ScrollArea className="min-h-0 flex-1" viewportClassName="workspace-content space-y-8">
-    <section id="settings-storage" className="scroll-mt-4">
-            <StoragePathsSection caseRoot={settings.caseRoot} imageSearchPaths={settings.imageSearchPaths} setSettings={setSettings} />
-    </section>
-    <section id="settings-performance" className="scroll-mt-4">
-            <ImportPerformanceSection maxImportWorkers={settings.maxImportWorkers} maxAnalysisWorkers={settings.maxAnalysisWorkers} importAnalysisMode={settings.importAnalysisMode} setSettings={setSettings} />
-    </section>
-    <section id="settings-preview" className="scroll-mt-4">
-            <PreviewSection hexChunkBytes={settings.hexChunkBytes} maxViewerRangeLength={settings.maxViewerRangeLength} maxInlineImagePreviewBytes={settings.maxInlineImagePreviewBytes} maxInlineMediaPreviewBytes={settings.maxInlineMediaPreviewBytes} setSettings={setSettings} />
-    </section>
-    <section id="settings-ui" className="scroll-mt-4">
+          <section id="settings-storage" className="scroll-mt-4">
+            <StoragePathsSection
+              caseRoot={settings.caseRoot}
+              imageSearchPaths={settings.imageSearchPaths}
+              setSettings={setSettings}
+            />
+          </section>
+          <section id="settings-performance" className="scroll-mt-4">
+            <ImportPerformanceSection
+              maxImportWorkers={settings.maxImportWorkers}
+              maxAnalysisWorkers={settings.maxAnalysisWorkers}
+              importAnalysisMode={settings.importAnalysisMode}
+              setSettings={setSettings}
+            />
+          </section>
+          <section id="settings-preview" className="scroll-mt-4">
+            <PreviewSection
+              hexChunkBytes={settings.hexChunkBytes}
+              maxViewerRangeLength={settings.maxViewerRangeLength}
+              maxInlineImagePreviewBytes={settings.maxInlineImagePreviewBytes}
+              maxInlineMediaPreviewBytes={settings.maxInlineMediaPreviewBytes}
+              setSettings={setSettings}
+            />
+          </section>
+          <section id="settings-ui" className="scroll-mt-4">
             <UiDebugSection devEventTrace={settings.devEventTrace} setSettings={setSettings} />
-    </section>
-    <section id="settings-mcp" className="scroll-mt-4">
+          </section>
+          <section id="settings-mcp" className="scroll-mt-4">
             <McpSectionContainer />
-    </section>
-    <section id="settings-system" className="scroll-mt-4">
+          </section>
+          <section id="settings-system" className="scroll-mt-4">
             <SystemInfoSection version={update.info?.currentVersion} />
-    </section>
-    <section id="settings-updates" className="scroll-mt-4">
+          </section>
+          <section id="settings-updates" className="scroll-mt-4">
             <UpdateSection model={update} />
-    </section>
+          </section>
         </ScrollArea>
-      <ActionBar note={settingsMessage}>
-        <IconButton label={t('settings.actions.save')} variant="solid" onClick={() => void saveSettings()} disabled={savingSettings}><ActionIcon name="save" /></IconButton>
-      </ActionBar>
-      <BrandWatermark motif="settings" className="watermark-settings" />
+        <ActionBar note={settingsMessage}>
+          <IconButton
+            label={t('settings.actions.save')}
+            variant="solid"
+            onClick={() => void saveSettings()}
+            disabled={savingSettings}
+          >
+            <ActionIcon name="save" />
+          </IconButton>
+        </ActionBar>
+        <BrandWatermark motif="settings" className="watermark-settings" />
       </WorkspaceCard>
     </WorkspaceFrame>
   );

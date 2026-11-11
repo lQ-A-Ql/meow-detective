@@ -1,4 +1,4 @@
-import { HardDriveDownload }  from '@/components/icons';
+import { HardDriveDownload } from '@/components/icons';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
@@ -13,24 +13,26 @@ interface ImageMountControlProps {
 export function ImageMountControl({ model }: ImageMountControlProps) {
   const { t } = useTranslation();
   const activeMountCount = model.mounts.filter((mount) => mount.state === 'mounted').length;
-  const activeEmulationCount = model.emulationSessions.filter((session) => (
-    session.state !== 'released' && session.state !== 'failedCleanupPending'
-  )).length;
+  const activeEmulationCount = model.emulationSessions.filter(
+    (session) => session.state !== 'released' && session.state !== 'failedCleanupPending',
+  ).length;
 
   return (
     <>
-      <Tooltip content={t('fileBrowser.mount.open')}><Button
-        type="button"
-        variant="forensicsOutline"
-        size="iconSm"
-        onClick={model.openDialog}
-        aria-label={t('fileBrowser.mount.open')}
-      >
-        <HardDriveDownload size={15} />
-        {activeMountCount + activeEmulationCount > 0 ? (
-          <Badge variant="secondary">{activeMountCount + activeEmulationCount}</Badge>
-        ) : null}
-      </Button></Tooltip>
+      <Tooltip content={t('fileBrowser.mount.open')}>
+        <Button
+          type="button"
+          variant="forensicsOutline"
+          size="iconSm"
+          onClick={model.openDialog}
+          aria-label={t('fileBrowser.mount.open')}
+        >
+          <HardDriveDownload size={15} />
+          {activeMountCount + activeEmulationCount > 0 ? (
+            <Badge variant="secondary">{activeMountCount + activeEmulationCount}</Badge>
+          ) : null}
+        </Button>
+      </Tooltip>
       <ImageMountDialog model={model} />
     </>
   );

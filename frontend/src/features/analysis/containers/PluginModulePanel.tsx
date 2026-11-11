@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Puzzle }  from '@/components/icons';
+import { Puzzle } from '@/components/icons';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { usePluginFamilyEntries } from '@/features/analysis/hooks';
@@ -47,7 +47,9 @@ function PluginFamilyAttrsDetail({ entry }: { entry: PluginArtifactEntry }) {
     <div className="bg-transparent px-3 py-2">
       <div className="mb-1 flex min-w-0 items-center gap-2 text-[11px] text-forensics-text">
         <span className="shrink-0 text-forensics-muted">{t('pluginModule.attrsTitle')}</span>
-        <span className="min-w-0 truncate" title={entry.title}>{entry.title}</span>
+        <span className="min-w-0 truncate" title={entry.title}>
+          {entry.title}
+        </span>
       </div>
       {attrs.length === 0 ? (
         <div className="text-[11px] text-forensics-muted">{t('pluginModule.attrsEmpty')}</div>
@@ -58,9 +60,7 @@ function PluginFamilyAttrsDetail({ entry }: { entry: PluginArtifactEntry }) {
               <dt className="w-44 shrink-0 truncate font-mono text-forensics-muted" title={key}>
                 {key}
               </dt>
-              <dd className="min-w-0 break-all font-mono text-forensics-text-secondary">
-                {attrText(value) || '-'}
-              </dd>
+              <dd className="min-w-0 break-all font-mono text-forensics-text-secondary">{attrText(value) || '-'}</dd>
             </div>
           ))}
         </dl>
@@ -133,9 +133,7 @@ function PluginFamilyTable({
 
   const totalCount = query.data?.totalCount ?? expectedCount;
   const truncated = query.data?.truncated ?? false;
-  const selectedEntry = selectedRowKey
-    ? rows.find((row) => row.artifactId === selectedRowKey)
-    : undefined;
+  const selectedEntry = selectedRowKey ? rows.find((row) => row.artifactId === selectedRowKey) : undefined;
 
   return (
     <div className="space-y-1">
@@ -148,9 +146,7 @@ function PluginFamilyTable({
             {t('pluginModule.loadProgress', { loaded: rows.length, total: totalCount })}
           </span>
           {truncated && totalCount > 0 ? (
-            <span className="text-forensics-warning-text">
-              {t('pluginModule.truncatedWarning')}
-            </span>
+            <span className="text-forensics-warning-text">{t('pluginModule.truncatedWarning')}</span>
           ) : null}
         </div>
       ) : null}
@@ -198,11 +194,7 @@ export interface PluginModulePanelProps {
 }
 
 /** Generic plugin module panel: one dense table per declared family. */
-export function PluginModulePanel({
-  dataSourceId,
-  module,
-  loadContextKey,
-}: PluginModulePanelProps) {
+export function PluginModulePanel({ dataSourceId, module, loadContextKey }: PluginModulePanelProps) {
   const { t } = useTranslation();
   const recoveryContext = `${dataSourceId}:${module.pluginId}`;
   const [recoveryTitle, setRecoveryTitle] = useState<{
@@ -218,13 +210,17 @@ export function PluginModulePanel({
           <h3 className="flex flex-wrap items-center gap-2 text-[14px] font-light text-forensics-text">
             <Puzzle size={16} />
             <span>{module.displayName}</span>
-            {recoveredKeys.length > 0 ? (
-              recoveredKeys.map((key) => (
-                <span key={`${key.databaseName}:${key.keyHex}`} className="min-w-0 break-all font-mono text-[10px] text-forensics-text-secondary">
-                  {t('pluginModule.actions.recoveredKey')} {key.databaseName}: <span className="text-forensics-text">{key.keyHex}</span>
-                </span>
-              ))
-            ) : null}
+            {recoveredKeys.length > 0
+              ? recoveredKeys.map((key) => (
+                  <span
+                    key={`${key.databaseName}:${key.keyHex}`}
+                    className="min-w-0 break-all font-mono text-[10px] text-forensics-text-secondary"
+                  >
+                    {t('pluginModule.actions.recoveredKey')} {key.databaseName}:{' '}
+                    <span className="text-forensics-text">{key.keyHex}</span>
+                  </span>
+                ))
+              : null}
           </h3>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-forensics-muted">
             <span className="rounded-none bg-forensics-panel-strong px-2 py-0.5 font-mono text-[10px] text-forensics-text-tertiary">

@@ -1,16 +1,8 @@
-export type EmulationState =
-  | 'descriptorReady'
-  | 'running'
-  | 'quiescing'
-  | 'released'
-  | 'failedCleanupPending';
+export type EmulationState = 'descriptorReady' | 'running' | 'quiescing' | 'released' | 'failedCleanupPending';
 
 export type EmulationControlMode = 'interactiveOnly';
 
-export type EmulationGuestPhase =
-  | 'unknown'
-  | 'booting'
-  | 'filesystemMounted';
+export type EmulationGuestPhase = 'unknown' | 'booting' | 'filesystemMounted';
 
 export type EmulationNetworkMode = 'off' | 'hostOnly' | 'nat' | 'bridged';
 

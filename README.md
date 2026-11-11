@@ -310,6 +310,7 @@ cargo tauri dev
 ```powershell
 pnpm --dir frontend typecheck
 pnpm --dir frontend lint
+pnpm --dir frontend format:check
 pnpm --dir frontend test
 pnpm --dir frontend build
 # UI 走查（可选，mock IPC 仅 dev server，构建会被拒绝）

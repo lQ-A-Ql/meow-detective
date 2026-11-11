@@ -210,7 +210,8 @@ describe('search hooks', () => {
 
   it('browses an empty query only when a case is open', async () => {
     const { result, rerender } = renderHook(({ caseId }) => useInfiniteSearchResults(caseId, ''), {
-      initialProps: { caseId: undefined as string | undefined }, wrapper: createWrapper(),
+      initialProps: { caseId: undefined as string | undefined },
+      wrapper: createWrapper(),
     });
     expect(mocks.searchFiles).not.toHaveBeenCalled();
     rerender({ caseId: 'case-a' });
@@ -221,7 +222,8 @@ describe('search hooks', () => {
   it('keeps identical text in different cases in separate caches', async () => {
     mocks.searchFiles.mockResolvedValueOnce({ total: 1, items: [{ fileId: 'case-a-file' }], tookMs: 0 });
     const { result, rerender } = renderHook(({ caseId }) => useInfiniteSearchResults(caseId, 'same'), {
-      initialProps: { caseId: 'case-a' }, wrapper: createWrapper(),
+      initialProps: { caseId: 'case-a' },
+      wrapper: createWrapper(),
     });
     await waitFor(() => expect(result.current.data?.pages[0]?.items[0].fileId).toBe('case-a-file'));
     mocks.searchFiles.mockResolvedValueOnce({ total: 1, items: [{ fileId: 'case-b-file' }], tookMs: 0 });
@@ -234,7 +236,12 @@ describe('search hooks', () => {
   it('bounds loaded rows without changing the actual total or over-fetching the final page', async () => {
     mocks.searchFiles.mockImplementation(async (_query, _offset, limit, cursor) => {
       const start = cursor ? Number(cursor) : 0;
-      return { total: 8_000, tookMs: 0, items: Array.from({ length: limit }, (_, index) => ({ fileId: `file-${start+index}` })), nextCursor: String(start+limit) };
+      return {
+        total: 8_000,
+        tookMs: 0,
+        items: Array.from({ length: limit }, (_, index) => ({ fileId: `file-${start + index}` })),
+        nextCursor: String(start + limit),
+      };
     });
     const { result } = renderHook(() => useInfiniteSearchResults('case-a', ''), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));

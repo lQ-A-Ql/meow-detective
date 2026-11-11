@@ -1,4 +1,4 @@
-import { Activity, BarChart3, GitBranch, Layers, Shield }  from '@/components/icons';
+import { Activity, BarChart3, GitBranch, Layers, Shield } from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { GraphVisualizationContainer } from '@/features/graph/containers/GraphVisualizationContainer';
 import { MetricCard, StatGrid } from '@/components/data-display';
@@ -24,7 +24,12 @@ export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined })
               icon={BarChart3}
               size="lg"
             />
-            <MetricCard label={t('dashboard.graph.nodeTypes')} value={Object.keys(data.nodeCountByType ?? {}).length} icon={Shield} size="lg" />
+            <MetricCard
+              label={t('dashboard.graph.nodeTypes')}
+              value={Object.keys(data.nodeCountByType ?? {}).length}
+              icon={Shield}
+              size="lg"
+            />
           </>
         ) : null}
       </StatGrid>
@@ -39,7 +44,9 @@ export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined })
       {data ? (
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
-            <div className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.graph.byNodeType')}</div>
+            <div className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-forensics-muted-light">
+              {t('dashboard.graph.byNodeType')}
+            </div>
             <div className="flex flex-wrap gap-2">
               {Object.entries(data.nodeCountByType ?? {}).map(([type, count]) => (
                 <div key={type} className="rounded-none bg-transparent px-2 py-1 text-[11px]">
@@ -50,7 +57,9 @@ export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined })
             </div>
           </div>
           <div>
-            <div className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.graph.byEdgeType')}</div>
+            <div className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-forensics-muted-light">
+              {t('dashboard.graph.byEdgeType')}
+            </div>
             <div className="flex flex-wrap gap-2">
               {Object.entries(data.edgeCountByType ?? {}).map(([type, count]) => (
                 <div key={type} className="rounded-none bg-transparent px-2 py-1 text-[11px]">
@@ -64,7 +73,7 @@ export function GraphStatsSection({ data }: { data: GraphSnapshot | undefined })
       ) : null}
 
       <div className="mt-3">
-      <GraphVisualizationContainer />
+        <GraphVisualizationContainer />
       </div>
     </section>
   );

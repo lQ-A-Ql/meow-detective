@@ -20,7 +20,7 @@ import {
   Database,
   Settings,
   type IconComponent,
-}  from '@/components/icons';
+} from '@/components/icons';
 import { fileIconColor } from '@/design/file-icon-tokens';
 import i18n from '@/i18n';
 
@@ -183,10 +183,7 @@ export function getFileIcon(node: {
 /**
  * 获取文件类型标签
  */
-export function getFileTypeLabel(node: {
-  name: string;
-  entryType?: string;
-}): string {
+export function getFileTypeLabel(node: { name: string; entryType?: string }): string {
   if (node.entryType === 'directory') {
     return i18n.t('common.fileTypes.directory');
   }

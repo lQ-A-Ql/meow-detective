@@ -12,14 +12,42 @@ function statusVariant(value: string) {
   return value === 'ready' || value === 'complete' || value === 'verified' ? 'default' : 'outline';
 }
 
-export function InfrastructureInventoryPanel({ nodes, selectedId, onSelect, t }: { nodes: InfrastructureGraphNode[]; selectedId?: string; onSelect: (id: string) => void; t: TFunction }) {
-  const columns = useMemo<DenseColumn<InfrastructureGraphNode>[]>(() => [
-    { key: 'name', title: t('infrastructure.columns.name'), className: 'w-[36%]', render: (node) => <span title={node.name}>{node.name}</span> },
-    { key: 'domain', title: t('infrastructure.columns.layer'), render: (node) => domainLabel(node.domain, t) },
-    { key: 'kind', title: t('infrastructure.columns.type'), render: (node) => kindLabel(node.kind, t) },
-    { key: 'status', title: t('infrastructure.columns.status'), render: (node) => <StatusBadge label={stateLabel(node.status, t)} variant={statusVariant(node.status)} /> },
-    { key: 'confidence', title: t('infrastructure.columns.confidence'), render: (node) => <StatusBadge label={stateLabel(node.confidence, t)} variant={statusVariant(node.confidence)} /> },
-  ], [t]);
+export function InfrastructureInventoryPanel({
+  nodes,
+  selectedId,
+  onSelect,
+  t,
+}: {
+  nodes: InfrastructureGraphNode[];
+  selectedId?: string;
+  onSelect: (id: string) => void;
+  t: TFunction;
+}) {
+  const columns = useMemo<DenseColumn<InfrastructureGraphNode>[]>(
+    () => [
+      {
+        key: 'name',
+        title: t('infrastructure.columns.name'),
+        className: 'w-[36%]',
+        render: (node) => <span title={node.name}>{node.name}</span>,
+      },
+      { key: 'domain', title: t('infrastructure.columns.layer'), render: (node) => domainLabel(node.domain, t) },
+      { key: 'kind', title: t('infrastructure.columns.type'), render: (node) => kindLabel(node.kind, t) },
+      {
+        key: 'status',
+        title: t('infrastructure.columns.status'),
+        render: (node) => <StatusBadge label={stateLabel(node.status, t)} variant={statusVariant(node.status)} />,
+      },
+      {
+        key: 'confidence',
+        title: t('infrastructure.columns.confidence'),
+        render: (node) => (
+          <StatusBadge label={stateLabel(node.confidence, t)} variant={statusVariant(node.confidence)} />
+        ),
+      },
+    ],
+    [t],
+  );
   const selectNode = useCallback((node: InfrastructureGraphNode) => onSelect(node.id), [onSelect]);
 
   return (

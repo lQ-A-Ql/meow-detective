@@ -167,13 +167,17 @@ vi.mock('@/stores/ui-store', () => ({
 
 vi.mock('@/components/viewers/VideoViewer', () => ({
   VideoViewer: ({ src, fileName }: { src: string; fileName?: string }) => (
-    <div data-testid="video-viewer">video:{fileName}:{src}</div>
+    <div data-testid="video-viewer">
+      video:{fileName}:{src}
+    </div>
   ),
 }));
 
 vi.mock('@/components/viewers/AudioViewer', () => ({
   AudioViewer: ({ src, fileName }: { src: string; fileName?: string }) => (
-    <div data-testid="audio-viewer">audio:{fileName}:{src}</div>
+    <div data-testid="audio-viewer">
+      audio:{fileName}:{src}
+    </div>
   ),
 }));
 
@@ -313,48 +317,71 @@ describe('FileBrowser media preview', () => {
         previewKind: 'video',
       }),
     );
-    mocks.fileViewer.mockReturnValue(
-      {
-        ...queryState({
-          handle: { handleId: 'file:video-1', size: videoFile.size, mime: 'video/mp4' },
-          mode: 'chunked',
-          chunkSize: 64 * 1024,
-          fileSize: videoFile.size,
-          lines: [],
-          rawBytes: [],
-          baseOffset: 0,
-          loadedRanges: [],
-          activeOffset: 0,
-          jumpOffsetInput: '0x0',
-          isFullyLoaded: false,
-          isLoadingMore: false,
-          hasMoreBefore: false,
-          hasMoreAfter: true,
-        }),
-        setJumpOffsetInput: vi.fn(),
-        jumpToOffset: vi.fn(),
-        loadNextRange: vi.fn(),
-        loadPreviousRange: vi.fn(),
-      },
-    );
+    mocks.fileViewer.mockReturnValue({
+      ...queryState({
+        handle: { handleId: 'file:video-1', size: videoFile.size, mime: 'video/mp4' },
+        mode: 'chunked',
+        chunkSize: 64 * 1024,
+        fileSize: videoFile.size,
+        lines: [],
+        rawBytes: [],
+        baseOffset: 0,
+        loadedRanges: [],
+        activeOffset: 0,
+        jumpOffsetInput: '0x0',
+        isFullyLoaded: false,
+        isLoadingMore: false,
+        hasMoreBefore: false,
+        hasMoreAfter: true,
+      }),
+      setJumpOffsetInput: vi.fn(),
+      jumpToOffset: vi.fn(),
+      loadNextRange: vi.fn(),
+      loadPreviousRange: vi.fn(),
+    });
     mocks.textPreview.mockReturnValue(queryState(null));
     mocks.imagePreview.mockReturnValue(queryState(null));
     mocks.mediaUrl.mockReturnValue(queryState(null));
     mocks.documentPreview.mockReturnValue(queryState(null));
-    mocks.ntfsTechnical.mockReturnValue({ eligible: false, technical: undefined, loading: false, errorText: undefined, unsupported: false, runs: { rows: [], total: 0 }, retry: vi.fn() });
+    mocks.ntfsTechnical.mockReturnValue({
+      eligible: false,
+      technical: undefined,
+      loading: false,
+      errorText: undefined,
+      unsupported: false,
+      runs: { rows: [], total: 0 },
+      retry: vi.fn(),
+    });
   });
 
   it('passes the case and global MFT identifier through the NTFS model to the inspector', () => {
     const fileId = 'ds:sample-source:mft:0:42';
     mocks.selectionState.selectedFileId = fileId;
-    mocks.fileRows.mockReturnValue(queryState({ rows: [{ ...videoFile, id: fileId }], totalCount: 1, offset: 0, limit: 500, truncated: false }));
-    mocks.ntfsTechnical.mockReturnValue({ eligible: true, loading: true, runs: { rows: [], total: 0 }, retry: vi.fn() });
+    mocks.fileRows.mockReturnValue(
+      queryState({ rows: [{ ...videoFile, id: fileId }], totalCount: 1, offset: 0, limit: 500, truncated: false }),
+    );
+    mocks.ntfsTechnical.mockReturnValue({
+      eligible: true,
+      loading: true,
+      runs: { rows: [], total: 0 },
+      retry: vi.fn(),
+    });
     const view = renderPage();
     expect(mocks.ntfsTechnical).toHaveBeenCalledWith('case-1', fileId, true);
     expect(screen.getByText('正在读取 NTFS 技术结构…')).toBeInTheDocument();
     const retry = vi.fn();
-    mocks.ntfsTechnical.mockReturnValue({ eligible: true, loading: false, errorText: 'NTFS读取失败', runs: { rows: [], total: 0 }, retry });
-    view.rerender(<QueryClientProvider client={new QueryClient()}><FileBrowser /></QueryClientProvider>);
+    mocks.ntfsTechnical.mockReturnValue({
+      eligible: true,
+      loading: false,
+      errorText: 'NTFS读取失败',
+      runs: { rows: [], total: 0 },
+      retry,
+    });
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <FileBrowser />
+      </QueryClientProvider>,
+    );
     expect(screen.getByRole('alert')).toHaveTextContent('NTFS读取失败');
     fireEvent.click(screen.getByRole('button', { name: '重试读取' }));
     expect(retry).toHaveBeenCalledTimes(1);
@@ -433,9 +460,7 @@ describe('FileBrowser media preview', () => {
 
     renderPage();
 
-    expect(screen.getByTestId('video-viewer').textContent).toContain(
-      'data:video/mp4;base64,AAAA',
-    );
+    expect(screen.getByTestId('video-viewer').textContent).toContain('data:video/mp4;base64,AAAA');
   });
 
   it('does not crash when selected media has no URL yet', () => {
@@ -467,9 +492,7 @@ describe('FileBrowser media preview', () => {
 
     renderPage();
 
-    expect(screen.getByTestId('video-viewer').textContent).toContain(
-      'evidence-media://handle/ZmlsZTp2aWRlby0x',
-    );
+    expect(screen.getByTestId('video-viewer').textContent).toContain('evidence-media://handle/ZmlsZTp2aWRlby0x');
     expect(screen.getByTestId('video-viewer').textContent).not.toContain('C:\\');
     expect(screen.getByTestId('video-viewer').textContent).not.toContain('D:\\');
   });
@@ -488,7 +511,7 @@ describe('FileBrowser media preview', () => {
           '00000000  89 50 4E 47 0D 0A 1A 0A  00 00 00 0D 49 48 44 52',
           '00000010  00 00 07 80 00 04 38 08  06 00 00 00 E8 D3 C1',
         ],
-        rawBytes: [0x89, 0x50, 0x4E, 0x47],
+        rawBytes: [0x89, 0x50, 0x4e, 0x47],
         baseOffset: 0,
         loadedRanges: [{ start: 0, end: 2048 }],
         activeOffset: 0,
@@ -602,9 +625,7 @@ describe('FileBrowser media preview', () => {
 
     fireEvent.click(screen.getByTestId('load-more-tree-children'));
 
-    await waitFor(() =>
-      expect(mocks.fileChildren).toHaveBeenLastCalledWith('root', 500, 500, true, 'case-1'),
-    );
+    await waitFor(() => expect(mocks.fileChildren).toHaveBeenLastCalledWith('root', 500, 500, true, 'case-1'));
     const treeViewport = document.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
     treeViewport.scrollTop = 501 * 28;
     fireEvent.scroll(treeViewport);
@@ -728,7 +749,17 @@ describe('FileBrowser media preview', () => {
           sourcePath: 'E:/windows.E01',
           importedAt: '2026-06-01T10:00:00Z',
           platform: 'windows',
-          partitions: [{ index: 1, name: 'Windows', kindLabel: 'NTFS', status: 'supported', offset: 0, length: 1024, filesystem: 'NTFS' }],
+          partitions: [
+            {
+              index: 1,
+              name: 'Windows',
+              kindLabel: 'NTFS',
+              status: 'supported',
+              offset: 0,
+              length: 1024,
+              filesystem: 'NTFS',
+            },
+          ],
         },
         {
           id: 'ds-2',
@@ -737,7 +768,17 @@ describe('FileBrowser media preview', () => {
           sourcePath: 'E:/linux.raw',
           importedAt: '2026-06-02T10:00:00Z',
           platform: 'linux',
-          partitions: [{ index: 2, name: 'Linux', kindLabel: 'FAT', status: 'supported', offset: 1024, length: 2048, filesystem: 'FAT' }],
+          partitions: [
+            {
+              index: 2,
+              name: 'Linux',
+              kindLabel: 'FAT',
+              status: 'supported',
+              offset: 1024,
+              length: 2048,
+              filesystem: 'FAT',
+            },
+          ],
         },
       ]),
     );
@@ -915,29 +956,12 @@ describe('FileBrowser media preview', () => {
     renderPage();
 
     await waitFor(() =>
-      expect(mocks.fileJumpContext).toHaveBeenCalledWith(
-        'hidden-offpage',
-        true,
-        500,
-        'name',
-        'asc',
-        'case-1',
-      ),
+      expect(mocks.fileJumpContext).toHaveBeenCalledWith('hidden-offpage', true, 500, 'name', 'asc', 'case-1'),
     );
     await waitFor(() => expect(mocks.fileTree).toHaveBeenLastCalledWith(true, 'case-1'));
+    await waitFor(() => expect(mocks.selectionState.selectedDirectoryId).toBe('dir-hidden'));
     await waitFor(() =>
-      expect(mocks.selectionState.selectedDirectoryId).toBe('dir-hidden'),
-    );
-    await waitFor(() =>
-      expect(mocks.fileRows).toHaveBeenLastCalledWith(
-        'dir-hidden',
-        500,
-        500,
-        true,
-        'name',
-        'asc',
-        'case-1',
-      ),
+      expect(mocks.fileRows).toHaveBeenLastCalledWith('dir-hidden', 500, 500, true, 'name', 'asc', 'case-1'),
     );
     expect(screen.getAllByText('secret.dat').length).toBeGreaterThan(0);
   });
@@ -952,9 +976,29 @@ describe('FileBrowser media preview', () => {
     mocks.fileChildren.mockImplementation((parentId, offset, limit) => {
       const children =
         parentId === 'root'
-          ? [{ id: 'dir-mid', name: 'mid-branch', depth: 1, hasChildren: true, deleted: false, hidden: false, system: false }]
+          ? [
+              {
+                id: 'dir-mid',
+                name: 'mid-branch',
+                depth: 1,
+                hasChildren: true,
+                deleted: false,
+                hidden: false,
+                system: false,
+              },
+            ]
           : parentId === 'dir-mid'
-            ? [{ id: 'dir-deep', name: 'deep-branch', depth: 2, hasChildren: true, deleted: false, hidden: false, system: false }]
+            ? [
+                {
+                  id: 'dir-deep',
+                  name: 'deep-branch',
+                  depth: 2,
+                  hasChildren: true,
+                  deleted: false,
+                  hidden: false,
+                  system: false,
+                },
+              ]
             : [];
       return queryState({ children, totalCount: children.length, offset, limit, truncated: false });
     });
@@ -988,9 +1032,7 @@ describe('FileBrowser media preview', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getAllByText('deep-branch').length).toBeGreaterThan(0));
-    await waitFor(() =>
-      expect(mocks.selectionState.selectedDirectoryId).toBe('dir-deep'),
-    );
+    await waitFor(() => expect(mocks.selectionState.selectedDirectoryId).toBe('dir-deep'));
     expect(mocks.selectionState.setSelectedDirectoryId).not.toHaveBeenCalledWith('root');
     expect(screen.getAllByText('secret.dat').length).toBeGreaterThan(0);
   });
@@ -1005,9 +1047,29 @@ describe('FileBrowser media preview', () => {
     mocks.fileChildren.mockImplementation((parentId, offset, limit) => {
       const children =
         parentId === 'root'
-          ? [{ id: 'dir-mid', name: 'mid-branch', depth: 1, hasChildren: true, deleted: false, hidden: false, system: false }]
+          ? [
+              {
+                id: 'dir-mid',
+                name: 'mid-branch',
+                depth: 1,
+                hasChildren: true,
+                deleted: false,
+                hidden: false,
+                system: false,
+              },
+            ]
           : parentId === 'dir-mid'
-            ? [{ id: 'dir-deep', name: 'deep-branch', depth: 2, hasChildren: true, deleted: false, hidden: false, system: false }]
+            ? [
+                {
+                  id: 'dir-deep',
+                  name: 'deep-branch',
+                  depth: 2,
+                  hasChildren: true,
+                  deleted: false,
+                  hidden: false,
+                  system: false,
+                },
+              ]
             : [];
       return queryState({ children, totalCount: children.length, offset, limit, truncated: false });
     });
@@ -1040,9 +1102,7 @@ describe('FileBrowser media preview', () => {
 
     const first = renderPage();
     await waitFor(() => expect(screen.getAllByText('deep-branch').length).toBeGreaterThan(0));
-    await waitFor(() =>
-      expect(mocks.selectionState.selectedDirectoryId).toBe('dir-deep'),
-    );
+    await waitFor(() => expect(mocks.selectionState.selectedDirectoryId).toBe('dir-deep'));
     first.unmount();
 
     // Re-entering the page no longer has the jump context (it was a one-shot lookup) and

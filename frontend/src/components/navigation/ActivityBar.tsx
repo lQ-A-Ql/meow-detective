@@ -51,19 +51,23 @@ function RailItem({ link }: { link: NavigationLink }) {
   );
 }
 
-export function ActivityBar({
-  model,
-}: {
-  model: NavigationModel;
-}) {
+export function ActivityBar({ model }: { model: NavigationModel }) {
   const { t } = useTranslation();
   const { pathname } = useLocation();
   const isSettings = pathname.startsWith('/settings');
   const jobsLabel = t('navigation.jobsRunning', { count: model.runningCount });
   return (
-    <aside className="relative z-20 flex w-12 shrink-0 flex-col items-center bg-forensics-base" aria-label={t('navigation.appNavLabel')}>
-      <nav className="flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto scrollbar-none px-1 pb-3 pt-4" aria-label={t('navigation.workspaceNavLabel')}>
-        {model.links.map((link) => <RailItem key={link.to} link={link} />)}
+    <aside
+      className="relative z-20 flex w-12 shrink-0 flex-col items-center bg-forensics-base"
+      aria-label={t('navigation.appNavLabel')}
+    >
+      <nav
+        className="flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto scrollbar-none px-1 pb-3 pt-4"
+        aria-label={t('navigation.workspaceNavLabel')}
+      >
+        {model.links.map((link) => (
+          <RailItem key={link.to} link={link} />
+        ))}
       </nav>
       <div className="mt-2 flex w-full flex-col items-center gap-1.5 px-1 pb-3 pt-3">
         <Tooltip content={jobsLabel}>
@@ -78,7 +82,11 @@ export function ActivityBar({
             <span className={railDiscClass}>
               <SidebarIcon name="jobs" className="size-[21px]" />
             </span>
-            {model.runningCount > 0 ? <span className="absolute right-2 top-1.5 min-w-3 rounded-full bg-forensics-primary-blue px-1 text-center text-[9px] leading-3 text-white">{model.runningCount}</span> : null}
+            {model.runningCount > 0 ? (
+              <span className="absolute right-2 top-1.5 min-w-3 rounded-full bg-forensics-primary-blue px-1 text-center text-[9px] leading-3 text-white">
+                {model.runningCount}
+              </span>
+            ) : null}
           </Button>
         </Tooltip>
         <Tooltip content={t('settings.title')}>

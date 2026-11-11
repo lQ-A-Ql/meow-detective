@@ -84,7 +84,18 @@ describe('FilePreviewTabs', () => {
         imagePreview={null}
         mediaUrl={null}
         documentPreview={null}
-        selectedFile={{ id: 'file:empty', path: '/evidence/empty.txt', name: 'empty.txt', entryType: 'file', size: 0, deleted: false, hidden: false, system: false, readOnly: false, archive: false }}
+        selectedFile={{
+          id: 'file:empty',
+          path: '/evidence/empty.txt',
+          name: 'empty.txt',
+          entryType: 'file',
+          size: 0,
+          deleted: false,
+          hidden: false,
+          system: false,
+          readOnly: false,
+          archive: false,
+        }}
       />,
     );
 

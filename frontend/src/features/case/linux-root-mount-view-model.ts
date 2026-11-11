@@ -9,12 +9,15 @@ export function createLinuxRootMountViewModel(source: DataSourceSummary, t: TFun
     entries: mounts.map((mount) => ({
       id: `${source.id}-${mount.fstabPartitionIndex}-${mount.evidenceLine}`,
       text: t('caseHome.dataSources.linuxRootMount', {
-        status: t(`caseHome.dataSources.rootMountStatus.${mount.status}`, { defaultValue: t('caseHome.dataSources.rootMountStatus.unresolved') }),
+        status: t(`caseHome.dataSources.rootMountStatus.${mount.status}`, {
+          defaultValue: t('caseHome.dataSources.rootMountStatus.unresolved'),
+        }),
         source: mount.sourceSpec,
         evidence: `${mount.evidencePath}:${mount.evidenceLine}`,
-        partition: mount.resolvedPartitionIndex === undefined
-          ? t('caseHome.dataSources.rootPartitionUnknown')
-          : t('caseHome.dataSources.rootPartition', { index: mount.resolvedPartitionIndex }),
+        partition:
+          mount.resolvedPartitionIndex === undefined
+            ? t('caseHome.dataSources.rootPartitionUnknown')
+            : t('caseHome.dataSources.rootPartition', { index: mount.resolvedPartitionIndex }),
         evidencePartition: mount.fstabPartitionIndex,
         uuid: mount.filesystemUuid ?? t('caseHome.partitions.uuidNotRecorded'),
       }),

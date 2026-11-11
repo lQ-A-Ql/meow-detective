@@ -30,7 +30,7 @@ function booleanAttr(entry: PluginArtifactEntry, key: string): boolean | undefin
 
 function objectValue(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : undefined;
 }
 
@@ -49,16 +49,17 @@ function finiteNumberValue(value: unknown): number | undefined {
 function opaqueLocator(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const normalized = value.trim();
-  return normalized.length >= 64
-    && normalized.length % 2 === 0
-    && /^[a-f\d]+$/i.test(normalized)
+  return normalized.length >= 64 && normalized.length % 2 === 0 && /^[a-f\d]+$/i.test(normalized)
     ? normalized
     : undefined;
 }
 
 function recordArray<T>(value: unknown, map: (record: Record<string, unknown>) => T): T[] {
   return Array.isArray(value)
-    ? value.map(objectValue).filter((record): record is Record<string, unknown> => Boolean(record)).map(map)
+    ? value
+        .map(objectValue)
+        .filter((record): record is Record<string, unknown> => Boolean(record))
+        .map(map)
     : [];
 }
 
@@ -101,10 +102,7 @@ function timestampValue(value?: string): number {
 }
 
 function preferredContactName(entry: PluginArtifactEntry, username: string): string {
-  return textAttr(entry, 'remark')
-    ?? textAttr(entry, 'nickName')
-    ?? textAttr(entry, 'alias')
-    ?? username;
+  return textAttr(entry, 'remark') ?? textAttr(entry, 'nickName') ?? textAttr(entry, 'alias') ?? username;
 }
 
 export function mapWeChatContacts(entries: readonly PluginArtifactEntry[]): WeChatContact[] {
@@ -196,9 +194,11 @@ export function buildWeChatConversations(
     });
   }
   for (const message of messages) {
-    const senderDisplayName = message.sourceDisplayName ?? (message.senderUsername
-      ? contactsByUsername.get(message.senderUsername)?.displayName ?? message.senderUsername
-      : undefined);
+    const senderDisplayName =
+      message.sourceDisplayName ??
+      (message.senderUsername
+        ? (contactsByUsername.get(message.senderUsername)?.displayName ?? message.senderUsername)
+        : undefined);
     const displayedMessage = { ...message, senderDisplayName };
     const conversation = conversations.get(message.talker) ?? {
       talker: message.talker,
@@ -254,9 +254,7 @@ export function mapWeChatMoments(
     .sort((left, right) => timestampValue(right.createTimeUtc) - timestampValue(left.createTimeUtc));
 }
 
-export function mapWeChatSupplemental(
-  entries: readonly PluginArtifactEntry[],
-): WeChatSupplementalRecord[] {
+export function mapWeChatSupplemental(entries: readonly PluginArtifactEntry[]): WeChatSupplementalRecord[] {
   return entries.map((entry) => {
     const values = objectValue(entry.attrs.values) ?? entry.attrs;
     const inlineMedia = findInlineMedia(values);
@@ -267,12 +265,7 @@ export function mapWeChatSupplemental(
       values,
       sourcePath: entry.sourcePath,
       inlineMedia,
-      localMedia: localMediaEvidence(
-        values,
-        textAttr(entry, 'table') ?? '',
-        entry.sourcePath,
-        inlineMedia,
-      ),
+      localMedia: localMediaEvidence(values, textAttr(entry, 'table') ?? '', entry.sourcePath, inlineMedia),
     };
   });
 }
@@ -334,7 +327,8 @@ function nestedField(value: unknown, names: readonly string[], depth = 0): unkno
   const object = objectValue(value);
   if (object) {
     const match = Object.entries(object).find(([key]) =>
-      names.some((name) => key.toLocaleLowerCase() === name.toLocaleLowerCase()));
+      names.some((name) => key.toLocaleLowerCase() === name.toLocaleLowerCase()),
+    );
     if (match) return match[1];
     for (const nested of Object.values(object)) {
       const found = nestedField(nested, names, depth + 1);
@@ -365,7 +359,11 @@ function tableHash(value: string | undefined): string | undefined {
   return value?.match(/[a-f\d]{32}/i)?.[0]?.toLocaleLowerCase();
 }
 
-function addUniqueIndex<K>(map: Map<K, WeChatSupplementalRecord | null>, key: K | undefined, record: WeChatSupplementalRecord) {
+function addUniqueIndex<K>(
+  map: Map<K, WeChatSupplementalRecord | null>,
+  key: K | undefined,
+  record: WeChatSupplementalRecord,
+) {
   if (key === undefined) return;
   if (!map.has(key)) {
     map.set(key, record);
@@ -375,13 +373,10 @@ function addUniqueIndex<K>(map: Map<K, WeChatSupplementalRecord | null>, key: K 
 }
 
 function recordStorageKey(record: WeChatSupplementalRecord): string | undefined {
-  return record.localMedia?.storageKey
-    ?? stringNestedField(record.values, ['storageKey'])?.toLocaleLowerCase();
+  return record.localMedia?.storageKey ?? stringNestedField(record.values, ['storageKey'])?.toLocaleLowerCase();
 }
 
-function linkLocalMediaRecords(
-  records: readonly WeChatSupplementalRecord[],
-): WeChatSupplementalRecord[] {
+function linkLocalMediaRecords(records: readonly WeChatSupplementalRecord[]): WeChatSupplementalRecord[] {
   const byStorageKey = new Map<string, WeChatSupplementalRecord | null>();
   for (const record of records) {
     if (!record.localMedia?.storageKey) continue;
@@ -412,8 +407,8 @@ export function linkWeChatMessageMedia(
   for (const record of linkedRecords) {
     const localId = numericNestedField(record.values, ['local_id', 'localId', 'msg_local_id', 'messageLocalId']);
     const serverId = numericNestedField(record.values, ['server_id', 'serverId', 'msg_server_id', 'messageServerId']);
-    const hash = tableHash(record.table)
-      ?? tableHash(stringNestedField(record.values, ['table', 'table_name', 'message_table']));
+    const hash =
+      tableHash(record.table) ?? tableHash(stringNestedField(record.values, ['table', 'table_name', 'message_table']));
     const talker = stringNestedField(record.values, ['talker', 'username'])?.toLocaleLowerCase();
     addUniqueIndex(byServerId, serverId, record);
     addUniqueIndex(byLocalId, localId, record);
@@ -427,13 +422,14 @@ export function linkWeChatMessageMedia(
   return messages.map((message) => {
     const hash = tableHash(message.talkerTable);
     const localTableKey = message.localId !== undefined && hash ? `${hash}:${message.localId}` : undefined;
-    const record = (message.mediaMd5 ? byMd5.get(message.mediaMd5.toLocaleLowerCase()) : undefined)
-      ?? (message.serverId !== undefined ? byServerId.get(message.serverId) : undefined)
-      ?? (localTableKey ? byLocalAndTable.get(localTableKey) : undefined)
-      ?? (message.localId !== undefined
+    const record =
+      (message.mediaMd5 ? byMd5.get(message.mediaMd5.toLocaleLowerCase()) : undefined) ??
+      (message.serverId !== undefined ? byServerId.get(message.serverId) : undefined) ??
+      (localTableKey ? byLocalAndTable.get(localTableKey) : undefined) ??
+      (message.localId !== undefined
         ? byLocalAndTalker.get(`${message.talker.toLocaleLowerCase()}:${message.localId}`)
-        : undefined)
-      ?? (message.localId !== undefined ? byLocalId.get(message.localId) : undefined);
+        : undefined) ??
+      (message.localId !== undefined ? byLocalId.get(message.localId) : undefined);
     return record
       ? {
           ...message,

@@ -21,8 +21,9 @@ const node = (id: string, kind: string): InfrastructureGraphNode => ({
 describe('networkCanvasHeight', () => {
   it('never drops below the minimum canvas height for zero or a single row of nodes', () => {
     expect(networkCanvasHeight([])).toBe(networkCanvasMetrics.minimumHeight);
-    expect(networkCanvasHeight([node('a', 'physical_host'), node('b', 'pve'), node('c', 'virtual_machine')]))
-      .toBe(networkCanvasMetrics.minimumHeight);
+    expect(networkCanvasHeight([node('a', 'physical_host'), node('b', 'pve'), node('c', 'virtual_machine')])).toBe(
+      networkCanvasMetrics.minimumHeight,
+    );
   });
 
   it('grows with one row per three nodes', () => {
@@ -40,15 +41,19 @@ describe('layoutNetworkNodes', () => {
   });
 
   it('places hosts, infrastructure services and workload systems in three lanes', () => {
-    const points = layoutNetworkNodes([
-      node('host-a', 'physical_host'),
-      node('host-b', 'physical_host'),
-      node('pve', 'pve'),
-      node('ceph', 'ceph_cluster'),
-      node('k8s', 'kubernetes'),
-      node('vm-1', 'virtual_machine'),
-      node('os-1', 'os_instance'),
-    ], 900, 600);
+    const points = layoutNetworkNodes(
+      [
+        node('host-a', 'physical_host'),
+        node('host-b', 'physical_host'),
+        node('pve', 'pve'),
+        node('ceph', 'ceph_cluster'),
+        node('k8s', 'kubernetes'),
+        node('vm-1', 'virtual_machine'),
+        node('os-1', 'os_instance'),
+      ],
+      900,
+      600,
+    );
 
     // laneWidth = 300; nodes are centered inside each lane.
     expect(points.get('host-a')).toEqual({ x: 150, y: 72, width: 244, height: 52 });

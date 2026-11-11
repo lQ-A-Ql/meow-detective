@@ -47,12 +47,7 @@ export interface FileEntryRow {
 }
 
 export type FileExtractionPhase =
-  | 'preparing'
-  | 'copying'
-  | 'finalizing'
-  | 'completed'
-  | 'completedWithWarning'
-  | 'failed';
+  'preparing' | 'copying' | 'finalizing' | 'completed' | 'completedWithWarning' | 'failed';
 
 export interface FileExtractionProgress {
   operationId: string;
@@ -76,13 +71,7 @@ export interface FileExtractionResult {
 
 export type BitLockerDictionaryBackend = 'cpu' | 'gpu';
 export type BitLockerDictionaryAttackPhase =
-  | 'queued'
-  | 'running'
-  | 'cancelling'
-  | 'found'
-  | 'exhausted'
-  | 'cancelled'
-  | 'failed';
+  'queued' | 'running' | 'cancelling' | 'found' | 'exhausted' | 'cancelled' | 'failed';
 
 /**
  * Progress for a BitLocker password-dictionary attempt.

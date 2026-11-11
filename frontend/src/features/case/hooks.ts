@@ -89,8 +89,7 @@ export function useOpenCase() {
 export function useRenameDataSource() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (params: { dataSourceId: string; name: string }) =>
-      renameDataSource(params.dataSourceId, params.name),
+    mutationFn: (params: { dataSourceId: string; name: string }) => renameDataSource(params.dataSourceId, params.name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['case', 'data-sources'] });
       qc.invalidateQueries({ queryKey: ['analysis', 'case-overview'] });

@@ -21,9 +21,7 @@ describe('RegistryExtractionPanel', () => {
     const { container } = render(createElement(RegistryExtractionPanel, {}));
     expect(screen.getByText('暂无用户账户数据')).toBeDefined();
 
-    const activeContent = container.querySelector(
-      '[data-slot="tabs-content"][data-state="active"]',
-    );
+    const activeContent = container.querySelector('[data-slot="tabs-content"][data-state="active"]');
     expect(activeContent?.className).toContain('flex-col');
     expect(activeContent?.className).toContain('overflow-hidden');
   });
@@ -90,27 +88,60 @@ describe('RegistryExtractionPanel', () => {
   });
 
   it('renders physical adapters separately with row-sized table viewports', () => {
-    const { container } = render(createElement(RegistryExtractionPanel, {
-      structured: {
-        hiveOverviews: [], samUsers: [], userAssistEntries: [], installedSoftware: [],
-        usbDevices: [], mountedDevices: [], systemServices: [], shutdownTimes: [],
-        shimcacheEntries: [], runKeys: [], openSaveMru: [], lastVisitedMru: [], runMru: [],
-        shellbagEntries: [], muicacheEntries: [], amcacheApplications: [],
-        amcacheApplicationFiles: [], lsaPackages: [], appcompatLayers: [], securityPolicies: [],
-        lsaSecrets: [], cachedCredentials: [], status: 'parsed', generatedAt: '', warnings: [],
-        networkAdapters: [{
-          guid: '{ADAPTER-GUID}', name: 'Ethernet', description: 'Intel Ethernet Controller',
-          macAddress: '00:11:22:33:44:55', ipAddresses: ['192.0.2.10'],
-          permanentMacAddress: '00:11:22:33:44:56',
-          subnetMasks: ['255.255.255.0'], gateways: ['192.0.2.1'], dhcpEnabled: true,
-          dhcpServer: '192.0.2.2', dnsServers: ['192.0.2.53'],
-        }],
-        networkProfiles: [{
-          profileGuid: '{PROFILE-GUID}', profileName: 'Office Network', managed: false,
-          sourceKeyPath: 'NetworkList\\Profiles\\{PROFILE-GUID}',
-        }],
-      },
-    }));
+    const { container } = render(
+      createElement(RegistryExtractionPanel, {
+        structured: {
+          hiveOverviews: [],
+          samUsers: [],
+          userAssistEntries: [],
+          installedSoftware: [],
+          usbDevices: [],
+          mountedDevices: [],
+          systemServices: [],
+          shutdownTimes: [],
+          shimcacheEntries: [],
+          runKeys: [],
+          openSaveMru: [],
+          lastVisitedMru: [],
+          runMru: [],
+          shellbagEntries: [],
+          muicacheEntries: [],
+          amcacheApplications: [],
+          amcacheApplicationFiles: [],
+          lsaPackages: [],
+          appcompatLayers: [],
+          securityPolicies: [],
+          lsaSecrets: [],
+          cachedCredentials: [],
+          status: 'parsed',
+          generatedAt: '',
+          warnings: [],
+          networkAdapters: [
+            {
+              guid: '{ADAPTER-GUID}',
+              name: 'Ethernet',
+              description: 'Intel Ethernet Controller',
+              macAddress: '00:11:22:33:44:55',
+              ipAddresses: ['192.0.2.10'],
+              permanentMacAddress: '00:11:22:33:44:56',
+              subnetMasks: ['255.255.255.0'],
+              gateways: ['192.0.2.1'],
+              dhcpEnabled: true,
+              dhcpServer: '192.0.2.2',
+              dnsServers: ['192.0.2.53'],
+            },
+          ],
+          networkProfiles: [
+            {
+              profileGuid: '{PROFILE-GUID}',
+              profileName: 'Office Network',
+              managed: false,
+              sourceKeyPath: 'NetworkList\\Profiles\\{PROFILE-GUID}',
+            },
+          ],
+        },
+      }),
+    );
     fireEvent.mouseDown(screen.getByRole('tab', { name: '网络配置' }), { button: 0 });
     expect(screen.getByText('网络适配器（物理与虚拟）')).toBeDefined();
     expect(screen.getByText('Intel Ethernet Controller')).toBeDefined();

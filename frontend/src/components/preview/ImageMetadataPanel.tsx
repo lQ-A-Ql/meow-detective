@@ -33,14 +33,19 @@ export function ImageMetadataPanel({ metadata }: ImageMetadataPanelProps) {
     return (
       <div className="space-y-1 text-[11px] text-forensics-muted">
         <div>{t('fileBrowser.preview.imageMetadata.status')}</div>
-        <div className="font-mono text-forensics-text-secondary">{t(`fileBrowser.preview.imageMetadata.states.${metadata.status}`)}</div>
+        <div className="font-mono text-forensics-text-secondary">
+          {t(`fileBrowser.preview.imageMetadata.states.${metadata.status}`)}
+        </div>
         <div>{t(`fileBrowser.preview.imageMetadata.${metadata.status}`)}</div>
       </div>
     );
   }
   return (
     <div className="space-y-1 font-mono text-[11px] text-forensics-text-secondary">
-      <div className="mb-2 text-[10px] text-forensics-muted">{t('fileBrowser.preview.imageMetadata.status')}: {t(`fileBrowser.preview.imageMetadata.states.${metadata.status}`)}</div>
+      <div className="mb-2 text-[10px] text-forensics-muted">
+        {t('fileBrowser.preview.imageMetadata.status')}:{' '}
+        {t(`fileBrowser.preview.imageMetadata.states.${metadata.status}`)}
+      </div>
       {visible.map(([key, label]) => (
         <div key={key} className="grid grid-cols-[minmax(100px,auto)_1fr] gap-2">
           <span className="text-forensics-muted-light">{t(`fileBrowser.preview.imageMetadata.fields.${label}`)}</span>

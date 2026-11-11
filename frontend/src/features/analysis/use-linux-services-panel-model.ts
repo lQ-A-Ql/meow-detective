@@ -20,11 +20,13 @@ export function useLinuxServicesPanelModel(props: LinuxServicesPanelProps) {
   const currentCase = useCurrentCase();
   const contextKey = JSON.stringify([currentCase.data?.id ?? null, props.loadContextKey ?? null]);
   const [selection, setSelection] = useState<{ contextKey: string; row: LinuxSystemConfig }>();
-  const services = props.rows.filter((row) => row.configKind === 'systemdServiceUnit'
-    && (row.name ?? row.line).endsWith('.service'));
-  const selected = selection?.contextKey === contextKey
-    ? services.find((row) => row.artifactId === selection.row.artifactId)
-    : undefined;
+  const services = props.rows.filter(
+    (row) => row.configKind === 'systemdServiceUnit' && (row.name ?? row.line).endsWith('.service'),
+  );
+  const selected =
+    selection?.contextKey === contextKey
+      ? services.find((row) => row.artifactId === selection.row.artifactId)
+      : undefined;
   const preview = useQuery({
     queryKey: ['analysis', 'linux-service-preview', contextKey, selected?.fileId ?? null],
     queryFn: () => {

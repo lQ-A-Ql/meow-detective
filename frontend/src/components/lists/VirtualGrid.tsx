@@ -36,13 +36,22 @@ export function VirtualGrid<T>({ items, getItemKey, renderItem, resetKey }: Virt
   }, [items, columns, getItemKey]);
   return (
     <div ref={container}>
-      <VirtualList items={rows} getItemKey={getRowKey} estimateSize={260}
-        style={{ height: 'min(60vh, 40rem)' }} resetKey={`${resetKey ?? ''}:${columns}`}
+      <VirtualList
+        items={rows}
+        getItemKey={getRowKey}
+        estimateSize={260}
+        style={{ height: 'min(60vh, 40rem)' }}
+        resetKey={`${resetKey ?? ''}:${columns}`}
         renderItem={(row) => (
           <div className="grid gap-3 pb-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-            {row.items.map((item) => <div key={getItemKey(item)} className="min-w-0">{renderItem(item)}</div>)}
+            {row.items.map((item) => (
+              <div key={getItemKey(item)} className="min-w-0">
+                {renderItem(item)}
+              </div>
+            ))}
           </div>
-        )} />
+        )}
+      />
     </div>
   );
 }

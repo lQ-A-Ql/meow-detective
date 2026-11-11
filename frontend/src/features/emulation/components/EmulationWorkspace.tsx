@@ -1,7 +1,4 @@
-import {
-  LoaderCircle,
-  Power,
-}  from '@/components/icons';
+import { LoaderCircle, Power } from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { SidebarIcon } from '@/components/navigation/SidebarIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
@@ -10,10 +7,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { EmulationSettingsDialog } from './EmulationSettingsDialog';
-import type {
-  EmulationSessionView,
-  EmulationWorkspaceModel,
-} from '@/features/emulation/use-emulation-workspace-model';
+import type { EmulationSessionView, EmulationWorkspaceModel } from '@/features/emulation/use-emulation-workspace-model';
 import { formatBytes } from '@/lib/format-bytes';
 import type { EmulationState } from '@/types/models';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
@@ -45,17 +39,15 @@ function SessionRow({
   return (
     <div className="grid min-w-[760px] grid-cols-[minmax(180px,1.4fr)_140px_120px_minmax(180px,1fr)_52px] items-center border-b border-forensics-border-light px-4 py-3 text-[12px] last:border-b-0 hover:bg-forensics-hover">
       <div className="min-w-0">
-        <div className="truncate text-forensics-text" title={session.sourceName}>{session.sourceName}</div>
+        <div className="truncate text-forensics-text" title={session.sourceName}>
+          {session.sourceName}
+        </div>
         <div className="mt-1 truncate font-mono text-[10px] text-forensics-muted" title={session.sessionId}>
           {session.sessionId}
         </div>
       </div>
-      <Badge variant={stateVariant(session.state)}>
-        {t(`emulationPage.states.${session.state}`)}
-      </Badge>
-      <span className="font-mono text-[11px] text-forensics-text-secondary">
-        {formatBytes(session.logicalLength)}
-      </span>
+      <Badge variant={stateVariant(session.state)}>{t(`emulationPage.states.${session.state}`)}</Badge>
+      <span className="font-mono text-[11px] text-forensics-text-secondary">{formatBytes(session.logicalLength)}</span>
       <div className="min-w-0">
         <div className="truncate text-forensics-text-secondary">
           {t(`emulationPage.controlModes.${session.controlMode}`)}
@@ -64,9 +56,7 @@ function SessionRow({
           {t(`emulationPage.guestPhases.${session.guestPhase ?? 'unknown'}`)}
         </div>
         <div className="mt-1 truncate text-[10px] text-forensics-muted">
-          {t(session.maintenanceMedia
-            ? 'emulationPage.maintenance.attached'
-            : 'emulationPage.maintenance.absent')}
+          {t(session.maintenanceMedia ? 'emulationPage.maintenance.attached' : 'emulationPage.maintenance.absent')}
         </div>
         {session.error ? (
           <div className="mt-1 truncate text-[10px] text-forensics-error-text" title={session.error}>
@@ -103,22 +93,45 @@ export function EmulationWorkspace({ model, settingsOpen, onSettingsOpenChange }
           {t('emulationPage.loading')}
         </div>
       ) : (
-        <ScrollArea className="min-h-0 flex-1" viewportClassName="workspace-scroll-viewport h-full min-h-0 overflow-y-auto scrollbar-none workspace-frame">
+        <ScrollArea
+          className="min-h-0 flex-1"
+          viewportClassName="workspace-scroll-viewport h-full min-h-0 overflow-y-auto scrollbar-none workspace-frame"
+        >
           <WorkspaceCard className="workspace-content relative isolate flex h-full min-h-full flex-1 flex-col">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forensics-ink-3">{t('emulationPage.statusTitle')}</div>
-                <h1 className="mt-1 text-xl font-semibold text-forensics-ink">{model.caseName ?? t('emulationPage.title')}</h1>
-                <div className="mt-1 text-[11px] text-forensics-muted">{t('emulationPage.activeSummary', { count: model.metrics.activeCount })}</div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forensics-ink-3">
+                  {t('emulationPage.statusTitle')}
+                </div>
+                <h1 className="mt-1 text-xl font-semibold text-forensics-ink">
+                  {model.caseName ?? t('emulationPage.title')}
+                </h1>
+                <div className="mt-1 text-[11px] text-forensics-muted">
+                  {t('emulationPage.activeSummary', { count: model.metrics.activeCount })}
+                </div>
               </div>
               <div className="flex items-center gap-1">
                 <Tooltip content={t('emulationPage.actions.settings')}>
-                  <Button type="button" variant="forensicsGhost" size="iconSm" aria-label={t('emulationPage.actions.settings')} onClick={() => onSettingsOpenChange(true)} disabled={!model.hasCase}>
+                  <Button
+                    type="button"
+                    variant="forensicsGhost"
+                    size="iconSm"
+                    aria-label={t('emulationPage.actions.settings')}
+                    onClick={() => onSettingsOpenChange(true)}
+                    disabled={!model.hasCase}
+                  >
                     <SidebarIcon name="settings" className="size-4" />
                   </Button>
                 </Tooltip>
                 <Tooltip content={t('emulationPage.actions.refresh')}>
-                  <Button type="button" variant="forensicsGhost" size="iconSm" aria-label={t('emulationPage.actions.refresh')} onClick={() => void model.refresh()} disabled={!model.hasCase || model.refreshing}>
+                  <Button
+                    type="button"
+                    variant="forensicsGhost"
+                    size="iconSm"
+                    aria-label={t('emulationPage.actions.refresh')}
+                    onClick={() => void model.refresh()}
+                    disabled={!model.hasCase || model.refreshing}
+                  >
                     <ActionIcon name="refresh" className={model.refreshing ? 'size-4 animate-spin' : 'size-4'} />
                   </Button>
                 </Tooltip>
@@ -130,11 +143,17 @@ export function EmulationWorkspace({ model, settingsOpen, onSettingsOpenChange }
               </div>
             ) : (
               <div className="space-y-2">
-                {model.sessions.filter((session) => session.active).map((session) => (
-                  <div key={session.sessionId} className="border-b border-forensics-line last:border-b-0">
-                    <SessionRow session={session} releasing={model.releasingSessionId === session.sessionId} onRelease={model.release} />
-                  </div>
-                ))}
+                {model.sessions
+                  .filter((session) => session.active)
+                  .map((session) => (
+                    <div key={session.sessionId} className="border-b border-forensics-line last:border-b-0">
+                      <SessionRow
+                        session={session}
+                        releasing={model.releasingSessionId === session.sessionId}
+                        onRelease={model.release}
+                      />
+                    </div>
+                  ))}
               </div>
             )}
             {model.metrics.activeCount === 0 ? (

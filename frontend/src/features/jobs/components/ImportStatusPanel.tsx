@@ -17,10 +17,10 @@ export function ImportStatusPanel({ importSignals, evidenceHashStatus }: ImportS
   const { t } = useTranslation();
   const visible = Boolean(
     importSignals.latestPhase ||
-      importSignals.latestCancellation ||
-      importSignals.partialResults.length ||
-      importSignals.cacheStatuses.length ||
-      importSignals.latestReport,
+    importSignals.latestCancellation ||
+    importSignals.partialResults.length ||
+    importSignals.cacheStatuses.length ||
+    importSignals.latestReport,
   );
   if (!visible) return null;
 
@@ -47,7 +47,8 @@ export function ImportStatusPanel({ importSignals, evidenceHashStatus }: ImportS
         {importSignals.latestPhase ? (
           <div className="text-right">
             <div className="font-mono text-forensics-text">
-              {importSignals.latestPhase.percent}{t('bottomDrawer.importSignals.percent')}
+              {importSignals.latestPhase.percent}
+              {t('bottomDrawer.importSignals.percent')}
             </div>
             <div className="text-[10px] text-forensics-muted-light">{importSignals.lastUpdatedAt ?? '-'}</div>
           </div>

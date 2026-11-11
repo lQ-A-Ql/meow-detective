@@ -18,13 +18,7 @@ export function ContextBar({
 }) {
   const justify = align === 'start' ? 'justify-start' : align === 'end' ? 'justify-end' : 'justify-between';
   return (
-    <div
-      className={cn(
-        'flex h-9 shrink-0 items-center gap-3 overflow-hidden bg-transparent px-4',
-        justify,
-        className,
-      )}
-    >
+    <div className={cn('flex h-9 shrink-0 items-center gap-3 overflow-hidden bg-transparent px-4', justify, className)}>
       {children}
     </div>
   );

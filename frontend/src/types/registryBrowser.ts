@@ -130,7 +130,37 @@ export interface RegistryValueRange {
   decodedText?: string;
 }
 
-export interface RegistrySearchHit { kind: string; path: string; name: string; cellOffset: number; matchedField: string; preview: string; keyCellOffset?: number; valueIndex?: number; dataOffset?: number; overlaySource: 'base' | 'recovered' | 'merged'; dataOverlaySource: 'base' | 'recovered' | 'merged' }
-export interface RegistrySearchPage { hits: RegistrySearchHit[]; scannedKeys: number; scannedValues: number; skippedCount: number; truncated: boolean; totalMatches?: number; complete?: boolean }
-export interface RegistrySearchLocation { key: RegistryKeyMetadata; value?: RegistryValueMetadata; valuesCursor?: string }
-export interface RegistrySearchLocateRequest { sessionId: string; keyPath: string; keyCellOffset: number; valueCellOffset?: number; valueIndex?: number }
+export interface RegistrySearchHit {
+  kind: string;
+  path: string;
+  name: string;
+  cellOffset: number;
+  matchedField: string;
+  preview: string;
+  keyCellOffset?: number;
+  valueIndex?: number;
+  dataOffset?: number;
+  overlaySource: 'base' | 'recovered' | 'merged';
+  dataOverlaySource: 'base' | 'recovered' | 'merged';
+}
+export interface RegistrySearchPage {
+  hits: RegistrySearchHit[];
+  scannedKeys: number;
+  scannedValues: number;
+  skippedCount: number;
+  truncated: boolean;
+  totalMatches?: number;
+  complete?: boolean;
+}
+export interface RegistrySearchLocation {
+  key: RegistryKeyMetadata;
+  value?: RegistryValueMetadata;
+  valuesCursor?: string;
+}
+export interface RegistrySearchLocateRequest {
+  sessionId: string;
+  keyPath: string;
+  keyCellOffset: number;
+  valueCellOffset?: number;
+  valueIndex?: number;
+}

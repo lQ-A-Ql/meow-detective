@@ -9,14 +9,16 @@ function createModel(overrides: Partial<EmulationWorkspaceModel> = {}): Emulatio
     hasCase: true,
     caseName: '启动验证案件',
     loading: false,
-    sourceOptions: [{
-      id: 'source-1',
-      name: '早起王的PC镜像',
-      kind: 'E01',
-      platform: 'WINDOWS',
-      partitionCount: 4,
-      evidenceSize: 90_619_311_073,
-    }],
+    sourceOptions: [
+      {
+        id: 'source-1',
+        name: '早起王的PC镜像',
+        kind: 'E01',
+        platform: 'WINDOWS',
+        partitionCount: 4,
+        evidenceSize: 90_619_311_073,
+      },
+    ],
     selectedSourceId: 'source-1',
     selectedSource: {
       id: 'source-1',
@@ -96,11 +98,15 @@ describe('EmulationWorkspace', () => {
 
   it('shows selected PE media as the first boot route and delegates clearing it', () => {
     const clearRecoveryIso = vi.fn();
-    render(<EmulationWorkspace model={createModel({
-      recoveryIsoPath: 'C:\\Users\\QAQ\\Tools\\iso\\LaoMaoTao.iso',
-      bootRoute: 'recoveryMedia',
-      clearRecoveryIso,
-    })} />);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          recoveryIsoPath: 'C:\\Users\\QAQ\\Tools\\iso\\LaoMaoTao.iso',
+          bootRoute: 'recoveryMedia',
+          clearRecoveryIso,
+        })}
+      />,
+    );
 
     expect(screen.getByDisplayValue('C:\\Users\\QAQ\\Tools\\iso\\LaoMaoTao.iso')).toBeInTheDocument();
     expect(screen.getByText('PE ISO 优先')).toBeInTheDocument();
@@ -108,23 +114,30 @@ describe('EmulationWorkspace', () => {
     expect(clearRecoveryIso).toHaveBeenCalledOnce();
   });
 
-  it('renders session state and releases the selected session by id', () => {    const release = vi.fn().mockResolvedValue(undefined);
-    renderBase(<EmulationWorkspace model={createModel({
-      sessions: [{
-        sessionId: 'emulation-session-1',
-        dataSourceId: 'source-1',
-        sourceName: '早起王的PC镜像',
-        state: 'running',
-        logicalLength: 214_748_364_800,
-        controlMode: 'interactiveOnly',
-        guestPhase: 'filesystemMounted',
-        active: true,
-        releasable: true,
-      }],
-      metrics: { sourceCount: 1, activeCount: 1, runningCount: 1, failedCount: 0 },
-      canStart: false,
-      release,
-    })} />);
+  it('renders session state and releases the selected session by id', () => {
+    const release = vi.fn().mockResolvedValue(undefined);
+    renderBase(
+      <EmulationWorkspace
+        model={createModel({
+          sessions: [
+            {
+              sessionId: 'emulation-session-1',
+              dataSourceId: 'source-1',
+              sourceName: '早起王的PC镜像',
+              state: 'running',
+              logicalLength: 214_748_364_800,
+              controlMode: 'interactiveOnly',
+              guestPhase: 'filesystemMounted',
+              active: true,
+              releasable: true,
+            },
+          ],
+          metrics: { sourceCount: 1, activeCount: 1, runningCount: 1, failedCount: 0 },
+          canStart: false,
+          release,
+        })}
+      />,
+    );
 
     expect(screen.getAllByText('运行中')).toHaveLength(1);
     expect(screen.getByText('客体已进入用户空间')).toBeInTheDocument();
@@ -133,22 +146,29 @@ describe('EmulationWorkspace', () => {
     expect(release).toHaveBeenCalledWith('emulation-session-1');
   });
 
-  it('offers OSDATA cleanup when preflight detects the entry and delegates the toggle', () => {    const toggleCleanupOsdata = vi.fn();
-    render(<EmulationWorkspace model={createModel({
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 2,
-          osdataPresent: true,
-          samPresent: true,
-          utilmanBypassAvailable: true,
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-      osdataCleanupPartitions: [2],
-      cleanupOsdata: true,
-      toggleCleanupOsdata,
-    })} />);
+  it('offers OSDATA cleanup when preflight detects the entry and delegates the toggle', () => {
+    const toggleCleanupOsdata = vi.fn();
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 2,
+                osdataPresent: true,
+                samPresent: true,
+                utilmanBypassAvailable: true,
+              },
+            ],
+            recommendedBootRoute: 'directSystem',
+          },
+          osdataCleanupPartitions: [2],
+          cleanupOsdata: true,
+          toggleCleanupOsdata,
+        })}
+      />,
+    );
 
     expect(screen.getByText('存在 OSDATA')).toBeInTheDocument();
     expect(screen.getAllByText('[P2]')).toHaveLength(2);
@@ -157,35 +177,46 @@ describe('EmulationWorkspace', () => {
   });
 
   it('replaces the OSDATA cleanup checkbox with a hint when OSDATA is not empty', () => {
-    render(<EmulationWorkspace model={createModel({
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 2,
-          osdataPresent: true,
-          osdataEmpty: false,
-          samPresent: true,
-          utilmanBypassAvailable: true,
-        }],
-        recommendedBootRoute: 'recoveryMedia',
-      },
-      osdataCleanupPartitions: [2],
-    })} />);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 2,
+                osdataPresent: true,
+                osdataEmpty: false,
+                samPresent: true,
+                utilmanBypassAvailable: true,
+              },
+            ],
+            recommendedBootRoute: 'recoveryMedia',
+          },
+          osdataCleanupPartitions: [2],
+        })}
+      />,
+    );
 
     expect(screen.getByText('OSDATA 非空，无法自动清除，请使用 PE 路线')).toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: '启动前清除 OSDATA（仅写入覆盖层）' })).not.toBeInTheDocument();
   });
 
-  it('warns when PE media is selected but the maintenance tool is unavailable', () => {    render(<EmulationWorkspace model={createModel({
-      recoveryIsoPath: 'C:\\Tools\\WinPE.iso',
-      bootRoute: 'recoveryMedia',
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [],
-        recommendedBootRoute: 'recoveryMedia',
-        maintenanceToolAvailable: false,
-      },
-    })} />);
+  it('warns when PE media is selected but the maintenance tool is unavailable', () => {
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          recoveryIsoPath: 'C:\\Tools\\WinPE.iso',
+          bootRoute: 'recoveryMedia',
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [],
+            recommendedBootRoute: 'recoveryMedia',
+            maintenanceToolAvailable: false,
+          },
+        })}
+      />,
+    );
 
     expect(screen.getByText('PE 中将没有维护工具，只能手动操作')).toBeInTheDocument();
   });
@@ -193,11 +224,15 @@ describe('EmulationWorkspace', () => {
   it('delegates network mode selection and resource sizing via sliders', () => {
     const selectNetworkMode = vi.fn();
     const setResourceValue = vi.fn();
-    render(<EmulationWorkspace model={createModel({
-      options: { networkMode: 'nat', clipboard: false, timeSync: false, processorCount: 4, memoryMib: 8192 },
-      selectNetworkMode,
-      setResourceValue,
-    })} />);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          options: { networkMode: 'nat', clipboard: false, timeSync: false, processorCount: 4, memoryMib: 8192 },
+          selectNetworkMode,
+          setResourceValue,
+        })}
+      />,
+    );
 
     expect(screen.getByRole('status', { name: 'CPU 核心数' })).toHaveTextContent('4');
     expect(screen.getByRole('status', { name: '内存 (MiB)' })).toHaveTextContent('8192');
@@ -212,30 +247,37 @@ describe('EmulationWorkspace', () => {
     expect(screen.getByRole('combobox', { name: '网络模式' })).toHaveTextContent('NAT');
   });
 
-  it('renders linux installs with distro, boot risks and the host-side bypass hint', () => {    render(<EmulationWorkspace model={createModel({
-      selectedSource: {
-        id: 'source-1',
-        name: 'CentOS 镜像',
-        kind: 'E01',
-        platform: 'LINUX',
-        partitionCount: 3,
-      },
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 5,
-          platform: 'linux',
-          osdataPresent: false,
-          samPresent: false,
-          utilmanBypassAvailable: false,
-          osReleasePrettyName: 'CentOS Linux 7 (Core)',
-          kernelPresent: false,
-          fstabPresent: true,
-          bootRiskNotes: ['no-kernel'],
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-    })} />);
+  it('renders linux installs with distro, boot risks and the host-side bypass hint', () => {
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          selectedSource: {
+            id: 'source-1',
+            name: 'CentOS 镜像',
+            kind: 'E01',
+            platform: 'LINUX',
+            partitionCount: 3,
+          },
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 5,
+                platform: 'linux',
+                osdataPresent: false,
+                samPresent: false,
+                utilmanBypassAvailable: false,
+                osReleasePrettyName: 'CentOS Linux 7 (Core)',
+                kernelPresent: false,
+                fstabPresent: true,
+                bootRiskNotes: ['no-kernel'],
+              },
+            ],
+            recommendedBootRoute: 'directSystem',
+          },
+        })}
+      />,
+    );
 
     expect(screen.getByText('[P5]')).toBeInTheDocument();
     expect(screen.getByText('Linux')).toBeInTheDocument();
@@ -246,15 +288,19 @@ describe('EmulationWorkspace', () => {
   });
 
   it('shows the live ISO hint for linux sources only', () => {
-    const { rerender } = render(<EmulationWorkspace model={createModel({
-      selectedSource: {
-        id: 'source-1',
-        name: 'CentOS 镜像',
-        kind: 'E01',
-        platform: 'LINUX',
-        partitionCount: 3,
-      },
-    })} />);
+    const { rerender } = render(
+      <EmulationWorkspace
+        model={createModel({
+          selectedSource: {
+            id: 'source-1',
+            name: 'CentOS 镜像',
+            kind: 'E01',
+            platform: 'LINUX',
+            partitionCount: 3,
+          },
+        })}
+      />,
+    );
     expect(screen.getByText(/SystemRescue/)).toBeInTheDocument();
 
     rerender(<EmulationWorkspace model={createModel()} />);
@@ -262,29 +308,35 @@ describe('EmulationWorkspace', () => {
   });
 
   it('renders the Linux panel for linux sources without the Windows bypass selects', () => {
-    render(<EmulationWorkspace model={createModel({
-      selectedSource: {
-        id: 'source-1',
-        name: 'CentOS 镜像',
-        kind: 'E01',
-        platform: 'LINUX',
-        partitionCount: 3,
-      },
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 5,
-          platform: 'linux',
-          osdataPresent: false,
-          samPresent: false,
-          utilmanBypassAvailable: false,
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-      bypassPartition: 5,
-      bypassIsLinux: true,
-      linuxAccounts: [{ username: 'root', hasPassword: true, locked: false }],
-    })} />);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          selectedSource: {
+            id: 'source-1',
+            name: 'CentOS 镜像',
+            kind: 'E01',
+            platform: 'LINUX',
+            partitionCount: 3,
+          },
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 5,
+                platform: 'linux',
+                osdataPresent: false,
+                samPresent: false,
+                utilmanBypassAvailable: false,
+              },
+            ],
+            recommendedBootRoute: 'directSystem',
+          },
+          bypassPartition: 5,
+          bypassIsLinux: true,
+          linuxAccounts: [{ username: 'root', hasPassword: true, locked: false }],
+        })}
+      />,
+    );
 
     expect(screen.getByRole('combobox', { name: '目标分区' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '目标账户' })).toBeInTheDocument();
@@ -295,50 +347,64 @@ describe('EmulationWorkspace', () => {
   });
 
   it('shows the configured password for a selected Linux account', () => {
-    render(<EmulationWorkspace model={createModel({
-      selectedSource: {
-        id: 'source-1',
-        name: 'CentOS 镜像',
-        kind: 'E01',
-        platform: 'LINUX',
-        partitionCount: 3,
-      },
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 5,
-          platform: 'linux',
-          osdataPresent: false,
-          samPresent: false,
-          utilmanBypassAvailable: false,
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-      bypassPartition: 5,
-      bypassIsLinux: true,
-      linuxAccounts: [{ username: 'root', hasPassword: true, locked: false }],
-      linuxUsername: 'root',
-    })} />);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          selectedSource: {
+            id: 'source-1',
+            name: 'CentOS 镜像',
+            kind: 'E01',
+            platform: 'LINUX',
+            partitionCount: 3,
+          },
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 5,
+                platform: 'linux',
+                osdataPresent: false,
+                samPresent: false,
+                utilmanBypassAvailable: false,
+              },
+            ],
+            recommendedBootRoute: 'directSystem',
+          },
+          bypassPartition: 5,
+          bypassIsLinux: true,
+          linuxAccounts: [{ username: 'root', hasPassword: true, locked: false }],
+          linuxUsername: 'root',
+        })}
+      />,
+    );
 
     expect(screen.getByText(/root 的密码为 123456/)).toBeInTheDocument();
     expect(screen.getByText(/SSH 或 root 登录策略仍可能限制密码登录/)).toBeInTheDocument();
   });
 
   it('renders the Windows panel with SAM bypass selects for windows sources', () => {
-    render(<EmulationWorkspace model={createModel({
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 2,
-          osdataPresent: true,
-          samPresent: true,
-          utilmanBypassAvailable: true,
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-      bypassPartition: 2,
-      bypassAccounts: [{ rid: 500, username: 'Administrator', disabled: false, lockedOut: false, hasPassword: true }],
-    })} />);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 2,
+                osdataPresent: true,
+                samPresent: true,
+                utilmanBypassAvailable: true,
+              },
+            ],
+            recommendedBootRoute: 'directSystem',
+          },
+          bypassPartition: 2,
+          bypassAccounts: [
+            { rid: 500, username: 'Administrator', disabled: false, lockedOut: false, hasPassword: true },
+          ],
+        })}
+      />,
+    );
 
     expect(screen.getByRole('combobox', { name: '目标账户' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '绕密方式' })).toBeInTheDocument();
@@ -347,29 +413,32 @@ describe('EmulationWorkspace', () => {
 
   it('shows the EFI fallback row only when preflight reports no-efi-fallback', () => {
     const toggleInstallEfiFallback = vi.fn();
-    const linuxPreflight = (bootRiskNotes?: string[]) => createModel({
-      selectedSource: {
-        id: 'source-1',
-        name: 'Kali 镜像',
-        kind: 'E01',
-        platform: 'LINUX',
-        partitionCount: 2,
-      },
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 2,
-          platform: 'linux',
-          osdataPresent: false,
-          samPresent: false,
-          utilmanBypassAvailable: false,
-          bootRiskNotes,
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-      needsEfiFallback: (bootRiskNotes ?? []).includes('no-efi-fallback'),
-      toggleInstallEfiFallback,
-    });
+    const linuxPreflight = (bootRiskNotes?: string[]) =>
+      createModel({
+        selectedSource: {
+          id: 'source-1',
+          name: 'Kali 镜像',
+          kind: 'E01',
+          platform: 'LINUX',
+          partitionCount: 2,
+        },
+        preflight: {
+          dataSourceId: 'source-1',
+          installs: [
+            {
+              partitionIndex: 2,
+              platform: 'linux',
+              osdataPresent: false,
+              samPresent: false,
+              utilmanBypassAvailable: false,
+              bootRiskNotes,
+            },
+          ],
+          recommendedBootRoute: 'directSystem',
+        },
+        needsEfiFallback: (bootRiskNotes ?? []).includes('no-efi-fallback'),
+        toggleInstallEfiFallback,
+      });
 
     const { rerender } = render(<EmulationWorkspace model={linuxPreflight(['no-efi-fallback'])} />);
     expect(screen.getByText('无 EFI fallback 引导')).toBeInTheDocument();
@@ -378,122 +447,147 @@ describe('EmulationWorkspace', () => {
 
     rerender(<EmulationWorkspace model={linuxPreflight(undefined)} />);
     expect(screen.queryByText('无 EFI fallback 引导')).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: '启动前安装 EFI fallback 引导（仅写入覆盖层）' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('checkbox', { name: '启动前安装 EFI fallback 引导（仅写入覆盖层）' }),
+    ).not.toBeInTheDocument();
   });
 
   it('uses the Linux bypass title without SAM wording', () => {
-    render(<EmulationWorkspace model={createModel({
-      selectedSource: {
-        id: 'source-1',
-        name: 'CentOS 镜像',
-        kind: 'E01',
-        platform: 'LINUX',
-        partitionCount: 3,
-      },
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 5,
-          platform: 'linux',
-          osdataPresent: false,
-          samPresent: false,
-          utilmanBypassAvailable: false,
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-    })} />);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          selectedSource: {
+            id: 'source-1',
+            name: 'CentOS 镜像',
+            kind: 'E01',
+            platform: 'LINUX',
+            partitionCount: 3,
+          },
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 5,
+                platform: 'linux',
+                osdataPresent: false,
+                samPresent: false,
+                utilmanBypassAvailable: false,
+              },
+            ],
+            recommendedBootRoute: 'directSystem',
+          },
+        })}
+      />,
+    );
 
     expect(screen.getByText('系统绕密：设置账户密码（仅写入覆盖层）')).toBeInTheDocument();
     expect(screen.queryByText(/SAM/)).not.toBeInTheDocument();
   });
 
   it('surfaces the linux account query error under the username selector', () => {
-    render(<EmulationWorkspace model={createModel({
-      selectedSource: {
-        id: 'source-1',
-        name: 'CentOS 镜像',
-        kind: 'E01',
-        platform: 'LINUX',
-        partitionCount: 3,
-      },
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 5,
-          platform: 'linux',
-          osdataPresent: false,
-          samPresent: false,
-          utilmanBypassAvailable: false,
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-      bypassPartition: 5,
-      bypassIsLinux: true,
-      linuxAccountsError: '该文件系统不支持离线绕密',
-    })} />);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          selectedSource: {
+            id: 'source-1',
+            name: 'CentOS 镜像',
+            kind: 'E01',
+            platform: 'LINUX',
+            partitionCount: 3,
+          },
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 5,
+                platform: 'linux',
+                osdataPresent: false,
+                samPresent: false,
+                utilmanBypassAvailable: false,
+              },
+            ],
+            recommendedBootRoute: 'directSystem',
+          },
+          bypassPartition: 5,
+          bypassIsLinux: true,
+          linuxAccountsError: '该文件系统不支持离线绕密',
+        })}
+      />,
+    );
 
     expect(screen.getByText('该文件系统不支持离线绕密')).toBeInTheDocument();
     expect(screen.queryByText('未在该分区找到可设置密码的 Linux 账户')).not.toBeInTheDocument();
   });
 
   it('shows an explicit hint when the linux account list loads empty', () => {
-    render(<EmulationWorkspace model={createModel({
-      selectedSource: {
-        id: 'source-1',
-        name: 'CentOS 镜像',
-        kind: 'E01',
-        platform: 'LINUX',
-        partitionCount: 3,
-      },
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 5,
-          platform: 'linux',
-          osdataPresent: false,
-          samPresent: false,
-          utilmanBypassAvailable: false,
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-      bypassPartition: 5,
-      bypassIsLinux: true,
-      linuxAccounts: [],
-      linuxAccountsLoading: false,
-    })} />);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          selectedSource: {
+            id: 'source-1',
+            name: 'CentOS 镜像',
+            kind: 'E01',
+            platform: 'LINUX',
+            partitionCount: 3,
+          },
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 5,
+                platform: 'linux',
+                osdataPresent: false,
+                samPresent: false,
+                utilmanBypassAvailable: false,
+              },
+            ],
+            recommendedBootRoute: 'directSystem',
+          },
+          bypassPartition: 5,
+          bypassIsLinux: true,
+          linuxAccounts: [],
+          linuxAccountsLoading: false,
+        })}
+      />,
+    );
 
     expect(screen.getByText(/未在该分区找到可设置密码的 Linux 账户/)).toBeInTheDocument();
   });
 
   it('offers host-side Linux filesystem repair for dirty or unverified logs', () => {
     const toggleRepairFilesystems = vi.fn();
-    const linuxModel = (bootRiskNotes?: string[]) => createModel({
-      selectedSource: {
-        id: 'source-1',
-        name: 'CentOS 镜像',
-        kind: 'E01',
-        platform: 'LINUX',
-        partitionCount: 3,
-      },
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 5,
-          platform: 'linux',
-          osdataPresent: false,
-          samPresent: false,
-          utilmanBypassAvailable: false,
-          bootRiskNotes,
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-      needsFsRepair: (bootRiskNotes ?? [])
-        .some((note) => note === 'xfs-log-dirty'
-          || note === 'xfs-log-unverified'
-          || note === 'ext4-journal-dirty'
-          || note === 'ext4-journal-unverified'),
-      toggleRepairFilesystems,
-    });
+    const linuxModel = (bootRiskNotes?: string[]) =>
+      createModel({
+        selectedSource: {
+          id: 'source-1',
+          name: 'CentOS 镜像',
+          kind: 'E01',
+          platform: 'LINUX',
+          partitionCount: 3,
+        },
+        preflight: {
+          dataSourceId: 'source-1',
+          installs: [
+            {
+              partitionIndex: 5,
+              platform: 'linux',
+              osdataPresent: false,
+              samPresent: false,
+              utilmanBypassAvailable: false,
+              bootRiskNotes,
+            },
+          ],
+          recommendedBootRoute: 'directSystem',
+        },
+        needsFsRepair: (bootRiskNotes ?? []).some(
+          (note) =>
+            note === 'xfs-log-dirty' ||
+            note === 'xfs-log-unverified' ||
+            note === 'ext4-journal-dirty' ||
+            note === 'ext4-journal-unverified',
+        ),
+        toggleRepairFilesystems,
+      });
 
     const { rerender } = render(<EmulationWorkspace model={linuxModel(['xfs-log-dirty'])} />);
     expect(screen.getByText('XFS 日志脏')).toBeInTheDocument();
@@ -502,7 +596,9 @@ describe('EmulationWorkspace', () => {
 
     rerender(<EmulationWorkspace model={linuxModel(undefined)} />);
     expect(screen.queryByText('XFS 日志脏')).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: '启动前清理 Linux 文件系统日志（仅写入覆盖层）' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('checkbox', { name: '启动前清理 Linux 文件系统日志（仅写入覆盖层）' }),
+    ).not.toBeInTheDocument();
 
     rerender(<EmulationWorkspace model={linuxModel(['xfs-log-unverified'])} />);
     expect(screen.getByText('XFS 日志未验证')).toBeInTheDocument();
@@ -511,55 +607,66 @@ describe('EmulationWorkspace', () => {
   });
 
   it('shows ext4 journal risk and the shared repair control', () => {
-    render(<EmulationWorkspace model={createModel({
-      selectedSource: {
-        id: 'source-1',
-        name: 'Ubuntu 镜像',
-        kind: 'E01',
-        platform: 'LINUX',
-        partitionCount: 3,
-      },
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 5,
-          platform: 'linux',
-          osdataPresent: false,
-          samPresent: false,
-          utilmanBypassAvailable: false,
-          bootRiskNotes: ['ext4-journal-dirty'],
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-      needsFsRepair: true,
-    })} />);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          selectedSource: {
+            id: 'source-1',
+            name: 'Ubuntu 镜像',
+            kind: 'E01',
+            platform: 'LINUX',
+            partitionCount: 3,
+          },
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 5,
+                platform: 'linux',
+                osdataPresent: false,
+                samPresent: false,
+                utilmanBypassAvailable: false,
+                bootRiskNotes: ['ext4-journal-dirty'],
+              },
+            ],
+            recommendedBootRoute: 'directSystem',
+          },
+          needsFsRepair: true,
+        })}
+      />,
+    );
     expect(screen.getByText('ext4 日志脏')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: '启动前清理 Linux 文件系统日志（仅写入覆盖层）' }))
-      .toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '启动前清理 Linux 文件系统日志（仅写入覆盖层）' })).toBeInTheDocument();
   });
 
   it('identifies image-side service loops without calling them XFS damage', () => {
-    render(<EmulationWorkspace model={createModel({
-      selectedSource: {
-        id: 'source-1',
-        name: 'CentOS 镜像',
-        kind: 'E01',
-        platform: 'LINUX',
-        partitionCount: 3,
-      },
-      preflight: {
-        dataSourceId: 'source-1',
-        installs: [{
-          partitionIndex: 5,
-          platform: 'linux',
-          osdataPresent: false,
-          samPresent: false,
-          utilmanBypassAvailable: false,
-          bootRiskNotes: ['custom-service-always-restart', 'remote-session-guard'],
-        }],
-        recommendedBootRoute: 'directSystem',
-      },
-    })} />);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          selectedSource: {
+            id: 'source-1',
+            name: 'CentOS 镜像',
+            kind: 'E01',
+            platform: 'LINUX',
+            partitionCount: 3,
+          },
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 5,
+                platform: 'linux',
+                osdataPresent: false,
+                samPresent: false,
+                utilmanBypassAvailable: false,
+                bootRiskNotes: ['custom-service-always-restart', 'remote-session-guard'],
+              },
+            ],
+            recommendedBootRoute: 'directSystem',
+          },
+        })}
+      />,
+    );
 
     expect(screen.getByText('自定义服务持续重启')).toBeInTheDocument();
     expect(screen.getByText('远程会话防护')).toBeInTheDocument();

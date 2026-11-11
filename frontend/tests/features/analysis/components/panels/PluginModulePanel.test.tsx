@@ -48,10 +48,7 @@ function moduleFixture(overrides: Partial<PluginModule> = {}): PluginModule {
   };
 }
 
-function queryState(
-  entries: PluginArtifactEntry[],
-  overrides: Record<string, unknown> = {},
-) {
+function queryState(entries: PluginArtifactEntry[], overrides: Record<string, unknown> = {}) {
   return {
     data: {
       pluginId: 'plugin-prefetch',
@@ -109,10 +106,12 @@ describe('PluginModulePanel', () => {
   });
 
   it('renders header with display name, version and warnings', () => {
-    render(createElement(PluginModulePanel, {
-      dataSourceId: 'ds-1',
-      module: moduleFixture({ warnings: ['family 白名单拒绝: Foo'] }),
-    }));
+    render(
+      createElement(PluginModulePanel, {
+        dataSourceId: 'ds-1',
+        module: moduleFixture({ warnings: ['family 白名单拒绝: Foo'] }),
+      }),
+    );
 
     expect(screen.getByText('Prefetch 插件')).toBeDefined();
     expect(screen.getByText('v1.2.3')).toBeDefined();
@@ -120,15 +119,17 @@ describe('PluginModulePanel', () => {
   });
 
   it('renders one table section per declared family', () => {
-    render(createElement(PluginModulePanel, {
-      dataSourceId: 'ds-1',
-      module: moduleFixture({
-        families: [
-          { family: 'ProgramExecution', count: 2 },
-          { family: 'UserActivity', count: 1 },
-        ],
+    render(
+      createElement(PluginModulePanel, {
+        dataSourceId: 'ds-1',
+        module: moduleFixture({
+          families: [
+            { family: 'ProgramExecution', count: 2 },
+            { family: 'UserActivity', count: 1 },
+          ],
+        }),
       }),
-    }));
+    );
 
     expect(screen.getByText('ProgramExecution (2)')).toBeDefined();
     expect(screen.getByText('UserActivity (1)')).toBeDefined();
@@ -136,14 +137,14 @@ describe('PluginModulePanel', () => {
   });
 
   it('renders fixed columns plus dynamic attrs columns from loaded rows', () => {
-    mocks.usePluginFamilyEntries.mockReturnValue(queryState([
-      entry('a1', { exeName: 'APP.EXE', runCount: 3 }),
-    ]));
+    mocks.usePluginFamilyEntries.mockReturnValue(queryState([entry('a1', { exeName: 'APP.EXE', runCount: 3 })]));
 
-    render(createElement(PluginModulePanel, {
-      dataSourceId: 'ds-1',
-      module: moduleFixture(),
-    }));
+    render(
+      createElement(PluginModulePanel, {
+        dataSourceId: 'ds-1',
+        module: moduleFixture(),
+      }),
+    );
 
     // Filter-bar select labels repeat filterable column titles; pin to the header cell.
     expect(screen.getByRole('columnheader', { name: '标题' })).toBeDefined();
@@ -159,14 +160,14 @@ describe('PluginModulePanel', () => {
   });
 
   it('expands the full attrs detail when a row is clicked', () => {
-    mocks.usePluginFamilyEntries.mockReturnValue(queryState([
-      entry('a1', { exeName: 'APP.EXE', runCount: 3 }),
-    ]));
+    mocks.usePluginFamilyEntries.mockReturnValue(queryState([entry('a1', { exeName: 'APP.EXE', runCount: 3 })]));
 
-    render(createElement(PluginModulePanel, {
-      dataSourceId: 'ds-1',
-      module: moduleFixture(),
-    }));
+    render(
+      createElement(PluginModulePanel, {
+        dataSourceId: 'ds-1',
+        module: moduleFixture(),
+      }),
+    );
 
     expect(screen.queryByText('属性明细')).toBeNull();
     fireEvent.click(screen.getByRole('cell', { name: 'title-a1' }));
@@ -177,26 +178,32 @@ describe('PluginModulePanel', () => {
   });
 
   it('renders the empty state when the family has no entries', () => {
-    render(createElement(PluginModulePanel, {
-      dataSourceId: 'ds-1',
-      module: moduleFixture(),
-    }));
+    render(
+      createElement(PluginModulePanel, {
+        dataSourceId: 'ds-1',
+        module: moduleFixture(),
+      }),
+    );
 
     expect(screen.getByText('暂无插件痕迹')).toBeDefined();
   });
 
   it('renders the error state and retries the initial load', () => {
     const refetch = vi.fn();
-    mocks.usePluginFamilyEntries.mockReturnValue(queryState([], {
-      data: undefined,
-      isError: true,
-      refetch,
-    }));
+    mocks.usePluginFamilyEntries.mockReturnValue(
+      queryState([], {
+        data: undefined,
+        isError: true,
+        refetch,
+      }),
+    );
 
-    render(createElement(PluginModulePanel, {
-      dataSourceId: 'ds-1',
-      module: moduleFixture(),
-    }));
+    render(
+      createElement(PluginModulePanel, {
+        dataSourceId: 'ds-1',
+        module: moduleFixture(),
+      }),
+    );
 
     expect(screen.getByText('插件痕迹加载失败。')).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
@@ -204,9 +211,8 @@ describe('PluginModulePanel', () => {
   });
 
   it('shows load progress while more rows remain on the backend', () => {
-    mocks.usePluginFamilyEntries.mockReturnValue(queryState(
-      [entry('a1')],
-      {
+    mocks.usePluginFamilyEntries.mockReturnValue(
+      queryState([entry('a1')], {
         data: {
           pluginId: 'plugin-prefetch',
           family: 'ProgramExecution',
@@ -215,41 +221,49 @@ describe('PluginModulePanel', () => {
           entries: [entry('a1')],
         },
         hasNextPage: true,
-      },
-    ));
+      }),
+    );
 
-    render(createElement(PluginModulePanel, {
-      dataSourceId: 'ds-1',
-      module: moduleFixture(),
-    }));
+    render(
+      createElement(PluginModulePanel, {
+        dataSourceId: 'ds-1',
+        module: moduleFixture(),
+      }),
+    );
 
     expect(screen.getByText('已加载 1 / 5')).toBeDefined();
   });
 
   it('shows the loading placeholder while the first page is in flight', () => {
-    mocks.usePluginFamilyEntries.mockReturnValue(queryState([], {
-      data: undefined,
-      isLoading: true,
-    }));
+    mocks.usePluginFamilyEntries.mockReturnValue(
+      queryState([], {
+        data: undefined,
+        isLoading: true,
+      }),
+    );
 
-    render(createElement(PluginModulePanel, {
-      dataSourceId: 'ds-1',
-      module: moduleFixture(),
-    }));
+    render(
+      createElement(PluginModulePanel, {
+        dataSourceId: 'ds-1',
+        module: moduleFixture(),
+      }),
+    );
 
     expect(screen.getByText('正在加载插件痕迹...')).toBeDefined();
   });
 
   it('uses the dedicated WeChat workspace for the first-party WeChat plugin', () => {
-    render(createElement(PluginModulePanel, {
-      dataSourceId: 'ds-1',
-      module: moduleFixture({
-        pluginId: 'meow.plugin.wechat',
-        displayName: '微信',
-        families: [{ family: 'WeChatMessage', count: 0 }],
-        totalCount: 0,
+    render(
+      createElement(PluginModulePanel, {
+        dataSourceId: 'ds-1',
+        module: moduleFixture({
+          pluginId: 'meow.plugin.wechat',
+          displayName: '微信',
+          families: [{ family: 'WeChatMessage', count: 0 }],
+          totalCount: 0,
+        }),
       }),
-    }));
+    );
 
     expect(screen.getByRole('tab', { name: '聊天' })).toBeDefined();
     expect(screen.getByRole('tab', { name: '联系人' })).toBeDefined();
@@ -276,10 +290,12 @@ describe('PluginModulePanel', () => {
       data: recovered,
       error: null,
     });
-    render(createElement(PluginModulePanel, {
-      dataSourceId: 'ds-1',
-      module: moduleFixture({ pluginId: 'meow.plugin.wechat', displayName: '微信' }),
-    }));
+    render(
+      createElement(PluginModulePanel, {
+        dataSourceId: 'ds-1',
+        module: moduleFixture({ pluginId: 'meow.plugin.wechat', displayName: '微信' }),
+      }),
+    );
     fireEvent.change(screen.getByLabelText('输入文件路径'), {
       target: { value: 'D:/wechat.raw' },
     });

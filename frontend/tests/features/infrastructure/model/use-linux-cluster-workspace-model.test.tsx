@@ -75,18 +75,20 @@ const summary = (overrides: Partial<LinuxEvidenceSetSummary> = {}): LinuxEvidenc
     member({ memberIndex: 1, dataSourceId: null, sourceName: 'node-b' }),
     member({ memberIndex: 2, dataSourceId: 'source-missing', sourceName: 'node-c' }),
   ],
-  scopes: [{
-    id: 'scope:host',
-    kind: 'physical_host',
-    name: 'node-a',
-    identityState: 'verified',
-    status: 'ready',
-    evidenceCompleteness: 'complete',
-    memberCount: 1,
-    memberSourceIds: ['source-1'],
-    memberRoles: [],
-    diagnostics: [],
-  }],
+  scopes: [
+    {
+      id: 'scope:host',
+      kind: 'physical_host',
+      name: 'node-a',
+      identityState: 'verified',
+      status: 'ready',
+      evidenceCompleteness: 'complete',
+      memberCount: 1,
+      memberSourceIds: ['source-1'],
+      memberRoles: [],
+      diagnostics: [],
+    },
+  ],
   edges: [],
   derivedSources: [],
   diagnostics: [],
@@ -104,10 +106,26 @@ describe('useLinuxClusterWorkspaceModel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.currentCase.mockReturnValue(queryResult({ id: 'case-1', name: 'cluster case' }));
-    mocks.dataSources.mockReturnValue(queryResult([
-      { id: 'source-1', name: 'node-a image', fileCount: 10, evidenceSize: 1024, platform: 'linux', importState: 'ready' },
-      { id: 'source-2', name: 'node-b image', fileCount: 5, evidenceSize: 512, platform: 'linux', importState: 'ready' },
-    ]));
+    mocks.dataSources.mockReturnValue(
+      queryResult([
+        {
+          id: 'source-1',
+          name: 'node-a image',
+          fileCount: 10,
+          evidenceSize: 1024,
+          platform: 'linux',
+          importState: 'ready',
+        },
+        {
+          id: 'source-2',
+          name: 'node-b image',
+          fileCount: 5,
+          evidenceSize: 512,
+          platform: 'linux',
+          importState: 'ready',
+        },
+      ]),
+    );
     mocks.graph.mockResolvedValue({ nodes: [], edges: [] });
     mocks.artifactSummary.mockResolvedValue({});
     mocks.listSets.mockResolvedValue(listItems);
@@ -198,9 +216,11 @@ describe('useLinuxClusterWorkspaceModel', () => {
     const queryKey = ['linux-evidence-set-summary', 'case-1', 'set-1'];
     await waitFor(() => expect(queryClient.getQueryCache().find({ queryKey })).toBeDefined());
     const query = queryClient.getQueryCache().find({ queryKey })!;
-    const interval = (query.options as unknown as {
-      refetchInterval?: (value: { state: { data?: LinuxEvidenceSetSummary } }) => number | false | undefined;
-    }).refetchInterval;
+    const interval = (
+      query.options as unknown as {
+        refetchInterval?: (value: { state: { data?: LinuxEvidenceSetSummary } }) => number | false | undefined;
+      }
+    ).refetchInterval;
     expect(interval).toBeTypeOf('function');
 
     expect(interval!({ state: { data: summary({ members: [member({ hashStatus: 'pending' })] }) } })).toBe(2_000);

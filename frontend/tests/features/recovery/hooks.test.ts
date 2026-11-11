@@ -2,11 +2,7 @@ import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type {
-  DataSourceSummary,
-  DeletedFileRecovery,
-  DeletedRecoveryPage,
-} from '@/types/models';
+import type { DataSourceSummary, DeletedFileRecovery, DeletedRecoveryPage } from '@/types/models';
 import { useDeletedRecoveryModel } from '@/features/recovery/hooks';
 
 const mocks = vi.hoisted(() => ({
@@ -96,16 +92,18 @@ function recovery(overrides: Partial<DeletedFileRecovery> = {}): DeletedFileReco
     allocationState: 'free',
     recoveryMethod: 'ext4_jbd2_deleted_inode',
     confidence: 0.9,
-    provenanceRanges: [{
-      ordinal: 1,
-      rangeRole: 'content',
-      sourceKind: 'filesystem',
-      logicalOffset: 0,
-      sourceOffset: 4096,
-      length: 4,
-      allocationState: 'free',
-      sha256: 'b'.repeat(64),
-    }],
+    provenanceRanges: [
+      {
+        ordinal: 1,
+        rangeRole: 'content',
+        sourceKind: 'filesystem',
+        logicalOffset: 0,
+        sourceOffset: 4096,
+        length: 4,
+        allocationState: 'free',
+        sha256: 'b'.repeat(64),
+      },
+    ],
     warnings: [],
     ...overrides,
   };
@@ -238,19 +236,16 @@ describe('useDeletedRecoveryModel', () => {
 
     await waitFor(() => expect(mocks.exportDeletedRecovery).toHaveBeenCalledTimes(1));
     expect(mocks.saveDialog).toHaveBeenCalledWith({ defaultPath: 'deleted.bin' });
-    expect(mocks.exportDeletedRecovery).toHaveBeenCalledWith(
-      source.id,
-      recoveryId,
-      'D:/exports/deleted.bin',
-      false,
-    );
+    expect(mocks.exportDeletedRecovery).toHaveBeenCalledWith(source.id, recoveryId, 'D:/exports/deleted.bin', false);
   });
 
   it('runs a scan against the selected source partition', async () => {
-    mocks.listDeletedRecoveries.mockRejectedValueOnce({
-      code: 'RECOVERY_SCAN_NOT_FOUND',
-      message: 'scan not found',
-    }).mockResolvedValue(recoveryPage([]));
+    mocks.listDeletedRecoveries
+      .mockRejectedValueOnce({
+        code: 'RECOVERY_SCAN_NOT_FOUND',
+        message: 'scan not found',
+      })
+      .mockResolvedValue(recoveryPage([]));
     mocks.runDeletedRecovery.mockResolvedValue({
       dataSourceId: source.id,
       scans: [],

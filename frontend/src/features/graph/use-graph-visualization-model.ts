@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCurrentCase } from '@/features/case/hooks';
-import {
-  useGraphQuery,
-  useGraphSnapshot,
-  useNodeNeighborhood,
-  useProvenanceChain,
-} from '@/features/graph/hooks';
+import { useGraphQuery, useGraphSnapshot, useNodeNeighborhood, useProvenanceChain } from '@/features/graph/hooks';
 import { ALL_EDGE_TYPES, buildEdgeMap, buildNodeMap } from '@/features/graph/logic/graph-utils';
 import { MAX_GRAPH_EDGES, MAX_GRAPH_NODES, mergeGraphData, type GraphData } from '@/features/graph/logic/graph-data';
 import type { EdgeType } from '@/types/models';
@@ -39,11 +34,7 @@ export function useGraphVisualizationModel() {
     },
     caseId,
   );
-  const neighborhood = useNodeNeighborhood(
-    expandTarget?.nodeId ?? '',
-    expandTarget?.depth ?? 1,
-    caseId,
-  );
+  const neighborhood = useNodeNeighborhood(expandTarget?.nodeId ?? '', expandTarget?.depth ?? 1, caseId);
   const provenance = useProvenanceChain(selectedEdgeId, caseId);
 
   useEffect(() => {
@@ -71,9 +62,7 @@ export function useGraphVisualizationModel() {
     setGraphData({
       nodes: nodes.slice(0, MAX_GRAPH_NODES),
       edges: edges.slice(0, MAX_GRAPH_EDGES),
-      truncated: initialQuery.data.truncated
-        || nodes.length > MAX_GRAPH_NODES
-        || edges.length > MAX_GRAPH_EDGES,
+      truncated: initialQuery.data.truncated || nodes.length > MAX_GRAPH_NODES || edges.length > MAX_GRAPH_EDGES,
     });
     setSelectedNodeId(undefined);
     setSelectedEdgeId(undefined);

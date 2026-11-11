@@ -8,8 +8,12 @@ import i18n from '@/i18n';
 
 describe('registry browser wire and synthetic adapter', () => {
   it('preserves the shared Rust session shape and decimal FILETIME', () => {
-    const session: RegistryHiveSession = { ...wire.session, source: { ...wire.session.source, view: 'base' },
-      hive: { ...wire.session.hive, readState: 'readable' }, rootKey: { ...wire.session.rootKey, readState: 'readable', overlaySource: 'base' } };
+    const session: RegistryHiveSession = {
+      ...wire.session,
+      source: { ...wire.session.source, view: 'base' },
+      hive: { ...wire.session.hive, readState: 'readable' },
+      rootKey: { ...wire.session.rootKey, readState: 'readable', overlaySource: 'base' },
+    };
     expect(JSON.parse(JSON.stringify(session))).toEqual(wire.session);
     expect(session.rootKey.lastWriteFiletime).toBe('133700000000000001');
     expect(registryFiletimeUtc(session.rootKey.lastWriteFiletime)).toMatch(/Z$/);
@@ -26,9 +30,17 @@ describe('registry browser wire and synthetic adapter', () => {
     expect(users).toHaveLength(2);
     expect(new Set(users.map((hive) => hive.fileId)).size).toBe(2);
     const session = await client.openHive({ fileId: hives.hives[0].fileId, view: 'base' });
-    const key = await client.resolveKey({ sessionId: session.sessionId, keyPath: 'Microsoft\\Windows\\CurrentVersion' });
+    const key = await client.resolveKey({
+      sessionId: session.sessionId,
+      keyPath: 'Microsoft\\Windows\\CurrentVersion',
+    });
     const first = await client.listValues({ sessionId: session.sessionId, keyId: key.keyId, limit: 2 });
-    const second = await client.listValues({ sessionId: session.sessionId, keyId: key.keyId, limit: 2, cursor: first.nextCursor });
+    const second = await client.listValues({
+      sessionId: session.sessionId,
+      keyId: key.keyId,
+      limit: 2,
+      cursor: first.nextCursor,
+    });
     expect(first.values.map((value) => value.name)).toEqual(['', 'ProductName']);
     expect(second.values.map((value) => value.typeName)).toEqual(['REG_EXPAND_SZ', 'REG_QWORD']);
     expect(first.coverage.declaredCount).toBe(7);
@@ -47,7 +59,9 @@ describe('registry browser wire and synthetic adapter', () => {
     expect(first.bytes.slice(0, 4)).toEqual([0, 1, 2, 3]);
     expect(first.eof).toBe(false);
     expect(second.eof).toBe(true);
-    await expect(client.readValueRange({ ...request, length: 65537, offset: 0 })).rejects.toMatchObject({ code: 'invalidRequest' });
+    await expect(client.readValueRange({ ...request, length: 65537, offset: 0 })).rejects.toMatchObject({
+      code: 'invalidRequest',
+    });
     await client.closeHive({ sessionId: session.sessionId });
     await expect(client.readValueRange({ ...request, offset: 0 })).rejects.toMatchObject({ code: 'expiredSession' });
   });
@@ -71,7 +85,13 @@ describe('registry browser wire and synthetic adapter', () => {
   it('preserves UTF-16 code units including a supplementary-plane character', async () => {
     const client = createRegistryBrowserMock();
     const session = await client.openHive({ fileId: fixture.hives[0].fileId, view: 'base' });
-    const range = await client.readValueRange({ sessionId: session.sessionId, keyId: 'current-version', valueId: 'unicode', offset: 0, length: 64 });
+    const range = await client.readValueRange({
+      sessionId: session.sessionId,
+      keyId: 'current-version',
+      valueId: 'unicode',
+      offset: 0,
+      length: 64,
+    });
     expect(range.bytes).toEqual([0x3a, 0x79, 0x8b, 0x4f, 0x3d, 0xd8, 0x75, 0xdd, 0, 0]);
     expect(range.decodedText).toBe('示例🕵');
   });

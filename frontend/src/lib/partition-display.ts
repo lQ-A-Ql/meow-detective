@@ -39,30 +39,23 @@ function normalizePartitionLabel(value?: string) {
 }
 
 function isRecoveryPartition(partition: DataSourcePartition) {
-  return [
-    partition.name,
-    partition.filesystem,
-    partition.kindLabel,
-  ].some((value) => normalizePartitionLabel(value) === 'RECOVERY');
+  return [partition.name, partition.filesystem, partition.kindLabel].some(
+    (value) => normalizePartitionLabel(value) === 'RECOVERY',
+  );
 }
 
 export function partitionDisplayLabel(partition: DataSourcePartition) {
   if (isRecoveryPartition(partition)) {
     return 'RECOVERY';
   }
-  return normalizePartitionLabel(partition.filesystem)
-    ?? normalizePartitionLabel(partition.kindLabel)
-    ?? 'UNKNOWN';
+  return normalizePartitionLabel(partition.filesystem) ?? normalizePartitionLabel(partition.kindLabel) ?? 'UNKNOWN';
 }
 
 export function formatPartitionDisplayName(partition: DataSourcePartition) {
   return i18n.t('common.partition.display', { index: partition.index, label: partitionDisplayLabel(partition) });
 }
 
-export function formatPartitionRootDisplayName(
-  rootName: string,
-  partitions: DataSourcePartition[] = [],
-) {
+export function formatPartitionRootDisplayName(rootName: string, partitions: DataSourcePartition[] = []) {
   const index = partitionIndexFromRootName(rootName);
   if (index === undefined) {
     return rootName;

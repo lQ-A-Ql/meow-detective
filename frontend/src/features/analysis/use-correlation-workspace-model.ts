@@ -14,7 +14,6 @@ export function useCorrelationWorkspaceModel({
   refreshing?: boolean;
   onJumpToTarget?: (route: string, targetId: string) => void;
 }) {
-
   const { t } = useTranslation();
 
   // A partial payload (older backend, preview harness) must not blank the whole analysis route:
@@ -41,12 +40,7 @@ export function useCorrelationWorkspaceModel({
 
   const [confidenceFilter, setConfidenceFilter] = useState<'all' | CorrelationConfidence>('all');
 
-
-  const nodeMap = useMemo(
-    () => new Map(snapshot.nodes.map((node) => [node.id, node])),
-    [snapshot.nodes],
-  );
-
+  const nodeMap = useMemo(() => new Map(snapshot.nodes.map((node) => [node.id, node])), [snapshot.nodes]);
 
   const filteredLeads = useMemo(() => {
     const normalizedSearch = leadSearch.trim().toLowerCase();
@@ -69,9 +63,9 @@ export function useCorrelationWorkspaceModel({
           return false;
         }
         return (
-          node.sourceObjectId === lead.primaryFileId
-          || node.id === lead.primaryFileId
-          || node.id === `file:${lead.primaryFileId}`
+          node.sourceObjectId === lead.primaryFileId ||
+          node.id === lead.primaryFileId ||
+          node.id === `file:${lead.primaryFileId}`
         );
       });
       const supportingNodes = lead.supportingNodeIds
@@ -96,7 +90,6 @@ export function useCorrelationWorkspaceModel({
     });
   }, [confidenceFilter, focusMode, leadSearch, nodeMap, snapshot.leads, snapshot.nodes]);
 
-
   useEffect(() => {
     if (filteredLeads.length === 0) {
       setSelectedLeadId(undefined);
@@ -107,15 +100,12 @@ export function useCorrelationWorkspaceModel({
     }
   }, [filteredLeads, selectedLeadId]);
 
-
   const jumpToTarget = onJumpToTarget ?? (() => undefined);
-
 
   const selectedLead = useMemo(
     () => filteredLeads.find((lead) => lead.id === selectedLeadId) ?? filteredLeads[0],
     [filteredLeads, selectedLeadId],
   );
-
 
   const primaryFileNode = useMemo(() => {
     if (!selectedLead) {
@@ -126,13 +116,12 @@ export function useCorrelationWorkspaceModel({
         return false;
       }
       return (
-        node.sourceObjectId === selectedLead.primaryFileId
-        || node.id === selectedLead.primaryFileId
-        || node.id === `file:${selectedLead.primaryFileId}`
+        node.sourceObjectId === selectedLead.primaryFileId ||
+        node.id === selectedLead.primaryFileId ||
+        node.id === `file:${selectedLead.primaryFileId}`
       );
     });
   }, [selectedLead, snapshot.nodes]);
-
 
   const selectedSupportingNodes = useMemo(() => {
     if (!selectedLead) {
@@ -142,7 +131,6 @@ export function useCorrelationWorkspaceModel({
     return snapshot.nodes.filter((node) => supportingIds.has(node.id));
   }, [selectedLead, snapshot.nodes]);
 
-
   const selectedLeadEdges = useMemo(() => {
     if (!selectedLead) {
       return [];
@@ -151,11 +139,8 @@ export function useCorrelationWorkspaceModel({
     if (primaryFileNode) {
       relatedNodeIds.add(primaryFileNode.id);
     }
-    return snapshot.edges.filter(
-      (edge) => relatedNodeIds.has(edge.fromNodeId) || relatedNodeIds.has(edge.toNodeId),
-    );
+    return snapshot.edges.filter((edge) => relatedNodeIds.has(edge.fromNodeId) || relatedNodeIds.has(edge.toNodeId));
   }, [primaryFileNode, selectedLead, snapshot.edges]);
-
 
   const relatedClusters = useMemo(() => {
     if (!selectedLead) {
@@ -164,12 +149,10 @@ export function useCorrelationWorkspaceModel({
     return snapshot.clusters.filter((cluster) => cluster.primaryFileId === selectedLead.primaryFileId);
   }, [selectedLead, snapshot.clusters]);
 
-
   const filteredClusters = useMemo(() => {
     const primaryFileIds = new Set(filteredLeads.map((lead) => lead.primaryFileId));
     return snapshot.clusters.filter((cluster) => primaryFileIds.has(cluster.primaryFileId));
   }, [filteredLeads, snapshot.clusters]);
-
 
   const visibleNodeIds = useMemo(() => {
     const ids = new Set<string>();
@@ -182,7 +165,6 @@ export function useCorrelationWorkspaceModel({
     }
     return ids;
   }, [filteredLeads]);
-
 
   const distributionNodes = useMemo(() => {
     const focusedNodes = snapshot.nodes.filter((node) => {
@@ -197,11 +179,7 @@ export function useCorrelationWorkspaceModel({
     return snapshot.nodes.slice(0, 8);
   }, [snapshot.nodes, visibleNodeIds]);
 
-
-  const reviewLeadCount = useMemo(
-    () => snapshot.leads.filter((lead) => isReviewLead(lead)).length,
-    [snapshot.leads],
-  );
+  const reviewLeadCount = useMemo(() => snapshot.leads.filter((lead) => isReviewLead(lead)).length, [snapshot.leads]);
 
   const highConfidenceLeadCount = useMemo(
     () => snapshot.leads.filter((lead) => isHighConfidenceLead(lead)).length,
@@ -212,5 +190,29 @@ export function useCorrelationWorkspaceModel({
     () => snapshot.familyCoverage.filter((item) => item.status === 'covered').length,
     [snapshot.familyCoverage],
   );
-return { onRefresh, refreshing, t, snapshot, setSelectedLeadId, leadSearch, setLeadSearch, focusMode, setFocusMode, confidenceFilter, setConfidenceFilter, filteredLeads, jumpToTarget, selectedLead, primaryFileNode, selectedSupportingNodes, selectedLeadEdges, relatedClusters, filteredClusters, distributionNodes, reviewLeadCount, highConfidenceLeadCount, coveredFamilyCount };
+  return {
+    onRefresh,
+    refreshing,
+    t,
+    snapshot,
+    setSelectedLeadId,
+    leadSearch,
+    setLeadSearch,
+    focusMode,
+    setFocusMode,
+    confidenceFilter,
+    setConfidenceFilter,
+    filteredLeads,
+    jumpToTarget,
+    selectedLead,
+    primaryFileNode,
+    selectedSupportingNodes,
+    selectedLeadEdges,
+    relatedClusters,
+    filteredClusters,
+    distributionNodes,
+    reviewLeadCount,
+    highConfidenceLeadCount,
+    coveredFamilyCount,
+  };
 }

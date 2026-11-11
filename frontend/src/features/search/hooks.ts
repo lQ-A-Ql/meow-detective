@@ -34,22 +34,22 @@ export function useInfiniteSearchResults(
 ) {
   return useInfiniteQuery({
     queryKey: ['search', caseId, 'infinite', query, pageSize, options],
-    initialPageParam: { cursor: undefined as string | undefined, limit: Math.max(1, Math.min(pageSize, MAX_CONTINUATION_PAGE_SIZE)) },
+    initialPageParam: {
+      cursor: undefined as string | undefined,
+      limit: Math.max(1, Math.min(pageSize, MAX_CONTINUATION_PAGE_SIZE)),
+    },
     queryFn: async ({ pageParam, signal }) => {
-      const result = await searchFiles(
-        query,
-        0,
-        pageParam.limit,
-        pageParam.cursor,
-        options,
-      );
+      const result = await searchFiles(query, 0, pageParam.limit, pageParam.cursor, options);
       signal.throwIfAborted();
       return result;
     },
     getNextPageParam: (lastPage, pages) => {
       const loaded = pages.reduce((count, page) => count + page.items.length, 0);
       if (!lastPage.nextCursor || lastPage.items.length === 0 || loaded >= MAX_LOADED_SEARCH_RESULTS) return undefined;
-      return { cursor: lastPage.nextCursor, limit: Math.min(pageSize * 5, MAX_CONTINUATION_PAGE_SIZE, MAX_LOADED_SEARCH_RESULTS - loaded) };
+      return {
+        cursor: lastPage.nextCursor,
+        limit: Math.min(pageSize * 5, MAX_CONTINUATION_PAGE_SIZE, MAX_LOADED_SEARCH_RESULTS - loaded),
+      };
     },
     enabled: Boolean(caseId),
     retry: false,

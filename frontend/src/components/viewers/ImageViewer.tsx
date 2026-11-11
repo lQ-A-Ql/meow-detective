@@ -12,7 +12,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { ZoomIn, ZoomOut, RotateCw, Maximize, Download, Image }  from '@/components/icons';
+import { ZoomIn, ZoomOut, RotateCw, Maximize, Download, Image } from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 import { useTranslation } from 'react-i18next';
 
@@ -62,19 +62,22 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
   }, []);
 
   // 图片加载错误
-  const handleError = useCallback((e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    setIsLoading(false);
-    const target = e.target as HTMLImageElement;
-    
-    // 提供更详细的错误信息
-    if (!target.src || target.src === 'about:blank') {
-      setError(t('media.errors.imageInvalid'));
-    } else if (target.src.startsWith('asset://') && !target.complete) {
-      setError(t('media.errors.imageTimeout'));
-    } else {
-      setError(t('media.errors.imageUnsupported'));
-    }
-  }, [t]);
+  const handleError = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+      setIsLoading(false);
+      const target = e.target as HTMLImageElement;
+
+      // 提供更详细的错误信息
+      if (!target.src || target.src === 'about:blank') {
+        setError(t('media.errors.imageInvalid'));
+      } else if (target.src.startsWith('asset://') && !target.complete) {
+        setError(t('media.errors.imageTimeout'));
+      } else {
+        setError(t('media.errors.imageUnsupported'));
+      }
+    },
+    [t],
+  );
 
   // 鼠标滚轮缩放
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -94,7 +97,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
         });
       }
     },
-    [position]
+    [position],
   );
 
   // 鼠标拖拽中
@@ -113,7 +116,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
         });
       }
     },
-    [isDragging, dragStart, imageSize, scale]
+    [isDragging, dragStart, imageSize, scale],
   );
 
   // 鼠标拖拽结束
@@ -164,9 +167,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
         >
           <ZoomIn size={14} />
         </Button>
-        <span className="min-w-[3.5rem] text-center font-mono text-forensics-muted">
-          {Math.round(scale * 100)}%
-        </span>
+        <span className="min-w-[3.5rem] text-center font-mono text-forensics-muted">{Math.round(scale * 100)}%</span>
         <Button
           type="button"
           variant="viewerControl"
@@ -205,14 +206,19 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
         </Button>
 
         {/* 重置 */}
-        <Tooltip content={t('media.controls.reset')}><Button aria-label={t('media.controls.reset')}
-          type="button"
-          variant="viewerControl"
-          size="xs"
-          onClick={resetView}
-          className="text-[10px]"
-          title={t('media.controls.reset')}
-        ><ActionIcon name="close" /></Button></Tooltip>
+        <Tooltip content={t('media.controls.reset')}>
+          <Button
+            aria-label={t('media.controls.reset')}
+            type="button"
+            variant="viewerControl"
+            size="xs"
+            onClick={resetView}
+            className="text-[10px]"
+            title={t('media.controls.reset')}
+          >
+            <ActionIcon name="close" />
+          </Button>
+        </Tooltip>
 
         <div className="flex-1" />
 
@@ -239,9 +245,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
       {/* 图片容器 */}
       <div
         ref={containerRef}
-        className={`flex-1 overflow-hidden bg-forensics-panel-strong ${
-          isDragging ? 'cursor-grabbing' : 'cursor-grab'
-        }`}
+        className={`flex-1 overflow-hidden bg-forensics-panel-strong ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -256,11 +260,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
         )}
 
         {/* 错误状态 */}
-        {error && (
-          <div className="flex items-center justify-center h-full text-forensics-error-text">
-            {error}
-          </div>
-        )}
+        {error && <div className="flex items-center justify-center h-full text-forensics-error-text">{error}</div>}
 
         {/* 图片 */}
         <div

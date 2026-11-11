@@ -1,5 +1,5 @@
 import { Children, isValidElement } from 'react';
-import type { IconComponent }  from '@/components/icons';
+import type { IconComponent } from '@/components/icons';
 import type { ReactNode } from 'react';
 import { cn } from '@/app/components/ui/utils';
 

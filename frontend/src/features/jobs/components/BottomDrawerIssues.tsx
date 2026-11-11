@@ -23,8 +23,12 @@ export function BottomDrawerIssues({ errorIssues, warningIssues }: BottomDrawerI
         </span>
       </div>
       <div className="min-w-0 space-y-2 overflow-hidden">
-        {errorIssues.map((issue) => <DrawerIssueCard key={issue.id} issue={issue} />)}
-        {warningIssues.map((issue) => <DrawerIssueCard key={issue.id} issue={issue} />)}
+        {errorIssues.map((issue) => (
+          <DrawerIssueCard key={issue.id} issue={issue} />
+        ))}
+        {warningIssues.map((issue) => (
+          <DrawerIssueCard key={issue.id} issue={issue} />
+        ))}
         {errorIssues.length === 0 && warningIssues.length === 0 ? (
           <div className="border border-forensics-border-light bg-forensics-surface p-3 text-[11px] text-forensics-muted">
             {t('bottomDrawer.issues.empty')}

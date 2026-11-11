@@ -5,20 +5,12 @@ import type { ArtifactRow } from '@/types/models';
 
 export function useArtifactsSelectionModel() {
   const navigate = useNavigate();
-  const selectedArtifactFamily = useSelectionStore(
-    (state) => state.selectedArtifactFamily,
-  );
-  const setSelectedArtifactFamily = useSelectionStore(
-    (state) => state.setSelectedArtifactFamily,
-  );
+  const selectedArtifactFamily = useSelectionStore((state) => state.selectedArtifactFamily);
+  const setSelectedArtifactFamily = useSelectionStore((state) => state.setSelectedArtifactFamily);
   const selectedArtifactId = useSelectionStore((state) => state.selectedArtifactId);
-  const setSelectedArtifactId = useSelectionStore(
-    (state) => state.setSelectedArtifactId,
-  );
+  const setSelectedArtifactId = useSelectionStore((state) => state.setSelectedArtifactId);
   const setSelectedFileId = useSelectionStore((state) => state.setSelectedFileId);
-  const setSelectedTimelineId = useSelectionStore(
-    (state) => state.setSelectedTimelineId,
-  );
+  const setSelectedTimelineId = useSelectionStore((state) => state.setSelectedTimelineId);
 
   const openArtifactSource = useCallback(
     (artifact?: ArtifactRow) => {

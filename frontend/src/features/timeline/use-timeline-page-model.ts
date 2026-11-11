@@ -11,9 +11,7 @@ export function useTimelineSelectionModel() {
   const setSelectedArtifactId = useSelectionStore((state) => state.setSelectedArtifactId);
 
   const eventLookupId =
-    selectedTimelineId && !selectedTimelineId.startsWith('artifact:')
-      ? selectedTimelineId
-      : undefined;
+    selectedTimelineId && !selectedTimelineId.startsWith('artifact:') ? selectedTimelineId : undefined;
 
   const jumpToSource = useCallback(
     (event?: TimelineEvent) => {

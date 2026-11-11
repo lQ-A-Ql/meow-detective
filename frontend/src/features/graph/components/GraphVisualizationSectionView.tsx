@@ -1,4 +1,4 @@
-import { RefreshCw, CircleDot }  from '@/components/icons';
+import { RefreshCw, CircleDot } from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { useTranslation } from 'react-i18next';
@@ -15,7 +15,15 @@ import { GraphNodeDetails } from '@/features/graph/components/GraphNodeDetails';
 import { ALL_EDGE_TYPES, edgeTypeColor, EDGE_TYPE_KEYS } from '@/features/graph/logic/graph-utils';
 import type { GraphVisualizationModel } from '@/features/graph/use-graph-visualization-model';
 
-export function GraphVisualizationSectionView({ model, canvasRef, canvasSize }: { model: GraphVisualizationModel; canvasRef: RefObject<HTMLDivElement>; canvasSize: { width: number; height: number } }) {
+export function GraphVisualizationSectionView({
+  model,
+  canvasRef,
+  canvasSize,
+}: {
+  model: GraphVisualizationModel;
+  canvasRef: RefObject<HTMLDivElement>;
+  canvasSize: { width: number; height: number };
+}) {
   const { t } = useTranslation();
   return (
     <section>
@@ -24,7 +32,9 @@ export function GraphVisualizationSectionView({ model, canvasRef, canvasSize }: 
           <div className="flex items-center gap-2 text-[11px]">
             <span className="text-forensics-muted">{t('graph.depth')}</span>
             <Select value={String(model.maxDepth)} onValueChange={(value) => model.setMaxDepth(Number(value))}>
-              <SelectTrigger size="xs" variant="forensics" className="w-16"><SelectValue /></SelectTrigger>
+              <SelectTrigger size="xs" variant="forensics" className="w-16">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="1">1</SelectItem>
                 <SelectItem value="2">2</SelectItem>
@@ -32,34 +42,52 @@ export function GraphVisualizationSectionView({ model, canvasRef, canvasSize }: 
               </SelectContent>
             </Select>
           </div>
-          <Tooltip content={t('graph.pause')}><Button aria-label={t('graph.pause')}
-            type="button"
-            variant="outline"
-            onClick={model.toggleRunning}
-            disabled={!model.hasNodes}
-            className="rounded-none border-forensics-border bg-forensics-surface text-[11px] hover:bg-forensics-panel-strong"
-          ><ActionIcon name="pause" /></Button></Tooltip>
-          <Tooltip content={t('graph.refresh')}><Button aria-label={t('graph.refresh')}
-            type="button"
-            variant="outline"
-            onClick={model.refresh}
-            disabled={model.isLoadingGraph}
-            className="rounded-none border-forensics-border bg-forensics-surface text-[11px] hover:bg-forensics-panel-strong"
-          ><ActionIcon name="refresh" /></Button></Tooltip>
+          <Tooltip content={t('graph.pause')}>
+            <Button
+              aria-label={t('graph.pause')}
+              type="button"
+              variant="outline"
+              onClick={model.toggleRunning}
+              disabled={!model.hasNodes}
+              className="rounded-none border-forensics-border bg-forensics-surface text-[11px] hover:bg-forensics-panel-strong"
+            >
+              <ActionIcon name="pause" />
+            </Button>
+          </Tooltip>
+          <Tooltip content={t('graph.refresh')}>
+            <Button
+              aria-label={t('graph.refresh')}
+              type="button"
+              variant="outline"
+              onClick={model.refresh}
+              disabled={model.isLoadingGraph}
+              className="rounded-none border-forensics-border bg-forensics-surface text-[11px] hover:bg-forensics-panel-strong"
+            >
+              <ActionIcon name="refresh" />
+            </Button>
+          </Tooltip>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="text-[11px] text-forensics-muted">{t('graph.edgeTypeLabel')}</span>
-        <Tooltip content={t('graph.selectAll') + ' / ' + t('graph.clearAll')}><Button aria-label={t('graph.selectAll') + ' / ' + t('graph.clearAll')}
-          type="button"
-          variant="forensicsGhost"
-          size="compact"
-          onClick={() => model.selectAllEdgeTypes(model.selectedEdgeTypes.length < ALL_EDGE_TYPES.length)}
-          className="text-[10px]"
-        ><CircleDot size={15} /></Button></Tooltip>
+        <Tooltip content={t('graph.selectAll') + ' / ' + t('graph.clearAll')}>
+          <Button
+            aria-label={t('graph.selectAll') + ' / ' + t('graph.clearAll')}
+            type="button"
+            variant="forensicsGhost"
+            size="compact"
+            onClick={() => model.selectAllEdgeTypes(model.selectedEdgeTypes.length < ALL_EDGE_TYPES.length)}
+            className="text-[10px]"
+          >
+            <CircleDot size={15} />
+          </Button>
+        </Tooltip>
         {ALL_EDGE_TYPES.map((type) => (
-          <label key={type} className="flex cursor-pointer items-center gap-1 rounded-none bg-transparent px-2 py-1 text-[10px] hover:bg-forensics-panel-strong">
+          <label
+            key={type}
+            className="flex cursor-pointer items-center gap-1 rounded-none bg-transparent px-2 py-1 text-[10px] hover:bg-forensics-panel-strong"
+          >
             <Checkbox
               checked={model.selectedEdgeTypes.includes(type)}
               onCheckedChange={() => model.toggleEdgeType(type)}
@@ -97,13 +125,17 @@ export function GraphVisualizationSectionView({ model, canvasRef, canvasSize }: 
           {model.isLoadingGraph ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-forensics-surface/60">
               <div className="flex items-center gap-2 rounded-none bg-transparent px-3 py-2 text-[11px]">
-                <RefreshCw size={12} className="opacity-70" />{t('graph.loading')}
+                <RefreshCw size={12} className="opacity-70" />
+                {t('graph.loading')}
               </div>
             </div>
           ) : null}
         </div>
 
-        <ScrollArea className="min-h-0 w-64 shrink-0 border-l border-forensics-divider bg-forensics-surface" viewportClassName="p-3">
+        <ScrollArea
+          className="min-h-0 w-64 shrink-0 border-l border-forensics-divider bg-forensics-surface"
+          viewportClassName="p-3"
+        >
           {model.selectedNode ? (
             <GraphNodeDetails
               node={model.selectedNode}
@@ -145,7 +177,8 @@ function GraphSummary({ model }: { model: GraphVisualizationModel }) {
             [t('graph.stats.density'), model.snapshot.density],
           ].map(([label, value]) => (
             <div key={label} className="flex justify-between">
-              <span>{label}</span><span className="font-mono text-forensics-text">{value}</span>
+              <span>{label}</span>
+              <span className="font-mono text-forensics-text">{value}</span>
             </div>
           ))}
         </div>

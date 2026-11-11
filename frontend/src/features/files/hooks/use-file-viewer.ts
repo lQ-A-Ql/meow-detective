@@ -63,11 +63,7 @@ export function useFileViewer(fileId?: string, enabled = true, caseId?: string) 
       const handle = await openFileHandle(fileId!);
       await adoptPreviewHandle(owner, handle.handleId, signal);
       try {
-        const initialLength = getHexWindowSize(
-          handle.size,
-          preview.maxViewerRangeLength,
-          preview.hexChunkBytes,
-        );
+        const initialLength = getHexWindowSize(handle.size, preview.maxViewerRangeLength, preview.hexChunkBytes);
         const requestedLength = clampRequestedRangeLength(Math.max(1, initialLength));
         const range = await readFileRange({
           handleId: handle.handleId,
@@ -132,12 +128,7 @@ export function useFileViewer(fileId?: string, enabled = true, caseId?: string) 
     const clampedOffset = Math.min(Math.max(0, offset), Math.max(0, handle.size - 1));
     const mode = handle.size <= preview.maxViewerRangeLength ? 'full' : 'chunked';
     const alignedOffset =
-      mode === 'full'
-        ? 0
-        : Math.max(
-            0,
-            Math.floor(clampedOffset / preview.hexChunkBytes) * preview.hexChunkBytes,
-          );
+      mode === 'full' ? 0 : Math.max(0, Math.floor(clampedOffset / preview.hexChunkBytes) * preview.hexChunkBytes);
     if (loadedChunks[alignedOffset]) {
       setActiveOffset(clampedOffset);
       return;
@@ -148,10 +139,12 @@ export function useFileViewer(fileId?: string, enabled = true, caseId?: string) 
     setIsLoadingMore(true);
     setViewerError(undefined);
     try {
-      const length = clampRequestedRangeLength(Math.min(
-        getHexWindowSize(handle.size, preview.maxViewerRangeLength, preview.hexChunkBytes),
-        Math.max(1, handle.size - alignedOffset),
-      ));
+      const length = clampRequestedRangeLength(
+        Math.min(
+          getHexWindowSize(handle.size, preview.maxViewerRangeLength, preview.hexChunkBytes),
+          Math.max(1, handle.size - alignedOffset),
+        ),
+      );
       const range = await readRange(alignedOffset, length);
       if (loadedFileIdRef.current !== requestedFileId) {
         return;
@@ -196,15 +189,11 @@ export function useFileViewer(fileId?: string, enabled = true, caseId?: string) 
 
     const { handle } = baseQuery.data;
     const mode = handle.size <= preview.maxViewerRangeLength ? 'full' : 'chunked';
-    const baseOffset = mode === 'full'
-      ? 0
-      : resolveWindowBaseOffset(activeOffset, preview.hexChunkBytes, loadedChunks);
+    const baseOffset = mode === 'full' ? 0 : resolveWindowBaseOffset(activeOffset, preview.hexChunkBytes, loadedChunks);
     const activeChunk = loadedChunks[baseOffset] ?? baseQuery.data.range;
     const rawBytes = getRawBytes(activeChunk);
     const lines = createHexByteWindowLines(activeChunk?.lines ?? [], rawBytes, baseOffset, handle.size);
-    const isFullyLoaded = loadedRanges.some(
-      (range) => range.start === 0 && range.end >= handle.size,
-    );
+    const isFullyLoaded = loadedRanges.some((range) => range.start === 0 && range.end >= handle.size);
     const firstRange = loadedRanges[0];
     const lastRange = loadedRanges[loadedRanges.length - 1];
 

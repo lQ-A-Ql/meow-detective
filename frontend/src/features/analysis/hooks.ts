@@ -57,12 +57,7 @@ const ALL_EXTRACTION_QUERY_FAMILIES = [
 
 const EXTRACTION_QUERY_FAMILIES: Readonly<Record<string, readonly string[]>> = {
   SystemInformation: ['evidence-classification', 'system-info'],
-  Registry: [
-    'evidence-classification',
-    'system-info',
-    'registry-extraction',
-    'registry-structured',
-  ],
+  Registry: ['evidence-classification', 'system-info', 'registry-extraction', 'registry-structured'],
   BrowserHistory: ['evidence-classification', 'browser-history'],
   Email: ['evidence-classification', 'email-extraction'],
   EventLogs: ['evidence-classification', 'evtx-events'],
@@ -95,7 +90,8 @@ async function refreshExtractionQueries(
     queryClient.invalidateQueries({
       queryKey: ['analysis', family, caseId, request.dataSourceId],
       refetchType: 'active',
-    }));
+    }),
+  );
 
   await Promise.all([
     ...sourceQueries,
@@ -126,10 +122,8 @@ export function useAnalysisSystemInfo(source?: AnalysisSource) {
   return useQuery({
     queryKey: ['analysis', 'system-info', currentCase.data?.id ?? null, dataSourceId ?? null, source?.platform ?? null],
     queryFn: () => getSystemInfo(dataSourceId ?? ''),
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && source?.platform === 'windows',
+    enabled:
+      currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId) && source?.platform === 'windows',
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
@@ -139,12 +133,17 @@ export function useFileClassificationBoard(source?: AnalysisSource, magicLimit =
   const currentCase = useCurrentCase();
   const dataSourceId = source?.id;
   return useQuery({
-    queryKey: ['analysis', 'classification-board', currentCase.data?.id ?? null, dataSourceId ?? null, source?.platform ?? null, magicLimit],
+    queryKey: [
+      'analysis',
+      'classification-board',
+      currentCase.data?.id ?? null,
+      dataSourceId ?? null,
+      source?.platform ?? null,
+      magicLimit,
+    ],
     queryFn: () => getFileClassificationBoard(dataSourceId ?? '', magicLimit),
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && source?.platform === 'windows',
+    enabled:
+      currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId) && source?.platform === 'windows',
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
@@ -154,12 +153,16 @@ export function useEvidenceClassificationSummary(source?: AnalysisSource) {
   const currentCase = useCurrentCase();
   const dataSourceId = source?.id;
   return useQuery({
-    queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null, dataSourceId ?? null, source?.platform ?? null],
+    queryKey: [
+      'analysis',
+      'evidence-classification',
+      currentCase.data?.id ?? null,
+      dataSourceId ?? null,
+      source?.platform ?? null,
+    ],
     queryFn: () => getEvidenceClassificationSummary(dataSourceId ?? ''),
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && source?.platform === 'windows',
+    enabled:
+      currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId) && source?.platform === 'windows',
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
@@ -171,12 +174,21 @@ export function useRegistryExtractionSummary(request: OptionalAnalysisPageReques
   const offset = request.offset ?? 0;
   const limit = request.limit ?? 200;
   return useQuery({
-    queryKey: ['analysis', 'registry-extraction', currentCase.data?.id ?? null, dataSourceId ?? null, request.source?.platform ?? null, offset, limit],
+    queryKey: [
+      'analysis',
+      'registry-extraction',
+      currentCase.data?.id ?? null,
+      dataSourceId ?? null,
+      request.source?.platform ?? null,
+      offset,
+      limit,
+    ],
     queryFn: () => getRegistryExtractionSummary({ dataSourceId: dataSourceId ?? '', offset, limit }),
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && request.source?.platform === 'windows',
+    enabled:
+      currentCase.isSuccess &&
+      Boolean(currentCase.data) &&
+      Boolean(dataSourceId) &&
+      request.source?.platform === 'windows',
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
@@ -186,12 +198,16 @@ export function useRegistryStructuredSummary(source?: AnalysisSource) {
   const currentCase = useCurrentCase();
   const dataSourceId = source?.id;
   return useQuery({
-    queryKey: ['analysis', 'registry-structured', currentCase.data?.id ?? null, dataSourceId ?? null, source?.platform ?? null],
+    queryKey: [
+      'analysis',
+      'registry-structured',
+      currentCase.data?.id ?? null,
+      dataSourceId ?? null,
+      source?.platform ?? null,
+    ],
     queryFn: () => getRegistryStructuredSummary(dataSourceId ?? ''),
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && source?.platform === 'windows',
+    enabled:
+      currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId) && source?.platform === 'windows',
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
@@ -203,12 +219,21 @@ export function useBrowserHistorySummary(request: OptionalAnalysisPageRequest = 
   const offset = request.offset ?? 0;
   const limit = request.limit ?? 200;
   return useQuery({
-    queryKey: ['analysis', 'browser-history', currentCase.data?.id ?? null, dataSourceId ?? null, request.source?.platform ?? null, offset, limit],
+    queryKey: [
+      'analysis',
+      'browser-history',
+      currentCase.data?.id ?? null,
+      dataSourceId ?? null,
+      request.source?.platform ?? null,
+      offset,
+      limit,
+    ],
     queryFn: () => getBrowserHistorySummary({ dataSourceId: dataSourceId ?? '', offset, limit }),
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && request.source?.platform === 'windows',
+    enabled:
+      currentCase.isSuccess &&
+      Boolean(currentCase.data) &&
+      Boolean(dataSourceId) &&
+      request.source?.platform === 'windows',
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
@@ -220,47 +245,62 @@ export function useEmailExtractionSummary(request: OptionalAnalysisPageRequest =
   const offset = request.offset ?? 0;
   const limit = request.limit ?? 200;
   return useQuery({
-    queryKey: ['analysis', 'email-extraction', currentCase.data?.id ?? null, dataSourceId ?? null, request.source?.platform ?? null, offset, limit],
+    queryKey: [
+      'analysis',
+      'email-extraction',
+      currentCase.data?.id ?? null,
+      dataSourceId ?? null,
+      request.source?.platform ?? null,
+      offset,
+      limit,
+    ],
     queryFn: () => getEmailExtractionSummary({ dataSourceId: dataSourceId ?? '', offset, limit }),
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && request.source?.platform === 'windows',
+    enabled:
+      currentCase.isSuccess &&
+      Boolean(currentCase.data) &&
+      Boolean(dataSourceId) &&
+      request.source?.platform === 'windows',
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
-export function useEvtxEventSummary(
-  request: OptionalAnalysisPageRequest & { view?: EvtxEventView } = {},
-) {
+export function useEvtxEventSummary(request: OptionalAnalysisPageRequest & { view?: EvtxEventView } = {}) {
   const currentCase = useCurrentCase();
   const dataSourceId = request.source?.id;
   const view = request.view ?? 'boot';
   const limit = Math.min(request.limit ?? EVTX_PAGE_SIZE, EVTX_PAGE_SIZE);
   const query = useInfiniteQuery({
-    queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null, dataSourceId ?? null, request.source?.platform ?? null, view, limit],
-    queryFn: ({ pageParam }) => getEvtxEventSummary({
-      dataSourceId: dataSourceId ?? '',
+    queryKey: [
+      'analysis',
+      'evtx-events',
+      currentCase.data?.id ?? null,
+      dataSourceId ?? null,
+      request.source?.platform ?? null,
       view,
-      offset: pageParam,
       limit,
-    }),
+    ],
+    queryFn: ({ pageParam }) =>
+      getEvtxEventSummary({
+        dataSourceId: dataSourceId ?? '',
+        view,
+        offset: pageParam,
+        limit,
+      }),
     initialPageParam: request.offset ?? 0,
     getNextPageParam: (lastPage, pages) => {
       const pageItemCount = (page: EvtxEventSummary) =>
-        (page.bootEvents?.length ?? 0)
-        + (page.securityEvents?.length ?? 0)
-        + (page.applicationEvents?.length ?? 0);
+        (page.bootEvents?.length ?? 0) + (page.securityEvents?.length ?? 0) + (page.applicationEvents?.length ?? 0);
       const lastPageItemCount = pageItemCount(lastPage);
       if (lastPageItemCount === 0) return undefined;
       const loaded = pages.reduce((total, page) => total + pageItemCount(page), 0);
       return loaded < lastPage.pageTotal ? (request.offset ?? 0) + loaded : undefined;
     },
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && request.source?.platform === 'windows',
+    enabled:
+      currentCase.isSuccess &&
+      Boolean(currentCase.data) &&
+      Boolean(dataSourceId) &&
+      request.source?.platform === 'windows',
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
@@ -284,12 +324,19 @@ export function usePluginModules(source?: AnalysisSource) {
   const currentCase = useCurrentCase();
   const dataSourceId = source?.id;
   return useQuery({
-    queryKey: ['analysis', 'plugin-modules', currentCase.data?.id ?? null, dataSourceId ?? null, source?.platform ?? null],
+    queryKey: [
+      'analysis',
+      'plugin-modules',
+      currentCase.data?.id ?? null,
+      dataSourceId ?? null,
+      source?.platform ?? null,
+    ],
     queryFn: () => listPluginModules(dataSourceId ?? ''),
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && (source?.platform === 'windows' || source?.platform === 'linux'),
+    enabled:
+      currentCase.isSuccess &&
+      Boolean(currentCase.data) &&
+      Boolean(dataSourceId) &&
+      (source?.platform === 'windows' || source?.platform === 'linux'),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
@@ -306,25 +353,35 @@ export function usePluginFamilyEntries(request: {
   const dataSourceId = request.dataSourceId;
   const limit = Math.min(request.limit ?? PLUGIN_PAGE_SIZE, PLUGIN_PAGE_SIZE);
   const query = useInfiniteQuery({
-    queryKey: ['analysis', 'plugin-family-entries', currentCase.data?.id ?? null, dataSourceId ?? null, request.pluginId ?? null, request.family ?? null, limit],
-    queryFn: ({ pageParam }) => getPluginFamilyEntries({
-      dataSourceId: dataSourceId ?? '',
-      pluginId: request.pluginId ?? '',
-      family: request.family ?? '',
-      offset: pageParam,
+    queryKey: [
+      'analysis',
+      'plugin-family-entries',
+      currentCase.data?.id ?? null,
+      dataSourceId ?? null,
+      request.pluginId ?? null,
+      request.family ?? null,
       limit,
-    }),
+    ],
+    queryFn: ({ pageParam }) =>
+      getPluginFamilyEntries({
+        dataSourceId: dataSourceId ?? '',
+        pluginId: request.pluginId ?? '',
+        family: request.family ?? '',
+        offset: pageParam,
+        limit,
+      }),
     initialPageParam: request.offset ?? 0,
     getNextPageParam: (lastPage, pages) => {
       if (lastPage.entries.length === 0) return undefined;
       const loaded = pages.reduce((total, page) => total + page.entries.length, 0);
       return loaded < lastPage.totalCount ? (request.offset ?? 0) + loaded : undefined;
     },
-    enabled: currentCase.isSuccess
-      && Boolean(currentCase.data)
-      && Boolean(dataSourceId)
-      && Boolean(request.pluginId)
-      && Boolean(request.family),
+    enabled:
+      currentCase.isSuccess &&
+      Boolean(currentCase.data) &&
+      Boolean(dataSourceId) &&
+      Boolean(request.pluginId) &&
+      Boolean(request.family),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
@@ -405,11 +462,7 @@ export function useRunAnalysisExtraction() {
   const currentCase = useCurrentCase();
   return useMutation({
     mutationFn: (request: AnalysisExtractionRequest) => runAnalysisExtraction(request),
-    onSuccess: (_data, variables) => refreshExtractionQueries(
-      qc,
-      currentCase.data?.id ?? null,
-      variables,
-    ),
+    onSuccess: (_data, variables) => refreshExtractionQueries(qc, currentCase.data?.id ?? null, variables),
   });
 }
 
@@ -419,10 +472,6 @@ export function useGenerateAnalysisSummary(dataSourceId?: string) {
   });
 }
 
-export {
-  useAndroidDeviceInfo,
-  useAndroidPackageSummary,
-  useRunAndroidAnalysis,
-} from './hooks/android';
+export { useAndroidDeviceInfo, useAndroidPackageSummary, useRunAndroidAnalysis } from './hooks/android';
 
 export { useLinuxArtifactSummary } from './hooks/linux';

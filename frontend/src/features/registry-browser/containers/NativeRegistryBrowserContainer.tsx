@@ -6,6 +6,9 @@ import { RegistryBrowserContainer } from './RegistryBrowserContainer';
 export function NativeRegistryBrowserContainer({ dataSourceId }: { dataSourceId?: string }) {
   const context = useNativeRegistryContext(dataSourceId);
   const { t } = useTranslation();
-  return context ? <RegistryBrowserContainer client={registryBrowserClient} context={context} />
-    : <p className="registry-browser-message">{t('registryBrowser.errors.sourceUnavailable')}</p>;
+  return context ? (
+    <RegistryBrowserContainer client={registryBrowserClient} context={context} />
+  ) : (
+    <p className="registry-browser-message">{t('registryBrowser.errors.sourceUnavailable')}</p>
+  );
 }

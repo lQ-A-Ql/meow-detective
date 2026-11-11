@@ -21,10 +21,7 @@ import { useFileBrowserCoordinator } from './hooks/use-file-browser-coordinator'
 
 const FILE_BROWSER_PAGE_LIMIT = 500;
 
-function findActivePartitionNode(
-  nodes: ReturnType<typeof useFileTree>['treeNodes'],
-  activeDirectoryId?: string,
-) {
+function findActivePartitionNode(nodes: ReturnType<typeof useFileTree>['treeNodes'], activeDirectoryId?: string) {
   const activeIndex = nodes.findIndex((node) => node.id === activeDirectoryId);
   if (activeIndex < 0) {
     return undefined;
@@ -46,11 +43,7 @@ export function useFileBrowserModel() {
   const setViewerTab = useUiStore((s) => s.setViewerTab);
   const [showHidden, setShowHiddenState] = useState(true);
 
-  const {
-    selectedDirectoryId,
-    selectedFileId,
-    setSelectedTimelineId,
-  } = useFileSelection();
+  const { selectedDirectoryId, selectedFileId, setSelectedTimelineId } = useFileSelection();
 
   const partitions: DataSourcePartition[] = useMemo(
     () => dataSources?.flatMap((source) => source.partitions ?? []) ?? [],
@@ -59,8 +52,13 @@ export function useFileBrowserModel() {
   const fileSortKey = useUiStore((s) => s.fileSortKey);
   const fileSortDirection = useUiStore((s) => s.fileSortDirection);
 
-  const location = useFileBrowserLocation({ caseId: currentCase?.id, showHidden,
-    pageLimit: FILE_BROWSER_PAGE_LIMIT, sortKey: fileSortKey, sortDirection: fileSortDirection });
+  const location = useFileBrowserLocation({
+    caseId: currentCase?.id,
+    showHidden,
+    pageLimit: FILE_BROWSER_PAGE_LIMIT,
+    sortKey: fileSortKey,
+    sortDirection: fileSortDirection,
+  });
   const setSelectedDirectoryId = location.selectDirectory;
   const setSelectedFileId = location.selectFile;
 
@@ -86,8 +84,14 @@ export function useFileBrowserModel() {
   });
 
   const { setShowHidden, handleSort, goToPreviousRows, goToNextRows, activateEntry } = useFileBrowserCoordinator({
-    caseId: currentCase?.id, selectedDirectoryId, selectedFileId, showHidden,
-    onShowHidden: setShowHiddenState, location, tree, pagination,
+    caseId: currentCase?.id,
+    selectedDirectoryId,
+    selectedFileId,
+    showHidden,
+    onShowHidden: setShowHiddenState,
+    location,
+    tree,
+    pagination,
   });
 
   const selectedFile = pagination.rows?.find((row) => row.id === selectedFileId);
@@ -100,9 +104,7 @@ export function useFileBrowserModel() {
     }
     const source = dataSources?.find((item) => item.id === node.dataSourceId);
     const partition = source?.partitions?.find((item) => item.index === partitionIndex);
-    return source && partition
-      ? { dataSourceId: source.id, partition }
-      : undefined;
+    return source && partition ? { dataSourceId: source.id, partition } : undefined;
   }, [dataSources, tree.activeDirectoryId, tree.treeNodes]);
 
   const activePartition = activePartitionContext?.partition;
@@ -133,8 +135,18 @@ export function useFileBrowserModel() {
     viewerTab,
     caseId: currentCase?.id,
   });
-  const ntfsTechnicalQuery = useNtfsTechnicalFile(currentCase?.id, selectedFile?.id, selectedFile?.entryType === 'file');
-  const digestSource = dataSources?.find((source) => source.id === (parseSourceScopedFileId(selectedFile?.id)?.sourceId ?? activePartitionContext?.dataSourceId ?? tree.activeRootNode?.dataSourceId));
+  const ntfsTechnicalQuery = useNtfsTechnicalFile(
+    currentCase?.id,
+    selectedFile?.id,
+    selectedFile?.entryType === 'file',
+  );
+  const digestSource = dataSources?.find(
+    (source) =>
+      source.id ===
+      (parseSourceScopedFileId(selectedFile?.id)?.sourceId ??
+        activePartitionContext?.dataSourceId ??
+        tree.activeRootNode?.dataSourceId),
+  );
   const evidenceDigest = useEvidenceDigestModel(currentCase?.id, selectedFile, digestSource, activePartition?.index);
 
   const onViewTimeline = () => {
@@ -167,9 +179,11 @@ export function useFileBrowserModel() {
     treeNodes: tree.treeNodes,
     sortedRows: pagination.sortedRows,
     activateEntry,
-    directoryLoadErrorText: pagination.rowsError || location.directoryError
-      ? errorMessage(pagination.rowsError ?? location.directoryError) : undefined,
-    retryDirectoryLoad: () => location.directoryError ? location.retryDirectory() : pagination.retryRows(),
+    directoryLoadErrorText:
+      pagination.rowsError || location.directoryError
+        ? errorMessage(pagination.rowsError ?? location.directoryError)
+        : undefined,
+    retryDirectoryLoad: () => (location.directoryError ? location.retryDirectory() : pagination.retryRows()),
     selectedFileId,
     viewerTab,
     fileSortKey: pagination.fileSortKey,

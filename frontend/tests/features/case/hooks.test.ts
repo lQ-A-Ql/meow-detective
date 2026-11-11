@@ -165,9 +165,7 @@ describe('case hooks', () => {
   it('prefetches the file tree after a case is opened', async () => {
     mocks.openCase.mockResolvedValue({ id: 'case-1', name: 'Test Case' });
     const queryClient = createQueryClient();
-    const prefetchSpy = vi
-      .spyOn(queryClient, 'prefetchQuery')
-      .mockResolvedValue(undefined);
+    const prefetchSpy = vi.spyOn(queryClient, 'prefetchQuery').mockResolvedValue(undefined);
     const { result } = renderHook(() => useOpenCase(), {
       wrapper: createWrapper(queryClient),
     });

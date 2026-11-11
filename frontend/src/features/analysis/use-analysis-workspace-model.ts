@@ -30,16 +30,9 @@ import {
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useDeletedRecoveryModel } from '@/features/recovery/hooks';
 import { subscribeToEvent } from '@/lib/events/subscribers';
-import {
-  labeledProgress,
-  useAnalysisStore,
-} from '@/stores/analysis-store';
+import { labeledProgress, useAnalysisStore } from '@/stores/analysis-store';
 import { useUiStore } from '@/stores/ui-store';
-import type {
-  AnalysisExtractionProgress,
-  AndroidAnalysisRun,
-  EvtxEventView,
-} from '@/types/models';
+import type { AnalysisExtractionProgress, AndroidAnalysisRun, EvtxEventView } from '@/types/models';
 
 export function useAnalysisWorkspaceModel() {
   const { t } = useTranslation();
@@ -48,10 +41,12 @@ export function useAnalysisWorkspaceModel() {
   const selectedDataSourceId = useAnalysisStore((state) => state.selectedDataSourceId);
   const setSelectedDataSourceId = useAnalysisStore((state) => state.setSelectedDataSourceId);
   const readyDataSources = useMemo(
-    () => (dataSources ?? []).filter(
-      (source) => source.importState === 'ready'
-        && (source.platform === 'windows' || source.platform === 'linux' || source.platform === 'android'),
-    ),
+    () =>
+      (dataSources ?? []).filter(
+        (source) =>
+          source.importState === 'ready' &&
+          (source.platform === 'windows' || source.platform === 'linux' || source.platform === 'android'),
+      ),
     [dataSources],
   );
   const selectedDataSource = useMemo(
@@ -59,10 +54,7 @@ export function useAnalysisWorkspaceModel() {
     [readyDataSources, selectedDataSourceId],
   );
   const selectedPlatform = selectedDataSource?.platform;
-  const selectedSourceContextKey = analysisSourceContextKey(
-    currentCase.data?.id,
-    selectedDataSource,
-  );
+  const selectedSourceContextKey = analysisSourceContextKey(currentCase.data?.id, selectedDataSource);
   const sourceEpoch = useRef(new AnalysisSourceEpoch(selectedSourceContextKey)).current;
   const extractionOperationRef = useRef<ReturnType<AnalysisSourceEpoch['begin']>>();
   const [analysisRefreshError, setAnalysisRefreshError] = useState<unknown>();
@@ -109,24 +101,22 @@ export function useAnalysisWorkspaceModel() {
   const setDrawerOpen = useUiStore((state) => state.setDrawerOpen);
   const deletedRecovery = useDeletedRecoveryModel(
     selectedDataSource,
-    (selectedPlatform === 'windows' && activeTab === 'deletedRecovery')
-      || (selectedPlatform === 'linux' && activeLinuxTab === 'deletedRecovery'),
+    (selectedPlatform === 'windows' && activeTab === 'deletedRecovery') ||
+      (selectedPlatform === 'linux' && activeLinuxTab === 'deletedRecovery'),
   );
 
-  const analysisMutationPending = evidenceScan.isPending
-    || extractionRun.isPending
-    || androidAnalysisRun.isPending
-    || androidAnalysisRunning
-    || summaryMutation.isPending
-    || extractionRunning
-    || deletedRecovery.scanning
-    || deletedRecovery.reading
-    || deletedRecovery.exporting;
+  const analysisMutationPending =
+    evidenceScan.isPending ||
+    extractionRun.isPending ||
+    androidAnalysisRun.isPending ||
+    androidAnalysisRunning ||
+    summaryMutation.isPending ||
+    extractionRunning ||
+    deletedRecovery.scanning ||
+    deletedRecovery.reading ||
+    deletedRecovery.exporting;
 
-  const labeledExtractionProgress = useMemo(
-    () => labeledProgress(extractionProgress, t),
-    [extractionProgress, t],
-  );
+  const labeledExtractionProgress = useMemo(() => labeledProgress(extractionProgress, t), [extractionProgress, t]);
   const linuxNodeCounts = useMemo<Partial<Record<LinuxAnalysisTabKey, number>>>(() => {
     const summary = selectedPlatform === 'linux' ? linuxSummary.data : undefined;
     const counts: Partial<Record<LinuxAnalysisTabKey, number>> = {};
@@ -140,16 +130,15 @@ export function useAnalysisWorkspaceModel() {
         cron: summary.cronJobCount,
         sudo: summary.sudoEventCount,
         systemConfig: summary.systemConfigCount,
-        webServices: summary.webSiteCount
-          + summary.webAccessLogCount
-          + summary.webErrorLogCount
-          + summary.webFindingCount,
-        mysqlServices: summary.mysqlConfigCount
-          + summary.mysqlLogCount
-          + summary.mysqlFindingCount,
-        services: summary.systemConfigs.filter((row) => row.configKind === 'systemdServiceUnit'
-          && (row.name ?? row.line).endsWith('.service')).length,
-        docker: summary.systemConfigs.filter((row) => row.configKind === 'dockerContainer' || row.configKind === 'dockerImage').length,
+        webServices:
+          summary.webSiteCount + summary.webAccessLogCount + summary.webErrorLogCount + summary.webFindingCount,
+        mysqlServices: summary.mysqlConfigCount + summary.mysqlLogCount + summary.mysqlFindingCount,
+        services: summary.systemConfigs.filter(
+          (row) => row.configKind === 'systemdServiceUnit' && (row.name ?? row.line).endsWith('.service'),
+        ).length,
+        docker: summary.systemConfigs.filter(
+          (row) => row.configKind === 'dockerContainer' || row.configKind === 'dockerImage',
+        ).length,
       });
     }
     if (deletedRecovery.state === 'ready') {
@@ -160,27 +149,26 @@ export function useAnalysisWorkspaceModel() {
 
   const hasCase = Boolean(currentCase.data);
   const loading = currentCase.isLoading;
-  const windowsError = currentCase.error
-    ?? evidenceScan.error
-    ?? extractionRun.error
-    ?? systemInfo.error
-    ?? evidenceSummary.error
-    ?? registrySummary.error
-    ?? browserSummary.error
-    ?? emailSummary.error
-    ?? eventLogSummary.error
-    ?? classificationBoard.error
-    ?? summaryMutation.error
-    ?? analysisRefreshError;
-  const linuxError = currentCase.error
-    ?? extractionRun.error
-    ?? linuxSummary.error
-    ?? analysisRefreshError;
-  const androidError = currentCase.error
-    ?? androidAnalysisRun.error
-    ?? androidDeviceInfo.error
-    ?? androidPackages.error
-    ?? analysisRefreshError;
+  const windowsError =
+    currentCase.error ??
+    evidenceScan.error ??
+    extractionRun.error ??
+    systemInfo.error ??
+    evidenceSummary.error ??
+    registrySummary.error ??
+    browserSummary.error ??
+    emailSummary.error ??
+    eventLogSummary.error ??
+    classificationBoard.error ??
+    summaryMutation.error ??
+    analysisRefreshError;
+  const linuxError = currentCase.error ?? extractionRun.error ?? linuxSummary.error ?? analysisRefreshError;
+  const androidError =
+    currentCase.error ??
+    androidAnalysisRun.error ??
+    androidDeviceInfo.error ??
+    androidPackages.error ??
+    analysisRefreshError;
 
   useLayoutEffect(() => {
     if (sourceEpoch.sync(selectedSourceContextKey)) {
@@ -241,22 +229,22 @@ export function useAnalysisWorkspaceModel() {
     setSelectedDataSourceId,
   ]);
 
-  useEffect(() => () => {
-    sourceEpoch.sync(undefined);
-    if (extractionOperationRef.current) {
-      extractionOperationRef.current = undefined;
-      setExtractionRunning(false);
-    }
-  }, [setExtractionRunning, sourceEpoch]);
+  useEffect(
+    () => () => {
+      sourceEpoch.sync(undefined);
+      if (extractionOperationRef.current) {
+        extractionOperationRef.current = undefined;
+        setExtractionRunning(false);
+      }
+    },
+    [setExtractionRunning, sourceEpoch],
+  );
 
   useEffect(() => {
     // Coalesce high-frequency backend progress events before they reach the UI store.
     const pending = new Map<ExtractionCategory, AnalysisExtractionProgress>();
     let flushTimer: ReturnType<typeof setTimeout> | undefined;
-    const applyProgress = (
-      category: ExtractionCategory,
-      progress: AnalysisExtractionProgress,
-    ) => {
+    const applyProgress = (category: ExtractionCategory, progress: AnalysisExtractionProgress) => {
       const completed = progress.phase === 'completed';
       const failed = progress.phase === 'failed';
       updateExtractionProgress(category, {
@@ -286,9 +274,9 @@ export function useAnalysisWorkspaceModel() {
       const progress = event.payload;
       const category = progress.category;
       if (
-        progress.caseId !== currentCase.data?.id
-        || progress.dataSourceId !== selectedDataSource?.id
-        || !isExtractionCategory(category)
+        progress.caseId !== currentCase.data?.id ||
+        progress.dataSourceId !== selectedDataSource?.id ||
+        !isExtractionCategory(category)
       ) {
         return;
       }
@@ -309,11 +297,7 @@ export function useAnalysisWorkspaceModel() {
       }
       unsubscribe();
     };
-  }, [
-    currentCase.data?.id,
-    selectedDataSource?.id,
-    updateExtractionProgress,
-  ]);
+  }, [currentCase.data?.id, selectedDataSource?.id, updateExtractionProgress]);
 
   async function refresh() {
     try {
@@ -434,11 +418,8 @@ export function useAnalysisWorkspaceModel() {
     }
   }
 
-  function selectDataSource(id: string) {    if (
-      id === selectedDataSourceId
-      || analysisMutationPending
-      || sourceEpoch.isBusy
-    ) {
+  function selectDataSource(id: string) {
+    if (id === selectedDataSourceId || analysisMutationPending || sourceEpoch.isBusy) {
       return;
     }
     const nextSource = readyDataSources.find((source) => source.id === id);

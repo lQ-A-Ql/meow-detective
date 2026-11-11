@@ -60,9 +60,12 @@ export function useResizableHeight({
    */
   const dragCleanupRef = useRef<(() => void) | undefined>(undefined);
 
-  useEffect(() => () => {
-    dragCleanupRef.current?.();
-  }, []);
+  useEffect(
+    () => () => {
+      dragCleanupRef.current?.();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!storageKey) {
@@ -104,7 +107,7 @@ export function useResizableHeight({
       document.addEventListener('mouseup', handleMouseUp);
       dragCleanupRef.current = stopListening;
     },
-    [height, minHeight, maxHeight]
+    [height, minHeight, maxHeight],
   );
 
   return { height, isResizing, onResizeStart };

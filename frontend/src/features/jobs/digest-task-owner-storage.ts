@@ -22,7 +22,7 @@ function storage(): Storage | undefined {
 
 function readOwners(target: Storage): StoredDigestTaskOwners {
   const raw = target.getItem(STORAGE_KEY);
-  return raw ? JSON.parse(raw) as StoredDigestTaskOwners : {};
+  return raw ? (JSON.parse(raw) as StoredDigestTaskOwners) : {};
 }
 
 export function readStoredDigestTaskOwner(caseId: string, contextKey: string): StoredDigestTaskOwner | undefined {

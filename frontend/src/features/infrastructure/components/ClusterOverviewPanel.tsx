@@ -25,27 +25,57 @@ export function ClusterOverviewPanel({
     <div className="space-y-4">
       <div className="px-3 py-3">
         <div className="grid gap-3 text-xs sm:grid-cols-4">
-          <KeyValueField layout="stacked" label={t('infrastructure.clusterInfo.types')} value={platforms.join(' / ') || t('infrastructure.values.unavailable')} />
-          <KeyValueField layout="stacked" label={t('infrastructure.clusterInfo.hosts')} value={presentation.hosts.length.toString()} />
-          <KeyValueField layout="stacked" label={t('infrastructure.clusterInfo.relations')} value={presentation.relationCount.toString()} />
-          <KeyValueField layout="stacked" label={t('infrastructure.clusterInfo.version')} value={presentation.versionEvidence.join(' | ') || t('infrastructure.values.unavailable')} />
+          <KeyValueField
+            layout="stacked"
+            label={t('infrastructure.clusterInfo.types')}
+            value={platforms.join(' / ') || t('infrastructure.values.unavailable')}
+          />
+          <KeyValueField
+            layout="stacked"
+            label={t('infrastructure.clusterInfo.hosts')}
+            value={presentation.hosts.length.toString()}
+          />
+          <KeyValueField
+            layout="stacked"
+            label={t('infrastructure.clusterInfo.relations')}
+            value={presentation.relationCount.toString()}
+          />
+          <KeyValueField
+            layout="stacked"
+            label={t('infrastructure.clusterInfo.version')}
+            value={presentation.versionEvidence.join(' | ') || t('infrastructure.values.unavailable')}
+          />
         </div>
       </div>
       <div className="overflow-hidden">
         <div className="overflow-x-auto scrollbar-none">
           <div className="grid min-w-[760px] grid-cols-[minmax(180px,1fr)_140px_minmax(260px,2fr)_130px] gap-x-4 border-b border-forensics-divider bg-forensics-panel px-4 py-2 text-[10px] uppercase tracking-wide text-forensics-muted">
-            <span>{t('infrastructure.clusterInfo.host')}</span><span>{t('infrastructure.clusterInfo.hostname')}</span><span>{t('infrastructure.clusterInfo.version')}</span><span>{t('infrastructure.clusterInfo.identity')}</span>
+            <span>{t('infrastructure.clusterInfo.host')}</span>
+            <span>{t('infrastructure.clusterInfo.hostname')}</span>
+            <span>{t('infrastructure.clusterInfo.version')}</span>
+            <span>{t('infrastructure.clusterInfo.identity')}</span>
           </div>
           <div className="divide-y divide-forensics-border-light">
             {presentation.hosts.map(({ node, fact }) => (
-              <div key={node.id} className="grid min-w-[760px] grid-cols-[minmax(180px,1fr)_140px_minmax(260px,2fr)_130px] gap-x-4 px-4 py-3 text-xs">
-                <span className="truncate text-forensics-text" title={node.name}>{node.name}</span>
-                <span className="truncate text-forensics-text-secondary">{fact?.hostname ?? t('infrastructure.values.unavailable')}</span>
-                <span className="truncate font-mono text-forensics-text-secondary">{formatHostVersion(fact) ?? t('infrastructure.values.unavailable')}</span>
+              <div
+                key={node.id}
+                className="grid min-w-[760px] grid-cols-[minmax(180px,1fr)_140px_minmax(260px,2fr)_130px] gap-x-4 px-4 py-3 text-xs"
+              >
+                <span className="truncate text-forensics-text" title={node.name}>
+                  {node.name}
+                </span>
+                <span className="truncate text-forensics-text-secondary">
+                  {fact?.hostname ?? t('infrastructure.values.unavailable')}
+                </span>
+                <span className="truncate font-mono text-forensics-text-secondary">
+                  {formatHostVersion(fact) ?? t('infrastructure.values.unavailable')}
+                </span>
                 <span className="text-forensics-muted">{stateLabel(node.confidence, t)}</span>
               </div>
             ))}
-            {presentation.hosts.length === 0 ? <div className="px-4 py-6 text-xs text-forensics-muted">{t('infrastructure.values.notFound')}</div> : null}
+            {presentation.hosts.length === 0 ? (
+              <div className="px-4 py-6 text-xs text-forensics-muted">{t('infrastructure.values.notFound')}</div>
+            ) : null}
           </div>
         </div>
       </div>

@@ -40,42 +40,107 @@ function Browser({ source }: { source: ServiceSnapshot }) {
   const selectedDirectoryId = useSelectionStore((state) => state.selectedDirectoryId);
   const selectedFileId = useSelectionStore((state) => state.selectedFileId);
   const [showHidden, onShowHidden] = useState(true);
-  const location = useFileBrowserLocation({ caseId: source.caseId, showHidden, pageLimit: 500,
-    sortKey: 'name', sortDirection: 'asc' });
-  const tree = useFileTree({ caseId: source.caseId, showHidden, pageLimit: 500, selectedDirectoryId,
-    setSelectedDirectoryId: location.selectDirectory, setSelectedFileId: location.selectFile,
-    partitions: source.sources.flatMap((item) => item.partitions ?? []), dataSources: source.sources,
-    revealDirectoryIds: location.revealDirectoryIds, jumpPathNodes: location.pathNodes,
-    deferInitialSelection: location.deferInitialSelection });
-  const pagination = useFilePagination({ caseId: source.caseId, showHidden, pageLimit: 500,
-    activeDirectoryId: tree.activeDirectoryIsDataSource ? undefined : tree.activeDirectoryId });
-  const navigation = useFileBrowserCoordinator({ caseId: source.caseId, selectedDirectoryId, selectedFileId,
-    showHidden, onShowHidden, location, tree, pagination });
-  return <>
-    <output data-testid="location">{JSON.stringify({ selectedDirectoryId, selectedFileId,
-      offset: pagination.rowsOffset, treeIds: tree.treeNodes.map((node) => node.id), showHidden })}</output>
-    <div style={{ height: 600 }}><FileTreePanel filteredTreeNodes={tree.filteredTreeNodes}
-      activeDirectoryId={tree.activeDirectoryId} expandedIds={tree.expandedIdSet}
-      activeChildrenPage={tree.activeChildrenPage} activeTreeChildrenLoaded={tree.activeTreeChildrenLoaded}
-      canLoadMoreTreeChildren={tree.canLoadMoreTreeChildren} loadMoreActiveTreeChildren={tree.loadMoreActiveTreeChildren}
-      toggleDirectory={tree.toggleDirectory} displayNodeName={tree.displayNodeName} filterQuery={tree.filterQuery}
-      setFilterQuery={tree.setFilterQuery} treeWidth={tree.treeWidth} isResizing={tree.isResizing}
-      onResizeStart={tree.onResizeStart} treeContainerRef={tree.treeContainerRef}
-      dataSources={source.sources} FILE_BROWSER_PAGE_LIMIT={500} /></div>
-    <div data-testid="listing" style={{ height: 600 }}><FileListPanel sortedRows={pagination.sortedRows}
-      selectedFileId={selectedFileId} fileSortKey="name" fileSortDirection="asc" handleSort={navigation.handleSort}
-      onActivateEntry={navigation.activateEntry} loadContextKey={pagination.rowsContextKey}
-      parentDirectory={tree.parentDirectory} goToParentDirectory={tree.goToParentDirectory}
-      rowsPage={pagination.rowsPage} canGoToPreviousRows={pagination.canGoToPreviousRows}
-      canGoToNextRows={pagination.canGoToNextRows} goToPreviousRows={navigation.goToPreviousRows}
-      goToNextRows={navigation.goToNextRows} visibilityToggle={<FileVisibilityToggle checked={showHidden} onCheckedChange={navigation.setShowHidden} />}
-      onExtractFile={() => { throw new Error('Extraction is outside this acceptance'); }} /></div>
-  </>;
+  const location = useFileBrowserLocation({
+    caseId: source.caseId,
+    showHidden,
+    pageLimit: 500,
+    sortKey: 'name',
+    sortDirection: 'asc',
+  });
+  const tree = useFileTree({
+    caseId: source.caseId,
+    showHidden,
+    pageLimit: 500,
+    selectedDirectoryId,
+    setSelectedDirectoryId: location.selectDirectory,
+    setSelectedFileId: location.selectFile,
+    partitions: source.sources.flatMap((item) => item.partitions ?? []),
+    dataSources: source.sources,
+    revealDirectoryIds: location.revealDirectoryIds,
+    jumpPathNodes: location.pathNodes,
+    deferInitialSelection: location.deferInitialSelection,
+  });
+  const pagination = useFilePagination({
+    caseId: source.caseId,
+    showHidden,
+    pageLimit: 500,
+    activeDirectoryId: tree.activeDirectoryIsDataSource ? undefined : tree.activeDirectoryId,
+  });
+  const navigation = useFileBrowserCoordinator({
+    caseId: source.caseId,
+    selectedDirectoryId,
+    selectedFileId,
+    showHidden,
+    onShowHidden,
+    location,
+    tree,
+    pagination,
+  });
+  return (
+    <>
+      <output data-testid="location">
+        {JSON.stringify({
+          selectedDirectoryId,
+          selectedFileId,
+          offset: pagination.rowsOffset,
+          treeIds: tree.treeNodes.map((node) => node.id),
+          showHidden,
+        })}
+      </output>
+      <div style={{ height: 600 }}>
+        <FileTreePanel
+          filteredTreeNodes={tree.filteredTreeNodes}
+          activeDirectoryId={tree.activeDirectoryId}
+          expandedIds={tree.expandedIdSet}
+          activeChildrenPage={tree.activeChildrenPage}
+          activeTreeChildrenLoaded={tree.activeTreeChildrenLoaded}
+          canLoadMoreTreeChildren={tree.canLoadMoreTreeChildren}
+          loadMoreActiveTreeChildren={tree.loadMoreActiveTreeChildren}
+          toggleDirectory={tree.toggleDirectory}
+          displayNodeName={tree.displayNodeName}
+          filterQuery={tree.filterQuery}
+          setFilterQuery={tree.setFilterQuery}
+          treeWidth={tree.treeWidth}
+          isResizing={tree.isResizing}
+          onResizeStart={tree.onResizeStart}
+          treeContainerRef={tree.treeContainerRef}
+          dataSources={source.sources}
+          FILE_BROWSER_PAGE_LIMIT={500}
+        />
+      </div>
+      <div data-testid="listing" style={{ height: 600 }}>
+        <FileListPanel
+          sortedRows={pagination.sortedRows}
+          selectedFileId={selectedFileId}
+          fileSortKey="name"
+          fileSortDirection="asc"
+          handleSort={navigation.handleSort}
+          onActivateEntry={navigation.activateEntry}
+          loadContextKey={pagination.rowsContextKey}
+          parentDirectory={tree.parentDirectory}
+          goToParentDirectory={tree.goToParentDirectory}
+          rowsPage={pagination.rowsPage}
+          canGoToPreviousRows={pagination.canGoToPreviousRows}
+          canGoToNextRows={pagination.canGoToNextRows}
+          goToPreviousRows={navigation.goToPreviousRows}
+          goToNextRows={navigation.goToNextRows}
+          visibilityToggle={<FileVisibilityToggle checked={showHidden} onCheckedChange={navigation.setShowHidden} />}
+          onExtractFile={() => {
+            throw new Error('Extraction is outside this acceptance');
+          }}
+        />
+      </div>
+    </>
+  );
 }
 
 function location() {
   return JSON.parse(screen.getByTestId('location').textContent!) as {
-    selectedDirectoryId?: string; selectedFileId?: string; offset: number; treeIds: string[]; showHidden: boolean;
+    selectedDirectoryId?: string;
+    selectedFileId?: string;
+    offset: number;
+    treeIds: string[];
+    showHidden: boolean;
   };
 }
 
@@ -85,15 +150,30 @@ function open(source: ServiceSnapshot, directory = source.listingId, fileId?: st
   useFileNavigationStore.getState().cancel();
   useSelectionStore.setState({ selectedDirectoryId: directory, selectedFileId: fileId });
   useUiStore.setState({ fileSortKey: 'name', fileSortDirection: 'asc' });
-  client = new QueryClient({ queryCache: new QueryCache({ onError: (error, query) => errors.push({ error, key: query.queryKey }) }),
-    defaultOptions: { queries: { staleTime: Infinity, retry: false, refetchOnMount: false, refetchOnWindowFocus: false, gcTime: Infinity } } });
+  client = new QueryClient({
+    queryCache: new QueryCache({ onError: (error, query) => errors.push({ error, key: query.queryKey }) }),
+    defaultOptions: {
+      queries: {
+        staleTime: Infinity,
+        retry: false,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+        gcTime: Infinity,
+      },
+    },
+  });
   for (const query of source.queries) client.setQueryData(query.key, query.data);
-  render(<QueryClientProvider client={client}><Browser source={source} /></QueryClientProvider>);
+  render(
+    <QueryClientProvider client={client}>
+      <Browser source={source} />
+    </QueryClientProvider>,
+  );
 }
 
 function rows(source: ServiceSnapshot, id: string, offset = 0) {
-  return source.queries.find((query) => query.key[1] === 'rows-page' && query.key[3] === id
-    && query.key[4] === offset && query.key[6] === true)!.data as FileRowsPage;
+  return source.queries.find(
+    (query) => query.key[1] === 'rows-page' && query.key[3] === id && query.key[4] === offset && query.key[6] === true,
+  )!.data as FileRowsPage;
 }
 
 async function clickEntry(source: ServiceSnapshot, parent: string, id: string, offset = 0) {
@@ -154,7 +234,9 @@ describe.skipIf(!fixturePath)('file browser with real source-service responses',
       await clickEntry(source, source.directoryId, source.offPageId, 500);
       await waitFor(() => expect(location().treeIds).toContain(source.offPageId));
       expect(location().selectedDirectoryId).toBe(source.offPageId);
-      const roots = source.queries.find((query) => query.key[1] === 'tree' && query.key[3] === true)!.data as { id: string }[];
+      const roots = source.queries.find((query) => query.key[1] === 'tree' && query.key[3] === true)!.data as {
+        id: string;
+      }[];
       expect(location().treeIds).toEqual(expect.arrayContaining(roots.map((node) => node.id)));
     });
 
@@ -172,8 +254,9 @@ describe.skipIf(!fixturePath)('file browser with real source-service responses',
     it(`consumes external file navigation before manual paging in sample ${index + 1}`, async () => {
       const source = responses[index];
       open(source, source.rootId);
-      const context = source.queries.find((query) => query.key[1] === 'jump-context'
-        && query.key[3] === source.fileId && query.key[4] === true)!.data as FileJumpContext;
+      const context = source.queries.find(
+        (query) => query.key[1] === 'jump-context' && query.key[3] === source.fileId && query.key[4] === true,
+      )!.data as FileJumpContext;
       act(() => {
         const store = useFileNavigationStore.getState();
         const request = store.begin(source.caseId, source.fileId, 'external');
@@ -188,16 +271,20 @@ describe.skipIf(!fixturePath)('file browser with real source-service responses',
     it(`keeps an off-page external target selected until its page is applied in sample ${index + 1}`, async () => {
       const source = responses[index];
       open(source, source.rootId);
-      const context = source.queries.find((query) => query.key[1] === 'jump-context'
-        && query.key[3] === source.farFileId && query.key[4] === true)!.data as FileJumpContext;
+      const context = source.queries.find(
+        (query) => query.key[1] === 'jump-context' && query.key[3] === source.farFileId && query.key[4] === true,
+      )!.data as FileJumpContext;
       expect(context.rowOffset).toBe(500);
       act(() => {
         const store = useFileNavigationStore.getState();
         expect(store.resolve(store.begin(source.caseId, source.farFileId, 'external'), context)).toBe(true);
       });
       await waitFor(() => expect(useFileNavigationStore.getState().pending).toBeUndefined());
-      expect(location()).toMatchObject({ selectedDirectoryId: source.listingId,
-        selectedFileId: source.farFileId, offset: 500 });
+      expect(location()).toMatchObject({
+        selectedDirectoryId: source.listingId,
+        selectedFileId: source.farFileId,
+        offset: 500,
+      });
       expect(await within(screen.getByTestId('listing')).findByText(context.target.name)).toBeVisible();
     });
 
@@ -205,13 +292,24 @@ describe.skipIf(!fixturePath)('file browser with real source-service responses',
       const source = responses[index];
       errors.length = 0;
       useUiStore.setState({ fileSortKey: 'name', fileSortDirection: 'asc' });
-      client = new QueryClient({ queryCache: new QueryCache({ onError: (error) => errors.push(error) }),
-        defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+      client = new QueryClient({
+        queryCache: new QueryCache({ onError: (error) => errors.push(error) }),
+        defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+      });
       for (const query of source.queries) client.setQueryData(query.key, query.data);
-      const { result, rerender } = renderHook(({ directory }) => useFilePagination({
-        caseId: source.caseId, activeDirectoryId: directory, pageLimit: 500, showHidden: true,
-      }), { initialProps: { directory: source.listingId }, wrapper: ({ children }) =>
-        <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+      const { result, rerender } = renderHook(
+        ({ directory }) =>
+          useFilePagination({
+            caseId: source.caseId,
+            activeDirectoryId: directory,
+            pageLimit: 500,
+            showHidden: true,
+          }),
+        {
+          initialProps: { directory: source.listingId },
+          wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+        },
+      );
       act(() => result.current.setRowsOffset(500));
       expect(result.current.rowsOffset).toBe(500);
       rerender({ directory: source.rootId });
@@ -246,7 +344,8 @@ describe.skipIf(!fixturePath)('file browser with real source-service responses',
     const request = store.begin(source.caseId, source.fileId, 'external');
     store.cancel();
     useSelectionStore.setState({ selectedDirectoryId: source.directoryId, selectedFileId: undefined });
-    const context = source.queries.find((query) => query.key[1] === 'jump-context' && query.key[3] === source.fileId)!.data as FileJumpContext;
+    const context = source.queries.find((query) => query.key[1] === 'jump-context' && query.key[3] === source.fileId)!
+      .data as FileJumpContext;
     expect(store.resolve(request, context)).toBe(false);
     expect(useSelectionStore.getState().selectedDirectoryId).toBe(source.directoryId);
   });
@@ -256,8 +355,10 @@ describe.skipIf(!fixturePath)('file browser with real source-service responses',
     const store = useFileNavigationStore.getState();
     const oldRequest = store.begin(responses[0].caseId, responses[0].fileId, 'external');
     const newRequest = store.begin(responses[1].caseId, responses[1].fileId, 'external');
-    const contextFor = (source: ServiceSnapshot) => source.queries.find((query) => query.key[1] === 'jump-context'
-      && query.key[3] === source.fileId && query.key[4] === true)!.data as FileJumpContext;
+    const contextFor = (source: ServiceSnapshot) =>
+      source.queries.find(
+        (query) => query.key[1] === 'jump-context' && query.key[3] === source.fileId && query.key[4] === true,
+      )!.data as FileJumpContext;
     expect(store.resolve(oldRequest, contextFor(responses[0]))).toBe(false);
     expect(store.resolve(newRequest, contextFor(responses[1]))).toBe(true);
     expect(useSelectionStore.getState().selectedFileId).toBe(responses[1].fileId);

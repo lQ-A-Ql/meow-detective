@@ -18,17 +18,33 @@ function Preview() {
   const [scenario, setScenario] = useState<RegistryPreviewScenario>('standard');
   const client = useMemo(() => createRegistryBrowserMock(scenario, 35), [scenario]);
   const queryClient = useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }), [scenario]);
-  return <div className="registry-preview">
-    <div className="registry-preview-toolbar"><span>{t('registryBrowser.prototype')}</span>
-      <Select value={scenario} onValueChange={(value) => setScenario(value as RegistryPreviewScenario)}>
-        <SelectTrigger aria-label={t('registryBrowser.scenario')}><SelectValue /></SelectTrigger>
-        <SelectContent>{['standard', 'emptySource', 'failedSource'].map((value) => <SelectItem key={value} value={value}>{t(`registryBrowser.scenarios.${value}`)}</SelectItem>)}</SelectContent>
-      </Select></div>
-    <QueryClientProvider key={scenario} client={queryClient}>
-      <RegistryBrowserContainer key={scenario} client={client} context={{ ...context, sourceRevision: 'synthetic-v1' }}
-        initialKeyPath="Microsoft\\Windows\\CurrentVersion" />
-    </QueryClientProvider>
-  </div>;
+  return (
+    <div className="registry-preview">
+      <div className="registry-preview-toolbar">
+        <span>{t('registryBrowser.prototype')}</span>
+        <Select value={scenario} onValueChange={(value) => setScenario(value as RegistryPreviewScenario)}>
+          <SelectTrigger aria-label={t('registryBrowser.scenario')}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {['standard', 'emptySource', 'failedSource'].map((value) => (
+              <SelectItem key={value} value={value}>
+                {t(`registryBrowser.scenarios.${value}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <QueryClientProvider key={scenario} client={queryClient}>
+        <RegistryBrowserContainer
+          key={scenario}
+          client={client}
+          context={{ ...context, sourceRevision: 'synthetic-v1' }}
+          initialKeyPath="Microsoft\\Windows\\CurrentVersion"
+        />
+      </QueryClientProvider>
+    </div>
+  );
 }
 
 createRoot(document.getElementById('root')!).render(<Preview />);

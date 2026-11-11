@@ -1,4 +1,4 @@
-import { FileWarning, KeyRound, Link2Off }  from '@/components/icons';
+import { FileWarning, KeyRound, Link2Off } from '@/components/icons';
 import { Badge } from './badge';
 import { cn } from './utils';
 
@@ -17,12 +17,7 @@ const statusIcons = {
   unlinked: Link2Off,
 } satisfies Record<MediaEvidenceStatusKind, typeof KeyRound>;
 
-export function MediaEvidenceStatus({
-  status,
-  label,
-  detail,
-  className,
-}: MediaEvidenceStatusProps) {
+export function MediaEvidenceStatus({ status, label, detail, className }: MediaEvidenceStatusProps) {
   const Icon = statusIcons[status];
   return (
     <div className={cn('min-w-0 text-left', className)} data-media-evidence-status={status}>

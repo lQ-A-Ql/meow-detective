@@ -93,86 +93,109 @@ describe('import event state store', () => {
     expect(snapshot.latestCancellation?.state).toBe('draining');
     expect(snapshot.latestCancellation?.safeToClose).toBe(false);
     expect(snapshot.partialResults.map((result) => result.freshness)).toEqual(['stale', 'partial']);
-    expect(snapshot.cacheStatuses[0]).toEqual(expect.objectContaining({ cacheKey: 'search:index:ds-9', state: 'warming' }));
-    expect(snapshot.latestReport).toEqual(expect.objectContaining({
-      summary: expect.objectContaining({ reportId: 'perf-1', elapsedMs: 842 }),
-      metrics: [expect.objectContaining({ key: 'timeline.query.elapsedMs', value: 842, unit: 'ms' })],
-    }));
+    expect(snapshot.cacheStatuses[0]).toEqual(
+      expect.objectContaining({ cacheKey: 'search:index:ds-9', state: 'warming' }),
+    );
+    expect(snapshot.latestReport).toEqual(
+      expect.objectContaining({
+        summary: expect.objectContaining({ reportId: 'perf-1', elapsedMs: 842 }),
+        metrics: [expect.objectContaining({ key: 'timeline.query.elapsedMs', value: 842, unit: 'ms' })],
+      }),
+    );
   });
 
   it('derives evidence hash status from partial freshness and data source hash status', () => {
-    expect(deriveEvidenceHashStatus([
-      {
-        kind: 'evidenceHash',
-        scopeId: 'ds-ready',
-        readyCount: 1,
-        totalEstimate: 1,
-        queryKey: 'evidence:hash:ds-ready',
-        freshness: 'ready',
-      },
-    ])).toBe('ready');
+    expect(
+      deriveEvidenceHashStatus([
+        {
+          kind: 'evidenceHash',
+          scopeId: 'ds-ready',
+          readyCount: 1,
+          totalEstimate: 1,
+          queryKey: 'evidence:hash:ds-ready',
+          freshness: 'ready',
+        },
+      ]),
+    ).toBe('ready');
 
-    expect(deriveEvidenceHashStatus([
-      {
-        kind: 'evidenceHash',
-        scopeId: 'ds-pending',
-        readyCount: 0,
-        totalEstimate: 1,
-        queryKey: 'evidence:hash:ds-pending',
-        freshness: 'partial',
-      },
-    ])).toBe('pending');
+    expect(
+      deriveEvidenceHashStatus([
+        {
+          kind: 'evidenceHash',
+          scopeId: 'ds-pending',
+          readyCount: 0,
+          totalEstimate: 1,
+          queryKey: 'evidence:hash:ds-pending',
+          freshness: 'partial',
+        },
+      ]),
+    ).toBe('pending');
 
-    expect(deriveEvidenceHashStatus([], [
-      {
-        id: 'ds-unavailable',
-        name: 'Logical Source',
-        kind: 'logical_directory',
-        sourcePath: 'redacted',
-        importedAt: '2026-06-05T10:00:00Z',
-        platform: 'windows',
-        hashStatus: 'unavailable',
-        partitions: [],
-      },
-    ])).toBe('unavailable');
+    expect(
+      deriveEvidenceHashStatus(
+        [],
+        [
+          {
+            id: 'ds-unavailable',
+            name: 'Logical Source',
+            kind: 'logical_directory',
+            sourcePath: 'redacted',
+            importedAt: '2026-06-05T10:00:00Z',
+            platform: 'windows',
+            hashStatus: 'unavailable',
+            partitions: [],
+          },
+        ],
+      ),
+    ).toBe('unavailable');
 
-    expect(deriveEvidenceHashStatus([
-      {
-        kind: 'evidenceHash',
-        scopeId: 'ds-ready',
-        readyCount: 1,
-        totalEstimate: 1,
-        queryKey: 'evidence:hash:ds-ready',
-        freshness: 'ready',
-      },
-    ], [
-      {
-        id: 'ds-failed',
-        name: 'Failed Source',
-        kind: 'raw',
-        sourcePath: 'redacted',
-        importedAt: '2026-06-05T10:00:00Z',
-        platform: 'linux',
-        hashStatus: 'failed',
-        partitions: [],
-      },
-    ])).toBe('failed');
+    expect(
+      deriveEvidenceHashStatus(
+        [
+          {
+            kind: 'evidenceHash',
+            scopeId: 'ds-ready',
+            readyCount: 1,
+            totalEstimate: 1,
+            queryKey: 'evidence:hash:ds-ready',
+            freshness: 'ready',
+          },
+        ],
+        [
+          {
+            id: 'ds-failed',
+            name: 'Failed Source',
+            kind: 'raw',
+            sourcePath: 'redacted',
+            importedAt: '2026-06-05T10:00:00Z',
+            platform: 'linux',
+            hashStatus: 'failed',
+            partitions: [],
+          },
+        ],
+      ),
+    ).toBe('failed');
   });
 
   it('keeps original-disk digest state separate from source hash status', () => {
-    expect(deriveEvidenceHashStatus([], [
-      {
-        id: 'ds-original-disk-only',
-        name: 'Original disk only',
-        kind: 'raw',
-        sourcePath: 'redacted',
-        importedAt: '2026-06-05T10:00:00Z',
-        platform: 'windows',
-        hashStatus: 'unknown',
-        originalDiskHashStatus: 'ready',
-        originalDiskSha256: 'a'.repeat(64),
-        partitions: [],
-      },
-    ])).toBe('deferred');
+    expect(
+      deriveEvidenceHashStatus(
+        [],
+        [
+          {
+            id: 'ds-original-disk-only',
+            name: 'Original disk only',
+            kind: 'raw',
+            sourcePath: 'redacted',
+            importedAt: '2026-06-05T10:00:00Z',
+            platform: 'windows',
+            hashStatus: 'unknown',
+            originalDiskHashStatus: 'ready',
+            originalDiskSha256: 'a'.repeat(64),
+            partitions: [],
+          },
+        ],
+      ),
+    ).toBe('deferred');
   });
 });

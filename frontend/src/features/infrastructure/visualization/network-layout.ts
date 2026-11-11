@@ -17,7 +17,10 @@ export const networkCanvasMetrics = {
 
 export function networkCanvasHeight(nodes: InfrastructureGraphNode[]) {
   const rows = Math.max(1, Math.ceil(nodes.length / 3));
-  return Math.max(networkCanvasMetrics.minimumHeight, rows * (networkCanvasMetrics.nodeHeight + networkCanvasMetrics.rowGap) + 96);
+  return Math.max(
+    networkCanvasMetrics.minimumHeight,
+    rows * (networkCanvasMetrics.nodeHeight + networkCanvasMetrics.rowGap) + 96,
+  );
 }
 
 export function layoutNetworkNodes(nodes: InfrastructureGraphNode[], width: number, height: number) {
@@ -51,10 +54,11 @@ export function layoutNetworkNodes(nodes: InfrastructureGraphNode[], width: numb
 }
 
 export function hitNetworkNode(points: Map<string, NetworkPoint>, x: number, y: number) {
-  return [...points.entries()].find(([, point]) => (
-    x >= point.x - point.width / 2
-      && x <= point.x + point.width / 2
-      && y >= point.y - point.height / 2
-      && y <= point.y + point.height / 2
-  ))?.[0];
+  return [...points.entries()].find(
+    ([, point]) =>
+      x >= point.x - point.width / 2 &&
+      x <= point.x + point.width / 2 &&
+      y >= point.y - point.height / 2 &&
+      y <= point.y + point.height / 2,
+  )?.[0];
 }

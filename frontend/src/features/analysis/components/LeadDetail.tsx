@@ -1,17 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import type {
-  CorrelationCluster,
-  CorrelationLead,
-  CorrelationSnapshot,
-} from '@/types/models';
+import type { CorrelationCluster, CorrelationLead, CorrelationSnapshot } from '@/types/models';
 import { Button } from '@/app/components/ui/button';
-import {
-  confidenceLabel,
-  confidenceTone,
-  FamilyPills,
-  Metric,
-  translateGuarantee,
-} from './correlation-helpers';
+import { confidenceLabel, confidenceTone, FamilyPills, Metric, translateGuarantee } from './correlation-helpers';
 
 export function LeadDetailPanel({
   lead,
@@ -34,7 +24,9 @@ export function LeadDetailPanel({
     <div className="rounded-none bg-transparent p-4" data-testid="selected-lead-panel">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[12px] uppercase tracking-wider text-forensics-muted-light">{t('correlation.lead.detailTitle')}</div>
+          <div className="text-[12px] uppercase tracking-wider text-forensics-muted-light">
+            {t('correlation.lead.detailTitle')}
+          </div>
           <div className="mt-1 text-[15px] font-light text-forensics-text" data-testid="selected-lead-title">
             {lead.title}
           </div>
@@ -83,14 +75,12 @@ export function LeadDetailPanel({
       <div className="mt-4 grid grid-cols-1 gap-4 2xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-4">
           <div className="bg-transparent p-3">
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('dashboard.correlation.nodes')}</div>
+            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">
+              {t('dashboard.correlation.nodes')}
+            </div>
             <div className="space-y-2">
               {primaryFileNode ? (
-                <NodeSummaryCard
-                  node={primaryFileNode}
-                  title={t('correlation.lead.primaryFileNode')}
-                  onJump={onJump}
-                />
+                <NodeSummaryCard node={primaryFileNode} title={t('correlation.lead.primaryFileNode')} onJump={onJump} />
               ) : null}
               {supportingNodes.length > 0 ? (
                 supportingNodes.map((node) => (
@@ -108,14 +98,21 @@ export function LeadDetailPanel({
           </div>
 
           <div className="bg-transparent p-3">
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('correlation.lead.relatedEdges')}</div>
+            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">
+              {t('correlation.lead.relatedEdges')}
+            </div>
             {edges.length > 0 ? (
               <div className="space-y-2">
                 {edges.map((edge) => (
-                  <div key={edge.id} className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
+                  <div
+                    key={edge.id}
+                    className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary"
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-mono text-[10px] text-forensics-muted-light">{edge.kind}</span>
-                      <span className={`rounded-none border px-2 py-0.5 text-[10px] font-mono ${confidenceTone(edge.confidence)}`}>
+                      <span
+                        className={`rounded-none border px-2 py-0.5 text-[10px] font-mono ${confidenceTone(edge.confidence)}`}
+                      >
                         {confidenceLabel(edge.confidence)}
                       </span>
                     </div>
@@ -134,14 +131,21 @@ export function LeadDetailPanel({
 
         <div className="space-y-4">
           <div className="bg-transparent p-3">
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('correlation.lead.relatedClusters')}</div>
+            <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">
+              {t('correlation.lead.relatedClusters')}
+            </div>
             {relatedClusters.length > 0 ? (
               <div className="space-y-2">
                 {relatedClusters.map((cluster) => (
-                  <div key={cluster.id} className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary">
+                  <div
+                    key={cluster.id}
+                    className="rounded-none bg-transparent px-3 py-2 text-[11px] text-forensics-text-tertiary"
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-light text-forensics-text">{cluster.title}</span>
-                      <span className={`rounded-none border px-2 py-0.5 text-[10px] font-mono ${confidenceTone(cluster.confidence)}`}>
+                      <span
+                        className={`rounded-none border px-2 py-0.5 text-[10px] font-mono ${confidenceTone(cluster.confidence)}`}
+                      >
                         {confidenceLabel(cluster.confidence)}
                       </span>
                     </div>
@@ -165,7 +169,9 @@ export function LeadDetailPanel({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-light text-forensics-text">{item.sourceLabel}</span>
-                      <span className="font-mono text-[10px] text-forensics-muted-light">{translateGuarantee(item.guaranteeLevel)}</span>
+                      <span className="font-mono text-[10px] text-forensics-muted-light">
+                        {translateGuarantee(item.guaranteeLevel)}
+                      </span>
                     </div>
                     <div className="mt-1 break-all">
                       {item.sourceKind} · {item.sourceRecordId}
@@ -217,7 +223,10 @@ function NodeSummaryCard({
       {node.badges.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-2">
           {node.badges.map((badge) => (
-            <span key={`${node.id}-${badge}`} className="rounded-none bg-transparent px-2 py-0.5 text-[10px] text-forensics-muted">
+            <span
+              key={`${node.id}-${badge}`}
+              className="rounded-none bg-transparent px-2 py-0.5 text-[10px] text-forensics-muted"
+            >
               {badge}
             </span>
           ))}

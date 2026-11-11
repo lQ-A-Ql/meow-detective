@@ -4,22 +4,16 @@ import { INFRASTRUCTURE_DOMAIN_ORDER, type InfrastructureDomain } from '../types
 
 export function groupNodesByDomain(nodes: InfrastructureGraphNode[]) {
   return Object.fromEntries(
-    INFRASTRUCTURE_DOMAIN_ORDER.map((domain) => [
-      domain,
-      nodes.filter((node) => node.domain === domain),
-    ]),
+    INFRASTRUCTURE_DOMAIN_ORDER.map((domain) => [domain, nodes.filter((node) => node.domain === domain)]),
   ) as Record<InfrastructureDomain, InfrastructureGraphNode[]>;
 }
 
-export function matchesInfrastructureQuery(
-  node: InfrastructureGraphNode,
-  query: string,
-  t: TFunction,
-) {
+export function matchesInfrastructureQuery(node: InfrastructureGraphNode, query: string, t: TFunction) {
   const normalized = query.trim().toLocaleLowerCase();
   if (!normalized) return true;
-  return [node.name, node.id, domainLabel(node.domain, t), kindLabel(node.kind, t)]
-    .some((value) => value.toLocaleLowerCase().includes(normalized));
+  return [node.name, node.id, domainLabel(node.domain, t), kindLabel(node.kind, t)].some((value) =>
+    value.toLocaleLowerCase().includes(normalized),
+  );
 }
 
 export function domainLabel(domain: InfrastructureDomain, t: TFunction) {

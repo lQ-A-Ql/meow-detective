@@ -12,48 +12,42 @@ type Translate = (key: string, options?: Record<string, unknown>) => string;
 // the component; the stable reference keeps DenseDataTable row memoization intact.
 function classificationColumns(t: Translate): DenseColumn<ClassifiedFileRow>[] {
   return [
-  {
-    key: 'name',
-    title: t('analysisPanels.subcategory.fileName'),
-    className: 'min-w-[220px]',
-    render: (row) => row.name,
-  },
-  {
-    key: 'path',
-    title: t('search.columns.path'),
-    className: 'min-w-[260px]',
-    render: (row) => (
-      <span className="font-mono text-[10px] text-forensics-muted-light">{row.path}</span>
-    ),
-  },
-  {
-    key: 'magicType',
-    title: t('analysisPanels.subcategory.magicType'),
-    className: 'w-[90px]',
-    render: (row) => row.magicType ?? '-',
-  },
-  {
-    key: 'source',
-    title: t('analysisPanels.subcategory.source'),
-    className: 'w-[70px]',
-    render: (row) => (
-      <span
-        className={
-          row.classificationSource === 'magic'
-            ? 'text-forensics-success-text'
-            : 'text-forensics-muted'
-        }
-      >
-        {row.classificationSource === 'magic' ? t('analysisPanels.subcategory.magic') : t('analysisPanels.subcategory.inferred')}
-      </span>
-    ),
-  },
-  {
-    key: 'size',
-    title: t('common.sort.size'),
-    className: 'w-[100px] text-right',
-    render: (row) => formatSize(row.size),
-  },
+    {
+      key: 'name',
+      title: t('analysisPanels.subcategory.fileName'),
+      className: 'min-w-[220px]',
+      render: (row) => row.name,
+    },
+    {
+      key: 'path',
+      title: t('search.columns.path'),
+      className: 'min-w-[260px]',
+      render: (row) => <span className="font-mono text-[10px] text-forensics-muted-light">{row.path}</span>,
+    },
+    {
+      key: 'magicType',
+      title: t('analysisPanels.subcategory.magicType'),
+      className: 'w-[90px]',
+      render: (row) => row.magicType ?? '-',
+    },
+    {
+      key: 'source',
+      title: t('analysisPanels.subcategory.source'),
+      className: 'w-[70px]',
+      render: (row) => (
+        <span className={row.classificationSource === 'magic' ? 'text-forensics-success-text' : 'text-forensics-muted'}>
+          {row.classificationSource === 'magic'
+            ? t('analysisPanels.subcategory.magic')
+            : t('analysisPanels.subcategory.inferred')}
+        </span>
+      ),
+    },
+    {
+      key: 'size',
+      title: t('common.sort.size'),
+      className: 'w-[100px] text-right',
+      render: (row) => formatSize(row.size),
+    },
   ];
 }
 
@@ -71,9 +65,7 @@ export function ClassificationSubcategoryTable({
   return (
     <div>
       <div className="mb-1 flex items-center gap-2 text-[11px]">
-        <span className="rounded-none bg-forensics-info-bg px-1.5 py-0.5 text-forensics-text">
-          {subcategory.name}
-        </span>
+        <span className="rounded-none bg-forensics-info-bg px-1.5 py-0.5 text-forensics-text">{subcategory.name}</span>
         <span className="text-forensics-muted-lighter">
           {t('analysisPanels.countWithSize', { count: subcategory.fileCount, size: formatSize(subcategory.totalSize) })}
           {subcategory.truncated

@@ -61,9 +61,10 @@ function idleProgress(): Record<ExtractionCategory, AnalysisExtractionProgressIn
     timelineEventCount: 0,
     warnings: [],
   };
-  return Object.fromEntries(
-    ANALYSIS_EXTRACTION_CATEGORIES.map((category) => [category, entry]),
-  ) as Record<ExtractionCategory, AnalysisExtractionProgressInfo>;
+  return Object.fromEntries(ANALYSIS_EXTRACTION_CATEGORIES.map((category) => [category, entry])) as Record<
+    ExtractionCategory,
+    AnalysisExtractionProgressInfo
+  >;
 }
 
 function renderSidebar(overrides: Partial<Parameters<typeof AnalysisSourceSidebar>[0]> = {}) {
@@ -88,10 +89,7 @@ function renderSidebar(overrides: Partial<Parameters<typeof AnalysisSourceSideba
 describe('AnalysisSourceSidebar plugin group', () => {
   it('renders the plugin group with module nodes and total-count badges', () => {
     renderSidebar({
-      pluginModules: [
-        pluginModule(),
-        pluginModule({ pluginId: 'plugin-qq', displayName: 'QQ', totalCount: 3 }),
-      ],
+      pluginModules: [pluginModule(), pluginModule({ pluginId: 'plugin-qq', displayName: 'QQ', totalCount: 3 })],
     });
 
     expect(screen.getByText('应用插件')).toBeDefined();

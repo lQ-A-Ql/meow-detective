@@ -197,16 +197,14 @@ describe('files API', () => {
       dataSourceId: 'source-1',
       partitionIndex: 2,
     });
-    expect(requestMock).toHaveBeenNthCalledWith(
-      4,
-      COMMANDS.files.RESTORE_PERSISTED_BITLOCKER_KEY,
-      { dataSourceId: 'source-1', partitionIndex: 2 },
-    );
-    expect(requestMock).toHaveBeenNthCalledWith(
-      5,
-      COMMANDS.files.FORGET_PERSISTED_BITLOCKER_KEY,
-      { dataSourceId: 'source-1', partitionIndex: 2 },
-    );
+    expect(requestMock).toHaveBeenNthCalledWith(4, COMMANDS.files.RESTORE_PERSISTED_BITLOCKER_KEY, {
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(5, COMMANDS.files.FORGET_PERSISTED_BITLOCKER_KEY, {
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+    });
   });
 
   it('passes BitLocker credentials only to the selected unlock command', async () => {
@@ -218,15 +216,11 @@ describe('files API', () => {
       partitionIndex: 2,
       credential: 'test-password',
     });
-    expect(requestMock).toHaveBeenNthCalledWith(
-      2,
-      COMMANDS.files.UNLOCK_BITLOCKER_WITH_RECOVERY_PASSWORD,
-      {
-        dataSourceId: 'source-1',
-        partitionIndex: 2,
-        credential: 'test-recovery',
-      },
-    );
+    expect(requestMock).toHaveBeenNthCalledWith(2, COMMANDS.files.UNLOCK_BITLOCKER_WITH_RECOVERY_PASSWORD, {
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+      credential: 'test-recovery',
+    });
   });
 
   it('routes dictionary attack lifecycle calls without reading the dictionary', async () => {
@@ -240,40 +234,31 @@ describe('files API', () => {
     await startBitLockerDictionaryAttack('source-1', 2, 'D:\\evidence\\passwords.txt');
     await getBitLockerDictionaryAttackStatus('source-1', 2);
     await cancelBitLockerDictionaryAttack('source-1', 2);
-    expect(requestMock).toHaveBeenNthCalledWith(
-      1,
-      COMMANDS.files.START_BITLOCKER_DICTIONARY_ATTACK,
-      {
-        dataSourceId: 'source-1',
-        partitionIndex: 2,
-        dictionaryPath: 'D:\\evidence\\passwords.txt',
-        backend: 'cpu',
-      },
-    );
-    expect(requestMock).toHaveBeenNthCalledWith(
-      2,
-      COMMANDS.files.GET_BITLOCKER_DICTIONARY_ATTACK_STATUS,
-      { dataSourceId: 'source-1', partitionIndex: 2 },
-    );
-    expect(requestMock).toHaveBeenNthCalledWith(
-      3,
-      COMMANDS.files.CANCEL_BITLOCKER_DICTIONARY_ATTACK,
-      { dataSourceId: 'source-1', partitionIndex: 2 },
-    );
+    expect(requestMock).toHaveBeenNthCalledWith(1, COMMANDS.files.START_BITLOCKER_DICTIONARY_ATTACK, {
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+      dictionaryPath: 'D:\\evidence\\passwords.txt',
+      backend: 'cpu',
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(2, COMMANDS.files.GET_BITLOCKER_DICTIONARY_ATTACK_STATUS, {
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(3, COMMANDS.files.CANCEL_BITLOCKER_DICTIONARY_ATTACK, {
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+    });
   });
 
   it('passes the memory image only to the dedicated BitLocker recovery command', async () => {
     requestMock.mockResolvedValue({} as never);
     await unlockBitLockerWithMemoryImage('source-1', 2, 'D:\\evidence\\memory.raw');
 
-    expect(requestMock).toHaveBeenCalledWith(
-      COMMANDS.files.UNLOCK_BITLOCKER_WITH_MEMORY_IMAGE,
-      {
-        dataSourceId: 'source-1',
-        partitionIndex: 2,
-        memoryImagePath: 'D:\\evidence\\memory.raw',
-      },
-    );
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.UNLOCK_BITLOCKER_WITH_MEMORY_IMAGE, {
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+      memoryImagePath: 'D:\\evidence\\memory.raw',
+    });
   });
 
   it('cancelImport sends jobId', async () => {

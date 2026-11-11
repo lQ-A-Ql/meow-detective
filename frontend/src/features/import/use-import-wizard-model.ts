@@ -55,7 +55,9 @@ export function useImportWizardModel({
         setDisks(items);
         if (items[0]) setPath((current) => current || items[0].path);
       })
-      .catch((cause: unknown) => { if (active) setError(errorMessage(cause)); })
+      .catch((cause: unknown) => {
+        if (active) setError(errorMessage(cause));
+      })
       .finally(() => {
         if (active) setDisksLoading(false);
       });
@@ -134,11 +136,12 @@ export function useImportWizardModel({
 
   const sourceLabel = t(`importDataSource.modes.${sourceKind === 'auto' ? 'single' : sourceKind}`);
   const selectedDisk = sourceKind === 'localDisk' ? disks.find((disk) => disk.path === path) : undefined;
-  const partitionsValue = sourceKind === 'linuxEvidenceSet'
-    ? t('importDataSource.confirmValues.partitionsSet')
-    : sourceKind === 'localDisk'
-      ? t('importDataSource.confirmValues.partitionsDisk')
-      : t('importDataSource.confirmValues.partitionsSingle');
+  const partitionsValue =
+    sourceKind === 'linuxEvidenceSet'
+      ? t('importDataSource.confirmValues.partitionsSet')
+      : sourceKind === 'localDisk'
+        ? t('importDataSource.confirmValues.partitionsDisk')
+        : t('importDataSource.confirmValues.partitionsSingle');
 
   const confirmRows: [string, string][] = [
     [t('importDataSource.confirmRows.platform'), platform.toUpperCase()],
@@ -158,7 +161,10 @@ export function useImportWizardModel({
   function selectPlatform(value: string) {
     if (value !== 'windows' && value !== 'linux' && value !== 'android') return;
     setPlatform(value);
-    if (value !== platform) { setSourceKind('auto'); setPath(''); }
+    if (value !== platform) {
+      setSourceKind('auto');
+      setPath('');
+    }
   }
   function selectSource(value: string) {
     if (!sourceOptions.includes(value as SourceKind)) return;
@@ -166,7 +172,32 @@ export function useImportWizardModel({
     if (value !== sourceKind) setPath('');
     setError('');
   }
-  return { open, step, platform, sourceKind, name, path, error, disks, disksLoading, importing, sourceOptions, confirmRows, setName, setPath, selectPlatform, selectSource, handleOpenChange, goToStep, goNext, goBack, pickFile, pickDirectory, pickLinuxEvidenceSetDirectory, handleImport };
+  return {
+    open,
+    step,
+    platform,
+    sourceKind,
+    name,
+    path,
+    error,
+    disks,
+    disksLoading,
+    importing,
+    sourceOptions,
+    confirmRows,
+    setName,
+    setPath,
+    selectPlatform,
+    selectSource,
+    handleOpenChange,
+    goToStep,
+    goNext,
+    goBack,
+    pickFile,
+    pickDirectory,
+    pickLinuxEvidenceSetDirectory,
+    handleImport,
+  };
 }
 
 export type ImportWizardModel = ReturnType<typeof useImportWizardModel>;

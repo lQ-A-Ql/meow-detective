@@ -115,9 +115,4 @@ export interface BrowserPassword {
 }
 
 export type BrowserDecryptionStatus =
-  | 'plaintext'
-  | 'decrypted'
-  | 'encrypted'
-  | 'unsupported'
-  | 'failed'
-  | 'unavailable';
+  'plaintext' | 'decrypted' | 'encrypted' | 'unsupported' | 'failed' | 'unavailable';

@@ -27,9 +27,33 @@
       "sourceHash": "mock-sha256-7a9c2d",
       "hashStatus": "completed",
       "partitions": [
-        { "index": 0, "name": "EFI System", "kindLabel": "GPT", "status": "supported", "offset": 1048576, "length": 272629760, "filesystem": "FAT32" },
-        { "index": 1, "name": "Windows", "kindLabel": "GPT", "status": "supported", "offset": 273678336, "length": 511705088000, "filesystem": "NTFS" },
-        { "index": 2, "name": "Recovery", "kindLabel": "GPT", "status": "supported", "offset": 511978766336, "length": 1073741824, "filesystem": "NTFS" }
+        {
+          "index": 0,
+          "name": "EFI System",
+          "kindLabel": "GPT",
+          "status": "supported",
+          "offset": 1048576,
+          "length": 272629760,
+          "filesystem": "FAT32"
+        },
+        {
+          "index": 1,
+          "name": "Windows",
+          "kindLabel": "GPT",
+          "status": "supported",
+          "offset": 273678336,
+          "length": 511705088000,
+          "filesystem": "NTFS"
+        },
+        {
+          "index": 2,
+          "name": "Recovery",
+          "kindLabel": "GPT",
+          "status": "supported",
+          "offset": 511978766336,
+          "length": 1073741824,
+          "filesystem": "NTFS"
+        }
       ]
     },
     {
@@ -60,7 +84,33 @@
     { "caseRoot": "D:/mock-cases/endpoint-2026-008", "name": "终端异常登录", "openedAt": "2026-10-07T08:14:00Z" }
   ],
   "jobs": [
-    { "id": "job-mock-import", "name": "Evidence import", "scope": "source-mock-android", "progress": 64, "status": "running", "detail": "Enumerating ext4 metadata", "warningCount": 1, "skippedCount": 0, "failedCount": 0, "partial": true, "currentPartition": "system", "completedPartitions": 2, "totalPartitions": 4, "partitionProgress": 64 },
-    { "id": "job-mock-index", "name": "Search index", "scope": "case-mock-001", "progress": 100, "status": "completed", "detail": "Index ready", "warningCount": 0, "skippedCount": 0, "failedCount": 0, "partial": false }
+    {
+      "id": "job-mock-import",
+      "name": "Evidence import",
+      "scope": "source-mock-android",
+      "progress": 64,
+      "status": "running",
+      "detail": "Enumerating ext4 metadata",
+      "warningCount": 1,
+      "skippedCount": 0,
+      "failedCount": 0,
+      "partial": true,
+      "currentPartition": "system",
+      "completedPartitions": 2,
+      "totalPartitions": 4,
+      "partitionProgress": 64
+    },
+    {
+      "id": "job-mock-index",
+      "name": "Search index",
+      "scope": "case-mock-001",
+      "progress": 100,
+      "status": "completed",
+      "detail": "Index ready",
+      "warningCount": 0,
+      "skippedCount": 0,
+      "failedCount": 0,
+      "partial": false
+    }
   ]
 }

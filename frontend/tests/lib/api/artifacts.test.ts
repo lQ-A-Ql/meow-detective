@@ -48,16 +48,13 @@ describe('artifacts API', () => {
   it('getArtifactRowsPage forwards the opaque cursor without an offset', async () => {
     requestMock.mockResolvedValueOnce({ total: 1, items: [] } as never);
     await getArtifactRowsPage('browser', 'artifact-cursor-1', 200);
-    expect(requestMock).toHaveBeenCalledWith(
-      COMMANDS.artifacts.GET_ARTIFACT_ROWS_REQUEST,
-      {
-        request: {
-          family: 'browser',
-          limit: 200,
-          cursor: 'artifact-cursor-1',
-        },
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.artifacts.GET_ARTIFACT_ROWS_REQUEST, {
+      request: {
+        family: 'browser',
+        limit: 200,
+        cursor: 'artifact-cursor-1',
       },
-    );
+    });
   });
 
   it('getArtifactById sends artifactId in request payload', async () => {
@@ -70,9 +67,7 @@ describe('artifacts API', () => {
   });
 
   it('getArtifactFamilyCounts calls the correct command', async () => {
-    requestMock.mockResolvedValueOnce([
-      { family: 'browser', count: 42 },
-    ] as never);
+    requestMock.mockResolvedValueOnce([{ family: 'browser', count: 42 }] as never);
     const result = await getArtifactFamilyCounts();
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.artifacts.GET_ARTIFACT_FAMILY_COUNTS);
     expect(result).toEqual([{ family: 'browser', count: 42 }]);

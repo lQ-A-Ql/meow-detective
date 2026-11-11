@@ -7,9 +7,7 @@ describe('mergeLoadedRanges', () => {
   });
 
   it('merges adjacent ranges into one', () => {
-    expect(
-      mergeLoadedRanges([{ start: 0, end: 100 }], { start: 100, end: 200 }),
-    ).toEqual([{ start: 0, end: 200 }]);
+    expect(mergeLoadedRanges([{ start: 0, end: 100 }], { start: 100, end: 200 })).toEqual([{ start: 0, end: 200 }]);
   });
 
   it('merges overlapping ranges', () => {
@@ -49,15 +47,11 @@ describe('mergeLoadedRanges', () => {
         ],
         { start: 500, end: 1000 },
       ),
-    ).toEqual([
-      { start: 0, end: 2000 },
-    ]);
+    ).toEqual([{ start: 0, end: 2000 }]);
   });
 
   it('extends existing range when new range ends later', () => {
-    expect(
-      mergeLoadedRanges([{ start: 1024, end: 2048 }], { start: 0, end: 3072 }),
-    ).toEqual([{ start: 0, end: 3072 }]);
+    expect(mergeLoadedRanges([{ start: 1024, end: 2048 }], { start: 0, end: 3072 })).toEqual([{ start: 0, end: 3072 }]);
   });
 
   it('does not mutate input ranges', () => {

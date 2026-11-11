@@ -6,14 +6,36 @@ import { useEvidenceTask } from '@/features/jobs/hooks/use-evidence-task';
 import { startEvidenceTask, getEvidenceTask, cancelEvidenceTask } from '@/lib/api/evidence-tasks';
 import type { EvidenceTask, EvidenceTaskRequest } from '@/types/evidenceTask';
 
-vi.mock('@/lib/api/evidence-tasks', () => ({ startEvidenceTask: vi.fn(), getEvidenceTask: vi.fn(), cancelEvidenceTask: vi.fn() }));
-const request: EvidenceTaskRequest = { kind: 'digest', request: { scope: 'file', algorithm: 'sha256', fileId: 'ds:source-a:file-a' } };
-const queued: EvidenceTask = { taskId: 'task-a', kind: 'digest', state: 'queued', sourceRevision: 'revision-a', bytesProcessed: 0, totalBytes: 100 };
+vi.mock('@/lib/api/evidence-tasks', () => ({
+  startEvidenceTask: vi.fn(),
+  getEvidenceTask: vi.fn(),
+  cancelEvidenceTask: vi.fn(),
+}));
+const request: EvidenceTaskRequest = {
+  kind: 'digest',
+  request: { scope: 'file', algorithm: 'sha256', fileId: 'ds:source-a:file-a' },
+};
+const queued: EvidenceTask = {
+  taskId: 'task-a',
+  kind: 'digest',
+  state: 'queued',
+  sourceRevision: 'revision-a',
+  bytesProcessed: 0,
+  totalBytes: 100,
+};
 let cache: QueryClient;
-function wrapper({ children }: { children: ReactNode }) { return <StrictMode><QueryClientProvider client={cache}>{children}</QueryClientProvider></StrictMode>; }
+function wrapper({ children }: { children: ReactNode }) {
+  return (
+    <StrictMode>
+      <QueryClientProvider client={cache}>{children}</QueryClientProvider>
+    </StrictMode>
+  );
+}
 function deferred() {
   let resolve!: (value: EvidenceTask) => void;
-  const promise = new Promise<EvidenceTask>((done) => { resolve = done; });
+  const promise = new Promise<EvidenceTask>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 beforeEach(() => {
@@ -21,9 +43,14 @@ beforeEach(() => {
   cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   vi.mocked(startEvidenceTask).mockReset().mockResolvedValue(queued);
   vi.mocked(getEvidenceTask).mockReset().mockResolvedValue(queued);
-  vi.mocked(cancelEvidenceTask).mockReset().mockResolvedValue({ ...queued, state: 'cancelled' });
+  vi.mocked(cancelEvidenceTask)
+    .mockReset()
+    .mockResolvedValue({ ...queued, state: 'cancelled' });
 });
-afterEach(() => { cleanup(); cache.clear(); });
+afterEach(() => {
+  cleanup();
+  cache.clear();
+});
 describe('case-bound evidence task lifecycle', () => {
   it('polls persistent byte progress and stops at completion', async () => {
     vi.mocked(getEvidenceTask).mockResolvedValueOnce({ ...queued, state: 'running', bytesProcessed: 64 });
@@ -89,7 +116,10 @@ describe('case-bound evidence task lifecycle', () => {
   it.each(['case', 'selection'] as const)('rejects a late start after changing %s', async (kind) => {
     const pending = deferred();
     vi.mocked(startEvidenceTask).mockReturnValue(pending.promise);
-    const hook = renderHook(({ caseId, context }) => useEvidenceTask(caseId, context), { wrapper, initialProps: { caseId: 'case-a', context: 'file-a' } });
+    const hook = renderHook(({ caseId, context }) => useEvidenceTask(caseId, context), {
+      wrapper,
+      initialProps: { caseId: 'case-a', context: 'file-a' },
+    });
     act(() => hook.result.current.start(request));
     await waitFor(() => expect(startEvidenceTask).toHaveBeenCalledOnce());
     hook.rerender(kind === 'case' ? { caseId: 'case-b', context: 'file-a' } : { caseId: 'case-a', context: 'file-b' });
@@ -101,16 +131,23 @@ describe('case-bound evidence task lifecycle', () => {
   it('rejects a late task after selection A to B to A', async () => {
     const pending = deferred();
     vi.mocked(startEvidenceTask).mockReturnValue(pending.promise);
-    const hook = renderHook(({ context }) => useEvidenceTask('case-a', context), { wrapper, initialProps: { context: 'file-a' } });
+    const hook = renderHook(({ context }) => useEvidenceTask('case-a', context), {
+      wrapper,
+      initialProps: { context: 'file-a' },
+    });
     act(() => hook.result.current.start(request));
-    hook.rerender({ context: 'file-b' }); hook.rerender({ context: 'file-a' });
+    hook.rerender({ context: 'file-b' });
+    hook.rerender({ context: 'file-a' });
     await act(async () => pending.resolve(queued));
     expect(hook.result.current.task).toBeUndefined();
   });
   it('keeps a late cancellation in the original case cache', async () => {
     const pending = deferred();
     vi.mocked(cancelEvidenceTask).mockReturnValue(pending.promise);
-    const hook = renderHook(({ caseId }) => useEvidenceTask(caseId, 'file-a'), { wrapper, initialProps: { caseId: 'case-a' } });
+    const hook = renderHook(({ caseId }) => useEvidenceTask(caseId, 'file-a'), {
+      wrapper,
+      initialProps: { caseId: 'case-a' },
+    });
     act(() => hook.result.current.start(request));
     await waitFor(() => expect(hook.result.current.task?.taskId).toBe('task-a'));
     act(() => hook.result.current.cancel());

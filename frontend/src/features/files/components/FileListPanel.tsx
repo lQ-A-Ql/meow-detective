@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight }  from '@/components/icons';
+import { ChevronLeft, ChevronRight } from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import type { ReactNode } from 'react';
@@ -134,11 +134,7 @@ export function FileListPanel({
         sortable: true,
         sortKey: 'size',
         render: (row) =>
-          row.entryType === 'directory'
-            ? '-'
-            : row.size
-              ? `${Math.round(row.size / 1000)} KB`
-              : '0 KB',
+          row.entryType === 'directory' ? '-' : row.size ? `${Math.round(row.size / 1000)} KB` : '0 KB',
       },
       {
         key: 'modifiedAt',
@@ -159,11 +155,7 @@ export function FileListPanel({
   );
   const renderRowContextMenu = useCallback(
     (row: FileEntryRow, trigger: ReactElement) => (
-      <FileEntryContextMenu
-        file={row}
-        onExtractFile={onExtractFile}
-        onOpenNested={onOpenNested}
-      >
+      <FileEntryContextMenu file={row} onExtractFile={onExtractFile} onOpenNested={onOpenNested}>
         {trigger}
       </FileEntryContextMenu>
     ),
@@ -173,14 +165,19 @@ export function FileListPanel({
   return (
     <div className="flex-1 flex flex-col border-b border-forensics-divider bg-forensics-surface min-h-0">
       <div className="shrink-0 flex items-center gap-2 border-b border-forensics-divider bg-forensics-panel px-3 py-1.5">
-        <Tooltip content={t('fileBrowser.parentDirectory')}><Button aria-label={t('fileBrowser.parentDirectory')}
-          type="button"
-          variant="outline"
-          size="sm"
-          className="text-[11px]"
-          disabled={!parentDirectory}
-          onClick={goToParentDirectory}
-        ><ActionIcon name="arrow-up" /></Button></Tooltip>
+        <Tooltip content={t('fileBrowser.parentDirectory')}>
+          <Button
+            aria-label={t('fileBrowser.parentDirectory')}
+            type="button"
+            variant="outline"
+            size="sm"
+            className="text-[11px]"
+            disabled={!parentDirectory}
+            onClick={goToParentDirectory}
+          >
+            <ActionIcon name="arrow-up" />
+          </Button>
+        </Tooltip>
         {visibilityToggle}
         {mountControl}
         {canGoToPreviousRows || canGoToNextRows ? (
@@ -212,28 +209,46 @@ export function FileListPanel({
       </div>
       <DenseDataTableFrame layout="fill" variant="plain">
         <DenseDataTable<FileEntryRow>
-        rows={sortedRows}
-        getRowKey={(row) => row.id}
-        selectedRowKey={selectedFile?.id}
-        onRowClick={onActivateEntry}
-        loadContextKey={loadContextKey}
-        initialLoadFailed={Boolean(loadErrorText)}
-        initialLoadErrorText={loadErrorText}
-        onRetryInitialLoad={onRetryLoad ? () => { void onRetryLoad(); } : undefined}
-        renderRowContextMenu={renderRowContextMenu}
-        emptyTitle={t('fileBrowser.list.emptyTitle')}
-        emptyAction={parentDirectory ? (
-          <Tooltip content={t('fileBrowser.parentDirectory')}><Button aria-label={t('fileBrowser.parentDirectory')} type="button" variant="outline" size="sm" onClick={goToParentDirectory}><ActionIcon name="arrow-up" /></Button></Tooltip>
-        ) : undefined}
-        emptyDescription={
-          rowsPage?.truncated
-            ? t('fileBrowser.list.emptyTruncated', { limit: rowsPage.limit, total: rowsPage.totalCount })
-            : t('fileBrowser.list.emptyDescription')
-        }
-        sortKey={fileSortKey}
-        sortDirection={fileSortDirection}
-        onSort={handleSort}
-        columns={columns}
+          rows={sortedRows}
+          getRowKey={(row) => row.id}
+          selectedRowKey={selectedFile?.id}
+          onRowClick={onActivateEntry}
+          loadContextKey={loadContextKey}
+          initialLoadFailed={Boolean(loadErrorText)}
+          initialLoadErrorText={loadErrorText}
+          onRetryInitialLoad={
+            onRetryLoad
+              ? () => {
+                  void onRetryLoad();
+                }
+              : undefined
+          }
+          renderRowContextMenu={renderRowContextMenu}
+          emptyTitle={t('fileBrowser.list.emptyTitle')}
+          emptyAction={
+            parentDirectory ? (
+              <Tooltip content={t('fileBrowser.parentDirectory')}>
+                <Button
+                  aria-label={t('fileBrowser.parentDirectory')}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={goToParentDirectory}
+                >
+                  <ActionIcon name="arrow-up" />
+                </Button>
+              </Tooltip>
+            ) : undefined
+          }
+          emptyDescription={
+            rowsPage?.truncated
+              ? t('fileBrowser.list.emptyTruncated', { limit: rowsPage.limit, total: rowsPage.totalCount })
+              : t('fileBrowser.list.emptyDescription')
+          }
+          sortKey={fileSortKey}
+          sortDirection={fileSortDirection}
+          onSort={handleSort}
+          columns={columns}
         />
       </DenseDataTableFrame>
     </div>

@@ -4,11 +4,7 @@ import type { DataSourceSummary } from './dataSource';
 import type { GraphStats } from './graph';
 import type { NotebookStats } from './notebook';
 
-export type VerificationGuaranteeLevel =
-  | 'guaranteed'
-  | 'bestEffort'
-  | 'experimental'
-  | 'notGuaranteed';
+export type VerificationGuaranteeLevel = 'guaranteed' | 'bestEffort' | 'experimental' | 'notGuaranteed';
 
 export type SupportMaturity = 'ga' | 'beta' | 'experimental' | 'unsupported';
 

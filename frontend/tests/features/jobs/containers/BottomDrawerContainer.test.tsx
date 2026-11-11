@@ -42,9 +42,13 @@ vi.mock('@/features/jobs/import-event-state', () => ({
   getCacheStateLabel: (state: string) => state,
   getEvidenceHashStatusLabel: (status: string) => status,
   getEvidenceHashCaveatText: (status: string) => `hash caveat ${status}`,
-  deriveEvidenceHashStatus: (partials: Array<{ kind: string; freshness: string }>, sources: Array<{ hashStatus?: string }>) => {
+  deriveEvidenceHashStatus: (
+    partials: Array<{ kind: string; freshness: string }>,
+    sources: Array<{ hashStatus?: string }>,
+  ) => {
     if (sources.some((source) => source.hashStatus === 'failed')) return 'failed';
-    if (partials.some((partial) => partial.kind === 'evidenceHash' && partial.freshness === 'partial')) return 'pending';
+    if (partials.some((partial) => partial.kind === 'evidenceHash' && partial.freshness === 'partial'))
+      return 'pending';
     if (sources.some((source) => source.hashStatus === 'unavailable')) return 'unavailable';
     if (partials.some((partial) => partial.kind === 'evidenceHash' && partial.freshness === 'ready')) return 'ready';
     return undefined;

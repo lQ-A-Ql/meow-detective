@@ -33,10 +33,7 @@ export function useFileClassificationBoardModel() {
   const currentCase = useCurrentCase();
   const [selected, setSelected] = useState<ClassifiedFileRow>();
   const [viewerTab, setViewerTab] = useState<PreviewViewerTab>('hex');
-  const selectedFile = useMemo(
-    () => (selected ? toFileEntryRow(selected) : undefined),
-    [selected],
-  );
+  const selectedFile = useMemo(() => (selected ? toFileEntryRow(selected) : undefined), [selected]);
   const preview = useFilePreview({
     selectedFile,
     viewerTab,

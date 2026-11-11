@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, CheckCircle2, Database, Shield }  from '@/components/icons';
+import { AlertTriangle, CheckCircle2, Database, Shield } from '@/components/icons';
 import { MetricCard } from '@/components/data-display';
 import type {
   ErrorTaxonomyEntry,
@@ -59,7 +59,8 @@ export function MessageBlock({
 
 function releaseGateTone(status: ReleaseGateEntry['status']) {
   if (status === 'blocked') return 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text';
-  if (status === 'warning') return 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text';
+  if (status === 'warning')
+    return 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text';
   return 'border-forensics-border bg-forensics-surface text-forensics-text';
 }
 
@@ -86,9 +87,15 @@ export function SecurityAuditPanel({ security }: { security: SecurityAuditSummar
     [t('v2Governance.security.exportOverwriteDefault'), security.exportOverwriteDefault ? on : off],
     [t('v2Governance.security.exportPathGuard'), security.exportPathGuardEnabled ? on : off],
     [t('v2Governance.security.stdioWhitelist'), security.stdioCommandWhitelistEnforced ? on : off],
-    [t('v2Governance.security.sseRestriction'), security.sseHttpsOnly ? 'http/https only' : t('v2Governance.security.sseNotTightened')],
+    [
+      t('v2Governance.security.sseRestriction'),
+      security.sseHttpsOnly ? 'http/https only' : t('v2Governance.security.sseNotTightened'),
+    ],
     [t('v2Governance.security.embeddedCredentials'), security.embeddedCredentialsBlocked ? on : off],
-    [t('v2Governance.security.mediaHandleScope'), security.mediaHandleScoped ? 'case scoped' : t('v2Governance.security.mediaNotScoped')],
+    [
+      t('v2Governance.security.mediaHandleScope'),
+      security.mediaHandleScoped ? 'case scoped' : t('v2Governance.security.mediaNotScoped'),
+    ],
     [t('v2Governance.security.errorRedaction'), security.errorRedactionEnabled ? on : off],
     [t('v2Governance.security.auditLogRequired'), security.auditLogRequired ? on : off],
     [t('v2Governance.security.auditEventCount'), security.auditEventCount.toString()],
@@ -108,11 +115,16 @@ export function SecurityAuditPanel({ security }: { security: SecurityAuditSummar
           ))}
         </div>
         <div className="mt-4 bg-transparent p-3">
-          <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">Recent Audit Entries</div>
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-forensics-muted-light">
+            Recent Audit Entries
+          </div>
           {security.recentAuditEntries.length > 0 ? (
             <div className="space-y-2">
               {security.recentAuditEntries.map((entry) => (
-                <SecurityAuditRow key={`${entry.action}-${entry.createdAt}-${entry.resourceId ?? 'none'}`} entry={entry} />
+                <SecurityAuditRow
+                  key={`${entry.action}-${entry.createdAt}-${entry.resourceId ?? 'none'}`}
+                  entry={entry}
+                />
               ))}
             </div>
           ) : (
@@ -160,7 +172,10 @@ export function ErrorTaxonomyPanel({ entries }: { entries: ErrorTaxonomyEntry[] 
               <div className="text-[10px] uppercase tracking-wider text-forensics-muted-light">Examples</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {entry.examples.map((sample) => (
-                  <span key={`${entry.category}-${sample}`} className="rounded-none bg-transparent px-2 py-1 text-[10px] text-forensics-text-tertiary">
+                  <span
+                    key={`${entry.category}-${sample}`}
+                    className="rounded-none bg-transparent px-2 py-1 text-[10px] text-forensics-text-tertiary"
+                  >
                     {sample}
                   </span>
                 ))}
@@ -220,11 +235,23 @@ export function GovernanceOverviewStrip({ snapshot }: { snapshot: V2GovernanceSn
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
       <OverviewCard label={t('v2Governance.overview.gaChains')} value={snapshot.supportMatrix.gaCount.toString()} />
       <OverviewCard label={t('v2Governance.overview.betaChains')} value={snapshot.supportMatrix.betaCount.toString()} />
-      <OverviewCard label={t('v2Governance.overview.documentedLimits')} value={snapshot.supportMatrix.documentedLimitCount.toString()} />
+      <OverviewCard
+        label={t('v2Governance.overview.documentedLimits')}
+        value={snapshot.supportMatrix.documentedLimitCount.toString()}
+      />
       <OverviewCard label={t('v2Governance.overview.factSources')} value={snapshot.factSources.length.toString()} />
-      <OverviewCard label={t('v2Governance.overview.runningJobs')} value={snapshot.runtimeSignals.runningJobCount.toString()} />
-      <OverviewCard label={t('caseHome.jobStates.partial')} value={snapshot.runtimeSignals.partialJobCount.toString()} />
-      <OverviewCard label={t('v2Governance.overview.totalScore')} value={snapshot.releaseScorecard.totalScore.toString()} />
+      <OverviewCard
+        label={t('v2Governance.overview.runningJobs')}
+        value={snapshot.runtimeSignals.runningJobCount.toString()}
+      />
+      <OverviewCard
+        label={t('caseHome.jobStates.partial')}
+        value={snapshot.runtimeSignals.partialJobCount.toString()}
+      />
+      <OverviewCard
+        label={t('v2Governance.overview.totalScore')}
+        value={snapshot.releaseScorecard.totalScore.toString()}
+      />
     </div>
   );
 }
@@ -257,7 +284,10 @@ export function GovernanceFactSourcesPanel({ snapshot }: { snapshot: V2Governanc
               <div className="text-[10px] uppercase tracking-wider text-forensics-muted-light">Derived Outputs</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {source.derivedOutputs.map((item) => (
-                  <span key={`${source.area}-${item}`} className="rounded-none bg-transparent px-2 py-1 text-[10px] text-forensics-text-tertiary">
+                  <span
+                    key={`${source.area}-${item}`}
+                    className="rounded-none bg-transparent px-2 py-1 text-[10px] text-forensics-text-tertiary"
+                  >
                     {item}
                   </span>
                 ))}

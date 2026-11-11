@@ -37,11 +37,20 @@ function avoidSplittingMatch(start: number, end: number, search?: TextSearchInde
     else high = middle;
   }
   const match = low - 1;
-  return match >= 0 && search.starts[match] > start && search.ends[match] > end
-    && search.ends[match] - search.starts[match] <= MAX_TEXT_SEGMENT_LENGTH ? search.starts[match] : end;
+  return match >= 0 &&
+    search.starts[match] > start &&
+    search.ends[match] > end &&
+    search.ends[match] - search.starts[match] <= MAX_TEXT_SEGMENT_LENGTH
+    ? search.starts[match]
+    : end;
 }
 
-export function readTextPage(content: string, index: TextDocumentIndex, pageNumber: number, search?: TextSearchIndex): TextPage {
+export function readTextPage(
+  content: string,
+  index: TextDocumentIndex,
+  pageNumber: number,
+  search?: TextSearchIndex,
+): TextPage {
   const boundary = index.pages[pageNumber];
   const startLine = boundary.firstLineNumber;
   const endLine = Math.min(index.totalLines, startLine + TEXT_PAGE_SIZE - 1);
@@ -55,10 +64,21 @@ export function readTextPage(content: string, index: TextDocumentIndex, pageNumb
     let segmentStart = cursor;
     do {
       let segmentEnd = Math.min(end, segmentStart + MAX_TEXT_SEGMENT_LENGTH);
-      if (segmentEnd < end && /[\uD800-\uDBFF]/.test(content[segmentEnd - 1]) && /[\uDC00-\uDFFF]/.test(content[segmentEnd])) segmentEnd -= 1;
+      if (
+        segmentEnd < end &&
+        /[\uD800-\uDBFF]/.test(content[segmentEnd - 1]) &&
+        /[\uDC00-\uDFFF]/.test(content[segmentEnd])
+      )
+        segmentEnd -= 1;
       if (segmentEnd < end) segmentEnd = avoidSplittingMatch(segmentStart, segmentEnd, search);
-      lines.push({ content: content.slice(segmentStart, segmentEnd), startOffset: segmentStart, endOffset: segmentEnd,
-        logicalStartOffset: cursor, lineNumber, continuation: segmentStart !== cursor });
+      lines.push({
+        content: content.slice(segmentStart, segmentEnd),
+        startOffset: segmentStart,
+        endOffset: segmentEnd,
+        logicalStartOffset: cursor,
+        lineNumber,
+        continuation: segmentStart !== cursor,
+      });
       segmentStart = segmentEnd;
     } while (segmentStart < end);
     cursor = rawEnd + 1;

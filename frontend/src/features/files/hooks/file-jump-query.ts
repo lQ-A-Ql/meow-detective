@@ -1,8 +1,14 @@
 import { getFileJumpContext } from '@/lib/api/files';
 import type { FileSortDirection, FileSortKey } from '@/lib/file-sort';
 
-export function fileJumpQuery(caseId: string | undefined, fileId: string | undefined, showHidden = false,
-  pageLimit = 500, sortKey: FileSortKey = 'name', sortDirection: FileSortDirection = 'asc') {
+export function fileJumpQuery(
+  caseId: string | undefined,
+  fileId: string | undefined,
+  showHidden = false,
+  pageLimit = 500,
+  sortKey: FileSortKey = 'name',
+  sortDirection: FileSortDirection = 'asc',
+) {
   return {
     queryKey: ['files', 'jump-context', caseId ?? null, fileId ?? null, showHidden, pageLimit, sortKey, sortDirection],
     queryFn: async ({ signal }: { signal: AbortSignal }) => {

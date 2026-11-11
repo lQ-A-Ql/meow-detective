@@ -1,5 +1,11 @@
-import type { DataSourceSummary,PluginModule } from '@/types/models';
-import type { AnalysisExtractionProgressInfo,AndroidAnalysisTabKey,AnalysisTabKey,ExtractionCategory,LinuxAnalysisTabKey } from '../types';
+import type { DataSourceSummary, PluginModule } from '@/types/models';
+import type {
+  AnalysisExtractionProgressInfo,
+  AndroidAnalysisTabKey,
+  AnalysisTabKey,
+  ExtractionCategory,
+  LinuxAnalysisTabKey,
+} from '../types';
 export interface AnalysisSourceSidebarProps {
   dataSources: DataSourceSummary[];
   selectedDataSourceId?: string;
@@ -18,4 +24,3 @@ export interface AnalysisSourceSidebarProps {
   onAndroidTabChange: (tab: AndroidAnalysisTabKey) => void;
   onSelectPluginModule?: (pluginId: string) => void;
 }
-

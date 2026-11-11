@@ -9,9 +9,7 @@ function initials(name: string): string {
 export function WeChatIdentity({ name, large = false }: { name: string; large?: boolean }) {
   return (
     <Avatar className={large ? 'size-10' : 'size-8'}>
-      <AvatarFallback className={large ? 'text-[12px]' : undefined}>
-        {initials(name)}
-      </AvatarFallback>
+      <AvatarFallback className={large ? 'text-[12px]' : undefined}>{initials(name)}</AvatarFallback>
     </Avatar>
   );
 }

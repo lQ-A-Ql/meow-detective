@@ -14,13 +14,58 @@ export function LinuxOverviewSection({ info }: { info: LinuxArtifactSummary }) {
     const yesNo = (value?: boolean) =>
       value === undefined ? '-' : t(value ? 'linuxArtifacts.values.yes' : 'linuxArtifacts.values.no');
     return [
-      { key: 'username', title: t('linuxArtifacts.columns.username'), className: 'min-w-[140px]', render: (row) => row.username, text: (row) => row.username },
-      { key: 'uid', title: t('linuxArtifacts.columns.uid'), className: 'w-[70px]', render: (row) => row.uid?.toString() ?? '-', text: (row) => row.uid?.toString() ?? '' },
-      { key: 'gid', title: t('linuxArtifacts.columns.gid'), className: 'w-[70px]', render: (row) => row.gid?.toString() ?? '-', text: (row) => row.gid?.toString() ?? '' },
-      { key: 'home', title: t('linuxArtifacts.columns.home'), className: 'min-w-[160px]', render: (row) => row.home ?? '-', text: (row) => row.home ?? '' },
-      { key: 'shell', title: t('linuxArtifacts.columns.shell'), className: 'min-w-[140px]', filterable: true, render: (row) => row.shell ?? '-', text: (row) => row.shell ?? '-' },
-      { key: 'locked', title: t('linuxArtifacts.columns.locked'), className: 'w-[80px]', filterable: true, render: (row) => yesNo(row.locked), text: (row) => yesNo(row.locked) },
-      { key: 'hasPassword', title: t('linuxArtifacts.columns.hasPassword'), className: 'w-[90px]', filterable: true, render: (row) => yesNo(row.hasPassword), text: (row) => yesNo(row.hasPassword) },
+      {
+        key: 'username',
+        title: t('linuxArtifacts.columns.username'),
+        className: 'min-w-[140px]',
+        render: (row) => row.username,
+        text: (row) => row.username,
+      },
+      {
+        key: 'uid',
+        title: t('linuxArtifacts.columns.uid'),
+        className: 'w-[70px]',
+        render: (row) => row.uid?.toString() ?? '-',
+        text: (row) => row.uid?.toString() ?? '',
+      },
+      {
+        key: 'gid',
+        title: t('linuxArtifacts.columns.gid'),
+        className: 'w-[70px]',
+        render: (row) => row.gid?.toString() ?? '-',
+        text: (row) => row.gid?.toString() ?? '',
+      },
+      {
+        key: 'home',
+        title: t('linuxArtifacts.columns.home'),
+        className: 'min-w-[160px]',
+        render: (row) => row.home ?? '-',
+        text: (row) => row.home ?? '',
+      },
+      {
+        key: 'shell',
+        title: t('linuxArtifacts.columns.shell'),
+        className: 'min-w-[140px]',
+        filterable: true,
+        render: (row) => row.shell ?? '-',
+        text: (row) => row.shell ?? '-',
+      },
+      {
+        key: 'locked',
+        title: t('linuxArtifacts.columns.locked'),
+        className: 'w-[80px]',
+        filterable: true,
+        render: (row) => yesNo(row.locked),
+        text: (row) => yesNo(row.locked),
+      },
+      {
+        key: 'hasPassword',
+        title: t('linuxArtifacts.columns.hasPassword'),
+        className: 'w-[90px]',
+        filterable: true,
+        render: (row) => yesNo(row.hasPassword),
+        text: (row) => yesNo(row.hasPassword),
+      },
     ];
   }, [t]);
 
@@ -45,10 +90,7 @@ export function LinuxOverviewSection({ info }: { info: LinuxArtifactSummary }) {
           label={t('linuxArtifacts.overview.kernelVersions')}
           value={systemInfo.kernelVersions?.join('、') || undefined}
         />
-        <InfoCard
-          label={t('linuxArtifacts.overview.accountCount')}
-          value={systemInfo.accountCount.toString()}
-        />
+        <InfoCard label={t('linuxArtifacts.overview.accountCount')} value={systemInfo.accountCount.toString()} />
         <InfoCard
           label={t('linuxArtifacts.overview.userAccountCount')}
           value={systemInfo.userAccountCount.toString()}

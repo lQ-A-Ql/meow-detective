@@ -13,16 +13,33 @@ vi.mock('@/lib/api/files', () => ({ getFileJumpContext: mocks.resolve }));
 vi.mock('react-router', () => ({ useNavigate: () => mocks.navigate }));
 
 function context(id: string): FileJumpContext {
-  const target = { id, name: 'hidden.txt', path: '[P1]/hidden/hidden.txt', entryType: 'file' as const,
-    hidden: true, system: false, deleted: false, readOnly: false, archive: false };
-  return { target, directory: { ...target, id: 'parent', entryType: 'directory' },
-    ancestorDirectoryIds: ['root', 'parent'], ancestorNodes: [], ancestorsComplete: true,
-    rowOffset: 1_000, requiresShowHidden: true };
+  const target = {
+    id,
+    name: 'hidden.txt',
+    path: '[P1]/hidden/hidden.txt',
+    entryType: 'file' as const,
+    hidden: true,
+    system: false,
+    deleted: false,
+    readOnly: false,
+    archive: false,
+  };
+  return {
+    target,
+    directory: { ...target, id: 'parent', entryType: 'directory' },
+    ancestorDirectoryIds: ['root', 'parent'],
+    ancestorNodes: [],
+    ancestorsComplete: true,
+    rowOffset: 1_000,
+    requiresShowHidden: true,
+  };
 }
 function setup() {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   cache.setQueryData(['case', 'current'], { id: 'case-a' });
-  const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={cache}>{children}</QueryClientProvider>;
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={cache}>{children}</QueryClientProvider>
+  );
   return { cache, wrapper };
 }
 
@@ -40,9 +57,17 @@ describe('source-owned file navigation', () => {
     const { result } = renderHook(() => useFileNavigation('case-a'), { wrapper });
     act(() => result.current.jump(target.target.id));
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/files'));
-    expect(mocks.resolve).toHaveBeenCalledWith(target.target.id, { showHidden: true, pageLimit: 500, sortKey: 'name', sortDirection: 'asc' });
+    expect(mocks.resolve).toHaveBeenCalledWith(target.target.id, {
+      showHidden: true,
+      pageLimit: 500,
+      sortKey: 'name',
+      sortDirection: 'asc',
+    });
     expect(cache.getQueryData(fileJumpQuery('case-a', target.target.id, true).queryKey)).toEqual(target);
-    expect(useSelectionStore.getState()).toMatchObject({ selectedDirectoryId: 'parent', selectedFileId: target.target.id });
+    expect(useSelectionStore.getState()).toMatchObject({
+      selectedDirectoryId: 'parent',
+      selectedFileId: target.target.id,
+    });
   });
 
   it('keeps the current browser selection on resolution errors and permits a retry', async () => {
@@ -59,9 +84,16 @@ describe('source-owned file navigation', () => {
 
   it('discards a late result even after switching away from and back to the same case', async () => {
     let finish!: (value: FileJumpContext) => void;
-    mocks.resolve.mockReturnValue(new Promise<FileJumpContext>((resolve) => { finish = resolve; }));
+    mocks.resolve.mockReturnValue(
+      new Promise<FileJumpContext>((resolve) => {
+        finish = resolve;
+      }),
+    );
     const { cache, wrapper } = setup();
-    const { result, rerender } = renderHook(({ id }) => useFileNavigation(id), { initialProps: { id: 'case-a' }, wrapper });
+    const { result, rerender } = renderHook(({ id }) => useFileNavigation(id), {
+      initialProps: { id: 'case-a' },
+      wrapper,
+    });
     act(() => result.current.jump('old-file'));
     await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(1));
     const summary = { name: 'case', createdAt: '', updatedAt: '' };
@@ -77,8 +109,13 @@ describe('source-owned file navigation', () => {
 
   it('publishes only the newest requested target when lookups finish out of order', async () => {
     let finish!: (value: FileJumpContext) => void;
-    mocks.resolve.mockImplementation((id: string) => id === 'old-file'
-      ? new Promise<FileJumpContext>((resolve) => { finish = resolve; }) : Promise.resolve(context(id)));
+    mocks.resolve.mockImplementation((id: string) =>
+      id === 'old-file'
+        ? new Promise<FileJumpContext>((resolve) => {
+            finish = resolve;
+          })
+        : Promise.resolve(context(id)),
+    );
     const { cache, wrapper } = setup();
     const { result } = renderHook(() => useFileNavigation('case-a'), { wrapper });
     act(() => result.current.jump('old-file'));

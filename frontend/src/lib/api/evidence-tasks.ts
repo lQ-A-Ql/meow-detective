@@ -7,4 +7,6 @@ export const getEvidenceTask = (taskId: string): Promise<EvidenceTask> =>
   apiClient.request(COMMANDS.evidenceTasks.GET, { taskId });
 export const cancelEvidenceTask = (taskId: string): Promise<EvidenceTask> =>
   apiClient.request(COMMANDS.evidenceTasks.CANCEL, { taskId });
-export function getContentIndexCoverage(dataSourceId: string): Promise<ContentIndexCoverage> { return apiClient.request(COMMANDS.evidenceTasks.COVERAGE, { dataSourceId }); }
+export function getContentIndexCoverage(dataSourceId: string): Promise<ContentIndexCoverage> {
+  return apiClient.request(COMMANDS.evidenceTasks.COVERAGE, { dataSourceId });
+}

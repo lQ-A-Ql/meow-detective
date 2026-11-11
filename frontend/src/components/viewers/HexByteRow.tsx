@@ -1,11 +1,6 @@
 import { memo } from 'react';
 import { cn } from '@/app/components/ui/utils';
-import {
-  formatAsciiByte,
-  formatByte,
-  formatOffset,
-  type HexParsedLine,
-} from '@/components/viewers/hex-viewer-model';
+import { formatAsciiByte, formatByte, formatOffset, type HexParsedLine } from '@/components/viewers/hex-viewer-model';
 
 interface HexByteRowProps {
   line: HexParsedLine;
@@ -35,12 +30,11 @@ export const HexByteRow = memo(function HexByteRow({
     hex: formatByte(byte),
   }));
 
-  const isSelected = (absoluteOffset: number) => (
-    selectionStart !== undefined
-    && selectionEnd !== undefined
-    && absoluteOffset >= selectionStart
-    && absoluteOffset <= selectionEnd
-  );
+  const isSelected = (absoluteOffset: number) =>
+    selectionStart !== undefined &&
+    selectionEnd !== undefined &&
+    absoluteOffset >= selectionStart &&
+    absoluteOffset <= selectionEnd;
 
   const byteCellClass = (absoluteOffset: number, widthClass: string) => {
     const selected = isSelected(absoluteOffset);
@@ -50,9 +44,7 @@ export const HexByteRow = memo(function HexByteRow({
       highlightedOffset === absoluteOffset || selected
         ? 'bg-[var(--forensics-selection-bg)] text-[var(--forensics-selection-text)]'
         : '',
-      selectionFocus === absoluteOffset
-        ? 'ring-1 ring-inset ring-forensics-sakura-500'
-        : '',
+      selectionFocus === absoluteOffset ? 'ring-1 ring-inset ring-forensics-sakura-500' : '',
     );
   };
 
@@ -76,26 +68,26 @@ export const HexByteRow = memo(function HexByteRow({
       >
         {cells.length > 0
           ? cells.map((cell) => (
-            <span
-              key={cell.absoluteOffset}
-              role="gridcell"
-              aria-label={`offset 0x${formatOffset(cell.absoluteOffset)}，Hex ${cell.hex}`}
-              aria-selected={isSelected(cell.absoluteOffset)}
-              className={cn(
-                byteCellClass(cell.absoluteOffset, 'w-[2ch]'),
-                cell.byteIndex === 7 && cells.length > 8 ? 'mr-[1ch]' : '',
-              )}
-              data-byte-offset={cell.absoluteOffset}
-              data-byte-side="hex"
-              data-highlighted={
-                highlightedOffset === cell.absoluteOffset || isSelected(cell.absoluteOffset) || undefined
-              }
-              data-selected={isSelected(cell.absoluteOffset) || undefined}
-              data-testid={`hex-byte-${cell.absoluteOffset}`}
-            >
-              {cell.hex}
-            </span>
-          ))
+              <span
+                key={cell.absoluteOffset}
+                role="gridcell"
+                aria-label={`offset 0x${formatOffset(cell.absoluteOffset)}，Hex ${cell.hex}`}
+                aria-selected={isSelected(cell.absoluteOffset)}
+                className={cn(
+                  byteCellClass(cell.absoluteOffset, 'w-[2ch]'),
+                  cell.byteIndex === 7 && cells.length > 8 ? 'mr-[1ch]' : '',
+                )}
+                data-byte-offset={cell.absoluteOffset}
+                data-byte-side="hex"
+                data-highlighted={
+                  highlightedOffset === cell.absoluteOffset || isSelected(cell.absoluteOffset) || undefined
+                }
+                data-selected={isSelected(cell.absoluteOffset) || undefined}
+                data-testid={`hex-byte-${cell.absoluteOffset}`}
+              >
+                {cell.hex}
+              </span>
+            ))
           : line.fallbackHex}
       </div>
       <div
@@ -114,9 +106,7 @@ export const HexByteRow = memo(function HexByteRow({
             )}
             data-byte-offset={cell.absoluteOffset}
             data-byte-side="ascii"
-            data-highlighted={
-              highlightedOffset === cell.absoluteOffset || isSelected(cell.absoluteOffset) || undefined
-            }
+            data-highlighted={highlightedOffset === cell.absoluteOffset || isSelected(cell.absoluteOffset) || undefined}
             data-selected={isSelected(cell.absoluteOffset) || undefined}
             data-testid={`ascii-byte-${cell.absoluteOffset}`}
           >

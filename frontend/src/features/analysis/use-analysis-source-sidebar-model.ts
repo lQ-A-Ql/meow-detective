@@ -4,10 +4,22 @@ import type { AnalysisSourceSidebarProps } from './components/analysis-source-si
 export function useAnalysisSourceSidebarModel(props: AnalysisSourceSidebarProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const { dataSources, selectedDataSourceId, pluginModules, onSelectDataSource } = props;
-  const rows = useMemo(() => buildAnalysisSourceRows(dataSources, selectedDataSourceId, pluginModules, collapsed), [dataSources, selectedDataSourceId, pluginModules, collapsed]);
-  const selectOrToggle = useCallback((sourceId: string, selected: boolean, expanded: boolean) => {
-    if (!selected) onSelectDataSource(sourceId);
-    if (selected || !expanded) setCollapsed((current) => { const next = new Set(current); if (next.has(sourceId)) next.delete(sourceId); else next.add(sourceId); return next; });
-  }, [onSelectDataSource]);
+  const rows = useMemo(
+    () => buildAnalysisSourceRows(dataSources, selectedDataSourceId, pluginModules, collapsed),
+    [dataSources, selectedDataSourceId, pluginModules, collapsed],
+  );
+  const selectOrToggle = useCallback(
+    (sourceId: string, selected: boolean, expanded: boolean) => {
+      if (!selected) onSelectDataSource(sourceId);
+      if (selected || !expanded)
+        setCollapsed((current) => {
+          const next = new Set(current);
+          if (next.has(sourceId)) next.delete(sourceId);
+          else next.add(sourceId);
+          return next;
+        });
+    },
+    [onSelectDataSource],
+  );
   return { props, rows, selectOrToggle };
 }

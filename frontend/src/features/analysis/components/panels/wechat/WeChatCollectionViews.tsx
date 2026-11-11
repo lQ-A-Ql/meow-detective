@@ -1,4 +1,4 @@
-import { Bookmark, Image, Search, UserRoundCheck, UserRoundX }  from '@/components/icons';
+import { Bookmark, Image, Search, UserRoundCheck, UserRoundX } from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';
@@ -47,13 +47,11 @@ export function WeChatContactsView({
   const { t } = useTranslation();
   const normalized = search.trim().toLocaleLowerCase();
   const visible = normalized
-    ? contacts.filter((contact) => [
-        contact.displayName,
-        contact.username,
-        contact.alias,
-        contact.nickName,
-        contact.remark,
-      ].some((value) => value?.toLocaleLowerCase().includes(normalized)))
+    ? contacts.filter((contact) =>
+        [contact.displayName, contact.username, contact.alias, contact.nickName, contact.remark].some((value) =>
+          value?.toLocaleLowerCase().includes(normalized),
+        ),
+      )
     : contacts;
   return (
     <div className="flex h-[min(68vh,680px)] min-h-[520px] flex-col border border-forensics-border">
@@ -88,7 +86,8 @@ export function WeChatContactsView({
                 )}
               </div>
               <div className="mt-0.5 truncate font-mono text-[10px] text-forensics-muted">
-                {contact.username}{contact.alias ? ` · ${contact.alias}` : ''}
+                {contact.username}
+                {contact.alias ? ` · ${contact.alias}` : ''}
               </div>
               {contact.description ? (
                 <div className="mt-0.5 truncate text-[10px] text-forensics-text-tertiary">{contact.description}</div>
@@ -103,13 +102,7 @@ export function WeChatContactsView({
   );
 }
 
-export function WeChatMomentsView({
-  moments,
-  loadState,
-}: {
-  moments: WeChatMoment[];
-  loadState: WeChatLoadState;
-}) {
+export function WeChatMomentsView({ moments, loadState }: { moments: WeChatMoment[]; loadState: WeChatLoadState }) {
   const { t, i18n } = useTranslation();
   return (
     <div className="flex h-[min(68vh,680px)] min-h-[520px] flex-col border border-forensics-border">
@@ -131,77 +124,94 @@ export function WeChatMomentsView({
                 ) : null}
                 {moment.hasMedia ? (
                   <div className="mt-2 grid gap-1 border-l-2 border-forensics-border pl-2 text-[10px] text-forensics-muted">
-                    {moment.mediaItems.length > 0 ? moment.mediaItems.map((media, index) => (
-                      <div key={`${media.id ?? index}-${media.url ?? ''}`} className="min-w-0">
-                        {media.inlineMedia ? (
-                          <InlineMedia
-                            media={media.inlineMedia}
-                            alt={media.title ?? media.description ?? ''}
-                            mediaClassName="max-h-72 w-full"
-                          />
-                        ) : media.localMedia ? (
-                          <>
-                            <MediaEvidenceStatus
-                              status={media.localMedia.state === 'encrypted' ? 'linked-encrypted' : 'linked-unavailable'}
-                              label={media.localMedia.state === 'encrypted'
-                                ? t('wechatWorkspace.localMediaLinkedEncrypted')
-                                : t('wechatWorkspace.localMediaLinkedUnavailable')}
-                              detail={media.localMedia.storageKey ?? media.localMedia.cacheKey}
-                              className="mb-2"
+                    {moment.mediaItems.length > 0 ? (
+                      moment.mediaItems.map((media, index) => (
+                        <div key={`${media.id ?? index}-${media.url ?? ''}`} className="min-w-0">
+                          {media.inlineMedia ? (
+                            <InlineMedia
+                              media={media.inlineMedia}
+                              alt={media.title ?? media.description ?? ''}
+                              mediaClassName="max-h-72 w-full"
                             />
-                            {media.thumbUrl || media.url ? (
-                              <ExternalMediaPreview
-                                sourceUrl={media.thumbUrl ?? media.url ?? ''}
-                                alt={media.title ?? media.description ?? media.id ?? t('wechatWorkspace.mediaItem')}
-                                warningLabel={t('wechatWorkspace.externalMediaWarning')}
-                                unavailableLabel={t('wechatWorkspace.externalMediaUnavailable')}
-                                blockedLabel={t('wechatWorkspace.externalMediaBlocked')}
-                                mediaClassName="max-h-72 w-full"
+                          ) : media.localMedia ? (
+                            <>
+                              <MediaEvidenceStatus
+                                status={
+                                  media.localMedia.state === 'encrypted' ? 'linked-encrypted' : 'linked-unavailable'
+                                }
+                                label={
+                                  media.localMedia.state === 'encrypted'
+                                    ? t('wechatWorkspace.localMediaLinkedEncrypted')
+                                    : t('wechatWorkspace.localMediaLinkedUnavailable')
+                                }
+                                detail={media.localMedia.storageKey ?? media.localMedia.cacheKey}
+                                className="mb-2"
                               />
-                            ) : null}
-                          </>
-                        ) : media.thumbUrl || media.url ? (
-                          <ExternalMediaPreview
-                            sourceUrl={media.thumbUrl ?? media.url ?? ''}
-                            alt={media.title ?? media.description ?? media.id ?? t('wechatWorkspace.mediaItem')}
-                            warningLabel={t('wechatWorkspace.externalMediaWarning')}
-                            unavailableLabel={t('wechatWorkspace.externalMediaUnavailable')}
-                            blockedLabel={t('wechatWorkspace.externalMediaBlocked')}
-                            mediaClassName="max-h-72 w-full"
-                          />
-                        ) : (
-                          <MediaEvidenceStatus
-                            status="unlinked"
-                            label={media.title ?? media.description ?? media.id ?? t('wechatWorkspace.mediaItem')}
-                            detail={t('wechatWorkspace.localMediaUnlinked')}
-                          />
-                        )}
-                        {media.url || media.thumbUrl || media.urlLocator || media.thumbLocator ? (
-                          <details className="mt-1 text-[9px] opacity-70">
-                            <summary>{t('wechatWorkspace.mediaReference')}</summary>
-                            <code className="mt-1 block max-h-16 overflow-auto scrollbar-none break-all">
-                              {media.url ?? media.thumbUrl ?? media.urlLocator ?? media.thumbLocator}
-                            </code>
-                          </details>
-                        ) : null}
+                              {media.thumbUrl || media.url ? (
+                                <ExternalMediaPreview
+                                  sourceUrl={media.thumbUrl ?? media.url ?? ''}
+                                  alt={media.title ?? media.description ?? media.id ?? t('wechatWorkspace.mediaItem')}
+                                  warningLabel={t('wechatWorkspace.externalMediaWarning')}
+                                  unavailableLabel={t('wechatWorkspace.externalMediaUnavailable')}
+                                  blockedLabel={t('wechatWorkspace.externalMediaBlocked')}
+                                  mediaClassName="max-h-72 w-full"
+                                />
+                              ) : null}
+                            </>
+                          ) : media.thumbUrl || media.url ? (
+                            <ExternalMediaPreview
+                              sourceUrl={media.thumbUrl ?? media.url ?? ''}
+                              alt={media.title ?? media.description ?? media.id ?? t('wechatWorkspace.mediaItem')}
+                              warningLabel={t('wechatWorkspace.externalMediaWarning')}
+                              unavailableLabel={t('wechatWorkspace.externalMediaUnavailable')}
+                              blockedLabel={t('wechatWorkspace.externalMediaBlocked')}
+                              mediaClassName="max-h-72 w-full"
+                            />
+                          ) : (
+                            <MediaEvidenceStatus
+                              status="unlinked"
+                              label={media.title ?? media.description ?? media.id ?? t('wechatWorkspace.mediaItem')}
+                              detail={t('wechatWorkspace.localMediaUnlinked')}
+                            />
+                          )}
+                          {media.url || media.thumbUrl || media.urlLocator || media.thumbLocator ? (
+                            <details className="mt-1 text-[9px] opacity-70">
+                              <summary>{t('wechatWorkspace.mediaReference')}</summary>
+                              <code className="mt-1 block max-h-16 overflow-auto scrollbar-none break-all">
+                                {media.url ?? media.thumbUrl ?? media.urlLocator ?? media.thumbLocator}
+                              </code>
+                            </details>
+                          ) : null}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Image className="size-3.5" />
+                        {t('wechatWorkspace.mediaItem')}
                       </div>
-                    )) : (
-                      <div className="flex items-center gap-2"><Image className="size-3.5" />{t('wechatWorkspace.mediaItem')}</div>
                     )}
                   </div>
                 ) : null}
                 {moment.likes.length > 0 ? (
                   <div className="mt-2 text-[10px] text-forensics-muted">
-                    {t('wechatWorkspace.likes')}: {moment.likes.map((like) => like.nickname ?? like.username).filter(Boolean).join(', ')}
+                    {t('wechatWorkspace.likes')}:{' '}
+                    {moment.likes
+                      .map((like) => like.nickname ?? like.username)
+                      .filter(Boolean)
+                      .join(', ')}
                   </div>
                 ) : null}
                 {moment.comments.map((comment, index) => (
-                  <div key={comment.commentId ?? `${comment.username}-${index}`} className="mt-1 border-l border-forensics-divider pl-2 text-[10px] text-forensics-text-secondary">
+                  <div
+                    key={comment.commentId ?? `${comment.username}-${index}`}
+                    className="mt-1 border-l border-forensics-divider pl-2 text-[10px] text-forensics-text-secondary"
+                  >
                     <span className="text-forensics-muted">
                       {comment.nickname ?? comment.username ?? t('wechatWorkspace.unknownSource')}
-                      {comment.replyNickname ?? comment.replyUsername
+                      {(comment.replyNickname ?? comment.replyUsername)
                         ? ` ${t('wechatWorkspace.replyTo', { name: comment.replyNickname ?? comment.replyUsername })}`
-                        : ''}: {' '}
+                        : ''}
+                      :{' '}
                     </span>
                     {comment.content}
                   </div>
@@ -237,15 +247,18 @@ export function WeChatSupplementalView({
           {records.map((record) => {
             const media = record.inlineMedia;
             return (
-              <article key={record.artifactId} className="min-w-0 bg-forensics-surface p-3" title={`${record.sourcePath}\n${record.artifactId}`}>
-                {media ? (
-                  <InlineMedia media={media} className="mb-2" mediaClassName="h-36 w-full" />
-                ) : null}
+              <article
+                key={record.artifactId}
+                className="min-w-0 bg-forensics-surface p-3"
+                title={`${record.sourcePath}\n${record.artifactId}`}
+              >
+                {media ? <InlineMedia media={media} className="mb-2" mediaClassName="h-36 w-full" /> : null}
                 <div className="truncate text-[11px] text-forensics-text">{record.title}</div>
                 <div className="mt-1 font-mono text-[9px] text-forensics-muted">{record.table}</div>
                 {media ? (
                   <div className="mt-1 break-all font-mono text-[9px] text-forensics-muted">
-                    {media.mimeType}{media.sizeBytes !== undefined ? ` · ${media.sizeBytes} B` : ''}
+                    {media.mimeType}
+                    {media.sizeBytes !== undefined ? ` · ${media.sizeBytes} B` : ''}
                     {media.sha256 ? ` · ${media.sha256}` : ''}
                   </div>
                 ) : (
@@ -287,11 +300,15 @@ export function WeChatFavoritesView({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-forensics-muted">
                 <span>{favorite.fromDisplayName || t('wechatWorkspace.unknownSource')}</span>
-                {favorite.type !== undefined ? <Badge variant="outline">{t('wechatWorkspace.type', { type: favorite.type })}</Badge> : null}
+                {favorite.type !== undefined ? (
+                  <Badge variant="outline">{t('wechatWorkspace.type', { type: favorite.type })}</Badge>
+                ) : null}
               </div>
               <p className="mt-1 whitespace-pre-wrap break-words text-[12px] leading-5 text-forensics-text-secondary">
                 {favorite.content || t('wechatWorkspace.noTextContent')}
-                {favorite.contentTruncated ? <span className="ml-1 text-forensics-muted">{t('wechatWorkspace.truncated')}</span> : null}
+                {favorite.contentTruncated ? (
+                  <span className="ml-1 text-forensics-muted">{t('wechatWorkspace.truncated')}</span>
+                ) : null}
               </p>
               <div className="mt-2 font-mono text-[9px] text-forensics-muted">
                 {formatDate(favorite.updateTimeUtc, i18n.language)}

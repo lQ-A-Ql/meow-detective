@@ -28,7 +28,13 @@ describe('ImageMetadataInspector', () => {
     const retry = vi.fn();
     const { rerender } = render(<ImageMetadataInspector loading metadata={null} />);
     expect(screen.getByText('正在读取图片元数据…')).toBeInTheDocument();
-    rerender(<ImageMetadataInspector loading={false} error={{ code: 'E', message: '读取失败', category: 'io', recoverable: true }} onRetry={retry} />);
+    rerender(
+      <ImageMetadataInspector
+        loading={false}
+        error={{ code: 'E', message: '读取失败', category: 'io', recoverable: true }}
+        onRetry={retry}
+      />,
+    );
     expect(screen.getByText('读取失败')).toBeInTheDocument();
     screen.getByRole('button', { name: '重试' }).click();
     expect(retry).toHaveBeenCalledTimes(1);

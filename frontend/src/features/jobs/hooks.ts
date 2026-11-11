@@ -43,7 +43,10 @@ function refreshWhenObservedJobsSettle(queryClient: QueryClient, jobs?: JobSnaps
   const newlySettledHandoffJobIds =
     Date.now() < pollJobsUntil
       ? jobs
-          .filter((job) => job.status !== 'running' && !handoffBaselineJobIds.has(job.id) && !refreshedSettledJobIds.has(job.id))
+          .filter(
+            (job) =>
+              job.status !== 'running' && !handoffBaselineJobIds.has(job.id) && !refreshedSettledJobIds.has(job.id),
+          )
           .map((job) => job.id)
       : [];
 
@@ -76,7 +79,8 @@ export function useJobsSnapshot(caseId?: string) {
     queryKey: ['jobs', 'snapshot', caseId ?? null],
     queryFn: getJobsSnapshot,
     enabled: Boolean(caseId),
-    refetchInterval: (activeQuery) => (shouldPollJobs(activeQuery.state.data as JobSnapshot[] | undefined) ? JOB_POLL_INTERVAL_MS : false),
+    refetchInterval: (activeQuery) =>
+      shouldPollJobs(activeQuery.state.data as JobSnapshot[] | undefined) ? JOB_POLL_INTERVAL_MS : false,
     refetchIntervalInBackground: true,
   });
 

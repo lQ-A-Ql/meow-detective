@@ -73,9 +73,15 @@ describe('matchesInfrastructureQuery', () => {
 
   it('matches a humanized kind label when no translation exists', () => {
     expect(matchesInfrastructureQuery(node({ name: 'x', id: 'x' }), 'physical host', echo)).toBe(true);
-    expect(matchesInfrastructureQuery(node({ name: 'x', id: 'x' }), 'physical host', translator({
-      'infrastructure.kinds.physical_host': '物理主机',
-    }))).toBe(false);
+    expect(
+      matchesInfrastructureQuery(
+        node({ name: 'x', id: 'x' }),
+        'physical host',
+        translator({
+          'infrastructure.kinds.physical_host': '物理主机',
+        }),
+      ),
+    ).toBe(false);
   });
 
   it('rejects a query absent from name, id, domain label and kind label', () => {
@@ -92,12 +98,16 @@ describe('label helpers', () => {
   it('humanizes kinds only when the translation is missing', () => {
     expect(kindLabel('physical_host', echo)).toBe('Physical Host');
     expect(kindLabel('pve', echo)).toBe('Pve');
-    expect(kindLabel('virtual_machine', translator({ 'infrastructure.kinds.virtual_machine': '虚拟机' }))).toBe('虚拟机');
+    expect(kindLabel('virtual_machine', translator({ 'infrastructure.kinds.virtual_machine': '虚拟机' }))).toBe(
+      '虚拟机',
+    );
   });
 
   it('humanizes relations only when the translation is missing', () => {
     expect(relationLabel('network_link', echo)).toBe('Network Link');
-    expect(relationLabel('derived_from', translator({ 'infrastructure.relations.derived_from': '派生于' }))).toBe('派生于');
+    expect(relationLabel('derived_from', translator({ 'infrastructure.relations.derived_from': '派生于' }))).toBe(
+      '派生于',
+    );
   });
 
   it('humanizes states only when the translation is missing', () => {

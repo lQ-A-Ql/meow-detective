@@ -4,11 +4,14 @@ import { TextViewer } from '@/components/viewers/TextViewer';
 import { Dialog, DialogContent, DialogTitle } from '@/app/components/ui/dialog';
 
 beforeEach(() => {
-  vi.stubGlobal('ResizeObserver', class {
-    observe = vi.fn();
-    disconnect = vi.fn();
-    unobserve = vi.fn();
-  });
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+    },
+  );
 });
 
 describe('TextViewer', () => {
@@ -77,7 +80,9 @@ describe('TextViewer', () => {
     expect(renderedSegments.length).toBeGreaterThan(1);
     expect(renderedSegments.every((segment) => (segment.textContent?.length ?? 0) <= 8 * 1024)).toBe(true);
     expect(renderedSegments.every((segment) => segment.parentElement?.className.includes('whitespace-pre'))).toBe(true);
-    expect(renderedSegments.every((segment) => !segment.parentElement?.className.includes('whitespace-pre-wrap'))).toBe(true);
+    expect(renderedSegments.every((segment) => !segment.parentElement?.className.includes('whitespace-pre-wrap'))).toBe(
+      true,
+    );
     expect(screen.queryByText('A'.repeat(20_000))).toBeNull();
   });
 
@@ -143,11 +148,18 @@ describe('TextViewer', () => {
     const fragments = Array.from(document.querySelectorAll('mark[data-current="true"]'));
     expect(fragments).toHaveLength(1);
     expect(fragments.map((mark) => mark.textContent).join('')).toBe('needle');
-    expect(screen.getAllByTestId('text-line-content').map((line) => line.textContent).join('')).toBe('x'.repeat(8190) + 'needle' + 'end');
+    expect(
+      screen
+        .getAllByTestId('text-line-content')
+        .map((line) => line.textContent)
+        .join(''),
+    ).toBe('x'.repeat(8190) + 'needle' + 'end');
   });
 
   it('resets search on document changes and allows editing an externally supplied query', () => {
-    const { rerender } = render(<TextViewer documentKey="one" content="pass needle" encoding="UTF-8" searchQuery="pass" />);
+    const { rerender } = render(
+      <TextViewer documentKey="one" content="pass needle" encoding="UTF-8" searchQuery="pass" />,
+    );
     const input = screen.getByRole('textbox', { name: '搜索文本' });
     fireEvent.change(input, { target: { value: 'needle' } });
     expect(document.querySelector('mark[data-current="true"]')).toHaveTextContent('needle');
@@ -168,9 +180,14 @@ describe('TextViewer', () => {
   });
 
   it('clears an active search before Escape closes a containing preview dialog', () => {
-    render(<Dialog defaultOpen><DialogContent aria-describedby={undefined}>
-      <DialogTitle>Mock preview</DialogTitle><TextViewer content="pass sample" encoding="UTF-8" />
-    </DialogContent></Dialog>);
+    render(
+      <Dialog defaultOpen>
+        <DialogContent aria-describedby={undefined}>
+          <DialogTitle>Mock preview</DialogTitle>
+          <TextViewer content="pass sample" encoding="UTF-8" />
+        </DialogContent>
+      </Dialog>,
+    );
     const input = screen.getByRole('textbox', { name: '搜索文本' });
     fireEvent.change(input, { target: { value: 'pass' } });
     fireEvent.keyDown(input, { key: 'Escape' });

@@ -1,14 +1,7 @@
 export interface DataSourceSummary {
   id: string;
   name: string;
-  kind:
-    | 'e01'
-    | 'raw'
-    | 'local_disk'
-    | 'logical_directory'
-    | 'logical_archive'
-    | 'android_sparse'
-    | string;
+  kind: 'e01' | 'raw' | 'local_disk' | 'logical_directory' | 'logical_archive' | 'android_sparse' | string;
   sourcePath: string;
   importedAt: string;
   fileCount?: number;

@@ -19,10 +19,8 @@ interface StartOperation {
 }
 
 const active = (state?: string) => state === 'queued' || state === 'running' || state === 'cancelling';
-const ownerQueryKey = (caseId: string, contextKey: string) =>
-  ['evidence-task-owner', caseId, contextKey] as const;
-const taskQueryKey = (caseId: string, taskId: string) =>
-  ['evidence-task', caseId, taskId] as const;
+const ownerQueryKey = (caseId: string, contextKey: string) => ['evidence-task-owner', caseId, contextKey] as const;
+const taskQueryKey = (caseId: string, taskId: string) => ['evidence-task', caseId, taskId] as const;
 
 export function useEvidenceTask(caseId?: string, contextKey = '') {
   const key = JSON.stringify([caseId, contextKey]);
@@ -32,11 +30,12 @@ export function useEvidenceTask(caseId?: string, contextKey = '') {
   const cache = useQueryClient();
   const ownerLookup = useQuery({
     queryKey: caseId ? ownerQueryKey(caseId, contextKey) : ['evidence-task-owner', null, contextKey],
-    queryFn: () => caseId
-      ? cache.getQueryData<StoredDigestTaskOwner>(ownerQueryKey(caseId, contextKey))
-        ?? readStoredDigestTaskOwner(caseId, contextKey)
-        ?? null
-      : null,
+    queryFn: () =>
+      caseId
+        ? (cache.getQueryData<StoredDigestTaskOwner>(ownerQueryKey(caseId, contextKey)) ??
+          readStoredDigestTaskOwner(caseId, contextKey) ??
+          null)
+        : null,
     enabled: !!caseId,
     staleTime: Infinity,
     gcTime: Infinity,
@@ -58,13 +57,17 @@ export function useEvidenceTask(caseId?: string, contextKey = '') {
       return { operation, task };
     },
   });
-  const current = start.variables?.key === key && start.variables.epoch === owner.epoch && start.variables.attempt === attempt.current;
+  const current =
+    start.variables?.key === key &&
+    start.variables.epoch === owner.epoch &&
+    start.variables.attempt === attempt.current;
   const started = current && start.data && start.data.operation === start.variables ? start.data.task : undefined;
-  const cachedOwner = start.variables?.key === key ? undefined : ownerLookup.data ?? undefined;
+  const cachedOwner = start.variables?.key === key ? undefined : (ownerLookup.data ?? undefined);
   const initialTaskId = started?.taskId ?? cachedOwner?.taskId;
-  const initialTask = initialTaskId && caseId
-    ? cache.getQueryData<EvidenceTask>(taskQueryKey(caseId, initialTaskId)) ?? cachedOwner?.task
-    : undefined;
+  const initialTask =
+    initialTaskId && caseId
+      ? (cache.getQueryData<EvidenceTask>(taskQueryKey(caseId, initialTaskId)) ?? cachedOwner?.task)
+      : undefined;
   const status = useQuery({
     queryKey: ['evidence-task', caseId ?? null, initialTaskId ?? null],
     queryFn: () => getEvidenceTask(initialTaskId!),
@@ -72,9 +75,9 @@ export function useEvidenceTask(caseId?: string, contextKey = '') {
     retry: false,
     staleTime: 0,
     initialData: initialTask,
-    refetchInterval: (query) => active(query.state.data?.state ?? started?.state ?? initialTask?.state) ? 250 : false,
+    refetchInterval: (query) => (active(query.state.data?.state ?? started?.state ?? initialTask?.state) ? 250 : false),
   });
-  const task = current ? status.data ?? started : status.data ?? initialTask;
+  const task = current ? (status.data ?? started) : (status.data ?? initialTask);
   const request = current ? start.variables?.request : cachedOwner?.request;
   useEffect(() => {
     if (!caseId || !request || !task || active(task.state)) return;
@@ -90,20 +93,24 @@ export function useEvidenceTask(caseId?: string, contextKey = '') {
     writeStoredDigestTaskOwner(stored);
   }, [cache, caseId, contextKey, request, task]);
   const cancel = useMutation({
-    mutationFn: async (owner: { caseId: string; taskId: string }) => ({ owner, task: await cancelEvidenceTask(owner.taskId) }),
+    mutationFn: async (owner: { caseId: string; taskId: string }) => ({
+      owner,
+      task: await cancelEvidenceTask(owner.taskId),
+    }),
     onSuccess: ({ owner, task }) => cache.setQueryData(['evidence-task', owner.caseId, task.taskId], task),
   });
   return {
     request,
     task,
     loading: (current && start.isPending) || active(task?.state) || (!!initialTaskId && !task && status.isPending),
-    errorText: current && start.error
-      ? errorMessage(start.error)
-      : status.error
-        ? errorMessage(status.error)
-        : cancel.variables?.taskId === task?.taskId && cancel.error
-          ? errorMessage(cancel.error)
-          : undefined,
+    errorText:
+      current && start.error
+        ? errorMessage(start.error)
+        : status.error
+          ? errorMessage(status.error)
+          : cancel.variables?.taskId === task?.taskId && cancel.error
+            ? errorMessage(cancel.error)
+            : undefined,
     cancelPending: cancel.isPending || task?.state === 'cancelling',
     start: (request: EvidenceTaskRequest) => {
       if (caseId && owner.key === key) {
@@ -129,6 +136,8 @@ export function useEvidenceTask(caseId?: string, contextKey = '') {
         });
       }
     },
-    cancel: () => { if (caseId && task && active(task.state)) cancel.mutate({ caseId, taskId: task.taskId }); },
+    cancel: () => {
+      if (caseId && task && active(task.state)) cancel.mutate({ caseId, taskId: task.taskId });
+    },
   };
 }

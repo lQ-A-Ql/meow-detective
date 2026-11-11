@@ -58,19 +58,23 @@ describe('PluginActionsSection', () => {
   });
 
   it('renders nothing when the plugin declares no actions', () => {
-    const { container } = render(createElement(PluginActionsSection, {
-      dataSourceId: 'ds-1',
-      pluginId: 'prefetch',
-    }));
+    const { container } = render(
+      createElement(PluginActionsSection, {
+        dataSourceId: 'ds-1',
+        pluginId: 'prefetch',
+      }),
+    );
     expect(container.firstChild).toBeNull();
   });
 
   it('renders descriptor label/description and the file picker for inputKind=file', () => {
     mocks.usePluginActions.mockReturnValue({ data: [FILE_ACTION], isLoading: false });
-    render(createElement(PluginActionsSection, {
-      dataSourceId: 'ds-1',
-      pluginId: 'wechat',
-    }));
+    render(
+      createElement(PluginActionsSection, {
+        dataSourceId: 'ds-1',
+        pluginId: 'wechat',
+      }),
+    );
     expect(screen.getByText('插件操作')).toBeDefined();
     expect(screen.getByText('从内存镜像恢复数据库密钥')).toBeDefined();
     expect(screen.getByText('扫描内存镜像并离线验证匹配')).toBeDefined();
@@ -80,11 +84,13 @@ describe('PluginActionsSection', () => {
   it('fills the path via the injected file picker', async () => {
     mocks.usePluginActions.mockReturnValue({ data: [FILE_ACTION], isLoading: false });
     const pickFilePath = vi.fn().mockResolvedValue('D:/dumps/wechat.raw');
-    render(createElement(PluginActionsSection, {
-      dataSourceId: 'ds-1',
-      pluginId: 'wechat',
-      pickFilePath,
-    }));
+    render(
+      createElement(PluginActionsSection, {
+        dataSourceId: 'ds-1',
+        pluginId: 'wechat',
+        pickFilePath,
+      }),
+    );
     fireEvent.click(screen.getByRole('button', { name: /选择文件|选择/ }));
     await waitFor(() => {
       expect(screen.getByLabelText('输入文件路径')).toHaveProperty('value', 'D:/dumps/wechat.raw');
@@ -96,10 +102,12 @@ describe('PluginActionsSection', () => {
     mocks.usePluginActions.mockReturnValue({ data: [FILE_ACTION], isLoading: false });
     const recovery = recoveryState();
     mocks.useRecoverWeChatKeys.mockReturnValue(recovery);
-    render(createElement(PluginActionsSection, {
-      dataSourceId: 'ds-1',
-      pluginId: 'wechat',
-    }));
+    render(
+      createElement(PluginActionsSection, {
+        dataSourceId: 'ds-1',
+        pluginId: 'wechat',
+      }),
+    );
     fireEvent.click(screen.getByRole('button', { name: /运行/ }));
     await waitFor(() => {
       expect(screen.getByText('请先选择输入文件。')).toBeDefined();
@@ -111,10 +119,12 @@ describe('PluginActionsSection', () => {
     mocks.usePluginActions.mockReturnValue({ data: [FILE_ACTION], isLoading: false });
     const recovery = recoveryState();
     mocks.useRecoverWeChatKeys.mockReturnValue(recovery);
-    render(createElement(PluginActionsSection, {
-      dataSourceId: 'ds-1',
-      pluginId: 'wechat',
-    }));
+    render(
+      createElement(PluginActionsSection, {
+        dataSourceId: 'ds-1',
+        pluginId: 'wechat',
+      }),
+    );
     fireEvent.change(screen.getByLabelText('输入文件路径'), {
       target: { value: '  D:/dump.raw  ' },
     });
@@ -130,10 +140,12 @@ describe('PluginActionsSection', () => {
   it('disables the run button while the action is running', () => {
     mocks.usePluginActions.mockReturnValue({ data: [FILE_ACTION], isLoading: false });
     mocks.useRecoverWeChatKeys.mockReturnValue(recoveryState({ isPending: true }));
-    render(createElement(PluginActionsSection, {
-      dataSourceId: 'ds-1',
-      pluginId: 'wechat',
-    }));
+    render(
+      createElement(PluginActionsSection, {
+        dataSourceId: 'ds-1',
+        pluginId: 'wechat',
+      }),
+    );
     const runButton = screen.getByRole('button', { name: /^运行$|运行中/ });
     expect(runButton).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: /选择文件|选择/ })).toHaveProperty('disabled', true);
@@ -141,33 +153,41 @@ describe('PluginActionsSection', () => {
 
   it('shows the api error message when the run fails', () => {
     mocks.usePluginActions.mockReturnValue({ data: [FILE_ACTION], isLoading: false });
-    mocks.useRecoverWeChatKeys.mockReturnValue(recoveryState({
-      error: { code: 'X', message: 'dump 读取失败', category: 'io', recoverable: true },
-    }));
-    render(createElement(PluginActionsSection, {
-      dataSourceId: 'ds-1',
-      pluginId: 'wechat',
-    }));
+    mocks.useRecoverWeChatKeys.mockReturnValue(
+      recoveryState({
+        error: { code: 'X', message: 'dump 读取失败', category: 'io', recoverable: true },
+      }),
+    );
+    render(
+      createElement(PluginActionsSection, {
+        dataSourceId: 'ds-1',
+        pluginId: 'wechat',
+      }),
+    );
     expect(screen.getByText('dump 读取失败')).toBeDefined();
   });
 
   it('shows the recovery result and triggers the plugin analysis rerun', async () => {
     mocks.usePluginActions.mockReturnValue({ data: [FILE_ACTION], isLoading: false });
-    mocks.useRecoverWeChatKeys.mockReturnValue(recoveryState({
-      data: {
-        candidatesSeen: 12,
-        recoveredCount: 3,
-        matchedDbNames: ['EnMicroMsg.db', 'SnsMicroMsg.db'],
-        unmatchedDbNames: ['Favorite.db'],
-        recoveredKeys: [{ databaseName: 'EnMicroMsg.db', keyHex: 'ab'.repeat(32) }],
-      },
-    }));
+    mocks.useRecoverWeChatKeys.mockReturnValue(
+      recoveryState({
+        data: {
+          candidatesSeen: 12,
+          recoveredCount: 3,
+          matchedDbNames: ['EnMicroMsg.db', 'SnsMicroMsg.db'],
+          unmatchedDbNames: ['Favorite.db'],
+          recoveredKeys: [{ databaseName: 'EnMicroMsg.db', keyHex: 'ab'.repeat(32) }],
+        },
+      }),
+    );
     const rerun = rerunState();
     mocks.useRunAnalysisExtraction.mockReturnValue(rerun);
-    render(createElement(PluginActionsSection, {
-      dataSourceId: 'ds-1',
-      pluginId: 'wechat',
-    }));
+    render(
+      createElement(PluginActionsSection, {
+        dataSourceId: 'ds-1',
+        pluginId: 'wechat',
+      }),
+    );
     expect(screen.getByText(/扫描候选/).textContent).toContain('12');
     expect(screen.getByText(/恢复成功/).textContent).toContain('3');
     expect(screen.getByText(/EnMicroMsg\.db, SnsMicroMsg\.db/)).toBeDefined();
@@ -192,15 +212,19 @@ describe('PluginActionsSection', () => {
       unmatchedDbNames: [],
       recoveredKeys: [{ databaseName: 'message_0.db', keyHex: 'cd'.repeat(32) }],
     };
-    mocks.useRecoverWeChatKeys.mockReturnValue(recoveryState({
-      mutateAsync: vi.fn().mockResolvedValue(result),
-    }));
+    mocks.useRecoverWeChatKeys.mockReturnValue(
+      recoveryState({
+        mutateAsync: vi.fn().mockResolvedValue(result),
+      }),
+    );
     const onRecoveredKeys = vi.fn();
-    render(createElement(PluginActionsSection, {
-      dataSourceId: 'ds-1',
-      pluginId: 'wechat',
-      onRecoveredKeys,
-    }));
+    render(
+      createElement(PluginActionsSection, {
+        dataSourceId: 'ds-1',
+        pluginId: 'wechat',
+        onRecoveredKeys,
+      }),
+    );
     fireEvent.change(screen.getByLabelText('输入文件路径'), {
       target: { value: 'D:/dump.raw' },
     });
@@ -216,10 +240,12 @@ describe('PluginActionsSection', () => {
       data: [{ id: 'otherAction', label: '其他操作', inputKind: 'none' }],
       isLoading: false,
     });
-    render(createElement(PluginActionsSection, {
-      dataSourceId: 'ds-1',
-      pluginId: 'wechat',
-    }));
+    render(
+      createElement(PluginActionsSection, {
+        dataSourceId: 'ds-1',
+        pluginId: 'wechat',
+      }),
+    );
     expect(screen.getByText('其他操作')).toBeDefined();
     expect(screen.getByText('该操作暂不支持在界面中运行。')).toBeDefined();
     expect(screen.getByRole('button', { name: /运行/ })).toHaveProperty('disabled', true);

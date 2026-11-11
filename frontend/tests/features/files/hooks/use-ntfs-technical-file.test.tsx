@@ -11,16 +11,25 @@ const clients: QueryClient[] = [];
 function wrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
-  return ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
 }
-beforeEach(() => { vi.mocked(inspectNtfsFile).mockReset(); });
-afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.clear()); });
+beforeEach(() => {
+  vi.mocked(inspectNtfsFile).mockReset();
+});
+afterEach(() => {
+  cleanup();
+  clients.splice(0).forEach((client) => client.clear());
+});
 
 describe('NTFS source-bound query', () => {
   it('requests a globally scoped MFT file without changing its ID', async () => {
     const technical = ntfsTechnicalFile();
     vi.mocked(inspectNtfsFile).mockResolvedValue(technical);
-    const hook = renderHook(() => useNtfsTechnicalFile('case-a', 'ds:sample-source:mft:0:42', true), { wrapper: wrapper() });
+    const hook = renderHook(() => useNtfsTechnicalFile('case-a', 'ds:sample-source:mft:0:42', true), {
+      wrapper: wrapper(),
+    });
     expect(hook.result.current.eligible).toBe(true);
     await waitFor(() => expect(hook.result.current.technical).toEqual(technical));
     expect(inspectNtfsFile).toHaveBeenCalledWith('ds:sample-source:mft:0:42');
@@ -43,7 +52,8 @@ describe('NTFS source-bound query', () => {
     const second = { ...first, inode: 84 };
     vi.mocked(inspectNtfsFile).mockResolvedValueOnce(first).mockResolvedValueOnce(second);
     const hook = renderHook(({ caseId }) => useNtfsTechnicalFile(caseId, 'ds:sample-source:mft:0:42', true), {
-      initialProps: { caseId: 'case-a' }, wrapper: wrapper(),
+      initialProps: { caseId: 'case-a' },
+      wrapper: wrapper(),
     });
     await waitFor(() => expect(hook.result.current.technical?.inode).toBe(42));
     hook.rerender({ caseId: 'case-b' });
@@ -53,16 +63,26 @@ describe('NTFS source-bound query', () => {
   });
 
   it('exposes typed Unsupported separately from read failures', async () => {
-    vi.mocked(inspectNtfsFile).mockRejectedValue({ code: 'unsupported', message: 'Not an image-backed NTFS file', category: 'unsupported' });
-    const hook = renderHook(() => useNtfsTechnicalFile('case-a', 'ds:sample-source:mft:42', true), { wrapper: wrapper() });
+    vi.mocked(inspectNtfsFile).mockRejectedValue({
+      code: 'unsupported',
+      message: 'Not an image-backed NTFS file',
+      category: 'unsupported',
+    });
+    const hook = renderHook(() => useNtfsTechnicalFile('case-a', 'ds:sample-source:mft:42', true), {
+      wrapper: wrapper(),
+    });
     await waitFor(() => expect(hook.result.current.unsupported).toBe(true));
     expect(hook.result.current.errorText).toBe('Not an image-backed NTFS file');
     expect(hook.result.current.technical).toBeUndefined();
   });
 
   it('retries transient read errors and projects a bounded run list', async () => {
-    vi.mocked(inspectNtfsFile).mockRejectedValueOnce({ code: 'read', message: '读取失败', category: 'io' }).mockResolvedValueOnce(ntfsTechnicalFile(33));
-    const hook = renderHook(() => useNtfsTechnicalFile('case-a', 'ds:sample-source:mft:42', true), { wrapper: wrapper() });
+    vi.mocked(inspectNtfsFile)
+      .mockRejectedValueOnce({ code: 'read', message: '读取失败', category: 'io' })
+      .mockResolvedValueOnce(ntfsTechnicalFile(33));
+    const hook = renderHook(() => useNtfsTechnicalFile('case-a', 'ds:sample-source:mft:42', true), {
+      wrapper: wrapper(),
+    });
     await waitFor(() => expect(hook.result.current.errorText).toBe('读取失败'));
     act(() => hook.result.current.retry());
     await waitFor(() => expect(hook.result.current.technical).toBeDefined());
@@ -72,8 +92,12 @@ describe('NTFS source-bound query', () => {
   });
 
   it('hides previous technical data when a refresh fails closed', async () => {
-    vi.mocked(inspectNtfsFile).mockResolvedValueOnce(ntfsTechnicalFile()).mockRejectedValueOnce({ code: 'corrupt', message: '结构损坏', category: 'parser' });
-    const hook = renderHook(() => useNtfsTechnicalFile('case-a', 'ds:sample-source:mft:42', true), { wrapper: wrapper() });
+    vi.mocked(inspectNtfsFile)
+      .mockResolvedValueOnce(ntfsTechnicalFile())
+      .mockRejectedValueOnce({ code: 'corrupt', message: '结构损坏', category: 'parser' });
+    const hook = renderHook(() => useNtfsTechnicalFile('case-a', 'ds:sample-source:mft:42', true), {
+      wrapper: wrapper(),
+    });
     await waitFor(() => expect(hook.result.current.technical).toBeDefined());
     act(() => hook.result.current.retry());
     await waitFor(() => expect(hook.result.current.errorText).toBe('结构损坏'));

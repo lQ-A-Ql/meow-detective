@@ -105,7 +105,9 @@ export async function closeFileHandle(handleId: string): Promise<boolean> {
   return apiClient.request(COMMANDS.files.CLOSE_FILE_HANDLE, { handleId });
 }
 
-export async function readFileRange(request: ViewerRangeRequest): Promise<import('@/types/models').ViewerRangeResponse> {
+export async function readFileRange(
+  request: ViewerRangeRequest,
+): Promise<import('@/types/models').ViewerRangeResponse> {
   return apiClient.request(COMMANDS.files.READ_FILE_RANGE, { request });
 }
 
@@ -219,10 +221,7 @@ export async function getBitLockerDictionaryAttackStatus(
   });
 }
 
-export async function cancelBitLockerDictionaryAttack(
-  dataSourceId: string,
-  partitionIndex: number,
-): Promise<boolean> {
+export async function cancelBitLockerDictionaryAttack(dataSourceId: string, partitionIndex: number): Promise<boolean> {
   return apiClient.request(COMMANDS.files.CANCEL_BITLOCKER_DICTIONARY_ATTACK, {
     dataSourceId,
     partitionIndex,
@@ -269,9 +268,7 @@ export async function readMediaRange(request: MediaRangeRequest): Promise<MediaR
   return apiClient.request<MediaRangeResponse>(COMMANDS.files.READ_MEDIA_RANGE, { request });
 }
 
-export async function extractFileToPath(
-  request: ExtractFileRequest,
-): Promise<FileExtractionResult> {
+export async function extractFileToPath(request: ExtractFileRequest): Promise<FileExtractionResult> {
   return apiClient.request<FileExtractionResult>(COMMANDS.files.EXTRACT_FILE, { request });
 }
 
@@ -284,12 +281,7 @@ export async function getFileJumpContext(
     sortDirection?: FileSortDirection;
   } = {},
 ): Promise<FileJumpContext> {
-  const {
-    showHidden = false,
-    pageLimit = 500,
-    sortKey = 'name',
-    sortDirection = 'asc',
-  } = options;
+  const { showHidden = false, pageLimit = 500, sortKey = 'name', sortDirection = 'asc' } = options;
   return apiClient.request<FileJumpContext>(COMMANDS.files.GET_FILE_JUMP_CONTEXT, {
     request: { fileId, showHidden, pageLimit, sortKey, sortDirection },
   });
@@ -306,10 +298,7 @@ export async function listDeletedRecoveries(
   });
 }
 
-export async function runDeletedRecovery(
-  dataSourceId: string,
-  partitionIndex?: number,
-): Promise<DeletedRecoveryRun> {
+export async function runDeletedRecovery(dataSourceId: string, partitionIndex?: number): Promise<DeletedRecoveryRun> {
   return apiClient.request<DeletedRecoveryRun>(COMMANDS.files.RUN_DELETED_RECOVERY, {
     request: { dataSourceId, partitionIndex: partitionIndex ?? null },
   });
@@ -319,10 +308,9 @@ export async function searchDeletedRecoveriesByHash(
   dataSourceId: string,
   hash: string,
 ): Promise<DeletedRecoveryHashSearch> {
-  return apiClient.request<DeletedRecoveryHashSearch>(
-    COMMANDS.files.SEARCH_DELETED_RECOVERIES_BY_HASH,
-    { request: { dataSourceId, hash } },
-  );
+  return apiClient.request<DeletedRecoveryHashSearch>(COMMANDS.files.SEARCH_DELETED_RECOVERIES_BY_HASH, {
+    request: { dataSourceId, hash },
+  });
 }
 
 export async function readDeletedRecoveryRange(
@@ -331,10 +319,9 @@ export async function readDeletedRecoveryRange(
   offset: number,
   length: number,
 ): Promise<DeletedRecoveryContentRange> {
-  return apiClient.request<DeletedRecoveryContentRange>(
-    COMMANDS.files.READ_DELETED_RECOVERY_RANGE,
-    { request: { dataSourceId, recoveryId, offset, length } },
-  );
+  return apiClient.request<DeletedRecoveryContentRange>(COMMANDS.files.READ_DELETED_RECOVERY_RANGE, {
+    request: { dataSourceId, recoveryId, offset, length },
+  });
 }
 
 export async function exportDeletedRecovery(

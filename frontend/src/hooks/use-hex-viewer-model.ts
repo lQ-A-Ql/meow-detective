@@ -1,8 +1,13 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BYTES_PER_ROW, formatByteWindowLine, formatOffset, parseHexLine, type HexParsedLine } from '@/components/viewers/hex-viewer-model';
+import {
+  BYTES_PER_ROW,
+  formatByteWindowLine,
+  formatOffset,
+  parseHexLine,
+  type HexParsedLine,
+} from '@/components/viewers/hex-viewer-model';
 import type { HexByteWindowLines, HexLoadedRange } from '@/types/models';
-
 
 interface HexViewerProps {
   lines: string[] | HexByteWindowLines;
@@ -16,23 +21,19 @@ interface HexViewerProps {
   onNeedMoreRange?: (direction: 'previous' | 'next') => void;
 }
 
-
 const DEFAULT_CONTAINER_HEIGHT = 600;
 
 const OVERSCAN_ROWS = 5;
-
 
 interface VisibleRange {
   startIndex: number;
   endIndex: number;
 }
 
-
 interface ByteSelection {
   anchor: number;
   focus: number;
 }
-
 
 function byteOffsetFromTarget(target: EventTarget | null): number | undefined {
   if (!(target instanceof Element)) return undefined;
@@ -42,14 +43,12 @@ function byteOffsetFromTarget(target: EventTarget | null): number | undefined {
   return Number.isSafeInteger(offset) && offset >= 0 ? offset : undefined;
 }
 
-
 function byteOffsetFromPointer(event: React.PointerEvent<HTMLDivElement>): number | undefined {
   const directOffset = byteOffsetFromTarget(event.target);
   if (directOffset !== undefined) return directOffset;
   if (typeof document.elementFromPoint !== 'function') return undefined;
   return byteOffsetFromTarget(document.elementFromPoint(event.clientX, event.clientY));
 }
-
 
 function visibleRangeFor(
   scrollTop: number,
@@ -59,10 +58,7 @@ function visibleRangeFor(
 ): VisibleRange {
   return {
     startIndex: Math.max(0, Math.floor(scrollTop / lineHeight) - OVERSCAN_ROWS),
-    endIndex: Math.min(
-      rowCount,
-      Math.ceil((scrollTop + containerHeight) / lineHeight) + OVERSCAN_ROWS,
-    ),
+    endIndex: Math.min(rowCount, Math.ceil((scrollTop + containerHeight) / lineHeight) + OVERSCAN_ROWS),
   };
 }
 export function useHexViewerModel({
@@ -76,7 +72,6 @@ export function useHexViewerModel({
   loadedRanges,
   onNeedMoreRange,
 }: HexViewerProps) {
-
   const { t } = useTranslation();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -91,7 +86,6 @@ export function useHexViewerModel({
 
   const [selection, setSelection] = useState<ByteSelection>();
 
-
   const byteWindow = useMemo(() => {
     const metadata = lines as HexByteWindowLines;
     const bytes = rawBytes ?? metadata.rawBytes;
@@ -102,11 +96,7 @@ export function useHexViewerModel({
     };
   }, [baseOffset, fileSize, lines, rawBytes]);
 
-
-  const rowCount = byteWindow.rawBytes
-    ? Math.ceil(byteWindow.rawBytes.length / BYTES_PER_ROW)
-    : lines.length;
-
+  const rowCount = byteWindow.rawBytes ? Math.ceil(byteWindow.rawBytes.length / BYTES_PER_ROW) : lines.length;
 
   const selectableRange = useMemo(() => {
     if (byteWindow.rawBytes?.length) {
@@ -132,21 +122,21 @@ export function useHexViewerModel({
     };
   }, [byteWindow.baseOffset, byteWindow.rawBytes, lines]);
 
-
   const [visibleRange, setVisibleRange] = useState<VisibleRange>(() =>
     visibleRangeFor(0, DEFAULT_CONTAINER_HEIGHT, lineHeight, rowCount),
   );
 
-
-  const updateVisibleRange = useCallback((scrollTop: number, viewportHeight: number) => {
-    const nextRange = visibleRangeFor(scrollTop, viewportHeight, lineHeight, rowCount);
-    setVisibleRange((currentRange) => (
-      currentRange.startIndex === nextRange.startIndex && currentRange.endIndex === nextRange.endIndex
-        ? currentRange
-        : nextRange
-    ));
-  }, [lineHeight, rowCount]);
-
+  const updateVisibleRange = useCallback(
+    (scrollTop: number, viewportHeight: number) => {
+      const nextRange = visibleRangeFor(scrollTop, viewportHeight, lineHeight, rowCount);
+      setVisibleRange((currentRange) =>
+        currentRange.startIndex === nextRange.startIndex && currentRange.endIndex === nextRange.endIndex
+          ? currentRange
+          : nextRange,
+      );
+    },
+    [lineHeight, rowCount],
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -155,9 +145,7 @@ export function useHexViewerModel({
     const updateContainerHeight = () => {
       const nextHeight = container.clientHeight;
       if (nextHeight > 0) {
-        setContainerHeight((currentHeight) => (
-          currentHeight === nextHeight ? currentHeight : nextHeight
-        ));
+        setContainerHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
         updateVisibleRange(container.scrollTop, nextHeight);
       }
     };
@@ -170,9 +158,7 @@ export function useHexViewerModel({
       for (const entry of entries) {
         const nextHeight = entry.contentRect.height;
         if (nextHeight > 0) {
-          setContainerHeight((currentHeight) => (
-            currentHeight === nextHeight ? currentHeight : nextHeight
-          ));
+          setContainerHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
           updateVisibleRange(container.scrollTop, nextHeight);
         }
       }
@@ -182,62 +168,56 @@ export function useHexViewerModel({
     return () => observer.disconnect();
   }, [updateVisibleRange]);
 
-
   useEffect(() => {
     const container = containerRef.current;
     updateVisibleRange(container?.scrollTop ?? 0, container?.clientHeight || containerHeight);
   }, [containerHeight, rowCount, updateVisibleRange]);
 
-
   const visibleLines = useMemo(() => {
     if (byteWindow.rawBytes) {
-      return Array.from(
-        { length: visibleRange.endIndex - visibleRange.startIndex },
-        (_, index) => {
-          const lineIndex = visibleRange.startIndex + index;
-          return {
-            parsed: formatByteWindowLine(byteWindow.rawBytes!, lineIndex, byteWindow.baseOffset),
-            lineIndex,
-          };
-        },
-      );
+      return Array.from({ length: visibleRange.endIndex - visibleRange.startIndex }, (_, index) => {
+        const lineIndex = visibleRange.startIndex + index;
+        return {
+          parsed: formatByteWindowLine(byteWindow.rawBytes!, lineIndex, byteWindow.baseOffset),
+          lineIndex,
+        };
+      });
     }
 
-    return lines
-      .slice(visibleRange.startIndex, visibleRange.endIndex)
-      .map((line, idx) => ({
-        parsed: parseHexLine(line),
-        lineIndex: visibleRange.startIndex + idx,
-      }));
+    return lines.slice(visibleRange.startIndex, visibleRange.endIndex).map((line, idx) => ({
+      parsed: parseHexLine(line),
+      lineIndex: visibleRange.startIndex + idx,
+    }));
   }, [byteWindow, lines, visibleRange.endIndex, visibleRange.startIndex]);
 
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const nextScrollTop = e.currentTarget.scrollTop;
+      updateVisibleRange(nextScrollTop, e.currentTarget.clientHeight);
 
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const nextScrollTop = e.currentTarget.scrollTop;
-    updateVisibleRange(nextScrollTop, e.currentTarget.clientHeight);
-
-    if (!onNeedMoreRange) {
-      return;
-    }
-
-    const maxScrollTop = Math.max(0, e.currentTarget.scrollHeight - e.currentTarget.clientHeight);
-    if (nextScrollTop <= lineHeight * OVERSCAN_ROWS) {
-      // A first chunk starts at zero. Do not duplicate the initial IPC range
-      // read when a new viewport reports its initial scroll position.
-      if (byteWindow.baseOffset > 0) {
-        onNeedMoreRange('previous');
+      if (!onNeedMoreRange) {
+        return;
       }
-    } else if (maxScrollTop - nextScrollTop <= lineHeight * (OVERSCAN_ROWS + 2)) {
-      const hasMoreAfter =
-        byteWindow.fileSize === undefined ||
-        !byteWindow.rawBytes ||
-        byteWindow.baseOffset + byteWindow.rawBytes.length < byteWindow.fileSize;
-      if (hasMoreAfter) {
-        onNeedMoreRange('next');
-      }
-    }
-  }, [byteWindow, lineHeight, onNeedMoreRange, updateVisibleRange]);
 
+      const maxScrollTop = Math.max(0, e.currentTarget.scrollHeight - e.currentTarget.clientHeight);
+      if (nextScrollTop <= lineHeight * OVERSCAN_ROWS) {
+        // A first chunk starts at zero. Do not duplicate the initial IPC range
+        // read when a new viewport reports its initial scroll position.
+        if (byteWindow.baseOffset > 0) {
+          onNeedMoreRange('previous');
+        }
+      } else if (maxScrollTop - nextScrollTop <= lineHeight * (OVERSCAN_ROWS + 2)) {
+        const hasMoreAfter =
+          byteWindow.fileSize === undefined ||
+          !byteWindow.rawBytes ||
+          byteWindow.baseOffset + byteWindow.rawBytes.length < byteWindow.fileSize;
+        if (hasMoreAfter) {
+          onNeedMoreRange('next');
+        }
+      }
+    },
+    [byteWindow, lineHeight, onNeedMoreRange, updateVisibleRange],
+  );
 
   const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const offset = byteOffsetFromPointer(event);
@@ -250,26 +230,26 @@ export function useHexViewerModel({
     setHoveredOffset((current) => (current === offset ? current : offset));
   }, []);
 
-
-  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button > 0) return;
-    const offset = byteOffsetFromTarget(event.target);
-    if (offset === undefined) return;
-    event.preventDefault();
-    event.currentTarget.focus();
-    const anchor = event.shiftKey && selection ? selection.anchor : offset;
-    dragAnchorRef.current = anchor;
-    draggingRef.current = true;
-    setHoveredOffset(undefined);
-    setSelection({ anchor, focus: offset });
-  }, [selection]);
-
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button > 0) return;
+      const offset = byteOffsetFromTarget(event.target);
+      if (offset === undefined) return;
+      event.preventDefault();
+      event.currentTarget.focus();
+      const anchor = event.shiftKey && selection ? selection.anchor : offset;
+      dragAnchorRef.current = anchor;
+      draggingRef.current = true;
+      setHoveredOffset(undefined);
+      setSelection({ anchor, focus: offset });
+    },
+    [selection],
+  );
 
   const finishPointerSelection = useCallback(() => {
     draggingRef.current = false;
     dragAnchorRef.current = undefined;
   }, []);
-
 
   useEffect(() => {
     window.addEventListener('pointerup', finishPointerSelection);
@@ -282,77 +262,77 @@ export function useHexViewerModel({
     };
   }, [finishPointerSelection]);
 
-
-  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!selectableRange) return;
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      setSelection(undefined);
-      return;
-    }
-    const current = selection?.focus
-      ?? (activeOffset !== undefined
-        && activeOffset >= selectableRange.start
-        && activeOffset <= selectableRange.end
-        ? activeOffset
-        : selectableRange.start);
-    let next = current;
-    switch (event.key) {
-      case 'ArrowLeft':
-        next -= 1;
-        break;
-      case 'ArrowRight':
-        next += 1;
-        break;
-      case 'ArrowUp':
-        next -= BYTES_PER_ROW;
-        break;
-      case 'ArrowDown':
-        next += BYTES_PER_ROW;
-        break;
-      case 'Home':
-        next = current - ((current - selectableRange.start) % BYTES_PER_ROW);
-        break;
-      case 'End':
-        next = current + (BYTES_PER_ROW - 1 - ((current - selectableRange.start) % BYTES_PER_ROW));
-        break;
-      default:
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!selectableRange) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setSelection(undefined);
         return;
-    }
-    event.preventDefault();
-    next = Math.min(selectableRange.end, Math.max(selectableRange.start, next));
-    setHoveredOffset(undefined);
-    setSelection({
-      anchor: event.shiftKey ? selection?.anchor ?? current : next,
-      focus: next,
-    });
+      }
+      const current =
+        selection?.focus ??
+        (activeOffset !== undefined && activeOffset >= selectableRange.start && activeOffset <= selectableRange.end
+          ? activeOffset
+          : selectableRange.start);
+      let next = current;
+      switch (event.key) {
+        case 'ArrowLeft':
+          next -= 1;
+          break;
+        case 'ArrowRight':
+          next += 1;
+          break;
+        case 'ArrowUp':
+          next -= BYTES_PER_ROW;
+          break;
+        case 'ArrowDown':
+          next += BYTES_PER_ROW;
+          break;
+        case 'Home':
+          next = current - ((current - selectableRange.start) % BYTES_PER_ROW);
+          break;
+        case 'End':
+          next = current + (BYTES_PER_ROW - 1 - ((current - selectableRange.start) % BYTES_PER_ROW));
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      next = Math.min(selectableRange.end, Math.max(selectableRange.start, next));
+      setHoveredOffset(undefined);
+      setSelection({
+        anchor: event.shiftKey ? (selection?.anchor ?? current) : next,
+        focus: next,
+      });
 
-    const container = containerRef.current;
-    if (!container) return;
-    const rowIndex = Math.floor((next - selectableRange.start) / BYTES_PER_ROW);
-    const rowTop = rowIndex * lineHeight;
-    const rowBottom = rowTop + lineHeight;
-    let nextScrollTop = container.scrollTop;
-    if (rowTop < container.scrollTop) {
-      nextScrollTop = rowTop;
-    } else if (rowBottom > container.scrollTop + container.clientHeight) {
-      nextScrollTop = rowBottom - container.clientHeight;
-    }
-    if (nextScrollTop !== container.scrollTop) {
-      container.scrollTop = nextScrollTop;
-      updateVisibleRange(nextScrollTop, container.clientHeight || containerHeight);
-    }
-  }, [activeOffset, containerHeight, lineHeight, selectableRange, selection, updateVisibleRange]);
-
+      const container = containerRef.current;
+      if (!container) return;
+      const rowIndex = Math.floor((next - selectableRange.start) / BYTES_PER_ROW);
+      const rowTop = rowIndex * lineHeight;
+      const rowBottom = rowTop + lineHeight;
+      let nextScrollTop = container.scrollTop;
+      if (rowTop < container.scrollTop) {
+        nextScrollTop = rowTop;
+      } else if (rowBottom > container.scrollTop + container.clientHeight) {
+        nextScrollTop = rowBottom - container.clientHeight;
+      }
+      if (nextScrollTop !== container.scrollTop) {
+        container.scrollTop = nextScrollTop;
+        updateVisibleRange(nextScrollTop, container.clientHeight || containerHeight);
+      }
+    },
+    [activeOffset, containerHeight, lineHeight, selectableRange, selection, updateVisibleRange],
+  );
 
   // In byte-window mode `lines` is only a compatibility wrapper and may be
   // recreated by unrelated view-model state changes. The bytes identify the
   // actual window whose selection must be retained.
   const selectionWindowSource = byteWindow.rawBytes ?? lines;
 
-
-  useEffect(() => { setSelection(undefined); }, [highlightRange?.start, highlightRange?.end]);
-
+  useEffect(() => {
+    setSelection(undefined);
+  }, [highlightRange?.start, highlightRange?.end]);
 
   useEffect(() => {
     draggingRef.current = false;
@@ -360,7 +340,6 @@ export function useHexViewerModel({
     setHoveredOffset(undefined);
     setSelection(undefined);
   }, [byteWindow.baseOffset, selectionWindowSource]);
-
 
   useEffect(() => {
     if (activeOffset === undefined || !containerRef.current) {
@@ -378,24 +357,45 @@ export function useHexViewerModel({
     updateVisibleRange(nextScrollTop, containerRef.current.clientHeight || containerHeight);
   }, [activeOffset, byteWindow, containerHeight, lineHeight, lines, rowCount, updateVisibleRange]);
 
-
   const offsetWidth = useMemo(() => {
     if (rowCount === 0) return 80;
     const lastOffset = byteWindow.rawBytes
       ? formatOffset(
-        Math.max(
-          byteWindow.baseOffset + Math.max(0, byteWindow.rawBytes.length - 1),
-          byteWindow.fileSize ? byteWindow.fileSize - 1 : 0,
-        ),
-      )
+          Math.max(
+            byteWindow.baseOffset + Math.max(0, byteWindow.rawBytes.length - 1),
+            byteWindow.fileSize ? byteWindow.fileSize - 1 : 0,
+          ),
+        )
       : parseHexLine(lines[lines.length - 1] ?? '').offset || '00000000';
     return Math.max(80, lastOffset.length * 10 + 16);
   }, [byteWindow, lines, rowCount]);
 
-
   const selectionStart = selection ? Math.min(selection.anchor, selection.focus) : highlightRange?.start;
 
   const selectionEnd = selection ? Math.max(selection.anchor, selection.focus) : highlightRange?.end;
-  const handlePointerLeave = () => { if (!draggingRef.current) setHoveredOffset(undefined); };
-return { handlePointerLeave, lineHeight, loadedRanges, t, containerRef, draggingRef, hoveredOffset, setHoveredOffset, selection, rowCount, visibleRange, visibleLines, handleScroll, handlePointerMove, handlePointerDown, finishPointerSelection, handleKeyDown, offsetWidth, selectionStart, selectionEnd };
+  const handlePointerLeave = () => {
+    if (!draggingRef.current) setHoveredOffset(undefined);
+  };
+  return {
+    handlePointerLeave,
+    lineHeight,
+    loadedRanges,
+    t,
+    containerRef,
+    draggingRef,
+    hoveredOffset,
+    setHoveredOffset,
+    selection,
+    rowCount,
+    visibleRange,
+    visibleLines,
+    handleScroll,
+    handlePointerMove,
+    handlePointerDown,
+    finishPointerSelection,
+    handleKeyDown,
+    offsetWidth,
+    selectionStart,
+    selectionEnd,
+  };
 }

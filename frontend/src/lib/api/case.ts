@@ -34,7 +34,10 @@ export async function getNestedEvidenceLineage(parentDataSourceId: string): Prom
   return apiClient.request(COMMANDS.case.GET_NESTED_EVIDENCE_LINEAGE, { request: { parentDataSourceId } });
 }
 
-export async function materializeNestedEvidence(parentDataSourceId: string, fileEntryId: string): Promise<EvidenceTask> {
+export async function materializeNestedEvidence(
+  parentDataSourceId: string,
+  fileEntryId: string,
+): Promise<EvidenceTask> {
   return apiClient.request(COMMANDS.case.MATERIALIZE_NESTED_EVIDENCE, { request: { parentDataSourceId, fileEntryId } });
 }
 

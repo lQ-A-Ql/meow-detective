@@ -6,9 +6,7 @@ export async function mountImage(request: MountImageRequest): Promise<MountStatu
   return apiClient.request<MountStatus>(COMMANDS.mount.MOUNT_IMAGE, { request });
 }
 
-export async function mountPhysicalImage(
-  request: MountPhysicalImageRequest,
-): Promise<MountStatus> {
+export async function mountPhysicalImage(request: MountPhysicalImageRequest): Promise<MountStatus> {
   return apiClient.request<MountStatus>(COMMANDS.mount.MOUNT_PHYSICAL_IMAGE, { request });
 }
 

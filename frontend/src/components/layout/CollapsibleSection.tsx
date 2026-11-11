@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import * as CollapsiblePrimitive from '@radix-ui/react-collapsible';
-import { ChevronDown, ChevronRight }  from '@/components/icons';
+import { ChevronDown, ChevronRight } from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
 
 export interface CollapsibleSectionProps {
@@ -49,9 +49,7 @@ export function CollapsibleSection({
         </CollapsiblePrimitive.Trigger>
         {headerExtra}
       </div>
-      <CollapsiblePrimitive.Content className={contentClassName}>
-        {children}
-      </CollapsiblePrimitive.Content>
+      <CollapsiblePrimitive.Content className={contentClassName}>{children}</CollapsiblePrimitive.Content>
     </CollapsiblePrimitive.Root>
   );
 }

@@ -1,13 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '@/lib/api/client';
 import { COMMANDS } from '@/lib/api/commands';
-import {
-  getNodeNeighborhood,
-  getGraphSnapshot,
-  listGraphNodes,
-  getProvenanceChain,
-  queryGraph,
-} from '@/lib/api/graph';
+import { getNodeNeighborhood, getGraphSnapshot, listGraphNodes, getProvenanceChain, queryGraph } from '@/lib/api/graph';
 
 vi.mock('@/lib/api/client', () => ({
   apiClient: {

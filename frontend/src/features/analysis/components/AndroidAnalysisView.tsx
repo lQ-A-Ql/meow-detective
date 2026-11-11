@@ -2,28 +2,16 @@ import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { RunAnalysisAction } from '@/components/layout/EmptyStateActions';
-import { AppWindow }  from '@/components/icons';
+import { AppWindow } from '@/components/icons';
 import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/app/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { EmptyState, KeyValueField, PanelFrame } from '@/components/data-display';
 import { VirtualGrid } from '@/components/lists/VirtualGrid';
-import {
-  AnalysisErrorBanner,
-  AnalysisLoadingPanel,
-} from '@/features/analysis/components/AnalysisPanels';
-import type {
-  AndroidAnalysisRun,
-  AndroidDeviceInfo,
-  AndroidPackageSummary,
-} from '@/types/models';
+import { AnalysisErrorBanner, AnalysisLoadingPanel } from '@/features/analysis/components/AnalysisPanels';
+import type { AndroidAnalysisRun, AndroidDeviceInfo, AndroidPackageSummary } from '@/types/models';
 import type { AndroidAnalysisTabKey } from '@/features/analysis/types';
 
 interface AndroidAnalysisViewProps {
@@ -42,7 +30,8 @@ interface AndroidAnalysisViewProps {
   onLoadMore: () => void;
 }
 
-const getPackageKey = (item: AndroidPackageSummary['packages'][number]) => JSON.stringify([item.packageName, item.userId]);
+const getPackageKey = (item: AndroidPackageSummary['packages'][number]) =>
+  JSON.stringify([item.packageName, item.userId]);
 const renderPackage = (item: AndroidPackageSummary['packages'][number]) => <AndroidPackageCard item={item} />;
 
 export function AndroidAnalysisView({
@@ -157,13 +146,26 @@ function AndroidPackagesPanel({
   return (
     <div className="space-y-5">
       {packages.length === 0 ? (
-        <EmptyState title={t('analysis.android.noPackages')} action={onRunAnalysis ? <RunAnalysisAction onClick={onRunAnalysis} /> : undefined} />
+        <EmptyState
+          title={t('analysis.android.noPackages')}
+          action={onRunAnalysis ? <RunAnalysisAction onClick={onRunAnalysis} /> : undefined}
+        />
       ) : (
         <VirtualGrid items={packages} getItemKey={getPackageKey} renderItem={renderPackage} />
       )}
       {hasMore ? (
         <div className="flex justify-center">
-          <Tooltip content={t('analysis.android.loadMore')}><Button aria-label={t('analysis.android.loadMore')} type="button" variant="outline" onClick={onLoadMore} disabled={loadingMore}><ActionIcon name="refresh" /></Button></Tooltip>
+          <Tooltip content={t('analysis.android.loadMore')}>
+            <Button
+              aria-label={t('analysis.android.loadMore')}
+              type="button"
+              variant="outline"
+              onClick={onLoadMore}
+              disabled={loadingMore}
+            >
+              <ActionIcon name="refresh" />
+            </Button>
+          </Tooltip>
         </div>
       ) : null}
     </div>
@@ -192,18 +194,8 @@ function AndroidPackageCard({ item }: { item: AndroidPackageSummary['packages'][
       </CardHeader>
       <CardContent className="space-y-2 px-4 pb-4 text-[11px]">
         <div className="grid grid-cols-2 gap-2">
-          <KeyValueField
-            label={t('analysis.android.versionCode')}
-            value={item.versionCode}
-            fallback=""
-            mono
-          />
-          <KeyValueField
-            label={t('analysis.android.uid')}
-            value={item.uid?.toString()}
-            fallback=""
-            mono
-          />
+          <KeyValueField label={t('analysis.android.versionCode')} value={item.versionCode} fallback="" mono />
+          <KeyValueField label={t('analysis.android.uid')} value={item.uid?.toString()} fallback="" mono />
         </div>
         <KeyValueField
           label={t('analysis.android.installTime')}
@@ -217,9 +209,7 @@ function AndroidPackageCard({ item }: { item: AndroidPackageSummary['packages'][
         />
         <div className="flex flex-wrap gap-1">
           {item.userState ? (
-            <Badge variant="outline">
-              {t('analysis.android.userStates.' + item.userState)}
-            </Badge>
+            <Badge variant="outline">{t('analysis.android.userStates.' + item.userState)}</Badge>
           ) : null}
           {item.installer ? <Badge variant="outline">{item.installer}</Badge> : null}
         </div>

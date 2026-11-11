@@ -14,40 +14,71 @@ export function useRegistryTree(client: RegistryBrowserClient, session?: Registr
   const [errors, setErrors] = useState<Record<string, string>>({});
   const activeSession = useRef<string>();
   activeSession.current = session?.sessionId;
-  const load = useCallback(async (key: RegistryKeyMetadata, cursor?: string) => {
-    if (!session || key.subkeyCount === 0) return;
-    const sessionId = session.sessionId;
-    setLoading((state) => new Set(state).add(key.keyId));
-    setErrors((state) => { const next = { ...state }; delete next[key.keyId]; return next; });
-    try {
-      const page = await queryClient.fetchQuery({
-        queryKey: ['registry-browser', 'subkeys', session.source, sessionId, key.keyId, cursor ?? null],
-        queryFn: () => client.listSubkeys({ sessionId, keyId: key.keyId, cursor, limit: REGISTRY_BROWSER_LAYOUT.pageSize }),
-        staleTime: Infinity,
+  const load = useCallback(
+    async (key: RegistryKeyMetadata, cursor?: string) => {
+      if (!session || key.subkeyCount === 0) return;
+      const sessionId = session.sessionId;
+      setLoading((state) => new Set(state).add(key.keyId));
+      setErrors((state) => {
+        const next = { ...state };
+        delete next[key.keyId];
+        return next;
       });
-      if (activeSession.current !== sessionId) return;
-      setPages((state) => ({ ...state, [key.keyId]: { page, keys: cursor
-        ? [...(state[key.keyId]?.keys ?? []), ...page.keys] : page.keys } }));
-      return page;
-    } catch (error) {
-      if (activeSession.current === sessionId) setErrors((state) => ({ ...state, [key.keyId]: registryBrowserErrorCode(error) }));
-    } finally {
-      if (activeSession.current === sessionId) setLoading((state) => { const next = new Set(state); next.delete(key.keyId); return next; });
-    }
-  }, [client, queryClient, session]);
+      try {
+        const page = await queryClient.fetchQuery({
+          queryKey: ['registry-browser', 'subkeys', session.source, sessionId, key.keyId, cursor ?? null],
+          queryFn: () =>
+            client.listSubkeys({ sessionId, keyId: key.keyId, cursor, limit: REGISTRY_BROWSER_LAYOUT.pageSize }),
+          staleTime: Infinity,
+        });
+        if (activeSession.current !== sessionId) return;
+        setPages((state) => ({
+          ...state,
+          [key.keyId]: { page, keys: cursor ? [...(state[key.keyId]?.keys ?? []), ...page.keys] : page.keys },
+        }));
+        return page;
+      } catch (error) {
+        if (activeSession.current === sessionId)
+          setErrors((state) => ({ ...state, [key.keyId]: registryBrowserErrorCode(error) }));
+      } finally {
+        if (activeSession.current === sessionId)
+          setLoading((state) => {
+            const next = new Set(state);
+            next.delete(key.keyId);
+            return next;
+          });
+      }
+    },
+    [client, queryClient, session],
+  );
   useEffect(() => {
-    setPages({}); setErrors({}); setLoading(new Set());
+    setPages({});
+    setErrors({});
+    setLoading(new Set());
     setExpanded(session ? new Set([session.rootKey.keyId]) : new Set());
     if (session) void load(session.rootKey);
   }, [load, session]);
-  const toggle = useCallback((key: RegistryKeyMetadata) => {
-    const isExpanded = expanded.has(key.keyId);
-    setExpanded((state) => { const next = new Set(state); if (isExpanded) next.delete(key.keyId); else next.add(key.keyId); return next; });
-    if (!isExpanded && !pages[key.keyId]) void load(key);
-  }, [expanded, load, pages]);
+  const toggle = useCallback(
+    (key: RegistryKeyMetadata) => {
+      const isExpanded = expanded.has(key.keyId);
+      setExpanded((state) => {
+        const next = new Set(state);
+        if (isExpanded) next.delete(key.keyId);
+        else next.add(key.keyId);
+        return next;
+      });
+      if (!isExpanded && !pages[key.keyId]) void load(key);
+    },
+    [expanded, load, pages],
+  );
   const expand = useCallback((key: RegistryKeyMetadata) => {
     setExpanded((state) => new Set(state).add(key.keyId));
   }, []);
-  useEffect(() => () => { activeSession.current = undefined; }, []);
+  useEffect(
+    () => () => {
+      activeSession.current = undefined;
+    },
+    [],
+  );
   return { pages, expanded, loading, errors, toggle, load, expand };
 }

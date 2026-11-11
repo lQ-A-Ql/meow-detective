@@ -5,17 +5,24 @@ import type { BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-
 
 describe('BitLocker transient panel state', () => {
   let clipboardValue = '';
-  const writeText = vi.fn(async (value: string) => { clipboardValue = value; });
+  const writeText = vi.fn(async (value: string) => {
+    clipboardValue = value;
+  });
   const readText = vi.fn(async () => clipboardValue);
   beforeEach(() => {
-    vi.useFakeTimers(); clipboardValue = ''; vi.clearAllMocks();
+    vi.useFakeTimers();
+    clipboardValue = '';
+    vi.clearAllMocks();
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText, readText } });
   });
-  afterEach(() => { vi.useRealTimers(); });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   const model = () => ({ unlock: vi.fn().mockResolvedValue(true) }) as unknown as BitLockerVolumeModel;
 
   it('clears credential state before awaiting unlock', () => {
-    const volume = model(); const { result } = renderHook(() => useBitLockerPanelState(volume));
+    const volume = model();
+    const { result } = renderHook(() => useBitLockerPanelState(volume));
     act(() => result.current.setCredential('synthetic-password'));
     act(() => result.current.submitCredential());
     expect(result.current.credential).toBe('');
@@ -27,7 +34,8 @@ describe('BitLocker transient panel state', () => {
     await act(() => result.current.copyRecoveredPassword('synthetic-recovery-password'));
     expect(result.current.passwordCopied).toBe(true);
     await act(() => vi.advanceTimersByTimeAsync(1500));
-    expect(clipboardValue).toBe(''); expect(result.current.passwordCopied).toBe(false);
+    expect(clipboardValue).toBe('');
+    expect(result.current.passwordCopied).toBe(false);
   });
 
   it('does not erase a clipboard value written by another application', async () => {
@@ -40,12 +48,20 @@ describe('BitLocker transient panel state', () => {
 
   it('cleans a late clipboard write after unmount', async () => {
     let resolve!: () => void;
-    writeText.mockImplementationOnce((value: string) => new Promise<void>((done) => {
-      resolve = () => { clipboardValue = value; done(); };
-    }));
+    writeText.mockImplementationOnce(
+      (value: string) =>
+        new Promise<void>((done) => {
+          resolve = () => {
+            clipboardValue = value;
+            done();
+          };
+        }),
+    );
     const { result, unmount } = renderHook(() => useBitLockerPanelState(model()));
     const pending = result.current.copyRecoveredPassword('synthetic-recovery-password');
-    unmount(); resolve(); await pending;
+    unmount();
+    resolve();
+    await pending;
     expect(clipboardValue).toBe('');
   });
 

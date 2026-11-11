@@ -35,9 +35,7 @@ describe('GraphNodeDetails', () => {
       makeEdge('e2', 'node:other', node.id),
       makeEdge('e3', 'node:other', 'node:third'),
     ];
-    render(
-      <GraphNodeDetails node={node} edges={edges} onExpand={vi.fn()} onClose={vi.fn()} />,
-    );
+    render(<GraphNodeDetails node={node} edges={edges} onExpand={vi.fn()} onClose={vi.fn()} />);
 
     expect(screen.getByText('evidence.doc')).toBeInTheDocument();
     expect(screen.getByText(node.id)).toBeInTheDocument();
@@ -58,12 +56,7 @@ describe('GraphNodeDetails', () => {
 
     for (const [nodeType, label] of types) {
       const { unmount } = render(
-        <GraphNodeDetails
-          node={makeNode({ nodeType })}
-          edges={[]}
-          onExpand={vi.fn()}
-          onClose={vi.fn()}
-        />,
+        <GraphNodeDetails node={makeNode({ nodeType })} edges={[]} onExpand={vi.fn()} onClose={vi.fn()} />,
       );
       expect(screen.getByText(label)).toBeInTheDocument();
       unmount();
@@ -89,9 +82,7 @@ describe('GraphNodeDetails', () => {
   it('expands one or two levels and closes through the action buttons', () => {
     const onExpand = vi.fn();
     const onClose = vi.fn();
-    render(
-      <GraphNodeDetails node={makeNode()} edges={[]} onExpand={onExpand} onClose={onClose} />,
-    );
+    render(<GraphNodeDetails node={makeNode()} edges={[]} onExpand={onExpand} onClose={onClose} />);
 
     fireEvent.click(screen.getByRole('button', { name: '展开 1 层' }));
     fireEvent.click(screen.getByRole('button', { name: '展开 2 层' }));

@@ -22,13 +22,22 @@ export function useInfrastructureHostFacts() {
       ...ANALYSIS_QUERY_OPTIONS,
     })),
   });
-  return useMemo(() => new Map(linuxSources.map((source, index) => {
-    const info = queries[index]?.data?.systemInfo;
-    return [source.id, {
-      hostname: info?.hostname,
-      operatingSystem: info?.osPrettyName ?? info?.osId,
-      operatingSystemVersion: info?.osVersionId,
-      kernelVersion: info?.kernelVersions?.[0],
-    } satisfies InfrastructureHostFact];
-  })), [linuxSources, queries]);
+  return useMemo(
+    () =>
+      new Map(
+        linuxSources.map((source, index) => {
+          const info = queries[index]?.data?.systemInfo;
+          return [
+            source.id,
+            {
+              hostname: info?.hostname,
+              operatingSystem: info?.osPrettyName ?? info?.osId,
+              operatingSystemVersion: info?.osVersionId,
+              kernelVersion: info?.kernelVersions?.[0],
+            } satisfies InfrastructureHostFact,
+          ];
+        }),
+      ),
+    [linuxSources, queries],
+  );
 }

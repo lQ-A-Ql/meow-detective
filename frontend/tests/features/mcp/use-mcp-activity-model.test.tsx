@@ -155,10 +155,10 @@ describe('useMcpActivityModel', () => {
   });
 
   it('hides cached activity when the host becomes disabled', async () => {
-    const { result, rerender } = renderHook(
-      ({ enabled }: { enabled: boolean }) => useMcpActivityModel(enabled),
-      { wrapper: createWrapper(), initialProps: { enabled: true } },
-    );
+    const { result, rerender } = renderHook(({ enabled }: { enabled: boolean }) => useMcpActivityModel(enabled), {
+      wrapper: createWrapper(),
+      initialProps: { enabled: true },
+    });
     await waitFor(() => expect(result.current.jobs).toEqual(jobs));
 
     rerender({ enabled: false });

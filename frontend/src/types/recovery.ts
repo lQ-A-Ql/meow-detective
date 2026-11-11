@@ -1,10 +1,6 @@
 export type RecoveryScanState = 'complete' | 'partial' | 'failed';
 export type RecoveryCompleteness = 'metadata_only' | 'partial' | 'complete';
-export type RecoveryAllocationState =
-  | 'unverified'
-  | 'free'
-  | 'allocated'
-  | 'partially_overwritten';
+export type RecoveryAllocationState = 'unverified' | 'free' | 'allocated' | 'partially_overwritten';
 export type RecoveryIssueSeverity = 'info' | 'warning' | 'error';
 export type RecoveryHashAlgorithm = 'md5' | 'sha1' | 'sha256';
 

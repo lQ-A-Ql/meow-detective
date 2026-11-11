@@ -1,14 +1,5 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/components/ui/dialog';
-import {
-  FilePreviewTabs,
-  type FilePreviewTabsProps,
-} from '@/components/preview/FilePreviewTabs';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
+import { FilePreviewTabs, type FilePreviewTabsProps } from '@/components/preview/FilePreviewTabs';
 import { useTranslation } from 'react-i18next';
 
 export interface FilePreviewDialogProps extends FilePreviewTabsProps {
@@ -21,12 +12,7 @@ export interface FilePreviewDialogProps extends FilePreviewTabsProps {
  * Presentational only: callers wire preview data hooks and pass the results
  * through props, keeping this primitive free of feature-store coupling.
  */
-export function FilePreviewDialog({
-  open,
-  onOpenChange,
-  selectedFile,
-  ...previewProps
-}: FilePreviewDialogProps) {
+export function FilePreviewDialog({ open, onOpenChange, selectedFile, ...previewProps }: FilePreviewDialogProps) {
   const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -35,9 +21,7 @@ export function FilePreviewDialog({
           <DialogTitle className="truncate font-mono text-[13px]">
             {selectedFile?.name ?? t('preview.dialogTitle')}
           </DialogTitle>
-          <DialogDescription className="truncate font-mono text-[11px]">
-            {selectedFile?.path ?? ''}
-          </DialogDescription>
+          <DialogDescription className="truncate font-mono text-[11px]">{selectedFile?.path ?? ''}</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-hidden">
           <FilePreviewTabs {...previewProps} selectedFile={selectedFile} />

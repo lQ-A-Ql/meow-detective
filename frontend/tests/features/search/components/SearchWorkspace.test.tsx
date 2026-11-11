@@ -5,9 +5,7 @@ import type { SearchWorkspaceModel } from '@/features/search/use-search-workspac
 import type { SearchFileHit } from '@/types/search';
 
 vi.mock('@/features/search/components/SearchFilePreviewDialog', () => ({
-  SearchFilePreviewDialog: ({ model }: { model: { open: boolean } }) => (
-    model.open ? <div>搜索文件预览</div> : null
-  ),
+  SearchFilePreviewDialog: ({ model }: { model: { open: boolean } }) => (model.open ? <div>搜索文件预览</div> : null),
 }));
 
 const hit: SearchFileHit = {
@@ -39,7 +37,20 @@ function createModel(overrides: Partial<SearchWorkspaceModel> = {}) {
     previewSelected: vi.fn(),
     jumpToFile: vi.fn(),
     refresh: vi.fn(),
-    contentIndex: { task: undefined, request: undefined, loading: false, errorText: undefined, cancelPending: false, start: vi.fn(), retry: vi.fn(), cancel: vi.fn(), coverage: undefined, coverageError: null, available: false, build: vi.fn() },
+    contentIndex: {
+      task: undefined,
+      request: undefined,
+      loading: false,
+      errorText: undefined,
+      cancelPending: false,
+      start: vi.fn(),
+      retry: vi.fn(),
+      cancel: vi.fn(),
+      coverage: undefined,
+      coverageError: null,
+      available: false,
+      build: vi.fn(),
+    },
     clearQuery: vi.fn(),
     coverage: {
       readySourceCount: 2,

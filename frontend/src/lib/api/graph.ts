@@ -1,10 +1,4 @@
-import {
-  GraphNode,
-  GraphProvenanceEntry,
-  GraphQuery,
-  GraphQueryResult,
-  GraphSnapshot,
-} from '@/types/models';
+import { GraphNode, GraphProvenanceEntry, GraphQuery, GraphQueryResult, GraphSnapshot } from '@/types/models';
 import { COMMANDS } from './commands';
 import { apiClient } from './client';
 

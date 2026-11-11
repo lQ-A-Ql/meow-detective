@@ -28,7 +28,12 @@ export function indexTextSearch(content: string, query: string): TextSearchIndex
 }
 
 /** Intersections also preserve matches crossing an 8,192-code-unit visual segment boundary. */
-export function searchRangesForLine(index: TextSearchIndex, start: number, end: number, active: number): SearchHighlightRange[] {
+export function searchRangesForLine(
+  index: TextSearchIndex,
+  start: number,
+  end: number,
+  active: number,
+): SearchHighlightRange[] {
   let low = 0;
   let high = index.ends.length;
   while (low < high) {
@@ -38,8 +43,12 @@ export function searchRangesForLine(index: TextSearchIndex, start: number, end: 
   }
   const ranges: SearchHighlightRange[] = [];
   for (let i = low; i < index.starts.length && index.starts[i] < end; i += 1) {
-    ranges.push({ start: Math.max(start, index.starts[i]) - start, end: Math.min(end, index.ends[i]) - start,
-      matchIndex: i, active: i === active });
+    ranges.push({
+      start: Math.max(start, index.starts[i]) - start,
+      end: Math.min(end, index.ends[i]) - start,
+      matchIndex: i,
+      active: i === active,
+    });
   }
   return ranges;
 }

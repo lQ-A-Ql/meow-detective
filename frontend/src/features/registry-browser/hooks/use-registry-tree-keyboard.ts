@@ -2,8 +2,11 @@ import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
 import { flattenRegistryTree } from '../tree-model';
 import type { RegistryTreeNode } from '../types';
 
-export function useRegistryTreeKeyboard(nodes: RegistryTreeNode[], activate: (node: RegistryTreeNode) => void,
-  toggle: (node: RegistryTreeNode) => void) {
+export function useRegistryTreeKeyboard(
+  nodes: RegistryTreeNode[],
+  activate: (node: RegistryTreeNode) => void,
+  toggle: (node: RegistryTreeNode) => void,
+) {
   const [focusedId, setFocusedId] = useState<string>();
   const treeRef = useRef<HTMLDivElement>(null);
   const focusRequest = useRef(false);
@@ -25,10 +28,18 @@ export function useRegistryTreeKeyboard(nodes: RegistryTreeNode[], activate: (no
     else if (event.key === 'ArrowUp') focus(rows[index - 1]);
     else if (event.key === 'Home') focus(rows[0]);
     else if (event.key === 'End') focus(rows[rows.length - 1]);
-    else if (event.key === 'ArrowRight') { if (node.hasChildren && !node.expanded) toggle(node); else focus(node.children[0]); }
-    else if (event.key === 'ArrowLeft') {
+    else if (event.key === 'ArrowRight') {
+      if (node.hasChildren && !node.expanded) toggle(node);
+      else focus(node.children[0]);
+    } else if (event.key === 'ArrowLeft') {
       if (node.expanded) toggle(node);
-      else focus(rows.slice(0, index).reverse().find((parent) => parent.depth === node.depth - 1));
+      else
+        focus(
+          rows
+            .slice(0, index)
+            .reverse()
+            .find((parent) => parent.depth === node.depth - 1),
+        );
     } else if (event.key === 'Enter' || event.key === ' ') activate(node);
     else return;
     event.preventDefault();

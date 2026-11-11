@@ -21,7 +21,7 @@ const api = vi.hoisted(() => ({
 
 const platform = vi.hoisted(() => ({
   openDialog: vi.fn(),
-  singleDialogPath: vi.fn((path: string | string[] | null) => Array.isArray(path) ? path[0] ?? null : path),
+  singleDialogPath: vi.fn((path: string | string[] | null) => (Array.isArray(path) ? (path[0] ?? null) : path)),
 }));
 
 vi.mock('@/lib/api/files', () => api);
@@ -76,11 +76,7 @@ describe('useBitLockerVolumeModel', () => {
       expect(await result.current.unlockFromMemoryImage()).toBe(true);
     });
 
-    expect(api.unlockBitLockerWithMemoryImage).toHaveBeenCalledWith(
-      'source-1',
-      2,
-      'D:\\evidence\\memory.raw',
-    );
+    expect(api.unlockBitLockerWithMemoryImage).toHaveBeenCalledWith('source-1', 2, 'D:\\evidence\\memory.raw');
     expect(result.current.status).toEqual(lockedVolume);
     expect(result.current.memoryUnlocking).toBe(false);
   });
@@ -97,9 +93,7 @@ describe('useBitLockerVolumeModel', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
-    const invalidateQueries = vi
-      .spyOn(queryClient, 'invalidateQueries')
-      .mockImplementation(() => refreshResult);
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(() => refreshResult);
     api.importUnlockedBitLockerCatalog.mockReturnValue(importResult);
 
     const { result } = renderHook(() => useBitLockerVolumeModel(target), {
@@ -151,18 +145,15 @@ describe('useBitLockerVolumeModel', () => {
       bytesProcessed: 12,
       totalBytes: 24,
     });
-    api.getBitLockerDictionaryAttackStatus
-      .mockResolvedValueOnce({
-        taskId: 'task-1',
-        phase: 'found',
-        backend: 'cpu',
-        testedCandidates: 2,
-        bytesProcessed: 24,
-        totalBytes: 24,
-      });
-    api.inspectBitLockerVolume
-      .mockResolvedValueOnce(lockedVolume)
-      .mockResolvedValueOnce(volume);
+    api.getBitLockerDictionaryAttackStatus.mockResolvedValueOnce({
+      taskId: 'task-1',
+      phase: 'found',
+      backend: 'cpu',
+      testedCandidates: 2,
+      bytesProcessed: 24,
+      totalBytes: 24,
+    });
+    api.inspectBitLockerVolume.mockResolvedValueOnce(lockedVolume).mockResolvedValueOnce(volume);
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });

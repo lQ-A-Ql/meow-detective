@@ -1,4 +1,4 @@
-import { Minus, RotateCcw, Target, Plus }  from '@/components/icons';
+import { Minus, RotateCcw, Target, Plus } from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/app/components/ui/button';
@@ -144,10 +144,7 @@ export function ForceGraph({
     if (!running || positions.size === 0 || width === 0 || height === 0) return;
     let raf = 0;
     const loop = () => {
-      if (
-        simulationTickRef.current >= MAX_SIMULATION_TICKS ||
-        stableTickRef.current >= STABLE_TICK_TARGET
-      ) {
+      if (simulationTickRef.current >= MAX_SIMULATION_TICKS || stableTickRef.current >= STABLE_TICK_TARGET) {
         return;
       }
       setPositions((prev) => {
@@ -155,12 +152,9 @@ export function ForceGraph({
         tickSimulation(next, edges, width, height);
         simulationTickRef.current += 1;
         const averageVelocity =
-          Array.from(next.values()).reduce(
-            (sum, node) => sum + Math.hypot(node.vx, node.vy),
-            0,
-          ) / Math.max(1, next.size);
-        stableTickRef.current =
-          averageVelocity < STABLE_VELOCITY_THRESHOLD ? stableTickRef.current + 1 : 0;
+          Array.from(next.values()).reduce((sum, node) => sum + Math.hypot(node.vx, node.vy), 0) /
+          Math.max(1, next.size);
+        stableTickRef.current = averageVelocity < STABLE_VELOCITY_THRESHOLD ? stableTickRef.current + 1 : 0;
         return next;
       });
       raf = requestAnimationFrame(loop);
@@ -418,16 +412,44 @@ function GraphOverlay({
     <g pointerEvents="none">
       <foreignObject x="10" y="10" width="36" height="164">
         <div className="flex flex-col gap-1.5">
-          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onZoomIn} title={t('graph.controls.zoomIn')} aria-label={t('graph.controls.zoomIn')}>
+          <Button
+            type="button"
+            variant="canvasControl"
+            size="canvasIcon"
+            onClick={onZoomIn}
+            title={t('graph.controls.zoomIn')}
+            aria-label={t('graph.controls.zoomIn')}
+          >
             <Plus size={14} />
           </Button>
-          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onZoomOut} title={t('graph.controls.zoomOut')} aria-label={t('graph.controls.zoomOut')}>
+          <Button
+            type="button"
+            variant="canvasControl"
+            size="canvasIcon"
+            onClick={onZoomOut}
+            title={t('graph.controls.zoomOut')}
+            aria-label={t('graph.controls.zoomOut')}
+          >
             <Minus size={14} />
           </Button>
-          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onFit} title={t('graph.controls.fit')} aria-label={t('graph.controls.fit')}>
+          <Button
+            type="button"
+            variant="canvasControl"
+            size="canvasIcon"
+            onClick={onFit}
+            title={t('graph.controls.fit')}
+            aria-label={t('graph.controls.fit')}
+          >
             <Target size={14} />
           </Button>
-          <Button type="button" variant="canvasControl" size="canvasIcon" onClick={onReset} title={t('graph.controls.reset')} aria-label={t('graph.controls.reset')}>
+          <Button
+            type="button"
+            variant="canvasControl"
+            size="canvasIcon"
+            onClick={onReset}
+            title={t('graph.controls.reset')}
+            aria-label={t('graph.controls.reset')}
+          >
             <RotateCcw size={14} />
           </Button>
         </div>

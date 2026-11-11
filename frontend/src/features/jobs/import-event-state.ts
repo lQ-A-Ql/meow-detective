@@ -284,7 +284,11 @@ export function createImportEventStateStore() {
 const importEventStateStore = createImportEventStateStore();
 
 export function useImportEventState() {
-  return useSyncExternalStore(importEventStateStore.subscribe, importEventStateStore.getSnapshot, importEventStateStore.getSnapshot);
+  return useSyncExternalStore(
+    importEventStateStore.subscribe,
+    importEventStateStore.getSnapshot,
+    importEventStateStore.getSnapshot,
+  );
 }
 
 export function resetImportEventStateForTests() {

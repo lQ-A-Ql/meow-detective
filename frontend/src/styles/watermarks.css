@@ -1,6 +1,10 @@
 @layer components {
-  .asset-slot { opacity: 0.08; }
-  .brand-watermark { opacity: var(--forensics-watermark-opacity); }
+  .asset-slot {
+    opacity: 0.08;
+  }
+  .brand-watermark {
+    opacity: var(--forensics-watermark-opacity);
+  }
 }
 
 .case-home-banner {
@@ -55,8 +59,12 @@
   opacity: 1;
 }
 
-.brand-banner-edge-left .brand-banner-art { left: 0; }
-.brand-banner-edge-right .brand-banner-art { right: 0; }
+.brand-banner-edge-left .brand-banner-art {
+  left: 0;
+}
+.brand-banner-edge-right .brand-banner-art {
+  right: 0;
+}
 
 .watermark-emulation {
   position: absolute;
@@ -145,7 +153,9 @@
 }
 
 @media (min-width: 1280px) {
-  .watermark-report { display: block; }
+  .watermark-report {
+    display: block;
+  }
   .report-config-layout {
     grid-template-columns: minmax(360px, 1fr) minmax(180px, 260px);
     column-gap: 32px;
@@ -154,11 +164,15 @@
 }
 
 @media (max-width: 1023px) {
-  .watermark-home { display: none; }
+  .watermark-home {
+    display: none;
+  }
 }
 
 @media (min-width: 1440px) {
-  .watermark-settings { display: block; }
+  .watermark-settings {
+    display: block;
+  }
 }
 
 @media (max-height: 600px) {
@@ -166,6 +180,11 @@
   .watermark-settings,
   .ornament-settings,
   .ornament-emulation,
-  .ornament-report { display: none; }
-  .report-config-layout { grid-template-columns: minmax(0, 1fr); margin-right: 0; }
+  .ornament-report {
+    display: none;
+  }
+  .report-config-layout {
+    grid-template-columns: minmax(0, 1fr);
+    margin-right: 0;
+  }
 }

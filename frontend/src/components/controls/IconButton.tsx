@@ -18,7 +18,10 @@ type IconButtonSize = 'iconXs' | 'iconSm' | 'icon' | 'iconMd';
  * The single icon button in the product: a perfect circle holding exactly one SVG glyph. The
  * name never sits inside the circle - it lives in the accessible label and in the hover hint.
  */
-interface IconButtonProps extends Omit<ComponentPropsWithoutRef<typeof Button>, 'aria-label' | 'size' | 'variant' | 'shape'> {
+interface IconButtonProps extends Omit<
+  ComponentPropsWithoutRef<typeof Button>,
+  'aria-label' | 'size' | 'variant' | 'shape'
+> {
   label: string;
   children: ReactNode;
   pressed?: boolean;
@@ -27,20 +30,23 @@ interface IconButtonProps extends Omit<ComponentPropsWithoutRef<typeof Button>, 
   testId?: string;
 }
 
-export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({
-  label,
-  // data-testid stays opt-in so the control keeps a single, name-based query surface.
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
+  {
+    label,
+    // data-testid stays opt-in so the control keeps a single, name-based query surface.
 
-  children,
-  onClick,
-  disabled = false,
-  pressed,
-  variant = 'forensicsGhost',
-  size = 'iconSm',
-  className,
-  testId,
-  ...props
-}, ref) {
+    children,
+    onClick,
+    disabled = false,
+    pressed,
+    variant = 'forensicsGhost',
+    size = 'iconSm',
+    className,
+    testId,
+    ...props
+  },
+  ref,
+) {
   return (
     <Tooltip content={label}>
       <Button

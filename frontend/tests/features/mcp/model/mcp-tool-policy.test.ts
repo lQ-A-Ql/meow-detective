@@ -21,10 +21,7 @@ const catalogue: McpHostTool[] = [
 
 describe('toggleQueryTools', () => {
   it('disables every read-only tool', () => {
-    expect(toggleQueryTools([], catalogue, true)).toEqual([
-      'forensics.search',
-      'forensics.list_jobs',
-    ]);
+    expect(toggleQueryTools([], catalogue, true)).toEqual(['forensics.search', 'forensics.list_jobs']);
   });
 
   it('keeps existing disabled tools when disabling', () => {
@@ -57,9 +54,7 @@ describe('toggleQueryTools', () => {
   });
 
   it('does nothing to non-read-only entries when enabling', () => {
-    expect(toggleQueryTools(['forensics.extract_file'], catalogue, false)).toEqual([
-      'forensics.extract_file',
-    ]);
+    expect(toggleQueryTools(['forensics.extract_file'], catalogue, false)).toEqual(['forensics.extract_file']);
   });
 
   it('returns a new array without mutating the input', () => {

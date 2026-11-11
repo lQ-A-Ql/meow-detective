@@ -1,4 +1,4 @@
-import { AlertTriangle }  from '@/components/icons';
+import { AlertTriangle } from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import type { KnownLimitation } from '@/types/models';
 
@@ -39,7 +39,10 @@ export function KnownLimitationsPanel({ items }: { items: KnownLimitation[] }) {
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {items.map((item) => (
-          <div key={`${item.category}-${item.item}`} className={`rounded-none border p-4 ${knownLimitationTone(item.status)}`}>
+          <div
+            key={`${item.category}-${item.item}`}
+            className={`rounded-none border p-4 ${knownLimitationTone(item.status)}`}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[13px] font-light">{item.item}</div>
@@ -54,7 +57,10 @@ export function KnownLimitationsPanel({ items }: { items: KnownLimitation[] }) {
               <div className="text-[10px] uppercase tracking-wider opacity-70">Affected Chains</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {item.affectedChains.map((chain) => (
-                  <span key={`${item.item}-${chain}`} className="rounded-none border border-current/20 bg-forensics-surface/70 px-2 py-1 text-[10px] font-mono">
+                  <span
+                    key={`${item.item}-${chain}`}
+                    className="rounded-none border border-current/20 bg-forensics-surface/70 px-2 py-1 text-[10px] font-mono"
+                  >
                     {chain}
                   </span>
                 ))}

@@ -1,9 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/app/components/ui/utils';
-import {
-  DENSE_TABLE_HEADER_HEIGHT,
-  DENSE_TABLE_ROW_HEIGHT,
-} from './dense-table-metrics';
+import { DENSE_TABLE_HEADER_HEIGHT, DENSE_TABLE_ROW_HEIGHT } from './dense-table-metrics';
 
 type DenseDataTableFrameProps =
   | {
@@ -44,14 +41,14 @@ export function DenseDataTableFrame({
   rowCount,
   variant = 'bordered',
 }: DenseDataTableFrameProps) {
-  const contentHeight = DENSE_TABLE_HEADER_HEIGHT
-    + (header ? FRAME_HEADER_HEIGHT : 0)
-    + Math.max(0, rowCount ?? 0) * DENSE_TABLE_ROW_HEIGHT
-    + (variant === 'bordered' ? FRAME_BORDER_HEIGHT : 0);
+  const contentHeight =
+    DENSE_TABLE_HEADER_HEIGHT +
+    (header ? FRAME_HEADER_HEIGHT : 0) +
+    Math.max(0, rowCount ?? 0) * DENSE_TABLE_ROW_HEIGHT +
+    (variant === 'bordered' ? FRAME_BORDER_HEIGHT : 0);
   const embeddedHeight = rowCount === 0 ? EMPTY_HEIGHT : contentHeight;
-  const embeddedStyle = layout === 'embedded'
-    ? { height: `min(${embeddedHeight}px, min(60vh, ${MAX_HEIGHT[maxHeight]}))` }
-    : undefined;
+  const embeddedStyle =
+    layout === 'embedded' ? { height: `min(${embeddedHeight}px, min(60vh, ${MAX_HEIGHT[maxHeight]}))` } : undefined;
 
   return (
     <div
