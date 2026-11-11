@@ -30,7 +30,7 @@ $fileCommands = Read-RepoFile "apps/desktop/src-tauri/src/commands/file_commands
 $viewerDto = Read-RepoFile "crates/transport/src/dto/viewer.rs"
 $frontendFilesApi = Read-RepoFile "frontend/src/lib/api/files.ts"
 $frontendCommands = Read-RepoFile "frontend/src/lib/api/commands.ts"
-$frontendFilesHooks = Read-RepoFile "frontend/src/features/files/hooks.ts"
+$frontendFilesHooks = Read-RepoFile "frontend/src/features/files/hooks/use-media-url.ts"
 
 Require-Contains "tauri.conf.json" $tauriConfig "media-src 'self' data: evidence-media:"
 Require-Contains "lib.rs" $lib "mod media_protocol;"
@@ -49,8 +49,8 @@ Require-Contains "commands.ts" $frontendCommands "GET_MEDIA_URL: 'get_media_url'
 Require-Contains "commands.ts" $frontendCommands "READ_MEDIA_RANGE: 'read_media_range'"
 Require-Contains "files.ts" $frontendFilesApi "COMMANDS.files.GET_MEDIA_URL"
 Require-Contains "files.ts" $frontendFilesApi "COMMANDS.files.READ_MEDIA_RANGE"
-Require-Contains "hooks.ts" $frontendFilesHooks "media.mode === 'protocol'"
-Require-Contains "hooks.ts" $frontendFilesHooks "previewMode: 'rangeFallback'"
+Require-Contains "use-media-url.ts" $frontendFilesHooks "media.mode === 'protocol'"
+Require-Contains "use-media-url.ts" $frontendFilesHooks "previewMode: 'rangeFallback'"
 
 $scanRoots = @(
   "apps/desktop/src-tauri",
