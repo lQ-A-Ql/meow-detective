@@ -112,7 +112,6 @@ pub fn open_or_create(path: &Path) -> DbResult<Connection> {
 pub fn open_or_create_source(path: &Path) -> DbResult<Connection> {
     let conn = open_or_create(path)?;
     crate::migrations::runner::run_source_all(&conn)?;
-    crate::source_fjall::configure_source_fjall(&conn, path)?;
     Ok(conn)
 }
 

@@ -1,9 +1,9 @@
 //! Source detail storage (source.fjall).
 //!
-//! This module tree is a line-for-line copy of the production
-//! `persistence_sqlite::source_fjall` surface. Both implementations share the
-//! same `source_meta` generation layout, on-disk Fjall stores, error text, and
-//! persist modes, so ownership can be switched without a data migration.
+//! This module tree is the owner of the source detail layer: `source_meta`
+//! generation layout, on-disk Fjall stores, record mapping, error text, and
+//! persist modes. `persistence-sqlite` no longer ships a copy; source-scoped
+//! repositories in [`crate::repositories`] build on this module.
 
 mod mapping;
 mod open;

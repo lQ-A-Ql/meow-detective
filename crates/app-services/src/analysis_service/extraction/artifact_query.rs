@@ -133,7 +133,7 @@ pub(super) fn query_artifact_rows_created_window(
     limit: u32,
 ) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
     Ok(
-        persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(conn)
+        persistence_source::repositories::artifact_repo::ArtifactRepo::new(conn)
             .list_by_family_created_window(family, offset, limit)?
             .into_iter()
             .map(selection::row)

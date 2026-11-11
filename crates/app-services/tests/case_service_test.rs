@@ -1,9 +1,11 @@
 use app_services::{case_service, source_db, storage_runtime::open_source_read_write};
 use domain::{Artifact, ArtifactId, DataSource, DataSourceId, EntryType, FileEntry, FileEntryId};
+use persistence_source::repositories::{
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
+};
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, audit_repo::AuditRepo, datasource_repo::DataSourceRepo,
-    datasource_repo::DataSourceStorage, file_repo::FileRepo, job_repo::JobRepo,
-    timeline_repo::TimelineRepo,
+    audit_repo::AuditRepo, datasource_repo::DataSourceRepo, datasource_repo::DataSourceStorage,
+    job_repo::JobRepo,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -144,7 +146,7 @@ fn publish_source_projection(
     conn: &rusqlite::Connection,
     source_id: &DataSourceId,
 ) -> persistence_sqlite::DbResult<()> {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)?.ok_or_else(|| {
+    let store = persistence_source::detail::open_store_for_write(conn)?.ok_or_else(|| {
         persistence_sqlite::DbError::System("source store is missing".to_string())
     })?;
     persistence_fjall::replace_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))

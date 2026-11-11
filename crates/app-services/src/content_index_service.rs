@@ -2,7 +2,7 @@
 pub mod coverage;
 mod projection;
 use domain::{CaseId, DataSourceId};
-use persistence_sqlite::repositories::{content_index_repo::ContentIndexRepo, file_repo::FileRepo};
+use persistence_source::repositories::{content_index_repo::ContentIndexRepo, file_repo::FileRepo};
 use search::SearchIndex;
 use sha2::{Digest, Sha256};
 use std::{

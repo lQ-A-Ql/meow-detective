@@ -48,7 +48,7 @@ fn source_connection() -> Connection {
 }
 
 fn insert_file(conn: &Connection, id: &str, path: &str, name: &str) {
-    persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+    persistence_source::repositories::file_repo::FileRepo::new(conn)
         .insert_batch(&[domain::FileEntry {
             id: domain::FileEntryId(id.into()),
             parent_id: None,

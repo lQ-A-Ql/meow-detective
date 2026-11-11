@@ -3,7 +3,7 @@ use std::path::Path;
 
 use domain::{FileEntry, FileEntryId};
 use evidence_core::FileSystemReader;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use transport::dto::{ViewerRangeRequestDto, ViewerRangeResponseDto};
 

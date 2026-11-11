@@ -5,7 +5,7 @@ use super::schema::{
     PartitionStatus, StagingManifest,
 };
 use super::writer::{get_staging_meta, get_worker_meta, set_staging_meta, set_worker_meta};
-use persistence_sqlite::repositories::staging_repo::StagingRepo;
+use persistence_source::repositories::staging_repo::StagingRepo;
 use rusqlite::Connection;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -125,7 +125,7 @@ pub fn merge_all_staging_to_main_with_catalog(
     progress_cb: Option<&dyn Fn(usize, usize)>,
     cancel_token: Option<&AtomicBool>,
 ) -> Result<StagingMergeStats, StagingError> {
-    persistence_sqlite::source_fjall::require_source_store(main_conn)
+    persistence_source::detail::require_source_store(main_conn)
         .map_err(|error| StagingError::Other(format!("Open native source storage: {error}")))?;
     let mut stats = StagingMergeStats::default();
     let mut merged_partitions = Vec::new();
@@ -245,7 +245,7 @@ pub fn merge_analysis_staging_to_main_with_fjall(
     source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
     progress_cb: Option<&dyn Fn(usize, usize)>,
 ) -> Result<AnalysisMergeStats, StagingError> {
-    persistence_sqlite::source_fjall::require_source_store(main_conn)
+    persistence_source::detail::require_source_store(main_conn)
         .map_err(|error| StagingError::Other(format!("Open native source storage: {error}")))?;
     let mut stats = AnalysisMergeStats::default();
     let mut merged_workers = Vec::new();

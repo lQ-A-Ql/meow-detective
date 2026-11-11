@@ -1,10 +1,9 @@
-use persistence_sqlite::repositories::staging_repo::StagingRepo;
+use persistence_source::repositories::staging_repo::StagingRepo;
 
 fn source_connection(root: &std::path::Path) -> rusqlite::Connection {
     let path = root.join("source.db");
-    let connection = persistence_sqlite::open_or_create_source(&path).unwrap();
-    persistence_source::detail::configure_source_identity(&connection, "source-1").unwrap();
-    persistence_source::detail::configure_source_fjall(&connection, &path).unwrap();
+    let connection =
+        persistence_source::control::opening::open_source_database(&path, "source-1").unwrap();
     persistence_source::detail::open_store_for_write(&connection)
         .unwrap()
         .expect("initialize Fjall source generation");
@@ -129,13 +128,13 @@ fn analysis_staging_merge_pages_to_fjall_and_replays_without_duplicates() {
         );
     }
     assert_eq!(
-        persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(&main)
+        persistence_source::repositories::artifact_repo::ArtifactRepo::new(&main)
             .count()
             .unwrap(),
         1
     );
     assert_eq!(
-        persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&main)
+        persistence_source::repositories::timeline_repo::TimelineRepo::new(&main)
             .count()
             .unwrap(),
         1

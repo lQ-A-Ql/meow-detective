@@ -1,5 +1,5 @@
 use app_services::{search_service, timeline_service};
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, file_repo::FileRepo};
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, file_repo::FileRepo};
 
 use super::fixture::{first_data_source_id, setup_case};
 use super::metrics::{measure_runs, scenario_result};

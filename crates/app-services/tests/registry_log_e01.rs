@@ -10,7 +10,7 @@ use artifacts_windows::registry::log_replay::{
 };
 use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use sha2::{Digest, Sha256};
 use std::{
     io::{Read, Write},

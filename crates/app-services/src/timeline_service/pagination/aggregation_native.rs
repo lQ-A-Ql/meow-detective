@@ -41,9 +41,9 @@ pub(super) fn query(
     offset: u64,
     limit: u32,
 ) -> Result<TimelineAggregatedDto, TimelineServiceError> {
-    let source = persistence_sqlite::source_fjall::require_source_store(conn)
-        .map_err(TimelineServiceError::Db)?;
-    let source_id = persistence_sqlite::source_fjall::source_id(conn)?
+    let source =
+        persistence_source::detail::require_source_store(conn).map_err(TimelineServiceError::Db)?;
+    let source_id = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| TimelineServiceError::Other("source identity is missing".into()))?;
     let repository = TimelineRecordStore::from_source_store((*source).clone());
     let snapshot = repository.read_snapshot();

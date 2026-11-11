@@ -1,12 +1,16 @@
+//! app.db / case-graph.sqlite repositories.
+//!
+//! Source-scoped detail repositories live in `persistence-source`::
+//! `repositories`; this crate keeps the case database, case graph, and generic
+//! SQLite utilities.
+
 pub mod analysis_scan_repo;
 pub mod android_analysis_repo;
-pub mod artifact_repo;
 pub mod audit_repo;
 pub mod batch_repo;
 pub mod bitlocker_restore_intent_repo;
 pub mod case_graph_repo;
 pub mod case_repo;
-pub mod catalog_file_repo;
 pub mod catalog_publication_repo;
 pub mod ceph_bluefs_replay_repo;
 pub mod ceph_bluefs_repo;
@@ -17,7 +21,6 @@ pub mod ceph_fs_journal_repo;
 pub mod ceph_fs_lineage_repo;
 pub mod ceph_fs_metadata_inventory_repo;
 pub mod ceph_fs_namespace_assembly_repo;
-pub mod ceph_fs_namespace_repo;
 pub mod ceph_osd_device_binding_repo;
 pub mod ceph_osd_repo;
 pub mod ceph_rbd_lineage_repo;
@@ -25,20 +28,16 @@ pub mod ceph_rocksdb_latest_state_repo;
 pub mod ceph_rocksdb_repo;
 pub mod ceph_rocksdb_sst_repo;
 pub mod ceph_rocksdb_wal_repo;
-pub mod content_index_repo;
-pub mod correlation_repo;
 pub mod datasource_repo;
 pub mod deleted_recovery_repo;
 pub mod entity_repo;
 pub mod environment_object_repo;
 pub mod evidence_digest_repo;
 pub mod evidence_task_repo;
-pub mod file_repo;
 pub mod filesystem_locator_repo;
 pub mod fingerprint_repo;
 pub mod graph_repo;
 pub mod infrastructure_graph_repo;
-pub mod infrastructure_network_fact_repo;
 pub mod job_repo;
 pub mod kubernetes_analysis_repo;
 mod ledger_batch_repo;
@@ -52,21 +51,15 @@ pub mod linux_topology_scope_repo;
 pub mod mcp_task_binding_repo;
 pub mod nested_evidence_repo;
 pub mod notebook_repo;
-mod ntfs_staging_merge;
+pub mod ntfs_staging_merge;
 mod ntfs_staging_paths;
 pub mod ntfs_staging_repo;
 pub mod processing_phase_repo;
 pub mod provenance_assertion_repo;
 pub mod report_repo;
 pub mod source_meta_repo;
-mod staging_merge_validation;
-pub mod staging_repo;
 pub mod storage_control_repo;
 pub mod storage_object_repo;
 pub mod storage_recovery_repo;
-pub mod systemd_unit_repo;
 pub mod timeline_facets_repo;
 pub mod timeline_projection_repo;
-pub mod timeline_repo;
-
-pub use staging_repo::StagingRepo;

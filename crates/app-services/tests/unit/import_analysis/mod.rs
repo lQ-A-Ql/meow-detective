@@ -50,9 +50,8 @@ fn setup_source_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
     let data_source_id = DataSourceId("ds-1".to_string());
     let source_db_path = tmp.path().join("sources").join("ds-1").join("source.db");
     let source_conn = persistence_sqlite::open_or_create_source(&source_db_path).unwrap();
-    persistence_sqlite::source_fjall::configure_source_identity(&source_conn, "ds-1").unwrap();
-    persistence_sqlite::source_fjall::configure_source_fjall(&source_conn, &source_db_path)
-        .unwrap();
+    persistence_source::detail::configure_source_identity(&source_conn, "ds-1").unwrap();
+    persistence_source::detail::configure_source_fjall(&source_conn, &source_db_path).unwrap();
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(
             &CaseId("case-1".to_string()),
@@ -109,7 +108,7 @@ fn insert_file_with_options(
     ext: Option<&str>,
     encrypted: bool,
 ) {
-    persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+    persistence_source::repositories::file_repo::FileRepo::new(conn)
         .insert_batch(&[FileEntry {
             id: FileEntryId(id.to_string()),
             parent_id: None,
@@ -324,8 +323,8 @@ fn setup_raw_source_db(
         .join(data_source_id)
         .join("source.db");
     let conn = persistence_sqlite::open_or_create_source(&db_path).unwrap();
-    persistence_sqlite::source_fjall::configure_source_identity(&conn, data_source_id).unwrap();
-    persistence_sqlite::source_fjall::configure_source_fjall(&conn, &db_path).unwrap();
+    persistence_source::detail::configure_source_identity(&conn, data_source_id).unwrap();
+    persistence_source::detail::configure_source_fjall(&conn, &db_path).unwrap();
     DataSourceRepo::new(&conn)
         .upsert_source_local_metadata(
             &CaseId(case_id.to_string()),
@@ -460,7 +459,7 @@ fn post_import_worker_staging_success_preserves_summary_and_counts() {
         .all(|(_, detail)| !detail.contains("Analysis staging:")));
     let source_conn = persistence_sqlite::open_existing_source(&db_path).unwrap();
     assert_eq!(
-        persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&source_conn)
+        persistence_source::repositories::timeline_repo::TimelineRepo::new(&source_conn)
             .count()
             .unwrap(),
         0

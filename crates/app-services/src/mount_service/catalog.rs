@@ -5,7 +5,7 @@ use evidence_core::FileSystemReader;
 use evidence_mount::{
     DirectoryPage, MountError, MountFileHandle, MountFileSystem, MountNode, MountPath,
 };
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 
 use super::cache::{MountMetadataCache, DEFAULT_METADATA_CACHE_ENTRIES};

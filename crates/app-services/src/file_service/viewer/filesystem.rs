@@ -1,6 +1,6 @@
 use std::io::{Read, Seek, SeekFrom};
 
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 
 use crate::file_service::FileServiceError;
 

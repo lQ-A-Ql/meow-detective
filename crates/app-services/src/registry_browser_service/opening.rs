@@ -6,7 +6,7 @@ use super::{
     RegistryBrowserContext, RegistryBrowserError, RegistryBrowserRegistry,
 };
 use artifacts_windows::registry::browser::HiveSnapshot;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use transport::dto::*;
 

@@ -1,6 +1,7 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use domain::{CaseId, FileEntryId};
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rand::{rngs::OsRng, RngCore};
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};

@@ -1,5 +1,5 @@
 use domain::{CaseId, DataSourceId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use std::{io::Read, path::Path};
 use transport::{
     dto::{ContentIndexCoverageDto, ContentIndexSummaryDto, EvidenceTaskRequestDto},

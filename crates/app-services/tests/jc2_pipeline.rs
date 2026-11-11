@@ -282,7 +282,7 @@ fn jc2_full_pipeline() {
 
             // Phase 4: File pagination
             let t_page = Instant::now();
-            let repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
             let page_result = repo.find_children_page(&domain::FileEntryId("mft:1:5".to_string()), 0, 50);
             let page_ms = t_page.elapsed().as_millis();
             let page_count = page_result.as_ref().map(|p| p.len()).unwrap_or(0);

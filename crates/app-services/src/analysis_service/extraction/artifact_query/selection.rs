@@ -1,7 +1,7 @@
 use super::{AnalysisArtifactRow, AnalysisServiceError};
 use chrono::{DateTime, Utc};
 use domain::Artifact;
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
 use serde_json::Value;
 use std::{

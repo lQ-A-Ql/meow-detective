@@ -1,8 +1,10 @@
 use super::{nodes::list_nodes_after_sql, Direction, GraphNodePageCursor, GraphRepo};
-use crate::{connection::open_in_memory, runner};
-use domain::{
-    DataSourceId, EdgeType, EntryType, FileEntry, FileEntryId, GraphEdge, GraphNode, NodeType,
+use crate::{
+    connection::open_in_memory,
+    repositories::graph_repo::{FileTreeProjectionPage, FileTreeProjectionRecord},
+    runner,
 };
+use domain::{EdgeType, GraphEdge, GraphNode, NodeType};
 use rusqlite::{params, Connection};
 
 fn setup() -> (&'static Connection, GraphRepo<'static>) {
@@ -17,76 +19,6 @@ fn setup() -> (&'static Connection, GraphRepo<'static>) {
         .unwrap();
     let repo = GraphRepo::new(conn_ref);
     (conn_ref, repo)
-}
-
-fn setup_native_file_tree() -> (&'static Connection, GraphRepo<'static>) {
-    let root = Box::leak(Box::new(tempfile::tempdir().unwrap()));
-    let database_path = root.path().join("source.db");
-    let conn = Box::leak(Box::new(
-        crate::open_or_create_source(&database_path).unwrap(),
-    ));
-    crate::source_fjall::configure_source_identity(conn, "ds-1").unwrap();
-    crate::source_fjall::configure_source_fjall(conn, &database_path).unwrap();
-    conn.execute(
-        "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
-         VALUES ('ds-1', 'case-1', 'source', 'raw', 'source.img', '2026-01-01T00:00:00Z')",
-        [],
-    )
-    .unwrap();
-    let source_id = DataSourceId("ds-1".into());
-    crate::repositories::file_repo::FileRepo::new(conn)
-        .insert_batch(&[
-            FileEntry {
-                id: FileEntryId("root".into()),
-                parent_id: None,
-                data_source_id: source_id.clone(),
-                path: String::new(),
-                name: "Partition 1".into(),
-                entry_type: EntryType::Directory,
-                size: None,
-                ext: None,
-                deleted: false,
-                hidden: false,
-                system: false,
-                encrypted: false,
-                read_only: false,
-                archive: false,
-                unix_mode: None,
-                created_at: None,
-                modified_at: None,
-                accessed_at: None,
-                changed_at: None,
-                hash_sha256: None,
-            },
-            FileEntry {
-                id: FileEntryId("child".into()),
-                parent_id: Some(FileEntryId("root".into())),
-                data_source_id: source_id,
-                path: "etc/passwd".into(),
-                name: "passwd".into(),
-                entry_type: EntryType::File,
-                size: Some(64),
-                ext: None,
-                deleted: false,
-                hidden: false,
-                system: false,
-                encrypted: false,
-                read_only: false,
-                archive: false,
-                unix_mode: None,
-                created_at: None,
-                modified_at: None,
-                accessed_at: None,
-                changed_at: None,
-                hash_sha256: None,
-            },
-        ])
-        .unwrap();
-    let store = crate::source_fjall::require_source_store(conn).unwrap();
-    persistence_fjall::seal_source_generation(&store, "ds-1", "graph-fixture", &"a".repeat(64))
-        .unwrap();
-    let repo = GraphRepo::new(conn);
-    (conn, repo)
 }
 
 fn make_node(id: &str, node_type: NodeType, label: &str) -> GraphNode {
@@ -437,13 +369,45 @@ fn empty_batch_returns_zero() {
     assert_eq!(repo.insert_edges_batch(&[]).unwrap(), 0);
 }
 
+fn file_tree_page() -> FileTreeProjectionPage {
+    FileTreeProjectionPage {
+        records: vec![
+            FileTreeProjectionRecord {
+                id: "root".to_string(),
+                parent_id: None,
+                name: "Partition 1".to_string(),
+                path: String::new(),
+            },
+            FileTreeProjectionRecord {
+                id: "child".to_string(),
+                parent_id: Some("root".to_string()),
+                name: "passwd".to_string(),
+                path: "etc/passwd".to_string(),
+            },
+        ],
+        next_cursor: None,
+    }
+}
+
 #[test]
 fn project_file_tree_uses_source_rows_for_nodes_and_contains_edges() {
-    let (_conn, repo) = setup_native_file_tree();
+    let (conn, repo) = setup();
+    conn.execute(
+        "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at)
+         VALUES ('ds-1', 'case-1', 'source', 'raw', 'source.img', '2026-01-01T00:00:00Z')",
+        [],
+    )
+    .unwrap();
+    let mut pages = 0;
 
     let counts = repo
-        .project_file_tree("ds-1", "2026-07-16T00:00:00Z")
+        .project_file_tree("ds-1", "2026-07-16T00:00:00Z", |cursor| {
+            assert!(cursor.is_none());
+            pages += 1;
+            Ok(file_tree_page())
+        })
         .unwrap();
+    assert_eq!(pages, 1);
     assert_eq!(counts, (2, 1));
 
     let child = repo.get_node("child").unwrap().unwrap();

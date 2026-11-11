@@ -9,8 +9,8 @@ fn setup() -> (tempfile::TempDir, rusqlite::Connection, std::path::PathBuf) {
     std::fs::write(&path, [0; 512]).unwrap();
     let database_path = temp.path().join("source.db");
     let conn = persistence_sqlite::open_or_create_source(&database_path).unwrap();
-    persistence_sqlite::source_fjall::configure_source_identity(&conn, "source").unwrap();
-    persistence_sqlite::source_fjall::configure_source_fjall(&conn, &database_path).unwrap();
+    persistence_source::detail::configure_source_identity(&conn, "source").unwrap();
+    persistence_source::detail::configure_source_fjall(&conn, &database_path).unwrap();
     (temp, conn, path)
 }
 
@@ -74,7 +74,7 @@ fn unbound_existing_staging_is_never_adopted_as_a_verified_snapshot() {
 #[test]
 fn nonempty_unbound_catalog_cannot_bypass_the_staging_identity_check() {
     let (temp, conn, path) = setup();
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&conn)
+    persistence_source::repositories::file_repo::FileRepo::new(&conn)
         .insert_batch(&[
             FileEntry {
                 id: FileEntryId("root".into()),

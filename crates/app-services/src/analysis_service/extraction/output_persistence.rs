@@ -16,7 +16,7 @@ pub(super) fn commit_analysis_control(
     let complete_scans = std::mem::take(&mut state.complete_scans);
     let linux_catalog = state.linux_catalog.take();
     let transaction = conn.unchecked_transaction()?;
-    persistence_sqlite::source_fjall::bind_generation(&transaction, &native_generation.name)?;
+    persistence_source::detail::bind_generation(&transaction, &native_generation.name)?;
     AnalysisScanRepo::new(&transaction).insert_all_checkpoint_batch_in_transaction(
         &clean_scans,
         &diagnostic_scans,

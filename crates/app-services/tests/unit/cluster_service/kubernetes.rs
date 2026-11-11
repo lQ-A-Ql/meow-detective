@@ -2,9 +2,9 @@ use crate::cluster_service::{
     discover_kubernetes_cluster_artifacts, discover_kubernetes_member_artifacts, TopologyScopeKind,
 };
 use domain::{CaseId, DataSourceId, EntryType, FileEntry, FileEntryId, KubernetesScopeId};
-use persistence_sqlite::repositories::{
-    file_repo::FileRepo,
-    linux_topology_scope_repo::{LinuxTopologyScopeRecord, LinuxTopologyScopeRepo},
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::linux_topology_scope_repo::{
+    LinuxTopologyScopeRecord, LinuxTopologyScopeRepo,
 };
 
 #[test]
@@ -13,8 +13,8 @@ fn member_inventory_reads_source_catalog_without_writing_it() {
     let source_id = DataSourceId("k8s-source".to_string());
     let database_path = tmp.path().join("source.db");
     let connection = persistence_sqlite::open_or_create_source(&database_path).unwrap();
-    persistence_sqlite::source_fjall::configure_source_identity(&connection, &source_id.0).unwrap();
-    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &database_path).unwrap();
+    persistence_source::detail::configure_source_identity(&connection, &source_id.0).unwrap();
+    persistence_source::detail::configure_source_fjall(&connection, &database_path).unwrap();
     FileRepo::new(&connection)
         .insert_batch(&[FileEntry {
             id: FileEntryId("file-manifest".to_string()),

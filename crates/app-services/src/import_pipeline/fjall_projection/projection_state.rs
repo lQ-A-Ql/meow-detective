@@ -90,7 +90,7 @@ pub(super) fn analysis_projection_revision(
     source_id: &str,
 ) -> Result<AnalysisProjectionRevision, CommandError> {
     let artifact_repo =
-        persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(source_connection);
+        persistence_source::repositories::artifact_repo::ArtifactRepo::new(source_connection);
     let artifact_revision = artifact_repo
         .cursor_revision()
         .map_err(|error| CommandError::internal(error.to_string()))?;
@@ -98,7 +98,7 @@ pub(super) fn analysis_projection_revision(
         .snapshot_high_water()
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let timeline_repo =
-        persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(source_connection);
+        persistence_source::repositories::timeline_repo::TimelineRepo::new(source_connection);
     let timeline_revision = timeline_repo
         .cursor_revision()
         .map_err(|error| CommandError::internal(error.to_string()))?;

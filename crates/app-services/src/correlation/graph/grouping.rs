@@ -4,7 +4,7 @@ use super::super::{
 use super::{derive_rule_timeline_signals, group_title, rule_group_confidence};
 use crate::correlation::rules::build_artifact_rule_matches;
 use domain::FileEntryId;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rayon::prelude::*;
 use rusqlite::Connection;
 use std::cmp::Reverse;

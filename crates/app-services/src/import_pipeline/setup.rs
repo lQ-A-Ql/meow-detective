@@ -55,7 +55,7 @@ pub(super) fn open_source(
     )
     .map_err(|error| CommandError::internal(error.to_string()))?;
     if !layout.published_path().is_dir() {
-        persistence_sqlite::source_fjall::bind_generation(
+        persistence_source::detail::bind_generation(
             &conn,
             &format!("source.fjall.build.{}", ctx.job_id.0),
         )

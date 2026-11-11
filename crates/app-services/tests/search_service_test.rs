@@ -59,7 +59,7 @@ fn index_and_search_basic() {
             assert!(stats.file_count >= 3, "Expected at least 3 files");
 
             // Get files for indexing
-            let repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -143,7 +143,7 @@ fn search_with_pagination() {
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
 
-            let repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -217,7 +217,7 @@ fn search_no_results() {
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
 
-            let repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -315,7 +315,7 @@ fn reindex_keeps_existing_documents_for_unmodified_files() {
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
 
-            let repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;

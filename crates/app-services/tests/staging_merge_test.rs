@@ -239,7 +239,7 @@ fn staging_merge_conflict_is_visible_and_rolls_back() {
     let tmp = tempfile::TempDir::new().unwrap();
     let ds_id = "ds-conflict";
     let source = NativeSourceFixture::new(tmp.path(), ds_id);
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&source.conn)
+    persistence_source::repositories::file_repo::FileRepo::new(&source.conn)
         .insert_batch(&[domain::FileEntry {
             id: domain::FileEntryId("existing".into()),
             parent_id: None,
@@ -435,7 +435,7 @@ fn staging_analysis_projects_fjall_before_sqlite_commit() {
         )
         .unwrap();
     assert_eq!(detail_tables, 0);
-    let store = persistence_sqlite::source_fjall::open_store(&source.conn)
+    let store = persistence_source::detail::open_store(&source.conn)
         .unwrap()
         .unwrap();
     let artifacts = persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
@@ -514,7 +514,7 @@ fn staging_analysis_merge_failure_rolls_back_and_detaches_database() {
         None,
     )
     .is_err());
-    let store = persistence_sqlite::source_fjall::open_store(&source.conn)
+    let store = persistence_source::detail::open_store(&source.conn)
         .unwrap()
         .unwrap();
     let artifacts = persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());

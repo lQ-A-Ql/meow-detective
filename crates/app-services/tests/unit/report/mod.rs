@@ -6,12 +6,13 @@ use domain::{
     Artifact, ArtifactId, CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, EntryType,
     FileEntry, FileEntryId, TimelineEvent, TimelineEventId,
 };
+use persistence_source::repositories::{
+    artifact_repo::ArtifactRepo as TestArtifactRepo, file_repo::FileRepo,
+    timeline_repo::TimelineRepo,
+};
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo as TestArtifactRepo,
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
-    timeline_repo::TimelineRepo,
 };
 use persistence_sqlite::runner;
 use std::collections::BTreeMap;
@@ -83,7 +84,7 @@ fn report_source_connection(
 }
 
 fn seal_report_source(connection: &rusqlite::Connection, source_id: &str) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+    let store = persistence_source::detail::open_store_for_write(connection)
         .expect("open report source store")
         .expect("configured report source store");
     persistence_fjall::replace_source_generation(

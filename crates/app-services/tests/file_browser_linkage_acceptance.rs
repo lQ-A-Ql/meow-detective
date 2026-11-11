@@ -1,6 +1,6 @@
 use app_services::{case_service, file_service, source_db};
 use domain::{CaseId, DataSourceId, EntryType};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, io::Write, path::Path};

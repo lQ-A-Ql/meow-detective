@@ -1,9 +1,9 @@
 use app_services::{case_service, file_service};
 use evidence_core::LogicalFsReader;
+use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::{
     audit_repo::AuditRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
 };
 use tempfile::TempDir;
 

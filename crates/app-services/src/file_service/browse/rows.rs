@@ -3,7 +3,7 @@ use crate::file_service::{
     FileServiceError,
 };
 use domain::FileEntryId;
-use persistence_sqlite::repositories::file_repo::{FileRepo, FileSortDirection, FileSortKey};
+use persistence_source::repositories::file_repo::{FileRepo, FileSortDirection, FileSortKey};
 use rusqlite::Connection;
 use transport::{commands::GetFileRowsRequest, dto::FileRowsPageDto};
 

@@ -5,7 +5,7 @@ mod fixture;
 mod ntfs_fixture;
 use app_services::carving_service::*;
 use domain::{DataSourceId, DataSourceKind};
-use persistence_sqlite::repositories::{
+use persistence_source::repositories::{
     artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
 use sha2::{Digest, Sha256};

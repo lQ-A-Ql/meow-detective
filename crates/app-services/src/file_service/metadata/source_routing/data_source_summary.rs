@@ -1,7 +1,8 @@
 use std::path::Path;
 
 use domain::CaseId;
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use transport::dto::DataSourceSummaryDto;
 

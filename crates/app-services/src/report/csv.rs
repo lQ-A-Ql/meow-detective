@@ -3,7 +3,7 @@ use super::{
     current_correlation_for_case, current_governance, execute_report_export, html,
     prepare_report_output, write_report_atomically, ReportError,
 };
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use reports::CsvExporter;
 use rusqlite::Connection;
 use std::path::Path;

@@ -18,9 +18,9 @@ pub(super) fn identity(
     platform: DataSourcePlatform,
 ) -> Result<String, TimelineServiceError> {
     use sha2::Digest;
-    let store = persistence_sqlite::source_fjall::open_store(conn)?
+    let store = persistence_source::detail::open_store(conn)?
         .ok_or_else(|| TimelineServiceError::Other("source generation is missing".into()))?;
-    let source = persistence_sqlite::source_fjall::source_id(conn)?
+    let source = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| TimelineServiceError::Other("source identity is missing".into()))?;
     let catalog = CatalogRecordStore::from_source_store((*store).clone());
     let snapshot = catalog.read_snapshot();
@@ -57,9 +57,9 @@ pub(super) fn materialize(
     cancel: &AtomicBool,
     identity: &str,
 ) -> Result<TimelineProjectionStats, TimelineServiceError> {
-    let store = persistence_sqlite::source_fjall::open_store(conn)?
+    let store = persistence_source::detail::open_store(conn)?
         .ok_or_else(|| TimelineServiceError::Other("source generation is missing".into()))?;
-    let source = persistence_sqlite::source_fjall::source_id(conn)?
+    let source = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| TimelineServiceError::Other("source identity is missing".into()))?;
     let meta =
         persistence_sqlite::repositories::timeline_projection_repo::TimelineProjectionRepo::new(

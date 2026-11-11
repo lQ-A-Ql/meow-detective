@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use domain::FileEntryId;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use transport::dto::FileExtractionResultDto;
 

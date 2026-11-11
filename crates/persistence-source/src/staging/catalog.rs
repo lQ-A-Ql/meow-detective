@@ -161,7 +161,7 @@ fn partition_root(
 }
 
 fn record(row: &Row<'_>, source: &str, partition: u32) -> DbResult<FileEntryRecord> {
-    let entry = persistence_sqlite::repositories::file_repo::mapping::row_to_file_entry(row)?;
+    let entry = crate::repositories::file_repo::mapping::row_to_file_entry(row)?;
     if entry.data_source_id.0 != source {
         return Err(DbError::System(
             "staging row source identity mismatch".into(),

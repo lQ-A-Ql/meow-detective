@@ -10,14 +10,25 @@ use persistence_sqlite::{repositories::datasource_repo::DataSourceRepo, DbError,
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
+/// Open (or create) a source database at an explicit path and bind its source
+/// identity plus Fjall detail-root metadata.
+///
+/// Tests and callers that do not go through the registered case-root layout use
+/// this helper so they get exactly the same detail-store configuration as
+/// [`open_source_db`].
+pub fn open_source_database(path: &Path, source_id: &str) -> DbResult<Connection> {
+    let connection = persistence_sqlite::open_or_create_source(path)?;
+    crate::detail::configure_source_identity(&connection, source_id)?;
+    crate::detail::configure_source_fjall(&connection, path)?;
+    Ok(connection)
+}
+
 pub fn open_source_db(case_root: &Path, data_source_id: &DataSourceId) -> DbResult<Connection> {
     validate_source_storage_id(data_source_id)?;
     let started = std::time::Instant::now();
     std::fs::create_dir_all(case_root.join("artifacts").join("objects"))?;
     let database_path = source_db_path(case_root, data_source_id);
-    let connection = persistence_sqlite::open_or_create_source(&database_path)?;
-    persistence_sqlite::source_fjall::configure_source_identity(&connection, &data_source_id.0)?;
-    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &database_path)?;
+    let connection = open_source_database(&database_path, &data_source_id.0)?;
     tracing::debug!(
         data_source_id = %data_source_id.0,
         elapsed_ms = started.elapsed().as_millis(),

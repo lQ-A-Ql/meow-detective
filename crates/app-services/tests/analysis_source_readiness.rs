@@ -31,7 +31,7 @@ fn register_source(
 
     let source_conn =
         app_services::source_db::open_source_db(case_root, &source.id).expect("create source db");
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+    let store = persistence_source::detail::open_store_for_write(&source_conn)
         .expect("open source store")
         .expect("configured source store");
     persistence_fjall::seal_source_generation(&store, &source.id.0, "fixture", &"a".repeat(64))

@@ -7,7 +7,7 @@ use domain::{
     Artifact, ArtifactId, DataSourceId, EntryType, FileEntry, FileEntryId, TimelineEvent,
     TimelineEventId,
 };
-use persistence_sqlite::repositories::{
+use persistence_source::repositories::{
     artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
 use rusqlite::Connection;
@@ -226,9 +226,9 @@ fn source_connection() -> SourceFixture {
     let db_path = source_dir.join("source.db");
     let connection =
         persistence_sqlite::open_or_create_source(&db_path).expect("open source database");
-    persistence_sqlite::source_fjall::configure_source_identity(&connection, "source-linux")
+    persistence_source::detail::configure_source_identity(&connection, "source-linux")
         .expect("configure source identity");
-    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &db_path)
+    persistence_source::detail::configure_source_fjall(&connection, &db_path)
         .expect("configure source storage");
     connection
         .execute(
@@ -286,10 +286,10 @@ fn native_event_ids(connection: &Connection) -> Vec<String> {
 }
 
 fn native_event_exists(connection: &Connection, id: &str) -> bool {
-    let store = persistence_sqlite::source_fjall::open_store(connection)
+    let store = persistence_source::detail::open_store(connection)
         .expect("open source store")
         .expect("configured source store");
-    let source_id = persistence_sqlite::source_fjall::source_id(connection)
+    let source_id = persistence_source::detail::source_id(connection)
         .expect("read source identity")
         .expect("source identity");
     let repository = persistence_fjall::TimelineRecordStore::from_source_store((*store).clone());
@@ -300,10 +300,10 @@ fn native_event_exists(connection: &Connection, id: &str) -> bool {
 }
 
 fn native_artifact_exists(connection: &Connection, id: &str) -> bool {
-    let store = persistence_sqlite::source_fjall::open_store(connection)
+    let store = persistence_source::detail::open_store(connection)
         .expect("open source store")
         .expect("configured source store");
-    let source_id = persistence_sqlite::source_fjall::source_id(connection)
+    let source_id = persistence_source::detail::source_id(connection)
         .expect("read source identity")
         .expect("source identity");
     let repository = persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
@@ -325,7 +325,7 @@ fn tamper_native_artifact(connection: &Connection, artifact_id: &str) {
 }
 
 fn inject_corrupt_timeline(connection: &Connection) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+    let store = persistence_source::detail::open_store_for_write(connection)
         .expect("open source store")
         .expect("configured source store");
     let record_key = persistence_fjall::encode_key(
@@ -379,13 +379,13 @@ fn insert_file(connection: &Connection, file: FileEntry) {
 }
 
 fn insert_partitioned_file(connection: &Connection, file: FileEntry, partition: usize) {
-    persistence_sqlite::source_fjall::upsert_files_with_partition(connection, &[file], partition)
+    persistence_source::detail::upsert_files_with_partition(connection, &[file], partition)
         .expect("insert partitioned native file catalog entry");
     reseal_native_generation(connection);
 }
 
 fn reseal_native_generation(connection: &Connection) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+    let store = persistence_source::detail::open_store_for_write(connection)
         .expect("open source store")
         .expect("configured source store");
     persistence_fjall::replace_source_generation(

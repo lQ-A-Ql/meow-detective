@@ -10,7 +10,8 @@
 use app_services::{case_service, datasource_service, file_service};
 use evidence_core::filesystem::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::time::Instant;

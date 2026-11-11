@@ -9,10 +9,10 @@ use domain::{
     FileEntry, FileEntryId,
 };
 use persistence_fjall::ScanDirection;
+use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::{
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
 };
 
 #[test]

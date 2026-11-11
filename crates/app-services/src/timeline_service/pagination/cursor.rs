@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, collections::VecDeque, path::Path};
 
 use domain::{CaseId, DataSourceId};
-use persistence_sqlite::repositories::timeline_repo::{
+use persistence_source::repositories::timeline_repo::{
     TimelineCursorRow, TimelineRepo, TimelineSortKey,
 };
 use rusqlite::Connection;

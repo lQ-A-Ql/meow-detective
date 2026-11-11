@@ -2,7 +2,7 @@ use super::*;
 use crate::plugin_loader::PluginModuleMeta;
 use chrono::Utc;
 use domain::{Artifact, ArtifactId, FileEntryId};
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use std::collections::BTreeMap;
 
 fn source_connection() -> Connection {
@@ -10,8 +10,8 @@ fn source_connection() -> Connection {
     let db_path = root.join("source.db");
     let connection =
         persistence_sqlite::open_or_create_source(&db_path).expect("open source database");
-    persistence_sqlite::source_fjall::configure_source_identity(&connection, "source-1").unwrap();
-    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &db_path).unwrap();
+    persistence_source::detail::configure_source_identity(&connection, "source-1").unwrap();
+    persistence_source::detail::configure_source_fjall(&connection, &db_path).unwrap();
     connection
 }
 

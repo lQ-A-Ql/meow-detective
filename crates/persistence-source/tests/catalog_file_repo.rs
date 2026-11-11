@@ -1,5 +1,5 @@
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::catalog_file_repo::CatalogFileRepo;
+use persistence_source::repositories::catalog_file_repo::CatalogFileRepo;
 
 fn entry(id: &str, parent_id: Option<&str>, path: &str, entry_type: EntryType) -> FileEntry {
     let is_file = entry_type == EntryType::File;
@@ -30,9 +30,11 @@ fn entry(id: &str, parent_id: Option<&str>, path: &str, entry_type: EntryType) -
 #[test]
 fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
     let directory = tempfile::tempdir().unwrap();
-    let connection = persistence_sqlite::open_or_create_source(&directory.path().join("source.db"))
-        .expect("open database");
-    persistence_source::detail::configure_source_identity(&connection, "source-1").unwrap();
+    let connection = persistence_source::control::opening::open_source_database(
+        &directory.path().join("source.db"),
+        "source-1",
+    )
+    .expect("open database");
     connection
         .execute(
             "INSERT INTO data_sources
@@ -106,7 +108,7 @@ fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
         .expect("check source fingerprint table");
     assert_eq!(fingerprint_table, 0);
     let hash = "b".repeat(64);
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&connection)
+    persistence_source::repositories::file_repo::FileRepo::new(&connection)
         .update_hash_sha256(&FileEntryId("file".into()), &hash)
         .unwrap();
     let updated = catalog
@@ -115,7 +117,7 @@ fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
         .unwrap();
     assert_eq!(updated.hash_sha256, Some(hash));
     assert_eq!(
-        persistence_sqlite::repositories::file_repo::FileRepo::new(&connection)
+        persistence_source::repositories::file_repo::FileRepo::new(&connection)
             .find_partition_index_by_id(&FileEntryId("file".into()))
             .unwrap(),
         Some(7)

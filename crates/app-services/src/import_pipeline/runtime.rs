@@ -169,7 +169,7 @@ pub(super) fn finish_indexes(ctx: &ImportJobContext<'_>) -> Result<(), CommandEr
         ctx.profiler.as_ref(),
         transport::dto::import_benchmark::ImportBenchmarkPhaseDto::SourceIndexBuild,
         || {
-            let source = persistence_sqlite::source_fjall::open_store(ctx.source_connection()?)
+            let source = persistence_source::detail::open_store(ctx.source_connection()?)
                 .map_err(CommandError::from_typed_service_error)?
                 .ok_or_else(|| CommandError::internal("source generation is missing"))?;
             source

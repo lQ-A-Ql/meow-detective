@@ -26,16 +26,10 @@ macro_rules! native_source_test_support {
                     let database_path = source_dir.join("source.db");
                     let connection = persistence_sqlite::open_or_create_source(&database_path)
                         .expect("open native source database");
-                    persistence_sqlite::source_fjall::configure_source_identity(
-                        &connection,
-                        source_id,
-                    )
-                    .expect("configure native source identity");
-                    persistence_sqlite::source_fjall::configure_source_fjall(
-                        &connection,
-                        &database_path,
-                    )
-                    .expect("configure native source details");
+                    persistence_source::detail::configure_source_identity(&connection, source_id)
+                        .expect("configure native source identity");
+                    persistence_source::detail::configure_source_fjall(&connection, &database_path)
+                        .expect("configure native source details");
                     connection
                         .execute(
                             "INSERT INTO data_sources
@@ -56,7 +50,7 @@ macro_rules! native_source_test_support {
                 }
 
                 pub(crate) fn insert_files(&self, files: &[FileEntry]) {
-                    persistence_sqlite::repositories::file_repo::FileRepo::new(&self.connection)
+                    persistence_source::repositories::file_repo::FileRepo::new(&self.connection)
                         .insert_batch(files)
                         .expect("insert native catalog records");
                     self.refresh_generation();
@@ -67,10 +61,9 @@ macro_rules! native_source_test_support {
                 }
 
                 fn refresh_generation(&self) {
-                    let store =
-                        persistence_sqlite::source_fjall::open_store_for_write(&self.connection)
-                            .expect("open native source store")
-                            .expect("configured native source store");
+                    let store = persistence_source::detail::open_store_for_write(&self.connection)
+                        .expect("open native source store")
+                        .expect("configured native source store");
                     persistence_fjall::replace_source_generation(
                         &store,
                         &self.source_id,
@@ -95,7 +88,7 @@ macro_rules! native_source_test_support {
                 connection: &Connection,
                 source_id: &str,
             ) {
-                let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+                let store = persistence_source::detail::open_store_for_write(connection)
                     .expect("open native source store")
                     .expect("configured native source store");
                 let key = persistence_fjall::encode_key(

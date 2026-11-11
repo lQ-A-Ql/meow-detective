@@ -180,7 +180,7 @@ fn dump_containerd_input(
     source_id: &DataSourceId,
     output: &Path,
 ) {
-    let entries = persistence_sqlite::repositories::file_repo::FileRepo::new(source)
+    let entries = persistence_source::repositories::file_repo::FileRepo::new(source)
         .find_by_path_fragments(source_id, &["io.containerd.metadata.v1.bolt/meta.db"])
         .unwrap();
     for (index, entry) in entries.into_iter().enumerate() {

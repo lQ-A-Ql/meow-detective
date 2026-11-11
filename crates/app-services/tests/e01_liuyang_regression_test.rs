@@ -4,9 +4,8 @@ use app_services::{
 };
 use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo, file_repo::FileRepo,
-};
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, file_repo::FileRepo};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use serde_json::Value;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::atomic::AtomicBool;

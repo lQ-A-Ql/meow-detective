@@ -12,6 +12,8 @@ mod snapshot;
 mod traversal;
 mod writes;
 
+pub use file_projection::{FileTreeProjectionPage, FileTreeProjectionRecord};
+
 /// Direction for neighbor traversal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {

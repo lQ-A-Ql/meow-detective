@@ -1,9 +1,8 @@
 use std::collections::BTreeSet;
 
 use domain::{CaseId, DataSourceId};
-use persistence_sqlite::repositories::{
-    file_repo::FileRepo, linux_evidence_facts_repo::LinuxEvidenceFactsRepo,
-};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::linux_evidence_facts_repo::LinuxEvidenceFactsRepo;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 const IDENTITY_PARSER_VERSION: &str = "1.3.7";
@@ -289,7 +288,7 @@ fn collect_artifact_facts(
     facts: &mut LinuxEvidenceFacts,
 ) {
     let mut artifacts = Vec::new();
-    if persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(source_connection)
+    if persistence_source::repositories::artifact_repo::ArtifactRepo::new(source_connection)
         .visit_by_family(Some("LinuxSystemConfig"), |artifact| {
             artifacts.push(artifact);
             Ok(())

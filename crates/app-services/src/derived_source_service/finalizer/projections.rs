@@ -163,7 +163,7 @@ pub(super) fn timeline_event_counts(
             |row| row.get(0),
         )
         .map_err(|error| format!("Count Timeline phase source: {error}"))?;
-    let store = persistence_sqlite::source_fjall::open_store(connection)
+    let store = persistence_source::detail::open_store(connection)
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "Fjall source storage is unavailable".to_owned())?;
     let repository = persistence_fjall::TimelineRecordStore::from_source_store((*store).clone());

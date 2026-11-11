@@ -1,6 +1,6 @@
 use super::{mapping, RegistryBrowserContext, RegistryBrowserError, RegistryBrowserRegistry};
 use domain::DataSourceId;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use transport::dto::{RegistryHiveListRequestDto, RegistryHivePageDto};
 
 pub fn list_hives(

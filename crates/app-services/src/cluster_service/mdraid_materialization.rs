@@ -142,7 +142,7 @@ fn publish_mdraid_catalog_generation(
     source: &DataSource,
     source_conn: &rusqlite::Connection,
 ) -> Result<(), String> {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(source_conn)
+    let store = persistence_source::detail::open_store_for_write(source_conn)
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "MD RAID source detail storage is missing".to_string())?;
     let partition = PartitionRecord {
@@ -199,7 +199,7 @@ fn publish_mdraid_catalog_generation(
     .map_err(|error| error.to_string())?;
     persistence_fjall::verify_source_generation(&store, &source.id.0)
         .map_err(|error| error.to_string())?;
-    persistence_sqlite::source_fjall::bind_generation(source_conn, "source.fjall")
+    persistence_source::detail::bind_generation(source_conn, "source.fjall")
         .map_err(|error| error.to_string())?;
     Ok(())
 }

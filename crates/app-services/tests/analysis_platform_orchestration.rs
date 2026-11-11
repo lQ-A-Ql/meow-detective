@@ -13,11 +13,10 @@ use domain::{
     Artifact, ArtifactId, CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind,
     DataSourcePlatform, DataSourceProvenance, FileEntryId, TimelineEvent, TimelineEventId,
 };
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo,
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    timeline_repo::TimelineRepo,
 };
 use transport::{dto::AnalysisParseStatusDto, ErrorCategory, ServiceErrorCategory};
 

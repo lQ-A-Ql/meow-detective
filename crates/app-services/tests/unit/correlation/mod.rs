@@ -5,12 +5,12 @@ use domain::{
     Artifact, ArtifactId, CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance,
     EntryType, FileEntry, FileEntryId, TimelineEvent, TimelineEventId,
 };
+use persistence_source::repositories::{
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
+};
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo,
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
-    timeline_repo::TimelineRepo,
 };
 use rusqlite::Connection;
 use serde_json::Value;

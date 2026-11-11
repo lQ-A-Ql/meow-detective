@@ -5,6 +5,7 @@ use domain::{
     CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourcePlatform,
     DataSourceProvenance, DataSourceProvenanceStatus,
 };
+use persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo;
 use persistence_sqlite::repositories::{
     catalog_publication_repo::CatalogPublicationRepo,
     ceph_fs_lineage_repo::{
@@ -12,7 +13,6 @@ use persistence_sqlite::repositories::{
         CephFsDerivedLineageRepo, CephFsDerivedMapProvenanceRecord, CephFsDerivedPoolRecord,
         CephFsDerivedPoolSourceRecord,
     },
-    ceph_fs_namespace_repo::CephFsNamespaceRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
 };
 use sha2::{Digest, Sha256};
@@ -144,8 +144,8 @@ pub(super) fn build_lineage(
             namespace_projection_sha256: evidence.namespace_projection_sha256.to_string(),
             namespace_assembly_sha256: evidence.namespace_assembly_sha256.to_string(),
             source_capability: evidence.source_capability.as_str().to_string(),
-            namespace_schema_version: persistence_sqlite::repositories::ceph_fs_namespace_repo::CEPHFS_NAMESPACE_SCHEMA_VERSION,
-            decoder_profile: persistence_sqlite::repositories::ceph_fs_namespace_repo::CEPHFS_NAMESPACE_DECODER_PROFILE.to_string(),
+            namespace_schema_version: persistence_source::repositories::ceph_fs_namespace_repo::CEPHFS_NAMESPACE_SCHEMA_VERSION,
+            decoder_profile: persistence_source::repositories::ceph_fs_namespace_repo::CEPHFS_NAMESPACE_DECODER_PROFILE.to_string(),
             journal_boundary_sha256: evidence.journal_boundary_sha256.map(str::to_string),
             lineage_fingerprint: String::new(),
         },

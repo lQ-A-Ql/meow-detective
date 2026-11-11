@@ -139,7 +139,7 @@ pub fn build_file_classification_board<E: std::fmt::Display>(
 
 fn encryption_counts(conn: &Connection) -> Result<(u64, u64), AnalysisServiceError> {
     let entries = crate::analysis_service::collect_file_entries(conn)?;
-    let repository = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+    let repository = persistence_source::repositories::file_repo::FileRepo::new(conn);
     let mut encrypted = 0;
     let mut unknown = 0;
     for entry in entries.into_iter().filter(FileEntry::is_file) {

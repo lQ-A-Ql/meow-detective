@@ -47,7 +47,7 @@ fn project_and_query_timeline() {
             file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
 
             // Get all files
-            let repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -111,7 +111,7 @@ fn timeline_pagination() {
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
 
-            let repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -169,7 +169,7 @@ fn timeline_filtered_by_event_type() {
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
 
-            let repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;

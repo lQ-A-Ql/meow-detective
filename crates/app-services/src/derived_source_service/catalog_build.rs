@@ -165,7 +165,7 @@ fn prepare_fjall_source(
         .ok_or_else(|| {
             DerivedSourceError::InconsistentState("source generation component is missing".into())
         })?;
-    persistence_sqlite::source_fjall::bind_generation(conn, name)?;
+    persistence_source::detail::bind_generation(conn, name)?;
     std::fs::create_dir_all(&root)?;
     let source = crate::storage_runtime::open_source_read_write_at_path(&root)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;

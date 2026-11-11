@@ -1,6 +1,7 @@
 use app_services::{case_service, file_service, search_service, timeline_service};
 use evidence_core::LogicalFsReader;
-use persistence_sqlite::repositories::{file_repo::FileRepo, job_repo::JobRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::job_repo::JobRepo;
 use tempfile::TempDir;
 use transport::commands::ExportScopeDto;
 

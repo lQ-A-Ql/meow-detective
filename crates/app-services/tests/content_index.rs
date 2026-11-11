@@ -2,7 +2,7 @@
 mod fixture;
 use app_services::{content_index_service, search_service};
 use domain::{Artifact, ArtifactId, EntryType, FileEntryId};
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use std::sync::atomic::{AtomicBool, Ordering};
 use transport::commands::SearchFilesRequest;
 fn setup() -> fixture::EvidenceCase {

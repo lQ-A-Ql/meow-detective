@@ -6,7 +6,7 @@ use crate::file_service::viewer::{
 };
 use crate::file_service::{metadata::lookup::mime_for_entry, FileServiceError};
 use domain::FileEntryId;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use std::path::PathBuf;
 use transport::dto::{ViewerHandleDto, ViewerPreviewKindDto};

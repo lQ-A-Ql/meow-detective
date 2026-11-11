@@ -206,7 +206,7 @@ fn catalog_manifest_supports_fast_reuse_and_explicit_deep_verification() {
     persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
         .upsert_source_local_metadata(&CaseId("case-1".to_string()), &source)
         .expect("insert source metadata");
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&connection)
+    persistence_source::repositories::file_repo::FileRepo::new(&connection)
         .insert_batch(&[
             catalog_dir(&source, "root", None, "", "root"),
             catalog_dir(&source, "other", None, "", "other"),
@@ -229,7 +229,7 @@ fn catalog_manifest_supports_fast_reuse_and_explicit_deep_verification() {
     )
     .unwrap();
 
-    persistence_sqlite::source_fjall::update_catalog_parent(
+    persistence_source::detail::update_catalog_parent(
         &connection,
         "file",
         Some("other".into()),
@@ -267,7 +267,7 @@ fn catalog_digest_ignores_materialized_partition_routing_hints() {
     persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&fixture.connection)
         .upsert_source_local_metadata(&CaseId("case-1".to_string()), &source)
         .expect("insert source metadata");
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&fixture.connection)
+    persistence_source::repositories::file_repo::FileRepo::new(&fixture.connection)
         .insert_batch(&[
             catalog_dir(&source, "root-1", None, "", "Partition 1"),
             catalog_file(&source, "file-1", "root-1", "etc/passwd", "passwd"),
@@ -280,10 +280,10 @@ fn catalog_digest_ignores_materialized_partition_routing_hints() {
     let before =
         catalog_manifest::summarize_source_connection(&fixture.connection, source.clone()).unwrap();
     for id in ["root-0", "file-0"] {
-        persistence_sqlite::source_fjall::set_partition_index(&fixture.connection, id, 0).unwrap();
+        persistence_source::detail::set_partition_index(&fixture.connection, id, 0).unwrap();
     }
     for id in ["root-1", "file-1"] {
-        persistence_sqlite::source_fjall::set_partition_index(&fixture.connection, id, 1).unwrap();
+        persistence_source::detail::set_partition_index(&fixture.connection, id, 1).unwrap();
     }
     let after = catalog_manifest::summarize_source_connection(&fixture.connection, source).unwrap();
 

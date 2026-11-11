@@ -3,8 +3,8 @@ use super::common::{
     EvidencePathPattern,
 };
 use crate::analysis_service::error::AnalysisServiceError;
+use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
-use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

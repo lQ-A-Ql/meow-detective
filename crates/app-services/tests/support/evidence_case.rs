@@ -4,10 +4,8 @@ use domain::{
     DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
     FileEntryId,
 };
-use persistence_sqlite::repositories::{
-    datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
-};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use std::path::Path;
 pub struct EvidenceCase {
     pub temp: tempfile::TempDir,
@@ -104,7 +102,7 @@ pub fn entry_with_metadata(
 }
 
 fn publish_source(conn: &rusqlite::Connection, source_id: &DataSourceId) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+    let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
     persistence_fjall::replace_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))

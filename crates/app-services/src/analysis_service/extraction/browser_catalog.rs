@@ -9,7 +9,7 @@ pub(super) fn locate_master_key_files(
     data_source_id: &str,
 ) -> Result<Vec<EvidenceCandidate>, AnalysisServiceError> {
     let mut candidates = Vec::new();
-    persistence_sqlite::repositories::file_repo::FileRepo::new(conn).visit_all(
+    persistence_source::repositories::file_repo::FileRepo::new(conn).visit_all(
         Some(data_source_id),
         |entry| {
             if is_master_key_path(&entry.path) && !entry.deleted && !entry.is_directory() {

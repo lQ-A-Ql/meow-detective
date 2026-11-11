@@ -24,9 +24,9 @@ impl NativeAnalysisFixture {
         let database_path = source_dir.join("source.db");
         let connection = persistence_sqlite::open_or_create_source(&database_path)
             .expect("open native analysis source database");
-        persistence_sqlite::source_fjall::configure_source_identity(&connection, source_id)
+        persistence_source::detail::configure_source_identity(&connection, source_id)
             .expect("configure native analysis source identity");
-        persistence_sqlite::source_fjall::configure_source_fjall(&connection, &database_path)
+        persistence_source::detail::configure_source_fjall(&connection, &database_path)
             .expect("configure native analysis source details");
         let source = DataSource {
             id: DataSourceId(source_id.to_owned()),
@@ -49,14 +49,14 @@ impl NativeAnalysisFixture {
     }
 
     pub(crate) fn insert_file(&self, entry: FileEntry) {
-        persistence_sqlite::repositories::file_repo::FileRepo::new(&self.connection)
+        persistence_source::repositories::file_repo::FileRepo::new(&self.connection)
             .insert_batch(&[entry])
             .expect("insert native analysis catalog entry");
         self.refresh_generation();
     }
 
     pub(crate) fn insert_partitioned_file(&self, entry: FileEntry, partition_index: usize) {
-        persistence_sqlite::source_fjall::upsert_files_with_partition(
+        persistence_source::detail::upsert_files_with_partition(
             &self.connection,
             &[entry],
             partition_index,
@@ -77,7 +77,7 @@ impl NativeAnalysisFixture {
     }
 
     pub(crate) fn reject_partition_index_above_u32(&self, entry: FileEntry) {
-        persistence_sqlite::source_fjall::upsert_files_with_partition(
+        persistence_source::detail::upsert_files_with_partition(
             &self.connection,
             &[entry],
             u32::MAX as usize + 1,
@@ -90,7 +90,7 @@ impl NativeAnalysisFixture {
         id: &str,
         update: impl FnOnce(&mut persistence_fjall::FileEntryRecord),
     ) {
-        let store = persistence_sqlite::source_fjall::open_store_for_write(&self.connection)
+        let store = persistence_source::detail::open_store_for_write(&self.connection)
             .expect("open native analysis store")
             .expect("configured native analysis store");
         let records = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
@@ -107,7 +107,7 @@ impl NativeAnalysisFixture {
     }
 
     fn refresh_generation(&self) {
-        let store = persistence_sqlite::source_fjall::open_store_for_write(&self.connection)
+        let store = persistence_source::detail::open_store_for_write(&self.connection)
             .expect("open native analysis store")
             .expect("configured native analysis store");
         persistence_fjall::replace_source_generation(

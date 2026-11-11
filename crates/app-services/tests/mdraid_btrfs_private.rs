@@ -2,9 +2,8 @@ use app_services::cluster_service::{
     discover_linux_evidence_set_mdraid, materialize_mdraid_array, plan_linux_evidence_set_import,
 };
 use domain::{CaseId, CaseMeta};
-use persistence_sqlite::repositories::{
-    case_repo::CaseRepo, datasource_repo::DataSourceRepo, file_repo::FileRepo,
-};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
 use std::time::Instant;
 
 #[test]

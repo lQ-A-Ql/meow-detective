@@ -5,9 +5,8 @@ use app_services::{
     import_precheck::prepare_import_source_config_from_path,
     nested_evidence_service,
 };
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, file_repo::FileRepo, job_repo::JobRepo,
-};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 fn vhd_bytes() -> Vec<u8> {

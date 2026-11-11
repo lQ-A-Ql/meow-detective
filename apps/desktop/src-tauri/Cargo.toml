@@ -39,6 +39,7 @@ physical-mount.workspace = true
 domain.workspace = true
 infrastructure.workspace = true
 persistence-sqlite.workspace = true
+persistence-source.workspace = true
 evidence-core.workspace = true
 volume-bitlocker.workspace = true
 artifacts-core.workspace = true

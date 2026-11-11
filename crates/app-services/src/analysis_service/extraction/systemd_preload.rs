@@ -5,7 +5,7 @@ use crate::analysis_service::{
 };
 use artifacts_linux::{LinuxArtifactError, LinuxServiceUnit, SystemdUnitCatalog, SystemdUnitFile};
 use domain::{DataSourceId, FileEntryId};
-use persistence_sqlite::repositories::systemd_unit_repo::{SystemdCatalogRow, SystemdUnitRepo};
+use persistence_source::repositories::systemd_unit_repo::{SystemdCatalogRow, SystemdUnitRepo};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},

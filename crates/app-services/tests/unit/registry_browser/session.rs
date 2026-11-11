@@ -22,10 +22,10 @@ fn source_generation_changing_during_a_read_discards_the_result() {
     std::fs::write(evidence.join("SOFTWARE"), &bytes).unwrap();
     active
         .with_conn(|conn| {
+            use persistence_source::repositories::file_repo::FileRepo;
             use persistence_sqlite::repositories::datasource_repo::{
                 DataSourceRepo, DataSourceStorage,
             };
-            use persistence_sqlite::repositories::file_repo::FileRepo;
             let source = domain::DataSource {
                 id: domain::DataSourceId("source".into()),
                 name: "source".into(),
@@ -68,7 +68,7 @@ fn source_generation_changing_during_a_read_discards_the_result() {
                     hash_sha256: None,
                 }])
                 .unwrap();
-            let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+            let store = persistence_source::detail::open_store_for_write(&source_conn)
                 .unwrap()
                 .unwrap();
             persistence_fjall::replace_source_generation(

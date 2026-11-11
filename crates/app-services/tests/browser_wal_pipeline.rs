@@ -1,6 +1,6 @@
 use app_services::analysis_service::run_analysis_extraction;
 use domain::{DataSourceId, DataSourcePlatform, EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
 use std::{cell::Cell, io::Read, path::Path};
 

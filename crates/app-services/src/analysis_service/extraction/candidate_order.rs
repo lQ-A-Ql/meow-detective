@@ -2,9 +2,8 @@ use std::collections::{BTreeSet, HashMap};
 
 use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use domain::DataSourcePlatform;
-use persistence_sqlite::repositories::{
-    file_repo::FileRepo, filesystem_locator_repo::FilesystemLocatorRepo,
-};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::filesystem_locator_repo::FilesystemLocatorRepo;
 use rusqlite::Connection;
 
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};

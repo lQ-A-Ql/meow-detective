@@ -96,7 +96,7 @@ fn load_plugin_files(
 ) -> Result<Vec<PluginFileRecord>, AnalysisServiceError> {
     let entries = super::common::collect_file_entries(conn)?;
     let mut records = Vec::new();
-    let repository = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+    let repository = persistence_source::repositories::file_repo::FileRepo::new(conn);
     for entry in entries {
         ensure_not_cancelled(cancel_token)?;
         if !entry.is_file() {

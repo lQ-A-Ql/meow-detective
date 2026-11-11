@@ -12,9 +12,11 @@ use app_services::import_analysis::ImportAnalysisMode;
 use app_services::import_pipeline::{execute_import_job_with_counts, ImportJobOptions};
 use app_services::source_db::{self, GlobalFileId};
 use domain::{CaseId, CaseMeta, DataSourceId, DataSourcePlatform, FileEntryId};
+use persistence_source::repositories::{
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
+};
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, case_repo::CaseRepo, datasource_repo::DataSourceRepo,
-    file_repo::FileRepo, job_repo::JobRepo, timeline_repo::TimelineRepo,
+    case_repo::CaseRepo, datasource_repo::DataSourceRepo, job_repo::JobRepo,
 };
 use tempfile::TempDir;
 use transport::dto::{ReleaseGateStatusDto, ViewerRangeRequestDto};

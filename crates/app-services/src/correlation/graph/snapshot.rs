@@ -20,7 +20,7 @@ use transport::dto::{
 pub fn get_correlation_snapshot(
     conn: &Connection,
 ) -> Result<CorrelationSnapshotDto, CorrelationError> {
-    if persistence_sqlite::source_fjall::source_id(conn)?.is_none() {
+    if persistence_source::detail::source_id(conn)?.is_none() {
         return compute_correlation_snapshot(conn);
     }
     let Some(case_id) = resolve_case_id(conn)? else {
@@ -38,7 +38,7 @@ pub fn get_correlation_snapshot(
 pub fn get_correlation_snapshot_read_only(
     conn: &Connection,
 ) -> Result<CorrelationSnapshotDto, CorrelationError> {
-    if persistence_sqlite::source_fjall::source_id(conn)?.is_none() {
+    if persistence_source::detail::source_id(conn)?.is_none() {
         return compute_correlation_snapshot_read_only(conn);
     }
     if let Some(case_id) = resolve_case_id(conn)? {
@@ -112,7 +112,7 @@ fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<(), CorrelationErro
 pub fn get_correlation_snapshot_incremental(
     conn: &Connection,
 ) -> Result<CorrelationSnapshotDto, CorrelationError> {
-    if persistence_sqlite::source_fjall::source_id(conn)?.is_none() {
+    if persistence_source::detail::source_id(conn)?.is_none() {
         return compute_correlation_snapshot(conn);
     }
     let Some(case_id) = resolve_case_id(conn)? else {
@@ -202,7 +202,7 @@ fn load_artifacts(conn: &Connection) -> Result<Vec<ArtifactRowDto>, CorrelationE
 }
 
 fn load_artifact_rows(conn: &Connection) -> Result<Vec<ArtifactRowDto>, CorrelationError> {
-    if persistence_sqlite::source_fjall::source_id(conn)?.is_none() {
+    if persistence_source::detail::source_id(conn)?.is_none() {
         return Ok(Vec::new());
     }
     crate::artifact_service::get_artifact_rows_from_db(conn, None)
@@ -210,7 +210,7 @@ fn load_artifact_rows(conn: &Connection) -> Result<Vec<ArtifactRowDto>, Correlat
 }
 
 fn load_timelines(conn: &Connection) -> Result<Vec<TimelineEventDto>, CorrelationError> {
-    if persistence_sqlite::source_fjall::source_id(conn)?.is_none() {
+    if persistence_source::detail::source_id(conn)?.is_none() {
         return Ok(Vec::new());
     }
     crate::timeline_service::query_timeline(conn, 0, MAX_CORRELATION_TIMELINE_ROWS)

@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use domain::FileEntry;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 
 use super::{archive, logical};

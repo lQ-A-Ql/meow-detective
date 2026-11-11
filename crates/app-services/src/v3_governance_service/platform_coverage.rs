@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use domain::CaseId;
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
 use transport::dto::{
     PlatformCoverageDto, ReleaseGateEntryDto, ReleaseGateStatusDto, V2GovernanceSnapshotDto,
@@ -29,7 +29,7 @@ struct PlatformMismatch {
 pub(super) fn build_platform_coverage(
     conn: &Connection,
 ) -> Result<PlatformCoverageDto, V3GovernanceError> {
-    if persistence_sqlite::source_fjall::source_id(conn)
+    if persistence_source::detail::source_id(conn)
         .map_err(|error| V3GovernanceError::Other(error.to_string()))?
         .is_none()
     {

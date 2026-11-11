@@ -10,19 +10,16 @@ use domain::{
     DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
     FileEntryId,
 };
-use persistence_sqlite::repositories::{
-    datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
-    timeline_repo::TimelineRepo,
-};
+use persistence_source::repositories::{file_repo::FileRepo, timeline_repo::TimelineRepo};
+use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use transport::dto::PerformanceReportDto;
 
 fn in_memory_db_with_timeline() -> rusqlite::Connection {
     let root = tempfile::TempDir::new().unwrap().keep();
     let db_path = root.join("source.db");
     let conn = persistence_sqlite::open_or_create_source(&db_path).unwrap();
-    persistence_sqlite::source_fjall::configure_source_identity(&conn, "ds-1").unwrap();
-    persistence_sqlite::source_fjall::configure_source_fjall(&conn, &db_path).unwrap();
+    persistence_source::detail::configure_source_identity(&conn, "ds-1").unwrap();
+    persistence_source::detail::configure_source_fjall(&conn, &db_path).unwrap();
     let source = DataSource {
         id: DataSourceId("ds-1".to_string()),
         name: "source".to_string(),
@@ -770,7 +767,7 @@ fn timeline_cursor_rejects_equal_count_replacement() {
                     .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
             }
             for event in &replacements {
-                let record = persistence_sqlite::source_fjall::timeline_record(event, "source-a");
+                let record = persistence_source::detail::timeline_record(event, "source-a");
                 source
                     .timeline_upsert(&record, persistence_fjall::PersistMode::Buffer)
                     .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;

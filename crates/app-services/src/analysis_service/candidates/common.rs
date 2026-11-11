@@ -3,7 +3,7 @@ use super::{evidence_category_defs, UNSUPPORTED_MACOS_CATEGORY};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::error::AnalysisServiceError;
 use domain::{FileEncryptionStatus, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;

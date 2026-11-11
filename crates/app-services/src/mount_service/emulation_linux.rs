@@ -11,7 +11,8 @@
 use crate::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use domain::DataSourceId;
 use evidence_core::{EvidenceReader, FileSystemReader};
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use transport::dto::{EmulationInstallDto, EmulationInstallPlatformDto};
 

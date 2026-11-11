@@ -5,7 +5,7 @@ use super::{PartitionEnumStrategy, PartitionWork};
 use crate::import_pipeline::profile::{Counters, PhaseRecorder};
 use crate::staging;
 use evidence_core::FileSystemReader;
-use persistence_sqlite::repositories::staging_repo::StagingRepo;
+use persistence_source::repositories::staging_repo::StagingRepo;
 use std::sync::atomic::{AtomicBool, Ordering};
 use transport::dto::import_benchmark::{
     ImportBenchmarkPhaseDto as Phase, ImportBenchmarkStateDto as State,

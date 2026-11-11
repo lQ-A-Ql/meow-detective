@@ -5,7 +5,7 @@ use super::{
     BitLockerReportContext, ReportAnalysis, ReportError,
 };
 use domain::CaseMeta;
-use persistence_sqlite::repositories::{
+use persistence_source::repositories::{
     artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
 use reports::HtmlReportExporter;

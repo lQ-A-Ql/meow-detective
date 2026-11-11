@@ -5,9 +5,8 @@ use std::sync::Arc;
 use app_services::import_analysis::ImportAnalysisMode;
 use app_services::import_pipeline::{execute_import_job_with_counts, ImportJobOptions};
 use domain::{DataSourceId, DataSourcePlatform};
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, file_repo::FileRepo, job_repo::JobRepo,
-};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
 
 #[test]
 fn windows_and_linux_logical_imports_are_isolated_in_both_orders() {

@@ -6,7 +6,7 @@ use domain::{
 use persistence_fjall::{
     ArtifactRecordStore, CatalogRecordStore, ScanDirection, TimelineRecordStore,
 };
-use persistence_sqlite::repositories::{
+use persistence_source::repositories::{
     artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
 use rusqlite::Connection;
@@ -15,9 +15,8 @@ use std::collections::BTreeMap;
 
 fn source_connection(root: &std::path::Path) -> Connection {
     let path = root.join("source.db");
-    let connection = persistence_sqlite::open_or_create_source(&path).unwrap();
-    persistence_source::detail::configure_source_identity(&connection, "source-1").unwrap();
-    persistence_source::detail::configure_source_fjall(&connection, &path).unwrap();
+    let connection =
+        persistence_source::control::opening::open_source_database(&path, "source-1").unwrap();
     persistence_source::detail::open_store_for_write(&connection)
         .unwrap()
         .expect("initialize Fjall source generation");
@@ -220,7 +219,7 @@ fn native_queries_preserve_unknown_encryption_partition_and_read_only_boundary()
 
 #[test]
 fn staging_merge_folds_roots_and_replays_multiple_partitions_without_duplicates() {
-    use persistence_sqlite::repositories::staging_repo::StagingRepo;
+    use persistence_source::repositories::staging_repo::StagingRepo;
     let root = tempfile::tempdir().unwrap();
     let main = source_connection(root.path());
     let mut stages = Vec::new();
@@ -336,7 +335,7 @@ fn staging_merge_folds_roots_and_replays_multiple_partitions_without_duplicates(
 
 #[test]
 fn analysis_workers_merge_to_fjall_without_attached_source_detail_tables() {
-    use persistence_sqlite::repositories::staging_repo::StagingRepo;
+    use persistence_source::repositories::staging_repo::StagingRepo;
     let root = tempfile::tempdir().unwrap();
     let main = source_connection(root.path());
     let mut workers = Vec::new();

@@ -2,7 +2,8 @@ use crate::file_service::visibility::visibility_flags_for_node;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use evidence_core::{FileSystemDiagnostic, FileSystemDiagnosticKind, FileSystemReader, FsNode};
 use infrastructure::constants::FILE_INSERT_BATCH_SIZE;
-use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::{DbError, DbResult};
 use rusqlite::Connection;
 use std::{
     collections::VecDeque,
@@ -167,10 +168,10 @@ fn enumerate_native_catalog(
     progress_fn: Option<&dyn Fn(u32)>,
     cancel_token: Option<&AtomicBool>,
 ) -> DbResult<Option<EnumerationStats>> {
-    let Some(store) = persistence_sqlite::source_fjall::open_store_for_write(conn)? else {
+    let Some(store) = persistence_source::detail::open_store_for_write(conn)? else {
         return Ok(None);
     };
-    let source_id = persistence_sqlite::source_fjall::source_id(conn)?
+    let source_id = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| DbError::System("source identity is missing".into()))?;
     if source_id != data_source_id.0 {
         return Err(DbError::System(
@@ -178,7 +179,7 @@ fn enumerate_native_catalog(
         ));
     }
     let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
-    let root_record = persistence_sqlite::source_fjall::file_record(root_entry);
+    let root_record = persistence_source::detail::file_record(root_entry);
     let mut walker = ChildBatchWalker::new(root_entry.id.clone());
     let result = repository.replace_subtree_streamed(
         &source_id,
@@ -192,7 +193,7 @@ fn enumerate_native_catalog(
                     batch.map(|entries| {
                         entries
                             .iter()
-                            .map(persistence_sqlite::source_fjall::file_record)
+                            .map(persistence_source::detail::file_record)
                             .collect()
                     })
                 })

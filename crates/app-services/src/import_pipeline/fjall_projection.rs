@@ -58,7 +58,7 @@ pub(super) fn mirror_source_records(
         &ctx.job_id.0,
         &projection_digest,
     )?;
-    persistence_sqlite::source_fjall::bind_generation(ctx.source_connection()?, "source.fjall")
+    persistence_source::detail::bind_generation(ctx.source_connection()?, "source.fjall")
         .map_err(CommandError::from_service_error)?;
     ctx.report_job_progress(97, "Queryable record projection completed")?;
     Ok(projection_digest)

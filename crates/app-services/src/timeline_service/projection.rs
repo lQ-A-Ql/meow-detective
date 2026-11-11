@@ -1,5 +1,5 @@
 use domain::{DataSourcePlatform, FileEntry};
-use persistence_sqlite::repositories::timeline_repo::TimelineRepo;
+use persistence_source::repositories::timeline_repo::TimelineRepo;
 use rayon::prelude::*;
 use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;

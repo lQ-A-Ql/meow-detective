@@ -1,6 +1,7 @@
 //! Bind disposable import work to the physical member metadata seen by its owner.
 use evidence_core::EvidenceReaderFactory;
-use persistence_sqlite::repositories::{file_repo::FileRepo, source_meta_repo::SourceMetaRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo;
 
 const SOURCE_VIEW_KEY: &str = "import:physical-member-metadata:v1";
 
@@ -44,7 +45,7 @@ pub(crate) fn bind_source_view(
     // Existence matters even if an interrupted/corrupt manifest cannot deserialize.
     let staging_exists = crate::staging::staging_dir(case_root, &source.0).try_exists()?;
     if initialize_view && !staging_exists {
-        persistence_sqlite::source_fjall::open_store_for_write(conn)?;
+        persistence_source::detail::open_store_for_write(conn)?;
     }
     let has_work = staging_exists || FileRepo::new(conn).count_by_data_source(source)? > 1;
     match (factory.metadata_identity(), prior) {

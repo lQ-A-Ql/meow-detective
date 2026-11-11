@@ -3,7 +3,8 @@ use crate::{
     bitlocker_runtime::BitLockerUnlockRegistry, file_service::PreviewRuntimeRegistry, source_db,
 };
 use domain::{CaseId, DataSourceId, FileEntry};
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use std::{path::Path, sync::Arc};

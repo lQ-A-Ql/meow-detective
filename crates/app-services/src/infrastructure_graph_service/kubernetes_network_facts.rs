@@ -1,5 +1,5 @@
 use domain::{CaseId, DataSourceId, FileEntry};
-use persistence_sqlite::repositories::{
+use persistence_source::repositories::{
     file_repo::FileRepo,
     infrastructure_network_fact_repo::{
         InfrastructureNetworkConfigRow as ConfigRow, InfrastructureNetworkFactRecord as Fact,

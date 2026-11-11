@@ -153,7 +153,7 @@ struct CatalogRun<'a> {
     source: &'a domain::DataSource,
     attempt: &'a super::catalog::CatalogAttempt,
     projection:
-        &'a persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceProjection,
+        &'a persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceProjection,
     namespace: &'a ceph_wire::CephFsNamespaceAssembly,
     lineage_fingerprint: &'a str,
     capability: super::CephFsSourceCapability,
@@ -303,7 +303,7 @@ pub(super) fn load_ready_summary(
     let connection =
         crate::source_db::open_registered_source_db_read_only(case_conn, case_root, &source.id)?;
     let published =
-        persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(
+        persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(
             &connection,
         )
         .verify_published_catalog(

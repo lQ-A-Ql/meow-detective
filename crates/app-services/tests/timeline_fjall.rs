@@ -64,7 +64,7 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
     }
     fjall.persist(PersistMode::SyncAll).unwrap();
     drop(fjall);
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+    let store = persistence_source::detail::open_store_for_write(&source_conn)
         .unwrap()
         .unwrap();
     persistence_fjall::seal_source_generation(&store, &source.id.0, "fixture", &"a".repeat(64))
@@ -99,7 +99,7 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
     drop(fjall);
     let source_conn = open_source_db(&case.case_root, &source.id).unwrap();
     let revision_before =
-        persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&source_conn)
+        persistence_source::repositories::timeline_repo::TimelineRepo::new(&source_conn)
             .cursor_revision()
             .unwrap();
 
@@ -141,7 +141,7 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
         .unwrap();
     drop(fjall);
     let revision_after =
-        persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&source_conn)
+        persistence_source::repositories::timeline_repo::TimelineRepo::new(&source_conn)
             .cursor_revision()
             .unwrap();
     assert_ne!(

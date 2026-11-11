@@ -1,7 +1,7 @@
 use domain::{CaseId, DataSourceId};
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo,
-    source_meta_repo::{SourceMetaRepo, ARTIFACT_CURSOR_REVISION_KEY},
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
+use persistence_sqlite::repositories::source_meta_repo::{
+    SourceMetaRepo, ARTIFACT_CURSOR_REVISION_KEY,
 };
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};

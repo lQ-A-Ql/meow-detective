@@ -206,7 +206,7 @@ fn actual_import_search_preview_extraction_and_projection_retry_are_stable() {
             }
             assert_eq!(
                 ids.len() as u64,
-                persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(conn)
+                persistence_source::repositories::timeline_repo::TimelineRepo::new(conn)
                     .count()
                     .unwrap()
             );

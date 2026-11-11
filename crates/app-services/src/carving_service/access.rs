@@ -1,8 +1,7 @@
 use domain::{CaseId, DataSourceId, DataSourceKind};
 use evidence_core::SharedReaderFactory;
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo,
-};
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use std::path::Path;
 use transport::{dto::CarvedArtifactDto, CommandError};

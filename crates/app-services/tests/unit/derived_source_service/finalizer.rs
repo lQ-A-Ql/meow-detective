@@ -394,7 +394,7 @@ fn timeline_counts_include_file_activity_and_analysis_events() {
         attrs: std::collections::BTreeMap::new(),
     })
     .collect::<Vec<_>>();
-    persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&fixture.connection)
+    persistence_source::repositories::timeline_repo::TimelineRepo::new(&fixture.connection)
         .insert_batch_with_case(&events, "case-1")
         .unwrap();
 

@@ -7,7 +7,8 @@ use app_services::{
     import_precheck::prepare_import_source_config_from_path,
     source_db,
 };
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, job_repo::JobRepo};
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
+use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 

@@ -17,10 +17,10 @@ pub(super) fn visit_file_entries_from_fjall(
     conn: &Connection,
     mut visit: impl FnMut(FileEntry) -> Result<(), AnalysisServiceError>,
 ) -> Result<(), AnalysisServiceError> {
-    let store = persistence_sqlite::source_fjall::open_store(conn)?.ok_or_else(|| {
+    let store = persistence_source::detail::open_store(conn)?.ok_or_else(|| {
         AnalysisServiceError::InvalidInput("source detail storage is missing".into())
     })?;
-    let owner = persistence_sqlite::source_fjall::source_id(conn)?
+    let owner = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| AnalysisServiceError::InvalidInput("source identity is missing".into()))?;
     let catalog = CatalogRecordStore::from_source_store((*store).clone());
     let snapshot = catalog.read_snapshot();

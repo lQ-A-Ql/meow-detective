@@ -348,7 +348,7 @@ fn collect_exportable_file_entries(
         [],
         |row| row.get(0),
     )?;
-    let entries = persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+    let entries = persistence_source::repositories::file_repo::FileRepo::new(conn)
         .find_by_data_source(&domain::DataSourceId(source_id))?;
     Ok(entries
         .into_iter()

@@ -5,7 +5,7 @@ use app_services::analysis_service::{
     AnalysisServiceError, EvidenceCandidate,
 };
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use transport::{ErrorCategory, ServiceErrorCategory};
 
 fn candidate(path: &str) -> EvidenceCandidate {

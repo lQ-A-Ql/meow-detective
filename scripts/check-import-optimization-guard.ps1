@@ -10,9 +10,10 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $e01PipelineTestPath = Join-Path $repoRoot "crates/app-services/tests/unit/import_pipeline/mod.rs"
 # Staging DB pragmas and merge logic moved from app-services/src/staging.rs
 # to persistence-sqlite/src/repositories/staging_repo.rs during the
-# engineering refactor (commit c24a989 + 1b1a7e3).
-$stagingPath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/staging_repo.rs"
-$enumMergePath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/staging_enum_merge.sql"
+# engineering refactor (commit c24a989 + 1b1a7e3), then to
+# persistence-source/src/repositories/staging_repo.rs in S4b.
+$stagingPath = Join-Path $repoRoot "crates/persistence-source/src/repositories/staging_repo.rs"
+$enumMergePath = Join-Path $repoRoot "crates/persistence-source/src/repositories/staging_enum_merge.sql"
 $numericMergeOwnerPath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/ntfs_staging_merge.rs"
 $numericMergePath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/ntfs_staging/merge.sql"
 # Import finalization owns the bounded file-activity Timeline projection.

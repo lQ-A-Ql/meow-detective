@@ -9,12 +9,10 @@ use domain::{
 use persistence_fjall::{
     CatalogEntryType, FileEntryRecord, PersistMode, TimelineRecord, VersionedEnvelope,
 };
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo,
-    datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
-    timeline_repo::TimelineRepo,
+use persistence_source::repositories::{
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
+use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use transport::{ErrorCategory, ServiceErrorCategory};
 
 #[test]
@@ -603,7 +601,7 @@ fn service_error(error: impl std::fmt::Display) -> persistence_sqlite::DbError {
 }
 
 fn publish_source(conn: &rusqlite::Connection, source_id: &DataSourceId) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+    let store = persistence_source::detail::open_store_for_write(conn)
         .expect("open source store")
         .expect("configured source store");
     persistence_fjall::replace_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))

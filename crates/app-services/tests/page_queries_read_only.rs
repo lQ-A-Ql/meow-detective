@@ -8,11 +8,10 @@ use domain::{
     DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
     FileEntryId,
 };
+use persistence_source::repositories::{file_repo::FileRepo, timeline_repo::TimelineRepo};
 use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
     graph_repo::GraphRepo,
-    timeline_repo::TimelineRepo,
 };
 use rusqlite::Connection;
 use std::path::Path;
@@ -91,7 +90,7 @@ fn source(
 }
 
 fn publish_source_generation(conn: &Connection, source_id: &DataSourceId) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+    let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
     persistence_fjall::seal_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))

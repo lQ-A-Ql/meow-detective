@@ -26,7 +26,7 @@ fn with_logical_case_file(
         .unwrap();
     file_service::enumerate_filesystem(&fixture.connection, &ds_id, &fs).unwrap();
     fixture.seal();
-    let file_id = persistence_sqlite::repositories::file_repo::FileRepo::new(&fixture.connection)
+    let file_id = persistence_source::repositories::file_repo::FileRepo::new(&fixture.connection)
         .find_by_data_source(&ds_id)
         .unwrap()
         .into_iter()

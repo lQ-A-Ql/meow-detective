@@ -151,7 +151,7 @@ fn file_browser_fjall_matches_visibility_sorting_and_orphan_root_rules() {
         source_db::open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
     write_catalog(&fjall);
     drop(fjall);
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+    let store = persistence_source::detail::open_store_for_write(&source_conn)
         .unwrap()
         .unwrap();
     persistence_fjall::seal_source_generation(&store, &source.id.0, "fixture", &"a".repeat(64))

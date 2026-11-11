@@ -99,7 +99,7 @@ fn source_storage(
 }
 
 fn publish_source_projection(conn: &Connection) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+    let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
     persistence_fjall::seal_source_generation(&store, DS_ID, "fixture", &"a".repeat(64)).unwrap();
@@ -492,7 +492,7 @@ fn redirected_lvm_placeholder_root_can_be_removed_on_resume_repair() {
         "queued",
     )
     .unwrap();
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&main_conn)
+    persistence_source::repositories::file_repo::FileRepo::new(&main_conn)
         .insert_batch(&[FileEntry {
             id: FileEntryId("root-lv".into()),
             parent_id: None,
@@ -520,7 +520,7 @@ fn redirected_lvm_placeholder_root_can_be_removed_on_resume_repair() {
     let removed = file_service::remove_partition_placeholder_root(&main_conn, &ds_id, 1).unwrap();
 
     assert_eq!(removed, 1);
-    let roots = persistence_sqlite::repositories::file_repo::FileRepo::new(&main_conn)
+    let roots = persistence_source::repositories::file_repo::FileRepo::new(&main_conn)
         .find_roots(&ds_id)
         .unwrap();
     assert!(

@@ -9,7 +9,7 @@ use app_services::{case_service, datasource_service, file_service};
 use domain::DataSourceKind;
 use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use tempfile::TempDir;

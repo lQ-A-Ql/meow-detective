@@ -206,11 +206,11 @@ fn persist_resolved_paths(
     partition_index: usize,
     id_partition_index: Option<usize>,
 ) -> DbResult<()> {
-    if persistence_sqlite::source_fjall::source_id(conn)?.is_some() {
-        persistence_sqlite::source_fjall::require_source_store(conn)?;
+    if persistence_source::detail::source_id(conn)?.is_some() {
+        persistence_source::detail::require_source_store(conn)?;
         for (record_number, path) in resolved {
             let prefixed_path = prefixed_path(&format!("[P{partition_index}]"), path);
-            persistence_sqlite::source_fjall::update_catalog_path(
+            persistence_source::detail::update_catalog_path(
                 conn,
                 &mft_entry_id(id_partition_index, record_number),
                 &prefixed_path,
@@ -259,10 +259,10 @@ pub(super) fn update_entry_parent_ids_in_transaction(
     path_map: &HashMap<String, (Option<String>, String, bool)>,
     partition_index: Option<usize>,
 ) -> DbResult<()> {
-    if persistence_sqlite::source_fjall::source_id(conn)?.is_some() {
-        persistence_sqlite::source_fjall::require_source_store(conn)?;
+    if persistence_source::detail::source_id(conn)?.is_some() {
+        persistence_source::detail::require_source_store(conn)?;
         for (record_number, (parent, _, _)) in path_map {
-            persistence_sqlite::source_fjall::update_catalog_parent(
+            persistence_source::detail::update_catalog_parent(
                 conn,
                 &mft_entry_id(partition_index, record_number),
                 mft_parent_entry_id_with_partition(

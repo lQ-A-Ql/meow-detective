@@ -5,7 +5,7 @@ use crate::file_service::viewer::{
 };
 use crate::file_service::{metadata::lookup::mime_for_entry, FileServiceError};
 use domain::{FileEntry, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::{Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 
@@ -163,7 +163,7 @@ fn cephfs_descriptor(
         }
     }
     let locator =
-        persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(conn)
+        persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(conn)
             .find_file_locator(&entry.data_source_id.0, &entry.id.0)?
             .ok_or_else(|| {
                 FileServiceError::not_found("Published CephFS file locator not found")
@@ -417,7 +417,7 @@ fn cephfs_descriptor_is_fresh(
     let Some(cached) = cached else {
         return false;
     };
-    persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(conn)
+    persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(conn)
         .find_file_locator(&entry.data_source_id.0, &entry.id.0)
         .ok()
         .flatten()

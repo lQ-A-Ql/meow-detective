@@ -1,6 +1,7 @@
 use chrono::Utc;
 use domain::{EdgeType, FileEntryId, GraphEdge, GraphNode, NodeType};
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, graph_repo::GraphRepo};
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
+use persistence_sqlite::repositories::graph_repo::GraphRepo;
 use rusqlite::Connection;
 
 use super::ArtifactServiceError;

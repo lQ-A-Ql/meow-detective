@@ -1,4 +1,4 @@
-use persistence_sqlite::repositories::timeline_repo::{
+use persistence_source::repositories::timeline_repo::{
     TimelineCursorRow, TimelineRepo, TimelineSortKey,
 };
 use rusqlite::Connection;
@@ -206,7 +206,7 @@ pub fn query_timeline_aggregated(
     offset: u64,
     limit: u32,
 ) -> Result<TimelineAggregatedDto, TimelineServiceError> {
-    if persistence_sqlite::source_fjall::source_id(conn)?.is_none() {
+    if persistence_source::detail::source_id(conn)?.is_none() {
         return Err(TimelineServiceError::Other(
             "source identity is missing".into(),
         ));

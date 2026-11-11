@@ -123,7 +123,7 @@ fn partition_records(
         let snapshot = source.snapshot();
         return read_partition_pages(&source, &snapshot, &source_id.0).map(Some);
     }
-    let bound_root = persistence_sqlite::source_fjall::open_store(connection)?
+    let bound_root = persistence_source::detail::open_store(connection)?
         .map(|store| store.database().path().to_path_buf());
     if let Some(bound_root) = bound_root.filter(|path| path.is_dir()) {
         let source = crate::storage_runtime::ReadOnlyStorageRuntime::open(&bound_root)

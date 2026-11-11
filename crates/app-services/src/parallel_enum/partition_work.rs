@@ -170,7 +170,7 @@ fn finish_partition(
 ) -> PartitionResult {
     match result {
         Ok(stats) => {
-            match persistence_sqlite::repositories::staging_repo::StagingRepo::complete_enum(
+            match persistence_source::repositories::staging_repo::StagingRepo::complete_enum(
                 conn,
                 stats.file_count,
                 stats.dir_count,

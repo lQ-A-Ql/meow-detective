@@ -336,7 +336,7 @@ pub(super) fn tree(
     let partitions = crate::partition_query_service::PartitionQueryRepo::new(conn)
         .find_by_data_source(&source_id.0)
         .map_err(|error| FileServiceError::other(error.to_string()))?;
-    let repository = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+    let repository = persistence_source::repositories::file_repo::FileRepo::new(conn);
     let child_counts = repository
         .count_child_directories_batch_visible(
             &entries.iter().map(|entry| &entry.id).collect::<Vec<_>>(),
@@ -393,7 +393,7 @@ pub(super) fn children(
     let start = (offset as usize).min(entries.len());
     let end = start.saturating_add(limit as usize).min(entries.len());
     let visible = &entries[start..end];
-    let repository = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+    let repository = persistence_source::repositories::file_repo::FileRepo::new(conn);
     let child_counts = repository
         .count_child_directories_batch_visible(
             &visible.iter().map(|entry| &entry.id).collect::<Vec<_>>(),

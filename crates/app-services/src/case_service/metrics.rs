@@ -1,9 +1,9 @@
 use super::Result;
 use domain::CaseId;
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, case_repo::CaseMetrics, datasource_repo::DataSourceRepo,
-    file_repo::FileRepo, timeline_repo::TimelineRepo,
+use persistence_source::repositories::{
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
+use persistence_sqlite::repositories::{case_repo::CaseMetrics, datasource_repo::DataSourceRepo};
 use persistence_sqlite::DbError;
 use rusqlite::Connection;
 use std::path::Path;

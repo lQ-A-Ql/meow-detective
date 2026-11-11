@@ -1,9 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
-use persistence_sqlite::repositories::{
-    analysis_scan_repo::{AnalysisScanRepo, CompleteAnalysisCandidateScan},
-    artifact_repo::ArtifactRepo,
-    timeline_repo::TimelineRepo,
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
+use persistence_sqlite::repositories::analysis_scan_repo::{
+    AnalysisScanRepo, CompleteAnalysisCandidateScan,
 };
 use rusqlite::Connection;
 

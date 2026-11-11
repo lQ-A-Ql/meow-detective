@@ -12,7 +12,8 @@ use domain::{
     CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
     FileEntryId,
 };
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -78,10 +79,10 @@ fn insert_native_preview_file(
         changed_at: None,
         hash_sha256: None,
     };
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&fixture.connection)
+    persistence_source::repositories::file_repo::FileRepo::new(&fixture.connection)
         .insert_batch(&[entry])
         .unwrap();
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&fixture.connection)
+    let store = persistence_source::detail::open_store_for_write(&fixture.connection)
         .unwrap()
         .unwrap();
     let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
@@ -97,7 +98,7 @@ fn insert_native_preview_file(
 }
 
 fn set_native_encryption(fixture: &NativeSourceFixture, id: &str, encrypted: Option<bool>) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&fixture.connection)
+    let store = persistence_source::detail::open_store_for_write(&fixture.connection)
         .unwrap()
         .unwrap();
     let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
@@ -123,7 +124,7 @@ fn insert_native_partition(fixture: &NativeSourceFixture, index: u32, filesystem
     let length = std::fs::metadata(source_path)
         .map(|metadata| metadata.len())
         .unwrap_or(2 * 1024 * 1024);
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&fixture.connection)
+    let store = persistence_source::detail::open_store_for_write(&fixture.connection)
         .unwrap()
         .unwrap();
     persistence_fjall::PartitionRecordStore::from_source_store((*store).clone())
@@ -1301,7 +1302,7 @@ fn preview_descriptor_uses_persisted_partition_index() {
         &descriptor
     ));
 
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&fixture.connection)
+    let store = persistence_source::detail::open_store_for_write(&fixture.connection)
         .unwrap()
         .unwrap();
     let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());

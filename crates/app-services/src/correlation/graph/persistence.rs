@@ -1,7 +1,8 @@
 use super::super::CorrelationError;
 use chrono::Utc;
 use domain::{EdgeType, GraphEdge};
-use persistence_sqlite::repositories::{correlation_repo, graph_repo::GraphRepo};
+use persistence_source::repositories::correlation_repo;
+use persistence_sqlite::repositories::graph_repo::GraphRepo;
 use rusqlite::Connection;
 use transport::dto::{CorrelationConfidenceDto, CorrelationLeadDto};
 

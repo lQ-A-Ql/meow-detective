@@ -1,6 +1,6 @@
 use domain::{DataSourceId, FileEntryId};
 use persistence_source::detail::configure_source_identity;
-use persistence_sqlite::repositories::{
+use persistence_source::repositories::{
     artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
 use tempfile::TempDir;
@@ -60,9 +60,9 @@ fn source_detail_repositories_fail_closed_without_fjall_storage() {
 fn configured_source_never_materializes_a_missing_generation_during_reads() {
     let temporary = TempDir::new().unwrap();
     let database_path = temporary.path().join("source.db");
-    let connection = persistence_sqlite::open_or_create_source(&database_path).unwrap();
-    configure_source_identity(&connection, "source-1").unwrap();
-    persistence_source::detail::configure_source_fjall(&connection, &database_path).unwrap();
+    let connection =
+        persistence_source::control::opening::open_source_database(&database_path, "source-1")
+            .unwrap();
 
     let error = ArtifactRepo::new(&connection).count().unwrap_err();
     assert!(error

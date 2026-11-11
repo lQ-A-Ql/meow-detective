@@ -27,7 +27,7 @@ pub enum CephFsSourceError {
     },
     #[error("CephFS namespace persistence failed: {0}")]
     Namespace(
-        #[from] persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepoError,
+        #[from] persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepoError,
     ),
     #[error("CephFS derived source database failed: {0}")]
     Database(#[from] persistence_sqlite::DbError),

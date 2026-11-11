@@ -103,13 +103,13 @@ impl From<crate::ceph_reconstruction::CephFsSourceError> for FileServiceError {
     }
 }
 
-impl From<persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepoError>
+impl From<persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepoError>
     for FileServiceError
 {
     fn from(
-        error: persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepoError,
+        error: persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepoError,
     ) -> Self {
-        use persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepoError;
+        use persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepoError;
 
         match error {
             CephFsNamespaceRepoError::Database(error) => Self::Db(error),

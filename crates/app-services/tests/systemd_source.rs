@@ -32,14 +32,14 @@ fn source_analysis_compiles_links_and_dropins_and_invalidates_multi_file_checkpo
         }
         let run=|values:&HashMap<String,Vec<u8>>|run_analysis_extraction_with_reader_limits(&source,&case.active.meta.id.0,domain::DataSourcePlatform::Linux,&["LinuxArtifacts"],|id,maximum|->Result<Box<dyn std::io::Read>,std::io::Error>{let value=values.get(&id.0).expect("source-bound dependency");Ok(Box::new(std::io::Cursor::new(value[..value.len().min(maximum)].to_vec())))}).unwrap();
         run(&bytes);
-        let records=persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(&source).list_by_family(Some("LinuxSystemConfig"))?;
+        let records=persistence_source::repositories::artifact_repo::ArtifactRepo::new(&source).list_by_family(Some("LinuxSystemConfig"))?;
         let worker=records.iter().find(|row|row.attrs.get("name").and_then(|value|value.as_str())==Some("Worker.service")).expect("compiled worker");
         assert_eq!(worker.attrs.get("state").and_then(|value|value.as_str()),Some("enabled"));assert_eq!(worker.attrs.get("user").and_then(|value|value.as_str()),Some("first"));
         assert_eq!(worker.attrs.get("sourceFiles").and_then(|value|value.as_array()).unwrap().len(),3);
         assert_eq!(records.iter().filter(|row|row.extractor_id.as_deref()==Some("linux.systemd_unit")).count(),2);
         let marker=persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(&source).read("systemd.inventory:linux-services")?.unwrap();assert!(serde_json::from_str::<serde_json::Value>(&marker).unwrap()["complete"].as_bool().unwrap());
         bytes.insert("drop".into(),b"[Service]\nUser=other\n".to_vec());run(&bytes);
-        let changed=persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(&source).list_by_family(Some("LinuxSystemConfig"))?;
+        let changed=persistence_source::repositories::artifact_repo::ArtifactRepo::new(&source).list_by_family(Some("LinuxSystemConfig"))?;
         let worker=changed.iter().find(|row|row.attrs.get("name").and_then(|value|value.as_str())==Some("Worker.service")).unwrap();assert_eq!(worker.attrs.get("user").and_then(|value|value.as_str()),Some("other")); Ok(())
     }).unwrap();
 }

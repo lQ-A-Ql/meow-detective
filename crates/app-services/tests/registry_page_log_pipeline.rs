@@ -5,7 +5,7 @@ mod logs;
 
 use app_services::analysis_service::run_analysis_extraction;
 use domain::{DataSourceId, DataSourcePlatform, EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::{params, Connection};
 use std::{cell::Cell, fs::File, io::Read, path::Path};
 
@@ -89,7 +89,7 @@ fn product(conn: &Connection) -> String {
 }
 
 fn publish_source(conn: &Connection, source_id: &DataSourceId) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+    let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
     persistence_fjall::replace_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))

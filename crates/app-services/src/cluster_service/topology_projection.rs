@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
 use domain::{CaseId, DataSourceId};
+use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::{
     ceph_osd_repo::CephOsdRepo,
     datasource_repo::DataSourceRepo,
-    file_repo::FileRepo,
     linux_import_set_repo::LinuxImportSetRepo,
     linux_topology_artifact_repo::{LinuxTopologyArtifactRecord, LinuxTopologyArtifactRepo},
     linux_topology_edge_repo::LinuxTopologyEdgeRepo,

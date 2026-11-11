@@ -209,7 +209,7 @@ Assert-Matches `
 # Staging merges must not use INSERT OR IGNORE in the merge-to-main path. Silent
 # conflict suppression hides missing/duplicate rows and lets staging partitions be
 # marked merged even when rows were skipped.
-$stagingRepoPath = Join-Path $repoRoot 'crates/persistence-sqlite/src/repositories/staging_repo.rs'
+$stagingRepoPath = Join-Path $repoRoot 'crates/persistence-source/src/repositories/staging_repo.rs'
 if (-not (Test-Path -LiteralPath $stagingRepoPath)) {
   throw "Required staging repository is missing: $stagingRepoPath"
 }
@@ -231,7 +231,7 @@ foreach ($pattern in @(
 # by the source Fjall store after the source-storage cutover.
 Assert-Matches `
   -Content $stagingRepo `
-  -Pattern 'crate::source_fjall::merge_staging_catalog' `
+  -Pattern 'crate::staging::merge_staging_catalog' `
   -Message 'Staging enum merge is missing the explicit Fjall catalog path'
 Assert-Matches `
   -Content $stagingRepo `
@@ -239,7 +239,7 @@ Assert-Matches `
   -Message 'Staging enum merge is missing the explicit SQLite fallback path'
 Assert-Matches `
   -Content $stagingRepo `
-  -Pattern 'crate::source_fjall::analysis_staging::merge' `
+  -Pattern 'crate::staging::analysis(_staging)?::merge' `
   -Message 'Staging analysis merge is missing the explicit Fjall analysis path'
 Assert-Matches `
   -Content $stagingRepo `

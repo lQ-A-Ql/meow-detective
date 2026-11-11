@@ -38,7 +38,7 @@ fn native_source_with_unknown_encryption(entry: FileEntry) -> test_support::Nati
         partition_index: None,
         unix_mode: entry.unix_mode,
     };
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&fixture.connection)
+    let store = persistence_source::detail::open_store_for_write(&fixture.connection)
         .unwrap()
         .unwrap();
     persistence_fjall::CatalogRecordStore::from_source_store((*store).clone())

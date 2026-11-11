@@ -1,4 +1,5 @@
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, graph_repo::GraphRepo};
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
+use persistence_sqlite::repositories::graph_repo::GraphRepo;
 use rusqlite::Connection;
 
 use super::super::error::RulePackError;
@@ -63,7 +64,7 @@ pub(super) fn file_entries(conn: &Connection) -> Result<Vec<FileEntryRow>, RuleP
         [],
         |row| row.get(0),
     )?;
-    let mut rows = persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+    let mut rows = persistence_source::repositories::file_repo::FileRepo::new(conn)
         .find_by_data_source(&domain::DataSourceId(source_id))
         .map_err(|error| RulePackError::Other(error.to_string()))?
         .into_iter()

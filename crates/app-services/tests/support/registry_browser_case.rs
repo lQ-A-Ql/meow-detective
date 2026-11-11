@@ -70,7 +70,7 @@ impl BrowserCase {
 }
 pub fn entry(conn: &rusqlite::Connection, source: &str, id: &str, path: &str, size: u64) {
     let name = path.rsplit('/').next().unwrap();
-    persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+    persistence_source::repositories::file_repo::FileRepo::new(conn)
         .insert_batch(&[FileEntry {
             id: FileEntryId(id.to_string()),
             parent_id: None,

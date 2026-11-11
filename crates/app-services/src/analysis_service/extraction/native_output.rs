@@ -129,7 +129,7 @@ impl StreamingGeneration {
             let records = artifacts
                 .iter()
                 .map(|artifact| {
-                    persistence_sqlite::source_fjall::artifact_record(artifact, &self.source_id)
+                    persistence_source::detail::artifact_record(artifact, &self.source_id)
                 })
                 .collect::<Vec<_>>();
             ArtifactRecordStore::from_source_store(self.store.clone())
@@ -139,9 +139,7 @@ impl StreamingGeneration {
         if !events.is_empty() {
             let records = events
                 .iter()
-                .map(|event| {
-                    persistence_sqlite::source_fjall::timeline_record(event, &self.source_id)
-                })
+                .map(|event| persistence_source::detail::timeline_record(event, &self.source_id))
                 .collect::<Vec<_>>();
             TimelineRecordStore::from_source_store(self.store.clone())
                 .upsert_batch_independent(&records, PersistMode::Buffer)
@@ -198,7 +196,7 @@ pub(super) fn begin_streaming(
     source_id: &str,
     replacements: &[super::state::AnalysisOutputReplacement],
 ) -> Result<StreamingGeneration, AnalysisServiceError> {
-    let owner = persistence_sqlite::source_fjall::source_id(conn)?
+    let owner = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| AnalysisServiceError::InvalidInput("source identity is missing".into()))?;
     if owner != source_id {
         return Err(AnalysisServiceError::InvalidInput(format!(
@@ -206,7 +204,7 @@ pub(super) fn begin_streaming(
             source_id, owner
         )));
     }
-    let source = persistence_sqlite::source_fjall::open_store(conn)?
+    let source = persistence_source::detail::open_store(conn)?
         .ok_or_else(|| AnalysisServiceError::Other("source generation is missing".into()))?;
     let source = (*source).clone();
     let manifest = persistence_fjall::verify_source_generation(&source, source_id)
@@ -238,7 +236,7 @@ pub(super) fn stage(
     events: &[TimelineEvent],
     replacements: &[super::state::AnalysisOutputReplacement],
 ) -> Result<StagedGeneration, AnalysisServiceError> {
-    let source = persistence_sqlite::source_fjall::open_store(conn)?
+    let source = persistence_source::detail::open_store(conn)?
         .ok_or_else(|| AnalysisServiceError::Other("source generation is missing".into()))?;
     let source = (*source).clone();
     let manifest = persistence_fjall::verify_source_generation(&source, source_id)
@@ -346,14 +344,14 @@ fn replace_records(
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     let artifact_records = artifacts
         .iter()
-        .map(|artifact| persistence_sqlite::source_fjall::artifact_record(artifact, source_id))
+        .map(|artifact| persistence_source::detail::artifact_record(artifact, source_id))
         .collect::<Vec<_>>();
     artifact_store
         .upsert_batch(&artifact_records, persistence_fjall::PersistMode::Buffer)
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     let timeline_records = events
         .iter()
-        .map(|event| persistence_sqlite::source_fjall::timeline_record(event, source_id))
+        .map(|event| persistence_source::detail::timeline_record(event, source_id))
         .collect::<Vec<_>>();
     timeline_store
         .upsert_batch(&timeline_records, persistence_fjall::PersistMode::Buffer)

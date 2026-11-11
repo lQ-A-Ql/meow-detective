@@ -1,4 +1,4 @@
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
 use transport::dto::{ArtifactRowDto, FamilyCountDto};
 

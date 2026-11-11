@@ -4,7 +4,8 @@ mod workers;
 use crossbeam_channel::unbounded;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use evidence_core::FileSystemReader;
-use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::{DbError, DbResult};
 use producer::{DirectoryWork, ParallelBatchProducer, WorkerResult};
 use rusqlite::Connection;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -54,7 +55,7 @@ pub fn enumerate_filesystem_parallel_with_factory(
         hash_sha256: None,
     };
 
-    if persistence_sqlite::source_fjall::open_store_for_write(conn)?.is_some() {
+    if persistence_source::detail::open_store_for_write(conn)?.is_some() {
         return enumerate_native_parallel(
             conn,
             data_source_id,
@@ -109,7 +110,7 @@ fn enumerate_native_parallel(
     progress_fn: Option<&dyn Fn(u32)>,
     cancel_token: Option<&AtomicBool>,
 ) -> DbResult<crate::file_service::EnumerationStats> {
-    let source_id = persistence_sqlite::source_fjall::source_id(conn)?
+    let source_id = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| DbError::System("source identity is missing".into()))?;
     if source_id != data_source_id.0 {
         return Err(DbError::System(
@@ -138,10 +139,10 @@ fn enumerate_native_parallel(
             );
         }
         drop(result_tx);
-        let store = persistence_sqlite::source_fjall::open_store_for_write(conn)?
+        let store = persistence_source::detail::open_store_for_write(conn)?
             .ok_or_else(|| DbError::System("source detail storage is missing".into()))?;
         let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
-        let root_record = persistence_sqlite::source_fjall::file_record(&root_entry);
+        let root_record = persistence_source::detail::file_record(&root_entry);
         let mut producer = ParallelBatchProducer::new(
             work_tx,
             result_rx,
@@ -159,7 +160,7 @@ fn enumerate_native_parallel(
                     batch.map(|entries| {
                         entries
                             .iter()
-                            .map(persistence_sqlite::source_fjall::file_record)
+                            .map(persistence_source::detail::file_record)
                             .collect()
                     })
                 })

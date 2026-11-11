@@ -1,10 +1,8 @@
 use app_services::{case_service, source_db, timeline_service};
 use chrono::{TimeZone, Utc};
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
-use persistence_sqlite::repositories::{
-    datasource_repo::{DataSourceRepo, DataSourceStorage},
-    timeline_repo::TimelineRepo,
-};
+use persistence_source::repositories::timeline_repo::TimelineRepo;
+use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use rusqlite::Connection;
 use std::path::Path;
 use timeline_service::{TimelineQuery, TimelineServiceError};
@@ -132,7 +130,7 @@ fn source_retirement_invalidates_existing_cursor_with_a_validation_error() {
 }
 
 fn publish_source(conn: &Connection, source_id: &str) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+    let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
     persistence_fjall::replace_source_generation(&store, source_id, "fixture", &"a".repeat(64))

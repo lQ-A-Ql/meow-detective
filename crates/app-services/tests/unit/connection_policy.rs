@@ -28,7 +28,7 @@ fn observe(role: &str, conn: &Connection) -> serde_json::Value {
 
 #[test]
 fn connection_pragmas_preserve_durable_source_and_disposable_staging_policies() {
-    use persistence_sqlite::repositories::staging_repo::StagingRepo;
+    use persistence_source::repositories::staging_repo::StagingRepo;
     let temp = tempfile::tempdir().unwrap();
     let source = source_db::open_source_db(temp.path(), &DataSourceId("ordinary".into())).unwrap();
     let build = open_fresh_source_build_db(

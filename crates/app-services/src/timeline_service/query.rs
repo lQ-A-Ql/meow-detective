@@ -1,4 +1,4 @@
-use persistence_sqlite::repositories::timeline_repo::TimelineRepo;
+use persistence_source::repositories::timeline_repo::TimelineRepo;
 use rusqlite::Connection;
 use std::path::Path;
 use transport::{dto::TimelineEventDto, paging::PageResponse};

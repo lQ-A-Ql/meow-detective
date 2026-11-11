@@ -227,7 +227,7 @@ fn artifact_counts_by_family(
     conn: &Connection,
 ) -> Result<HashMap<String, u64>, AnalysisServiceError> {
     Ok(
-        persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(conn)
+        persistence_source::repositories::artifact_repo::ArtifactRepo::new(conn)
             .count_by_family()?
             .into_iter()
             .collect(),
@@ -239,7 +239,7 @@ fn artifact_counts_by_source(
 ) -> Result<HashMap<String, u64>, AnalysisServiceError> {
     let mut counts = HashMap::new();
     for candidate in discover_evidence_candidates(conn)?.into_values().flatten() {
-        let count = persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(conn)
+        let count = persistence_source::repositories::artifact_repo::ArtifactRepo::new(conn)
             .count_by_source_object(&candidate.file_id.0)?;
         if count > 0 {
             counts.insert(candidate.file_id.0, count);

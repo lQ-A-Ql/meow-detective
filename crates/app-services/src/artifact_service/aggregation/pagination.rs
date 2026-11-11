@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, collections::VecDeque, path::Path};
 
 use domain::{CaseId, DataSourceId};
-use persistence_sqlite::repositories::artifact_repo::{
+use persistence_source::repositories::artifact_repo::{
     ArtifactCursorRow, ArtifactRepo, ArtifactSortKey,
 };
 use rusqlite::Connection;

@@ -1,8 +1,6 @@
 use super::*;
-use persistence_sqlite::repositories::{
-    datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
-};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 
 fn with_raw_exfat_case_file(
     test: impl FnOnce(

@@ -5,10 +5,8 @@ use app_services::{case_service, source_db, v3_governance_service};
 use domain::{
     Artifact, ArtifactId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance,
 };
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo,
-    datasource_repo::{DataSourceRepo, DataSourceStorage},
-};
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
+use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use transport::dto::{ReleaseGateEntryDto, ReleaseGateStatusDto, V3GovernanceSnapshotDto};
 
 #[test]
@@ -174,7 +172,7 @@ fn register_source(
 }
 
 fn publish_source(conn: &rusqlite::Connection, source_id: &DataSourceId) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(conn)
+    let store = persistence_source::detail::open_store_for_write(conn)
         .expect("open source store")
         .expect("configured source store");
     persistence_fjall::replace_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))

@@ -23,9 +23,8 @@ use app_services::file_service::PreviewRuntimeRegistry;
 use app_services::{file_service, parallel_enum, staging};
 use domain::{DataSourceId, DataSourcePlatform};
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, staging_repo::StagingRepo,
-};
+use persistence_source::repositories::staging_repo::StagingRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use std::{

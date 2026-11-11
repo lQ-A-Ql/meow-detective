@@ -5,8 +5,8 @@ use test_support::mark_source_projection_complete;
 
 use chrono::Utc;
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
+use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
-use persistence_sqlite::repositories::file_repo::FileRepo;
 use search::SearchFileDocument;
 use tempfile::TempDir;
 use transport::commands::{FileSortDirectionDto, SearchEntryTypeDto, SearchSortKeyDto};
@@ -116,7 +116,7 @@ fn setup_indexed_case(tmp: &TempDir) -> SearchRequestFixture {
                 .collect::<Vec<_>>(),
         )
         .unwrap();
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+    let store = persistence_source::detail::open_store_for_write(&source_conn)
         .unwrap()
         .unwrap();
     persistence_fjall::replace_source_generation(

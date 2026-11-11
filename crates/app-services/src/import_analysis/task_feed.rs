@@ -22,7 +22,7 @@ pub(super) fn count_analysis_file_tasks(
     data_source_id: &DataSourceId,
 ) -> Result<u64, ImportAnalysisError> {
     let conn = persistence_sqlite::open_existing_source_read_only(db_path)?;
-    let store = persistence_sqlite::source_fjall::open_store(&conn)?.ok_or_else(|| {
+    let store = persistence_source::detail::open_store(&conn)?.ok_or_else(|| {
         ImportAnalysisError::Other("source detail storage is missing".to_string())
     })?;
     let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
@@ -47,7 +47,7 @@ pub(super) fn fetch_analysis_file_page(
             ))
         }
     };
-    let store = persistence_sqlite::source_fjall::open_store(conn)?.ok_or_else(|| {
+    let store = persistence_source::detail::open_store(conn)?.ok_or_else(|| {
         ImportAnalysisError::Other("source detail storage is missing".to_string())
     })?;
     let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());

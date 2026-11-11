@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use domain::{CaseId, DataSourceId};
 use evidence_core::FileSystemReader;
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use transport::dto::{EmulationBootRouteDto, EmulationInstallDto, EmulationPreflightDto};

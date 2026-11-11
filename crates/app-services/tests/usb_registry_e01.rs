@@ -2,9 +2,8 @@
 use app_services::analysis_service::{self, EvidenceCandidate};
 use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo,
-};
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use std::{io::Read, path::PathBuf};
 
 #[test]

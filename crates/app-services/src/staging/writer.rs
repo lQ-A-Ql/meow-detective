@@ -1,4 +1,4 @@
-use persistence_sqlite::repositories::staging_repo::StagingRepo;
+use persistence_source::repositories::staging_repo::StagingRepo;
 use persistence_sqlite::DbResult;
 use rusqlite::Connection;
 

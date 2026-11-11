@@ -3,7 +3,7 @@ use super::{
     prepare_report_output, write_report_atomically, ReportCorrelation, ReportError,
     ReportGovernance,
 };
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use reports::JsonExporter;
 use rusqlite::Connection;
 use std::path::Path;

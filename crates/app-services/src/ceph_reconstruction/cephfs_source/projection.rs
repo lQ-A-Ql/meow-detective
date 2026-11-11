@@ -5,7 +5,7 @@ use ceph_wire::{
     CephFsNamespaceEntryKind, CephFsNamespaceGraph,
 };
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::ceph_fs_namespace_repo::{
+use persistence_source::repositories::ceph_fs_namespace_repo::{
     cephfs_namespace_projection_digest, CephFsDentryRecord, CephFsFileLayoutRecord,
     CephFsInodeRecord, CephFsNamespaceDiagnosticRecord, CephFsNamespaceManifest,
     CephFsNamespaceProjection, CEPHFS_NAMESPACE_DECODER_PROFILE, CEPHFS_NAMESPACE_SCHEMA_VERSION,
@@ -178,7 +178,7 @@ fn collect_inode(
         sparse_extents: sparse_extents
             .into_iter()
             .map(|extent| {
-                persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsSparseExtentRecord {
+                persistence_source::repositories::ceph_fs_namespace_repo::CephFsSparseExtentRecord {
                     offset: extent.offset,
                     length: extent.length,
                     evidence_sha256: extent.evidence_sha256,

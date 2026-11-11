@@ -6,7 +6,7 @@ use tempfile::TempDir;
 use transport::{commands::GetFileRowsRequest, dto::ViewerRangeRequestDto};
 
 fn publish_source(source_conn: &rusqlite::Connection, source_id: &domain::DataSourceId) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(source_conn)
+    let store = persistence_source::detail::open_store_for_write(source_conn)
         .unwrap()
         .unwrap();
     persistence_fjall::seal_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))
@@ -635,7 +635,7 @@ fn open_file_content_rejects_traversal_paths_from_database() {
             let global_file_id = app_services::source_db::GlobalFileId::parse(
                 &domain::FileEntryId(file_id.clone()),
             )?;
-            persistence_sqlite::source_fjall::update_catalog_path(
+            persistence_source::detail::update_catalog_path(
                 &source_conn,
                 &global_file_id.local_id.0,
                 "../outside.txt",
@@ -681,7 +681,7 @@ fn encrypted_file_export_fails_before_creating_destination() {
                 &active.case_root,
                 &source_id,
             )?;
-            let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)?
+            let store = persistence_source::detail::open_store_for_write(&source_conn)?
                 .ok_or_else(|| {
                     persistence_sqlite::DbError::System("source storage is missing".to_string())
                 })?;

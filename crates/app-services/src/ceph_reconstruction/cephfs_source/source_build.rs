@@ -1,15 +1,17 @@
 use std::path::Path;
 
 use domain::{CaseId, DataSource, DataSourceId, EntryType, FileEntry};
+use persistence_source::repositories::{
+    ceph_fs_namespace_repo::{CephFsNamespaceProjection, CephFsNamespaceRepo},
+    file_repo::FileRepo,
+};
 use persistence_sqlite::repositories::{
     ceph_fs_capability_repo::{
         CephFsSourceCapability as PersistedCapability, CephFsSourceCapabilityRecord,
         CephFsSourceCapabilityRepo,
     },
     ceph_fs_namespace_assembly_repo::{CephFsNamespaceAssemblyRecord, CephFsNamespaceAssemblyRepo},
-    ceph_fs_namespace_repo::{CephFsNamespaceProjection, CephFsNamespaceRepo},
     datasource_repo::DataSourceRepo,
-    file_repo::FileRepo,
 };
 
 use super::{
@@ -102,12 +104,9 @@ fn publish_native_catalog(
     connection: &rusqlite::Connection,
     request: &CephFsSourceBuildRequest<'_>,
 ) -> CephFsSourceResult<()> {
-    let store =
-        persistence_sqlite::source_fjall::open_store_for_write(connection)?.ok_or_else(|| {
-            CephFsSourceError::InconsistentState(
-                "CephFS native source store is missing".to_string(),
-            )
-        })?;
+    let store = persistence_source::detail::open_store_for_write(connection)?.ok_or_else(|| {
+        CephFsSourceError::InconsistentState("CephFS native source store is missing".to_string())
+    })?;
     let projection_digest = hex::encode(persistence_fjall::digest(
         request.projection.manifest.projection_sha256.as_bytes(),
     ));

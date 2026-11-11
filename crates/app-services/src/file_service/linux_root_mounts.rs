@@ -1,6 +1,6 @@
 //! Resolve configured Linux root mounts from source-scoped fstab evidence.
 use domain::{DataSourceId, EntryType, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use transport::dto::{DataSourcePartitionDto, LinuxRootMountDto};
 

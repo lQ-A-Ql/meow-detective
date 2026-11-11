@@ -5,10 +5,8 @@ use app_services::{
     source_db::{self, GlobalFileId},
 };
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
-use persistence_sqlite::repositories::{
-    datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
-};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use serde_json::{json, Value};
 use transport::dto::mcp_host::access::McpHostCreateClientRequestDto;
 use transport::dto::mcp_host::McpHostSettingsDto;

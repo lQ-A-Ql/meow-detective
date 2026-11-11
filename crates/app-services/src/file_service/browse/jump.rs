@@ -1,5 +1,5 @@
 use domain::{EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use transport::{commands::GetFileJumpContextRequest, dto::FileJumpContextDto};
 

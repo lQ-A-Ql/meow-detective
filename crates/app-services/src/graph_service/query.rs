@@ -1,10 +1,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use domain::{EdgeType, GraphEdge, GraphNode, NodeType};
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo,
-    graph_repo::{Direction, GraphRepo},
-};
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
+use persistence_sqlite::repositories::graph_repo::{Direction, GraphRepo};
 use rusqlite::Connection;
 use transport::dto::{
     GraphEdgeDto, GraphEdgeTypeDto, GraphNodeDto, GraphNodeTypeDto, GraphProvenanceEntryDto,

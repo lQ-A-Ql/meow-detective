@@ -3,7 +3,7 @@ use app_services::{
     import_pipeline::{enumerate_partition_with_fs, PartitionEnumerationRequest},
 };
 use evidence_core::{filesystem::root_node, FileSystemReader, FsNode};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use std::collections::HashMap;
 use std::io::{self, Cursor, Read};
 
@@ -72,7 +72,7 @@ fn candidate_without_preseeded_placeholder_materializes_partition_subtree() {
         [&data_source_id.0],
     )
     .unwrap();
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&conn)
+    let store = persistence_source::detail::open_store_for_write(&conn)
         .unwrap()
         .unwrap();
     persistence_fjall::seal_source_generation(
@@ -114,15 +114,14 @@ fn candidate_without_preseeded_placeholder_materializes_partition_subtree() {
     let rows = records
         .iter()
         .filter(|record| {
-            persistence_sqlite::source_fjall::partition_index(&conn, &record.id.0).unwrap()
-                == Some(4)
+            persistence_source::detail::partition_index(&conn, &record.id.0).unwrap() == Some(4)
         })
         .count();
     assert_eq!(rows, 3);
     let missing = records
         .iter()
         .filter(|record| {
-            persistence_sqlite::source_fjall::partition_index(&conn, &record.id.0)
+            persistence_source::detail::partition_index(&conn, &record.id.0)
                 .unwrap()
                 .is_none()
         })

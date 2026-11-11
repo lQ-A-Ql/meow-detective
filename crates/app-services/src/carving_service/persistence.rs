@@ -1,7 +1,7 @@
 use domain::{Artifact, ArtifactId, CaseId, DataSourceId, GraphNode, NodeType};
 use evidence_core::carving::CarveCandidate;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo,
     fingerprint_repo::ForensicFingerprintRepo,
     graph_repo::GraphRepo,
     source_meta_repo::{SourceMetaRepo, ARTIFACT_CURSOR_REVISION_KEY},
@@ -53,7 +53,7 @@ pub(super) fn persist(
     let transaction = conn
         .unchecked_transaction()
         .map_err(CommandError::from_service_error)?;
-    persistence_sqlite::source_fjall::bind_generation(&transaction, &staged.name)
+    persistence_source::detail::bind_generation(&transaction, &staged.name)
         .map_err(CommandError::from_service_error)?;
     persist_artifact_fingerprints(&transaction, case, source, &artifacts)?;
     GraphRepo::new(&transaction)

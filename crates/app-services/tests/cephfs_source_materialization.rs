@@ -619,7 +619,7 @@ fn sparse_file_round_trips_evidence_proof_and_zero_fills_preview() {
     let source_conn = persistence_sqlite::open_existing_source_read_only(&source_path)
         .expect("open sparse source database");
     let locator =
-        persistence_sqlite::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(
+        persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(
             &source_conn,
         )
         .find_file_locator(&result.data_source.id.0, FILE_ENTRY_ID)
@@ -750,7 +750,7 @@ fn ready_materialization_rejects_file_catalog_tampering() {
         app_services::source_db::source_db_path(fixture.root.path(), &result.data_source.id);
     let source_conn = persistence_sqlite::open_or_create_source(&source_path)
         .expect("open published source database for catalog tamper fixture");
-    assert!(persistence_sqlite::source_fjall::update_catalog_parent(
+    assert!(persistence_source::detail::update_catalog_parent(
         &source_conn,
         FILE_ENTRY_ID,
         None,
@@ -807,7 +807,7 @@ fn incomplete_cephfs_namespace_is_retained_without_file_rows_or_ready_access() {
         .join(&generation);
     if generation_path.is_dir() {
         assert!(
-            persistence_sqlite::repositories::file_repo::FileRepo::new(&source_conn)
+            persistence_source::repositories::file_repo::FileRepo::new(&source_conn)
                 .find_by_data_source(&result.data_source.id)
                 .expect("count incomplete file rows")
                 .is_empty()

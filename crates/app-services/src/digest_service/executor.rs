@@ -289,7 +289,7 @@ fn digest_file(
         case_id,
         &global_id.data_source_id,
     );
-    let total = persistence_sqlite::repositories::file_repo::FileRepo::new(&source_conn)
+    let total = persistence_source::repositories::file_repo::FileRepo::new(&source_conn)
         .find_by_id(&global_id.local_id)?
         .ok_or(DigestServiceError::NotFound)?
         .size;

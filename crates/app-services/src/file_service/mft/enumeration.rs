@@ -11,7 +11,8 @@ use std::{
 use crossbeam_channel::{bounded, Receiver, Sender};
 use domain::{DataSourceId, EntryType, FileEntry};
 use fs_ntfs::mft_scanner::MftScanner;
-use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::{DbError, DbResult};
 use rusqlite::Connection;
 
 use crate::file_service::enumeration::EnumerationStats;

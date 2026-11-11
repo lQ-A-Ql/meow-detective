@@ -1,7 +1,7 @@
 use app_services::file_service::enumerate_filesystem_parallel_with_factory;
 use domain::DataSourceId;
 use evidence_core::{filesystem::fs_node_without_timestamps, FileSystemReader, FsNode, ReadSeek};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use std::collections::BTreeMap;
 use std::io;
 use std::sync::{

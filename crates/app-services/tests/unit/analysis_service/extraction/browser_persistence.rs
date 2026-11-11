@@ -1,7 +1,7 @@
 use super::*;
 use chrono::Utc;
 use domain::{Artifact, ArtifactId, FileEntryId, TimelineEvent, TimelineEventId};
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use std::{collections::BTreeMap, sync::atomic::AtomicBool};
 
 const CASE_ID: &str = "case-browser";
@@ -51,9 +51,9 @@ fn native_source() -> NativeSource {
     let database_path = source_dir.join("source.db");
     let connection =
         persistence_sqlite::open_or_create_source(&database_path).expect("open source database");
-    persistence_sqlite::source_fjall::configure_source_identity(&connection, DATA_SOURCE_ID)
+    persistence_source::detail::configure_source_identity(&connection, DATA_SOURCE_ID)
         .expect("configure source identity");
-    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &database_path)
+    persistence_source::detail::configure_source_fjall(&connection, &database_path)
         .expect("configure source storage");
     connection
         .execute(
@@ -71,16 +71,13 @@ fn native_source() -> NativeSource {
     .expect("open source store");
     persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone())
         .upsert(
-            &persistence_sqlite::source_fjall::artifact_record(
-                &previous_artifact(),
-                DATA_SOURCE_ID,
-            ),
+            &persistence_source::detail::artifact_record(&previous_artifact(), DATA_SOURCE_ID),
             persistence_fjall::PersistMode::SyncAll,
         )
         .expect("seed previous artifact");
     persistence_fjall::TimelineRecordStore::from_source_store((*store).clone())
         .upsert(
-            &persistence_sqlite::source_fjall::timeline_record(&previous_event(), DATA_SOURCE_ID),
+            &persistence_source::detail::timeline_record(&previous_event(), DATA_SOURCE_ID),
             persistence_fjall::PersistMode::SyncAll,
         )
         .expect("seed previous timeline event");

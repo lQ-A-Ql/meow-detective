@@ -1,6 +1,6 @@
 use super::*;
 crate::native_source_test_support!();
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use test_support::NativeSourceFixture;
 
 #[test]

@@ -1,6 +1,6 @@
 use super::error::StagingError;
 use infrastructure::constants::{MANIFEST_FILE_NAME, STAGING_DIR_NAME};
-use persistence_sqlite::repositories::staging_repo::StagingRepo;
+use persistence_source::repositories::staging_repo::StagingRepo;
 use persistence_sqlite::DbResult;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};

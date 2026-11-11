@@ -4,10 +4,8 @@ use domain::{
     DataSourceHashStatus, DataSourceId, DataSourcePlatform, DataSourceProvenanceStatus, EntryType,
     FileEntry,
 };
-use persistence_sqlite::repositories::{
-    datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
-};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use rusqlite::Connection;
 use std::path::Path;
 use transport::dto::{DataSourceSummaryDto, RecentObjectDto};

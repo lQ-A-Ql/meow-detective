@@ -10,12 +10,11 @@ use domain::{
     CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
     FileEntryId,
 };
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, file_repo::FileRepo};
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo,
     case_repo::CaseRepo,
     ceph_osd_repo::{CephOsdInventoryRecord, CephOsdRepo},
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
     linux_import_set_repo::{LinuxImportSetMemberRecord, LinuxImportSetRecord, LinuxImportSetRepo},
 };
 use test_support::mark_source_projection_complete;
@@ -415,7 +414,7 @@ fn register_source(
         })
         .collect::<Vec<_>>();
     FileRepo::new(&source_conn).insert_batch(&entries).unwrap();
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+    let store = persistence_source::detail::open_store_for_write(&source_conn)
         .unwrap()
         .unwrap();
     persistence_fjall::replace_source_generation(

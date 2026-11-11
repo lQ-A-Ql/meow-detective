@@ -16,12 +16,9 @@ fn setup() -> (tempfile::TempDir, Connection, SourceStore) {
     std::fs::create_dir_all(&source_dir).unwrap();
     let connection =
         persistence_sqlite::open_or_create_source(&source_dir.join("source.db")).unwrap();
-    persistence_sqlite::source_fjall::configure_source_identity(&connection, "source-1").unwrap();
-    persistence_sqlite::source_fjall::configure_source_fjall(
-        &connection,
-        &source_dir.join("source.db"),
-    )
-    .unwrap();
+    persistence_source::detail::configure_source_identity(&connection, "source-1").unwrap();
+    persistence_source::detail::configure_source_fjall(&connection, &source_dir.join("source.db"))
+        .unwrap();
     let shared = persistence_fjall::open_shared_source_store(
         source_dir.join("source.fjall"),
         DatabaseConfig::default(),
@@ -31,7 +28,7 @@ fn setup() -> (tempfile::TempDir, Connection, SourceStore) {
     let artifacts = ArtifactRecordStore::from_source_store(store.clone());
     artifacts
         .upsert(
-            &persistence_sqlite::source_fjall::artifact_record(
+            &persistence_source::detail::artifact_record(
                 &artifact("old", "old", "linux.web.old"),
                 "source-1",
             ),
@@ -41,7 +38,7 @@ fn setup() -> (tempfile::TempDir, Connection, SourceStore) {
     let timeline = TimelineRecordStore::from_source_store(store.clone());
     timeline
         .upsert(
-            &persistence_sqlite::source_fjall::timeline_record(
+            &persistence_source::detail::timeline_record(
                 &event("old-event", "old", "linux.web.old"),
                 "source-1",
             ),

@@ -1117,7 +1117,7 @@ fn real_liuyang_bitlocker_reader_uses_mft_catalog_path() {
         .unwrap();
     drop(conn);
     let merge_conn = staging::open_partition_staging(temp.path(), "source-liuyang", 5).unwrap();
-    persistence_sqlite::repositories::staging_repo::StagingRepo::merge_enum_staging_to_main(
+    persistence_source::repositories::staging_repo::StagingRepo::merge_enum_staging_to_main(
         &source_conn,
         &merge_conn,
         "source-liuyang",

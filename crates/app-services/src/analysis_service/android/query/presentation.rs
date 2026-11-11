@@ -100,7 +100,7 @@ fn hydrate_package_restrictions(
 
 fn find_restriction_files(connection: &Connection) -> Result<Vec<FileEntry>, AnalysisServiceError> {
     let mut entries = Vec::new();
-    persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
+    persistence_source::repositories::file_repo::FileRepo::new(connection).visit_all(
         None,
         |entry| {
             if !entry.deleted
@@ -244,7 +244,7 @@ fn find_exact_apk_file(
         .replace('\\', "/")
         .to_ascii_lowercase();
     let mut found = None;
-    persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
+    persistence_source::repositories::file_repo::FileRepo::new(connection).visit_all(
         None,
         |entry| {
             let actual = entry
@@ -274,7 +274,7 @@ fn find_directory_apk_file(
         .replace('\\', "/")
         .to_ascii_lowercase();
     let mut found = None;
-    persistence_sqlite::repositories::file_repo::FileRepo::new(connection).visit_all(
+    persistence_source::repositories::file_repo::FileRepo::new(connection).visit_all(
         None,
         |entry| {
             let actual = entry.path.replace('\\', "/").to_ascii_lowercase();

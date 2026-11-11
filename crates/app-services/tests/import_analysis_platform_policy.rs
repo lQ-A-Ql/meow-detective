@@ -12,9 +12,8 @@ use app_services::import_pipeline::{execute_import_job, ImportJobOptions};
 use app_services::{case_service, import_precheck, search_service, source_db};
 use domain::{DataSourceId, DataSourcePlatform};
 use fixture_builder::build_prefetch_v30;
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, job_repo::JobRepo, timeline_repo::TimelineRepo,
-};
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
+use persistence_sqlite::repositories::job_repo::JobRepo;
 use tempfile::TempDir;
 use transport::{ErrorCategory, ServiceErrorCategory};
 

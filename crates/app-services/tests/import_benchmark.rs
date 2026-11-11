@@ -24,7 +24,8 @@ use app_services::{
     import_precheck, source_db,
 };
 use domain::{DataSourceId, DataSourcePlatform, EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::{file_repo::FileRepo, job_repo::JobRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::job_repo::JobRepo;
 use rusqlite::{types::Value, Connection};
 use sha2::{Digest, Sha256};
 use std::io::Read;
@@ -264,10 +265,10 @@ fn canonical_replacements(
 }
 
 fn native_catalog_records(conn: &Connection) -> Vec<persistence_fjall::FileEntryRecord> {
-    let source_id = persistence_sqlite::source_fjall::source_id(conn)
+    let source_id = persistence_source::detail::source_id(conn)
         .unwrap()
         .expect("source identity");
-    let store = persistence_sqlite::source_fjall::require_source_store(conn).unwrap();
+    let store = persistence_source::detail::require_source_store(conn).unwrap();
     let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
     let snapshot = repository.read_snapshot();
     let mut cursor = None;
@@ -359,10 +360,10 @@ fn native_timeline_snapshot(
     conn: &Connection,
     replacements: &[(String, String)],
 ) -> Vec<Vec<Value>> {
-    let source_id = persistence_sqlite::source_fjall::source_id(conn)
+    let source_id = persistence_source::detail::source_id(conn)
         .unwrap()
         .expect("source identity");
-    let store = persistence_sqlite::source_fjall::require_source_store(conn).unwrap();
+    let store = persistence_source::detail::require_source_store(conn).unwrap();
     let repository = persistence_fjall::TimelineRecordStore::from_source_store((*store).clone());
     let snapshot = repository.read_snapshot();
     let mut cursor = None;
@@ -839,7 +840,7 @@ fn oracle_normalizes_generated_generic_ids_and_preserves_native_mft_ids() {
     assert!(native_catalog_snapshot(&first.conn, &a)
         .iter()
         .any(|row| row.contains(&Value::Text("mft:1:25".into()))));
-    let store = persistence_sqlite::source_fjall::require_source_store(&second.conn).unwrap();
+    let store = persistence_source::detail::require_source_store(&second.conn).unwrap();
     let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
     let snapshot_value = repository.read_snapshot();
     let mut record = repository

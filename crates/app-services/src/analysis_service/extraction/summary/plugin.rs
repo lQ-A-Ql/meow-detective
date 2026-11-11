@@ -8,7 +8,7 @@
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::plugin_loader::PluginModuleMeta;
 use domain::Artifact;
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;

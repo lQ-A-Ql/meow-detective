@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use domain::CaseId;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use transport::dto::{RegistryBrowserKeyDto, RegistryBrowserValueDto, RegistryOverlaySourceDto};
 

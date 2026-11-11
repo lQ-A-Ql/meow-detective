@@ -4,7 +4,7 @@ use crate::analysis_service::extraction::artifact_query::AnalysisArtifactRow;
 use crate::analysis_service::extraction::attr_mapping::{optional_string_attr, u64_attr};
 use chrono::{DateTime, Utc};
 use domain::Artifact;
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
 use std::{
     cmp::Reverse,

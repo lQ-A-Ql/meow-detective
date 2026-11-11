@@ -2,10 +2,10 @@ use super::*;
 crate::native_source_test_support!();
 use crate::file_service::{PreparedSourceReadState, SourceReadContext};
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::{
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
 };
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -91,7 +91,7 @@ fn seed_source_db(case_root: &Path, data_source_id: &str) {
             hash_sha256: None,
         }])
         .unwrap();
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&conn)
+    let store = persistence_source::detail::open_store_for_write(&conn)
         .unwrap()
         .unwrap();
     persistence_fjall::replace_source_generation(

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use domain::{CaseId, DataSourceId, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use serde_json::Value;
 
 use crate::{

@@ -2,7 +2,8 @@ use crate::datasource_service;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use evidence_core::FsNode;
 use persistence_fjall::{CatalogRecordStore, CatalogStreamError};
-use persistence_sqlite::{repositories::file_repo::FileRepo, DbResult};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::DbResult;
 use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;
 use uuid::Uuid;
@@ -89,7 +90,7 @@ pub fn replace_placeholder_root_with_real_and_cancel(
     let root = fs.root().map_err(|e| {
         persistence_sqlite::DbError::System(format!("Failed to read filesystem root: {}", e))
     })?;
-    if persistence_sqlite::source_fjall::source_id(conn)?.is_some() {
+    if persistence_source::detail::source_id(conn)?.is_some() {
         return replace_placeholder_native(
             conn,
             placeholder_id,
@@ -120,16 +121,16 @@ fn replace_placeholder_native(
     cancel_token: Option<&AtomicBool>,
     root: &FsNode,
 ) -> DbResult<super::EnumerationStats> {
-    let source_id = persistence_sqlite::source_fjall::source_id(conn)?
+    let source_id = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| persistence_sqlite::DbError::System("source identity is missing".into()))?;
-    let source = persistence_sqlite::source_fjall::require_source_store(conn)?;
+    let source = persistence_source::detail::require_source_store(conn)?;
     let manifest = persistence_fjall::read_source_generation_manifest(&source, &source_id)
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
     let repository = CatalogRecordStore::from_source_store((*source).clone());
     let mut root_entry = repository
         .get(&repository.read_snapshot(), &source_id, &placeholder_id.0)
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
-        .map(persistence_sqlite::source_fjall::file_entry)
+        .map(persistence_source::detail::file_entry)
         .ok_or_else(|| {
             persistence_sqlite::DbError::System("Partition placeholder root not found".to_string())
         })?;
@@ -146,7 +147,7 @@ fn replace_placeholder_native(
             ))
         })?;
     apply_real_root_metadata(&mut root_entry, root, root_name_override);
-    let root_record = persistence_sqlite::source_fjall::file_record(&root_entry);
+    let root_record = persistence_source::detail::file_record(&root_entry);
     let mut walker = super::enumeration::ChildBatchWalker::new(root_entry.id.clone());
     repository
         .replace_subtree_streamed(
@@ -163,7 +164,7 @@ fn replace_placeholder_native(
                         batch.map(|entries| {
                             entries
                                 .into_iter()
-                                .map(|entry| persistence_sqlite::source_fjall::file_record(&entry))
+                                .map(|entry| persistence_source::detail::file_record(&entry))
                                 .collect()
                         })
                     })

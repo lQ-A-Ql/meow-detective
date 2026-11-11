@@ -106,11 +106,10 @@ fn open_fixture_source(
 }
 
 fn seal_source(connection: &rusqlite::Connection) {
-    let Some(store) = persistence_sqlite::source_fjall::open_store_for_write(connection).unwrap()
-    else {
+    let Some(store) = persistence_source::detail::open_store_for_write(connection).unwrap() else {
         return;
     };
-    let source_id = persistence_sqlite::source_fjall::source_id(connection)
+    let source_id = persistence_source::detail::source_id(connection)
         .unwrap()
         .unwrap();
     persistence_fjall::replace_source_generation(
@@ -144,10 +143,10 @@ fn seal_source(connection: &rusqlite::Connection) {
 }
 
 fn delete_native_artifact(connection: &rusqlite::Connection, artifact_id: &str) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+    let store = persistence_source::detail::open_store_for_write(connection)
         .unwrap()
         .unwrap();
-    let source_id = persistence_sqlite::source_fjall::source_id(connection)
+    let source_id = persistence_source::detail::source_id(connection)
         .unwrap()
         .unwrap();
     persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone())
@@ -185,7 +184,7 @@ fn make_file(id: &str, path: &str) -> FileEntry {
 }
 
 fn insert_files(conn: &rusqlite::Connection, files: &[FileEntry]) {
-    persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+    persistence_source::repositories::file_repo::FileRepo::new(conn)
         .insert_batch(files)
         .unwrap();
     seal_source(conn);
@@ -604,7 +603,7 @@ fn case_artifact_cursor_rejects_equal_count_replacement() {
     let source_conn = open_fixture_source(temp.path(), &source_id);
     let transaction = source_conn.unchecked_transaction().unwrap();
     let repository =
-        persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(&transaction);
+        persistence_source::repositories::artifact_repo::ArtifactRepo::new(&transaction);
     assert_eq!(
         repository
             .delete_analysis_outputs_in_transaction("shared-source", "test.")

@@ -341,7 +341,7 @@ pub(super) fn locate_by_suffix(
 ) -> Result<Option<EvidenceCandidate>, AnalysisServiceError> {
     let normalized_suffix = suffix.replace('\\', "/").to_ascii_lowercase();
     let mut found = None;
-    persistence_sqlite::repositories::file_repo::FileRepo::new(conn).visit_all(
+    persistence_source::repositories::file_repo::FileRepo::new(conn).visit_all(
         Some(data_source_id),
         |entry| {
             if found.is_none()

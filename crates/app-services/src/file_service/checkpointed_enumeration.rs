@@ -3,10 +3,8 @@ use super::EnumerationStats;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use evidence_core::{FileSystemDiagnostic, FileSystemDiagnosticKind, FileSystemReader, FsNode};
 use infrastructure::constants::FILE_INSERT_BATCH_SIZE;
-use persistence_sqlite::{
-    repositories::{catalog_file_repo::CatalogFileRepo, file_repo::FileRepo},
-    DbError, DbResult,
-};
+use persistence_source::repositories::{catalog_file_repo::CatalogFileRepo, file_repo::FileRepo};
+use persistence_sqlite::{DbError, DbResult};
 use rusqlite::Connection;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};

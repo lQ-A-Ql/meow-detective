@@ -145,9 +145,7 @@ fn find_unique_data_source_id(conn: &Connection) -> Option<String> {
 }
 
 fn unique_data_source_id_from_files(conn: &Connection) -> Option<String> {
-    persistence_sqlite::source_fjall::source_id(conn)
-        .ok()
-        .flatten()
+    persistence_source::detail::source_id(conn).ok().flatten()
 }
 
 fn unique_registered_data_source_id(conn: &Connection) -> Option<String> {

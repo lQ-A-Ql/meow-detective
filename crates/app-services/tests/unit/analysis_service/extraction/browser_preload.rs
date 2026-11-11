@@ -8,9 +8,9 @@ fn native_source() -> (tempfile::TempDir, Connection) {
     let database_path = source_dir.join("source.db");
     let connection =
         persistence_sqlite::open_or_create_source(&database_path).expect("open source database");
-    persistence_sqlite::source_fjall::configure_source_identity(&connection, "source-1")
+    persistence_source::detail::configure_source_identity(&connection, "source-1")
         .expect("configure source identity");
-    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &database_path)
+    persistence_source::detail::configure_source_fjall(&connection, &database_path)
         .expect("configure source details");
     connection
         .execute(
@@ -139,7 +139,7 @@ fn liuyang_preload_builds_app_bound_decryptor_via_service_path() {
         .enumerate()
         .map(|(index, path)| file_entry(&format!("file:{index}"), &format!("[P2]/{path}")))
         .collect::<Vec<_>>();
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&conn)
+    persistence_source::repositories::file_repo::FileRepo::new(&conn)
         .insert_batch(&files)
         .expect("insert native file entries");
 
@@ -220,7 +220,7 @@ fn locate_by_suffix_tolerates_all_stored_path_forms() {
     .enumerate()
     .map(|(index, path)| file_entry(&format!("file:{index}"), path))
     .collect::<Vec<_>>();
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&conn)
+    persistence_source::repositories::file_repo::FileRepo::new(&conn)
         .insert_batch(&files)
         .expect("insert native file entries");
 
@@ -266,7 +266,7 @@ fn elevation_service_selection_is_bound_to_the_chromium_family() {
     .into_iter()
     .map(|(id, path)| file_entry(id, path))
     .collect::<Vec<_>>();
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&conn)
+    persistence_source::repositories::file_repo::FileRepo::new(&conn)
         .insert_batch(&files)
         .expect("insert native file entries");
     let cancel = AtomicBool::new(false);

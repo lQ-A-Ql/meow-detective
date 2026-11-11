@@ -92,10 +92,10 @@ pub fn seed_placeholder(
 }
 
 pub fn catalog_records(conn: &Connection) -> Vec<FileEntryRecord> {
-    let source_id = persistence_sqlite::source_fjall::source_id(conn)
+    let source_id = persistence_source::detail::source_id(conn)
         .unwrap()
         .expect("source identity");
-    let store = persistence_sqlite::source_fjall::open_store(conn)
+    let store = persistence_source::detail::open_store(conn)
         .unwrap()
         .expect("source store");
     let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());

@@ -18,8 +18,10 @@ use app_services::derived_source_service::{
 use app_services::import_analysis::ImportAnalysisMode;
 use app_services::source_db::{self, GlobalFileId};
 use domain::{CaseId, CaseMeta, DataSource, DataSourceId, FileEntryId};
+use persistence_source::repositories::{
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
+};
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo,
     audit_repo::AuditRepo,
     case_repo::CaseRepo,
     ceph_bluestore_semantic_repo::{
@@ -29,10 +31,8 @@ use persistence_sqlite::repositories::{
     ceph_rbd_lineage_repo::CephRbdLineageRepo,
     ceph_rocksdb_latest_state_repo::CephRocksdbLatestStateRepo,
     datasource_repo::DataSourceRepo,
-    file_repo::FileRepo,
     job_repo::JobRepo,
     processing_phase_repo::{DataSourceProcessingPhaseRepo, ProcessingPhase, ProcessingPhaseState},
-    timeline_repo::TimelineRepo,
 };
 use tempfile::TempDir;
 use transport::commands::{

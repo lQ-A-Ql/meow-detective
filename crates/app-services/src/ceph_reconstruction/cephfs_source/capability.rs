@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use persistence_sqlite::repositories::ceph_fs_namespace_repo::{
+use persistence_source::repositories::ceph_fs_namespace_repo::{
     CephFsFileLayoutRecord, CephFsNamespaceProjection,
 };
 

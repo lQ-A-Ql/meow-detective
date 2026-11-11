@@ -2151,6 +2151,7 @@ dependencies = [
  "image-e01",
  "infrastructure",
  "mimalloc",
+ "persistence-source",
  "persistence-sqlite",
  "physical-mount",
  "portable-updater",

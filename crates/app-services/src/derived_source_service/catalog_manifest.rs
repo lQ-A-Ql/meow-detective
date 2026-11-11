@@ -158,7 +158,7 @@ pub(super) fn summarize_source_connection(
     connection: &Connection,
     data_source: DataSource,
 ) -> DerivedSourceResult<MaterializedRbdSource> {
-    let entries = persistence_sqlite::repositories::file_repo::FileRepo::new(connection)
+    let entries = persistence_source::repositories::file_repo::FileRepo::new(connection)
         .find_by_data_source(&data_source.id)
         .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?;
     let by_id = entries

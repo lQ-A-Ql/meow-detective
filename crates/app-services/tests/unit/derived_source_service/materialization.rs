@@ -184,11 +184,11 @@ fn setup_recoverable_catalog(
     DataSourceRepo::new(&source_connection)
         .upsert_source_local_metadata(&CaseId("case-1".to_string()), &source)
         .expect("insert source-local metadata");
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&source_connection)
+    persistence_source::repositories::file_repo::FileRepo::new(&source_connection)
         .insert_batch(&catalog_rows(&source))
         .expect("insert source catalog");
-    persistence_sqlite::source_fjall::set_partition_index(&source_connection, "root", 0).unwrap();
-    persistence_sqlite::source_fjall::set_partition_index(&source_connection, "file", 0).unwrap();
+    persistence_source::detail::set_partition_index(&source_connection, "root", 0).unwrap();
+    persistence_source::detail::set_partition_index(&source_connection, "file", 0).unwrap();
     let fjall_source = crate::source_db::open_fjall_source_read_write(case_root, &source.id.0)
         .expect("open Fjall source storage");
     fjall_source
@@ -538,7 +538,7 @@ fn catalog_recovery_rejects_file_tree_drift_without_deleting_source() {
     let source_path = crate::source_db::source_db_path(temp.path(), &source.id);
     let source_connection =
         crate::source_db::open_source_db(temp.path(), &source.id).expect("open source database");
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_connection)
+    let store = persistence_source::detail::open_store_for_write(&source_connection)
         .unwrap()
         .unwrap();
     persistence_fjall::CatalogRecordStore::from_source_store((*store).clone())

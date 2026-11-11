@@ -60,7 +60,7 @@ fn setup() -> TestDb {
 }
 
 fn insert_fstab(conn: &Connection, source: &str, index: u32, path: &str, text: &str) {
-    persistence_sqlite::source_fjall::upsert_files_with_partition(
+    persistence_source::detail::upsert_files_with_partition(
         conn,
         &[FileEntry {
             id: FileEntryId(format!("{source}-{index}")),
@@ -158,35 +158,33 @@ fn duplicate_uuid_or_conflicting_root_lines_never_confirm_a_target() {
 fn fstab_is_source_scoped_case_sensitive_and_requires_complete_bytes() {
     let conn = setup();
     let text = format!("UUID={FS_UUID} / ext4 defaults 0 1\n");
-    assert!(
-        persistence_sqlite::source_fjall::upsert_files_with_partition(
-            &conn,
-            &[FileEntry {
-                id: FileEntryId("foreign-fstab".into()),
-                parent_id: None,
-                data_source_id: DataSourceId("other".into()),
-                path: "etc/fstab".into(),
-                name: "fstab".into(),
-                entry_type: EntryType::File,
-                size: Some(text.len() as u64),
-                ext: None,
-                deleted: false,
-                hidden: false,
-                system: false,
-                encrypted: false,
-                read_only: false,
-                archive: false,
-                unix_mode: None,
-                created_at: None,
-                modified_at: None,
-                accessed_at: None,
-                changed_at: None,
-                hash_sha256: None,
-            }],
-            1,
-        )
-        .is_err()
-    );
+    assert!(persistence_source::detail::upsert_files_with_partition(
+        &conn,
+        &[FileEntry {
+            id: FileEntryId("foreign-fstab".into()),
+            parent_id: None,
+            data_source_id: DataSourceId("other".into()),
+            path: "etc/fstab".into(),
+            name: "fstab".into(),
+            entry_type: EntryType::File,
+            size: Some(text.len() as u64),
+            ext: None,
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: false,
+            archive: false,
+            unix_mode: None,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }],
+        1,
+    )
+    .is_err());
     insert_fstab(&conn, "source", 2, "ETC/fstab", &text);
     assert!(resolve(&conn, &text).is_empty());
     insert_fstab(&conn, "source", 1, "etc/fstab", &text);

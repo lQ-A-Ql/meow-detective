@@ -10,14 +10,14 @@ use transport::CommandError;
 const PAGE_SIZE: usize = 512;
 
 fn origin(connection: &Connection, source_id: &str) -> Result<Arc<SourceStore>, CommandError> {
-    let owner = persistence_sqlite::source_fjall::source_id(connection)
+    let owner = persistence_source::detail::source_id(connection)
         .map_err(|error| CommandError::internal(error.to_string()))?;
     if owner.as_deref() != Some(source_id) {
         return Err(CommandError::internal(
             "source generation owner does not match projection source",
         ));
     }
-    persistence_sqlite::source_fjall::open_store(connection)
+    persistence_source::detail::open_store(connection)
         .map_err(|error| CommandError::internal(error.to_string()))?
         .ok_or_else(|| CommandError::internal("source generation is missing"))
 }

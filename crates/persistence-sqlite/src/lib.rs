@@ -3,7 +3,6 @@ pub mod migrations;
 pub mod read_operation;
 pub mod read_pool;
 pub mod repositories;
-pub mod source_fjall;
 pub mod sql_builder;
 pub mod util;
 

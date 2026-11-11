@@ -4,7 +4,7 @@ use domain::{CaseId, DataSourceId, FileEntryId};
 use evidence_core::{
     EvidenceReader, FileSystemDiagnostic, FileSystemDiagnosticKind, FileSystemReader,
 };
-use persistence_sqlite::repositories::{file_repo::FileRepo, staging_repo::StagingRepo};
+use persistence_source::repositories::{file_repo::FileRepo, staging_repo::StagingRepo};
 use rusqlite::Connection;
 use transport::dto::BitLockerCatalogImportDto;
 use volume_bitlocker::read_volume_identities;

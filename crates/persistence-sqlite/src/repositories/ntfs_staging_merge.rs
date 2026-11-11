@@ -1,7 +1,7 @@
 //! Completed validated numeric catalogs generate external ids only at final merge.
 use rusqlite::{params, Connection, OptionalExtension};
 
-pub(super) fn merge_completed_numeric(
+pub fn merge_completed_numeric(
     main: &Connection,
     staging: &Connection,
     source: &str,

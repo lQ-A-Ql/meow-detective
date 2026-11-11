@@ -2,11 +2,10 @@ use super::*;
 crate::native_source_test_support!();
 use crate::notebook_service;
 use domain::{CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, file_repo::FileRepo};
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo,
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
     notebook_repo::StepFilters,
 };
 use persistence_sqlite::runner;
@@ -63,9 +62,9 @@ fn register_ready_source(case: &TestCase, case_id: &str, source_id: &str) -> std
         .expect("create source directory");
     let source_conn =
         persistence_sqlite::open_or_create_source(&source_path).expect("create source db");
-    persistence_sqlite::source_fjall::configure_source_identity(&source_conn, source_id)
+    persistence_source::detail::configure_source_identity(&source_conn, source_id)
         .expect("configure source identity");
-    persistence_sqlite::source_fjall::configure_source_fjall(&source_conn, &source_path)
+    persistence_source::detail::configure_source_fjall(&source_conn, &source_path)
         .expect("configure native source");
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(&CaseId(case_id.to_string()), &source)
@@ -134,7 +133,7 @@ fn case_state_hash_changes_when_counts_change() {
             "ds-1",
         )
         .unwrap();
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+    let store = persistence_source::detail::open_store_for_write(&source_conn)
         .expect("open source store")
         .expect("configured source store");
     persistence_fjall::replace_source_generation(

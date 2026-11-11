@@ -1,7 +1,7 @@
 use crate::analysis_service::error::AnalysisServiceError;
 use persistence_fjall::{encode_key, KeyPart, KeyspaceName, PersistMode};
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -106,7 +106,7 @@ fn page_key(
 }
 
 fn source_id(conn: &Connection) -> Result<String, AnalysisServiceError> {
-    persistence_sqlite::source_fjall::source_id(conn)?
+    persistence_source::detail::source_id(conn)?
         .ok_or_else(|| AnalysisServiceError::InvalidInput("source identity is missing".into()))
 }
 
@@ -114,7 +114,7 @@ fn read<T: DeserializeOwned>(
     conn: &Connection,
     key: Vec<u8>,
 ) -> Result<Option<T>, AnalysisServiceError> {
-    let Some(store) = persistence_sqlite::source_fjall::open_store(conn)? else {
+    let Some(store) = persistence_source::detail::open_store(conn)? else {
         return Err(AnalysisServiceError::InvalidInput(
             "source detail storage is missing".into(),
         ));
@@ -136,7 +136,7 @@ fn write<T: Serialize>(
     key: Vec<u8>,
     value: &T,
 ) -> Result<(), AnalysisServiceError> {
-    let Some(store) = persistence_sqlite::source_fjall::open_store(conn)? else {
+    let Some(store) = persistence_source::detail::open_store(conn)? else {
         return Err(AnalysisServiceError::InvalidInput(
             "source detail storage is missing".into(),
         ));

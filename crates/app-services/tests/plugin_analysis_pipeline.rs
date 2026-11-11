@@ -11,7 +11,7 @@ use app_services::analysis_service::{
 use app_services::plugin_loader::load_plugins_from_dirs;
 use artifacts_core::{ArtifactContext, ArtifactExtractor, VecSink};
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, file_repo::FileRepo};
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, file_repo::FileRepo};
 use std::collections::BTreeMap;
 use std::sync::atomic::AtomicBool;
 

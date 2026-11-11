@@ -1,10 +1,10 @@
 use std::path::Path;
 
 use domain::DataSource;
+use persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo;
 use persistence_sqlite::repositories::{
     catalog_publication_repo::{seal_for, CatalogPublicationRepo},
     ceph_fs_lineage_repo::CephFsDerivedLineageAggregate,
-    ceph_fs_namespace_repo::CephFsNamespaceRepo,
     datasource_repo::DataSourceRepo,
 };
 

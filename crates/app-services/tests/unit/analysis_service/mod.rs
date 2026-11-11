@@ -8,10 +8,10 @@ use domain::{
     Artifact, ArtifactId, CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, EntryType,
     FileEntry, FileEntryId,
 };
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, case_repo::CaseRepo, datasource_repo::DataSourceRepo,
-    file_repo::FileRepo, timeline_repo::TimelineRepo,
+use persistence_source::repositories::{
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
+use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
 use persistence_sqlite::{open_in_memory, runner};
 use rusqlite::{params, Connection};
 use std::{
@@ -92,7 +92,7 @@ fn setup_case_db() -> (Connection, TempDir, DataSourceId) {
         .unwrap();
 
     let source_connection = crate::source_db::open_source_db(tmp.path(), &ds_id).unwrap();
-    persistence_sqlite::source_fjall::open_store_for_write(&source_connection)
+    persistence_source::detail::open_store_for_write(&source_connection)
         .unwrap()
         .expect("initialize native source generation");
     DataSourceRepo::new(&source_connection)
@@ -109,10 +109,10 @@ fn insert_files(connection: &Connection, files: &[FileEntry]) {
 }
 
 fn reseal_source_generation(connection: &Connection) {
-    let store = persistence_sqlite::source_fjall::open_store_for_write(connection)
+    let store = persistence_source::detail::open_store_for_write(connection)
         .expect("open native source store")
         .expect("native source store is configured");
-    let source_id = persistence_sqlite::source_fjall::source_id(connection)
+    let source_id = persistence_source::detail::source_id(connection)
         .expect("read source identity")
         .expect("source identity is configured");
     persistence_fjall::replace_source_generation(

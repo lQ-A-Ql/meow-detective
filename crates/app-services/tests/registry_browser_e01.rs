@@ -8,7 +8,7 @@ use app_services::{
 use artifacts_windows::registry::browser::HiveSnapshot;
 use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use sha2::{Digest, Sha256};
 use std::{io::Read, path::PathBuf, sync::Arc, time::Instant};
 use transport::dto::*;

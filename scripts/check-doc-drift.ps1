@@ -168,12 +168,19 @@ $crateCount = ([regex]::Matches(
 Assert-Equals $crateCount 44 'Workspace crate count drifted'
 $commandFiles = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'apps/desktop/src-tauri/src/commands') -Recurse -File -Filter '*.rs'
 $commandCount = ($commandFiles | Select-String -Pattern '#\[tauri::command\]' | Measure-Object).Count
-$repositoryRoot = Join-Path $repoRoot 'crates/persistence-sqlite/src/repositories'
+# Source-scoped detail repositories live in persistence-source after S4b; the
+# logical repository count spans both repositories roots.
+$repositoryRoots = @(
+  (Join-Path $repoRoot 'crates/persistence-sqlite/src/repositories'),
+  (Join-Path $repoRoot 'crates/persistence-source/src/repositories')
+)
 $repositoryNames = @(
-  Get-ChildItem -LiteralPath $repositoryRoot -File -Filter '*_repo.rs' |
-    ForEach-Object { $_.BaseName }
-  Get-ChildItem -LiteralPath $repositoryRoot -Directory -Filter '*_repo' |
-    ForEach-Object { $_.Name }
+  foreach ($repositoryRoot in $repositoryRoots) {
+    Get-ChildItem -LiteralPath $repositoryRoot -File -Filter '*_repo.rs' |
+      ForEach-Object { $_.BaseName }
+    Get-ChildItem -LiteralPath $repositoryRoot -Directory -Filter '*_repo' |
+      ForEach-Object { $_.Name }
+  }
 )
 $repoCount = @($repositoryNames | Sort-Object -Unique).Count
 $migrationCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates/persistence-sqlite/src/migrations/scripts') -Filter '*.sql' | Measure-Object).Count

@@ -1,5 +1,5 @@
 use super::super::CorrelationError;
-use persistence_sqlite::repositories::correlation_repo;
+use persistence_source::repositories::correlation_repo;
 use rusqlite::Connection;
 use std::collections::BTreeSet;
 use transport::dto::CorrelationSnapshotDto;

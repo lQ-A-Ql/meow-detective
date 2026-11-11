@@ -13,9 +13,8 @@ crate::native_source_test_support!();
 use crate::{case_service, import_analysis, import_precheck, search_service, staging};
 use chrono::{DateTime, TimeZone, Utc};
 use persistence_fjall::{FileEntryRecord, ScanDirection};
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, job_repo::JobRepo, timeline_repo::TimelineRepo,
-};
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
+use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
@@ -838,7 +837,7 @@ fn logical_import_post_pipeline_indexes_marker_and_defers_artifact() {
                 |row| row.get(0),
             )?;
             assert_eq!(file_entries, 0, "app.db must not own source file entries");
-            let source_file_entries = persistence_sqlite::repositories::file_repo::FileRepo::new(&source_conn)
+            let source_file_entries = persistence_source::repositories::file_repo::FileRepo::new(&source_conn)
                 .find_by_data_source(&data_source_id)?.into_iter().filter(|entry| entry.is_file()).count();
             assert_eq!(source_file_entries, 2);
             let source_detail_tables: u64 = source_conn.query_row(
@@ -873,7 +872,7 @@ fn logical_import_post_pipeline_indexes_marker_and_defers_artifact() {
             let app_graph_nodes: i64 =
                 conn.query_row("SELECT COUNT(*) FROM graph_nodes", [], |row| row.get(0))?;
             assert_eq!(app_graph_nodes, 0, "app.db must not own source-local graph");
-            let source_timeline_events = persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&source_conn).count()?;
+            let source_timeline_events = persistence_source::repositories::timeline_repo::TimelineRepo::new(&source_conn).count()?;
             assert!(source_timeline_events > 0);
             let source_graph_nodes: i64 =
                 source_conn.query_row("SELECT COUNT(*) FROM graph_nodes", [], |row| row.get(0))?;
@@ -1034,7 +1033,7 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
                 .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
             persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&source_conn)
                 .upsert_source_local_metadata(&active.meta.id, &data_source)?;
-            persistence_sqlite::repositories::file_repo::FileRepo::new(&source_conn).insert_batch(
+            persistence_source::repositories::file_repo::FileRepo::new(&source_conn).insert_batch(
                 &[domain::FileEntry {
                     id: domain::FileEntryId("raw-file-1".to_string()),
                     parent_id: None,
@@ -1097,7 +1096,7 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
             assert!(!counts.is_partial());
             let source_conn = persistence_sqlite::open_existing_source(&source_db_path)?;
             assert_eq!(
-                persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&source_conn)
+                persistence_source::repositories::timeline_repo::TimelineRepo::new(&source_conn)
                     .count()?,
                 0
             );

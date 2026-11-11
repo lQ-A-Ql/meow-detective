@@ -7,7 +7,7 @@ use crate::analysis_service::extraction::attr_mapping::{
     details_attr, optional_string_attr, optional_u64_attr, string_attr, u32_attr,
 };
 use chrono::Utc;
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
 use transport::dto::{
     EvtxApplicationEventDto, EvtxBootEventDto, EvtxEventSummaryDto, EvtxEventViewDto,

@@ -5,7 +5,7 @@ use evidence_core::{
     filesystem::root_node, EvidenceReader, FileSystemDiagnostic, FileSystemDiagnosticKind, FsNode,
 };
 use fs_ntfs::mft_scanner::MftRecord;
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::{params, Connection};
 use std::{
     cmp::Ordering as CmpOrdering,
@@ -29,8 +29,8 @@ fn standalone_file_entries_connection(source_id: &str) -> (tempfile::TempDir, Co
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("source.db");
     let conn = persistence_sqlite::open_or_create_source(&path).unwrap();
-    persistence_sqlite::source_fjall::configure_source_identity(&conn, source_id).unwrap();
-    persistence_sqlite::source_fjall::open_store_for_write(&conn)
+    persistence_source::detail::configure_source_identity(&conn, source_id).unwrap();
+    persistence_source::detail::open_store_for_write(&conn)
         .unwrap()
         .unwrap();
     (root, conn)

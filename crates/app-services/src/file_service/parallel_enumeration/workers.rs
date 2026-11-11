@@ -2,7 +2,8 @@ use crossbeam_channel::{Receiver, Sender};
 use domain::DataSourceId;
 use evidence_core::{FileSystemDiagnostic, FileSystemDiagnosticKind, FileSystemReader};
 use infrastructure::constants::FILE_INSERT_BATCH_SIZE;
-use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::{DbError, DbResult};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 

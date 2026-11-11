@@ -84,10 +84,10 @@ fn insert_entries(tmp: &TempDir, source_id: &str, documents: &[SearchFileDocumen
             hash_sha256: None,
         })
         .collect::<Vec<_>>();
-    persistence_sqlite::repositories::file_repo::FileRepo::new(&connection)
+    persistence_source::repositories::file_repo::FileRepo::new(&connection)
         .insert_batch(&entries)
         .unwrap();
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&connection)
+    let store = persistence_source::detail::open_store_for_write(&connection)
         .unwrap()
         .unwrap();
     persistence_fjall::replace_source_generation(

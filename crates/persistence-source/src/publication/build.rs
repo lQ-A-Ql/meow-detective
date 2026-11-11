@@ -52,8 +52,8 @@ pub fn open_fresh_source_build_db(
         )));
     }
     let connection = persistence_sqlite::open_or_create_source(&build_path)?;
-    persistence_sqlite::source_fjall::configure_source_identity(&connection, &data_source_id.0)?;
-    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &build_path)?;
+    crate::detail::configure_source_identity(&connection, &data_source_id.0)?;
+    crate::detail::configure_source_fjall(&connection, &build_path)?;
     connection.pragma_update(
         None,
         "wal_autocheckpoint",
@@ -63,7 +63,7 @@ pub fn open_fresh_source_build_db(
 }
 
 pub fn finalize_source_build_db(conn: &Connection) -> DbResult<()> {
-    let source_id = persistence_sqlite::source_fjall::source_id(conn)?
+    let source_id = crate::detail::source_id(conn)?
         .ok_or_else(|| DbError::System("source identity is missing".to_string()))?;
     let database_path: String = conn.query_row(
         "SELECT file FROM pragma_database_list WHERE name = 'main'",
@@ -83,12 +83,12 @@ pub fn finalize_source_build_db(conn: &Connection) -> DbResult<()> {
             .is_some_and(|parent| parent.join(name).is_dir())
     });
     if generation_exists {
-        let store = persistence_sqlite::source_fjall::open_store_for_write(conn)?
+        let store = crate::detail::open_store_for_write(conn)?
             .ok_or_else(|| DbError::System("source store is missing".to_string()))?;
         persistence_fjall::verify_source_generation(&store, &source_id)
             .map_err(|error| DbError::System(error.to_string()))?;
     }
-    persistence_sqlite::source_fjall::bind_generation(conn, "source.fjall")?;
+    crate::detail::bind_generation(conn, "source.fjall")?;
     verify_source_db_integrity(conn)?;
     checkpoint_source_db(conn)?;
     let journal_mode: String =

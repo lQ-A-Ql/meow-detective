@@ -78,7 +78,7 @@ pub fn get_infrastructure_graph(
             provenance_json: edge.provenance_json,
         })
         .collect();
-    let network_facts = persistence_sqlite::repositories::infrastructure_network_fact_repo::InfrastructureNetworkFactRepo::new(connection)
+    let network_facts = persistence_source::repositories::infrastructure_network_fact_repo::InfrastructureNetworkFactRepo::new(connection)
         .list_for_case(&case_id.0)?
         .into_iter()
         .map(|fact| InfrastructureNetworkFactDto {

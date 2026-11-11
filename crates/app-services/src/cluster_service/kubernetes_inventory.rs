@@ -1,5 +1,6 @@
 use domain::{DataSourceId, EntryType, FileEntryId, KubernetesScopeId};
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 
 use crate::source_db;

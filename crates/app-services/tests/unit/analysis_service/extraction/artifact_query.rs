@@ -1,7 +1,7 @@
 use super::*;
 use chrono::{TimeZone, Utc};
 use domain::{Artifact, ArtifactId};
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use serde_json::json;
 
 fn artifact(id: &str, family: &str, attrs: Value) -> Artifact {
@@ -22,7 +22,7 @@ fn artifact(id: &str, family: &str, attrs: Value) -> Artifact {
 
 fn source(root: &std::path::Path) -> Connection {
     let conn = persistence_sqlite::open_or_create_source(&root.join("source.db")).unwrap();
-    persistence_sqlite::source_fjall::configure_source_identity(&conn, "source").unwrap();
+    persistence_source::detail::configure_source_identity(&conn, "source").unwrap();
     conn
 }
 

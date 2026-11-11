@@ -9,9 +9,9 @@ use domain::{
     DataSourceProvenance, EdgeType, EntryType, FileEntry, FileEntryId, GraphEdge, GraphNode,
     NodeType,
 };
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, file_repo::FileRepo};
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, case_repo::CaseRepo, datasource_repo::DataSourceRepo,
-    file_repo::FileRepo, graph_repo::GraphRepo,
+    case_repo::CaseRepo, datasource_repo::DataSourceRepo, graph_repo::GraphRepo,
 };
 use rusqlite::Connection;
 use serde_json::Value;

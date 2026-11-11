@@ -1,13 +1,11 @@
 use std::net::IpAddr;
 
 use domain::{CaseId, DataSourceId, FileEntry};
-use persistence_sqlite::{
-    repositories::infrastructure_network_fact_repo::{
-        InfrastructureNetworkConfigRow as ConfigRow, InfrastructureNetworkFactRecord as Fact,
-        InfrastructureNetworkFactRepo,
-    },
-    DbResult,
+use persistence_source::repositories::infrastructure_network_fact_repo::{
+    InfrastructureNetworkConfigRow as ConfigRow, InfrastructureNetworkFactRecord as Fact,
+    InfrastructureNetworkFactRepo,
 };
+use persistence_sqlite::DbResult;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
@@ -16,7 +14,7 @@ use crate::{
     file_service::{read_file_bytes_for_case, SourceReadContext},
     source_db,
 };
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_source::repositories::file_repo::FileRepo;
 
 const MAX_NETWORK_CONFIG_ROWS: usize = 8_192;
 const PARSER_ID: &str = "linux.network.config.v1";

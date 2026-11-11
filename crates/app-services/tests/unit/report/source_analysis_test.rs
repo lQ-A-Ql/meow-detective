@@ -9,12 +9,12 @@ use domain::{
     DataSourcePlatform, DataSourceProvenance, EntryType, FileEntry, FileEntryId, TimelineEvent,
     TimelineEventId,
 };
+use persistence_source::repositories::{
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
+};
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo,
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
-    file_repo::FileRepo,
-    timeline_repo::TimelineRepo,
 };
 use transport::commands::ExportScopeDto;
 use transport::dto::{AnalysisParseStatusDto, TimelineEventDto};
@@ -68,9 +68,9 @@ fn register_source(
     let database_path = crate::source_db::source_db_path(case_root, &source.id);
     let source_conn =
         persistence_sqlite::open_or_create_source(&database_path).expect("create source database");
-    persistence_sqlite::source_fjall::configure_source_identity(&source_conn, &source.id.0)
+    persistence_source::detail::configure_source_identity(&source_conn, &source.id.0)
         .expect("configure source identity");
-    persistence_sqlite::source_fjall::configure_source_fjall(&source_conn, &database_path)
+    persistence_source::detail::configure_source_fjall(&source_conn, &database_path)
         .expect("configure source details");
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(case_id, &source)
@@ -100,7 +100,7 @@ fn register_source(
             hash_sha256: None,
         }])
         .expect("insert source file");
-    let store = persistence_sqlite::source_fjall::open_store_for_write(&source_conn)
+    let store = persistence_source::detail::open_store_for_write(&source_conn)
         .expect("open source store")
         .expect("configured source store");
     persistence_fjall::replace_source_generation(

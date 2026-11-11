@@ -2,7 +2,8 @@
 
 use super::{DigestServiceError, DigestTarget};
 use domain::{CaseId, DataSourceId, DataSourceKind};
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use sha2::{Digest, Sha256};
 use std::path::Path;
 

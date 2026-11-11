@@ -5,11 +5,11 @@ use crate::analysis_service::capability::{
     find_capability, AnalysisCapability, CHECKPOINT_VERSIONS,
 };
 use crate::analysis_service::error::AnalysisServiceError;
+use persistence_source::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use persistence_sqlite::repositories::analysis_scan_repo::{
     AnalysisScanRepo, CleanAnalysisCandidateScan, CompleteAnalysisCandidateScan,
     DiagnosticAnalysisCandidateScan,
 };
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use rusqlite::Connection;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use transport::dto::{
