@@ -1,22 +1,13 @@
 import { create } from 'zustand';
-import type {
-  AnalysisExtractionProgressInfo,
-  AnalysisExtractionProgressState,
-} from '@/features/analysis/types';
-import type {
-  AndroidAnalysisTabKey,
-  AnalysisTabKey,
-  ExtractionCategory,
-  LinuxAnalysisTabKey,
-} from '@/features/analysis/types';
-import { ANALYSIS_EXTRACTION_CATEGORIES } from '@/features/analysis/types';
-export { isExtractionCategory } from '@/features/analysis/types';
-export type {
-  AnalysisPlatformView,
-  AnalysisTabKey,
-  ExtractionCategory,
-  LinuxAnalysisTabKey,
-} from '@/features/analysis/types';
+import {
+  ANALYSIS_EXTRACTION_CATEGORIES,
+  type AnalysisExtractionProgressInfo,
+  type AnalysisExtractionProgressState,
+  type AnalysisTabKey,
+  type AndroidAnalysisTabKey,
+  type ExtractionCategory,
+  type LinuxAnalysisTabKey,
+} from '@/types/analysisUi';
 
 function emptyProgress(): Omit<AnalysisExtractionProgressInfo, 'label'> {
   return {

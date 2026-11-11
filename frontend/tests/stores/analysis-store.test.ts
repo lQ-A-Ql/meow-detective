@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ANALYSIS_EXTRACTION_CATEGORIES } from '@/features/analysis/types';
-import {
-  isExtractionCategory,
-  labeledProgress,
-  statusFromRun,
-  useAnalysisStore,
-} from '@/stores/analysis-store';
+import { ANALYSIS_EXTRACTION_CATEGORIES, isExtractionCategory } from '@/types/analysisUi';
+import { labeledProgress, statusFromRun, useAnalysisStore } from '@/stores/analysis-store';
 
 describe('analysis-store', () => {
   beforeEach(() => {
