@@ -57,6 +57,7 @@ fn with_raw_exfat_case_file(
             },
         )
         .unwrap();
+    publish_exfat_partition_metadata(tmp.path(), &ds_id);
     let file_id = domain::FileEntryId("file-protocol-raw-exfat".to_string());
     FileRepo::new(&source_conn)
         .insert_batch(&[domain::FileEntry {
@@ -88,6 +89,47 @@ fn with_raw_exfat_case_file(
         .encode()
         .0;
     test(&state, &conn, tmp.path(), case_id, global_file_id).unwrap();
+}
+
+fn publish_exfat_partition_metadata(
+    case_root: &std::path::Path,
+    data_source_id: &domain::DataSourceId,
+) {
+    let storage =
+        app_services::source_db::open_fjall_source_read_write(case_root, &data_source_id.0)
+            .expect("open Fjall source storage");
+    let record = persistence_source::fjall::PartitionRecord {
+        id: "partition:0".to_string(),
+        data_source_id: data_source_id.0.clone(),
+        partition_index: 0,
+        name: "Volume".to_string(),
+        kind_label: "EXFAT".to_string(),
+        status: "supported".to_string(),
+        type_guid: None,
+        offset: 0,
+        length: 1024 * 512,
+        filesystem: Some("EXFAT".to_string()),
+        unlock_hint: None,
+        lvm_vg_uuid: None,
+        lvm_vg_name: None,
+        lvm_lv_uuid: None,
+        lvm_lv_name: None,
+        lvm_pv_offsets_json: None,
+        lvm_pv_sources_json: None,
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
+    };
+    storage
+        .partition_replace_by_source(
+            &data_source_id.0,
+            &[record],
+            persistence_source::fjall::PersistMode::Buffer,
+        )
+        .expect("write Fjall partition records");
+    storage
+        .partition_projection_publish(&data_source_id.0)
+        .expect("publish Fjall partition projection");
 }
 
 fn write_exfat_raw_fixture(path: &std::path::Path) -> std::io::Result<()> {

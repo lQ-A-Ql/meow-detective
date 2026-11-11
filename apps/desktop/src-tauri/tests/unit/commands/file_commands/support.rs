@@ -169,6 +169,7 @@ pub(super) fn with_raw_exfat_case_file(
                 app_services::source_db::open_source_db(&case_root, &data_source_id)?;
             DataSourceRepo::new(&source_connection)
                 .upsert_source_local_metadata(&case_id, &data_source)?;
+            publish_exfat_partition_metadata(&case_root, &data_source_id)?;
 
             let file_id = domain::FileEntryId("file-raw-exfat-large".to_string());
             FileRepo::new(&source_connection).insert_batch(&[domain::FileEntry {
@@ -206,6 +207,48 @@ pub(super) fn with_raw_exfat_case_file(
             )
         })
         .unwrap();
+}
+
+fn publish_exfat_partition_metadata(
+    case_root: &Path,
+    data_source_id: &domain::DataSourceId,
+) -> Result<(), persistence_sqlite::DbError> {
+    let storage =
+        app_services::source_db::open_fjall_source_read_write(case_root, &data_source_id.0)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let record = persistence_source::fjall::PartitionRecord {
+        id: "partition:0".to_string(),
+        data_source_id: data_source_id.0.clone(),
+        partition_index: 0,
+        name: "Volume".to_string(),
+        kind_label: "EXFAT".to_string(),
+        status: "supported".to_string(),
+        type_guid: None,
+        offset: 0,
+        length: 1024 * 512,
+        filesystem: Some("EXFAT".to_string()),
+        unlock_hint: None,
+        lvm_vg_uuid: None,
+        lvm_vg_name: None,
+        lvm_lv_uuid: None,
+        lvm_lv_name: None,
+        lvm_pv_offsets_json: None,
+        lvm_pv_sources_json: None,
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
+    };
+    storage
+        .partition_replace_by_source(
+            &data_source_id.0,
+            &[record],
+            persistence_source::fjall::PersistMode::Buffer,
+        )
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    storage
+        .partition_projection_publish(&data_source_id.0)
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    Ok(())
 }
 
 fn write_exfat_raw_fixture(path: &Path, extension: &str) -> std::io::Result<()> {
