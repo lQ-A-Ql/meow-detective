@@ -50,6 +50,25 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
     let count = FileRepo::new(&source_conn)
         .count_by_data_source(&source.id)
         .expect("count catalog records");
+    let native =
+        app_services::source_db::open_registered_fjall_source_read_only(&case_root, &source.id)
+            .expect("open published Fjall source");
+    let snapshot = native.snapshot();
+    let partitions = native
+        .partition_list_by_source(
+            &snapshot,
+            &source.id.0,
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            10,
+        )
+        .expect("read persisted partition metadata");
+    assert_eq!(partitions.records.len(), 1);
+    assert_eq!(partitions.records[0].partition_index, 0);
+    assert_eq!(partitions.records[0].filesystem.as_deref(), Some("Btrfs"));
+    assert!(native
+        .partition_projection_complete(&snapshot, &source.id.0)
+        .expect("verify partition projection marker"));
     let storage = DataSourceRepo::new(&conn)
         .find_storage(&source.id)
         .expect("read storage")

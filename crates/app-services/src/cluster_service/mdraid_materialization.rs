@@ -11,6 +11,8 @@ use super::mdraid::{
     discover_linux_evidence_set_mdraid, open_mdraid_reader, open_persisted_mdraid_reader,
     write_mdraid_descriptor, MdRaidArrayPlan, MdRaidPlanError,
 };
+use persistence_fjall::{PartitionRecord, PartitionRecordStore, PersistMode};
+use sha2::{Digest, Sha256};
 
 pub fn materialize_mdraid_array(
     conn: &rusqlite::Connection,
@@ -127,10 +129,78 @@ pub fn materialize_mdraid_source_catalog_with_cancel(
         let _ = repo.update_import_state(&source.0.id, "failed", Some(&message));
         return Err(MdRaidPlanError::Io(std::io::Error::other(message)));
     }
+    publish_mdraid_catalog_generation(&source.0, &source_conn)
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
     crate::source_db::checkpoint_source_db(&source_conn)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error.to_string())))?;
     repo.update_import_state(&source.0.id, "ready", None)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    Ok(())
+}
+
+fn publish_mdraid_catalog_generation(
+    source: &DataSource,
+    source_conn: &rusqlite::Connection,
+) -> Result<(), String> {
+    let store = persistence_sqlite::source_fjall::open_store_for_write(source_conn)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "MD RAID source detail storage is missing".to_string())?;
+    let partition = PartitionRecord {
+        id: "partition:0".to_string(),
+        data_source_id: source.id.0.clone(),
+        partition_index: 0,
+        name: "Btrfs root".to_string(),
+        kind_label: "MD RAID".to_string(),
+        status: "supported".to_string(),
+        type_guid: None,
+        offset: 0,
+        length: source.provenance.evidence_size.unwrap_or_default(),
+        filesystem: Some("Btrfs".to_string()),
+        unlock_hint: None,
+        lvm_vg_uuid: None,
+        lvm_vg_name: None,
+        lvm_lv_uuid: None,
+        lvm_lv_name: None,
+        lvm_pv_offsets_json: None,
+        lvm_pv_sources_json: None,
+        gpt_disk_guid: None,
+        gpt_partition_uuid: None,
+        filesystem_uuid: None,
+    };
+    PartitionRecordStore::from_source_store((*store).clone())
+        .replace_by_source(&source.id.0, &[partition], PersistMode::Buffer)
+        .map_err(|error| error.to_string())?;
+    let (keyspace, key, marker) =
+        crate::partition_storage_service::partition_projection_marker(&source.id.0)
+            .map_err(|error| error.to_string())?;
+    store
+        .write_envelope(keyspace, key, &marker, PersistMode::Buffer)
+        .map_err(|error| error.to_string())?;
+    store
+        .database()
+        .persist(PersistMode::SyncAll)
+        .map_err(|error| error.to_string())?;
+    let mut digest = Sha256::new();
+    digest.update(b"mdraid-btrfs-catalog-v1");
+    digest.update(source.id.0.as_bytes());
+    digest.update(
+        source
+            .provenance
+            .evidence_size
+            .unwrap_or_default()
+            .to_le_bytes(),
+    );
+    persistence_fjall::replace_source_generation(
+        &store,
+        &source.id.0,
+        "mdraid-btrfs-catalog-v1",
+        &hex::encode(digest.finalize()),
+    )
+    .map_err(|error| error.to_string())?;
+    persistence_fjall::verify_source_generation(&store, &source.id.0)
+        .map_err(|error| error.to_string())?;
+    persistence_sqlite::source_fjall::bind_generation(source_conn, "source.fjall")
+        .map_err(|error| error.to_string())?;
     Ok(())
 }
 
