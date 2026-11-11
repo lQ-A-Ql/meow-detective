@@ -26,7 +26,7 @@ fn fingerprint(object_id: &str) -> ForensicFingerprint {
 #[test]
 fn upsert_round_trips_and_replaces_same_object() {
     let conn = open_in_memory().unwrap();
-    runner::run_source_all(&conn).unwrap();
+    runner::run_all(&conn).unwrap();
     let repo = ForensicFingerprintRepo::new(&conn);
     let first = fingerprint("file-1");
     repo.upsert(&first).unwrap();
@@ -47,7 +47,7 @@ fn upsert_round_trips_and_replaces_same_object() {
 #[test]
 fn invalid_content_digest_is_rejected_before_persistence() {
     let conn = open_in_memory().unwrap();
-    runner::run_source_all(&conn).unwrap();
+    runner::run_all(&conn).unwrap();
     let repo = ForensicFingerprintRepo::new(&conn);
     let mut value = fingerprint("file-2");
     value.content_sha256 = Some("not-a-sha256".to_string());
