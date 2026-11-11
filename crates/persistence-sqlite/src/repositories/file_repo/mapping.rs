@@ -1,7 +1,7 @@
 use crate::util::parse_opt_datetime;
 use domain::{DataSourceId, EntryType, FileEncryptionStatus, FileEntry, FileEntryId};
 
-pub(crate) fn row_to_file_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileEntry> {
+pub fn row_to_file_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileEntry> {
     let entry_type: String = row.get(5)?;
     let encryption_status = file_encryption_status_from_row(row, 16)?;
     Ok(FileEntry {

@@ -7,7 +7,7 @@ mod browse_paging;
 mod browse_partition;
 mod indexing;
 mod lookup;
-pub(crate) mod mapping;
+pub mod mapping;
 mod registry_hives;
 mod visiting;
 mod writes;
