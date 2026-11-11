@@ -1,175 +1,17 @@
-use super::{
-    path_safety::{
-        safe_case_managed_destination, safe_case_relative_path, safe_existing_case_path,
-    },
-    paths::{canonical_source_db_rel_path, source_db_path},
-    ready::{validate_ready_storage, ReadySourceError},
-};
-use domain::{DataSource, DataSourceId};
-use persistence_sqlite::{
-    repositories::datasource_repo::{DataSourceRepo, DataSourceStorage},
-    DbError, DbResult,
-};
+//! Source database opening facade.
+//!
+//! Opening, schema verification, and WAL durability live in
+//! `persistence-source`; this module keeps the existing
+//! `crate::source_db::opening::*` paths plus the ready-state enumeration that
+//! depends on the application-level ready-source policy.
+
+pub use persistence_source::control::opening::*;
+
+use domain::DataSource;
+use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use rusqlite::Connection;
-use std::path::{Path, PathBuf};
 
-pub fn open_source_db(case_root: &Path, data_source_id: &DataSourceId) -> DbResult<Connection> {
-    super::identity::validate_source_storage_id(data_source_id)?;
-    let started = std::time::Instant::now();
-    std::fs::create_dir_all(case_root.join("artifacts").join("objects"))?;
-    let database_path = source_db_path(case_root, data_source_id);
-    let connection = persistence_sqlite::open_or_create_source(&database_path)?;
-    persistence_sqlite::source_fjall::configure_source_identity(&connection, &data_source_id.0)?;
-    persistence_sqlite::source_fjall::configure_source_fjall(&connection, &database_path)?;
-    tracing::debug!(
-        data_source_id = %data_source_id.0,
-        elapsed_ms = started.elapsed().as_millis(),
-        "Source control database opened"
-    );
-    Ok(connection)
-}
-
-pub fn open_registered_source_db(
-    case_conn: &Connection,
-    case_root: &Path,
-    data_source_id: &DataSourceId,
-) -> DbResult<Connection> {
-    let db_path = registered_source_db_path(case_conn, case_root, data_source_id)?;
-    let storage = DataSourceRepo::new(case_conn)
-        .find_storage(data_source_id)?
-        .ok_or_else(|| DbError::System(format!("Data source '{}' not found", data_source_id.0)))?;
-    let expected_schema_version = persistence_sqlite::migrations::runner::latest_source_version();
-    if storage.schema_version.as_deref() != Some(expected_schema_version) {
-        return Err(DbError::System(format!(
-            "Data source '{}' source DB schema is obsolete; re-import is required",
-            data_source_id.0
-        )));
-    }
-    let read_only = persistence_sqlite::open_existing_source_read_only(&db_path)?;
-    let actual_schema_version =
-        persistence_sqlite::migrations::runner::current_version(&read_only)?;
-    if actual_schema_version.as_deref() != Some(expected_schema_version) {
-        return Err(DbError::System(format!(
-            "Data source '{}' physical source DB schema is obsolete; re-import is required",
-            data_source_id.0
-        )));
-    }
-    drop(read_only);
-    persistence_sqlite::open_existing(&db_path)
-}
-
-pub fn open_registered_source_db_read_only(
-    case_conn: &Connection,
-    case_root: &Path,
-    data_source_id: &DataSourceId,
-) -> DbResult<Connection> {
-    let expected = persistence_sqlite::migrations::runner::latest_source_version();
-    let storage = DataSourceRepo::new(case_conn)
-        .find_storage(data_source_id)?
-        .ok_or_else(|| DbError::System(format!("Data source '{}' not found", data_source_id.0)))?;
-    let registered_schema_version = storage.schema_version.as_deref().ok_or_else(|| {
-        DbError::System(format!(
-            "Data source '{}' is missing source DB schema version",
-            data_source_id.0
-        ))
-    })?;
-    if registered_schema_version != expected {
-        return Err(DbError::System(format!(
-            "Data source '{}' uses an obsolete source DB schema; re-import is required",
-            data_source_id.0
-        )));
-    }
-    let db_path = registered_source_db_path(case_conn, case_root, data_source_id)?;
-    let connection = persistence_sqlite::open_existing_source_read_only(&db_path)?;
-    let actual_schema_version =
-        persistence_sqlite::migrations::runner::current_version(&connection)?;
-    let actual_schema_version = actual_schema_version.as_deref().ok_or_else(|| {
-        DbError::System(format!(
-            "Data source '{}' physical source DB has no schema version",
-            data_source_id.0
-        ))
-    })?;
-    if actual_schema_version != registered_schema_version {
-        return Err(DbError::System(format!(
-            "Data source '{}' source DB schema metadata is inconsistent; registered '{}', physical '{}'",
-            data_source_id.0, registered_schema_version, actual_schema_version
-        )));
-    }
-    if actual_schema_version != expected {
-        return Err(DbError::System(format!(
-            "Data source '{}' physical source DB schema is obsolete; re-import is required",
-            data_source_id.0
-        )));
-    }
-    Ok(connection)
-}
-
-pub fn registered_source_db_path(
-    case_conn: &Connection,
-    case_root: &Path,
-    data_source_id: &DataSourceId,
-) -> DbResult<PathBuf> {
-    let storage = DataSourceRepo::new(case_conn)
-        .find_storage(data_source_id)?
-        .ok_or_else(|| DbError::System(format!("Data source '{}' not found", data_source_id.0)))?;
-    if storage.storage_model != "source_db" {
-        return Err(DbError::System(format!(
-            "Data source '{}' uses unsupported storage model '{}'",
-            data_source_id.0, storage.storage_model
-        )));
-    }
-    if storage.schema_version.is_none() {
-        return Err(DbError::System(format!(
-            "Data source '{}' is missing source DB schema version; re-import is required",
-            data_source_id.0
-        )));
-    }
-    let rel_path = storage.source_db_rel_path.ok_or_else(|| {
-        DbError::System(format!(
-            "Data source '{}' is missing source DB path; re-import is required",
-            data_source_id.0
-        ))
-    })?;
-    if rel_path.replace('\\', "/") != canonical_source_db_rel_path(data_source_id) {
-        return Err(DbError::System(format!(
-            "Data source '{}' is bound to a non-canonical source DB path; re-import is required",
-            data_source_id.0
-        )));
-    }
-    let db_path = safe_case_relative_path(case_root, &rel_path)?;
-    if !db_path.exists() {
-        return Err(DbError::System(format!(
-            "Data source '{}' source DB is missing at {}; re-import is required",
-            data_source_id.0,
-            db_path.display()
-        )));
-    }
-    safe_existing_case_path(case_root, &db_path)
-}
-
-pub fn registered_source_index_dir(
-    case_conn: &Connection,
-    case_root: &Path,
-    data_source_id: &DataSourceId,
-) -> DbResult<PathBuf> {
-    let storage = DataSourceRepo::new(case_conn)
-        .find_storage(data_source_id)?
-        .ok_or_else(|| DbError::System(format!("Data source '{}' not found", data_source_id.0)))?;
-    if storage.storage_model != "source_db" {
-        return Err(DbError::System(format!(
-            "Data source '{}' uses unsupported storage model '{}'",
-            data_source_id.0, storage.storage_model
-        )));
-    }
-    let rel_path = storage.index_rel_path.ok_or_else(|| {
-        DbError::System(format!(
-            "Data source '{}' is missing search index path; re-import is required",
-            data_source_id.0
-        ))
-    })?;
-    let index_dir = safe_case_relative_path(case_root, &rel_path)?;
-    safe_case_managed_destination(case_root, &index_dir)
-}
+use super::ready::{validate_ready_storage, ReadySourceError};
 
 pub(crate) fn ready_data_sources(
     case_conn: &Connection,
@@ -190,27 +32,4 @@ pub(crate) fn ready_data_sources(
         }
     }
     Ok(ready)
-}
-
-pub fn checkpoint_source_db(conn: &Connection) -> DbResult<()> {
-    let (busy, log_frames, checkpointed_frames): (u32, u64, u64) =
-        conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })?;
-    if busy != 0 || log_frames != checkpointed_frames {
-        return Err(DbError::System(format!(
-            "Source DB WAL checkpoint did not converge: busy={busy}, logFrames={log_frames}, checkpointedFrames={checkpointed_frames}"
-        )));
-    }
-    Ok(())
-}
-
-pub fn verify_source_db_integrity(conn: &Connection) -> DbResult<()> {
-    let result = conn.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0))?;
-    if result.eq_ignore_ascii_case("ok") {
-        return Ok(());
-    }
-    Err(DbError::System(format!(
-        "Source DB integrity check failed: {result}"
-    )))
 }
