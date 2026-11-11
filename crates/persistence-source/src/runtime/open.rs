@@ -1,8 +1,6 @@
-use super::{
-    artifact_root, source_registry, DatabaseConfig, FjallStorageError, StorageRuntimeError,
-};
+use super::{artifact_root, registry, StorageRuntimeError};
 use artifact_storage::ArtifactStore;
-use persistence_fjall::SourceStore;
+use persistence_fjall::{DatabaseConfig, FjallStorageError, SourceStore};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -40,7 +38,7 @@ pub(super) fn open_parts(
     } else {
         ArtifactStore::from_objects_root(&artifact_root)?
     });
-    let source_store = source_registry::open_shared_source_store(source_root, config)?;
+    let source_store = registry::open_shared_source_store(source_root, config)?;
     tracing::debug!(
         source_root = %source_root.display(),
         read_only,

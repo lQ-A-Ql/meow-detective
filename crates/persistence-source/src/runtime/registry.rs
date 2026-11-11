@@ -1,5 +1,5 @@
-use super::{DatabaseConfig, SourceStore, StorageRuntimeError};
-use persistence_fjall::FjallStorageError;
+use super::StorageRuntimeError;
+use persistence_fjall::{DatabaseConfig, FjallStorageError, SourceStore};
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -23,7 +23,7 @@ struct CachedStore {
 
 static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
 
-pub(crate) struct SourceStoreCloseGuard {
+pub struct SourceStoreCloseGuard {
     blockers: Vec<PathBuf>,
 }
 
@@ -145,7 +145,7 @@ pub(super) fn open_shared_source_store(
     Ok(store)
 }
 
-pub(crate) fn close_source_store(
+pub fn close_source_store(
     case_root: impl AsRef<Path>,
     source_id: &str,
 ) -> Result<Option<SourceStoreCloseGuard>, StorageRuntimeError> {
@@ -153,7 +153,7 @@ pub(crate) fn close_source_store(
     close_source_store_at_path(&source_root)
 }
 
-pub(crate) fn close_source_store_at_path(
+pub fn close_source_store_at_path(
     source_root: &Path,
 ) -> Result<Option<SourceStoreCloseGuard>, StorageRuntimeError> {
     let source_root = canonicalize_or_resolve(source_root)?;
@@ -182,7 +182,7 @@ pub(crate) fn close_source_store_at_path(
     }))
 }
 
-pub(crate) fn close_case_source_stores(
+pub fn close_case_source_stores(
     case_root: &Path,
 ) -> Result<Option<SourceStoreCloseGuard>, StorageRuntimeError> {
     let case_root = canonicalize_or_resolve(case_root)?;

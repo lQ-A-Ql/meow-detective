@@ -1,6 +1,8 @@
 use domain::DataSourceId;
-use persistence_fjall::{KeyPart, KeyspaceName, PartitionRecord, PersistMode, VersionedEnvelope};
+use persistence_fjall::{PartitionRecord, PersistMode};
 use thiserror::Error;
+
+pub(crate) use persistence_source::runtime::partition_marker::partition_projection_marker;
 
 #[derive(Debug, Error)]
 pub enum PartitionStorageError {
@@ -94,23 +96,4 @@ fn filesystem_name(kind: crate::datasource_service::ImageFilesystemKind) -> Stri
         crate::datasource_service::ImageFilesystemKind::LvmPool => "LVM",
     }
     .to_owned()
-}
-
-pub(crate) fn partition_projection_marker(
-    source_id: &str,
-) -> Result<(KeyspaceName, Vec<u8>, VersionedEnvelope), crate::storage_runtime::StorageRuntimeError>
-{
-    let key = persistence_fjall::encode_key(
-        "partition_projection",
-        &[KeyPart::Text(source_id.to_owned())],
-    )?;
-    let marker = VersionedEnvelope::new(
-        "partition_projection_complete",
-        1,
-        format!("partition-projection:{source_id}"),
-        source_id,
-        1,
-        source_id.as_bytes().to_vec(),
-    );
-    Ok((KeyspaceName::Meta, key, marker))
 }

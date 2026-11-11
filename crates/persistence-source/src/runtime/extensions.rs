@@ -1,7 +1,6 @@
-use crate::search_metadata_projection::SearchProjectionMarker;
-use crate::storage_runtime::{
-    ReadOnlySourceStorageHandle, ReadWriteSourceStorageHandle, StorageRuntimeError,
-};
+use super::partition_marker::partition_projection_marker;
+use super::search_marker::SearchProjectionMarker;
+use super::{ReadOnlySourceStorageHandle, ReadWriteSourceStorageHandle, StorageRuntimeError};
 use persistence_fjall::{
     ArtifactPage, ArtifactRecord, ArtifactRecordStore, CatalogPage, CatalogRecordStore,
     FileEntryRecord, ParserFieldQuery, ParserPage, ParserRecord, ParserRecordStore, PartitionPage,
@@ -33,8 +32,7 @@ impl ReadOnlySourceStorageHandle {
         {
             return Ok(false);
         }
-        let (keyspace, key, _) =
-            crate::partition_storage_service::partition_projection_marker(source_id)?;
+        let (keyspace, key, _) = partition_projection_marker(source_id)?;
         Ok(self
             .read_envelope(snapshot, keyspace, &key)?
             .is_some_and(|envelope| {
@@ -184,7 +182,7 @@ impl ReadOnlySourceStorageHandle {
             .get(snapshot, source_id, record_id)
             .map_err(StorageRuntimeError::Source)
     }
-    pub(crate) fn search_projection_marker(
+    pub fn search_projection_marker(
         &self,
         snapshot: &SourceReadSnapshot,
         source_id: &str,
@@ -353,8 +351,7 @@ impl ReadWriteSourceStorageHandle {
     }
 
     pub fn partition_projection_publish(&self, source_id: &str) -> Result<(), StorageRuntimeError> {
-        let (keyspace, key, marker) =
-            crate::partition_storage_service::partition_projection_marker(source_id)?;
+        let (keyspace, key, marker) = partition_projection_marker(source_id)?;
         self.write_envelope(keyspace, key, &marker, PersistMode::SyncAll)?;
         Ok(())
     }
