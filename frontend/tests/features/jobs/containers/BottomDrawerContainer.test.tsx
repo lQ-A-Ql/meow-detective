@@ -130,6 +130,9 @@ describe('BottomDrawer jobs panel', () => {
     viewports.forEach((viewport) => {
       expect(viewport.className).toContain('overflow-x-hidden');
     });
+    // Radix sizes its inner wrapper with `display: table`, so the jobs cards grew past
+    // the column; the jobs viewport must force that wrapper back to block.
+    expect(viewports[0]?.className).toContain('[&>div]:block!');
   });
 
   it('truncates the collapsed headline while preserving its full status as a tooltip', () => {

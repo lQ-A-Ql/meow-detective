@@ -15,7 +15,10 @@ export function BottomDrawerJobs({ model, analysisProgress }: BottomDrawerJobsPr
   return (
     <ScrollArea
       className="min-h-0 min-w-0 overflow-hidden border-r border-forensics-border"
-      viewportClassName="min-w-0 overflow-x-hidden p-3"
+      // Radix wraps viewport content in an inline `display: table` div, which sizes to
+      // min-content and pushes cards past the column; the jobs column never scrolls
+      // horizontally, so force that wrapper back to block so cards fit the column.
+      viewportClassName="min-w-0 overflow-x-hidden p-3 [&>div]:block!"
     >
       <div className="mb-2 flex min-w-0 items-center justify-between gap-2 text-[10px] font-light uppercase tracking-wider text-forensics-text-tertiary">
         <span className="shrink-0">{t('bottomDrawer.jobs.title')}</span>
