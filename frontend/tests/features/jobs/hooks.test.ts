@@ -42,7 +42,7 @@ describe('jobs hooks', () => {
       ];
       mocks.getJobsSnapshot.mockResolvedValue(jobs);
 
-      const { result } = renderHook(() => useJobsSnapshot(), {
+      const { result } = renderHook(() => useJobsSnapshot('case-1'), {
         wrapper: createWrapper(),
       });
 
@@ -54,12 +54,21 @@ describe('jobs hooks', () => {
     it('returns empty array when no jobs exist', async () => {
       mocks.getJobsSnapshot.mockResolvedValue([]);
 
-      const { result } = renderHook(() => useJobsSnapshot(), {
+      const { result } = renderHook(() => useJobsSnapshot('case-1'), {
         wrapper: createWrapper(),
       });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toEqual([]);
+    });
+
+    it('does not fetch without an active case', () => {
+      const { result } = renderHook(() => useJobsSnapshot(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.fetchStatus).toBe('idle');
+      expect(mocks.getJobsSnapshot).not.toHaveBeenCalled();
     });
   });
 

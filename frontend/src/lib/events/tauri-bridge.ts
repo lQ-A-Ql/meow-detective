@@ -38,12 +38,12 @@ export async function startTauriEventBridge(): Promise<void> {
     'file-extract-progress',
   ];
 
-  for (const topic of topics) {
-    const unlisten = await listen<EventEnvelope>(topic, (event) => {
+  const listeners = await Promise.all(
+    topics.map((topic) => listen<EventEnvelope>(topic, (event) => {
       eventBus.publishEvent(event.payload);
-    });
-    unlisteners.push(unlisten);
-  }
+    })),
+  );
+  unlisteners.push(...listeners);
 }
 
 /**

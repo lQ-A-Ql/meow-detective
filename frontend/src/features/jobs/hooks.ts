@@ -75,6 +75,7 @@ export function useJobsSnapshot(caseId?: string) {
   const query = useQuery({
     queryKey: ['jobs', 'snapshot', caseId ?? null],
     queryFn: getJobsSnapshot,
+    enabled: Boolean(caseId),
     refetchInterval: (activeQuery) => (shouldPollJobs(activeQuery.state.data as JobSnapshot[] | undefined) ? JOB_POLL_INTERVAL_MS : false),
     refetchIntervalInBackground: true,
   });
