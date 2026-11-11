@@ -133,8 +133,9 @@ fn wal_discovery_full_streaming_checkpoint_reuse_and_failed_replacement_are_atom
     );
     connection
         .execute_batch(
-            "CREATE TRIGGER stop_browser BEFORE INSERT ON forensic_fingerprints
-             BEGIN SELECT RAISE(ABORT,'native output commit failure'); END;",
+            "CREATE TRIGGER stop_browser BEFORE INSERT ON source_meta
+             WHEN NEW.key LIKE 'analysis_candidate_scan:%'
+             BEGIN SELECT RAISE(ABORT,'analysis control commit failure'); END;",
         )
         .unwrap();
     assert!(run_analysis_extraction(

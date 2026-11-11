@@ -180,6 +180,19 @@ fn execute_import_job_internal(
     let message = profile::measure_optional(profiling.as_ref(), Phase::PostReady, || {
         super::post_ready::finish(&mut ctx, &ds, &source_conn, message)
     })?;
+    profile::emit_phase_profile(
+        ctx.event_sink(),
+        ctx.job_id,
+        ctx.case_id,
+        Some(&ds.id),
+        99,
+        format!(
+            "Import profile complete: phase=total elapsedMs={} rssMb={}",
+            profile::elapsed_ms(import_started.elapsed()),
+            crate::runtime_resources::current_rss_mb()
+        ),
+        ctx.cancel_requested(),
+    );
     cleanup.start();
     Ok((message, counts))
 }

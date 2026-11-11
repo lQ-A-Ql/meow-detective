@@ -1,4 +1,6 @@
+use super::output_digest::OutputDigestAccumulator;
 use super::state::AnalysisOutputProducer;
+use super::state::PersistedExtractionOutcome;
 use crate::analysis_service::error::AnalysisServiceError;
 use domain::{Artifact, TimelineEvent};
 use persistence_fjall::{
@@ -35,7 +37,89 @@ pub(super) struct StreamingGeneration {
     projection_batch_digest: String,
 }
 
+pub(super) struct ConcurrentOutputBatch<'a> {
+    generation: &'a StreamingGeneration,
+    artifacts: Vec<Artifact>,
+    events: Vec<TimelineEvent>,
+    artifact_count: u64,
+    timeline_event_count: u64,
+    digest: OutputDigestAccumulator,
+}
+
+impl<'a> ConcurrentOutputBatch<'a> {
+    pub(super) fn new(generation: &'a StreamingGeneration) -> Self {
+        Self {
+            generation,
+            artifacts: Vec::new(),
+            events: Vec::new(),
+            artifact_count: 0,
+            timeline_event_count: 0,
+            digest: OutputDigestAccumulator::default(),
+        }
+    }
+
+    pub(super) fn push(&mut self, mut outcome: super::ExtractionOutcome) {
+        for artifact in outcome.artifacts {
+            self.digest.record_artifact(&artifact);
+            self.artifacts.push(artifact);
+            self.artifact_count = self.artifact_count.saturating_add(1);
+        }
+        crate::timeline_service::retain_analysis_events(&mut outcome.timeline_events);
+        for event in outcome.timeline_events {
+            self.digest.record_timeline_event(&event);
+            self.events.push(event);
+            self.timeline_event_count = self.timeline_event_count.saturating_add(1);
+        }
+    }
+
+    pub(super) fn pending_artifact_count(&self) -> usize {
+        self.artifacts.len()
+    }
+
+    pub(super) fn flush(&mut self) -> Result<(), AnalysisServiceError> {
+        if !self.artifacts.is_empty() {
+            super::output_persistence::validate_artifact_source_attribution(
+                &self.artifacts,
+                &self.generation.source_id,
+            )?;
+            self.generation.write_batch(&self.artifacts, &[])?;
+            self.artifacts.clear();
+        }
+        if !self.events.is_empty() {
+            self.generation.write_batch(&[], &self.events)?;
+            self.events.clear();
+        }
+        Ok(())
+    }
+
+    pub(super) fn finish(
+        mut self,
+        warnings: Vec<String>,
+    ) -> Result<PersistedExtractionOutcome, AnalysisServiceError> {
+        self.flush()?;
+        Ok(PersistedExtractionOutcome {
+            artifact_count: self.artifact_count,
+            timeline_event_count: self.timeline_event_count,
+            warnings,
+            output_digest: self.digest.finish(),
+        })
+    }
+}
+
 impl StreamingGeneration {
+    pub(super) fn parser_workspace(&self) -> Result<PathBuf, AnalysisServiceError> {
+        self.store
+            .database()
+            .path()
+            .parent()
+            .map(|parent| parent.join("parser-inputs/browser"))
+            .ok_or_else(|| {
+                AnalysisServiceError::Other(
+                    "analysis generation has no parser workspace parent".into(),
+                )
+            })
+    }
+
     pub(super) fn write_batch(
         &self,
         artifacts: &[Artifact],
@@ -49,7 +133,7 @@ impl StreamingGeneration {
                 })
                 .collect::<Vec<_>>();
             ArtifactRecordStore::from_source_store(self.store.clone())
-                .upsert_batch(&records, PersistMode::Buffer)
+                .upsert_batch_independent(&records, PersistMode::Buffer)
                 .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
         }
         if !events.is_empty() {
@@ -60,9 +144,29 @@ impl StreamingGeneration {
                 })
                 .collect::<Vec<_>>();
             TimelineRecordStore::from_source_store(self.store.clone())
-                .upsert_batch(&records, PersistMode::Buffer)
+                .upsert_batch_independent(&records, PersistMode::Buffer)
                 .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
         }
+        Ok(())
+    }
+
+    pub(super) fn persist_outcome(
+        &self,
+        outcome: super::ExtractionOutcome,
+    ) -> Result<PersistedExtractionOutcome, AnalysisServiceError> {
+        let warnings = outcome.warnings.clone();
+        let mut batch = ConcurrentOutputBatch::new(self);
+        batch.push(outcome);
+        batch.finish(warnings)
+    }
+
+    pub(super) fn rebuild_derived_metrics(&self) -> Result<(), AnalysisServiceError> {
+        ArtifactRecordStore::from_source_store(self.store.clone())
+            .rebuild_metrics_for_source(&self.source_id, PersistMode::Buffer)
+            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        TimelineRecordStore::from_source_store(self.store.clone())
+            .rebuild_count_indexes(&self.source_id, PersistMode::Buffer)
+            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
         Ok(())
     }
 

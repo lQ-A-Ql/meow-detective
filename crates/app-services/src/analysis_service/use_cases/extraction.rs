@@ -51,6 +51,33 @@ struct AnalysisExecutionControl<'a> {
     browser_password: Option<&'a str>,
 }
 
+fn analysis_progress_dto(
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    run_id: &str,
+    update: ExtractionProgressUpdate,
+) -> AnalysisExtractionProgressDto {
+    AnalysisExtractionProgressDto {
+        run_id: run_id.to_string(),
+        case_id: case_id.0.clone(),
+        data_source_id: data_source_id.0.clone(),
+        category: update.category,
+        label: update.label,
+        phase: update.phase,
+        total_candidates: update.total_candidates,
+        processed_candidates: update.processed_candidates,
+        structured_candidates: update.structured_candidates,
+        unsupported_candidates: update.unsupported_candidates,
+        text_fallback_candidates: update.text_fallback_candidates,
+        warning_candidates: update.warning_candidates,
+        checkpoint_hit_count: update.checkpoint_hit_count,
+        artifact_count: update.artifact_count,
+        timeline_event_count: update.timeline_event_count,
+        current_path: update.current_path,
+        detail: update.detail,
+    }
+}
+
 pub fn run_source_analysis_extraction(
     case_conn: &Connection,
     case_root: &Path,
@@ -125,25 +152,12 @@ pub fn run_source_analysis_extraction_with_progress_and_cancel(
         cancel_token.load(std::sync::atomic::Ordering::Relaxed),
     ));
     let mut emit = |update: ExtractionProgressUpdate| {
-        progress(AnalysisExtractionProgressDto {
-            run_id: context.run_id.to_string(),
-            case_id: case_id.0.clone(),
-            data_source_id: data_source_id.0.clone(),
-            category: update.category,
-            label: update.label,
-            phase: update.phase,
-            total_candidates: update.total_candidates,
-            processed_candidates: update.processed_candidates,
-            structured_candidates: update.structured_candidates,
-            unsupported_candidates: update.unsupported_candidates,
-            text_fallback_candidates: update.text_fallback_candidates,
-            warning_candidates: update.warning_candidates,
-            checkpoint_hit_count: update.checkpoint_hit_count,
-            artifact_count: update.artifact_count,
-            timeline_event_count: update.timeline_event_count,
-            current_path: update.current_path,
-            detail: update.detail,
-        });
+        progress(analysis_progress_dto(
+            case_id,
+            data_source_id,
+            context.run_id,
+            update,
+        ));
     };
     let control = AnalysisExecutionControl {
         cancel_token: Arc::clone(&cancel_token),
@@ -336,24 +350,28 @@ pub(crate) fn run_import_source_extraction(
     case_root: &Path,
     case_id: &CaseId,
     source: &DataSourceId,
+    categories: &[&str],
     runtime: &AnalysisSourceReadRuntime,
     cancel_token: Arc<AtomicBool>,
-) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
-    let mut ignore = |_update: ExtractionProgressUpdate| {};
+    run_id: &str,
+    mut progress: impl FnMut(AnalysisExtractionProgressDto),
+) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
+    let mut emit = |update: ExtractionProgressUpdate| {
+        progress(analysis_progress_dto(case_id, source, run_id, update));
+    };
     run_source_analysis_extraction_execution_with_progress(
         case_conn,
         case_root,
         case_id,
         source,
-        &["LinuxArtifacts"],
+        categories,
         AnalysisExecutionControl {
             cancel_token,
             source_runtime: runtime,
-            progress: &mut ignore,
+            progress: &mut emit,
             browser_password: None,
         },
     )
-    .map(|execution| execution.dto)
 }
 
 fn candidate_source_from_range_reader(reader: RangeContentReader) -> CandidateSource {

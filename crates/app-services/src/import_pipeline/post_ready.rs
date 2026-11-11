@@ -1,6 +1,7 @@
 //! Complete post-Ready artifact work under the import publication lease.
 use super::context::ImportJobContext;
 use std::sync::atomic::Ordering;
+use std::time::Instant;
 use transport::CommandError;
 
 pub(super) fn finish(
@@ -54,27 +55,80 @@ fn auto_extract_platform_artifacts(
     if let Some(source) = &ctx.runtime {
         runtime = runtime.with_publication(source.publication_lease());
     }
-    let run = if ctx.import_config.platform == domain::DataSourcePlatform::Linux {
-        crate::analysis_service::run_import_source_extraction(
-            ctx.conn,
-            ctx.case_root,
-            ctx.case_id,
-            &data_source.id,
-            &runtime,
-            ctx.options.cancel_token.clone(),
-        )
-    } else {
-        crate::analysis_service::run_source_analysis_extraction_with_cancel(
-            ctx.conn,
-            ctx.case_root,
-            ctx.case_id,
-            &data_source.id,
-            &["Registry", "BrowserHistory", "Email", "EventLogs"],
-            ctx.options.cancel_token.clone(),
-        )
+    let categories = match ctx.import_config.platform {
+        domain::DataSourcePlatform::Linux => &["LinuxArtifacts"][..],
+        domain::DataSourcePlatform::Windows => {
+            &["Registry", "BrowserHistory", "Email", "EventLogs"][..]
+        }
+        _ => unreachable!("platform was checked above"),
     };
+    let analysis_started = Instant::now();
+    let mut last_phase = None;
+    let event_sink = ctx.event_sink();
+    let job_id = ctx.job_id.0.as_str();
+    let mut audit_progress = |progress: transport::dto::AnalysisExtractionProgressDto| {
+        if last_phase != Some(progress.phase) {
+            last_phase = Some(progress.phase);
+            super::emit::emit_job_progress(
+                event_sink,
+                job_id,
+                96,
+                &format!(
+                    "analysis-audit: phase={:?} elapsedMs={}",
+                    progress.phase,
+                    analysis_started.elapsed().as_millis()
+                ),
+            );
+        }
+        if progress.phase == transport::dto::AnalysisExtractionPhaseDto::Completed {
+            super::emit::emit_job_progress(
+                event_sink,
+                job_id,
+                96,
+                &format!(
+                    "analysis-audit: category={} candidates={} processed={} artifacts={} timeline={} checkpoints={} elapsedMs={}",
+                    progress.category,
+                    progress.total_candidates,
+                    progress.processed_candidates,
+                    progress.artifact_count,
+                    progress.timeline_event_count,
+                    progress.checkpoint_hit_count,
+                    analysis_started.elapsed().as_millis()
+                ),
+            );
+        }
+    };
+    let run = crate::analysis_service::run_import_source_extraction(
+        ctx.conn,
+        ctx.case_root,
+        ctx.case_id,
+        &data_source.id,
+        categories,
+        &runtime,
+        ctx.options.cancel_token.clone(),
+        job_id,
+        &mut audit_progress,
+    );
     match run {
-        Ok(run) => {
+        Ok(execution) => {
+            let run = execution.dto;
+            super::emit::emit_job_progress(
+                event_sink,
+                job_id,
+                96,
+                &format!(
+                    "analysis-audit: phase=summary discoveryMs={} processingMs={} persistenceMs={} sourceReads={} sourceReadMs={} retryableFailures={} fsReads={:?} radosReads={:?} totalMs={}",
+                    execution.discovery_elapsed_ms,
+                    execution.processing_elapsed_ms,
+                    execution.persistence_elapsed_ms,
+                    execution.source_read_count,
+                    execution.source_read_elapsed_ms,
+                    execution.retryable_failure_count,
+                    execution.filesystem_read_metrics,
+                    execution.rados_read_metrics,
+                    analysis_started.elapsed().as_millis()
+                ),
+            );
             let facts = crate::cluster_service::collect_linux_evidence_facts(
                 ctx.conn,
                 ctx.case_root,
@@ -105,7 +159,9 @@ fn auto_extract_platform_artifacts(
                     true,
                 )
                 .map_err(CommandError::from_service_error)?;
-            message.push_str(&format!("; Linux artifact auto-analysis partial: {error}"));
+            message.push_str(&format!(
+                "; {platform_label} artifact auto-analysis partial: {error}"
+            ));
         }
     }
     Ok(message)

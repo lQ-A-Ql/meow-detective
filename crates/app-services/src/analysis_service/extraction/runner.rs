@@ -7,12 +7,16 @@ use super::candidate_processing::{
 };
 use super::checkpoint_validation::existing_complete_scan_keys;
 use super::linux::{resolve_linux_log_time, LinuxLogTimeContext};
-use super::output_persistence::flush_pending_outputs;
+use super::native_output;
+use super::output_persistence::{commit_analysis_control, resolve_output_data_source_id};
 use super::preparation::prepare_registry_preload;
 use super::progress::{ExtractionProgressReporter, ExtractionProgressUpdate};
 use super::registry_preload::RegistryPreloadContext;
 use super::scheduler::acquire_extraction_slot;
-use super::state::{existing_clean_scan_keys, existing_diagnostic_scan_keys, ExtractionState};
+use super::state::{
+    existing_clean_scan_keys, existing_diagnostic_scan_keys, AnalysisOutputProducer,
+    AnalysisOutputReplacement, ExtractionState,
+};
 use super::{PluginExtractFailure, PluginLoadRecord};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{
@@ -182,7 +186,7 @@ fn run_analysis_extraction_with_plugin_loader(
 #[allow(clippy::too_many_arguments)]
 fn run_analysis_extraction_with_plugin_loader_with_password(
     conn: &Connection,
-    case_id: &str,
+    _case_id: &str,
     platform: DataSourcePlatform,
     categories: &[&str],
     cancel_token: &AtomicBool,
@@ -244,17 +248,22 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
     )?;
     preloads.systemd.annotate(&mut candidates);
     ensure_not_cancelled(cancel_token)?;
+    let output_source_id = resolve_output_data_source_id(conn)?;
+    let replacements =
+        candidate_replacements(&candidates, &selected, &plugin_extractors, &checkpoints);
+    let output = native_output::begin_streaming(conn, &output_source_id, &replacements)?;
+    let discovery_elapsed_ms = elapsed_millis(discovery_started);
     progress_reporter.begin_extraction();
     let mut state = ExtractionState::new(&selected);
     record_preload_warnings(&selected, &preloads, &mut state);
     let processing_started = Instant::now();
     let processing_context = CandidateProcessingContext::new(
         conn,
-        case_id,
         &selected,
         &checkpoints,
         preloads.as_refs(),
         &plugin_extractors,
+        &output,
         cancel_token,
     );
     process_candidates(
@@ -265,14 +274,19 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
         &mut progress_reporter,
     )?;
     ensure_not_cancelled(cancel_token)?;
+    let processing_elapsed_ms = elapsed_millis(processing_started);
     progress_reporter.begin_persisting();
+    let persistence_started = Instant::now();
+    output.rebuild_derived_metrics()?;
+    let staged_generation = output.seal()?;
     let result = finalize_run(
         conn,
-        case_id,
         state,
         &mut progress_reporter,
-        elapsed_millis(discovery_started),
-        elapsed_millis(processing_started),
+        staged_generation,
+        discovery_elapsed_ms,
+        processing_elapsed_ms,
+        persistence_started,
         plugin_loads,
         plugin_rejections,
     )?;
@@ -285,15 +299,17 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
 #[allow(clippy::too_many_arguments)]
 fn finalize_run(
     conn: &Connection,
-    case_id: &str,
     mut state: ExtractionState,
     progress_reporter: &mut ExtractionProgressReporter<'_>,
+    staged_generation: native_output::StagedGeneration,
     discovery_elapsed_ms: u64,
     processing_elapsed_ms: u64,
+    persistence_started: Instant,
     plugin_loads: Vec<PluginLoadRecord>,
     plugin_rejections: Vec<PluginRejection>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
-    let persistence_elapsed_ms = flush_pending_outputs(conn, case_id, &mut state)?;
+    commit_analysis_control(conn, &mut state, staged_generation)?;
+    let persistence_elapsed_ms = elapsed_millis(persistence_started);
     let retryable_failure_count = state.retryable_failure_count;
     let plugin_extract_failures = state.take_plugin_failures();
     let dto = state.into_dto(conn, Utc::now().to_rfc3339())?;
@@ -316,6 +332,52 @@ fn finalize_run(
         plugin_rejections,
         plugin_extract_failures,
     })
+}
+
+fn candidate_replacements(
+    candidates: &[EvidenceCandidate],
+    selected: &[AnalysisCapability],
+    plugins: &[&dyn ArtifactExtractor],
+    checkpoints: &ExistingCheckpoints<'_>,
+) -> Vec<AnalysisOutputReplacement> {
+    let mut replacements = Vec::new();
+    for candidate in candidates {
+        let Some(capability) = capability_for_candidate(selected, candidate) else {
+            continue;
+        };
+        if checkpoints.has_candidate(candidate, capability) {
+            continue;
+        }
+        if capability.key == PLUGIN_CAPABILITY_KEY {
+            for producer in super::plugin::matching_producer_ids(plugins, candidate) {
+                push_replacement(
+                    &mut replacements,
+                    AnalysisOutputReplacement {
+                        source_object_id: candidate.file_id.0.clone(),
+                        producer: AnalysisOutputProducer::ExtractorId(producer),
+                    },
+                );
+            }
+        } else {
+            push_replacement(
+                &mut replacements,
+                AnalysisOutputReplacement {
+                    source_object_id: candidate.file_id.0.clone(),
+                    producer: AnalysisOutputProducer::Prefix(capability.producer_prefix()),
+                },
+            );
+        }
+    }
+    replacements
+}
+
+fn push_replacement(
+    replacements: &mut Vec<AnalysisOutputReplacement>,
+    replacement: AnalysisOutputReplacement,
+) {
+    if !replacements.contains(&replacement) {
+        replacements.push(replacement);
+    }
 }
 
 /// Keep plugins whose declared evidence platform matches the run platform.

@@ -6,7 +6,8 @@ use super::linux::{
     unsupported_linux_candidate_outcome, LinuxLogTimeContext,
 };
 use super::linux_sections::LinuxCandidateSupport;
-use super::plugin::{extract_plugin_candidate, PluginCandidateOutcome};
+use super::native_output::StreamingGeneration;
+use super::plugin::extract_plugin_candidate;
 use super::progress::{CandidateProgressResult, ExtractionProgressReporter};
 pub(super) use super::reader::read_candidate_bytes_with_progress;
 pub(super) use super::reader::{
@@ -76,31 +77,31 @@ pub(super) struct PreloadContexts<'a> {
 
 pub(super) struct CandidateProcessingContext<'a> {
     conn: &'a Connection,
-    case_id: &'a str,
     selected: &'a [AnalysisCapability],
     checkpoints: &'a ExistingCheckpoints<'a>,
     preloads: PreloadContexts<'a>,
     plugins: &'a [&'a dyn ArtifactExtractor],
+    output: &'a StreamingGeneration,
     cancel_token: &'a AtomicBool,
 }
 
 impl<'a> CandidateProcessingContext<'a> {
     pub(super) fn new(
         conn: &'a Connection,
-        case_id: &'a str,
         selected: &'a [AnalysisCapability],
         checkpoints: &'a ExistingCheckpoints<'a>,
         preloads: PreloadContexts<'a>,
         plugins: &'a [&'a dyn ArtifactExtractor],
+        output: &'a StreamingGeneration,
         cancel_token: &'a AtomicBool,
     ) -> Self {
         Self {
             conn,
-            case_id,
             selected,
             checkpoints,
             preloads,
             plugins,
+            output,
             cancel_token,
         }
     }
@@ -158,6 +159,7 @@ where
                 context.preloads.browser,
                 context.preloads.linux_log_time,
                 context.plugins,
+                context.output,
                 context.cancel_token,
             )
         },
@@ -202,6 +204,11 @@ struct PreparedCandidate {
 enum PreparedCandidateInput {
     Registry,
     Bytes(Vec<u8>),
+    Extraction(ExtractionOutcome),
+    Browser {
+        primary: Vec<u8>,
+        companions: Vec<ArtifactCompanion>,
+    },
     Plugin {
         primary: Vec<u8>,
         companions: Vec<ArtifactCompanion>,
@@ -215,15 +222,17 @@ struct CandidateCompletion {
 }
 
 enum CandidateCompletionKind {
-    Outcome(ExtractionOutcome),
-    Plugin(PluginCandidateOutcome),
-    Persisted(PersistedExtractionOutcome),
+    Persisted {
+        observation: PersistedExtractionOutcome,
+        plugin_failures: Vec<super::PluginExtractFailure>,
+    },
     Deferred(String),
     Warning(String),
     ReplayDiagnostic(Vec<String>),
     ReplayClean,
     ReplayComplete(CompleteAnalysisCandidateScan),
     ExistingV1,
+    Failed(AnalysisServiceError),
     Cancelled,
 }
 
@@ -243,10 +252,7 @@ where
 
     if let Some(warning) = encrypted_candidate_warning(&candidate) {
         return Ok(PreparedWork::Ready(CandidateCompletion {
-            kind: CandidateCompletionKind::Outcome(ExtractionOutcome {
-                warnings: vec![warning],
-                ..ExtractionOutcome::default()
-            }),
+            kind: CandidateCompletionKind::Warning(warning),
             candidate,
             capability,
         }));
@@ -265,18 +271,26 @@ where
         .systemd
         .and_then(|preload| preload.outcome(&candidate))
     {
-        return Ok(PreparedWork::Ready(CandidateCompletion {
-            candidate,
-            capability,
-            kind: CandidateCompletionKind::Outcome(outcome),
-        }));
+        return Ok(PreparedWork::Parallel {
+            input: PreparedCandidate {
+                candidate,
+                capability,
+                input: PreparedCandidateInput::Extraction(outcome),
+            },
+            weight_bytes: 0,
+        });
     }
     if is_unsupported_linux_candidate(&candidate) {
-        return Ok(PreparedWork::Ready(CandidateCompletion {
-            kind: CandidateCompletionKind::Outcome(unsupported_linux_candidate_outcome(&candidate)),
-            candidate,
-            capability,
-        }));
+        return Ok(PreparedWork::Parallel {
+            input: PreparedCandidate {
+                candidate: candidate.clone(),
+                capability,
+                input: PreparedCandidateInput::Extraction(unsupported_linux_candidate_outcome(
+                    &candidate,
+                )),
+            },
+            weight_bytes: 0,
+        });
     }
     if capability.read_policy == CandidateReadPolicy::RegistryPreload {
         return Ok(PreparedWork::Parallel {
@@ -298,6 +312,7 @@ fn parse_candidate(
     browser_preload: &BrowserPreloadContext,
     linux_log_time: &LinuxLogTimeContext,
     plugins: &[&dyn ArtifactExtractor],
+    output: &StreamingGeneration,
     cancel_token: &AtomicBool,
 ) -> CandidateCompletion {
     let PreparedCandidate {
@@ -312,39 +327,73 @@ fn parse_candidate(
             kind: CandidateCompletionKind::Cancelled,
         };
     }
-    let kind =
-        match input {
-            PreparedCandidateInput::Registry => match preload.snapshot(&candidate) {
-                Some(snapshot) => {
-                    let boot_key = preload.boot_key(&candidate);
-                    CandidateCompletionKind::Outcome(extract_snapshot_candidate(
-                        &candidate, snapshot, boot_key,
-                    ))
+    let kind = match input {
+        PreparedCandidateInput::Registry => match preload.snapshot(&candidate) {
+            Some(snapshot) => {
+                let boot_key = preload.boot_key(&candidate);
+                persist_candidate_outcome(
+                    output,
+                    extract_snapshot_candidate(&candidate, snapshot, boot_key),
+                    Vec::new(),
+                )
+            }
+            None => CandidateCompletionKind::Warning(format!(
+                "{} registry bytes not preloaded",
+                candidate.path
+            )),
+        },
+        PreparedCandidateInput::Bytes(_) if capability.key == PLUGIN_CAPABILITY_KEY => {
+            unreachable!("plugin candidates use PreparedCandidateInput::Plugin")
+        }
+        PreparedCandidateInput::Plugin {
+            primary,
+            companions,
+        } => {
+            // Plugins that only know the host wall clock mark their events;
+            // convert them with the resolved host timezone before merge.
+            let mut plugin_outcome =
+                extract_plugin_candidate(&candidate, &primary, &companions, plugins);
+            linux_log_time.convert_marked_local_events(&mut plugin_outcome.outcome.timeline_events);
+            persist_candidate_outcome(output, plugin_outcome.outcome, plugin_outcome.failures)
+        }
+        PreparedCandidateInput::Bytes(bytes) if candidate.category == "EventLogs" => {
+            match super::evtx::extract_evtx_candidate(&candidate, &bytes) {
+                Ok(outcome) => persist_candidate_outcome(output, outcome, Vec::new()),
+                Err(artifacts_windows::evtx::EvtxBootError::Cancelled) => {
+                    CandidateCompletionKind::Cancelled
                 }
-                None => CandidateCompletionKind::Warning(format!(
-                    "{} registry bytes not preloaded",
-                    candidate.path
-                )),
-            },
-            PreparedCandidateInput::Bytes(_) if capability.key == PLUGIN_CAPABILITY_KEY => {
-                unreachable!("plugin candidates use PreparedCandidateInput::Plugin")
+                Err(error) => CandidateCompletionKind::Deferred(error.to_string()),
             }
-            PreparedCandidateInput::Plugin {
-                primary,
-                companions,
-            } => {
-                // Plugins that only know the host wall clock mark their events;
-                // convert them with the resolved host timezone before merge.
-                let mut plugin_outcome =
-                    extract_plugin_candidate(&candidate, &primary, &companions, plugins);
-                linux_log_time
-                    .convert_marked_local_events(&mut plugin_outcome.outcome.timeline_events);
-                CandidateCompletionKind::Plugin(plugin_outcome)
+        }
+        PreparedCandidateInput::Bytes(bytes) => persist_candidate_outcome(
+            output,
+            extract_bytes(&candidate, &bytes, browser_preload, linux_log_time),
+            Vec::new(),
+        ),
+        PreparedCandidateInput::Extraction(outcome) => {
+            persist_candidate_outcome(output, outcome, Vec::new())
+        }
+        PreparedCandidateInput::Browser {
+            primary,
+            companions,
+        } => {
+            match super::browser::persistence::persist_worker(
+                output,
+                &candidate,
+                &primary,
+                &companions,
+                browser_preload,
+                cancel_token,
+            ) {
+                Ok(observation) => CandidateCompletionKind::Persisted {
+                    observation,
+                    plugin_failures: Vec::new(),
+                },
+                Err(AnalysisServiceError::Cancelled) => CandidateCompletionKind::Cancelled,
+                Err(error) => CandidateCompletionKind::Failed(error),
             }
-            PreparedCandidateInput::Bytes(bytes) => CandidateCompletionKind::Outcome(
-                extract_bytes(&candidate, &bytes, browser_preload, linux_log_time),
-            ),
-        };
+        }
+    };
     let kind = if ensure_not_cancelled(cancel_token).is_err() {
         CandidateCompletionKind::Cancelled
     } else {
@@ -384,35 +433,27 @@ where
         kind,
     } = completion;
     let result = match kind {
-        CandidateCompletionKind::Outcome(outcome) => {
-            let result = progress_result(&outcome, false);
-            coordinator
-                .state
-                .record_outcome(capability, &candidate, outcome);
-            result
-        }
-        CandidateCompletionKind::Plugin(plugin_outcome) => {
-            let result = progress_result(&plugin_outcome.outcome, false);
-            let producer_ids =
-                super::plugin::matching_producer_ids(coordinator.context.plugins, &candidate);
-            coordinator.state.record_plugin_outcome(
-                capability,
-                &candidate,
-                plugin_outcome,
-                &producer_ids,
-            );
-            result
-        }
-        CandidateCompletionKind::Persisted(outcome) => {
+        CandidateCompletionKind::Persisted {
+            observation,
+            plugin_failures,
+        } => {
             let result = CandidateProgressResult {
-                artifact_count: outcome.artifact_count,
-                timeline_event_count: outcome.timeline_event_count,
-                warning: !outcome.warnings.is_empty(),
+                artifact_count: observation.artifact_count,
+                timeline_event_count: observation.timeline_event_count,
+                warning: !observation.warnings.is_empty(),
                 ..CandidateProgressResult::default()
             };
-            coordinator
-                .state
-                .record_persisted_outcome(capability, outcome);
+            if capability.key == PLUGIN_CAPABILITY_KEY {
+                coordinator.state.record_persisted_plugin_outcome(
+                    capability,
+                    observation,
+                    plugin_failures,
+                );
+            } else {
+                coordinator
+                    .state
+                    .record_persisted_outcome(capability, &candidate, observation);
+            }
             result
         }
         CandidateCompletionKind::Deferred(warning) => {
@@ -456,6 +497,7 @@ where
             }
         }
         CandidateCompletionKind::ExistingV1 => CandidateProgressResult::default(),
+        CandidateCompletionKind::Failed(error) => return Err(error),
         CandidateCompletionKind::Cancelled => return Err(AnalysisServiceError::Cancelled),
     };
     coordinator
@@ -464,12 +506,17 @@ where
     ensure_not_cancelled(coordinator.context.cancel_token)
 }
 
-fn progress_result(outcome: &ExtractionOutcome, checkpoint_hit: bool) -> CandidateProgressResult {
-    CandidateProgressResult {
-        artifact_count: outcome.artifacts.len() as u64,
-        timeline_event_count: outcome.timeline_events.len() as u64,
-        warning: !outcome.warnings.is_empty(),
-        checkpoint_hit,
+fn persist_candidate_outcome(
+    output: &StreamingGeneration,
+    outcome: ExtractionOutcome,
+    plugin_failures: Vec<super::PluginExtractFailure>,
+) -> CandidateCompletionKind {
+    match output.persist_outcome(outcome) {
+        Ok(observation) => CandidateCompletionKind::Persisted {
+            observation,
+            plugin_failures,
+        },
+        Err(error) => CandidateCompletionKind::Failed(error),
     }
 }
 

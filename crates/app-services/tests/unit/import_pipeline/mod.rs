@@ -122,6 +122,9 @@ impl RecordingImportEventSink {
 
 impl ImportEventSink for RecordingImportEventSink {
     fn job_progress(&self, _job_id: &str, progress: u32, detail: &str) {
+        if detail.starts_with("analysis-audit:") {
+            eprintln!("[import-profile] {progress}% {detail}");
+        }
         self.record(format!("job:{progress}:{detail}"));
     }
 
@@ -1165,6 +1168,7 @@ fn e01_full_import() {
     active
         .with_conn(|conn| {
             let job_id = JobRepo::new(conn).create(&active.meta.id.0, "Import regression")?;
+            JobRepo::new(conn).start(&job_id)?;
 
             eprintln!("\n[1/7] Starting import...");
             let t_import = std::time::Instant::now();

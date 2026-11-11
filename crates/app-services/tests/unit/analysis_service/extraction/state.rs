@@ -27,7 +27,7 @@ fn warning_artifact(source_object_id: &FileEntryId) -> Artifact {
 }
 
 #[test]
-fn warning_with_artifact_checkpoint_remains_pending_until_atomic_persistence() {
+fn persisted_warning_with_artifact_records_complete_observation() {
     let fixture = native_source();
     let conn = &fixture.connection;
     let capability = crate::analysis_service::capability::find_capability("LinuxWebServices")
@@ -48,13 +48,14 @@ fn warning_with_artifact_checkpoint_remains_pending_until_atomic_persistence() {
         parser: "XFS".to_string(),
         category: crate::analysis_service::capability::LINUX_UMBRELLA_KEY.to_string(),
     };
-    state.record_outcome(
+    state.record_persisted_outcome(
         capability,
         &candidate,
-        ExtractionOutcome {
-            artifacts: vec![warning_artifact(&candidate.file_id)],
+        PersistedExtractionOutcome {
+            artifact_count: 1,
+            timeline_event_count: 0,
             warnings: vec!["deterministic parser warning".to_string()],
-            ..ExtractionOutcome::default()
+            output_digest: "a".repeat(64),
         },
     );
 
@@ -67,9 +68,8 @@ fn warning_with_artifact_checkpoint_remains_pending_until_atomic_persistence() {
         )
         .expect("count diagnostic checkpoints");
     assert_eq!(diagnostic_count, 0);
-    assert_eq!(state.artifacts.len(), 1);
     assert_eq!(state.complete_scans.len(), 1);
-    assert_eq!(state.replacements.len(), 1);
+    assert_eq!(state.complete_scans[0].artifact_count, 1);
 }
 
 #[test]
@@ -140,7 +140,7 @@ fn output_digest_is_canonical_across_insertion_order() {
         ..ExtractionOutcome::default()
     };
 
-    assert_eq!(output_digest(&forward), output_digest(&reverse));
+    assert_eq!(digest_outcome(&forward), digest_outcome(&reverse),);
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn output_digest_preserves_duplicate_multiplicity() {
         ..ExtractionOutcome::default()
     };
 
-    assert_ne!(output_digest(&single), output_digest(&duplicate));
+    assert_ne!(digest_outcome(&single), digest_outcome(&duplicate));
 }
 
 #[test]
@@ -174,7 +174,21 @@ fn retryable_source_read_failure_does_not_create_a_checkpoint() {
     assert!(state.clean_scans.is_empty());
     assert!(state.diagnostic_scans.is_empty());
     assert!(state.complete_scans.is_empty());
-    assert!(!state.has_pending_outputs());
+    assert!(state.clean_scans.is_empty());
+    assert!(state.diagnostic_scans.is_empty());
+    assert!(state.complete_scans.is_empty());
+}
+
+fn digest_outcome(outcome: &ExtractionOutcome) -> String {
+    let mut digest =
+        crate::analysis_service::extraction::output_digest::OutputDigestAccumulator::default();
+    for artifact in &outcome.artifacts {
+        digest.record_artifact(artifact);
+    }
+    for event in &outcome.timeline_events {
+        digest.record_timeline_event(event);
+    }
+    digest.finish()
 }
 
 #[test]

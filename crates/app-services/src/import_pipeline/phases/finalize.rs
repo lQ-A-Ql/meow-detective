@@ -26,19 +26,6 @@ pub(crate) fn run_finalize_phase(
     if let Some(timeline_count) = timeline_count {
         emit_projection_ready_events(ctx, timeline_count);
     }
-    emit_phase_profile(
-        ctx.event_sink(),
-        ctx.job_id,
-        ctx.case_id,
-        Some(&data_source.id),
-        99,
-        format!(
-            "Import profile complete: phase=total elapsedMs={} rssMb={}",
-            elapsed_ms(import_started.elapsed()),
-            crate::runtime_resources::current_rss_mb()
-        ),
-        ctx.cancel_requested(),
-    );
     record_import_step(ctx, stats, import_started);
     Ok(match ctx.content_kind {
         crate::import_pipeline::context::ImportContentKind::Filesystem => {

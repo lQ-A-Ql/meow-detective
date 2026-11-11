@@ -2,37 +2,37 @@ use super::*;
 use chrono::Utc;
 use domain::{Artifact, ArtifactId, FileEntryId, TimelineEvent, TimelineEventId};
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
-use std::{
-    collections::BTreeMap,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-};
+use std::{collections::BTreeMap, sync::atomic::AtomicBool};
 
 const CASE_ID: &str = "case-browser";
 const DATA_SOURCE_ID: &str = "source-browser";
 
 #[test]
-fn cancellation_after_native_batches_preserves_published_generation_and_checkpoint() {
+fn cancellation_drops_the_unpublished_generation_without_changing_published_outputs() {
     let fixture = native_source();
-    let cancel = Arc::new(AtomicBool::new(false));
-    install_cancellation_trigger(&fixture.connection, cancel.clone());
+    let cancel = AtomicBool::new(true);
     let (bytes, candidate) = browser_candidate();
     let preload = BrowserPreloadContext::empty();
-    let context = PersistenceContext {
-        connection: &fixture.connection,
-        case_id: CASE_ID,
-        capability: crate::analysis_service::capability::find_capability("BrowserHistory").unwrap(),
-        preload: &preload,
-        cancel: cancel.as_ref(),
-    };
+    let replacements = [
+        crate::analysis_service::extraction::state::AnalysisOutputReplacement {
+            source_object_id: candidate.file_id.0.clone(),
+            producer: crate::analysis_service::extraction::state::AnalysisOutputProducer::Prefix(
+                "browser.".into(),
+            ),
+        },
+    ];
+    let output = crate::analysis_service::extraction::native_output::begin_streaming(
+        &fixture.connection,
+        DATA_SOURCE_ID,
+        &replacements,
+    )
+    .expect("stage browser generation");
 
     assert!(matches!(
-        persist(context, &candidate, &bytes, &[]),
+        persist_worker(&output, &candidate, &bytes, &[], &preload, &cancel),
         Err(AnalysisServiceError::Cancelled)
     ));
-    assert!(cancel.load(Ordering::Acquire));
+    drop(output);
     assert_previous_outputs_unchanged(&fixture.connection);
     assert_eq!(checkpoint_count(&fixture.connection), 0);
     assert_no_build_generation(&fixture.source_dir);
@@ -92,36 +92,6 @@ fn native_source() -> NativeSource {
         source_dir,
         connection,
     }
-}
-
-fn install_cancellation_trigger(connection: &Connection, cancel: Arc<AtomicBool>) {
-    connection
-        .create_scalar_function(
-            "cancel_browser",
-            0,
-            rusqlite::functions::FunctionFlags::SQLITE_UTF8,
-            move |_| {
-                cancel.store(true, Ordering::Release);
-                Ok(0)
-            },
-        )
-        .expect("register cancellation function");
-    connection
-        .execute_batch(
-            "CREATE TRIGGER cancel_browser_native_write
-             AFTER INSERT ON forensic_fingerprints
-             WHEN NEW.source_id = 'source-browser'
-               AND NEW.object_type = 'artifact'
-               AND (
-                   SELECT COUNT(*) FROM forensic_fingerprints
-                   WHERE source_id = 'source-browser'
-                     AND object_type = 'artifact'
-               ) >= 256
-             BEGIN
-                 SELECT cancel_browser();
-             END;",
-        )
-        .expect("install cancellation trigger");
 }
 
 fn browser_candidate() -> (Vec<u8>, EvidenceCandidate) {

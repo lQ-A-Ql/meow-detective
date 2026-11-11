@@ -13,7 +13,7 @@ use crate::analysis_service::extraction::ExtractionOutcome;
 use artifacts_windows::evtx::EvtxBootError;
 use artifacts_windows::{
     EvtxApplicationEvent, EvtxApplicationEventKind, EvtxBootEvent, EvtxBootEventKind,
-    EvtxSecurityEvent, EvtxSecurityEventKind, EvtxStructuredEvent, EvtxStructuredExtraction,
+    EvtxSecurityEvent, EvtxSecurityEventKind, EvtxStructuredExtraction,
 };
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -48,20 +48,6 @@ fn extract_boot_events(
 ) {
     for event in &extraction.boot_events {
         project_boot_event(candidate, event, outcome);
-    }
-}
-
-pub(super) fn project_evtx_event(
-    candidate: &EvidenceCandidate,
-    event: &EvtxStructuredEvent,
-    outcome: &mut ExtractionOutcome,
-) {
-    match event {
-        EvtxStructuredEvent::Boot(event) => project_boot_event(candidate, event, outcome),
-        EvtxStructuredEvent::Security(event) => project_security_event(candidate, event, outcome),
-        EvtxStructuredEvent::Application(event) => {
-            project_application_event(candidate, event, outcome)
-        }
     }
 }
 

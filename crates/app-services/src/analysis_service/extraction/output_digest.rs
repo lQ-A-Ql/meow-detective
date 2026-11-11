@@ -39,20 +39,6 @@ impl OutputDigestAccumulator {
     }
 }
 
-pub(super) fn output_digest_for_outputs<'a>(
-    artifacts: impl IntoIterator<Item = &'a Artifact>,
-    timeline_events: impl IntoIterator<Item = &'a TimelineEvent>,
-) -> String {
-    let mut accumulator = OutputDigestAccumulator::default();
-    for artifact in artifacts {
-        accumulator.record_artifact(artifact);
-    }
-    for event in timeline_events {
-        accumulator.record_timeline_event(event);
-    }
-    accumulator.finish()
-}
-
 #[derive(Clone, Copy, Default)]
 struct MultisetAccumulator {
     count: u64,

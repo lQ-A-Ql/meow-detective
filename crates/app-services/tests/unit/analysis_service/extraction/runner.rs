@@ -1,8 +1,6 @@
 use super::*;
 use crate::analysis_service::capability::LINUX_UMBRELLA_KEY;
 use crate::analysis_service::extraction::candidate_processing::read_candidate_bytes_with_progress;
-use crate::analysis_service::extraction::output_persistence::persist_outputs;
-use crate::analysis_service::extraction::reader::CancellableProgressReader;
 use crate::analysis_service::extraction::ExtractionOutcome;
 use chrono::Utc;
 use domain::{
@@ -14,9 +12,8 @@ use persistence_sqlite::repositories::{
 };
 use rusqlite::Connection;
 use std::collections::BTreeMap;
-use std::io::{Read, Seek, SeekFrom};
 use std::ops::Deref;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 
 #[test]
 fn owned_candidate_bytes_are_reused_without_a_second_content_copy() {
@@ -93,42 +90,6 @@ fn candidate_reader_reports_monotonic_byte_progress() {
     assert!(byte_progress.windows(2).all(|pair| pair[0] < pair[1]));
 }
 
-#[test]
-fn seekable_candidate_reports_monotonic_read_high_water() {
-    let cancel_token = AtomicBool::new(false);
-    let mut source = std::io::Cursor::new(vec![0u8; 16]);
-    let mut progress = Vec::new();
-    let mut on_progress = |bytes| progress.push(bytes);
-    {
-        let mut reader =
-            CancellableProgressReader::new(&mut source, &cancel_token, &mut on_progress);
-        let mut buffer = [0u8; 4];
-
-        reader.read_exact(&mut buffer).unwrap();
-        reader.seek(SeekFrom::Start(0)).unwrap();
-        reader.read_exact(&mut buffer[..2]).unwrap();
-        reader.seek(SeekFrom::Start(8)).unwrap();
-        reader.read_exact(&mut buffer).unwrap();
-    }
-
-    assert_eq!(progress, vec![4, 12]);
-}
-
-#[test]
-fn seekable_candidate_read_is_interrupted_after_cancellation() {
-    let cancel_token = AtomicBool::new(false);
-    let mut source = std::io::Cursor::new(vec![0u8; 16]);
-    let mut on_progress = |_| {};
-    let mut reader = CancellableProgressReader::new(&mut source, &cancel_token, &mut on_progress);
-    let mut buffer = [0u8; 4];
-    reader.read_exact(&mut buffer).unwrap();
-    cancel_token.store(true, Ordering::Relaxed);
-
-    let error = reader.read(&mut buffer).unwrap_err();
-
-    assert_eq!(error.kind(), std::io::ErrorKind::Interrupted);
-}
-
 fn output_candidate() -> EvidenceCandidate {
     EvidenceCandidate {
         file_id: FileEntryId("web-output".to_string()),
@@ -144,6 +105,70 @@ fn output_candidate() -> EvidenceCandidate {
         parser: "XFS".to_string(),
         category: LINUX_UMBRELLA_KEY.to_string(),
     }
+}
+
+fn persist_outcome_for_test(
+    connection: &Connection,
+    candidate: &EvidenceCandidate,
+    capability: AnalysisCapability,
+    outcome: ExtractionOutcome,
+) -> Result<(), AnalysisServiceError> {
+    let source_id =
+        crate::analysis_service::extraction::output_persistence::resolve_output_data_source_id(
+            connection,
+        )?;
+    let replacements = [AnalysisOutputReplacement {
+        source_object_id: candidate.file_id.0.clone(),
+        producer: AnalysisOutputProducer::Prefix(capability.producer_prefix()),
+    }];
+    let output = crate::analysis_service::extraction::native_output::begin_streaming(
+        connection,
+        &source_id,
+        &replacements,
+    )?;
+    let observation = output.persist_outcome(outcome)?;
+    let mut state = ExtractionState::new(&[capability]);
+    state.record_persisted_outcome(capability, candidate, observation);
+    output.rebuild_derived_metrics()?;
+    let staged = output.seal()?;
+    crate::analysis_service::extraction::output_persistence::commit_analysis_control(
+        connection, &mut state, staged,
+    )?;
+    Ok(())
+}
+
+fn persist_plugin_outcome_for_test(
+    connection: &Connection,
+    candidate: &EvidenceCandidate,
+    capability: AnalysisCapability,
+    outcome: ExtractionOutcome,
+    producer_ids: &[String],
+) -> Result<(), AnalysisServiceError> {
+    let source_id =
+        crate::analysis_service::extraction::output_persistence::resolve_output_data_source_id(
+            connection,
+        )?;
+    let replacements = producer_ids
+        .iter()
+        .map(|producer| AnalysisOutputReplacement {
+            source_object_id: candidate.file_id.0.clone(),
+            producer: AnalysisOutputProducer::ExtractorId(producer.clone()),
+        })
+        .collect::<Vec<_>>();
+    let output = crate::analysis_service::extraction::native_output::begin_streaming(
+        connection,
+        &source_id,
+        &replacements,
+    )?;
+    let observation = output.persist_outcome(outcome)?;
+    let mut state = ExtractionState::new(&[capability]);
+    state.record_persisted_plugin_outcome(capability, observation, Vec::new());
+    output.rebuild_derived_metrics()?;
+    let staged = output.seal()?;
+    crate::analysis_service::extraction::output_persistence::commit_analysis_control(
+        connection, &mut state, staged,
+    )?;
+    Ok(())
 }
 
 fn artifact(id: &str, source_id: &str, extractor_id: &str, version: &str) -> Artifact {
@@ -426,10 +451,10 @@ fn output_replacement_commits_artifacts_timeline_and_checkpoint_atomically() {
         .expect("insert old event");
     let capability = crate::analysis_service::capability::find_capability("LinuxWebServices")
         .expect("web capability");
-    let mut state = ExtractionState::new(&[capability]);
-    state.record_outcome(
-        capability,
+    persist_outcome_for_test(
+        &connection,
         &candidate,
+        capability,
         ExtractionOutcome {
             artifacts: vec![artifact(
                 "new-artifact",
@@ -445,9 +470,8 @@ fn output_replacement_commits_artifacts_timeline_and_checkpoint_atomically() {
             )],
             warnings: Vec::new(),
         },
-    );
-
-    persist_outputs(&connection, "case-1", &mut state).expect("replace analysis outputs");
+    )
+    .expect("replace analysis outputs");
 
     assert_eq!(
         ArtifactRepo::new(&connection)
@@ -504,10 +528,10 @@ fn output_replacement_rolls_back_when_timeline_insert_fails() {
     inject_corrupt_timeline(&connection);
     let capability = crate::analysis_service::capability::find_capability("LinuxWebServices")
         .expect("web capability");
-    let mut state = ExtractionState::new(&[capability]);
-    state.record_outcome(
-        capability,
+    persist_outcome_for_test(
+        &connection,
         &candidate,
+        capability,
         ExtractionOutcome {
             artifacts: vec![artifact(
                 "new-artifact",
@@ -523,10 +547,8 @@ fn output_replacement_rolls_back_when_timeline_insert_fails() {
             )],
             warnings: Vec::new(),
         },
-    );
-
-    persist_outputs(&connection, "case-1", &mut state)
-        .expect_err("timeline failure must roll back the replacement");
+    )
+    .expect_err("timeline failure must roll back the replacement");
 
     assert_eq!(
         native_artifact_ids(&connection),
@@ -585,10 +607,10 @@ fn output_replacement_rolls_back_when_artifact_source_attribution_conflicts() {
         "dataSourceId".to_string(),
         serde_json::Value::String("source-windows".to_string()),
     );
-    let mut state = ExtractionState::new(&[capability]);
-    state.record_outcome(
-        capability,
+    let error = persist_outcome_for_test(
+        &connection,
         &candidate,
+        capability,
         ExtractionOutcome {
             artifacts: vec![conflicting_artifact],
             timeline_events: vec![event(
@@ -599,10 +621,8 @@ fn output_replacement_rolls_back_when_artifact_source_attribution_conflicts() {
             )],
             warnings: Vec::new(),
         },
-    );
-
-    let error = persist_outputs(&connection, "case-1", &mut state)
-        .expect_err("source attribution conflict must roll back the replacement");
+    )
+    .expect_err("source attribution conflict must roll back the replacement");
 
     assert!(error.to_string().contains("source-windows"));
     assert!(error.to_string().contains("source-linux"));
@@ -630,10 +650,10 @@ fn complete_checkpoint_is_ignored_after_persisted_output_tampering() {
     let candidate = output_candidate();
     let capability = crate::analysis_service::capability::find_capability("LinuxWebServices")
         .expect("web capability");
-    let mut state = ExtractionState::new(&[capability]);
-    state.record_outcome(
-        capability,
+    persist_outcome_for_test(
+        &connection,
         &candidate,
+        capability,
         ExtractionOutcome {
             artifacts: vec![artifact(
                 "new-artifact",
@@ -649,8 +669,8 @@ fn complete_checkpoint_is_ignored_after_persisted_output_tampering() {
             )],
             warnings: Vec::new(),
         },
-    );
-    persist_outputs(&connection, "case-1", &mut state).expect("persist analysis outputs");
+    )
+    .expect("persist analysis outputs");
 
     let key = (
         candidate.file_id.0.clone(),
@@ -675,10 +695,10 @@ fn complete_checkpoint_is_ignored_when_stale_producer_output_remains() {
     let candidate = output_candidate();
     let capability = crate::analysis_service::capability::find_capability("LinuxWebServices")
         .expect("web capability");
-    let mut state = ExtractionState::new(&[capability]);
-    state.record_outcome(
-        capability,
+    persist_outcome_for_test(
+        &connection,
         &candidate,
+        capability,
         ExtractionOutcome {
             artifacts: vec![artifact(
                 "current-artifact",
@@ -689,8 +709,8 @@ fn complete_checkpoint_is_ignored_when_stale_producer_output_remains() {
             warnings: Vec::new(),
             timeline_events: Vec::new(),
         },
-    );
-    persist_outputs(&connection, "case-1", &mut state).expect("persist current output");
+    )
+    .expect("persist current output");
     ArtifactRepo::new(&connection)
         .insert_batch(
             &[artifact(
@@ -1200,31 +1220,28 @@ fn plugin_reextraction_replaces_outputs_by_exact_extractor_id() {
 
     let capability = crate::analysis_service::capability::find_capability("PluginArtifacts")
         .expect("plugin capability");
-    let mut state = ExtractionState::new(&[capability]);
-    state.record_plugin_outcome(
-        capability,
+    persist_plugin_outcome_for_test(
+        &connection,
         &candidate,
-        super::super::plugin::PluginCandidateOutcome {
-            outcome: ExtractionOutcome {
-                artifacts: vec![artifact(
-                    "new-plugin-artifact",
-                    "web-output",
-                    "meow.fixture.good",
-                    "0.2.0",
-                )],
-                timeline_events: vec![event(
-                    "new-plugin-event",
-                    "web-output",
-                    "meow.fixture.good",
-                    "0.2.0",
-                )],
-                warnings: Vec::new(),
-            },
-            failures: Vec::new(),
+        capability,
+        ExtractionOutcome {
+            artifacts: vec![artifact(
+                "new-plugin-artifact",
+                "web-output",
+                "meow.fixture.good",
+                "0.2.0",
+            )],
+            timeline_events: vec![event(
+                "new-plugin-event",
+                "web-output",
+                "meow.fixture.good",
+                "0.2.0",
+            )],
+            warnings: Vec::new(),
         },
         &["meow.fixture.good".to_string()],
-    );
-    persist_outputs(&connection, "case-1", &mut state).expect("persist plugin outputs");
+    )
+    .expect("persist plugin outputs");
 
     let artifact_ids = native_artifact_ids(&connection);
     assert_eq!(

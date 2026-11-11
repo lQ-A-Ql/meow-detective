@@ -1,6 +1,4 @@
 use super::artifact_query::count_analysis_artifacts;
-use super::output_digest::output_digest_for_outputs;
-use super::plugin::PluginCandidateOutcome;
 use super::{ExtractionOutcome, PluginExtractFailure};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::capability::{
@@ -26,6 +24,7 @@ pub(super) struct PersistedExtractionOutcome {
     pub(super) artifact_count: u64,
     pub(super) timeline_event_count: u64,
     pub(super) warnings: Vec<String>,
+    pub(super) output_digest: String,
 }
 
 #[derive(Debug, Clone)]
@@ -91,16 +90,13 @@ pub(super) enum AnalysisOutputProducer {
     ExtractorId(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct AnalysisOutputReplacement {
     pub(super) source_object_id: String,
     pub(super) producer: AnalysisOutputProducer,
 }
 
 pub(super) struct ExtractionState {
-    pub(super) artifacts: Vec<domain::Artifact>,
-    pub(super) events: Vec<domain::TimelineEvent>,
-    pub(super) replacements: Vec<AnalysisOutputReplacement>,
     pub(super) warnings: Vec<String>,
     pub(super) scanned_count: u64,
     pub(super) timeline_event_count: u64,
@@ -116,9 +112,6 @@ pub(super) struct ExtractionState {
 impl ExtractionState {
     pub(super) fn new(selected: &[AnalysisCapability]) -> Self {
         Self {
-            artifacts: Vec::new(),
-            events: Vec::new(),
-            replacements: Vec::new(),
             warnings: Vec::new(),
             scanned_count: 0,
             timeline_event_count: 0,
@@ -140,21 +133,25 @@ impl ExtractionState {
         }
     }
 
-    pub(super) fn record_outcome(
+    pub(super) fn record_persisted_outcome(
         &mut self,
         capability: AnalysisCapability,
         candidate: &EvidenceCandidate,
-        mut outcome: ExtractionOutcome,
+        outcome: PersistedExtractionOutcome,
     ) {
-        crate::timeline_service::retain_analysis_events(&mut outcome.timeline_events);
-        self.replacements.push(AnalysisOutputReplacement {
-            source_object_id: candidate.file_id.0.clone(),
-            producer: AnalysisOutputProducer::Prefix(capability.producer_prefix()),
-        });
-        if outcome.warnings.is_empty()
-            && outcome.artifacts.is_empty()
-            && outcome.timeline_events.is_empty()
-        {
+        if outcome.artifact_count > 0 || outcome.timeline_event_count > 0 {
+            self.complete_scans.push(CompleteAnalysisCandidateScan {
+                source_object_id: candidate.file_id.0.clone(),
+                capability_key: capability.key.to_string(),
+                extractor_version: capability.extractor_version().to_string(),
+                source_size: candidate.size,
+                content_identity: candidate.content_identity.clone(),
+                artifact_count: outcome.artifact_count,
+                timeline_event_count: outcome.timeline_event_count,
+                output_digest: outcome.output_digest.clone(),
+                warnings: outcome.warnings.clone(),
+            });
+        } else if outcome.warnings.is_empty() {
             self.clean_scans.push(CleanAnalysisCandidateScan {
                 source_object_id: candidate.file_id.0.clone(),
                 capability_key: capability.key.to_string(),
@@ -162,10 +159,7 @@ impl ExtractionState {
                 source_size: candidate.size,
                 content_identity: candidate.content_identity.clone(),
             });
-        } else if !outcome.warnings.is_empty()
-            && outcome.artifacts.is_empty()
-            && outcome.timeline_events.is_empty()
-        {
+        } else {
             self.diagnostic_scans.push(DiagnosticAnalysisCandidateScan {
                 source_object_id: candidate.file_id.0.clone(),
                 capability_key: capability.key.to_string(),
@@ -174,46 +168,22 @@ impl ExtractionState {
                 content_identity: candidate.content_identity.clone(),
                 warnings: outcome.warnings.clone(),
             });
-        } else {
-            self.complete_scans.push(CompleteAnalysisCandidateScan {
-                source_object_id: candidate.file_id.0.clone(),
-                capability_key: capability.key.to_string(),
-                extractor_version: capability.extractor_version().to_string(),
-                source_size: candidate.size,
-                content_identity: candidate.content_identity.clone(),
-                artifact_count: outcome.artifacts.len() as u64,
-                timeline_event_count: outcome.timeline_events.len() as u64,
-                output_digest: output_digest(&outcome),
-                warnings: outcome.warnings.clone(),
-            });
         }
-        self.record_observation(capability, outcome);
+        self.record_persisted_observation(capability, &outcome);
     }
 
     /// Plugin candidates never participate in scan checkpoints: their outputs
     /// carry per-plugin ids/versions that the shared version/digest
     /// validation cannot address. Re-extraction stays idempotent through
     /// exact-id output replacements, one per plugin that ran on the candidate.
-    pub(super) fn record_plugin_outcome(
+    pub(super) fn record_persisted_plugin_outcome(
         &mut self,
         capability: AnalysisCapability,
-        candidate: &EvidenceCandidate,
-        plugin_outcome: PluginCandidateOutcome,
-        producer_ids: &[String],
+        outcome: PersistedExtractionOutcome,
+        failures: Vec<PluginExtractFailure>,
     ) {
-        let PluginCandidateOutcome {
-            mut outcome,
-            failures,
-        } = plugin_outcome;
-        crate::timeline_service::retain_analysis_events(&mut outcome.timeline_events);
-        for producer_id in producer_ids {
-            self.replacements.push(AnalysisOutputReplacement {
-                source_object_id: candidate.file_id.0.clone(),
-                producer: AnalysisOutputProducer::ExtractorId(producer_id.clone()),
-            });
-        }
         self.plugin_failures.extend(failures);
-        self.record_observation(capability, outcome);
+        self.record_persisted_observation(capability, &outcome);
     }
 
     pub(super) fn take_plugin_failures(&mut self) -> Vec<PluginExtractFailure> {
@@ -233,26 +203,6 @@ impl ExtractionState {
                 ..ExtractionOutcome::default()
             },
         );
-    }
-
-    pub(super) fn record_persisted_outcome(
-        &mut self,
-        capability: AnalysisCapability,
-        outcome: PersistedExtractionOutcome,
-    ) {
-        self.scanned_count = self.scanned_count.saturating_add(1);
-        self.timeline_event_count = self
-            .timeline_event_count
-            .saturating_add(outcome.timeline_event_count);
-        self.sections
-            .entry(capability.key.to_string())
-            .or_insert_with(|| SectionProgress::new(capability))
-            .record_checkpoint(
-                outcome.artifact_count,
-                outcome.timeline_event_count,
-                &outcome.warnings,
-            );
-        self.warnings.extend(outcome.warnings);
     }
 
     pub(super) fn replay_clean(&mut self, capability: AnalysisCapability) {
@@ -314,15 +264,6 @@ impl ExtractionState {
         self.warnings.push(warning);
     }
 
-    pub(super) fn has_pending_outputs(&self) -> bool {
-        !self.replacements.is_empty()
-            || !self.artifacts.is_empty()
-            || !self.events.is_empty()
-            || !self.clean_scans.is_empty()
-            || !self.diagnostic_scans.is_empty()
-            || !self.complete_scans.is_empty()
-    }
-
     pub(super) fn into_dto(
         self,
         conn: &Connection,
@@ -345,12 +286,7 @@ impl ExtractionState {
         })
     }
 
-    fn record_observation(
-        &mut self,
-        capability: AnalysisCapability,
-        mut outcome: ExtractionOutcome,
-    ) {
-        crate::timeline_service::retain_analysis_events(&mut outcome.timeline_events);
+    fn record_observation(&mut self, capability: AnalysisCapability, outcome: ExtractionOutcome) {
         self.scanned_count += 1;
         self.timeline_event_count += outcome.timeline_events.len() as u64;
         self.sections
@@ -358,8 +294,26 @@ impl ExtractionState {
             .or_insert_with(|| SectionProgress::new(capability))
             .record_scan(&outcome);
         self.warnings.extend(outcome.warnings.iter().cloned());
-        self.artifacts.extend(outcome.artifacts);
-        self.events.extend(outcome.timeline_events);
+    }
+
+    fn record_persisted_observation(
+        &mut self,
+        capability: AnalysisCapability,
+        outcome: &PersistedExtractionOutcome,
+    ) {
+        self.scanned_count = self.scanned_count.saturating_add(1);
+        self.timeline_event_count = self
+            .timeline_event_count
+            .saturating_add(outcome.timeline_event_count);
+        self.sections
+            .entry(capability.key.to_string())
+            .or_insert_with(|| SectionProgress::new(capability))
+            .record_checkpoint(
+                outcome.artifact_count,
+                outcome.timeline_event_count,
+                &outcome.warnings,
+            );
+        self.warnings.extend(outcome.warnings.iter().cloned());
     }
 }
 
@@ -432,10 +386,6 @@ fn scan_has_no_outputs(
         ArtifactRepo::new(conn).count_analysis_outputs(source_object_id, prefix)? == 0
             && TimelineRepo::new(conn).count_analysis_outputs(source_object_id, prefix)? == 0,
     )
-}
-
-fn output_digest(outcome: &ExtractionOutcome) -> String {
-    output_digest_for_outputs(&outcome.artifacts, &outcome.timeline_events)
 }
 
 fn extraction_status(scanned_count: u64, warnings: &[String]) -> AnalysisParseStatusDto {

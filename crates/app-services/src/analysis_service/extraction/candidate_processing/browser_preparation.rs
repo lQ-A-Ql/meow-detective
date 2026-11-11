@@ -1,7 +1,4 @@
-use super::super::browser::{
-    is_sqlite_path,
-    persistence::{self, PersistenceContext},
-};
+use super::super::browser::is_sqlite_path;
 use super::*;
 
 pub(super) fn prepare<F>(
@@ -32,26 +29,23 @@ where
         }
         Err(CandidateExtractionError::Cancelled) => return Err(AnalysisServiceError::Cancelled),
     };
-    let context = PersistenceContext {
-        connection: coordinator.context.conn,
-        case_id: coordinator.context.case_id,
-        capability,
-        preload: coordinator.context.preloads.browser,
-        cancel: coordinator.context.cancel_token,
-    };
-    match persistence::persist(context, &candidate, &bytes, &companions) {
-        Ok(outcome) => Ok(source_preparation::ready_persisted(
-            candidate, capability, outcome,
-        )),
-        Err(
-            error @ (AnalysisServiceError::Extraction(_) | AnalysisServiceError::Unsupported(_)),
-        ) => Ok(source_preparation::ready_deferred(
+    let weight_bytes = bytes.len().saturating_add(
+        companions
+            .iter()
+            .map(|companion| companion.data.len())
+            .sum::<usize>(),
+    );
+    Ok(PreparedWork::Parallel {
+        input: PreparedCandidate {
             candidate,
             capability,
-            error.to_string(),
-        )),
-        Err(error) => Err(error),
-    }
+            input: PreparedCandidateInput::Browser {
+                primary: bytes,
+                companions,
+            },
+        },
+        weight_bytes,
+    })
 }
 
 fn read_companions<F>(
