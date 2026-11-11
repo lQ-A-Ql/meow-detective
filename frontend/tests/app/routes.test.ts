@@ -34,6 +34,14 @@ describe('app route code splitting', () => {
     expect(pageRoutes().some((route) => route.index === true)).toBe(true);
   });
 
+  it('paints a status fallback inside the shell while the first lazy page module loads', () => {
+    const boundary = boundaryRoute();
+
+    // React Router renders a route-level HydrateFallback during the initial load of a lazy
+    // route, so the first paint is the shell plus this status element instead of blank.
+    expect(boundary?.HydrateFallback).toEqual(expect.any(Function));
+  });
+
   it('includes the V2 governance workbench route', () => {
     const v2Route = pageRoutes().find((route) => route.path === 'v2');
 

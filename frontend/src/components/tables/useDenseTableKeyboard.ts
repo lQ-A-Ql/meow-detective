@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from '@/app/components/ui/toast';
+import { toast } from 'sonner';
 import type { DenseColumn } from './dense-table-types';
 
 export function useDenseTableKeyboard<T>({ columns, visibleRows, onRowClick, loadContextKey, scrollToIndex }: { columns: DenseColumn<T>[]; visibleRows: T[]; onRowClick?: (row: T) => void; loadContextKey?: string; scrollToIndex: (index: number, options: { align: 'auto' }) => void }) {

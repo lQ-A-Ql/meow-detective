@@ -17,7 +17,7 @@ export function useShellModel() {
       id: `go:${link.to}`,
       label: t(`navigation.links.${link.page}.label`),
       group: t('commandPalette.group.goTo'),
-      run: () => { navigation.selectPage(link.page); navigate(link.to); },
+      run: () => navigate(link.to),
     })),
     { id: 'go:settings', label: t('settings.title'), group: t('commandPalette.group.goTo'), run: () => navigate('/settings') },
     ...(!isCaseEntry ? [{ id: 'drawer', label: t('bottomDrawer.jobs.title'), group: t('commandPalette.group.view'), run: navigation.toggleDrawer }] : []),

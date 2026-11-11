@@ -6,7 +6,7 @@ import { ShellContainer } from '@/features/shell/containers/ShellContainer';
 const state = vi.hoisted(() => ({ current: null as { id: string } | null, toggleDrawer: vi.fn() }));
 vi.mock('@/features/case/hooks', () => ({ useCurrentCase: () => ({ data: state.current }) }));
 vi.mock('@/features/shell/use-navigation-model', () => ({ useNavigationModel: () => ({
-  links: [{ to: '/', page: 'home' }, { to: '/files', page: 'files' }], selectPage: vi.fn(), toggleDrawer: state.toggleDrawer,
+  links: [{ to: '/', page: 'home' }, { to: '/files', page: 'files' }], toggleDrawer: state.toggleDrawer,
 }) }));
 vi.mock('@/features/shell/containers/ActivityBarContainer', () => ({ ActivityBarContainer: () => <nav aria-label="workspace navigation" /> }));
 vi.mock('@/features/jobs/containers/BottomDrawerContainer', () => ({ BottomDrawerContainer: () => <div role="region" aria-label="job drawer" /> }));

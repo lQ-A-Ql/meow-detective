@@ -1,7 +1,30 @@
 import { createBrowserRouter, type RouteObject } from 'react-router';
+import { useTranslation } from 'react-i18next';
+import { LoaderCircle } from '@/components/icons';
 import { Layout } from '@/components/layout/Layout';
 import { RouteErrorBoundary } from '@/app/components/RouteErrorBoundary';
 import { isDevOrAuditMode } from '@/lib/env';
+
+/**
+ * Painted inside the layout shell while the first lazy page module resolves.
+ * React Router only renders a route-level `HydrateFallback` for the initial load of a
+ * lazy route (`state.renderFallback`); later client navigations keep the current page
+ * painted until the next route module arrives, so they need no separate fallback.
+ */
+function RouteLoadingFallback() {
+  const { t } = useTranslation();
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={t('common.loading')}
+      className="grid min-h-40 place-items-center gap-2 p-6 text-forensics-muted"
+    >
+      <LoaderCircle size={18} className="animate-spin" aria-hidden="true" />
+      <span className="text-[12px]">{t('common.loading')}</span>
+    </div>
+  );
+}
 
 export const appRoutes: RouteObject[] = [
   {
@@ -11,6 +34,7 @@ export const appRoutes: RouteObject[] = [
       {
         // Pathless boundary: a page crash keeps the app shell and stays inside the page area.
         errorElement: <RouteErrorBoundary />,
+        HydrateFallback: RouteLoadingFallback,
         children: [
           {
             index: true,

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import i18n from '@/i18n';
@@ -11,7 +11,6 @@ const model: NavigationModel = {
     { to: '/timeline', page: 'timeline' },
   ],
   runningCount: 2,
-  selectPage: vi.fn(),
   toggleDrawer: vi.fn(),
   openSettings: vi.fn(),
 };
@@ -45,11 +44,14 @@ describe('ActivityBar', () => {
     expect(screen.getByRole('button', { name: i18n.t('navigation.jobsRunning', { count: 2 }) })).toBeInTheDocument();
   });
 
-  it('marks the current page in the store when a rail entry is used', async () => {
+  it('navigates through the router and marks the active rail entry from the location', async () => {
     renderBar();
+    const label = i18n.t('navigation.links.timeline.label');
 
-    screen.getByRole('link', { name: i18n.t('navigation.links.timeline.label') }).click();
+    await act(async () => {
+      screen.getByRole('link', { name: label }).click();
+    });
 
-    expect(model.selectPage).toHaveBeenCalledWith('timeline');
+    expect(screen.getByRole('link', { name: label })).toHaveAttribute('aria-current', 'page');
   });
 });

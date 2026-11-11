@@ -17,6 +17,15 @@ if (import.meta.env.PROD) {
 
 type MockCommandPayload = Record<string, unknown> | undefined;
 
+/**
+ * Browser stand-in for Tauri's IPC channel. `src/lib/api/client.ts` re-exports the real
+ * `Channel`, and `src/lib/api/app-update.ts` constructs one and assigns `onmessage`;
+ * without this export mock mode failed at module load with a blank screen.
+ */
+export class Channel<T> {
+  onmessage: ((message: T) => void) | null = null;
+}
+
 const recentObjects = [
   { id: 'object-mock-001', title: 'powershell.exe', detail: 'Windows\System32 · Process artifact', time: '11:42', kind: 'file' },
   { id: 'object-mock-002', title: 'Suspicious logon event', detail: 'Security.evtx · Event ID 4624', time: '11:35', kind: 'artifact' },

@@ -9,7 +9,9 @@ import './styles/index.css';
 
 config.autoAddCss = false;
 
-startTauriEventBridge();
+startTauriEventBridge().catch((error: unknown) => {
+  console.error('[startup] Tauri event bridge failed to start', error);
+});
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

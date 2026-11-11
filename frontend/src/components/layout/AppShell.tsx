@@ -1,8 +1,8 @@
 import type { PropsWithChildren } from 'react';
+import { Toaster } from 'sonner';
 import { BottomDrawerContainer } from '@/features/jobs/containers/BottomDrawerContainer';
 import { ActivityBarContainer } from '@/features/shell/containers/ActivityBarContainer';
 import { CommandPalette, type CommandPaletteItem } from '@/app/components/CommandPalette';
-import { Toaster } from '@/app/components/ui/toast';
 
 export function AppShell({ children, isCaseEntry, commands }: PropsWithChildren<{ isCaseEntry: boolean; commands: CommandPaletteItem[] }>) {
   return (
@@ -21,7 +21,7 @@ export function AppShell({ children, isCaseEntry, commands }: PropsWithChildren<
         </div>
       </div>
       <CommandPalette commands={commands} />
-      <Toaster />
+      <Toaster position="bottom-center" theme="dark" />
     </div>
   );
 }

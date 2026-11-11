@@ -28,7 +28,6 @@ export function useNavigationModel() {
   const currentCase = useCurrentCase();
   const { data: jobs } = useJobsSnapshot(currentCase.data?.id);
   const toggleDrawer = useUiStore((state) => state.toggleDrawer);
-  const setCurrentPage = useUiStore((state) => state.setCurrentPage);
   const links = isDevOrAuditMode()
     ? [...productionLinks.slice(0, 3), { to: '/v2', page: 'v2' as const }, ...productionLinks.slice(3)]
     : productionLinks;
@@ -36,7 +35,6 @@ export function useNavigationModel() {
   return {
     links,
     runningCount: jobs?.filter((job) => job.status === 'running').length ?? 0,
-    selectPage: setCurrentPage,
     toggleDrawer,
     openSettings() {
       navigate('/settings');

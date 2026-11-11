@@ -12,7 +12,7 @@ const clients: QueryClient[] = [];
 const target = { caseId: 'case-a', fileId: 'ds:source-a:mft:0:42', available: true };
 const digest: EvidenceDigest = { scope: 'file', algorithm: 'sha256', value: 'a'.repeat(64), byteLength: 3, status: 'completed' };
 
-function wrapper({ children }: { children: ReactNode }) {
+function Wrapper({ children }: { children: ReactNode }) {
   const [client] = useState(() => {
     const created = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
     clients.push(created);
@@ -34,7 +34,7 @@ afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.clear(
 describe('file digest identity', () => {
   it.each<DigestAlgorithm>(['md5', 'sha1', 'sha256', 'sm3'])('keeps the %s request bound to the clicked file', async (algorithm) => {
     vi.mocked(calculateEvidenceDigest).mockResolvedValue({ ...digest, algorithm });
-    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper });
+    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper: Wrapper });
     act(() => hook.result.current.mutate(algorithm));
     await waitFor(() => expect(hook.result.current.data?.algorithm).toBe(algorithm));
     expect(calculateEvidenceDigest).toHaveBeenCalledWith({ scope: 'file', algorithm, fileId: target.fileId });
@@ -42,7 +42,7 @@ describe('file digest identity', () => {
 
   it('clears a completed result when a different file is selected', async () => {
     vi.mocked(calculateEvidenceDigest).mockResolvedValue(digest);
-    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper });
+    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper: Wrapper });
     act(() => hook.result.current.mutate('sha256'));
     await waitFor(() => expect(hook.result.current.data).toEqual(digest));
     hook.rerender({ ...target, fileId: 'ds:source-a:mft:0:43' });
@@ -53,7 +53,7 @@ describe('file digest identity', () => {
   it.each(['success', 'error'] as const)('does not project a late %s from file A onto B', async (outcome) => {
     const pending = deferred();
     vi.mocked(calculateEvidenceDigest).mockReturnValue(pending.promise);
-    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper });
+    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper: Wrapper });
     act(() => hook.result.current.mutate('sha256'));
     await waitFor(() => expect(hook.result.current.isPending).toBe(true));
     hook.rerender({ ...target, fileId: 'ds:source-a:mft:0:43' });
@@ -69,7 +69,7 @@ describe('file digest identity', () => {
   it('rejects the first selection of A after A to B to A', async () => {
     const pending = deferred();
     vi.mocked(calculateEvidenceDigest).mockReturnValue(pending.promise);
-    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper });
+    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper: Wrapper });
     act(() => hook.result.current.mutate('sha256'));
     hook.rerender({ ...target, fileId: 'ds:source-a:mft:0:43' });
     hook.rerender(target);
@@ -80,7 +80,7 @@ describe('file digest identity', () => {
 
   it('isolates identical file IDs in different cases', async () => {
     vi.mocked(calculateEvidenceDigest).mockResolvedValue(digest);
-    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper });
+    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper: Wrapper });
     act(() => hook.result.current.mutate('sha256'));
     await waitFor(() => expect(hook.result.current.data).toEqual(digest));
     hook.rerender({ ...target, caseId: 'case-b' });
@@ -91,7 +91,7 @@ describe('file digest identity', () => {
     const old = deferred();
     const fresh = deferred();
     vi.mocked(calculateEvidenceDigest).mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise);
-    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper });
+    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper: Wrapper });
     act(() => hook.result.current.mutate('sha256'));
     act(() => hook.result.current.mutate('sha1'));
     const latest = { ...digest, algorithm: 'sha1' as const, value: 'b'.repeat(40) };
@@ -104,7 +104,7 @@ describe('file digest identity', () => {
   it.each([
     { ...target, caseId: undefined }, { ...target, fileId: undefined }, { ...target, available: false },
   ])('does not call the API for an unavailable target', (props) => {
-    const hook = renderHook(() => useFileDigest(props), { wrapper });
+    const hook = renderHook(() => useFileDigest(props), { wrapper: Wrapper });
     act(() => hook.result.current.mutate('sha256'));
     expect(hook.result.current.available).toBe(false);
     expect(calculateEvidenceDigest).not.toHaveBeenCalled();
@@ -112,7 +112,7 @@ describe('file digest identity', () => {
 
   it('uses the shared typed error adapter and clears errors on selection changes', async () => {
     vi.mocked(calculateEvidenceDigest).mockRejectedValue({ code: 'read', message: '读取失败', category: 'io' });
-    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper });
+    const hook = renderHook((props) => useFileDigest(props), { initialProps: target, wrapper: Wrapper });
     act(() => hook.result.current.mutate('sha256'));
     await waitFor(() => expect(hook.result.current.errorText).toBe('读取失败'));
     hook.rerender({ ...target, fileId: 'ds:source-a:mft:0:43' });

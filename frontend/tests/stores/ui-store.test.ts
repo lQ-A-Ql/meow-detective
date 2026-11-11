@@ -4,11 +4,9 @@ import { useUiStore } from '@/stores/ui-store';
 describe('ui-store', () => {
   beforeEach(() => {
     useUiStore.setState({
-      currentPage: 'home',
       drawerOpen: false,
       viewerTab: 'hex',
       rightPanelTab: 'details',
-      globalSearchQuery: '',
       fileSortKey: 'name',
       fileSortDirection: 'asc',
     });
@@ -17,21 +15,8 @@ describe('ui-store', () => {
   it('initial state has correct defaults', () => {
     const state = useUiStore.getState();
 
-    expect(state.currentPage).toBe('home');
     expect(state.drawerOpen).toBe(false);
-    expect(state.globalSearchQuery).toBe('');
-  });
-
-  it('setCurrentPage updates state', () => {
-    useUiStore.getState().setCurrentPage('search');
-
-    expect(useUiStore.getState().currentPage).toBe('search');
-  });
-
-  it('accepts the v2 governance page key', () => {
-    useUiStore.getState().setCurrentPage('v2');
-
-    expect(useUiStore.getState().currentPage).toBe('v2');
+    expect(state.viewerTab).toBe('hex');
   });
 
   it('toggleDrawer toggles drawer state', () => {
@@ -42,11 +27,5 @@ describe('ui-store', () => {
 
     useUiStore.getState().toggleDrawer();
     expect(useUiStore.getState().drawerOpen).toBe(false);
-  });
-
-  it('setGlobalSearchQuery updates query', () => {
-    useUiStore.getState().setGlobalSearchQuery('test query');
-
-    expect(useUiStore.getState().globalSearchQuery).toBe('test query');
   });
 });

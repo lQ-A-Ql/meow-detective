@@ -25,7 +25,6 @@ export function useFileNavigation(caseId?: string) {
       if (operation.owner !== owner.current || operation.attempt !== owner.current.attempt) return;
       if (cache.getQueryData<CaseSummary | null>(['case', 'current'])?.id !== operation.owner.caseId) return;
       if (!useFileNavigationStore.getState().resolve(operation.request, context)) return;
-      useUiStore.getState().setCurrentPage('files');
       navigate('/files');
     },
   });
