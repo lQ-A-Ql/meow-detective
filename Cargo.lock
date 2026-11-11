@@ -240,6 +240,7 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "persistence-fjall",
+ "persistence-source",
  "persistence-sqlite",
  "plugin-api",
  "quick-xml",
@@ -4477,6 +4478,26 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "persistence-source"
+version = "0.1.0"
+dependencies = [
+ "artifact-storage",
+ "chrono",
+ "domain",
+ "hex",
+ "persistence-fjall",
+ "persistence-sqlite",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "testing",
+ "thiserror 2.0.21",
+ "tracing",
 ]
 
 [[package]]

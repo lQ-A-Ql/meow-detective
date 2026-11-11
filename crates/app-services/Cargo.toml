@@ -21,6 +21,7 @@ transport.workspace = true
 infrastructure.workspace = true
 persistence-sqlite.workspace = true
 persistence-fjall.workspace = true
+persistence-source.workspace = true
 artifact-storage.workspace = true
 evidence-core.workspace = true
 evidence-mount.workspace = true

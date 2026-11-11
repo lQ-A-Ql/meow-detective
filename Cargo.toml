@@ -44,6 +44,7 @@ members = [
   "crates/plugin-api",
   "crates/portable-updater",
   "crates/persistence-fjall",
+  "crates/persistence-source",
   "crates/artifact-storage",
 ]
 exclude = [
@@ -201,6 +202,7 @@ mimalloc = { version = "0.1", default-features = false }
 fjall = "~3.1.13"
 postcard = { version = "~1.1", features = ["use-std"] }
 persistence-fjall = { path = "crates/persistence-fjall" }
+persistence-source = { path = "crates/persistence-source" }
 artifact-storage = { path = "crates/artifact-storage" }
 
 [patch.crates-io]
