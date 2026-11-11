@@ -120,8 +120,8 @@ export interface FileJumpContext {
   target: FileEntryRow;
   directory: FileEntryRow;
   ancestorDirectoryIds: string[];
-  ancestorNodes?: FileTreeNode[];
-  ancestorsComplete?: boolean;
+  ancestorNodes: FileTreeNode[];
+  ancestorsComplete: boolean;
   rowOffset: number;
   requiresShowHidden: boolean;
 }

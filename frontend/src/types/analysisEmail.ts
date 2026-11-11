@@ -4,7 +4,7 @@ export interface EmailExtractionSummary {
   status: AnalysisParseStatus;
   total: number;
   messages: EmailMessage[];
-  accounts?: EmailAccount[];
+  accounts: EmailAccount[];
   generatedAt: string;
   warnings: string[];
 }

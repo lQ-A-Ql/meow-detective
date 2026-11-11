@@ -6,6 +6,11 @@ export interface ContentIndexSummary {
   indexed: number; binary: number; oversized: number; unreadable: number;
   unsupportedEncoding: number; notApplicable: number; expected: number; complete: boolean;
 }
+export interface ContentIndexCoverage {
+  summary: ContentIndexSummary;
+  stale: boolean;
+  sourceRevision?: string;
+}
 export type EvidenceTaskRequest =
   | { kind: 'carvePng'; request: import('./carving').PngCarvingRequest }
   | { kind: 'carveZip'; request: import('./carving').ZipCarvingRequest }

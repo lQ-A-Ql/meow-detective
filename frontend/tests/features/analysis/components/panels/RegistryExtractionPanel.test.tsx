@@ -77,7 +77,7 @@ describe('RegistryExtractionPanel', () => {
       amcacheApplications: [],
       amcacheApplicationFiles: [],
       lsaPackages: [],
-      appCompatLayers: [],
+      appcompatLayers: [],
       securityPolicies: [],
       lsaSecrets: [],
       cachedCredentials: [],
@@ -96,7 +96,7 @@ describe('RegistryExtractionPanel', () => {
         usbDevices: [], mountedDevices: [], systemServices: [], shutdownTimes: [],
         shimcacheEntries: [], runKeys: [], openSaveMru: [], lastVisitedMru: [], runMru: [],
         shellbagEntries: [], muicacheEntries: [], amcacheApplications: [],
-        amcacheApplicationFiles: [], lsaPackages: [], appCompatLayers: [], securityPolicies: [],
+        amcacheApplicationFiles: [], lsaPackages: [], appcompatLayers: [], securityPolicies: [],
         lsaSecrets: [], cachedCredentials: [], status: 'parsed', generatedAt: '', warnings: [],
         networkAdapters: [{
           guid: '{ADAPTER-GUID}', name: 'Ethernet', description: 'Intel Ethernet Controller',

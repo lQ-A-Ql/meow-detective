@@ -137,8 +137,13 @@ describe('useInfrastructureWorkspace', () => {
     expect(result.current.selected).toBeUndefined();
   });
 
-  it('defaults network facts to an empty list when the graph omits them', async () => {
-    mocks.graph.mockResolvedValue({ nodes: graph.nodes, edges: graph.edges } satisfies InfrastructureGraph);
+  it('keeps network facts empty when the graph has none', async () => {
+    mocks.graph.mockResolvedValue({
+      nodes: graph.nodes,
+      edges: graph.edges,
+      networkFacts: [],
+      networkDiagnostics: [],
+    } satisfies InfrastructureGraph);
 
     const { result } = renderHook(() => useInfrastructureWorkspace(), { wrapper: createWrapper() });
 

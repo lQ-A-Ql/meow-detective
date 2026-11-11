@@ -16,7 +16,8 @@ function context(id: string): FileJumpContext {
   const target = { id, name: 'hidden.txt', path: '[P1]/hidden/hidden.txt', entryType: 'file' as const,
     hidden: true, system: false, deleted: false, readOnly: false, archive: false };
   return { target, directory: { ...target, id: 'parent', entryType: 'directory' },
-    ancestorDirectoryIds: ['root', 'parent'], rowOffset: 1_000, requiresShowHidden: true };
+    ancestorDirectoryIds: ['root', 'parent'], ancestorNodes: [], ancestorsComplete: true,
+    rowOffset: 1_000, requiresShowHidden: true };
 }
 function setup() {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });

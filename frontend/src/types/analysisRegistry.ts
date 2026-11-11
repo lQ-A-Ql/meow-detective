@@ -265,7 +265,7 @@ export interface RegistryStructuredSummary {
   amcacheApplicationFiles: AmcacheApplicationFileEntry[];
   winlogonConfig?: WinlogonConfig;
   lsaPackages: LsaPackage[];
-  appCompatLayers: AppCompatLayerEntry[];
+  appcompatLayers: AppCompatLayerEntry[];
   securityPolicies: SecurityPolicyEntry[];
   lsaSecrets: LsaSecretEntry[];
   cachedCredentials: CachedCredentialEntry[];

@@ -136,7 +136,7 @@ describe('LinuxArtifactsPanel', () => {
       totalCount: 1,
       loginRecords: [{
         artifactId: 'legacy-wtmp', fileId: 'file-legacy', sourcePath: '/var/log/wtmp',
-        user: 'root', terminal: 'tty1', host: '', pid: 0,
+        user: 'root', terminal: 'tty1', host: '', pid: 0, recordType: 0,
       }],
     });
     render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'login' }));

@@ -70,7 +70,9 @@ export interface McpHostReadFileRequest extends McpHostFileRequest {
 }
 
 export interface McpHostExtractFileRequest extends McpHostFileRequest {
-  destinationPath: string;
+  destinationPath?: string;
+  destinationGrantId?: string;
+  relativePath?: string;
   overwrite?: boolean;
 }
 

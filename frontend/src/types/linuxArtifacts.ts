@@ -34,7 +34,7 @@ export interface LinuxLoginRecord {
   terminal: string;
   host: string;
   pid: number;
-  recordType?: number;
+  recordType: number;
   recordKind?: 'wtmp' | 'btmp' | 'lastlog' | 'faillog' | string;
   uid?: number;
   failures?: number;

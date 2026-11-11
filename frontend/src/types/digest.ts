@@ -24,3 +24,9 @@ export interface EvidenceDigest {
   byteLength: number;
   status: 'running' | 'completed' | 'cancelled' | 'failed';
 }
+
+export interface DigestResult {
+  digest: EvidenceDigest;
+  sourceRevision: string;
+  stale: boolean;
+}

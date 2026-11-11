@@ -1,4 +1,4 @@
-import type { CalculateEvidenceDigestRequest, EvidenceDigest } from '@/types/digest';
+import type { CalculateEvidenceDigestRequest, DigestResult, EvidenceDigest } from '@/types/digest';
 import { COMMANDS } from './commands';
 import { apiClient } from './client';
 import { getEvidenceTask } from './evidence-tasks';
@@ -18,7 +18,6 @@ export async function calculateEvidenceDigest(
   throw { code: task.errorCode ?? 'digest_failed', category: task.state === 'cancelled' ? 'cancelled' : 'internal', message: 'Evidence digest task did not complete' };
 }
 
-export interface DigestResult { digest: EvidenceDigest; sourceRevision: string; stale: boolean }
 export function listEvidenceDigests(request: { dataSourceId: string; fileId?: string; partitionIndex?: number }): Promise<DigestResult[]> {
   return apiClient.request(COMMANDS.files.LIST_EVIDENCE_DIGESTS, { request });
 }
