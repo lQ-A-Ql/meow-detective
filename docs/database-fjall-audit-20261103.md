@@ -1,14 +1,16 @@
 # SQLite 与 Fjall 数据库审计
 
-审计日期：2026-11-10
+审计日期：2026-11-10；并发写入更新：2026-11-11
 当前 source 格式：`source_041_fjall_detail_ownership`
 验证分支基线：`044c5566`
 
 ## 存储规则
 
 - 案件数据库保存案件、来源注册、导入任务、Graph、审计和领域控制信息。
-- Source SQLite 保存来源本地控制信息和领域数据，不建立 `file_entries`、`artifacts`、`timeline_events`。
+- Source SQLite 只保存来源身份、Fjall 代际、导入/分析作业、候选检查点、发布回执和恢复控制，不建立 `file_entries`、`artifacts`、`timeline_events`、`forensic_fingerprints`。
 - Catalog、Artifact、Timeline 记录由该来源的 Fjall generation 保存。
+- Analysis worker 直接使用 Fjall 原生 `Database::batch` 并发写入记录与索引；同一数据库的 journal append 由 Fjall 排定顺序，不再持有应用层单写事务锁。
+- Artifact/Timeline 的共享计数与 revision 在 worker 全部结束后汇总一次；SQLite 仅在候选检查点全部准备后提交生命周期控制事务。
 - 文件枚举和分析 worker 使用独立 staging SQLite；staging 表不属于已发布 source 或案件数据库。
 - Source 身份存在时，Fjall generation 缺失会返回错误。只读请求不会创建 generation；显式导入初始化可以创建 build generation。
 - 案件 migration registry 不再包含 source detail 建表、索引、字段升级或删除迁移。旧 source SQLite 明细布局由 source schema 检查拒绝。
@@ -34,6 +36,8 @@
 | 15 | Artifact 删除未释放对象引用 | 已完成 | Artifact 删除和重复投影同步更新对象引用。 |
 | 16 | Source schema 检查晚于恢复状态写入 | 已完成 | 打开案件时先检查来源 schema，再进行恢复扫描。 |
 | 17 | 恢复诊断错误使用 operation 外键 | 已完成 | 写入恢复状态前校验 operation 归属。 |
+| 18 | Analysis 写入受单写事务锁串行限制 | 已完成 | 独立记录批次改用 Fjall `Database::batch`；4 worker 并发写入回归通过；共享指标在代际封存前一次重建。 |
+| 19 | Source SQLite 残留指纹业务明细 | 已完成 | `forensic_fingerprints` 从 source migration 删除；导入、Catalog/Analysis staging 合并和 hash 更新不再写 source SQLite；旧 SQL detail fallback 已删除。 |
 
 ## 第一项验收表
 
@@ -62,6 +66,7 @@
 | FJ-12-J | 缺失 generation、重新打开、取消、失败重试、删除和进程终止行为正确 | 已完成 | `source_detail_repo_fail_closed` 2 项、案件服务 32 项；Fjall process recovery 与 generation 测试 | PVE/Kubernetes 私有镜像未运行 |
 | FJ-12-K | 大 Catalog 的计数、排序、分页及导入缓存受界限约束 | 已完成 | Fjall 单页上限 8192（包含内部 lookahead）；文件浏览排序、跳转、根目录和子目录窗口上限 8192；Artifact 查询集合上限 100000、分页上限 1024；Timeline 报告、Correlation Artifact ID 和 FileRepo 全量查询均有界；分页与超限失败回归通过 | 无 |
 | FJ-12-L | 相关测试、Clippy、格式和架构门禁通过，文档及分批提交完整 | 已完成 | `app-services --lib` 1167 通过、16 忽略；`persistence-sqlite --lib` 140 通过、1 忽略；Fjall Catalog 8 项、文件浏览、Artifact 超限、source detail fail-closed 回归通过；格式、Clippy、模块规模、函数规模、测试布局和 SQL 边界门禁通过；修复按功能分批提交 | 私有 E01、PVE、Kubernetes 和真实掉电样本未执行 |
+| FJ-12-M | 分析输出由 worker 并发写 Fjall，SQLite 只提交生命周期控制 | 代码验收完成 | `concurrent_analysis_outputs` 并发 4 worker 写入 400 Artifact 与 400 Timeline；核心检查点一次性重建且 revision 各为 1；EVTX、Browser、Plugin 替换和失败发布回滚回归通过 | 私有 Windows/Linux 样本性能复测尚未完成 |
 
 ## 当前验证
 
