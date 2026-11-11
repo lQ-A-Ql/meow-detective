@@ -57,12 +57,12 @@ invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请�
 | app-services source modules | 56 |
 | SQLite repositories | 68 logical repositories |
 | SQLite migration scripts | 77 |
-| frontend test files | 142 |
+| frontend test files | 158 |
 
 | 路径 | 数量 |
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 12 |
-| `frontend/tests/**/*.{test,spec}.{ts,tsx}` | 142 |
+| `frontend/tests/**/*.{test,spec}.{ts,tsx}` | 158 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 169 |
 
 治理事实源：
