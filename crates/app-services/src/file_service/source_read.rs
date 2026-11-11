@@ -12,7 +12,8 @@ use crate::{
     file_service::{
         viewer::{
             descriptor_for_file_with_cache, open_host_evidence_reader,
-            read_file_header_with_context, PreviewDescriptor, PreviewReadContext,
+            read_file_header_for_descriptor_with_context, read_file_header_with_context,
+            PreviewDescriptor, PreviewReadContext,
         },
         FileServiceError,
     },

@@ -6,8 +6,8 @@ use serde_json::Value;
 
 use crate::file_service::FileServiceError;
 
-use super::api::read_file_bytes_for_case;
-use crate::file_service::viewer::PreviewReadContext;
+use super::api::{read_file_bytes_for_case, read_file_bytes_for_descriptor_with_context};
+use crate::file_service::viewer::{PreviewDescriptor, PreviewReadContext};
 
 pub fn read_file_header_by_id(
     conn: &Connection,
@@ -29,6 +29,19 @@ where
 {
     read_header_chunks(max_bytes, |offset, length| {
         read_file_bytes_for_case(&mut *context, file_id, offset, length)
+    })
+}
+
+pub(crate) fn read_file_header_for_descriptor_with_context<C>(
+    context: &mut C,
+    descriptor: &PreviewDescriptor,
+    max_bytes: usize,
+) -> Result<Vec<u8>, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    read_header_chunks(max_bytes, |offset, length| {
+        read_file_bytes_for_descriptor_with_context(context, descriptor, offset, length)
     })
 }
 

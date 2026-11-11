@@ -1,17 +1,14 @@
 use domain::{EntryType, FileEncryptionStatus, FileEntry};
-use persistence_sqlite::repositories::file_repo::FileRepo;
 use std::path::Path;
 
 use super::SourceReadFileHint;
 use crate::file_service::{viewer::validate_file_encryption_status, FileServiceError};
 
 pub(super) fn validate_hint_encryption(
-    source_conn: &rusqlite::Connection,
+    _source_conn: &rusqlite::Connection,
     hint: &SourceReadFileHint,
 ) -> Result<(), FileServiceError> {
-    let persisted_status = FileRepo::new(source_conn).find_encryption_status(&hint.file_id)?;
-    let status = persisted_status.unwrap_or_else(|| FileEncryptionStatus::from(hint.encrypted));
-    validate_file_encryption_status(status)
+    validate_file_encryption_status(FileEncryptionStatus::from(hint.encrypted))
 }
 
 pub(super) fn hint_file_entry(hint: &SourceReadFileHint) -> FileEntry {

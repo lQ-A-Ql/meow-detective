@@ -1,7 +1,6 @@
 use domain::FileEntryId;
 
-use super::ParallelSourceReaders;
-use super::SourceReadContext;
+use super::{ParallelSourceReaders, SourceReadContext, SourceReadFileHint};
 use crate::file_service::{
     viewer::{
         descriptor_for_file_with_cache, open_range_content_for_descriptor_with_context,
@@ -27,6 +26,24 @@ impl SourceReadContext<'_> {
         file_id: &FileEntryId,
     ) -> Result<RangeContentReader, FileServiceError> {
         let descriptor = descriptor_for_file_with_cache(&mut *self, file_id)?;
+        open_range_content_for_descriptor_with_context(self, &descriptor)
+    }
+
+    pub(crate) fn open_file_range_with_metadata(
+        &mut self,
+        hint: SourceReadFileHint,
+    ) -> Result<RangeContentReader, FileServiceError> {
+        if hint.data_source_id != *self.data_source_id {
+            return Err(FileServiceError::security(
+                "Source-read hint does not belong to the bound data source",
+            ));
+        }
+        let Some(partition_index) = hint.partition_index else {
+            return self.open_file_range_by_id(&hint.file_id);
+        };
+        let (source_kind, source_path) = self.source_location()?.clone();
+        let descriptor =
+            self.descriptor_for_hint(&hint, partition_index, source_kind, source_path)?;
         open_range_content_for_descriptor_with_context(self, &descriptor)
     }
 

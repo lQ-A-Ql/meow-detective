@@ -268,23 +268,21 @@ fn run_source_analysis_extraction_execution_with_progress(
                 return Err(FileServiceError::Unsupported(warning));
             }
             let started = Instant::now();
+            let hint = SourceReadFileHint::new(
+                candidate.file_id.clone(),
+                DataSourceId(candidate.data_source_id.clone()),
+                candidate.partition_index,
+                candidate.path.clone(),
+                candidate.size,
+                candidate.encrypted,
+            );
             let result = if candidate.category == "EventLogs" {
                 source_reader
-                    .open_file_range_by_id(&candidate.file_id)
+                    .open_file_range_with_metadata(hint)
                     .map(candidate_source_from_range_reader)
             } else {
                 source_reader
-                    .read_file_header_with_metadata(
-                        SourceReadFileHint::new(
-                            candidate.file_id.clone(),
-                            DataSourceId(candidate.data_source_id.clone()),
-                            candidate.partition_index,
-                            candidate.path.clone(),
-                            candidate.size,
-                            candidate.encrypted,
-                        ),
-                        read_limit,
-                    )
+                    .read_file_header_with_metadata(hint, read_limit)
                     .map(CandidateSource::Bytes)
             };
             source_read_count = source_read_count.saturating_add(1);

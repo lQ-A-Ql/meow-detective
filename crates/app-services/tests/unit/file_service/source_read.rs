@@ -186,6 +186,68 @@ fn partition_metadata_fast_path_builds_and_caches_descriptor_without_file_entry_
 }
 
 #[test]
+fn native_metadata_hint_keeps_mft_identity_without_catalog_lookup() {
+    let case_root = TempDir::new().expect("create case root");
+    let source_conn =
+        crate::source_db::open_source_db(case_root.path(), &DataSourceId("windows-e01".to_owned()))
+            .expect("open source database");
+    insert_source(&source_conn, "windows-e01", "e01", "missing-windows.e01");
+    write_partition_records(
+        case_root.path(),
+        "windows-e01",
+        &[persistence_fjall::PartitionRecord {
+            id: "partition-1".to_owned(),
+            data_source_id: "windows-e01".to_owned(),
+            partition_index: 1,
+            name: "Windows".to_owned(),
+            kind_label: "NTFS".to_owned(),
+            status: "ready".to_owned(),
+            type_guid: None,
+            offset: 0,
+            length: 4096,
+            filesystem: Some("NTFS".to_owned()),
+            unlock_hint: None,
+            lvm_vg_uuid: None,
+            lvm_vg_name: None,
+            lvm_lv_uuid: None,
+            lvm_lv_name: None,
+            lvm_pv_offsets_json: None,
+            lvm_pv_sources_json: None,
+            gpt_disk_guid: None,
+            gpt_partition_uuid: None,
+            filesystem_uuid: None,
+        }],
+    );
+    let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
+    let case_id = CaseId("case-1".to_string());
+    let source_id = DataSourceId("windows-e01".to_string());
+    let mut context = SourceReadContext::new(
+        &source_conn,
+        &case_conn,
+        case_root.path(),
+        &case_id,
+        &source_id,
+    );
+
+    let descriptor = context
+        .descriptor_for_hint(
+            &source_read_hint(
+                "windows-e01",
+                "mft:1:4885",
+                Some(1),
+                "Windows/System32/config/SYSTEM",
+            ),
+            1,
+            "e01".to_string(),
+            "missing-windows.e01".to_string(),
+        )
+        .expect("build descriptor from partition metadata");
+
+    assert_eq!(descriptor.file_id, "mft:1:4885");
+    assert_eq!(descriptor.partition_candidates[0].filesystem_kind, "NTFS");
+}
+
+#[test]
 fn null_partition_candidate_falls_back_to_existing_file_id_reader() {
     let evidence = TempDir::new().expect("create logical evidence");
     std::fs::write(evidence.path().join("fallback.txt"), b"fallback-by-id")

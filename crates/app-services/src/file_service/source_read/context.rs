@@ -66,11 +66,14 @@ impl<'a> SourceReadContext<'a> {
             return self.read_file_header_by_id(&hint.file_id, max_bytes);
         };
         let (source_kind, source_path) = self.source_location()?.clone();
-        if source_kind != "ceph_rbd" {
-            return self.read_file_header_by_id(&hint.file_id, max_bytes);
-        }
         let descriptor =
             self.descriptor_for_hint(&hint, partition_index, source_kind, source_path)?;
+        if descriptor.source_kind != "ceph_rbd" {
+            if let Some(bytes) = self.read_native_header(&descriptor, max_bytes)? {
+                return Ok(bytes);
+            }
+            return read_file_header_for_descriptor_with_context(self, &descriptor, max_bytes);
+        }
         let runtime = self.derived_runtime()?.clone();
         self.derived_reads.read_file_header(
             self.source_conn,
