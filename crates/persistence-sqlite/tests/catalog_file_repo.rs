@@ -96,30 +96,24 @@ fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
         .unwrap()
         .encrypted;
     assert_eq!(encrypted, Some(true));
-    let fingerprint_count: i64 = connection
+    let fingerprint_table: i64 = connection
         .query_row(
-            "SELECT COUNT(*) FROM forensic_fingerprints WHERE source_id = 'source-1'",
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'table' AND name = 'forensic_fingerprints'",
             [],
             |row| row.get(0),
         )
-        .expect("count file fingerprints");
-    assert_eq!(fingerprint_count, 2);
+        .expect("check source fingerprint table");
+    assert_eq!(fingerprint_table, 0);
     let hash = "b".repeat(64);
     persistence_sqlite::repositories::file_repo::FileRepo::new(&connection)
         .update_hash_sha256(&FileEntryId("file".into()), &hash)
         .unwrap();
-    let fingerprint =
-        persistence_sqlite::repositories::fingerprint_repo::ForensicFingerprintRepo::new(
-            &connection,
-        )
-        .find(
-            domain::ForensicObjectType::FileEntry,
-            Some("source-1"),
-            "file",
-        )
+    let updated = catalog
+        .get(&catalog.read_snapshot(), "source-1", "file")
         .unwrap()
         .unwrap();
-    assert_eq!(fingerprint.content_sha256, Some(hash));
+    assert_eq!(updated.hash_sha256, Some(hash));
     assert_eq!(
         persistence_sqlite::repositories::file_repo::FileRepo::new(&connection)
             .find_partition_index_by_id(&FileEntryId("file".into()))

@@ -7,7 +7,6 @@ use rusqlite::Connection;
 use std::sync::Arc;
 pub(crate) mod analysis_staging;
 mod catalog_staging;
-mod fingerprints;
 pub use catalog_staging::merge_staging_catalog;
 
 const FJALL_ROOT_KEY: &str = "fjall_root";
@@ -422,7 +421,6 @@ pub(crate) fn upsert_files(conn: &Connection, entries: &[FileEntry]) -> crate::D
     CatalogRecordStore::from_source_store((*store).clone())
         .upsert_batch(&records, PersistMode::SyncAll)
         .map_err(|error| crate::DbError::System(error.to_string()))?;
-    fingerprints::files(conn, entries)?;
     Ok(true)
 }
 
@@ -450,7 +448,6 @@ pub fn upsert_files_with_partition(
     CatalogRecordStore::from_source_store((*store).clone())
         .upsert_batch(&records, persistence_fjall::PersistMode::SyncAll)
         .map_err(|error| crate::DbError::System(error.to_string()))?;
-    fingerprints::files(conn, entries)?;
     Ok(true)
 }
 

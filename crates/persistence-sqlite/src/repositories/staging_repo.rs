@@ -434,46 +434,20 @@ impl StagingRepo {
         staging_conn: &Connection,
         case_id: &str,
         data_source_id: &str,
-        alias: &str,
+        _alias: &str,
     ) -> rusqlite::Result<(u64, u64)> {
-        if let Some(counts) = crate::source_fjall::analysis_staging::merge(
+        crate::source_fjall::analysis_staging::merge(
             main_conn,
             staging_conn,
             case_id,
             data_source_id,
         )
         .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?
-        {
-            return Ok(counts);
-        }
-        let staging_path = staging_db_file_path(staging_conn)?;
-        let escaped = staging_path.replace('\'', "''");
-        main_conn.execute_batch(&format!("ATTACH DATABASE '{}' AS {alias}", escaped))?;
-
-        let result = (|| {
-            let artifact_count = main_conn.execute(
-                &format!("INSERT INTO main.artifacts
-                 (id, case_id, data_source_id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at)
-                 SELECT id, ?1, ?2, artifact_type, file_id, extractor_id, extractor_version, confidence, source_attribution, display_name, summary, data_json, created_at
-                 FROM {alias}.artifact_rows"),
-                params![case_id, data_source_id],
-            )?;
-            super::staging_fingerprint_repo::persist_analysis_fingerprints_for_merge_with_alias(
-                main_conn,
-                case_id,
-                data_source_id,
-                alias,
-            )?;
-            let timeline_count = main_conn.execute(
-                &format!("INSERT INTO main.timeline_events
-                 (id, case_id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs)
-                 SELECT id, ?1, file_id, event_type, timestamp, title, description, parser_id, parser_version, confidence, source_attribution, data_json
-                 FROM {alias}.timeline_rows"),
-                params![case_id],
-            )?;
-            Ok((artifact_count as u64, timeline_count as u64))
-        })();
-        result
+        .ok_or_else(|| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(crate::DbError::System(
+                "source detail storage is missing".into(),
+            )))
+        })
     }
 }
 mod analysis_index;

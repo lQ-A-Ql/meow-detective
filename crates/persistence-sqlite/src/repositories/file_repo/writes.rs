@@ -1,5 +1,4 @@
 use crate::connection::DbResult;
-use crate::repositories::fingerprint_repo::ForensicFingerprintRepo;
 use domain::{normalize_content_sha256, FileEntry, FileEntryId};
 
 use super::FileRepo;
@@ -24,12 +23,6 @@ impl FileRepo<'_> {
             catalog
                 .upsert(&record, persistence_fjall::PersistMode::SyncAll)
                 .map_err(|error| crate::connection::DbError::System(error.to_string()))?;
-            ForensicFingerprintRepo::new(self.conn).update_content_sha256(
-                domain::ForensicObjectType::FileEntry,
-                Some(&source_id),
-                &id.0,
-                record.hash_sha256.as_deref(),
-            )?;
             return Ok(Some(crate::source_fjall::file_entry(record)));
         }
         Err(crate::DbError::System(

@@ -23,7 +23,6 @@ fn migration_log(names: &[&str]) -> Connection {
 #[test]
 fn source_version_uses_registry_order_after_an_older_gap_is_repaired() {
     let connection = migration_log(&[
-        "source_037_forensic_fingerprints",
         "source_038_linux_evidence_facts",
         "source_036_android_analysis",
     ]);

@@ -63,19 +63,13 @@ pub fn merge_staging_catalog(
 }
 
 fn flush(
-    conn: &Connection,
+    _conn: &Connection,
     catalog: &CatalogRecordStore,
     records: &[FileEntryRecord],
 ) -> DbResult<()> {
     catalog
         .upsert_batch(records, PersistMode::Buffer)
-        .map_err(storage_error)?;
-    let entries = records
-        .iter()
-        .cloned()
-        .map(super::file_entry)
-        .collect::<Vec<_>>();
-    super::fingerprints::files(conn, &entries)
+        .map_err(storage_error)
 }
 
 fn validate_staging(staging: &Connection, source: &str, partition: u32) -> DbResult<()> {

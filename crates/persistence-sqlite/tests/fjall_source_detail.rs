@@ -282,8 +282,7 @@ fn staging_merge_folds_roots_and_replays_multiple_partitions_without_duplicates(
         .list_all(&snapshot, "source-1", None, ScanDirection::Forward, 20)
         .unwrap();
     assert_eq!(page.records.len(), 6);
-    let fingerprint_count: u64 = main.query_row("SELECT COUNT(*) FROM forensic_fingerprints WHERE source_id='source-1' AND object_type='file_entry'",[],|row| row.get(0)).unwrap();
-    assert_eq!(fingerprint_count, 6);
+    assert_eq!(source_fingerprint_table_count(&main), 0);
     assert!(!page
         .records
         .iter()
@@ -375,8 +374,7 @@ fn analysis_workers_merge_to_fjall_without_attached_source_detail_tables() {
             .attrs["runCount"],
         2
     );
-    let fingerprint_count: u64 = main.query_row("SELECT COUNT(*) FROM forensic_fingerprints WHERE source_id='source-1' AND object_type='artifact'",[],|row| row.get(0)).unwrap();
-    assert_eq!(fingerprint_count, 2);
+    assert_eq!(source_fingerprint_table_count(&main), 0);
     let attached: u64 = main
         .query_row("SELECT COUNT(*) FROM pragma_database_list", [], |row| {
             row.get(0)
@@ -385,4 +383,15 @@ fn analysis_workers_merge_to_fjall_without_attached_source_detail_tables() {
     assert_eq!(attached, 1);
     let details: u64 = main.query_row("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('artifacts','timeline_events','file_entries')",[],|row| row.get(0)).unwrap();
     assert_eq!(details, 0);
+}
+
+fn source_fingerprint_table_count(connection: &Connection) -> u64 {
+    connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'table' AND name = 'forensic_fingerprints'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap()
 }

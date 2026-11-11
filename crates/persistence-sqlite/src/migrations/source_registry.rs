@@ -93,10 +93,6 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         include_str!("scripts/source_036_android_analysis.sql"),
     ),
     (
-        "source_037_forensic_fingerprints",
-        include_str!("scripts/source_037_forensic_fingerprints.sql"),
-    ),
-    (
         "source_038_linux_evidence_facts",
         include_str!("scripts/source_038_linux_evidence_facts.sql"),
     ),

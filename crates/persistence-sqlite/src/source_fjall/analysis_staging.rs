@@ -11,7 +11,7 @@ const PAGE_SIZE: usize = 256;
 pub(crate) fn merge(
     main: &Connection,
     staging: &Connection,
-    case_id: &str,
+    _case_id: &str,
     source_id: &str,
 ) -> DbResult<Option<(u64, u64)>> {
     let Some(store) = open_store_for_write(main)? else {
@@ -39,14 +39,12 @@ pub(crate) fn merge(
             artifacts
                 .upsert_batch(&batch, PersistMode::Buffer)
                 .map_err(storage_error)?;
-            super::fingerprints::artifacts(main, &batch, case_id, source_id)?;
             batch.clear();
         }
     }
     artifacts
         .upsert_batch(&batch, PersistMode::Buffer)
         .map_err(storage_error)?;
-    super::fingerprints::artifacts(main, &batch, case_id, source_id)?;
     let mut batch = Vec::with_capacity(PAGE_SIZE);
     let mut statement = snapshot.prepare(
         "SELECT id, file_id, event_type, timestamp, title, description,

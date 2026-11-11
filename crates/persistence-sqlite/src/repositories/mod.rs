@@ -59,7 +59,6 @@ pub mod processing_phase_repo;
 pub mod provenance_assertion_repo;
 pub mod report_repo;
 pub mod source_meta_repo;
-pub mod staging_fingerprint_repo;
 mod staging_merge_validation;
 pub mod staging_repo;
 pub mod storage_control_repo;
