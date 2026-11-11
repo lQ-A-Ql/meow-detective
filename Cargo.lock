@@ -4509,7 +4509,6 @@ dependencies = [
  "chrono",
  "domain",
  "hex",
- "persistence-fjall",
  "r2d2",
  "rusqlite",
  "serde",
@@ -4518,7 +4517,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
- "transport",
  "uuid",
 ]
 

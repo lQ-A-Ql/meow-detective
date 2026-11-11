@@ -88,7 +88,7 @@ fn run_member_import(
 ) -> Result<String, CommandError> {
     let MemberWork { config, job_id, .. } = member;
     let connection = app_services::connection::open_existing_case_db(&execution.db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let event_sink = execution.app.as_ref().map(TauriImportEventSink::new);
     match app_services::import_job_coordinator::run_member_import(
         app_services::import_job_coordinator::MemberImportRequest {

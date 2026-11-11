@@ -32,7 +32,7 @@ pub(super) fn acquire_import_slot(
     }
     job_repo
         .update_progress(job_id, 2, "Waiting for import slot")
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     if let Some(app) = app {
         event_bridge::emit_job_progress(app, &job_id.0, 2, "Waiting for import slot");
     }
@@ -40,7 +40,7 @@ pub(super) fn acquire_import_slot(
         Ok(lease) => {
             job_repo
                 .update_progress(job_id, 5, "Import slot acquired")
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(app_services::connection::command_error_from_db)?;
             if let Some(app) = app {
                 event_bridge::emit_job_progress(app, &job_id.0, 5, "Import slot acquired");
             }
@@ -61,7 +61,7 @@ pub(super) fn acquire_import_slot(
             let detail = "Import admission timed out after 300 seconds";
             job_repo
                 .fail(job_id, detail)
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(app_services::connection::command_error_from_db)?;
             if let Some(app) = app {
                 event_bridge::emit_job_failed(app, &job_id.0, detail);
             }

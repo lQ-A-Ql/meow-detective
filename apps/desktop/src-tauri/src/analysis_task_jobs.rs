@@ -33,14 +33,14 @@ where
 {
     let db_path = request.case_root.join("app.db");
     let connection = app_services::connection::open_existing_case_db(&db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let job_repo = JobRepo::new(&connection);
     let job_id = job_repo
         .create(request.case_id, request.kind)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     job_repo
         .update_progress(&job_id, 1, "Queued for analysis admission")
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     drop(connection);
 
     let task_id = job_id.0.clone();
@@ -113,13 +113,13 @@ pub(crate) fn start_evidence_classification(
 ) -> Result<String, CommandError> {
     let db_path = request.case_root.join("app.db");
     let connection = app_services::connection::open_existing_case_db(&db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let job_id = JobRepo::new(&connection)
         .create(request.case_id, request.kind)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     JobRepo::new(&connection)
         .update_progress(&job_id, 1, "Queued for analysis admission")
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     drop(connection);
 
     let task_id = job_id.0.clone();
@@ -198,19 +198,19 @@ where
     F: FnOnce(&rusqlite::Connection, Arc<AtomicBool>) -> Result<T, CommandError> + Send + 'static,
 {
     let connection = app_services::connection::open_existing_case_db(db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let job = domain::JobId(job_id.to_string());
     let repo = JobRepo::new(&connection);
     if !repo
         .start(&job)
-        .map_err(CommandError::from_typed_service_error)?
+        .map_err(app_services::connection::command_error_from_db)?
     {
         return Err(CommandError::cancelled(
             "Analysis task cancelled before execution",
         ));
     }
     repo.update_progress(&job, 2, "Analysis task admitted")
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     if let Some(app) = app {
         event_bridge::emit_job_started(app, job_id, &format!("{kind} started"));
         event_bridge::emit_job_progress(app, job_id, 2, "Analysis task admitted");
@@ -220,14 +220,14 @@ where
         Ok(value) => {
             let detail = format!("{kind} completed");
             repo.complete_committed(&job, &detail)
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(app_services::connection::command_error_from_db)?;
             emit_completed(app, job_id, &detail);
             Ok(value)
         }
         Err(error) if error.category == "cancelled" => {
             let detail = error.message.clone();
             repo.cancel(&job, &detail)
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(app_services::connection::command_error_from_db)?;
             if let Some(app) = app {
                 event_bridge::emit_job_cancelled(app, job_id, &detail);
             }
@@ -236,7 +236,7 @@ where
         Err(error) => {
             let detail = error.message.clone();
             repo.fail(&job, &detail)
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(app_services::connection::command_error_from_db)?;
             if let Some(app) = app {
                 event_bridge::emit_job_failed(app, job_id, &detail);
             }
@@ -258,11 +258,11 @@ fn settle_registration_failure(
     error: &TaskRegistrationError,
 ) -> Result<(), CommandError> {
     let connection = app_services::connection::open_existing_case_db(db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let detail = format!("Analysis task registration failed: {error}");
     JobRepo::new(&connection)
         .fail(job_id, &detail)
-        .map_err(CommandError::from_typed_service_error)
+        .map_err(app_services::connection::command_error_from_db)
 }
 
 fn registration_error(error: TaskRegistrationError) -> CommandError {

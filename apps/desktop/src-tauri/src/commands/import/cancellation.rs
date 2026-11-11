@@ -17,7 +17,7 @@ pub async fn cancel_import(
         let active = crate::commands::command_support::require_active_case(&app_state)?;
         let conn =
             app_services::connection::open_existing_case_db(&active.case_root.join("app.db"))
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(app_services::connection::command_error_from_db)?;
         if !app_state.task_manager.is_running(&job_id) {
             return Err(CommandError::not_found("Job"));
         }

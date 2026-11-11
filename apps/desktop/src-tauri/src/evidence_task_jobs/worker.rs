@@ -85,7 +85,7 @@ fn execute(
     }
     if !persistence_sqlite::repositories::job_repo::JobRepo::new(conn)
         .start(&domain::JobId(ctx.plan.task.task_id.clone()))
-        .map_err(CommandError::from_typed_service_error)?
+        .map_err(app_services::connection::command_error_from_db)?
     {
         return Err(CommandError::cancelled(
             "Evidence task cancelled before execution",

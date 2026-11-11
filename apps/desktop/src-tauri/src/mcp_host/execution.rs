@@ -310,7 +310,7 @@ fn authorize_task_access(
         serde_json::from_value(request.arguments.clone())
             .map_err(|_| CommandError::invalid_input("任务标识无效"))?;
     let connection = app_services::connection::open_existing_case_db(&active.db_path())
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let binding_owned =
         persistence_sqlite::repositories::mcp_task_binding_repo::McpTaskBindingRepo::new(
             &connection,
@@ -321,7 +321,7 @@ fn authorize_task_access(
             &principal.client.id,
             &input.task_id,
         )
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let memory_owned = state
         .mcp_host
         .owns_task(&input.task_id, &principal.client.id)
@@ -339,7 +339,7 @@ fn dispatch_extract_file(
     invocation: &Invocation,
 ) -> Result<McpHostToolCallResultDto, CommandError> {
     let conn = app_services::connection::open_existing_case_db(&active.db_path())
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let mut effective = request.clone();
     if let Some(principal) = invocation.principal.as_ref() {
         let destination = principal

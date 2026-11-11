@@ -2,6 +2,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::connection::command_error_from_db;
 use crate::import_analysis::ImportAnalysisMode;
 pub use crate::import_group_gate::{ImportGroupGateError, ImportGroupLease};
 use crate::import_pipeline::{execute_import_job, ImportEventSink, ImportJobOptions};
@@ -68,10 +69,7 @@ pub fn run_member_import(
                 CommandError::timeout("Linux evidence-set member admission timed out")
             }
         })?;
-    if !repo
-        .start(job_id)
-        .map_err(CommandError::from_typed_service_error)?
-    {
+    if !repo.start(job_id).map_err(command_error_from_db)? {
         return Ok(MemberImportOutcome::Cancelled(
             "Member cancelled before execution".to_string(),
         ));
@@ -98,7 +96,7 @@ pub fn run_member_import(
     ) {
         Ok(message) => {
             repo.complete_committed(job_id, &message)
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(command_error_from_db)?;
             Ok(MemberImportOutcome::Completed(message))
         }
         Err(error)
@@ -106,12 +104,12 @@ pub fn run_member_import(
                 || cancel_token.load(std::sync::atomic::Ordering::Acquire) =>
         {
             repo.cancel(job_id, &error.message)
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(command_error_from_db)?;
             Ok(MemberImportOutcome::Cancelled(error.message))
         }
         Err(error) => {
             repo.fail(job_id, &error.message)
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(command_error_from_db)?;
             Err(error)
         }
     }
@@ -148,7 +146,7 @@ pub fn run_single_import(
     let repo = JobRepo::new(connection);
     if cancel_token.load(std::sync::atomic::Ordering::Acquire) {
         repo.cancel(job_id, "Import cancelled by user")
-            .map_err(CommandError::from_typed_service_error)?;
+            .map_err(command_error_from_db)?;
         return Ok(SingleImportOutcome::Cancelled(
             "Import cancelled by user".to_string(),
         ));
@@ -172,12 +170,9 @@ pub fn run_single_import(
                 CommandError::timeout("Import scheduler admission timed out")
             }
         })?;
-    if !repo
-        .start(job_id)
-        .map_err(CommandError::from_typed_service_error)?
-    {
+    if !repo.start(job_id).map_err(command_error_from_db)? {
         repo.cancel(job_id, "Import cancelled before execution")
-            .map_err(CommandError::from_typed_service_error)?;
+            .map_err(command_error_from_db)?;
         return Ok(SingleImportOutcome::Cancelled(
             "Import cancelled before execution".to_string(),
         ));
@@ -204,7 +199,7 @@ pub fn run_single_import(
     ) {
         Ok(message) => {
             repo.complete_committed(job_id, &message)
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(command_error_from_db)?;
             Ok(SingleImportOutcome::Completed(message))
         }
         Err(error)
@@ -212,12 +207,12 @@ pub fn run_single_import(
                 || cancel_token.load(std::sync::atomic::Ordering::Acquire) =>
         {
             repo.cancel(job_id, &error.message)
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(command_error_from_db)?;
             Ok(SingleImportOutcome::Cancelled(error.message))
         }
         Err(error) => {
             repo.fail(job_id, &error.message)
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(command_error_from_db)?;
             Err(error)
         }
     }

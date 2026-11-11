@@ -55,33 +55,6 @@ impl DbError {
     }
 }
 
-impl transport::ServiceErrorCategory for DbError {
-    fn category(&self) -> transport::ErrorCategory {
-        match self.category() {
-            DbErrorCategory::Cancelled => transport::ErrorCategory::Cancelled,
-            DbErrorCategory::Timeout => transport::ErrorCategory::Timeout,
-            DbErrorCategory::Io => transport::ErrorCategory::Io,
-            DbErrorCategory::Internal => transport::ErrorCategory::Internal,
-        }
-    }
-
-    fn code(&self) -> Option<&'static str> {
-        DbError::code(self)
-    }
-
-    fn user_message(&self) -> Option<&'static str> {
-        DbError::user_message(self)
-    }
-
-    fn recoverable(&self) -> Option<bool> {
-        DbError::recoverable(self)
-    }
-
-    fn suggestion(&self) -> Option<&'static str> {
-        DbError::suggestion(self)
-    }
-}
-
 fn sqlite_error_is_busy(error: &rusqlite::Error) -> bool {
     matches!(
         error,

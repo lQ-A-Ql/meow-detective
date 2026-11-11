@@ -36,7 +36,7 @@ pub async fn export_carved_artifact(
         let active = crate::commands::command_support::require_active_case(&state)?;
         let conn =
             app_services::connection::open_existing_case_db(&active.case_root.join("app.db"))
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(app_services::connection::command_error_from_db)?;
         app_services::carving_service::export_carved_artifact(
             &conn,
             &active.case_root,

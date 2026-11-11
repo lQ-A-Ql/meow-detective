@@ -118,7 +118,7 @@ fn persist_event(
     response: &McpHostToolCallResultDto,
 ) -> Result<(), CommandError> {
     let connection = app_services::connection::open_existing_case_db(&active.db_path())
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let error = response.error_details.as_ref();
     let details = serde_json::json!({
         "serverId":"embedded", "toolName":tool, "success":response.success,
@@ -134,6 +134,6 @@ fn persist_event(
             Some(tool),
             &details.to_string(),
         )
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     Ok(())
 }

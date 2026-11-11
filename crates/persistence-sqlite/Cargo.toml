@@ -12,8 +12,6 @@ chrono.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 domain.workspace = true
-transport.workspace = true
-persistence-fjall.workspace = true
 rusqlite = { workspace = true, features = ["chrono"] }
 uuid.workspace = true
 sha2.workspace = true

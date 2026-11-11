@@ -15,7 +15,7 @@ pub(crate) fn run_background_import_job(
     task_manager: Arc<TaskManager>,
 ) -> Result<(), CommandError> {
     let connection = app_services::connection::open_existing_case_db(&job.db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let event_sink = app.map(TauriImportEventSink::new);
     match app_services::import_job_coordinator::run_single_import(
         app_services::import_job_coordinator::SingleImportRequest {

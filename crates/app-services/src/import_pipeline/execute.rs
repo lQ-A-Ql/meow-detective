@@ -210,14 +210,14 @@ fn mark_projection_committed(
         persistence_sqlite::repositories::storage_control_repo::StorageControlRepo::new(connection);
     let operation_id = format!("source-import:{job_id}");
     repo.update_expected_batch_digest(&operation_id, digest)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(crate::connection::command_error_from_db)?;
     repo.update_operation_state(
         &operation_id,
         persistence_sqlite::repositories::storage_control_repo::StorageOperationState::Committed,
         &chrono::Utc::now().to_rfc3339(),
         None,
     )
-    .map_err(CommandError::from_typed_service_error)?;
+    .map_err(crate::connection::command_error_from_db)?;
     Ok(())
 }
 

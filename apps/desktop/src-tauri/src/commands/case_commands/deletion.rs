@@ -163,7 +163,7 @@ pub async fn delete_data_source(
             )));
         }
         let conn = app_services::connection::open_existing_case_db(&db_path)
-            .map_err(CommandError::from_typed_service_error)?;
+            .map_err(app_services::connection::command_error_from_db)?;
         let drained = worker_state
             .retire_preview_source(&case_id.0, &data_source_id, timeout)
             .map_err(CommandError::from_service_error)?;

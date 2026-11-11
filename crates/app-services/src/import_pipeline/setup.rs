@@ -1,5 +1,6 @@
 //! Set up source storage and resources without changing their ownership scope.
 use super::{context::ImportJobContext, profile::measure_optional};
+use crate::connection::command_error_from_db;
 use chrono::Utc;
 use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo,
@@ -20,7 +21,7 @@ pub(super) fn open_source(
     let control = StorageControlRepo::new(ctx.conn);
     if control
         .find_operation(&operation_id)
-        .map_err(CommandError::from_typed_service_error)?
+        .map_err(command_error_from_db)?
         .is_none()
     {
         let now = Utc::now().to_rfc3339();
@@ -38,7 +39,7 @@ pub(super) fn open_source(
                 updated_at: now,
                 last_error_code: None,
             })
-            .map_err(CommandError::from_typed_service_error)?;
+            .map_err(command_error_from_db)?;
     }
     control
         .update_operation_state(
@@ -47,7 +48,7 @@ pub(super) fn open_source(
             &Utc::now().to_rfc3339(),
             None,
         )
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(command_error_from_db)?;
     let layout = persistence_fjall::SourceBuildLayout::for_case_source(
         ctx.case_root,
         &source.id.0,

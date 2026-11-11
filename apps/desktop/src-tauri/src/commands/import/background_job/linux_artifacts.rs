@@ -26,9 +26,9 @@ pub(crate) fn schedule_linux_artifact_analysis(
 ) -> Result<bool, CommandError> {
     let db_path = case_root.join("app.db");
     let connection = app_services::connection::open_existing_case_db(&db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     if !app_services::linux_artifact_job::source_is_ready_linux(&connection, data_source_id)
-        .map_err(CommandError::from_typed_service_error)?
+        .map_err(app_services::connection::command_error_from_db)?
     {
         return Ok(false);
     }
@@ -38,7 +38,7 @@ pub(crate) fn schedule_linux_artifact_analysis(
         return Ok(false);
     }
     let job_id = app_services::linux_artifact_job::create_job(&connection, case_id)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let job_id_value = job_id.0.clone();
     app_services::linux_artifact_job::update_progress(
         &connection,
@@ -46,7 +46,7 @@ pub(crate) fn schedule_linux_artifact_analysis(
         1,
         "Queued Linux artifact analysis",
     )
-    .map_err(CommandError::from_typed_service_error)?;
+    .map_err(app_services::connection::command_error_from_db)?;
     let scope = TaskScope::data_source(&case_id.0, &data_source_id.0, &task_id);
     let case_root = case_root.to_path_buf();
     let case_id = case_id.clone();

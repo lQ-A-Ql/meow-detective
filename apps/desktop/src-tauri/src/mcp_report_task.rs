@@ -32,13 +32,13 @@ pub(crate) fn start(
     }
     let db_path = case_root.join("app.db");
     let connection = app_services::connection::open_existing_case_db(&db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let job_id = JobRepo::new(&connection)
         .create(case_id, "Report export")
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     JobRepo::new(&connection)
         .update_progress(&job_id, 1, "Queued for report export")
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     drop(connection);
 
     let task_id = job_id.0.clone();
@@ -68,13 +68,13 @@ pub(crate) fn start(
         });
     if let Err(error) = registration {
         let connection = app_services::connection::open_existing_case_db(&db_path)
-            .map_err(CommandError::from_typed_service_error)?;
+            .map_err(app_services::connection::command_error_from_db)?;
         JobRepo::new(&connection)
             .fail(
                 &job_id,
                 &format!("Report task registration failed: {error}"),
             )
-            .map_err(CommandError::from_typed_service_error)?;
+            .map_err(app_services::connection::command_error_from_db)?;
         return Err(CommandError::internal(format!(
             "Report task registration failed: {error}"
         )));

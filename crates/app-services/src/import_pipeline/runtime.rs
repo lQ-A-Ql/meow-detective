@@ -1,4 +1,5 @@
 use super::context::ImportJobContext;
+use crate::connection::command_error_from_db;
 use chrono::Utc;
 use persistence_sqlite::repositories::storage_control_repo::{
     StorageControlRepo, StorageOperationState,
@@ -12,7 +13,7 @@ pub(super) fn source_is_pending(
     Ok(
         persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
             .find_storage(source)
-            .map_err(CommandError::from_typed_service_error)?
+            .map_err(command_error_from_db)?
             .is_some_and(|storage| storage.import_state == "pending"),
     )
 }
@@ -58,7 +59,7 @@ fn mark_storage_operation(
     let operation_id = format!("source-import:{}", ctx.job_id.0);
     StorageControlRepo::new(ctx.conn)
         .update_operation_state(&operation_id, state, &Utc::now().to_rfc3339(), error_code)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(command_error_from_db)?;
     Ok(())
 }
 
@@ -170,7 +171,7 @@ pub(super) fn finish_indexes(ctx: &ImportJobContext<'_>) -> Result<(), CommandEr
         transport::dto::import_benchmark::ImportBenchmarkPhaseDto::SourceIndexBuild,
         || {
             let source = persistence_source::detail::open_store(ctx.source_connection()?)
-                .map_err(CommandError::from_typed_service_error)?
+                .map_err(command_error_from_db)?
                 .ok_or_else(|| CommandError::internal("source generation is missing"))?;
             source
                 .database()

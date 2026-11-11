@@ -17,7 +17,7 @@ pub async fn get_infrastructure_graph(
             &active.case_root,
             &domain::CaseId(active.case_id.clone()),
         )
-        .map_err(CommandError::from_typed_service_error)
+        .map_err(app_services::connection::command_error_from_db)
     })
     .await
     .map_err(CommandError::from_join_error)?

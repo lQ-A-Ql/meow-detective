@@ -24,18 +24,18 @@ pub fn schedule_import_for_active_case(
     let db_path = active.db_path();
     let source_name = import_config.source_name.clone();
     let connection = app_services::connection::open_existing_case_db(&db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let job_repo = JobRepo::new(&connection);
     let job_id = job_repo
         .create(&case_id.0, "Import data source")
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let job_id_string = job_id.0.clone();
     if let Some(app) = app {
         event_bridge::emit_job_created(app, &job_id_string, "Import data source");
     }
     job_repo
         .update_progress(&job_id, 1, &format!("Queued import for {source_name}"))
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
 
     let app_handle = app.cloned();
     let cancel_token = Arc::new(AtomicBool::new(false));

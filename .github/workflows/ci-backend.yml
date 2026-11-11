@@ -135,6 +135,9 @@ jobs:
       - name: Stage 5 regression guard
         shell: pwsh
         run: ./scripts/check-stage5-regression-guard.ps1
+      - name: Stage 6 persistence boundary guard
+        shell: pwsh
+        run: ./scripts/check-stage6-persistence-boundary.ps1
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
       - name: Dependency policy

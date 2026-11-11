@@ -59,10 +59,10 @@ pub(super) fn complete_evidence_set_import_with_failures(
         .map_err(CommandError::from_typed_service_error)?;
         job_repo
             .update_outcome_counts(&job.job_id, summary.failed_count, 0, 0, true)
-            .map_err(CommandError::from_typed_service_error)?;
+            .map_err(app_services::connection::command_error_from_db)?;
         job_repo
             .complete_if_active(&job.job_id, &detail)
-            .map_err(CommandError::from_typed_service_error)?;
+            .map_err(app_services::connection::command_error_from_db)?;
         if let Some(app) = app {
             event_bridge::emit_job_completed(app, &job.job_id.0, &detail);
         }
@@ -91,7 +91,7 @@ pub(super) fn complete_evidence_set_import_with_failures(
     .map_err(CommandError::from_typed_service_error)?;
     job_repo
         .update_outcome_counts(&job.job_id, 0, 0, summary.failed_count, true)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     tracing::warn!(
         import_set_id = %job.plan.import_set_id,
         members = total_members,

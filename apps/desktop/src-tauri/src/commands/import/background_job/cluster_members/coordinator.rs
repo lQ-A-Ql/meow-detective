@@ -68,7 +68,7 @@ impl<'a, 'db> MemberCoordinator<'a, 'db> {
         );
         self.job_repo
             .update_progress(&self.job.job_id, progress.min(90), &detail)
-            .map_err(super::CommandError::from_typed_service_error)?;
+            .map_err(app_services::connection::command_error_from_db)?;
         if let Some(app) = self.app {
             event_bridge::emit_job_progress(app, &self.job.job_id.0, progress.min(90), &detail);
         }

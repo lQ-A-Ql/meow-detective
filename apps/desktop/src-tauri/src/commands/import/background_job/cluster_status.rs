@@ -20,10 +20,10 @@ pub(crate) fn complete_browseable_evidence_set_job(
     app: Option<&AppHandle>,
 ) -> Result<(), CommandError> {
     let connection = app_services::connection::open_existing_case_db(&outcome.processing.db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let completed = JobRepo::new(&connection)
         .complete_if_active(&outcome.parent_job_id, &outcome.completion_detail)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     if !completed {
         cancel_browseable_evidence_set_job(
             outcome,
@@ -155,7 +155,7 @@ pub(crate) fn continue_ceph_rbd_processing(
     cancel_token: &Arc<AtomicBool>,
 ) -> Result<(), CommandError> {
     let connection = app_services::connection::open_existing_case_db(&job.db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     for data_source_id in &job.source_ids {
         if cancel_token.load(Ordering::Relaxed) {
             tracing::info!(

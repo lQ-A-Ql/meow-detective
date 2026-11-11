@@ -28,7 +28,7 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
     task_manager: Option<Arc<TaskManager>>,
 ) -> Result<Option<BrowseableEvidenceSetImport>, CommandError> {
     let connection = app_services::connection::open_existing_case_db(&job.db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let job_repo = JobRepo::new(&connection);
     let projection_task_manager = task_manager.as_ref().cloned();
     if cancel_token.load(Ordering::Relaxed) {
@@ -97,7 +97,7 @@ fn start_cluster_job(
 ) -> Result<bool, CommandError> {
     let started = job_repo
         .start(job_id)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     if !started {
         cancel_job(
             job_repo,

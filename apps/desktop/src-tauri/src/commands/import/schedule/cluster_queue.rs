@@ -30,11 +30,11 @@ pub(super) fn schedule_linux_evidence_set_import_for_active_case(
     let import_set_name = plan.import_set_name.clone();
     let member_count = plan.members.len();
     let connection = app_services::connection::open_existing_case_db(&db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let job_repo = JobRepo::new(&connection);
     let job_id = job_repo
         .create(&case_id.0, "Import Linux evidence set")
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let job_id_string = job_id.0.clone();
     if let Some(app) = app {
         event_bridge::emit_job_created(app, &job_id_string, "Import Linux evidence set");
@@ -47,7 +47,7 @@ pub(super) fn schedule_linux_evidence_set_import_for_active_case(
                 "Queued Linux evidence-set import for {import_set_name} ({member_count} images)"
             ),
         )
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
 
     let app_handle = app.cloned();
     let cancel_token = Arc::new(AtomicBool::new(false));

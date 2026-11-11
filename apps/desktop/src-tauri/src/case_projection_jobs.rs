@@ -22,16 +22,16 @@ pub(crate) fn schedule(
 ) -> Result<Option<String>, CommandError> {
     let db_path = db_path_for_root(case_root);
     let connection = app_services::connection::open_existing_case_db(&db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let repo = JobRepo::new(&connection);
     if has_active_projection_build(&repo)? {
         return Ok(None);
     }
     let job_id = repo
         .create(case_id, CASE_PROJECTION_JOB_KIND)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     repo.update_progress(&job_id, 1, "Queued case projection build")
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     drop(connection);
 
     let task_id = job_id.0.clone();
@@ -72,16 +72,16 @@ fn fail_registration(
     detail: &str,
 ) -> Result<(), CommandError> {
     let connection = app_services::connection::open_existing_case_db(db_path)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     JobRepo::new(&connection)
         .fail(job_id, detail)
-        .map_err(CommandError::from_typed_service_error)
+        .map_err(app_services::connection::command_error_from_db)
 }
 
 fn has_active_projection_build(repo: &JobRepo<'_>) -> Result<bool, CommandError> {
     let jobs = repo
         .list_recent(infrastructure::constants::JOB_LIST_LIMIT)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     Ok(jobs.into_iter().any(|job| {
         job.kind == CASE_PROJECTION_JOB_KIND
             && matches!(job.status.as_str(), "pending" | "running" | "cancelling")

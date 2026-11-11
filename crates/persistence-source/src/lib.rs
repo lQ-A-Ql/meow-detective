@@ -8,3 +8,4 @@ pub mod runtime;
 pub mod staging;
 
 pub use error::{Result, SourceError};
+pub use persistence_fjall as fjall;

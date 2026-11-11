@@ -24,7 +24,7 @@ pub(super) fn cancel_job(
     let input: McpHostJobRequestDto = serde_json::from_value(request.arguments.clone())
         .map_err(|_| CommandError::invalid_input("任务标识无效"))?;
     let connection = app_services::connection::open_existing_case_db(&active.db_path())
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     let job_id = domain::JobId(input.job_id.clone());
     if let Some(principal) = invocation.principal.as_ref() {
         let owns_task = state
@@ -72,7 +72,7 @@ pub(super) fn start_content_index(
     let binding_connection = if principal.is_some() && input.idempotency_key.is_some() {
         Some(
             app_services::connection::open_existing_case_db(&active.db_path())
-                .map_err(CommandError::from_typed_service_error)?,
+                .map_err(app_services::connection::command_error_from_db)?,
         )
     } else {
         None
@@ -90,7 +90,7 @@ pub(super) fn start_content_index(
                 "start_content_index",
                 idempotency_key,
             )
-            .map_err(CommandError::from_typed_service_error)?
+            .map_err(app_services::connection::command_error_from_db)?
         {
             if binding.arguments_sha256 != arguments_sha256 {
                 return Err(CommandError::conflict("幂等键已用于其他内容索引请求"));
@@ -134,7 +134,7 @@ pub(super) fn start_content_index(
             };
             let selected = McpTaskBindingRepo::new(connection)
                 .insert_or_get(&binding)
-                .map_err(CommandError::from_typed_service_error)?;
+                .map_err(app_services::connection::command_error_from_db)?;
             if selected.task_id != task.task_id {
                 let _ = crate::evidence_task_jobs::cancel(state, &task.task_id);
                 let existing = app_services::evidence_tasks::get(
@@ -174,7 +174,7 @@ pub(super) fn start_analysis(
     let binding_connection = if principal.is_some() && input.idempotency_key.is_some() {
         Some(
             app_services::connection::open_existing_case_db(&active.db_path())
-                .map_err(CommandError::from_typed_service_error)?,
+                .map_err(app_services::connection::command_error_from_db)?,
         )
     } else {
         None
@@ -254,7 +254,7 @@ fn find_analysis_binding(
 ) -> Result<Option<transport::dto::JobSnapshotDto>, CommandError> {
     let Some(binding) = McpTaskBindingRepo::new(connection)
         .find(&active.meta.id.0, principal_id, "start_analysis", key)
-        .map_err(CommandError::from_typed_service_error)?
+        .map_err(app_services::connection::command_error_from_db)?
     else {
         return Ok(None);
     };
@@ -286,7 +286,7 @@ fn bind_analysis_task(
     };
     let selected = McpTaskBindingRepo::new(connection)
         .insert_or_get(&binding)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     if selected.task_id == task_id {
         return Ok(None);
     }
@@ -328,7 +328,7 @@ pub(super) fn start_report_export(
     let binding_connection = if principal.is_some() && input.idempotency_key.is_some() {
         Some(
             app_services::connection::open_existing_case_db(&active.db_path())
-                .map_err(CommandError::from_typed_service_error)?,
+                .map_err(app_services::connection::command_error_from_db)?,
         )
     } else {
         None
@@ -401,7 +401,7 @@ fn find_report_binding(
 ) -> Result<Option<transport::dto::JobSnapshotDto>, CommandError> {
     let Some(binding) = McpTaskBindingRepo::new(connection)
         .find(&active.meta.id.0, principal_id, "start_report_export", key)
-        .map_err(CommandError::from_typed_service_error)?
+        .map_err(app_services::connection::command_error_from_db)?
     else {
         return Ok(None);
     };
@@ -433,7 +433,7 @@ fn bind_report_task(
     };
     let selected = McpTaskBindingRepo::new(connection)
         .insert_or_get(&binding)
-        .map_err(CommandError::from_typed_service_error)?;
+        .map_err(app_services::connection::command_error_from_db)?;
     if selected.task_id == task_id {
         return Ok(None);
     }
