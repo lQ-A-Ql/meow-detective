@@ -2,10 +2,13 @@ import { useEffect, type KeyboardEvent, type RefObject } from 'react';
 import type { TextViewerModel } from './use-text-viewer-model';
 
 export function useTextSearchKeyboard(model: TextViewerModel, viewportRef: RefObject<HTMLDivElement>) {
+  // The model object is rebuilt on every render; only these two members drive the
+  // listener, so depend on them directly instead of on the container object.
+  const { query, setQuery } = model;
   // Capture at the owning window before a containing dialog handles Escape.
   useEffect(() => {
     const owner = viewportRef.current?.ownerDocument.defaultView;
-    if (!owner || !model.query) return;
+    if (!owner || !query) return;
     const clear = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || event.isComposing) return;
       const region = viewportRef.current?.closest('[data-slot="text-viewer"]')?.querySelector('[role="search"]');
@@ -13,11 +16,11 @@ export function useTextSearchKeyboard(model: TextViewerModel, viewportRef: RefOb
       if (!region || !target || !('nodeType' in target) || !region.contains(target as Node)) return;
       event.preventDefault();
       event.stopPropagation();
-      model.setQuery('');
+      setQuery('');
     };
     owner.addEventListener('keydown', clear, true);
     return () => owner.removeEventListener('keydown', clear, true);
-  }, [model.query, model.setQuery, viewportRef]);
+  }, [query, setQuery, viewportRef]);
 
   return (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing) return;

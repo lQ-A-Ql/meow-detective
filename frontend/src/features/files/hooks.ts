@@ -472,7 +472,17 @@ export function useFileViewer(fileId?: string, enabled = true, caseId?: string) 
       hasMoreAfter: Boolean(lastRange && lastRange.end < handle.size),
       error: viewerError,
     };
-  }, [activeOffset, baseQuery.data, isLoadingMore, jumpOffsetInput, loadedChunks, loadedRanges, viewerError]);
+  }, [
+    activeOffset,
+    baseQuery.data,
+    isLoadingMore,
+    jumpOffsetInput,
+    loadedChunks,
+    loadedRanges,
+    preview.hexChunkBytes,
+    preview.maxViewerRangeLength,
+    viewerError,
+  ]);
 
   return {
     ...baseQuery,

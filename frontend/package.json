@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "typecheck:mock": "tsc --noEmit -p tsconfig.mock.json",
-    "lint": "eslint src/ tests/",
+    "lint": "eslint src/ tests/ --max-warnings 0",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest"

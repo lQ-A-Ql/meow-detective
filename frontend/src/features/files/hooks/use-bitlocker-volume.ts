@@ -135,8 +135,14 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     }
   }, [inspect, target]);
 
+  // Polling only depends on the attack phase: every status poll replaces the
+  // `dictionaryAttack` object, so depending on the object itself would tear down
+  // and restart the interval on each poll.
+  const dictionaryAttackPhase = dictionaryAttack?.phase;
+
   useEffect(() => {
-    if (!target || !dictionaryAttack || !['queued', 'running', 'cancelling'].includes(dictionaryAttack.phase)) {
+    if (!target || !dictionaryAttackPhase
+      || !['queued', 'running', 'cancelling'].includes(dictionaryAttackPhase)) {
       return;
     }
     let active = true;
@@ -165,7 +171,7 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
       active = false;
       window.clearInterval(timer);
     };
-  }, [dictionaryAttack?.phase, inspect, target]);
+  }, [dictionaryAttackPhase, inspect, target]);
 
   const unlock = useCallback(async (method: BitLockerUnlockMethod, credential: string) => {
     if (!target || !credential) {
@@ -334,7 +340,8 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
   }, [dictionaryAttack?.phase, inspect, target]);
 
   const cancelDictionaryAttack = useCallback(async () => {
-    if (!target || !dictionaryAttack || !['queued', 'running'].includes(dictionaryAttack.phase) || dictionaryCancelling) {
+    if (!target || !dictionaryAttackPhase
+      || !['queued', 'running'].includes(dictionaryAttackPhase) || dictionaryCancelling) {
       return false;
     }
     setDictionaryCancelling(true);
@@ -351,7 +358,7 @@ export function useBitLockerVolumeModel(target?: BitLockerTarget): BitLockerVolu
     } finally {
       setDictionaryCancelling(false);
     }
-  }, [dictionaryAttack?.phase, dictionaryCancelling, target]);
+  }, [dictionaryAttackPhase, dictionaryCancelling, target]);
 
   return {
     status,

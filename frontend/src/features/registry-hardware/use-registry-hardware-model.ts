@@ -23,11 +23,13 @@ export function useRegistryHardwareModel(client: RegistryHardwareClient, context
   const revision = hives.data?.sourceRevision ?? context.sourceRevision;
   const hive = useRegistrySession(client, { ...context, sourceRevision: revision });
   const session = hive.session;
+  const openHiveSession = hive.openHive;
   useRegistrySessionCache(session?.sessionId);
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, isError, fetchNextPage } = hives;
   useEffect(() => {
-    if (!systems.length && hives.hasNextPage && !hives.isFetchingNextPage && !hives.isFetchNextPageError && !hives.isError) void hives.fetchNextPage();
-  }, [systems.length, hives.hasNextPage, hives.isFetchingNextPage, hives.isFetchNextPageError, hives.isError, hives.fetchNextPage]);
-  useEffect(() => { if (selected?.fileId) void hive.openHive(selected.fileId, revision, view); }, [selected?.fileId, revision, view, attempt, hive.openHive]);
+    if (!systems.length && hasNextPage && !isFetchingNextPage && !isFetchNextPageError && !isError) void fetchNextPage();
+  }, [systems.length, hasNextPage, isFetchingNextPage, isFetchNextPageError, isError, fetchNextPage]);
+  useEffect(() => { if (selected?.fileId) void openHiveSession(selected.fileId, revision, view); }, [selected?.fileId, revision, view, attempt, openHiveSession]);
   const sourceMatches = session?.source.fileId === selected?.fileId && session?.source.view === view;
   const summary = useQuery({
     queryKey: ['registry-browser', 'hardware', context.caseId, context.dataSourceId, revision, session?.sessionId],

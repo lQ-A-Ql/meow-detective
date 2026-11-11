@@ -78,7 +78,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
       setIsPlaying(false);
       setError(t('media.errors.playback', { message: e.message }));
     });
-  }, [isPlaying]);
+  }, [isPlaying, t]);
 
   // 快进/快退
   const skip = useCallback((seconds: number) => {
@@ -174,7 +174,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('error', handleError);
     };
-  }, []);
+  }, [t]);
 
   // 格式化时间
   const formatTime = (seconds: number) => {

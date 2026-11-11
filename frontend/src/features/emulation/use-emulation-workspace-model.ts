@@ -368,7 +368,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
       return;
     }
     await startMutation.mutateAsync(allowDirectBoot);
-  }, [recoveryIsoPath, startMutation, t]);
+  }, [recoveryIsoPath, startMutation]);
   const cancelDirectBoot = useCallback(() => setDirectBootConfirmationOpen(false), []);
   const confirmDirectBoot = useCallback(async () => {
     setDirectBootConfirmationOpen(false);

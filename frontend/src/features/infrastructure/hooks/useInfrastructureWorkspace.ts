@@ -18,8 +18,8 @@ export function useInfrastructureWorkspace() {
   });
   const [selectedId, setSelectedId] = useState<string>();
   const [query, setQuery] = useState('');
-  const nodes = graph.data?.nodes ?? [];
-  const edges = graph.data?.edges ?? [];
+  const nodes = useMemo(() => graph.data?.nodes ?? [], [graph.data]);
+  const edges = useMemo(() => graph.data?.edges ?? [], [graph.data]);
   const selected = nodes.find((node) => node.id === selectedId);
   const domains = useMemo(() => groupNodesByDomain(nodes), [nodes]);
   const visibleNodes = useMemo(
@@ -27,7 +27,7 @@ export function useInfrastructureWorkspace() {
     [nodes, query, t],
   );
   const nodeNames = useMemo(() => new Map(nodes.map((node) => [node.id, node.name])), [nodes]);
-  const networkFacts = graph.data?.networkFacts ?? [];
+  const networkFacts = useMemo(() => graph.data?.networkFacts ?? [], [graph.data]);
   const networkTopology = useMemo(() => buildNetworkTopology({ nodes, edges }, networkFacts), [edges, networkFacts, nodes]);
 
   return {

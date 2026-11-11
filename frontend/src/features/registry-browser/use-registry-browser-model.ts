@@ -27,6 +27,8 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   const pendingViewPath = useRef<{ view: RegistryHiveView; fileId: string; path: string }>();
   const hive = useRegistrySession(client, { ...context, sourceRevision: hives.data?.sourceRevision ?? context.sourceRevision });
   const session = hive.session;
+  const openHiveSession = hive.openHive;
+  const expireSession = hive.expire;
   useRegistrySessionCache(session?.sessionId);
   const tree = useRegistryTree(client, session);
   const [selection, setSelection] = useState<{ sessionId: string; key: RegistryKeyMetadata; initialValuesCursor?: string }>();
@@ -40,7 +42,7 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
   const range = useRegistryValueRange(client, session, selectedKey, selectedValue, offset);
   const expired = registryBrowserErrorCode(values.error) === 'expiredSession'
     || registryBrowserErrorCode(range.error) === 'expiredSession' || Object.values(tree.errors).includes('expiredSession');
-  useEffect(() => { if (expired) hive.expire(); }, [expired, hive.expire]);
+  useEffect(() => { if (expired) expireSession(); }, [expired, expireSession]);
   const [detailTab, setDetailTab] = useState<RegistryDetailTab>('decoded');
   const [filter, setFilter] = useState('');
   const registrySearch = useRegistrySearch(session);
@@ -64,8 +66,8 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     navigationEpoch.current += 1;
     setLocating(false); setCopyStatus(undefined);
     setSelection(undefined); setValueSelection(undefined); setOffset(0); setPathInput(''); setPathError(undefined);
-    return hive.openHive(fileId, revision, requestedView);
-  }, [hive.openHive, view]);
+    return openHiveSession(fileId, revision, requestedView);
+  }, [openHiveSession, view]);
   const activate = (node: RegistryTreeNode) => {
     if (node.key && session?.hive.fileId === node.hive.fileId) selectKey(node.key);
     else void openHive(node.hive.fileId);
@@ -78,6 +80,9 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
     tree.expanded, tree.loading, tree.errors, instanceId), filter);
   const keyboard = useRegistryTreeKeyboard(nodes, activate, toggle);
   const viewport = useRegistryTreeViewport(flattenRegistryTree(nodes), keyboard);
+  const loadTreePage = tree.load;
+  const expandTreeKey = tree.expand;
+  const setTreeKeyboardFocus = keyboard.setFocusedId;
   const locate = useCallback(async (path: string) => {
     if (!session) return;
     const token = ++navigationEpoch.current;
@@ -91,21 +96,21 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
           : await client.resolveKey({ sessionId, keyPath: parts.slice(0, depth).join('\\') });
         if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
         const childPath = parts.slice(0, depth + 1).join('\\').toLowerCase();
-        let page = await tree.load(parent);
+        let page = await loadTreePage(parent);
         while (page?.nextCursor && !page.keys.some((child) => child.path.toLowerCase() === childPath)) {
           if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
-          page = await tree.load(parent, page.nextCursor);
+          page = await loadTreePage(parent, page.nextCursor);
         }
-        tree.expand(parent);
+        expandTreeKey(parent);
       }
       if (token !== navigationEpoch.current || activeSession.current !== sessionId) return;
       setSelection({ sessionId, key }); setPathInput(key.path); setValueSelection(undefined); setOffset(0);
-      keyboard.setFocusedId(key.keyId);
+      setTreeKeyboardFocus(key.keyId);
       return key;
     } catch (error) {
       if (token === navigationEpoch.current && activeSession.current === sessionId) setPathError(error);
     } finally { if (token === navigationEpoch.current) setLocating(false); }
-  }, [client, session, tree.load, tree.expand, keyboard.setFocusedId]);
+  }, [client, session, loadTreePage, expandTreeKey, setTreeKeyboardFocus]);
   const initialDone = useRef(false);
   useEffect(() => {
     if (!initialDone.current && hives.data?.hives.length) {
@@ -119,12 +124,12 @@ export function useRegistryBrowserModel(client: RegistryBrowserClient, context: 
       pendingViewPath.current = undefined;
       if (pending.path) void locate(pending.path);
     }
-  }, [session?.sessionId]);
+  }, [locate, session]);
   useEffect(() => {
     if (session && initialKeyPath && !initialPathDone.current) {
       initialPathDone.current = true; void locate(initialKeyPath);
     }
-  }, [session?.sessionId]);
+  }, [initialKeyPath, locate, session]);
   const copy = async (text: string) => {
     const token = navigationEpoch.current;
     try { await navigator.clipboard.writeText(text); if (token === navigationEpoch.current) setCopyStatus(t('registryBrowser.copied')); }

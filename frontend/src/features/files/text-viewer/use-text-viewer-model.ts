@@ -15,8 +15,11 @@ export function useTextViewerModel({ content, documentKey, searchQuery }: TextVi
   const [search, setSearch] = useState({ content, documentKey, external: searchQuery, value: searchQuery ?? '' });
   const sameDocument = search.content === content && search.documentKey === documentKey && search.external === searchQuery;
   const query = sameDocument ? search.value : searchQuery ?? '';
-  const document = useMemo(() => indexTextDocument(content), [content, documentKey]);
-  const index = useMemo(() => indexTextSearch(content, query), [content, query, documentKey]);
+  // documentKey identifies the evidence file: a different file can carry identical text and
+  // still needs a fresh index, because index identity is what resets the viewed page/match.
+  const source = useMemo(() => ({ content, documentKey }), [content, documentKey]);
+  const document = useMemo(() => indexTextDocument(source.content), [source]);
+  const index = useMemo(() => indexTextSearch(source.content, query), [source, query]);
   const initialLocation = useMemo<Location>(() => index.starts.length > 0
     ? { index, document, page: pageForOffset(document, index.starts[0]), active: 0,
       request: { kind: 'match', startOffset: index.starts[0], matchIndex: 0 } }

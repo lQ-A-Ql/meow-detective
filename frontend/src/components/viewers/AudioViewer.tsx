@@ -66,7 +66,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
       setIsPlaying(false);
       setError(t('media.errors.playback', { message: e.message }));
     });
-  }, [isPlaying]);
+  }, [isPlaying, t]);
 
   // 快进/快退
   const skip = useCallback((seconds: number) => {
@@ -139,7 +139,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('error', handleError);
     };
-  }, []);
+  }, [t]);
 
   // 格式化时间
   const formatTime = (seconds: number) => {

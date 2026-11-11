@@ -74,7 +74,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
     } else {
       setError(t('media.errors.imageUnsupported'));
     }
-  }, []);
+  }, [t]);
 
   // 鼠标滚轮缩放
   const handleWheel = useCallback((e: React.WheelEvent) => {

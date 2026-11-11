@@ -200,7 +200,13 @@ export function useFileTree({
     setTreeChildren((current) => mergeFileTreePath(current, wrappedRootTree, jumpPathNodes));
   }, [dataSources, jumpPathNodes, showHidden, wrappedRootTree]);
 
-  const rootNodes = wrappedRootTree.length > 0 ? wrappedRootTree : (rootTree ?? []);
+  // Both branches must be referentially stable: `rootTree ?? []` would hand every
+  // render a fresh empty array and re-run each downstream memo/effect that depends
+  // on the roots.
+  const rootNodes = useMemo(
+    () => (wrappedRootTree.length > 0 ? wrappedRootTree : (rootTree ?? [])),
+    [rootTree, wrappedRootTree],
+  );
 
   // Auto-expand the first data source node so its partition children are visible
   // on initial load, matching the pre-wrap behavior where partition roots were at

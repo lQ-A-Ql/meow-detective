@@ -22,6 +22,16 @@ export function useFileBrowserCoordinator({ caseId, selectedDirectoryId, selecte
   showHidden, onShowHidden, location, tree, pagination }: FileBrowserCoordinatorOptions) {
   const setSelectedDirectoryId = location.selectDirectory;
   const setSelectedFileId = location.selectFile;
+  // `tree` and `pagination` are hook result objects rebuilt on every render. Each
+  // member used below is either a `useCallback` function or a primitive, so depend
+  // on the members rather than on the container object (which would invalidate the
+  // effects on every render).
+  const setExpandedDirectoryIds = tree.setExpandedDirectoryIds;
+  const rowsOffset = pagination.rowsOffset;
+  const setRowsOffset = pagination.setRowsOffset;
+  const paginationHandleSort = pagination.handleSort;
+  const paginationGoToPreviousRows = pagination.goToPreviousRows;
+  const paginationGoToNextRows = pagination.goToNextRows;
 
   useEffect(() => {
     const pending = location.pendingJump;
@@ -36,18 +46,18 @@ export function useFileBrowserCoordinator({ caseId, selectedDirectoryId, selecte
       onShowHidden(true);
       return;
     }
-    tree.setExpandedDirectoryIds((current) => {
+    setExpandedDirectoryIds((current) => {
       const next = [...new Set([...current, ...directoryExpansionIds(context, true)])];
       return next.length === current.length ? current : next;
     });
     const offset = context.target.entryType === 'file' ? context.rowOffset : 0;
-    if (pagination.rowsOffset !== offset) {
-      pagination.setRowsOffset(offset);
+    if (rowsOffset !== offset) {
+      setRowsOffset(offset);
       return;
     }
     useFileNavigationStore.getState().consume(pending);
-  }, [location.pendingJump, onShowHidden, pagination.rowsOffset, pagination.setRowsOffset, selectedDirectoryId, selectedFileId,
-    showHidden, tree.setExpandedDirectoryIds]);
+  }, [location.pendingJump, onShowHidden, rowsOffset, selectedDirectoryId, selectedFileId,
+    setExpandedDirectoryIds, setRowsOffset, showHidden]);
 
   useEffect(() => {
     const context = location.directoryContext;
@@ -57,12 +67,12 @@ export function useFileBrowserCoordinator({ caseId, selectedDirectoryId, selecte
       setSelectedDirectoryId(visibility.directoryId);
       return;
     }
-    tree.setExpandedDirectoryIds((current) => {
+    setExpandedDirectoryIds((current) => {
       const next = [...new Set([...current, ...directoryExpansionIds(context)])];
       return next.length === current.length ? current : next;
     });
-  }, [location.directoryContext, location.pendingJump, setSelectedDirectoryId, showHidden,
-    tree.setExpandedDirectoryIds]);
+  }, [location.directoryContext, location.pendingJump, setExpandedDirectoryIds,
+    setSelectedDirectoryId, showHidden]);
 
   useEffect(() => {
     if (selectedFileId && pagination.rowsReady && !location.pendingJump
@@ -79,24 +89,24 @@ export function useFileBrowserCoordinator({ caseId, selectedDirectoryId, selecte
   }, [onShowHidden, setSelectedFileId]);
   const handleSort = useCallback((key: string) => {
     setSelectedFileId(undefined);
-    pagination.handleSort(key);
-  }, [pagination.handleSort, setSelectedFileId]);
+    paginationHandleSort(key);
+  }, [paginationHandleSort, setSelectedFileId]);
   const goToPreviousRows = useCallback(() => {
     setSelectedFileId(undefined);
-    pagination.goToPreviousRows();
-  }, [pagination.goToPreviousRows, setSelectedFileId]);
+    paginationGoToPreviousRows();
+  }, [paginationGoToPreviousRows, setSelectedFileId]);
   const goToNextRows = useCallback(() => {
     setSelectedFileId(undefined);
-    pagination.goToNextRows();
-  }, [pagination.goToNextRows, setSelectedFileId]);
+    paginationGoToNextRows();
+  }, [paginationGoToNextRows, setSelectedFileId]);
   const activateEntry = useCallback((row: FileEntryRow) => {
     if (row.entryType === 'directory') {
       setSelectedDirectoryId(row.id);
-      tree.setExpandedDirectoryIds((current) => current.includes(row.id) ? current : [...current, row.id]);
+      setExpandedDirectoryIds((current) => current.includes(row.id) ? current : [...current, row.id]);
     } else {
       setSelectedFileId(row.id);
     }
-  }, [setSelectedDirectoryId, setSelectedFileId, tree.setExpandedDirectoryIds]);
+  }, [setExpandedDirectoryIds, setSelectedDirectoryId, setSelectedFileId]);
 
   return { setShowHidden, handleSort, goToPreviousRows, goToNextRows, activateEntry };
 }

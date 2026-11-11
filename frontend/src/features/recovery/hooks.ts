@@ -88,6 +88,7 @@ export function useDeletedRecoveryModel(
     [source],
   );
   const partitionIdentity = partitions.map((partition) => partition.index).join(',');
+  const initialPartitionIndex = partitions[0]?.index;
   const [selectedPartitionIndex, setSelectedPartitionIndex] = useState<number>();
   const [offset, setOffset] = useState(0);
   const [selectedRecoveryId, setSelectedRecoveryId] = useState<string>();
@@ -104,13 +105,13 @@ export function useDeletedRecoveryModel(
   selectedRangeOrdinalRef.current = selectedRangeOrdinal;
 
   useEffect(() => {
-    setSelectedPartitionIndex(partitions[0]?.index);
+    setSelectedPartitionIndex(initialPartitionIndex);
     setOffset(0);
     setSelectedRecoveryId(undefined);
     setSelectedRangeOrdinal(undefined);
     setPreview(undefined);
     setHashQueryState('');
-  }, [partitionIdentity, source?.id]);
+  }, [initialPartitionIndex, partitionIdentity, source?.id]);
 
   const queryKey = [
     'recovery',

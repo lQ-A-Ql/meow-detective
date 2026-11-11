@@ -1,6 +1,6 @@
 import { Minus, RotateCcw, Target, Plus }  from '@/components/icons';
 import { useTranslation } from 'react-i18next';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/app/components/ui/button';
 import type { GraphEdge, GraphNode } from '@/types/models';
 import {
@@ -89,7 +89,7 @@ export function ForceGraph({
     };
   }, []);
 
-  const degrees = degreeMap(nodes, edges);
+  const degrees = useMemo(() => degreeMap(nodes, edges), [nodes, edges]);
   const nodeSignature = nodes.map((node) => node.id).join('\0');
 
   useEffect(() => {
@@ -129,7 +129,7 @@ export function ForceGraph({
       }
       return changed ? next : prev;
     });
-  }, [nodes, edges, width, height]);
+  }, [degrees, nodes, edges, width, height]);
 
   // Fit view once after positions are first populated.
   useEffect(() => {

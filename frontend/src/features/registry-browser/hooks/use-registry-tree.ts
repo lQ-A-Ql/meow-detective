@@ -39,13 +39,15 @@ export function useRegistryTree(client: RegistryBrowserClient, session?: Registr
     setPages({}); setErrors({}); setLoading(new Set());
     setExpanded(session ? new Set([session.rootKey.keyId]) : new Set());
     if (session) void load(session.rootKey);
-  }, [session?.sessionId]);
+  }, [load, session]);
   const toggle = useCallback((key: RegistryKeyMetadata) => {
     const isExpanded = expanded.has(key.keyId);
     setExpanded((state) => { const next = new Set(state); if (isExpanded) next.delete(key.keyId); else next.add(key.keyId); return next; });
     if (!isExpanded && !pages[key.keyId]) void load(key);
   }, [expanded, load, pages]);
+  const expand = useCallback((key: RegistryKeyMetadata) => {
+    setExpanded((state) => new Set(state).add(key.keyId));
+  }, []);
   useEffect(() => () => { activeSession.current = undefined; }, []);
-  return { pages, expanded, loading, errors, toggle, load,
-    expand: (key: RegistryKeyMetadata) => setExpanded((state) => new Set(state).add(key.keyId)) };
+  return { pages, expanded, loading, errors, toggle, load, expand };
 }

@@ -76,12 +76,14 @@ export function useImageMountModel() {
     retry: false,
   });
 
-  const dataSources = dataSourcesQuery.data ?? [];
+  // `?? []` inside the render body yields a fresh array whenever the query has no
+  // data; memoize so the fallbacks keep a stable identity for the effects below.
+  const dataSources = useMemo(() => dataSourcesQuery.data ?? [], [dataSourcesQuery.data]);
   const selectedSource = useMemo(
     () => dataSources.find((source) => source.id === selectedSourceId),
     [dataSources, selectedSourceId],
   );
-  const partitions = selectedSource?.partitions ?? [];
+  const partitions = useMemo(() => selectedSource?.partitions ?? [], [selectedSource]);
   const selectedPartition = findSelectedPartition(selectedSource, selectedPartitionIndex);
   const selectedMount = useMemo(
     () => mountsQuery.data?.find((mount) => {
@@ -213,7 +215,7 @@ export function useImageMountModel() {
       return;
     }
     await mountMutation.mutateAsync();
-  }, [emulationMutation, mountMode, mountMutation, recoveryIsoPath.length, t]);
+  }, [emulationMutation, mountMode, mountMutation, recoveryIsoPath.length]);
 
   const unmount = useCallback(async (mountId: string) => {
     await unmountMutation.mutateAsync(mountId);

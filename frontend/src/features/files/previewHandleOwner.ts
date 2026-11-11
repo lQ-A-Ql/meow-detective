@@ -3,6 +3,8 @@ import { useEffect, useMemo } from 'react';
 import { closeFileHandle } from '@/lib/api/files';
 
 interface PreviewHandleOwner {
+  /** Preview target this owner is bound to. A new scope key yields a new owner (see below). */
+  scopeKey: string;
   disposed: boolean;
   handles: Set<string>;
   mountVersion: number;
@@ -10,7 +12,9 @@ interface PreviewHandleOwner {
 
 export function usePreviewHandleOwner(scopeKey: string) {
   const owner = useMemo<PreviewHandleOwner>(
-    () => ({ disposed: false, handles: new Set<string>(), mountVersion: 0 }),
+    // The scope key is part of the identity on purpose: switching files/tabs must create a
+    // fresh owner so the effect cleanup below closes the previous scope's handles.
+    () => ({ scopeKey, disposed: false, handles: new Set<string>(), mountVersion: 0 }),
     [scopeKey],
   );
   useEffect(() => {
