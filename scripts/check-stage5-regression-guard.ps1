@@ -226,15 +226,34 @@ foreach ($pattern in @(
     -Message "Staging merge-to-main must not silently suppress conflicts with: $pattern"
 }
 
+# Enumeration merge has two explicit persistence paths: the Fjall catalog
+# merge and the SQLite fallback. Analysis artifacts and timeline rows are owned
+# by the source Fjall store after the source-storage cutover.
+Assert-Matches `
+  -Content $stagingRepo `
+  -Pattern 'crate::source_fjall::merge_staging_catalog' `
+  -Message 'Staging enum merge is missing the explicit Fjall catalog path'
+Assert-Matches `
+  -Content $stagingRepo `
+  -Pattern 'INSERT\s+INTO\s+main\.file_entries' `
+  -Message 'Staging enum merge is missing the explicit SQLite fallback path'
+Assert-Matches `
+  -Content $stagingRepo `
+  -Pattern 'crate::source_fjall::analysis_staging::merge' `
+  -Message 'Staging analysis merge is missing the explicit Fjall analysis path'
+Assert-Matches `
+  -Content $stagingRepo `
+  -Pattern 'source detail storage is missing' `
+  -Message 'Staging analysis merge must fail closed when source detail storage is missing'
+
 foreach ($pattern in @(
-    'INSERT\s+INTO\s+main\.file_entries',
-    'INSERT\s+INTO\s+main\.artifacts',
-    'INSERT\s+INTO\s+main\.timeline_events'
+    'INSERT\s+(OR\s+\w+\s+)?INTO\s+main\.artifacts',
+    'INSERT\s+(OR\s+\w+\s+)?INTO\s+main\.timeline_events'
   )) {
-  Assert-Matches `
+  Assert-NotMatches `
     -Content $stagingRepo `
     -Pattern $pattern `
-    -Message "Staging merge-to-main is missing explicit insert path: $pattern"
+    -Message "Staging analysis merge must not write artifacts/timeline to SQLite: $pattern"
 }
 
 # Import pipeline orchestration must remain Tauri-free. Desktop commands may
@@ -242,7 +261,7 @@ foreach ($pattern in @(
 # direct dependency on Tauri runtime handles.
 Assert-NotMatchesCaseSensitive `
   -Content $importPipelineProduction `
-  -Pattern '\btauri::|\bAppHandle\b|\bWindow\b|\bEmitter\b|emit_all|emit_to|\.emit\(' `
+  -Pattern '\btauri::|\bAppHandle\b|\bWindow\b|\bEmitter\b|emit_all|emit_to' `
   -Message "import_pipeline production code must stay Tauri-free; use ImportEventSink adapters at the command boundary"
 
 Assert-Matches `

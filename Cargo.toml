@@ -18,7 +18,6 @@ members = [
   "crates/fs-exfat",
   "crates/image-e01",
   "crates/image-android",
-  "crates/volume-android",
   "crates/search",
   "crates/timeline",
   "crates/artifacts-core",
@@ -48,6 +47,7 @@ members = [
   "crates/artifact-storage",
 ]
 exclude = [
+  "experimental/volume-android",
   "vendor/iscsi-target",
   "vendor/bbolt-rs",
   "vendor/fjall-3.1.13",
@@ -114,7 +114,6 @@ volume-bitlocker = { path = "crates/volume-bitlocker" }
 memory-windows = { path = "crates/memory-windows" }
 image-e01 = { path = "crates/image-e01" }
 image-android = { path = "crates/image-android" }
-volume-android = { path = "crates/volume-android" }
 search = { path = "crates/search" }
 timeline = { path = "crates/timeline" }
 artifacts-core = { path = "crates/artifacts-core" }

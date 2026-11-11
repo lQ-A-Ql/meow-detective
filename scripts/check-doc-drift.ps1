@@ -49,6 +49,18 @@ function Assert-Matches {
   }
 }
 
+function Assert-NotMatches {
+  param(
+    [Parameter(Mandatory = $true)][string]$Content,
+    [Parameter(Mandatory = $true)][string]$Pattern,
+    [Parameter(Mandatory = $true)][string]$Message
+  )
+
+  if ($Content -match $Pattern) {
+    throw $Message
+  }
+}
+
 function Get-KnownLimitationDocRows {
   param([Parameter(Mandatory = $true)][string]$Content)
 
@@ -134,6 +146,7 @@ function Assert-TableFact {
 }
 
 $readme = Read-Text 'README.md'
+$agents = Read-Text 'AGENTS.md'
 $docIndex = Read-Text 'docs/documentation-index.md'
 $knownUnsupportedDoc = Read-Text 'docs/known-unsupported-formats.md'
 $validationDoc = Read-Text 'docs/validation-trust-framework.md'
@@ -152,7 +165,7 @@ $crateCount = ([regex]::Matches(
     $workspaceMembersMatch.Groups['members'].Value,
     '"crates/[^"\r\n]+"'
   ) | Measure-Object).Count
-Assert-Equals $crateCount 44 'Workspace crate count drifted'
+Assert-Equals $crateCount 43 'Workspace crate count drifted'
 $commandFiles = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'apps/desktop/src-tauri/src/commands') -Recurse -File -Filter '*.rs'
 $commandCount = ($commandFiles | Select-String -Pattern '#\[tauri::command\]' | Measure-Object).Count
 $repositoryRoot = Join-Path $repoRoot 'crates/persistence-sqlite/src/repositories'
@@ -171,6 +184,14 @@ $frontendTestCount = (
     Measure-Object
 ).Count
 $serviceModuleCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates/app-services/src') -Filter '*.rs' | Where-Object { $_.Name -ne 'lib.rs' } | Measure-Object).Count
+$eventTopicCount = ([regex]::Matches(
+    (Read-Text 'crates/transport/src/events/mod.rs'),
+    '(?m)^pub const TOPIC_[A-Z0-9_]+:'
+  ) | Measure-Object).Count
+$dtoModuleCount = (
+  Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates/transport/src/dto') -File -Filter '*.rs' |
+    Measure-Object
+).Count
 $knownLimitationRows = Get-KnownLimitationDocRows $knownUnsupportedDoc
 $moduleBaselineRows = @(Import-Csv -LiteralPath (Join-Path $repoRoot 'scripts/baselines/rust-module-size-baseline.csv'))
 $functionBaselineRows = @(Import-Csv -LiteralPath (Join-Path $repoRoot 'scripts/baselines/rust-function-size-baseline.csv'))
@@ -187,6 +208,20 @@ Assert-Contains $readme "$commandCount Tauri commands" 'README Tauri command cou
 Assert-Contains $readme "$serviceModuleCount source modules" 'README app-services module count is stale'
 Assert-Contains $readme "migration scripts ($migrationCount)" 'README migration script count is stale'
 Assert-Contains $readme "$frontendTestCount test files" 'README frontend test file count is stale'
+
+Assert-Contains $agents "$crateCount crates" 'AGENTS crate count is stale'
+Assert-Contains $agents "$commandCount Tauri commands" 'AGENTS Tauri command count is stale'
+Assert-Contains $agents "$repoCount logical SQLite repositories" 'AGENTS repository count is stale'
+Assert-Contains $agents "$migrationCount migration scripts" 'AGENTS migration count is stale'
+Assert-Contains $agents "$pageCount frontend pages" 'AGENTS frontend page count is stale'
+Assert-Contains $agents "$frontendTestCount frontend test files" 'AGENTS frontend test count is stale'
+Assert-Contains $agents "$eventTopicCount event topics" 'AGENTS event topic count is stale'
+Assert-Contains $agents "$dtoModuleCount DTO module files" 'AGENTS DTO module count is stale'
+Assert-Contains $agents 'experimental/volume-android' 'AGENTS is missing the experimental volume-android boundary'
+Assert-NotMatches `
+  -Content $agents `
+  -Pattern '`mcp-client`' `
+  -Message 'AGENTS still lists the removed mcp-client crate'
 
 Assert-TableFact $docIndex 'Rust workspace crate' $crateCount 'documentation-index crate count is stale'
 Assert-TableFact $docIndex 'Tauri commands' $commandCount 'documentation-index command count is stale'

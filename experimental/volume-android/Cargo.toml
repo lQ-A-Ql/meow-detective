@@ -1,0 +1,22 @@
+# Experimental: not a product workspace member until liblp import is wired in.
+[workspace]
+
+[package]
+name = "volume-android"
+version = "0.1.0"
+edition = "2021"
+authors = ["lQ-A-Ql"]
+license = "MIT"
+
+[dependencies]
+thiserror = "~2.0"
+sha2 = "~0.10"
+evidence-core = { path = "../../crates/evidence-core" }
+fs-ext4 = { path = "../../crates/fs-ext4" }
+fs-f2fs = { path = "../../crates/fs-f2fs" }
+fs-erofs = { path = "../../crates/fs-erofs" }
+
+[dev-dependencies]
+tempfile = "3"
+image-android = { path = "../../crates/image-android" }
+testing = { path = "../../crates/testing" }

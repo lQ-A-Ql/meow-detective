@@ -4,7 +4,7 @@
 
 ## 项目介绍
 
-Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 44 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
+Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 43 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
 当前工程事实快照：12 frontend pages（其中 `/v2` V2 workbench 仅在 dev/audit 模式注册，生产路由 11 个）、169 Tauri commands、57 source modules、migration scripts (77)、142 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
@@ -415,7 +415,7 @@ cargo build --release
 | [libewf](https://github.com/libyal/libewf) | LGPL-3.0 | 参考 `ewfmount.c`、Dokan/FUSE 回调和 EWF handle 生命周期设计，确定最小只读操作集、句柄边界与卸载清理；生产链路使用本项目 `image-e01` reader，未复用 libewf 源码或调用其 CLI |
 | [Microsoft go-winio](https://github.com/microsoft/go-winio) | MIT | `crates/fs-ntfs` 的 WOF WIM-LZX 解压按 go-winio `wim/lzx` 的算法与帧结构适配，上游 MIT 许可证文本保留于 `crates/fs-ntfs/NOTICE`，仓库未包含其 Go 源码文件 |
 | [libyal/libfwevt](https://github.com/libyal/libfwevt) | LGPL-3.0 | `crates/evtx-patched` 的 `WEVT_TEMPLATE`（manifest）解析为按 libfwevt《Windows Event manifest binary format》文档重写的 Rust 解析器，字段语义与参考 C 实现对齐，见 `crates/evtx-patched/src/wevt_templates/manifest/mod.rs`；仓库未包含其 C 源码文件 |
-| [AOSP libsparse / liblp](https://android.googlesource.com/platform/system/core/+/refs/heads/main/libsparse/) | Apache-2.0 | `crates/image-android` 的 sparse 格式/CRC32 与 `crates/volume-android` 的 liblp 逻辑分区线格式按 AOSP 实现契约与已知测试向量对照，见对应 crate 注释；仓库未包含 AOSP 源码文件 |
+| [AOSP libsparse / liblp](https://android.googlesource.com/platform/system/core/+/refs/heads/main/libsparse/) | Apache-2.0 | `crates/image-android` 的 sparse 格式/CRC32 与 `experimental/volume-android` 的 liblp 逻辑分区线格式按 AOSP 实现契约与已知测试向量对照，见对应 crate 注释；仓库未包含 AOSP 源码文件 |
 | [XFS 内核日志格式](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/fs/xfs) / [xfsprogs](https://git.kernel.org/pub/scm/fs/xfs/xfsprogs-dev.git) | GPL-2.0 | `crates/fs-xfs` 的日志解析按 `xfs_log_format.h`、`xfs_log_recover.c` 与 xfsprogs log-print/recovery 的结构和行为对照实现，见 `crates/fs-xfs/src/log/mod.rs`；仅解析已提交事务元数据，仓库未包含上游源码文件 |
 | [iscsi-target](https://github.com/lawless-m/iscsi-crate) | MIT OR Apache-2.0 | 物理磁盘模式的本机 loopback iSCSI target 基础实现；仓库在 `vendor/iscsi-target` 保留许可证并增加写保护 SCSI 与 Windows 互操作补丁，修改说明见 `vendor/iscsi-target/MEOW_PATCH.md` |
 | [Microsoft Windows iSCSI API](https://learn.microsoft.com/windows/win32/iscsi/portal) | Microsoft Learn / Windows SDK 使用条款 | 物理挂载使用系统 `iscsidsc.dll`、Microsoft iSCSI Initiator 和 Service Control Manager API；不复制或分发 Windows 组件，服务修改范围见本文“Windows 权限与系统服务” |
