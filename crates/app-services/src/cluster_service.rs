@@ -4,7 +4,6 @@ use crate::datasource_service;
 
 mod audit_parser;
 mod capability;
-mod ceph_scope_report;
 mod etcd_bolt;
 mod etcd_wal;
 mod events;
@@ -23,7 +22,6 @@ mod mdraid_materialization;
 mod member_binding;
 mod network_parser;
 mod phase_ledger;
-pub(crate) mod scope_storage;
 mod summary;
 mod topology_projection;
 
@@ -34,12 +32,14 @@ pub use kubernetes_paths::KubernetesArtifactKind;
 pub use linux_evidence_facts::{collect_linux_evidence_facts, persist_linux_evidence_facts};
 pub use topology_projection::{project_import_set_topology, ImportSetTopologyProjection};
 
+pub use ::ceph_reconstruction::cluster_scope::ceph_scope_report::{
+    read_ceph_scope_coverage_report, write_ceph_scope_coverage_report, CephScopeReportError,
+};
 pub use audit_parser::{
     parse_kubernetes_audit_log, KubernetesAuditEvent, KubernetesAuditIndicator,
     KubernetesAuditParseResult,
 };
 pub use capability::{require_ceph_scope, require_kubernetes_scope, require_os_scope};
-pub use ceph_scope_report::{read_ceph_scope_coverage_report, write_ceph_scope_coverage_report};
 pub use etcd_bolt::{parse_etcd_bolt_metadata, EtcdBoltEntry, EtcdBoltSummary};
 pub use etcd_wal::{parse_etcd_wal, EtcdWalRecord, EtcdWalSummary};
 pub use events::get_linux_evidence_events;
@@ -105,8 +105,6 @@ pub enum ClusterServiceError {
     InvalidClusterId,
     #[error("Linux import member index is out of range")]
     InvalidMemberIndex,
-    #[error("linux cluster coverage report is invalid")]
-    InvalidCoverageReport,
     #[error("linux cluster import did not find supported E01/RAW images in the selected folder")]
     NoSupportedImages,
     #[error("I/O error: {0}")]
@@ -142,7 +140,6 @@ impl transport::ServiceErrorCategory for ClusterServiceError {
             | Self::InvalidClusterRoot
             | Self::InvalidClusterId
             | Self::InvalidMemberIndex
-            | Self::InvalidCoverageReport
             | Self::NoSupportedImages => transport::ErrorCategory::Validation,
             Self::Io(_) | Self::Db(_) => transport::ErrorCategory::Io,
             Self::Classification(e) => e.category(),

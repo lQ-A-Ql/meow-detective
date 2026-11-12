@@ -226,7 +226,7 @@ fn ceph_scope_report_round_trips_and_rejects_path_components() {
     );
     assert!(matches!(
         write_ceph_scope_coverage_report(case_root.path(), "../escape", &report),
-        Err(ClusterServiceError::InvalidClusterId)
+        Err(CephScopeReportError::InvalidClusterId)
     ));
 }
 

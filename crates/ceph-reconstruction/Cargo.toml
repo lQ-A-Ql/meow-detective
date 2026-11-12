@@ -1,0 +1,34 @@
+[package]
+name = "ceph-reconstruction"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+sha2.workspace = true
+hex.workspace = true
+uuid.workspace = true
+rusqlite.workspace = true
+rayon.workspace = true
+tempfile.workspace = true
+
+domain.workspace = true
+transport.workspace = true
+persistence-sqlite.workspace = true
+persistence-source.workspace = true
+evidence-core.workspace = true
+image-e01.workspace = true
+fs-lvm.workspace = true
+infrastructure.workspace = true
+ceph-wire.workspace = true
+rocksdb-wire.workspace = true
+source-kernel.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

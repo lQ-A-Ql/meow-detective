@@ -5,35 +5,17 @@
 //! `forensics-desktop` crate.
 
 mod ceph;
-mod ceph_bluefs_file_reader;
-mod ceph_bluefs_records;
-mod ceph_bluefs_replay;
-mod ceph_bluestore_omap;
-mod ceph_bluestore_omap_records;
-mod ceph_device_binding;
+mod ceph_metadata_audit;
 mod ceph_persistence;
-pub use ceph_bluestore_omap::{
+pub use ::ceph_reconstruction::import_pipeline::ceph_bluestore_omap::{
     BlueStoreOmapError, BlueStoreOmapFragment, BlueStoreOmapLimits, BlueStoreOmapOwner,
     BlueStoreOmapOwnerKind, BlueStoreOmapPoolScope, BlueStoreOmapScope, BlueStoreOmapScopeRecord,
     BlueStoreOmapSnapshot, BlueStoreRbdDirectoryMapping, BlueStoreRbdHeader,
 };
-mod ceph_bluestore_semantic;
-mod ceph_metadata_audit;
-mod ceph_rocksdb_control_files;
-mod ceph_rocksdb_digest;
-mod ceph_rocksdb_inventory;
-mod ceph_rocksdb_latest_state;
-mod ceph_rocksdb_merge;
-mod ceph_rocksdb_range_state;
-mod ceph_rocksdb_records;
-mod ceph_rocksdb_sharding;
-mod ceph_rocksdb_spool;
-mod ceph_rocksdb_sst_inventory;
-mod ceph_rocksdb_sst_locator;
-mod ceph_rocksdb_sst_reader;
-mod ceph_rocksdb_sst_records;
-mod ceph_rocksdb_wal_inventory;
-mod ceph_rocksdb_wal_locator;
+pub(crate) use ::ceph_reconstruction::import_pipeline::{
+    ceph_bluefs_file_reader, ceph_bluefs_records, ceph_bluefs_replay, ceph_bluestore_omap_records,
+    ceph_device_binding, ceph_rocksdb_inventory,
+};
 mod context;
 mod emit;
 mod execute;

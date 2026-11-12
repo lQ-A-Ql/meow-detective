@@ -314,7 +314,7 @@ if ($serviceMaskedSources -cmatch '\btauri(?:::|_)|\bAppHandle\b|\bEmitter\b') {
 }
 
 Assert-NoModuleReferencesUnder `
-  'crates/app-services/src/ceph_reconstruction' `
+  'crates/ceph-reconstruction/src/ceph_reconstruction' `
   @('analysis_service', 'file_service', 'derived_source_service') `
   'Ceph reconstruction is a lower-level capability and must not depend on higher-level orchestration'
 Assert-NoModuleReferencesUnder `
