@@ -6,10 +6,17 @@
 //! command layer and the domain/infrastructure crates, and owns the SQLite
 //! case database schema through `persistence-sqlite`.
 
-pub mod active_case;
+pub use source_kernel::e01_reader_cache::{
+    clear_e01_reader_cache, clear_e01_reader_cache_for_case, open_e01_reader_cached,
+};
+pub use source_kernel::{
+    active_case, artifact_storage_service, connection, performance, processing_phase_service,
+    resource_budget, runtime_resources, source_db, storage_manifest, storage_runtime,
+};
+pub(crate) use source_kernel::{derived_source_catalog, e01_reader_cache};
+
 pub mod analysis_service;
 pub mod artifact_service;
-pub mod artifact_storage_service;
 pub mod batch_service;
 pub mod bitlocker_runtime;
 pub mod bitlocker_service;
@@ -19,18 +26,12 @@ pub mod case_projection_service;
 pub mod case_service;
 pub mod ceph_reconstruction;
 pub mod cluster_service;
-pub mod connection;
 pub mod content_index_service;
 pub mod correlation;
 pub mod datasource_service;
 pub mod deleted_recovery;
-mod derived_source_catalog;
 pub mod derived_source_service;
 pub mod digest_service;
-mod e01_reader_cache;
-pub use e01_reader_cache::{
-    clear_e01_reader_cache, clear_e01_reader_cache_for_case, open_e01_reader_cached,
-};
 pub mod emulation_bypass;
 pub mod emulation_cow_reader;
 pub mod emulation_efi_fallback;
@@ -64,24 +65,17 @@ pub mod parallel_enum;
 mod partition_capabilities;
 pub mod partition_query_service;
 pub mod partition_storage_service;
-pub mod performance;
 pub mod plugin_action_service;
 pub mod plugin_loader;
-pub mod processing_phase_service;
 pub mod registry_browser_service;
 pub mod report;
-pub mod resource_budget;
 pub mod rule_pack;
-pub mod runtime_resources;
 mod search_metadata_projection;
 pub mod search_service;
-pub mod source_db;
 pub mod source_runtime;
 pub mod staging;
 pub mod step_recorder;
-pub mod storage_manifest;
 pub mod storage_recovery_service;
-pub mod storage_runtime;
 pub mod text_service;
 pub mod timeline_service;
 pub mod v2_governance_service;

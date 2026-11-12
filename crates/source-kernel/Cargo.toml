@@ -1,0 +1,35 @@
+[package]
+name = "source-kernel"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+hex.workspace = true
+sha2.workspace = true
+uuid.workspace = true
+rusqlite.workspace = true
+
+domain.workspace = true
+transport.workspace = true
+persistence-sqlite.workspace = true
+persistence-source.workspace = true
+artifact-storage.workspace = true
+evidence-core.workspace = true
+image-e01.workspace = true
+fs-lvm.workspace = true
+fs-f2fs.workspace = true
+fs-erofs.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[dev-dependencies]
+rusqlite = { workspace = true, features = ["functions"] }
+tempfile.workspace = true

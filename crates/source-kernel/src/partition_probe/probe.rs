@@ -1,5 +1,5 @@
 mod gpt;
-pub(crate) mod identity;
+pub mod identity;
 
 use self::gpt::detect_gpt_filesystems;
 use self::identity::read_filesystem_uuid;

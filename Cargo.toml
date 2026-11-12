@@ -46,6 +46,7 @@ members = [
   "crates/persistence-fjall",
   "crates/persistence-source",
   "crates/artifact-storage",
+  "crates/source-kernel",
 ]
 exclude = [
   "experimental/volume-android",
@@ -204,6 +205,7 @@ postcard = { version = "~1.1", features = ["use-std"] }
 persistence-fjall = { path = "crates/persistence-fjall" }
 persistence-source = { path = "crates/persistence-source" }
 artifact-storage = { path = "crates/artifact-storage" }
+source-kernel = { path = "crates/source-kernel" }
 
 [patch.crates-io]
 fjall = { path = "vendor/fjall-3.1.13" }

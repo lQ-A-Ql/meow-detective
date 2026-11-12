@@ -13,7 +13,7 @@ use rusqlite::Connection;
 
 use super::ready::{validate_ready_storage, ReadySourceError};
 
-pub(crate) fn ready_data_sources(
+pub fn ready_data_sources(
     case_conn: &Connection,
     case_id: &domain::CaseId,
 ) -> Result<Vec<(DataSource, DataSourceStorage)>, ReadySourceError> {

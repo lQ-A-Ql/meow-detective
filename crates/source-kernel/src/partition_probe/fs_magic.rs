@@ -1,9 +1,9 @@
 use super::{ImageFilesystemKind, Result};
 use std::io::{Read, Seek, SeekFrom};
 
-pub(crate) const SECTOR_SIZE: u64 = 512;
+pub const SECTOR_SIZE: u64 = 512;
 
-pub(crate) fn kind_label(kind: ImageFilesystemKind) -> String {
+pub fn kind_label(kind: ImageFilesystemKind) -> String {
     match kind {
         ImageFilesystemKind::Ntfs => "NTFS".to_string(),
         ImageFilesystemKind::Fat => "FAT".to_string(),
@@ -18,7 +18,7 @@ pub(crate) fn kind_label(kind: ImageFilesystemKind) -> String {
     }
 }
 
-pub(crate) fn detect_boot_filesystem(sector: &[u8; 512]) -> Option<ImageFilesystemKind> {
+pub fn detect_boot_filesystem(sector: &[u8; 512]) -> Option<ImageFilesystemKind> {
     if &sector[3..11] == b"NTFS    " {
         return Some(ImageFilesystemKind::Ntfs);
     }
@@ -38,14 +38,11 @@ pub(crate) fn detect_boot_filesystem(sector: &[u8; 512]) -> Option<ImageFilesyst
     None
 }
 
-pub(crate) fn is_exfat_boot_sector(sector: &[u8; 512]) -> bool {
+pub fn is_exfat_boot_sector(sector: &[u8; 512]) -> bool {
     &sector[3..11] == b"EXFAT   " && sector[510..512] == [0x55, 0xAA]
 }
 
-pub(crate) fn read_boot_filesystem<R>(
-    reader: &mut R,
-    offset: u64,
-) -> Result<Option<ImageFilesystemKind>>
+pub fn read_boot_filesystem<R>(reader: &mut R, offset: u64) -> Result<Option<ImageFilesystemKind>>
 where
     R: Read + Seek + ?Sized,
 {
@@ -102,7 +99,7 @@ where
     Ok(None)
 }
 
-pub(crate) fn read_iso9660<R>(reader: &mut R) -> Result<bool>
+pub fn read_iso9660<R>(reader: &mut R) -> Result<bool>
 where
     R: Read + Seek + ?Sized,
 {
@@ -130,7 +127,7 @@ where
     Ok(false)
 }
 
-pub(crate) fn read_sector<R>(reader: &mut R, offset: u64) -> Result<[u8; 512]>
+pub fn read_sector<R>(reader: &mut R, offset: u64) -> Result<[u8; 512]>
 where
     R: Read + Seek + ?Sized,
 {

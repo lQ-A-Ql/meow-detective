@@ -22,6 +22,7 @@ infrastructure.workspace = true
 persistence-sqlite.workspace = true
 persistence-source.workspace = true
 artifact-storage.workspace = true
+source-kernel.workspace = true
 evidence-core.workspace = true
 evidence-mount.workspace = true
 volume-bitlocker.workspace = true

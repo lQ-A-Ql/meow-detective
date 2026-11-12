@@ -28,7 +28,7 @@ pub enum ReadySourceError {
 }
 
 impl ReadySourceError {
-    pub(crate) fn into_db_error(self) -> DbError {
+    pub fn into_db_error(self) -> DbError {
         match self {
             Self::Db(error) => error,
             other => DbError::System(other.to_string()),
@@ -99,7 +99,7 @@ pub fn open_reconstruction_source_by_id(
     })
 }
 
-pub(crate) fn open_catalog_recovery_source_by_id(
+pub fn open_catalog_recovery_source_by_id(
     case_conn: &Connection,
     case_root: &std::path::Path,
     case_id: &CaseId,

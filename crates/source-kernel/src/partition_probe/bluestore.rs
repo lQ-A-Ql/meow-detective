@@ -9,14 +9,14 @@ const BLUESTORE_LABEL_OFFSETS: [u64; 5] = [0, GIB, 10 * GIB, 100 * GIB, 1000 * G
 
 /// Detect Ceph BlueStore labels without treating an OSD block device as a
 /// mountable filesystem.
-pub(crate) fn has_bluestore_label<R>(reader: &mut R) -> Result<bool>
+pub fn has_bluestore_label<R>(reader: &mut R) -> Result<bool>
 where
     R: Read + Seek + ?Sized,
 {
     has_bluestore_label_at(reader, 0)
 }
 
-pub(super) fn has_bluestore_label_at<R>(reader: &mut R, device_offset: u64) -> Result<bool>
+pub fn has_bluestore_label_at<R>(reader: &mut R, device_offset: u64) -> Result<bool>
 where
     R: Read + Seek + ?Sized,
 {

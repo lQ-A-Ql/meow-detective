@@ -236,7 +236,7 @@ $moduleManifest = @(
   @('crates/app-services/src/datasource_service/lvm.rs', 'expansion', 'crates/app-services/src/datasource_service/lvm/expansion.rs'),
   @('crates/app-services/src/datasource_service/lvm.rs', 'model', 'crates/app-services/src/datasource_service/lvm/model.rs'),
   @('crates/app-services/src/datasource_service/lvm.rs', 'source_identity', 'crates/app-services/src/datasource_service/lvm/source_identity.rs'),
-  @('crates/app-services/src/datasource_service/probe.rs', 'gpt', 'crates/app-services/src/datasource_service/probe/gpt.rs'),
+  @('crates/source-kernel/src/partition_probe/probe.rs', 'gpt', 'crates/source-kernel/src/partition_probe/probe/gpt.rs'),
   @('crates/app-services/src/governance/scoring.rs', 'benchmark_gate', 'crates/app-services/src/governance/scoring/benchmark_gate.rs'),
   @('crates/app-services/src/governance/scoring.rs', 'contributions', 'crates/app-services/src/governance/scoring/contributions.rs'),
   @('crates/app-services/src/governance/scoring.rs', 'correlation_gate', 'crates/app-services/src/governance/scoring/correlation_gate.rs'),

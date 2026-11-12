@@ -1,7 +1,7 @@
 use super::super::{ImageFilesystemKind, Result};
 use std::io::{Read, Seek, SeekFrom};
 
-pub(crate) fn read_filesystem_uuid<R: Read + Seek + ?Sized>(
+pub fn read_filesystem_uuid<R: Read + Seek + ?Sized>(
     reader: &mut R,
     partition_offset: u64,
     partition_length: Option<u64>,

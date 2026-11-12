@@ -2,10 +2,10 @@ use rusqlite::{Connection, OptionalExtension};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
-pub(crate) const PROCESSING_PHASE_VERSION: u32 = 1;
-pub(crate) const CATALOG_MATERIALIZER_VERSION: u32 = 5;
-pub(crate) const CATALOG_SCHEMA_DEPENDENCY: &str = "source_015_ceph_bluestore_rbd_header_context";
-pub(crate) const CATALOG_POLICY_VERSION: &str = "rbd-filesystem-catalog-v3-partition-identities";
+pub const PROCESSING_PHASE_VERSION: u32 = 1;
+pub const CATALOG_MATERIALIZER_VERSION: u32 = 5;
+pub const CATALOG_SCHEMA_DEPENDENCY: &str = "source_015_ceph_bluestore_rbd_header_context";
+pub const CATALOG_POLICY_VERSION: &str = "rbd-filesystem-catalog-v3-partition-identities";
 
 const SOURCE_META_KEY: &str = "derived.catalog.manifest";
 
@@ -16,7 +16,7 @@ struct StoredCatalogIdentity {
     input_fingerprint: String,
 }
 
-pub(crate) fn catalog_fingerprint(lineage_fingerprint: &str) -> String {
+pub fn catalog_fingerprint(lineage_fingerprint: &str) -> String {
     processing_phase_fingerprint(
         lineage_fingerprint,
         "catalog",
@@ -25,7 +25,7 @@ pub(crate) fn catalog_fingerprint(lineage_fingerprint: &str) -> String {
     )
 }
 
-pub(crate) fn processing_phase_fingerprint(
+pub fn processing_phase_fingerprint(
     seed: &str,
     phase: &str,
     schema_dependency: &str,
@@ -41,7 +41,7 @@ pub(crate) fn processing_phase_fingerprint(
     hex::encode(hasher.finalize())
 }
 
-pub(crate) fn load_catalog_fingerprint(
+pub fn load_catalog_fingerprint(
     connection: &Connection,
 ) -> Result<Option<String>, persistence_sqlite::DbError> {
     let stored = connection

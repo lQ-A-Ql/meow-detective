@@ -2,9 +2,7 @@
 use std::io::{self, Read, Seek, SeekFrom};
 use transport::dto::DirectNtfsVolumeDto;
 
-pub(crate) fn probe<R: Read + Seek + ?Sized>(
-    reader: &mut R,
-) -> io::Result<Option<DirectNtfsVolumeDto>> {
+pub fn probe<R: Read + Seek + ?Sized>(reader: &mut R) -> io::Result<Option<DirectNtfsVolumeDto>> {
     let saved = reader.stream_position()?;
     let result = read_geometry(reader);
     let restored = reader.seek(SeekFrom::Start(saved));

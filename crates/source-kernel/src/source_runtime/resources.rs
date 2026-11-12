@@ -11,13 +11,13 @@ use std::{
     },
 };
 
-pub(crate) struct SharedPlan {
+pub struct SharedPlan {
     pub plan: image_e01::E01OpenPlan,
     pub route: ResourceRoute,
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct ResourceRoute(Arc<Mutex<Option<Arc<dyn ReaderAllocationScope>>>>);
+pub struct ResourceRoute(Arc<Mutex<Option<Arc<dyn ReaderAllocationScope>>>>);
 impl ResourceRoute {
     pub fn bind(&self, scope: Arc<dyn ReaderAllocationScope>) {
         *self.0.lock().unwrap_or_else(|p| p.into_inner()) = Some(scope);
@@ -30,7 +30,7 @@ impl ResourceRoute {
             .filter(|s| s.active())
     }
 }
-pub(crate) struct WorkspaceAdmission(pub crate::resource_budget::ResourcePool);
+pub struct WorkspaceAdmission(pub crate::resource_budget::ResourcePool);
 impl ReaderAllocationScope for WorkspaceAdmission {
     fn active(&self) -> bool {
         self.0.active()
@@ -73,7 +73,7 @@ impl ReaderAllocationScope for WorkspaceAdmission {
     }
 }
 #[derive(Clone)]
-pub(crate) struct ReaderBudget {
+pub struct ReaderBudget {
     pub bytes: u64,
     pub handles: u64,
     pub route: ResourceRoute,
@@ -102,7 +102,7 @@ impl ReaderAdmission for ReaderBudget {
             .map_err(ResourceError::into_io)
     }
 }
-pub(crate) struct CaseReaderAdmission {
+pub struct CaseReaderAdmission {
     pub budget: ReaderBudget,
     pub cancel: Arc<AtomicBool>,
 }
@@ -124,7 +124,7 @@ impl ReaderAdmission for CaseReaderAdmission {
         }
     }
 }
-pub(crate) fn open_e01_plan(
+pub fn open_e01_plan(
     path: &Path,
     cancel: Option<&AtomicBool>,
     case_cancel: Option<Arc<AtomicBool>>,
@@ -184,7 +184,7 @@ pub(crate) fn open_e01_plan(
     Ok(plan.with_resources(Arc::new(metadata), admission))
 }
 
-pub(crate) struct BudgetedReader {
+pub struct BudgetedReader {
     pub reader: Box<dyn EvidenceReader>,
     pub _hold: Arc<dyn ReaderResourceHold>,
     pub _metadata: Arc<dyn ReaderResourceHold>,
@@ -207,7 +207,7 @@ impl EvidenceReader for BudgetedReader {
         self.reader.preferred_read_granularity()
     }
 }
-pub(crate) fn raw_parse(cancel: Option<&AtomicBool>) -> io::Result<ResourcePermit> {
+pub fn raw_parse(cancel: Option<&AtomicBool>) -> io::Result<ResourcePermit> {
     global_pool()
         .acquire(
             Resources {

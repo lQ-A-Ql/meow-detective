@@ -6,7 +6,7 @@ use transport::dto::import_benchmark::{
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct ProcessIoCounters {
+pub struct ProcessIoCounters {
     pub read_operations: u64,
     pub write_operations: u64,
     pub other_operations: u64,
@@ -16,7 +16,7 @@ pub(crate) struct ProcessIoCounters {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct ProcessCounterSnapshot {
+pub struct ProcessCounterSnapshot {
     pub user_cpu_ns: Option<u64>,
     pub kernel_cpu_ns: Option<u64>,
     pub io: Option<ProcessIoCounters>,
@@ -24,7 +24,7 @@ pub(crate) struct ProcessCounterSnapshot {
 }
 
 impl ProcessCounterSnapshot {
-    pub(crate) fn capture() -> Self {
+    pub fn capture() -> Self {
         #[cfg(target_os = "windows")]
         {
             capture_windows()
@@ -35,7 +35,7 @@ impl ProcessCounterSnapshot {
         }
     }
 
-    pub(crate) fn usage_until(self, end: Self, wall: Duration) -> ImportBenchmarkProcessUsageDto {
+    pub fn usage_until(self, end: Self, wall: Duration) -> ImportBenchmarkProcessUsageDto {
         let user_cpu_ns = delta(self.user_cpu_ns, end.user_cpu_ns);
         let kernel_cpu_ns = delta(self.kernel_cpu_ns, end.kernel_cpu_ns);
         let cpu_core_equivalents = user_cpu_ns

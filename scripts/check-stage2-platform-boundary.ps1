@@ -26,7 +26,7 @@ $requiredPaths = @(
   'crates/app-services/src/analysis_service/extraction/linux.rs',
   'crates/app-services/src/import_analysis/extractor_policy.rs',
   'crates/app-services/src/report/source_analysis.rs',
-  'crates/app-services/src/source_db/ready.rs',
+  'crates/source-kernel/src/source_db/ready.rs',
   'crates/app-services/src/v3_governance_service/artifact_family_platform.rs'
 )
 
@@ -37,16 +37,22 @@ foreach ($relativePath in $requiredPaths) {
   }
 }
 
-$serviceRoot = Join-Path $repoRoot 'crates/app-services/src'
-foreach ($file in Get-ChildItem -LiteralPath $serviceRoot -Recurse -File -Filter '*.rs') {
-  $content = Read-StrictUtf8 $file.FullName
-  $relative = $file.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
-  if ($content -match '\bImportTargetPlatformDto\b') {
-    $errors.Add("app-services depends on transport platform DTO: $relative")
-  }
-  if (-not $relative.StartsWith('crates/app-services/src/source_db') -and
-      $content.Contains('open_registered_source_db(')) {
-    $errors.Add("investigator-facing service bypasses the typed ready-source route: $relative")
+$serviceRoots = @(
+  (Join-Path $repoRoot 'crates/app-services/src'),
+  (Join-Path $repoRoot 'crates/source-kernel/src')
+)
+foreach ($serviceRoot in $serviceRoots) {
+  foreach ($file in Get-ChildItem -LiteralPath $serviceRoot -Recurse -File -Filter '*.rs') {
+    $content = Read-StrictUtf8 $file.FullName
+    $relative = $file.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
+    if ($content -match '\bImportTargetPlatformDto\b') {
+      $errors.Add("app-services depends on transport platform DTO: $relative")
+    }
+    if (-not ($relative.StartsWith('crates/app-services/src/source_db') -or
+              $relative.StartsWith('crates/source-kernel/src/source_db')) -and
+        $content.Contains('open_registered_source_db(')) {
+      $errors.Add("investigator-facing service bypasses the typed ready-source route: $relative")
+    }
   }
 }
 
@@ -258,7 +264,7 @@ if (Test-Path -LiteralPath $familyPlatformPath -PathType Leaf) {
   }
 }
 
-$sourceDbPath = Join-Path $repoRoot 'crates/app-services/src/source_db.rs'
+$sourceDbPath = Join-Path $repoRoot 'crates/source-kernel/src/source_db.rs'
 if (Test-Path -LiteralPath $sourceDbPath -PathType Leaf) {
   $sourceDb = Read-StrictUtf8 $sourceDbPath
   foreach ($required in @(
@@ -271,7 +277,7 @@ if (Test-Path -LiteralPath $sourceDbPath -PathType Leaf) {
   }
 }
 
-$readySourcePath = Join-Path $repoRoot 'crates/app-services/src/source_db/ready.rs'
+$readySourcePath = Join-Path $repoRoot 'crates/source-kernel/src/source_db/ready.rs'
 if (Test-Path -LiteralPath $readySourcePath -PathType Leaf) {
   $readySource = Read-StrictUtf8 $readySourcePath
   foreach ($required in @(
@@ -289,7 +295,7 @@ if (Test-Path -LiteralPath $readySourcePath -PathType Leaf) {
     }
   }
 } else {
-  $errors.Add('missing typed ready-source route: crates/app-services/src/source_db/ready.rs')
+  $errors.Add('missing typed ready-source route: crates/source-kernel/src/source_db/ready.rs')
 }
 
 foreach ($relativePath in @(

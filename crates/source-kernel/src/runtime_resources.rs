@@ -1,5 +1,5 @@
-mod process_counters;
-pub(crate) use process_counters::ProcessCounterSnapshot;
+pub mod process_counters;
+pub use process_counters::ProcessCounterSnapshot;
 
 const DEFAULT_MEMORY_SOFT_LIMIT_MB: u64 = 1536;
 const DEFAULT_MEMORY_HARD_LIMIT_MB: u64 = 2048;
@@ -20,11 +20,11 @@ pub fn default_memory_hard_limit_mb() -> u64 {
     DEFAULT_MEMORY_HARD_LIMIT_MB
 }
 
-pub(crate) fn memory_hard_limit_exceeded(limit_mb: u64) -> bool {
+pub fn memory_hard_limit_exceeded(limit_mb: u64) -> bool {
     memory_hard_limit_exceeded_for_rss(current_rss_mb(), limit_mb)
 }
 
-pub(crate) fn memory_hard_limit_exceeded_for_rss(rss_mb: u64, limit_mb: u64) -> bool {
+pub fn memory_hard_limit_exceeded_for_rss(rss_mb: u64, limit_mb: u64) -> bool {
     rss_mb > 0 && rss_mb >= limit_mb
 }
 

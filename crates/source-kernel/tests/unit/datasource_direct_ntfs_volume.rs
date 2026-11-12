@@ -28,7 +28,7 @@ fn includes_verified_backup_after_declared_ntfs_sector_range() {
     assert_eq!(geometry.logical_media_bytes, 128 * 512);
     assert_eq!(geometry.volume_serial, "4482D035A65A1162");
     assert_eq!(reader.position(), 17);
-    let result = crate::datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let result = crate::partition_probe::detect_image_filesystem(&mut reader).unwrap();
     assert_eq!(result.partitions[0].offset, 0);
     assert_eq!(result.partitions[0].length, 65 * 512);
     assert_eq!(result.candidates[0].length, Some(65 * 512));

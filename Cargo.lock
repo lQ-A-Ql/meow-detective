@@ -254,6 +254,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2 0.10.9",
+ "source-kernel",
  "subtle",
  "tempfile",
  "testing",
@@ -6125,6 +6126,33 @@ dependencies = [
  "gobject-sys",
  "libc",
  "system-deps",
+]
+
+[[package]]
+name = "source-kernel"
+version = "0.1.0"
+dependencies = [
+ "artifact-storage",
+ "chrono",
+ "domain",
+ "evidence-core",
+ "fs-erofs",
+ "fs-f2fs",
+ "fs-lvm",
+ "hex",
+ "image-e01",
+ "persistence-source",
+ "persistence-sqlite",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+ "transport",
+ "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

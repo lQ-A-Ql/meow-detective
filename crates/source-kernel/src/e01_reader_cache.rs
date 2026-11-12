@@ -10,7 +10,7 @@ use std::{
     },
 };
 
-pub(crate) const E01_READER_CACHE_PER_CASE_MAX_SIZE: usize = 16;
+pub const E01_READER_CACHE_PER_CASE_MAX_SIZE: usize = 16;
 const CASE_BYTES: u64 = 258 * MIB;
 const GLOBAL_BYTES: u64 = 258 * MIB;
 const MAX_CASES: usize = 32;
@@ -23,7 +23,7 @@ struct Bucket {
     used: u64,
     cancel: Arc<AtomicBool>,
 }
-pub(crate) struct E01ReaderCacheRegistry {
+pub struct E01ReaderCacheRegistry {
     buckets: HashMap<String, Bucket>,
     flags: HashMap<String, Weak<AtomicBool>>,
     clock: u64,
@@ -196,7 +196,7 @@ impl E01ReaderCacheRegistry {
         self.flags.retain(|_, flag| flag.strong_count() > 0);
     }
 }
-pub(crate) static E01_READER_CACHE: LazyLock<Mutex<E01ReaderCacheRegistry>> =
+pub static E01_READER_CACHE: LazyLock<Mutex<E01ReaderCacheRegistry>> =
     LazyLock::new(|| Mutex::new(E01ReaderCacheRegistry::new()));
 fn registry() -> std::sync::MutexGuard<'static, E01ReaderCacheRegistry> {
     E01_READER_CACHE.lock().unwrap_or_else(|p| {
@@ -212,10 +212,10 @@ pub fn clear_e01_reader_cache() {
 pub fn clear_e01_reader_cache_for_case(case_id: &str) {
     registry().clear_case(case_id);
 }
-pub(crate) fn evict_e01_plans_for_case(case_id: &str) {
+pub fn evict_e01_plans_for_case(case_id: &str) {
     registry().buckets.remove(case_id);
 }
-pub(crate) fn register_factory_plan(
+pub fn register_factory_plan(
     case: &str,
     path: &Path,
     plan: &Arc<crate::source_runtime::resources::SharedPlan>,

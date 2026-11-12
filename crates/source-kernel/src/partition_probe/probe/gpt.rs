@@ -1,9 +1,9 @@
 use super::identity::read_filesystem_uuid;
 use super::{partition_display_name, partition_status_for_filesystem};
-use crate::datasource_service::fs_magic::{
+use crate::partition_probe::fs_magic::{
     kind_label, read_boot_filesystem, read_sector, SECTOR_SIZE,
 };
-use crate::datasource_service::{
+use crate::partition_probe::{
     ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe, ImageFilesystemSource,
     PartitionRecord, PartitionStatus, Result,
 };

@@ -254,9 +254,7 @@ impl Drop for Workspace {
         self.0 .0.changed.notify_all();
     }
 }
-pub(crate) fn pool_for(
-    lease: Option<&crate::source_runtime::SourcePublicationLease>,
-) -> ResourcePool {
+pub fn pool_for(lease: Option<&crate::source_runtime::SourcePublicationLease>) -> ResourcePool {
     lease
         .map(|l| l.resource_pool())
         .unwrap_or_else(|| global_pool().clone())

@@ -41,7 +41,7 @@ impl std::fmt::Debug for SourcePublicationLease {
 }
 
 impl SourcePublicationLease {
-    pub(super) fn acquire(case_id: &str, source_id: &str, factory: SharedReaderFactory) -> Self {
+    pub fn acquire(case_id: &str, source_id: &str, factory: SharedReaderFactory) -> Self {
         let mut epochs = EPOCHS.lock().unwrap_or_else(|p| p.into_inner());
         epochs.retain(|_, value| value.strong_count() > 0);
         let key = (case_id.into(), source_id.into());
@@ -58,19 +58,19 @@ impl SourcePublicationLease {
         }
     }
 
-    pub(crate) fn bind_pool(&self, pool: crate::resource_budget::ResourcePool) {
+    pub fn bind_pool(&self, pool: crate::resource_budget::ResourcePool) {
         self.factory
             .bind_reader_scope(Arc::new(super::resources::WorkspaceAdmission(pool.clone())));
         *self.pool.lock().unwrap_or_else(|p| p.into_inner()) = Some(pool);
     }
-    pub(crate) fn resource_pool(&self) -> crate::resource_budget::ResourcePool {
+    pub fn resource_pool(&self) -> crate::resource_budget::ResourcePool {
         self.pool
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .clone()
             .unwrap_or_else(|| crate::resource_budget::global_pool().clone())
     }
-    pub(crate) fn reader_memory_bound(&self) -> u64 {
+    pub fn reader_memory_bound(&self) -> u64 {
         self.factory.reader_memory_bound()
     }
     pub fn validate(&self) -> io::Result<()> {
@@ -79,7 +79,7 @@ impl SourcePublicationLease {
         self.validate_epoch()
     }
 
-    pub(super) fn validate_epoch(&self) -> io::Result<()> {
+    pub fn validate_epoch(&self) -> io::Result<()> {
         if !self.owns_failure_state()
             || self.scope.revocation.load(Ordering::Acquire) != self.revocation
         {
@@ -90,11 +90,11 @@ impl SourcePublicationLease {
 
     /// A revoked last owner may record its failure; a superseded owner may not
     /// overwrite a newer result, even after that newer runtime has been dropped.
-    pub(crate) fn owns_failure_state(&self) -> bool {
+    pub fn owns_failure_state(&self) -> bool {
         self.scope.owner.load(Ordering::Acquire) == self.owner
     }
 
-    pub(crate) fn failure_fence_connection<'a>(
+    pub fn failure_fence_connection<'a>(
         &self,
         connection: &'a rusqlite::Connection,
     ) -> SourcePublicationFence<'a> {
@@ -105,7 +105,7 @@ impl SourcePublicationLease {
 
     /// Only for a connection owned by this operation, with no pre-existing hook.
     /// The commit hook must not query SQLite or emit application events.
-    pub(crate) fn fence_connection<'a>(
+    pub fn fence_connection<'a>(
         &self,
         connection: &'a rusqlite::Connection,
     ) -> SourcePublicationFence<'a> {
@@ -115,7 +115,7 @@ impl SourcePublicationLease {
     }
 }
 
-pub(crate) struct SourcePublicationFence<'a>(&'a rusqlite::Connection);
+pub struct SourcePublicationFence<'a>(&'a rusqlite::Connection);
 impl Drop for SourcePublicationFence<'_> {
     fn drop(&mut self) {
         self.0.commit_hook(None::<fn() -> bool>);
