@@ -2,9 +2,7 @@ mod error;
 mod export;
 mod facets;
 mod fjall;
-mod ingestion;
 mod pagination;
-mod policy;
 mod projection;
 mod projection_fjall;
 mod projection_timing;
@@ -19,7 +17,6 @@ pub use facets::get_timeline_facets_for_case;
 pub use pagination::{
     query_timeline_aggregated, query_timeline_filtered_for_case, query_timeline_for_case,
 };
-pub use policy::TimelineProjectionPolicy;
 pub use projection::{
     materialize_file_activity, materialize_file_activity_unknown,
     materialize_file_activity_unknown_with_cancel,
@@ -33,5 +30,4 @@ pub use query::{
     count_timeline_events_for_case, get_timeline_event_by_id, get_timeline_event_by_id_for_case,
     query_timeline, query_timeline_filtered, TimelineQuery,
 };
-
-pub(crate) use ingestion::retain_analysis_events;
+pub use timeline::TimelineProjectionPolicy;

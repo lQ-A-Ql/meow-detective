@@ -8,4 +8,5 @@ license.workspace = true
 [dependencies]
 serde_json.workspace = true
 chrono.workspace = true
+thiserror.workspace = true
 domain.workspace = true

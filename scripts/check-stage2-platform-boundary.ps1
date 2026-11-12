@@ -173,8 +173,8 @@ $extractorPolicyPath = Join-Path $repoRoot 'crates/app-services/src/import_analy
 if (Test-Path -LiteralPath $extractorPolicyPath -PathType Leaf) {
   $extractorPolicy = Read-StrictUtf8 $extractorPolicyPath
   foreach ($required in @(
-    'DataSourcePlatform::Windows => Ok(Self',
-    'DataSourcePlatform::Linux => Ok(Self { registry: None })',
+    'DataSourcePlatform::Windows => Ok(Self)',
+    'DataSourcePlatform::Linux => Ok(Self)',
     'DataSourcePlatform::Unknown => Err(unsupported_platform(platform))'
   )) {
     if (-not $extractorPolicy.Contains($required)) {

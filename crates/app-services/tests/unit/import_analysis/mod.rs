@@ -6,7 +6,6 @@ use super::{
     finalize::{prepare_analysis_staging_startup, AnalysisStartupAction},
     search_policy::{classify_text_content, text_candidate, TextCandidate},
     task_feed::{analysis_task_queue_bound, count_analysis_file_tasks, fetch_analysis_file_page},
-    worker_runtime::{reserve_content_budget, SharedAnalysisState},
 };
 use crate::{artifact_service, staging};
 use chrono::{TimeZone, Utc};
@@ -1207,42 +1206,4 @@ fn cancelled_analysis_keeps_cancel_error_and_unmerged_worker_status() {
 fn producer_never_buffers_more_than_queue_bound() {
     assert_eq!(analysis_task_queue_bound(1), 256);
     assert_eq!(analysis_task_queue_bound(4), 1024);
-}
-
-#[test]
-fn content_budget_blocks_large_file_and_disabled_mode() {
-    let shared = SharedAnalysisState::new();
-    let file = FileEntry {
-        id: FileEntryId("large".to_string()),
-        parent_id: None,
-        data_source_id: DataSourceId("ds".to_string()),
-        path: "large.txt".to_string(),
-        name: "large.txt".to_string(),
-        entry_type: EntryType::File,
-        size: Some(infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES + 1),
-        ext: Some("txt".to_string()),
-        deleted: false,
-        hidden: false,
-        system: false,
-        encrypted: false,
-        read_only: false,
-        archive: false,
-        unix_mode: None,
-        created_at: None,
-        modified_at: None,
-        accessed_at: None,
-        changed_at: None,
-        hash_sha256: None,
-    };
-
-    assert!(!reserve_content_budget(
-        &ContentBudget::disabled(),
-        &file,
-        &shared
-    ));
-    assert!(!reserve_content_budget(
-        &ContentBudget::conservative(),
-        &file,
-        &shared
-    ));
 }

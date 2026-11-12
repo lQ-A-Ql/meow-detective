@@ -40,6 +40,12 @@ impl From<rusqlite::Error> for TimelineServiceError {
     }
 }
 
+impl From<timeline::TimelineProjectionPolicyError> for TimelineServiceError {
+    fn from(error: timeline::TimelineProjectionPolicyError) -> Self {
+        Self::InvalidInput(error.to_string())
+    }
+}
+
 impl From<crate::source_db::ReadySourceError> for TimelineServiceError {
     fn from(error: crate::source_db::ReadySourceError) -> Self {
         match error {

@@ -1,3 +1,5 @@
+use domain::FileEntryId;
+
 use super::*;
 
 fn prefetch_entry() -> FileEntry {

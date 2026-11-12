@@ -3,14 +3,13 @@ use super::error::ImportAnalysisError;
 use super::extractor_policy::PlatformExtractorPolicy;
 use super::options::{ImportAnalysisOptions, ImportAnalysisStats};
 use super::search_policy::{
-    classify_text_content, mime_hint_for_entry, normalized_extension, search_budget_allows_file,
-    should_read_text_index, text_candidate, TextCandidate, TextSkipReason,
+    classify_text_content, mime_hint_for_entry, search_budget_allows_file, should_read_text_index,
+    text_candidate, TextCandidate, TextSkipReason,
 };
 use super::source_reader::AnalysisSourceReader;
 use super::worker_model::WorkerStats;
 use super::worker_staging::{flush_worker_rows, persist_worker_stats, IndexDocRow};
 use crate::{file_service, staging};
-use artifacts_core::VecSink;
 use crossbeam_channel::Receiver;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use rusqlite::Connection;
@@ -110,7 +109,6 @@ pub(super) fn run_analysis_worker(
 }
 
 struct AnalysisWorkerRuntime {
-    extractor_policy: PlatformExtractorPolicy,
     main_conn: Connection,
     staging_conn: Connection,
     stats: WorkerStats,
@@ -126,7 +124,7 @@ impl AnalysisWorkerRuntime {
         options: &ImportAnalysisOptions,
         derived_runtime: Option<Arc<crate::ceph_reconstruction::DerivedRbdRuntime>>,
     ) -> Result<Self, ImportAnalysisError> {
-        let extractor_policy = PlatformExtractorPolicy::for_platform(options.platform)?;
+        let _ = PlatformExtractorPolicy::for_platform(options.platform)?;
         let main_conn = persistence_sqlite::open_existing_source_read_only(&options.db_path)?;
         let staging_conn = staging::open_analysis_staging(
             &options.case_root,
@@ -135,7 +133,6 @@ impl AnalysisWorkerRuntime {
         )?;
         staging::set_worker_meta(&staging_conn, "status", "running")?;
         Ok(Self {
-            extractor_policy,
             main_conn,
             staging_conn,
             stats: WorkerStats::default(),
@@ -155,72 +152,8 @@ impl AnalysisWorkerRuntime {
         let file = task.to_file_entry();
         self.stats.processed_count += 1;
         shared.processed_total.fetch_add(1, Ordering::Relaxed);
-        self.extract_artifacts(&file, options, shared);
         self.index_text(&file, options, shared);
         self.flush_if_needed()
-    }
-
-    fn extract_artifacts(
-        &mut self,
-        file: &FileEntry,
-        options: &ImportAnalysisOptions,
-        shared: &SharedAnalysisState,
-    ) {
-        if options.analysis_mode.allows_content()
-            && options.enable_content_extraction
-            && self.extractor_policy.should_extract(file)
-            && reserve_content_budget(&options.content_budget, file, shared)
-        {
-            match read_artifact_bytes(&mut self.source_reader, &self.main_conn, &file.id) {
-                Ok(bytes) => {
-                    let mut sink = VecSink::new();
-                    match self.extractor_policy.run_extractors(
-                        &file.id,
-                        &file.path,
-                        Box::new(Cursor::new(bytes)),
-                        &mut sink,
-                    ) {
-                        Ok(extract_stats) => {
-                            self.stats.warning_count = self
-                                .stats
-                                .warning_count
-                                .saturating_add(extract_stats.warning_count);
-                            self.stats.skipped_count = self
-                                .stats
-                                .skipped_count
-                                .saturating_add(extract_stats.skipped_count);
-                            self.stats.failed_count = self
-                                .stats
-                                .failed_count
-                                .saturating_add(extract_stats.failed_count);
-                        }
-                        Err(error) => {
-                            self.stats.warning_count = self.stats.warning_count.saturating_add(1);
-                            self.stats.skipped_count = self.stats.skipped_count.saturating_add(1);
-                            tracing::warn!(
-                                "Artifact extraction failed for {}: {}",
-                                file.path,
-                                error
-                            );
-                        }
-                    }
-                    self.stats.artifact_count += sink.artifacts.len() as u64;
-                    crate::timeline_service::retain_analysis_events(&mut sink.timeline_events);
-                    self.stats.timeline_count += sink.timeline_events.len() as u64;
-                    self.artifacts.extend(sink.artifacts);
-                    self.timeline_events.extend(sink.timeline_events);
-                }
-                Err(error) => {
-                    self.stats.warning_count = self.stats.warning_count.saturating_add(1);
-                    self.stats.skipped_count = self.stats.skipped_count.saturating_add(1);
-                    tracing::warn!(
-                        "Artifact extraction skipped unreadable file {}: {}",
-                        file.path,
-                        error
-                    );
-                }
-            }
-        }
     }
 
     fn index_text(
@@ -318,26 +251,6 @@ fn read_text_index_bytes(
     read_text_index_bytes_impl(source_reader, conn, file_id)
 }
 
-fn read_artifact_bytes(
-    source_reader: &mut AnalysisSourceReader,
-    conn: &Connection,
-    file_id: &FileEntryId,
-) -> Result<Vec<u8>, file_service::FileServiceError> {
-    read_artifact_bytes_impl(source_reader, conn, file_id)
-}
-
-fn read_artifact_bytes_impl(
-    source_reader: &mut AnalysisSourceReader,
-    conn: &Connection,
-    file_id: &FileEntryId,
-) -> Result<Vec<u8>, file_service::FileServiceError> {
-    source_reader.read_file_header_by_id(
-        conn,
-        file_id,
-        infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize,
-    )
-}
-
 fn read_text_index_bytes_impl(
     source_reader: &mut AnalysisSourceReader,
     conn: &Connection,
@@ -358,24 +271,6 @@ pub(super) fn add_worker_stats(stats: &mut ImportAnalysisStats, worker: WorkerSt
     stats.warning_count = stats.warning_count.saturating_add(worker.warning_count);
     stats.skipped_count = stats.skipped_count.saturating_add(worker.skipped_count);
     stats.failed_count = stats.failed_count.saturating_add(worker.failed_count);
-}
-
-pub(super) fn reserve_content_budget(
-    budget: &ContentBudget,
-    file: &FileEntry,
-    shared: &SharedAnalysisState,
-) -> bool {
-    if !budget.allowed_extensions.is_empty() {
-        let ext = normalized_extension(file).to_ascii_lowercase();
-        if !budget
-            .allowed_extensions
-            .iter()
-            .any(|allowed| allowed == &ext)
-        {
-            return false;
-        }
-    }
-    reserve_content_quota(budget, file, shared)
 }
 
 pub(super) fn reserve_content_quota(
