@@ -26,17 +26,14 @@ fn append(connection: &Connection, start: i64, end: i64) {
 
 #[test]
 fn visit_cursor_reads_all_pages_and_keeps_url_summaries_distinct() {
-    let writer = Connection::open_in_memory().unwrap();
+    let mut writer = Connection::open_in_memory().unwrap();
     populate(&writer, 2107);
-    let bytes = writer
-        .serialize(rusqlite::DatabaseName::Main)
-        .unwrap()
-        .to_vec();
-    let reader = open_sqlite_from_bytes(&bytes).unwrap();
+    let bytes = writer.serialize("main").unwrap().to_vec();
+    let mut reader = open_sqlite_from_bytes(&bytes).unwrap();
     let mut ids = Vec::new();
     let mut summaries = 0;
     visit_history(
-        &reader,
+        &mut reader,
         BrowserFamily::Chromium,
         &AtomicBool::new(false),
         |row| {
@@ -111,11 +108,11 @@ fn wal_snapshot_includes_committed_tail_and_preserves_source_bytes() {
 
 #[test]
 fn cursor_cancellation_and_unknown_schema_return_explicit_errors() {
-    let connection = Connection::open_in_memory().unwrap();
+    let mut connection = Connection::open_in_memory().unwrap();
     populate(&connection, 2107);
     let cancel = AtomicBool::new(false);
     let mut seen = 0;
-    let result = visit_history(&connection, BrowserFamily::Chromium, &cancel, |_| {
+    let result = visit_history(&mut connection, BrowserFamily::Chromium, &cancel, |_| {
         seen += 1;
         if seen == 700 {
             cancel.store(true, Ordering::Release);
@@ -127,9 +124,9 @@ fn cursor_cancellation_and_unknown_schema_return_explicit_errors() {
         Err(VisitError::Parser(BrowserError::Cancelled))
     ));
     assert_eq!(seen, 700);
-    let empty = Connection::open_in_memory().unwrap();
+    let mut empty = Connection::open_in_memory().unwrap();
     let result = visit_history(
-        &empty,
+        &mut empty,
         BrowserFamily::Chromium,
         &AtomicBool::new(false),
         |_| Ok::<(), BrowserError>(()),

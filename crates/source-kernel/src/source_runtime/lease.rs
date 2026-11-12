@@ -98,9 +98,9 @@ impl SourcePublicationLease {
         &self,
         connection: &'a rusqlite::Connection,
     ) -> SourcePublicationFence<'a> {
-        let lease = self.clone();
-        connection.commit_hook(Some(move || !lease.owns_failure_state()));
-        SourcePublicationFence(connection)
+        SourcePublicationFence::install(connection, self.clone(), |lease| {
+            !lease.owns_failure_state()
+        })
     }
 
     /// Only for a connection owned by this operation, with no pre-existing hook.
@@ -109,16 +109,72 @@ impl SourcePublicationLease {
         &self,
         connection: &'a rusqlite::Connection,
     ) -> SourcePublicationFence<'a> {
-        let lease = self.clone();
-        connection.commit_hook(Some(move || lease.validate().is_err()));
-        SourcePublicationFence(connection)
+        SourcePublicationFence::install(connection, self.clone(), |lease| lease.validate().is_err())
     }
 }
 
-pub struct SourcePublicationFence<'a>(&'a rusqlite::Connection);
+struct PublicationHook {
+    lease: SourcePublicationLease,
+    rollback: fn(&SourcePublicationLease) -> bool,
+}
+
+/// SQLite keeps one commit hook per connection. rusqlite 0.41 requires
+/// `&mut Connection` to register one, but the fence is installed over shared
+/// connections that stay borrowed by the caller for the publication window, so
+/// the hook is registered directly. The fence owns the boxed hook and clears
+/// the registration before freeing it.
+// SAFETY: `data` is a live `Box<PublicationHook>` installed by
+// `SourcePublicationFence::install`; SQLite invokes the callback on the
+// connection's thread while the fence is alive.
+unsafe extern "C" fn commit_hook_callback(data: *mut std::ffi::c_void) -> std::ffi::c_int {
+    // SAFETY: installation keeps this pointer valid for the hook lifetime.
+    let hook = unsafe { &*data.cast::<PublicationHook>() };
+    // An unwind must never cross the SQLite C frame; rolling back is the safe
+    // fallback if the predicate panics.
+    let rollback = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        (hook.rollback)(&hook.lease)
+    }))
+    .unwrap_or(true);
+    rollback as std::ffi::c_int
+}
+
+pub struct SourcePublicationFence<'a> {
+    connection: &'a rusqlite::Connection,
+    hook: *mut PublicationHook,
+}
+
+impl<'a> SourcePublicationFence<'a> {
+    fn install(
+        connection: &'a rusqlite::Connection,
+        lease: SourcePublicationLease,
+        rollback: fn(&SourcePublicationLease) -> bool,
+    ) -> Self {
+        let hook = Box::into_raw(Box::new(PublicationHook { lease, rollback }));
+        // SAFETY: the SQLite handle is live for `'a`; the registration points at
+        // `hook`, which this guard clears in Drop before freeing the allocation.
+        unsafe {
+            rusqlite::ffi::sqlite3_commit_hook(
+                connection.handle(),
+                Some(commit_hook_callback),
+                hook.cast(),
+            );
+        }
+        Self { connection, hook }
+    }
+}
+
 impl Drop for SourcePublicationFence<'_> {
     fn drop(&mut self) {
-        self.0.commit_hook(None::<fn() -> bool>);
+        // SAFETY: Drop clears the registration installed above before freeing
+        // the boxed hook; the connection is still live for `'a`.
+        unsafe {
+            rusqlite::ffi::sqlite3_commit_hook(
+                self.connection.handle(),
+                None,
+                std::ptr::null_mut(),
+            );
+            drop(Box::from_raw(self.hook));
+        }
     }
 }
 

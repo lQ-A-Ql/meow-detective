@@ -2,7 +2,7 @@
 //! (docx/xlsx/pptx), and SQLite databases. Output is a bounded text
 //! extraction, never a layout render or inlined binary payload.
 
-use rusqlite::{serialize::OwnedData, Connection, DatabaseName};
+use rusqlite::{serialize::OwnedData, Connection};
 use std::ptr::NonNull;
 use transport::dto::{
     DocumentPreviewDto, DocumentSectionDto, DocumentTableDto, ViewerPreviewKindDto,
@@ -182,7 +182,7 @@ fn open_sqlite_in_memory(bytes: &[u8]) -> Result<Connection, FileServiceError> {
     let data = unsafe { OwnedData::from_raw_nonnull(allocation, bytes.len()) };
     let mut connection = Connection::open_in_memory().map_err(sqlite_error)?;
     connection
-        .deserialize(DatabaseName::Main, data, true)
+        .deserialize("main", data, true)
         .map_err(sqlite_error)?;
     Ok(connection)
 }

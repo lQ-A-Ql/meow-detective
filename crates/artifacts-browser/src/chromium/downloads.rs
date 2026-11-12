@@ -17,7 +17,7 @@ pub struct DownloadRow {
 }
 
 pub fn visit_downloads<E>(
-    connection: &Connection,
+    connection: &mut Connection,
     cancel: &AtomicBool,
     mut visit: impl FnMut(DownloadRow) -> std::result::Result<(), E>,
 ) -> std::result::Result<(), VisitError<E>> {

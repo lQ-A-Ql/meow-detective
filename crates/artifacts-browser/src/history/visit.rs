@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub fn visit_history<E>(
-    connection: &Connection,
+    connection: &mut Connection,
     family: BrowserFamily,
     cancel: &AtomicBool,
     mut visit: impl FnMut(HistoryRow) -> std::result::Result<(), E>,
@@ -23,7 +23,7 @@ pub fn visit_history<E>(
 }
 
 fn pages<E>(
-    connection: &Connection,
+    connection: &mut Connection,
     schema: &Schema,
     kind: HistoryKind,
     cancel: &AtomicBool,

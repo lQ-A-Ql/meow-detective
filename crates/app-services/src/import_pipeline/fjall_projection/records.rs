@@ -78,7 +78,6 @@ fn mirror_parser_table(
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let columns = statement
         .column_names()
-        .iter()
         .map(|value| value.to_string())
         .collect::<Vec<_>>();
     let rows = statement

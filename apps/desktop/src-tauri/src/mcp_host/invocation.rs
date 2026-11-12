@@ -113,9 +113,9 @@ impl Invocation {
         Ok(())
     }
 
-    pub fn interrupt_sql(&self, connection: &rusqlite::Connection) -> SqlInterruption {
+    pub fn interrupt_sql(&self, connection: &mut rusqlite::Connection) -> SqlInterruption {
         let progress_cancel = self.cancel.clone();
-        connection.progress_handler(1000, Some(move || progress_cancel.is_cancelled()));
+        let _ = connection.progress_handler(1000, Some(move || progress_cancel.is_cancelled()));
         let interrupt = connection.get_interrupt_handle();
         let cancel = self.cancel.clone();
         SqlInterruption(tokio::spawn(async move {

@@ -274,8 +274,8 @@ async fn cancellation_interrupts_sql_and_retains_execution_until_completion() {
     let invocation = Invocation::new(&state, None, cancel.clone(), false).unwrap();
     let (ready, started) = tokio::sync::oneshot::channel();
     let task = tokio::task::spawn_blocking(move || {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        let _guard = invocation.interrupt_sql(&conn);
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        let _guard = invocation.interrupt_sql(&mut conn);
         ready.send(()).unwrap();
         conn.query_row("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100000000) SELECT sum(x) FROM n", [], |row| row.get::<_, i64>(0))
     });

@@ -97,7 +97,7 @@ fn native_source() -> NativeSource {
 }
 
 fn browser_candidate() -> (Vec<u8>, EvidenceCandidate) {
-    let input = Connection::open_in_memory().expect("open browser input");
+    let mut input = Connection::open_in_memory().expect("open browser input");
     input
         .execute_batch(
             "CREATE TABLE urls(id INTEGER PRIMARY KEY,url TEXT,title TEXT,visit_count INTEGER);
@@ -113,7 +113,7 @@ fn browser_candidate() -> (Vec<u8>, EvidenceCandidate) {
     }
     drop(statement);
     let bytes = input
-        .serialize(rusqlite::DatabaseName::Main)
+        .serialize("main")
         .expect("serialize browser input")
         .to_vec();
     let candidate = EvidenceCandidate {

@@ -80,13 +80,13 @@ pub fn ensure_active() -> DbResult<()> {
     }
 }
 
-pub(crate) fn configure_connection(connection: &rusqlite::Connection) -> DbResult<()> {
+pub(crate) fn configure_connection(connection: &mut rusqlite::Connection) -> DbResult<()> {
     ensure_active()?;
     if CURRENT.with(|current| current.borrow().is_none()) {
         return Ok(());
     }
     // Callbacks consult the executing thread; a reused connection never captures an old request.
-    connection.progress_handler(1000, Some(|| ensure_active().is_err()));
+    let _ = connection.progress_handler(1000, Some(|| ensure_active().is_err()));
     connection.busy_handler(Some(read_busy))?;
     Ok(())
 }

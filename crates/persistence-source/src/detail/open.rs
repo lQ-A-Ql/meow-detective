@@ -102,7 +102,7 @@ pub fn open_store(conn: &Connection) -> DbResult<Option<Arc<SourceStore>>> {
 
 pub fn open_store_for_write(conn: &Connection) -> DbResult<Option<Arc<SourceStore>>> {
     let query_only: bool = conn.pragma_query_value(None, "query_only", |row| row.get(0))?;
-    if query_only || conn.is_readonly(rusqlite::DatabaseName::Main)? {
+    if query_only || conn.is_readonly("main")? {
         return Err(DbError::Io(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             "source connection is read-only",

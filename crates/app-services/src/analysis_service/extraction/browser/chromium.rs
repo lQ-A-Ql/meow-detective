@@ -9,7 +9,7 @@ use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;
 
 pub(super) fn extract_chromium_history(
-    connection: &Connection,
+    connection: &mut Connection,
     candidate: &EvidenceCandidate,
     browser: &str,
     profile: &str,
@@ -32,7 +32,7 @@ pub(super) fn extract_chromium_history(
 }
 
 pub(super) fn visit(
-    connection: &Connection,
+    connection: &mut Connection,
     candidate: &EvidenceCandidate,
     browser: &str,
     profile: &str,

@@ -112,13 +112,13 @@ pub fn open_existing_source_read_only(path: &Path) -> DbResult<Connection> {
             format!("Database file not found: {}", path.display()),
         )));
     }
-    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    let mut conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     conn.execute_batch(
         "PRAGMA query_only=ON;
          PRAGMA foreign_keys=ON;
          PRAGMA busy_timeout=30000;",
     )?;
-    crate::read_operation::configure_connection(&conn)?;
+    crate::read_operation::configure_connection(&mut conn)?;
     Ok(conn)
 }
 

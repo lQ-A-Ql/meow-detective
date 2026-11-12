@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::sync::atomic::AtomicBool;
 
 pub(super) fn visit_history(
-    connection: &Connection,
+    connection: &mut Connection,
     candidate: &EvidenceCandidate,
     browser: &str,
     profile: &str,

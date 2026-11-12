@@ -276,14 +276,14 @@ fn query_active_case(
         return dispatch_extract_file(state, active, request, invocation);
     }
     let _scope = invocation.reads.enter();
-    let conn = rusqlite::Connection::open_with_flags(
+    let mut conn = rusqlite::Connection::open_with_flags(
         active.db_path(),
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )
     .map_err(|_| CommandError::internal("无法读取当前案件"))?;
     conn.busy_timeout(std::time::Duration::from_secs(5))
         .map_err(|_| CommandError::internal("无法读取当前案件"))?;
-    let _interrupt = invocation.interrupt_sql(&conn);
+    let _interrupt = invocation.interrupt_sql(&mut conn);
     let result = dispatch_tool(
         state,
         McpHostQueryContext {

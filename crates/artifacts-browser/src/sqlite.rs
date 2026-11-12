@@ -1,5 +1,5 @@
 use crate::{BrowserError, Result};
-use rusqlite::{serialize::OwnedData, Connection, DatabaseName, OpenFlags};
+use rusqlite::{serialize::OwnedData, Connection, OpenFlags};
 use std::{
     io::Write,
     path::Path,
@@ -39,8 +39,8 @@ pub fn open_sqlite_from_bytes(bytes: &[u8]) -> Result<Connection> {
     // SAFETY: ptr was allocated by sqlite3_malloc64 and ownership transfers to OwnedData.
     let data = unsafe { OwnedData::from_raw_nonnull(ptr, bytes.len()) };
     let mut connection = Connection::open_in_memory()?;
-    connection.deserialize(DatabaseName::Main, data, true)?;
-    configure(&connection)?;
+    connection.deserialize("main", data, true)?;
+    configure(&mut connection)?;
     Ok(connection)
 }
 
@@ -74,11 +74,11 @@ impl DatabaseSnapshot {
         if let Some(bytes) = shm {
             write(&files.path().join("snapshot.sqlite-shm"), bytes)?;
         }
-        let connection = Connection::open_with_flags(
+        let mut connection = Connection::open_with_flags(
             files.path().join("snapshot.sqlite"),
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        configure(&connection)?;
+        configure(&mut connection)?;
         connection.execute_batch("BEGIN")?;
         connection.query_row("SELECT count(*) FROM sqlite_schema", [], |row| {
             row.get::<_, i64>(0)
@@ -93,6 +93,9 @@ impl DatabaseSnapshot {
     pub fn connection(&self) -> &Connection {
         &self.connection
     }
+    pub fn connection_mut(&mut self) -> &mut Connection {
+        &mut self.connection
+    }
     pub fn input_mode(&self) -> &'static str {
         if self.wal_included {
             "databaseWithWal"
@@ -102,16 +105,16 @@ impl DatabaseSnapshot {
     }
 }
 
-fn configure(connection: &Connection) -> Result<()> {
+fn configure(connection: &mut Connection) -> Result<()> {
     connection.busy_timeout(Duration::from_millis(50))?;
     connection.execute_batch("PRAGMA query_only=ON; PRAGMA trusted_schema=OFF; PRAGMA temp_store=MEMORY; PRAGMA cache_size=-8192;")?;
     refresh_query_budget(connection);
     Ok(())
 }
 
-pub(crate) fn refresh_query_budget(connection: &Connection) {
+pub(crate) fn refresh_query_budget(connection: &mut Connection) {
     let deadline = Instant::now() + Duration::from_secs(30);
-    connection.progress_handler(1000, Some(move || Instant::now() >= deadline));
+    let _ = connection.progress_handler(1000, Some(move || Instant::now() >= deadline));
 }
 
 fn write(path: &Path, bytes: &[u8]) -> Result<()> {

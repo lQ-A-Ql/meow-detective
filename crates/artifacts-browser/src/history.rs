@@ -73,10 +73,10 @@ pub(crate) fn collect_history(
     browser: &str,
     profile: Option<&str>,
 ) -> crate::Result<Vec<crate::BrowserVisit>> {
-    let connection = crate::sqlite::open_sqlite_from_bytes(bytes)?;
+    let mut connection = crate::sqlite::open_sqlite_from_bytes(bytes)?;
     let mut records = Vec::new();
     let result = visit_history(
-        &connection,
+        &mut connection,
         family,
         &std::sync::atomic::AtomicBool::new(false),
         |row| {

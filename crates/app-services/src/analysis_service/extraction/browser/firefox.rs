@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;
 
 pub(super) fn extract_firefox_history(
-    connection: &Connection,
+    connection: &mut Connection,
     candidate: &EvidenceCandidate,
     browser: &str,
     profile: &str,

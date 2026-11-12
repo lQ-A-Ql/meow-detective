@@ -2,16 +2,13 @@ use super::sqlite::with_database;
 use super::ExtractionOutcome;
 
 fn database() -> Vec<u8> {
-    let connection = rusqlite::Connection::open_in_memory().unwrap();
+    let mut connection = rusqlite::Connection::open_in_memory().unwrap();
     connection
         .execute_batch(
             "CREATE TABLE records(id INTEGER PRIMARY KEY); INSERT INTO records VALUES(1);",
         )
         .unwrap();
-    connection
-        .serialize(rusqlite::DatabaseName::Main)
-        .unwrap()
-        .to_vec()
+    connection.serialize("main").unwrap().to_vec()
 }
 
 #[test]

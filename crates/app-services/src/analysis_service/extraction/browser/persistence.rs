@@ -21,9 +21,9 @@ enum DatabaseView {
     Files(DatabaseSnapshot),
 }
 impl DatabaseView {
-    fn connection(&self) -> &Connection {
+    fn connection_mut(&mut self) -> &mut Connection {
         match self {
-            Self::Files(snapshot) => snapshot.connection(),
+            Self::Files(snapshot) => snapshot.connection_mut(),
         }
     }
     fn mode(&self) -> &'static str {
@@ -43,7 +43,7 @@ pub(in crate::analysis_service::extraction) fn persist_worker(
 ) -> Result<PersistedExtractionOutcome, AnalysisServiceError> {
     ensure_not_cancelled(cancel)?;
     let parser_workspace = output.parser_workspace()?;
-    let view = open_view(&parser_workspace, bytes, companions)?;
+    let mut view = open_view(&parser_workspace, bytes, companions)?;
     let mode = view.mode();
     let mut batch = ConcurrentOutputBatch::new(output);
     let mut sink = |mut outcome: ExtractionOutcome| {
@@ -57,7 +57,7 @@ pub(in crate::analysis_service::extraction) fn persist_worker(
         }
         Ok(())
     };
-    visit(view.connection(), candidate, preload, cancel, &mut sink)?;
+    visit(view.connection_mut(), candidate, preload, cancel, &mut sink)?;
     ensure_not_cancelled(cancel)?;
     batch.finish(Vec::new())
 }
@@ -88,7 +88,7 @@ fn open_view(
 }
 
 fn visit(
-    database: &Connection,
+    database: &mut Connection,
     candidate: &EvidenceCandidate,
     preload: &BrowserPreloadContext,
     cancel: &AtomicBool,
