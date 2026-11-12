@@ -125,6 +125,24 @@ pub(super) fn setup_case() -> (app_services::active_case::ActiveCase, TempDir) {
             Ok(())
         })
         .unwrap();
+    let data_source_id = active
+        .with_conn(|connection| Ok(first_data_source_id(connection, &active.meta.id)))
+        .unwrap();
+    active
+        .with_conn(|connection| {
+            let runtime = app_services::analysis_service::AnalysisSourceReadRuntime::default();
+            app_services::analysis_service::run_source_evidence_scan(
+                connection,
+                &active.case_root,
+                &active.meta.id,
+                &data_source_id,
+                &["ProgramExecution"],
+                &runtime,
+            )
+            .expect("benchmark setup evidence scan should succeed");
+            Ok(())
+        })
+        .unwrap();
     (active, temporary)
 }
 
