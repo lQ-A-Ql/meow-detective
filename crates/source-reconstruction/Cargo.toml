@@ -1,0 +1,57 @@
+[package]
+name = "source-reconstruction"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+chrono.workspace = true
+crc32c.workspace = true
+flate2.workspace = true
+hex.workspace = true
+lz4_flex.workspace = true
+md-5.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+rusqlite.workspace = true
+xz2.workspace = true
+zstd.workspace = true
+
+domain.workspace = true
+transport.workspace = true
+infrastructure.workspace = true
+persistence-sqlite.workspace = true
+persistence-source.workspace = true
+source-kernel.workspace = true
+ceph-reconstruction.workspace = true
+ceph-wire.workspace = true
+image-e01.workspace = true
+evidence-access.workspace = true
+tempfile.workspace = true
+evidence-core.workspace = true
+evidence-mount.workspace = true
+evidence-block.workspace = true
+evidence-emulation.workspace = true
+analysis-core.workspace = true
+import-core.workspace = true
+artifacts-linux.workspace = true
+fs-btrfs.workspace = true
+fs-exfat.workspace = true
+fs-ext4.workspace = true
+fs-fat.workspace = true
+fs-lvm.workspace = true
+fs-ntfs.workspace = true
+fs-xfs.workspace = true
+
+[dev-dependencies]
+rusqlite = { workspace = true, features = ["functions"] }
+tempfile.workspace = true
+sha2.workspace = true
+testing.workspace = true

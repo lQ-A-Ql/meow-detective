@@ -306,7 +306,8 @@ $serviceRoots = @(
   (Join-Path $repoRoot 'crates/app-services/src'),
   (Join-Path $repoRoot 'crates/analysis-core/src'),
   (Join-Path $repoRoot 'crates/emulation-services/src'),
-  (Join-Path $repoRoot 'crates/import-core/src')
+  (Join-Path $repoRoot 'crates/import-core/src'),
+  (Join-Path $repoRoot 'crates/source-reconstruction/src')
 )
 $serviceFiles = foreach ($serviceRoot in $serviceRoots) {
   Get-ChildItem -LiteralPath $serviceRoot -Recurse -File -Filter '*.rs'
@@ -335,15 +336,15 @@ Assert-NoModuleReferencesUnder `
   'File services must not depend on derived-source orchestration'
 
 Assert-MaskedPattern `
-  'crates/app-services/src/derived_source_service/orchestration.rs' `
+  'crates/source-reconstruction/src/derived_source_service/orchestration.rs' `
   '\bceph_reconstruction\b' `
   'derived_source_service must remain the owner of Ceph-derived source orchestration'
 Assert-MaskedPattern `
-  'crates/app-services/src/derived_source_service/finalizer/artifacts.rs' `
+  'crates/source-reconstruction/src/derived_source_service/finalizer/artifacts.rs' `
   '\banalysis_service\b' `
   'derived-source artifact finalization must delegate through analysis_service'
 Assert-MaskedPattern `
-  'crates/app-services/src/derived_source_service/finalizer/graph.rs' `
+  'crates/source-reconstruction/src/derived_source_service/finalizer/graph.rs' `
   '\bfile_service\b' `
   'derived-source graph finalization must delegate through file_service'
 

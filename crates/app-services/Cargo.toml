@@ -28,6 +28,7 @@ evidence-access.workspace = true
 analysis-core.workspace = true
 emulation-services.workspace = true
 import-core.workspace = true
+source-reconstruction.workspace = true
 evidence-core.workspace = true
 evidence-mount.workspace = true
 volume-bitlocker.workspace = true

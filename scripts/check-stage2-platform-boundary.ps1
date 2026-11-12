@@ -42,6 +42,7 @@ $serviceRoots = @(
   (Join-Path $repoRoot 'crates/analysis-core/src'),
   (Join-Path $repoRoot 'crates/emulation-services/src'),
   (Join-Path $repoRoot 'crates/import-core/src'),
+  (Join-Path $repoRoot 'crates/source-reconstruction/src'),
   (Join-Path $repoRoot 'crates/source-kernel/src')
 )
 foreach ($serviceRoot in $serviceRoots) {

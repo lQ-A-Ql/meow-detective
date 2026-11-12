@@ -35,7 +35,7 @@
 
 | 命令 | 结果 |
 | --- | --- |
-| `cargo test -p app-services mount_service::emulation --lib` | 44 项通过 |
+| `cargo test -p source-reconstruction mount_service::emulation --lib` | 44 项通过 |
 | `cargo test -p forensics-desktop emulation_registry --lib` | 28 项通过，3 项按私有环境条件忽略 |
 | `cargo test -p app-services digest_service --lib` | 4 项通过 |
 | `cargo test -p app-services --lib hash_service` | 24 项通过，4 项按外部设备或样本条件忽略 |

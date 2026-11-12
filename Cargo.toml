@@ -52,6 +52,7 @@ members = [
   "crates/analysis-core",
   "crates/emulation-services",
   "crates/import-core",
+  "crates/source-reconstruction",
 ]
 exclude = [
   "experimental/volume-android",
@@ -135,6 +136,7 @@ evtx = { path = "crates/evtx-patched", default-features = false, features = ["mu
 flate2 = "1"
 kamadak-exif = "0.6.1"
 crc32fast = "1.5"
+crc32c = "0.6"
 tar = { version = "0.4", default-features = false }
 containers-pst = { path = "crates/containers-pst" }
 containers-bolt = { path = "crates/containers-bolt", default-features = false }
@@ -216,6 +218,7 @@ evidence-access = { path = "crates/evidence-access" }
 analysis-core = { path = "crates/analysis-core" }
 emulation-services = { path = "crates/emulation-services" }
 import-core = { path = "crates/import-core" }
+source-reconstruction = { path = "crates/source-reconstruction" }
 
 [patch.crates-io]
 fjall = { path = "vendor/fjall-3.1.13" }

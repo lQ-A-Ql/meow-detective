@@ -9,7 +9,7 @@
       "id": "D02", "name": "Bolt database",
       "owners": ["crates/containers-bolt/src/read.rs", "crates/containers-bolt/src/walk.rs"],
       "references": [
-        {"path":"crates/app-services/src/cluster_service/etcd_bolt.rs","marker":"crate::bolt_reader_service"},
+        {"path":"crates/source-reconstruction/src/cluster_service/etcd_bolt.rs","marker":"evidence_access::bolt_reader_service"},
         {"path":"crates/analysis-core/src/analysis_service/extraction/containerd_images.rs","marker":"bolt_reader_service"}
       ]
     },
@@ -19,7 +19,7 @@
       "retired": ["crates/app-services/src/parallel_enum/ntfs/run_numbers.rs"],
       "references": [
         {"path":"crates/evidence-access/src/file_service/mft/stream.rs","marker":"fs_ntfs"},
-        {"path":"crates/app-services/src/parallel_enum/ntfs/mft_scan.rs","marker":"fs_ntfs"}
+        {"path":"crates/import-core/src/parallel_enum/ntfs/mft_scan.rs","marker":"fs_ntfs"}
       ]
     },
     {
@@ -46,7 +46,7 @@
       "id": "D07", "name": "OS release",
       "owners": ["crates/artifacts-linux/src/os_release.rs"],
       "references": [
-        {"path":"crates/app-services/src/mount_service/emulation_linux.rs","marker":"linux_identity_service"},
+        {"path":"crates/source-reconstruction/src/mount_service/emulation_linux.rs","marker":"linux_identity_service"},
         {"path":"crates/analysis-core/src/linux_evidence_facts.rs","marker":"linux_identity_service"}
       ]
     },

@@ -6,7 +6,6 @@
 //! command layer and the domain/infrastructure crates, and owns the SQLite
 //! case database schema through `persistence-sqlite`.
 
-pub(crate) use source_kernel::derived_source_catalog;
 pub use source_kernel::e01_reader_cache::{
     clear_e01_reader_cache, clear_e01_reader_cache_for_case, open_e01_reader_cached,
 };
@@ -56,7 +55,6 @@ pub mod infrastructure_graph_service;
 pub mod job_service;
 pub mod ledger_service;
 pub mod linux_artifact_job;
-pub(crate) mod linux_identity_service;
 pub mod mcp_host_service;
 pub mod mount_service;
 pub mod nested_evidence_service;
