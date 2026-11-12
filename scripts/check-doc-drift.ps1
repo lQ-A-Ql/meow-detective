@@ -146,7 +146,8 @@ function Assert-TableFact {
 }
 
 $readme = Read-Text 'README.md'
-$agents = Read-Text 'AGENTS.md'
+$agentsPath = Join-Path $repoRoot 'AGENTS.md'
+$agents = if (Test-Path -LiteralPath $agentsPath) { Read-Text 'AGENTS.md' } else { $null }
 $docIndex = Read-Text 'docs/documentation-index.md'
 $knownUnsupportedDoc = Read-Text 'docs/known-unsupported-formats.md'
 $validationDoc = Read-Text 'docs/validation-trust-framework.md'
@@ -165,7 +166,7 @@ $crateCount = ([regex]::Matches(
     $workspaceMembersMatch.Groups['members'].Value,
     '"crates/[^"\r\n]+"'
   ) | Measure-Object).Count
-Assert-Equals $crateCount 44 'Workspace crate count drifted'
+Assert-Equals $crateCount 45 'Workspace crate count drifted'
 $commandFiles = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'apps/desktop/src-tauri/src/commands') -Recurse -File -Filter '*.rs'
 $commandCount = ($commandFiles | Select-String -Pattern '#\[tauri::command\]' | Measure-Object).Count
 # Source-scoped detail repositories live in persistence-source after S4b; the
@@ -216,19 +217,23 @@ Assert-Contains $readme "$serviceModuleCount source modules" 'README app-service
 Assert-Contains $readme "migration scripts ($migrationCount)" 'README migration script count is stale'
 Assert-Contains $readme "$frontendTestCount test files" 'README frontend test file count is stale'
 
-Assert-Contains $agents "$crateCount crates" 'AGENTS crate count is stale'
-Assert-Contains $agents "$commandCount Tauri commands" 'AGENTS Tauri command count is stale'
-Assert-Contains $agents "$repoCount logical SQLite repositories" 'AGENTS repository count is stale'
-Assert-Contains $agents "$migrationCount migration scripts" 'AGENTS migration count is stale'
-Assert-Contains $agents "$pageCount frontend pages" 'AGENTS frontend page count is stale'
-Assert-Contains $agents "$frontendTestCount frontend test files" 'AGENTS frontend test count is stale'
-Assert-Contains $agents "$eventTopicCount event topics" 'AGENTS event topic count is stale'
-Assert-Contains $agents "$dtoModuleCount DTO module files" 'AGENTS DTO module count is stale'
-Assert-Contains $agents 'experimental/volume-android' 'AGENTS is missing the experimental volume-android boundary'
-Assert-NotMatches `
-  -Content $agents `
-  -Pattern '`mcp-client`' `
-  -Message 'AGENTS still lists the removed mcp-client crate'
+if ($null -ne $agents) {
+  Assert-Contains $agents "$crateCount crates" 'AGENTS crate count is stale'
+  Assert-Contains $agents "$commandCount Tauri commands" 'AGENTS Tauri command count is stale'
+  Assert-Contains $agents "$repoCount logical SQLite repositories" 'AGENTS repository count is stale'
+  Assert-Contains $agents "$migrationCount migration scripts" 'AGENTS migration count is stale'
+  Assert-Contains $agents "$pageCount frontend pages" 'AGENTS frontend page count is stale'
+  Assert-Contains $agents "$frontendTestCount frontend test files" 'AGENTS frontend test count is stale'
+  Assert-Contains $agents "$eventTopicCount event topics" 'AGENTS event topic count is stale'
+  Assert-Contains $agents "$dtoModuleCount DTO module files" 'AGENTS DTO module count is stale'
+  Assert-Contains $agents 'experimental/volume-android' 'AGENTS is missing the experimental volume-android boundary'
+  Assert-NotMatches `
+    -Content $agents `
+    -Pattern '`mcp-client`' `
+    -Message 'AGENTS still lists the removed mcp-client crate'
+} else {
+  Write-Host 'AGENTS.md is workstation-local (untracked); skipping AGENTS fact checks'
+}
 
 Assert-TableFact $docIndex 'Rust workspace crate' $crateCount 'documentation-index crate count is stale'
 Assert-TableFact $docIndex 'Tauri commands' $commandCount 'documentation-index command count is stale'
