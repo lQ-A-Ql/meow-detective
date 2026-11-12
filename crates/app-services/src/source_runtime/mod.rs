@@ -1,12 +1,17 @@
-pub(crate) mod factory;
-mod identity;
-mod partition;
-pub(crate) mod resume;
-mod snapshot;
+//! Source runtime facade.
+//!
+//! The reader factory and per-source runtime identities live in
+//! `evidence-access::source_runtime`; publication leases and resource
+//! accounting still come straight from `source-kernel`. Import resume
+//! identity stays here until the import pipeline moves out of this crate.
 
-pub use factory::{open_factory, open_factory_with_cancel};
-pub use identity::{SourceIdentity, SourceRuntime};
-pub use partition::PartitionReadPlan;
+pub(crate) mod resume;
+
+pub use ::evidence_access::source_runtime::{factory, identity, partition, snapshot};
+pub use ::evidence_access::source_runtime::{
+    open_factory, open_factory_for_case, open_factory_with_cancel, PartitionReadPlan,
+    SourceIdentity, SourceRuntime,
+};
 pub use source_kernel::source_runtime::lease::{
     invalidate_case, invalidate_source, SourceInvalidated, SourcePublicationLease,
 };

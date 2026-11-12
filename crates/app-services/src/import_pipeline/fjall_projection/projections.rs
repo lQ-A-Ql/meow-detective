@@ -1,7 +1,6 @@
 use crate::storage_runtime::ReadWriteSourceStorageHandle;
 use persistence_source::fjall::{
-    ArtifactRecordStore, CatalogRecordStore, PersistMode, ScanDirection, SourceStore,
-    TimelineRecordStore,
+    ArtifactRecordStore, PersistMode, ScanDirection, SourceStore, TimelineRecordStore,
 };
 use rusqlite::Connection;
 use std::sync::Arc;
@@ -108,39 +107,6 @@ pub(super) fn mirror_artifact_records_only(
             .map_err(|error| CommandError::internal(error.to_string()))?;
         source
             .artifact_upsert_batch(&page.records, PersistMode::Buffer)
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            break;
-        }
-    }
-    Ok(())
-}
-
-pub(super) fn mirror_catalog(
-    connection: &Connection,
-    source: &ReadWriteSourceStorageHandle,
-    source_id: &str,
-) -> Result<(), CommandError> {
-    let store = origin(connection, source_id)?;
-    if store.database().path() == source.source_store().database().path() {
-        return Ok(());
-    }
-    let records = CatalogRecordStore::from_source_store((*store).clone());
-    let snapshot = records.read_snapshot();
-    let mut cursor = None;
-    loop {
-        let page = records
-            .list_all(
-                &snapshot,
-                source_id,
-                cursor.as_deref(),
-                ScanDirection::Forward,
-                PAGE_SIZE,
-            )
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-        source
-            .catalog_upsert_batch(&page.records, PersistMode::Buffer)
             .map_err(|error| CommandError::internal(error.to_string()))?;
         cursor = page.next_cursor;
         if cursor.is_none() {

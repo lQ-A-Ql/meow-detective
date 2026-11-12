@@ -128,6 +128,20 @@ fn pve_cluster_root() -> PathBuf {
         })
 }
 
+fn discover_plan_arrays(
+    plan: &app_services::cluster_service::LinuxEvidenceSetImportPlan,
+) -> Vec<app_services::cluster_service::MdRaidArrayPlan> {
+    let members = plan
+        .members
+        .iter()
+        .map(|member| evidence_access::mdraid::MdRaidDiscoveryMember {
+            source_path: &member.source_path,
+            source_kind: &member.source_kind,
+        })
+        .collect::<Vec<_>>();
+    discover_linux_evidence_set_mdraid(&plan.root_path, &members).expect("discover MD RAID arrays")
+}
+
 fn build_synthetic_lvm_pv(
     vg_name: &str,
     vg_uuid: &str,
@@ -3281,7 +3295,7 @@ fn pve_cluster_mdraid_plan_groups_members_across_vgs() {
     let root = pve_cluster_root();
     let plan = plan_linux_evidence_set_import(&root, Some("mdraid-plan".to_string()))
         .expect("MD RAID evidence set should be planned");
-    let arrays = discover_linux_evidence_set_mdraid(&plan).expect("discover MD RAID arrays");
+    let arrays = discover_plan_arrays(&plan);
     let array = arrays
         .iter()
         .find(|array| array.name == "mac:0")
@@ -3326,7 +3340,7 @@ fn pve_cluster_mdraid_reader_exposes_btrfs_root() {
     let root = pve_cluster_root();
     let plan = plan_linux_evidence_set_import(&root, Some("mdraid-btrfs".to_string()))
         .expect("MD RAID evidence set should be planned");
-    let arrays = discover_linux_evidence_set_mdraid(&plan).expect("discover MD RAID arrays");
+    let arrays = discover_plan_arrays(&plan);
     let array = arrays
         .into_iter()
         .find(|array| array.name == "mac:0")

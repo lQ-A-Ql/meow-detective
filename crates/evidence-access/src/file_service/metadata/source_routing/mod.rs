@@ -1,0 +1,33 @@
+//! Source-routing entry points that resolve case-scoped requests to the
+//! per-data-source databases within a case.
+
+mod browse;
+mod data_source_summary;
+mod file_metadata;
+mod file_page;
+mod ntfs_inspector;
+mod preview;
+mod read;
+mod registry_browser;
+mod shared;
+
+pub use browse::{
+    get_file_children_for_case, get_file_jump_context_for_case, get_file_rows_for_case,
+    get_file_tree_for_case,
+};
+pub use data_source_summary::get_data_sources_for_case;
+pub use file_metadata::get_file_metadata_for_case;
+pub use file_page::list_file_entries_page_for_case;
+pub use ntfs_inspector::inspect_ntfs_file_for_case;
+pub use preview::{
+    document_preview_for_source_case, image_metadata_for_source_case,
+    image_preview_for_source_case, media_preview_plan_for_source_case, media_range_for_source_case,
+    read_preview_bytes_for_source_case, text_preview_for_source_case,
+};
+pub use read::{open_file_handle_for_case, read_file_range_for_source_case};
+pub use registry_browser::browse_registry_key_for_case;
+pub use shared::open_source_for_file_id;
+
+#[cfg(test)]
+#[path = "../../../../tests/unit/file_service/source_routing.rs"]
+mod tests;

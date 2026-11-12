@@ -6,6 +6,7 @@
 //! command layer and the domain/infrastructure crates, and owns the SQLite
 //! case database schema through `persistence-sqlite`.
 
+pub(crate) use source_kernel::derived_source_catalog;
 pub use source_kernel::e01_reader_cache::{
     clear_e01_reader_cache, clear_e01_reader_cache_for_case, open_e01_reader_cached,
 };
@@ -13,7 +14,6 @@ pub use source_kernel::{
     active_case, artifact_storage_service, connection, performance, processing_phase_service,
     resource_budget, runtime_resources, source_db, storage_manifest, storage_runtime,
 };
-pub(crate) use source_kernel::{derived_source_catalog, e01_reader_cache};
 
 pub mod analysis_service;
 pub mod artifact_service;

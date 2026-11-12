@@ -5,4 +5,5 @@ pub mod file_magic;
 mod fs;
 pub mod hashing;
 mod logging;
+pub mod paths;
 pub mod text;

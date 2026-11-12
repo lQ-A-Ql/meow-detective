@@ -1,4 +1,4 @@
-use persistence_source::fjall::{encode_key, KeyPart, PersistMode, VersionedEnvelope};
+use persistence_source::fjall::{encode_key, KeyPart, PersistMode};
 use rusqlite::Connection;
 use std::time::Instant;
 
@@ -166,7 +166,9 @@ pub(crate) fn mirror_catalog_records_from_connection(
     source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
     source_id: &str,
 ) -> Result<(), CommandError> {
-    projections::mirror_catalog(connection, source, source_id)
+    ::evidence_access::catalog_projection::mirror_catalog_records_from_connection(
+        connection, source, source_id,
+    )
 }
 
 pub(crate) fn mirror_analysis_records_before_sqlite_commit(
@@ -182,25 +184,7 @@ pub(crate) fn mark_catalog_projection_seeded(
     source: &crate::storage_runtime::ReadWriteSourceStorageHandle,
     source_id: &str,
 ) -> Result<(), CommandError> {
-    let key = encode_key("projection", &[KeyPart::Text(source_id.to_owned())])
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let marker = VersionedEnvelope::new(
-        "catalog_projection_seeded",
-        1,
-        format!("projection:{source_id}"),
-        source_id,
-        1,
-        source_id.as_bytes().to_vec(),
-    );
-    source
-        .write_envelope(
-            persistence_source::fjall::KeyspaceName::Meta,
-            key,
-            &marker,
-            PersistMode::SyncAll,
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(())
+    ::evidence_access::catalog_projection::mark_catalog_projection_seeded(source, source_id)
 }
 
 pub(crate) fn begin_partition_projection(
@@ -349,7 +333,11 @@ fn mirror_projection_records(
         ensure_projection_building(source, source_id, "projection")?;
     }
     if include_catalog && !catalog_published {
-        projections::mirror_catalog(source_connection, source, source_id)?;
+        ::evidence_access::catalog_projection::mirror_catalog_records_from_connection(
+            source_connection,
+            source,
+            source_id,
+        )?;
     } else {
         tracing::debug!(source_id, "Skipping Fjall catalog mirror");
     }

@@ -7,9 +7,9 @@ use domain::{
 };
 
 use super::linux_import::LinuxEvidenceSetImportPlan;
-use super::mdraid::{
+use ::evidence_access::mdraid::{
     discover_linux_evidence_set_mdraid, open_mdraid_reader, open_persisted_mdraid_reader,
-    write_mdraid_descriptor, MdRaidArrayPlan, MdRaidPlanError,
+    write_mdraid_descriptor, MdRaidArrayPlan, MdRaidDiscoveryMember, MdRaidPlanError,
 };
 use persistence_source::fjall::{PartitionRecord, PartitionRecordStore, PersistMode};
 use sha2::{Digest, Sha256};
@@ -308,13 +308,27 @@ fn enumerate_mdraid_catalog(
     .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error.to_string())))
 }
 
+fn discover_evidence_set_arrays(
+    plan: &LinuxEvidenceSetImportPlan,
+) -> Result<Vec<MdRaidArrayPlan>, MdRaidPlanError> {
+    let members = plan
+        .members
+        .iter()
+        .map(|member| MdRaidDiscoveryMember {
+            source_path: &member.source_path,
+            source_kind: &member.source_kind,
+        })
+        .collect::<Vec<_>>();
+    discover_linux_evidence_set_mdraid(&plan.root_path, &members)
+}
+
 pub fn register_linux_evidence_set_mdraid(
     conn: &rusqlite::Connection,
     case_root: &std::path::Path,
     case_id: &CaseId,
     plan: &LinuxEvidenceSetImportPlan,
 ) -> Result<Vec<DataSource>, MdRaidPlanError> {
-    discover_linux_evidence_set_mdraid(plan)?
+    discover_evidence_set_arrays(plan)?
         .iter()
         .map(|array| register_mdraid_array(conn, case_root, case_id, array))
         .collect()
@@ -326,7 +340,7 @@ pub fn materialize_linux_evidence_set_mdraid(
     case_id: &CaseId,
     plan: &LinuxEvidenceSetImportPlan,
 ) -> Result<Vec<DataSource>, MdRaidPlanError> {
-    discover_linux_evidence_set_mdraid(plan)?
+    discover_evidence_set_arrays(plan)?
         .iter()
         .map(|array| materialize_mdraid_array(conn, case_root, case_id, array))
         .collect()

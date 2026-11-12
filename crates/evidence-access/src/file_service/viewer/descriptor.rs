@@ -1,0 +1,438 @@
+//! Preview descriptor construction and caching.
+
+use crate::file_service::viewer::{
+    validate_readable_file_entry, PreviewCephFsDescriptor, PreviewDescriptor, PreviewReadContext,
+};
+use crate::file_service::{metadata::lookup::mime_for_entry, FileServiceError};
+use domain::{FileEntry, FileEntryId};
+use persistence_source::repositories::file_repo::FileRepo;
+use rusqlite::{Connection, OptionalExtension};
+use std::path::{Path, PathBuf};
+
+pub fn preview_descriptor_for_case(
+    conn: &Connection,
+    case_id: &str,
+    file_id: &FileEntryId,
+) -> Result<PreviewDescriptor, FileServiceError> {
+    let repo = FileRepo::new(conn);
+    let entry = fjall_entry_for_id(conn, file_id)?
+        .or(repo.find_by_id(file_id)?)
+        .ok_or_else(|| FileServiceError::not_found("File not found"))?;
+
+    preview_descriptor_for_entry(conn, &repo, case_id, &entry)
+}
+
+fn fjall_entry_for_id(
+    conn: &Connection,
+    file_id: &FileEntryId,
+) -> Result<Option<FileEntry>, FileServiceError> {
+    let database_path: String = conn
+        .query_row("PRAGMA database_list", [], |row| row.get(2))
+        .unwrap_or_default();
+    let source_id = conn
+        .query_row(
+            "SELECT id FROM data_sources ORDER BY id LIMIT 2",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| FileServiceError::other(error.to_string()))?;
+    let Some(source_id) = source_id else {
+        return Ok(None);
+    };
+    let Ok(source) = crate::source_db::open_fjall_source_read_only_from_source_db_path(
+        Path::new(&database_path),
+        &domain::DataSourceId(source_id.clone()),
+    ) else {
+        return Ok(None);
+    };
+    let snapshot = source.snapshot();
+    if !source
+        .source_projection_complete(&snapshot, &source_id)
+        .map_err(|error| FileServiceError::other(error.to_string()))?
+    {
+        return Ok(None);
+    }
+    source
+        .catalog_get(&snapshot, &source_id, &file_id.0)
+        .map(|record| record.map(crate::file_service::fjall_read::record_to_domain))
+        .map_err(|error| FileServiceError::other(error.to_string()))
+}
+
+fn preview_descriptor_for_entry(
+    conn: &Connection,
+    repo: &FileRepo<'_>,
+    case_id: &str,
+    entry: &FileEntry,
+) -> Result<PreviewDescriptor, FileServiceError> {
+    validate_readable_file_entry(conn, entry)?;
+
+    let (source_kind, source_path) = repo
+        .find_data_source_location(&entry.data_source_id)?
+        .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
+
+    let partition_candidates = match source_kind.as_str() {
+        "logical_directory" | "logical_archive" | "ceph_fs" => Vec::new(),
+        "e01" | "ceph_rbd" => {
+            let expected_partition_index =
+                crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
+            crate::file_service::viewer::e01_partition_candidates(
+                conn,
+                entry,
+                expected_partition_index,
+            )?
+        }
+        "raw" | "local_disk" | "android_sparse" => {
+            let expected_partition_index =
+                crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
+            crate::file_service::viewer::block_partition_candidates(
+                &source_path,
+                expected_partition_index,
+                &source_kind,
+            )?
+        }
+        other => {
+            return Err(FileServiceError::other(format!(
+                "Range reading is not yet wired for data source kind '{}'",
+                other
+            )))
+        }
+    };
+    let selected = partition_candidates.first();
+    let ceph_fs = if source_kind == "ceph_fs" {
+        Some(cephfs_descriptor(conn, entry)?)
+    } else {
+        None
+    };
+
+    Ok(PreviewDescriptor {
+        case_id: case_id.to_string(),
+        file_id: entry.id.0.clone(),
+        source_kind,
+        source_path,
+        partition_index: selected.map(|candidate| candidate.partition_index),
+        filesystem_kind: selected.map(|candidate| candidate.filesystem_kind.clone()),
+        path: entry.path.clone(),
+        mime: mime_for_entry(entry),
+        size: entry.size.unwrap_or(0),
+        data_source_id: entry.data_source_id.0.clone(),
+        partition_candidates,
+        entry_size: entry.size.unwrap_or(0),
+        entry_modified_at: entry.modified_at.as_ref().map(|dt| dt.to_rfc3339()),
+        ceph_fs,
+    })
+}
+
+fn cephfs_descriptor(
+    conn: &Connection,
+    entry: &FileEntry,
+) -> Result<PreviewCephFsDescriptor, FileServiceError> {
+    if let Some(case_root) = case_root_from_connection(conn) {
+        if let Ok(source) = crate::source_db::open_registered_fjall_source_read_only(
+            &case_root,
+            &entry.data_source_id,
+        ) {
+            let snapshot = source.snapshot();
+            if source
+                .source_projection_complete(&snapshot, &entry.data_source_id.0)
+                .map_err(|error| FileServiceError::other(error.to_string()))?
+            {
+                let page = source
+                    .parser_list_by_field(
+                        &snapshot,
+                        persistence_source::fjall::ParserFieldQuery {
+                            source_id: &entry.data_source_id.0,
+                            kind: "ceph_fs_namespace_locator",
+                            field: "entry_id",
+                            value: &entry.id.0,
+                        },
+                        None,
+                        persistence_source::fjall::ScanDirection::Forward,
+                        2,
+                    )
+                    .map_err(|error| FileServiceError::other(error.to_string()))?;
+                if page.records.len() > 1 {
+                    return Err(FileServiceError::other(
+                        "Multiple CephFS namespace locators matched the file entry",
+                    ));
+                }
+                if let Some(record) = page.records.into_iter().next() {
+                    return cephfs_descriptor_from_parser_record(&record, entry);
+                }
+            }
+        }
+    }
+    let locator =
+        persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(conn)
+            .find_file_locator(&entry.data_source_id.0, &entry.id.0)?
+            .ok_or_else(|| {
+                FileServiceError::not_found("Published CephFS file locator not found")
+            })?;
+    if !matches!(locator.entry_kind.as_str(), "file" | "symlink")
+        || locator.size != entry.size.unwrap_or(0)
+    {
+        return Err(FileServiceError::other(
+            "CephFS file locator does not match the file catalog",
+        ));
+    }
+    Ok(PreviewCephFsDescriptor {
+        filesystem_identity: locator.filesystem_identity,
+        filesystem_id: locator.filesystem_id,
+        fsmap_epoch: locator.fsmap_epoch,
+        inode: locator.inode,
+        stripe_unit: locator.stripe_unit,
+        stripe_count: locator.stripe_count,
+        object_size: locator.object_size,
+        pool_id: locator.pool_id,
+        pool_namespace: locator.pool_namespace,
+        inline_data: locator.inline_data,
+        projection_sha256: locator.projection_sha256,
+        schema_version: locator.schema_version,
+        decoder_profile: locator.decoder_profile,
+        sparse_extents: locator
+            .sparse_extents
+            .into_iter()
+            .map(
+                |extent| ceph_reconstruction::ceph_reconstruction::CephFsSparseExtentProof {
+                    offset: extent.offset,
+                    length: extent.length,
+                    evidence_sha256: extent.evidence_sha256,
+                    proof_sha256: extent.proof_sha256,
+                },
+            )
+            .collect(),
+    })
+}
+
+fn case_root_from_connection(conn: &Connection) -> Option<PathBuf> {
+    let path = conn
+        .query_row("PRAGMA database_list", [], |row| row.get::<_, String>(2))
+        .ok()?;
+    Path::new(&path)
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+}
+
+fn cephfs_descriptor_from_parser_record(
+    record: &persistence_source::fjall::ParserRecord,
+    entry: &FileEntry,
+) -> Result<PreviewCephFsDescriptor, FileServiceError> {
+    let value = &record.payload;
+    let text = |name: &str| {
+        value
+            .get(name)
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| FileServiceError::other(format!("Missing CephFS locator field: {name}")))
+    };
+    let integer = |name: &str| {
+        value
+            .get(name)
+            .and_then(serde_json::Value::as_i64)
+            .ok_or_else(|| FileServiceError::other(format!("Invalid CephFS locator field: {name}")))
+    };
+    let inline_data = match value
+        .get("inline_data_hex")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some(hex) => {
+            Some(hex::decode(hex).map_err(|error| FileServiceError::other(error.to_string()))?)
+        }
+        None => None,
+    };
+    let sparse_extents = value
+        .get("sparse_extents")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| FileServiceError::other("Invalid CephFS sparse extent list"))?
+        .iter()
+        .map(|extent| {
+            Ok(
+                ceph_reconstruction::ceph_reconstruction::CephFsSparseExtentProof {
+                    offset: extent
+                        .get("offset")
+                        .and_then(serde_json::Value::as_u64)
+                        .ok_or_else(|| FileServiceError::other("Invalid sparse extent offset"))?,
+                    length: extent
+                        .get("length")
+                        .and_then(serde_json::Value::as_u64)
+                        .ok_or_else(|| FileServiceError::other("Invalid sparse extent length"))?,
+                    evidence_sha256: extent
+                        .get("evidence_sha256")
+                        .and_then(serde_json::Value::as_str)
+                        .ok_or_else(|| {
+                            FileServiceError::other("Invalid sparse extent evidence digest")
+                        })?
+                        .to_owned(),
+                    proof_sha256: extent
+                        .get("proof_sha256")
+                        .and_then(serde_json::Value::as_str)
+                        .ok_or_else(|| {
+                            FileServiceError::other("Invalid sparse extent proof digest")
+                        })?
+                        .to_owned(),
+                },
+            )
+        })
+        .collect::<Result<Vec<_>, FileServiceError>>()?;
+    let size = u64::try_from(integer("size")?)
+        .map_err(|error| FileServiceError::other(error.to_string()))?;
+    if text("entry_id")? != entry.id.0
+        || !matches!(text("entry_kind")?, "file" | "symlink")
+        || size != entry.size.unwrap_or(0)
+    {
+        return Err(FileServiceError::other(
+            "CephFS parser locator does not match the file catalog",
+        ));
+    }
+    Ok(PreviewCephFsDescriptor {
+        filesystem_identity: text("filesystem_identity")?.to_owned(),
+        filesystem_id: integer("filesystem_id")?,
+        fsmap_epoch: u32::try_from(integer("fsmap_epoch")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        inode: u64::try_from(integer("inode")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        stripe_unit: u32::try_from(integer("stripe_unit")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        stripe_count: u32::try_from(integer("stripe_count")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        object_size: u32::try_from(integer("object_size")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        pool_id: integer("pool_id")?,
+        pool_namespace: text("pool_namespace")?.to_owned(),
+        inline_data,
+        projection_sha256: text("projection_sha256")?.to_owned(),
+        schema_version: u32::try_from(integer("schema_version")?)
+            .map_err(|error| FileServiceError::other(error.to_string()))?,
+        decoder_profile: text("decoder_profile")?.to_owned(),
+        sparse_extents,
+    })
+}
+
+pub(crate) fn descriptor_for_file_with_cache<C>(
+    context: &mut C,
+    file_id: &FileEntryId,
+) -> Result<PreviewDescriptor, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    let case_id = context.case_id().to_string();
+    let key = descriptor_cache_key(&case_id, file_id);
+    if let Some(value) = context.get_cached_preview_descriptor(&key) {
+        match serde_json::from_value::<PreviewDescriptor>(value) {
+            Ok(descriptor)
+                if descriptor.case_id == case_id
+                    && descriptor.file_id == file_id.0
+                    && descriptor_is_fresh(context.conn(), file_id, &descriptor) =>
+            {
+                return Ok(descriptor);
+            }
+            Ok(_) => {
+                tracing::debug!(
+                    cache_key = %key,
+                    "Discarding stale preview descriptor cache entry"
+                );
+            }
+            Err(error) => {
+                tracing::warn!(
+                    cache_key = %key,
+                    %error,
+                    "Discarding malformed preview descriptor cache entry"
+                );
+            }
+        }
+    }
+
+    let descriptor = preview_descriptor_for_case(context.conn(), &case_id, file_id)?;
+    if let Ok(value) = serde_json::to_value(&descriptor) {
+        context.set_cached_preview_descriptor(&key, &value);
+    }
+    Ok(descriptor)
+}
+
+/// Check whether a cached preview descriptor still matches the current file
+/// entry metadata. A mismatch indicates the entry was updated in place (for
+/// example by a re-import or staging merge) and the descriptor must be rebuilt.
+pub(crate) fn descriptor_is_fresh(
+    conn: &Connection,
+    file_id: &FileEntryId,
+    descriptor: &PreviewDescriptor,
+) -> bool {
+    let file_repo = FileRepo::new(conn);
+    let entry = match fjall_entry_for_id(conn, file_id)
+        .ok()
+        .flatten()
+        .or_else(|| file_repo.find_by_id(file_id).ok().flatten())
+    {
+        Some(entry) => entry,
+        None => {
+            tracing::debug!(file_id = %file_id.0, "File entry not found; treating descriptor as stale");
+            return false;
+        }
+    };
+
+    let current_partition_index =
+        match crate::file_service::viewer::resolve_partition_index_for_entry(&file_repo, &entry) {
+            Ok(index) => index,
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    file_id = %file_id.0,
+                    "Failed to validate descriptor partition routing"
+                );
+                return false;
+            }
+        };
+    let current_size = entry.size.unwrap_or(0);
+    let current_modified = entry.modified_at.as_ref().map(|dt| dt.to_rfc3339());
+
+    if validate_readable_file_entry(conn, &entry).is_err()
+        || descriptor.entry_size != current_size
+        || descriptor.entry_modified_at != current_modified
+        || descriptor.partition_index != current_partition_index
+    {
+        tracing::debug!(
+            file_id = %file_id.0,
+            cached_size = descriptor.entry_size,
+            current_size = current_size,
+            cached_modified = ?descriptor.entry_modified_at,
+            current_modified = ?current_modified,
+            cached_partition_index = ?descriptor.partition_index,
+            current_partition_index = ?current_partition_index,
+            "Preview descriptor metadata changed; rebuilding"
+        );
+        return false;
+    }
+
+    if descriptor.source_kind == "ceph_fs"
+        && !cephfs_descriptor_is_fresh(conn, &entry, descriptor.ceph_fs.as_ref())
+    {
+        return false;
+    }
+
+    true
+}
+
+fn cephfs_descriptor_is_fresh(
+    conn: &Connection,
+    entry: &FileEntry,
+    cached: Option<&PreviewCephFsDescriptor>,
+) -> bool {
+    let Some(cached) = cached else {
+        return false;
+    };
+    persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo::new(conn)
+        .find_file_locator(&entry.data_source_id.0, &entry.id.0)
+        .ok()
+        .flatten()
+        .is_some_and(|current| {
+            current.filesystem_identity == cached.filesystem_identity
+                && current.fsmap_epoch == cached.fsmap_epoch
+                && current.inode == cached.inode
+                && current.projection_sha256 == cached.projection_sha256
+        })
+}
+
+pub(crate) fn descriptor_cache_key(case_id: &str, file_id: &FileEntryId) -> String {
+    format!("preview-descriptor:v6:{case_id}:{}", file_id.0)
+}

@@ -1,0 +1,65 @@
+[package]
+name = "evidence-access"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+crossbeam-channel.workspace = true
+num_cpus.workspace = true
+rayon.workspace = true
+crc32fast.workspace = true
+encoding_rs.workspace = true
+
+domain.workspace = true
+transport.workspace = true
+infrastructure.workspace = true
+persistence-sqlite.workspace = true
+persistence-source.workspace = true
+source-kernel.workspace = true
+ceph-reconstruction.workspace = true
+search.workspace = true
+evidence-core.workspace = true
+image-e01.workspace = true
+image-android.workspace = true
+volume-bitlocker.workspace = true
+fs-ntfs.workspace = true
+fs-fat.workspace = true
+fs-exfat.workspace = true
+fs-ext4.workspace = true
+fs-f2fs.workspace = true
+fs-erofs.workspace = true
+fs-xfs.workspace = true
+fs-btrfs.workspace = true
+fs-lvm.workspace = true
+artifacts-linux.workspace = true
+artifacts-windows.workspace = true
+rusqlite.workspace = true
+uuid.workspace = true
+sha2.workspace = true
+hex.workspace = true
+base64.workspace = true
+tempfile.workspace = true
+zip.workspace = true
+quick-xml.workspace = true
+lopdf.workspace = true
+kamadak-exif.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+rusqlite = { workspace = true, features = ["functions"] }
+tempfile.workspace = true
+sha2.workspace = true
+testing.workspace = true
+flate2.workspace = true

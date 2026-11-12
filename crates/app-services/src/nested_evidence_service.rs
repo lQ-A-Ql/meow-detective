@@ -6,7 +6,6 @@ use thiserror::Error;
 use transport::dto::NestedEvidenceLineageDto;
 use transport::{ErrorCategory, ServiceErrorCategory};
 
-const NESTED_LINEAGE_FAMILY: &str = "nested";
 const NESTED_LINEAGE_KIND: &str = "lineage";
 const MAX_NESTED_LINEAGE_ROWS: usize = 4_096;
 
@@ -108,26 +107,7 @@ pub fn list_for_parent(
         .collect())
 }
 
-pub(crate) fn lineage_parser_record(lineage: &NestedEvidenceLineage) -> ParserRecord {
-    let payload = serde_json::json!({
-        "parentDataSourceId": lineage.parent_data_source_id.0,
-        "nestedFilePath": lineage.nested_file_path,
-        "parentFileId": lineage.parent_file_id,
-        "derivedDataSourceId": lineage.derived_data_source_id.as_ref().map(|id| id.0.clone()),
-        "offset": lineage.offset,
-        "length": lineage.length,
-        "probeKind": lineage.probe_kind,
-    });
-    ParserRecord {
-        id: format!("lineage:{}", lineage.nested_file_path),
-        data_source_id: lineage.parent_data_source_id.0.clone(),
-        family: NESTED_LINEAGE_FAMILY.to_owned(),
-        kind: NESTED_LINEAGE_KIND.to_owned(),
-        status: "ready".to_owned(),
-        summary_sha256: infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes()),
-        payload,
-    }
-}
+pub(crate) use ::evidence_access::nested_lineage::lineage_parser_record;
 
 fn parser_record_to_dto(
     record: ParserRecord,

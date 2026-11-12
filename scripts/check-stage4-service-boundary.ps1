@@ -161,7 +161,7 @@ $facades = @(
   'crates/app-services/src/staging/mod.rs',
   'crates/app-services/src/parallel_enum/mod.rs',
   'crates/app-services/src/import_pipeline/mod.rs',
-  'crates/app-services/src/file_service/mod.rs',
+  'crates/evidence-access/src/file_service/mod.rs',
   'crates/app-services/src/artifact_service.rs',
   'crates/app-services/src/graph_service.rs',
   'crates/app-services/src/correlation/mod.rs',
@@ -171,7 +171,7 @@ $facades = @(
   'crates/app-services/src/analysis_service/extraction/registry/mod.rs',
   'crates/app-services/src/analysis_service/extraction/summary/linux.rs',
   'crates/app-services/src/analysis_service/extraction/summary/registry.rs',
-  'crates/app-services/src/datasource_service/lvm.rs',
+  'crates/evidence-access/src/datasource_service/lvm.rs',
   'crates/app-services/src/governance/scoring.rs',
   'crates/app-services/src/import_analysis/mod.rs',
   'crates/app-services/src/notebook_service/mod.rs',
@@ -204,9 +204,9 @@ $moduleManifest = @(
   @('crates/app-services/src/import_pipeline/phases/mod.rs', 'enumerate', 'crates/app-services/src/import_pipeline/phases/enumerate.rs'),
   @('crates/app-services/src/import_pipeline/phases/mod.rs', 'finalize', 'crates/app-services/src/import_pipeline/phases/finalize.rs'),
   @('crates/app-services/src/import_pipeline/partition/mod.rs', 'candidates', 'crates/app-services/src/import_pipeline/partition/candidates.rs'),
-  @('crates/app-services/src/file_service/metadata/mod.rs', 'source_routing', 'crates/app-services/src/file_service/metadata/source_routing/mod.rs'),
-  @('crates/app-services/src/file_service/viewer/range/mod.rs', 'api', 'crates/app-services/src/file_service/viewer/range/api.rs'),
-  @('crates/app-services/src/file_service/mft/mod.rs', 'enumeration', 'crates/app-services/src/file_service/mft/enumeration.rs'),
+  @('crates/evidence-access/src/file_service/metadata/mod.rs', 'source_routing', 'crates/evidence-access/src/file_service/metadata/source_routing/mod.rs'),
+  @('crates/evidence-access/src/file_service/viewer/range/mod.rs', 'api', 'crates/evidence-access/src/file_service/viewer/range/api.rs'),
+  @('crates/evidence-access/src/file_service/mft/mod.rs', 'enumeration', 'crates/evidence-access/src/file_service/mft/enumeration.rs'),
   @('crates/app-services/src/artifact_service.rs', 'persistence', 'crates/app-services/src/artifact_service/persistence.rs'),
   @('crates/app-services/src/graph_service.rs', 'source_aggregation', 'crates/app-services/src/graph_service/source_aggregation.rs'),
   @('crates/app-services/src/correlation/graph.rs', 'snapshot', 'crates/app-services/src/correlation/graph/snapshot.rs'),
@@ -231,11 +231,11 @@ $moduleManifest = @(
   @('crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs', 'usrclass', 'crates/app-services/src/analysis_service/extraction/registry/extractors/usrclass.rs'),
   @('crates/app-services/src/analysis_service/extraction/summary/linux.rs', 'mapping', 'crates/app-services/src/analysis_service/extraction/summary/linux/mapping.rs'),
   @('crates/app-services/src/analysis_service/extraction/summary/registry.rs', 'structured', 'crates/app-services/src/analysis_service/extraction/summary/registry/structured.rs'),
-  @('crates/app-services/src/datasource_service/lvm.rs', 'diagnostics', 'crates/app-services/src/datasource_service/lvm/diagnostics.rs'),
-  @('crates/app-services/src/datasource_service/lvm.rs', 'discovery', 'crates/app-services/src/datasource_service/lvm/discovery.rs'),
-  @('crates/app-services/src/datasource_service/lvm.rs', 'expansion', 'crates/app-services/src/datasource_service/lvm/expansion.rs'),
-  @('crates/app-services/src/datasource_service/lvm.rs', 'model', 'crates/app-services/src/datasource_service/lvm/model.rs'),
-  @('crates/app-services/src/datasource_service/lvm.rs', 'source_identity', 'crates/app-services/src/datasource_service/lvm/source_identity.rs'),
+  @('crates/evidence-access/src/datasource_service/lvm.rs', 'diagnostics', 'crates/evidence-access/src/datasource_service/lvm/diagnostics.rs'),
+  @('crates/evidence-access/src/datasource_service/lvm.rs', 'discovery', 'crates/evidence-access/src/datasource_service/lvm/discovery.rs'),
+  @('crates/evidence-access/src/datasource_service/lvm.rs', 'expansion', 'crates/evidence-access/src/datasource_service/lvm/expansion.rs'),
+  @('crates/evidence-access/src/datasource_service/lvm.rs', 'model', 'crates/evidence-access/src/datasource_service/lvm/model.rs'),
+  @('crates/evidence-access/src/datasource_service/lvm.rs', 'source_identity', 'crates/evidence-access/src/datasource_service/lvm/source_identity.rs'),
   @('crates/source-kernel/src/partition_probe/probe.rs', 'gpt', 'crates/source-kernel/src/partition_probe/probe/gpt.rs'),
   @('crates/app-services/src/governance/scoring.rs', 'benchmark_gate', 'crates/app-services/src/governance/scoring/benchmark_gate.rs'),
   @('crates/app-services/src/governance/scoring.rs', 'contributions', 'crates/app-services/src/governance/scoring/contributions.rs'),
@@ -322,7 +322,7 @@ Assert-NoModuleReferencesUnder `
   @('derived_source_service') `
   'Analysis must not depend on derived-source orchestration'
 Assert-NoModuleReferencesUnder `
-  'crates/app-services/src/file_service' `
+  'crates/evidence-access/src/file_service' `
   @('derived_source_service') `
   'File services must not depend on derived-source orchestration'
 
@@ -375,19 +375,19 @@ if ($importMasked -notmatch 'pub\s+trait\s+ImportEventSink' -or
 }
 
 Assert-MaskedPattern `
-  'crates/app-services/src/file_service/metadata/source_routing/browse.rs' `
+  'crates/evidence-access/src/file_service/metadata/source_routing/browse.rs' `
   '\bGlobalFileId\b' `
   'file_service source routing must resolve source-scoped file identifiers'
 Assert-MaskedPattern `
-  'crates/app-services/src/file_service/viewer/range/api.rs' `
+  'crates/evidence-access/src/file_service/viewer/range/api.rs' `
   '\bMAX_RANGE_LENGTH\b' `
   'file viewer range reads must retain the bounded MAX_RANGE_LENGTH clamp'
 Assert-MaskedPattern `
-  'crates/app-services/src/file_service/viewer/preview_bytes.rs' `
+  'crates/evidence-access/src/file_service/viewer/preview_bytes.rs' `
   'length\s*\.\s*min\s*\(\s*transport::dto::MAX_VIEWER_RANGE_LENGTH\s*\)' `
   'public preview byte reads must clamp unvalidated lengths to MAX_VIEWER_RANGE_LENGTH'
 Assert-MaskedPattern `
-  'crates/app-services/src/file_service/viewer/media.rs' `
+  'crates/evidence-access/src/file_service/viewer/media.rs' `
   '\.\s*min\s*\(\s*transport::dto::MAX_VIEWER_RANGE_LENGTH\s*\)' `
   'public media range reads must clamp unvalidated lengths to MAX_VIEWER_RANGE_LENGTH'
 

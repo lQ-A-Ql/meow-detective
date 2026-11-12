@@ -14,7 +14,15 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
         .expect("set FORENSICS_PVE_CLUSTER_ROOT");
     let plan = plan_linux_evidence_set_import(&root, Some("mdraid-btrfs".into()))
         .expect("plan Linux evidence set");
-    let array = discover_linux_evidence_set_mdraid(&plan)
+    let members = plan
+        .members
+        .iter()
+        .map(|member| evidence_access::mdraid::MdRaidDiscoveryMember {
+            source_path: &member.source_path,
+            source_kind: &member.source_kind,
+        })
+        .collect::<Vec<_>>();
+    let array = discover_linux_evidence_set_mdraid(&plan.root_path, &members)
         .expect("discover MD RAID")
         .into_iter()
         .find(|array| array.name == "mac:0")

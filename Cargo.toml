@@ -48,6 +48,7 @@ members = [
   "crates/artifact-storage",
   "crates/source-kernel",
   "crates/ceph-reconstruction",
+  "crates/evidence-access",
 ]
 exclude = [
   "experimental/volume-android",
@@ -208,6 +209,7 @@ persistence-source = { path = "crates/persistence-source" }
 artifact-storage = { path = "crates/artifact-storage" }
 source-kernel = { path = "crates/source-kernel" }
 ceph-reconstruction = { path = "crates/ceph-reconstruction" }
+evidence-access = { path = "crates/evidence-access" }
 
 [patch.crates-io]
 fjall = { path = "vendor/fjall-3.1.13" }

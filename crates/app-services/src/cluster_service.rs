@@ -17,7 +17,6 @@ mod kubernetes_yaml;
 mod linux_evidence_facts;
 mod linux_import;
 mod manifest_parser;
-mod mdraid;
 mod mdraid_materialization;
 mod member_binding;
 mod network_parser;
@@ -34,6 +33,11 @@ pub use topology_projection::{project_import_set_topology, ImportSetTopologyProj
 
 pub use ::ceph_reconstruction::cluster_scope::ceph_scope_report::{
     read_ceph_scope_coverage_report, write_ceph_scope_coverage_report, CephScopeReportError,
+};
+pub use ::evidence_access::mdraid::{
+    discover_linux_evidence_set_mdraid, mdraid_descriptor_path, open_mdraid_reader,
+    open_persisted_mdraid_reader, write_mdraid_descriptor, MdRaidArrayPlan, MdRaidMemberOrigin,
+    MdRaidMemberPlan, MdRaidPlanError,
 };
 pub use audit_parser::{
     parse_kubernetes_audit_log, KubernetesAuditEvent, KubernetesAuditIndicator,
@@ -67,11 +71,6 @@ pub use linux_import::{
 };
 pub use manifest_parser::{
     parse_static_pod_manifests, ManifestContainer, StaticPodManifestSummary,
-};
-pub use mdraid::{
-    discover_linux_evidence_set_mdraid, mdraid_descriptor_path, open_mdraid_reader,
-    open_persisted_mdraid_reader, write_mdraid_descriptor, MdRaidArrayPlan, MdRaidMemberOrigin,
-    MdRaidMemberPlan, MdRaidPlanError,
 };
 pub use mdraid_materialization::{
     materialize_linux_evidence_set_mdraid, materialize_mdraid_array,

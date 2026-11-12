@@ -145,13 +145,14 @@ fn load_persisted_mdraid_arrays(
         .filter(|source| source.kind == DataSourceKind::MdRaid)
         .map(|source| {
             let payload = std::fs::read(&source.source_path)?;
-            let plan = serde_json::from_slice::<super::mdraid::MdRaidArrayPlan>(&payload)?;
+            let plan =
+                serde_json::from_slice::<::evidence_access::mdraid::MdRaidArrayPlan>(&payload)?;
             if !plan.members.iter().any(|member| match &member.origin {
-                super::mdraid::MdRaidMemberOrigin::Lvm { identity, .. } => identity
+                ::evidence_access::mdraid::MdRaidMemberOrigin::Lvm { identity, .. } => identity
                     .pv_sources
                     .iter()
                     .any(|pv| member_paths.contains(&pv.source_path)),
-                super::mdraid::MdRaidMemberOrigin::Direct { source_path, .. } => {
+                ::evidence_access::mdraid::MdRaidMemberOrigin::Direct { source_path, .. } => {
                     member_paths.contains(source_path)
                 }
             }) {

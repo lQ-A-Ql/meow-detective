@@ -15,10 +15,10 @@ $importPipelineDir = Join-Path $repoRoot "crates/app-services/src/import_pipelin
 $importPipelineModPath = Join-Path $importPipelineDir "mod.rs"
 $importPipelineEmitPath = Join-Path $importPipelineDir "emit.rs"
 $analysisExtractionModPath = Join-Path $repoRoot "crates/app-services/src/analysis_service/extraction/mod.rs"
-$filePreviewDir = Join-Path $repoRoot "crates/app-services/src/file_service/viewer"
+$filePreviewDir = Join-Path $repoRoot "crates/evidence-access/src/file_service/viewer"
 $fileCommandsPath = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/file_commands.rs"
 $fileCommandsDir = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/file_commands"
-$datasourceFacadePath = Join-Path $repoRoot "crates/app-services/src/datasource_service.rs"
+$datasourceFacadePath = Join-Path $repoRoot "crates/evidence-access/src/datasource_service.rs"
 $linuxIntegrationTestPath = Join-Path $repoRoot "crates/app-services/tests/linux_e01_integration.rs"
 $validationTrustPath = Join-Path $repoRoot "docs/validation-trust-framework.md"
 $parserSupportPath = Join-Path $repoRoot "docs/parser-support-matrix.md"
@@ -349,7 +349,7 @@ foreach ($pattern in @(
     'mod\s+attach;',
     'mod\s+lvm;',
     'mod\s+reader;',
-    'pub\(crate\)\s+use\s+source_kernel::partition_probe::\{[\s\S]{0,400}\bfs_magic\b[\s\S]{0,400}\bpartition_index\b[\s\S]{0,400}\bprobe\b[\s\S]{0,400}\btypes\b',
+    'pub\s+use\s+source_kernel::partition_probe::\{[\s\S]{0,400}\bfs_magic\b[\s\S]{0,400}\bpartition_index\b[\s\S]{0,400}\bprobe\b[\s\S]{0,400}\btypes\b',
     'pub\s+use\s+attach::\{[^}]*attach_data_source[^}]*classify_data_source_path',
     'pub\s+use\s+lvm::\{[^}]*expand_lvm_pool_candidates[^}]*expand_lvm_pool_candidates_with_sources',
     'pub\s+use\s+probe::\{[^}]*detect_image_filesystem[^}]*partition_display_name[^}]*volume_display_name',

@@ -29,6 +29,6 @@
     { "id": "indexes", "contract": "Primary/unique constraints remain; cross-transaction file index deferral has a durable manifest; timeline index DDL shares the event transaction", "code": "crates/persistence-sqlite/src/repositories", "tests": "crates/persistence-sqlite/tests/timeline_bulk_indexes.rs" },
     { "id": "ready", "contract": "Ordinary source visibility is import_state gated; derived source build/publish is a separate protocol", "code": "crates/app-services/src/import_pipeline/execute.rs", "tests": "crates/app-services/tests/unit/source_db.rs" },
     { "id": "graph-retry", "contract": "Completed graph batches survive a later batch failure; retries remain idempotent and missing-target warnings remain retryable", "code": "crates/app-services/src/timeline_service/projection_graph.rs", "tests": "crates/app-services/tests/unit/timeline_service/projection.rs" },
-    { "id": "preview", "contract": "Read evidence by FileEntryId/range; media uses evidence-media handles and exports default to overwrite=false", "code": "crates/app-services/src/file_service", "tests": "crates/app-services/tests/unit/file_service" }
+    { "id": "preview", "contract": "Read evidence by FileEntryId/range; media uses evidence-media handles and exports default to overwrite=false", "code": "crates/evidence-access/src/file_service", "tests": "crates/evidence-access/tests/unit/file_service" }
   ]
 }
