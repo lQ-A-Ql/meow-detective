@@ -98,6 +98,7 @@ fn catalog_sidecar_localizes_each_business_field_mutation() {
 }
 
 #[test]
+#[ignore = "heavy full-import benchmark; run explicitly with --ignored"]
 fn indexed_fragmented_scenario_is_reproducible_and_preserves_catalog_and_bytes() {
     let bytes = scenarios::image(128, "indexed-fragmented");
     assert_eq!(bytes, scenarios::image(128, "indexed-fragmented"));

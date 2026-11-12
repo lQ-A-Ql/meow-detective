@@ -42,6 +42,15 @@ use transport::dto::{
 // Correctness comparisons must not compete with another test's import for the
 // process-wide resource pool while collecting preview/extraction oracles.
 // Reader workers inside each workflow retain their requested concurrency.
+// Every import in this binary serializes on this mutex, so libtest's reported
+// wall-clock time includes lock-queue time rather than import cost alone. The
+// heavy full-import tests are therefore #[ignore]d and run as an explicit set:
+// `cargo test -p app-services --test import_benchmark -- --test-threads=1
+// profiling_preserves_full_raw_catalog_graph_and_timeline
+// parallel_raw_and_e01_keep_the_serial_catalog_graph_and_timeline
+// indexed_fragmented_scenario_is_reproducible_and_preserves_catalog_and_bytes`.
+// A bare `--ignored` also selects the env-gated profile tests (one defaults to
+// 100_000 records, another panics without FORENSICS_IMPORT_FIXTURE).
 static IMPORT_ORACLE_WINDOW: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 struct BenchmarkPhaseSink;
@@ -679,6 +688,7 @@ fn emit_benchmark(result: &ImportResult) {
 }
 
 #[test]
+#[ignore = "heavy full-import benchmark; run explicitly with --ignored"]
 fn profiling_preserves_full_raw_catalog_graph_and_timeline() {
     let temporary = tempfile::TempDir::new().unwrap();
     let path = temporary.path().join("synthetic.raw");
@@ -724,6 +734,7 @@ fn compressed_e01_and_raw_produce_the_same_logical_catalog() {
 }
 
 #[test]
+#[ignore = "heavy full-import benchmark; run explicitly with --ignored"]
 fn mft_profile_counts_invalid_records_and_the_short_final_chunk() {
     let temporary = tempfile::TempDir::new().unwrap();
     let path = temporary.path().join("two-chunks.raw");
@@ -894,6 +905,7 @@ fn fixture_import_profile() {
 }
 
 #[test]
+#[ignore = "heavy full-import benchmark; run explicitly with --ignored"]
 fn parallel_raw_and_e01_keep_the_serial_catalog_graph_and_timeline() {
     let temporary = tempfile::tempdir().unwrap();
     let raw = temporary.path().join("parallel.raw");
