@@ -260,6 +260,7 @@ dependencies = [
  "crossbeam-channel",
  "dirs",
  "domain",
+ "emulation-services",
  "encoding_rs",
  "evidence-access",
  "evidence-block",
@@ -1895,6 +1896,36 @@ name = "embedded-io"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
+
+[[package]]
+name = "emulation-services"
+version = "0.1.0"
+dependencies = [
+ "artifacts-linux",
+ "artifacts-windows",
+ "ceph-wire",
+ "chrono",
+ "domain",
+ "evidence-access",
+ "evidence-block",
+ "evidence-core",
+ "evidence-emulation",
+ "fs-ext4",
+ "fs-fat",
+ "fs-lvm",
+ "fs-ntfs",
+ "fs-xfs",
+ "persistence-source",
+ "persistence-sqlite",
+ "rusqlite",
+ "serde_json",
+ "source-kernel",
+ "tempfile",
+ "testing",
+ "thiserror 2.0.21",
+ "tracing",
+ "transport",
+]
 
 [[package]]
 name = "encodify"

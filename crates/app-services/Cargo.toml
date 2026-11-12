@@ -26,6 +26,7 @@ source-kernel.workspace = true
 ceph-reconstruction.workspace = true
 evidence-access.workspace = true
 analysis-core.workspace = true
+emulation-services.workspace = true
 evidence-core.workspace = true
 evidence-mount.workspace = true
 volume-bitlocker.workspace = true

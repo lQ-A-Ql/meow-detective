@@ -50,6 +50,7 @@ members = [
   "crates/ceph-reconstruction",
   "crates/evidence-access",
   "crates/analysis-core",
+  "crates/emulation-services",
 ]
 exclude = [
   "experimental/volume-android",
@@ -212,6 +213,7 @@ source-kernel = { path = "crates/source-kernel" }
 ceph-reconstruction = { path = "crates/ceph-reconstruction" }
 evidence-access = { path = "crates/evidence-access" }
 analysis-core = { path = "crates/analysis-core" }
+emulation-services = { path = "crates/emulation-services" }
 
 [patch.crates-io]
 fjall = { path = "vendor/fjall-3.1.13" }

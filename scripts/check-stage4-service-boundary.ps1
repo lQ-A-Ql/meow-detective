@@ -285,7 +285,7 @@ foreach ($entry in $moduleManifest) {
 }
 
 $metadata = Invoke-RustGuardCargoMetadata -RepoRoot $repoRoot
-foreach ($packageName in @('app-services', 'analysis-core')) {
+foreach ($packageName in @('app-services', 'analysis-core', 'emulation-services')) {
   $packages = @($metadata.packages | Where-Object { $_.name -ceq $packageName })
   if ($packages.Count -ne 1) {
     $errors.Add("cargo metadata must contain exactly one $packageName package; found $($packages.Count)")
@@ -305,7 +305,8 @@ foreach ($packageName in @('app-services', 'analysis-core')) {
 
 $serviceRoots = @(
   (Join-Path $repoRoot 'crates/app-services/src'),
-  (Join-Path $repoRoot 'crates/analysis-core/src')
+  (Join-Path $repoRoot 'crates/analysis-core/src'),
+  (Join-Path $repoRoot 'crates/emulation-services/src')
 )
 $serviceFiles = foreach ($serviceRoot in $serviceRoots) {
   Get-ChildItem -LiteralPath $serviceRoot -Recurse -File -Filter '*.rs'

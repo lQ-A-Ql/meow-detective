@@ -122,7 +122,8 @@ function Is-FrontendTestFile {
 # fatal instead of advisory.
 $backendSrcRoots = @(
   (Join-Path $repoRoot "crates/app-services/src"),
-  (Join-Path $repoRoot "crates/analysis-core/src")
+  (Join-Path $repoRoot "crates/analysis-core/src"),
+  (Join-Path $repoRoot "crates/emulation-services/src")
 )
 foreach ($backendSrcRoot in $backendSrcRoots) {
   if (-not (Test-Path -LiteralPath $backendSrcRoot)) {

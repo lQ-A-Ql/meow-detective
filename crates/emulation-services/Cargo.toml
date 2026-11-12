@@ -1,0 +1,35 @@
+[package]
+name = "emulation-services"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+rusqlite.workspace = true
+
+domain.workspace = true
+transport.workspace = true
+evidence-core.workspace = true
+evidence-emulation.workspace = true
+evidence-access.workspace = true
+source-kernel.workspace = true
+persistence-sqlite.workspace = true
+artifacts-linux.workspace = true
+artifacts-windows.workspace = true
+fs-ext4.workspace = true
+fs-fat.workspace = true
+fs-lvm.workspace = true
+fs-ntfs.workspace = true
+fs-xfs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+evidence-block.workspace = true
+ceph-wire.workspace = true
+persistence-source.workspace = true
+testing.workspace = true
