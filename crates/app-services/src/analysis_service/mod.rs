@@ -66,7 +66,7 @@ pub(crate) use use_cases::{run_import_source_extraction, ImportSourceExtractionR
 
 pub const DEFAULT_SAMPLE_SIZE: u32 = 1000;
 pub const MAX_SAMPLE_SIZE: u32 = 5000;
-pub const MAGIC_HEADER_LIMIT: usize = 8 * 1024;
+pub use evidence_core::MAGIC_HEADER_LIMIT;
 pub const MAX_REGISTRY_ANALYSIS_BYTES: usize = 256 * 1024 * 1024;
 pub const MAX_ANALYSIS_SOURCE_BYTES: usize = 128 * 1024 * 1024;
 // Preserve case-sensitive systemd paths and project Docker on-disk states.

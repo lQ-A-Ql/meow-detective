@@ -1,3 +1,1 @@
-mod policy;
-
-pub(crate) use policy::retain_analysis_events;
+pub(crate) use timeline::retain_analysis_events;

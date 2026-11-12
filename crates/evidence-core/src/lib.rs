@@ -17,5 +17,5 @@ pub use image::raw_reader::RawImageReader;
 pub use probe::{probe, ProbeResult};
 pub use reader::{
     EvidenceReader, EvidenceReaderFactory, PartitionWindowReader, ReaderCapabilities, ReaderInfo,
-    SharedReaderFactory,
+    SharedReaderFactory, MAGIC_HEADER_LIMIT,
 };

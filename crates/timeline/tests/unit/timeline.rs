@@ -131,3 +131,34 @@ fn unsupported_events_are_removed() {
     assert_eq!(events[0].id.0, "registry");
     assert_eq!(events[1].id.0, "file");
 }
+
+#[test]
+fn analysis_events_are_retained_and_others_dropped() {
+    let timestamp = Utc
+        .with_ymd_and_hms(2024, 1, 2, 1, 0, 0)
+        .single()
+        .expect("timestamp");
+    let event = |id: &str, event_type: &str| TimelineEvent {
+        id: TimelineEventId(id.to_string()),
+        source_object_id: "file-1".to_string(),
+        event_type: event_type.to_string(),
+        timestamp,
+        title: id.to_string(),
+        description: String::new(),
+        parser_id: None,
+        parser_version: None,
+        confidence: None,
+        source_attribution: None,
+        attrs: BTreeMap::new(),
+    };
+    let mut events = vec![
+        event("registry", "REGISTRY_HIVE_LAST_WRITE"),
+        event("created", "FILE_CREATED"),
+        event("unknown", "EVTX_EVENT"),
+    ];
+
+    retain_analysis_events(&mut events);
+
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].id.0, "registry");
+}

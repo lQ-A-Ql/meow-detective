@@ -9,6 +9,9 @@ mod partition_window;
 pub use factory::{EvidenceReaderFactory, ReaderCapabilities, SharedReaderFactory};
 pub use partition_window::PartitionWindowReader;
 
+/// Upper bound on the number of bytes read when inspecting file headers or magic values.
+pub const MAGIC_HEADER_LIMIT: usize = 8 * 1024;
+
 #[derive(Debug, Clone)]
 pub struct ReaderInfo {
     pub path: PathBuf,
