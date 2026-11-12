@@ -17,10 +17,10 @@ $enumMergePath = Join-Path $repoRoot "crates/persistence-source/src/repositories
 $numericMergeOwnerPath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/ntfs_staging_merge.rs"
 $numericMergePath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/ntfs_staging/merge.sql"
 # Import finalization owns the bounded file-activity Timeline projection.
-$pipelineFinalizePath = Join-Path $repoRoot "crates/app-services/src/import_pipeline/phases/finalize.rs"
-$timelineProjectionPath = Join-Path $repoRoot "crates/app-services/src/timeline_service/projection_fjall.rs"
+$pipelineFinalizePath = Join-Path $repoRoot "crates/import-core/src/import_pipeline/phases/finalize.rs"
+$timelineProjectionPath = Join-Path $repoRoot "crates/import-core/src/timeline_projection/fjall.rs"
 # Post-import skip logging lives in the analysis worker pool.
-$workerPoolPath = Join-Path $repoRoot "crates/app-services/src/import_analysis/worker_pool.rs"
+$workerPoolPath = Join-Path $repoRoot "crates/import-core/src/import_analysis/worker_pool.rs"
 $appStatePath = Join-Path $repoRoot "apps/desktop/src-tauri/src/state/app_state.rs"
 $caseDatabasePath = Join-Path $repoRoot "apps/desktop/src-tauri/src/state/case_database.rs"
 $persistenceConnectionPath = Join-Path $repoRoot "crates/persistence-sqlite/src/connection.rs"
@@ -73,7 +73,7 @@ if ($e01PipelineTest -notmatch 'Timeline events after import') {
   throw "real E01 import profile must verify the import-finalized Timeline projection"
 }
 if ($pipelineFinalize -notmatch 'ImportContentKind::Filesystem' -or
-    $pipelineFinalize -notmatch 'timeline_service::materialize_file_activity_with_policy\(') {
+    $pipelineFinalize -notmatch 'timeline_projection::materialize_file_activity_with_policy\(') {
   throw "Filesystem imports must finalize the narrowed file-activity Timeline projection before becoming ready"
 }
 foreach ($pattern in @(

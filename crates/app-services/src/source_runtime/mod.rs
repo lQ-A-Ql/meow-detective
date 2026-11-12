@@ -2,10 +2,8 @@
 //!
 //! The reader factory and per-source runtime identities live in
 //! `evidence-access::source_runtime`; publication leases and resource
-//! accounting still come straight from `source-kernel`. Import resume
-//! identity stays here until the import pipeline moves out of this crate.
-
-pub(crate) mod resume;
+//! accounting still come straight from `source-kernel`; import resume
+//! identity lives in `import-core`.
 
 pub use ::evidence_access::source_runtime::{factory, identity, partition, snapshot};
 pub use ::evidence_access::source_runtime::{

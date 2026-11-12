@@ -24,7 +24,7 @@ $requiredPaths = @(
   'crates/analysis-core/src/analysis_service/use_cases/source.rs',
   'crates/analysis-core/src/analysis_service/candidates.rs',
   'crates/analysis-core/src/analysis_service/extraction/linux.rs',
-  'crates/app-services/src/import_analysis/extractor_policy.rs',
+  'crates/import-core/src/import_analysis/extractor_policy.rs',
   'crates/app-services/src/report/source_analysis.rs',
   'crates/source-kernel/src/source_db/ready.rs',
   'crates/app-services/src/v3_governance_service/artifact_family_platform.rs'
@@ -40,6 +40,8 @@ foreach ($relativePath in $requiredPaths) {
 $serviceRoots = @(
   (Join-Path $repoRoot 'crates/app-services/src'),
   (Join-Path $repoRoot 'crates/analysis-core/src'),
+  (Join-Path $repoRoot 'crates/emulation-services/src'),
+  (Join-Path $repoRoot 'crates/import-core/src'),
   (Join-Path $repoRoot 'crates/source-kernel/src')
 )
 foreach ($serviceRoot in $serviceRoots) {
@@ -153,7 +155,7 @@ if (Test-Path -LiteralPath $candidateCommonPath -PathType Leaf) {
   }
 }
 
-$importPhasesPath = Join-Path $repoRoot 'crates/app-services/src/import_pipeline/phases.rs'
+$importPhasesPath = Join-Path $repoRoot 'crates/import-core/src/import_pipeline/phases.rs'
 if (Test-Path -LiteralPath $importPhasesPath -PathType Leaf) {
   $importPhases = Read-StrictUtf8 $importPhasesPath
   foreach ($forbidden in @(
@@ -169,7 +171,7 @@ if (Test-Path -LiteralPath $importPhasesPath -PathType Leaf) {
   }
 }
 
-$extractorPolicyPath = Join-Path $repoRoot 'crates/app-services/src/import_analysis/extractor_policy.rs'
+$extractorPolicyPath = Join-Path $repoRoot 'crates/import-core/src/import_analysis/extractor_policy.rs'
 if (Test-Path -LiteralPath $extractorPolicyPath -PathType Leaf) {
   $extractorPolicy = Read-StrictUtf8 $extractorPolicyPath
   foreach ($required in @(
@@ -184,8 +186,8 @@ if (Test-Path -LiteralPath $extractorPolicyPath -PathType Leaf) {
 }
 
 foreach ($relativePath in @(
-  'crates/app-services/src/import_analysis/task_feed.rs',
-  'crates/app-services/src/import_analysis/worker_runtime.rs'
+  'crates/import-core/src/import_analysis/task_feed.rs',
+  'crates/import-core/src/import_analysis/worker_runtime.rs'
 )) {
   $absolutePath = Join-Path $repoRoot $relativePath
   if (-not (Test-Path -LiteralPath $absolutePath -PathType Leaf)) {
@@ -308,7 +310,7 @@ foreach ($relativePath in @(
   'crates/evidence-access/src/file_service/data_sources.rs',
   'crates/evidence-access/src/file_service/metadata/source_routing/browse.rs',
   'crates/app-services/src/search_service/case_search.rs',
-  'crates/app-services/src/step_recorder.rs'
+  'crates/import-core/src/step_recorder.rs'
 )) {
   $absolutePath = Join-Path $repoRoot $relativePath
   if (Test-Path -LiteralPath $absolutePath -PathType Leaf) {

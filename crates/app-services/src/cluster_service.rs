@@ -123,6 +123,17 @@ pub enum ClusterServiceError {
     Cancelled,
 }
 
+impl From<import_core::step_recorder::StepRecorderError> for ClusterServiceError {
+    fn from(error: import_core::step_recorder::StepRecorderError) -> Self {
+        match error {
+            import_core::step_recorder::StepRecorderError::Db(error) => Self::Db(error),
+            import_core::step_recorder::StepRecorderError::Other(message) => {
+                Self::Notebook(crate::notebook_service::NotebookError::Other(message))
+            }
+        }
+    }
+}
+
 impl From<rusqlite::Error> for ClusterServiceError {
     fn from(error: rusqlite::Error) -> Self {
         Self::Db(error.into())

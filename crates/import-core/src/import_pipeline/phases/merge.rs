@@ -1,0 +1,161 @@
+use std::time::Instant;
+
+use transport::CommandError;
+
+use crate::staging;
+use evidence_access::file_service;
+
+use crate::import_pipeline::context::ImportJobContext;
+use crate::import_pipeline::profile::{elapsed_ms, emit_phase_profile, rows_per_sec};
+
+pub(super) fn merge_enumeration_results(
+    ctx: &ImportJobContext<'_>,
+    data_source: &domain::DataSource,
+    manifest: &staging::StagingManifest,
+) -> Result<file_service::EnumerationStats, CommandError> {
+    crate::import_pipeline::emit::emit_job_progress(
+        ctx.event_sink(),
+        &ctx.job_id.0,
+        62,
+        "Merging partitions...",
+    );
+    persist_merging_phase(ctx.case_root, manifest)?;
+
+    let started = Instant::now();
+    let source_connection = ctx.source_connection()?;
+    super::super::runtime::validate_current(ctx.runtime.as_deref())?;
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
+        ctx.case_root,
+        &data_source.id.0,
+        &ctx.job_id.0,
+    )
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    let target_root = if layout.published_path().is_dir() {
+        layout.published_path()
+    } else {
+        layout.build_path()
+    };
+    std::fs::create_dir_all(&target_root)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let fjall_source = source_kernel::storage_runtime::open_source_read_write_at_path(&target_root)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let merged = super::super::profile::measure_optional(
+        ctx.profiler.as_ref(),
+        transport::dto::import_benchmark::ImportBenchmarkPhaseDto::StagingMerge,
+        || {
+            staging::merge_all_staging_to_main_with_catalog(
+                source_connection,
+                ctx.case_root,
+                &data_source.id.0,
+                manifest,
+                &fjall_source,
+                Some(&|completed, total| {
+                    let percent = 62 + (completed as u32 * 8 / total as u32);
+                    crate::import_pipeline::emit::emit_job_progress(
+                        ctx.event_sink(),
+                        &ctx.job_id.0,
+                        percent.min(70),
+                        &format!("Merged {completed}/{total} partitions"),
+                    );
+                }),
+                Some(ctx.options.cancel_token),
+            )
+        },
+    )
+    .map(|stats| stats.merged_rows)
+    .map_err(CommandError::from_service_error)?;
+    report_merge_complete(ctx, data_source, merged, started.elapsed());
+
+    Ok(file_service::EnumerationStats {
+        file_count: manifest
+            .partitions
+            .iter()
+            .map(|partition| partition.file_count)
+            .sum(),
+        dir_count: manifest
+            .partitions
+            .iter()
+            .map(|partition| partition.dir_count)
+            .sum(),
+        total_size: manifest
+            .partitions
+            .iter()
+            .map(|partition| partition.total_size)
+            .sum(),
+        warnings: collect_partition_warnings(ctx.case_root, &data_source.id.0, manifest),
+        diagnostics: Vec::new(),
+    })
+}
+
+fn persist_merging_phase(
+    case_root: &std::path::Path,
+    manifest: &staging::StagingManifest,
+) -> Result<(), CommandError> {
+    let mut updated = manifest.clone();
+    updated.phase = staging::ImportPhase::Merging;
+    updated
+        .save(case_root)
+        .map_err(CommandError::from_service_error)
+}
+
+fn report_merge_complete(
+    ctx: &ImportJobContext<'_>,
+    data_source: &domain::DataSource,
+    merged: u64,
+    elapsed: std::time::Duration,
+) {
+    emit_phase_profile(
+        ctx.event_sink(),
+        ctx.job_id,
+        ctx.case_id,
+        Some(&data_source.id),
+        70,
+        format!(
+            "Partition merge complete: phase=enum-merge elapsedMs={} rows={} rowsPerSec={} rssMb={}",
+            elapsed_ms(elapsed),
+            merged,
+            rows_per_sec(merged, elapsed),
+            source_kernel::runtime_resources::current_rss_mb()
+        ),
+        ctx.cancel_requested(),
+    );
+}
+
+fn collect_partition_warnings(
+    case_root: &std::path::Path,
+    data_source_id: &str,
+    manifest: &staging::StagingManifest,
+) -> Vec<String> {
+    manifest
+        .partitions
+        .iter()
+        .flat_map(|partition| partition_warnings(case_root, data_source_id, partition))
+        .collect()
+}
+
+fn partition_warnings(
+    case_root: &std::path::Path,
+    data_source_id: &str,
+    partition: &staging::PartitionEntry,
+) -> Vec<String> {
+    if let Some(error) = &partition.error {
+        return vec![format!("Partition {}: {error}", partition.index)];
+    }
+    let path = staging::staging_db_path(case_root, data_source_id, partition.index);
+    if !path.exists() {
+        return Vec::new();
+    }
+    let Ok(connection) =
+        staging::open_partition_staging(case_root, data_source_id, partition.index)
+    else {
+        return Vec::new();
+    };
+    let Ok(Some(warnings)) = staging::get_staging_meta(&connection, "warnings") else {
+        return Vec::new();
+    };
+    warnings
+        .lines()
+        .filter(|warning| !warning.is_empty())
+        .map(|warning| format!("Partition {}: {warning}", partition.index))
+        .collect()
+}

@@ -86,7 +86,7 @@
     },
     {
       "id": "ntfs-path-boundaries",
-      "source": "crates/app-services/tests/unit/parallel_enum/path_projection.rs",
+      "source": "crates/import-core/tests/unit/parallel_enum/path_projection.rs",
       "sourceSha256": "f909ea6e32bf471fb1bd6429ace2d4e5d75a3d47f566a587ec9890d3989641f3",
       "license": "Repository MIT",
       "features": [
@@ -154,7 +154,7 @@
     {
       "id": "e01-paged-index",
       "source": "crates/image-e01/tests/unit/paged_index.rs",
-      "sourceSha256": "a0ba0e84f3a0463769c376c3bf402b08f335f07cde0272d6f908a3f5746e7580",
+      "sourceSha256": "8a9e690aa8a282c461a62e9e414d737a1a0a2acab07c7c7c0788be9a25377b42",
       "license": "Repository MIT",
       "features": [
         "offset page boundary",

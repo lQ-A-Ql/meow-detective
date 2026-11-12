@@ -1,0 +1,472 @@
+use super::error::ImportAnalysisError;
+use super::options::{
+    AnalysisProgressCallback, ImportAnalysisOptions, ImportAnalysisStats, SearchIndexPhaseOptions,
+    SearchIndexPhaseStats,
+};
+use super::progress::{current_rss_mb, rows_per_sec};
+use super::worker_staging::clear_analysis_worker_rows;
+use crate::staging;
+use persistence_sqlite::repositories::storage_control_repo::{
+    StorageControlRepo, StorageOperationState,
+};
+use persistence_sqlite::DbResult;
+use rusqlite::Connection;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+const ANALYSIS_LAYOUT_VERSION: &str = "2";
+
+pub(super) fn merge_finished_analysis_staging(
+    options: &ImportAnalysisOptions,
+    worker_ids: &[usize],
+    mut stats: ImportAnalysisStats,
+    progress_cb: Option<AnalysisProgressCallback<'_>>,
+    analysis_started: Instant,
+) -> Result<ImportAnalysisStats, ImportAnalysisError> {
+    if let Some(cb) = progress_cb {
+        cb(
+            84,
+            &format!(
+                "Analysis workers complete: phase=analysis scheduling=running elapsedMs={} workerBudget={} activeWorkers=0 queuedTasks={} pendingTasks=0 processed={} rowsPerSec={} indexed={} rssMb={}",
+                analysis_started.elapsed().as_millis(),
+                worker_ids.len().max(1),
+                stats.processed_count,
+                stats.processed_count,
+                rows_per_sec(stats.processed_count, analysis_started.elapsed()),
+                stats.indexed_count,
+                current_rss_mb()
+            ),
+        );
+        cb(84, "Merging analysis staging DBs...");
+    }
+    let merge_started = Instant::now();
+    if let Some(lease) = &options.publication_lease {
+        lease.validate()?;
+    }
+    let source = persistence_sqlite::open_existing_source(&options.db_path)?;
+    let fjall_root = analysis_fjall_root(options)?;
+    let fjall_source = source_kernel::storage_runtime::open_source_read_write_at_path(&fjall_root)
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+    let _source_fence = options
+        .publication_lease
+        .as_ref()
+        .map(|lease| lease.fence_connection(&source));
+    let content_index_dir = source_kernel::source_db::source_content_index_dir(&options.index_dir);
+    let merge_stats = staging::merge_analysis_staging_to_main_with_fjall(
+        &source,
+        &options.case_root,
+        &options.data_source_id.0,
+        worker_ids,
+        &options.case_id,
+        &content_index_dir,
+        &fjall_source,
+        Some(&|completed, total| {
+            if let Some(cb) = progress_cb {
+                let pct = 84 + ((completed as u32 * 7) / total.max(1) as u32);
+                cb(
+                    pct.min(91),
+                    &format!(
+                        "Merged analysis staging {}/{}: phase=analysis-merge elapsedMs={} rssMb={}",
+                        completed,
+                        total,
+                        merge_started.elapsed().as_millis(),
+                        current_rss_mb()
+                    ),
+                );
+            }
+        }),
+    )
+    .map_err(|e| ImportAnalysisError::Staging(e.to_string()))?;
+    drop(fjall_source);
+    stats.artifact_count = merge_stats.artifact_count;
+    stats.timeline_count = merge_stats.timeline_count;
+    if options.platform == domain::DataSourcePlatform::Linux {
+        if let Some(cb) = progress_cb {
+            cb(
+                91,
+                "Materializing Linux analysis summary: phase=analysis-summary state=running",
+            );
+        }
+        let summary_started = Instant::now();
+        analysis_core::analysis_service::warm_linux_artifact_summary(&source, 200)
+            .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+        if let Some(cb) = progress_cb {
+            cb(
+                91,
+                &format!(
+                    "Linux analysis summary ready: phase=analysis-summary state=completed elapsedMs={}",
+                    summary_started.elapsed().as_millis()
+                ),
+            );
+        }
+    }
+    bump_search_input_revision(&source)?;
+    let search_stats = rebuild_file_metadata_index(options, progress_cb)?;
+    apply_search_stats(&mut stats, search_stats);
+
+    Ok(stats)
+}
+
+fn analysis_fjall_root(options: &ImportAnalysisOptions) -> Result<PathBuf, ImportAnalysisError> {
+    let case_connection =
+        source_kernel::connection::open_existing_case_db(&options.case_root.join("app.db"))
+            .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+    let active = StorageControlRepo::new(&case_connection)
+        .list_open_operations(&options.case_id)
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()))?
+        .into_iter()
+        .filter(|operation| {
+            operation.source_id.as_deref() == Some(options.data_source_id.0.as_str())
+                && operation.operation_kind == "source_import"
+                && matches!(
+                    operation.state,
+                    StorageOperationState::Planned | StorageOperationState::Running
+                )
+        })
+        .collect::<Vec<_>>();
+    if active.len() > 1 {
+        return Err(ImportAnalysisError::Other(
+            "multiple source import attempts are active".to_owned(),
+        ));
+    }
+    if let Some(operation) = active.into_iter().next() {
+        return persistence_source::fjall::SourceBuildLayout::for_case_source(
+            &options.case_root,
+            &options.data_source_id.0,
+            &operation.attempt_id,
+        )
+        .map(|layout| {
+            if layout.published_path().is_dir() {
+                layout.published_path()
+            } else {
+                layout.build_path()
+            }
+        })
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()));
+    }
+    source_kernel::source_db::fjall_source_storage_root(
+        &options.case_root,
+        &options.data_source_id.0,
+    )
+    .map_err(|error| ImportAnalysisError::Other(error.to_string()))
+}
+
+fn bump_search_input_revision(source: &Connection) -> Result<(), ImportAnalysisError> {
+    persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(source)
+        .bump_revision(
+            persistence_sqlite::repositories::source_meta_repo::SEARCH_INPUT_REVISION_KEY,
+        )
+        .map(|_| ())
+        .map_err(|error| ImportAnalysisError::Other(error.to_string()))
+}
+
+pub(super) fn rebuild_file_metadata_index(
+    options: &ImportAnalysisOptions,
+    progress_cb: Option<AnalysisProgressCallback<'_>>,
+) -> Result<SearchIndexPhaseStats, ImportAnalysisError> {
+    if let Some(callback) = progress_cb {
+        callback(
+            92,
+            "Building complete file metadata search index: phase=search-index state=running",
+        );
+    }
+    let search_started = Instant::now();
+    let stats = super::search_phase::run_search_index_phase(SearchIndexPhaseOptions {
+        publication_lease: options.publication_lease.clone(),
+        case_root: options.case_root.clone(),
+        db_path: options.db_path.clone(),
+        data_source_id: options.data_source_id.clone(),
+        platform: options.platform,
+        index_dir: options.index_dir.clone(),
+        cancel_token: options.cancel_token.clone(),
+    })?;
+    if let Some(callback) = progress_cb {
+        callback(
+            94,
+            &format!(
+                "File metadata search index ready: phase=search-index state=completed elapsedMs={} indexed={} eligible={} failed={} rssMb={}",
+                search_started.elapsed().as_millis(),
+                stats.indexed_count,
+                stats.eligible_count,
+                stats.failed_count,
+                current_rss_mb()
+            ),
+        );
+    }
+    Ok(stats)
+}
+
+pub(super) fn apply_search_stats(
+    stats: &mut ImportAnalysisStats,
+    search_stats: SearchIndexPhaseStats,
+) {
+    stats.indexed_count = search_stats.indexed_count;
+    stats.skipped_count = stats
+        .skipped_count
+        .saturating_add(search_stats.skipped_count.min(u32::MAX as u64) as u32);
+    stats.failed_count = stats
+        .failed_count
+        .saturating_add(search_stats.failed_count.min(u32::MAX as u64) as u32);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum AnalysisStartupAction {
+    RunWorkers,
+    MergeOnly,
+    AlreadyMerged,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct ExistingAnalysisWorker {
+    worker_id: usize,
+    status: Option<String>,
+    merged: bool,
+    worker_count: Option<usize>,
+}
+
+pub(super) fn prepare_analysis_staging_startup(
+    options: &ImportAnalysisOptions,
+    worker_ids: &[usize],
+    worker_count: usize,
+    progress_cb: Option<AnalysisProgressCallback<'_>>,
+) -> Result<AnalysisStartupAction, ImportAnalysisError> {
+    let existing_ids = discover_analysis_worker_ids(&options.case_root, &options.data_source_id.0)?;
+    let existing = load_existing_analysis_workers(options, &existing_ids)?;
+
+    if !existing.is_empty()
+        && existing
+            .iter()
+            .all(|worker| worker.status.as_deref() == Some("done") && worker.merged)
+    {
+        return Ok(AnalysisStartupAction::AlreadyMerged);
+    }
+
+    let expected: HashSet<usize> = worker_ids.iter().copied().collect();
+    let by_id: HashMap<usize, ExistingAnalysisWorker> = existing
+        .iter()
+        .cloned()
+        .map(|worker| (worker.worker_id, worker))
+        .collect();
+    let extra_unmerged_exists = existing
+        .iter()
+        .any(|worker| !expected.contains(&worker.worker_id) && !worker.merged);
+    let expected_all_done = worker_ids.iter().all(|worker_id| {
+        by_id.get(worker_id).is_some_and(|worker| {
+            worker.status.as_deref() == Some("done")
+                && worker
+                    .worker_count
+                    .is_none_or(|stored_count| stored_count == worker_count)
+        })
+    });
+    let expected_count_mismatch = worker_ids.iter().any(|worker_id| {
+        by_id
+            .get(worker_id)
+            .and_then(|worker| worker.worker_count)
+            .is_some_and(|stored_count| stored_count != worker_count)
+    });
+
+    if expected_all_done && !extra_unmerged_exists && !expected_count_mismatch {
+        return Ok(AnalysisStartupAction::MergeOnly);
+    }
+
+    if !existing.is_empty() && (extra_unmerged_exists || expected_count_mismatch) {
+        if let Some(cb) = progress_cb {
+            cb(
+                72,
+                &format!(
+                    "Analysis staging layout changed; reinitializing unfinished worker DBs: previousWorkers={:?} currentWorkers={:?}",
+                    existing_ids, worker_ids
+                ),
+            );
+        }
+    }
+
+    let mut stale_extra_ids = Vec::new();
+    for worker in &existing {
+        if !expected.contains(&worker.worker_id) && !worker.merged {
+            stale_extra_ids.push(worker.worker_id);
+        }
+    }
+    for worker_id in stale_extra_ids {
+        remove_analysis_worker_db_files(&options.case_root, &options.data_source_id.0, worker_id)
+            .map_err(|e| {
+            ImportAnalysisError::Other(format!("Remove stale analysis staging {worker_id}: {e}"))
+        })?;
+    }
+
+    for worker_id in worker_ids {
+        let conn = staging::open_analysis_staging(
+            &options.case_root,
+            &options.data_source_id.0,
+            *worker_id,
+        )
+        .map_err(|e| {
+            ImportAnalysisError::Staging(format!("Open analysis staging {worker_id}: {e}"))
+        })?;
+        clear_analysis_worker_rows(&conn).map_err(|e| {
+            ImportAnalysisError::Staging(format!("Clear analysis staging {worker_id}: {e}"))
+        })?;
+        init_analysis_worker_meta(&conn, worker_count, "pending").map_err(|e| {
+            ImportAnalysisError::Staging(format!("Init analysis staging {worker_id}: {e}"))
+        })?;
+    }
+
+    Ok(AnalysisStartupAction::RunWorkers)
+}
+
+pub(super) fn discover_analysis_worker_ids(
+    case_root: &Path,
+    data_source_id: &str,
+) -> Result<Vec<usize>, ImportAnalysisError> {
+    let dir = staging::staging_dir(case_root, data_source_id);
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut worker_ids = Vec::new();
+    for entry in std::fs::read_dir(&dir)
+        .map_err(|e| ImportAnalysisError::Other(format!("Read staging dir: {e}")))?
+    {
+        let entry =
+            entry.map_err(|e| ImportAnalysisError::Other(format!("Read staging entry: {e}")))?;
+        let file_name = entry.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        let Some(id_part) = file_name
+            .strip_prefix("analysis_worker_")
+            .and_then(|name| name.strip_suffix(".db"))
+        else {
+            continue;
+        };
+        if let Ok(worker_id) = id_part.parse::<usize>() {
+            worker_ids.push(worker_id);
+        }
+    }
+    worker_ids.sort_unstable();
+    worker_ids.dedup();
+    Ok(worker_ids)
+}
+
+fn load_existing_analysis_workers(
+    options: &ImportAnalysisOptions,
+    worker_ids: &[usize],
+) -> Result<Vec<ExistingAnalysisWorker>, ImportAnalysisError> {
+    let mut workers = Vec::with_capacity(worker_ids.len());
+    for worker_id in worker_ids {
+        let conn = staging::open_analysis_staging(
+            &options.case_root,
+            &options.data_source_id.0,
+            *worker_id,
+        )
+        .map_err(|e| {
+            ImportAnalysisError::Staging(format!("Open analysis staging {worker_id}: {e}"))
+        })?;
+        let status = staging::get_worker_meta(&conn, "status").map_err(|e| {
+            ImportAnalysisError::Staging(format!("Read analysis staging status {worker_id}: {e}"))
+        })?;
+        let merged = staging::get_worker_meta(&conn, "merged")
+            .map_err(|e| {
+                ImportAnalysisError::Staging(format!(
+                    "Read analysis staging merge flag {worker_id}: {e}"
+                ))
+            })?
+            .as_deref()
+            == Some("true");
+        let worker_count = staging::get_worker_meta(&conn, "worker_count")
+            .map_err(|e| {
+                ImportAnalysisError::Staging(format!(
+                    "Read analysis staging worker count {worker_id}: {e}"
+                ))
+            })?
+            .and_then(|value| value.parse::<usize>().ok());
+        workers.push(ExistingAnalysisWorker {
+            worker_id: *worker_id,
+            status,
+            merged,
+            worker_count,
+        });
+    }
+    Ok(workers)
+}
+
+fn init_analysis_worker_meta(conn: &Connection, worker_count: usize, status: &str) -> DbResult<()> {
+    staging::set_worker_meta(conn, "status", status)?;
+    staging::set_worker_meta(conn, "merged", "false")?;
+    staging::set_worker_meta(conn, "worker_count", &worker_count.to_string())?;
+    staging::set_worker_meta(conn, "layout_version", ANALYSIS_LAYOUT_VERSION)
+}
+
+fn remove_analysis_worker_db_files(
+    case_root: &Path,
+    data_source_id: &str,
+    worker_id: usize,
+) -> std::io::Result<()> {
+    let path = staging::analysis_staging_db_path(case_root, data_source_id, worker_id);
+    for candidate in [
+        path.clone(),
+        PathBuf::from(format!("{}-wal", path.display())),
+        PathBuf::from(format!("{}-shm", path.display())),
+    ] {
+        match std::fs::remove_file(&candidate) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn collect_done_worker_stats(
+    options: &ImportAnalysisOptions,
+    worker_ids: &[usize],
+) -> Result<ImportAnalysisStats, ImportAnalysisError> {
+    let mut stats = ImportAnalysisStats {
+        worker_ids: worker_ids.to_vec(),
+        ..ImportAnalysisStats::default()
+    };
+    for worker_id in worker_ids {
+        let db_path = staging::analysis_staging_db_path(
+            &options.case_root,
+            &options.data_source_id.0,
+            *worker_id,
+        );
+        if !db_path.exists() {
+            continue;
+        }
+        let conn = staging::open_analysis_staging(
+            &options.case_root,
+            &options.data_source_id.0,
+            *worker_id,
+        )
+        .map_err(|e| {
+            ImportAnalysisError::Staging(format!("Open analysis staging {worker_id}: {e}"))
+        })?;
+        stats.processed_count += worker_meta_u64(&conn, "processed_count")?;
+        stats.warning_count = stats
+            .warning_count
+            .saturating_add(worker_meta_u32(&conn, "warning_count")?);
+        stats.skipped_count = stats
+            .skipped_count
+            .saturating_add(worker_meta_u32(&conn, "skipped_count")?);
+        stats.failed_count = stats
+            .failed_count
+            .saturating_add(worker_meta_u32(&conn, "failed_count")?);
+        stats.artifact_count += worker_meta_u64(&conn, "artifact_count")?;
+        stats.timeline_count += worker_meta_u64(&conn, "timeline_count")?;
+        stats.indexed_count += worker_meta_u64(&conn, "indexed_count")?;
+    }
+    Ok(stats)
+}
+
+fn worker_meta_u64(conn: &Connection, key: &str) -> Result<u64, ImportAnalysisError> {
+    Ok(staging::get_worker_meta(conn, key)
+        .map_err(|e| ImportAnalysisError::Staging(format!("Read worker meta {key}: {e}")))?
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0))
+}
+
+fn worker_meta_u32(conn: &Connection, key: &str) -> Result<u32, ImportAnalysisError> {
+    Ok(worker_meta_u64(conn, key)?.min(u32::MAX as u64) as u32)
+}

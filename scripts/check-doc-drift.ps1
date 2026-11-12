@@ -166,7 +166,7 @@ $crateCount = ([regex]::Matches(
     $workspaceMembersMatch.Groups['members'].Value,
     '"crates/[^"\r\n]+"'
   ) | Measure-Object).Count
-Assert-Equals $crateCount 49 'Workspace crate count drifted'
+Assert-Equals $crateCount 50 'Workspace crate count drifted'
 $commandFiles = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'apps/desktop/src-tauri/src/commands') -Recurse -File -Filter '*.rs'
 $commandCount = ($commandFiles | Select-String -Pattern '#\[tauri::command\]' | Measure-Object).Count
 # Source-scoped detail repositories live in persistence-source after S4b; the

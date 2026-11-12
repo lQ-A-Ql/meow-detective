@@ -1,13 +1,7 @@
 use crate::import_pipeline::{
-    emit::ImportEventSink,
-    execute::job_cancellation_dto,
-    execute_import_job,
-    partition::{format_partition_record_root_name, format_partition_root_name},
-    profile::{
-        progress::import_phase_progress_from_profile,
-        results::{cache_statuses_from_profile, partial_results_from_profile},
-    },
-    ImportJobOptions,
+    cache_statuses_from_profile, execute_import_job, format_partition_record_root_name,
+    format_partition_root_name, import_phase_progress_from_profile, job_cancellation_dto,
+    partial_results_from_profile, ImportEventSink, ImportJobOptions,
 };
 crate::native_source_test_support!();
 use crate::{case_service, import_analysis, import_precheck, search_service, staging};
@@ -44,7 +38,7 @@ fn single_imported_data_source_id(
 }
 
 fn read_native_catalog(
-    source: &crate::source_db::FjallReadOnlySourceStorageHandle,
+    source: &source_kernel::source_db::FjallReadOnlySourceStorageHandle,
     source_id: &str,
 ) -> persistence_sqlite::DbResult<Vec<FileEntryRecord>> {
     let snapshot = source.snapshot();
@@ -175,18 +169,18 @@ impl ImportEventSink for RecordingImportEventSink {
 
 #[test]
 fn partition_root_names_reject_misleading_filesystem_names() {
-    let candidate = crate::datasource_service::ImageFilesystemCandidate {
+    let candidate = evidence_access::datasource_service::ImageFilesystemCandidate {
         partition_index: Some(3),
         partition_name: Some("System Volume Information".to_string()),
-        kind: crate::datasource_service::ImageFilesystemKind::Ntfs,
+        kind: evidence_access::datasource_service::ImageFilesystemKind::Ntfs,
         offset: 2048,
         length: None,
-        source: crate::datasource_service::ImageFilesystemSource::GptPartition,
+        source: evidence_access::datasource_service::ImageFilesystemSource::GptPartition,
         lvm_identity: None,
     };
     assert_eq!(format_partition_root_name(&candidate), "Partition 3 (NTFS)");
 
-    let root_candidate = crate::datasource_service::ImageFilesystemCandidate {
+    let root_candidate = evidence_access::datasource_service::ImageFilesystemCandidate {
         partition_name: Some("\\".to_string()),
         ..candidate.clone()
     };
@@ -195,7 +189,7 @@ fn partition_root_names_reject_misleading_filesystem_names() {
         "Partition 3 (NTFS)"
     );
 
-    let record = crate::datasource_service::PartitionRecord {
+    let record = evidence_access::datasource_service::PartitionRecord {
         index: 3,
         name: "/".to_string(),
         kind_label: "NTFS".to_string(),
@@ -204,8 +198,8 @@ fn partition_root_names_reject_misleading_filesystem_names() {
         filesystem_uuid: None,
         offset: 2048,
         length: 4096,
-        status: crate::datasource_service::PartitionStatus::Supported,
-        filesystem: Some(crate::datasource_service::ImageFilesystemKind::Ntfs),
+        status: evidence_access::datasource_service::PartitionStatus::Supported,
+        filesystem: Some(evidence_access::datasource_service::ImageFilesystemKind::Ntfs),
         lvm_identity: None,
     };
     assert_eq!(
@@ -213,7 +207,7 @@ fn partition_root_names_reject_misleading_filesystem_names() {
         "Partition 3 (NTFS)"
     );
 
-    let display_record = crate::datasource_service::PartitionRecord {
+    let display_record = evidence_access::datasource_service::PartitionRecord {
         name: "Partition 3 (NTFS)".to_string(),
         ..record
     };
@@ -225,13 +219,13 @@ fn partition_root_names_reject_misleading_filesystem_names() {
 
 #[test]
 fn partition_root_names_preserve_meaningful_names() {
-    let candidate = crate::datasource_service::ImageFilesystemCandidate {
+    let candidate = evidence_access::datasource_service::ImageFilesystemCandidate {
         partition_index: Some(4),
         partition_name: Some("Evidence Volume".to_string()),
-        kind: crate::datasource_service::ImageFilesystemKind::Ntfs,
+        kind: evidence_access::datasource_service::ImageFilesystemKind::Ntfs,
         offset: 4096,
         length: None,
-        source: crate::datasource_service::ImageFilesystemSource::GptPartition,
+        source: evidence_access::datasource_service::ImageFilesystemSource::GptPartition,
         lvm_identity: None,
     };
 
@@ -827,7 +821,7 @@ fn logical_import_post_pipeline_indexes_marker_and_defers_artifact() {
             assert_eq!(data_sources, 1);
             let data_source_id = single_imported_data_source_id(conn, &active.meta.id)?;
             let source_conn =
-                crate::source_db::open_source_db(&active.case_root, &data_source_id)
+                source_kernel::source_db::open_source_db(&active.case_root, &data_source_id)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             let file_entries: i64 = conn.query_row(
@@ -852,7 +846,7 @@ fn logical_import_post_pipeline_indexes_marker_and_defers_artifact() {
             )
             .expect("build Fjall source generation layout");
             assert!(!fjall_layout.build_path().exists());
-            let fjall = crate::source_db::open_registered_fjall_source_read_only(
+            let fjall = source_kernel::source_db::open_registered_fjall_source_read_only(
                 &active.case_root,
                 &data_source_id,
             )
@@ -878,7 +872,7 @@ fn logical_import_post_pipeline_indexes_marker_and_defers_artifact() {
                 source_conn.query_row("SELECT COUNT(*) FROM graph_nodes", [], |row| row.get(0))?;
             assert!(source_graph_nodes > 0, "source.db should own source-local graph");
 
-            let index_dir = crate::source_db::source_index_dir(&active.case_root, &data_source_id);
+            let index_dir = source_kernel::source_db::source_index_dir(&active.case_root, &data_source_id);
             let results = search_service::search_files_real(&index_dir, marker, 0, 10)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(results.total, 1);
@@ -1028,9 +1022,10 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
             persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
                 .insert_with_storage(&active.meta.id, &data_source, &storage)?;
             let source_db_path =
-                crate::source_db::source_db_path(&active.case_root, &data_source_id);
-            let source_conn = crate::source_db::open_source_db(&active.case_root, &data_source_id)
-                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+                source_kernel::source_db::source_db_path(&active.case_root, &data_source_id);
+            let source_conn =
+                source_kernel::source_db::open_source_db(&active.case_root, &data_source_id)
+                    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
             persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&source_conn)
                 .upsert_source_local_metadata(&active.meta.id, &data_source)?;
             persistence_source::repositories::file_repo::FileRepo::new(&source_conn).insert_batch(
@@ -1204,9 +1199,9 @@ fn e01_full_import() {
 
             let data_source_id = single_imported_data_source_id(conn, &active.meta.id)?;
             let source_conn =
-                crate::source_db::open_source_db(&active.case_root, &data_source_id)
+                source_kernel::source_db::open_source_db(&active.case_root, &data_source_id)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            let native_source = crate::source_db::open_registered_fjall_source_read_only(
+            let native_source = source_kernel::source_db::open_registered_fjall_source_read_only(
                 &active.case_root,
                 &data_source_id,
             )
@@ -1302,9 +1297,9 @@ fn e01_full_import() {
 
             eprintln!("\n[4/7] Verifying system information analysis...");
             let header_cache =
-                crate::file_service::FileHeaderReadCache::new(active.meta.id.0.clone());
+                evidence_access::file_service::FileHeaderReadCache::new(active.meta.id.0.clone());
             let system_info =
-                crate::analysis_service::extract_system_info_for_case(
+                analysis_core::analysis_service::extract_system_info_for_case(
                     &source_conn,
                     |file_id, max_bytes| {
                         header_cache.read_file_header_by_id(&source_conn, file_id, max_bytes)
@@ -1336,7 +1331,7 @@ fn e01_full_import() {
             }
 
             eprintln!("\n[5/7] Verifying evidence semantic classification...");
-            let evidence_summary = crate::analysis_service::get_evidence_classification_summary(
+            let evidence_summary = analysis_core::analysis_service::get_evidence_classification_summary(
                 &source_conn,
                 domain::DataSourcePlatform::Windows,
             )

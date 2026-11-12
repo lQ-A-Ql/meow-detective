@@ -1,0 +1,385 @@
+use std::sync::atomic::Ordering;
+use std::time::Instant;
+
+use persistence_sqlite::repositories::{
+    datasource_repo::DataSourceRepo, job_repo::JobRepo, linux_import_set_repo::LinuxImportSetRepo,
+};
+use transport::dto::import_benchmark::ImportBenchmarkPhaseDto as Phase;
+use transport::{dto::CancellationStateDto, CommandError};
+
+use crate::import_pipeline::{
+    context::ImportJobContext,
+    emit::ImportEventSink,
+    options::{ImportJobOptions, JobOutcomeCounts},
+    phases, profile,
+};
+use crate::import_precheck;
+
+/// Execute the import job (main logic).
+pub fn execute_import_job(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+    case_root: &std::path::Path,
+    import_config: import_precheck::ImportSourceConfig,
+    job_id: &domain::JobId,
+    options: ImportJobOptions<'_>,
+) -> Result<String, CommandError> {
+    let (message, _counts) =
+        execute_import_job_with_counts(conn, case_id, case_root, import_config, job_id, options)?;
+    Ok(message)
+}
+
+/// Execute the import job and return both the summary message and outcome counts.
+pub fn execute_import_job_with_counts(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+    case_root: &std::path::Path,
+    import_config: import_precheck::ImportSourceConfig,
+    job_id: &domain::JobId,
+    options: ImportJobOptions<'_>,
+) -> Result<(String, JobOutcomeCounts), CommandError> {
+    execute_import_job_internal(
+        conn,
+        case_id,
+        case_root,
+        import_config,
+        job_id,
+        options,
+        None,
+    )
+}
+
+/// Execute the same workflow with a job-local benchmark collector.
+pub fn execute_import_job_profiled(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+    case_root: &std::path::Path,
+    import_config: import_precheck::ImportSourceConfig,
+    job_id: &domain::JobId,
+    options: ImportJobOptions<'_>,
+    profiler: &super::ImportProfiler,
+) -> Result<(String, JobOutcomeCounts), CommandError> {
+    use transport::dto::import_benchmark::{
+        ImportBenchmarkPhaseDto as Phase, ImportBenchmarkStateDto as State,
+    };
+    let process_start = source_kernel::runtime_resources::ProcessCounterSnapshot::capture();
+    let started = Instant::now();
+    let result = execute_import_job_internal(
+        conn,
+        case_id,
+        case_root,
+        import_config,
+        job_id,
+        options,
+        Some(profiler.clone()),
+    );
+    let state = if result.is_ok() {
+        State::Completed
+    } else if options.cancel_token.load(Ordering::Relaxed) {
+        State::Cancelled
+    } else {
+        State::Failed
+    };
+    let elapsed = started.elapsed();
+    profiler.record_process_usage(process_start.usage_until(
+        source_kernel::runtime_resources::ProcessCounterSnapshot::capture(),
+        elapsed,
+    ));
+    profiler.record(
+        None,
+        Phase::Workflow,
+        Some(elapsed),
+        state,
+        profile::Counters::default(),
+    );
+    result
+}
+
+fn execute_import_job_internal(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+    case_root: &std::path::Path,
+    import_config: import_precheck::ImportSourceConfig,
+    job_id: &domain::JobId,
+    options: ImportJobOptions<'_>,
+    profiler: Option<super::ImportProfiler>,
+) -> Result<(String, JobOutcomeCounts), CommandError> {
+    // First local, so the observer drops after all pre-existing workflow locals.
+    let mut cleanup = profile::CleanupRecorder::new(profiler.clone());
+    let profiling = profiler.clone();
+    let job_repo = JobRepo::new(conn);
+    let mut counts = JobOutcomeCounts::default();
+    let import_started = Instant::now();
+    let source_conn: Option<rusqlite::Connection> = None;
+    let source_path_display = import_config.source_path_display.clone();
+
+    let mut ctx = ImportJobContext {
+        conn,
+        source_conn: source_conn.as_ref(),
+        case_id,
+        case_root,
+        source_path: &source_path_display,
+        job_id,
+        options,
+        import_config,
+        ds: None,
+        job_repo,
+        counts: &mut counts,
+        content_kind: crate::import_pipeline::context::ImportContentKind::Filesystem,
+        profiler,
+        runtime: None,
+    };
+
+    let ds = profile::measure_optional(profiling.as_ref(), Phase::Attach, || {
+        phases::run_attach_phase(&mut ctx)
+    })?;
+    let (source_conn, initialize_view) = super::setup::open_source(&ctx, &ds)?;
+    ctx.source_conn = Some(&source_conn);
+    ctx.ds = Some(&ds);
+    let mut workspace = None;
+    let result = (|| {
+        reject_cancelled_after_register(&ctx, &ds)?;
+        workspace = super::setup::prepare_resources(&mut ctx, &ds, initialize_view)?;
+        let publication = ctx.runtime.as_ref().map(|r| r.publication_lease());
+        let _source_fence = publication
+            .as_ref()
+            .map(|lease| lease.fence_connection(&source_conn));
+        let stats = profile::measure_optional(profiling.as_ref(), Phase::Catalog, || {
+            phases::run_enumeration_phase(&mut ctx, &ds)
+        })?;
+        super::fjall_projection::mirror_source_records(&ctx, &ds.id.0)?;
+        let profiler = ctx.profiler.clone();
+        let pipeline_msg = profile::measure_optional(
+            profiler.as_ref(),
+            transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Analysis,
+            || phases::run_analyze_phase(&mut ctx, &ds),
+        )?;
+        let message = profile::measure_optional(profiling.as_ref(), Phase::Finalize, || {
+            phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)
+        })?;
+        let projection_digest = super::fjall_projection::mirror_analysis_outputs_from_connections(
+            ctx.conn,
+            ctx.case_root,
+            &ctx.case_id.0,
+            &source_conn,
+            &ds.id.0,
+        )?;
+        mark_projection_committed(ctx.conn, &job_id.0, &projection_digest)?;
+        Ok(message)
+    })();
+
+    let ready_state = ready_state(ctx.content_kind);
+    let message = profile::measure_optional(profiling.as_ref(), Phase::OutcomePersistence, || {
+        super::runtime::persist_outcome(&ctx, &ds, ready_state, result)
+    })?;
+    let message = profile::measure_optional(profiling.as_ref(), Phase::PostReady, || {
+        super::post_ready::finish(&mut ctx, &ds, &source_conn, message)
+    })?;
+    profile::emit_phase_profile(
+        ctx.event_sink(),
+        ctx.job_id,
+        ctx.case_id,
+        Some(&ds.id),
+        99,
+        format!(
+            "Import profile complete: phase=total elapsedMs={} rssMb={}",
+            profile::elapsed_ms(import_started.elapsed()),
+            source_kernel::runtime_resources::current_rss_mb()
+        ),
+        ctx.cancel_requested(),
+    );
+    cleanup.start();
+    Ok((message, counts))
+}
+
+fn ready_state(kind: crate::import_pipeline::context::ImportContentKind) -> &'static str {
+    match kind {
+        crate::import_pipeline::context::ImportContentKind::Filesystem => "ready",
+        crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata => {
+            "ready_metadata"
+        }
+    }
+}
+
+fn mark_projection_committed(
+    connection: &rusqlite::Connection,
+    job_id: &str,
+    digest: &str,
+) -> Result<(), CommandError> {
+    let repo =
+        persistence_sqlite::repositories::storage_control_repo::StorageControlRepo::new(connection);
+    let operation_id = format!("source-import:{job_id}");
+    repo.update_expected_batch_digest(&operation_id, digest)
+        .map_err(source_kernel::connection::command_error_from_db)?;
+    repo.update_operation_state(
+        &operation_id,
+        persistence_sqlite::repositories::storage_control_repo::StorageOperationState::Committed,
+        &chrono::Utc::now().to_rfc3339(),
+        None,
+    )
+    .map_err(source_kernel::connection::command_error_from_db)?;
+    Ok(())
+}
+
+fn reject_cancelled_after_register(
+    ctx: &ImportJobContext<'_>,
+    data_source: &domain::DataSource,
+) -> Result<(), CommandError> {
+    if !ctx.options.cancel_token.load(Ordering::Relaxed) {
+        return Ok(());
+    }
+    mark_import_cancelling(
+        &ctx.job_repo,
+        ctx.job_id,
+        "Cancellation acknowledged after attach",
+    );
+    emit_import_cancellation_state(
+        ctx.event_sink(),
+        ctx.job_id,
+        CancellationStateDto::Acknowledged,
+        false,
+        "Cancellation acknowledged after attach",
+    );
+    profile::emit_import_profile_progress(
+        ctx.event_sink(),
+        ctx.job_id,
+        ctx.case_id,
+        Some(&data_source.id),
+        12,
+        "Cancellation acknowledged: phase=attach",
+        true,
+    );
+    Err(CommandError::internal("Import cancelled by user"))
+}
+
+pub(super) fn persist_import_outcome(
+    conn: &rusqlite::Connection,
+    data_source_id: &domain::DataSourceId,
+    ready_state: &str,
+    result: Result<String, CommandError>,
+) -> Result<String, CommandError> {
+    match result {
+        Ok(message) => {
+            DataSourceRepo::new(conn)
+                .update_import_state(data_source_id, ready_state, None)
+                .map_err(CommandError::from_service_error)?;
+            let import_set_repo = LinuxImportSetRepo::new(conn);
+            if import_set_repo
+                .has_member_source(&data_source_id.0)
+                .map_err(CommandError::from_service_error)?
+            {
+                if let Err(error) = import_set_repo.update_member_state_by_source(
+                    &data_source_id.0,
+                    ready_state,
+                    None,
+                ) {
+                    let command_error = CommandError::from_service_error(error);
+                    let diagnostic = command_error.message.clone();
+                    if let Err(update_error) = DataSourceRepo::new(conn).update_import_state(
+                        data_source_id,
+                        "failed",
+                        Some(&diagnostic),
+                    ) {
+                        tracing::error!(
+                            data_source_id = %data_source_id.0,
+                            error = %update_error,
+                            "Failed to close data source state after evidence-set member update failure"
+                        );
+                    }
+                    return Err(command_error);
+                }
+            }
+            Ok(message)
+        }
+        Err(error) => {
+            persist_failed_import(conn, data_source_id, &error);
+            Err(error)
+        }
+    }
+}
+
+pub(super) fn persist_failed_import(
+    conn: &rusqlite::Connection,
+    data_source_id: &domain::DataSourceId,
+    error: &CommandError,
+) {
+    let diagnostic = error.to_string();
+    if let Err(update_error) =
+        DataSourceRepo::new(conn).update_import_state(data_source_id, "failed", Some(&diagnostic))
+    {
+        tracing::warn!(
+            data_source_id = %data_source_id.0,
+            error = %update_error,
+            "Failed to persist data source import failure state"
+        );
+    }
+    let import_set_repo = LinuxImportSetRepo::new(conn);
+    match import_set_repo.has_member_source(&data_source_id.0) {
+        Ok(true) => {
+            if let Err(update_error) = import_set_repo.update_member_state_by_source(
+                &data_source_id.0,
+                "failed",
+                Some(&diagnostic),
+            ) {
+                tracing::error!(
+                    data_source_id = %data_source_id.0,
+                    error = %update_error,
+                    "Failed to persist evidence-set member failure"
+                );
+            }
+        }
+        Ok(false) => {}
+        Err(update_error) => tracing::error!(
+            data_source_id = %data_source_id.0,
+            error = %update_error,
+            "Failed to determine whether data source belongs to an evidence set"
+        ),
+    }
+}
+
+pub(crate) fn emit_import_cancellation_state(
+    event_sink: Option<&dyn ImportEventSink>,
+    job_id: &domain::JobId,
+    state: CancellationStateDto,
+    safe_to_close: bool,
+    detail: &str,
+) {
+    crate::import_pipeline::emit::emit_job_cancellation(
+        event_sink,
+        &job_cancellation_dto(&job_id.0, state, safe_to_close, detail),
+    );
+}
+
+pub fn job_cancellation_dto(
+    job_id: &str,
+    state: CancellationStateDto,
+    safe_to_close: bool,
+    detail: &str,
+) -> transport::dto::JobCancellationDto {
+    let now = chrono::Utc::now().to_rfc3339();
+    transport::dto::JobCancellationDto {
+        job_id: job_id.to_string(),
+        requested_at: Some(now.clone()),
+        acknowledged_at: matches!(
+            state,
+            CancellationStateDto::Acknowledged
+                | CancellationStateDto::Draining
+                | CancellationStateDto::Cancelled
+                | CancellationStateDto::TimedOut
+        )
+        .then_some(now),
+        state,
+        safe_to_close,
+        detail: detail.to_string(),
+    }
+}
+
+pub(crate) fn mark_import_cancelling(job_repo: &JobRepo<'_>, job_id: &domain::JobId, detail: &str) {
+    if let Err(error) = job_repo.mark_cancelling(job_id, detail) {
+        tracing::warn!("Failed to mark job {} as cancelling: {}", job_id.0, error);
+    }
+}
+
+pub(crate) fn is_import_cancelled_message(message: &str) -> bool {
+    message.to_ascii_lowercase().contains("cancel")
+}

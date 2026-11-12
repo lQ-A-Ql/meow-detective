@@ -11,6 +11,15 @@ pub enum NotebookError {
     Other(String),
 }
 
+impl From<import_core::step_recorder::StepRecorderError> for NotebookError {
+    fn from(error: import_core::step_recorder::StepRecorderError) -> Self {
+        match error {
+            import_core::step_recorder::StepRecorderError::Db(error) => Self::Db(error),
+            import_core::step_recorder::StepRecorderError::Other(message) => Self::Other(message),
+        }
+    }
+}
+
 impl transport::ServiceErrorCategory for NotebookError {
     fn category(&self) -> transport::ErrorCategory {
         match self {

@@ -158,9 +158,9 @@ if ($SelfTest) {
 
 $facades = @(
   'crates/app-services/src/timeline_service.rs',
-  'crates/app-services/src/staging/mod.rs',
-  'crates/app-services/src/parallel_enum/mod.rs',
-  'crates/app-services/src/import_pipeline/mod.rs',
+  'crates/app-services/src/staging.rs',
+  'crates/app-services/src/parallel_enum.rs',
+  'crates/app-services/src/import_pipeline.rs',
   'crates/evidence-access/src/file_service/mod.rs',
   'crates/app-services/src/artifact_service.rs',
   'crates/app-services/src/graph_service.rs',
@@ -173,7 +173,7 @@ $facades = @(
   'crates/analysis-core/src/analysis_service/extraction/summary/registry.rs',
   'crates/evidence-access/src/datasource_service/lvm.rs',
   'crates/app-services/src/governance/scoring.rs',
-  'crates/app-services/src/import_analysis/mod.rs',
+  'crates/import-core/src/import_analysis/mod.rs',
   'crates/app-services/src/notebook_service/mod.rs',
   'crates/app-services/src/report/json.rs',
   'crates/app-services/src/report/mod.rs'
@@ -193,17 +193,16 @@ foreach ($relativePath in $facades) {
 
 $moduleManifest = @(
   @('crates/app-services/src/timeline_service.rs', 'pagination', 'crates/app-services/src/timeline_service/pagination.rs'),
-  @('crates/app-services/src/timeline_service.rs', 'projection', 'crates/app-services/src/timeline_service/projection.rs'),
-  @('crates/app-services/src/staging/mod.rs', 'merge', 'crates/app-services/src/staging/merge.rs'),
-  @('crates/app-services/src/staging/mod.rs', 'partition_root', 'crates/app-services/src/staging/partition_root.rs'),
-  @('crates/app-services/src/parallel_enum/mod.rs', 'coordinator', 'crates/app-services/src/parallel_enum/coordinator.rs'),
-  @('crates/app-services/src/parallel_enum/mod.rs', 'batch_sink', 'crates/app-services/src/parallel_enum/batch_sink.rs'),
-  @('crates/app-services/src/parallel_enum/ntfs/mod.rs', 'mft_scan', 'crates/app-services/src/parallel_enum/ntfs/mft_scan.rs'),
-  @('crates/app-services/src/parallel_enum/ntfs/mod.rs', 'path_reconstruction', 'crates/app-services/src/parallel_enum/ntfs/path_reconstruction.rs'),
-  @('crates/app-services/src/import_pipeline/mod.rs', 'context', 'crates/app-services/src/import_pipeline/context.rs'),
-  @('crates/app-services/src/import_pipeline/phases/mod.rs', 'enumerate', 'crates/app-services/src/import_pipeline/phases/enumerate.rs'),
-  @('crates/app-services/src/import_pipeline/phases/mod.rs', 'finalize', 'crates/app-services/src/import_pipeline/phases/finalize.rs'),
-  @('crates/app-services/src/import_pipeline/partition/mod.rs', 'candidates', 'crates/app-services/src/import_pipeline/partition/candidates.rs'),
+  @('crates/import-core/src/staging/mod.rs', 'merge', 'crates/import-core/src/staging/merge.rs'),
+  @('crates/import-core/src/staging/mod.rs', 'partition_root', 'crates/import-core/src/staging/partition_root.rs'),
+  @('crates/import-core/src/parallel_enum/mod.rs', 'coordinator', 'crates/import-core/src/parallel_enum/coordinator.rs'),
+  @('crates/import-core/src/parallel_enum/mod.rs', 'batch_sink', 'crates/import-core/src/parallel_enum/batch_sink.rs'),
+  @('crates/import-core/src/parallel_enum/ntfs/mod.rs', 'mft_scan', 'crates/import-core/src/parallel_enum/ntfs/mft_scan.rs'),
+  @('crates/import-core/src/parallel_enum/ntfs/mod.rs', 'path_reconstruction', 'crates/import-core/src/parallel_enum/ntfs/path_reconstruction.rs'),
+  @('crates/import-core/src/import_pipeline/mod.rs', 'context', 'crates/import-core/src/import_pipeline/context.rs'),
+  @('crates/import-core/src/import_pipeline/phases/mod.rs', 'enumerate', 'crates/import-core/src/import_pipeline/phases/enumerate.rs'),
+  @('crates/import-core/src/import_pipeline/phases/mod.rs', 'finalize', 'crates/import-core/src/import_pipeline/phases/finalize.rs'),
+  @('crates/import-core/src/import_pipeline/partition/mod.rs', 'candidates', 'crates/import-core/src/import_pipeline/partition/candidates.rs'),
   @('crates/evidence-access/src/file_service/metadata/mod.rs', 'source_routing', 'crates/evidence-access/src/file_service/metadata/source_routing/mod.rs'),
   @('crates/evidence-access/src/file_service/viewer/range/mod.rs', 'api', 'crates/evidence-access/src/file_service/viewer/range/api.rs'),
   @('crates/evidence-access/src/file_service/mft/mod.rs', 'enumeration', 'crates/evidence-access/src/file_service/mft/enumeration.rs'),
@@ -245,9 +244,9 @@ $moduleManifest = @(
   @('crates/app-services/src/governance/scoring.rs', 'release_gates', 'crates/app-services/src/governance/scoring/release_gates.rs'),
   @('crates/app-services/src/governance/scoring.rs', 'scorecard', 'crates/app-services/src/governance/scoring/scorecard.rs'),
   @('crates/app-services/src/governance/scoring.rs', 'security_gate', 'crates/app-services/src/governance/scoring/security_gate.rs'),
-  @('crates/app-services/src/import_analysis/mod.rs', 'worker_coordinator', 'crates/app-services/src/import_analysis/worker_coordinator.rs'),
-  @('crates/app-services/src/import_analysis/mod.rs', 'worker_model', 'crates/app-services/src/import_analysis/worker_model.rs'),
-  @('crates/app-services/src/import_analysis/mod.rs', 'worker_staging', 'crates/app-services/src/import_analysis/worker_staging.rs'),
+  @('crates/import-core/src/import_analysis/mod.rs', 'worker_coordinator', 'crates/import-core/src/import_analysis/worker_coordinator.rs'),
+  @('crates/import-core/src/import_analysis/mod.rs', 'worker_model', 'crates/import-core/src/import_analysis/worker_model.rs'),
+  @('crates/import-core/src/import_analysis/mod.rs', 'worker_staging', 'crates/import-core/src/import_analysis/worker_staging.rs'),
   @('crates/app-services/src/notebook_service/mod.rs', 'citation_operations', 'crates/app-services/src/notebook_service/citation_operations.rs'),
   @('crates/app-services/src/notebook_service/mod.rs', 'dto_conversion', 'crates/app-services/src/notebook_service/dto_conversion.rs'),
   @('crates/app-services/src/notebook_service/mod.rs', 'entry_operations', 'crates/app-services/src/notebook_service/entry_operations.rs'),
@@ -306,7 +305,8 @@ foreach ($packageName in @('app-services', 'analysis-core', 'emulation-services'
 $serviceRoots = @(
   (Join-Path $repoRoot 'crates/app-services/src'),
   (Join-Path $repoRoot 'crates/analysis-core/src'),
-  (Join-Path $repoRoot 'crates/emulation-services/src')
+  (Join-Path $repoRoot 'crates/emulation-services/src'),
+  (Join-Path $repoRoot 'crates/import-core/src')
 )
 $serviceFiles = foreach ($serviceRoot in $serviceRoots) {
   Get-ChildItem -LiteralPath $serviceRoot -Recurse -File -Filter '*.rs'
@@ -362,9 +362,9 @@ if ($functionBaseline -match '(?m)^crates/app-services/') {
 }
 
 foreach ($relativePath in @(
-  'crates/app-services/src/parallel_enum/coordinator.rs',
-  'crates/app-services/src/parallel_enum/partition_work.rs',
-  'crates/app-services/src/parallel_enum/ntfs/mft_scan.rs'
+  'crates/import-core/src/parallel_enum/coordinator.rs',
+  'crates/import-core/src/parallel_enum/partition_work.rs',
+  'crates/import-core/src/parallel_enum/ntfs/mft_scan.rs'
 )) {
   $masked = Get-MaskedRust (Read-StrictUtf8 (Join-Path $repoRoot $relativePath))
   if ($masked -match '\bpar_iter\b|\binto_par_iter\b|\brayon::') {
@@ -373,7 +373,7 @@ foreach ($relativePath in @(
 }
 
 $importMasked = (
-  Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates/app-services/src/import_pipeline') `
+  Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates/import-core/src/import_pipeline') `
     -Recurse -File -Filter '*.rs' |
     ForEach-Object { Get-MaskedRust (Read-StrictUtf8 $_.FullName) }
 ) -join "`n"

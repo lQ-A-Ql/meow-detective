@@ -1,0 +1,359 @@
+use evidence_core::{EvidenceReader, FileSystemReader};
+use image_e01::E01Reader;
+use std::io::SeekFrom;
+
+use crate::parallel_enum;
+use evidence_access::datasource_service::{
+    self, ImageFilesystemKind, ImageFilesystemSource, LvmLogicalVolumeIdentity,
+    LvmPhysicalVolumeSource,
+};
+
+pub fn build_partition_work(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    partition_index: usize,
+    partition_name: &str,
+    fs_kind: &str,
+    probe_candidates: &[datasource_service::ImageFilesystemCandidate],
+) -> Option<parallel_enum::PartitionWork> {
+    build_partition_work_typed(
+        source_path,
+        source_kind,
+        partition_index,
+        partition_name,
+        fs_kind,
+        probe_candidates,
+    )
+    .ok()
+}
+
+pub(crate) fn build_partition_work_typed(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    partition_index: usize,
+    partition_name: &str,
+    fs_kind: &str,
+    probe_candidates: &[datasource_service::ImageFilesystemCandidate],
+) -> Result<parallel_enum::PartitionWork, super::PartitionBuildError> {
+    build_partition_work_typed_with_factory(
+        source_path,
+        source_kind,
+        partition_index,
+        partition_name,
+        fs_kind,
+        probe_candidates,
+        None,
+    )
+}
+
+pub(crate) fn build_partition_work_typed_with_factory(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    partition_index: usize,
+    partition_name: &str,
+    fs_kind: &str,
+    probe_candidates: &[datasource_service::ImageFilesystemCandidate],
+    reader_factory: Option<evidence_core::SharedReaderFactory>,
+) -> Result<parallel_enum::PartitionWork, super::PartitionBuildError> {
+    let index_map = datasource_service::assign_effective_partition_indices(probe_candidates);
+    let candidate = probe_candidates
+        .iter()
+        .enumerate()
+        .find(|(ordinal, candidate)| {
+            datasource_service::effective_partition_index(candidate, *ordinal, &index_map)
+                == partition_index
+        })
+        .map(|(_, candidate)| candidate)
+        .ok_or(super::PartitionBuildError::MissingCandidate(
+            partition_index,
+        ))?;
+    let strategy = if fs_kind.eq_ignore_ascii_case("ntfs")
+        && parallel_enum::NtfsPartitionPlan::eligible(source_kind, candidate)
+    {
+        parallel_enum::PartitionEnumStrategy::NtfsDeferred(parallel_enum::NtfsPartitionPlan {
+            candidate: candidate.clone(),
+        })
+    } else {
+        let fs = open_candidate_filesystem_with_factory(
+            source_path,
+            source_kind,
+            candidate,
+            reader_factory.as_deref(),
+        )
+        .map_err(|error| super::PartitionBuildError::Reader(std::io::Error::other(error)))?
+        .ok_or(super::PartitionBuildError::Unavailable)?;
+        parallel_enum::PartitionEnumStrategy::Generic(fs)
+    };
+    Ok(parallel_enum::PartitionWork {
+        index: partition_index,
+        name: partition_name.to_string(),
+        fs_kind: fs_kind.to_string(),
+        strategy,
+        source_path: source_path.to_path_buf(),
+        source_kind: source_kind.clone(),
+        volume_offset: candidate.offset,
+        reader_factory,
+        mft_workers: 1,
+    })
+}
+
+pub(super) fn open_candidate_filesystem(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    candidate: &datasource_service::ImageFilesystemCandidate,
+) -> Result<Option<Box<dyn FileSystemReader + Send>>, String> {
+    open_candidate_filesystem_with_factory(source_path, source_kind, candidate, None)
+}
+
+fn open_candidate_filesystem_with_factory(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    candidate: &datasource_service::ImageFilesystemCandidate,
+    factory: Option<&dyn evidence_core::EvidenceReaderFactory>,
+) -> Result<Option<Box<dyn FileSystemReader + Send>>, String> {
+    let open = || {
+        if !matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume) {
+            if let Some(factory) = factory {
+                return factory
+                    .open_reader()
+                    .map(|reader| (reader, candidate.offset))
+                    .map_err(|error| error.to_string());
+            }
+        }
+        open_candidate_reader(source_path, source_kind, candidate)
+    };
+    if candidate.kind == ImageFilesystemKind::Iso9660 {
+        let (reader, fs_offset) = open()?;
+        let reader = evidence_core::PartitionWindowReader::new(reader, fs_offset, candidate.length)
+            .map_err(|error| error.to_string())?;
+        return Ok(Some(Box::new(
+            evidence_core::Iso9660Reader::from_reader(
+                Box::new(reader),
+                source_path.file_name().and_then(|name| name.to_str()),
+            )
+            .map_err(|error| error.to_string())?,
+        )));
+    }
+    let (mut base_reader, fs_offset) = open()?;
+    let fs: Box<dyn FileSystemReader + Send> = match candidate.kind {
+        ImageFilesystemKind::Ntfs => Box::new(
+            fs_ntfs::NtfsReader::open(base_reader, fs_offset).map_err(|error| error.to_string())?,
+        ),
+        ImageFilesystemKind::Fat => {
+            if is_exfat_boot(&mut *base_reader, fs_offset).map_err(|error| error.to_string())? {
+                Box::new(
+                    fs_exfat::ExfatReader::open(base_reader, fs_offset)
+                        .map_err(|error| error.to_string())?,
+                )
+            } else {
+                Box::new(
+                    fs_fat::FatReader::open(base_reader, fs_offset)
+                        .map_err(|error| error.to_string())?,
+                )
+            }
+        }
+        ImageFilesystemKind::Ext4 => Box::new(
+            fs_ext4::Ext4Reader::open(base_reader, fs_offset).map_err(|error| error.to_string())?,
+        ),
+        ImageFilesystemKind::F2fs => Box::new(
+            fs_f2fs::F2fsReader::open(base_reader, fs_offset).map_err(|error| error.to_string())?,
+        ),
+        ImageFilesystemKind::Erofs => Box::new(
+            fs_erofs::ErofsReader::open(base_reader, fs_offset)
+                .map_err(|error| error.to_string())?,
+        ),
+        ImageFilesystemKind::Xfs => Box::new(
+            fs_xfs::XfsReader::open(base_reader, fs_offset).map_err(|error| error.to_string())?,
+        ),
+        ImageFilesystemKind::Btrfs => Box::new(
+            fs_btrfs::BtrfsReader::open(base_reader, fs_offset)
+                .map_err(|error| error.to_string())?,
+        ),
+        ImageFilesystemKind::LvmPool | ImageFilesystemKind::BitLocker => return Ok(None),
+        ImageFilesystemKind::Iso9660 => unreachable!("ISO9660 handled before block reader"),
+    };
+    Ok(Some(fs))
+}
+
+fn is_exfat_boot(reader: &mut dyn EvidenceReader, offset: u64) -> std::io::Result<bool> {
+    reader.seek(SeekFrom::Start(offset))?;
+    let mut sector = [0u8; 512];
+    reader.read_exact(&mut sector)?;
+    Ok(datasource_service::is_exfat_boot_sector(&sector))
+}
+
+pub fn open_candidate_reader(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    candidate: &datasource_service::ImageFilesystemCandidate,
+) -> Result<(Box<dyn EvidenceReader>, u64), String> {
+    if matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume) {
+        return open_lvm_candidate_reader(source_path, source_kind, candidate);
+    }
+    let reader: Box<dyn EvidenceReader> = match source_kind {
+        domain::DataSourceKind::E01 => {
+            Box::new(E01Reader::open(source_path).map_err(|error| error.to_string())?)
+        }
+        domain::DataSourceKind::Raw => Box::new(
+            evidence_core::RawImageReader::open(source_path).map_err(|error| error.to_string())?,
+        ),
+        domain::DataSourceKind::LocalDisk => Box::new(
+            evidence_core::LocalDiskReader::open(source_path).map_err(|error| error.to_string())?,
+        ),
+        domain::DataSourceKind::AndroidSparse => Box::new(
+            image_android::AndroidSparseReader::open(source_path)
+                .map_err(|error| error.to_string())?,
+        ),
+        domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive => {
+            return Err("logical sources do not expose image candidates".to_string())
+        }
+        domain::DataSourceKind::CephRbd
+        | domain::DataSourceKind::CephFs
+        | domain::DataSourceKind::MdRaid => {
+            return Err(
+                "Ceph RBD derived sources do not use the host image import pipeline".to_string(),
+            )
+        }
+    };
+    Ok((reader, candidate.offset))
+}
+
+fn open_lvm_candidate_reader(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    candidate: &datasource_service::ImageFilesystemCandidate,
+) -> Result<(Box<dyn EvidenceReader>, u64), String> {
+    let identity = candidate
+        .lvm_identity
+        .as_ref()
+        .ok_or_else(|| "LVM logical volume candidate missing identity".to_string())?;
+    let readers = open_lvm_physical_volume_readers(source_path, source_kind, identity)
+        .ok_or_else(|| "failed to open LVM physical volume readers".to_string())?;
+    let pool = fs_lvm::LvmPool::discover(readers, identity.pv_offsets.clone())
+        .map_err(|e| e.to_string())?;
+    let volumes = pool.list_volumes();
+    let volume_index = find_lvm_volume_index(&volumes, identity)
+        .ok_or_else(|| "LVM logical volume identity not found in pool".to_string())?;
+    let reader = pool
+        .open_volume_reader(volume_index)
+        .map_err(|error| error.to_string())?;
+    Ok((reader, 0))
+}
+
+fn open_lvm_physical_volume_readers(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    identity: &LvmLogicalVolumeIdentity,
+) -> Option<Vec<Box<dyn EvidenceReader>>> {
+    if identity.pv_offsets.is_empty() {
+        return None;
+    }
+    if identity.pv_offsets.len() > 1 && identity.pv_sources.len() != identity.pv_offsets.len() {
+        tracing::warn!(
+            pv_offsets = identity.pv_offsets.len(),
+            pv_sources = identity.pv_sources.len(),
+            vg = %identity.vg_name,
+            lv = %identity.lv_name,
+            "LVM identity is missing per-PV source paths; refusing multi-PV fallback"
+        );
+        return None;
+    }
+
+    identity
+        .pv_offsets
+        .iter()
+        .enumerate()
+        .map(|(index, offset)| {
+            open_lvm_physical_volume_reader(source_path, source_kind, identity, index, *offset)
+        })
+        .collect()
+}
+
+fn open_lvm_physical_volume_reader(
+    default_path: &std::path::Path,
+    default_kind: &domain::DataSourceKind,
+    identity: &LvmLogicalVolumeIdentity,
+    index: usize,
+    offset: u64,
+) -> Option<Box<dyn EvidenceReader>> {
+    let source = identity.pv_sources.get(index);
+    let path = source
+        .map(|value| std::path::Path::new(&value.source_path))
+        .unwrap_or(default_path);
+    let kind = source
+        .and_then(|value| value.source_kind.as_ref())
+        .unwrap_or(default_kind);
+    let mut reader: Box<dyn EvidenceReader> = match kind {
+        domain::DataSourceKind::E01 => Box::new(E01Reader::open(path).ok()?),
+        domain::DataSourceKind::Raw => Box::new(evidence_core::RawImageReader::open(path).ok()?),
+        domain::DataSourceKind::LocalDisk => {
+            Box::new(evidence_core::LocalDiskReader::open(path).ok()?)
+        }
+        domain::DataSourceKind::AndroidSparse => {
+            Box::new(image_android::AndroidSparseReader::open(path).ok()?)
+        }
+        domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive => {
+            return None
+        }
+        domain::DataSourceKind::CephRbd
+        | domain::DataSourceKind::CephFs
+        | domain::DataSourceKind::MdRaid => return None,
+    };
+    if let Some(expected) = source {
+        validate_lvm_pv_source(reader.as_mut(), offset, expected)?;
+    }
+    Some(reader)
+}
+
+fn validate_lvm_pv_source(
+    reader: &mut dyn EvidenceReader,
+    expected_offset: u64,
+    expected_source: &LvmPhysicalVolumeSource,
+) -> Option<()> {
+    if expected_source.pv_uuid.is_empty() {
+        return Some(());
+    }
+    let label = match fs_lvm::label::parse_pv_label(reader, expected_offset) {
+        Ok(label) => label,
+        Err(error) => {
+            tracing::warn!(
+                source = %datasource_service::lvm_source_fingerprint(&expected_source.source_path),
+                offset = expected_offset,
+                error = %error,
+                "LVM import PV source label validation failed"
+            );
+            return None;
+        }
+    };
+    let actual = datasource_service::normalize_lvm_uuid_for_match(&label.pv_uuid);
+    let expected = datasource_service::normalize_lvm_uuid_for_match(&expected_source.pv_uuid);
+    if actual == expected {
+        return Some(());
+    }
+    tracing::warn!(
+        source = %datasource_service::lvm_source_fingerprint(&expected_source.source_path),
+        offset = expected_offset,
+        expected = %expected_source.pv_uuid,
+        actual = %label.pv_uuid,
+        "LVM import PV source UUID mismatch"
+    );
+    None
+}
+
+fn find_lvm_volume_index(
+    volumes: &[fs_lvm::LvInfo],
+    identity: &LvmLogicalVolumeIdentity,
+) -> Option<usize> {
+    if !identity.lv_uuid.is_empty() {
+        return volumes
+            .iter()
+            .position(|volume| volume.uuid == identity.lv_uuid);
+    }
+    volumes
+        .iter()
+        .position(|volume| volume.name == identity.lv_name)
+}
+
+#[cfg(test)]
+#[path = "../../../tests/unit/import_pipeline/partition/work.rs"]
+mod tests;
