@@ -402,14 +402,14 @@ fn fjall_metadata_projection(
     let page = storage
         .parser_list_by_field(
             &snapshot,
-            persistence_fjall::ParserFieldQuery {
+            persistence_source::fjall::ParserFieldQuery {
                 source_id: &runtime.binding.data_source_id.0,
                 kind: "ceph_fs_metadata_objects",
                 field: "locator",
                 value: canonical,
             },
             None,
-            persistence_fjall::ScanDirection::Forward,
+            persistence_source::fjall::ScanDirection::Forward,
             2,
         )
         .map_err(|_| inventory_unavailable(runtime))?;

@@ -2,7 +2,7 @@ use crate::{
     file_service::FileServiceError, source_db, storage_runtime::ReadOnlySourceStorageHandle,
 };
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use persistence_fjall::{CatalogEntryType, FileEntryRecord, ScanDirection};
+use persistence_source::fjall::{CatalogEntryType, FileEntryRecord, ScanDirection};
 use std::collections::BTreeMap;
 use std::path::Path;
 use transport::{

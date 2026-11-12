@@ -3,7 +3,7 @@ use super::state::AnalysisOutputProducer;
 use super::state::PersistedExtractionOutcome;
 use crate::analysis_service::error::AnalysisServiceError;
 use domain::{Artifact, TimelineEvent};
-use persistence_fjall::{
+use persistence_source::fjall::{
     ArtifactRecordStore, DatabaseConfig, PersistMode, SourceStore, TimelineRecordStore,
 };
 use rusqlite::Connection;
@@ -179,7 +179,7 @@ impl StreamingGeneration {
             .database()
             .persist(PersistMode::SyncAll)
             .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        persistence_fjall::seal_source_generation(
+        persistence_source::fjall::seal_source_generation(
             &store,
             &source_id,
             &staged.name,
@@ -207,7 +207,7 @@ pub(super) fn begin_streaming(
     let source = persistence_source::detail::open_store(conn)?
         .ok_or_else(|| AnalysisServiceError::Other("source generation is missing".into()))?;
     let source = (*source).clone();
-    let manifest = persistence_fjall::verify_source_generation(&source, source_id)
+    let manifest = persistence_source::fjall::verify_source_generation(&source, source_id)
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     let attempt = format!("analysis-{}", Uuid::new_v4());
     let layout = SourceCaseLayout::from_published_store(&source, source_id, &attempt)?;
@@ -239,12 +239,13 @@ pub(super) fn stage(
     let source = persistence_source::detail::open_store(conn)?
         .ok_or_else(|| AnalysisServiceError::Other("source generation is missing".into()))?;
     let source = (*source).clone();
-    let manifest = persistence_fjall::verify_source_generation(&source, source_id)
+    let manifest = persistence_source::fjall::verify_source_generation(&source, source_id)
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     let attempt = format!("analysis-{}", Uuid::new_v4());
-    let layout =
-        persistence_fjall::SourceBuildLayout::for_case_source(case_root, source_id, &attempt)
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
+        case_root, source_id, &attempt,
+    )
+    .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     std::fs::create_dir_all(layout.build_path())?;
     let staged = source
         .clone_to(layout.build_path(), DatabaseConfig::default())
@@ -252,9 +253,9 @@ pub(super) fn stage(
     replace_records(&staged, source_id, replacements, artifacts, events)?;
     staged
         .database()
-        .persist(persistence_fjall::PersistMode::SyncAll)
+        .persist(persistence_source::fjall::PersistMode::SyncAll)
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-    persistence_fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation(
         &staged,
         source_id,
         &attempt,
@@ -288,7 +289,7 @@ fn replace_records(
                 &snapshot,
                 source_id,
                 artifact_cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
+                persistence_source::fjall::ScanDirection::Forward,
                 512,
             )
             .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
@@ -311,7 +312,7 @@ fn replace_records(
                 &snapshot,
                 source_id,
                 timeline_cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
+                persistence_source::fjall::ScanDirection::Forward,
                 512,
             )
             .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
@@ -332,14 +333,14 @@ fn replace_records(
         .delete_batch(
             source_id,
             &artifact_ids,
-            persistence_fjall::PersistMode::Buffer,
+            persistence_source::fjall::PersistMode::Buffer,
         )
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     timeline_store
         .delete_batch(
             source_id,
             &timeline_ids,
-            persistence_fjall::PersistMode::Buffer,
+            persistence_source::fjall::PersistMode::Buffer,
         )
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     let artifact_records = artifacts
@@ -347,14 +348,20 @@ fn replace_records(
         .map(|artifact| persistence_source::detail::artifact_record(artifact, source_id))
         .collect::<Vec<_>>();
     artifact_store
-        .upsert_batch(&artifact_records, persistence_fjall::PersistMode::Buffer)
+        .upsert_batch(
+            &artifact_records,
+            persistence_source::fjall::PersistMode::Buffer,
+        )
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     let timeline_records = events
         .iter()
         .map(|event| persistence_source::detail::timeline_record(event, source_id))
         .collect::<Vec<_>>();
     timeline_store
-        .upsert_batch(&timeline_records, persistence_fjall::PersistMode::Buffer)
+        .upsert_batch(
+            &timeline_records,
+            persistence_source::fjall::PersistMode::Buffer,
+        )
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     Ok(())
 }
@@ -374,7 +381,7 @@ fn delete_replacements(
                 &artifacts,
                 source_id,
                 cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
+                persistence_source::fjall::ScanDirection::Forward,
                 512,
             )
             .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
@@ -404,7 +411,7 @@ fn delete_replacements(
                 &timeline,
                 source_id,
                 cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
+                persistence_source::fjall::ScanDirection::Forward,
                 512,
             )
             .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
@@ -436,7 +443,7 @@ impl SourceCaseLayout {
         source: &SourceStore,
         source_id: &str,
         attempt: &str,
-    ) -> Result<persistence_fjall::SourceBuildLayout, AnalysisServiceError> {
+    ) -> Result<persistence_source::fjall::SourceBuildLayout, AnalysisServiceError> {
         let source_dir = source.database().path().parent().ok_or_else(|| {
             AnalysisServiceError::Other("source generation has no source directory".into())
         })?;
@@ -444,14 +451,14 @@ impl SourceCaseLayout {
             .parent()
             .and_then(Path::parent)
             .ok_or_else(|| AnalysisServiceError::Other("source has no case root".into()))?;
-        persistence_fjall::SourceBuildLayout::for_case_source(case_root, source_id, attempt)
+        persistence_source::fjall::SourceBuildLayout::for_case_source(case_root, source_id, attempt)
             .map_err(|error| AnalysisServiceError::Other(error.to_string()))
     }
 }
 
 fn matches_artifact(
     replacement: &super::state::AnalysisOutputReplacement,
-    record: &persistence_fjall::ArtifactRecord,
+    record: &persistence_source::fjall::ArtifactRecord,
     source_id: &str,
 ) -> bool {
     if record.data_source_id != source_id
@@ -472,7 +479,7 @@ fn matches_artifact(
 
 fn matches_timeline(
     replacement: &super::state::AnalysisOutputReplacement,
-    record: &persistence_fjall::TimelineRecord,
+    record: &persistence_source::fjall::TimelineRecord,
 ) -> bool {
     if replacement.source_object_id != record.source_object_id {
         return false;

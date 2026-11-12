@@ -5,6 +5,16 @@ use persistence_sqlite::repositories::job_repo::JobRepo;
 use tempfile::TempDir;
 use transport::commands::ExportScopeDto;
 
+fn open_source_connection(
+    active: &app_services::active_case::ActiveCase,
+    data_source: &domain::DataSource,
+) -> Result<rusqlite::Connection, persistence_sqlite::DbError> {
+    let connection = app_services::source_db::open_source_db(&active.case_root, &data_source.id)?;
+    persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
+        .upsert_source_local_metadata(&active.meta.id, data_source)?;
+    Ok(connection)
+}
+
 #[test]
 fn full_case_lifecycle() {
     let tmp = TempDir::new().unwrap();
@@ -26,24 +36,24 @@ fn full_case_lifecycle() {
     active
         .with_conn(|conn| {
             let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            let data_source = domain::DataSource {
+                id: ds_id.clone(),
+                name: "test-evidence".into(),
+                kind: domain::DataSourceKind::LogicalDirectory,
+                source_path: evidence_dir.clone(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            };
 
             // Insert data source record to satisfy FK
-            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn).insert(
-                &case_id,
-                &domain::DataSource {
-                    id: ds_id.clone(),
-                    name: "test-evidence".into(),
-                    kind: domain::DataSourceKind::LogicalDirectory,
-                    source_path: evidence_dir.clone(),
-                    imported_at: chrono::Utc::now(),
-                    provenance: domain::DataSourceProvenance::unknown(),
-                },
-            )?;
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+                .insert(&case_id, &data_source)?;
+            let source_conn = open_source_connection(&active, &data_source)?;
 
             // Import
             let fs = LogicalFsReader::open(&evidence_dir, "test-evidence")
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            let stats = file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+            let stats = file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
             assert!(
                 stats.file_count >= 2,
                 "Expected at least 2 files, got {}",
@@ -51,7 +61,7 @@ fn full_case_lifecycle() {
             );
 
             // Read files for timeline
-            let repo = FileRepo::new(conn);
+            let repo = FileRepo::new(&source_conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -65,8 +75,9 @@ fn full_case_lifecycle() {
             assert!(!all_files.is_empty());
 
             // Timeline
-            let tl_count = timeline_service::project_and_store_file_activity(conn, &all_files)
-                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let tl_count =
+                timeline_service::project_and_store_file_activity(&source_conn, &all_files)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(tl_count > 0, "Expected timeline events");
 
             // Search indexing: build a map of entry paths, then provide readers
@@ -78,7 +89,7 @@ fn full_case_lifecycle() {
             let to_index: Vec<domain::FileEntryId> =
                 all_files.iter().take(10).map(|f| f.id.clone()).collect();
             let idx_result =
-                search_service::index_files(conn, &index_dir, &to_index, move |file_id| {
+                search_service::index_files(&source_conn, &index_dir, &to_index, move |file_id| {
                     let rel_path = path_map.get(&file_id.0)?;
                     let abs_path = ev.join(if rel_path.is_empty() { "." } else { rel_path });
                     std::fs::File::open(&abs_path)

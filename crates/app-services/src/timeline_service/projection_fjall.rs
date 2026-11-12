@@ -1,6 +1,6 @@
 use super::{projection::TimelineProjectionStats, TimelineServiceError, TimelineWriteTimings};
 use domain::{DataSourcePlatform, EdgeType, GraphEdge, GraphNode, NodeType};
-use persistence_fjall::{
+use persistence_source::fjall::{
     CatalogRecordStore, PersistMode, ScanDirection, TimelineRecord, TimelineRecordStore,
 };
 use persistence_sqlite::repositories::graph_repo::GraphRepo;
@@ -159,10 +159,10 @@ fn stream_file_events(
             &mut next_batch,
         )
         .map_err(|error| match error {
-            persistence_fjall::TimelineStreamError::Storage(error) => {
+            persistence_source::fjall::TimelineStreamError::Storage(error) => {
                 TimelineServiceError::Storage(error)
             }
-            persistence_fjall::TimelineStreamError::Producer(error) => error,
+            persistence_source::fjall::TimelineStreamError::Producer(error) => error,
         })?;
     ensure_active(cancel)?;
     meta.mark_done(FILE_KEY, count, identity)?;
@@ -170,7 +170,7 @@ fn stream_file_events(
 }
 
 fn file_events_for_record(
-    record: persistence_fjall::FileEntryRecord,
+    record: persistence_source::fjall::FileEntryRecord,
     source: &str,
     platform: DataSourcePlatform,
 ) -> Vec<TimelineRecord> {
@@ -200,8 +200,11 @@ fn file_events_for_record(
         .collect()
 }
 
-fn eligible(record: &persistence_fjall::FileEntryRecord, platform: DataSourcePlatform) -> bool {
-    if record.entry_type != persistence_fjall::CatalogEntryType::File {
+fn eligible(
+    record: &persistence_source::fjall::FileEntryRecord,
+    platform: DataSourcePlatform,
+) -> bool {
+    if record.entry_type != persistence_source::fjall::CatalogEntryType::File {
         return false;
     }
     if platform != DataSourcePlatform::Windows {

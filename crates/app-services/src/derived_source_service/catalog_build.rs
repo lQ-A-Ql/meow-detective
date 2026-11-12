@@ -80,7 +80,7 @@ pub(super) fn build_and_enumerate_source(
         }
     };
     fjall_source
-        .persist(persistence_fjall::PersistMode::SyncAll)
+        .persist(persistence_source::fjall::PersistMode::SyncAll)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     let source_finalize = (|| {
         persist_current_source_manifest(
@@ -137,7 +137,7 @@ pub(super) fn build_and_enumerate_source(
 }
 
 struct FjallBuildStorage {
-    layout: persistence_fjall::SourceBuildLayout,
+    layout: persistence_source::fjall::SourceBuildLayout,
     root: std::path::PathBuf,
     existing: bool,
     source: crate::storage_runtime::ReadWriteSourceStorageHandle,
@@ -147,7 +147,7 @@ fn prepare_fjall_source(
     request: &CatalogBuildRequest<'_>,
     conn: &rusqlite::Connection,
 ) -> DerivedSourceResult<FjallBuildStorage> {
-    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         request.case_root,
         &request.data_source.id.0,
         request.catalog_attempt.attempt_id(),
@@ -187,7 +187,7 @@ fn prepare_fjall_source(
 fn publish_fjall_partition_generation(
     data_source_id: &DataSourceId,
     attempt_id: &str,
-    layout: &persistence_fjall::SourceBuildLayout,
+    layout: &persistence_source::fjall::SourceBuildLayout,
     target_root: &std::path::Path,
     replace_published: bool,
     catalog_digest: &str,
@@ -197,21 +197,22 @@ fn publish_fjall_partition_generation(
         .ok_or_else(|| {
             DerivedSourceError::Reconstruction("Fjall source build is still in use".to_owned())
         })?;
-    let source = persistence_fjall::SourceStore::open(
+    let source = persistence_source::fjall::SourceStore::open(
         target_root,
-        persistence_fjall::DatabaseConfig::default(),
+        persistence_source::fjall::DatabaseConfig::default(),
     )
     .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    let projection_digest = hex::encode(persistence_fjall::digest(catalog_digest.as_bytes()));
+    let projection_digest =
+        hex::encode(persistence_source::fjall::digest(catalog_digest.as_bytes()));
     let seal = if replace_published {
-        persistence_fjall::replace_source_generation(
+        persistence_source::fjall::replace_source_generation(
             &source,
             &data_source_id.0,
             attempt_id,
             &projection_digest,
         )
     } else {
-        persistence_fjall::seal_source_generation(
+        persistence_source::fjall::seal_source_generation(
             &source,
             &data_source_id.0,
             attempt_id,
@@ -227,16 +228,16 @@ fn publish_fjall_partition_generation(
             keyspace,
             key,
             &marker,
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     source
         .database()
-        .persist(persistence_fjall::PersistMode::SyncAll)
+        .persist(persistence_source::fjall::PersistMode::SyncAll)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     drop(source);
     if !replace_published {
-        persistence_fjall::publish_source_generation(target_root, layout.published_path())
+        persistence_source::fjall::publish_source_generation(target_root, layout.published_path())
             .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     }
     drop(_close_guard);

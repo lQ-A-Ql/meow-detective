@@ -55,7 +55,7 @@ fn projected_events(
             &snapshot,
             source_id,
             None,
-            persistence_fjall::ScanDirection::Forward,
+            persistence_source::fjall::ScanDirection::Forward,
             limit as usize,
         )
         .map_err(|error| {
@@ -71,7 +71,7 @@ fn projected_events(
 
 fn event_from_fjall_record(
     source_id: &str,
-    record: persistence_fjall::TimelineRecord,
+    record: persistence_source::fjall::TimelineRecord,
 ) -> LinuxEvidenceEventDto {
     let attrs = serde_json::to_value(record.attrs)
         .ok()

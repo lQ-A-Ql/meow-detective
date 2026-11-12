@@ -239,7 +239,6 @@ dependencies = [
  "memory-windows",
  "num_cpus",
  "once_cell",
- "persistence-fjall",
  "persistence-source",
  "persistence-sqlite",
  "plugin-api",

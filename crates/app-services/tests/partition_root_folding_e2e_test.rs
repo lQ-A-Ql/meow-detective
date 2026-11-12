@@ -41,7 +41,7 @@ fn seed_partitions_table(case_root: &std::path::Path) {
         .partition_replace_by_source(
             DS_ID,
             &[
-                persistence_fjall::PartitionRecord {
+                persistence_source::fjall::PartitionRecord {
                     id: "part-0".to_string(),
                     data_source_id: DS_ID.to_string(),
                     partition_index: 0,
@@ -63,7 +63,7 @@ fn seed_partitions_table(case_root: &std::path::Path) {
                     gpt_partition_uuid: None,
                     filesystem_uuid: None,
                 },
-                persistence_fjall::PartitionRecord {
+                persistence_source::fjall::PartitionRecord {
                     id: "part-1".to_string(),
                     data_source_id: DS_ID.to_string(),
                     partition_index: 1,
@@ -86,7 +86,7 @@ fn seed_partitions_table(case_root: &std::path::Path) {
                     filesystem_uuid: None,
                 },
             ],
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
     storage.partition_projection_publish(DS_ID).unwrap();
@@ -102,13 +102,14 @@ fn publish_source_projection(conn: &Connection) {
     let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
-    persistence_fjall::seal_source_generation(&store, DS_ID, "fixture", &"a".repeat(64)).unwrap();
-    let key = persistence_fjall::encode_key(
+    persistence_source::fjall::seal_source_generation(&store, DS_ID, "fixture", &"a".repeat(64))
+        .unwrap();
+    let key = persistence_source::fjall::encode_key(
         "projection",
-        &[persistence_fjall::KeyPart::Text(DS_ID.to_string())],
+        &[persistence_source::fjall::KeyPart::Text(DS_ID.to_string())],
     )
     .unwrap();
-    let marker = persistence_fjall::VersionedEnvelope::new(
+    let marker = persistence_source::fjall::VersionedEnvelope::new(
         "source_projection_complete",
         1,
         format!("projection:{DS_ID}"),
@@ -118,17 +119,17 @@ fn publish_source_projection(conn: &Connection) {
     );
     store
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
 }
 
 fn catalog_records(
     storage: &app_services::source_db::FjallReadWriteSourceStorageHandle,
-) -> Vec<persistence_fjall::FileEntryRecord> {
+) -> Vec<persistence_source::fjall::FileEntryRecord> {
     let snapshot = storage.snapshot();
     let mut cursor = None;
     let mut records = Vec::new();
@@ -138,7 +139,7 @@ fn catalog_records(
                 &snapshot,
                 DS_ID,
                 cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
+                persistence_source::fjall::ScanDirection::Forward,
                 512,
             )
             .unwrap();
@@ -434,7 +435,7 @@ fn redirected_lvm_placeholder_root_can_be_removed_on_resume_repair() {
         .partition_replace_by_source(
             DS_ID,
             &[
-                persistence_fjall::PartitionRecord {
+                persistence_source::fjall::PartitionRecord {
                     id: "part-lvm-pool".to_string(),
                     data_source_id: DS_ID.to_string(),
                     partition_index: 1,
@@ -456,7 +457,7 @@ fn redirected_lvm_placeholder_root_can_be_removed_on_resume_repair() {
                     gpt_partition_uuid: None,
                     filesystem_uuid: None,
                 },
-                persistence_fjall::PartitionRecord {
+                persistence_source::fjall::PartitionRecord {
                     id: "part-root-lv".to_string(),
                     data_source_id: DS_ID.to_string(),
                     partition_index: 2,
@@ -479,7 +480,7 @@ fn redirected_lvm_placeholder_root_can_be_removed_on_resume_repair() {
                     filesystem_uuid: None,
                 },
             ],
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
     storage.partition_projection_publish(DS_ID).unwrap();

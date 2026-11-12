@@ -1941,7 +1941,7 @@ fn assert_linux_artifact_source_paths_include(conn: &Connection, paths: &[&str])
 fn lvm_root_partition_record(
     conn: &Connection,
     ds_id: &DataSourceId,
-) -> persistence_fjall::PartitionRecord {
+) -> persistence_source::fjall::PartitionRecord {
     app_services::partition_query_service::PartitionQueryRepo::new(conn)
         .find_by_data_source(&ds_id.0)
         .unwrap()

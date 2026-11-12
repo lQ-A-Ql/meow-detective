@@ -503,7 +503,7 @@ fn evidence_read_failure_remains_retryable_and_is_not_checkpointed() {
     let checkpoint_count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM source_meta
-             WHERE key LIKE 'analysis_candidate_scan:%'",
+             WHERE key GLOB 'analysis_candidate_scan:*'",
             [],
             |row| row.get(0),
         )

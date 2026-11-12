@@ -1,6 +1,6 @@
 use super::{RecoveryDisposition, StorageRecoveryError, StorageRecoveryItem};
 use crate::{source_db, storage_runtime::ReadOnlySourceStorageHandle};
-use persistence_fjall::{
+use persistence_source::fjall::{
     scan_recovery_consistency, BatchReceiptState, DatabaseConfig, RecoveryScan, RecoveryState,
     SourceBuildLayout, SourceStore, SOURCE_GENERATION_MANIFEST_FILE,
 };
@@ -188,7 +188,10 @@ fn operation_receipt(
 
 fn scan_consistency(
     storage: &OperationStorage,
-) -> Result<persistence_fjall::RecoveryConsistencyReport, persistence_fjall::FjallStorageError> {
+) -> Result<
+    persistence_source::fjall::RecoveryConsistencyReport,
+    persistence_source::fjall::FjallStorageError,
+> {
     scan_recovery_consistency(RecoveryScan {
         build_path: &storage.layout.build_path(),
         published_path: &storage.layout.published_path(),
@@ -202,8 +205,8 @@ fn publish_sealed_generation(
     source_id: &str,
     storage: &mut OperationStorage,
     report: &mut Result<
-        persistence_fjall::RecoveryConsistencyReport,
-        persistence_fjall::FjallStorageError,
+        persistence_source::fjall::RecoveryConsistencyReport,
+        persistence_source::fjall::FjallStorageError,
     >,
 ) -> Result<(), StorageRecoveryError> {
     let source_generation = storage
@@ -229,26 +232,29 @@ fn publish_sealed_generation(
                 return Ok(());
             }
         };
-    let manifest = match persistence_fjall::verify_source_generation(&build_store, source_id) {
-        Ok(manifest) => manifest,
-        Err(error) => {
-            *report = Err(error);
-            return Ok(());
-        }
-    };
+    let manifest =
+        match persistence_source::fjall::verify_source_generation(&build_store, source_id) {
+            Ok(manifest) => manifest,
+            Err(error) => {
+                *report = Err(error);
+                return Ok(());
+            }
+        };
     if storage
         .recovered_digest
         .as_deref()
         .or(operation.expected_batch_digest.as_deref())
         .is_some_and(|digest| digest != manifest.projection_batch_digest)
     {
-        *report = Err(persistence_fjall::FjallStorageError::InvalidEnvelope(
-            "SQLite operation digest differs from source generation receipt".to_owned(),
-        ));
+        *report = Err(
+            persistence_source::fjall::FjallStorageError::InvalidEnvelope(
+                "SQLite operation digest differs from source generation receipt".to_owned(),
+            ),
+        );
         return Ok(());
     }
     drop(build_store);
-    if let Err(error) = persistence_fjall::publish_source_generation(
+    if let Err(error) = persistence_source::fjall::publish_source_generation(
         storage.layout.build_path(),
         storage.layout.published_path(),
     ) {
@@ -257,9 +263,11 @@ fn publish_sealed_generation(
     }
     storage.handle = open_source(case_root, source_id);
     let Some(handle) = storage.handle.as_ref() else {
-        *report = Err(persistence_fjall::FjallStorageError::InvalidBuildPath(
-            storage.layout.published_path().display().to_string(),
-        ));
+        *report = Err(
+            persistence_source::fjall::FjallStorageError::InvalidBuildPath(
+                storage.layout.published_path().display().to_string(),
+            ),
+        );
         return Ok(());
     };
     storage.receipt = receipt_state(
@@ -330,8 +338,8 @@ fn validate_published_generation_receipt(
 
 fn recovery_item(
     report: Result<
-        persistence_fjall::RecoveryConsistencyReport,
-        persistence_fjall::FjallStorageError,
+        persistence_source::fjall::RecoveryConsistencyReport,
+        persistence_source::fjall::FjallStorageError,
     >,
     operation: &StorageOperationRecord,
     source_id: &str,
@@ -424,7 +432,7 @@ fn source_import_receipt_state_from_store(
     source_id: &str,
     expected_digest: Option<&str>,
 ) -> Result<(BatchReceiptState, Option<String>), StorageRecoveryError> {
-    let manifest = match persistence_fjall::verify_source_generation(store, source_id) {
+    let manifest = match persistence_source::fjall::verify_source_generation(store, source_id) {
         Ok(manifest) => manifest,
         Err(error) => return Ok((invalid_manifest_receipt_state(&error), None)),
     };
@@ -447,11 +455,13 @@ fn decode_batch_digest(value: &str) -> Result<[u8; 32], StorageRecoveryError> {
 }
 
 fn invalid_manifest_receipt_state(
-    error: &persistence_fjall::FjallStorageError,
+    error: &persistence_source::fjall::FjallStorageError,
 ) -> BatchReceiptState {
     match error {
-        persistence_fjall::FjallStorageError::MissingManifest(_)
-        | persistence_fjall::FjallStorageError::MissingSeal(_) => BatchReceiptState::Missing,
+        persistence_source::fjall::FjallStorageError::MissingManifest(_)
+        | persistence_source::fjall::FjallStorageError::MissingSeal(_) => {
+            BatchReceiptState::Missing
+        }
         _ => BatchReceiptState::Corrupt,
     }
 }

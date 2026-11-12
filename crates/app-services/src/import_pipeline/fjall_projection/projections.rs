@@ -1,5 +1,5 @@
 use crate::storage_runtime::ReadWriteSourceStorageHandle;
-use persistence_fjall::{
+use persistence_source::fjall::{
     ArtifactRecordStore, CatalogRecordStore, PersistMode, ScanDirection, SourceStore,
     TimelineRecordStore,
 };

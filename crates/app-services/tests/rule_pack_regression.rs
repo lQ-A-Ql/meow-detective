@@ -7,7 +7,7 @@ use app_services::rule_pack::{
     V2_STANDARD_TOML,
 };
 use domain::{EdgeType, NodeType};
-use entity_phase4_support::{case_db, insert_artifact, insert_graph_node, seed_file, CASE_ID};
+use entity_phase4_support::{insert_artifact, insert_graph_node, seed_file, source_db, CASE_ID};
 use persistence_sqlite::repositories::graph_repo::GraphRepo;
 use serde_json::Value;
 
@@ -145,7 +145,7 @@ fn validator_rejects_empty_manifest_and_unknown_confidence() {
 
 #[test]
 fn path_rule_executes_and_projects_provenance() {
-    let conn = case_db();
+    let conn = source_db();
     insert_graph_node(&conn, "file-1", NodeType::File, "cmd.exe", &[]);
     seed_file(&conn, "file-1", "C:/Windows/System32/cmd.exe", "cmd.exe");
     let mut attrs = BTreeMap::new();
@@ -179,7 +179,7 @@ fn path_rule_executes_and_projects_provenance() {
 
 #[test]
 fn filename_rule_matches_prefetch_executable() {
-    let conn = case_db();
+    let conn = source_db();
     insert_graph_node(&conn, "file-1", NodeType::File, "cmd.exe", &[]);
     seed_file(&conn, "file-1", "C:/Windows/System32/cmd.exe", "cmd.exe");
     let mut attrs = BTreeMap::new();
@@ -212,7 +212,7 @@ fn filename_rule_matches_prefetch_executable() {
 
 #[test]
 fn incremental_execution_skips_completed_rule() {
-    let conn = case_db();
+    let conn = source_db();
     insert_graph_node(&conn, "file-1", NodeType::File, "cmd.exe", &[]);
     seed_file(&conn, "file-1", "C:/Windows/System32/cmd.exe", "cmd.exe");
     let mut attrs = BTreeMap::new();
@@ -241,7 +241,7 @@ fn unsupported_source_types_return_zero() {
             "source_type = \"timeline_event\"",
         )
         .replace("source_family = \"LNK\"", "source_family = \"EvtxEvent\"");
-    let conn = case_db();
+    let conn = source_db();
     let pack = parse_rule_pack(&source).expect("parse timeline rule");
     assert_eq!(
         execute_rule_pack(&conn, CASE_ID, &pack).expect("execute unsupported rule"),
@@ -251,7 +251,7 @@ fn unsupported_source_types_return_zero() {
 
 #[test]
 fn missing_source_artifacts_and_builtin_pack_are_safe() {
-    let conn = case_db();
+    let conn = source_db();
     let minimal = parse_rule_pack(MINIMAL_PACK).expect("parse minimal pack");
     assert_eq!(
         execute_rule_pack(&conn, CASE_ID, &minimal).expect("execute empty pack inputs"),

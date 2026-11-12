@@ -178,14 +178,15 @@ fn enumerate_native_catalog(
             "enumeration source identity mismatch".into(),
         ));
     }
-    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let repository =
+        persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
     let root_record = persistence_source::detail::file_record(root_entry);
     let mut walker = ChildBatchWalker::new(root_entry.id.clone());
     let result = repository.replace_subtree_streamed(
         &source_id,
         &root_record,
         0,
-        persistence_fjall::PersistMode::SyncAll,
+        persistence_source::fjall::PersistMode::SyncAll,
         || {
             walker
                 .next_batch(fs, data_source_id, progress_fn, cancel_token)
@@ -201,10 +202,10 @@ fn enumerate_native_catalog(
     );
     match result {
         Ok(_) => Ok(Some(walker.into_stats())),
-        Err(persistence_fjall::CatalogStreamError::Storage(error)) => {
+        Err(persistence_source::fjall::CatalogStreamError::Storage(error)) => {
             Err(DbError::System(error.to_string()))
         }
-        Err(persistence_fjall::CatalogStreamError::Producer(error)) => Err(error),
+        Err(persistence_source::fjall::CatalogStreamError::Producer(error)) => Err(error),
     }
 }
 
@@ -240,7 +241,7 @@ fn enumerate_sqlite_catalog(
                 )
                 .map_err(|error| DbError::System(error.to_string()))?;
                 catalog
-                    .persist(persistence_fjall::PersistMode::SyncAll)
+                    .persist(persistence_source::fjall::PersistMode::SyncAll)
                     .map_err(|error| DbError::System(error.to_string()))?;
                 crate::import_pipeline::mark_catalog_projection_seeded(catalog, &data_source_id.0)
                     .map_err(|error| DbError::System(error.to_string()))?;

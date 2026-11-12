@@ -1,5 +1,5 @@
 use domain::{CaseId, DataSourceId, NestedEvidenceLineage};
-use persistence_fjall::{ParserRecord, ScanDirection};
+use persistence_source::fjall::{ParserRecord, ScanDirection};
 use persistence_sqlite::repositories::nested_evidence_repo::NestedEvidenceRepo;
 use rusqlite::Connection;
 use thiserror::Error;

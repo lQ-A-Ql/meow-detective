@@ -1,4 +1,4 @@
-use persistence_fjall::{encode_key, KeyPart, PersistMode, VersionedEnvelope};
+use persistence_source::fjall::{encode_key, KeyPart, PersistMode, VersionedEnvelope};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use transport::CommandError;
@@ -50,7 +50,7 @@ pub(super) fn publish_projection_marker(
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let mut receipt = source
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
             PersistMode::SyncAll,
@@ -72,7 +72,7 @@ pub(super) fn publish_projection_marker(
             .map_err(|error| CommandError::internal(error.to_string()))?;
         receipt = source
             .write_envelope(
-                persistence_fjall::KeyspaceName::Meta,
+                persistence_source::fjall::KeyspaceName::Meta,
                 key,
                 &marker,
                 PersistMode::SyncAll,
@@ -128,7 +128,11 @@ pub(super) fn analysis_projection_marker(
     .map_err(|error| CommandError::internal(error.to_string()))?;
     let snapshot = source.snapshot();
     let Some(envelope) = source
-        .read_envelope(&snapshot, persistence_fjall::KeyspaceName::Meta, &key)
+        .read_envelope(
+            &snapshot,
+            persistence_source::fjall::KeyspaceName::Meta,
+            &key,
+        )
         .map_err(|error| CommandError::internal(error.to_string()))?
     else {
         return Ok(None);
@@ -169,7 +173,7 @@ pub(super) fn write_analysis_projection_state(
     );
     source
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
             PersistMode::SyncAll,
@@ -192,7 +196,11 @@ pub(super) fn ensure_projection_building(
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let snapshot = source.snapshot();
     let current = source
-        .read_envelope(&snapshot, persistence_fjall::KeyspaceName::Meta, &key)
+        .read_envelope(
+            &snapshot,
+            persistence_source::fjall::KeyspaceName::Meta,
+            &key,
+        )
         .map_err(|error| CommandError::internal(error.to_string()))?;
     if current.is_some_and(|envelope| {
         envelope.record_kind == building_kind && envelope.source_id == source_id
@@ -209,7 +217,7 @@ pub(super) fn ensure_projection_building(
     );
     source
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
             PersistMode::SyncAll,
@@ -226,7 +234,11 @@ pub(super) fn catalog_projection_is_published(
     let key = encode_key("projection", &[KeyPart::Text(source_id.to_owned())])
         .map_err(|error| CommandError::internal(error.to_string()))?;
     Ok(source
-        .read_envelope(&snapshot, persistence_fjall::KeyspaceName::Meta, &key)
+        .read_envelope(
+            &snapshot,
+            persistence_source::fjall::KeyspaceName::Meta,
+            &key,
+        )
         .map_err(|error| CommandError::internal(error.to_string()))?
         .is_some_and(|envelope| {
             (envelope.record_kind == "source_projection_complete"

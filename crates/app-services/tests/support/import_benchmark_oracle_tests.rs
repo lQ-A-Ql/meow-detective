@@ -242,7 +242,7 @@ fn actual_import_search_preview_extraction_and_projection_retry_are_stable() {
                 &DataSourceId(source.into()),
             )
             .unwrap();
-            let invalidation_event = persistence_fjall::TimelineRecord {
+            let invalidation_event = persistence_source::fjall::TimelineRecord {
                 id: "__cursor-invalidation__".into(),
                 data_source_id: source.into(),
                 source_object_id: "__probe__".into(),
@@ -257,13 +257,16 @@ fn actual_import_search_preview_extraction_and_projection_retry_are_stable() {
                 attrs: Default::default(),
             };
             fjall
-                .timeline_upsert(&invalidation_event, persistence_fjall::PersistMode::SyncAll)
+                .timeline_upsert(
+                    &invalidation_event,
+                    persistence_source::fjall::PersistMode::SyncAll,
+                )
                 .unwrap();
             fjall
                 .timeline_delete(
                     source,
                     &invalidation_event.id,
-                    persistence_fjall::PersistMode::SyncAll,
+                    persistence_source::fjall::PersistMode::SyncAll,
                 )
                 .unwrap();
             drop(fjall);

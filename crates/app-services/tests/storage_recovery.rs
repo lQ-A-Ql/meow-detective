@@ -107,30 +107,30 @@ fn startup_recovery_publishes_a_sealed_import_generation_and_finishes_its_operat
     })
     .unwrap();
 
-    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         &case.case_root,
         &source_id.0,
         "attempt-1",
     )
     .unwrap();
     std::fs::create_dir_all(layout.build_path()).unwrap();
-    let build = persistence_fjall::SourceStore::open(
+    let build = persistence_source::fjall::SourceStore::open(
         layout.build_path(),
-        persistence_fjall::DatabaseConfig::default(),
+        persistence_source::fjall::DatabaseConfig::default(),
     )
     .unwrap();
     let projection_receipt = build
         .database()
         .write_batch(
-            &[persistence_fjall::WriteAction::Put {
-                keyspace: persistence_fjall::KeyspaceName::Meta,
+            &[persistence_source::fjall::WriteAction::Put {
+                keyspace: persistence_source::fjall::KeyspaceName::Meta,
                 key: b"projection-complete".to_vec(),
                 value: b"source-import".to_vec(),
             }],
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
-    persistence_fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation(
         &build,
         &source_id.0,
         "attempt-1",
@@ -149,7 +149,7 @@ fn startup_recovery_publishes_a_sealed_import_generation_and_finishes_its_operat
     assert!(report.items.iter().any(|item| {
         item.operation_id == "source-import:attempt-1"
             && item.disposition == RecoveryDisposition::Ready
-            && item.state == Some(persistence_fjall::RecoveryState::Published)
+            && item.state == Some(persistence_source::fjall::RecoveryState::Published)
     }));
     assert!(!layout.build_path().exists());
     assert!(layout.published_path().is_dir());
@@ -201,30 +201,30 @@ fn startup_recovery_reports_a_missing_generation_seal_without_aborting() {
     })
     .unwrap();
 
-    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         &case.case_root,
         &source_id.0,
         "missing-seal-attempt",
     )
     .unwrap();
     std::fs::create_dir_all(layout.build_path()).unwrap();
-    let build = persistence_fjall::SourceStore::open(
+    let build = persistence_source::fjall::SourceStore::open(
         layout.build_path(),
-        persistence_fjall::DatabaseConfig::default(),
+        persistence_source::fjall::DatabaseConfig::default(),
     )
     .unwrap();
     let receipt = build
         .database()
         .write_batch(
-            &[persistence_fjall::WriteAction::Put {
-                keyspace: persistence_fjall::KeyspaceName::Meta,
+            &[persistence_source::fjall::WriteAction::Put {
+                keyspace: persistence_source::fjall::KeyspaceName::Meta,
                 key: b"projection-complete".to_vec(),
                 value: b"source-import".to_vec(),
             }],
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
-    persistence_fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation(
         &build,
         &source_id.0,
         "missing-seal-attempt",
@@ -235,7 +235,7 @@ fn startup_recovery_reports_a_missing_generation_seal_without_aborting() {
     std::fs::remove_file(
         layout
             .build_path()
-            .join(persistence_fjall::SOURCE_GENERATION_SEAL_FILE),
+            .join(persistence_source::fjall::SOURCE_GENERATION_SEAL_FILE),
     )
     .unwrap();
 
@@ -249,6 +249,6 @@ fn startup_recovery_reports_a_missing_generation_seal_without_aborting() {
     assert!(report.items.iter().any(|item| {
         item.operation_id == "source-import:missing-seal-attempt"
             && item.disposition == RecoveryDisposition::RecoveryRequired
-            && item.state == Some(persistence_fjall::RecoveryState::MissingSeal)
+            && item.state == Some(persistence_source::fjall::RecoveryState::MissingSeal)
     }));
 }

@@ -75,7 +75,7 @@ fn candidate_without_preseeded_placeholder_materializes_partition_subtree() {
     let store = persistence_source::detail::open_store_for_write(&conn)
         .unwrap()
         .unwrap();
-    persistence_fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation(
         &store,
         &data_source_id.0,
         "fixture",

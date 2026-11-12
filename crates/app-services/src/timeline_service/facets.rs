@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use persistence_fjall::{ScanDirection, TimelineRecordStore};
+use persistence_source::fjall::{ScanDirection, TimelineRecordStore};
 use persistence_sqlite::repositories::timeline_facets_repo::{
     TimelineFacetSummary, TimelineFacetsRepo,
 };

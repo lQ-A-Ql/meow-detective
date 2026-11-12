@@ -49,7 +49,7 @@ pub(super) fn open_source(
             None,
         )
         .map_err(command_error_from_db)?;
-    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         ctx.case_root,
         &source.id.0,
         &ctx.job_id.0,

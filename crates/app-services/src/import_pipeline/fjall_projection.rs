@@ -1,4 +1,4 @@
-use persistence_fjall::{encode_key, KeyPart, PersistMode, VersionedEnvelope};
+use persistence_source::fjall::{encode_key, KeyPart, PersistMode, VersionedEnvelope};
 use rusqlite::Connection;
 use std::time::Instant;
 
@@ -27,7 +27,7 @@ pub(super) fn mirror_source_records(
     source_id: &str,
 ) -> Result<String, CommandError> {
     ctx.report_job_progress(96, "Projecting queryable records...")?;
-    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         ctx.case_root,
         source_id,
         &ctx.job_id.0,
@@ -70,7 +70,7 @@ pub(crate) fn mirror_partition_data_for_import(
     partitions: &[crate::datasource_service::PartitionRecord],
     gpt_disk_guid: Option<&str>,
 ) -> Result<(), CommandError> {
-    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         ctx.case_root,
         source_id,
         &ctx.job_id.0,
@@ -144,7 +144,7 @@ pub(crate) fn mirror_analysis_outputs_from_connections(
             .and_then(|name| name.to_str())
             .and_then(|name| name.strip_prefix("source.fjall.build."))
         {
-            let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+            let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
                 case_root, source_id, attempt_id,
             )
             .map_err(|error| CommandError::internal(error.to_string()))?;
@@ -194,7 +194,7 @@ pub(crate) fn mark_catalog_projection_seeded(
     );
     source
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
             PersistMode::SyncAll,
@@ -270,7 +270,7 @@ fn mirror_source_records_from_connections_internal(
                 sqlite_projection_transaction
                     .commit()
                     .map_err(|error| CommandError::internal(error.to_string()))?;
-                return Ok(hex::encode(persistence_fjall::digest(&digest)));
+                return Ok(hex::encode(persistence_source::fjall::digest(&digest)));
             }
         }
     }

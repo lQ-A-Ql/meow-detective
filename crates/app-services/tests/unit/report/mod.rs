@@ -87,7 +87,7 @@ fn seal_report_source(connection: &rusqlite::Connection, source_id: &str) {
     let store = persistence_source::detail::open_store_for_write(connection)
         .expect("open report source store")
         .expect("configured report source store");
-    persistence_fjall::replace_source_generation(
+    persistence_source::fjall::replace_source_generation(
         &store,
         source_id,
         "report-fixture",

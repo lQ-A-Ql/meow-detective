@@ -23,7 +23,7 @@ pub(super) fn merge_enumeration_results(
     let started = Instant::now();
     let source_connection = ctx.source_connection()?;
     super::super::runtime::validate_current(ctx.runtime.as_deref())?;
-    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         ctx.case_root,
         &data_source.id.0,
         &ctx.job_id.0,

@@ -21,8 +21,10 @@ fn artifact(id: &str, family: &str, attrs: Value) -> Artifact {
 }
 
 fn source(root: &std::path::Path) -> Connection {
-    let conn = persistence_sqlite::open_or_create_source(&root.join("source.db")).unwrap();
+    let path = root.join("source.db");
+    let conn = persistence_sqlite::open_or_create_source(&path).unwrap();
     persistence_source::detail::configure_source_identity(&conn, "source").unwrap();
+    persistence_source::detail::configure_source_fjall(&conn, &path).unwrap();
     conn
 }
 

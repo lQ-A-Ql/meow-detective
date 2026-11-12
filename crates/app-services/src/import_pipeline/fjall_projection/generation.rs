@@ -1,4 +1,4 @@
-use persistence_fjall::{DatabaseConfig, PersistMode, SourceBuildLayout, SourceStore};
+use persistence_source::fjall::{DatabaseConfig, PersistMode, SourceBuildLayout, SourceStore};
 use persistence_sqlite::repositories::storage_control_repo::{
     StorageControlRepo, StorageOperationState,
 };
@@ -29,9 +29,9 @@ pub(super) fn publish(
     let source = SourceStore::open(root, DatabaseConfig::default())
         .map_err(|error| CommandError::internal(error.to_string()))?;
     if existing {
-        persistence_fjall::replace_source_generation(&source, source_id, attempt, digest)
+        persistence_source::fjall::replace_source_generation(&source, source_id, attempt, digest)
     } else {
-        persistence_fjall::seal_source_generation(&source, source_id, attempt, digest)
+        persistence_source::fjall::seal_source_generation(&source, source_id, attempt, digest)
     }
     .map_err(|error| CommandError::internal(error.to_string()))?;
     source
@@ -40,7 +40,7 @@ pub(super) fn publish(
         .map_err(|error| CommandError::internal(error.to_string()))?;
     drop(source);
     if !existing {
-        persistence_fjall::publish_source_generation(root, layout.published_path())
+        persistence_source::fjall::publish_source_generation(root, layout.published_path())
             .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     Ok(())

@@ -136,7 +136,7 @@ fn case_state_hash_changes_when_counts_change() {
     let store = persistence_source::detail::open_store_for_write(&source_conn)
         .expect("open source store")
         .expect("configured source store");
-    persistence_fjall::replace_source_generation(
+    persistence_source::fjall::replace_source_generation(
         &store,
         "ds-1",
         "step-recorder-fixture",

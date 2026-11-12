@@ -64,7 +64,7 @@ macro_rules! native_source_test_support {
                     let store = persistence_source::detail::open_store_for_write(&self.connection)
                         .expect("open native source store")
                         .expect("configured native source store");
-                    persistence_fjall::replace_source_generation(
+                    persistence_source::fjall::replace_source_generation(
                         &store,
                         &self.source_id,
                         "fixture",
@@ -91,12 +91,14 @@ macro_rules! native_source_test_support {
                 let store = persistence_source::detail::open_store_for_write(connection)
                     .expect("open native source store")
                     .expect("configured native source store");
-                let key = persistence_fjall::encode_key(
+                let key = persistence_source::fjall::encode_key(
                     "projection",
-                    &[persistence_fjall::KeyPart::Text(source_id.to_owned())],
+                    &[persistence_source::fjall::KeyPart::Text(
+                        source_id.to_owned(),
+                    )],
                 )
                 .expect("encode projection key");
-                let marker = persistence_fjall::VersionedEnvelope::new(
+                let marker = persistence_source::fjall::VersionedEnvelope::new(
                     "source_projection_complete",
                     1,
                     format!("projection:{source_id}"),
@@ -106,10 +108,10 @@ macro_rules! native_source_test_support {
                 );
                 store
                     .write_envelope(
-                        persistence_fjall::KeyspaceName::Meta,
+                        persistence_source::fjall::KeyspaceName::Meta,
                         key,
                         &marker,
-                        persistence_fjall::PersistMode::SyncAll,
+                        persistence_source::fjall::PersistMode::SyncAll,
                     )
                     .expect("mark source projection complete");
             }

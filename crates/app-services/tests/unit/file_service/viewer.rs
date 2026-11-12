@@ -85,7 +85,8 @@ fn insert_native_preview_file(
     let store = persistence_source::detail::open_store_for_write(&fixture.connection)
         .unwrap()
         .unwrap();
-    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let repository =
+        persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
     let mut record = repository
         .get(&repository.read_snapshot(), &fixture.source_id, id)
         .unwrap()
@@ -93,7 +94,7 @@ fn insert_native_preview_file(
     record.encrypted = encrypted;
     record.partition_index = partition_index;
     repository
-        .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+        .upsert(&record, persistence_source::fjall::PersistMode::SyncAll)
         .unwrap();
 }
 
@@ -101,14 +102,15 @@ fn set_native_encryption(fixture: &NativeSourceFixture, id: &str, encrypted: Opt
     let store = persistence_source::detail::open_store_for_write(&fixture.connection)
         .unwrap()
         .unwrap();
-    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let repository =
+        persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
     let mut record = repository
         .get(&repository.read_snapshot(), &fixture.source_id, id)
         .unwrap()
         .unwrap();
     record.encrypted = encrypted;
     repository
-        .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+        .upsert(&record, persistence_source::fjall::PersistMode::SyncAll)
         .unwrap();
 }
 
@@ -127,10 +129,10 @@ fn insert_native_partition(fixture: &NativeSourceFixture, index: u32, filesystem
     let store = persistence_source::detail::open_store_for_write(&fixture.connection)
         .unwrap()
         .unwrap();
-    persistence_fjall::PartitionRecordStore::from_source_store((*store).clone())
+    persistence_source::fjall::PartitionRecordStore::from_source_store((*store).clone())
         .replace_by_source(
             &fixture.source_id,
-            &[persistence_fjall::PartitionRecord {
+            &[persistence_source::fjall::PartitionRecord {
                 id: format!("partition-{index}"),
                 data_source_id: fixture.source_id.clone(),
                 partition_index: index,
@@ -152,7 +154,7 @@ fn insert_native_partition(fixture: &NativeSourceFixture, index: u32, filesystem
                 gpt_partition_uuid: None,
                 filesystem_uuid: None,
             }],
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
     drop(store);
@@ -1242,28 +1244,31 @@ fn setup_e01_preview_routing_case(
     );
     fixture.seal();
 
-    let partitions = [2u32, 4u32].map(|partition_index| persistence_fjall::PartitionRecord {
-        id: format!("routing-partition-{partition_index}"),
-        data_source_id: data_source_id.0.clone(),
-        partition_index,
-        name: format!("Partition {partition_index}"),
-        kind_label: "NTFS".to_string(),
-        status: "ready".to_string(),
-        type_guid: None,
-        offset: u64::from(partition_index) * 1_048_576,
-        length: 1_048_576,
-        filesystem: Some("NTFS".to_string()),
-        unlock_hint: None,
-        lvm_vg_uuid: None,
-        lvm_vg_name: None,
-        lvm_lv_uuid: None,
-        lvm_lv_name: None,
-        lvm_pv_offsets_json: None,
-        lvm_pv_sources_json: None,
-        gpt_disk_guid: None,
-        gpt_partition_uuid: None,
-        filesystem_uuid: None,
-    });
+    let partitions =
+        [2u32, 4u32].map(
+            |partition_index| persistence_source::fjall::PartitionRecord {
+                id: format!("routing-partition-{partition_index}"),
+                data_source_id: data_source_id.0.clone(),
+                partition_index,
+                name: format!("Partition {partition_index}"),
+                kind_label: "NTFS".to_string(),
+                status: "ready".to_string(),
+                type_guid: None,
+                offset: u64::from(partition_index) * 1_048_576,
+                length: 1_048_576,
+                filesystem: Some("NTFS".to_string()),
+                unlock_hint: None,
+                lvm_vg_uuid: None,
+                lvm_vg_name: None,
+                lvm_lv_uuid: None,
+                lvm_lv_name: None,
+                lvm_pv_offsets_json: None,
+                lvm_pv_sources_json: None,
+                gpt_disk_guid: None,
+                gpt_partition_uuid: None,
+                filesystem_uuid: None,
+            },
+        );
     let case_root = fixture
         .source_dir
         .parent()
@@ -1275,7 +1280,7 @@ fn setup_e01_preview_routing_case(
         .partition_replace_by_source(
             &data_source_id.0,
             &partitions,
-            persistence_fjall::PersistMode::Buffer,
+            persistence_source::fjall::PersistMode::Buffer,
         )
         .unwrap();
     storage
@@ -1305,14 +1310,15 @@ fn preview_descriptor_uses_persisted_partition_index() {
     let store = persistence_source::detail::open_store_for_write(&fixture.connection)
         .unwrap()
         .unwrap();
-    let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let catalog =
+        persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
     let mut record = catalog
         .get(&catalog.read_snapshot(), &fixture.source_id, &file_id.0)
         .unwrap()
         .unwrap();
     record.partition_index = Some(2);
     catalog
-        .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+        .upsert(&record, persistence_source::fjall::PersistMode::SyncAll)
         .unwrap();
     assert!(!descriptor_is_fresh(
         &fixture.connection,
@@ -1917,7 +1923,7 @@ fn e01_ntfs_lvm_record_uses_logical_volume_reader() {
     storage
         .partition_replace_by_source(
             &entry.data_source_id.0,
-            &[persistence_fjall::PartitionRecord {
+            &[persistence_source::fjall::PartitionRecord {
                 id: "partition-lvm-ntfs".to_string(),
                 data_source_id: entry.data_source_id.0.clone(),
                 partition_index: 4,
@@ -1939,7 +1945,7 @@ fn e01_ntfs_lvm_record_uses_logical_volume_reader() {
                 gpt_partition_uuid: None,
                 filesystem_uuid: None,
             }],
-            persistence_fjall::PersistMode::Buffer,
+            persistence_source::fjall::PersistMode::Buffer,
         )
         .unwrap();
     storage

@@ -1,5 +1,5 @@
 use domain::DataSourceId;
-use persistence_fjall::{ParserRecord, PersistMode};
+use persistence_source::fjall::{ParserRecord, PersistMode};
 use persistence_sqlite::repositories::android_analysis_repo::{
     AndroidAnalysisRepo, AndroidFactRecord, AndroidPackageRecord,
 };

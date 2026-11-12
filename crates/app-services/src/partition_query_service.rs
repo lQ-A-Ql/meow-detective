@@ -1,5 +1,5 @@
 use domain::DataSourceId;
-pub use persistence_fjall::PartitionRecord;
+pub use persistence_source::fjall::PartitionRecord;
 use persistence_sqlite::{
     repositories::storage_control_repo::{StorageControlRepo, StorageOperationState},
     DbError, DbResult,
@@ -78,7 +78,7 @@ impl<'a> PartitionQueryRepo<'a> {
                 data_source_id,
                 partition_index,
                 filesystem,
-                persistence_fjall::PersistMode::SyncAll,
+                persistence_source::fjall::PersistMode::SyncAll,
             )
             .map_err(storage_error)
     }
@@ -160,7 +160,7 @@ fn partition_records(
 
 fn read_partition_pages(
     source: &crate::storage_runtime::ReadOnlySourceStorageHandle,
-    snapshot: &persistence_fjall::SourceReadSnapshot,
+    snapshot: &persistence_source::fjall::SourceReadSnapshot,
     source_id: &str,
 ) -> DbResult<Vec<PartitionRecord>> {
     let mut cursor = None;
@@ -171,7 +171,7 @@ fn read_partition_pages(
                 snapshot,
                 source_id,
                 cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
+                persistence_source::fjall::ScanDirection::Forward,
                 256,
             )
             .map_err(storage_error)?;
@@ -223,7 +223,7 @@ fn active_import_storage_root(
             source_id.0
         )));
     }
-    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         case_root,
         &source_id.0,
         &operation.attempt_id,

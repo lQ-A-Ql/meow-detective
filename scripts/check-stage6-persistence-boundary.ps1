@@ -26,6 +26,45 @@ function Assert-ManifestLacksDependency([string]$RelativePath, [string]$Dependen
   }
 }
 
+function Get-WorkspaceDependencyManifests {
+  $manifests = New-Object System.Collections.Generic.List[string]
+  foreach ($root in @('crates', 'apps')) {
+    $absoluteRoot = Join-Path $repoRoot $root
+    if (-not (Test-Path -LiteralPath $absoluteRoot -PathType Container)) {
+      continue
+    }
+    foreach ($owner in Get-ChildItem -LiteralPath $absoluteRoot -Directory) {
+      $candidates = @(Join-Path $owner.FullName 'Cargo.toml')
+      foreach ($child in Get-ChildItem -LiteralPath $owner.FullName -Directory) {
+        $candidates += Join-Path $child.FullName 'Cargo.toml'
+      }
+      foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+          $manifests.Add($candidate)
+        }
+      }
+    }
+  }
+  return $manifests
+}
+
+function Assert-SingleFjallDependencyOwner {
+  $pattern = '(?m)^\s*persistence-fjall(\s*\.\w+\s*)?='
+  $offenders = New-Object System.Collections.Generic.List[string]
+  foreach ($manifest in Get-WorkspaceDependencyManifests) {
+    $relative = $manifest.Substring($repoRoot.Length + 1).Replace('\', '/')
+    if ($relative -ieq 'crates/persistence-source/Cargo.toml') {
+      continue
+    }
+    if ((Read-StrictUtf8 $manifest) -match $pattern) {
+      $offenders.Add($relative)
+    }
+  }
+  if ($offenders.Count -gt 0) {
+    $errors.Add('only crates/persistence-source/Cargo.toml may declare a persistence-fjall dependency; offenders: ' + ($offenders -join ', '))
+  }
+}
+
 function Assert-NoRustReference([string]$RelativeRoot, [string]$Pattern, [string]$Message) {
   $absoluteRoot = Join-Path $repoRoot $RelativeRoot
   if (-not (Test-Path -LiteralPath $absoluteRoot -PathType Container)) {
@@ -42,9 +81,13 @@ function Assert-NoRustReference([string]$RelativeRoot, [string]$Pattern, [string
 Assert-ManifestLacksDependency 'crates/persistence-sqlite/Cargo.toml' 'persistence-fjall'
 Assert-ManifestLacksDependency 'crates/persistence-sqlite/Cargo.toml' 'transport'
 Assert-ManifestLacksDependency 'apps/desktop/src-tauri/Cargo.toml' 'persistence-fjall'
+Assert-ManifestLacksDependency 'crates/app-services/Cargo.toml' 'persistence-fjall'
+Assert-SingleFjallDependencyOwner
 
 Assert-NoRustReference 'crates/persistence-sqlite/src' '\bpersistence_fjall\b' 'persistence-sqlite owns source detail storage'
 Assert-NoRustReference 'crates/persistence-sqlite/tests' '\bpersistence_fjall\b' 'persistence-sqlite tests own source detail storage'
+Assert-NoRustReference 'crates/app-services/src' '\bpersistence_fjall\b' 'app-services must consume the persistence-source fjall facade'
+Assert-NoRustReference 'crates/app-services/tests' '\bpersistence_fjall\b' 'app-services tests must consume the persistence-source fjall facade'
 Assert-NoRustReference 'crates/persistence-sqlite/src' '\btransport\s*::' 'persistence-sqlite depends on the transport contract'
 Assert-NoRustReference 'crates/persistence-sqlite/tests' '\btransport\s*::' 'persistence-sqlite tests depend on the transport contract'
 
@@ -76,4 +119,4 @@ if ($errors.Count -gt 0) {
   throw ("Stage 6 persistence boundary guard failed:`n- " + ($errors -join "`n- "))
 }
 
-Write-Host 'Stage 6 persistence boundary guard passed: persistence-sqlite is case-store only and Fjall source storage is owned by persistence-source'
+Write-Host 'Stage 6 persistence boundary guard passed: persistence-sqlite is case-store only, Fjall source storage is owned by persistence-source, and app-services consumes only the persistence-source fjall facade'

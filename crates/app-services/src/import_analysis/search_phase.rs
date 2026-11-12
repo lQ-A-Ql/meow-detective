@@ -5,8 +5,9 @@ use std::{
 };
 
 use crate::search_metadata_projection::{MetadataProjection, SearchProjectionMarker};
-use persistence_fjall::{CatalogEntryType, ScanDirection};
-use persistence_fjall::{KeyPart, PersistMode, VersionedEnvelope};
+use persistence_source::fjall::{
+    CatalogEntryType, KeyPart, PersistMode, ScanDirection, VersionedEnvelope,
+};
 use rusqlite::Connection;
 use search::{SearchIndex, SearchMetadataWriter};
 
@@ -119,12 +120,14 @@ fn write_search_marker(
         &marker_payload,
     )
     .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
-    let key =
-        persistence_fjall::encode_key("search", &[KeyPart::Text(options.data_source_id.0.clone())])
-            .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
+    let key = persistence_source::fjall::encode_key(
+        "search",
+        &[KeyPart::Text(options.data_source_id.0.clone())],
+    )
+    .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;
     source
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
             PersistMode::SyncAll,

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use app_services::staging::{PartitionEntry, PartitionStatus, StagingManifest};
-use persistence_fjall::{FileEntryRecord, ScanDirection};
+use persistence_source::fjall::{FileEntryRecord, ScanDirection};
 use rusqlite::{params, Connection};
 
 pub struct NativeSourceFixture {
@@ -98,7 +98,8 @@ pub fn catalog_records(conn: &Connection) -> Vec<FileEntryRecord> {
     let store = persistence_source::detail::open_store(conn)
         .unwrap()
         .expect("source store");
-    let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let catalog =
+        persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
     let snapshot = catalog.read_snapshot();
     let mut cursor = None;
     let mut records = Vec::new();

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use ceph_wire::RbdImageMetadata;
 use domain::DataSourceId;
-use persistence_fjall::{ParserRecord, PersistMode};
+use persistence_source::fjall::{ParserRecord, PersistMode};
 
 use super::*;
 use crate::ceph_reconstruction::ReplicaIdentity;
@@ -259,12 +259,14 @@ fn rbd_header_lookup_prefers_bounded_fjall_parser_projection() {
             PersistMode::SyncAll,
         )
         .expect("persist parser projection");
-    let marker_key = persistence_fjall::encode_key(
+    let marker_key = persistence_source::fjall::encode_key(
         "projection",
-        &[persistence_fjall::KeyPart::Text(source_id.0.clone())],
+        &[persistence_source::fjall::KeyPart::Text(
+            source_id.0.clone(),
+        )],
     )
     .expect("encode projection marker key");
-    let marker = persistence_fjall::VersionedEnvelope::new(
+    let marker = persistence_source::fjall::VersionedEnvelope::new(
         "source_projection_complete",
         1,
         format!("projection:{}", source_id.0),
@@ -274,7 +276,7 @@ fn rbd_header_lookup_prefers_bounded_fjall_parser_projection() {
     );
     source
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             marker_key,
             &marker,
             PersistMode::SyncAll,

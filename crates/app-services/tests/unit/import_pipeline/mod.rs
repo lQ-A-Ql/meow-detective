@@ -12,7 +12,7 @@ use crate::import_pipeline::{
 crate::native_source_test_support!();
 use crate::{case_service, import_analysis, import_precheck, search_service, staging};
 use chrono::{DateTime, TimeZone, Utc};
-use persistence_fjall::{FileEntryRecord, ScanDirection};
+use persistence_source::fjall::{FileEntryRecord, ScanDirection};
 use persistence_source::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::sync::atomic::AtomicBool;
@@ -845,7 +845,7 @@ fn logical_import_post_pipeline_indexes_marker_and_defers_artifact() {
                 [], |row| row.get(0),
             )?;
             assert_eq!(source_detail_tables,0);
-            let fjall_layout = persistence_fjall::SourceBuildLayout::for_case_source(
+            let fjall_layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
                 &active.case_root,
                 &data_source_id.0,
                 &job_id.0,
@@ -1223,7 +1223,7 @@ fn e01_full_import() {
             let root_system32 = catalog
                 .iter()
                 .filter(|record| {
-                    record.entry_type == persistence_fjall::CatalogEntryType::Directory
+                    record.entry_type == persistence_source::fjall::CatalogEntryType::Directory
                         && record.name.eq_ignore_ascii_case("System32")
                         && {
                             let path = normalized_path(record);
@@ -1235,7 +1235,7 @@ fn e01_full_import() {
             let root_windows = catalog
                 .iter()
                 .filter(|record| {
-                    record.entry_type == persistence_fjall::CatalogEntryType::Directory
+                    record.entry_type == persistence_source::fjall::CatalogEntryType::Directory
                         && record.name.eq_ignore_ascii_case("Windows")
                         && normalized_path(record).ends_with("/windows")
                 })

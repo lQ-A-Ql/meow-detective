@@ -90,7 +90,7 @@ fn insert_entries(tmp: &TempDir, source_id: &str, documents: &[SearchFileDocumen
     let store = persistence_source::detail::open_store_for_write(&connection)
         .unwrap()
         .unwrap();
-    persistence_fjall::replace_source_generation(
+    persistence_source::fjall::replace_source_generation(
         &store,
         source_id,
         "search-fixture",

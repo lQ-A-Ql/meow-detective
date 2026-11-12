@@ -8,7 +8,7 @@ use domain::{
     CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType,
     FileEntry, FileEntryId,
 };
-use persistence_fjall::ScanDirection;
+use persistence_source::fjall::ScanDirection;
 use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::{
     case_repo::CaseRepo,

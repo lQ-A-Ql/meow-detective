@@ -1,5 +1,5 @@
 use super::{AnalysisServiceError, FileEntry};
-use persistence_fjall::CatalogRecordStore;
+use persistence_source::fjall::CatalogRecordStore;
 use rusqlite::Connection;
 
 pub(super) fn collect_file_entries_from_fjall(

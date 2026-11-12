@@ -27,6 +27,16 @@ fn create_test_files(dir: &std::path::Path) {
     std::fs::write(dir.join("binary.dat"), vec![0u8; 100]).unwrap(); // Non-text file
 }
 
+fn open_source_connection(
+    active: &app_services::active_case::ActiveCase,
+    data_source: &domain::DataSource,
+) -> Result<rusqlite::Connection, persistence_sqlite::DbError> {
+    let connection = app_services::source_db::open_source_db(&active.case_root, &data_source.id)?;
+    persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
+        .upsert_source_local_metadata(&active.meta.id, data_source)?;
+    Ok(connection)
+}
+
 #[test]
 fn index_and_search_basic() {
     let (tmp, active) = setup_test_case();
@@ -40,26 +50,26 @@ fn index_and_search_basic() {
             let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
 
             // Insert data source
-            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn).insert(
-                &active.meta.id,
-                &domain::DataSource {
-                    id: ds_id.clone(),
-                    name: "test-evidence".into(),
-                    kind: domain::DataSourceKind::LogicalDirectory,
-                    source_path: evidence_dir.clone(),
-                    imported_at: chrono::Utc::now(),
-                    provenance: domain::DataSourceProvenance::unknown(),
-                },
-            )?;
+            let data_source = domain::DataSource {
+                id: ds_id.clone(),
+                name: "test-evidence".into(),
+                kind: domain::DataSourceKind::LogicalDirectory,
+                source_path: evidence_dir.clone(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            };
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+                .insert(&active.meta.id, &data_source)?;
+            let source_conn = open_source_connection(&active, &data_source)?;
 
             // Enumerate files
             let fs = LogicalFsReader::open(&evidence_dir, "test-evidence")
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            let stats = file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+            let stats = file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
             assert!(stats.file_count >= 3, "Expected at least 3 files");
 
             // Get files for indexing
-            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(&source_conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -81,7 +91,7 @@ fn index_and_search_basic() {
                 all_files.iter().take(10).map(|f| f.id.clone()).collect();
 
             let idx_result =
-                search_service::index_files(conn, &index_dir, &to_index, move |file_id| {
+                search_service::index_files(&source_conn, &index_dir, &to_index, move |file_id| {
                     let rel_path = path_map.get(&file_id.0)?;
                     let abs_path = ev.join(if rel_path.is_empty() { "." } else { rel_path });
                     std::fs::File::open(&abs_path)
@@ -127,23 +137,23 @@ fn search_with_pagination() {
         .with_conn(|conn| {
             let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
 
-            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn).insert(
-                &active.meta.id,
-                &domain::DataSource {
-                    id: ds_id.clone(),
-                    name: "test-evidence".into(),
-                    kind: domain::DataSourceKind::LogicalDirectory,
-                    source_path: evidence_dir.clone(),
-                    imported_at: chrono::Utc::now(),
-                    provenance: domain::DataSourceProvenance::unknown(),
-                },
-            )?;
+            let data_source = domain::DataSource {
+                id: ds_id.clone(),
+                name: "test-evidence".into(),
+                kind: domain::DataSourceKind::LogicalDirectory,
+                source_path: evidence_dir.clone(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            };
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+                .insert(&active.meta.id, &data_source)?;
+            let source_conn = open_source_connection(&active, &data_source)?;
 
             let fs = LogicalFsReader::open(&evidence_dir, "test-evidence")
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+            file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
 
-            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(&source_conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -163,7 +173,7 @@ fn search_with_pagination() {
             let to_index: Vec<domain::FileEntryId> =
                 all_files.iter().take(10).map(|f| f.id.clone()).collect();
 
-            search_service::index_files(conn, &index_dir, &to_index, move |file_id| {
+            search_service::index_files(&source_conn, &index_dir, &to_index, move |file_id| {
                 let rel_path = path_map.get(&file_id.0)?;
                 let abs_path = ev.join(if rel_path.is_empty() { "." } else { rel_path });
                 std::fs::File::open(&abs_path)
@@ -201,23 +211,23 @@ fn search_no_results() {
         .with_conn(|conn| {
             let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
 
-            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn).insert(
-                &active.meta.id,
-                &domain::DataSource {
-                    id: ds_id.clone(),
-                    name: "test-evidence".into(),
-                    kind: domain::DataSourceKind::LogicalDirectory,
-                    source_path: evidence_dir.clone(),
-                    imported_at: chrono::Utc::now(),
-                    provenance: domain::DataSourceProvenance::unknown(),
-                },
-            )?;
+            let data_source = domain::DataSource {
+                id: ds_id.clone(),
+                name: "test-evidence".into(),
+                kind: domain::DataSourceKind::LogicalDirectory,
+                source_path: evidence_dir.clone(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            };
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+                .insert(&active.meta.id, &data_source)?;
+            let source_conn = open_source_connection(&active, &data_source)?;
 
             let fs = LogicalFsReader::open(&evidence_dir, "test-evidence")
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+            file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
 
-            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(&source_conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -237,7 +247,7 @@ fn search_no_results() {
             let to_index: Vec<domain::FileEntryId> =
                 all_files.iter().take(10).map(|f| f.id.clone()).collect();
 
-            search_service::index_files(conn, &index_dir, &to_index, move |file_id| {
+            search_service::index_files(&source_conn, &index_dir, &to_index, move |file_id| {
                 let rel_path = path_map.get(&file_id.0)?;
                 let abs_path = ev.join(if rel_path.is_empty() { "." } else { rel_path });
                 std::fs::File::open(&abs_path)
@@ -299,23 +309,23 @@ fn reindex_keeps_existing_documents_for_unmodified_files() {
         .with_conn(|conn| {
             let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
 
-            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn).insert(
-                &active.meta.id,
-                &domain::DataSource {
-                    id: ds_id.clone(),
-                    name: "test-evidence".into(),
-                    kind: domain::DataSourceKind::LogicalDirectory,
-                    source_path: evidence_dir.clone(),
-                    imported_at: chrono::Utc::now(),
-                    provenance: domain::DataSourceProvenance::unknown(),
-                },
-            )?;
+            let data_source = domain::DataSource {
+                id: ds_id.clone(),
+                name: "test-evidence".into(),
+                kind: domain::DataSourceKind::LogicalDirectory,
+                source_path: evidence_dir.clone(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            };
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+                .insert(&active.meta.id, &data_source)?;
+            let source_conn = open_source_connection(&active, &data_source)?;
 
             let fs = LogicalFsReader::open(&evidence_dir, "test-evidence")
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+            file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
 
-            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(&source_conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -335,7 +345,7 @@ fn reindex_keeps_existing_documents_for_unmodified_files() {
             let to_index: Vec<domain::FileEntryId> =
                 all_files.iter().map(|f| f.id.clone()).collect();
 
-            search_service::index_files(conn, &index_dir, &to_index, {
+            search_service::index_files(&source_conn, &index_dir, &to_index, {
                 let path_map = path_map.clone();
                 let ev = ev.clone();
                 move |file_id| {
@@ -358,7 +368,7 @@ fn reindex_keeps_existing_documents_for_unmodified_files() {
                 .map(|file| file.id.clone())
                 .expect("readme file id");
 
-            search_service::index_files(conn, &index_dir, &[readme_id], {
+            search_service::index_files(&source_conn, &index_dir, &[readme_id], {
                 let path_map = path_map.clone();
                 let ev = ev.clone();
                 move |file_id| {

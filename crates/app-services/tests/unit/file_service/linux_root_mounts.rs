@@ -209,7 +209,7 @@ fn lvm_escaped_mapper_name_is_matched_against_stored_vg_and_lv_names() {
             &snapshot,
             "source",
             None,
-            persistence_fjall::ScanDirection::Forward,
+            persistence_source::fjall::ScanDirection::Forward,
             256,
         )
         .unwrap()
@@ -228,7 +228,7 @@ fn lvm_escaped_mapper_name_is_matched_against_stored_vg_and_lv_names() {
         .partition_replace_by_source(
             "source",
             &partitions,
-            persistence_fjall::PersistMode::Buffer,
+            persistence_source::fjall::PersistMode::Buffer,
         )
         .unwrap();
     storage.partition_projection_publish("source").unwrap();

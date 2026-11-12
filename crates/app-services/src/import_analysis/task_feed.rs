@@ -25,7 +25,8 @@ pub(super) fn count_analysis_file_tasks(
     let store = persistence_source::detail::open_store(&conn)?.ok_or_else(|| {
         ImportAnalysisError::Other("source detail storage is missing".to_string())
     })?;
-    let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let catalog =
+        persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
     catalog
         .file_count(&catalog.read_snapshot(), &data_source_id.0)
         .map_err(|error| ImportAnalysisError::Other(error.to_string()))
@@ -50,7 +51,8 @@ pub(super) fn fetch_analysis_file_page(
     let store = persistence_source::detail::open_store(conn)?.ok_or_else(|| {
         ImportAnalysisError::Other("source detail storage is missing".to_string())
     })?;
-    let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let catalog =
+        persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
     let page = catalog
         .list_files_by_path(
             &catalog.read_snapshot(),
@@ -135,7 +137,7 @@ pub(super) fn enqueue_analysis_tasks_prioritized(
     Ok(())
 }
 
-fn file_task_from_record(record: persistence_fjall::FileEntryRecord) -> FileTask {
+fn file_task_from_record(record: persistence_source::fjall::FileEntryRecord) -> FileTask {
     FileTask {
         id: FileEntryId(record.id),
         data_source_id: DataSourceId(record.data_source_id),

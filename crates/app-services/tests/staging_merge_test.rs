@@ -93,8 +93,10 @@ fn staging_merge_combines_two_partitions_and_reports_progress() {
     let unknown_encryption_rows = records
         .iter()
         .filter(|record| {
-            matches!(record.entry_type, persistence_fjall::CatalogEntryType::File)
-                && record.encrypted.is_none()
+            matches!(
+                record.entry_type,
+                persistence_source::fjall::CatalogEntryType::File
+            ) && record.encrypted.is_none()
         })
         .count();
     assert_eq!(unknown_encryption_rows, 5);
@@ -438,7 +440,8 @@ fn staging_analysis_projects_fjall_before_sqlite_commit() {
     let store = persistence_source::detail::open_store(&source.conn)
         .unwrap()
         .unwrap();
-    let artifacts = persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+    let artifacts =
+        persistence_source::fjall::ArtifactRecordStore::from_source_store((*store).clone());
     let snapshot = artifacts.read_snapshot();
     assert!(artifacts
         .get(&snapshot, "ds-analysis-fjall", "artifact-fjall")
@@ -517,7 +520,8 @@ fn staging_analysis_merge_failure_rolls_back_and_detaches_database() {
     let store = persistence_source::detail::open_store(&source.conn)
         .unwrap()
         .unwrap();
-    let artifacts = persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+    let artifacts =
+        persistence_source::fjall::ArtifactRecordStore::from_source_store((*store).clone());
     let snapshot = artifacts.read_snapshot();
     assert!(artifacts
         .get(&snapshot, "ds-analysis", "a1")

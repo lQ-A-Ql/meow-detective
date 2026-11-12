@@ -1,6 +1,6 @@
 use chrono::Utc;
 use domain::DataSourceId;
-use persistence_fjall::{CatalogRecordStore, ScanDirection};
+use persistence_source::fjall::{CatalogRecordStore, ScanDirection};
 use persistence_sqlite::{
     repositories::graph_repo::{FileTreeProjectionPage, FileTreeProjectionRecord, GraphRepo},
     DbError, DbResult,

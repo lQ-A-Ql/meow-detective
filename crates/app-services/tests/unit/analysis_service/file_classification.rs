@@ -15,13 +15,13 @@ fn native_source(entries: &[FileEntry]) -> test_support::NativeSourceFixture {
 fn native_source_with_unknown_encryption(entry: FileEntry) -> test_support::NativeSourceFixture {
     let source_id = entry.data_source_id.clone();
     let fixture = test_support::NativeSourceFixture::new(&source_id.0, "case-classification");
-    let record = persistence_fjall::FileEntryRecord {
+    let record = persistence_source::fjall::FileEntryRecord {
         id: entry.id.0,
         parent_id: entry.parent_id.map(|id| id.0),
         data_source_id: entry.data_source_id.0,
         path: entry.path,
         name: entry.name,
-        entry_type: persistence_fjall::CatalogEntryType::File,
+        entry_type: persistence_source::fjall::CatalogEntryType::File,
         size: entry.size,
         ext: entry.ext,
         deleted: entry.deleted,
@@ -41,8 +41,8 @@ fn native_source_with_unknown_encryption(entry: FileEntry) -> test_support::Nati
     let store = persistence_source::detail::open_store_for_write(&fixture.connection)
         .unwrap()
         .unwrap();
-    persistence_fjall::CatalogRecordStore::from_source_store((*store).clone())
-        .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+    persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone())
+        .upsert(&record, persistence_source::fjall::PersistMode::SyncAll)
         .unwrap();
     fixture.seal();
     fixture

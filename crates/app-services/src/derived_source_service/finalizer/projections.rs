@@ -166,7 +166,8 @@ pub(super) fn timeline_event_counts(
     let store = persistence_source::detail::open_store(connection)
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "Fjall source storage is unavailable".to_owned())?;
-    let repository = persistence_fjall::TimelineRecordStore::from_source_store((*store).clone());
+    let repository =
+        persistence_source::fjall::TimelineRecordStore::from_source_store((*store).clone());
     let snapshot = repository.read_snapshot();
     let mut cursor = None;
     let mut file = 0;
@@ -177,7 +178,7 @@ pub(super) fn timeline_event_counts(
                 &snapshot,
                 &source_id,
                 cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
+                persistence_source::fjall::ScanDirection::Forward,
                 512,
             )
             .map_err(|error| error.to_string())?;

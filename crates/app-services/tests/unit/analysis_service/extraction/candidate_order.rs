@@ -44,34 +44,36 @@ fn derived_source_connection() -> (tempfile::TempDir, Connection) {
         .expect("open Fjall source storage");
     let partitions = [1u32, 2u32]
         .into_iter()
-        .map(|partition_index| persistence_fjall::PartitionRecord {
-            id: format!("partition-{partition_index}"),
-            data_source_id: "derived-linux".to_owned(),
-            partition_index,
-            name: format!("Partition {partition_index}"),
-            kind_label: "XFS".to_owned(),
-            status: "ready".to_owned(),
-            type_guid: None,
-            offset: 0,
-            length: 4096,
-            filesystem: Some("XFS".to_owned()),
-            unlock_hint: None,
-            lvm_vg_uuid: None,
-            lvm_vg_name: None,
-            lvm_lv_uuid: None,
-            lvm_lv_name: None,
-            lvm_pv_offsets_json: None,
-            lvm_pv_sources_json: None,
-            gpt_disk_guid: None,
-            gpt_partition_uuid: None,
-            filesystem_uuid: None,
-        })
+        .map(
+            |partition_index| persistence_source::fjall::PartitionRecord {
+                id: format!("partition-{partition_index}"),
+                data_source_id: "derived-linux".to_owned(),
+                partition_index,
+                name: format!("Partition {partition_index}"),
+                kind_label: "XFS".to_owned(),
+                status: "ready".to_owned(),
+                type_guid: None,
+                offset: 0,
+                length: 4096,
+                filesystem: Some("XFS".to_owned()),
+                unlock_hint: None,
+                lvm_vg_uuid: None,
+                lvm_vg_name: None,
+                lvm_lv_uuid: None,
+                lvm_lv_name: None,
+                lvm_pv_offsets_json: None,
+                lvm_pv_sources_json: None,
+                gpt_disk_guid: None,
+                gpt_partition_uuid: None,
+                filesystem_uuid: None,
+            },
+        )
         .collect::<Vec<_>>();
     storage
         .partition_replace_by_source(
             "derived-linux",
             &partitions,
-            persistence_fjall::PersistMode::Buffer,
+            persistence_source::fjall::PersistMode::Buffer,
         )
         .expect("insert XFS partitions");
     storage

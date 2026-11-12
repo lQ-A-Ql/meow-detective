@@ -143,7 +143,7 @@ fn setup(image: &[u8]) -> RepairFixture {
     storage
         .partition_replace_by_source(
             "ds-xfs",
-            &[persistence_fjall::PartitionRecord {
+            &[persistence_source::fjall::PartitionRecord {
                 id: "ds-xfs:partition:0".to_string(),
                 data_source_id: "ds-xfs".to_string(),
                 partition_index: 0,
@@ -165,7 +165,7 @@ fn setup(image: &[u8]) -> RepairFixture {
                 gpt_partition_uuid: None,
                 filesystem_uuid: None,
             }],
-            persistence_fjall::PersistMode::Buffer,
+            persistence_source::fjall::PersistMode::Buffer,
         )
         .unwrap();
     storage.partition_projection_publish("ds-xfs").unwrap();
@@ -259,13 +259,13 @@ fn unsupported_second_volume_prevents_writes_to_the_first() {
             &snapshot,
             &fixture.data_source_id.0,
             None,
-            persistence_fjall::ScanDirection::Forward,
+            persistence_source::fjall::ScanDirection::Forward,
             16,
         )
         .unwrap()
         .records;
     let mut partitions = existing;
-    partitions.push(persistence_fjall::PartitionRecord {
+    partitions.push(persistence_source::fjall::PartitionRecord {
         id: "ds-xfs:partition:1".to_string(),
         data_source_id: "ds-xfs".to_string(),
         partition_index: 1,
@@ -291,7 +291,7 @@ fn unsupported_second_volume_prevents_writes_to_the_first() {
         .partition_replace_by_source(
             &fixture.data_source_id.0,
             &partitions,
-            persistence_fjall::PersistMode::Buffer,
+            persistence_source::fjall::PersistMode::Buffer,
         )
         .unwrap();
     storage

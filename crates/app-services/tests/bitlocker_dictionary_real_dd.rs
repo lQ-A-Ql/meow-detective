@@ -110,7 +110,7 @@ fn real_raw_bitlocker_dictionary_attack_uses_parallel_kdf() {
     partition_storage
         .partition_replace_by_source(
             &source.id.0,
-            &[persistence_fjall::PartitionRecord {
+            &[persistence_source::fjall::PartitionRecord {
                 id: format!("{}:partition:0", source.id.0),
                 data_source_id: source.id.0.clone(),
                 partition_index: 0,
@@ -132,7 +132,7 @@ fn real_raw_bitlocker_dictionary_attack_uses_parallel_kdf() {
                 gpt_partition_uuid: None,
                 filesystem_uuid: None,
             }],
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .expect("partition metadata");
     partition_storage

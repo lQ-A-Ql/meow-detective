@@ -251,7 +251,7 @@ fn private_liuyang_memory_image_completes_the_production_unlock_service() {
                 .partition_replace_by_source(
                     &source.id.0,
                     &[bitlocker_partition_record(&source.id.0, partition)],
-                    persistence_fjall::PersistMode::SyncAll,
+                    persistence_source::fjall::PersistMode::SyncAll,
                 )
                 .expect("persist BitLocker partition metadata");
             partition_storage
@@ -349,8 +349,8 @@ fn private_liuyang_structural_vmk_authentication_oracles() {
 fn bitlocker_partition_record(
     data_source_id: &str,
     partition: &PartitionRecord,
-) -> persistence_fjall::PartitionRecord {
-    persistence_fjall::PartitionRecord {
+) -> persistence_source::fjall::PartitionRecord {
+    persistence_source::fjall::PartitionRecord {
         id: format!("{data_source_id}:partition:{}", partition.index),
         data_source_id: data_source_id.to_string(),
         partition_index: partition.index as u32,
@@ -433,7 +433,7 @@ fn private_liuyang_memory_unlock_reconstructs_the_expected_recovery_password() {
                 .partition_replace_by_source(
                     &source.id.0,
                     &[bitlocker_partition_record(&source.id.0, partition)],
-                    persistence_fjall::PersistMode::SyncAll,
+                    persistence_source::fjall::PersistMode::SyncAll,
                 )
                 .expect("persist BitLocker partition metadata");
             partition_storage

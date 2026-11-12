@@ -213,7 +213,7 @@ fn persist_lineage(
     storage
         .parser_upsert(
             &super::lineage_parser_record(&lineage),
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .map_err(|error| MaterializeError::Source(error.to_string()))
 }

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
@@ -25,6 +26,49 @@ pub fn case_db() -> Connection {
     seed_case(&conn, CASE_ID, "Test Case");
     seed_source(&conn);
     conn
+}
+
+pub struct SourceFixture {
+    _root: tempfile::TempDir,
+    connection: Connection,
+}
+
+impl Deref for SourceFixture {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.connection
+    }
+}
+
+pub fn source_db() -> SourceFixture {
+    let root = tempfile::TempDir::new().expect("create source fixture root");
+    let case_root = root.path().join("case");
+    let conn = app_services::source_db::open_source_db(&case_root, &DataSourceId(SOURCE_ID.into()))
+        .expect("open source database");
+    conn.execute(
+        "INSERT INTO data_sources
+         (id, case_id, name, kind, source_path, imported_at)
+         VALUES (?1, ?2, 'test-source', 'directory', 'C:/evidence',
+                 '2026-01-01T00:00:00Z')",
+        rusqlite::params![SOURCE_ID, CASE_ID],
+    )
+    .expect("register source");
+    let store = persistence_source::detail::open_store_for_write(&conn)
+        .expect("open source detail store")
+        .expect("source detail store is configured");
+    persistence_source::fjall::replace_source_generation(
+        &store,
+        SOURCE_ID,
+        "rule-pack-fixture",
+        &"a".repeat(64),
+    )
+    .expect("seal source generation");
+    drop(store);
+    SourceFixture {
+        _root: root,
+        connection: conn,
+    }
 }
 
 pub fn seed_case(conn: &Connection, case_id: &str, name: &str) {

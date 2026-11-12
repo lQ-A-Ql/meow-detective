@@ -107,24 +107,24 @@ fn publish_native_catalog(
     let store = persistence_source::detail::open_store_for_write(connection)?.ok_or_else(|| {
         CephFsSourceError::InconsistentState("CephFS native source store is missing".to_string())
     })?;
-    let projection_digest = hex::encode(persistence_fjall::digest(
+    let projection_digest = hex::encode(persistence_source::fjall::digest(
         request.projection.manifest.projection_sha256.as_bytes(),
     ));
-    persistence_fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation(
         &store,
         &request.source.id.0,
         request.attempt_id,
         &projection_digest,
     )
     .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
-    let key = persistence_fjall::encode_key(
+    let key = persistence_source::fjall::encode_key(
         "projection",
-        &[persistence_fjall::KeyPart::Text(
+        &[persistence_source::fjall::KeyPart::Text(
             request.source.id.0.clone(),
         )],
     )
     .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
-    let marker = persistence_fjall::VersionedEnvelope::new(
+    let marker = persistence_source::fjall::VersionedEnvelope::new(
         "source_projection_complete",
         1,
         format!("projection:{}", request.source.id.0),
@@ -134,10 +134,10 @@ fn publish_native_catalog(
     );
     store
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
     Ok(())
@@ -146,7 +146,7 @@ fn publish_native_catalog(
 fn remove_incomplete_source_build(
     request: &CephFsSourceBuildRequest<'_>,
 ) -> CephFsSourceResult<()> {
-    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         request.case_root,
         &request.source.id.0,
         request.attempt_id,

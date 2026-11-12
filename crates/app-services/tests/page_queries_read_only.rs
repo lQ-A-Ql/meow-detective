@@ -93,14 +93,21 @@ fn publish_source_generation(conn: &Connection, source_id: &DataSourceId) {
     let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
-    persistence_fjall::seal_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))
-        .unwrap();
-    let key = persistence_fjall::encode_key(
-        "projection",
-        &[persistence_fjall::KeyPart::Text(source_id.0.clone())],
+    persistence_source::fjall::seal_source_generation(
+        &store,
+        &source_id.0,
+        "fixture",
+        &"a".repeat(64),
     )
     .unwrap();
-    let marker = persistence_fjall::VersionedEnvelope::new(
+    let key = persistence_source::fjall::encode_key(
+        "projection",
+        &[persistence_source::fjall::KeyPart::Text(
+            source_id.0.clone(),
+        )],
+    )
+    .unwrap();
+    let marker = persistence_source::fjall::VersionedEnvelope::new(
         "source_projection_complete",
         1,
         format!("projection:{}", source_id.0),
@@ -110,10 +117,10 @@ fn publish_source_generation(conn: &Connection, source_id: &DataSourceId) {
     );
     store
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
 }

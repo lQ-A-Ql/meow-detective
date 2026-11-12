@@ -1,5 +1,5 @@
 use super::ClusterRow;
-use persistence_fjall::{ScanDirection, TimelineRecordStore};
+use persistence_source::fjall::{ScanDirection, TimelineRecordStore};
 use rusqlite::Connection;
 use std::{
     cmp::Ordering,
@@ -58,7 +58,7 @@ pub(super) fn query(
 
 fn load_clusters(
     repository: &TimelineRecordStore,
-    snapshot: &persistence_fjall::SourceReadSnapshot,
+    snapshot: &persistence_source::fjall::SourceReadSnapshot,
     source_id: &str,
     page_capacity: usize,
 ) -> Result<(Vec<ClusterRow>, HashMap<String, u64>), TimelineServiceError> {
@@ -109,7 +109,7 @@ fn load_clusters(
 
 fn update_cluster(
     current: &mut Option<ClusterRow>,
-    record: &persistence_fjall::TimelineRecord,
+    record: &persistence_source::fjall::TimelineRecord,
     page_capacity: usize,
     retained: &mut BinaryHeap<RankedCluster>,
     totals: &mut HashMap<String, u64>,

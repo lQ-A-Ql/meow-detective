@@ -64,25 +64,30 @@ fn native_source() -> NativeSource {
             rusqlite::params![DATA_SOURCE_ID, CASE_ID],
         )
         .expect("register source");
-    let store = persistence_fjall::open_shared_source_store(
+    let store = persistence_source::fjall::open_shared_source_store(
         source_dir.join("source.fjall"),
-        persistence_fjall::DatabaseConfig::default(),
+        persistence_source::fjall::DatabaseConfig::default(),
     )
     .expect("open source store");
-    persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone())
+    persistence_source::fjall::ArtifactRecordStore::from_source_store((*store).clone())
         .upsert(
             &persistence_source::detail::artifact_record(&previous_artifact(), DATA_SOURCE_ID),
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .expect("seed previous artifact");
-    persistence_fjall::TimelineRecordStore::from_source_store((*store).clone())
+    persistence_source::fjall::TimelineRecordStore::from_source_store((*store).clone())
         .upsert(
             &persistence_source::detail::timeline_record(&previous_event(), DATA_SOURCE_ID),
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .expect("seed previous timeline event");
-    persistence_fjall::seal_source_generation(&store, DATA_SOURCE_ID, "fixture", &"a".repeat(64))
-        .expect("seal native source fixture");
+    persistence_source::fjall::seal_source_generation(
+        &store,
+        DATA_SOURCE_ID,
+        "fixture",
+        &"a".repeat(64),
+    )
+    .expect("seal native source fixture");
     drop(store);
     NativeSource {
         _root: root,
@@ -177,7 +182,7 @@ fn checkpoint_count(connection: &Connection) -> i64 {
     connection
         .query_row(
             "SELECT COUNT(*) FROM source_meta
-             WHERE key LIKE 'analysis_candidate_scan:%'",
+             WHERE key GLOB 'analysis_candidate_scan:*'",
             [],
             |row| row.get(0),
         )

@@ -2,7 +2,7 @@ use rusqlite::Connection;
 use std::time::Instant;
 
 use crate::storage_runtime::ReadWriteSourceStorageHandle;
-use persistence_fjall::PersistMode;
+use persistence_source::fjall::PersistMode;
 use transport::CommandError;
 
 const BATCH_SIZE: usize = 512;
@@ -104,7 +104,7 @@ fn mirror_parser_table(
                 serde_json::Value::String(table.to_owned()),
             );
         }
-        batch.push(persistence_fjall::ParserRecord {
+        batch.push(persistence_source::fjall::ParserRecord {
             id: format!("table:{table}:{row_id}"),
             data_source_id: source_id.to_owned(),
             family: family.to_owned(),
@@ -168,7 +168,7 @@ pub(super) fn mirror_linux_parser_record(
     let Ok(facts) = facts else { return Ok(()) };
     let payload = serde_json::from_str::<serde_json::Value>(&facts)
         .map_err(|error| CommandError::internal(error.to_string()))?;
-    let record = persistence_fjall::ParserRecord {
+    let record = persistence_source::fjall::ParserRecord {
         id: "linux:evidence-facts".to_owned(),
         data_source_id: source_id.to_owned(),
         family: "linux".to_owned(),
@@ -245,8 +245,8 @@ fn parser_record(
     source_id: &str,
     kind: &str,
     payload: serde_json::Value,
-) -> persistence_fjall::ParserRecord {
-    persistence_fjall::ParserRecord {
+) -> persistence_source::fjall::ParserRecord {
+    persistence_source::fjall::ParserRecord {
         id,
         data_source_id: source_id.to_owned(),
         family: "android".to_owned(),
@@ -259,7 +259,7 @@ fn parser_record(
 
 fn flush_parser_rows<I>(source: &ReadWriteSourceStorageHandle, rows: I) -> Result<(), CommandError>
 where
-    I: Iterator<Item = rusqlite::Result<persistence_fjall::ParserRecord>>,
+    I: Iterator<Item = rusqlite::Result<persistence_source::fjall::ParserRecord>>,
 {
     let mut batch = Vec::with_capacity(BATCH_SIZE);
     for row in rows {

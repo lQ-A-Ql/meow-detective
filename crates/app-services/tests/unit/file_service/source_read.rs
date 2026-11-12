@@ -92,12 +92,16 @@ fn source_read_hint(
 fn write_partition_records(
     case_root: &std::path::Path,
     source_id: &str,
-    records: &[persistence_fjall::PartitionRecord],
+    records: &[persistence_source::fjall::PartitionRecord],
 ) {
     let storage = crate::source_db::open_fjall_source_read_write(case_root, source_id)
         .expect("open Fjall source storage");
     storage
-        .partition_replace_by_source(source_id, records, persistence_fjall::PersistMode::Buffer)
+        .partition_replace_by_source(
+            source_id,
+            records,
+            persistence_source::fjall::PersistMode::Buffer,
+        )
         .expect("write Fjall partition records");
     storage
         .partition_projection_publish(source_id)
@@ -116,7 +120,7 @@ fn partition_metadata_fast_path_builds_and_caches_descriptor_without_file_entry_
     write_partition_records(
         case_root.path(),
         "derived-linux",
-        &[persistence_fjall::PartitionRecord {
+        &[persistence_source::fjall::PartitionRecord {
             id: "partition-2".to_owned(),
             data_source_id: "derived-linux".to_owned(),
             partition_index: 2,
@@ -195,7 +199,7 @@ fn native_metadata_hint_keeps_mft_identity_without_catalog_lookup() {
     write_partition_records(
         case_root.path(),
         "windows-e01",
-        &[persistence_fjall::PartitionRecord {
+        &[persistence_source::fjall::PartitionRecord {
             id: "partition-1".to_owned(),
             data_source_id: "windows-e01".to_owned(),
             partition_index: 1,
@@ -425,7 +429,7 @@ fn bitlocker_candidate_detection_is_scoped_to_the_bound_source() {
     write_partition_records(
         case_root.path(),
         "source-a",
-        &[persistence_fjall::PartitionRecord {
+        &[persistence_source::fjall::PartitionRecord {
             id: "locked".to_owned(),
             data_source_id: "source-a".to_owned(),
             partition_index: 2,
@@ -455,7 +459,7 @@ fn bitlocker_candidate_detection_is_scoped_to_the_bound_source() {
     write_partition_records(
         case_root.path(),
         "source-b",
-        &[persistence_fjall::PartitionRecord {
+        &[persistence_source::fjall::PartitionRecord {
             id: "plain".to_owned(),
             data_source_id: "source-b".to_owned(),
             partition_index: 2,
@@ -517,7 +521,7 @@ fn locked_bitlocker_candidate_fails_before_plaintext_filesystem_open() {
     write_partition_records(
         case_root.path(),
         "source-a",
-        &[persistence_fjall::PartitionRecord {
+        &[persistence_source::fjall::PartitionRecord {
             id: "locked".to_owned(),
             data_source_id: "source-a".to_owned(),
             partition_index: 0,

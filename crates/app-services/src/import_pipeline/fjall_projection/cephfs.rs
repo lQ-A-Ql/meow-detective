@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use persistence_fjall::PersistMode;
+use persistence_source::fjall::PersistMode;
 use rusqlite::Connection;
 use serde_json::{Map, Value};
 
@@ -18,7 +18,7 @@ pub(super) fn mirror_namespace_locators(
     let mut batch = Vec::with_capacity(BATCH_SIZE);
     for (entry_id, payload) in payloads {
         let payload = Value::Object(payload);
-        batch.push(persistence_fjall::ParserRecord {
+        batch.push(persistence_source::fjall::ParserRecord {
             id: format!("namespace-locator:{entry_id}"),
             data_source_id: source_id.to_owned(),
             family: "cephfs".to_owned(),

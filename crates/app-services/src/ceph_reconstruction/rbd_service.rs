@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::path::Path;
 
-use persistence_fjall::{ParserFieldQuery, ScanDirection};
+use persistence_source::fjall::{ParserFieldQuery, ScanDirection};
 use persistence_sqlite::repositories::ceph_bluestore_omap_repo::CephBluestoreOmapRepo;
 use thiserror::Error;
 
@@ -141,7 +141,7 @@ pub fn find_rbd_header_from_case_storage(
 }
 
 fn header_from_parser_record(
-    record: &persistence_fjall::ParserRecord,
+    record: &persistence_source::fjall::ParserRecord,
     inventory_id: &str,
     requested_image_id: &str,
 ) -> Result<

@@ -241,13 +241,18 @@ fn source_connection() -> SourceFixture {
             [],
         )
         .expect("register source database owner");
-    let store = persistence_fjall::open_shared_source_store(
+    let store = persistence_source::fjall::open_shared_source_store(
         source_dir.join("source.fjall"),
-        persistence_fjall::DatabaseConfig::default(),
+        persistence_source::fjall::DatabaseConfig::default(),
     )
     .expect("open source store");
-    persistence_fjall::seal_source_generation(&store, "source-linux", "fixture", &"a".repeat(64))
-        .expect("seal fixture generation");
+    persistence_source::fjall::seal_source_generation(
+        &store,
+        "source-linux",
+        "fixture",
+        &"a".repeat(64),
+    )
+    .expect("seal fixture generation");
     drop(store);
     SourceFixture {
         _root: root,
@@ -292,7 +297,8 @@ fn native_event_exists(connection: &Connection, id: &str) -> bool {
     let source_id = persistence_source::detail::source_id(connection)
         .expect("read source identity")
         .expect("source identity");
-    let repository = persistence_fjall::TimelineRecordStore::from_source_store((*store).clone());
+    let repository =
+        persistence_source::fjall::TimelineRecordStore::from_source_store((*store).clone());
     repository
         .get(&repository.read_snapshot(), &source_id, id)
         .expect("read native timeline event")
@@ -306,7 +312,8 @@ fn native_artifact_exists(connection: &Connection, id: &str) -> bool {
     let source_id = persistence_source::detail::source_id(connection)
         .expect("read source identity")
         .expect("source identity");
-    let repository = persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+    let repository =
+        persistence_source::fjall::ArtifactRecordStore::from_source_store((*store).clone());
     repository
         .get(&repository.read_snapshot(), &source_id, id)
         .expect("read native artifact")
@@ -328,11 +335,11 @@ fn inject_corrupt_timeline(connection: &Connection) {
     let store = persistence_source::detail::open_store_for_write(connection)
         .expect("open source store")
         .expect("configured source store");
-    let record_key = persistence_fjall::encode_key(
+    let record_key = persistence_source::fjall::encode_key(
         "timeline.record",
         &[
-            persistence_fjall::KeyPart::Text("source-linux".to_string()),
-            persistence_fjall::KeyPart::Text("corrupt-event".to_string()),
+            persistence_source::fjall::KeyPart::Text("source-linux".to_string()),
+            persistence_source::fjall::KeyPart::Text("corrupt-event".to_string()),
         ],
     )
     .expect("encode corrupt event key");
@@ -342,12 +349,12 @@ fn inject_corrupt_timeline(connection: &Connection) {
         .expect("fixture has an existing event")
         .timestamp;
     let sort_value = (timestamp.timestamp_micros() as u64) ^ (1_u64 << 63);
-    let source_key = persistence_fjall::encode_key(
+    let source_key = persistence_source::fjall::encode_key(
         "timeline.source",
         &[
-            persistence_fjall::KeyPart::Text("source-linux".to_string()),
-            persistence_fjall::KeyPart::InverseU64(sort_value),
-            persistence_fjall::KeyPart::Text("corrupt-event".to_string()),
+            persistence_source::fjall::KeyPart::Text("source-linux".to_string()),
+            persistence_source::fjall::KeyPart::InverseU64(sort_value),
+            persistence_source::fjall::KeyPart::Text("corrupt-event".to_string()),
         ],
     )
     .expect("encode corrupt event source index");
@@ -355,18 +362,18 @@ fn inject_corrupt_timeline(connection: &Connection) {
         .database()
         .write_batch(
             &[
-                persistence_fjall::WriteAction::Put {
-                    keyspace: persistence_fjall::KeyspaceName::TimelineRecords,
+                persistence_source::fjall::WriteAction::Put {
+                    keyspace: persistence_source::fjall::KeyspaceName::TimelineRecords,
                     key: record_key.clone(),
                     value: b"corrupt".to_vec(),
                 },
-                persistence_fjall::WriteAction::Put {
-                    keyspace: persistence_fjall::KeyspaceName::TimelineIndexes,
+                persistence_source::fjall::WriteAction::Put {
+                    keyspace: persistence_source::fjall::KeyspaceName::TimelineIndexes,
                     key: source_key,
                     value: record_key,
                 },
             ],
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .expect("inject corrupt timeline record");
 }
@@ -388,7 +395,7 @@ fn reseal_native_generation(connection: &Connection) {
     let store = persistence_source::detail::open_store_for_write(connection)
         .expect("open source store")
         .expect("configured source store");
-    persistence_fjall::replace_source_generation(
+    persistence_source::fjall::replace_source_generation(
         &store,
         "source-linux",
         "fixture-reseal",
@@ -772,7 +779,7 @@ fn internal_execution_reports_retryable_read_failures_without_checkpointing() {
         connection
             .query_row(
                 "SELECT COUNT(*) FROM source_meta
-                 WHERE key LIKE 'analysis_candidate_scan:%'",
+                 WHERE key GLOB 'analysis_candidate_scan:*'",
                 [],
                 |row| row.get::<_, i64>(0)
             )
@@ -1258,7 +1265,7 @@ fn plugin_reextraction_replaces_outputs_by_exact_extractor_id() {
 
     let checkpoint_count: i64 = connection
         .query_row(
-            "SELECT COUNT(*) FROM source_meta WHERE key LIKE 'analysis_candidate_scan:%'",
+            "SELECT COUNT(*) FROM source_meta WHERE key GLOB 'analysis_candidate_scan:*'",
             [],
             |row| row.get(0),
         )

@@ -583,7 +583,7 @@ fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
             partition_storage
                 .partition_replace_by_source(
                     &data_source_id.0,
-                    &[persistence_fjall::PartitionRecord {
+                    &[persistence_source::fjall::PartitionRecord {
                         id: format!("{}:{partition_index}", data_source_id.0),
                         data_source_id: data_source_id.0.clone(),
                         partition_index: partition_index as u32,
@@ -605,7 +605,7 @@ fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
                         gpt_partition_uuid: None,
                         filesystem_uuid: None,
                     }],
-                    persistence_fjall::PersistMode::SyncAll,
+                    persistence_source::fjall::PersistMode::SyncAll,
                 )
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             partition_storage

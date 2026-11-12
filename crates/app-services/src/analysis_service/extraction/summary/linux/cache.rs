@@ -1,5 +1,5 @@
 use crate::analysis_service::error::AnalysisServiceError;
-use persistence_fjall::{encode_key, KeyPart, KeyspaceName, PersistMode};
+use persistence_source::fjall::{encode_key, KeyPart, KeyspaceName, PersistMode};
 use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
 use rusqlite::Connection;

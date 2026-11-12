@@ -264,12 +264,13 @@ fn canonical_replacements(
     replacements
 }
 
-fn native_catalog_records(conn: &Connection) -> Vec<persistence_fjall::FileEntryRecord> {
+fn native_catalog_records(conn: &Connection) -> Vec<persistence_source::fjall::FileEntryRecord> {
     let source_id = persistence_source::detail::source_id(conn)
         .unwrap()
         .expect("source identity");
     let store = persistence_source::detail::require_source_store(conn).unwrap();
-    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let repository =
+        persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
     let snapshot = repository.read_snapshot();
     let mut cursor = None;
     let mut records = Vec::new();
@@ -279,7 +280,7 @@ fn native_catalog_records(conn: &Connection) -> Vec<persistence_fjall::FileEntry
                 &snapshot,
                 &source_id,
                 cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
+                persistence_source::fjall::ScanDirection::Forward,
                 512,
             )
             .unwrap();
@@ -306,8 +307,8 @@ fn native_catalog_snapshot(
                 Value::Text(record.name),
                 Value::Text(
                     match record.entry_type {
-                        persistence_fjall::CatalogEntryType::File => "file",
-                        persistence_fjall::CatalogEntryType::Directory => "directory",
+                        persistence_source::fjall::CatalogEntryType::File => "file",
+                        persistence_source::fjall::CatalogEntryType::Directory => "directory",
                     }
                     .into(),
                 ),
@@ -364,7 +365,8 @@ fn native_timeline_snapshot(
         .unwrap()
         .expect("source identity");
     let store = persistence_source::detail::require_source_store(conn).unwrap();
-    let repository = persistence_fjall::TimelineRecordStore::from_source_store((*store).clone());
+    let repository =
+        persistence_source::fjall::TimelineRecordStore::from_source_store((*store).clone());
     let snapshot = repository.read_snapshot();
     let mut cursor = None;
     let mut records = Vec::new();
@@ -374,7 +376,7 @@ fn native_timeline_snapshot(
                 &snapshot,
                 &source_id,
                 cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
+                persistence_source::fjall::ScanDirection::Forward,
                 512,
             )
             .unwrap();
@@ -841,7 +843,8 @@ fn oracle_normalizes_generated_generic_ids_and_preserves_native_mft_ids() {
         .iter()
         .any(|row| row.contains(&Value::Text("mft:1:25".into()))));
     let store = persistence_source::detail::require_source_store(&second.conn).unwrap();
-    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let repository =
+        persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
     let snapshot_value = repository.read_snapshot();
     let mut record = repository
         .get(&snapshot_value, "source", "mft:1:25")
@@ -851,12 +854,12 @@ fn oracle_normalizes_generated_generic_ids_and_preserves_native_mft_ids() {
         .delete(
             "source",
             "mft:1:25",
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
     record.id = "mft:1:26".into();
     repository
-        .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+        .upsert(&record, persistence_source::fjall::PersistMode::SyncAll)
         .unwrap();
     assert_ne!(
         native_catalog_snapshot(&first.conn, &a),

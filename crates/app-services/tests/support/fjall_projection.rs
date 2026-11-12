@@ -1,5 +1,7 @@
 use app_services::storage_runtime::ReadWriteSourceStorageHandle;
-use persistence_fjall::{encode_key, KeyPart, KeyspaceName, PersistMode, VersionedEnvelope};
+use persistence_source::fjall::{
+    encode_key, KeyPart, KeyspaceName, PersistMode, VersionedEnvelope,
+};
 
 pub fn mark_source_projection_complete(source: &ReadWriteSourceStorageHandle, source_id: &str) {
     let key = encode_key("projection", &[KeyPart::Text(source_id.to_owned())]).unwrap();

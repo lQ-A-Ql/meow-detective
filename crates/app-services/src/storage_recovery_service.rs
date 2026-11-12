@@ -1,6 +1,6 @@
 use crate::source_db;
 use artifact_storage::{ArtifactStore, ObjectAddress};
-use persistence_fjall::RecoveryState;
+use persistence_source::fjall::RecoveryState;
 use persistence_sqlite::repositories::storage_control_repo::{
     StorageControlRepo, StorageOperationState,
 };
@@ -17,7 +17,7 @@ pub enum StorageRecoveryError {
     #[error("storage recovery database operation failed: {0}")]
     Database(#[from] persistence_sqlite::DbError),
     #[error("storage recovery operation failed: {0}")]
-    Storage(#[from] persistence_fjall::FjallStorageError),
+    Storage(#[from] persistence_source::fjall::FjallStorageError),
     #[error("storage recovery source failed: {0}")]
     Source(String),
 }

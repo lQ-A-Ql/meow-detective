@@ -94,7 +94,7 @@ fn seed_source_db(case_root: &Path, data_source_id: &str) {
     let store = persistence_source::detail::open_store_for_write(&conn)
         .unwrap()
         .unwrap();
-    persistence_fjall::replace_source_generation(
+    persistence_source::fjall::replace_source_generation(
         &store,
         data_source_id,
         "source-routing-fixture",

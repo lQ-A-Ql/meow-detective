@@ -3,7 +3,7 @@ use crate::analysis_service::extraction::state::{
 };
 use chrono::Utc;
 use domain::{Artifact, ArtifactId, FileEntryId, TimelineEvent, TimelineEventId};
-use persistence_fjall::{
+use persistence_source::fjall::{
     ArtifactRecordStore, DatabaseConfig, PersistMode, SourceStore, TimelineRecordStore,
 };
 use rusqlite::Connection;
@@ -19,7 +19,7 @@ fn setup() -> (tempfile::TempDir, Connection, SourceStore) {
     persistence_source::detail::configure_source_identity(&connection, "source-1").unwrap();
     persistence_source::detail::configure_source_fjall(&connection, &source_dir.join("source.db"))
         .unwrap();
-    let shared = persistence_fjall::open_shared_source_store(
+    let shared = persistence_source::fjall::open_shared_source_store(
         source_dir.join("source.fjall"),
         DatabaseConfig::default(),
     )
@@ -45,8 +45,13 @@ fn setup() -> (tempfile::TempDir, Connection, SourceStore) {
             PersistMode::SyncAll,
         )
         .unwrap();
-    persistence_fjall::seal_source_generation(&store, "source-1", "attempt-1", &"a".repeat(64))
-        .unwrap();
+    persistence_source::fjall::seal_source_generation(
+        &store,
+        "source-1",
+        "attempt-1",
+        &"a".repeat(64),
+    )
+    .unwrap();
     (root, connection, store)
 }
 

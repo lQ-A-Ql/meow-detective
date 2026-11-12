@@ -1,7 +1,7 @@
 use crate::datasource_service;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use evidence_core::FsNode;
-use persistence_fjall::{CatalogRecordStore, CatalogStreamError};
+use persistence_source::fjall::{CatalogRecordStore, CatalogStreamError};
 use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::DbResult;
 use rusqlite::Connection;
@@ -124,7 +124,7 @@ fn replace_placeholder_native(
     let source_id = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| persistence_sqlite::DbError::System("source identity is missing".into()))?;
     let source = persistence_source::detail::require_source_store(conn)?;
-    let manifest = persistence_fjall::read_source_generation_manifest(&source, &source_id)
+    let manifest = persistence_source::fjall::read_source_generation_manifest(&source, &source_id)
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
     let repository = CatalogRecordStore::from_source_store((*source).clone());
     let mut root_entry = repository
@@ -156,7 +156,7 @@ fn replace_placeholder_native(
             u32::try_from(partition_index).map_err(|_| {
                 persistence_sqlite::DbError::System("partition index exceeds Fjall range".into())
             })?,
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
             || {
                 walker
                     .next_batch(fs, &root_entry.data_source_id, progress_fn, cancel_token)
@@ -176,7 +176,7 @@ fn replace_placeholder_native(
             }
             CatalogStreamError::Producer(error) => error,
         })?;
-    persistence_fjall::replace_source_generation(
+    persistence_source::fjall::replace_source_generation(
         &source,
         &source_id,
         &format!("partition-{}", Uuid::new_v4()),

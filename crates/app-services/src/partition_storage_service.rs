@@ -1,5 +1,5 @@
 use domain::DataSourceId;
-use persistence_fjall::{PartitionRecord, PersistMode};
+use persistence_source::fjall::{PartitionRecord, PersistMode};
 use thiserror::Error;
 
 pub(crate) use persistence_source::runtime::partition_marker::partition_projection_marker;

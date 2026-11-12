@@ -25,7 +25,7 @@ pub(super) fn enumerate_logical_source(
     let source_conn = ctx.source_conn.ok_or_else(|| {
         persistence_sqlite::DbError::System("source DB connection is not initialized".to_string())
     })?;
-    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         ctx.case_root,
         &data_source.id.0,
         &ctx.job_id.0,

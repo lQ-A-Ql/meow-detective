@@ -175,7 +175,7 @@ pub(super) fn finish_indexes(ctx: &ImportJobContext<'_>) -> Result<(), CommandEr
                 .ok_or_else(|| CommandError::internal("source generation is missing"))?;
             source
                 .database()
-                .persist(persistence_fjall::PersistMode::SyncAll)
+                .persist(persistence_source::fjall::PersistMode::SyncAll)
                 .map_err(|error| CommandError::internal(error.to_string()))
         },
     )?;

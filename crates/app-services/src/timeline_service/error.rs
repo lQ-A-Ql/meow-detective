@@ -5,7 +5,7 @@ pub enum TimelineServiceError {
     #[error("database error: {0}")]
     Db(#[from] persistence_sqlite::DbError),
     #[error("source storage error: {0}")]
-    Storage(#[from] persistence_fjall::FjallStorageError),
+    Storage(#[from] persistence_source::fjall::FjallStorageError),
     #[error("not found: {0}")]
     NotFound(String),
     #[error("invalid input: {0}")]

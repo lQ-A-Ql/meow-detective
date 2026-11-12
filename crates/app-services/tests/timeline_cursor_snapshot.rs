@@ -133,14 +133,21 @@ fn publish_source(conn: &Connection, source_id: &str) {
     let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
-    persistence_fjall::replace_source_generation(&store, source_id, "fixture", &"a".repeat(64))
-        .unwrap();
-    let key = persistence_fjall::encode_key(
-        "projection",
-        &[persistence_fjall::KeyPart::Text(source_id.to_string())],
+    persistence_source::fjall::replace_source_generation(
+        &store,
+        source_id,
+        "fixture",
+        &"a".repeat(64),
     )
     .unwrap();
-    let marker = persistence_fjall::VersionedEnvelope::new(
+    let key = persistence_source::fjall::encode_key(
+        "projection",
+        &[persistence_source::fjall::KeyPart::Text(
+            source_id.to_string(),
+        )],
+    )
+    .unwrap();
+    let marker = persistence_source::fjall::VersionedEnvelope::new(
         "source_projection_complete",
         1,
         format!("projection:{source_id}"),
@@ -150,10 +157,10 @@ fn publish_source(conn: &Connection, source_id: &str) {
     );
     store
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
 }

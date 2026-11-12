@@ -6,7 +6,7 @@ use domain::{
     Artifact, ArtifactId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance,
     EntryType, FileEntry, FileEntryId, TimelineEvent, TimelineEventId,
 };
-use persistence_fjall::{
+use persistence_source::fjall::{
     CatalogEntryType, FileEntryRecord, PersistMode, TimelineRecord, VersionedEnvelope,
 };
 use persistence_source::repositories::{
@@ -604,11 +604,18 @@ fn publish_source(conn: &rusqlite::Connection, source_id: &DataSourceId) {
     let store = persistence_source::detail::open_store_for_write(conn)
         .expect("open source store")
         .expect("configured source store");
-    persistence_fjall::replace_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))
-        .expect("publish source generation");
-    let key = persistence_fjall::encode_key(
+    persistence_source::fjall::replace_source_generation(
+        &store,
+        &source_id.0,
+        "fixture",
+        &"a".repeat(64),
+    )
+    .expect("publish source generation");
+    let key = persistence_source::fjall::encode_key(
         "projection",
-        &[persistence_fjall::KeyPart::Text(source_id.0.clone())],
+        &[persistence_source::fjall::KeyPart::Text(
+            source_id.0.clone(),
+        )],
     )
     .expect("encode projection key");
     let marker = VersionedEnvelope::new(
@@ -621,7 +628,7 @@ fn publish_source(conn: &rusqlite::Connection, source_id: &DataSourceId) {
     );
     store
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
             PersistMode::SyncAll,

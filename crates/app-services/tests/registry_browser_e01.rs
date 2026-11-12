@@ -50,7 +50,7 @@ fn registry_browser_reads_real_hives_and_hot_navigation_preserves_source_bytes()
         storage
             .partition_replace_by_source(
                 "sample-source",
-                &[persistence_fjall::PartitionRecord {
+                &[persistence_source::fjall::PartitionRecord {
                     id: "sample-partition".into(),
                     data_source_id: "sample-source".into(),
                     partition_index: 0,
@@ -72,7 +72,7 @@ fn registry_browser_reads_real_hives_and_hot_navigation_preserves_source_bytes()
                     gpt_partition_uuid: None,
                     filesystem_uuid: None,
                 }],
-                persistence_fjall::PersistMode::SyncAll,
+                persistence_source::fjall::PersistMode::SyncAll,
             )
             .unwrap();
         storage.partition_projection_publish("sample-source").unwrap();

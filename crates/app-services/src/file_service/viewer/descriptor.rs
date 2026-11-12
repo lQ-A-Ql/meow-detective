@@ -140,14 +140,14 @@ fn cephfs_descriptor(
                 let page = source
                     .parser_list_by_field(
                         &snapshot,
-                        persistence_fjall::ParserFieldQuery {
+                        persistence_source::fjall::ParserFieldQuery {
                             source_id: &entry.data_source_id.0,
                             kind: "ceph_fs_namespace_locator",
                             field: "entry_id",
                             value: &entry.id.0,
                         },
                         None,
-                        persistence_fjall::ScanDirection::Forward,
+                        persistence_source::fjall::ScanDirection::Forward,
                         2,
                     )
                     .map_err(|error| FileServiceError::other(error.to_string()))?;
@@ -216,7 +216,7 @@ fn case_root_from_connection(conn: &Connection) -> Option<PathBuf> {
 }
 
 fn cephfs_descriptor_from_parser_record(
-    record: &persistence_fjall::ParserRecord,
+    record: &persistence_source::fjall::ParserRecord,
     entry: &FileEntry,
 ) -> Result<PreviewCephFsDescriptor, FileServiceError> {
     let value = &record.payload;

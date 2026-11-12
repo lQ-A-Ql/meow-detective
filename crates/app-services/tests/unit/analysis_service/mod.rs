@@ -98,6 +98,7 @@ fn setup_case_db() -> (Connection, TempDir, DataSourceId) {
     DataSourceRepo::new(&source_connection)
         .upsert_source_local_metadata(&case.id, &source)
         .unwrap();
+    reseal_source_generation(&source_connection);
     (source_connection, tmp, ds_id)
 }
 
@@ -115,7 +116,7 @@ fn reseal_source_generation(connection: &Connection) {
     let source_id = persistence_source::detail::source_id(connection)
         .expect("read source identity")
         .expect("source identity is configured");
-    persistence_fjall::replace_source_generation(
+    persistence_source::fjall::replace_source_generation(
         &store,
         &source_id,
         "analysis-fixture",

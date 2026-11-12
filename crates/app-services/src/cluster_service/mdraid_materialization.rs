@@ -11,7 +11,7 @@ use super::mdraid::{
     discover_linux_evidence_set_mdraid, open_mdraid_reader, open_persisted_mdraid_reader,
     write_mdraid_descriptor, MdRaidArrayPlan, MdRaidPlanError,
 };
-use persistence_fjall::{PartitionRecord, PartitionRecordStore, PersistMode};
+use persistence_source::fjall::{PartitionRecord, PartitionRecordStore, PersistMode};
 use sha2::{Digest, Sha256};
 
 pub fn materialize_mdraid_array(
@@ -190,14 +190,14 @@ fn publish_mdraid_catalog_generation(
             .unwrap_or_default()
             .to_le_bytes(),
     );
-    persistence_fjall::replace_source_generation(
+    persistence_source::fjall::replace_source_generation(
         &store,
         &source.id.0,
         "mdraid-btrfs-catalog-v1",
         &hex::encode(digest.finalize()),
     )
     .map_err(|error| error.to_string())?;
-    persistence_fjall::verify_source_generation(&store, &source.id.0)
+    persistence_source::fjall::verify_source_generation(&store, &source.id.0)
         .map_err(|error| error.to_string())?;
     persistence_source::detail::bind_generation(source_conn, "source.fjall")
         .map_err(|error| error.to_string())?;

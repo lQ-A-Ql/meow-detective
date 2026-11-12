@@ -1,7 +1,9 @@
 use app_services::{case_service, partition_query_service::PartitionQueryRepo, source_db};
 use chrono::Utc;
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
-use persistence_fjall::{encode_key, KeyPart, PartitionRecord, PersistMode, VersionedEnvelope};
+use persistence_source::fjall::{
+    encode_key, KeyPart, PartitionRecord, PersistMode, VersionedEnvelope,
+};
 use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
     storage_control_repo::{StorageControlRepo, StorageOperationRecord, StorageOperationState},
@@ -57,7 +59,7 @@ fn published_partition_reads_use_fjall_and_unpublished_sources_fail() {
     );
     source
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             encode_key("projection", &[KeyPart::Text(source_id.0.clone())]).unwrap(),
             &marker,
             PersistMode::SyncAll,
@@ -137,7 +139,7 @@ fn active_import_partition_queries_read_the_attempt_build() {
         .partition_projection_publish(&source_id.0)
         .unwrap();
     drop(published);
-    let layout = persistence_fjall::SourceBuildLayout::for_case_source(
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         &active.case_root,
         &source_id.0,
         attempt_id,

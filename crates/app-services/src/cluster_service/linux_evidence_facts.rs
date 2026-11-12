@@ -171,7 +171,7 @@ fn load_persisted_linux_evidence_facts_from_fjall(
             &data_source_id.0,
             "evidence_facts",
             None,
-            persistence_fjall::ScanDirection::Forward,
+            persistence_source::fjall::ScanDirection::Forward,
             2,
         )
         .ok()?;

@@ -47,7 +47,7 @@ pub fn get_artifact_families_for_case(
                         &snapshot,
                         &source_id.0,
                         cursor.as_deref(),
-                        persistence_fjall::ScanDirection::Forward,
+                        persistence_source::fjall::ScanDirection::Forward,
                         256,
                     )
                     .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;
@@ -92,14 +92,14 @@ pub fn get_artifact_rows_for_case(
                         &source_id.0,
                         family,
                         cursor.as_deref(),
-                        persistence_fjall::ScanDirection::Forward,
+                        persistence_source::fjall::ScanDirection::Forward,
                         256,
                     ),
                     None => source.artifact_list_by_source(
                         &snapshot,
                         &source_id.0,
                         cursor.as_deref(),
-                        persistence_fjall::ScanDirection::Forward,
+                        persistence_source::fjall::ScanDirection::Forward,
                         256,
                     ),
                 }
@@ -138,7 +138,7 @@ fn trim_artifact_rows(rows: &mut Vec<ArtifactRowDto>) {
 }
 
 pub(crate) fn artifact_record_to_dto(
-    record: persistence_fjall::ArtifactRecord,
+    record: persistence_source::fjall::ArtifactRecord,
     source_id: &DataSourceId,
 ) -> ArtifactRowDto {
     let attrs = record.attrs;
@@ -199,7 +199,7 @@ pub(crate) fn get_source_attributed_artifact_family_counts_for_case(
                         &snapshot,
                         &source.id.0,
                         cursor.as_deref(),
-                        persistence_fjall::ScanDirection::Forward,
+                        persistence_source::fjall::ScanDirection::Forward,
                         256,
                     )
                     .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;

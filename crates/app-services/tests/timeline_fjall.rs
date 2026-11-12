@@ -5,7 +5,7 @@ use app_services::{
 };
 use chrono::{TimeZone, Utc};
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
-use persistence_fjall::{PersistMode, TimelineRecord};
+use persistence_source::fjall::{PersistMode, TimelineRecord};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use std::collections::BTreeMap;
 
@@ -67,8 +67,13 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
     let store = persistence_source::detail::open_store_for_write(&source_conn)
         .unwrap()
         .unwrap();
-    persistence_fjall::seal_source_generation(&store, &source.id.0, "fixture", &"a".repeat(64))
-        .unwrap();
+    persistence_source::fjall::seal_source_generation(
+        &store,
+        &source.id.0,
+        "fixture",
+        &"a".repeat(64),
+    )
+    .unwrap();
     drop(store);
     drop(source_conn);
 

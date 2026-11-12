@@ -80,7 +80,7 @@ fn validates_original_clean_hives_and_controlled_real_log_recovery() {
         storage
             .partition_replace_by_source(
                 "real-source",
-                &[persistence_fjall::PartitionRecord {
+                &[persistence_source::fjall::PartitionRecord {
                     id: "real-partition".into(),
                     data_source_id: "real-source".into(),
                     partition_index: 0,
@@ -102,7 +102,7 @@ fn validates_original_clean_hives_and_controlled_real_log_recovery() {
                     gpt_partition_uuid: None,
                     filesystem_uuid: None,
                 }],
-                persistence_fjall::PersistMode::SyncAll,
+                persistence_source::fjall::PersistMode::SyncAll,
             )
             .unwrap();
         storage.partition_projection_publish("real-source").unwrap();

@@ -71,7 +71,7 @@ fn source_generation_changing_during_a_read_discards_the_result() {
             let store = persistence_source::detail::open_store_for_write(&source_conn)
                 .unwrap()
                 .unwrap();
-            persistence_fjall::replace_source_generation(
+            persistence_source::fjall::replace_source_generation(
                 &store,
                 "source",
                 "registry-browser-session",

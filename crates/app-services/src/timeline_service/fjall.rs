@@ -3,7 +3,7 @@ use crate::source_db;
 use crate::storage_runtime::ReadOnlySourceStorageHandle;
 use chrono::{DateTime, Utc};
 use domain::{CaseId, DataSourceId, TimelineEvent, TimelineEventId};
-use persistence_fjall::{ScanDirection, SourceReadSnapshot, TimelineRecord};
+use persistence_source::fjall::{ScanDirection, SourceReadSnapshot, TimelineRecord};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use transport::{
@@ -152,8 +152,13 @@ fn resume_cursor(
         if revision != source_state.revision {
             let current_upper_bound =
                 source_upper_bound(&source, &snapshot, &source_id.0, context)?;
-            let crossed_frozen_boundary = current_upper_bound > source_state.snapshot_upper_bound;
-            if current_count <= source_state.count || crossed_frozen_boundary {
+            // Newer rows sort ahead of the frozen rows and are filtered by the upper
+            // bound, so ahead-only growth is harmless only until this source has
+            // consumed rows; backdated rows sort after the consumed prefix and stay
+            // excluded by the frozen count.
+            let grew_ahead = current_upper_bound > source_state.snapshot_upper_bound;
+            let ahead_shift = grew_ahead && source_state.consumed > 0;
+            if current_count <= source_state.count || ahead_shift {
                 return Err(invalid_cursor(format!(
                     "timeline snapshot changed for source {}",
                     source_id.0

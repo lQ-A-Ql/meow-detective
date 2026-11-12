@@ -3,7 +3,7 @@ use app_services::{
 };
 use chrono::Utc;
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, FileEntryId};
-use persistence_fjall::{CatalogEntryType, FileEntryRecord, PersistMode};
+use persistence_source::fjall::{CatalogEntryType, FileEntryRecord, PersistMode};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use transport::commands::GetFileRowsRequest;
 
@@ -154,8 +154,13 @@ fn file_browser_fjall_matches_visibility_sorting_and_orphan_root_rules() {
     let store = persistence_source::detail::open_store_for_write(&source_conn)
         .unwrap()
         .unwrap();
-    persistence_fjall::seal_source_generation(&store, &source.id.0, "fixture", &"a".repeat(64))
-        .unwrap();
+    persistence_source::fjall::seal_source_generation(
+        &store,
+        &source.id.0,
+        "fixture",
+        &"a".repeat(64),
+    )
+    .unwrap();
     drop(store);
     drop(source_conn);
 

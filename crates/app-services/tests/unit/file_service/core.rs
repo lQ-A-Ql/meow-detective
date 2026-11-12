@@ -30,6 +30,7 @@ fn standalone_file_entries_connection(source_id: &str) -> (tempfile::TempDir, Co
     let path = root.path().join("source.db");
     let conn = persistence_sqlite::open_or_create_source(&path).unwrap();
     persistence_source::detail::configure_source_identity(&conn, source_id).unwrap();
+    persistence_source::detail::configure_source_fjall(&conn, &path).unwrap();
     persistence_source::detail::open_store_for_write(&conn)
         .unwrap()
         .unwrap();
@@ -826,12 +827,12 @@ fn seed_ds_with_partition_name(conn: &Connection, ds_id: &str, index: u32, name:
             &snapshot,
             ds_id,
             None,
-            persistence_fjall::ScanDirection::Forward,
+            persistence_source::fjall::ScanDirection::Forward,
             256,
         )
         .unwrap()
         .records;
-    records.push(persistence_fjall::PartitionRecord {
+    records.push(persistence_source::fjall::PartitionRecord {
         id: format!("p-{index}"),
         data_source_id: ds_id.to_owned(),
         partition_index: index,
@@ -854,7 +855,11 @@ fn seed_ds_with_partition_name(conn: &Connection, ds_id: &str, index: u32, name:
         filesystem_uuid: None,
     });
     storage
-        .partition_replace_by_source(ds_id, &records, persistence_fjall::PersistMode::Buffer)
+        .partition_replace_by_source(
+            ds_id,
+            &records,
+            persistence_source::fjall::PersistMode::Buffer,
+        )
         .unwrap();
     storage.partition_projection_publish(ds_id).unwrap();
     assert_eq!(

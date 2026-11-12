@@ -4,6 +4,16 @@ use app_services::{case_service, file_service, timeline_service};
 use evidence_core::LogicalFsReader;
 use tempfile::TempDir;
 
+fn open_source_connection(
+    active: &app_services::active_case::ActiveCase,
+    data_source: &domain::DataSource,
+) -> Result<rusqlite::Connection, persistence_sqlite::DbError> {
+    let connection = app_services::source_db::open_source_db(&active.case_root, &data_source.id)?;
+    persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
+        .upsert_source_local_metadata(&active.meta.id, data_source)?;
+    Ok(connection)
+}
+
 fn setup_test_case() -> (TempDir, app_services::active_case::ActiveCase) {
     let tmp = TempDir::new().unwrap();
     let cases_dir = tmp.path().join("cases");
@@ -29,25 +39,25 @@ fn project_and_query_timeline() {
             let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
 
             // Insert data source
-            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn).insert(
-                &active.meta.id,
-                &domain::DataSource {
-                    id: ds_id.clone(),
-                    name: "test-evidence".into(),
-                    kind: domain::DataSourceKind::LogicalDirectory,
-                    source_path: evidence_dir.clone(),
-                    imported_at: chrono::Utc::now(),
-                    provenance: domain::DataSourceProvenance::unknown(),
-                },
-            )?;
+            let data_source = domain::DataSource {
+                id: ds_id.clone(),
+                name: "test-evidence".into(),
+                kind: domain::DataSourceKind::LogicalDirectory,
+                source_path: evidence_dir.clone(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            };
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+                .insert(&active.meta.id, &data_source)?;
+            let source_conn = open_source_connection(&active, &data_source)?;
 
             // Enumerate files
             let fs = LogicalFsReader::open(&evidence_dir, "test-evidence")
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+            file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
 
             // Get all files
-            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(&source_conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -61,12 +71,13 @@ fn project_and_query_timeline() {
             assert!(!all_files.is_empty(), "Expected files");
 
             // Project timeline
-            let tl_count = timeline_service::project_and_store_file_activity(conn, &all_files)
-                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let tl_count =
+                timeline_service::project_and_store_file_activity(&source_conn, &all_files)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(tl_count > 0, "Expected timeline events");
 
             // Query timeline
-            let result = timeline_service::query_timeline(conn, 0, 100)
+            let result = timeline_service::query_timeline(&source_conn, 0, 100)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(result.total > 0, "Expected total > 0");
             assert!(!result.items.is_empty(), "Expected items");
@@ -95,23 +106,23 @@ fn timeline_pagination() {
         .with_conn(|conn| {
             let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
 
-            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn).insert(
-                &active.meta.id,
-                &domain::DataSource {
-                    id: ds_id.clone(),
-                    name: "test-evidence".into(),
-                    kind: domain::DataSourceKind::LogicalDirectory,
-                    source_path: evidence_dir.clone(),
-                    imported_at: chrono::Utc::now(),
-                    provenance: domain::DataSourceProvenance::unknown(),
-                },
-            )?;
+            let data_source = domain::DataSource {
+                id: ds_id.clone(),
+                name: "test-evidence".into(),
+                kind: domain::DataSourceKind::LogicalDirectory,
+                source_path: evidence_dir.clone(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            };
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+                .insert(&active.meta.id, &data_source)?;
+            let source_conn = open_source_connection(&active, &data_source)?;
 
             let fs = LogicalFsReader::open(&evidence_dir, "test-evidence")
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+            file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
 
-            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(&source_conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -123,17 +134,18 @@ fn timeline_pagination() {
                 }
             }
 
-            let tl_count = timeline_service::project_and_store_file_activity(conn, &all_files)
-                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let tl_count =
+                timeline_service::project_and_store_file_activity(&source_conn, &all_files)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query with limit
-            let result1 = timeline_service::query_timeline(conn, 0, 2)
+            let result1 = timeline_service::query_timeline(&source_conn, 0, 2)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(result1.items.len(), 2.min(tl_count as usize));
             assert_eq!(result1.total, tl_count);
 
             // Query with offset
-            let result2 = timeline_service::query_timeline(conn, 2, 100)
+            let result2 = timeline_service::query_timeline(&source_conn, 2, 100)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(result2.total, tl_count);
             // Items may be empty if total <= 2
@@ -153,23 +165,23 @@ fn timeline_filtered_by_event_type() {
         .with_conn(|conn| {
             let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
 
-            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn).insert(
-                &active.meta.id,
-                &domain::DataSource {
-                    id: ds_id.clone(),
-                    name: "test-evidence".into(),
-                    kind: domain::DataSourceKind::LogicalDirectory,
-                    source_path: evidence_dir.clone(),
-                    imported_at: chrono::Utc::now(),
-                    provenance: domain::DataSourceProvenance::unknown(),
-                },
-            )?;
+            let data_source = domain::DataSource {
+                id: ds_id.clone(),
+                name: "test-evidence".into(),
+                kind: domain::DataSourceKind::LogicalDirectory,
+                source_path: evidence_dir.clone(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            };
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+                .insert(&active.meta.id, &data_source)?;
+            let source_conn = open_source_connection(&active, &data_source)?;
 
             let fs = LogicalFsReader::open(&evidence_dir, "test-evidence")
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+            file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
 
-            let repo = persistence_source::repositories::file_repo::FileRepo::new(conn);
+            let repo = persistence_source::repositories::file_repo::FileRepo::new(&source_conn);
             let roots = repo.find_roots(&ds_id)?;
             let mut all_files = Vec::new();
             let mut queue = roots;
@@ -181,16 +193,16 @@ fn timeline_filtered_by_event_type() {
                 }
             }
 
-            timeline_service::project_and_store_file_activity(conn, &all_files)
+            timeline_service::project_and_store_file_activity(&source_conn, &all_files)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query all events
-            let all = timeline_service::query_timeline(conn, 0, 1000)
+            let all = timeline_service::query_timeline(&source_conn, 0, 1000)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query filtered by FILE_CREATED
             let filtered = timeline_service::query_timeline_filtered(
-                conn,
+                &source_conn,
                 0,
                 1000,
                 None,

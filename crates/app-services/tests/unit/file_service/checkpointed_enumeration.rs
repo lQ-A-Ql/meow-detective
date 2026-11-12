@@ -193,7 +193,7 @@ fn completed_checkpointed_enumeration_returns_full_stats() {
 }
 
 fn catalog_row_count(connection: &rusqlite::Connection, source_id: &DataSourceId) -> u64 {
-    persistence_fjall::CatalogRecordStore::from_source_store(
+    persistence_source::fjall::CatalogRecordStore::from_source_store(
         (*persistence_source::detail::require_source_store(connection).unwrap()).clone(),
     )
     .count(
@@ -208,7 +208,8 @@ fn catalog_row_count(connection: &rusqlite::Connection, source_id: &DataSourceId
 
 fn unindexed_catalog_rows(connection: &rusqlite::Connection, source_id: &DataSourceId) -> u64 {
     let store = persistence_source::detail::require_source_store(connection).unwrap();
-    let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let repository =
+        persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
     let snapshot = repository.read_snapshot();
     let mut cursor = None;
     let mut unindexed = 0;
@@ -218,7 +219,7 @@ fn unindexed_catalog_rows(connection: &rusqlite::Connection, source_id: &DataSou
                 &snapshot,
                 &source_id.0,
                 cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
+                persistence_source::fjall::ScanDirection::Forward,
                 512,
             )
             .unwrap();

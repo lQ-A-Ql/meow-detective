@@ -1,6 +1,6 @@
 use app_services::{case_service, file_service};
 use evidence_core::LogicalFsReader;
-use persistence_fjall::{PersistMode, ScanDirection};
+use persistence_source::fjall::{PersistMode, ScanDirection};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use tempfile::TempDir;
 use transport::{commands::GetFileRowsRequest, dto::ViewerRangeRequestDto};
@@ -9,14 +9,21 @@ fn publish_source(source_conn: &rusqlite::Connection, source_id: &domain::DataSo
     let store = persistence_source::detail::open_store_for_write(source_conn)
         .unwrap()
         .unwrap();
-    persistence_fjall::seal_source_generation(&store, &source_id.0, "fixture", &"a".repeat(64))
-        .unwrap();
-    let key = persistence_fjall::encode_key(
-        "projection",
-        &[persistence_fjall::KeyPart::Text(source_id.0.clone())],
+    persistence_source::fjall::seal_source_generation(
+        &store,
+        &source_id.0,
+        "fixture",
+        &"a".repeat(64),
     )
     .unwrap();
-    let marker = persistence_fjall::VersionedEnvelope::new(
+    let key = persistence_source::fjall::encode_key(
+        "projection",
+        &[persistence_source::fjall::KeyPart::Text(
+            source_id.0.clone(),
+        )],
+    )
+    .unwrap();
+    let marker = persistence_source::fjall::VersionedEnvelope::new(
         "source_projection_complete",
         1,
         format!("projection:{}", source_id.0),
@@ -26,7 +33,7 @@ fn publish_source(source_conn: &rusqlite::Connection, source_id: &domain::DataSo
     );
     store
         .write_envelope(
-            persistence_fjall::KeyspaceName::Meta,
+            persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
             PersistMode::SyncAll,
@@ -686,7 +693,7 @@ fn encrypted_file_export_fails_before_creating_destination() {
                     persistence_sqlite::DbError::System("source storage is missing".to_string())
                 })?;
             let catalog =
-                persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+                persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
             let snapshot = catalog.read_snapshot();
             let mut record = catalog
                 .list_all(&snapshot, &source_id.0, None, ScanDirection::Forward, 512)

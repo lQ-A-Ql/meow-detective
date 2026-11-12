@@ -194,7 +194,7 @@ fn setup_recoverable_catalog(
     fjall_source
         .partition_replace_by_source(
             &source.id.0,
-            &[persistence_fjall::PartitionRecord {
+            &[persistence_source::fjall::PartitionRecord {
                 id: "partition-0".to_owned(),
                 data_source_id: source.id.0.clone(),
                 partition_index: 0,
@@ -216,7 +216,7 @@ fn setup_recoverable_catalog(
                 gpt_partition_uuid: None,
                 filesystem_uuid: None,
             }],
-            persistence_fjall::PersistMode::Buffer,
+            persistence_source::fjall::PersistMode::Buffer,
         )
         .expect("persist Fjall partition");
     fjall_source
@@ -541,11 +541,11 @@ fn catalog_recovery_rejects_file_tree_drift_without_deleting_source() {
     let store = persistence_source::detail::open_store_for_write(&source_connection)
         .unwrap()
         .unwrap();
-    persistence_fjall::CatalogRecordStore::from_source_store((*store).clone())
+    persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone())
         .delete(
             &source.id.0,
             "file",
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
     crate::source_db::checkpoint_source_db(&source_connection).expect("checkpoint source database");
@@ -623,7 +623,11 @@ fn catalog_recovery_rejects_partition_drift_without_deleting_source() {
     let storage = crate::source_db::open_fjall_source_read_write(temp.path(), &source.id.0)
         .expect("open Fjall source storage");
     storage
-        .partition_replace_by_source(&source.id.0, &[], persistence_fjall::PersistMode::Buffer)
+        .partition_replace_by_source(
+            &source.id.0,
+            &[],
+            persistence_source::fjall::PersistMode::Buffer,
+        )
         .expect("delete partition inventory");
     storage
         .partition_projection_publish(&source.id.0)
@@ -819,7 +823,7 @@ fn catalog_recovery_rejects_changed_partition_uuid_metadata() {
             &snapshot,
             &source.id.0,
             None,
-            persistence_fjall::ScanDirection::Forward,
+            persistence_source::fjall::ScanDirection::Forward,
             256,
         )
         .unwrap();
@@ -829,7 +833,7 @@ fn catalog_recovery_rejects_changed_partition_uuid_metadata() {
         .partition_replace_by_source(
             &source.id.0,
             &[record],
-            persistence_fjall::PersistMode::Buffer,
+            persistence_source::fjall::PersistMode::Buffer,
         )
         .unwrap();
     storage.partition_projection_publish(&source.id.0).unwrap();

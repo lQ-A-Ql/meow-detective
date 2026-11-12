@@ -5,10 +5,9 @@ use app_services::storage_runtime::{
 };
 use chrono::Utc;
 use domain::DataSourceId;
-use persistence_fjall::TimelineRecord;
-use persistence_fjall::{
+use persistence_source::fjall::{
     encode_key, CatalogEntryType, FileEntryRecord, KeyPart, KeyspaceName, PersistMode,
-    ScanDirection, VersionedEnvelope,
+    ScanDirection, TimelineRecord, VersionedEnvelope,
 };
 use serde_json::json;
 use std::collections::BTreeMap;

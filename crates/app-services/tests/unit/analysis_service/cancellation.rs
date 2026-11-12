@@ -11,6 +11,7 @@ fn cancellation_during_candidate_read_discards_uncommitted_outputs() {
             file_with_ds("mail-second", &data_source_id, "mailbox/second.eml", 64),
         ])
         .expect("insert cancellable analysis candidates");
+    reseal_source_generation(&conn);
     let cancel_token = AtomicBool::new(false);
     let reader_calls = AtomicUsize::new(0);
 
@@ -30,7 +31,10 @@ fn cancellation_during_candidate_read_discards_uncommitted_outputs() {
     )
     .expect_err("cancellation must abort extraction");
 
-    assert!(matches!(error, AnalysisServiceError::Cancelled));
+    assert!(
+        matches!(error, AnalysisServiceError::Cancelled),
+        "unexpected error: {error:?}"
+    );
     assert_eq!(reader_calls.load(Ordering::Relaxed), 1);
     let artifact_count = ArtifactRepo::new(&conn)
         .count()

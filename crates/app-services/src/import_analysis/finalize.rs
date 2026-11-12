@@ -131,7 +131,7 @@ fn analysis_fjall_root(options: &ImportAnalysisOptions) -> Result<PathBuf, Impor
         ));
     }
     if let Some(operation) = active.into_iter().next() {
-        return persistence_fjall::SourceBuildLayout::for_case_source(
+        return persistence_source::fjall::SourceBuildLayout::for_case_source(
             &options.case_root,
             &options.data_source_id.0,
             &operation.attempt_id,

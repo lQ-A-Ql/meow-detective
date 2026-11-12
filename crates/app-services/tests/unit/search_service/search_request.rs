@@ -119,7 +119,7 @@ fn setup_indexed_case(tmp: &TempDir) -> SearchRequestFixture {
     let store = persistence_source::detail::open_store_for_write(&source_conn)
         .unwrap()
         .unwrap();
-    persistence_fjall::replace_source_generation(
+    persistence_source::fjall::replace_source_generation(
         &store,
         "ds-1",
         "search-request-fixture",

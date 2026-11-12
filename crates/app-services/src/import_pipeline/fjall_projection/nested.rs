@@ -1,4 +1,4 @@
-use persistence_fjall::PersistMode;
+use persistence_source::fjall::PersistMode;
 use rusqlite::Connection;
 
 use crate::storage_runtime::ReadWriteSourceStorageHandle;

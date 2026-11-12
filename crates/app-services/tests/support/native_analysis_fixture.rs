@@ -88,12 +88,13 @@ impl NativeAnalysisFixture {
     fn update_record(
         &self,
         id: &str,
-        update: impl FnOnce(&mut persistence_fjall::FileEntryRecord),
+        update: impl FnOnce(&mut persistence_source::fjall::FileEntryRecord),
     ) {
         let store = persistence_source::detail::open_store_for_write(&self.connection)
             .expect("open native analysis store")
             .expect("configured native analysis store");
-        let records = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+        let records =
+            persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
         let snapshot = records.read_snapshot();
         let mut record = records
             .get(&snapshot, &self.source_id, id)
@@ -101,7 +102,7 @@ impl NativeAnalysisFixture {
             .expect("native analysis record");
         update(&mut record);
         records
-            .upsert(&record, persistence_fjall::PersistMode::SyncAll)
+            .upsert(&record, persistence_source::fjall::PersistMode::SyncAll)
             .expect("update native analysis record");
         self.refresh_generation();
     }
@@ -110,19 +111,21 @@ impl NativeAnalysisFixture {
         let store = persistence_source::detail::open_store_for_write(&self.connection)
             .expect("open native analysis store")
             .expect("configured native analysis store");
-        persistence_fjall::replace_source_generation(
+        persistence_source::fjall::replace_source_generation(
             &store,
             &self.source_id,
             "native-analysis-fixture",
             &"a".repeat(64),
         )
         .expect("refresh native analysis generation");
-        let key = persistence_fjall::encode_key(
+        let key = persistence_source::fjall::encode_key(
             "projection",
-            &[persistence_fjall::KeyPart::Text(self.source_id.clone())],
+            &[persistence_source::fjall::KeyPart::Text(
+                self.source_id.clone(),
+            )],
         )
         .expect("encode native projection key");
-        let marker = persistence_fjall::VersionedEnvelope::new(
+        let marker = persistence_source::fjall::VersionedEnvelope::new(
             "source_projection_complete",
             1,
             format!("projection:{}", self.source_id),
@@ -132,10 +135,10 @@ impl NativeAnalysisFixture {
         );
         store
             .write_envelope(
-                persistence_fjall::KeyspaceName::Meta,
+                persistence_source::fjall::KeyspaceName::Meta,
                 key,
                 &marker,
-                persistence_fjall::PersistMode::SyncAll,
+                persistence_source::fjall::PersistMode::SyncAll,
             )
             .expect("mark native analysis projection complete");
     }

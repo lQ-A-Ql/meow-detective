@@ -58,7 +58,7 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
             &snapshot,
             &source.id.0,
             None,
-            persistence_fjall::ScanDirection::Forward,
+            persistence_source::fjall::ScanDirection::Forward,
             10,
         )
         .expect("read persisted partition metadata");

@@ -160,7 +160,7 @@ pub(super) fn persist_analysis_links(
                     &snapshot,
                     source_id,
                     cursor.as_deref(),
-                    persistence_fjall::ScanDirection::Forward,
+                    persistence_source::fjall::ScanDirection::Forward,
                     512,
                 )
                 .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
@@ -187,7 +187,7 @@ pub(super) fn persist_analysis_links(
                     &snapshot,
                     source_id,
                     cursor.as_deref(),
-                    persistence_fjall::ScanDirection::Forward,
+                    persistence_source::fjall::ScanDirection::Forward,
                     512,
                 )
                 .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;

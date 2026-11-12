@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use domain::DataSourceId;
-use persistence_fjall::ScanDirection;
+use persistence_source::fjall::ScanDirection;
 use persistence_sqlite::repositories::android_analysis_repo::AndroidAnalysisRepo;
 use rusqlite::Connection;
 use std::path::Path;

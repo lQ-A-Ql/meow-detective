@@ -270,7 +270,7 @@ fn fjall_parser_versions(conn: &Connection) -> Option<std::collections::HashMap<
                 &snapshot,
                 &source_id,
                 cursor.as_deref(),
-                persistence_fjall::ScanDirection::Forward,
+                persistence_source::fjall::ScanDirection::Forward,
                 512,
             )
             .ok()?;

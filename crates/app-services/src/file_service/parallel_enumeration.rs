@@ -141,7 +141,8 @@ fn enumerate_native_parallel(
         drop(result_tx);
         let store = persistence_source::detail::open_store_for_write(conn)?
             .ok_or_else(|| DbError::System("source detail storage is missing".into()))?;
-        let repository = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+        let repository =
+            persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
         let root_record = persistence_source::detail::file_record(&root_entry);
         let mut producer = ParallelBatchProducer::new(
             work_tx,
@@ -154,7 +155,7 @@ fn enumerate_native_parallel(
             &source_id,
             &root_record,
             0,
-            persistence_fjall::PersistMode::SyncAll,
+            persistence_source::fjall::PersistMode::SyncAll,
             || {
                 producer.next_batch(data_source_id).map(|batch| {
                     batch.map(|entries| {
@@ -171,10 +172,10 @@ fn enumerate_native_parallel(
         }
         match result {
             Ok(_) => Ok(producer.into_stats()),
-            Err(persistence_fjall::CatalogStreamError::Storage(error)) => {
+            Err(persistence_source::fjall::CatalogStreamError::Storage(error)) => {
                 Err(DbError::System(error.to_string()))
             }
-            Err(persistence_fjall::CatalogStreamError::Producer(error)) => Err(error),
+            Err(persistence_source::fjall::CatalogStreamError::Producer(error)) => Err(error),
         }
     })
 }
