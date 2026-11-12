@@ -77,6 +77,30 @@ fn unknown_platform_fails_before_database_or_staging_access() {
     assert!(!case_root.exists());
 }
 
+fn write_chrome_history(evidence_dir: &std::path::Path) {
+    let history_dir = evidence_dir
+        .join("Users")
+        .join("tester")
+        .join("AppData")
+        .join("Local")
+        .join("Google")
+        .join("Chrome")
+        .join("User Data")
+        .join("Default");
+    std::fs::create_dir_all(&history_dir).expect("create browser history directory");
+    let connection = rusqlite::Connection::open(history_dir.join("History"))
+        .expect("create browser history database");
+    connection
+        .execute_batch(
+            "CREATE TABLE urls(id INTEGER PRIMARY KEY,url TEXT,title TEXT,
+                 visit_count INTEGER,last_visit_time INTEGER);
+             CREATE TABLE visits(id INTEGER PRIMARY KEY,url INTEGER,visit_time INTEGER);
+             INSERT INTO urls VALUES(1,'https://example.test/','Platform policy',1,13300000000000001);
+             INSERT INTO visits VALUES(1,1,13300000000000001);",
+        )
+        .expect("seed browser history database");
+}
+
 fn run_logical_import(platform: DataSourcePlatform, case_name: &str) -> PipelineOutcome {
     let tmp = TempDir::new().expect("temp directory");
     let evidence_dir = tmp.path().join("evidence");
@@ -88,6 +112,7 @@ fn run_logical_import(platform: DataSourcePlatform, case_name: &str) -> Pipeline
         build_prefetch_v30("CMD.EXE", 3, &[chrono::Utc::now()]),
     )
     .expect("write Prefetch fixture");
+    write_chrome_history(&evidence_dir);
 
     let active = case_service::create_case(&tmp.path().join("cases"), case_name, Some("tester"))
         .expect("create case");
