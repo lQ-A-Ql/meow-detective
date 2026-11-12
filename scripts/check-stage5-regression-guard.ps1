@@ -341,17 +341,15 @@ Assert-NotMatches `
   -Pattern 'file_service::(?:read_file_range_for_source_case|media_range_for_source_case)' `
   -Message "file_commands.rs must not bypass opaque preview sessions for range or media reads"
 
-# Datasource probing and LVM expansion were split into focused modules. Keep the
+# Datasource probing and LVM expansion were split into focused modules. The
+# partition probe model lives in source-kernel and is re-exported here; keep the
 # public datasource_service path as a facade so import/viewer callers do not bind
 # to private module internals.
 foreach ($pattern in @(
     'mod\s+attach;',
-    'mod\s+fs_magic;',
     'mod\s+lvm;',
-    'mod\s+partition_index;',
-    'mod\s+probe;',
     'mod\s+reader;',
-    'mod\s+types;',
+    'pub\(crate\)\s+use\s+source_kernel::partition_probe::\{[\s\S]{0,400}\bfs_magic\b[\s\S]{0,400}\bpartition_index\b[\s\S]{0,400}\bprobe\b[\s\S]{0,400}\btypes\b',
     'pub\s+use\s+attach::\{[^}]*attach_data_source[^}]*classify_data_source_path',
     'pub\s+use\s+lvm::\{[^}]*expand_lvm_pool_candidates[^}]*expand_lvm_pool_candidates_with_sources',
     'pub\s+use\s+probe::\{[^}]*detect_image_filesystem[^}]*partition_display_name[^}]*volume_display_name',
