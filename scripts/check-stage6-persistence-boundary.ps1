@@ -82,12 +82,15 @@ Assert-ManifestLacksDependency 'crates/persistence-sqlite/Cargo.toml' 'persisten
 Assert-ManifestLacksDependency 'crates/persistence-sqlite/Cargo.toml' 'transport'
 Assert-ManifestLacksDependency 'apps/desktop/src-tauri/Cargo.toml' 'persistence-fjall'
 Assert-ManifestLacksDependency 'crates/app-services/Cargo.toml' 'persistence-fjall'
+Assert-ManifestLacksDependency 'crates/analysis-core/Cargo.toml' 'persistence-fjall'
 Assert-SingleFjallDependencyOwner
 
 Assert-NoRustReference 'crates/persistence-sqlite/src' '\bpersistence_fjall\b' 'persistence-sqlite owns source detail storage'
 Assert-NoRustReference 'crates/persistence-sqlite/tests' '\bpersistence_fjall\b' 'persistence-sqlite tests own source detail storage'
 Assert-NoRustReference 'crates/app-services/src' '\bpersistence_fjall\b' 'app-services must consume the persistence-source fjall facade'
 Assert-NoRustReference 'crates/app-services/tests' '\bpersistence_fjall\b' 'app-services tests must consume the persistence-source fjall facade'
+Assert-NoRustReference 'crates/analysis-core/src' '\bpersistence_fjall\b' 'analysis-core must consume the persistence-source fjall facade'
+Assert-NoRustReference 'crates/analysis-core/tests' '\bpersistence_fjall\b' 'analysis-core tests must consume the persistence-source fjall facade'
 Assert-NoRustReference 'crates/persistence-sqlite/src' '\btransport\s*::' 'persistence-sqlite depends on the transport contract'
 Assert-NoRustReference 'crates/persistence-sqlite/tests' '\btransport\s*::' 'persistence-sqlite tests depend on the transport contract'
 

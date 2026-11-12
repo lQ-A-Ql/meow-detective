@@ -13,7 +13,6 @@ pub use crate::import_group_gate::{
     global_import_group_gate, ImportGroupGateError, ImportGroupLease,
 };
 
-const DEFAULT_CPU_CAP: usize = 6;
 // E01 members are independent disk-backed sources. Allow two members in
 // flight by default; each member still has a bounded worker budget and the
 // weighted admission controller prevents CPU/memory overcommit.
@@ -21,7 +20,6 @@ const CLUSTER_MEMBER_CAP: usize = 2;
 const CLUSTER_MEMBER_WORKER_CAP: usize = 2;
 const MEMORY_CAPACITY_MB: u64 = 1536;
 const SINGLE_SOURCE_MEMORY_RESERVATION_MB: u64 = 1536;
-const ANALYSIS_WORKER_MEMORY_RESERVATION_MB: u64 = 192;
 const ADMISSION_WAIT: Duration = Duration::from_millis(100);
 const ADMISSION_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
 
@@ -314,15 +312,9 @@ pub fn global_import_admission() -> &'static ImportAdmission {
     ADMISSION.get_or_init(|| ImportAdmission::new(default_cpu_budget(), memory_capacity_mb()))
 }
 
-pub fn default_cpu_budget() -> usize {
-    if let Some(cap) = test_override("FORENSICS_TEST_CPU_CAPACITY") {
-        return cap.max(1);
-    }
-    std::thread::available_parallelism()
-        .map(|count| count.get().min(DEFAULT_CPU_CAP))
-        .unwrap_or(DEFAULT_CPU_CAP)
-        .max(1)
-}
+pub use source_kernel::resource_budget::{
+    default_cpu_budget, resolve_analysis_worker_count, resolve_analysis_worker_count_for_memory,
+};
 
 fn memory_capacity_mb() -> u64 {
     test_override("FORENSICS_TEST_MEMORY_CAPACITY_MB")
@@ -345,30 +337,6 @@ fn test_override(name: &str) -> Option<usize> {
 
 pub fn resolve_import_worker_count(max_import_workers: Option<usize>) -> usize {
     resolve_requested(max_import_workers, default_cpu_budget())
-}
-
-pub fn resolve_analysis_worker_count(max_analysis_workers: Option<usize>) -> usize {
-    resolve_requested(max_analysis_workers, default_cpu_budget())
-}
-
-/// Resolve analysis workers against both CPU capacity and the process RSS
-/// soft limit. A worker is given a conservative memory reservation so a small
-/// CPU increase cannot turn into an unbounded peak when several content files
-/// are processed at once. A zero RSS/limit keeps deterministic callers from
-/// being throttled when the platform cannot provide memory telemetry.
-pub fn resolve_analysis_worker_count_for_memory(
-    max_analysis_workers: Option<usize>,
-    rss_mb: u64,
-    memory_soft_limit_mb: u64,
-) -> usize {
-    let cpu_bound = resolve_analysis_worker_count(max_analysis_workers);
-    if rss_mb == 0 || memory_soft_limit_mb == 0 {
-        return cpu_bound;
-    }
-    let available_mb = memory_soft_limit_mb.saturating_sub(rss_mb);
-    let memory_bound = (available_mb / ANALYSIS_WORKER_MEMORY_RESERVATION_MB).max(1);
-    let memory_bound = usize::try_from(memory_bound).unwrap_or(usize::MAX);
-    cpu_bound.min(memory_bound).max(1)
 }
 
 fn resolve_requested(requested: Option<usize>, capacity: usize) -> usize {

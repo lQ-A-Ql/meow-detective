@@ -859,3 +859,72 @@ fn targeted_scan_records_read_error_and_deduplicates_existing_source() {
     assert_eq!(stats.skipped_count, 1);
     assert_eq!(reads.load(Ordering::Relaxed), 0);
 }
+
+#[derive(Clone)]
+struct BoundedBytesProbe {
+    bytes: Vec<u8>,
+    requested_limits: std::rc::Rc<std::cell::RefCell<Vec<usize>>>,
+    full_reader_calls: std::rc::Rc<std::cell::Cell<usize>>,
+}
+
+impl BoundedBytesProbe {
+    fn new(bytes: Vec<u8>) -> Self {
+        Self {
+            bytes,
+            requested_limits: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
+            full_reader_calls: std::rc::Rc::new(std::cell::Cell::new(0)),
+        }
+    }
+
+    fn read_header(&self, max_bytes: usize) -> Vec<u8> {
+        self.requested_limits.borrow_mut().push(max_bytes);
+        self.bytes[..self.bytes.len().min(max_bytes)].to_vec()
+    }
+
+    fn open_full_reader(&self) -> Box<dyn Read> {
+        self.full_reader_calls.set(self.full_reader_calls.get() + 1);
+        panic!("test path must use bounded header bytes, not full reader");
+    }
+
+    fn requested_limits(&self) -> Vec<usize> {
+        self.requested_limits.borrow().clone()
+    }
+
+    fn full_reader_calls(&self) -> usize {
+        self.full_reader_calls.get()
+    }
+}
+
+#[test]
+fn targeted_evidence_scan_can_use_bounded_bytes_reader_without_full_open() {
+    let root = tempfile::tempdir().unwrap();
+    let conn = open_fixture_source(root.path(), &DataSourceId("ds-1".into()));
+    insert_files(
+        &conn,
+        &[make_file(
+            "lnk",
+            "Users/alice/AppData/Roaming/Microsoft/Windows/Recent/app.lnk",
+        )],
+    );
+
+    let probe = BoundedBytesProbe::new(vec![0u8; 64]);
+    let full_reader_probe = probe.clone();
+    let _full_reader_path = move || full_reader_probe.open_full_reader();
+    let reader_probe = probe.clone();
+
+    let stats = run_targeted_evidence_scan(&conn, "case-1", &["UserActivity"], |file_id| {
+        assert_eq!(file_id.0, "lnk");
+        let bytes =
+            reader_probe.read_header(infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize);
+        Ok::<Box<dyn Read>, ArtifactServiceError>(Box::new(std::io::Cursor::new(bytes)))
+    })
+    .unwrap();
+
+    assert_eq!(stats.candidate_count, 1);
+    assert_eq!(stats.scanned_count, 1);
+    assert_eq!(
+        probe.requested_limits(),
+        vec![infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize]
+    );
+    assert_eq!(probe.full_reader_calls(), 0);
+}

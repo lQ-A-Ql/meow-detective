@@ -5,6 +5,7 @@ mod persistence;
 mod query;
 mod registry;
 mod source_routing;
+mod source_scan;
 
 pub use aggregation::{
     get_artifact_families_for_case, get_artifact_family_counts_for_case,
@@ -23,6 +24,7 @@ pub use query::{
 };
 pub use registry::create_registry;
 pub use source_routing::get_artifact_row_by_id_for_case;
+pub use source_scan::{run_source_evidence_scan, run_source_evidence_scan_with_cancel};
 
 pub(crate) use aggregation::{
     get_source_attributed_artifact_family_counts_for_case, SourceArtifactFamilyCount,

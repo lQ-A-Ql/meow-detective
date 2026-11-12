@@ -1,0 +1,379 @@
+use std::collections::BTreeSet;
+
+use domain::{CaseId, DataSourceId};
+use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::linux_evidence_facts_repo::LinuxEvidenceFactsRepo;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+const IDENTITY_PARSER_VERSION: &str = "1.3.7";
+
+use evidence_access::file_service::{read_file_bytes_for_case, SourceReadContext};
+use source_kernel::source_db;
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxEvidenceFacts {
+    pub hostname: Option<String>,
+    pub operating_system: Option<String>,
+    pub os_version: Option<String>,
+    pub kernel_version: Option<String>,
+    pub addresses: Vec<String>,
+    pub roles: Vec<String>,
+    pub services: Vec<String>,
+    pub containers: Vec<String>,
+    pub diagnostics: Vec<String>,
+}
+
+pub fn load_persisted_linux_evidence_facts(
+    source_connection: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+) -> Option<LinuxEvidenceFacts> {
+    let facts_json = LinuxEvidenceFactsRepo::new(source_connection)
+        .find_json(data_source_id)
+        .ok()??;
+    let value: Value = serde_json::from_str(&facts_json).ok()?;
+    if value.get("osReleaseParserVersion").and_then(Value::as_str) != Some(IDENTITY_PARSER_VERSION)
+    {
+        return None;
+    }
+    serde_json::from_value(value).ok()
+}
+
+pub fn persist_linux_evidence_facts(
+    source_connection: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+    facts: &LinuxEvidenceFacts,
+) -> persistence_sqlite::DbResult<()> {
+    // This cache is written only from the import publication lease, before the
+    // source transitions to ready. Post-ready analysis must remain read-only
+    // against the published source catalog.
+    let mut value = serde_json::to_value(facts)
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let Value::Object(ref mut object) = value else {
+        return Err(persistence_sqlite::DbError::System(
+            "Linux facts must be an object".into(),
+        ));
+    };
+    object.insert(
+        "osReleaseParserVersion".into(),
+        IDENTITY_PARSER_VERSION.into(),
+    );
+    let facts_json = serde_json::to_string(&value)
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    LinuxEvidenceFactsRepo::new(source_connection).replace_json(data_source_id, &facts_json)
+}
+
+pub fn collect_linux_evidence_facts(
+    case_connection: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> LinuxEvidenceFacts {
+    let Ok(source_connection) =
+        source_db::open_registered_source_db_read_only(case_connection, case_root, data_source_id)
+    else {
+        return LinuxEvidenceFacts {
+            diagnostics: vec!["source DB could not be opened read-only".to_string()],
+            ..Default::default()
+        };
+    };
+    if let Some(facts) = load_persisted_linux_evidence_facts_from_fjall(case_root, data_source_id) {
+        return facts;
+    }
+    if let Some(facts) = load_persisted_linux_evidence_facts(&source_connection, data_source_id) {
+        return facts;
+    }
+    let mut facts = LinuxEvidenceFacts::default();
+    let file_repo = FileRepo::new(&source_connection);
+    let mut entries = Vec::new();
+    for fragments in [
+        vec!["etc/hostname"],
+        vec!["os-release"],
+        vec!["etc/hosts"],
+        vec!["vmlinuz-"],
+        vec!["etc/kubernetes/manifests"],
+        vec!["etc/kubernetes/kubelet.conf"],
+        vec!["var/lib/docker/containers", "config.v2.json"],
+    ] {
+        if let Ok(mut matches) = file_repo.find_by_path_fragments(data_source_id, &fragments) {
+            entries.append(&mut matches);
+        }
+    }
+    entries.sort_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then_with(|| left.id.0.cmp(&right.id.0))
+    });
+    entries.dedup_by(|left, right| left.id == right.id);
+    let mut context = SourceReadContext::new(
+        &source_connection,
+        case_connection,
+        case_root,
+        case_id,
+        data_source_id,
+    );
+    if let Some(entry) = find_entry(&entries, &["etc/hostname"]) {
+        facts.hostname = read_entry(entry, &mut context).and_then(|bytes| clean_text(&bytes));
+    }
+    match evidence_access::linux_identity_service::from_catalog(&entries, &mut context) {
+        Ok(Some(info)) => {
+            facts.operating_system = info
+                .pretty_name
+                .or_else(|| info.fields.get("NAME").cloned());
+            facts.os_version = info.version_id;
+        }
+        Ok(None) => {}
+        Err(error) => facts.diagnostics.push(error.to_string()),
+    }
+    if let Some(entry) = find_entry(&entries, &["etc/hosts"]) {
+        if let Some(text) = read_entry(entry, &mut context).and_then(|bytes| clean_text(&bytes)) {
+            facts.addresses = parse_hosts_addresses(&text, facts.hostname.as_deref());
+        }
+    }
+    if let Some(entry) = entries.iter().find(|entry| {
+        let path = normalized(&entry.path);
+        (path.contains("/boot/vmlinuz-")
+            || path.starts_with("boot/vmlinuz-")
+            || entry.name.starts_with("vmlinuz-"))
+            && !entry.name.starts_with("vmlinuz-0-rescue-")
+    }) {
+        let name = entry.name.trim_start_matches("vmlinuz-");
+        if !name.is_empty() {
+            facts.kernel_version = Some(name.to_string());
+        }
+    }
+
+    collect_manifest_facts(&entries, &mut facts, &mut context);
+    collect_container_facts(&entries, &mut facts, &mut context);
+    collect_artifact_facts(&source_connection, &mut facts);
+    finalize_identity_facts(&entries, &mut facts);
+    facts
+}
+
+fn load_persisted_linux_evidence_facts_from_fjall(
+    case_root: &std::path::Path,
+    data_source_id: &DataSourceId,
+) -> Option<LinuxEvidenceFacts> {
+    let source =
+        source_db::open_registered_fjall_source_read_only(case_root, data_source_id).ok()?;
+    let snapshot = source.snapshot();
+    if !source
+        .source_projection_complete(&snapshot, &data_source_id.0)
+        .ok()?
+    {
+        return None;
+    }
+    let page = source
+        .parser_list_by_kind(
+            &snapshot,
+            &data_source_id.0,
+            "evidence_facts",
+            None,
+            persistence_source::fjall::ScanDirection::Forward,
+            2,
+        )
+        .ok()?;
+    let record = page.records.first()?;
+    if record.family != "linux" || record.status != "ready" {
+        return None;
+    }
+    let version = record
+        .payload
+        .get("osReleaseParserVersion")
+        .and_then(serde_json::Value::as_str)?;
+    (version == IDENTITY_PARSER_VERSION)
+        .then(|| serde_json::from_value(record.payload.clone()).ok())
+        .flatten()
+}
+
+fn collect_manifest_facts(
+    entries: &[domain::FileEntry],
+    facts: &mut LinuxEvidenceFacts,
+    context: &mut SourceReadContext<'_>,
+) {
+    let manifest_entries = entries
+        .iter()
+        .filter(|entry| {
+            normalized(&entry.path).contains("etc/kubernetes/manifests/")
+                && entry.name.ends_with(".yaml")
+        })
+        .take(32);
+    for entry in manifest_entries {
+        if let Some(text) = read_entry(entry, context).and_then(|bytes| clean_text(&bytes)) {
+            facts.roles.push("control_plane".to_string());
+            facts
+                .services
+                .push(entry.name.trim_end_matches(".yaml").to_string());
+            for image in manifest_images(&text) {
+                facts.services.push(image);
+            }
+        }
+    }
+    let has_kubelet = entries
+        .iter()
+        .any(|entry| path_matches(&entry.path, "etc/kubernetes/kubelet.conf"));
+    if has_kubelet && !facts.roles.iter().any(|role| role == "control_plane") {
+        facts.roles.push("worker".to_string());
+    }
+}
+
+fn collect_container_facts(
+    entries: &[domain::FileEntry],
+    facts: &mut LinuxEvidenceFacts,
+    context: &mut SourceReadContext<'_>,
+) {
+    let container_entries = entries
+        .iter()
+        .filter(|entry| {
+            normalized(&entry.path).contains("var/lib/docker/containers/")
+                && entry.name == "config.v2.json"
+        })
+        .take(256);
+    for entry in container_entries {
+        if let Some(bytes) = read_entry(entry, context) {
+            if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
+                let name = value["Name"]
+                    .as_str()
+                    .or_else(|| value["Config"]["Image"].as_str())
+                    .map(|value| value.trim_start_matches('/').to_string());
+                if let Some(name) = name {
+                    facts.containers.push(name);
+                }
+            }
+        }
+    }
+}
+
+fn finalize_identity_facts(entries: &[domain::FileEntry], facts: &mut LinuxEvidenceFacts) {
+    if facts.hostname.is_none() && facts.operating_system.is_none() {
+        let candidates = entries
+            .iter()
+            .filter(|entry| {
+                let path = normalized(&entry.path);
+                path.contains("hostname") || path.contains("os-release")
+            })
+            .take(8)
+            .map(|entry| entry.path.clone())
+            .collect::<Vec<_>>();
+        if candidates.is_empty() {
+            facts
+                .diagnostics
+                .push("identity paths were not present in source catalog".to_string());
+        } else {
+            facts.diagnostics.push(format!(
+                "identity candidates present but unreadable: {candidates:?}"
+            ));
+        }
+    }
+    facts.roles = unique(std::mem::take(&mut facts.roles));
+    facts.services = unique(std::mem::take(&mut facts.services));
+    facts.containers = unique(std::mem::take(&mut facts.containers));
+    facts.addresses = unique(std::mem::take(&mut facts.addresses));
+}
+
+fn read_entry(entry: &domain::FileEntry, context: &mut SourceReadContext<'_>) -> Option<Vec<u8>> {
+    read_file_bytes_for_case(
+        context,
+        &entry.id,
+        0,
+        entry.size.unwrap_or(0).min(16 * 1024 * 1024) as u32,
+    )
+    .ok()
+}
+
+fn collect_artifact_facts(
+    source_connection: &rusqlite::Connection,
+    facts: &mut LinuxEvidenceFacts,
+) {
+    let mut artifacts = Vec::new();
+    if persistence_source::repositories::artifact_repo::ArtifactRepo::new(source_connection)
+        .visit_by_family(Some("LinuxSystemConfig"), |artifact| {
+            artifacts.push(artifact);
+            Ok(())
+        })
+        .is_err()
+    {
+        return;
+    }
+    for artifact in artifacts {
+        let attrs = serde_json::to_value(artifact.attrs).unwrap_or(Value::Null);
+        let path = attrs["sourcePath"].as_str().unwrap_or_default();
+        let kind = attrs["configKind"].as_str().unwrap_or_default();
+        let line = attrs["line"].as_str().unwrap_or_default().trim();
+        if kind == "textConfig" && path_matches(path, "etc/hostname") {
+            if !line.is_empty() {
+                facts.hostname = facts.hostname.clone().or_else(|| Some(line.to_string()));
+            }
+        } else if path_matches(path, "etc/hosts") {
+            facts
+                .addresses
+                .extend(parse_hosts_addresses(line, facts.hostname.as_deref()));
+        } else if normalized(path).contains("etc/systemd/system/") && path.ends_with(".service") {
+            if let Some(name) = path.rsplit('/').next() {
+                facts
+                    .services
+                    .push(name.trim_end_matches(".service").to_string());
+            }
+        }
+    }
+}
+
+fn path_matches(path: &str, suffix: &str) -> bool {
+    let path = normalized(path);
+    path == suffix || path.ends_with(&format!("/{suffix}"))
+}
+
+fn find_entry<'a>(
+    entries: &'a [domain::FileEntry],
+    suffixes: &[&str],
+) -> Option<&'a domain::FileEntry> {
+    suffixes.iter().find_map(|suffix| {
+        entries.iter().find(|entry| {
+            let path = normalized(&entry.path);
+            (path == *suffix || path.ends_with(&format!("/{suffix}")))
+                && !path.contains("/overlay2/")
+        })
+    })
+}
+
+fn normalized(path: &str) -> String {
+    path.replace('\\', "/").to_ascii_lowercase()
+}
+
+fn clean_text(bytes: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(bytes).trim().to_string();
+    (!text.is_empty()).then_some(text)
+}
+
+fn parse_hosts_addresses(text: &str, hostname: Option<&str>) -> Vec<String> {
+    let Some(hostname) = hostname else {
+        return Vec::new();
+    };
+    text.lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let address = fields.next()?;
+            let ip = address.parse::<std::net::IpAddr>().ok()?;
+            (!ip.is_loopback() && fields.any(|name| name == hostname))
+                .then_some(address.to_string())
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn manifest_images(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|line| line.trim().strip_prefix("image:"))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect()
+}
+
+fn unique(values: Vec<String>) -> Vec<String> {
+    values
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}

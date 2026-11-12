@@ -120,9 +120,14 @@ function Is-FrontendTestFile {
 # Stage 0 records the backend event-emission boundary as a known Stage 1
 # hardening item. Use -StrictBackend once Stage 1 starts to make these findings
 # fatal instead of advisory.
-$appServicesSrc = Join-Path $repoRoot "crates/app-services/src"
-if (-not (Test-Path -LiteralPath $appServicesSrc)) {
-  throw "Required app-services source root is missing: $appServicesSrc"
+$backendSrcRoots = @(
+  (Join-Path $repoRoot "crates/app-services/src"),
+  (Join-Path $repoRoot "crates/analysis-core/src")
+)
+foreach ($backendSrcRoot in $backendSrcRoots) {
+  if (-not (Test-Path -LiteralPath $backendSrcRoot)) {
+    throw "Required backend capability source root is missing: $backendSrcRoot"
+  }
 }
 
 $appServiceRules = @(
@@ -132,20 +137,22 @@ $appServiceRules = @(
   @{ Pattern = '\.emit_to\s*\('; Label = 'Tauri emit_to dependency' }
 )
 
-Get-ChildItem -LiteralPath $appServicesSrc -Recurse -File -Filter '*.rs' |
-  Where-Object { -not (Is-RustTestFile $_) } |
-  ForEach-Object {
-    $content = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
-    $content = Remove-CfgTestModules $content
-    $findings = @(Find-RegexViolations (Get-RelativePath $_.FullName) $content $appServiceRules)
-    if ($findings.Count -gt 0) {
-      if ($StrictBackend) {
-        $violations += $findings
-      } else {
-        $backendWarnings += $findings
+foreach ($backendSrcRoot in $backendSrcRoots) {
+  Get-ChildItem -LiteralPath $backendSrcRoot -Recurse -File -Filter '*.rs' |
+    Where-Object { -not (Is-RustTestFile $_) } |
+    ForEach-Object {
+      $content = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
+      $content = Remove-CfgTestModules $content
+      $findings = @(Find-RegexViolations (Get-RelativePath $_.FullName) $content $appServiceRules)
+      if ($findings.Count -gt 0) {
+        if ($StrictBackend) {
+          $violations += $findings
+        } else {
+          $backendWarnings += $findings
+        }
       }
     }
-  }
+}
 
 # Stage 0 frontend boundary: production UI code must not pin a private fixture
 # case id or bypass the central Tauri API client.

@@ -1,0 +1,76 @@
+//! Data source analysis service.
+//!
+//! Provides system information status reporting and bounded file classification.
+
+mod android;
+mod artifact_builders;
+mod cancellation;
+pub use cancellation::ensure_not_cancelled;
+mod candidates;
+pub use candidates::normalize_evidence_path;
+mod capability;
+mod classification;
+mod error;
+mod extraction;
+mod file_classification;
+mod file_classification_taxonomy;
+mod platforms;
+mod provenance;
+mod summary;
+mod system_info;
+mod system_info_candidates;
+mod use_cases;
+
+pub use candidates::{
+    collect_file_entries, discover_evidence_candidates, discover_plugin_candidates,
+    evidence_candidates_for_categories, evidence_category_defs,
+    get_evidence_classification_summary, EvidenceCandidate, EvidenceCategoryDef,
+};
+pub use classification::{classify_files_by_magic, classify_files_by_metadata};
+pub use error::AnalysisServiceError;
+pub use extraction::stage_native_records;
+pub use extraction::warm_linux_artifact_summary;
+pub use extraction::AnalysisExtractionExecution;
+pub use extraction::{
+    extract_evtx_candidate, extract_linux_candidate, extract_registry_candidate,
+    get_browser_history_summary, get_email_extraction_summary, get_evtx_event_summary,
+    get_linux_artifact_summary, get_linux_system_config_page, get_plugin_family_entries,
+    get_registry_extraction_summary, get_registry_structured_summary, list_plugin_modules,
+    run_analysis_extraction, run_analysis_extraction_with_cancel,
+    run_analysis_extraction_with_reader_limits, ExtractionOutcome,
+};
+pub use file_classification::build_file_classification_board;
+pub use platforms::{
+    resolve_data_source_platform, select_evidence_scan_categories, validate_analysis_categories,
+    validate_data_source_analysis_categories,
+};
+pub use summary::generate_analysis_summary;
+pub use system_info::extract_system_info_for_case;
+mod system_info_boot;
+pub use use_cases::run_source_analysis_extraction_execution_with_cancel;
+pub use use_cases::{
+    classify_source_files, generate_source_analysis_summary, get_file_classification_board,
+    get_source_android_device_info, get_source_android_package_summary, get_source_browser_summary,
+    get_source_email_summary, get_source_evidence_summary, get_source_evtx_summary,
+    get_source_linux_summary, get_source_linux_system_config_page,
+    get_source_plugin_family_entries, get_source_plugin_modules,
+    get_source_registry_structured_summary, get_source_registry_summary, get_source_system_info,
+    materialize_source_linux_summary, open_ready_analysis_source, run_source_analysis_extraction,
+    run_source_analysis_extraction_with_cancel, run_source_analysis_extraction_with_progress,
+    run_source_analysis_extraction_with_progress_and_cancel, run_source_android_analysis,
+    run_source_android_analysis_with_cancel, AnalysisExtractionProgressContext, AnalysisSource,
+    AnalysisSourceReadRuntime,
+};
+pub use use_cases::{run_import_source_extraction, ImportSourceExtractionRequest};
+
+pub const DEFAULT_SAMPLE_SIZE: u32 = 1000;
+pub const MAX_SAMPLE_SIZE: u32 = 5000;
+pub use evidence_core::MAGIC_HEADER_LIMIT;
+pub const MAX_REGISTRY_ANALYSIS_BYTES: usize = 256 * 1024 * 1024;
+pub const MAX_ANALYSIS_SOURCE_BYTES: usize = 128 * 1024 * 1024;
+// Preserve case-sensitive systemd paths and project Docker on-disk states.
+pub const ANALYSIS_EXTRACTOR_VERSION: &str = "1.3.3";
+
+#[cfg(test)]
+#[path = "../../tests/unit/analysis_service/mod.rs"]
+mod tests;

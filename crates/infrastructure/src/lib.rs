@@ -7,3 +7,4 @@ pub mod hashing;
 mod logging;
 pub mod paths;
 pub mod text;
+pub mod wechat_keys_env;

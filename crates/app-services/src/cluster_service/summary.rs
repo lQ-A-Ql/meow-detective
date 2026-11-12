@@ -11,7 +11,7 @@ use transport::dto::{
     LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto, LinuxTopologyScopeSummaryDto,
 };
 
-use super::linux_evidence_facts::collect_linux_evidence_facts;
+use super::collect_linux_evidence_facts;
 use super::{ClusterServiceError, Result};
 
 #[derive(Debug, Clone)]

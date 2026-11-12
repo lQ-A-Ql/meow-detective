@@ -1,0 +1,428 @@
+mod entries;
+
+use super::aggregate::LinuxSummaryFamily;
+use crate::analysis_service::error::AnalysisServiceError;
+use crate::analysis_service::extraction::artifact_query::{
+    query_artifact_rows_created_window, AnalysisArtifactRow,
+};
+use crate::analysis_service::extraction::attr_mapping::{
+    bool_attr, i32_attr, optional_bool_attr, optional_string_attr, optional_u32_attr, string_attr,
+    u64_attr,
+};
+use domain::{Artifact, DataSourceId};
+use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use source_kernel::source_db::encode_source_scoped_id;
+use std::collections::BTreeMap;
+use transport::dto::{
+    LinuxAptEventDto, LinuxBashCommandDto, LinuxCronJobDto, LinuxJournalEntryDto,
+    LinuxLoginRecordDto, LinuxMysqlConfigDto, LinuxMysqlFindingDto, LinuxMysqlLogEntryDto,
+    LinuxSudoEventDto, LinuxSystemConfigDto, LinuxWebAccessLogDto, LinuxWebErrorLogDto,
+    LinuxWebFindingDto, LinuxWebSiteDto,
+};
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub(super) struct LinuxCounts {
+    pub(super) journal: u64,
+    /// Text-log fallback records (syslog/messages/auth/audit/pve) share the
+    /// `LinuxJournal` artifact type but are counted separately so
+    /// `journal_count` reflects only real systemd journal entries.
+    pub(super) text_log: u64,
+    pub(super) login: u64,
+    pub(super) bash_command: u64,
+    pub(super) apt_event: u64,
+    pub(super) cron_job: u64,
+    pub(super) sudo_event: u64,
+    pub(super) system_config: u64,
+    pub(super) web_site: u64,
+    pub(super) web_access_log: u64,
+    pub(super) web_error_log: u64,
+    pub(super) web_finding: u64,
+    pub(super) mysql_config: u64,
+    pub(super) mysql_log: u64,
+    pub(super) mysql_finding: u64,
+}
+
+impl LinuxCounts {
+    pub(super) fn record(&mut self, artifact: &Artifact) {
+        match artifact.family.as_str() {
+            "LinuxJournal" => {
+                if artifact.extractor_id.as_deref() == Some("linux.journal") {
+                    self.journal = self.journal.saturating_add(1);
+                } else {
+                    self.text_log = self.text_log.saturating_add(1);
+                }
+            }
+            "LinuxWtmp" => self.login = self.login.saturating_add(1),
+            "LinuxBashCommand" => self.bash_command = self.bash_command.saturating_add(1),
+            "LinuxAptEvent" => self.apt_event = self.apt_event.saturating_add(1),
+            "LinuxCronJob" => self.cron_job = self.cron_job.saturating_add(1),
+            "LinuxSudoEvent" => self.sudo_event = self.sudo_event.saturating_add(1),
+            "LinuxSystemConfig" => self.system_config = self.system_config.saturating_add(1),
+            "LinuxWebSite" => self.web_site = self.web_site.saturating_add(1),
+            "LinuxWebAccessLog" => self.web_access_log = self.web_access_log.saturating_add(1),
+            "LinuxWebErrorLog" => self.web_error_log = self.web_error_log.saturating_add(1),
+            "LinuxWebFinding" => self.web_finding = self.web_finding.saturating_add(1),
+            "LinuxMysqlConfig" => self.mysql_config = self.mysql_config.saturating_add(1),
+            "LinuxMysqlLogEntry" => self.mysql_log = self.mysql_log.saturating_add(1),
+            "LinuxMysqlFinding" => self.mysql_finding = self.mysql_finding.saturating_add(1),
+            _ => {}
+        }
+    }
+
+    pub(super) fn total(&self) -> u64 {
+        self.journal
+            + self.text_log
+            + self.login
+            + self.bash_command
+            + self.apt_event
+            + self.cron_job
+            + self.sudo_event
+            + self.system_config
+            + self.web_site
+            + self.web_access_log
+            + self.web_error_log
+            + self.web_finding
+            + self.mysql_config
+            + self.mysql_log
+            + self.mysql_finding
+    }
+}
+
+pub(super) struct LinuxEntries {
+    pub(super) journal: Vec<LinuxJournalEntryDto>,
+    pub(super) login: Vec<LinuxLoginRecordDto>,
+    pub(super) bash_commands: Vec<LinuxBashCommandDto>,
+    pub(super) apt_events: Vec<LinuxAptEventDto>,
+    pub(super) cron_jobs: Vec<LinuxCronJobDto>,
+    pub(super) sudo_events: Vec<LinuxSudoEventDto>,
+    pub(super) system_configs: Vec<LinuxSystemConfigDto>,
+    pub(super) web_sites: Vec<LinuxWebSiteDto>,
+    pub(super) web_access_logs: Vec<LinuxWebAccessLogDto>,
+    pub(super) web_error_logs: Vec<LinuxWebErrorLogDto>,
+    pub(super) web_findings: Vec<LinuxWebFindingDto>,
+    pub(super) mysql_configs: Vec<LinuxMysqlConfigDto>,
+    pub(super) mysql_logs: Vec<LinuxMysqlLogEntryDto>,
+    pub(super) mysql_findings: Vec<LinuxMysqlFindingDto>,
+}
+
+fn map_journal(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxJournalEntryDto> {
+    rows.into_iter()
+        .map(|row| {
+            // Text-log fallback rows carry an explicit `logKind` attribute;
+            // rows produced by the structured journald extractor default to
+            // `journald` so the UI can tell the two channels apart.
+            let log_kind = optional_string_attr(&row.attrs, "logKind").or_else(|| {
+                (row.extractor_id.as_deref() == Some("linux.journal"))
+                    .then(|| "journald".to_string())
+            });
+            LinuxJournalEntryDto {
+                artifact_id: row.id,
+                file_id: row.source_object_id.unwrap_or_default(),
+                source_path: string_attr(&row.attrs, "sourcePath"),
+                timestamp: optional_string_attr(&row.attrs, "timestamp"),
+                message: optional_string_attr(&row.attrs, "message"),
+                cmdline: optional_string_attr(&row.attrs, "cmdline"),
+                boot_id: optional_string_attr(&row.attrs, "bootId"),
+                message_id: optional_string_attr(&row.attrs, "messageId"),
+                executable: optional_string_attr(&row.attrs, "executable"),
+                systemd_unit: optional_string_attr(&row.attrs, "systemdUnit"),
+                hostname: optional_string_attr(&row.attrs, "hostname"),
+                syslog_identifier: optional_string_attr(&row.attrs, "syslogIdentifier"),
+                transport: optional_string_attr(&row.attrs, "transport"),
+                machine_id: optional_string_attr(&row.attrs, "machineId"),
+                cgroup: optional_string_attr(&row.attrs, "cgroup"),
+                invocation_id: optional_string_attr(&row.attrs, "invocationId"),
+                pid: optional_u32_attr(&row.attrs, "pid"),
+                uid: optional_u32_attr(&row.attrs, "uid"),
+                priority: optional_u32_attr(&row.attrs, "priority"),
+                log_kind,
+            }
+        })
+        .collect()
+}
+
+fn map_logins(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxLoginRecordDto> {
+    rows.into_iter()
+        .map(|row| LinuxLoginRecordDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            user: string_attr(&row.attrs, "user"),
+            terminal: string_attr(&row.attrs, "terminal"),
+            host: string_attr(&row.attrs, "host"),
+            pid: i32_attr(&row.attrs, "pid"),
+            record_type: i32_attr(&row.attrs, "recordType"),
+            record_kind: login_record_kind(&row.attrs),
+            uid: optional_u32_attr(&row.attrs, "uid"),
+            failures: optional_u32_attr(&row.attrs, "failures"),
+            fail_max: optional_u32_attr(&row.attrs, "failMax"),
+            locktime_seconds: optional_u64_attr(&row.attrs, "locktimeSeconds"),
+            lockout: optional_bool_attr(&row.attrs, "lockout"),
+            login_time: optional_string_attr(&row.attrs, "loginTime"),
+            logout_time: optional_string_attr(&row.attrs, "logoutTime"),
+        })
+        .collect()
+}
+
+fn login_record_kind(attrs: &BTreeMap<String, Value>) -> Option<String> {
+    if let Some(kind) = optional_string_attr(attrs, "recordKind") {
+        return Some(kind);
+    }
+    let path = optional_string_attr(attrs, "sourcePath")?;
+    let normalized = path.trim_start_matches('/');
+    if normalized.ends_with("var/log/lastlog") {
+        Some("lastlog".to_string())
+    } else if normalized.ends_with("var/log/faillog") {
+        Some("faillog".to_string())
+    } else {
+        None
+    }
+}
+
+fn map_bash_commands(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxBashCommandDto> {
+    rows.into_iter()
+        .map(|row| LinuxBashCommandDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            command: string_attr(&row.attrs, "command"),
+            line_number: u64_attr(&row.attrs, "lineNumber"),
+            timestamp: optional_string_attr(&row.attrs, "timestamp"),
+        })
+        .collect()
+}
+
+fn map_apt_events(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxAptEventDto> {
+    rows.into_iter()
+        .map(|row| LinuxAptEventDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            action: string_attr(&row.attrs, "action"),
+            package: string_attr(&row.attrs, "package"),
+            version: string_attr(&row.attrs, "version"),
+            timestamp: optional_string_attr(&row.attrs, "timestamp"),
+        })
+        .collect()
+}
+
+fn map_cron_jobs(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxCronJobDto> {
+    rows.into_iter()
+        .map(|row| LinuxCronJobDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            schedule: string_attr(&row.attrs, "schedule"),
+            command: string_attr(&row.attrs, "command"),
+            user: optional_string_attr(&row.attrs, "user"),
+            source_file: string_attr(&row.attrs, "sourceFile"),
+        })
+        .collect()
+}
+
+fn map_sudo_events(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxSudoEventDto> {
+    rows.into_iter()
+        .map(|row| LinuxSudoEventDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            user: string_attr(&row.attrs, "user"),
+            target_user: optional_string_attr(&row.attrs, "targetUser"),
+            command: string_attr(&row.attrs, "command"),
+            working_directory: optional_string_attr(&row.attrs, "workingDirectory"),
+            terminal: optional_string_attr(&row.attrs, "terminal"),
+            success: bool_attr(&row.attrs, "success"),
+            timestamp: optional_string_attr(&row.attrs, "timestamp"),
+        })
+        .collect()
+}
+
+pub(super) fn map_system_configs(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxSystemConfigDto> {
+    rows.into_iter()
+        .map(|row| {
+            let file_id = source_scoped_file_id(&row);
+            LinuxSystemConfigDto {
+                artifact_id: row.id,
+                file_id,
+                source_path: string_attr(&row.attrs, "sourcePath"),
+                config_kind: string_attr(&row.attrs, "configKind"),
+                line: string_attr(&row.attrs, "line"),
+                line_number: u64_attr(&row.attrs, "lineNumber"),
+                key: optional_string_attr(&row.attrs, "key"),
+                value: optional_string_attr(&row.attrs, "value"),
+                username: optional_string_attr(&row.attrs, "username"),
+                uid: optional_u32_attr(&row.attrs, "uid"),
+                gid: optional_u32_attr(&row.attrs, "gid"),
+                home: optional_string_attr(&row.attrs, "home"),
+                shell: optional_string_attr(&row.attrs, "shell"),
+                name: optional_string_attr(&row.attrs, "name"),
+                description: optional_string_attr(&row.attrs, "description"),
+                state: optional_string_attr(&row.attrs, "state"),
+                enabled: optional_bool_attr(&row.attrs, "enabled"),
+                masked: optional_bool_attr(&row.attrs, "masked"),
+                static_unit: optional_bool_attr(&row.attrs, "static"),
+                unit_file: optional_string_attr(&row.attrs, "unitFile"),
+                exec_start: string_vec_attr(&row.attrs, "execStart"),
+                exec_stop: string_vec_attr(&row.attrs, "execStop"),
+                user: optional_string_attr(&row.attrs, "user"),
+                group: optional_string_attr(&row.attrs, "group"),
+                working_directory: optional_string_attr(&row.attrs, "workingDirectory"),
+                restart: optional_string_attr(&row.attrs, "restart"),
+                wanted_by: string_vec_attr(&row.attrs, "wantedBy"),
+                required_by: string_vec_attr(&row.attrs, "requiredBy"),
+                enablement_symlink: optional_string_attr(&row.attrs, "enablementSymlink"),
+            }
+        })
+        .collect()
+}
+
+fn source_scoped_file_id(row: &AnalysisArtifactRow) -> String {
+    let file_id = row.source_object_id.clone().unwrap_or_default();
+    if file_id.starts_with("ds:") {
+        return file_id;
+    }
+    let data_source_id = string_attr(&row.attrs, "dataSourceId");
+    if data_source_id.is_empty() || file_id.is_empty() {
+        return file_id;
+    }
+    encode_source_scoped_id(&DataSourceId(data_source_id), &file_id)
+}
+
+fn map_web_sites(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxWebSiteDto> {
+    rows.into_iter()
+        .map(|row| LinuxWebSiteDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            server_kind: string_attr(&row.attrs, "serverKind"),
+            site_name: string_attr(&row.attrs, "siteName"),
+            hostnames: string_vec_attr(&row.attrs, "hostnames"),
+            listen: string_vec_attr(&row.attrs, "listen"),
+            document_roots: string_vec_attr(&row.attrs, "documentRoots"),
+            access_logs: string_vec_attr(&row.attrs, "accessLogs"),
+            error_logs: string_vec_attr(&row.attrs, "errorLogs"),
+            line_number: u64_attr(&row.attrs, "lineNumber"),
+        })
+        .collect()
+}
+
+fn map_web_access_logs(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxWebAccessLogDto> {
+    rows.into_iter()
+        .map(|row| LinuxWebAccessLogDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            client_ip: string_attr(&row.attrs, "clientIp"),
+            vhost: optional_string_attr(&row.attrs, "vhost"),
+            timestamp: optional_string_attr(&row.attrs, "timestamp"),
+            method: string_attr(&row.attrs, "method"),
+            uri: string_attr(&row.attrs, "uri"),
+            protocol: string_attr(&row.attrs, "protocol"),
+            status: optional_u32_attr(&row.attrs, "status").unwrap_or_default() as u16,
+            response_bytes: optional_u64_attr(&row.attrs, "responseBytes"),
+            referer: optional_string_attr(&row.attrs, "referer"),
+            user_agent: optional_string_attr(&row.attrs, "userAgent"),
+            line_number: u64_attr(&row.attrs, "lineNumber"),
+        })
+        .collect()
+}
+
+fn map_web_error_logs(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxWebErrorLogDto> {
+    rows.into_iter()
+        .map(|row| LinuxWebErrorLogDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            timestamp: optional_string_attr(&row.attrs, "timestamp"),
+            severity: optional_string_attr(&row.attrs, "severity"),
+            message: string_attr(&row.attrs, "message"),
+            line_number: u64_attr(&row.attrs, "lineNumber"),
+        })
+        .collect()
+}
+
+fn map_web_findings(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxWebFindingDto> {
+    rows.into_iter()
+        .map(|row| LinuxWebFindingDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            finding_kind: string_attr(&row.attrs, "findingKind"),
+            severity: string_attr(&row.attrs, "severity"),
+            confidence: f32_attr(&row.attrs, "confidence"),
+            evidence: string_attr(&row.attrs, "evidence"),
+            client_ip: optional_string_attr(&row.attrs, "clientIp"),
+            uri: optional_string_attr(&row.attrs, "uri"),
+            timestamp: optional_string_attr(&row.attrs, "timestamp"),
+            line_number: u64_attr(&row.attrs, "lineNumber"),
+        })
+        .collect()
+}
+
+fn map_mysql_configs(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxMysqlConfigDto> {
+    rows.into_iter()
+        .map(|row| LinuxMysqlConfigDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            section: optional_string_attr(&row.attrs, "section"),
+            key: string_attr(&row.attrs, "key"),
+            value: string_attr(&row.attrs, "value"),
+            line_number: u64_attr(&row.attrs, "lineNumber"),
+        })
+        .collect()
+}
+
+fn map_mysql_logs(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxMysqlLogEntryDto> {
+    rows.into_iter()
+        .map(|row| LinuxMysqlLogEntryDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            timestamp: optional_string_attr(&row.attrs, "timestamp"),
+            severity: optional_string_attr(&row.attrs, "severity"),
+            thread_id: optional_string_attr(&row.attrs, "threadId"),
+            message: string_attr(&row.attrs, "message"),
+            line_number: u64_attr(&row.attrs, "lineNumber"),
+        })
+        .collect()
+}
+
+fn map_mysql_findings(rows: Vec<AnalysisArtifactRow>) -> Vec<LinuxMysqlFindingDto> {
+    rows.into_iter()
+        .map(|row| LinuxMysqlFindingDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            finding_kind: string_attr(&row.attrs, "findingKind"),
+            severity: string_attr(&row.attrs, "severity"),
+            confidence: f32_attr(&row.attrs, "confidence"),
+            evidence: string_attr(&row.attrs, "evidence"),
+            line_number: u64_attr(&row.attrs, "lineNumber"),
+        })
+        .collect()
+}
+
+fn string_vec_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Vec<String> {
+    attrs
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn optional_u64_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Option<u64> {
+    attrs.get(key).and_then(Value::as_u64)
+}
+
+fn f32_attr(attrs: &BTreeMap<String, Value>, key: &str) -> f32 {
+    attrs.get(key).and_then(Value::as_f64).unwrap_or_default() as f32
+}

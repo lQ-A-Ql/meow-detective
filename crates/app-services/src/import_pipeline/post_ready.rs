@@ -78,13 +78,13 @@ fn auto_extract_platform_artifacts(
                     analysis_started.elapsed().as_millis()
                 ),
             );
-            let facts = crate::cluster_service::collect_linux_evidence_facts(
+            let facts = ::analysis_core::linux_evidence_facts::collect_linux_evidence_facts(
                 ctx.conn,
                 ctx.case_root,
                 ctx.case_id,
                 &data_source.id,
             );
-            if let Err(error) = crate::cluster_service::persist_linux_evidence_facts(
+            if let Err(error) = ::analysis_core::linux_evidence_facts::persist_linux_evidence_facts(
                 source_conn,
                 &data_source.id,
                 &facts,

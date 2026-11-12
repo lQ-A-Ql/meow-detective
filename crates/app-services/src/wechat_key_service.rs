@@ -15,7 +15,7 @@
 //! logs, audit details, artifacts, plugin metadata, or reports.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::file_service::SourceReadContext;
 use crate::plugin_action_service::{call_plugin_action, PluginActionError};
@@ -35,9 +35,11 @@ pub(super) use keys_file::write_keys_file;
 pub const WECHAT_PLUGIN_ID: &str = "meow.plugin.wechat";
 /// Action id on the WeChat plugin's action channel.
 const RECOVER_KEYS_ACTION: &str = "recoverKeys";
-/// Mirrors the plugin's `keyinject::KEYS_ENV` contract (the plugin crate is
-/// not linkable from the host; the literal is the contract).
-const WECHAT_KEYS_ENV: &str = "MEOW_WECHAT_KEYS";
+/// Recovered-keys file: `<case_root>/derived/wechat-keys/keys.json`, in the
+/// keyinject format `{"<fileEntryId>": "<hex>"}` the plugin's injection
+/// channel reads during analysis extraction. File ids avoid collisions
+/// between accounts and data sources; the plugin retains legacy fallbacks.
+pub use infrastructure::wechat_keys_env::{keys_file_path, WeChatKeysEnvGuard, WECHAT_KEYS_ENV};
 const IMAGE_KEY_ENTRY: &str = "__wechat_image_key_v2";
 const IMAGE_XOR_KEY_ENTRY: &str = "__wechat_image_xor_key_v2";
 /// file_entries path fragments selecting WeChat 4.x database candidates.
@@ -46,17 +48,6 @@ const PAGE1_BYTES: usize = 4096;
 const MEDIA_SAMPLE_MAX_BYTES: usize = 1024 * 1024;
 /// Memory-dump extensions accepted for recovery (loose but never a dir).
 const DUMP_EXTENSIONS: [&str; 2] = ["dmp", "raw"];
-
-/// Recovered-keys file: `<case_root>/derived/wechat-keys/keys.json`, in the
-/// keyinject format `{"<fileEntryId>": "<hex>"}` the plugin's injection
-/// channel reads during analysis extraction. File ids avoid collisions
-/// between accounts and data sources; the plugin retains legacy fallbacks.
-pub fn keys_file_path(case_root: &Path) -> PathBuf {
-    case_root
-        .join("derived")
-        .join("wechat-keys")
-        .join("keys.json")
-}
 
 /// Recover WeChat database keys for one data source from a memory dump.
 ///
@@ -393,39 +384,6 @@ fn audit_recovery(
     );
     if let Err(error) = result {
         tracing::warn!("wechat key recovery audit event could not be recorded: {error}");
-    }
-}
-
-/// RAII guard pointing the WeChat plugin's key-injection channel
-/// (`MEOW_WECHAT_KEYS`) at the recovered keys file for the duration of one
-/// analysis extraction run; without a keys file nothing changes.
-///
-/// Process-level env caveat: this is a single-user desktop application and
-/// analysis extraction is admitted through a bounded scheduler (a single
-/// extraction slot, see `extraction/scheduler.rs`), so the set/restore
-/// window cannot race a concurrent extraction.
-pub(crate) struct WeChatKeysEnvGuard {
-    previous: Option<std::ffi::OsString>,
-}
-
-impl WeChatKeysEnvGuard {
-    pub(crate) fn activate(case_root: &Path) -> Option<Self> {
-        let path = keys_file_path(case_root);
-        if !path.is_file() {
-            return None;
-        }
-        let previous = std::env::var_os(WECHAT_KEYS_ENV);
-        std::env::set_var(WECHAT_KEYS_ENV, &path);
-        Some(Self { previous })
-    }
-}
-
-impl Drop for WeChatKeysEnvGuard {
-    fn drop(&mut self) {
-        match &self.previous {
-            Some(value) => std::env::set_var(WECHAT_KEYS_ENV, value),
-            None => std::env::remove_var(WECHAT_KEYS_ENV),
-        }
     }
 }
 

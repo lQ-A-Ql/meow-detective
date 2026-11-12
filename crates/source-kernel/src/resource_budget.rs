@@ -8,6 +8,60 @@ pub const WORKSPACE_BYTES: u64 = 1020 * MIB;
 pub const ENUMERATION_BYTES: u64 = 560 * MIB;
 pub const TIMELINE_BYTES: u64 = 1_000_000 * 1024;
 
+const DEFAULT_CPU_CAP: usize = 6;
+const ANALYSIS_WORKER_MEMORY_RESERVATION_MB: u64 = 192;
+
+/// CPU capacity available to bounded worker pools.
+pub fn default_cpu_budget() -> usize {
+    if let Some(cap) = cpu_capacity_override() {
+        return cap.max(1);
+    }
+    std::thread::available_parallelism()
+        .map(|count| count.get().min(DEFAULT_CPU_CAP))
+        .unwrap_or(DEFAULT_CPU_CAP)
+        .max(1)
+}
+
+fn cpu_capacity_override() -> Option<usize> {
+    std::env::var("FORENSICS_TEST_CPU_CAPACITY")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+}
+
+/// Bounded analysis worker count for the current CPU capacity.
+pub fn resolve_analysis_worker_count(max_analysis_workers: Option<usize>) -> usize {
+    resolve_requested(max_analysis_workers, default_cpu_budget())
+}
+
+/// Resolve analysis workers against both CPU capacity and the process RSS
+/// soft limit. A worker is given a conservative memory reservation so a small
+/// CPU increase cannot turn into an unbounded peak when several content files
+/// are processed at once. A zero RSS/limit keeps deterministic callers from
+/// being throttled when the platform cannot provide memory telemetry.
+pub fn resolve_analysis_worker_count_for_memory(
+    max_analysis_workers: Option<usize>,
+    rss_mb: u64,
+    memory_soft_limit_mb: u64,
+) -> usize {
+    let cpu_bound = resolve_analysis_worker_count(max_analysis_workers);
+    if rss_mb == 0 || memory_soft_limit_mb == 0 {
+        return cpu_bound;
+    }
+    let available_mb = memory_soft_limit_mb.saturating_sub(rss_mb);
+    let memory_bound = (available_mb / ANALYSIS_WORKER_MEMORY_RESERVATION_MB).max(1);
+    let memory_bound = usize::try_from(memory_bound).unwrap_or(usize::MAX);
+    cpu_bound.min(memory_bound).max(1)
+}
+
+fn resolve_requested(requested: Option<usize>, capacity: usize) -> usize {
+    requested
+        .filter(|count| *count > 0)
+        .unwrap_or(capacity.min(2))
+        .min(capacity)
+        .max(1)
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Resources {
     pub bytes: u64,

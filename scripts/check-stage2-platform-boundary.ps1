@@ -15,15 +15,15 @@ function Read-StrictUtf8([string]$Path) {
 }
 
 $requiredPaths = @(
-  'crates/app-services/src/analysis_service/capability.rs',
-  'crates/app-services/src/analysis_service/platforms/mod.rs',
-  'crates/app-services/src/analysis_service/platforms/windows.rs',
-  'crates/app-services/src/analysis_service/platforms/linux.rs',
-  'crates/app-services/src/analysis_service/platforms/source.rs',
-  'crates/app-services/src/analysis_service/use_cases/mod.rs',
-  'crates/app-services/src/analysis_service/use_cases/source.rs',
-  'crates/app-services/src/analysis_service/candidates.rs',
-  'crates/app-services/src/analysis_service/extraction/linux.rs',
+  'crates/analysis-core/src/analysis_service/capability.rs',
+  'crates/analysis-core/src/analysis_service/platforms/mod.rs',
+  'crates/analysis-core/src/analysis_service/platforms/windows.rs',
+  'crates/analysis-core/src/analysis_service/platforms/linux.rs',
+  'crates/analysis-core/src/analysis_service/platforms/source.rs',
+  'crates/analysis-core/src/analysis_service/use_cases/mod.rs',
+  'crates/analysis-core/src/analysis_service/use_cases/source.rs',
+  'crates/analysis-core/src/analysis_service/candidates.rs',
+  'crates/analysis-core/src/analysis_service/extraction/linux.rs',
   'crates/app-services/src/import_analysis/extractor_policy.rs',
   'crates/app-services/src/report/source_analysis.rs',
   'crates/source-kernel/src/source_db/ready.rs',
@@ -39,6 +39,7 @@ foreach ($relativePath in $requiredPaths) {
 
 $serviceRoots = @(
   (Join-Path $repoRoot 'crates/app-services/src'),
+  (Join-Path $repoRoot 'crates/analysis-core/src'),
   (Join-Path $repoRoot 'crates/source-kernel/src')
 )
 foreach ($serviceRoot in $serviceRoots) {
@@ -105,7 +106,7 @@ if (Test-Path -LiteralPath $analysisCommandPath -PathType Leaf) {
   }
 }
 
-$analysisSourceUseCasePath = Join-Path $repoRoot 'crates/app-services/src/analysis_service/use_cases/source.rs'
+$analysisSourceUseCasePath = Join-Path $repoRoot 'crates/analysis-core/src/analysis_service/use_cases/source.rs'
 if (Test-Path -LiteralPath $analysisSourceUseCasePath -PathType Leaf) {
   $analysisSourceUseCase = Read-StrictUtf8 $analysisSourceUseCasePath
   foreach ($required in @(
@@ -117,7 +118,7 @@ if (Test-Path -LiteralPath $analysisSourceUseCasePath -PathType Leaf) {
   }
 }
 
-$evidencePolicyPath = Join-Path $repoRoot 'crates/app-services/src/analysis_service/platforms/evidence.rs'
+$evidencePolicyPath = Join-Path $repoRoot 'crates/analysis-core/src/analysis_service/platforms/evidence.rs'
 if (Test-Path -LiteralPath $evidencePolicyPath -PathType Leaf) {
   $evidencePolicy = Read-StrictUtf8 $evidencePolicyPath
   foreach ($required in @(
@@ -131,7 +132,7 @@ if (Test-Path -LiteralPath $evidencePolicyPath -PathType Leaf) {
   }
 }
 
-$candidateSummaryPath = Join-Path $repoRoot 'crates/app-services/src/analysis_service/candidates/summary.rs'
+$candidateSummaryPath = Join-Path $repoRoot 'crates/analysis-core/src/analysis_service/candidates/summary.rs'
 if (Test-Path -LiteralPath $candidateSummaryPath -PathType Leaf) {
   $candidateSummary = Read-StrictUtf8 $candidateSummaryPath
   foreach ($required in @(
@@ -144,7 +145,7 @@ if (Test-Path -LiteralPath $candidateSummaryPath -PathType Leaf) {
   }
 }
 
-$candidateCommonPath = Join-Path $repoRoot 'crates/app-services/src/analysis_service/candidates/common.rs'
+$candidateCommonPath = Join-Path $repoRoot 'crates/analysis-core/src/analysis_service/candidates/common.rs'
 if (Test-Path -LiteralPath $candidateCommonPath -PathType Leaf) {
   $candidateCommon = Read-StrictUtf8 $candidateCommonPath
   if ($candidateCommon -match 'super::windows|windows::') {
@@ -378,8 +379,8 @@ foreach ($relativePath in @(
 }
 
 foreach ($relativePath in @(
-  'crates/app-services/src/analysis_service/candidates.rs',
-  'crates/app-services/src/analysis_service/extraction/linux.rs'
+  'crates/analysis-core/src/analysis_service/candidates.rs',
+  'crates/analysis-core/src/analysis_service/extraction/linux.rs'
 )) {
   $absolutePath = Join-Path $repoRoot $relativePath
   if (-not (Test-Path -LiteralPath $absolutePath -PathType Leaf)) {

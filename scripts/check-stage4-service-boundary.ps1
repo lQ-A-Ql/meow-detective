@@ -167,10 +167,10 @@ $facades = @(
   'crates/app-services/src/correlation/mod.rs',
   'crates/app-services/src/entity_resolution/mod.rs',
   'crates/app-services/src/rule_pack/mod.rs',
-  'crates/app-services/src/analysis_service/extraction/browser.rs',
-  'crates/app-services/src/analysis_service/extraction/registry/mod.rs',
-  'crates/app-services/src/analysis_service/extraction/summary/linux.rs',
-  'crates/app-services/src/analysis_service/extraction/summary/registry.rs',
+  'crates/analysis-core/src/analysis_service/extraction/browser.rs',
+  'crates/analysis-core/src/analysis_service/extraction/registry/mod.rs',
+  'crates/analysis-core/src/analysis_service/extraction/summary/linux.rs',
+  'crates/analysis-core/src/analysis_service/extraction/summary/registry.rs',
   'crates/evidence-access/src/datasource_service/lvm.rs',
   'crates/app-services/src/governance/scoring.rs',
   'crates/app-services/src/import_analysis/mod.rs',
@@ -212,25 +212,25 @@ $moduleManifest = @(
   @('crates/app-services/src/correlation/graph.rs', 'snapshot', 'crates/app-services/src/correlation/graph/snapshot.rs'),
   @('crates/app-services/src/entity_resolution/cross_case/mod.rs', 'matching', 'crates/app-services/src/entity_resolution/cross_case/matching.rs'),
   @('crates/app-services/src/rule_pack/engine/mod.rs', 'execution', 'crates/app-services/src/rule_pack/engine/execution.rs'),
-  @('crates/app-services/src/analysis_service/extraction/browser.rs', 'chromium', 'crates/app-services/src/analysis_service/extraction/browser/chromium.rs'),
-  @('crates/app-services/src/analysis_service/extraction/browser.rs', 'firefox', 'crates/app-services/src/analysis_service/extraction/browser/firefox.rs'),
-  @('crates/app-services/src/analysis_service/extraction/browser.rs', 'profile', 'crates/app-services/src/analysis_service/extraction/browser/profile.rs'),
-  @('crates/app-services/src/analysis_service/extraction/browser.rs', 'records', 'crates/app-services/src/analysis_service/extraction/browser/records.rs'),
-  @('crates/app-services/src/analysis_service/extraction/browser.rs', 'sqlite', 'crates/app-services/src/analysis_service/extraction/browser/sqlite.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/mod.rs', 'context', 'crates/app-services/src/analysis_service/extraction/registry/context.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/mod.rs', 'dispatch', 'crates/app-services/src/analysis_service/extraction/registry/dispatch.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/mod.rs', 'extractors', 'crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs'),
-  @('crates/app-services/src/analysis_service/extraction/mod.rs', 'registry_preload', 'crates/app-services/src/analysis_service/extraction/registry_preload.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/mod.rs', 'warnings', 'crates/app-services/src/analysis_service/extraction/registry/warnings.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs', 'amcache', 'crates/app-services/src/analysis_service/extraction/registry/extractors/amcache.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs', 'ntuser', 'crates/app-services/src/analysis_service/extraction/registry/extractors/ntuser.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs', 'sam', 'crates/app-services/src/analysis_service/extraction/registry/extractors/sam.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs', 'security', 'crates/app-services/src/analysis_service/extraction/registry/extractors/security.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs', 'software', 'crates/app-services/src/analysis_service/extraction/registry/extractors/software.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs', 'system', 'crates/app-services/src/analysis_service/extraction/registry/extractors/system.rs'),
-  @('crates/app-services/src/analysis_service/extraction/registry/extractors/mod.rs', 'usrclass', 'crates/app-services/src/analysis_service/extraction/registry/extractors/usrclass.rs'),
-  @('crates/app-services/src/analysis_service/extraction/summary/linux.rs', 'mapping', 'crates/app-services/src/analysis_service/extraction/summary/linux/mapping.rs'),
-  @('crates/app-services/src/analysis_service/extraction/summary/registry.rs', 'structured', 'crates/app-services/src/analysis_service/extraction/summary/registry/structured.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/browser.rs', 'chromium', 'crates/analysis-core/src/analysis_service/extraction/browser/chromium.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/browser.rs', 'firefox', 'crates/analysis-core/src/analysis_service/extraction/browser/firefox.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/browser.rs', 'profile', 'crates/analysis-core/src/analysis_service/extraction/browser/profile.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/browser.rs', 'records', 'crates/analysis-core/src/analysis_service/extraction/browser/records.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/browser.rs', 'sqlite', 'crates/analysis-core/src/analysis_service/extraction/browser/sqlite.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/registry/mod.rs', 'context', 'crates/analysis-core/src/analysis_service/extraction/registry/context.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/registry/mod.rs', 'dispatch', 'crates/analysis-core/src/analysis_service/extraction/registry/dispatch.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/registry/mod.rs', 'extractors', 'crates/analysis-core/src/analysis_service/extraction/registry/extractors/mod.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/mod.rs', 'registry_preload', 'crates/analysis-core/src/analysis_service/extraction/registry_preload.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/registry/mod.rs', 'warnings', 'crates/analysis-core/src/analysis_service/extraction/registry/warnings.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/registry/extractors/mod.rs', 'amcache', 'crates/analysis-core/src/analysis_service/extraction/registry/extractors/amcache.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/registry/extractors/mod.rs', 'ntuser', 'crates/analysis-core/src/analysis_service/extraction/registry/extractors/ntuser.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/registry/extractors/mod.rs', 'sam', 'crates/analysis-core/src/analysis_service/extraction/registry/extractors/sam.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/registry/extractors/mod.rs', 'security', 'crates/analysis-core/src/analysis_service/extraction/registry/extractors/security.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/registry/extractors/mod.rs', 'software', 'crates/analysis-core/src/analysis_service/extraction/registry/extractors/software.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/registry/extractors/mod.rs', 'system', 'crates/analysis-core/src/analysis_service/extraction/registry/extractors/system.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/registry/extractors/mod.rs', 'usrclass', 'crates/analysis-core/src/analysis_service/extraction/registry/extractors/usrclass.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/summary/linux.rs', 'mapping', 'crates/analysis-core/src/analysis_service/extraction/summary/linux/mapping.rs'),
+  @('crates/analysis-core/src/analysis_service/extraction/summary/registry.rs', 'structured', 'crates/analysis-core/src/analysis_service/extraction/summary/registry/structured.rs'),
   @('crates/evidence-access/src/datasource_service/lvm.rs', 'diagnostics', 'crates/evidence-access/src/datasource_service/lvm/diagnostics.rs'),
   @('crates/evidence-access/src/datasource_service/lvm.rs', 'discovery', 'crates/evidence-access/src/datasource_service/lvm/discovery.rs'),
   @('crates/evidence-access/src/datasource_service/lvm.rs', 'expansion', 'crates/evidence-access/src/datasource_service/lvm/expansion.rs'),
@@ -285,24 +285,31 @@ foreach ($entry in $moduleManifest) {
 }
 
 $metadata = Invoke-RustGuardCargoMetadata -RepoRoot $repoRoot
-$appServicesPackage = @($metadata.packages | Where-Object { $_.name -ceq 'app-services' })
-if ($appServicesPackage.Count -ne 1) {
-  $errors.Add("cargo metadata must contain exactly one app-services package; found $($appServicesPackage.Count)")
-} else {
-  foreach ($dependency in @($appServicesPackage[0].dependencies)) {
+foreach ($packageName in @('app-services', 'analysis-core')) {
+  $packages = @($metadata.packages | Where-Object { $_.name -ceq $packageName })
+  if ($packages.Count -ne 1) {
+    $errors.Add("cargo metadata must contain exactly one $packageName package; found $($packages.Count)")
+    continue
+  }
+  foreach ($dependency in @($packages[0].dependencies)) {
     if (Test-ForbiddenTauriDependency ([string]$dependency.name)) {
       $alias = if ([string]::IsNullOrWhiteSpace([string]$dependency.rename)) {
         ''
       } else {
         " alias=$($dependency.rename)"
       }
-      $errors.Add("app-services must not depend on Tauri runtime crates: $($dependency.name)$alias")
+      $errors.Add("$packageName must not depend on Tauri runtime crates: $($dependency.name)$alias")
     }
   }
 }
 
-$serviceRoot = Join-Path $repoRoot 'crates/app-services/src'
-$serviceFiles = Get-ChildItem -LiteralPath $serviceRoot -Recurse -File -Filter '*.rs'
+$serviceRoots = @(
+  (Join-Path $repoRoot 'crates/app-services/src'),
+  (Join-Path $repoRoot 'crates/analysis-core/src')
+)
+$serviceFiles = foreach ($serviceRoot in $serviceRoots) {
+  Get-ChildItem -LiteralPath $serviceRoot -Recurse -File -Filter '*.rs'
+}
 $serviceMaskedSources = (
   $serviceFiles |
     Sort-Object -Property FullName |
@@ -310,7 +317,7 @@ $serviceMaskedSources = (
 ) -join "`n"
 
 if ($serviceMaskedSources -cmatch '\btauri(?:::|_)|\bAppHandle\b|\bEmitter\b') {
-  $errors.Add('app-services must remain independent from the Tauri runtime')
+  $errors.Add('app-services and analysis-core must remain independent from the Tauri runtime')
 }
 
 Assert-NoModuleReferencesUnder `
@@ -318,7 +325,7 @@ Assert-NoModuleReferencesUnder `
   @('analysis_service', 'file_service', 'derived_source_service') `
   'Ceph reconstruction is a lower-level capability and must not depend on higher-level orchestration'
 Assert-NoModuleReferencesUnder `
-  'crates/app-services/src/analysis_service' `
+  'crates/analysis-core/src/analysis_service' `
   @('derived_source_service') `
   'Analysis must not depend on derived-source orchestration'
 Assert-NoModuleReferencesUnder `

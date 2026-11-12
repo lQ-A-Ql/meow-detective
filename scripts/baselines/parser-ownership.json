@@ -10,7 +10,7 @@
       "owners": ["crates/containers-bolt/src/read.rs", "crates/containers-bolt/src/walk.rs"],
       "references": [
         {"path":"crates/app-services/src/cluster_service/etcd_bolt.rs","marker":"crate::bolt_reader_service"},
-        {"path":"crates/app-services/src/analysis_service/extraction/containerd_images.rs","marker":"bolt_reader_service"}
+        {"path":"crates/analysis-core/src/analysis_service/extraction/containerd_images.rs","marker":"bolt_reader_service"}
       ]
     },
     {
@@ -32,22 +32,22 @@
       "owners": ["crates/artifacts-browser/src/history/schema.rs", "crates/artifacts-browser/src/history/visit.rs", "crates/artifacts-browser/src/sqlite.rs"],
       "retired": ["crates/artifacts-windows/src/browser/chromium/history.rs", "crates/artifacts-windows/src/browser/firefox/history.rs", "crates/artifacts-windows/src/browser/chromium/sqlite.rs", "crates/artifacts-windows/src/browser/firefox/sqlite.rs"],
       "references": [
-        {"path":"crates/app-services/src/analysis_service/extraction/browser/history.rs","marker":"artifacts_browser"},
-        {"path":"crates/app-services/src/analysis_service/extraction/browser/chromium.rs","marker":"artifacts_browser"}
+        {"path":"crates/analysis-core/src/analysis_service/extraction/browser/history.rs","marker":"artifacts_browser"},
+        {"path":"crates/analysis-core/src/analysis_service/extraction/browser/chromium.rs","marker":"artifacts_browser"}
       ]
     },
     {
       "id": "D06", "name": "RFC 5322 message",
       "owners": ["crates/containers-pst/src/message.rs", "crates/containers-pst/src/message/fields.rs", "crates/containers-pst/src/message/parts.rs"],
       "retired": ["crates/containers-pst/src/mbox/mime.rs", "crates/containers-pst/src/mbox/header.rs", "crates/containers-pst/src/mbox/framing.rs"],
-      "references": [{"path":"crates/app-services/src/analysis_service/extraction/email/eml/parser.rs","marker":"containers_pst"}]
+      "references": [{"path":"crates/analysis-core/src/analysis_service/extraction/email/eml/parser.rs","marker":"containers_pst"}]
     },
     {
       "id": "D07", "name": "OS release",
       "owners": ["crates/artifacts-linux/src/os_release.rs"],
       "references": [
         {"path":"crates/app-services/src/mount_service/emulation_linux.rs","marker":"linux_identity_service"},
-        {"path":"crates/app-services/src/cluster_service/linux_evidence_facts.rs","marker":"linux_identity_service"}
+        {"path":"crates/analysis-core/src/linux_evidence_facts.rs","marker":"linux_identity_service"}
       ]
     },
     {

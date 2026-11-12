@@ -115,6 +115,53 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "analysis-core"
+version = "0.1.0"
+dependencies = [
+ "artifacts-android",
+ "artifacts-browser",
+ "artifacts-core",
+ "artifacts-linux",
+ "artifacts-windows",
+ "base64 0.22.1",
+ "ceph-reconstruction",
+ "chrono",
+ "chrono-tz",
+ "containers-pst",
+ "crossbeam-channel",
+ "dirs",
+ "domain",
+ "evidence-access",
+ "evidence-core",
+ "flate2",
+ "fs-ntfs",
+ "hex",
+ "image-e01",
+ "infrastructure",
+ "libloading",
+ "persistence-source",
+ "persistence-sqlite",
+ "plugin-api",
+ "rand 0.8.7",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2 0.10.9",
+ "source-kernel",
+ "tempfile",
+ "testing",
+ "thiserror 2.0.21",
+ "timeline",
+ "toml 0.8.2",
+ "tracing",
+ "transport",
+ "uuid",
+ "zeroize",
+ "zip",
+]
+
+[[package]]
 name = "android-abx"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -196,6 +243,7 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 name = "app-services"
 version = "0.1.0"
 dependencies = [
+ "analysis-core",
  "artifact-storage",
  "artifacts-android",
  "artifacts-browser",

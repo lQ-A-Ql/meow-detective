@@ -14,7 +14,6 @@ mod kubernetes_dispatch;
 mod kubernetes_inventory;
 mod kubernetes_parser_error;
 mod kubernetes_yaml;
-mod linux_evidence_facts;
 mod linux_import;
 mod manifest_parser;
 mod mdraid_materialization;
@@ -26,9 +25,11 @@ mod topology_projection;
 
 pub mod kubernetes_paths;
 
+pub use ::analysis_core::linux_evidence_facts::{
+    collect_linux_evidence_facts, persist_linux_evidence_facts,
+};
 pub use kind::{TopologyEdgeKind, TopologyMemberRole, TopologyScopeKind};
 pub use kubernetes_paths::KubernetesArtifactKind;
-pub use linux_evidence_facts::{collect_linux_evidence_facts, persist_linux_evidence_facts};
 pub use topology_projection::{project_import_set_topology, ImportSetTopologyProjection};
 
 pub use ::ceph_reconstruction::cluster_scope::ceph_scope_report::{
