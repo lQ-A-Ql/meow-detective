@@ -42,7 +42,19 @@ jobs:
           ./scripts/check-tauri-version-alignment.ps1
           pnpm --dir frontend build
       - name: Format
-        run: cargo fmt --all -- --check
+        shell: pwsh
+        run: |
+          # cargo-fmt batches all workspace targets into one rustfmt command line,
+          # which exceeds the Windows 32K limit (os error 206). Format per package.
+          $ErrorActionPreference = 'Stop'
+          $metadata = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'cargo metadata failed' }
+          $failed = @()
+          foreach ($package in $metadata.packages) {
+            cargo fmt --package $package.name -- --check
+            if ($LASTEXITCODE -ne 0) { $failed += $package.name }
+          }
+          if ($failed.Count -gt 0) { throw ("cargo fmt failed for: " + ($failed -join ', ')) }
       - name: Documentation drift guard
         shell: pwsh
         run: ./scripts/check-doc-drift.ps1
