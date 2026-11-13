@@ -208,6 +208,13 @@ powershell -ExecutionPolicy Bypass -File scripts\check-stage6-test-separation.ps
 powershell -ExecutionPolicy Bypass -File scripts\check-module-size.ps1 -SelfTest
 powershell -ExecutionPolicy Bypass -File scripts\check-module-size.ps1
 
+# Per-crate dependency and source-size budget guard. Discovers workspace
+# members through cargo metadata, counts normal internal dependencies and
+# lines under each governed crate's src tree, and compares them with
+# scripts/baselines/crate-budget-policy.csv (owner/reason/expiry required).
+powershell -ExecutionPolicy Bypass -File scripts\check-crate-budget.ps1 -SelfTest
+powershell -ExecutionPolicy Bypass -File scripts\check-crate-budget.ps1
+
 # New normal modules at 501-800 lines require a temporary, reviewed row in
 # scripts/baselines/rust-module-size-exceptions.csv. Every row requires
 # path/owner/reason/expires; stale, duplicate, expired, invalid, vendored, or

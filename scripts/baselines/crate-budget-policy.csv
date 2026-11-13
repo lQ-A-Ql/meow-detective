@@ -1,0 +1,9 @@
+crate,maxInternalDeps,maxSrcLoc,owner,reason,expires
+analysis-core,19,31000,architecture,analysis capability layer with ten percent headroom,2027-06-30
+app-services,26,31500,architecture,use-case orchestration plus artifact report search and bitlocker services,2027-06-30
+ceph-reconstruction,13,22500,architecture,ceph reconstruction and wire decoders with ten percent headroom,2027-06-30
+emulation-services,16,3000,architecture,controlled emulation workflows with ten percent headroom,2027-06-30
+evidence-access,26,26000,architecture,evidence read preview and partition services with ten percent headroom,2027-06-30
+import-core,30,17500,architecture,import pipeline staging scheduling and projection with ten percent headroom,2027-06-30
+source-kernel,12,4500,architecture,source lifecycle probe model and reader cache with ten percent headroom,2027-06-30
+source-reconstruction,27,16500,architecture,cluster derived deleted and mount reconstruction with ten percent headroom,2027-06-30

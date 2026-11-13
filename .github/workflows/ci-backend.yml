@@ -80,6 +80,8 @@ jobs:
           ./scripts/check-rust-function-size.ps1
           ./scripts/check-rust-test-layout.ps1 -SelfTest
           ./scripts/check-rust-test-layout.ps1
+          ./scripts/check-crate-budget.ps1 -SelfTest
+          ./scripts/check-crate-budget.ps1
           ./scripts/check-private-real-sample-tests.ps1 -SelfTest
           ./scripts/check-private-real-sample-tests.ps1
           ./scripts/check-stage0-boundary-guard.ps1

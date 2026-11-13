@@ -7,13 +7,11 @@ license.workspace = true
 
 [dependencies]
 chrono.workspace = true
-chrono-tz.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 crossbeam-channel.workspace = true
-num_cpus.workspace = true
 rayon.workspace = true
 
 domain.workspace = true
@@ -30,12 +28,46 @@ emulation-services.workspace = true
 import-core.workspace = true
 source-reconstruction.workspace = true
 evidence-core.workspace = true
-evidence-mount.workspace = true
 volume-bitlocker.workspace = true
 memory-windows.workspace = true
 fs-ntfs.workspace = true
 fs-fat.workspace = true
 fs-exfat.workspace = true
+search.workspace = true
+artifacts-core.workspace = true
+artifacts-windows.workspace = true
+timeline.workspace = true
+reports.workspace = true
+rusqlite.workspace = true
+uuid.workspace = true
+sha2.workspace = true
+subtle.workspace = true
+rand.workspace = true
+hex.workspace = true
+once_cell.workspace = true
+zeroize.workspace = true
+regex.workspace = true
+unicode-normalization = { workspace = true }
+toml.workspace = true
+zip.workspace = true
+tempfile.workspace = true
+base64.workspace = true
+libloading.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[dev-dependencies]
+flate2.workspace = true
+crc32fast.workspace = true
+sha1.workspace = true
+dirs.workspace = true
+rusqlite = { workspace = true, features = ["functions"] }
+tempfile.workspace = true
+sha2.workspace = true
+testing.workspace = true
+winpe-maintenance.workspace = true
+tracing-subscriber.workspace = true
 image-e01.workspace = true
 image-android.workspace = true
 fs-ext4.workspace = true
@@ -45,56 +77,7 @@ fs-xfs.workspace = true
 fs-btrfs.workspace = true
 fs-lvm.workspace = true
 ceph-wire.workspace = true
-search.workspace = true
-artifacts-core.workspace = true
-artifacts-android.workspace = true
-artifacts-windows.workspace = true
-artifacts-browser.workspace = true
 artifacts-linux.workspace = true
-flate2.workspace = true
-kamadak-exif.workspace = true
-crc32fast.workspace = true
-xz2.workspace = true
-zstd.workspace = true
-lz4_flex.workspace = true
-timeline.workspace = true
-reports.workspace = true
-rusqlite.workspace = true
-uuid.workspace = true
-encoding_rs.workspace = true
-sha2.workspace = true
-subtle.workspace = true
-rand.workspace = true
-sha1.workspace = true
-md-5.workspace = true
-hex.workspace = true
-once_cell.workspace = true
-zeroize.workspace = true
-regex.workspace = true
-unicode-normalization = { workspace = true }
-toml.workspace = true
-zip.workspace = true
-quick-xml.workspace = true
-lopdf.workspace = true
-containers-pst.workspace = true
-tempfile.workspace = true
-base64.workspace = true
 evidence-emulation.workspace = true
 evidence-block.workspace = true
-libloading.workspace = true
-dirs.workspace = true
 plugin-api = { path = "../plugin-api" }
-
-[target.'cfg(windows)'.dependencies]
-windows-sys.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-libc.workspace = true
-
-[dev-dependencies]
-rusqlite = { workspace = true, features = ["functions"] }
-tempfile.workspace = true
-sha2.workspace = true
-testing.workspace = true
-winpe-maintenance.workspace = true
-tracing-subscriber.workspace = true
