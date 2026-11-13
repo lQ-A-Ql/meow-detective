@@ -1,8 +1,10 @@
-use crate::timeline_service::fjall::restored_skip_remaining;
+use crate::timeline_service::fjall::validate_resume_position;
 
 #[test]
-fn saved_after_key_skips_the_consumed_prefix_only_when_present() {
-    assert_eq!(restored_skip_remaining(5, true), 0);
-    assert_eq!(restored_skip_remaining(5, false), 5);
-    assert_eq!(restored_skip_remaining(0, false), 0);
+fn resumed_source_requires_a_position_until_it_is_exhausted() {
+    assert!(validate_resume_position(5, 10, true).is_ok());
+    assert!(validate_resume_position(5, 10, false).is_err());
+    assert!(validate_resume_position(0, 10, false).is_ok());
+    assert!(validate_resume_position(10, 10, false).is_ok());
+    assert!(validate_resume_position(11, 10, true).is_err());
 }

@@ -17,6 +17,12 @@ pub(super) fn validate_arguments(name: &str, arguments: &Value) -> Result<(), Mc
     let fields = arguments
         .as_object()
         .ok_or_else(|| McpHostServiceError::Invalid("arguments 必须是 JSON 对象".to_string()))?;
+    if name == "forensics.get_timeline_events" {
+        if let Some(offset) = fields.get("offset").and_then(Value::as_u64) {
+            transport::paging::validate_page_offset(offset)
+                .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+        }
+    }
     let properties = &tool.input_schema["properties"];
     for key in tool.input_schema["required"]
         .as_array()

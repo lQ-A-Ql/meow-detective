@@ -1,5 +1,12 @@
 # IPC 事件契约
 
+## Artifact 与 Timeline 条目分页
+
+`GetArtifactRowsRequest` 和 `GetTimelineRequest` 的 `offset` 接受 0 至 10000，
+超过上限返回 `INVALID_INPUT`。应用服务的对应分页入口执行相同校验。
+继续读取时，将响应中的 `nextCursor` 传入 `cursor`，同时将 `offset` 设为 0。
+游标仍校验案件、数据源集合、筛选条件及存储版本。
+
 ## PNG carving 任务与字节地址
 
 新增能力复用 `start_evidence_task` / 查询 / 取消链路，tag 为 `carvePng`；

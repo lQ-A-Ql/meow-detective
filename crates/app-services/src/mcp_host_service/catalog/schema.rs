@@ -82,6 +82,15 @@ pub(super) fn non_negative_integer() -> Value {
     json!({"type":"integer", "minimum":0, "maximum":MCP_MAX_SAFE_OFFSET, "default":0})
 }
 
+pub(super) fn page_offset() -> Value {
+    json!({
+        "type":"integer",
+        "minimum":0,
+        "maximum":transport::paging::MAX_PAGE_OFFSET,
+        "default":0
+    })
+}
+
 pub(super) fn page_limit(maximum: u32, default: u32) -> Value {
     json!({"type":"integer", "minimum":1, "maximum":maximum, "default":default})
 }

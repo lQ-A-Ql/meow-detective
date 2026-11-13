@@ -11,8 +11,6 @@ use transport::{
     paging::{decode_opaque_cursor, encode_opaque_cursor, PageResponse},
 };
 
-/// v4 changed `after` from the prefetched head key to the last consumed key,
-/// so v3 cursors are rejected instead of silently skipping one row on resume.
 const CURSOR_VERSION: u8 = 4;
 const CURSOR_KIND: &str = "timeline-fjall";
 const FETCH_LIMIT: usize = 1;
@@ -57,22 +55,21 @@ struct FjallSourcePage {
     /// scan, and this key only advances the position once the head is taken.
     head_after: Option<Vec<u8>>,
     exhausted: bool,
-    skip_remaining: u64,
 }
 
-pub(super) fn try_query(
+pub(super) fn query(
     case_conn: &Connection,
     case_root: &std::path::Path,
     case_id: &CaseId,
     query: TimelineQuery<'_>,
-) -> Result<Option<PageResponse<TimelineEventDto>>, TimelineServiceError> {
+) -> Result<PageResponse<TimelineEventDto>, TimelineServiceError> {
     let ready = source_db::ready_data_sources(case_conn, case_id)?;
     if ready.is_empty() {
-        return Ok(Some(PageResponse {
+        return Ok(PageResponse {
             total: 0,
             items: Vec::new(),
             next_cursor: None,
-        }));
+        });
     }
     let mut sources = Vec::with_capacity(ready.len());
     for (source, _) in ready {
@@ -87,7 +84,7 @@ pub(super) fn try_query(
         Some(cursor) => resume_cursor(case_id, &context, cursor, sources)?,
         None => capture_cursor(case_id, &context, sources)?,
     };
-    Ok(Some(paginate(state, pages, query.offset, query.limit)?))
+    paginate(state, pages, query.offset, query.limit)
 }
 
 fn capture_cursor(
@@ -131,11 +128,10 @@ fn resume_cursor(
 ) -> Result<(FjallCursor, Vec<FjallSourcePage>), TimelineServiceError> {
     let state: FjallCursor =
         decode_opaque_cursor(encoded).map_err(|error| invalid_cursor(error.to_string()))?;
-    if state.version != CURSOR_VERSION
-        || state.kind != CURSOR_KIND
-        || state.context != *context
-        || (state.case_id != case_id.0 && !state.case_id.is_empty())
-    {
+    if state.version != CURSOR_VERSION {
+        return Err(invalid_cursor("unsupported timeline cursor version"));
+    }
+    if state.kind != CURSOR_KIND || state.context != *context || state.case_id != case_id.0 {
         return Err(invalid_cursor("query context does not match"));
     }
     let current_ids = sources
@@ -152,6 +148,16 @@ fn resume_cursor(
     }
     let mut pages = Vec::with_capacity(sources.len());
     for ((source_id, source), source_state) in sources.into_iter().zip(state.sources.iter()) {
+        validate_resume_position(
+            source_state.consumed,
+            source_state.count,
+            source_state.after.is_some(),
+        )?;
+        if source_state.count > 0 && source_state.snapshot_upper_bound.is_none() {
+            return Err(invalid_cursor(
+                "timeline source is missing its snapshot bound",
+            ));
+        }
         let snapshot = source.snapshot();
         let revision = source.timeline_cursor_revision(&snapshot)?;
         let current_count = count_source(&source, &snapshot, &source_id.0, context)?;
@@ -284,7 +290,6 @@ impl FjallSourcePage {
             head: None,
             head_after: None,
             exhausted: count == 0,
-            skip_remaining: 0,
         }
     }
 
@@ -293,11 +298,6 @@ impl FjallSourcePage {
         snapshot: SourceReadSnapshot,
         state: FjallSourceCursor,
     ) -> Self {
-        // A cursor that saved the Fjall key of its last consumed record resumes
-        // with an exclusive scan from that key instead of replaying the consumed
-        // prefix. Only legacy or incomplete cursors fall back to counting the
-        // records that still have to be skipped.
-        let skip_remaining = restored_skip_remaining(state.consumed, state.after.is_some());
         Self {
             exhausted: state.consumed >= state.count,
             state,
@@ -305,7 +305,6 @@ impl FjallSourcePage {
             snapshot,
             head: None,
             head_after: None,
-            skip_remaining,
         }
     }
 
@@ -343,14 +342,11 @@ impl FjallSourcePage {
             if next_after.is_none() {
                 self.exhausted = true;
             }
-            if self.skip_remaining > 0 {
-                self.skip_remaining = self.skip_remaining.saturating_sub(1);
-                self.state.after = next_after;
-                continue;
-            }
-            if record.timestamp <= self.state.snapshot_upper_bound.unwrap_or(record.timestamp)
-                && matches_context(&record, context)?
-            {
+            let upper_bound = self
+                .state
+                .snapshot_upper_bound
+                .ok_or_else(|| invalid_cursor("timeline source is missing its snapshot bound"))?;
+            if record.timestamp <= upper_bound && matches_context(&record, context)? {
                 self.head_after = next_after;
                 self.head = Some(record);
                 return Ok(());
@@ -360,14 +356,17 @@ impl FjallSourcePage {
     }
 }
 
-/// Restored cursors carry the Fjall key of the last consumed record, so nothing
-/// has to be replayed; cursors without a saved key keep the legacy replay rule.
-pub(crate) fn restored_skip_remaining(consumed: u64, after_present: bool) -> u64 {
-    if after_present {
-        0
-    } else {
-        consumed
+pub(crate) fn validate_resume_position(
+    consumed: u64,
+    count: u64,
+    after_present: bool,
+) -> Result<(), TimelineServiceError> {
+    if consumed > count || (consumed > 0 && consumed < count && !after_present) {
+        return Err(invalid_cursor(
+            "timeline source has no valid resume position",
+        ));
     }
+    Ok(())
 }
 
 fn count_source(

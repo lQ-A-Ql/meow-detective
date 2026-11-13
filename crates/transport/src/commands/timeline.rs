@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::validation::{DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT};
-use crate::paging::validate_opaque_cursor;
+use crate::paging::{validate_opaque_cursor, validate_page_offset};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,6 +23,7 @@ pub struct GetTimelineRequest {
 
 impl GetTimelineRequest {
     pub fn validate(&mut self) -> Result<(), String> {
+        validate_page_offset(self.offset).map_err(|error| error.to_string())?;
         if self.limit == 0 {
             self.limit = DEFAULT_PAGE_LIMIT;
         }

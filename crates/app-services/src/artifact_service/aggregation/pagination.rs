@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use transport::{
     dto::ArtifactRowDto,
-    paging::{decode_opaque_cursor, encode_opaque_cursor, PageResponse},
+    paging::{decode_opaque_cursor, encode_opaque_cursor, validate_page_offset, PageResponse},
 };
 
 use super::super::{source_routing::artifact_to_source_dto, ArtifactServiceError};
@@ -138,6 +138,8 @@ pub fn get_artifact_rows_page_with_cursor_for_case(
     limit: u32,
     cursor: Option<&str>,
 ) -> Result<PageResponse<ArtifactRowDto>, ArtifactServiceError> {
+    validate_page_offset(offset)
+        .map_err(|error| ArtifactServiceError::invalid_input(error.to_string()))?;
     if cursor.is_some() && offset != 0 {
         return Err(ArtifactServiceError::invalid_input(
             "offset must be zero when cursor is provided",

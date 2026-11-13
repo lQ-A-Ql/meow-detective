@@ -1,7 +1,10 @@
 use persistence_source::repositories::timeline_repo::TimelineRepo;
 use rusqlite::Connection;
 use std::path::Path;
-use transport::{dto::TimelineEventDto, paging::PageResponse};
+use transport::{
+    dto::TimelineEventDto,
+    paging::{validate_page_offset, PageResponse},
+};
 
 use super::export::{timeline_event_to_dto, timeline_event_to_source_dto};
 use super::TimelineServiceError;
@@ -46,6 +49,8 @@ pub fn query_timeline_filtered(
     time_end: Option<&str>,
     event_type: Option<&str>,
 ) -> Result<PageResponse<TimelineEventDto>, TimelineServiceError> {
+    validate_page_offset(offset)
+        .map_err(|error| TimelineServiceError::InvalidInput(error.to_string()))?;
     let repo = TimelineRepo::new(conn);
     let total = repo.count_filtered(time_start, time_end, event_type)?;
     let items = repo

@@ -3,7 +3,7 @@ mod schema;
 
 use schema::{
     file_chunk_schema, identifier, job_snapshot_schema, metrics_schema, non_negative_integer,
-    output_schema, page_limit, source_id, timestamp,
+    output_schema, page_limit, page_offset, source_id, timestamp,
 };
 use serde_json::{json, Value};
 use transport::dto::mcp_host::{
@@ -371,8 +371,8 @@ fn timeline_tools() -> Vec<McpHostToolDto> {
     [
         (
             "forensics.get_timeline_events",
-            "分页读取当前案件时间线；可用 RFC3339 时间范围和 eventType 过滤，cursor 用于继续分页。",
-            json!({"offset":non_negative_integer(), "limit":page_limit(500, 100), "timeStart":timestamp(), "timeEnd":timestamp(), "eventType":identifier(), "cursor":{"type":"string","minLength":1,"maxLength":16384}}),
+            "分页读取当前案件时间线；offset 最大为 10000，继续分页使用返回的 nextCursor 作为 cursor，并将 offset 设为 0；支持 RFC3339 时间范围和 eventType 过滤。",
+            json!({"offset":page_offset(), "limit":page_limit(500, 100), "timeStart":timestamp(), "timeEnd":timestamp(), "eventType":identifier(), "cursor":{"type":"string","minLength":1,"maxLength":16384}}),
             vec![],
         ),
         (

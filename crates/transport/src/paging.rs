@@ -4,6 +4,9 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+mod offset;
+pub use offset::{validate_page_offset, OffsetLimitError, MAX_PAGE_OFFSET};
+
 /// Maximum accepted encoded cursor size. Cursors only contain logical source
 /// identifiers and bounded pagination state, never storage paths.
 pub const MAX_OPAQUE_CURSOR_LENGTH: usize = 16 * 1024;
