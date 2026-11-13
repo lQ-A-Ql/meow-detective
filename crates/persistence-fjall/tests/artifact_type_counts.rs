@@ -33,7 +33,9 @@ fn pairs(items: &[(&str, u64)]) -> Vec<(String, u64)> {
 }
 
 fn counts(store: &ArtifactRecordStore, source_id: &str) -> Vec<(String, u64)> {
-    store.type_counts(&store.read_snapshot(), source_id).unwrap()
+    store
+        .type_counts(&store.read_snapshot(), source_id)
+        .unwrap()
 }
 
 /// Independent oracle: page every record of the source (small pages so paging
@@ -81,6 +83,19 @@ fn assert_matches_oracle(store: &ArtifactRecordStore, source_id: &str, ready: bo
     }
 }
 
+fn assert_counts_unavailable(store: &ArtifactRecordStore, source_id: &str) {
+    let snapshot = store.read_snapshot();
+    assert!(!store.type_counts_ready(&snapshot, source_id).unwrap());
+    assert!(matches!(
+        store.type_counts(&snapshot, source_id),
+        Err(persistence_fjall::FjallStorageError::ArtifactIndexCorrupt)
+    ));
+    assert!(matches!(
+        store.count_by_type(&snapshot, source_id, "evtx"),
+        Err(persistence_fjall::FjallStorageError::ArtifactIndexCorrupt)
+    ));
+}
+
 #[test]
 fn upsert_batch_counts_records_and_writes_the_ready_marker() {
     let (_root, _source, store) = setup();
@@ -96,7 +111,10 @@ fn upsert_batch_counts_records_and_writes_the_ready_marker() {
         .unwrap();
     let snapshot = store.read_snapshot();
     assert!(store.type_counts_ready(&snapshot, SOURCE).unwrap());
-    assert_eq!(counts(&store, SOURCE), pairs(&[("evtx", 2), ("prefetch", 1)]));
+    assert_eq!(
+        counts(&store, SOURCE),
+        pairs(&[("evtx", 2), ("prefetch", 1)])
+    );
     let evtx = store.count_by_type(&snapshot, SOURCE, "evtx").unwrap();
     assert_eq!(evtx, 2);
     let absent = store.count_by_type(&snapshot, SOURCE, "absent").unwrap();
@@ -120,14 +138,20 @@ fn same_id_replacement_moves_the_count_between_types() {
     store
         .upsert_batch(&[record(SOURCE, "a1", "prefetch")], PersistMode::Buffer)
         .unwrap();
-    assert_eq!(counts(&store, SOURCE), pairs(&[("evtx", 1), ("prefetch", 2)]));
+    assert_eq!(
+        counts(&store, SOURCE),
+        pairs(&[("evtx", 1), ("prefetch", 2)])
+    );
     let mut replaced = record(SOURCE, "a2", "evtx");
     replaced.attrs = json!({ "title": "a2", "runCount": 2 });
     store
         .upsert_batch(&[replaced], PersistMode::Buffer)
         .unwrap();
     assert_matches_oracle(&store, SOURCE, true);
-    assert_eq!(counts(&store, SOURCE), pairs(&[("evtx", 1), ("prefetch", 2)]));
+    assert_eq!(
+        counts(&store, SOURCE),
+        pairs(&[("evtx", 1), ("prefetch", 2)])
+    );
 }
 
 #[test]
@@ -144,7 +168,9 @@ fn delete_batch_decrements_and_prunes_zero_types() {
         )
         .unwrap();
     let ids = ["a1".to_string(), "a2".to_string()];
-    let pruned = store.delete_batch(SOURCE, &ids, PersistMode::Buffer).unwrap();
+    let pruned = store
+        .delete_batch(SOURCE, &ids, PersistMode::Buffer)
+        .unwrap();
     assert_eq!(pruned, 2);
     let missing = store
         .delete_batch(SOURCE, &["missing".to_string()], PersistMode::Buffer)
@@ -181,7 +207,10 @@ fn delete_by_source_object_where_decrements_matching_records_only() {
         .delete_by_source_object_where(SOURCE, "object-1", PersistMode::Buffer, |_| false)
         .unwrap();
     assert_eq!(skipped, 0);
-    assert_eq!(counts(&store, SOURCE), pairs(&[("evtx", 1), ("prefetch", 1)]));
+    assert_eq!(
+        counts(&store, SOURCE),
+        pairs(&[("evtx", 1), ("prefetch", 1)])
+    );
     assert_matches_oracle(&store, SOURCE, true);
 }
 
@@ -200,29 +229,44 @@ fn independent_writes_need_a_rebuild_before_counts_are_authoritative() {
         .unwrap();
     let snapshot = store.read_snapshot();
     assert!(!store.type_counts_ready(&snapshot, SOURCE).unwrap());
-    assert_eq!(counts(&store, SOURCE), pairs(&[("evtx", 2), ("prefetch", 1)]));
-    let evtx = store.count_by_type(&snapshot, SOURCE, "evtx").unwrap();
-    assert_eq!(evtx, 2);
-    assert_matches_oracle(&store, SOURCE, false);
+    assert_counts_unavailable(&store, SOURCE);
 
     store
-        .rebuild_metrics_for_source(SOURCE, PersistMode::Buffer)
+        .rebuild_metrics_for_source_with_control(
+            SOURCE,
+            PersistMode::Buffer,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_| {},
+        )
         .unwrap();
     let snapshot = store.read_snapshot();
     assert!(store.type_counts_ready(&snapshot, SOURCE).unwrap());
     let total = store.count(&snapshot, Some(SOURCE)).unwrap();
     assert_eq!(total, 3);
-    assert_eq!(counts(&store, SOURCE), pairs(&[("evtx", 2), ("prefetch", 1)]));
+    assert_eq!(
+        counts(&store, SOURCE),
+        pairs(&[("evtx", 2), ("prefetch", 1)])
+    );
     assert_matches_oracle(&store, SOURCE, true);
 
     store
         .upsert_batch_independent(&[record(SOURCE, "c1", "linux")], PersistMode::Buffer)
         .unwrap();
-    assert!(!store.type_counts_ready(&store.read_snapshot(), SOURCE).unwrap());
-    assert_matches_oracle(&store, SOURCE, false);
-    assert_eq!(store.type_counts(&snapshot, SOURCE).unwrap(), pairs(&[("evtx", 2), ("prefetch", 1)]));
+    assert!(!store
+        .type_counts_ready(&store.read_snapshot(), SOURCE)
+        .unwrap());
+    assert_counts_unavailable(&store, SOURCE);
+    assert_eq!(
+        store.type_counts(&snapshot, SOURCE).unwrap(),
+        pairs(&[("evtx", 2), ("prefetch", 1)])
+    );
     store
-        .rebuild_metrics_for_source(SOURCE, PersistMode::Buffer)
+        .rebuild_metrics_for_source_with_control(
+            SOURCE,
+            PersistMode::Buffer,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_| {},
+        )
         .unwrap();
     assert_matches_oracle(&store, SOURCE, true);
     assert_eq!(
@@ -260,14 +304,19 @@ fn rebuild_prunes_type_keys_for_records_that_disappeared() {
         .unwrap();
     assert_eq!(counts(&store, SOURCE).len(), 2);
     store
-        .rebuild_metrics_for_source(SOURCE, PersistMode::Buffer)
+        .rebuild_metrics_for_source_with_control(
+            SOURCE,
+            PersistMode::Buffer,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_| {},
+        )
         .unwrap();
     assert_eq!(counts(&store, SOURCE), pairs(&[("evtx", 1)]));
     assert_matches_oracle(&store, SOURCE, true);
 }
 
 #[test]
-fn upsert_batch_leaves_legacy_sources_without_a_marker_on_the_scan_fallback() {
+fn upsert_does_not_publish_counts_for_an_unprepared_source() {
     let (_root, _source, store) = setup();
     store
         .upsert_batch_independent(&[record(SOURCE, "a1", "evtx")], PersistMode::Buffer)
@@ -277,15 +326,15 @@ fn upsert_batch_leaves_legacy_sources_without_a_marker_on_the_scan_fallback() {
         .unwrap();
     let snapshot = store.read_snapshot();
     assert!(!store.type_counts_ready(&snapshot, SOURCE).unwrap());
-    assert_eq!(counts(&store, SOURCE), pairs(&[("evtx", 1), ("prefetch", 1)]));
-    let prefetch = store
-        .count_by_type(&snapshot, SOURCE, "prefetch")
-        .unwrap();
-    assert_eq!(prefetch, 1);
-    assert_matches_oracle(&store, SOURCE, false);
+    assert_counts_unavailable(&store, SOURCE);
 
     store
-        .rebuild_metrics_for_source(SOURCE, PersistMode::Buffer)
+        .rebuild_metrics_for_source_with_control(
+            SOURCE,
+            PersistMode::Buffer,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_| {},
+        )
         .unwrap();
     assert_matches_oracle(&store, SOURCE, true);
 }
@@ -354,7 +403,13 @@ fn count_underflow_is_reported_instead_of_saturating() {
 fn type_count_queries_read_only_counter_entries() {
     let (_root, _source, store) = setup();
     let records = (0..1024)
-        .map(|id| record(SOURCE, &format!("row-{id}"), if id % 2 == 0 { "evtx" } else { "prefetch" }))
+        .map(|id| {
+            record(
+                SOURCE,
+                &format!("row-{id}"),
+                if id % 2 == 0 { "evtx" } else { "prefetch" },
+            )
+        })
         .collect::<Vec<_>>();
     store.upsert_batch(&records, PersistMode::Buffer).unwrap();
     let snapshot = store.read_snapshot();
@@ -374,12 +429,27 @@ fn type_count_queries_read_only_counter_entries() {
 fn refilling_an_uncounted_empty_source_does_not_reuse_stale_counts() {
     let (_root, _source, store) = setup();
     let artifact = record(SOURCE, "a1", "evtx");
-    store.upsert_batch(&[artifact.clone()], PersistMode::Buffer).unwrap();
-    store.upsert_batch_independent(&[artifact], PersistMode::Buffer).unwrap();
-    store.delete_batch(SOURCE, &["a1".into()], PersistMode::Buffer).unwrap();
+    store
+        .upsert_batch(std::slice::from_ref(&artifact), PersistMode::Buffer)
+        .unwrap();
+    store
+        .upsert_batch_independent(&[artifact], PersistMode::Buffer)
+        .unwrap();
+    store
+        .delete_batch(SOURCE, &["a1".into()], PersistMode::Buffer)
+        .unwrap();
     assert!(counts(&store, SOURCE).is_empty());
-    store.upsert_batch(&[record(SOURCE, "b1", "prefetch")], PersistMode::Buffer).unwrap();
-    assert_eq!(counts(&store, SOURCE), pairs(&[("prefetch", 1)]));
-    store.rebuild_metrics_for_source(SOURCE, PersistMode::Buffer).unwrap();
+    store
+        .upsert_batch(&[record(SOURCE, "b1", "prefetch")], PersistMode::Buffer)
+        .unwrap();
+    assert_counts_unavailable(&store, SOURCE);
+    store
+        .rebuild_metrics_for_source_with_control(
+            SOURCE,
+            PersistMode::Buffer,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_| {},
+        )
+        .unwrap();
     assert_matches_oracle(&store, SOURCE, true);
 }

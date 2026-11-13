@@ -852,7 +852,9 @@ fn logical_import_post_pipeline_indexes_marker_and_defers_artifact() {
             )
             .expect("open published Fjall source generation");
             let generation = fjall
-                .verify_source_generation(&data_source_id.0)
+                .verify_source_generation_with_control(
+                    &data_source_id.0, &std::sync::atomic::AtomicBool::new(false), |_, _| {},
+                )
                 .expect("published Fjall source generation is valid");
             assert_eq!(generation.attempt_id, job_id.0);
             assert_eq!(generation.projection_batch_digest.len(), 64);

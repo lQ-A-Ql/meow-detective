@@ -55,7 +55,10 @@ fn file_repository_finds_entries_by_id_batch() {
     assert!(!resolved.contains_key("missing"));
 
     // Empty batches never touch storage.
-    assert!(FileRepo::new(&connection).find_by_ids(&[]).unwrap().is_empty());
+    assert!(FileRepo::new(&connection)
+        .find_by_ids(&[])
+        .unwrap()
+        .is_empty());
 }
 
 #[test]

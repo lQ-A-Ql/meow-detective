@@ -223,6 +223,7 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
             discovery_started,
             plugin_loads,
             plugin_rejections,
+            cancel_token,
         );
     }
     register_candidates(&mut progress_reporter, &selected, &candidates);
@@ -277,8 +278,15 @@ fn extract_discovered_candidates(
     )?;
     preloads.systemd.annotate(&mut candidates);
     ensure_not_cancelled(cancel_token)?;
-    let output =
-        begin_streamed_output(conn, &candidates, selected, plugin_extractors, &checkpoints)?;
+    let output = begin_streamed_output(
+        conn,
+        &candidates,
+        selected,
+        plugin_extractors,
+        &checkpoints,
+        cancel_token,
+        progress_reporter,
+    )?;
     let discovery_elapsed_ms = elapsed_millis(discovery_started);
     progress_reporter.begin_extraction();
     let mut state = ExtractionState::new(selected);
@@ -306,9 +314,15 @@ fn extract_discovered_candidates(
     ensure_not_cancelled(cancel_token)?;
     let processing_elapsed_ms = elapsed_millis(processing_started);
     progress_reporter.begin_persisting();
+    ensure_not_cancelled(cancel_token)?;
     let persistence_started = Instant::now();
-    output.rebuild_derived_metrics()?;
-    let staged_generation = output.seal()?;
+    output.rebuild_derived_metrics(cancel_token, |records| {
+        progress_reporter.report_count_progress(records);
+    })?;
+    let staged_generation = output.seal(cancel_token, |records, bytes| {
+        progress_reporter.report_seal_progress(records, bytes);
+    })?;
+    ensure_not_cancelled(cancel_token)?;
     let result = finalize_run(
         conn,
         state,
@@ -319,6 +333,7 @@ fn extract_discovered_candidates(
         persistence_started,
         plugin_loads,
         plugin_rejections,
+        cancel_token,
     )?;
     preloads.systemd.persist_markers(conn)?;
     Ok(result)

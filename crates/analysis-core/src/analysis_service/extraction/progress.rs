@@ -9,6 +9,8 @@ use transport::dto::AnalysisExtractionPhaseDto;
 
 const EVENT_INTERVAL: Duration = Duration::from_millis(100);
 const LOG_INTERVAL: Duration = Duration::from_secs(1);
+pub(crate) const PREPARING_DETAIL: &str = "preparing extraction";
+const PERSISTING_DETAIL: &str = "persisting extracted artifacts";
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct CandidateProgressResult {
@@ -187,10 +189,7 @@ impl<'a> ExtractionProgressReporter<'a> {
     }
 
     pub(crate) fn emit_preparing(&mut self) {
-        self.emit_all(
-            AnalysisExtractionPhaseDto::Preparing,
-            "preparing extraction",
-        );
+        self.emit_all(AnalysisExtractionPhaseDto::Preparing, PREPARING_DETAIL);
         let totals = self
             .sections
             .values()
@@ -223,6 +222,51 @@ impl<'a> ExtractionProgressReporter<'a> {
             waited_ms = waited.as_millis(),
             "Analysis extraction is waiting for the serial data-source slot"
         );
+    }
+
+    pub(crate) fn report_copy_progress(&mut self, records: u64, bytes: u64, durable: bool) {
+        if !durable
+            && self
+                .last_event
+                .is_some_and(|last| last.elapsed() < EVENT_INTERVAL)
+        {
+            return;
+        }
+        tracing::debug!(
+            records_copied = records,
+            bytes_copied = bytes,
+            "Analysis source copy progress"
+        );
+        self.emit_all(AnalysisExtractionPhaseDto::Preparing, PREPARING_DETAIL);
+    }
+
+    pub(crate) fn report_count_progress(&mut self, records: u64) {
+        if self
+            .last_event
+            .is_some_and(|last| last.elapsed() < EVENT_INTERVAL)
+        {
+            return;
+        }
+        tracing::debug!(
+            processed_records = records,
+            "Analysis count rebuild progress"
+        );
+        self.emit_all(AnalysisExtractionPhaseDto::Persisting, PERSISTING_DETAIL);
+    }
+
+    pub(crate) fn report_seal_progress(&mut self, records: u64, bytes: u64) {
+        if self
+            .last_event
+            .is_some_and(|last| last.elapsed() < EVENT_INTERVAL)
+        {
+            return;
+        }
+        tracing::debug!(
+            processed_records = records,
+            bytes_read = bytes,
+            "Analysis source verification progress"
+        );
+        self.emit_all(AnalysisExtractionPhaseDto::Persisting, PERSISTING_DETAIL);
     }
 
     pub(crate) fn begin_extraction(&mut self) {
@@ -313,10 +357,7 @@ impl<'a> ExtractionProgressReporter<'a> {
     }
 
     pub(crate) fn begin_persisting(&mut self) {
-        self.emit_all(
-            AnalysisExtractionPhaseDto::Persisting,
-            "persisting extracted artifacts",
-        );
+        self.emit_all(AnalysisExtractionPhaseDto::Persisting, PERSISTING_DETAIL);
     }
 
     pub(crate) fn complete(&mut self) {

@@ -9,6 +9,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 
 mod artifact_batch;
 mod indexing;
@@ -47,7 +48,14 @@ impl ArtifactRecordStore {
     pub fn count(&self, snapshot: &SourceReadSnapshot, source: Option<&str>) -> Result<u64> {
         crate::record_metrics::count(snapshot, "artifact", source)
     }
-    pub fn rebuild_metrics_for_source(&self, source_id: &str, mode: PersistMode) -> Result<()> {
+    pub fn rebuild_metrics_for_source_with_control(
+        &self,
+        source_id: &str,
+        mode: PersistMode,
+        cancel: &AtomicBool,
+        mut progress: impl FnMut(u64),
+    ) -> Result<()> {
+        crate::source_store::ensure_not_cancelled(cancel)?;
         let snapshot = self.read_snapshot();
         let previous_source = crate::record_metrics::count(&snapshot, "artifact", Some(source_id))?;
         let previous_total = crate::record_metrics::count(&snapshot, "artifact", None)?;
@@ -55,6 +63,7 @@ impl ArtifactRecordStore {
         let mut type_tally = std::collections::BTreeMap::<String, u64>::new();
         let mut cursor = None;
         loop {
+            crate::source_store::ensure_not_cancelled(cancel)?;
             let page = self.list_by_source(
                 &snapshot,
                 source_id,
@@ -64,9 +73,12 @@ impl ArtifactRecordStore {
             )?;
             record_count = record_count.saturating_add(page.records.len() as u64);
             for record in &page.records {
+                crate::source_store::ensure_not_cancelled(cancel)?;
                 let count = type_tally.entry(record.artifact_type.clone()).or_insert(0);
                 *count = count.saturating_add(1);
             }
+            progress(record_count);
+            crate::source_store::ensure_not_cancelled(cancel)?;
             cursor = page.next_cursor;
             if cursor.is_none() {
                 break;
@@ -92,6 +104,7 @@ impl ArtifactRecordStore {
         )?;
         type_counts::append_rebuild_actions(&snapshot, &mut actions, source_id, &type_tally)?;
         actions.push(self.revision_action(&snapshot)?);
+        crate::source_store::ensure_not_cancelled(cancel)?;
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(())
     }
@@ -311,7 +324,7 @@ impl ArtifactRecordStore {
         source_id: &str,
         artifact_type: &str,
     ) -> Result<u64> {
-        type_counts::count_by_type(self, snapshot, source_id, artifact_type)
+        type_counts::count_by_type(snapshot, source_id, artifact_type)
     }
     fn page(
         &self,

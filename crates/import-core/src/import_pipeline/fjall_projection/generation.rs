@@ -31,7 +31,14 @@ pub(super) fn publish(
     if existing {
         persistence_source::fjall::replace_source_generation(&source, source_id, attempt, digest)
     } else {
-        persistence_source::fjall::seal_source_generation(&source, source_id, attempt, digest)
+        persistence_source::fjall::seal_source_generation_with_control(
+            &source,
+            source_id,
+            attempt,
+            digest,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_, _| {},
+        )
     }
     .map_err(|error| CommandError::internal(error.to_string()))?;
     source

@@ -120,21 +120,21 @@ fn aggregate_source_counts(
         )
         .map_err(source_kernel::source_db::ReadySourceError::into_db_error)?
     {
-        counts.file_count +=
+        let file_count =
             source_kernel::source_db::ready_source_catalog_count(case_root, &source_id)
-                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
-                .unwrap_or(0) as i64;
-        counts.artifact_count +=
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        counts.file_count += i64::try_from(file_count)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        let artifact_count =
             source_kernel::source_db::ready_source_artifact_count(case_root, &source_id)
-                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
-                .unwrap_or(0) as i64;
-        counts.timeline_count +=
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        counts.artifact_count += i64::try_from(artifact_count)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        let timeline_count =
             source_kernel::source_db::ready_source_timeline_count(case_root, &source_id)
-                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
-                .map(i64::try_from)
-                .transpose()
-                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
-                .unwrap_or(0);
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        counts.timeline_count += i64::try_from(timeline_count)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
         counts.graph_node_count += count_table_rows_for_case(
             &source_conn,
             "SELECT COUNT(*) FROM graph_nodes WHERE case_id = ?1",

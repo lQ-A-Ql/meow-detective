@@ -68,12 +68,12 @@ pub(crate) fn get_source_attributed_artifact_family_counts_for_case(
         let source_counts = handle
             .artifact_type_counts(&snapshot, &source.id.0)
             .map_err(|error| match error {
-                StorageRuntimeError::SourceNotReady(_) => ArtifactServiceError::InvalidInput(
-                    format!(
-                        "artifact type-count index is not ready for source {}; re-run data-source analysis",
+                StorageRuntimeError::SourceNotReady(_) => {
+                    ArtifactServiceError::InvalidInput(format!(
+                        "artifact type-count index is not ready for source {}; re-import the data source",
                         source.id.0
-                    ),
-                ),
+                    ))
+                }
                 other => ArtifactServiceError::Other(other.to_string()),
             })?;
         counts.extend(

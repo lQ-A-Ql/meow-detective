@@ -8,12 +8,10 @@ use crate::analysis_service::error::AnalysisServiceError;
 use crate::plugin_loader::PluginRejection;
 use chrono::Utc;
 use rusqlite::Connection;
+use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
-/// Finish a run with no candidates, no Linux catalog, and no plugins without
-/// cloning the published source store or binding a new generation: there is
-/// nothing to replace, checkpoint, or seal. The DTO is assembled exactly like
-/// the normal path through `ExtractionState::into_dto`.
+/// Complete a run without candidates or pending outputs.
 pub(super) fn complete_empty_run(
     conn: &Connection,
     selected: &[AnalysisCapability],
@@ -21,10 +19,12 @@ pub(super) fn complete_empty_run(
     discovery_started: Instant,
     plugin_loads: Vec<PluginLoadRecord>,
     plugin_rejections: Vec<PluginRejection>,
+    cancel_token: &AtomicBool,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     progress_reporter.emit_preparing();
     progress_reporter.begin_extraction();
     progress_reporter.begin_persisting();
+    crate::analysis_service::cancellation::ensure_not_cancelled(cancel_token)?;
     progress_reporter.complete();
     let dto = ExtractionState::new(selected).into_dto(conn, Utc::now().to_rfc3339())?;
     Ok(AnalysisExtractionExecution {

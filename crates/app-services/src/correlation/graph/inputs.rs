@@ -26,9 +26,9 @@ pub(super) fn append_only(
     revision: &str,
     artifacts: &[ArtifactRowDto],
 ) -> Result<bool, CorrelationError> {
-    let Some((old_revision, encoded)) = cached.artifact_hash.split_once('|') else {
-        return Ok(false);
-    };
+    let (old_revision, encoded) = cached.artifact_hash.split_once('|').ok_or_else(|| {
+        CorrelationError::Other("correlation cache input record is malformed".to_owned())
+    })?;
     if old_revision
         .split(':')
         .skip(2)

@@ -85,10 +85,20 @@ pub(super) fn begin_streamed_output(
     selected: &[AnalysisCapability],
     plugin_extractors: &[&dyn ArtifactExtractor],
     checkpoints: &ExistingCheckpoints<'_>,
+    cancel_token: &AtomicBool,
+    progress: &mut ExtractionProgressReporter<'_>,
 ) -> Result<native_output::StreamingGeneration, AnalysisServiceError> {
     let output_source_id = resolve_output_data_source_id(conn)?;
     let replacements = candidate_replacements(candidates, selected, plugin_extractors, checkpoints);
-    native_output::begin_streaming(conn, &output_source_id, &replacements)
+    native_output::begin_streaming(
+        conn,
+        &output_source_id,
+        &replacements,
+        cancel_token,
+        |copy| {
+            progress.report_copy_progress(copy.records_copied, copy.bytes_copied, copy.durable);
+        },
+    )
 }
 
 fn candidate_replacements(

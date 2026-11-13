@@ -6,6 +6,8 @@ pub enum FjallStorageError {
     StorageLocked { path: PathBuf },
     #[error("shared source store registry lock is poisoned")]
     LockPoisoned,
+    #[error("source store clone cancelled")]
+    Cancelled,
     #[error("Fjall operation failed: {0}")]
     Engine(#[source] fjall::Error),
     #[error("storage I/O failed: {0}")]

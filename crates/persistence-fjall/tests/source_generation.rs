@@ -1,8 +1,8 @@
 use persistence_fjall::{
     publish_source_generation, read_source_generation_manifest, replace_source_generation,
-    scan_recovery_consistency, seal_source_generation, verify_source_generation, BatchReceiptState,
-    DatabaseConfig, KeyspaceName, PersistMode, RecoveryScan, RecoveryState, SourceBuildLayout,
-    SourceStore, WriteAction,
+    scan_recovery_consistency, seal_source_generation_with_control,
+    verify_source_generation_with_control, BatchReceiptState, DatabaseConfig, KeyspaceName,
+    PersistMode, RecoveryScan, RecoveryState, SourceBuildLayout, SourceStore, WriteAction,
 };
 
 fn put(keyspace: KeyspaceName, key: &[u8], value: &[u8]) -> WriteAction {
@@ -29,12 +29,26 @@ fn worker_shutdown_releases_generation_for_immediate_publication() {
                 PersistMode::SyncAll,
             )
             .unwrap();
-        seal_source_generation(&source, &source_id, "attempt", &"d".repeat(64)).unwrap();
+        seal_source_generation_with_control(
+            &source,
+            &source_id,
+            "attempt",
+            &"d".repeat(64),
+            &std::sync::atomic::AtomicBool::new(false),
+            |_, _| {},
+        )
+        .unwrap();
         drop(source);
         publish_source_generation(layout.build_path(), layout.published_path()).unwrap();
         let published =
             SourceStore::open(layout.published_path(), DatabaseConfig::default()).unwrap();
-        verify_source_generation(&published, &source_id).unwrap();
+        verify_source_generation_with_control(
+            &published,
+            &source_id,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_, _| {},
+        )
+        .unwrap();
     }
 }
 
@@ -62,7 +76,15 @@ fn source_generation_manifest_survives_mutable_analysis_writes() {
             PersistMode::SyncAll,
         )
         .unwrap();
-    let digest = seal_source_generation(&source, "source-1", "attempt-1", &"a".repeat(64)).unwrap();
+    let digest = seal_source_generation_with_control(
+        &source,
+        "source-1",
+        "attempt-1",
+        &"a".repeat(64),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
 
     source
         .database()
@@ -85,7 +107,13 @@ fn source_generation_manifest_survives_mutable_analysis_writes() {
         )
         .unwrap();
 
-    let manifest = verify_source_generation(&source, "source-1").unwrap();
+    let manifest = verify_source_generation_with_control(
+        &source,
+        "source-1",
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
     assert_eq!(manifest.attempt_id, "attempt-1");
     assert_eq!(manifest.projection_batch_digest, "a".repeat(64));
     assert_eq!(
@@ -108,7 +136,15 @@ fn source_generation_manifest_rejects_catalog_changes() {
             PersistMode::SyncAll,
         )
         .unwrap();
-    seal_source_generation(&source, "source-1", "attempt-1", &"b".repeat(64)).unwrap();
+    seal_source_generation_with_control(
+        &source,
+        "source-1",
+        "attempt-1",
+        &"b".repeat(64),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
     source
         .database()
         .write_batch(
@@ -118,14 +154,25 @@ fn source_generation_manifest_rejects_catalog_changes() {
         .unwrap();
 
     assert!(matches!(
-        verify_source_generation(&source, "source-1"),
+        verify_source_generation_with_control(
+            &source,
+            "source-1",
+            &std::sync::atomic::AtomicBool::new(false),
+            |_, _| {}
+        ),
         Err(persistence_fjall::FjallStorageError::ManifestDigestMismatch { .. })
     ));
     let manifest = read_source_generation_manifest(&source, "source-1").unwrap();
     assert_eq!(manifest.attempt_id, "attempt-1");
     assert_eq!(manifest.projection_batch_digest, "b".repeat(64));
     replace_source_generation(&source, "source-1", "attempt-2", &"c".repeat(64)).unwrap();
-    let manifest = verify_source_generation(&source, "source-1").unwrap();
+    let manifest = verify_source_generation_with_control(
+        &source,
+        "source-1",
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
     assert_eq!(manifest.attempt_id, "attempt-2");
     assert_eq!(manifest.projection_batch_digest, "c".repeat(64));
 }
@@ -144,7 +191,15 @@ fn published_source_generation_reopens_and_verifies() {
             PersistMode::SyncAll,
         )
         .unwrap();
-    let digest = seal_source_generation(&source, "source-1", "attempt-1", &"c".repeat(64)).unwrap();
+    let digest = seal_source_generation_with_control(
+        &source,
+        "source-1",
+        "attempt-1",
+        &"c".repeat(64),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
     drop(source);
 
     let receipt = publish_source_generation(layout.build_path(), layout.published_path()).unwrap();
@@ -153,7 +208,13 @@ fn published_source_generation_reopens_and_verifies() {
     assert!(!layout.build_path().exists());
 
     let published = SourceStore::open(layout.published_path(), DatabaseConfig::default()).unwrap();
-    let manifest = verify_source_generation(&published, "source-1").unwrap();
+    let manifest = verify_source_generation_with_control(
+        &published,
+        "source-1",
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
     assert_eq!(manifest.attempt_id, "attempt-1");
     let receipt = published
         .database()

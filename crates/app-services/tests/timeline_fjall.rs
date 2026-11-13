@@ -68,11 +68,13 @@ fn publish_source(
     let store = persistence_source::detail::open_store_for_write(&source_conn)
         .unwrap()
         .unwrap();
-    persistence_source::fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation_with_control(
         &store,
         source_id,
         "fixture",
         &"a".repeat(64),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
     )
     .unwrap();
     drop(store);
@@ -131,6 +133,53 @@ fn assert_complete_in_order(ids: &[String], expected: &[String]) {
 }
 
 #[test]
+fn timeline_cursor_rejects_old_versions_and_missing_active_positions() {
+    let temporary = tempfile::tempdir().unwrap();
+    let case = case_service::create_case(temporary.path(), "cursor validation", None).unwrap();
+    let when = Utc.with_ymd_and_hms(2026, 11, 13, 0, 0, 0).unwrap();
+    let records = (0..3)
+        .map(|id| source_event("source", &format!("e{id}"), when))
+        .collect::<Vec<_>>();
+    publish_source(&case, "source", &records);
+    let first = case
+        .with_conn(|connection| {
+            query_timeline_filtered_for_case(
+                connection,
+                &case.case_root,
+                &case.meta.id,
+                TimelineQuery::unfiltered(0, 1),
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    let encoded = first.next_cursor.unwrap();
+    let original: serde_json::Value = transport::paging::decode_opaque_cursor(&encoded).unwrap();
+    for mutation in 0..3 {
+        let mut changed = original.clone();
+        match mutation {
+            0 => changed["version"] = 3.into(),
+            1 => changed["sources"][0]["after"] = serde_json::Value::Null,
+            _ => changed["caseId"] = "".into(),
+        }
+        let cursor = transport::paging::encode_opaque_cursor(&changed).unwrap();
+        let connection = case.connection().unwrap();
+        let result = query_timeline_filtered_for_case(
+            &connection,
+            &case.case_root,
+            &case.meta.id,
+            TimelineQuery {
+                cursor: Some(&cursor),
+                ..TimelineQuery::unfiltered(0, 1)
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(app_services::timeline_service::TimelineServiceError::InvalidInput(_))
+        ));
+    }
+}
+
+#[test]
 fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
     let temporary = tempfile::tempdir().unwrap();
     let case = case_service::create_case(temporary.path(), "Fjall timeline", None).unwrap();
@@ -168,11 +217,13 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
     let store = persistence_source::detail::open_store_for_write(&source_conn)
         .unwrap()
         .unwrap();
-    persistence_source::fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation_with_control(
         &store,
         &source.id.0,
         "fixture",
         &"a".repeat(64),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
     )
     .unwrap();
     drop(store);

@@ -5,12 +5,20 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::tantivy_writer::{IndexError, Result};
+use super::tantivy_writer::{IndexError, Result, SearchIndex};
 
 const IDENTITY_FILE_NAME: &str = ".meow-search-generation.json";
 const IDENTITY_FORMAT_VERSION: u32 = 1;
 const SEARCH_SCHEMA_VERSION: u32 = 5;
 const MAX_IDENTITY_BYTES: u64 = 4096;
+
+impl SearchIndex {
+    /// Reads the bounded generation marker without opening a Tantivy index.
+    pub fn identity_from_path(index_dir: &Path) -> Result<(String, u32)> {
+        let identity = SearchIndexIdentity::load(index_dir)?;
+        Ok((identity.generation, identity.schema_version))
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

@@ -242,9 +242,7 @@ fn file_count_for_case(
         let catalog_count =
             crate::source_db::ready_source_catalog_count(case_root, &source.data_source_id)
                 .map_err(|error| ReportError::Other(error.to_string()))?;
-        total = total.saturating_add(
-            catalog_count.unwrap_or(FileRepo::new(&source.connection).count_all()?),
-        );
+        total = total.saturating_add(catalog_count);
     }
     Ok(total)
 }

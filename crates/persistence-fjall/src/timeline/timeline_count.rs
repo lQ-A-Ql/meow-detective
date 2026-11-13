@@ -1,7 +1,7 @@
 use super::{TimelineRecord, TimelineRecordStore, RECORD_FAMILY};
 use crate::{
     codec::{encode_key, KeyPart},
-    database::{PersistMode, SourceReadSnapshot, WriteAction},
+    database::{SourceReadSnapshot, WriteAction},
     errors::{FjallStorageError, Result},
     keyspaces::KeyspaceName,
     scan::ScanDirection,
@@ -9,6 +9,7 @@ use crate::{
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
+mod rebuild;
 mod timeline_count_ranges;
 
 const COUNT_FAMILY: &str = "timeline.count";
@@ -36,63 +37,6 @@ impl TimelineRecordStore {
     }
     pub fn counts_ready(&self, snapshot: &SourceReadSnapshot, source_id: &str) -> Result<bool> {
         counts_ready(snapshot, source_id)
-    }
-    pub fn rebuild_count_indexes(&self, source_id: &str, mode: PersistMode) -> Result<()> {
-        let snapshot = self.read_snapshot();
-        let prefix = encode_key(RECORD_FAMILY, &[KeyPart::Text(source_id.to_owned())])?;
-        let mut deltas = HashMap::new();
-        for entry in snapshot.prefix(
-            KeyspaceName::TimelineRecords,
-            &prefix,
-            ScanDirection::Forward,
-        )? {
-            let envelope = self
-                .source_store
-                .read_envelope(&snapshot, KeyspaceName::TimelineRecords, &entry.key)?
-                .ok_or(FjallStorageError::TimelineIndexCorrupt)?;
-            let record = super::decode_record(envelope)?;
-            if record.data_source_id != source_id {
-                return Err(FjallStorageError::TimelineRecordIdentityMismatch);
-            }
-            adjust_count_deltas(&mut deltas, &record, 1)?;
-        }
-        let count_prefix = encode_key(COUNT_FAMILY, &[KeyPart::Text(source_id.to_owned())])?;
-        let mut actions = snapshot
-            .prefix(
-                KeyspaceName::TimelineIndexes,
-                &count_prefix,
-                ScanDirection::Forward,
-            )?
-            .into_iter()
-            .map(|entry| WriteAction::Delete {
-                keyspace: KeyspaceName::TimelineIndexes,
-                key: entry.key,
-            })
-            .collect::<Vec<_>>();
-        for (key, count) in deltas {
-            let count = u64::try_from(count).map_err(|_| {
-                FjallStorageError::InvalidEnvelope("timeline count is negative".to_owned())
-            })?;
-            actions.push(WriteAction::Put {
-                keyspace: KeyspaceName::TimelineIndexes,
-                key,
-                value: count.to_be_bytes().to_vec(),
-            });
-        }
-        actions.push(count_schema_marker_action(source_id)?);
-        let revision = self
-            .cursor_revision(&snapshot)?
-            .checked_add(1)
-            .ok_or_else(|| {
-                FjallStorageError::InvalidEnvelope("timeline revision overflowed".into())
-            })?;
-        actions.push(WriteAction::Put {
-            keyspace: KeyspaceName::Meta,
-            key: super::revision_key("timeline")?,
-            value: revision.to_be_bytes().to_vec(),
-        });
-        self.source_store.database().write_batch(&actions, mode)?;
-        Ok(())
     }
     fn count_by_time_and_type(
         &self,

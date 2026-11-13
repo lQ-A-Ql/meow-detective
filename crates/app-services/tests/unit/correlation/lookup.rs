@@ -1,8 +1,12 @@
+use crate::correlation::path_suffix_key;
 use crate::correlation::rules::{
     basename, find_best_file_by_name, find_best_file_by_path, normalize_path, FileLookup,
 };
-use crate::correlation::{deleted_preference_score, path_suffix_key};
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+
+fn deleted_preference_score(file: &FileEntry, preference: Option<bool>) -> u8 {
+    u8::from(preference.is_some_and(|expected| file.deleted != expected))
+}
 
 fn file(id: &str, path: &str, name: &str, entry_type: EntryType, deleted: bool) -> FileEntry {
     FileEntry {

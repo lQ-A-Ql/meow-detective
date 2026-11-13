@@ -197,8 +197,13 @@ fn publish_mdraid_catalog_generation(
         &hex::encode(digest.finalize()),
     )
     .map_err(|error| error.to_string())?;
-    persistence_source::fjall::verify_source_generation(&store, &source.id.0)
-        .map_err(|error| error.to_string())?;
+    persistence_source::fjall::verify_source_generation_with_control(
+        &store,
+        &source.id.0,
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .map_err(|error| error.to_string())?;
     persistence_source::detail::bind_generation(source_conn, "source.fjall")
         .map_err(|error| error.to_string())?;
     Ok(())

@@ -89,26 +89,6 @@ pub fn resolve_case_id(conn: &Connection) -> DbResult<Option<String>> {
     Err(DbError::System("source identity is missing".into()))
 }
 
-/// Collect all artifact IDs ordered by id.
-pub fn collect_artifact_ids(conn: &Connection) -> DbResult<Vec<String>> {
-    if crate::detail::source_id(conn)?.is_some() {
-        const MAX_ARTIFACT_IDS: usize = 100_000;
-        let mut ids = Vec::new();
-        super::artifact_repo::ArtifactRepo::new(conn).visit_by_family(None, |artifact| {
-            if ids.len() >= MAX_ARTIFACT_IDS {
-                return Err(DbError::System(
-                    "correlation artifact id query exceeds the bounded row limit".into(),
-                ));
-            }
-            ids.push(artifact.id.0);
-            Ok(())
-        })?;
-        ids.sort();
-        return Ok(ids);
-    }
-    Err(DbError::System("source identity is missing".into()))
-}
-
 // ── Types ─────────────────────────────────────────────────────────────
 
 /// Deserialized row from the correlation_snapshots table.

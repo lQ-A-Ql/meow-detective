@@ -40,6 +40,8 @@ pub fn delete_data_source_in(
     };
 
     validate_data_source_storage(&storage, data_source_id)?;
+    crate::search_service::clear_source_file_search_cache(case_root, data_source_id)
+        .map_err(|error| CaseServiceError::Io(std::io::Error::other(error)))?;
     let _source_store_guard = crate::storage_runtime::close_source_store(case_root, data_source_id)
         .map_err(|error| CaseServiceError::InvalidCaseDir(error.to_string()))?
         .ok_or_else(|| CaseServiceError::StorageHandlesInUse(data_source_id.to_owned()))?;

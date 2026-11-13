@@ -95,7 +95,7 @@ fn empty_case_family_facets_need_no_type_count_marker() {
 }
 
 #[test]
-fn nonempty_legacy_source_requires_type_count_preparation() {
+fn nonempty_source_without_counts_is_rejected() {
     let root = tempfile::tempdir().unwrap();
     let case_conn = in_memory_case_db();
     let source = open_fixture_source(root.path(), &DataSourceId("ds-1".into()));
@@ -124,7 +124,8 @@ fn nonempty_legacy_source_requires_type_count_preparation() {
     )
     .unwrap_err();
     assert!(matches!(error, ArtifactServiceError::InvalidInput(_)));
-    assert!(error.to_string().contains("re-run data-source analysis"));
+    assert!(error.to_string().contains("type-count index is not ready"));
+    assert!(error.to_string().contains("re-import the data source"));
 }
 
 #[test]

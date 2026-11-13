@@ -63,15 +63,25 @@ fn open_store() -> (tempfile::TempDir, TimelineRecordStore) {
 #[derive(Clone, Copy)]
 enum WriteMode {
     Counted,
-    Independent,
+    Rebuilt,
 }
 
 fn publish(store: &TimelineRecordStore, records: &[TimelineRecord], mode: WriteMode) {
     match mode {
         WriteMode::Counted => store.upsert_batch(records, PersistMode::SyncAll).unwrap(),
-        WriteMode::Independent => store
-            .upsert_batch_independent(records, PersistMode::SyncAll)
-            .unwrap(),
+        WriteMode::Rebuilt => {
+            store
+                .upsert_batch_independent(records, PersistMode::SyncAll)
+                .unwrap();
+            store
+                .rebuild_count_indexes_with_control(
+                    SOURCE,
+                    PersistMode::SyncAll,
+                    &std::sync::atomic::AtomicBool::new(false),
+                    |_| {},
+                )
+                .unwrap();
+        }
     }
 }
 
@@ -133,11 +143,7 @@ fn summarize(
         .unwrap()
 }
 
-fn assert_filter_matrix(
-    store: &TimelineRecordStore,
-    records: &[TimelineRecord],
-    expected_counts_ready: bool,
-) {
+fn assert_filter_matrix(store: &TimelineRecordStore, records: &[TimelineRecord]) {
     let base = base_seconds();
     let day = 86_400;
     let filters: Vec<(Option<&str>, Option<i64>, Option<i64>)> = vec![
@@ -163,7 +169,6 @@ fn assert_filter_matrix(
         let expected = brute_force(records, event_type, start, end);
         let summary = summarize(store, SOURCE, event_type, start, end);
         let label = format!("type={event_type:?} start={start:?} end={end:?}");
-        assert_eq!(summary.counts_ready, expected_counts_ready, "{label}");
         assert_eq!(summary.total, expected.total, "{label}");
         assert_eq!(
             summary.min_timestamp.map(|value| value.timestamp()),
@@ -176,20 +181,6 @@ fn assert_filter_matrix(
             "{label}"
         );
         assert_eq!(summary.type_totals, expected.type_totals, "{label}");
-        let edges = store
-            .facet_window_edges(
-                &store.read_snapshot(),
-                SOURCE,
-                event_type,
-                start.map(timestamp),
-                end.map(timestamp),
-            )
-            .unwrap();
-        assert_eq!(
-            edges.map(|(first, last)| (first.timestamp(), last.timestamp())),
-            expected.min_epoch.zip(expected.max_epoch),
-            "{label} index edges"
-        );
         if summary.total == 0 {
             assert!(summary.min_timestamp.is_none(), "{label}");
             assert!(summary.max_timestamp.is_none(), "{label}");
@@ -202,15 +193,15 @@ fn facet_summary_matches_the_oracle_when_counts_are_ready() {
     let (_root, store) = open_store();
     let records = dataset();
     publish(&store, &records, WriteMode::Counted);
-    assert_filter_matrix(&store, &records, true);
+    assert_filter_matrix(&store, &records);
 }
 
 #[test]
-fn facet_summary_matches_the_oracle_without_counts() {
+fn facet_summary_matches_the_oracle_after_count_rebuild() {
     let (_root, store) = open_store();
     let records = dataset();
-    publish(&store, &records, WriteMode::Independent);
-    assert_filter_matrix(&store, &records, false);
+    publish(&store, &records, WriteMode::Rebuilt);
+    assert_filter_matrix(&store, &records);
 }
 
 #[test]
@@ -252,7 +243,7 @@ fn facet_summary_keeps_equal_and_subsecond_timestamps_inside_second_bounds() {
         (None, Some(base.timestamp()), Some(base.timestamp() + 1)),
         (Some("LOGON"), None, Some(base.timestamp())),
     ];
-    for mode in [WriteMode::Counted, WriteMode::Independent] {
+    for mode in [WriteMode::Counted, WriteMode::Rebuilt] {
         let (_root, store) = open_store();
         publish(&store, &records, mode);
         for (event_type, start, end) in &filters {
@@ -289,17 +280,29 @@ fn facet_summary_keeps_equal_and_subsecond_timestamps_inside_second_bounds() {
 }
 
 #[test]
-fn facet_summary_of_an_empty_source_is_zero_for_both_paths() {
+fn facet_summary_of_an_empty_source_is_zero() {
     let (_root, store) = open_store();
     let summary = summarize(&store, SOURCE, None, None, None);
     assert_eq!(summary.total, 0);
     assert_eq!(summary.min_timestamp, None);
     assert_eq!(summary.max_timestamp, None);
     assert!(summary.type_totals.is_empty());
-    assert!(!summary.counts_ready);
     let filtered = summarize(&store, SOURCE, Some("FILE_CREATED"), Some(1), Some(2));
     assert_eq!(filtered.total, 0);
     assert_eq!(filtered.min_timestamp, None);
+}
+
+#[test]
+fn facet_summary_rejects_an_unprepared_nonempty_source() {
+    let (_root, store) = open_store();
+    store
+        .upsert_batch_independent(&dataset(), PersistMode::SyncAll)
+        .unwrap();
+    let result = store.facet_summary(&store.read_snapshot(), SOURCE, None, None, None);
+    assert!(matches!(
+        result,
+        Err(persistence_fjall::FjallStorageError::TimelineIndexCorrupt)
+    ));
 }
 
 #[test]
@@ -367,7 +370,7 @@ fn bounded_index_pages_stay_inside_both_window_edges() {
 }
 
 #[test]
-fn facet_edges_reject_an_index_pointing_to_a_missing_record() {
+fn facet_summary_rejects_an_index_pointing_to_a_missing_record() {
     let (_root, store) = open_store();
     let records = dataset();
     publish(&store, &records, WriteMode::Counted);
@@ -391,7 +394,7 @@ fn facet_edges_reject_an_index_pointing_to_a_missing_record() {
         )
         .unwrap();
     let error = store
-        .facet_window_edges(&store.read_snapshot(), SOURCE, None, None, None)
+        .facet_summary(&store.read_snapshot(), SOURCE, None, None, None)
         .unwrap_err();
     assert!(matches!(
         error,

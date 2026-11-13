@@ -44,7 +44,6 @@ pub(crate) fn confidence_rank(confidence: &CorrelationConfidenceDto) -> u8 {
         CorrelationConfidenceDto::Heuristic => 1,
     }
 }
-
 pub(crate) fn dedup_vec<T>(values: &mut Vec<T>)
 where
     T: Clone + PartialEq,
@@ -172,16 +171,5 @@ pub(crate) fn normalized_path_suffix_key(normalized: &str) -> &str {
         &normalized[3..]
     } else {
         normalized.trim_start_matches('/')
-    }
-}
-
-pub(crate) fn deleted_preference_score(
-    file: &domain::FileEntry,
-    prefer_deleted: Option<bool>,
-) -> u8 {
-    match prefer_deleted {
-        Some(expected) if file.deleted == expected => 0,
-        Some(_) => 1,
-        None => 0,
     }
 }

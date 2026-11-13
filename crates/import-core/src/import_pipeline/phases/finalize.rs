@@ -10,6 +10,8 @@ use source_kernel::source_db;
 use crate::import_pipeline::context::ImportJobContext;
 use crate::import_pipeline::profile::{elapsed_ms, emit_phase_profile};
 
+mod budget;
+
 pub(crate) fn run_finalize_phase(
     ctx: &mut ImportJobContext<'_>,
     data_source: &domain::DataSource,
@@ -54,32 +56,31 @@ fn materialize_timeline(
     ctx: &ImportJobContext<'_>,
     data_source: &domain::DataSource,
 ) -> Result<u64, CommandError> {
-    let _budget = source_kernel::resource_budget::pool_for(
+    let pool = source_kernel::resource_budget::pool_for(
         ctx.runtime.as_ref().map(|r| r.publication_lease()).as_ref(),
-    )
-    .acquire(
-        source_kernel::resource_budget::Resources {
-            bytes: u64::from(ctx.options.projection_policy.cache_kib) * 1024,
-            ..Default::default()
-        },
-        Some(ctx.options.cancel_token),
-    )
-    .map_err(CommandError::from_typed_service_error)?;
-    let source_conn = ctx.source_connection()?;
-    ctx.report_job_progress(94, "Materializing timeline...")?;
-    let projection = super::super::profile::measure_optional(
-        ctx.profiler.as_ref(),
-        transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Timeline,
+    );
+    let projection = budget::run(
+        &pool,
+        ctx.options.projection_policy,
+        ctx.options.cancel_token,
         || {
-            timeline_projection::materialize_file_activity_with_policy(
-                source_conn,
-                ctx.import_config.platform,
-                ctx.options.cancel_token.as_ref(),
-                ctx.options.projection_policy,
+            let source_conn = ctx.source_connection()?;
+            ctx.report_job_progress(94, "Materializing timeline...")?;
+            super::super::profile::measure_optional(
+                ctx.profiler.as_ref(),
+                transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Timeline,
+                || {
+                    timeline_projection::materialize_file_activity_with_policy(
+                        source_conn,
+                        ctx.import_config.platform,
+                        ctx.options.cancel_token.as_ref(),
+                        ctx.options.projection_policy,
+                    )
+                },
             )
+            .map_err(CommandError::from_typed_service_error)
         },
-    )
-    .map_err(CommandError::from_service_error)?;
+    )?;
     record_timeline_subphases(ctx, &projection);
     emit_phase_profile(
         ctx.event_sink(),

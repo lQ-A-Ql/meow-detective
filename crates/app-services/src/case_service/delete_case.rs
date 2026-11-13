@@ -32,6 +32,8 @@ pub fn delete_case_in(root: &Path) -> Result<()> {
     })?;
     let case_id = active.meta.id.0.clone();
     drop(active);
+    crate::search_service::clear_case_file_search_cache(&case_id)
+        .map_err(|error| CaseServiceError::Io(std::io::Error::other(error)))?;
     let _source_store_guard = crate::storage_runtime::close_case_source_stores(root)
         .map_err(|error| CaseServiceError::InvalidCaseDir(error.to_string()))?
         .ok_or_else(|| {

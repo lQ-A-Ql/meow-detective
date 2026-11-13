@@ -64,12 +64,19 @@ impl ReadOnlySourceStorageHandle {
             .map_err(StorageRuntimeError::Source)
     }
 
-    pub fn verify_source_generation(
+    pub fn verify_source_generation_with_control(
         &self,
         source_id: &str,
+        cancel: &std::sync::atomic::AtomicBool,
+        progress: impl FnMut(u64, u64),
     ) -> Result<persistence_fjall::SourceGenerationManifest, StorageRuntimeError> {
-        persistence_fjall::verify_source_generation(self.source_store(), source_id)
-            .map_err(StorageRuntimeError::Source)
+        persistence_fjall::verify_source_generation_with_control(
+            self.source_store(),
+            source_id,
+            cancel,
+            progress,
+        )
+        .map_err(StorageRuntimeError::Source)
     }
 
     pub fn source_projection_complete(
@@ -377,13 +384,15 @@ impl ReadWriteSourceStorageHandle {
             .map_err(StorageRuntimeError::Source)
     }
 
-    pub fn timeline_rebuild_count_indexes(
+    pub fn timeline_rebuild_count_indexes_with_control(
         &self,
         source_id: &str,
         mode: PersistMode,
+        cancel: &std::sync::atomic::AtomicBool,
+        progress: impl FnMut(u64),
     ) -> Result<(), StorageRuntimeError> {
         TimelineRecordStore::from_source_store(self.source_store().clone())
-            .rebuild_count_indexes(source_id, mode)
+            .rebuild_count_indexes_with_control(source_id, mode, cancel, progress)
             .map_err(StorageRuntimeError::Source)
     }
 

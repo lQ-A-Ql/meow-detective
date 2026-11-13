@@ -34,11 +34,13 @@ fn register_source(
     let store = persistence_source::detail::open_store_for_write(&source_conn)
         .expect("open source store")
         .expect("configured source store");
-    persistence_source::fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation_with_control(
         &store,
         &source.id.0,
         "fixture",
         &"a".repeat(64),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
     )
     .expect("seal source generation");
     let key = persistence_source::fjall::encode_key(

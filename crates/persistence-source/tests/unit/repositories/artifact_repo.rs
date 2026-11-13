@@ -258,8 +258,14 @@ fn base_queries_read_counts_without_scanning_artifact_records() {
     drop(instrumentation);
 
     assert!(counters.scan_entries <= 16, "scanned records: {counters:?}");
-    assert!(counters.scan_calls <= 4, "unexpected scan calls: {counters:?}");
-    assert!(counters.point_reads >= 4, "counts not point reads: {counters:?}");
+    assert!(
+        counters.scan_calls <= 4,
+        "unexpected scan calls: {counters:?}"
+    );
+    assert!(
+        counters.point_reads >= 4,
+        "counts not point reads: {counters:?}"
+    );
 }
 
 #[test]
@@ -267,17 +273,33 @@ fn family_queries_reject_more_than_the_bounded_type_limit() {
     use persistence_fjall::{encode_key, KeyPart, KeyspaceName, PersistMode, WriteAction};
     let (_root, conn) = setup_db();
     let store = crate::detail::open_store_for_write(&conn).unwrap().unwrap();
-    let mut actions = (0..=MAX_ARTIFACT_QUERY_ROWS).map(|id| WriteAction::Put {
-        keyspace: KeyspaceName::ArtifactRecords,
-        key: encode_key("artifact.type-count", &[KeyPart::Text("ds-1".into()), KeyPart::Text(format!("type-{id}"))]).unwrap(),
-        value: 1u64.to_be_bytes().to_vec(),
-    }).collect::<Vec<_>>();
+    let mut actions = (0..=MAX_ARTIFACT_QUERY_ROWS)
+        .map(|id| WriteAction::Put {
+            keyspace: KeyspaceName::ArtifactRecords,
+            key: encode_key(
+                "artifact.type-count",
+                &[
+                    KeyPart::Text("ds-1".into()),
+                    KeyPart::Text(format!("type-{id}")),
+                ],
+            )
+            .unwrap(),
+            value: 1u64.to_be_bytes().to_vec(),
+        })
+        .collect::<Vec<_>>();
     actions.push(WriteAction::Put {
         keyspace: KeyspaceName::Meta,
-        key: encode_key("artifact.type-count-schema", &[KeyPart::Text("ds-1".into())]).unwrap(),
+        key: encode_key(
+            "artifact.type-count-schema",
+            &[KeyPart::Text("ds-1".into())],
+        )
+        .unwrap(),
         value: b"v1".to_vec(),
     });
-    store.database().write_batch(&actions, PersistMode::Buffer).unwrap();
+    store
+        .database()
+        .write_batch(&actions, PersistMode::Buffer)
+        .unwrap();
     let repo = ArtifactRepo::new(&conn);
     assert!(repo.families().is_err());
     assert!(repo.count_by_family().is_err());

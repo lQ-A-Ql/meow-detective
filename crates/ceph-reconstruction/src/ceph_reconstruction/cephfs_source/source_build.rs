@@ -110,11 +110,13 @@ fn publish_native_catalog(
     let projection_digest = hex::encode(persistence_source::fjall::digest(
         request.projection.manifest.projection_sha256.as_bytes(),
     ));
-    persistence_source::fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation_with_control(
         &store,
         &request.source.id.0,
         request.attempt_id,
         &projection_digest,
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
     )
     .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
     let key = persistence_source::fjall::encode_key(

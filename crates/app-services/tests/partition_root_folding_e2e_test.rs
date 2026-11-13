@@ -102,8 +102,15 @@ fn publish_source_projection(conn: &Connection) {
     let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
-    persistence_source::fjall::seal_source_generation(&store, DS_ID, "fixture", &"a".repeat(64))
-        .unwrap();
+    persistence_source::fjall::seal_source_generation_with_control(
+        &store,
+        DS_ID,
+        "fixture",
+        &"a".repeat(64),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
     let key = persistence_source::fjall::encode_key(
         "projection",
         &[persistence_source::fjall::KeyPart::Text(DS_ID.to_string())],

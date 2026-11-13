@@ -1,15 +1,13 @@
 //! Facet aggregation helpers for the timeline listing UI.
 //!
-//! When the `timeline.count` counters are ready a summary costs a handful of
-//! point reads and bounded index probes; otherwise a single newest-first scan
-//! reproduces the same numbers. Both paths answer the same question so the
-//! caller can merge sources without knowing which strategy was used.
+//! Summaries require the published `timeline.count` index and use bounded
+//! index probes. Empty sources return an empty summary.
 
 use super::facet_index::{
     edge_bounds, index_edge_timestamp, index_family_and_parts, whole_second_end, whole_second_start,
 };
 use super::timeline_count::counts_ready;
-use super::{decode_record, TimelinePage, TimelineRecordStore};
+use super::{decode_record, TimelinePage, TimelineRecordStore, RECORD_FAMILY};
 use crate::{
     codec::{decode_key, encode_key, KeyPart, VersionedEnvelope},
     database::SourceReadSnapshot,
@@ -23,7 +21,6 @@ use std::collections::BTreeMap;
 const COUNT_FAMILY: &str = "timeline.count";
 const TYPE_SCOPE: &[u8] = b"type";
 const TOTAL_PERIOD: &[u8] = b"total";
-const FACET_PAGE_SIZE: usize = 512;
 
 /// Time-window and type aggregation for one source.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,8 +33,6 @@ pub struct FacetSummary {
     pub max_timestamp: Option<DateTime<Utc>>,
     /// Every record of the source per event type, ignoring the filters.
     pub type_totals: BTreeMap<String, u64>,
-    /// Whether the summary came from the `timeline.count` counters.
-    pub counts_ready: bool,
 }
 
 impl TimelineRecordStore {
@@ -57,11 +52,26 @@ impl TimelineRecordStore {
     ) -> Result<FacetSummary> {
         let start = whole_second_start(start)?;
         let end = whole_second_end(end)?;
-        if counts_ready(snapshot, source_id)? {
-            self.counted_facet_summary(snapshot, source_id, event_type, start, end)
-        } else {
-            self.scanned_facet_summary(snapshot, source_id, event_type, start, end)
+        if !counts_ready(snapshot, source_id)? {
+            let prefix = encode_key(RECORD_FAMILY, &[KeyPart::Text(source_id.to_owned())])?;
+            let first = snapshot.keyset(
+                KeyspaceName::TimelineRecords,
+                &prefix,
+                None,
+                ScanDirection::Forward,
+                1,
+            )?;
+            if !first.is_empty() {
+                return Err(FjallStorageError::TimelineIndexCorrupt);
+            }
+            return Ok(FacetSummary {
+                total: 0,
+                min_timestamp: None,
+                max_timestamp: None,
+                type_totals: BTreeMap::new(),
+            });
         }
+        self.counted_facet_summary(snapshot, source_id, event_type, start, end)
     }
 
     fn counted_facet_summary(
@@ -108,55 +118,6 @@ impl TimelineRecordStore {
             min_timestamp,
             max_timestamp,
             type_totals,
-            counts_ready: true,
-        })
-    }
-
-    fn scanned_facet_summary(
-        &self,
-        snapshot: &SourceReadSnapshot,
-        source_id: &str,
-        event_type: Option<&str>,
-        start: Option<DateTime<Utc>>,
-        end: Option<DateTime<Utc>>,
-    ) -> Result<FacetSummary> {
-        let mut type_totals = BTreeMap::new();
-        let mut total = 0u64;
-        let mut min_timestamp: Option<DateTime<Utc>> = None;
-        let mut max_timestamp: Option<DateTime<Utc>> = None;
-        let mut cursor = None;
-        loop {
-            let page = self.list_by_time(
-                snapshot,
-                source_id,
-                cursor.as_deref(),
-                ScanDirection::Forward,
-                FACET_PAGE_SIZE,
-            )?;
-            for record in page.records {
-                *type_totals.entry(record.event_type.clone()).or_default() += 1;
-                if !matches_filters(&record.event_type, record.timestamp, event_type, start, end) {
-                    continue;
-                }
-                total += 1;
-                min_timestamp = Some(
-                    min_timestamp.map_or(record.timestamp, |value| value.min(record.timestamp)),
-                );
-                max_timestamp = Some(
-                    max_timestamp.map_or(record.timestamp, |value| value.max(record.timestamp)),
-                );
-            }
-            cursor = page.next_cursor;
-            if cursor.is_none() {
-                break;
-            }
-        }
-        Ok(FacetSummary {
-            total,
-            min_timestamp,
-            max_timestamp,
-            type_totals,
-            counts_ready: false,
         })
     }
 
@@ -203,18 +164,6 @@ impl TimelineRecordStore {
             next_cursor,
         })
     }
-}
-
-fn matches_filters(
-    record_type: &str,
-    timestamp: DateTime<Utc>,
-    event_type: Option<&str>,
-    start: Option<DateTime<Utc>>,
-    end: Option<DateTime<Utc>>,
-) -> bool {
-    event_type.is_none_or(|kind| kind == record_type)
-        && start.is_none_or(|bound| timestamp >= bound)
-        && end.is_none_or(|bound| timestamp <= bound)
 }
 
 /// Reads the per-type record totals from one `timeline.count` prefix scan.

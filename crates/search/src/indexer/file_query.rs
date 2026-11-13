@@ -7,14 +7,14 @@ use unicode_normalization::UnicodeNormalization;
 
 use super::tantivy_writer::{IndexError, Result, SearchIndex};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FileEntryTypeFilter {
     Any,
     File,
     Directory,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FileSearchSortField {
     Name,
     Path,
@@ -22,13 +22,13 @@ pub enum FileSearchSortField {
     ModifiedAt,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FileSearchSortDirection {
     Asc,
     Desc,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FileSearchOptions {
     pub query: String,
     pub match_path: bool,

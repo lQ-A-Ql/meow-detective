@@ -142,14 +142,3 @@ fn resolve_case_id_returns_none_when_empty() {
     let case_id = resolve_case_id(&conn).unwrap();
     assert!(case_id.is_none());
 }
-
-#[test]
-fn collect_artifact_ids_returns_sorted() {
-    let (_root, conn) = setup_db();
-    crate::repositories::artifact_repo::ArtifactRepo::new(&conn)
-        .insert_batch(&[artifact("a2"), artifact("a1")], "case-1", "source-1")
-        .unwrap();
-
-    let ids = collect_artifact_ids(&conn).unwrap();
-    assert_eq!(ids, vec!["a1", "a2"]);
-}

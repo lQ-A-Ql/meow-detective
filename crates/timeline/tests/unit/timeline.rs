@@ -133,6 +133,46 @@ fn unsupported_events_are_removed() {
 }
 
 #[test]
+fn projection_policy_default_validates() {
+    let policy = TimelineProjectionPolicy::default();
+
+    assert_eq!(policy.workspace_kib, 1_000_000);
+    assert!(policy.validate().is_ok());
+}
+
+#[test]
+fn projection_policy_accepts_workspace_budget_bounds() {
+    for workspace_kib in [128 * 1024, 1024 * 1024] {
+        let policy = TimelineProjectionPolicy { workspace_kib };
+        assert!(
+            policy.validate().is_ok(),
+            "workspace budget {workspace_kib} KiB must validate"
+        );
+    }
+}
+
+#[test]
+fn projection_policy_rejects_workspace_budget_outside_bounds() {
+    for workspace_kib in [128 * 1024 - 1, 1024 * 1024 + 1] {
+        let policy = TimelineProjectionPolicy { workspace_kib };
+        assert_eq!(policy.validate(), Err(TimelineProjectionPolicyError));
+    }
+}
+
+#[test]
+fn projection_policy_error_reports_the_bounded_workspace_range() {
+    let error = TimelineProjectionPolicy { workspace_kib: 0 }
+        .validate()
+        .expect_err("zero workspace budget must not validate");
+
+    assert_eq!(
+        error.to_string(),
+        "timeline projection workspace budget is outside its bounded range"
+    );
+    assert_eq!(error, TimelineProjectionPolicyError);
+}
+
+#[test]
 fn analysis_events_are_retained_and_others_dropped() {
     let timestamp = Utc
         .with_ymd_and_hms(2024, 1, 2, 1, 0, 0)

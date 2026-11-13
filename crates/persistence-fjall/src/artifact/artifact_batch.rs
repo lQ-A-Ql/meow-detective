@@ -29,7 +29,9 @@ impl ArtifactRecordStore {
             return Ok(());
         }
         let mut actions = Vec::with_capacity(records.len().saturating_mul(4));
-        let sources = records.iter().map(|record| &record.data_source_id)
+        let sources = records
+            .iter()
+            .map(|record| &record.data_source_id)
             .collect::<std::collections::BTreeSet<_>>();
         // Independent writes cannot maintain counts; invalidate them atomically until rebuilt.
         for source_id in sources {

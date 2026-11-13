@@ -9,7 +9,7 @@ fn put(keyspace: KeyspaceName, key: &[u8], value: &[u8]) -> WriteAction {
 }
 
 #[test]
-fn clone_to_copies_paged_keyspaces_into_an_independent_store() {
+fn controlled_clone_copies_paged_keyspaces_into_an_independent_store() {
     let source_root = tempfile::tempdir().unwrap();
     let clone_root = tempfile::tempdir().unwrap();
     let source = SourceStore::open(source_root.path(), DatabaseConfig::default()).unwrap();
@@ -33,7 +33,12 @@ fn clone_to_copies_paged_keyspaces_into_an_independent_store() {
     let clone_path = clone_root.path().join("source.fjall.clone");
     std::fs::create_dir_all(&clone_path).unwrap();
     let clone = source
-        .clone_to(&clone_path, DatabaseConfig::default())
+        .clone_to_with_control(
+            &clone_path,
+            DatabaseConfig::default(),
+            &std::sync::atomic::AtomicBool::new(false),
+            |_| {},
+        )
         .unwrap();
     assert_ne!(source.database().path(), clone.database().path());
     let snapshot = clone.database().read_snapshot();

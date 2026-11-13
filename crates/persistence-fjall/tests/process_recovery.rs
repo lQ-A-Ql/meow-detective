@@ -87,8 +87,13 @@ fn child_process_termination_matrix_reopens_each_durable_boundary() {
                 let source =
                     persistence_fjall::SourceStore::open(source_root, DatabaseConfig::default())
                         .unwrap();
-                let manifest =
-                    persistence_fjall::verify_source_generation(&source, "source-1").unwrap();
+                let manifest = persistence_fjall::verify_source_generation_with_control(
+                    &source,
+                    "source-1",
+                    &std::sync::atomic::AtomicBool::new(false),
+                    |_, _| {},
+                )
+                .unwrap();
                 assert_eq!(manifest.attempt_id, "attempt");
                 assert_eq!(manifest.projection_batch_digest.len(), 64);
             }
@@ -173,11 +178,13 @@ fn run_matrix_child_if_requested() {
                     PersistMode::SyncAll,
                 )
                 .unwrap();
-            persistence_fjall::seal_source_generation(
+            persistence_fjall::seal_source_generation_with_control(
                 &source,
                 "source-1",
                 "attempt",
                 &hex::encode(receipt.batch_digest),
+                &std::sync::atomic::AtomicBool::new(false),
+                |_, _| {},
             )
             .unwrap();
             drop(source);

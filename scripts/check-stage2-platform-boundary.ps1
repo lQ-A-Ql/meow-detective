@@ -304,13 +304,15 @@ if (Test-Path -LiteralPath $readySourcePath -PathType Leaf) {
 
 foreach ($relativePath in @(
   'crates/app-services/src/artifact_service/aggregation.rs',
-  'crates/app-services/src/timeline_service/pagination.rs',
+  'crates/app-services/src/artifact_service/family_facets.rs',
+  'crates/app-services/src/timeline_service/fjall.rs',
+  'crates/app-services/src/timeline_service/facets/mod.rs',
   'crates/app-services/src/graph_service/source_aggregation.rs',
   'crates/app-services/src/correlation/graph/snapshot.rs',
   'crates/app-services/src/case_service/metrics.rs',
   'crates/evidence-access/src/file_service/data_sources.rs',
   'crates/evidence-access/src/file_service/metadata/source_routing/browse.rs',
-  'crates/app-services/src/search_service/case_search.rs',
+  'crates/app-services/src/search_service/case_search/source.rs',
   'crates/import-core/src/step_recorder.rs'
 )) {
   $absolutePath = Join-Path $repoRoot $relativePath
@@ -324,6 +326,20 @@ foreach ($relativePath in @(
     if ($content -match 'import_state\s*==\s*"failed"') {
       $errors.Add("case-wide aggregation still treats non-failed partial sources as readable: $relativePath")
     }
+  }
+}
+
+$aggregationDelegates = @(
+  @{ Path = 'crates/app-services/src/timeline_service/pagination.rs'; Call = 'super::fjall::query(case_conn, case_root, case_id, query)' },
+  @{ Path = 'crates/app-services/src/search_service/case_search.rs'; Call = 'use source::current_sources;' },
+  @{ Path = 'crates/app-services/src/search_service/case_search/cursor.rs'; Call = 'current_sources(' },
+  @{ Path = 'crates/app-services/src/search_service/case_search/offset.rs'; Call = 'current_sources(' }
+)
+foreach ($delegate in $aggregationDelegates) {
+  $path = Join-Path $repoRoot $delegate.Path
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
+      -not (Read-StrictUtf8 $path).Contains($delegate.Call)) {
+    $errors.Add("case-wide aggregation lost its ready-source delegation: $($delegate.Path)")
   }
 }
 

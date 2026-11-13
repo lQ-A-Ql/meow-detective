@@ -126,6 +126,8 @@ pub(super) fn clear_active_case_if_matches(
         .map_err(|error| CommandError::from_lock_error("Case", error))?;
     if matches_identity(guard.as_ref(), Some(expected)) {
         state.clear_case_read_pool()?;
+        app_services::search_service::clear_case_file_search_cache(&expected.case_id)
+            .map_err(CommandError::from_typed_service_error)?;
         *guard = None;
         return Ok(true);
     }
@@ -142,6 +144,8 @@ fn retire_case_runtime(
         .retire_preview_case(&identity.case_id, timeout)
         .map_err(CommandError::from_service_error)?;
     if drained {
+        app_services::search_service::clear_case_file_search_cache(&identity.case_id)
+            .map_err(CommandError::from_typed_service_error)?;
         return Ok(());
     }
 

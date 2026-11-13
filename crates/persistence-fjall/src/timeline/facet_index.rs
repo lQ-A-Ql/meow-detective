@@ -1,6 +1,4 @@
-use super::{
-    decode_record, record_key, timestamp_sort_value, TimelineRecordStore, TIME_FAMILY, TYPE_FAMILY,
-};
+use super::{decode_record, record_key, timestamp_sort_value, TIME_FAMILY, TYPE_FAMILY};
 use crate::{
     codec::{encode_key, KeyPart, VersionedEnvelope},
     database::SourceReadSnapshot,
@@ -10,35 +8,6 @@ use crate::{
 };
 use chrono::{DateTime, TimeZone, Utc};
 use std::ops::Bound;
-
-impl TimelineRecordStore {
-    /// Returns the matching edge timestamps using two bounded index probes.
-    /// Bounds include every timestamp within their whole second.
-    pub fn facet_window_edges(
-        &self,
-        snapshot: &SourceReadSnapshot,
-        source_id: &str,
-        event_type: Option<&str>,
-        start: Option<DateTime<Utc>>,
-        end: Option<DateTime<Utc>>,
-    ) -> Result<Option<(DateTime<Utc>, DateTime<Utc>)>> {
-        let start = whole_second_start(start)?;
-        let end = whole_second_end(end)?;
-        if start.zip(end).is_some_and(|(start, end)| start > end) {
-            return Ok(None);
-        }
-        let first = index_edge_timestamp(
-            snapshot,
-            source_id,
-            event_type,
-            ScanDirection::Reverse,
-            start,
-        )?;
-        let last =
-            index_edge_timestamp(snapshot, source_id, event_type, ScanDirection::Forward, end)?;
-        Ok(first.zip(last).filter(|(first, last)| first <= last))
-    }
-}
 
 pub(super) fn whole_second_start(bound: Option<DateTime<Utc>>) -> Result<Option<DateTime<Utc>>> {
     bound

@@ -49,11 +49,11 @@ pub use source_build::{
 };
 pub use source_generation::{
     publish_source_generation, read_source_generation_manifest, replace_source_generation,
-    seal_source_generation, source_generation_manifest_digest, verify_source_generation,
-    SourceGenerationManifest, SourceGenerationReceipt, SOURCE_GENERATION_MANIFEST_FILE,
-    SOURCE_GENERATION_SEAL_FILE,
+    seal_source_generation_with_control, source_generation_manifest_digest,
+    verify_source_generation_with_control, SourceGenerationManifest, SourceGenerationReceipt,
+    SOURCE_GENERATION_MANIFEST_FILE, SOURCE_GENERATION_SEAL_FILE,
 };
-pub use source_store::{open_shared_source_store, SourceStore};
+pub use source_store::{open_shared_source_store, SourceCloneProgress, SourceStore};
 pub use timeline::{
     decode_timestamp_desc, encode_timestamp_desc, FacetSummary, TimelinePage, TimelineRecord,
     TimelineRecordStore, TimelineStreamError, TimelineTypeAfterQuery,

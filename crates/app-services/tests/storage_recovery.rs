@@ -130,11 +130,13 @@ fn startup_recovery_publishes_a_sealed_import_generation_and_finishes_its_operat
             persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
-    persistence_source::fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation_with_control(
         &build,
         &source_id.0,
         "attempt-1",
         &hex::encode(projection_receipt.batch_digest),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
     )
     .unwrap();
     drop(build);
@@ -224,11 +226,13 @@ fn startup_recovery_reports_a_missing_generation_seal_without_aborting() {
             persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
-    persistence_source::fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation_with_control(
         &build,
         &source_id.0,
         "missing-seal-attempt",
         &hex::encode(receipt.batch_digest),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
     )
     .unwrap();
     drop(build);

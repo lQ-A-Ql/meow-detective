@@ -93,11 +93,13 @@ fn publish_source_generation(conn: &Connection, source_id: &DataSourceId) {
     let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
-    persistence_source::fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation_with_control(
         &store,
         &source_id.0,
         "fixture",
         &"a".repeat(64),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
     )
     .unwrap();
     let key = persistence_source::fjall::encode_key(

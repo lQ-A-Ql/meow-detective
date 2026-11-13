@@ -149,10 +149,6 @@ fn native_reader_adapters_use_source_catalog_and_native_details() {
     assert_eq!(rows[0].line, "127.0.0.1 local");
 
     assert_eq!(
-        correlation_repo::collect_artifact_ids(&connection).unwrap(),
-        vec!["hosts-artifact", "other-artifact"]
-    );
-    assert_eq!(
         correlation_repo::resolve_case_id(&connection).unwrap(),
         Some("case-1".into())
     );

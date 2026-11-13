@@ -16,6 +16,10 @@ use std::{
 static SHARED_STORES: OnceLock<Mutex<HashMap<PathBuf, Weak<crate::database::DatabaseState>>>> =
     OnceLock::new();
 
+mod clone;
+pub use clone::SourceCloneProgress;
+pub(crate) use clone::{ensure_not_cancelled, read_bounded_page};
+
 #[derive(Clone)]
 pub struct SourceStore {
     database: SingleWriterTxDatabase,
@@ -35,39 +39,6 @@ impl SourceStore {
         Arc::strong_count(&self.database.inner) == 1
     }
 
-    pub fn clone_to(&self, path: impl AsRef<Path>, config: DatabaseConfig) -> Result<SourceStore> {
-        let target = SourceStore::open(path, config)?;
-        let snapshot = self.database.read_snapshot();
-        for keyspace in self.database.keyspace_names() {
-            let mut cursor = None;
-            loop {
-                let page = snapshot.range_keyset(
-                    keyspace,
-                    crate::scan::ScanBounds::unbounded(),
-                    cursor.as_deref(),
-                    512,
-                )?;
-                if page.is_empty() {
-                    break;
-                }
-                let actions = page
-                    .iter()
-                    .map(|entry| crate::database::WriteAction::Put {
-                        keyspace,
-                        key: entry.key.clone(),
-                        value: entry.value.clone(),
-                    })
-                    .collect::<Vec<_>>();
-                target.database.write_batch(&actions, PersistMode::Buffer)?;
-                cursor = page.last().map(|entry| entry.key.clone());
-            }
-        }
-        // The clone is an unpublished build directory: buffered page writes are
-        // made durable by one SyncAll after every keyspace is copied, so the
-        // clone is durable when clone_to returns while nothing is published early.
-        target.database.persist(PersistMode::SyncAll)?;
-        Ok(target)
-    }
     pub fn write_envelope(
         &self,
         keyspace: KeyspaceName,

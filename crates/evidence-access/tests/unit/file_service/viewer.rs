@@ -23,6 +23,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use test_support::NativeSourceFixture;
 use transport::dto::ViewerRangeRequestDto;
 
+#[path = "viewer/header_capacity.rs"]
+mod header_capacity;
 #[path = "preview.rs"]
 mod preview_tests;
 

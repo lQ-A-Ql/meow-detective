@@ -128,12 +128,14 @@ fn persist_outcome_for_test(
         connection,
         &source_id,
         &replacements,
+        &AtomicBool::new(false),
+        |_| {},
     )?;
     let observation = output.persist_outcome(outcome)?;
     let mut state = ExtractionState::new(&[capability]);
     state.record_persisted_outcome(capability, candidate, observation);
-    output.rebuild_derived_metrics()?;
-    let staged = output.seal()?;
+    output.rebuild_derived_metrics(&AtomicBool::new(false), |_| {})?;
+    let staged = output.seal(&AtomicBool::new(false), |_, _| {})?;
     crate::analysis_service::extraction::output_persistence::commit_analysis_control(
         connection, &mut state, staged,
     )?;
@@ -162,12 +164,14 @@ fn persist_plugin_outcome_for_test(
         connection,
         &source_id,
         &replacements,
+        &AtomicBool::new(false),
+        |_| {},
     )?;
     let observation = output.persist_outcome(outcome)?;
     let mut state = ExtractionState::new(&[capability]);
     state.record_persisted_plugin_outcome(capability, observation, Vec::new());
-    output.rebuild_derived_metrics()?;
-    let staged = output.seal()?;
+    output.rebuild_derived_metrics(&AtomicBool::new(false), |_| {})?;
+    let staged = output.seal(&AtomicBool::new(false), |_, _| {})?;
     crate::analysis_service::extraction::output_persistence::commit_analysis_control(
         connection, &mut state, staged,
     )?;
@@ -249,11 +253,13 @@ fn source_connection() -> SourceFixture {
         persistence_source::fjall::DatabaseConfig::default(),
     )
     .expect("open source store");
-    persistence_source::fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation_with_control(
         &store,
         "source-linux",
         "fixture",
         &"a".repeat(64),
+        &AtomicBool::new(false),
+        |_, _| {},
     )
     .expect("seal fixture generation");
     drop(store);
@@ -1247,6 +1253,88 @@ fn empty_candidate_run_skips_streamed_output_generation() {
         build_dirs.is_empty(),
         "an empty-candidate run must not stage an analysis generation: {build_dirs:?}"
     );
+}
+
+#[test]
+fn copy_progress_cancellation_stops_the_real_extraction_run() {
+    let fixture = source_connection();
+    insert_event_log_candidate(&fixture, 128);
+    let cancel = AtomicBool::new(false);
+    let mut preparation_updates = 0;
+    let mut progress = |update: super::ExtractionProgressUpdate| {
+        if update.phase == transport::dto::AnalysisExtractionPhaseDto::Preparing
+            && update.detail == crate::analysis_service::extraction::progress::PREPARING_DETAIL
+        {
+            preparation_updates += 1;
+            if preparation_updates >= 2 {
+                cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    };
+    let result = run_analysis_extraction_with_plugin_loader(
+        &fixture,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["EventLogs"],
+        &cancel,
+        &mut progress,
+        |_, _| -> Result<CandidateSource, String> {
+            panic!("candidate content requested after copy cancellation")
+        },
+        &crate::plugin_loader::load_all_report,
+    );
+    assert!(preparation_updates >= 2);
+    assert!(matches!(result, Err(AnalysisServiceError::Cancelled)));
+    let source_dir = fixture._root.path().join("case/sources/source-linux");
+    assert!(std::fs::read_dir(source_dir).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with("source.fjall.build.")
+    }));
+}
+
+#[test]
+fn persisting_progress_cancellation_preserves_the_published_generation() {
+    let fixture = source_connection();
+    let bytes = std::fs::read(testing::fixtures::tiny_system_evtx()).unwrap();
+    insert_event_log_candidate(&fixture, bytes.len() as u64);
+    let original = persistence_source::detail::require_source_store(&fixture).unwrap();
+    let cancel = AtomicBool::new(false);
+    let mut reads = 0;
+    let mut progress = |update: super::ExtractionProgressUpdate| {
+        if update.phase == transport::dto::AnalysisExtractionPhaseDto::Persisting {
+            cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    };
+    let result = run_analysis_extraction_with_source(
+        &fixture,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["EventLogs"],
+        &cancel,
+        &mut progress,
+        |_, _| {
+            reads += 1;
+            Ok::<CandidateSource, String>(CandidateSource::Seekable(Box::new(
+                std::io::Cursor::new(bytes.clone()),
+            )))
+        },
+    );
+    assert_eq!(reads, 1);
+    assert!(matches!(result, Err(AnalysisServiceError::Cancelled)));
+    let current = persistence_source::detail::require_source_store(&fixture).unwrap();
+    assert_eq!(current.database().path(), original.database().path());
+    assert_eq!(ArtifactRepo::new(&fixture).count().unwrap(), 0);
+    let source_dir = fixture._root.path().join("case/sources/source-linux");
+    assert!(std::fs::read_dir(source_dir).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with("source.fjall.build.")
+    }));
 }
 
 #[test]

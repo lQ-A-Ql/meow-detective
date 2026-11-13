@@ -25,6 +25,8 @@ fn cancellation_drops_the_unpublished_generation_without_changing_published_outp
         &fixture.connection,
         DATA_SOURCE_ID,
         &replacements,
+        &AtomicBool::new(false),
+        |_| {},
     )
     .expect("stage browser generation");
 
@@ -81,11 +83,13 @@ fn native_source() -> NativeSource {
             persistence_source::fjall::PersistMode::SyncAll,
         )
         .expect("seed previous timeline event");
-    persistence_source::fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation_with_control(
         &store,
         DATA_SOURCE_ID,
         "fixture",
         &"a".repeat(64),
+        &AtomicBool::new(false),
+        |_, _| {},
     )
     .expect("seal native source fixture");
     drop(store);

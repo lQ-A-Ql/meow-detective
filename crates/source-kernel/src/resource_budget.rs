@@ -6,7 +6,6 @@ use std::time::Duration;
 pub const MIB: u64 = 1024 * 1024;
 pub const WORKSPACE_BYTES: u64 = 1020 * MIB;
 pub const ENUMERATION_BYTES: u64 = 560 * MIB;
-pub const TIMELINE_BYTES: u64 = 1_000_000 * 1024;
 
 const DEFAULT_CPU_CAP: usize = 6;
 const ANALYSIS_WORKER_MEMORY_RESERVATION_MB: u64 = 192;

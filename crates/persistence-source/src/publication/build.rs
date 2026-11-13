@@ -85,8 +85,13 @@ pub fn finalize_source_build_db(conn: &Connection) -> DbResult<()> {
     if generation_exists {
         let store = crate::detail::open_store_for_write(conn)?
             .ok_or_else(|| DbError::System("source store is missing".to_string()))?;
-        persistence_fjall::verify_source_generation(&store, &source_id)
-            .map_err(|error| DbError::System(error.to_string()))?;
+        persistence_fjall::verify_source_generation_with_control(
+            &store,
+            &source_id,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_, _| {},
+        )
+        .map_err(|error| DbError::System(error.to_string()))?;
     }
     crate::detail::bind_generation(conn, "source.fjall")?;
     verify_source_db_integrity(conn)?;

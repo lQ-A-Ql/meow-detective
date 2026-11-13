@@ -17,8 +17,8 @@ const DAY_SECONDS: i64 = 86_400;
 enum WriteMode {
     /// `upsert_batch` initializes and maintains the `timeline.count` counters.
     Counted,
-    /// `upsert_batch_independent` skips count maintenance.
-    Independent,
+    /// Independent writes are followed by an explicit count rebuild before publication.
+    Rebuilt,
 }
 
 #[derive(Debug, Clone)]
@@ -130,9 +130,19 @@ fn publish_source(
     let store = TimelineRecordStore::from_source_store(handle.source_store().clone());
     match mode {
         WriteMode::Counted => store.upsert_batch(records, PersistMode::SyncAll).unwrap(),
-        WriteMode::Independent => store
-            .upsert_batch_independent(records, PersistMode::SyncAll)
-            .unwrap(),
+        WriteMode::Rebuilt => {
+            store
+                .upsert_batch_independent(records, PersistMode::SyncAll)
+                .unwrap();
+            store
+                .rebuild_count_indexes_with_control(
+                    source_id,
+                    PersistMode::SyncAll,
+                    &std::sync::atomic::AtomicBool::new(false),
+                    |_| {},
+                )
+                .unwrap();
+        }
     }
     drop(store);
     drop(handle);
@@ -288,22 +298,22 @@ fn comparison_filters() -> Vec<FacetFilter> {
 }
 
 #[test]
-fn timeline_facets_agree_between_counted_and_scanned_sources() {
+fn timeline_facets_agree_between_counted_and_rebuilt_sources() {
     let records = comparison_records();
     let counted_temp = tempfile::TempDir::new().unwrap();
     let counted = prepare_case(&counted_temp, "facets-counts", &records, WriteMode::Counted);
-    let scanned_temp = tempfile::TempDir::new().unwrap();
-    let scanned = prepare_case(
-        &scanned_temp,
-        "facets-scan",
+    let rebuilt_temp = tempfile::TempDir::new().unwrap();
+    let rebuilt = prepare_case(
+        &rebuilt_temp,
+        "facets-rebuilt",
         &records,
-        WriteMode::Independent,
+        WriteMode::Rebuilt,
     );
     for filter in comparison_filters() {
         let label = format!("{filter:?}");
         let counted_facets = facets(&counted, &filter);
-        let scanned_facets = facets(&scanned, &filter);
-        assert_same_facets(&counted_facets, &scanned_facets, &label);
+        let rebuilt_facets = facets(&rebuilt, &filter);
+        assert_same_facets(&counted_facets, &rebuilt_facets, &label);
         assert!(
             !counted_facets.event_types.is_empty(),
             "{label} keeps type totals"
@@ -410,24 +420,24 @@ fn timeline_facets_narrow_window_avoids_the_full_scan_when_counts_are_ready() {
         counted_counters.scan_entries
     );
 
-    let scanned_temp = tempfile::TempDir::new().unwrap();
-    let scanned_case = prepare_case(
-        &scanned_temp,
-        "facets-narrow-scan",
+    let rebuilt_temp = tempfile::TempDir::new().unwrap();
+    let rebuilt_case = prepare_case(
+        &rebuilt_temp,
+        "facets-narrow-rebuilt",
         &records,
-        WriteMode::Independent,
+        WriteMode::Rebuilt,
     );
     instrumentation::enable();
     instrumentation::reset();
-    let scanned = facets(&scanned_case, &filter);
-    let scanned_counters = instrumentation::snapshot();
+    let rebuilt = facets(&rebuilt_case, &filter);
+    let rebuilt_counters = instrumentation::snapshot();
     instrumentation::disable();
-    assert_eq!(scanned.total_events, 6);
+    assert_eq!(rebuilt.total_events, 6);
     assert!(
-        scanned_counters.scan_entries >= total,
-        "uncounted facets must scan every record ({total}): {scanned_counters:?}"
+        rebuilt_counters.point_reads <= 32 && rebuilt_counters.scan_entries <= total / 4,
+        "rebuilt count index read outside its window: {rebuilt_counters:?}"
     );
-    assert_same_facets(&counted, &scanned, "narrow window");
+    assert_same_facets(&counted, &rebuilt, "narrow window");
 }
 
 #[test]
@@ -466,15 +476,10 @@ fn nonempty_facets_retain_sources_with_zero_matching_events() {
 }
 
 #[test]
-fn uncounted_full_window_materializes_each_record_only_once() {
+fn rebuilt_full_window_materializes_each_record_only_once() {
     let temp = tempfile::TempDir::new().unwrap();
     let records = spread_records();
-    let active = prepare_case(
-        &temp,
-        "facets-single-scan",
-        &records,
-        WriteMode::Independent,
-    );
+    let active = prepare_case(&temp, "facets-single-scan", &records, WriteMode::Rebuilt);
     instrumentation::enable();
     instrumentation::reset();
     let result = facets(
@@ -500,6 +505,60 @@ fn uncounted_full_window_materializes_each_record_only_once() {
     assert!(
         counters.point_reads <= records.len() as u64 + 16,
         "duplicate record reads: {counters:?}"
+    );
+}
+
+#[test]
+fn case_facets_reject_a_nonempty_source_with_unprepared_counts() {
+    let temporary = tempfile::tempdir().unwrap();
+    let records = comparison_records();
+    let active = app_services::case_service::create_case(
+        temporary.path(),
+        "unprepared-facets",
+        Some("tester"),
+    )
+    .unwrap();
+    active
+        .with_conn(|connection| {
+            drop(register_ready_source(
+                connection,
+                &active.case_root,
+                &active.meta.id,
+                SOURCE,
+            )?);
+            Ok(())
+        })
+        .unwrap();
+    let handle = app_services::source_db::open_registered_fjall_source_read_write(
+        &active.case_root,
+        &DataSourceId(SOURCE.to_owned()),
+    )
+    .unwrap();
+    let store = TimelineRecordStore::from_source_store(handle.source_store().clone());
+    store
+        .upsert_batch_independent(&records, PersistMode::SyncAll)
+        .unwrap();
+    assert!(!store.counts_ready(&store.read_snapshot(), SOURCE).unwrap());
+    let connection = active.connection().unwrap();
+    let result = get_timeline_facets_for_case(
+        &connection,
+        &active.case_root,
+        &active.meta.id,
+        None,
+        None,
+        None,
+        24,
+    );
+    assert!(
+        matches!(
+            &result,
+            Err(
+                app_services::timeline_service::TimelineServiceError::Storage(
+                    persistence_source::fjall::FjallStorageError::TimelineIndexCorrupt
+                )
+            )
+        ),
+        "unexpected facet result: {result:?}"
     );
 }
 
@@ -599,8 +658,8 @@ fn mixed_counted_sources_match_randomized_record_oracles() {
         })
         .collect::<Vec<_>>();
     for (first_mode, second_mode) in [
-        (WriteMode::Counted, WriteMode::Independent),
-        (WriteMode::Independent, WriteMode::Counted),
+        (WriteMode::Counted, WriteMode::Rebuilt),
+        (WriteMode::Rebuilt, WriteMode::Counted),
     ] {
         let temporary = tempfile::TempDir::new().unwrap();
         let first = records

@@ -53,10 +53,20 @@ fn workers_write_independent_artifacts_and_timeline_before_one_metric_rebuild() 
         }
     });
     artifacts
-        .rebuild_metrics_for_source("source", PersistMode::Buffer)
+        .rebuild_metrics_for_source_with_control(
+            "source",
+            PersistMode::Buffer,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_| {},
+        )
         .unwrap();
     timeline
-        .rebuild_count_indexes("source", PersistMode::Buffer)
+        .rebuild_count_indexes_with_control(
+            "source",
+            PersistMode::Buffer,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_| {},
+        )
         .unwrap();
     source.database().persist(PersistMode::SyncAll).unwrap();
 

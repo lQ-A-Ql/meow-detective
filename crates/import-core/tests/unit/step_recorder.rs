@@ -161,12 +161,12 @@ fn case_state_hash_changes_when_counts_change() {
     assert_eq!(
         source_kernel::source_db::ready_source_catalog_count(&case.case_root, &inventory_source)
             .unwrap(),
-        Some(1)
+        1
     );
     assert_eq!(
         source_kernel::source_db::ready_source_artifact_count(&case.case_root, &inventory_source)
             .unwrap(),
-        Some(1)
+        1
     );
     let hash_after = compute_case_state_hash(&case.conn, &case.case_root, "case-hash-change");
     assert_ne!(hash_before, hash_after);

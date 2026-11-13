@@ -1,8 +1,7 @@
 use crate::{
     errors::{FjallStorageError, Result},
     keyspaces::KeyspaceName,
-    scan::ScanDirection,
-    source_store::SourceStore,
+    source_store::{ensure_not_cancelled, SourceStore},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,7 +11,11 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
+    sync::atomic::AtomicBool,
 };
+
+mod digest;
+use digest::immutable_data_digest;
 
 pub const SOURCE_GENERATION_MANIFEST_FILE: &str = "source-generation.manifest.json";
 pub const SOURCE_GENERATION_SEAL_FILE: &str = "source-generation.seal";
@@ -40,12 +43,15 @@ pub struct SourceGenerationReceipt {
     pub reused: bool,
 }
 
-pub fn seal_source_generation(
+pub fn seal_source_generation_with_control(
     source: &SourceStore,
     source_id: &str,
     attempt_id: &str,
     projection_batch_digest: &str,
+    cancel: &AtomicBool,
+    mut progress: impl FnMut(u64, u64),
 ) -> Result<String> {
+    ensure_not_cancelled(cancel)?;
     validate_identity(source_id)?;
     validate_identity(attempt_id)?;
     validate_digest(projection_batch_digest)?;
@@ -53,7 +59,8 @@ pub fn seal_source_generation(
     let manifest_path = path.join(SOURCE_GENERATION_MANIFEST_FILE);
     let seal_path = path.join(SOURCE_GENERATION_SEAL_FILE);
     if manifest_path.exists() || seal_path.exists() {
-        let manifest = verify_source_generation(source, source_id)?;
+        let manifest =
+            verify_source_generation_with_control(source, source_id, cancel, &mut progress)?;
         if manifest.attempt_id == attempt_id
             && manifest.projection_batch_digest == projection_batch_digest
         {
@@ -62,7 +69,14 @@ pub fn seal_source_generation(
         return Err(FjallStorageError::PublicationConflict(path.to_path_buf()));
     }
 
-    write_source_generation_markers(source, source_id, attempt_id, projection_batch_digest)
+    write_source_generation_markers(
+        source,
+        source_id,
+        attempt_id,
+        projection_batch_digest,
+        cancel,
+        &mut progress,
+    )
 }
 
 pub fn replace_source_generation(
@@ -74,7 +88,14 @@ pub fn replace_source_generation(
     validate_identity(source_id)?;
     validate_identity(attempt_id)?;
     validate_digest(projection_batch_digest)?;
-    write_source_generation_markers(source, source_id, attempt_id, projection_batch_digest)
+    write_source_generation_markers(
+        source,
+        source_id,
+        attempt_id,
+        projection_batch_digest,
+        &AtomicBool::new(false),
+        &mut |_, _| {},
+    )
 }
 
 fn write_source_generation_markers(
@@ -82,6 +103,8 @@ fn write_source_generation_markers(
     source_id: &str,
     attempt_id: &str,
     projection_batch_digest: &str,
+    cancel: &AtomicBool,
+    progress: &mut impl FnMut(u64, u64),
 ) -> Result<String> {
     let path = source.database().path();
     let manifest_path = path.join(SOURCE_GENERATION_MANIFEST_FILE);
@@ -90,25 +113,31 @@ fn write_source_generation_markers(
         version: SOURCE_GENERATION_VERSION,
         source_id: source_id.to_owned(),
         attempt_id: attempt_id.to_owned(),
-        immutable_data_digest: immutable_data_digest(source)?,
+        immutable_data_digest: immutable_data_digest(source, cancel, progress)?,
         projection_batch_digest: projection_batch_digest.to_owned(),
     };
     let bytes = serde_json::to_vec(&manifest)
         .map_err(|error| FjallStorageError::Serialization(error.to_string()))?;
     let digest = digest_hex(&bytes);
+    ensure_not_cancelled(cancel)?;
     write_atomic(&manifest_path, &bytes)?;
+    ensure_not_cancelled(cancel)?;
     write_atomic(
         &seal_path,
         format!("source-generation-v1\n{digest}\n").as_bytes(),
     )?;
     sync_directory(path)?;
+    ensure_not_cancelled(cancel)?;
     Ok(digest)
 }
 
-pub fn verify_source_generation(
+pub fn verify_source_generation_with_control(
     source: &SourceStore,
     expected_source_id: &str,
+    cancel: &AtomicBool,
+    mut progress: impl FnMut(u64, u64),
 ) -> Result<SourceGenerationManifest> {
+    ensure_not_cancelled(cancel)?;
     validate_identity(expected_source_id)?;
     let path = source.database().path();
     let (manifest, _) = read_manifest(path)?;
@@ -121,7 +150,7 @@ pub fn verify_source_generation(
         ));
     }
     validate_digest(&manifest.projection_batch_digest)?;
-    let actual = immutable_data_digest(source)?;
+    let actual = immutable_data_digest(source, cancel, &mut progress)?;
     if actual != manifest.immutable_data_digest {
         return Err(FjallStorageError::ManifestDigestMismatch {
             expected: manifest.immutable_data_digest,
@@ -220,23 +249,6 @@ fn rename_directory(source: &Path, target: &Path) -> io::Result<()> {
 
 pub fn source_generation_manifest_digest(path: impl AsRef<Path>) -> Result<String> {
     read_manifest(path.as_ref()).map(|(_, digest)| digest)
-}
-
-fn immutable_data_digest(source: &SourceStore) -> Result<String> {
-    let snapshot = source.database().read_snapshot();
-    let mut hasher = Sha256::new();
-    for keyspace in SEALED_KEYSPACES {
-        let name = keyspace.as_str().as_bytes();
-        hasher.update((name.len() as u64).to_be_bytes());
-        hasher.update(name);
-        for entry in snapshot.prefix(keyspace, &[], ScanDirection::Forward)? {
-            hasher.update((entry.key.len() as u64).to_be_bytes());
-            hasher.update(&entry.key);
-            hasher.update((entry.value.len() as u64).to_be_bytes());
-            hasher.update(&entry.value);
-        }
-    }
-    Ok(hex::encode(hasher.finalize()))
 }
 
 fn read_manifest(path: &Path) -> Result<(SourceGenerationManifest, String)> {

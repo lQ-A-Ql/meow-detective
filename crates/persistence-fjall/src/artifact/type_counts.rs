@@ -11,7 +11,6 @@ use std::collections::BTreeMap;
 const TYPE_COUNT_FAMILY: &str = "artifact.type-count";
 const TYPE_COUNT_SCHEMA: &str = "artifact.type-count-schema";
 const TYPE_COUNT_SCHEMA_VALUE: &[u8] = b"v1";
-const FALLBACK_PAGE_SIZE: usize = 512;
 
 pub(super) type TypeCountDeltas = BTreeMap<Vec<u8>, i64>;
 
@@ -24,7 +23,7 @@ pub(super) enum CountPolicy {
     /// marker can be written together with this mutation.
     Bootstrap,
     /// Counts are missing for a non-empty source; leave them absent and rely on
-    /// `rebuild_metrics_for_source` to recreate them.
+    /// `rebuild_metrics_for_source_with_control` to recreate them.
     Skip,
 }
 
@@ -37,17 +36,14 @@ impl CountPolicy {
 impl ArtifactRecordStore {
     /// Per-type counts for one source, sorted by artifact type.
     ///
-    /// Reads the persistent count family when the source has a ready marker.
-    /// Sources written before the count family existed (no marker) fall back to
-    /// a paged record scan so callers still observe exact counts; the fallback
-    /// is read-only and never writes counts back.
+    /// A nonempty source must have a valid count marker before it is queried.
     pub fn type_counts(
         &self,
         snapshot: &SourceReadSnapshot,
         source_id: &str,
     ) -> Result<Vec<(String, u64)>> {
-        if !counts_ready(snapshot, source_id)? {
-            return scan_type_counts(self, snapshot, source_id);
+        if !require_counts_or_empty(snapshot, source_id)? {
+            return Ok(Vec::new());
         }
         let prefix = count_prefix(source_id)?;
         let entries = snapshot.scan_prefix(
@@ -75,13 +71,12 @@ impl ArtifactRecordStore {
 }
 
 pub(super) fn count_by_type(
-    store: &ArtifactRecordStore,
     snapshot: &SourceReadSnapshot,
     source_id: &str,
     artifact_type: &str,
 ) -> Result<u64> {
-    if !counts_ready(snapshot, source_id)? {
-        return scan_count_by_type(store, snapshot, source_id, artifact_type);
+    if !require_counts_or_empty(snapshot, source_id)? {
+        return Ok(0);
     }
     read_count(snapshot, source_id, artifact_type)
 }
@@ -237,55 +232,22 @@ fn read_count(snapshot: &SourceReadSnapshot, source_id: &str, artifact_type: &st
     count_value(&value)
 }
 
-fn scan_count_by_type(
-    store: &ArtifactRecordStore,
-    snapshot: &SourceReadSnapshot,
-    source_id: &str,
-    artifact_type: &str,
-) -> Result<u64> {
-    let mut cursor = None;
-    let mut count = 0u64;
-    loop {
-        let page = store.list_by_type(
-            snapshot,
-            source_id,
-            artifact_type,
-            cursor.as_deref(),
-            ScanDirection::Forward,
-            FALLBACK_PAGE_SIZE,
-        )?;
-        count = count.saturating_add(page.records.len() as u64);
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            return Ok(count);
-        }
+fn require_counts_or_empty(snapshot: &SourceReadSnapshot, source_id: &str) -> Result<bool> {
+    if counts_ready(snapshot, source_id)? {
+        return Ok(true);
     }
-}
-
-fn scan_type_counts(
-    store: &ArtifactRecordStore,
-    snapshot: &SourceReadSnapshot,
-    source_id: &str,
-) -> Result<Vec<(String, u64)>> {
-    let mut tally = BTreeMap::<String, u64>::new();
-    let mut cursor = None;
-    loop {
-        let page = store.list_by_source(
-            snapshot,
-            source_id,
-            cursor.as_deref(),
-            ScanDirection::Forward,
-            FALLBACK_PAGE_SIZE,
-        )?;
-        for record in &page.records {
-            let count = tally.entry(record.artifact_type.clone()).or_insert(0);
-            *count = count.saturating_add(1);
-        }
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            return Ok(tally.into_iter().collect());
-        }
+    let prefix = encode_key(RECORD_FAMILY, &[KeyPart::Text(source_id.to_owned())])?;
+    let first = snapshot.keyset(
+        KeyspaceName::ArtifactRecords,
+        &prefix,
+        None,
+        ScanDirection::Forward,
+        1,
+    )?;
+    if first.is_empty() {
+        return Ok(false);
     }
+    Err(FjallStorageError::ArtifactIndexCorrupt)
 }
 
 fn count_prefix(source_id: &str) -> Result<Vec<u8>> {
@@ -312,8 +274,10 @@ fn count_type(key: &[u8]) -> Result<String> {
         return Err(FjallStorageError::ArtifactIndexCorrupt);
     }
     match parts.as_slice() {
-        [KeyPart::Bytes(_), KeyPart::Bytes(artifact_type)] => String::from_utf8(artifact_type.clone())
-            .map_err(|_| FjallStorageError::ArtifactIndexCorrupt),
+        [KeyPart::Bytes(_), KeyPart::Bytes(artifact_type)] => {
+            String::from_utf8(artifact_type.clone())
+                .map_err(|_| FjallStorageError::ArtifactIndexCorrupt)
+        }
         _ => Err(FjallStorageError::ArtifactIndexCorrupt),
     }
 }

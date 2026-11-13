@@ -231,7 +231,11 @@ impl<'a> ArtifactRepo<'a> {
                 "source identity is missing".into(),
             ));
         }
-        Ok(self.artifact_type_counts()?.into_iter().map(|(family, _)| family).collect())
+        Ok(self
+            .artifact_type_counts()?
+            .into_iter()
+            .map(|(family, _)| family)
+            .collect())
     }
 
     pub fn count(&self) -> DbResult<u64> {

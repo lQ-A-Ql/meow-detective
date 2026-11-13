@@ -17,7 +17,9 @@ pub(super) fn finalize_run(
     persistence_started: Instant,
     plugin_loads: Vec<PluginLoadRecord>,
     plugin_rejections: Vec<PluginRejection>,
+    cancel_token: &AtomicBool,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
+    ensure_not_cancelled(cancel_token)?;
     commit_analysis_control(conn, &mut state, staged_generation)?;
     let persistence_elapsed_ms = elapsed_millis(persistence_started);
     let retryable_failure_count = state.retryable_failure_count;

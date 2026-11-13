@@ -1,7 +1,7 @@
 use domain::{EntryType, FileEntryId};
 use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
-use search::{extract_text, SearchIndex, SearchResult};
+use search::{extract_text, SearchIndex};
 use std::path::Path;
 use transport::commands::SearchFilesRequest;
 use transport::dto::{
@@ -13,6 +13,7 @@ mod case_search;
 mod error;
 mod instrumented;
 mod search_request;
+pub use case_search::pool::{clear_case_file_search_cache, clear_source_file_search_cache};
 pub use error::SearchError;
 pub use instrumented::{
     search_files_for_case_cursor_instrumented, search_files_for_case_instrumented,
@@ -104,6 +105,7 @@ pub fn search_files_real(
     };
     let index =
         SearchIndex::open(active_index_dir).map_err(|e| SearchError::Index(e.to_string()))?;
+    persistence_source::fjall::instrumentation::record_search_index_open();
     if !index.supports_stable_paging() {
         return Err(SearchError::Unsupported(
             "Search index schema does not support deterministic pagination; rebuild the data source search index"
@@ -111,8 +113,19 @@ pub fn search_files_real(
         ));
     }
     let start = std::time::Instant::now();
-    let SearchResult { hits, total_count } = index
-        .search_page(query, offset as usize, limit as usize)
+    let session = index
+        .query_session(query)
+        .map_err(|e| SearchError::Index(e.to_string()))?;
+    persistence_source::fjall::instrumentation::record_query_session_open();
+    let ranked = session
+        .rank_page(offset as usize, limit as usize)
+        .map_err(|e| SearchError::Index(e.to_string()))?;
+    let total_count = ranked.total_count;
+    let hits = ranked
+        .hits
+        .into_iter()
+        .map(|hit| session.materialize(hit))
+        .collect::<Result<Vec<_>, _>>()
         .map_err(|e| SearchError::Index(e.to_string()))?;
     let took_ms = start.elapsed().as_millis() as u64;
 

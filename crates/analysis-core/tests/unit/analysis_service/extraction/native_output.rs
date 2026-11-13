@@ -8,6 +8,7 @@ use persistence_source::fjall::{
 };
 use rusqlite::Connection;
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 fn setup() -> (tempfile::TempDir, Connection, SourceStore) {
     let root = tempfile::tempdir().unwrap();
@@ -45,11 +46,13 @@ fn setup() -> (tempfile::TempDir, Connection, SourceStore) {
             PersistMode::SyncAll,
         )
         .unwrap();
-    persistence_source::fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation_with_control(
         &store,
         "source-1",
         "attempt-1",
         &"a".repeat(64),
+        &AtomicBool::new(false),
+        |_, _| {},
     )
     .unwrap();
     (root, connection, store)
@@ -141,8 +144,17 @@ fn rebuild_derived_metrics_without_writes_leaves_derived_counts_unchanged() {
     assert_eq!((published_artifacts, published_events), (1, 1));
     drop(snapshot);
 
-    let generation = super::begin_streaming(&connection, "source-1", &[]).unwrap();
-    generation.rebuild_derived_metrics().unwrap();
+    let generation = super::begin_streaming(
+        &connection,
+        "source-1",
+        &[],
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    generation
+        .rebuild_derived_metrics(&AtomicBool::new(false), |_| {})
+        .unwrap();
 
     let snapshot = generation.store.database().read_snapshot();
     let artifacts = ArtifactRecordStore::from_source_store(generation.store.clone());
@@ -173,75 +185,98 @@ fn rebuild_derived_metrics_without_writes_leaves_derived_counts_unchanged() {
     drop(staged);
 }
 
-fn remove_artifact_type_count_marker(store: &SourceStore) {
-    let key = persistence_source::fjall::encode_key(
-        "artifact.type-count-schema",
-        &[persistence_source::fjall::KeyPart::Text("source-1".into())],
+fn assert_no_build_generation(root: &std::path::Path) {
+    let source_dir = root.join("case/sources/source-1");
+    let names = std::fs::read_dir(source_dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    assert!(
+        names
+            .iter()
+            .all(|name| !name.starts_with("source.fjall.build.")),
+        "{names:?}"
+    );
+}
+
+#[test]
+fn cancellation_during_clone_removes_build_and_preserves_published_records() {
+    let (root, connection, source) = setup();
+    let published = ArtifactRecordStore::from_source_store(source.clone());
+    let records = (0..5_000)
+        .map(|index| {
+            persistence_source::detail::artifact_record(
+                &artifact(&format!("extra-{index}"), "old", "linux.web.old"),
+                "source-1",
+            )
+        })
+        .collect::<Vec<_>>();
+    published
+        .upsert_batch(&records, PersistMode::SyncAll)
+        .unwrap();
+    let revision = published
+        .cursor_revision(&published.read_snapshot())
+        .unwrap();
+    let cancel = AtomicBool::new(false);
+    let mut copied = 0;
+    let result = super::begin_streaming(&connection, "source-1", &[], &cancel, |progress| {
+        copied = progress.records_copied;
+        if copied > 0 {
+            cancel.store(true, Ordering::Relaxed);
+        }
+    });
+    assert!(matches!(
+        result,
+        Err(crate::analysis_service::error::AnalysisServiceError::Cancelled)
+    ));
+    assert!(copied > 0);
+    assert_no_build_generation(root.path());
+    let snapshot = published.read_snapshot();
+    assert_eq!(published.count(&snapshot, Some("source-1")).unwrap(), 5_001);
+    assert_eq!(published.cursor_revision(&snapshot).unwrap(), revision);
+    assert!(published
+        .get(&snapshot, "source-1", "old")
+        .unwrap()
+        .is_some());
+}
+
+#[test]
+fn dropping_streaming_generation_releases_store_before_removing_build() {
+    let (root, connection, _source) = setup();
+    let generation = super::begin_streaming(
+        &connection,
+        "source-1",
+        &[],
+        &AtomicBool::new(false),
+        |_| {},
     )
     .unwrap();
-    store
-        .database()
-        .write_batch(
-            &[persistence_source::fjall::WriteAction::Delete {
-                keyspace: persistence_source::fjall::KeyspaceName::Meta,
-                key,
-            }],
-            PersistMode::SyncAll,
-        )
-        .unwrap();
+    let path = generation.staged.path.clone();
+    assert!(path.is_dir());
+    drop(generation);
+    assert!(!path.exists());
+    assert_no_build_generation(root.path());
 }
 
 #[test]
-fn reprocessing_without_new_outputs_prepares_legacy_artifact_type_counts() {
-    let (_root, connection, source) = setup();
-    remove_artifact_type_count_marker(&source);
+fn failed_nonstreaming_stage_removes_build_and_preserves_published_records() {
+    let (root, connection, source) = setup();
+    let invalid = artifact("", "old", "linux.web.new");
+    assert!(super::stage(
+        &connection,
+        &root.path().join("case"),
+        "source-1",
+        &[invalid],
+        &[],
+        &[],
+    )
+    .is_err());
+    assert_no_build_generation(root.path());
     let published = ArtifactRecordStore::from_source_store(source);
-    assert!(!published
-        .type_counts_ready(&published.read_snapshot(), "source-1")
-        .unwrap());
-
-    let generation = super::begin_streaming(&connection, "source-1", &[]).unwrap();
-    generation.rebuild_derived_metrics().unwrap();
-    let artifacts = ArtifactRecordStore::from_source_store(generation.store.clone());
-    let snapshot = artifacts.read_snapshot();
-    assert!(artifacts.type_counts_ready(&snapshot, "source-1").unwrap());
-    assert_eq!(
-        artifacts.type_counts(&snapshot, "source-1").unwrap(),
-        vec![("LinuxWebFinding".to_owned(), 1)]
-    );
-    assert!(!published
-        .type_counts_ready(&published.read_snapshot(), "source-1")
-        .unwrap());
-    drop(snapshot);
-    drop(artifacts);
-    let super::StreamingGeneration { staged, store, .. } = generation;
-    drop(store);
-    drop(staged);
-}
-
-#[test]
-fn reprocessing_empty_source_prepares_empty_artifact_type_counts() {
-    let (_root, connection, source) = setup();
-    let published = ArtifactRecordStore::from_source_store(source.clone());
-    published
-        .delete("source-1", "old", PersistMode::SyncAll)
-        .unwrap();
-    remove_artifact_type_count_marker(&source);
-    let generation = super::begin_streaming(&connection, "source-1", &[]).unwrap();
-    generation.rebuild_derived_metrics().unwrap();
-    let artifacts = ArtifactRecordStore::from_source_store(generation.store.clone());
-    let snapshot = artifacts.read_snapshot();
-    assert!(artifacts.type_counts_ready(&snapshot, "source-1").unwrap());
-    assert!(artifacts
-        .type_counts(&snapshot, "source-1")
+    let snapshot = published.read_snapshot();
+    assert_eq!(published.count(&snapshot, Some("source-1")).unwrap(), 1);
+    assert!(published
+        .get(&snapshot, "source-1", "old")
         .unwrap()
-        .is_empty());
-    assert!(!published
-        .type_counts_ready(&published.read_snapshot(), "source-1")
-        .unwrap());
-    drop(snapshot);
-    drop(artifacts);
-    let super::StreamingGeneration { staged, store, .. } = generation;
-    drop(store);
-    drop(staged);
+        .is_some());
 }

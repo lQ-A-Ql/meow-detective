@@ -10,6 +10,8 @@ pub enum SearchError {
     InvalidInput(String),
     #[error("unsupported: {0}")]
     Unsupported(String),
+    #[error(transparent)]
+    Resources(#[from] crate::resource_budget::ResourceError),
     #[error("{0}")]
     Other(String),
 }
@@ -21,6 +23,7 @@ impl transport::ServiceErrorCategory for SearchError {
             Self::Index(_) => transport::ErrorCategory::Parser,
             Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
+            Self::Resources(error) => transport::ServiceErrorCategory::category(error),
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
     }

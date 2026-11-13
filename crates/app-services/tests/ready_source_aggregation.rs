@@ -469,7 +469,12 @@ fn case_metrics_and_search_coverage_use_published_fjall_counts() {
                 )
                 .map_err(service_error)?;
             fjall
-                .timeline_rebuild_count_indexes(&source_id.0, PersistMode::Buffer)
+                .timeline_rebuild_count_indexes_with_control(
+                    &source_id.0,
+                    PersistMode::Buffer,
+                    &std::sync::atomic::AtomicBool::new(false),
+                    |_| {},
+                )
                 .map_err(service_error)?;
             fjall.persist(PersistMode::SyncAll).map_err(service_error)?;
             drop(fjall);

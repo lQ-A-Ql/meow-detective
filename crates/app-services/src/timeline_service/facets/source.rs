@@ -1,8 +1,7 @@
 use chrono::{DateTime, Utc};
 use domain::DataSourceId;
 use persistence_source::fjall::{
-    FacetSummary, FjallStorageError, ScanDirection, SourceReadSnapshot, TimelineRecord,
-    TimelineRecordStore,
+    FacetSummary, FjallStorageError, SourceReadSnapshot, TimelineRecordStore,
 };
 use std::{collections::BTreeMap, path::Path};
 
@@ -18,24 +17,12 @@ pub(super) struct FacetFilter<'a> {
     pub event_type: Option<&'a str>,
 }
 
-impl FacetFilter<'_> {
-    fn matches(&self, record: &TimelineRecord) -> bool {
-        self.event_type.is_none_or(|kind| record.event_type == kind)
-            && self
-                .start
-                .is_none_or(|bound| record.timestamp.timestamp() >= bound)
-            && self
-                .end
-                .is_none_or(|bound| record.timestamp.timestamp() <= bound)
-    }
-}
-
 pub(super) struct NativeFacetSource {
     pub id: DataSourceId,
     pub bounds: Option<(DateTime<Utc>, DateTime<Utc>)>,
     store: TimelineRecordStore,
     snapshot: SourceReadSnapshot,
-    indexed_summary: Option<FacetSummary>,
+    summary: FacetSummary,
 }
 
 impl NativeFacetSource {
@@ -50,21 +37,14 @@ impl NativeFacetSource {
         let store = TimelineRecordStore::from_source_store(handle.source_store().clone());
         let start = epoch_to_datetime("timeStart", filter.start)?;
         let end = epoch_to_datetime("timeEnd", filter.end)?;
-        let indexed_summary = if store.counts_ready(&snapshot, &id.0)? {
-            Some(store.facet_summary(&snapshot, &id.0, filter.event_type, start, end)?)
-        } else {
-            None
-        };
-        let bounds = match &indexed_summary {
-            Some(summary) => summary.min_timestamp.zip(summary.max_timestamp),
-            None => store.facet_window_edges(&snapshot, &id.0, filter.event_type, start, end)?,
-        };
+        let summary = store.facet_summary(&snapshot, &id.0, filter.event_type, start, end)?;
+        let bounds = summary.min_timestamp.zip(summary.max_timestamp);
         Ok(Self {
             id: id.clone(),
             bounds,
             store,
             snapshot,
-            indexed_summary,
+            summary,
         })
     }
 
@@ -74,20 +54,17 @@ impl NativeFacetSource {
         histogram: &mut Histogram,
         types: &mut BTreeMap<String, u64>,
     ) -> Result<u64, TimelineServiceError> {
-        if let Some(summary) = &self.indexed_summary {
-            for (kind, count) in &summary.type_totals {
-                add_type_count(types, kind, *count)?;
-            }
-            let observed = self.collect_indexed(filter, histogram)?;
-            if observed != summary.total {
-                return Err(FjallStorageError::TimelineIndexCorrupt.into());
-            }
-            return Ok(observed);
+        for (kind, count) in &self.summary.type_totals {
+            add_type_count(types, kind, *count)?;
         }
-        self.collect_unindexed(filter, histogram, types)
+        let observed = self.collect_window(filter, histogram)?;
+        if observed != self.summary.total {
+            return Err(FjallStorageError::TimelineIndexCorrupt.into());
+        }
+        Ok(observed)
     }
 
-    fn collect_indexed(
+    fn collect_window(
         &self,
         filter: &FacetFilter<'_>,
         histogram: &mut Histogram,
@@ -109,36 +86,6 @@ impl NativeFacetSource {
             for record in page.records {
                 histogram.add(record.timestamp.timestamp())?;
                 count += 1;
-            }
-            cursor = page.next_cursor;
-            if cursor.is_none() {
-                return Ok(count);
-            }
-        }
-    }
-
-    fn collect_unindexed(
-        &self,
-        filter: &FacetFilter<'_>,
-        histogram: &mut Histogram,
-        types: &mut BTreeMap<String, u64>,
-    ) -> Result<u64, TimelineServiceError> {
-        let mut cursor = None;
-        let mut count = 0;
-        loop {
-            let page = self.store.list_by_time(
-                &self.snapshot,
-                &self.id.0,
-                cursor.as_deref(),
-                ScanDirection::Forward,
-                PAGE_SIZE,
-            )?;
-            for record in page.records {
-                add_type_count(types, &record.event_type, 1)?;
-                if filter.matches(&record) {
-                    histogram.add(record.timestamp.timestamp())?;
-                    count += 1;
-                }
             }
             cursor = page.next_cursor;
             if cursor.is_none() {

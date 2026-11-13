@@ -232,14 +232,18 @@ fn publish_sealed_generation(
                 return Ok(());
             }
         };
-    let manifest =
-        match persistence_source::fjall::verify_source_generation(&build_store, source_id) {
-            Ok(manifest) => manifest,
-            Err(error) => {
-                *report = Err(error);
-                return Ok(());
-            }
-        };
+    let manifest = match persistence_source::fjall::verify_source_generation_with_control(
+        &build_store,
+        source_id,
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    ) {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            *report = Err(error);
+            return Ok(());
+        }
+    };
     if storage
         .recovered_digest
         .as_deref()
@@ -314,7 +318,11 @@ fn validate_published_generation_receipt(
     source_id: &str,
     expected_digest: Option<&str>,
 ) -> Result<(), StorageRecoveryError> {
-    let manifest = match handle.verify_source_generation(source_id) {
+    let manifest = match handle.verify_source_generation_with_control(
+        source_id,
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    ) {
         Ok(manifest) => manifest,
         Err(error) => return Err(StorageRecoveryError::Source(error.to_string())),
     };
@@ -408,7 +416,11 @@ fn source_import_receipt_state_from_handle(
     source_id: &str,
     expected_digest: Option<&str>,
 ) -> Result<(BatchReceiptState, Option<String>), StorageRecoveryError> {
-    let manifest = match handle.verify_source_generation(source_id) {
+    let manifest = match handle.verify_source_generation_with_control(
+        source_id,
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    ) {
         Ok(manifest) => manifest,
         Err(crate::storage_runtime::StorageRuntimeError::Source(error)) => {
             return Ok((invalid_manifest_receipt_state(&error), None));
@@ -432,7 +444,12 @@ fn source_import_receipt_state_from_store(
     source_id: &str,
     expected_digest: Option<&str>,
 ) -> Result<(BatchReceiptState, Option<String>), StorageRecoveryError> {
-    let manifest = match persistence_source::fjall::verify_source_generation(store, source_id) {
+    let manifest = match persistence_source::fjall::verify_source_generation_with_control(
+        store,
+        source_id,
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    ) {
         Ok(manifest) => manifest,
         Err(error) => return Ok((invalid_manifest_receipt_state(&error), None)),
     };

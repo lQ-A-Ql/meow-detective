@@ -159,6 +159,11 @@ impl SearchIndex {
 }
 
 impl FileSearchQuerySession {
+    /// Number of indexed documents in this immutable reader snapshot.
+    pub fn document_count(&self) -> u64 {
+        self.searcher.num_docs()
+    }
+
     pub fn index_generation(&self) -> &str {
         &self.index_generation
     }

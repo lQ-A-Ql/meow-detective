@@ -154,11 +154,13 @@ fn file_browser_fjall_matches_visibility_sorting_and_orphan_root_rules() {
     let store = persistence_source::detail::open_store_for_write(&source_conn)
         .unwrap()
         .unwrap();
-    persistence_source::fjall::seal_source_generation(
+    persistence_source::fjall::seal_source_generation_with_control(
         &store,
         &source.id.0,
         "fixture",
         &"a".repeat(64),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
     )
     .unwrap();
     drop(store);

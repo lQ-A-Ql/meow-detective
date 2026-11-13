@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 foreach ($name in @('Input','Process','Report','Protocol')) { Import-Module "$PSScriptRoot/lib/ImportBenchmark.$name.psm1" -Force }
 $repo = (Resolve-Path "$PSScriptRoot/..").Path
-if (-not $TempRoot) { $TempRoot=Join-Path ([IO.Path]::GetPathRoot($repo)) 'ibt' }
+if (-not $TempRoot) { $TempRoot=Join-Path $repo 'output/import-comparison-scratch' }
 $protocol = Read-ImportBenchmarkProtocol "$PSScriptRoot/baselines/import-optimization-protocol.json"
 Assert-ImportBenchmarkRunConfiguration $protocol $RunKind $Runs $WarmupRuns $true
 $definition = Get-Content -LiteralPath $DefinitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -24,9 +24,7 @@ foreach ($v in $definition.versions) {
   if ($v.PSObject.Properties['environment']) {
     foreach ($property in $v.environment.PSObject.Properties) {
       $valid = switch ($property.Name) {
-        'FORENSICS_TIMELINE_GRAPH_BATCH' { [string]$property.Value -match '^(20000|50000|100000)$' }
-        'FORENSICS_TIMELINE_CACHED_STATEMENTS' { [string]$property.Value -cmatch '^(true|false)$' }
-        'FORENSICS_TIMELINE_WAL_PAGES' { [string]$property.Value -match '^(1000|16384|32768)$' }
+        'FORENSICS_TIMELINE_WORKSPACE_KIB' { [string]$property.Value -match '^[0-9]{1,7}$' -and [int]$property.Value -ge 131072 -and [int]$property.Value -le 1048576 }
         default { $false }
       }
       if (-not $valid) { throw 'Unsupported bounded projection experiment environment' }
@@ -69,7 +67,7 @@ try {
         status='running'; log=$log; temp=$scratch; process=$null; payload=$null }
       $trials.Add([pscustomobject]$trial); $current = $trials[$trials.Count-1]; $report.trials=$trials.ToArray(); Save-Report
       $childEnvironment = @{ TEMP=$scratch; TMP=$scratch; FORENSICS_IMPORT_FIXTURE=$inputs[$c.input].path; FORENSICS_IMPORT_BENCH_WORKERS=$c.workers; FORENSICS_IMPORT_BENCH_ANALYSIS=$c.mode }
-      foreach ($key in @('FORENSICS_TIMELINE_GRAPH_BATCH','FORENSICS_TIMELINE_CACHED_STATEMENTS','FORENSICS_TIMELINE_WAL_PAGES')) { $childEnvironment[$key] = $null }
+      $childEnvironment['FORENSICS_TIMELINE_WORKSPACE_KIB'] = $null
       if ($v.PSObject.Properties['environment']) {
         foreach ($property in $v.environment.PSObject.Properties) { $childEnvironment[$property.Name] = $property.Value }
       }
@@ -81,9 +79,17 @@ try {
       Assert-ImportBenchmarkPayload $payload $c.workers
       if ($v.PSObject.Properties['environment']) {
         if (-not $payload.PSObject.Properties['timelinePolicy']) { throw 'Executable did not report requested projection policy' }
-        $fields = @{ FORENSICS_TIMELINE_GRAPH_BATCH='graphBatchRows'; FORENSICS_TIMELINE_CACHED_STATEMENTS='cachedGraphStatements'; FORENSICS_TIMELINE_WAL_PAGES='walAutocheckpointPages' }
+        $fields = @{ FORENSICS_TIMELINE_WORKSPACE_KIB='workspaceKiB' }
         foreach ($property in $v.environment.PSObject.Properties) {
           if ([string]$payload.timelinePolicy.($fields[$property.Name]) -ine [string]$property.Value) { throw 'Executable ignored requested projection policy' }
+        }
+        if ($v.environment.PSObject.Properties['FORENSICS_TIMELINE_WORKSPACE_KIB']) {
+          $expectedBytes = [long]$v.environment.FORENSICS_TIMELINE_WORKSPACE_KIB * 1024
+          if (-not $payload.timelinePolicy.PSObject.Properties['reservationBytes'] -or
+              $payload.timelinePolicy.reservationBytes -ne $expectedBytes -or
+              $payload.timelinePolicy.reservationKind -ne 'estimatedWorkspace') {
+            throw 'Executable reported an inconsistent projection reservation'
+          }
         }
       }
       $actualMode = if ($payload.PSObject.Properties['executionMode']) { $payload.executionMode } else { 'metadataOnly' }

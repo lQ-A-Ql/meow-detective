@@ -214,11 +214,13 @@ fn publish_fjall_partition_generation(
             &projection_digest,
         )
     } else {
-        persistence_source::fjall::seal_source_generation(
+        persistence_source::fjall::seal_source_generation_with_control(
             &source,
             &data_source_id.0,
             attempt_id,
             &projection_digest,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_, _| {},
         )
     };
     seal.map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
