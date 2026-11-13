@@ -1,8 +1,10 @@
 //! Complete post-Ready artifact work under the import publication lease.
 use super::context::ImportJobContext;
-use std::sync::atomic::Ordering;
 use std::time::Instant;
 use transport::CommandError;
+
+mod progress;
+use progress::AnalysisAuditProgress;
 
 pub(super) fn finish(
     ctx: &mut ImportJobContext<'_>,
@@ -10,16 +12,28 @@ pub(super) fn finish(
     source: &rusqlite::Connection,
     message: String,
 ) -> Result<String, CommandError> {
-    let result = (|| {
-        super::runtime::validate_current(ctx.runtime.as_deref())?;
+    let result: Result<String, CommandError> = (|| {
+        ensure_active(ctx)?;
         let lease = ctx.runtime.as_ref().map(|r| r.publication_lease());
         let _source = lease.as_ref().map(|l| l.fence_connection(source));
         let message = auto_extract_platform_artifacts(ctx, ds, source, message)?;
+        ensure_active(ctx)?;
         super::phases::emit_data_source_ready(ctx, ds)?;
         Ok(message)
     })();
     if let Err(error) = &result {
-        super::runtime::record_failure(ctx, ds, error);
+        if error.category == "cancelled" {
+            super::execute::mark_import_cancelling(&ctx.job_repo, ctx.job_id, &error.message);
+            super::execute::emit_import_cancellation_state(
+                ctx.event_sink(),
+                ctx.job_id,
+                transport::dto::CancellationStateDto::Cancelled,
+                false,
+                &error.message,
+            );
+        } else {
+            super::runtime::record_failure(ctx, ds, error);
+        }
     }
     result
 }
@@ -44,7 +58,8 @@ fn auto_extract_platform_artifacts(
     let analysis_started = Instant::now();
     let event_sink = ctx.options.event_sink;
     let job_id = ctx.job_id.0.as_str();
-    let mut audit_progress = AnalysisAuditProgress::new(event_sink, job_id, analysis_started);
+    let mut audit_progress =
+        AnalysisAuditProgress::new(event_sink, job_id, analysis_started, ctx.profiler.as_ref());
     let run = analysis_core::analysis_service::run_import_source_extraction(
         analysis_core::analysis_service::ImportSourceExtractionRequest {
             case_conn: ctx.conn,
@@ -58,10 +73,10 @@ fn auto_extract_platform_artifacts(
         },
         |progress| audit_progress.emit(progress),
     );
-    match run {
-        Ok(execution) => {
-            let run = execution.dto;
-            super::emit::emit_job_progress(
+    ensure_active(ctx)?;
+    let execution = run.map_err(CommandError::from_typed_service_error)?;
+    let run = execution.dto;
+    super::emit::emit_job_progress(
                 event_sink,
                 job_id,
                 96,
@@ -79,27 +94,31 @@ fn auto_extract_platform_artifacts(
                     analysis_started.elapsed().as_millis()
                 ),
             );
-            let warnings =
-                run.warnings
-                    .len()
-                    .saturating_add(cache_linux_facts(ctx, data_source, source_conn));
-            record_analysis_outcome(ctx, warnings, execution.retryable_failure_count)?;
-            message.push_str(&format!(
+    let warnings =
+        run.warnings
+            .len()
+            .saturating_add(cache_linux_facts(ctx, data_source, source_conn));
+    record_analysis_outcome(ctx, warnings, execution.retryable_failure_count)?;
+    message.push_str(&format!(
                 "; {platform_label} artifacts auto-analyzed: artifacts={} timeline={} warnings={} failed={}",
                 run.artifact_count,
                 run.timeline_event_count,
                 warnings,
                 execution.retryable_failure_count
             ));
-        }
-        Err(error) => {
-            record_analysis_outcome(ctx, 1, 1)?;
-            message.push_str(&format!(
-                "; {platform_label} artifact auto-analysis partial: {error}"
-            ));
-        }
-    }
     Ok(message)
+}
+
+fn ensure_active(ctx: &ImportJobContext<'_>) -> Result<(), CommandError> {
+    if let Some(profiler) = &ctx.profiler {
+        profiler
+            .check_output()
+            .map_err(CommandError::from_typed_service_error)?;
+    }
+    if ctx.cancel_requested() {
+        return Err(CommandError::cancelled("Import cancelled by user"));
+    }
+    super::runtime::validate_current(ctx.runtime.as_deref())
 }
 
 fn record_analysis_outcome(
@@ -157,8 +176,7 @@ fn analysis_plan(ctx: &ImportJobContext<'_>) -> Option<(&'static str, &'static [
         ctx.content_kind,
         crate::import_pipeline::context::ImportContentKind::Filesystem
     ) && ctx.import_config.import_set.is_none()
-        && !ctx.options.defer_linux_artifacts
-        && !ctx.options.cancel_token.load(Ordering::Relaxed);
+        && !ctx.options.defer_linux_artifacts;
     if !should_run {
         return None;
     }
@@ -169,60 +187,5 @@ fn analysis_plan(ctx: &ImportJobContext<'_>) -> Option<(&'static str, &'static [
             &["Registry", "BrowserHistory", "Email", "EventLogs"][..],
         )),
         _ => unreachable!("platform was checked above"),
-    }
-}
-
-struct AnalysisAuditProgress<'a> {
-    event_sink: Option<&'a dyn super::emit::ImportEventSink>,
-    job_id: &'a str,
-    started: Instant,
-    last_phase: Option<transport::dto::AnalysisExtractionPhaseDto>,
-}
-
-impl<'a> AnalysisAuditProgress<'a> {
-    fn new(
-        event_sink: Option<&'a dyn super::emit::ImportEventSink>,
-        job_id: &'a str,
-        started: Instant,
-    ) -> Self {
-        Self {
-            event_sink,
-            job_id,
-            started,
-            last_phase: None,
-        }
-    }
-
-    fn emit(&mut self, progress: transport::dto::AnalysisExtractionProgressDto) {
-        if self.last_phase != Some(progress.phase) {
-            self.last_phase = Some(progress.phase);
-            super::emit::emit_job_progress(
-                self.event_sink,
-                self.job_id,
-                96,
-                &format!(
-                    "analysis-audit: phase={:?} elapsedMs={}",
-                    progress.phase,
-                    self.started.elapsed().as_millis()
-                ),
-            );
-        }
-        if progress.phase == transport::dto::AnalysisExtractionPhaseDto::Completed {
-            super::emit::emit_job_progress(
-                self.event_sink,
-                self.job_id,
-                96,
-                &format!(
-                    "analysis-audit: category={} candidates={} processed={} artifacts={} timeline={} checkpoints={} elapsedMs={}",
-                    progress.category,
-                    progress.total_candidates,
-                    progress.processed_candidates,
-                    progress.artifact_count,
-                    progress.timeline_event_count,
-                    progress.checkpoint_hit_count,
-                    self.started.elapsed().as_millis()
-                ),
-            );
-        }
     }
 }

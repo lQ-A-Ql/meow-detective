@@ -10,6 +10,7 @@ use std::sync::atomic::AtomicBool;
 
 const READ_BUFFER_BYTES: usize = 64 * 1024;
 
+#[derive(Default)]
 pub(super) struct RegistryPreloadContext {
     snapshots: HashMap<(String, String), RegistrySnapshot<'static>>,
     boot_keys: HashMap<(String, Option<usize>), Option<[u8; 16]>>,
@@ -17,6 +18,10 @@ pub(super) struct RegistryPreloadContext {
 }
 
 impl RegistryPreloadContext {
+    pub(super) fn prepared_records(&self) -> u64 {
+        self.snapshots.len() as u64
+    }
+
     pub(super) fn snapshot(
         &self,
         candidate: &EvidenceCandidate,

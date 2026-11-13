@@ -1,5 +1,7 @@
 use super::{AnalysisServiceError, FileEntry};
-use persistence_source::fjall::CatalogRecordStore;
+use persistence_source::fjall::{
+    CatalogEntryType, CatalogRecordStore, FileEntryRecord, ScanDirection,
+};
 use rusqlite::Connection;
 
 pub(super) fn collect_file_entries_from_fjall(
@@ -17,6 +19,18 @@ pub(super) fn visit_file_entries_from_fjall(
     conn: &Connection,
     mut visit: impl FnMut(FileEntry) -> Result<(), AnalysisServiceError>,
 ) -> Result<(), AnalysisServiceError> {
+    visit_catalog_records_from_fjall(conn, |record| {
+        if record.entry_type == CatalogEntryType::File {
+            visit(evidence_access::file_service::record_to_domain(record))?;
+        }
+        Ok(())
+    })
+}
+
+pub(super) fn visit_catalog_records_from_fjall(
+    conn: &Connection,
+    mut visit: impl FnMut(FileEntryRecord) -> Result<(), AnalysisServiceError>,
+) -> Result<(), AnalysisServiceError> {
     let store = persistence_source::detail::open_store(conn)?.ok_or_else(|| {
         AnalysisServiceError::InvalidInput("source detail storage is missing".into())
     })?;
@@ -24,29 +38,24 @@ pub(super) fn visit_file_entries_from_fjall(
         .ok_or_else(|| AnalysisServiceError::InvalidInput("source identity is missing".into()))?;
     let catalog = CatalogRecordStore::from_source_store((*store).clone());
     let snapshot = catalog.read_snapshot();
-    let mut after: Option<(String, String)> = None;
+    let mut cursor = None;
     loop {
         persistence_sqlite::read_operation::ensure_active()?;
         let page = catalog
-            .list_files_by_path(
+            .list_all(
                 &snapshot,
                 &owner,
-                after
-                    .as_ref()
-                    .map(|(path, id)| (path.as_str(), id.as_str())),
+                cursor.as_deref(),
+                ScanDirection::Forward,
                 512,
             )
             .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        let next_after = page
-            .records
-            .last()
-            .map(|record| (record.path.clone(), record.id.clone()));
         for record in page.records {
-            visit(evidence_access::file_service::record_to_domain(record))?;
+            visit(record)?;
         }
-        if page.next_cursor.is_none() {
+        cursor = page.next_cursor;
+        if cursor.is_none() {
             return Ok(());
         }
-        after = Some(next_after.expect("a non-terminal catalog page contains a record"));
     }
 }

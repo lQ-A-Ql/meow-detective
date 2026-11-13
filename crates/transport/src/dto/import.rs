@@ -12,6 +12,9 @@ pub enum ImportPhaseDto {
     MergeAnalysis,
     HashEvidence,
     BuildIndexes,
+    Timeline,
+    Checkpoint,
+    PostReady,
     Finalize,
 }
 
@@ -31,7 +34,8 @@ pub enum ImportPhaseStateDto {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportPhaseMetricsDto {
-    pub elapsed_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub elapsed_ms: Option<u64>,
     pub rss_mb: u64,
     pub workers: u32,
     pub rows_processed: u64,

@@ -74,7 +74,7 @@ pub(super) fn prepare_derived_runtime_for_source(
     if !content_required {
         return Ok(None);
     }
-    let source_conn = persistence_sqlite::open_existing_source_read_only(db_path)
+    let source_conn = persistence_source::control::opening::open_source_database_read_only(db_path)
         .map_err(|error| format!("Open analysis source database: {error}"))?;
     let source_kind = DataSourceRepo::new(&source_conn)
         .source_kind(data_source_id)

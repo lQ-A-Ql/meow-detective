@@ -18,7 +18,10 @@ use evidence_access::file_service::{
     FileServiceError, RangeContentReader, SourceReadContext, SourceReadFileHint,
 };
 use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
-use transport::dto::{AnalysisExtractionProgressDto, AnalysisExtractionRunDto};
+use transport::dto::{
+    AnalysisExtractionProgressDto, AnalysisExtractionRunDto, AnalysisWorkProgressDto,
+    AnalysisWorkStageDto,
+};
 
 use super::runtime::AnalysisSourceReadRuntime;
 
@@ -75,6 +78,7 @@ fn analysis_progress_dto(
         timeline_event_count: update.timeline_event_count,
         current_path: update.current_path,
         detail: update.detail,
+        work: update.work,
     }
 }
 
@@ -232,7 +236,9 @@ fn run_source_analysis_extraction_execution_with_progress(
     control: AnalysisExecutionControl<'_>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     control.source_runtime.validate_publication()?;
+    let admission = Instant::now();
     let _budget = admit_extraction(&control)?;
+    let admission_ms = u64::try_from(admission.elapsed().as_millis()).unwrap_or(u64::MAX);
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
     let _source_fence = control.source_runtime.fence(&source.connection);
     let _audit_fence = control.source_runtime.fence(case_conn);
@@ -293,6 +299,7 @@ fn run_source_analysis_extraction_execution_with_progress(
     if let Ok(execution) = &mut extraction {
         record_extraction_metrics(
             execution,
+            admission_ms,
             source_read_count,
             source_read_elapsed,
             &source_reader,
@@ -312,6 +319,9 @@ fn run_source_analysis_extraction_execution_with_progress(
         control.source_runtime,
         &mut source_reader,
     )?;
+    if extraction.is_ok() {
+        super::generation_gc::request(case_root, data_source_id)?;
+    }
     extraction
 }
 
@@ -332,10 +342,21 @@ fn finish_extraction<'a>(
 
 fn record_extraction_metrics(
     execution: &mut AnalysisExtractionExecution,
+    admission_ms: u64,
     source_read_count: u64,
     source_read_elapsed: Duration,
     source_reader: &SourceReadContext<'_>,
 ) {
+    execution.work_metrics.insert(
+        0,
+        AnalysisWorkProgressDto {
+            stage: AnalysisWorkStageDto::Admission,
+            elapsed_ms: admission_ms,
+            records: 0,
+            bytes: 0,
+            complete: true,
+        },
+    );
     execution.source_read_count = source_read_count;
     execution.source_read_elapsed_ms =
         u64::try_from(source_read_elapsed.as_millis()).unwrap_or(u64::MAX);

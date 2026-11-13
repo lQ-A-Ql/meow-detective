@@ -14,6 +14,7 @@ type SampleKey = (Option<usize>, Phase);
 pub struct ImportProfiler {
     samples: Arc<Mutex<BTreeMap<SampleKey, Measurement>>>,
     process_usage: Arc<Mutex<ProcessUsageState>>,
+    journal: Arc<Mutex<Option<super::journal::ProfileJournal>>>,
 }
 
 #[derive(Debug, Default)]
@@ -54,6 +55,74 @@ pub(super) struct Measurement {
 }
 
 impl ImportProfiler {
+    pub fn with_output_directory(
+        directory: impl AsRef<std::path::Path>,
+    ) -> Result<Self, super::journal::ImportProfileOutputError> {
+        let profiler = Self::default();
+        let mut journal = super::journal::ProfileJournal::new(directory.as_ref())?;
+        journal.append("profile", &profiler.report())?;
+        *profiler
+            .journal
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = Some(journal);
+        Ok(profiler)
+    }
+
+    pub fn record_progress(
+        &self,
+        progress: &impl serde::Serialize,
+    ) -> Result<(), super::journal::ImportProfileOutputError> {
+        let mut journal = self
+            .journal
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(journal) = journal.as_mut() {
+            journal.append("progress", progress)?;
+        }
+        Ok(())
+    }
+
+    pub fn output_error(&self) -> Option<super::journal::ImportProfileOutputError> {
+        self.journal
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .as_ref()
+            .and_then(super::journal::ProfileJournal::error)
+    }
+
+    /// Returns the first output failure, including failures observed during cleanup.
+    pub fn check_output(&self) -> Result<(), super::journal::ImportProfileOutputError> {
+        self.output_error().map_or(Ok(()), Err)
+    }
+
+    pub(super) fn persist_partition_progress(
+        &self,
+        partition: Option<usize>,
+        measurements: &BTreeMap<Phase, Measurement>,
+    ) {
+        let mut journal = self
+            .journal
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(journal) = journal.as_mut() {
+            let samples = measurements
+                .iter()
+                .map(|(phase, sample)| sample.dto(partition, *phase))
+                .collect::<Vec<_>>();
+            let _ = journal.append("partition-progress", &samples);
+        }
+    }
+
+    fn persist_report(&self) {
+        let mut journal = self
+            .journal
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(journal) = journal.as_mut() {
+            let _ = journal.append("profile", &self.report());
+        }
+    }
+
     pub(crate) fn record_process_usage(&self, usage: ImportBenchmarkProcessUsageDto) {
         let mut state = self
             .process_usage
@@ -62,6 +131,8 @@ impl ImportProfiler {
         state.windows = state.windows.saturating_add(1);
         // A reused profiler cannot attribute multiple process windows to one workflow.
         state.usage = (state.windows == 1).then_some(usage);
+        drop(state);
+        self.persist_report();
     }
 
     pub(crate) fn record(
@@ -120,6 +191,8 @@ impl ImportProfiler {
                 }
             }
         }
+        drop(samples);
+        self.persist_report();
     }
 
     pub fn report(&self) -> ImportBenchmarkReportDto {

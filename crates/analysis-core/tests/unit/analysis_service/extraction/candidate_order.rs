@@ -40,9 +40,10 @@ fn derived_source_connection() -> (tempfile::TempDir, Connection) {
             [],
         )
         .expect("insert derived source");
-    let storage =
-        source_kernel::source_db::open_fjall_source_read_write(root.path(), "derived-linux")
-            .expect("open Fjall source storage");
+    let storage = source_kernel::storage_runtime::open_source_read_write_at_path(
+        root.path().join("sources/derived-linux/source.fjall"),
+    )
+    .expect("create Fjall source storage");
     let partitions = [1u32, 2u32]
         .into_iter()
         .map(
@@ -80,6 +81,24 @@ fn derived_source_connection() -> (tempfile::TempDir, Connection) {
     storage
         .partition_projection_publish("derived-linux")
         .expect("publish XFS partitions");
+    let receipt = storage
+        .source_store()
+        .write_raw(
+            persistence_source::fjall::KeyspaceName::Meta,
+            b"candidate-order-fixture".to_vec(),
+            b"xfs".to_vec(),
+            persistence_source::fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
+    persistence_source::fjall::seal_source_generation_with_control(
+        storage.source_store(),
+        "derived-linux",
+        "candidate-order",
+        &hex::encode(receipt.batch_digest),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
     let manifest = serde_json::json!({
         "materializerVersion": source_kernel::derived_source_catalog::CATALOG_MATERIALIZER_VERSION,
         "inputFingerprint": CATALOG_FINGERPRINT,

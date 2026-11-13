@@ -151,7 +151,10 @@ impl ImportEventSink for RecordingImportEventSink {
 
     fn import_phase_progress(&self, progress: &ImportPhaseProgressDto) {
         eprintln!("[import-profile] {}% {}", progress.percent, progress.detail);
-        self.record(format!("phase:{}:{}", progress.job_id, progress.percent));
+        self.record(format!(
+            "phase:{:?}:{:?}:{}:{}",
+            progress.phase, progress.state, progress.job_id, progress.percent
+        ));
     }
 
     fn import_partial_result(&self, result: &PartialResultDto) {
@@ -287,7 +290,7 @@ fn import_profile_progress_maps_enumeration_metrics_to_typed_dto() {
     assert_eq!(dto.phase, transport::dto::ImportPhaseDto::Enumerate);
     assert_eq!(dto.state, transport::dto::ImportPhaseStateDto::Completed);
     assert_eq!(dto.percent, 60);
-    assert_eq!(dto.metrics.elapsed_ms, 125);
+    assert_eq!(dto.metrics.elapsed_ms, Some(125));
     assert_eq!(dto.metrics.rss_mb, 512);
     assert_eq!(dto.metrics.workers, 4);
     assert_eq!(dto.metrics.rows_processed, 12);
@@ -971,11 +974,11 @@ fn logical_import_reports_progress_through_tauri_free_sink() {
     );
     assert!(
         events.iter().any(|event| event.starts_with("timeline:")),
-        "sink should receive finalize timeline events: {events:?}"
+        "sink should receive timeline readiness events: {events:?}"
     );
     let checkpoint_index = events
         .iter()
-        .position(|event| event.starts_with("phase:") && event.ends_with(":98"))
+        .position(|event| event.starts_with("phase:Checkpoint:Completed:"))
         .expect("sink should receive source checkpoint progress");
     let timeline_index = events
         .iter()
@@ -994,6 +997,8 @@ fn logical_import_reports_progress_through_tauri_free_sink() {
 #[test]
 fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
     let tmp = TempDir::new().unwrap();
+    let image_path = tmp.path().join("sample.raw");
+    std::fs::write(&image_path, [0u8; 4096]).unwrap();
     let active = case_service::create_case(
         &tmp.path().join("cases"),
         "raw-lazy-timeline",
@@ -1010,7 +1015,7 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
                 id: data_source_id.clone(),
                 name: "sample.raw".to_string(),
                 kind: domain::DataSourceKind::Raw,
-                source_path: std::path::PathBuf::from("C:/evidence/sample.raw"),
+                source_path: image_path.clone(),
                 imported_at: chrono::Utc::now(),
                 provenance: domain::DataSourceProvenance::unknown(),
             };
@@ -1054,7 +1059,7 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
                     hash_sha256: None,
                 }],
             )?;
-            test_support::mark_source_projection_complete(&source_conn, &data_source_id.0);
+            seal_metadata_catalog(&source_conn, &data_source_id.0, cancel.as_ref());
             drop(source_conn);
             conn.execute(
                 "INSERT INTO graph_nodes
@@ -1091,7 +1096,9 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
                 "Timeline: scheduled for import finalization. Artifacts: 0. Index: 1 indexed"
             );
             assert!(!counts.is_partial());
-            let source_conn = persistence_sqlite::open_existing_source(&source_db_path)?;
+            let source_conn = persistence_source::control::opening::open_existing_source_database(
+                &source_db_path,
+            )?;
             assert_eq!(
                 persistence_source::repositories::timeline_repo::TimelineRepo::new(&source_conn)
                     .count()?,
@@ -1138,6 +1145,34 @@ fn metadata_only_post_import_does_not_lazy_materialize_timeline() {
             Ok(())
         })
         .unwrap();
+}
+
+fn seal_metadata_catalog(connection: &rusqlite::Connection, source_id: &str, cancel: &AtomicBool) {
+    use persistence_source::fjall::{KeyPart, KeyspaceName, PersistMode, VersionedEnvelope};
+    let source = persistence_source::detail::require_source_store(connection).unwrap();
+    let key =
+        persistence_source::fjall::encode_key("projection", &[KeyPart::Text(source_id.into())])
+            .unwrap();
+    let marker = VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{source_id}"),
+        source_id,
+        1,
+        source_id.as_bytes().to_vec(),
+    );
+    let receipt = source
+        .write_envelope(KeyspaceName::Meta, key, &marker, PersistMode::SyncAll)
+        .unwrap();
+    persistence_source::fjall::seal_source_generation_with_control(
+        &source,
+        source_id,
+        "metadata-catalog",
+        &hex::encode(receipt.batch_digest),
+        cancel,
+        |_, _| {},
+    )
+    .unwrap();
 }
 
 #[test]

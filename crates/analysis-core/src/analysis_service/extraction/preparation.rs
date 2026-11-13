@@ -19,7 +19,7 @@ pub(super) fn prepare_registry_preload(
 ) -> Result<RegistryPreloadContext, crate::analysis_service::error::AnalysisServiceError> {
     let readable_candidates = candidates
         .iter()
-        .filter(|candidate| !candidate.encrypted)
+        .filter(|candidate| candidate.category == "Registry" && !candidate.encrypted)
         .cloned()
         .collect::<Vec<_>>();
     let mut candidates_by_id = readable_candidates

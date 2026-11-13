@@ -89,7 +89,33 @@ fn preflight_case_workspace(root: &Path, db_path: &Path, case_id: &CaseId) -> Re
     }
     ensure_global_detail_boundary(&conn)?;
     ensure_supported_data_source_platforms_for_case(&conn, case_id)?;
+    queue_retired_generation_cleanup(&conn, root, case_id)?;
     Ok(stored)
+}
+
+fn queue_retired_generation_cleanup(
+    conn: &Connection,
+    root: &Path,
+    case_id: &CaseId,
+) -> persistence_sqlite::DbResult<()> {
+    let sources = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
+    for source in sources.find_by_case(case_id)? {
+        let Some(storage) = sources.find_storage(&source.id)? else {
+            continue;
+        };
+        if !matches!(storage.import_state.as_str(), "ready" | "ready_metadata") {
+            continue;
+        }
+        let current =
+            persistence_source::control::current_source_generation_root(root, &source.id)?;
+        let directory = current.parent().ok_or_else(|| {
+            persistence_sqlite::DbError::System("source generation has no directory".into())
+        })?;
+        if persistence_source::publication::has_pending_analysis_gc(directory)? {
+            persistence_source::publication::request_analysis_generation_gc(directory)?;
+        }
+    }
+    Ok(())
 }
 
 fn ensure_storage_manifest(root: &Path, case_id: &CaseId) -> Result<()> {
@@ -142,7 +168,8 @@ fn ensure_current_source_schemas(
             )));
         }
         let source_path = crate::source_db::registered_source_db_path(conn, root, &source.id)?;
-        let source_conn = persistence_sqlite::open_existing_source_read_only(&source_path)?;
+        let source_conn =
+            persistence_source::control::opening::open_source_database_read_only(&source_path)?;
         if persistence_sqlite::migrations::runner::current_version(&source_conn)?.as_deref()
             != Some(expected)
         {

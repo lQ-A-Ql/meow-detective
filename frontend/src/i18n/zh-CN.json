@@ -3011,6 +3011,9 @@
         "mergeAnalysis": "合并分析",
         "hashEvidence": "计算证据哈希",
         "buildIndexes": "构建索引",
+        "timeline": "生成时间线",
+        "checkpoint": "保存进度",
+        "postReady": "分析痕迹",
         "finalize": "收尾"
       },
       "phaseState": {

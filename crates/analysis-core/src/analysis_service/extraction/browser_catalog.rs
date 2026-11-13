@@ -1,24 +1,18 @@
-use super::browser_preload::locator_from_entry;
-use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
-use crate::analysis_service::AnalysisServiceError;
-use rusqlite::Connection;
+use crate::analysis_service::candidates::preparation::locator;
+use crate::analysis_service::candidates::{
+    normalize_evidence_path, EvidenceCandidate, PreparationCatalog,
+};
 use uuid::Uuid;
 
 pub(super) fn locate_master_key_files(
-    conn: &Connection,
+    catalog: &PreparationCatalog,
     data_source_id: &str,
-) -> Result<Vec<EvidenceCandidate>, AnalysisServiceError> {
-    let mut candidates = Vec::new();
-    persistence_source::repositories::file_repo::FileRepo::new(conn).visit_all(
-        Some(data_source_id),
-        |entry| {
-            if is_master_key_path(&entry.path) && !entry.deleted && !entry.is_directory() {
-                candidates.push(locator_from_entry(data_source_id, &entry, "BrowserPreload"));
-            }
-            Ok(())
-        },
-    )?;
-    Ok(candidates)
+) -> Vec<EvidenceCandidate> {
+    catalog
+        .files(data_source_id)
+        .filter(|record| is_master_key_path(&record.path))
+        .map(locator)
+        .collect()
 }
 
 fn is_master_key_path(path: &str) -> bool {

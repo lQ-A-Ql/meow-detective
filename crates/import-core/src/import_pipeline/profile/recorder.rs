@@ -7,11 +7,12 @@ use transport::dto::import_benchmark::{
 
 use super::benchmark::{Counters, ImportProfiler, Measurement};
 
-/// Accumulate chunk timings locally; publish once per partition, never per row.
+/// Accumulate chunk timings locally and persist bounded progress checkpoints.
 pub(crate) struct PhaseRecorder {
     profiler: Option<ImportProfiler>,
     partition: Option<usize>,
     measurements: BTreeMap<Phase, Measurement>,
+    last_persisted: Option<(Phase, Instant)>,
 }
 
 impl PhaseRecorder {
@@ -20,6 +21,7 @@ impl PhaseRecorder {
             profiler,
             partition,
             measurements: BTreeMap::new(),
+            last_persisted: None,
         }
     }
 
@@ -77,12 +79,14 @@ impl PhaseRecorder {
                 self.measurements.insert(phase, sample);
             }
         }
+        self.checkpoint(phase);
     }
 
     pub(crate) fn count(&mut self, phase: Phase, counters: Counters) {
         if let Some(sample) = self.measurements.get_mut(&phase) {
             sample.counters.add(&counters);
         }
+        self.checkpoint(phase);
     }
 
     pub(crate) fn cancel(&mut self, phase: Phase) {
@@ -90,6 +94,8 @@ impl PhaseRecorder {
             sample.state = State::Cancelled;
             sample.failures = 0;
         }
+        self.last_persisted = None;
+        self.checkpoint(phase);
     }
 
     pub(crate) fn observe_wal(&mut self, phase: Phase, conn: &rusqlite::Connection) {
@@ -101,6 +107,18 @@ impl PhaseRecorder {
                     ..Counters::default()
                 },
             );
+        }
+    }
+
+    fn checkpoint(&mut self, phase: Phase) {
+        if self.last_persisted.is_some_and(|(last_phase, time)| {
+            last_phase == phase && time.elapsed() < Duration::from_millis(250)
+        }) {
+            return;
+        }
+        if let Some(profiler) = &self.profiler {
+            profiler.persist_partition_progress(self.partition, &self.measurements);
+            self.last_persisted = Some((phase, Instant::now()));
         }
     }
 }

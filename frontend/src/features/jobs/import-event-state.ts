@@ -56,6 +56,9 @@ const phaseLabelKeys: Record<ImportPhase, string> = {
   mergeAnalysis: 'jobs.import.phase.mergeAnalysis',
   hashEvidence: 'jobs.import.phase.hashEvidence',
   buildIndexes: 'jobs.import.phase.buildIndexes',
+  timeline: 'jobs.import.phase.timeline',
+  checkpoint: 'jobs.import.phase.checkpoint',
+  postReady: 'jobs.import.phase.postReady',
   finalize: 'jobs.import.phase.finalize',
 };
 

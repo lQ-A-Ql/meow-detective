@@ -8,13 +8,16 @@ export type ImportPhase =
   | 'mergeAnalysis'
   | 'hashEvidence'
   | 'buildIndexes'
+  | 'timeline'
+  | 'checkpoint'
+  | 'postReady'
   | 'finalize';
 
 export type ImportPhaseState =
   'pending' | 'running' | 'completed' | 'skipped' | 'cancelling' | 'cancelled' | 'failed' | 'partial';
 
 export interface ImportPhaseMetrics {
-  elapsedMs: number;
+  elapsedMs?: number;
   rssMb: number;
   workers: number;
   rowsProcessed: number;

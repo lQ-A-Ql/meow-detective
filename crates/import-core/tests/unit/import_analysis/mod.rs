@@ -1,6 +1,5 @@
 use super::tier::TierStateMachine;
 use super::*;
-crate::native_source_test_support!();
 use super::{
     finalize::{prepare_analysis_staging_startup, AnalysisStartupAction},
     search_policy::{classify_text_content, text_candidate, TextCandidate},
@@ -47,9 +46,9 @@ fn setup_source_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
 
     let data_source_id = DataSourceId("ds-1".to_string());
     let source_db_path = tmp.path().join("sources").join("ds-1").join("source.db");
-    let source_conn = persistence_sqlite::open_or_create_source(&source_db_path).unwrap();
-    persistence_source::detail::configure_source_identity(&source_conn, "ds-1").unwrap();
-    persistence_source::detail::configure_source_fjall(&source_conn, &source_db_path).unwrap();
+    let source_conn =
+        persistence_source::control::opening::open_source_database(&source_db_path, "ds-1")
+            .unwrap();
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(
             &CaseId("case-1".to_string()),
@@ -63,8 +62,61 @@ fn setup_source_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
             },
         )
         .unwrap();
-    test_support::mark_source_projection_complete(&source_conn, "ds-1");
     (source_db_path, data_source_id)
+}
+
+fn seal_source_fixture(db_path: &std::path::Path, source_id: &DataSourceId) {
+    use persistence_source::fjall::{KeyPart, KeyspaceName, PersistMode, VersionedEnvelope};
+    let connection =
+        persistence_source::control::opening::open_existing_source_database(db_path).unwrap();
+    let source = persistence_source::detail::open_store_for_write(&connection)
+        .unwrap()
+        .expect("source fixture must have a configured builder");
+    let key =
+        persistence_source::fjall::encode_key("projection", &[KeyPart::Text(source_id.0.clone())])
+            .unwrap();
+    let marker = VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{}", source_id.0),
+        &source_id.0,
+        1,
+        source_id.0.as_bytes().to_vec(),
+    );
+    let receipt = source
+        .write_envelope(KeyspaceName::Meta, key, &marker, PersistMode::SyncAll)
+        .unwrap();
+    persistence_source::fjall::seal_source_generation_with_control(
+        &source,
+        &source_id.0,
+        "fixture",
+        &hex::encode(receipt.batch_digest),
+        &AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
+}
+
+#[test]
+fn current_index_and_summary_phase_labels_ignore_percent_fallback() {
+    for (label, expected) in [
+        ("source-index", transport::dto::ImportPhaseDto::BuildIndexes),
+        (
+            "analysis-summary",
+            transport::dto::ImportPhaseDto::MergeAnalysis,
+        ),
+    ] {
+        let progress = crate::import_pipeline::import_phase_progress_from_profile(
+            &domain::JobId("phase-job".into()),
+            &CaseId("phase-case".into()),
+            None,
+            70,
+            &format!("phase={label} state=completed elapsedMs=12"),
+            false,
+        );
+        assert_eq!(progress.phase, expected);
+        assert_eq!(progress.metrics.elapsed_ms, Some(12));
+    }
 }
 fn insert_file_with_type(
     conn: &Connection,
@@ -277,6 +329,7 @@ fn analysis_options(
     ds_id: DataSourceId,
     mode: ImportAnalysisMode,
 ) -> ImportAnalysisOptions {
+    seal_source_fixture(&db_path, &ds_id);
     ImportAnalysisOptions {
         publication_lease: None,
         case_root: tmp.path().to_path_buf(),
@@ -320,9 +373,8 @@ fn setup_raw_source_db(
         .join("sources")
         .join(data_source_id)
         .join("source.db");
-    let conn = persistence_sqlite::open_or_create_source(&db_path).unwrap();
-    persistence_source::detail::configure_source_identity(&conn, data_source_id).unwrap();
-    persistence_source::detail::configure_source_fjall(&conn, &db_path).unwrap();
+    let conn = persistence_source::control::opening::open_source_database(&db_path, data_source_id)
+        .unwrap();
     DataSourceRepo::new(&conn)
         .upsert_source_local_metadata(
             &CaseId(case_id.to_string()),
@@ -336,7 +388,6 @@ fn setup_raw_source_db(
             },
         )
         .unwrap();
-    test_support::mark_source_projection_complete(&conn, data_source_id);
     (db_path, ds_id)
 }
 
@@ -346,6 +397,7 @@ fn post_import_options(
     ds_id: DataSourceId,
     mode: ImportAnalysisMode,
 ) -> PostImportPipelineOptions {
+    seal_source_fixture(&db_path, &ds_id);
     PostImportPipelineOptions {
         publication_lease: None,
         case_root: tmp.path().to_path_buf(),
@@ -367,6 +419,7 @@ fn post_import_options(
 fn post_import_skip_uses_progress_sink_without_running_workers() {
     let tmp = TempDir::new().unwrap();
     let (db_path, data_source_id) = setup_source_db(&tmp);
+    seal_source_fixture(&db_path, &data_source_id);
     let options = PostImportPipelineOptions {
         publication_lease: None,
         case_root: tmp.path().to_path_buf(),

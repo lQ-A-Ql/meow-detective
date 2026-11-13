@@ -94,8 +94,10 @@ fn write_partition_records(
     source_id: &str,
     records: &[persistence_source::fjall::PartitionRecord],
 ) {
-    let storage = crate::source_db::open_fjall_source_read_write(case_root, source_id)
-        .expect("open Fjall source storage");
+    let id = DataSourceId(source_id.to_owned());
+    let connection = crate::source_db::open_source_db(case_root, &id).unwrap();
+    let storage = crate::source_db::open_fjall_source_for_build(&connection, &id)
+        .expect("open Fjall source build");
     storage
         .partition_replace_by_source(
             source_id,
@@ -106,6 +108,7 @@ fn write_partition_records(
     storage
         .partition_projection_publish(source_id)
         .expect("publish Fjall partition projection");
+    test_support::mark_source_projection_complete(&connection, source_id);
 }
 
 #[test]
@@ -252,7 +255,7 @@ fn native_metadata_hint_keeps_mft_identity_without_catalog_lookup() {
 }
 
 #[test]
-fn null_partition_candidate_falls_back_to_existing_file_id_reader() {
+fn logical_directory_hints_read_files_with_and_without_partition_tags() {
     let evidence = TempDir::new().expect("create logical evidence");
     std::fs::write(evidence.path().join("fallback.txt"), b"fallback-by-id")
         .expect("write logical evidence");
@@ -313,6 +316,28 @@ fn null_partition_candidate_falls_back_to_existing_file_id_reader() {
         )
         .expect("read through file-id fallback");
 
+    assert_eq!(bytes, b"fallback-by-id");
+    let hint = SourceReadFileHint::new(
+        FileEntryId("fallback-file".into()),
+        source_id.clone(),
+        Some(0),
+        "fallback.txt".into(),
+        14,
+        false,
+    );
+    let bytes = context
+        .read_file_header_with_metadata(hint.clone(), 64)
+        .expect("read logical file header using stored metadata");
+    assert_eq!(bytes, b"fallback-by-id");
+    let mut bytes = Vec::new();
+    match context.open_file_range_with_metadata(hint).unwrap() {
+        crate::file_service::RangeContentReader::Seekable(mut reader) => {
+            reader.read_to_end(&mut bytes).unwrap();
+        }
+        crate::file_service::RangeContentReader::Streaming(mut reader) => {
+            reader.read_to_end(&mut bytes).unwrap();
+        }
+    }
     assert_eq!(bytes, b"fallback-by-id");
 }
 

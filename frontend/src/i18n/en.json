@@ -3022,6 +3022,9 @@
         "mergeAnalysis": "Merge Analysis",
         "hashEvidence": "Hash Evidence",
         "buildIndexes": "Build Indexes",
+        "timeline": "Build Timeline",
+        "checkpoint": "Save Progress",
+        "postReady": "Analyze Artifacts",
         "finalize": "Finalize"
       },
       "phaseState": {

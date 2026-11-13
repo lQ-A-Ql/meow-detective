@@ -56,6 +56,35 @@ pub enum AnalysisExtractionPhaseDto {
     Failed,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub enum AnalysisWorkStageDto {
+    Admission,
+    Discovery,
+    CheckpointValidation,
+    RegistryPreload,
+    BrowserPreload,
+    SystemdPreload,
+    TimezonePreload,
+    GenerationVerify,
+    GenerationClone,
+    ReplacementDelete,
+    Processing,
+    CountRebuild,
+    GenerationSeal,
+    Publication,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalysisWorkProgressDto {
+    pub stage: AnalysisWorkStageDto,
+    pub elapsed_ms: u64,
+    pub records: u64,
+    pub bytes: u64,
+    pub complete: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AnalysisExtractionProgressDto {
@@ -76,6 +105,8 @@ pub struct AnalysisExtractionProgressDto {
     pub timeline_event_count: u64,
     pub current_path: Option<String>,
     pub detail: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub work: Option<AnalysisWorkProgressDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

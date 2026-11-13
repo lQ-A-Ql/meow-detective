@@ -32,7 +32,7 @@ pub fn open_source_read_only(
     case_root: impl AsRef<Path>,
     source_id: &str,
 ) -> Result<ReadOnlySourceStorageHandle, StorageRuntimeError> {
-    let source_root = source_storage_root(case_root, source_id)?;
+    let (_control, source_root) = registry::open_source_control(case_root.as_ref(), source_id)?;
     Ok(ReadOnlyStorageRuntime::open(source_root)?.source())
 }
 
@@ -40,7 +40,7 @@ pub fn open_source_read_write(
     case_root: impl AsRef<Path>,
     source_id: &str,
 ) -> Result<ReadWriteSourceStorageHandle, StorageRuntimeError> {
-    let source_root = source_storage_root(case_root, source_id)?;
+    let (_control, source_root) = registry::open_source_control(case_root.as_ref(), source_id)?;
     Ok(ReadWriteStorageRuntime::open(source_root)?.source())
 }
 

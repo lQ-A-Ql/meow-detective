@@ -46,7 +46,8 @@ fn run_search_index_phase_with_page_size(
     validate_analysis_platform(options.platform)?;
     reconcile_index_generation(&options.index_dir)?;
     ensure_not_cancelled(&options)?;
-    let connection = persistence_sqlite::open_existing_source_read_only(&options.db_path)?;
+    let connection =
+        persistence_source::control::opening::open_source_database_read_only(&options.db_path)?;
     let projection =
         MetadataProjection::new(&options.data_source_id, search_input_revision(&connection)?);
     let next_index_dir = next_index_dir(&options.index_dir);
@@ -100,8 +101,10 @@ fn write_search_marker(
     generation: &str,
     schema_version: u32,
 ) -> Result<(), ImportAnalysisError> {
-    let source = source_kernel::source_db::open_registered_fjall_source_read_write(
-        &options.case_root,
+    let connection =
+        persistence_source::control::opening::open_source_database_read_only(&options.db_path)?;
+    let source = source_kernel::source_db::open_fjall_source_for_build(
+        &connection,
         &options.data_source_id,
     )?;
     let marker_payload = SearchProjectionMarker {

@@ -25,6 +25,8 @@ static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
 
 pub struct SourceStoreCloseGuard {
     blockers: Vec<PathBuf>,
+    _shared: Option<persistence_fjall::SharedSourceStoreCloseGuard>,
+    _sql: Option<crate::control::connections::SourceGenerationGcGuard>,
 }
 
 impl Drop for SourceStoreCloseGuard {
@@ -45,10 +47,23 @@ pub(super) fn source_storage_root(
     source_id: &str,
 ) -> Result<PathBuf, StorageRuntimeError> {
     validate_source_id(source_id)?;
-    Ok(case_root
-        .join("sources")
-        .join(source_id)
-        .join("source.fjall"))
+    crate::control::current_source_generation_root(
+        case_root,
+        &domain::DataSourceId(source_id.to_owned()),
+    )
+    .map_err(StorageRuntimeError::Control)
+}
+
+pub(super) fn open_source_control(
+    case_root: &Path,
+    source_id: &str,
+) -> Result<(rusqlite::Connection, PathBuf), StorageRuntimeError> {
+    validate_source_id(source_id)?;
+    crate::control::generation::open_current_source_generation(
+        case_root,
+        &domain::DataSourceId(source_id.to_owned()),
+    )
+    .map_err(StorageRuntimeError::Control)
 }
 
 fn validate_source_id(source_id: &str) -> Result<(), StorageRuntimeError> {
@@ -149,8 +164,68 @@ pub fn close_source_store(
     case_root: impl AsRef<Path>,
     source_id: &str,
 ) -> Result<Option<SourceStoreCloseGuard>, StorageRuntimeError> {
-    let source_root = source_storage_root(case_root.as_ref(), source_id)?;
-    close_source_store_at_path(&source_root)
+    validate_source_id(source_id)?;
+    let source_directory =
+        canonicalize_or_resolve(&case_root.as_ref().join("sources").join(source_id))?;
+    let sql = if source_directory.exists() {
+        let Some(guard) = crate::control::connections::try_begin_generation_gc(&source_directory)
+            .map_err(StorageRuntimeError::Control)?
+        else {
+            return Ok(None);
+        };
+        Some(guard)
+    } else {
+        None
+    };
+    close_source_directory(source_directory, sql)
+}
+
+fn close_source_directory(
+    directory: PathBuf,
+    sql: Option<crate::control::connections::SourceGenerationGcGuard>,
+) -> Result<Option<SourceStoreCloseGuard>, StorageRuntimeError> {
+    let registry = REGISTRY.get_or_init(|| Mutex::new(Registry::default()));
+    let removed = {
+        let mut registry = registry
+            .lock()
+            .map_err(|_| StorageRuntimeError::RegistryPoisoned)?;
+        let paths = registry
+            .stores
+            .keys()
+            .filter(|path| path.starts_with(&directory))
+            .cloned()
+            .collect::<Vec<_>>();
+        if registry
+            .opening
+            .iter()
+            .any(|(path, lock)| path.starts_with(&directory) && lock.strong_count() > 0)
+            || paths.iter().any(|path| {
+                registry.stores.get(path).is_some_and(|cached| {
+                    Arc::strong_count(&cached.store) > 1 || !cached.store.is_exclusively_owned()
+                })
+            })
+        {
+            return Ok(None);
+        }
+        registry.closing.insert(directory.clone());
+        paths
+            .iter()
+            .filter_map(|path| registry.stores.remove(path))
+            .collect::<Vec<_>>()
+    };
+    drop(removed);
+    let mut guard = SourceStoreCloseGuard {
+        blockers: vec![directory.clone()],
+        _shared: None,
+        _sql: sql,
+    };
+    let Some(shared) = persistence_fjall::close_shared_source_stores_under(&directory)
+        .map_err(StorageRuntimeError::Source)?
+    else {
+        return Ok(None);
+    };
+    guard._shared = Some(shared);
+    Ok(Some(guard))
 }
 
 pub fn close_source_store_at_path(
@@ -179,6 +254,8 @@ pub fn close_source_store_at_path(
     drop(cached);
     Ok(Some(SourceStoreCloseGuard {
         blockers: vec![source_root],
+        _shared: None,
+        _sql: None,
     }))
 }
 
@@ -220,6 +297,8 @@ pub fn close_case_source_stores(
     drop(removed);
     Ok(Some(SourceStoreCloseGuard {
         blockers: vec![sources_root],
+        _shared: None,
+        _sql: None,
     }))
 }
 

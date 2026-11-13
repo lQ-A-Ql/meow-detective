@@ -4,6 +4,66 @@ use crate::analysis_service::capability::{retain_active_plugin_capability, PLUGI
 use crate::plugin_loader::PluginLoadReport;
 use chrono::Utc;
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn persist_processed_output(
+    conn: &Connection,
+    state: ExtractionState,
+    output: native_output::StreamingGeneration,
+    progress: &mut ExtractionProgressReporter<'_>,
+    discovery_elapsed_ms: u64,
+    processing_elapsed_ms: u64,
+    plugin_loads: Vec<PluginLoadRecord>,
+    plugin_rejections: Vec<PluginRejection>,
+    cancel: &AtomicBool,
+) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
+    progress.begin_persisting();
+    ensure_not_cancelled(cancel)?;
+    let persistence_started = Instant::now();
+    let rebuilding = Instant::now();
+    let mut rebuilt = 0;
+    output.rebuild_derived_metrics(cancel, |records| {
+        rebuilt = records;
+        progress.report_work(
+            AnalysisWorkStageDto::CountRebuild,
+            rebuilding,
+            records,
+            0,
+            false,
+        );
+    })?;
+    progress.report_work(
+        AnalysisWorkStageDto::CountRebuild,
+        rebuilding,
+        rebuilt,
+        0,
+        true,
+    );
+    let sealing = Instant::now();
+    let staged = output.seal(cancel, |records, bytes| {
+        progress.report_work(
+            AnalysisWorkStageDto::GenerationSeal,
+            sealing,
+            records,
+            bytes,
+            false,
+        );
+    })?;
+    progress.report_work(AnalysisWorkStageDto::GenerationSeal, sealing, 0, 0, true);
+    ensure_not_cancelled(cancel)?;
+    finalize_run(
+        conn,
+        state,
+        progress,
+        staged,
+        discovery_elapsed_ms,
+        processing_elapsed_ms,
+        persistence_started,
+        plugin_loads,
+        plugin_rejections,
+        cancel,
+    )
+}
+
 /// Persist pending outputs, build the run DTO, complete the progress
 /// reporter, and assemble the execution record.
 #[allow(clippy::too_many_arguments)]
@@ -20,7 +80,9 @@ pub(super) fn finalize_run(
     cancel_token: &AtomicBool,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     ensure_not_cancelled(cancel_token)?;
+    let publication = Instant::now();
     commit_analysis_control(conn, &mut state, staged_generation)?;
+    progress_reporter.report_work(AnalysisWorkStageDto::Publication, publication, 1, 0, true);
     let persistence_elapsed_ms = elapsed_millis(persistence_started);
     let retryable_failure_count = state.retryable_failure_count;
     let plugin_extract_failures = state.take_plugin_failures();
@@ -36,6 +98,7 @@ pub(super) fn finalize_run(
         discovery_elapsed_ms,
         processing_elapsed_ms,
         persistence_elapsed_ms,
+        work_metrics: progress_reporter.take_work_metrics(),
         source_read_count: 0,
         source_read_elapsed_ms: 0,
         filesystem_read_metrics: evidence_core::FileSystemReadMetrics::default(),

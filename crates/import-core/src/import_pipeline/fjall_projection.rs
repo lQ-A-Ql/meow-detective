@@ -1,4 +1,4 @@
-use persistence_source::fjall::{encode_key, KeyPart, PersistMode};
+use persistence_source::fjall::PersistMode;
 use rusqlite::Connection;
 use std::time::Instant;
 
@@ -19,13 +19,25 @@ use nested::mirror_nested_lineage;
 use projection_state::{
     analysis_projection_marker, analysis_projection_revision, catalog_projection_is_published,
     ensure_analysis_projection_building, ensure_projection_building, publish_projection_marker,
-    write_analysis_projection_state,
 };
 
 pub(super) fn mirror_source_records(
     ctx: &ImportJobContext<'_>,
     source_id: &str,
 ) -> Result<String, CommandError> {
+    let target = match ctx.content_kind {
+        super::context::ImportContentKind::Filesystem => {
+            persistence_source::control::import_state::ImportedSourceState::Ready
+        }
+        super::context::ImportContentKind::CephBlueStoreMetadata => {
+            persistence_source::control::import_state::ImportedSourceState::ReadyMetadata
+        }
+    };
+    persistence_source::control::import_state::record_import_target(
+        ctx.source_connection()?,
+        target,
+    )
+    .map_err(CommandError::from_service_error)?;
     ctx.report_job_progress(96, "Projecting queryable records...")?;
     let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         ctx.case_root,
@@ -156,9 +168,11 @@ pub(crate) fn mirror_analysis_outputs_from_connections(
                 attempt_id,
                 &projection_digest,
             )?;
+            persistence_source::detail::bind_generation(source_connection, "source.fjall")
+                .map_err(CommandError::from_service_error)?;
         }
     }
-    Ok(projection_digest)
+    generation::publication_receipt(source_connection, source_id)
 }
 
 pub(crate) fn mirror_catalog_records_from_connection(
@@ -191,14 +205,17 @@ pub fn begin_partition_projection(
     case_root: &std::path::Path,
     source_id: &domain::DataSourceId,
 ) -> Result<(), CommandError> {
-    let root = source_kernel::source_db::fjall_source_storage_root(case_root, &source_id.0)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let control = persistence_source::control::opening::open_source_database_read_only(
+        &source_kernel::source_db::source_db_path(case_root, source_id),
+    )
+    .map_err(CommandError::from_service_error)?;
+    let root = persistence_source::control::bound_source_generation_root(&control, source_id)
+        .map_err(CommandError::from_service_error)?;
     if !root.is_dir() {
         return Ok(());
     }
-    let source =
-        source_kernel::source_db::open_registered_fjall_source_read_write(case_root, source_id)
-            .map_err(|error| CommandError::internal(error.to_string()))?;
+    let source = source_kernel::source_db::open_fjall_source_for_build(&control, source_id)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
     ensure_projection_building(&source, &source_id.0, "projection")
 }
 
@@ -237,27 +254,11 @@ fn mirror_source_records_from_connections_internal(
     if !include_catalog && counts_ready {
         if let Some(revision) = analysis_revision.as_ref() {
             if previous_analysis_revision.as_ref() == Some(revision) {
-                write_analysis_projection_state(
-                    &source,
-                    source_id,
-                    "analysis_projection_complete",
-                )?;
-                let digest = encode_key(
-                    "analysis_projection_revision",
-                    &[
-                        KeyPart::Text(source_id.to_owned()),
-                        KeyPart::U64(revision.artifact_revision),
-                        KeyPart::U64(revision.artifact_high_water.max(0) as u64),
-                        KeyPart::U64(revision.timeline_revision),
-                        KeyPart::U64(revision.timeline_high_water.max(0) as u64),
-                        KeyPart::U64(revision.change_high_water),
-                    ],
-                )
-                .map_err(|error| CommandError::internal(error.to_string()))?;
+                let digest = publish_projection_marker(&source, source_id, false, Some(revision))?;
                 sqlite_projection_transaction
                     .commit()
                     .map_err(|error| CommandError::internal(error.to_string()))?;
-                return Ok(hex::encode(persistence_source::fjall::digest(&digest)));
+                return Ok(digest);
             }
         }
     }
@@ -367,3 +368,7 @@ fn mirror_projection_records(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/import_pipeline/fjall_projection.rs"]
+mod tests;

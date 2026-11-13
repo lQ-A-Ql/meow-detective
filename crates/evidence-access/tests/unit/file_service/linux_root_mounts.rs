@@ -1,4 +1,5 @@
 use super::*;
+crate::native_source_test_support!();
 use crate::datasource_service::{ImageFilesystemKind, PartitionRecord, PartitionStatus};
 use domain::{EntryType, FileEntry, FileEntryId};
 use std::ops::Deref;
@@ -25,7 +26,7 @@ fn setup() -> TestDb {
     let source_id = DataSourceId("source".into());
     let conn = crate::source_db::open_source_db(&case_root, &source_id).unwrap();
     let partition_storage =
-        crate::source_db::open_fjall_source_read_write(&case_root, &source_id.0).unwrap();
+        crate::source_db::open_fjall_source_for_build(&conn, &source_id).unwrap();
     let partitions: Vec<_> = (1..=2)
         .map(|index| PartitionRecord {
             index,
@@ -56,6 +57,7 @@ fn setup() -> TestDb {
         None,
     )
     .unwrap();
+    test_support::mark_source_projection_complete(&conn, &source_id.0);
     TestDb { _root: root, conn }
 }
 
@@ -87,6 +89,7 @@ fn insert_fstab(conn: &Connection, source: &str, index: u32, path: &str, text: &
         index as usize,
     )
     .unwrap();
+    test_support::mark_source_projection_complete(conn, source);
 }
 
 fn resolve(conn: &Connection, text: &str) -> Vec<LinuxRootMountDto> {

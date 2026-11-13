@@ -1,5 +1,6 @@
 use super::*;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+use rusqlite::Connection;
 
 fn native_source() -> (tempfile::TempDir, Connection) {
     let root = tempfile::tempdir().expect("create native source root");
@@ -160,8 +161,16 @@ fn liuyang_preload_builds_app_bound_decryptor_via_service_path() {
         Ok(CandidateSource::Bytes(read_ntfs(path)))
     };
     let cancel_token = AtomicBool::new(false);
-    let context = prepare_browser_preload(&conn, &candidates, &cancel_token, None, &mut reader)
-        .expect("browser preload");
+    let catalog = preparation_catalog(&conn);
+    let context = prepare_browser_preload(
+        &catalog,
+        &super::super::registry_preload::RegistryPreloadContext::default(),
+        &candidates,
+        &cancel_token,
+        None,
+        &mut reader,
+    )
+    .expect("browser preload");
     eprintln!("preload warnings: {:?}", context.warnings);
 
     let decryptor = context
@@ -225,27 +234,28 @@ fn locate_by_suffix_tolerates_all_stored_path_forms() {
         .insert_batch(&files)
         .expect("insert native file entries");
 
+    let catalog = preparation_catalog(&conn);
     assert!(
-        locate_by_suffix(&conn, "source-1", "/windows/system32/config/system")
-            .expect("locate bare relative path")
+        catalog
+            .suffix("source-1", "/windows/system32/config/system")
             .is_some(),
         "bare relative path without partition prefix must be found"
     );
     assert!(
-        locate_by_suffix(&conn, "source-1", "/windows/system32/config/sam")
-            .expect("locate partition-prefixed path")
+        catalog
+            .suffix("source-1", "/windows/system32/config/sam")
             .is_some(),
         "partition-prefixed path must still be found"
     );
     assert!(
-        locate_by_suffix(&conn, "source-1", "/windows/system32/config/security")
-            .expect("locate leading-slash path")
+        catalog
+            .suffix("source-1", "/windows/system32/config/security")
             .is_some(),
         "leading-slash path must be found"
     );
     assert!(
-        locate_by_suffix(&conn, "source-1", "/windows/system32/config/software")
-            .expect("reject segment mismatch")
+        catalog
+            .suffix("source-1", "/windows/system32/config/software")
             .is_none(),
         "segment-boundary mismatches must stay rejected"
     );
@@ -271,6 +281,7 @@ fn elevation_service_selection_is_bound_to_the_chromium_family() {
         .insert_batch(&files)
         .expect("insert native file entries");
     let cancel = AtomicBool::new(false);
+    let catalog = preparation_catalog(&conn);
     let mut reader = |candidate: &EvidenceCandidate, _limit: usize| {
         Ok(CandidateSource::Bytes(
             candidate.file_id.0.as_bytes().to_vec(),
@@ -278,7 +289,7 @@ fn elevation_service_selection_is_bound_to_the_chromium_family() {
     };
 
     let chrome = read_elevation_service(
-        &conn,
+        &catalog,
         "source-1",
         ChromiumFamily::Chrome,
         &cancel,
@@ -286,7 +297,7 @@ fn elevation_service_selection_is_bound_to_the_chromium_family() {
     )
     .expect("Chrome elevation service");
     let edge = read_elevation_service(
-        &conn,
+        &catalog,
         "source-1",
         ChromiumFamily::Edge,
         &cancel,
@@ -296,4 +307,15 @@ fn elevation_service_selection_is_bound_to_the_chromium_family() {
 
     assert_eq!(chrome.as_deref(), Some(b"chrome".as_slice()));
     assert_eq!(edge.as_deref(), Some(b"edge".as_slice()));
+}
+
+fn preparation_catalog(conn: &rusqlite::Connection) -> PreparationCatalog {
+    crate::analysis_service::candidates::evidence_candidates_for_categories_with_preparation(
+        conn,
+        &["Registry", "BrowserHistory"],
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap()
+    .2
 }

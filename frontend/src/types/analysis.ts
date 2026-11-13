@@ -124,6 +124,30 @@ export interface AnalysisExtractionRequest {
 export type AnalysisExtractionPhase =
   'discovering' | 'preparing' | 'extracting' | 'persisting' | 'completed' | 'failed';
 
+export type AnalysisWorkStage =
+  | 'admission'
+  | 'discovery'
+  | 'checkpointValidation'
+  | 'registryPreload'
+  | 'browserPreload'
+  | 'systemdPreload'
+  | 'timezonePreload'
+  | 'generationVerify'
+  | 'generationClone'
+  | 'replacementDelete'
+  | 'processing'
+  | 'countRebuild'
+  | 'generationSeal'
+  | 'publication';
+
+export interface AnalysisWorkProgress {
+  stage: AnalysisWorkStage;
+  elapsedMs: number;
+  records: number;
+  bytes: number;
+  complete: boolean;
+}
+
 export interface AnalysisExtractionProgress {
   runId: string;
   caseId: string;
@@ -142,6 +166,7 @@ export interface AnalysisExtractionProgress {
   timelineEventCount: number;
   currentPath: string | null;
   detail: string;
+  work?: AnalysisWorkProgress;
 }
 
 export interface AnalysisExtractionPageRequest {

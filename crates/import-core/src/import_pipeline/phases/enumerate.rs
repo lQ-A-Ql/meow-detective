@@ -38,7 +38,7 @@ pub(crate) fn run_enumeration_phase(
     ctx.report_job_progress(25, "Enumerating filesystem...")?;
     let mut stats = match ctx.import_config.kind {
         domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive => {
-            enumerate_logical_source(ctx, data_source).map_err(CommandError::from_service_error)?
+            enumerate_logical_source(ctx, data_source)?
         }
         domain::DataSourceKind::E01
         | domain::DataSourceKind::Raw

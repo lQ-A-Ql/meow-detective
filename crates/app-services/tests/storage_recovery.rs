@@ -107,6 +107,15 @@ fn startup_recovery_publishes_a_sealed_import_generation_and_finishes_its_operat
     })
     .unwrap();
 
+    let source_control =
+        app_services::source_db::open_source_db(&case.case_root, &source_id).unwrap();
+    persistence_source::control::import_state::record_import_target(
+        &source_control,
+        persistence_source::control::import_state::ImportedSourceState::Ready,
+    )
+    .unwrap();
+    drop(source_control);
+
     let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         &case.case_root,
         &source_id.0,
@@ -161,6 +170,13 @@ fn startup_recovery_publishes_a_sealed_import_generation_and_finishes_its_operat
             .find_operation("source-import:attempt-1")?
             .unwrap();
         assert_eq!(operation.state, StorageOperationState::Published);
+        assert_eq!(
+            DataSourceRepo::new(connection)
+                .find_storage(&source_id)?
+                .unwrap()
+                .import_state,
+            "ready"
+        );
         assert_eq!(
             operation.expected_batch_digest,
             Some(hex::encode(projection_receipt.batch_digest))

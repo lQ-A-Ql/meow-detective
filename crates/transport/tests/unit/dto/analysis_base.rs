@@ -54,6 +54,13 @@ fn extraction_progress_serializes_runtime_counters_and_phase() {
         timeline_event_count: 42,
         current_path: Some("/var/log/syslog".to_string()),
         detail: "processed 414/749 candidate(s)".to_string(),
+        work: Some(AnalysisWorkProgressDto {
+            stage: AnalysisWorkStageDto::Processing,
+            elapsed_ms: 123,
+            records: 414,
+            bytes: 8192,
+            complete: false,
+        }),
     };
 
     let value = serde_json::to_value(dto).unwrap();
@@ -64,5 +71,8 @@ fn extraction_progress_serializes_runtime_counters_and_phase() {
     assert_eq!(value["unsupportedCandidates"], 8);
     assert_eq!(value["textFallbackCandidates"], 6);
     assert_eq!(value["currentPath"], "/var/log/syslog");
+    assert_eq!(value["work"]["stage"], "processing");
+    assert_eq!(value["work"]["elapsedMs"], 123);
+    assert_eq!(value["work"]["records"], 414);
     assert!(value.get("processed_candidates").is_none());
 }

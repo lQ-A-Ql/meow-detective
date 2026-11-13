@@ -143,3 +143,69 @@ fn cancelled_native_enumeration_does_not_publish_partial_batches() {
     assert!(cancel.load(Ordering::Acquire));
     assert_eq!(FileRepo::new(&fixture.connection).count_all().unwrap(), 0);
 }
+
+#[test]
+fn explicit_catalog_cancellation_preserves_committed_catalog() {
+    let scratch = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../output/repair-2026-11-13/import");
+    std::fs::create_dir_all(&scratch).unwrap();
+    let root = tempfile::tempdir_in(scratch).unwrap();
+    let original = root.path().join("original");
+    add_files(&original, "kept", 3);
+    let fixture = test_support::NativeSourceFixture::new("batch-source", "batch-case");
+    let source = DataSourceId(fixture.source_id.clone());
+    enumerate_filesystem(
+        &fixture.connection,
+        &source,
+        &LogicalFsReader::open(&original, "original").unwrap(),
+    )
+    .unwrap();
+    let before = FileRepo::new(&fixture.connection).count_all().unwrap();
+    let replacement = root.path().join("replacement");
+    add_files(&replacement, "cancel", 2000);
+    let cancel = AtomicBool::new(false);
+    let callbacks = AtomicUsize::new(0);
+    let progress = |_: u32| {
+        if callbacks.fetch_add(1, Ordering::AcqRel) >= 5 {
+            cancel.store(true, Ordering::Release);
+        }
+    };
+    let catalog = crate::storage_runtime::open_source_read_write_at_path(
+        fixture.source_dir.join("source.fjall"),
+    )
+    .unwrap();
+    let error = enumerate_filesystem_with_root_name_and_cancel_with_catalog(
+        &fixture.connection,
+        &source,
+        &LogicalFsReader::open(&replacement, "replacement").unwrap(),
+        None,
+        Some(&progress),
+        Some(&cancel),
+        &catalog,
+    )
+    .err()
+    .expect("enumeration must be cancelled");
+    assert!(error.to_string().contains("cancelled"));
+    assert!(callbacks.load(Ordering::Acquire) >= 6);
+    assert_eq!(
+        FileRepo::new(&fixture.connection).count_all().unwrap(),
+        before
+    );
+    let mut files = BTreeSet::new();
+    FileRepo::new(&fixture.connection)
+        .visit_all(None, |entry| {
+            if entry.is_file() {
+                files.insert(entry.name);
+            }
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(
+        files,
+        BTreeSet::from([
+            "kept-00000.bin".into(),
+            "kept-00001.bin".into(),
+            "kept-00002.bin".into()
+        ])
+    );
+}

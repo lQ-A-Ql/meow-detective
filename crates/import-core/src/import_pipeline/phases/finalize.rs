@@ -2,13 +2,12 @@ use std::time::Instant;
 
 use transport::CommandError;
 
-use crate::step_recorder;
 use crate::timeline_projection;
 use evidence_access::file_service;
 use source_kernel::source_db;
 
 use crate::import_pipeline::context::ImportJobContext;
-use crate::import_pipeline::profile::{elapsed_ms, emit_phase_profile};
+use crate::import_pipeline::profile::elapsed_ms;
 
 mod budget;
 
@@ -17,7 +16,6 @@ pub(crate) fn run_finalize_phase(
     data_source: &domain::DataSource,
     stats: &file_service::EnumerationStats,
     pipeline_message: &str,
-    import_started: Instant,
 ) -> Result<String, CommandError> {
     super::super::runtime::validate_current(ctx.runtime.as_deref())?;
     let timeline_count =
@@ -31,7 +29,6 @@ pub(crate) fn run_finalize_phase(
     if let Some(timeline_count) = timeline_count {
         emit_projection_ready_events(ctx, timeline_count);
     }
-    record_import_step(ctx, stats, import_started);
     Ok(match ctx.content_kind {
         crate::import_pipeline::context::ImportContentKind::Filesystem => {
             build_summary_message(&ctx.import_config.source_name, stats, pipeline_message)
@@ -53,7 +50,7 @@ fn emit_projection_ready_events(ctx: &ImportJobContext<'_>, timeline_count: u64)
 }
 
 fn materialize_timeline(
-    ctx: &ImportJobContext<'_>,
+    ctx: &mut ImportJobContext<'_>,
     data_source: &domain::DataSource,
 ) -> Result<u64, CommandError> {
     let pool = source_kernel::resource_budget::pool_for(
@@ -82,12 +79,13 @@ fn materialize_timeline(
         },
     )?;
     record_timeline_subphases(ctx, &projection);
-    emit_phase_profile(
-        ctx.event_sink(),
-        ctx.job_id,
-        ctx.case_id,
-        Some(&data_source.id),
+    super::super::profile::emit_timed_phase_profile(
+        ctx,
+        transport::dto::ImportPhaseDto::Timeline,
+        if projection.graph_complete { transport::dto::ImportPhaseStateDto::Completed }
+        else { transport::dto::ImportPhaseStateDto::Partial },
         94,
+        std::time::Duration::from_millis(projection.elapsed_ms.min(u64::MAX as u128) as u64),
         format!(
             "Timeline materialization complete: phase=timeline elapsedMs={} eventMs={} graphMs={} rows={} warnings={} rssMb={}",
             projection.elapsed_ms,
@@ -97,8 +95,8 @@ fn materialize_timeline(
             projection.warnings.len(),
             source_kernel::runtime_resources::current_rss_mb()
         ),
-        ctx.cancel_requested(),
-    );
+    )?;
+    ctx.counts.add_warnings(projection.warnings.len());
     for warning in &projection.warnings {
         tracing::warn!(
             data_source_id = %data_source.id.0,
@@ -257,53 +255,19 @@ fn checkpoint_source_database(
         );
         CommandError::from_service_error(error)
     })?;
-    emit_phase_profile(
-        ctx.event_sink(),
-        ctx.job_id,
-        ctx.case_id,
-        Some(&data_source.id),
-        98,
+    super::super::profile::emit_timed_phase_profile(
+        ctx,
+        transport::dto::ImportPhaseDto::Checkpoint,
+        transport::dto::ImportPhaseStateDto::Completed,
+        95,
+        started.elapsed(),
         format!(
             "Source checkpoint complete: phase=checkpoint elapsedMs={} rssMb={}",
             elapsed_ms(started.elapsed()),
             source_kernel::runtime_resources::current_rss_mb()
         ),
-        ctx.cancel_requested(),
-    );
+    )?;
     Ok(())
-}
-
-fn record_import_step(
-    ctx: &ImportJobContext<'_>,
-    stats: &file_service::EnumerationStats,
-    import_started: Instant,
-) {
-    let params = serde_json::json!({
-        "sourcePath": ctx.source_path,
-        "sourceName": ctx.import_config.source_name,
-        "kind": format!("{:?}", ctx.import_config.kind),
-        "contentKind": match ctx.content_kind {
-            crate::import_pipeline::context::ImportContentKind::Filesystem => "filesystem",
-            crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata => {
-                "cephBlueStoreMetadata"
-            }
-        },
-        "filesEnumerated": stats.file_count,
-        "dirsEnumerated": stats.dir_count,
-    })
-    .to_string();
-    let _ = step_recorder::record_step(
-        ctx.conn,
-        ctx.case_root,
-        step_recorder::CaseStepInput {
-            case_id: &ctx.case_id.0,
-            step_kind: "import",
-            params_json: &params,
-            duration_ms: import_started.elapsed().as_millis() as u32,
-            success: true,
-            error_code: None,
-        },
-    );
 }
 
 fn build_summary_message(

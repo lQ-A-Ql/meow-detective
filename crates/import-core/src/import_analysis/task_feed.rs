@@ -21,7 +21,7 @@ pub(super) fn count_analysis_file_tasks(
     db_path: &Path,
     data_source_id: &DataSourceId,
 ) -> Result<u64, ImportAnalysisError> {
-    let conn = persistence_sqlite::open_existing_source_read_only(db_path)?;
+    let conn = persistence_source::control::opening::open_source_database_read_only(db_path)?;
     let store = persistence_source::detail::open_store(&conn)?.ok_or_else(|| {
         ImportAnalysisError::Other("source detail storage is missing".to_string())
     })?;
@@ -88,7 +88,8 @@ pub(super) fn enqueue_analysis_tasks_prioritized(
     shared: Arc<SharedAnalysisState>,
 ) -> Result<(), ImportAnalysisError> {
     let extractor_policy = PlatformExtractorPolicy::for_platform(options.platform)?;
-    let conn = persistence_sqlite::open_existing_source_read_only(&options.db_path)?;
+    let conn =
+        persistence_source::control::opening::open_source_database_read_only(&options.db_path)?;
     let mut cursor: Option<(String, String)> = None;
 
     loop {

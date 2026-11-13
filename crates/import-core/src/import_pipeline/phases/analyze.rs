@@ -107,7 +107,7 @@ fn map_analysis_error(
             false,
             "Cancellation acknowledged during post-import analysis drain",
         );
-        CommandError::internal("Import cancelled by user")
+        CommandError::cancelled("Import cancelled by user")
     } else {
         CommandError::from_service_error(error.message)
     }

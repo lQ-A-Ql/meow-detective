@@ -126,7 +126,8 @@ impl AnalysisWorkerRuntime {
         derived_runtime: Option<Arc<ceph_reconstruction::ceph_reconstruction::DerivedRbdRuntime>>,
     ) -> Result<Self, ImportAnalysisError> {
         let _ = PlatformExtractorPolicy::for_platform(options.platform)?;
-        let main_conn = persistence_sqlite::open_existing_source_read_only(&options.db_path)?;
+        let main_conn =
+            persistence_source::control::opening::open_source_database_read_only(&options.db_path)?;
         let staging_conn = staging::open_analysis_staging(
             &options.case_root,
             &options.data_source_id.0,

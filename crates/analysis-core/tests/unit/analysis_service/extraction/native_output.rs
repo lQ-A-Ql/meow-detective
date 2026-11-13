@@ -150,6 +150,7 @@ fn rebuild_derived_metrics_without_writes_leaves_derived_counts_unchanged() {
         &[],
         &AtomicBool::new(false),
         |_| {},
+        |_| {},
     )
     .unwrap();
     generation
@@ -219,12 +220,19 @@ fn cancellation_during_clone_removes_build_and_preserves_published_records() {
         .unwrap();
     let cancel = AtomicBool::new(false);
     let mut copied = 0;
-    let result = super::begin_streaming(&connection, "source-1", &[], &cancel, |progress| {
-        copied = progress.records_copied;
-        if copied > 0 {
-            cancel.store(true, Ordering::Relaxed);
-        }
-    });
+    let result = super::begin_streaming(
+        &connection,
+        "source-1",
+        &[],
+        &cancel,
+        |progress| {
+            copied = progress.records_copied;
+            if copied > 0 {
+                cancel.store(true, Ordering::Relaxed);
+            }
+        },
+        |_| {},
+    );
     assert!(matches!(
         result,
         Err(crate::analysis_service::error::AnalysisServiceError::Cancelled)
@@ -248,6 +256,7 @@ fn dropping_streaming_generation_releases_store_before_removing_build() {
         "source-1",
         &[],
         &AtomicBool::new(false),
+        |_| {},
         |_| {},
     )
     .unwrap();
@@ -277,6 +286,89 @@ fn failed_nonstreaming_stage_removes_build_and_preserves_published_records() {
     assert_eq!(published.count(&snapshot, Some("source-1")).unwrap(), 1);
     assert!(published
         .get(&snapshot, "source-1", "old")
+        .unwrap()
+        .is_some());
+}
+
+#[test]
+fn replacement_reads_only_selected_source_objects_and_preserves_published_data() {
+    let (_root, connection, source) = setup();
+    let records = (0..2_000)
+        .map(|index| {
+            persistence_source::detail::artifact_record(
+                &artifact(
+                    &format!("unrelated-{index}"),
+                    &format!("object-{index}"),
+                    "linux.web.old",
+                ),
+                "source-1",
+            )
+        })
+        .collect::<Vec<_>>();
+    let published = ArtifactRecordStore::from_source_store(source.clone());
+    published
+        .upsert_batch(&records, PersistMode::SyncAll)
+        .unwrap();
+    persistence_source::fjall::instrumentation::enable();
+    let generation = super::begin_streaming(
+        &connection,
+        "source-1",
+        &[AnalysisOutputReplacement {
+            source_object_id: "old".into(),
+            producer: AnalysisOutputProducer::Prefix("linux.web."),
+        }],
+        &AtomicBool::new(false),
+        |_| {},
+        |processed| {
+            if processed == 0 {
+                persistence_source::fjall::instrumentation::reset();
+            }
+        },
+    )
+    .unwrap();
+    let counters = persistence_source::fjall::instrumentation::snapshot();
+    assert!(
+        counters.scan_entries < 20,
+        "replacement scanned unrelated objects: {counters:?}"
+    );
+    let staged = ArtifactRecordStore::from_source_store(generation.store.clone());
+    assert!(staged
+        .get(&staged.read_snapshot(), "source-1", "old")
+        .unwrap()
+        .is_none());
+    assert!(published
+        .get(&published.read_snapshot(), "source-1", "old")
+        .unwrap()
+        .is_some());
+}
+
+#[test]
+fn cancellation_during_targeted_replacement_discards_the_new_generation() {
+    let (root, connection, source) = setup();
+    let cancel = AtomicBool::new(false);
+    let result = super::begin_streaming(
+        &connection,
+        "source-1",
+        &[AnalysisOutputReplacement {
+            source_object_id: "old".into(),
+            producer: AnalysisOutputProducer::Prefix("linux.web."),
+        }],
+        &cancel,
+        |_| {},
+        |processed| {
+            if processed > 0 {
+                cancel.store(true, Ordering::Release);
+            }
+        },
+    );
+    assert!(matches!(
+        result,
+        Err(crate::analysis_service::AnalysisServiceError::Cancelled)
+    ));
+    assert_no_build_generation(root.path());
+    let published = ArtifactRecordStore::from_source_store(source);
+    assert!(published
+        .get(&published.read_snapshot(), "source-1", "old")
         .unwrap()
         .is_some());
 }

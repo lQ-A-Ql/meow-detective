@@ -146,7 +146,7 @@ shlex = "=2.0.1"
 libc = "0.2"
 ceph-wire = { path = "crates/ceph-wire" }
 rocksdb-wire = { path = "crates/rocksdb-wire" }
-rusqlite = { version = "0.41", features = ["bundled", "serialize", "hooks", "fallible_uint"] }
+rusqlite = { version = "0.41", features = ["bundled", "serialize", "hooks", "fallible_uint", "functions"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.24"
 tempfile = "3"

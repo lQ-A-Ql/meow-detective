@@ -17,10 +17,23 @@ use std::path::{Path, PathBuf};
 /// this helper so they get exactly the same detail-store configuration as
 /// [`open_source_db`].
 pub fn open_source_database(path: &Path, source_id: &str) -> DbResult<Connection> {
-    let connection = persistence_sqlite::open_or_create_source(path)?;
+    let connection =
+        super::connections::open_tracked(path, true, persistence_sqlite::open_or_create_source)?;
     crate::detail::configure_source_identity(&connection, source_id)?;
     crate::detail::configure_source_fjall(&connection, path)?;
     Ok(connection)
+}
+
+pub fn open_existing_source_database(path: &Path) -> DbResult<Connection> {
+    super::connections::open_tracked(path, false, persistence_sqlite::open_existing_source)
+}
+
+pub fn open_source_database_read_only(path: &Path) -> DbResult<Connection> {
+    super::connections::open_tracked(
+        path,
+        false,
+        persistence_sqlite::open_existing_source_read_only,
+    )
 }
 
 pub fn open_source_db(case_root: &Path, data_source_id: &DataSourceId) -> DbResult<Connection> {
@@ -53,7 +66,7 @@ pub fn open_registered_source_db(
             data_source_id.0
         )));
     }
-    let read_only = persistence_sqlite::open_existing_source_read_only(&db_path)?;
+    let read_only = open_source_database_read_only(&db_path)?;
     let actual_schema_version =
         persistence_sqlite::migrations::runner::current_version(&read_only)?;
     if actual_schema_version.as_deref() != Some(expected_schema_version) {
@@ -63,7 +76,7 @@ pub fn open_registered_source_db(
         )));
     }
     drop(read_only);
-    persistence_sqlite::open_existing(&db_path)
+    open_existing_source_database(&db_path)
 }
 
 pub fn open_registered_source_db_read_only(
@@ -88,7 +101,7 @@ pub fn open_registered_source_db_read_only(
         )));
     }
     let db_path = registered_source_db_path(case_conn, case_root, data_source_id)?;
-    let connection = persistence_sqlite::open_existing_source_read_only(&db_path)?;
+    let connection = open_source_database_read_only(&db_path)?;
     let actual_schema_version =
         persistence_sqlite::migrations::runner::current_version(&connection)?;
     let actual_schema_version = actual_schema_version.as_deref().ok_or_else(|| {

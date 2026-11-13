@@ -92,17 +92,6 @@ macro_rules! native_source_test_support {
                 }
 
                 fn refresh_generation(&self) {
-                    let store = persistence_source::detail::open_store_for_write(&self.connection)
-                        .expect("open native source store")
-                        .expect("configured native source store");
-                    persistence_source::fjall::replace_source_generation(
-                        &store,
-                        &self.source_id,
-                        "fixture",
-                        &"a".repeat(64),
-                    )
-                    .expect("seal native source fixture");
-                    drop(store);
                     mark_source_projection_complete(&self.connection, &self.source_id);
                 }
             }
@@ -137,7 +126,7 @@ macro_rules! native_source_test_support {
                     1,
                     source_id.as_bytes().to_vec(),
                 );
-                store
+                let receipt = store
                     .write_envelope(
                         persistence_source::fjall::KeyspaceName::Meta,
                         key,
@@ -145,6 +134,13 @@ macro_rules! native_source_test_support {
                         persistence_source::fjall::PersistMode::SyncAll,
                     )
                     .expect("mark source projection complete");
+                persistence_source::fjall::replace_source_generation(
+                    &store,
+                    source_id,
+                    "fixture",
+                    &hex::encode(receipt.batch_digest),
+                )
+                .expect("seal native source fixture");
             }
         }
     };

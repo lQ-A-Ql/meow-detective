@@ -53,6 +53,16 @@ pub fn open_registered_fjall_source_read_write(
     open_fjall_source_read_write(case_root, &data_source_id.0)
 }
 
+pub fn open_fjall_source_for_build(
+    connection: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+) -> Result<FjallReadWriteSourceStorageHandle, FjallStorageRuntimeError> {
+    let root =
+        persistence_source::control::bound_source_generation_root(connection, data_source_id)
+            .map_err(FjallStorageRuntimeError::Control)?;
+    crate::storage_runtime::open_source_read_write_at_path(root)
+}
+
 pub fn open_fjall_source_read_only_from_source_db_path(
     source_db_path: &Path,
     data_source_id: &DataSourceId,

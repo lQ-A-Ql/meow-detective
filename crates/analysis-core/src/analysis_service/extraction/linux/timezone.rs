@@ -21,12 +21,10 @@
 //! instead keep the raw text with an `unverified-timezone` marker.
 
 use super::super::reader::{read_candidate_source_with_progress, CandidateSource};
-use crate::analysis_service::candidates::{find_candidate_by_path_suffix, EvidenceCandidate};
+use crate::analysis_service::candidates::{EvidenceCandidate, PreparationCatalog};
 use artifacts_linux::LogClock;
 use chrono::{DateTime, LocalResult, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
-use domain::FileEntry;
-use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;
 
 /// Cap on timezone hint file reads; the zone name is a few dozen bytes.
@@ -152,13 +150,13 @@ const TIMEZONE_SOURCES: &[(&str, ZoneExtractor)] = &[
 /// Returns the context plus any warnings to record against the Linux
 /// capability (unreadable files, unrecognized zone names, UTC fallback).
 pub(in crate::analysis_service::extraction) fn resolve_linux_log_time(
-    conn: &Connection,
+    catalog: &PreparationCatalog,
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> (LinuxLogTimeContext, Vec<String>) {
     let mut warnings = Vec::new();
     for (path, extract) in TIMEZONE_SOURCES {
-        match read_zone_text(conn, path, cancel_token, file_reader) {
+        match read_zone_text(catalog, path, cancel_token, file_reader) {
             Ok(Some(text)) => {
                 if let Some(name) = extract(&text) {
                     match name.parse::<Tz>() {
@@ -180,20 +178,17 @@ pub(in crate::analysis_service::extraction) fn resolve_linux_log_time(
 
 /// Locate a timezone hint file and read its (small) content as text.
 fn read_zone_text(
-    conn: &Connection,
+    catalog: &PreparationCatalog,
     path: &str,
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> Result<Option<String>, String> {
-    let Some(entry) = find_candidate_by_path_suffix(conn, path)
-        .map_err(|error| format!("{path} lookup failed: {error}"))?
-    else {
+    let Some(candidate) = catalog.shortest_suffix(path) else {
         return Ok(None);
     };
-    if entry.encrypted {
+    if candidate.encrypted {
         return Ok(None);
     }
-    let candidate = timezone_probe_candidate(&entry);
     let source = file_reader(&candidate, TIMEZONE_READ_LIMIT)
         .map_err(|error| format!("{path} read failed: {error}"))?;
     let bytes = read_candidate_source_with_progress(
@@ -205,25 +200,6 @@ fn read_zone_text(
     )
     .map_err(|error| format!("{path} read failed: {error:?}"))?;
     Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
-}
-
-/// Minimal candidate view used only to route a timezone file through the
-/// standard bounded reader.
-fn timezone_probe_candidate(entry: &FileEntry) -> EvidenceCandidate {
-    EvidenceCandidate {
-        file_id: entry.id.clone(),
-        data_source_id: entry.data_source_id.0.clone(),
-        partition_index: None,
-        path: entry.path.clone(),
-        size: entry.size.unwrap_or(0),
-        encrypted: entry.encrypted,
-        content_identity: String::new(),
-        companions: Vec::new(),
-        evidence_kind: "linux_timezone".to_string(),
-        parser: "linux.timezone".to_string(),
-        category: String::new(),
-        modified_at: entry.modified_at,
-    }
 }
 
 /// `/etc/localtime` symlink target text ends with `zoneinfo/<Area>/<City>`.

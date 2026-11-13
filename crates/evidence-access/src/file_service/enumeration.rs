@@ -108,17 +108,16 @@ fn enumerate_filesystem_with_root_name_and_cancel_internal(
         return Err(enumeration_cancelled_error());
     }
     let root_entry = root_entry_for_filesystem(&root, data_source_id, root_name_override);
-    if catalog.is_none() {
-        if let Some(stats) = enumerate_native_catalog(
-            conn,
-            data_source_id,
-            fs,
-            &root_entry,
-            progress_fn,
-            cancel_token,
-        )? {
-            return Ok(stats);
-        }
+    if let Some(stats) = enumerate_native_catalog(
+        conn,
+        data_source_id,
+        fs,
+        &root_entry,
+        progress_fn,
+        cancel_token,
+        catalog,
+    )? {
+        return Ok(stats);
     }
     enumerate_sqlite_catalog(
         conn,
@@ -127,7 +126,6 @@ fn enumerate_filesystem_with_root_name_and_cancel_internal(
         &root_entry,
         progress_fn,
         cancel_token,
-        catalog,
     )
 }
 
@@ -167,9 +165,14 @@ fn enumerate_native_catalog(
     root_entry: &FileEntry,
     progress_fn: Option<&dyn Fn(u32)>,
     cancel_token: Option<&AtomicBool>,
+    catalog: Option<&crate::storage_runtime::ReadWriteSourceStorageHandle>,
 ) -> DbResult<Option<EnumerationStats>> {
-    let Some(store) = persistence_source::detail::open_store_for_write(conn)? else {
-        return Ok(None);
+    let store = match catalog {
+        Some(catalog) => catalog.source_store().clone(),
+        None => match persistence_source::detail::open_store_for_write(conn)? {
+            Some(store) => (*store).clone(),
+            None => return Ok(None),
+        },
     };
     let source_id = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| DbError::System("source identity is missing".into()))?;
@@ -178,8 +181,7 @@ fn enumerate_native_catalog(
             "enumeration source identity mismatch".into(),
         ));
     }
-    let repository =
-        persistence_source::fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let repository = persistence_source::fjall::CatalogRecordStore::from_source_store(store);
     let root_record = persistence_source::detail::file_record(root_entry);
     let mut walker = ChildBatchWalker::new(root_entry.id.clone());
     let result = repository.replace_subtree_streamed(
@@ -216,7 +218,6 @@ fn enumerate_sqlite_catalog(
     root_entry: &FileEntry,
     progress_fn: Option<&dyn Fn(u32)>,
     cancel_token: Option<&AtomicBool>,
-    catalog: Option<&crate::storage_runtime::ReadWriteSourceStorageHandle>,
 ) -> DbResult<EnumerationStats> {
     let tx = conn.unchecked_transaction()?;
     let result = {
@@ -233,22 +234,6 @@ fn enumerate_sqlite_catalog(
     };
     match result {
         Ok(stats) => {
-            if let Some(catalog) = catalog {
-                crate::catalog_projection::mirror_catalog_records_from_connection(
-                    &tx,
-                    catalog,
-                    &data_source_id.0,
-                )
-                .map_err(|error| DbError::System(error.to_string()))?;
-                catalog
-                    .persist(persistence_source::fjall::PersistMode::SyncAll)
-                    .map_err(|error| DbError::System(error.to_string()))?;
-                crate::catalog_projection::mark_catalog_projection_seeded(
-                    catalog,
-                    &data_source_id.0,
-                )
-                .map_err(|error| DbError::System(error.to_string()))?;
-            }
             tx.commit()?;
             Ok(stats)
         }

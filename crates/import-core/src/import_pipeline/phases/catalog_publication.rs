@@ -1,6 +1,6 @@
 //! Publish the validated catalog indexes and graph before analysis starts.
 use crate::import_pipeline::context::ImportJobContext;
-use crate::import_pipeline::profile::emit_phase_profile;
+use crate::import_pipeline::profile::emit_timed_phase_profile;
 use evidence_access::file_service;
 use transport::CommandError;
 
@@ -9,11 +9,12 @@ pub(super) fn finish_catalog(
     source: &domain::DataSource,
     stats: &mut file_service::EnumerationStats,
 ) -> Result<(), CommandError> {
+    let started = std::time::Instant::now();
     super::super::runtime::validate_current(ctx.runtime.as_deref())?;
     super::super::runtime::finish_indexes(ctx)?;
     populate_file_graph(ctx, source, stats);
     ctx.counts.add_warnings(stats.warnings.len());
-    report_catalog_ready(ctx, source, stats);
+    report_catalog_ready(ctx, stats, started.elapsed())?;
     Ok(())
 }
 
@@ -38,23 +39,22 @@ fn populate_file_graph(
 
 fn report_catalog_ready(
     ctx: &ImportJobContext<'_>,
-    data_source: &domain::DataSource,
     stats: &file_service::EnumerationStats,
-) {
-    emit_phase_profile(
-        ctx.event_sink(),
-        ctx.job_id,
-        ctx.case_id,
-        Some(&data_source.id),
+    elapsed: std::time::Duration,
+) -> Result<(), CommandError> {
+    emit_timed_phase_profile(
+        ctx,
+        transport::dto::ImportPhaseDto::BuildIndexes,
+        transport::dto::ImportPhaseStateDto::Completed,
         70,
+        elapsed,
         format!(
-            "File catalog ready: phase=enum-merge rows={} files={} dirs={} warnings={} rssMb={}",
+            "File catalog indexes ready: phase=source-index rows={} files={} dirs={} warnings={} rssMb={}",
             stats.file_count + stats.dir_count,
             stats.file_count,
             stats.dir_count,
             stats.warnings.len(),
             source_kernel::runtime_resources::current_rss_mb()
         ),
-        ctx.cancel_requested(),
-    );
+    )
 }

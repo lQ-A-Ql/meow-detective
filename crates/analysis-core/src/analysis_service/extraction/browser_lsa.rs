@@ -2,16 +2,17 @@
 //! browser preload pipeline. All failures degrade to warnings so the base
 //! v10/v11 decryption path keeps working.
 
-use super::browser_preload::{locate_by_suffix, locator_from_entry, read_locator};
+use super::browser_preload::read_locator;
 use super::candidate_processing::CandidateSource;
-use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
+use crate::analysis_service::candidates::{
+    normalize_evidence_path, EvidenceCandidate, PreparationCatalog,
+};
 use crate::analysis_service::AnalysisServiceError;
 use artifacts_windows::dpapi::{
     derive_user_prekeys, derive_user_prekeys_from_password_sha1, parse_cng_system_key_file,
     ChromiumFamily,
 };
 use artifacts_windows::{decrypt_lsa_secrets, DpapiSystemKeys, LsaDecryptedSecrets, TbalSecret};
-use rusqlite::Connection;
 use sha1::{Digest, Sha1};
 use std::sync::atomic::AtomicBool;
 
@@ -70,7 +71,7 @@ fn password_sha1_utf16le(password: &str) -> [u8; 20] {
 /// prekeys and TBAL-provisioned password-SHA1 prekeys cross-checked against
 /// SAM NT hashes. All failures degrade to warnings.
 pub(super) fn extend_prekeys_from_lsa_secrets(
-    conn: &Connection,
+    catalog: &PreparationCatalog,
     data_source_id: &str,
     seed: &PrekeySeed<'_>,
     cancel_token: &AtomicBool,
@@ -78,9 +79,7 @@ pub(super) fn extend_prekeys_from_lsa_secrets(
     prekeys: &mut Vec<[u8; 20]>,
     warnings: &mut Vec<String>,
 ) -> Result<(), AnalysisServiceError> {
-    let Some(security) =
-        locate_by_suffix(conn, data_source_id, "/windows/system32/config/security")?
-    else {
+    let Some(security) = catalog.suffix(data_source_id, "/windows/system32/config/security") else {
         return Ok(());
     };
     let security_bytes = match read_locator(&security, cancel_token, file_reader) {
@@ -140,12 +139,12 @@ fn apply_lsa_secrets(
 /// Read the CNG system key file whose description identifies the Chrome
 /// `Google Chromekey1` key, if present.
 pub(super) fn read_cng_chromekey_file(
-    conn: &Connection,
+    catalog: &PreparationCatalog,
     data_source_id: &str,
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> Result<Option<Vec<u8>>, AnalysisServiceError> {
-    for locator in locate_files_by_like(conn, data_source_id, "%/crypto/systemkeys/%")? {
+    for locator in catalog.matching(data_source_id, "/crypto/systemkeys/") {
         let Ok(bytes) = read_locator(&locator, cancel_token, file_reader) else {
             continue;
         };
@@ -162,7 +161,7 @@ pub(super) fn read_cng_chromekey_file(
 /// Read the Chrome/Edge `elevation_service.exe` used to bind the App-Bound XOR
 /// constant to the browser build, if present.
 pub(super) fn read_elevation_service(
-    conn: &Connection,
+    catalog: &PreparationCatalog,
     data_source_id: &str,
     family: ChromiumFamily,
     cancel_token: &AtomicBool,
@@ -173,38 +172,12 @@ pub(super) fn read_elevation_service(
         ChromiumFamily::Edge => "/microsoft/edge/application/",
         ChromiumFamily::Chromium => return Ok(None),
     };
-    let locator = locate_files_by_like(conn, data_source_id, "%/elevation_service.exe")?
+    let locator = catalog
+        .matching(data_source_id, "/elevation_service.exe")
         .into_iter()
         .find(|locator| normalize_evidence_path(&locator.path).contains(path_marker));
     match locator {
         Some(locator) => read_locator(&locator, cancel_token, file_reader).map(Some),
         None => Ok(None),
     }
-}
-
-fn locate_files_by_like(
-    conn: &Connection,
-    data_source_id: &str,
-    like_pattern: &str,
-) -> Result<Vec<EvidenceCandidate>, AnalysisServiceError> {
-    let marker = like_pattern
-        .trim_matches('%')
-        .replace('\\', "/")
-        .to_ascii_lowercase();
-    let mut candidates = Vec::new();
-    persistence_source::repositories::file_repo::FileRepo::new(conn).visit_all(
-        Some(data_source_id),
-        |entry| {
-            if !entry.deleted
-                && !entry.is_directory()
-                && normalize_evidence_path(&entry.path).contains(&marker)
-            {
-                candidates.push(locator_from_entry(data_source_id, &entry, "BrowserPreload"));
-            }
-            Ok(())
-        },
-    )?;
-    candidates.sort_by_key(|candidate| candidate.path.len());
-    candidates.truncate(32);
-    Ok(candidates)
 }

@@ -1692,11 +1692,12 @@ fn linux_summary_catalog_collects_candidates_and_kernel_versions_together() {
     );
 
     let cancel = std::sync::atomic::AtomicBool::new(false);
-    let (candidates, kernel) =
-        crate::analysis_service::candidates::evidence_candidates_for_categories_with_cancel_and_linux_catalog(
+    let (candidates, kernel, _) =
+        crate::analysis_service::candidates::evidence_candidates_for_categories_with_preparation(
             &conn,
             &["LinuxArtifacts"],
             &cancel,
+            |_| {},
         )
         .unwrap();
     let metadata = crate::analysis_service::candidates::LinuxCatalogMetadata::from_discovery(

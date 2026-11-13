@@ -1,5 +1,4 @@
 use super::output_digest::OutputDigestAccumulator;
-use super::replacement_index::ReplacementIndex;
 use super::state::PersistedExtractionOutcome;
 use crate::analysis_service::error::AnalysisServiceError;
 use domain::{Artifact, TimelineEvent};
@@ -11,6 +10,8 @@ use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use uuid::Uuid;
+mod replacement;
+use replacement::delete_replacements;
 
 pub struct StagedGeneration {
     pub name: String,
@@ -53,7 +54,7 @@ pub(super) struct StreamingGeneration {
     store: SourceStore,
     staged: StagedGeneration,
     source_id: String,
-    projection_batch_digest: String,
+    verified_clone: persistence_source::fjall::VerifiedGenerationClone,
     wrote_artifacts: AtomicBool,
     wrote_events: AtomicBool,
 }
@@ -220,29 +221,24 @@ impl StreamingGeneration {
     pub(super) fn seal(
         self,
         cancel: &AtomicBool,
-        progress: impl FnMut(u64, u64),
+        mut progress: impl FnMut(u64, u64),
     ) -> Result<StagedGeneration, AnalysisServiceError> {
         let Self {
             staged,
             store,
-            source_id,
-            projection_batch_digest,
+            verified_clone,
             ..
         } = self;
         crate::analysis_service::cancellation::ensure_not_cancelled(cancel)?;
+        progress(0, 0);
         store
             .database()
             .persist(PersistMode::SyncAll)
             .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        persistence_source::fjall::seal_source_generation_with_control(
-            &store,
-            &source_id,
-            &staged.name,
-            &projection_batch_digest,
-            cancel,
-            progress,
-        )
-        .map_err(clone_error)?;
+        verified_clone
+            .seal(&store, &staged.name, cancel)
+            .map_err(clone_error)?;
+        progress(0, 0);
         drop(store);
         Ok(staged)
     }
@@ -254,6 +250,7 @@ pub(super) fn begin_streaming(
     replacements: &[super::state::AnalysisOutputReplacement],
     cancel_token: &AtomicBool,
     progress: impl FnMut(SourceCloneProgress),
+    deletion_progress: impl FnMut(u64),
 ) -> Result<StreamingGeneration, AnalysisServiceError> {
     crate::analysis_service::cancellation::ensure_not_cancelled(cancel_token)?;
     let owner = persistence_source::detail::source_id(conn)?
@@ -267,18 +264,13 @@ pub(super) fn begin_streaming(
     let source = persistence_source::detail::open_store(conn)?
         .ok_or_else(|| AnalysisServiceError::Other("source generation is missing".into()))?;
     let source = (*source).clone();
-    let manifest = persistence_source::fjall::verify_source_generation_with_control(
-        &source,
-        source_id,
-        cancel_token,
-        |_, _| {},
-    )
-    .map_err(clone_error)?;
     let attempt = format!("analysis-{}", Uuid::new_v4());
     let layout = SourceCaseLayout::from_published_store(&source, source_id, &attempt)?;
     let staged = StagedGeneration::create(&layout)?;
-    let store = source
-        .clone_to_with_control(
+    let (store, verified_clone) =
+        persistence_source::fjall::clone_verified_generation_with_control(
+            &source,
+            source_id,
             &staged.path,
             DatabaseConfig::default(),
             cancel_token,
@@ -286,12 +278,18 @@ pub(super) fn begin_streaming(
         )
         .map_err(clone_error)?;
     crate::analysis_service::cancellation::ensure_not_cancelled(cancel_token)?;
-    delete_replacements(&store, source_id, replacements)?;
+    delete_replacements(
+        &store,
+        source_id,
+        replacements,
+        cancel_token,
+        deletion_progress,
+    )?;
     Ok(StreamingGeneration {
         staged,
         store,
         source_id: source_id.to_owned(),
-        projection_batch_digest: manifest.projection_batch_digest,
+        verified_clone,
         wrote_artifacts: AtomicBool::new(false),
         wrote_events: AtomicBool::new(false),
     })
@@ -308,21 +306,16 @@ pub(super) fn stage(
     let source = persistence_source::detail::open_store(conn)?
         .ok_or_else(|| AnalysisServiceError::Other("source generation is missing".into()))?;
     let source = (*source).clone();
-    let manifest = persistence_source::fjall::verify_source_generation_with_control(
-        &source,
-        source_id,
-        &AtomicBool::new(false),
-        |_, _| {},
-    )
-    .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     let attempt = format!("analysis-{}", Uuid::new_v4());
     let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         case_root, source_id, &attempt,
     )
     .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
     let staged = StagedGeneration::create(&layout)?;
-    let store = source
-        .clone_to_with_control(
+    let (store, verified_clone) =
+        persistence_source::fjall::clone_verified_generation_with_control(
+            &source,
+            source_id,
             &staged.path,
             DatabaseConfig::default(),
             &AtomicBool::new(false),
@@ -334,20 +327,14 @@ pub(super) fn stage(
         .database()
         .persist(persistence_source::fjall::PersistMode::SyncAll)
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-    persistence_source::fjall::seal_source_generation_with_control(
-        &store,
-        source_id,
-        &attempt,
-        &manifest.projection_batch_digest,
-        &AtomicBool::new(false),
-        |_, _| {},
-    )
-    .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+    verified_clone
+        .seal(&store, &attempt, &AtomicBool::new(false))
+        .map_err(clone_error)?;
     drop(store);
     Ok(staged)
 }
 
-fn clone_error(error: FjallStorageError) -> AnalysisServiceError {
+pub(super) fn clone_error(error: FjallStorageError) -> AnalysisServiceError {
     match error {
         FjallStorageError::Cancelled => AnalysisServiceError::Cancelled,
         other => AnalysisServiceError::Other(other.to_string()),
@@ -361,7 +348,13 @@ fn replace_records(
     artifacts: &[Artifact],
     events: &[TimelineEvent],
 ) -> Result<(), AnalysisServiceError> {
-    delete_replacements(store, source_id, replacements)?;
+    delete_replacements(
+        store,
+        source_id,
+        replacements,
+        &AtomicBool::new(false),
+        |_| {},
+    )?;
     let artifact_records = artifacts
         .iter()
         .map(|artifact| persistence_source::detail::artifact_record(artifact, source_id))
@@ -382,72 +375,6 @@ fn replace_records(
             persistence_source::fjall::PersistMode::Buffer,
         )
         .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-    Ok(())
-}
-
-fn delete_replacements(
-    store: &SourceStore,
-    source_id: &str,
-    replacements: &[super::state::AnalysisOutputReplacement],
-) -> Result<(), AnalysisServiceError> {
-    if replacements.is_empty() {
-        return Ok(());
-    }
-    let index = ReplacementIndex::new(replacements);
-    let artifact_store = ArtifactRecordStore::from_source_store(store.clone());
-    let timeline_store = TimelineRecordStore::from_source_store(store.clone());
-    let artifacts = artifact_store.read_snapshot();
-    let mut cursor = None;
-    loop {
-        let page = artifact_store
-            .list_by_source(
-                &artifacts,
-                source_id,
-                cursor.as_deref(),
-                persistence_source::fjall::ScanDirection::Forward,
-                512,
-            )
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        let ids = page
-            .records
-            .into_iter()
-            .filter(|record| index.matches_artifact(record, source_id))
-            .map(|record| record.id)
-            .collect::<Vec<_>>();
-        artifact_store
-            .delete_batch(source_id, &ids, PersistMode::Buffer)
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            break;
-        }
-    }
-    let timeline = timeline_store.read_snapshot();
-    let mut cursor = None;
-    loop {
-        let page = timeline_store
-            .list_by_source(
-                &timeline,
-                source_id,
-                cursor.as_deref(),
-                persistence_source::fjall::ScanDirection::Forward,
-                512,
-            )
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        let ids = page
-            .records
-            .into_iter()
-            .filter(|record| index.matches_timeline(record))
-            .map(|record| record.id)
-            .collect::<Vec<_>>();
-        timeline_store
-            .delete_batch(source_id, &ids, PersistMode::Buffer)
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            break;
-        }
-    }
     Ok(())
 }
 

@@ -5,7 +5,7 @@ pub use crate::dto::analysis_android::{
 pub use crate::dto::analysis_base::{
     AnalysisExtractionPhaseDto, AnalysisExtractionProgressDto, AnalysisExtractionRunDto,
     AnalysisExtractionSectionRunDto, AnalysisFieldProvenanceDto, AnalysisParseStatusDto,
-    AnalysisProvenanceDto,
+    AnalysisProvenanceDto, AnalysisWorkProgressDto, AnalysisWorkStageDto,
 };
 pub use crate::dto::analysis_browser::{
     BrowserCookieDto, BrowserDownloadDto, BrowserExtensionDto, BrowserHistorySummaryDto,

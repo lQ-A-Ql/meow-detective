@@ -96,8 +96,7 @@ fn store_partition_metadata_persists_lvm_identity() {
     let data_source_id = DataSourceId("ds-lvm".to_string());
     let case_root = root.path().join("case");
     let conn = crate::source_db::open_source_db(&case_root, &data_source_id).unwrap();
-    let source =
-        crate::source_db::open_fjall_source_read_write(&case_root, &data_source_id.0).unwrap();
+    let source = crate::source_db::open_fjall_source_for_build(&conn, &data_source_id).unwrap();
     crate::partition_storage_service::replace_from_probe(
         &source,
         &data_source_id,
@@ -140,6 +139,7 @@ fn store_partition_metadata_persists_lvm_identity() {
     )
     .unwrap();
 
+    test_support::mark_source_projection_complete(&conn, &data_source_id.0);
     let record = crate::partition_query_service::PartitionQueryRepo::new(&conn)
         .find_by_data_source(&data_source_id.0)
         .unwrap()

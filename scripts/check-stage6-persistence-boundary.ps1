@@ -1,8 +1,9 @@
-param()
+param([switch]$SelfTest)
 
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'lib/RustGuard.Common.ps1')
 $strictUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
 $errors = New-Object System.Collections.Generic.List[string]
 
@@ -78,6 +79,91 @@ function Assert-NoRustReference([string]$RelativeRoot, [string]$Pattern, [string
   }
 }
 
+function Test-UntrackedSourceOpen([string]$RelativePath, [string]$Content) {
+  $allowed = @(
+    'crates/persistence-sqlite/src/connection.rs',
+    'crates/persistence-source/src/control/opening.rs',
+    'crates/persistence-source/src/control/connections.rs'
+  )
+  if ($allowed -ccontains $RelativePath) { return $false }
+  $code = [Stage0.RustGuardLexicalMasker]::Mask($Content)
+  $openers = '(?:open_existing_source_read_only|open_existing_source|open_or_create_source)'
+  $namespaces = New-Object System.Collections.Generic.List[string]
+  $namespaces.Add('persistence_sqlite')
+  foreach ($alias in [regex]::Matches($code, '\b(?:use|extern\s+crate)\s+persistence_sqlite(?:\s*::\s*connection)?\s+as\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*;')) {
+    $namespaces.Add($alias.Groups['name'].Value)
+  }
+  for ($namespaceIndex = 0; $namespaceIndex -lt $namespaces.Count; $namespaceIndex++) {
+    $namespace = $namespaces[$namespaceIndex]
+    $prefix = [regex]::Escape($namespace)
+    if ([regex]::IsMatch($code, '\b' + $prefix + '\s*::\s*(?:connection\s*::\s*)?' + $openers + '\b')) {
+      return $true
+    }
+    $groups = [regex]::Matches($code, '\buse\s+' + $prefix + '\s*::\s*(?:connection\s*::\s*)?\{(?<body>[^;]*)\}\s*;')
+    foreach ($group in $groups) {
+      if ([regex]::IsMatch($group.Groups['body'].Value, '\b' + $openers + '\b')) { return $true }
+      foreach ($alias in [regex]::Matches($group.Groups['body'].Value, '\b(?:self|connection)\s+as\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)')) {
+        if (-not $namespaces.Contains($alias.Groups['name'].Value)) {
+          $namespaces.Add($alias.Groups['name'].Value)
+        }
+      }
+    }
+    if ([regex]::IsMatch($code, '\buse\s+' + $prefix + '\s*::\s*(?:connection\s*::\s*)?\*\s*;') -and
+        [regex]::IsMatch($code, '\b' + $openers + '\s*\(')) {
+      return $true
+    }
+  }
+  return $false
+}
+
+function Assert-TrackedSourceConnections {
+  foreach ($manifest in Get-WorkspaceDependencyManifests) {
+    $sourceRoot = Join-Path (Split-Path -Parent $manifest) 'src'
+    if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container)) { continue }
+    foreach ($file in Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs') {
+      $relative = $file.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
+      if (Test-UntrackedSourceOpen $relative (Read-StrictUtf8 $file.FullName)) {
+        $errors.Add("source SQL connections must use persistence-source tracked openers: $relative")
+      }
+    }
+  }
+}
+
+function Invoke-TrackedSourceSelfTest {
+  $path = 'crates/example/src/source.rs'
+  $cases = @(
+    @{ Code = 'persistence_sqlite::open_existing_source(path)?;'; Reject = $true },
+    @{ Code = 'persistence_sqlite::connection::open_existing_source_read_only(path)?;'; Reject = $true },
+    @{ Code = 'use persistence_sqlite::{open_or_create_source as source}; source(path)?;'; Reject = $true },
+    @{ Code = 'use persistence_sqlite::connection::{open_existing_source};'; Reject = $true },
+    @{ Code = 'use persistence_sqlite as db; db::open_existing_source(path)?;'; Reject = $true },
+    @{ Code = 'use persistence_sqlite::{connection as db}; db::open_existing_source(path)?;'; Reject = $true },
+    @{ Code = 'use persistence_sqlite::{self as db}; use db::{open_existing_source as source}; source(path)?;'; Reject = $true },
+    @{ Code = 'use persistence_sqlite::*; open_existing_source(path)?;'; Reject = $true },
+    @{ Code = '// persistence_sqlite::open_existing_source(path)'; Reject = $false },
+    @{ Code = 'let note = r#"persistence_sqlite::open_existing_source(path)"#;'; Reject = $false },
+    @{ Code = 'persistence_sqlite::open_existing(case_path)?;'; Reject = $false },
+    @{ Code = 'rusqlite::Connection::open(evidence_path)?;'; Reject = $false },
+    @{ Code = 'persistence_source::control::opening::open_source_database_read_only(path)?;'; Reject = $false }
+  )
+  foreach ($case in $cases) {
+    if ((Test-UntrackedSourceOpen $path $case.Code) -ne $case.Reject) {
+      throw "tracked source connection self-test failed: $($case.Code)"
+    }
+  }
+  foreach ($allowed in @('crates/persistence-sqlite/src/connection.rs', 'crates/persistence-source/src/control/opening.rs', 'crates/persistence-source/src/control/connections.rs')) {
+    if (Test-UntrackedSourceOpen $allowed 'persistence_sqlite::open_existing_source(path)?;') {
+      throw "tracked source connection exception self-test failed: $allowed"
+    }
+  }
+  Write-Host 'Stage 6 tracked source connection self-tests passed'
+}
+
+if ($SelfTest) {
+  Invoke-TrackedSourceSelfTest
+  return
+}
+
 Assert-ManifestLacksDependency 'crates/persistence-sqlite/Cargo.toml' 'persistence-fjall'
 Assert-ManifestLacksDependency 'crates/persistence-sqlite/Cargo.toml' 'transport'
 Assert-ManifestLacksDependency 'apps/desktop/src-tauri/Cargo.toml' 'persistence-fjall'
@@ -87,6 +173,7 @@ Assert-ManifestLacksDependency 'crates/emulation-services/Cargo.toml' 'persisten
 Assert-ManifestLacksDependency 'crates/import-core/Cargo.toml' 'persistence-fjall'
 Assert-ManifestLacksDependency 'crates/source-reconstruction/Cargo.toml' 'persistence-fjall'
 Assert-SingleFjallDependencyOwner
+Assert-TrackedSourceConnections
 
 Assert-NoRustReference 'crates/persistence-sqlite/src' '\bpersistence_fjall\b' 'persistence-sqlite owns source detail storage'
 Assert-NoRustReference 'crates/persistence-sqlite/tests' '\bpersistence_fjall\b' 'persistence-sqlite tests own source detail storage'
@@ -131,4 +218,4 @@ if ($errors.Count -gt 0) {
   throw ("Stage 6 persistence boundary guard failed:`n- " + ($errors -join "`n- "))
 }
 
-Write-Host 'Stage 6 persistence boundary guard passed: persistence-sqlite is case-store only, Fjall source storage is owned by persistence-source, and app-services consumes only the persistence-source fjall facade'
+Write-Host 'Stage 6 persistence boundary guard passed: persistence-source owns Fjall and tracked source SQL connections; persistence-sqlite remains the case-store boundary'

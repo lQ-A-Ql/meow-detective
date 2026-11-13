@@ -2,6 +2,34 @@ import { describe, expect, it } from 'vitest';
 import { createImportEventStateStore, deriveEvidenceHashStatus } from '@/features/jobs/import-event-state';
 
 describe('import event state store', () => {
+  it('preserves missing timing across distinct completion stages', () => {
+    const store = createImportEventStateStore();
+    for (const phase of ['timeline', 'checkpoint', 'postReady', 'finalize'] as const) {
+      store.ingestPhase('2026-11-13T12:00:00Z', {
+        jobId: 'job-stages',
+        caseId: 'case-stages',
+        phase,
+        state: 'running',
+        percent: 96,
+        detail: '',
+        metrics: {
+          rssMb: 0,
+          workers: 1,
+          rowsProcessed: 0,
+          bytesProcessed: 0,
+          warnings: 0,
+          skipped: 0,
+          failed: 0,
+        },
+        partialResults: [],
+        cancellable: true,
+        cancelRequested: false,
+      });
+      expect(store.getSnapshot().latestPhase?.phase).toBe(phase);
+      expect(store.getSnapshot().latestPhase?.metrics.elapsedMs).toBeUndefined();
+    }
+  });
+
   it('merges typed progress, partial freshness, cancellation, cache, and performance report state', () => {
     const store = createImportEventStateStore();
 

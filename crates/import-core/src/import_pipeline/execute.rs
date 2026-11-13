@@ -38,7 +38,7 @@ pub fn execute_import_job_with_counts(
     job_id: &domain::JobId,
     options: ImportJobOptions<'_>,
 ) -> Result<(String, JobOutcomeCounts), CommandError> {
-    execute_import_job_internal(
+    execute_and_record(
         conn,
         case_id,
         case_root,
@@ -64,6 +64,7 @@ pub fn execute_import_job_profiled(
     };
     let process_start = source_kernel::runtime_resources::ProcessCounterSnapshot::capture();
     let started = Instant::now();
+    let params = super::outcome::parameters(&import_config);
     let result = execute_import_job_internal(
         conn,
         case_id,
@@ -75,7 +76,12 @@ pub fn execute_import_job_profiled(
     );
     let state = if result.is_ok() {
         State::Completed
-    } else if options.cancel_token.load(Ordering::Relaxed) {
+    } else if result
+        .as_ref()
+        .err()
+        .is_some_and(|error| error.category == "cancelled")
+        || options.cancel_token.load(Ordering::Relaxed)
+    {
         State::Cancelled
     } else {
         State::Failed
@@ -92,6 +98,44 @@ pub fn execute_import_job_profiled(
         state,
         profile::Counters::default(),
     );
+    let result = result.and_then(|value| {
+        profiler
+            .check_output()
+            .map_err(CommandError::from_typed_service_error)?;
+        Ok(value)
+    });
+    super::outcome::record(conn, case_root, case_id, &params, elapsed, &result)?;
+    result
+}
+
+fn execute_and_record(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+    case_root: &std::path::Path,
+    import_config: import_precheck::ImportSourceConfig,
+    job_id: &domain::JobId,
+    options: ImportJobOptions<'_>,
+    profiler: Option<super::ImportProfiler>,
+) -> Result<(String, JobOutcomeCounts), CommandError> {
+    let params = super::outcome::parameters(&import_config);
+    let started = Instant::now();
+    let result = execute_import_job_internal(
+        conn,
+        case_id,
+        case_root,
+        import_config,
+        job_id,
+        options,
+        profiler,
+    );
+    super::outcome::record(
+        conn,
+        case_root,
+        case_id,
+        &params,
+        started.elapsed(),
+        &result,
+    )?;
     result
 }
 
@@ -109,7 +153,6 @@ fn execute_import_job_internal(
     let profiling = profiler.clone();
     let job_repo = JobRepo::new(conn);
     let mut counts = JobOutcomeCounts::default();
-    let import_started = Instant::now();
     let source_conn: Option<rusqlite::Connection> = None;
     let source_path_display = import_config.source_path_display.clone();
 
@@ -130,7 +173,7 @@ fn execute_import_job_internal(
         runtime: None,
     };
 
-    let ds = profile::measure_optional(profiling.as_ref(), Phase::Attach, || {
+    let ds = profile::measure_command(profiling.as_ref(), Phase::Attach, || {
         phases::run_attach_phase(&mut ctx)
     })?;
     let (source_conn, initialize_view) = super::setup::open_source(&ctx, &ds)?;
@@ -144,52 +187,89 @@ fn execute_import_job_internal(
         let _source_fence = publication
             .as_ref()
             .map(|lease| lease.fence_connection(&source_conn));
-        let stats = profile::measure_optional(profiling.as_ref(), Phase::Catalog, || {
+        let stats = profile::measure_command(profiling.as_ref(), Phase::Catalog, || {
             phases::run_enumeration_phase(&mut ctx, &ds)
         })?;
-        super::fjall_projection::mirror_source_records(&ctx, &ds.id.0)?;
+        profile::measure_command(profiling.as_ref(), Phase::CatalogProjection, || {
+            super::fjall_projection::mirror_source_records(&ctx, &ds.id.0)
+        })?;
         let profiler = ctx.profiler.clone();
-        let pipeline_msg = profile::measure_optional(
+        let pipeline_msg = profile::measure_command(
             profiler.as_ref(),
             transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Analysis,
             || phases::run_analyze_phase(&mut ctx, &ds),
         )?;
-        let message = profile::measure_optional(profiling.as_ref(), Phase::Finalize, || {
-            phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)
+        finalize(&mut ctx, &ds, &stats, &pipeline_msg)
+    })();
+
+    let result = (|| {
+        let ready_state = ready_state(ctx.content_kind);
+        let message =
+            profile::measure_command(profiling.as_ref(), Phase::OutcomePersistence, || {
+                super::runtime::persist_outcome(&ctx, &ds, ready_state, result)
+            })?;
+        let started = Instant::now();
+        let message = profile::measure_command(profiling.as_ref(), Phase::PostReady, || {
+            super::post_ready::finish(&mut ctx, &ds, &source_conn, message)
         })?;
-        let projection_digest = super::fjall_projection::mirror_analysis_outputs_from_connections(
+        profile::emit_timed_phase_profile(
+            &ctx,
+            transport::dto::ImportPhaseDto::PostReady,
+            transport::dto::ImportPhaseStateDto::Completed,
+            99,
+            started.elapsed(),
+            "Post-ready analysis complete".into(),
+        )?;
+        ctx.job_repo
+            .update_outcome_counts(
+                ctx.job_id,
+                ctx.counts.warning_count,
+                ctx.counts.skipped_count,
+                ctx.counts.failed_count,
+                ctx.counts.is_partial(),
+            )
+            .map_err(CommandError::from_service_error)?;
+        Ok(message)
+    })();
+    cleanup.start();
+    result.map(|message| (message, counts))
+}
+
+fn finalize(
+    ctx: &mut ImportJobContext<'_>,
+    source: &domain::DataSource,
+    stats: &evidence_access::file_service::EnumerationStats,
+    pipeline_message: &str,
+) -> Result<String, CommandError> {
+    let profiler = ctx.profiler.clone();
+    let started = Instant::now();
+    let result = profile::measure_command(profiler.as_ref(), Phase::Finalize, || {
+        let message = phases::run_finalize_phase(ctx, source, stats, pipeline_message)?;
+        let digest = super::fjall_projection::mirror_analysis_outputs_from_connections(
             ctx.conn,
             ctx.case_root,
             &ctx.case_id.0,
-            &source_conn,
-            &ds.id.0,
+            ctx.source_connection()?,
+            &source.id.0,
         )?;
-        mark_projection_committed(ctx.conn, &job_id.0, &projection_digest)?;
+        mark_projection_committed(ctx.conn, &ctx.job_id.0, &digest)?;
         Ok(message)
-    })();
-
-    let ready_state = ready_state(ctx.content_kind);
-    let message = profile::measure_optional(profiling.as_ref(), Phase::OutcomePersistence, || {
-        super::runtime::persist_outcome(&ctx, &ds, ready_state, result)
-    })?;
-    let message = profile::measure_optional(profiling.as_ref(), Phase::PostReady, || {
-        super::post_ready::finish(&mut ctx, &ds, &source_conn, message)
-    })?;
-    profile::emit_phase_profile(
-        ctx.event_sink(),
-        ctx.job_id,
-        ctx.case_id,
-        Some(&ds.id),
-        99,
-        format!(
-            "Import profile complete: phase=total elapsedMs={} rssMb={}",
-            profile::elapsed_ms(import_started.elapsed()),
-            source_kernel::runtime_resources::current_rss_mb()
-        ),
-        ctx.cancel_requested(),
-    );
-    cleanup.start();
-    Ok((message, counts))
+    });
+    profile::emit_timed_phase_profile(
+        ctx,
+        transport::dto::ImportPhaseDto::Finalize,
+        if result.is_ok() {
+            transport::dto::ImportPhaseStateDto::Completed
+        } else if ctx.cancel_requested() {
+            transport::dto::ImportPhaseStateDto::Cancelled
+        } else {
+            transport::dto::ImportPhaseStateDto::Failed
+        },
+        95,
+        started.elapsed(),
+        "Import finalization finished".into(),
+    )?;
+    result
 }
 
 fn ready_state(kind: crate::import_pipeline::context::ImportContentKind) -> &'static str {
@@ -249,7 +329,7 @@ fn reject_cancelled_after_register(
         "Cancellation acknowledged: phase=attach",
         true,
     );
-    Err(CommandError::internal("Import cancelled by user"))
+    Err(CommandError::cancelled("Import cancelled by user"))
 }
 
 pub(super) fn persist_import_outcome(

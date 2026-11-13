@@ -365,11 +365,12 @@ fn ensure_session(runtime: &mut SourceRuntime) -> Result<(), CephFsObjectReadErr
     if runtime.session.is_some() {
         return Ok(());
     }
-    let connection =
-        persistence_sqlite::open_existing_source_read_only(&runtime.binding.source_db_path)
-            .map_err(|_| CephFsObjectReadError::SourceDbUnavailable {
-                inventory_id: runtime.binding.inventory_id.clone(),
-            })?;
+    let connection = persistence_source::control::opening::open_source_database_read_only(
+        &runtime.binding.source_db_path,
+    )
+    .map_err(|_| CephFsObjectReadError::SourceDbUnavailable {
+        inventory_id: runtime.binding.inventory_id.clone(),
+    })?;
     runtime.session = Some(
         CephBluestoreReadPlanSession::new(connection, &runtime.binding.inventory_id).map_err(
             |_| CephFsObjectReadError::SourceDbUnavailable {

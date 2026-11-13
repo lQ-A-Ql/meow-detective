@@ -27,6 +27,7 @@ fn cancellation_drops_the_unpublished_generation_without_changing_published_outp
         &replacements,
         &AtomicBool::new(false),
         |_| {},
+        |_| {},
     )
     .expect("stage browser generation");
 

@@ -2,6 +2,7 @@ mod android;
 mod classification;
 mod evidence;
 mod extraction;
+mod generation_gc;
 mod queries;
 mod runtime;
 mod source;

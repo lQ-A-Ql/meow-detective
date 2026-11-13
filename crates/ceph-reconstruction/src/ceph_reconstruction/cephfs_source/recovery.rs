@@ -84,7 +84,7 @@ fn validate_published_database(
     let path =
         source_kernel::source_db::registered_source_db_path(case_conn, case_root, &source.id)?;
     source_kernel::source_db::verify_finalized_source_db(&path, &source.id)?;
-    let connection = persistence_sqlite::open_existing_source_read_only(&path)?;
+    let connection = persistence_source::control::opening::open_source_database_read_only(&path)?;
     let Some(manifest) = CephFsNamespaceRepo::new(&connection)
         .find_manifest(&lineage.lineage.filesystem_identity, &source.id.0)?
     else {

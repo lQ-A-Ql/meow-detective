@@ -128,11 +128,13 @@ pub fn find_rbd_header_from_case_storage(
             }
         }
     }
-    let connection = persistence_sqlite::open_existing_source_read_only(&replica.source_db_path)
-        .map_err(|error| RbdReconstructionError::SourceDb {
-            inventory_id: replica.inventory_id.clone(),
-            detail: source_db_error_detail(&error),
-        })?;
+    let connection = persistence_source::control::opening::open_source_database_read_only(
+        &replica.source_db_path,
+    )
+    .map_err(|error| RbdReconstructionError::SourceDb {
+        inventory_id: replica.inventory_id.clone(),
+        detail: source_db_error_detail(&error),
+    })?;
     CephBluestoreOmapRepo::new(&connection)
         .find_rbd_header(&replica.inventory_id, image_id)
         .map_err(|error| RbdReconstructionError::SourceDb {
@@ -219,7 +221,7 @@ fn discover_rbd_descriptors(
 ) -> Result<Vec<RbdImageDescriptor>, RbdReconstructionError> {
     let mut images = BTreeMap::new();
     for replica in replicas {
-        let connection = persistence_sqlite::open_existing_source_read_only(
+        let connection = persistence_source::control::opening::open_source_database_read_only(
             &replica.source_db_path,
         )
         .map_err(|error| RbdReconstructionError::SourceDb {
@@ -253,7 +255,7 @@ fn discover_rbd_descriptors_with_case_storage(
 ) -> Result<Vec<RbdImageDescriptor>, RbdReconstructionError> {
     let mut images = BTreeMap::new();
     for replica in replicas {
-        let connection = persistence_sqlite::open_existing_source_read_only(
+        let connection = persistence_source::control::opening::open_source_database_read_only(
             &replica.source_db_path,
         )
         .map_err(|error| RbdReconstructionError::SourceDb {

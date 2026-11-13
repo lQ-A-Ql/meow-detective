@@ -10,6 +10,8 @@ use persistence_sqlite::repositories::storage_control_repo::{
 use rusqlite::Connection;
 use std::path::Path;
 
+mod readiness;
+
 struct OperationStorage {
     layout: SourceBuildLayout,
     handle: Option<ReadOnlySourceStorageHandle>,
@@ -74,11 +76,11 @@ fn scan_operation(
         && item.disposition == RecoveryDisposition::Ready
         && operation.state != StorageOperationState::Published
     {
-        StorageControlRepo::new(connection).update_operation_state(
+        readiness::finish_import_recovery(
+            connection,
+            case_root,
+            &source_id,
             &operation.operation_id,
-            StorageOperationState::Published,
-            &chrono::Utc::now().to_rfc3339(),
-            None,
         )?;
     }
     Ok(item)

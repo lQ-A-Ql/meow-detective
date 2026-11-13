@@ -5,7 +5,7 @@ use crate::analysis_service::capability::AnalysisCapability;
 use domain::DataSourcePlatform;
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
-use transport::dto::AnalysisExtractionPhaseDto;
+use transport::dto::{AnalysisExtractionPhaseDto, AnalysisWorkProgressDto, AnalysisWorkStageDto};
 
 const EVENT_INTERVAL: Duration = Duration::from_millis(100);
 const LOG_INTERVAL: Duration = Duration::from_secs(1);
@@ -36,6 +36,7 @@ pub(crate) struct ExtractionProgressUpdate {
     pub(crate) timeline_event_count: u64,
     pub(crate) current_path: Option<String>,
     pub(crate) detail: String,
+    pub(crate) work: Option<AnalysisWorkProgressDto>,
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +123,7 @@ impl SectionProgress {
             timeline_event_count: self.timeline_event_count,
             current_path: self.current_path.clone(),
             detail,
+            work: None,
         }
     }
 }
@@ -139,6 +141,7 @@ pub(crate) struct ExtractionProgressReporter<'a> {
     callback: &'a mut dyn FnMut(ExtractionProgressUpdate),
     last_event: Option<Instant>,
     last_log: Option<Instant>,
+    work_metrics: Vec<AnalysisWorkProgressDto>,
 }
 
 impl<'a> ExtractionProgressReporter<'a> {
@@ -162,6 +165,7 @@ impl<'a> ExtractionProgressReporter<'a> {
             callback,
             last_event: None,
             last_log: None,
+            work_metrics: Vec::new(),
         }
     }
 
@@ -175,6 +179,58 @@ impl<'a> ExtractionProgressReporter<'a> {
             sections = self.sections.len(),
             "Analysis extraction discovery started"
         );
+    }
+
+    pub(crate) fn report_work(
+        &mut self,
+        stage: AnalysisWorkStageDto,
+        started: Instant,
+        records: u64,
+        bytes: u64,
+        complete: bool,
+    ) {
+        if !complete
+            && self
+                .last_event
+                .is_some_and(|last| last.elapsed() < EVENT_INTERVAL)
+        {
+            return;
+        }
+        let work = AnalysisWorkProgressDto {
+            stage,
+            elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            records,
+            bytes,
+            complete,
+        };
+        if complete {
+            self.work_metrics.push(work.clone());
+        }
+        let phase = match stage {
+            AnalysisWorkStageDto::Discovery => AnalysisExtractionPhaseDto::Discovering,
+            AnalysisWorkStageDto::Processing => AnalysisExtractionPhaseDto::Extracting,
+            AnalysisWorkStageDto::CountRebuild
+            | AnalysisWorkStageDto::GenerationSeal
+            | AnalysisWorkStageDto::Publication => AnalysisExtractionPhaseDto::Persisting,
+            _ => AnalysisExtractionPhaseDto::Preparing,
+        };
+        if let Some(section) = self.sections.values().next() {
+            let mut update = section.update(
+                phase,
+                if phase == AnalysisExtractionPhaseDto::Persisting {
+                    PERSISTING_DETAIL.to_owned()
+                } else {
+                    PREPARING_DETAIL.to_owned()
+                },
+            );
+            update.work = Some(work);
+            (self.callback)(update);
+            self.last_event = Some(Instant::now());
+        }
+    }
+
+    pub(crate) fn take_work_metrics(&mut self) -> Vec<AnalysisWorkProgressDto> {
+        std::mem::take(&mut self.work_metrics)
     }
 
     pub(crate) fn register_candidate(
@@ -222,51 +278,6 @@ impl<'a> ExtractionProgressReporter<'a> {
             waited_ms = waited.as_millis(),
             "Analysis extraction is waiting for the serial data-source slot"
         );
-    }
-
-    pub(crate) fn report_copy_progress(&mut self, records: u64, bytes: u64, durable: bool) {
-        if !durable
-            && self
-                .last_event
-                .is_some_and(|last| last.elapsed() < EVENT_INTERVAL)
-        {
-            return;
-        }
-        tracing::debug!(
-            records_copied = records,
-            bytes_copied = bytes,
-            "Analysis source copy progress"
-        );
-        self.emit_all(AnalysisExtractionPhaseDto::Preparing, PREPARING_DETAIL);
-    }
-
-    pub(crate) fn report_count_progress(&mut self, records: u64) {
-        if self
-            .last_event
-            .is_some_and(|last| last.elapsed() < EVENT_INTERVAL)
-        {
-            return;
-        }
-        tracing::debug!(
-            processed_records = records,
-            "Analysis count rebuild progress"
-        );
-        self.emit_all(AnalysisExtractionPhaseDto::Persisting, PERSISTING_DETAIL);
-    }
-
-    pub(crate) fn report_seal_progress(&mut self, records: u64, bytes: u64) {
-        if self
-            .last_event
-            .is_some_and(|last| last.elapsed() < EVENT_INTERVAL)
-        {
-            return;
-        }
-        tracing::debug!(
-            processed_records = records,
-            bytes_read = bytes,
-            "Analysis source verification progress"
-        );
-        self.emit_all(AnalysisExtractionPhaseDto::Persisting, PERSISTING_DETAIL);
     }
 
     pub(crate) fn begin_extraction(&mut self) {

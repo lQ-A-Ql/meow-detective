@@ -1,11 +1,15 @@
 //! Source control-plane storage (source.db): path layout, identity, path
 //! safety, and opening.
 
+pub mod connections;
+pub mod generation;
 pub mod identity;
+pub mod import_state;
 pub mod opening;
 pub mod path_safety;
 pub mod paths;
 
+pub use generation::{bound_source_generation_root, current_source_generation_root};
 pub use identity::{encode_source_scoped_id, parse_source_scoped_id, GlobalFileId};
 pub use opening::{
     checkpoint_source_db, open_registered_source_db, open_registered_source_db_read_only,

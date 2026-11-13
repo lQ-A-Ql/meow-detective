@@ -5,6 +5,32 @@ use persistence_sqlite::repositories::storage_control_repo::{
 use std::path::{Path, PathBuf};
 use transport::CommandError;
 
+pub(super) fn publication_receipt(
+    connection: &rusqlite::Connection,
+    source_id: &str,
+) -> Result<String, CommandError> {
+    let source = persistence_source::detail::require_source_store(connection)
+        .map_err(CommandError::from_service_error)?;
+    let manifest = persistence_source::fjall::read_source_generation_manifest(&source, source_id)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let mut digest = [0u8; 32];
+    hex::decode_to_slice(&manifest.projection_batch_digest, &mut digest)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let receipt = source
+        .database()
+        .batch_receipt_state_for_digest(&digest)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    if !matches!(
+        receipt,
+        persistence_source::fjall::BatchReceiptState::Present { .. }
+    ) {
+        return Err(CommandError::internal(
+            "published source generation batch receipt is missing or corrupt",
+        ));
+    }
+    Ok(manifest.projection_batch_digest)
+}
+
 pub(super) fn publish(
     layout: &SourceBuildLayout,
     root: &Path,

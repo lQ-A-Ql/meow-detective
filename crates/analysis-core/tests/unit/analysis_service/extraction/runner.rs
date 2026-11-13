@@ -130,6 +130,7 @@ fn persist_outcome_for_test(
         &replacements,
         &AtomicBool::new(false),
         |_| {},
+        |_| {},
     )?;
     let observation = output.persist_outcome(outcome)?;
     let mut state = ExtractionState::new(&[capability]);
@@ -165,6 +166,7 @@ fn persist_plugin_outcome_for_test(
         &source_id,
         &replacements,
         &AtomicBool::new(false),
+        |_| {},
         |_| {},
     )?;
     let observation = output.persist_outcome(outcome)?;
@@ -341,6 +343,14 @@ fn tamper_native_artifact(connection: &Connection, artifact_id: &str) {
 }
 
 fn inject_corrupt_timeline(connection: &Connection) {
+    let mut corrupt = native_events(connection)
+        .into_iter()
+        .next()
+        .expect("fixture has an existing event");
+    corrupt.id = TimelineEventId("corrupt-event".into());
+    TimelineRepo::new(connection)
+        .insert_batch_with_case(&[corrupt], "case-1")
+        .expect("insert indexed event in the replacement scope");
     let store = persistence_source::detail::open_store_for_write(connection)
         .expect("open source store")
         .expect("configured source store");
@@ -352,36 +362,11 @@ fn inject_corrupt_timeline(connection: &Connection) {
         ],
     )
     .expect("encode corrupt event key");
-    let timestamp = native_events(connection)
-        .into_iter()
-        .next()
-        .expect("fixture has an existing event")
-        .timestamp;
-    let sort_value = (timestamp.timestamp_micros() as u64) ^ (1_u64 << 63);
-    let source_key = persistence_source::fjall::encode_key(
-        "timeline.source",
-        &[
-            persistence_source::fjall::KeyPart::Text("source-linux".to_string()),
-            persistence_source::fjall::KeyPart::InverseU64(sort_value),
-            persistence_source::fjall::KeyPart::Text("corrupt-event".to_string()),
-        ],
-    )
-    .expect("encode corrupt event source index");
     store
-        .database()
-        .write_batch(
-            &[
-                persistence_source::fjall::WriteAction::Put {
-                    keyspace: persistence_source::fjall::KeyspaceName::TimelineRecords,
-                    key: record_key.clone(),
-                    value: b"corrupt".to_vec(),
-                },
-                persistence_source::fjall::WriteAction::Put {
-                    keyspace: persistence_source::fjall::KeyspaceName::TimelineIndexes,
-                    key: source_key,
-                    value: record_key,
-                },
-            ],
+        .write_raw(
+            persistence_source::fjall::KeyspaceName::TimelineRecords,
+            record_key,
+            b"corrupt".to_vec(),
             persistence_source::fjall::PersistMode::SyncAll,
         )
         .expect("inject corrupt timeline record");

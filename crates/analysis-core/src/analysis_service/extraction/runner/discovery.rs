@@ -31,13 +31,24 @@ impl CheckpointScans {
 
 pub(super) fn load_checkpoint_scans(
     conn: &Connection,
+    progress: &mut ExtractionProgressReporter<'_>,
 ) -> Result<CheckpointScans, AnalysisServiceError> {
-    Ok(CheckpointScans {
+    let started = Instant::now();
+    let scans = CheckpointScans {
         clean: existing_clean_scan_keys(conn)?,
         diagnostic: existing_diagnostic_scan_keys(conn)?,
         complete: existing_complete_scan_keys(conn)?,
         storage_available: AnalysisScanRepo::new(conn).storage_available()?,
-    })
+    };
+    let records = scans.clean.len() + scans.diagnostic.len() + scans.complete.len();
+    progress.report_work(
+        AnalysisWorkStageDto::CheckpointValidation,
+        started,
+        records as u64,
+        0,
+        true,
+    );
+    Ok(scans)
 }
 
 pub(super) fn guarded_candidate_reader<F>(
@@ -60,13 +71,25 @@ pub(super) fn discover_run_candidates(
     selected: &[AnalysisCapability],
     plugin_extractors: &[&dyn ArtifactExtractor],
     cancel_token: &AtomicBool,
-) -> Result<(Vec<EvidenceCandidate>, Option<LinuxCatalogMetadata>), AnalysisServiceError> {
+    progress: &mut ExtractionProgressReporter<'_>,
+) -> Result<
+    (
+        Vec<EvidenceCandidate>,
+        Option<LinuxCatalogMetadata>,
+        PreparationCatalog,
+    ),
+    AnalysisServiceError,
+> {
     let categories = discovery_categories(selected);
-    let (mut candidates, kernel) =
-        evidence_candidates_for_categories_with_cancel_and_linux_catalog(
+    let started = Instant::now();
+    let (mut candidates, kernel, preparation_catalog) =
+        evidence_candidates_for_categories_with_preparation(
             conn,
             &categories,
             cancel_token,
+            |records| {
+                progress.report_work(AnalysisWorkStageDto::Discovery, started, records, 0, false);
+            },
         )?;
     candidates.append(&mut discover_plugin_candidates(
         conn,
@@ -76,7 +99,14 @@ pub(super) fn discover_run_candidates(
     order_candidates_for_extraction(conn, platform, &mut candidates);
     let linux_catalog = (platform == DataSourcePlatform::Linux)
         .then(|| LinuxCatalogMetadata::from_discovery(&candidates, kernel));
-    Ok((candidates, linux_catalog))
+    progress.report_work(
+        AnalysisWorkStageDto::Discovery,
+        started,
+        preparation_catalog.scanned_records(),
+        0,
+        true,
+    );
+    Ok((candidates, linux_catalog, preparation_catalog))
 }
 
 pub(super) fn begin_streamed_output(
@@ -90,15 +120,45 @@ pub(super) fn begin_streamed_output(
 ) -> Result<native_output::StreamingGeneration, AnalysisServiceError> {
     let output_source_id = resolve_output_data_source_id(conn)?;
     let replacements = candidate_replacements(candidates, selected, plugin_extractors, checkpoints);
-    native_output::begin_streaming(
+    let progress = std::cell::RefCell::new(progress);
+    let started = Instant::now();
+    let deleting = std::cell::Cell::new(None);
+    let deleted = std::cell::Cell::new(0);
+    let output = native_output::begin_streaming(
         conn,
         &output_source_id,
         &replacements,
         cancel_token,
         |copy| {
-            progress.report_copy_progress(copy.records_copied, copy.bytes_copied, copy.durable);
+            progress.borrow_mut().report_work(
+                AnalysisWorkStageDto::GenerationClone,
+                started,
+                copy.records_copied,
+                copy.bytes_copied,
+                copy.durable,
+            );
         },
-    )
+        |records| {
+            let started = deleting.get().unwrap_or_else(Instant::now);
+            deleting.set(Some(started));
+            deleted.set(records);
+            progress.borrow_mut().report_work(
+                AnalysisWorkStageDto::ReplacementDelete,
+                started,
+                records,
+                0,
+                false,
+            );
+        },
+    )?;
+    progress.borrow_mut().report_work(
+        AnalysisWorkStageDto::ReplacementDelete,
+        deleting.get().unwrap_or_else(Instant::now),
+        deleted.get(),
+        0,
+        true,
+    );
+    Ok(output)
 }
 
 fn candidate_replacements(

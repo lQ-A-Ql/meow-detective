@@ -51,9 +51,7 @@ pub fn open_fresh_source_build_db(
             data_source_id.0, attempt_id
         )));
     }
-    let connection = persistence_sqlite::open_or_create_source(&build_path)?;
-    crate::detail::configure_source_identity(&connection, &data_source_id.0)?;
-    crate::detail::configure_source_fjall(&connection, &build_path)?;
+    let connection = crate::control::opening::open_source_database(&build_path, &data_source_id.0)?;
     connection.pragma_update(
         None,
         "wal_autocheckpoint",
@@ -202,7 +200,7 @@ fn sqlite_file_set_has_sidecars(path: &Path) -> bool {
 }
 
 pub fn verify_finalized_source_db(path: &Path, data_source_id: &DataSourceId) -> DbResult<()> {
-    let connection = persistence_sqlite::open_existing_source_read_only(path)?;
+    let connection = crate::control::opening::open_source_database_read_only(path)?;
     let marker = connection
         .query_row(
             "SELECT value FROM source_meta WHERE key = ?1",

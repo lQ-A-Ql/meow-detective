@@ -156,7 +156,9 @@ fn build_overlay(
     let mut groups = BTreeMap::<(String, String), Vec<EntityMember>>::new();
     let mut entity_count = 0usize;
     for source in &manifest.sources {
-        let connection = persistence_sqlite::open_existing_source_read_only(&source.database_path)?;
+        let connection = persistence_source::control::opening::open_source_database_read_only(
+            &source.database_path,
+        )?;
         let remaining = MAX_ENTITY_NODES.saturating_sub(entity_count);
         let nodes = GraphRepo::new(&connection).list_nodes_by_type_for_case_bounded(
             case_id,

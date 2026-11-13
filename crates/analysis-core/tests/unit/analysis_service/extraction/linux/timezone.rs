@@ -51,6 +51,17 @@ fn bytes_reader(
     move |_, _| Ok(CandidateSource::Bytes(content.as_bytes().to_vec()))
 }
 
+fn preparation_catalog(conn: &rusqlite::Connection) -> PreparationCatalog {
+    crate::analysis_service::candidates::evidence_candidates_for_categories_with_preparation(
+        conn,
+        &["LinuxArtifacts"],
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap()
+    .2
+}
+
 #[test]
 fn localtime_symlink_target_yields_zone_name() {
     assert_eq!(
@@ -91,7 +102,11 @@ fn sysconfig_clock_yields_zone_name() {
 fn missing_timezone_sources_fall_back_to_utc_with_warning() {
     let conn = conn_with_files(&["/var/log/syslog"]);
     let mut reader = bytes_reader("");
-    let (context, warnings) = resolve_linux_log_time(&conn, &AtomicBool::new(false), &mut reader);
+    let (context, warnings) = resolve_linux_log_time(
+        &preparation_catalog(&conn),
+        &AtomicBool::new(false),
+        &mut reader,
+    );
     assert_eq!(context.tz_label(), "utc");
     assert!(warnings
         .iter()
@@ -108,7 +123,11 @@ fn missing_timezone_sources_fall_back_to_utc_with_warning() {
 fn resolves_zone_from_localtime_symlink_text() {
     let conn = conn_with_files(&["/etc/localtime"]);
     let mut reader = bytes_reader("../usr/share/zoneinfo/Asia/Shanghai\n");
-    let (context, warnings) = resolve_linux_log_time(&conn, &AtomicBool::new(false), &mut reader);
+    let (context, warnings) = resolve_linux_log_time(
+        &preparation_catalog(&conn),
+        &AtomicBool::new(false),
+        &mut reader,
+    );
     assert_eq!(context.tz_label(), "Asia/Shanghai");
     assert!(!warnings
         .iter()
@@ -129,7 +148,11 @@ fn resolves_zone_from_localtime_symlink_text() {
 fn resolves_zone_from_etc_timezone_when_localtime_absent() {
     let conn = conn_with_files(&["/etc/timezone"]);
     let mut reader = bytes_reader("Asia/Shanghai\n");
-    let (context, _) = resolve_linux_log_time(&conn, &AtomicBool::new(false), &mut reader);
+    let (context, _) = resolve_linux_log_time(
+        &preparation_catalog(&conn),
+        &AtomicBool::new(false),
+        &mut reader,
+    );
     assert_eq!(context.tz_label(), "Asia/Shanghai");
 }
 
@@ -137,7 +160,11 @@ fn resolves_zone_from_etc_timezone_when_localtime_absent() {
 fn resolves_zone_from_sysconfig_clock_when_others_absent() {
     let conn = conn_with_files(&["/etc/sysconfig/clock"]);
     let mut reader = bytes_reader("ZONE=\"Asia/Shanghai\"\n");
-    let (context, _) = resolve_linux_log_time(&conn, &AtomicBool::new(false), &mut reader);
+    let (context, _) = resolve_linux_log_time(
+        &preparation_catalog(&conn),
+        &AtomicBool::new(false),
+        &mut reader,
+    );
     assert_eq!(context.tz_label(), "Asia/Shanghai");
 }
 
@@ -152,7 +179,11 @@ fn unknown_zone_falls_through_to_next_source() {
         };
         Ok(CandidateSource::Bytes(text.as_bytes().to_vec()))
     };
-    let (context, warnings) = resolve_linux_log_time(&conn, &AtomicBool::new(false), &mut reader);
+    let (context, warnings) = resolve_linux_log_time(
+        &preparation_catalog(&conn),
+        &AtomicBool::new(false),
+        &mut reader,
+    );
     assert_eq!(context.tz_label(), "Asia/Shanghai");
     assert!(warnings
         .iter()

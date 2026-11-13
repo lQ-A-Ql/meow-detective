@@ -347,14 +347,16 @@ fn ensure_replica_read_plan_session(
         return Ok(None);
     }
     let started = Instant::now();
-    let connection = persistence_sqlite::open_existing_source_read_only(&replica.source_db_path)
-        .map_err(|error| RadosProviderError::SourceDb {
-            inventory_id: replica.inventory_id.clone(),
-            detail: format!(
-                "source database could not be opened: {}",
-                source_db_error_detail(&error)
-            ),
-        })?;
+    let connection = persistence_source::control::opening::open_source_database_read_only(
+        &replica.source_db_path,
+    )
+    .map_err(|error| RadosProviderError::SourceDb {
+        inventory_id: replica.inventory_id.clone(),
+        detail: format!(
+            "source database could not be opened: {}",
+            source_db_error_detail(&error)
+        ),
+    })?;
     runtime.read_plan_session = Some(
         CephBluestoreReadPlanSession::new(connection, &replica.inventory_id).map_err(|error| {
             RadosProviderError::SourceDb {

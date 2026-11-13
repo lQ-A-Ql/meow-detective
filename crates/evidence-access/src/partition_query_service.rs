@@ -65,11 +65,8 @@ impl<'a> PartitionQueryRepo<'a> {
         partition_index: u32,
         filesystem: &str,
     ) -> DbResult<bool> {
-        let case_root = case_root_from_connection(self.connection)?.ok_or_else(|| {
-            DbError::System("source database path does not identify a case root".to_owned())
-        })?;
-        let source = crate::source_db::open_registered_fjall_source_read_write(
-            &case_root,
+        let source = crate::source_db::open_fjall_source_for_build(
+            self.connection,
             &DataSourceId(data_source_id.to_owned()),
         )
         .map_err(storage_error)?;

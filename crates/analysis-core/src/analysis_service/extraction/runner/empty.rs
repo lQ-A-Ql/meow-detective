@@ -33,6 +33,7 @@ pub(super) fn complete_empty_run(
         discovery_elapsed_ms: super::elapsed_millis(discovery_started),
         processing_elapsed_ms: 0,
         persistence_elapsed_ms: 0,
+        work_metrics: progress_reporter.take_work_metrics(),
         source_read_count: 0,
         source_read_elapsed_ms: 0,
         filesystem_read_metrics: evidence_core::FileSystemReadMetrics::default(),

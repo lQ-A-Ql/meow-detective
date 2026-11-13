@@ -53,6 +53,15 @@ impl<'a> ImportJobContext<'a> {
         self.job_repo
             .update_progress(self.job_id, progress, detail)
             .map_err(transport::CommandError::from_service_error)?;
+        if let Some(profiler) = &self.profiler {
+            profiler
+                .record_progress(&serde_json::json!({
+                    "jobId": self.job_id.0,
+                    "percent": progress,
+                    "detail": detail,
+                }))
+                .map_err(transport::CommandError::from_typed_service_error)?;
+        }
         emit::emit_job_progress(self.event_sink(), &self.job_id.0, progress, detail);
         Ok(())
     }

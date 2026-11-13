@@ -1,11 +1,13 @@
 //! Compile multi-file systemd evidence before single-file checkpoint decisions.
 use super::{reader::read_candidate_bytes_with_progress, CandidateSource, ExtractionOutcome};
 use crate::analysis_service::{
-    cancellation::ensure_not_cancelled, candidates::EvidenceCandidate, error::AnalysisServiceError,
+    cancellation::ensure_not_cancelled,
+    candidates::{EvidenceCandidate, PreparationCatalog},
+    error::AnalysisServiceError,
 };
 use artifacts_linux::{LinuxArtifactError, LinuxServiceUnit, SystemdUnitCatalog, SystemdUnitFile};
 use domain::{DataSourceId, FileEntryId};
-use persistence_source::repositories::systemd_unit_repo::{SystemdCatalogRow, SystemdUnitRepo};
+use persistence_source::repositories::systemd_unit_repo::SystemdCatalogRow;
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -90,7 +92,7 @@ impl SystemdPreload {
     }
 }
 pub(super) fn prepare(
-    conn: &rusqlite::Connection,
+    catalog: &PreparationCatalog,
     candidates: &[EvidenceCandidate],
     cancel: &AtomicBool,
     read: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
@@ -105,28 +107,38 @@ pub(super) fn prepare(
         .map(|candidate| candidate.data_source_id.clone())
         .collect::<BTreeSet<_>>();
     let mut groups = BTreeMap::<Scope, BTreeMap<String, SystemdCatalogRow>>::new();
-    for source in selected {
-        let mut after = String::new();
-        loop {
-            ensure_not_cancelled(cancel)?;
-            let rows = SystemdUnitRepo::new(conn).catalog_page(&source, &after)?;
-            if rows.is_empty() {
-                break;
-            }
-            for row in rows {
-                after = row.file_id.clone();
-                let path = unit_path(&row);
-                let group = groups
-                    .entry((source.clone(), row.partition_index))
-                    .or_default();
-                if group.len() >= 32768 {
-                    return Err(AnalysisServiceError::Unsupported(
-                        "systemd catalog exceeds 32768 entries per source partition".into(),
-                    ));
-                }
-                group.insert(path, row);
-            }
+    for record in catalog.records() {
+        ensure_not_cancelled(cancel)?;
+        let path = record.path.replace('\\', "/").to_ascii_lowercase();
+        if !selected.contains(&record.data_source_id)
+            || record.deleted
+            || !(path.contains("/systemd/")
+                || matches!(
+                    record.name.to_ascii_lowercase().as_str(),
+                    "lib" | "usr" | "local" | "etc" | "run" | "systemd"
+                ))
+        {
+            continue;
         }
+        let row = SystemdCatalogRow {
+            file_id: record.id.clone(),
+            source_id: record.data_source_id.clone(),
+            partition_index: record.partition_index,
+            path: record.path.clone(),
+            name: record.name.clone(),
+            size: record.size.unwrap_or_default(),
+            unix_mode: record.unix_mode,
+            encrypted: record.encrypted.unwrap_or(true),
+        };
+        let group = groups
+            .entry((row.source_id.clone(), row.partition_index))
+            .or_default();
+        if group.len() >= 32768 {
+            return Err(AnalysisServiceError::Unsupported(
+                "systemd catalog exceeds 32768 entries per source partition".into(),
+            ));
+        }
+        group.insert(unit_path(&row), row);
     }
     let mut preload = SystemdPreload::default();
     for (_, rows) in groups {

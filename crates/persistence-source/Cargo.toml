@@ -20,6 +20,9 @@ persistence-fjall.workspace = true
 artifact-storage.workspace = true
 rusqlite.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true
 testing.workspace = true

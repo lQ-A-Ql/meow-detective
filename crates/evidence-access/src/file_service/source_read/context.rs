@@ -138,19 +138,29 @@ impl<'a> SourceReadContext<'a> {
         }
         let partition_candidates =
             self.partition_candidates_for(hint, partition_index, &source_kind, &source_path)?;
-        let [selected] = partition_candidates.as_slice() else {
-            return Err(FileServiceError::other(format!(
-                "Source-read descriptor requires exactly one partition candidate, found {}",
-                partition_candidates.len()
-            )));
+        let selected = match partition_candidates.as_slice() {
+            [] if matches!(
+                source_kind.as_str(),
+                "logical_directory" | "logical_archive"
+            ) =>
+            {
+                None
+            }
+            [selected] => Some(selected),
+            _ => {
+                return Err(FileServiceError::other(format!(
+                    "Source-read descriptor requires exactly one partition candidate, found {}",
+                    partition_candidates.len()
+                )));
+            }
         };
         Ok(PreviewDescriptor {
             case_id: self.case_id.0.clone(),
             file_id: hint.file_id.0.clone(),
             source_kind,
             source_path,
-            partition_index: Some(selected.partition_index),
-            filesystem_kind: Some(selected.filesystem_kind.clone()),
+            partition_index: selected.map(|candidate| candidate.partition_index),
+            filesystem_kind: selected.map(|candidate| candidate.filesystem_kind.clone()),
             path: hint.path.clone(),
             mime: None,
             size: hint.size,

@@ -12,6 +12,7 @@ pub enum ImportBenchmarkPhaseDto {
     WorkspaceAdmission,
     BulkLoadBegin,
     Catalog,
+    CatalogProjection,
     Finalize,
     OutcomePersistence,
     PostReady,

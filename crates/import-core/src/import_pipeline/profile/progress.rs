@@ -46,18 +46,57 @@ pub(crate) fn emit_import_profile_progress(
         detail,
         cancel_requested,
     );
-    crate::import_pipeline::emit::emit_import_phase_progress(event_sink, &phase_progress);
+    emit_progress(event_sink, &phase_progress);
+}
+
+pub(crate) fn emit_timed_phase_profile(
+    ctx: &crate::import_pipeline::context::ImportJobContext<'_>,
+    phase: ImportPhaseDto,
+    state: ImportPhaseStateDto,
+    percent: u32,
+    elapsed: std::time::Duration,
+    detail: String,
+) -> Result<(), transport::CommandError> {
+    let mut progress = import_phase_progress_from_profile(
+        ctx.job_id,
+        ctx.case_id,
+        ctx.ds.map(|source| &source.id),
+        percent,
+        &detail,
+        ctx.cancel_requested(),
+    );
+    progress.phase = phase;
+    progress.state = state;
+    progress.metrics.elapsed_ms = Some(elapsed.as_millis().min(u64::MAX as u128) as u64);
+    if let Some(profiler) = &ctx.profiler {
+        profiler
+            .record_progress(&progress)
+            .map_err(transport::CommandError::from_typed_service_error)?;
+    }
+    emit_progress(ctx.event_sink(), &progress);
+    Ok(())
+}
+
+fn emit_progress(
+    event_sink: Option<&dyn ImportEventSink>,
+    phase_progress: &ImportPhaseProgressDto,
+) {
+    crate::import_pipeline::emit::emit_import_phase_progress(event_sink, phase_progress);
     for result in &phase_progress.partial_results {
         crate::import_pipeline::emit::emit_import_partial_result(event_sink, result);
     }
-    for status in cache_statuses_from_profile(data_source_id, detail) {
+    let source = phase_progress
+        .data_source_id
+        .clone()
+        .map(domain::DataSourceId);
+    for status in cache_statuses_from_profile(source.as_ref(), &phase_progress.detail) {
         crate::import_pipeline::emit::emit_cache_index_status(event_sink, &status);
     }
     crate::import_pipeline::emit::emit_job_progress(
         event_sink,
-        &job_id.0,
-        progress.min(99),
-        detail,
+        &phase_progress.job_id,
+        phase_progress.percent,
+        &phase_progress.detail,
     );
 }
 
@@ -92,13 +131,14 @@ fn import_phase_from_profile(detail: &str, progress: u32) -> ImportPhaseDto {
         Some("enum-merge") => ImportPhaseDto::MergeEnumeration,
         Some("analysis-start") | Some("analysis") => ImportPhaseDto::Analyze,
         Some("analysis-admission") => ImportPhaseDto::Analyze,
-        Some("analysis-merge") => ImportPhaseDto::MergeAnalysis,
+        Some("analysis-merge") | Some("analysis-summary") => ImportPhaseDto::MergeAnalysis,
         Some("search-index") => ImportPhaseDto::MergeAnalysis,
-        Some("timeline")
-        | Some("checkpoint")
-        | Some("post-import")
-        | Some("post-import-skip")
-        | Some("total") => ImportPhaseDto::Finalize,
+        Some("source-index") => ImportPhaseDto::BuildIndexes,
+        Some("timeline") => ImportPhaseDto::Timeline,
+        Some("checkpoint") => ImportPhaseDto::Checkpoint,
+        Some("post-import") => ImportPhaseDto::MergeAnalysis,
+        Some("post-ready") => ImportPhaseDto::PostReady,
+        Some("finalize") | Some("post-import-skip") | Some("total") => ImportPhaseDto::Finalize,
         _ if progress < 25 => ImportPhaseDto::Attach,
         _ if progress < 70 => ImportPhaseDto::Enumerate,
         _ if progress < 84 => ImportPhaseDto::Analyze,
@@ -136,7 +176,7 @@ fn import_phase_metrics_from_profile(detail: &str) -> ImportPhaseMetricsDto {
         .or_else(|| profile_u64(detail, "dataMb").map(|mb| mb.saturating_mul(1024 * 1024)))
         .unwrap_or(0);
     ImportPhaseMetricsDto {
-        elapsed_ms: profile_u64(detail, "elapsedMs").unwrap_or(0),
+        elapsed_ms: profile_u64(detail, "elapsedMs"),
         rss_mb: profile_u64(detail, "rssMb").unwrap_or(0),
         workers: profile_u64(detail, "workers")
             .or_else(|| profile_nonzero_u64(detail, "activeWorkers"))

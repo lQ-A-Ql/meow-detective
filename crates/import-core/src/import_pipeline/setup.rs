@@ -1,5 +1,5 @@
 //! Set up source storage and resources without changing their ownership scope.
-use super::{context::ImportJobContext, profile::measure_optional};
+use super::{context::ImportJobContext, profile::measure_command};
 use chrono::Utc;
 use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo,
@@ -12,7 +12,7 @@ pub(super) fn open_source(
     ctx: &ImportJobContext<'_>,
     source: &domain::DataSource,
 ) -> Result<(rusqlite::Connection, bool), CommandError> {
-    let conn = measure_optional(ctx.profiler.as_ref(), Phase::SourceDatabaseOpen, || {
+    let conn = measure_command(ctx.profiler.as_ref(), Phase::SourceDatabaseOpen, || {
         // Includes connection configuration, migrations and bulk-load recovery.
         source_kernel::source_db::open_source_db(ctx.case_root, &source.id)
             .map_err(CommandError::from_service_error)
@@ -63,7 +63,7 @@ pub(super) fn open_source(
         .map_err(CommandError::from_service_error)?;
     }
     super::begin_partition_projection(ctx.case_root, &source.id)?;
-    let initialize = measure_optional(
+    let initialize = measure_command(
         ctx.profiler.as_ref(),
         Phase::SourceMetadataInitialize,
         || {
@@ -86,13 +86,13 @@ pub(super) fn prepare_resources(
     initialize: bool,
 ) -> Result<Option<source_kernel::resource_budget::Workspace>, CommandError> {
     let profiler = ctx.profiler.clone();
-    measure_optional(profiler.as_ref(), Phase::RuntimePrepare, || {
+    measure_command(profiler.as_ref(), Phase::RuntimePrepare, || {
         super::runtime::prepare_runtime(ctx, source, initialize)
     })?;
     let Some(runtime) = &ctx.runtime else {
         return Ok(None);
     };
-    let admitted = measure_optional(profiler.as_ref(), Phase::WorkspaceAdmission, || {
+    let admitted = measure_command(profiler.as_ref(), Phase::WorkspaceAdmission, || {
         source_kernel::resource_budget::global_pool()
             .workspace(ctx.options.cancel_token)
             .map_err(CommandError::from_typed_service_error)

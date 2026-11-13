@@ -3,14 +3,15 @@ use super::browser_lsa::{
 };
 use super::candidate_processing::{read_candidate_bytes_with_progress, CandidateSource};
 use super::reader::CandidateExtractionError;
-use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
+use crate::analysis_service::candidates::{
+    normalize_evidence_path, EvidenceCandidate, PreparationCatalog,
+};
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::MAX_ANALYSIS_SOURCE_BYTES;
 use artifacts_windows::dpapi::{
     decrypt_master_key_file, ChromiumDecryptor, ChromiumFamily, DecryptedMasterKey,
 };
 use artifacts_windows::{extract_boot_key, extract_sam_fields};
-use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 
@@ -46,7 +47,8 @@ impl BrowserPreloadContext {
 /// Build browser decryption contexts without making browser parsers aware of
 /// databases, evidence readers, or registry layout.
 pub(super) fn prepare_browser_preload(
-    conn: &Connection,
+    catalog: &PreparationCatalog,
+    registry: &super::registry_preload::RegistryPreloadContext,
     candidates: &[EvidenceCandidate],
     cancel_token: &AtomicBool,
     manual_password: Option<&str>,
@@ -58,13 +60,21 @@ pub(super) fn prepare_browser_preload(
     }
 
     let mut context = BrowserPreloadContext::empty();
+    let mut shared_reader = |candidate: &EvidenceCandidate, limit: usize| {
+        if let Some(snapshot) = registry.snapshot(candidate) {
+            return Ok(CandidateSource::Bytes(
+                snapshot.bytes()[..snapshot.bytes().len().min(limit)].to_vec(),
+            ));
+        }
+        file_reader(candidate, limit)
+    };
     let data_sources = roots
         .keys()
         .map(|(data_source_id, _)| data_source_id.clone())
         .collect::<HashSet<_>>();
     for data_source_id in data_sources {
         if let Err(error) = prepare_source_context(
-            conn,
+            catalog,
             &data_source_id,
             roots
                 .iter()
@@ -73,7 +83,7 @@ pub(super) fn prepare_browser_preload(
                 .collect(),
             cancel_token,
             manual_password,
-            file_reader,
+            &mut shared_reader,
             &mut context,
         ) {
             context.warnings.push(format!(
@@ -85,7 +95,7 @@ pub(super) fn prepare_browser_preload(
 }
 
 fn prepare_source_context(
-    conn: &Connection,
+    catalog: &PreparationCatalog,
     data_source_id: &str,
     roots: Vec<String>,
     cancel_token: &AtomicBool,
@@ -93,9 +103,11 @@ fn prepare_source_context(
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
     context: &mut BrowserPreloadContext,
 ) -> Result<(), AnalysisServiceError> {
-    let system = locate_by_suffix(conn, data_source_id, "/windows/system32/config/system")?
+    let system = catalog
+        .suffix(data_source_id, "/windows/system32/config/system")
         .ok_or_else(|| AnalysisServiceError::Other("SYSTEM hive was not found".to_string()))?;
-    let sam = locate_by_suffix(conn, data_source_id, "/windows/system32/config/sam")?
+    let sam = catalog
+        .suffix(data_source_id, "/windows/system32/config/sam")
         .ok_or_else(|| AnalysisServiceError::Other("SAM hive was not found".to_string()))?;
     let system_bytes = read_locator(&system, cancel_token, file_reader)?;
     let sam_bytes = read_locator(&sam, cancel_token, file_reader)?;
@@ -109,7 +121,7 @@ fn prepare_source_context(
     let (mut prekeys, user_nt_hashes) =
         super::browser_lsa::derive_sam_prekeys_with_password(sam_info, manual_password);
     extend_prekeys_from_lsa_secrets(
-        conn,
+        catalog,
         data_source_id,
         &PrekeySeed {
             boot_key: &boot_key,
@@ -126,7 +138,8 @@ fn prepare_source_context(
         ));
     }
 
-    let master_keys = load_master_keys(conn, data_source_id, &prekeys, cancel_token, file_reader)?;
+    let master_keys =
+        load_master_keys(catalog, data_source_id, &prekeys, cancel_token, file_reader)?;
     if master_keys.is_empty() {
         return Err(AnalysisServiceError::Other(
             "no DPAPI master key could be decrypted".to_string(),
@@ -134,7 +147,7 @@ fn prepare_source_context(
     }
 
     install_profile_decryptors(
-        conn,
+        catalog,
         data_source_id,
         roots,
         &master_keys,
@@ -145,7 +158,7 @@ fn prepare_source_context(
 }
 
 fn install_profile_decryptors(
-    conn: &Connection,
+    catalog: &PreparationCatalog,
     data_source_id: &str,
     roots: Vec<String>,
     master_keys: &[DecryptedMasterKey],
@@ -159,7 +172,7 @@ fn install_profile_decryptors(
     for root in roots {
         ensure_not_cancelled(cancel_token)?;
         let local_state_path = format!("{root}/local state");
-        let Some(local_state) = locate_by_suffix(conn, data_source_id, &local_state_path)? else {
+        let Some(local_state) = catalog.suffix(data_source_id, &local_state_path) else {
             context.warnings.push(format!(
                 "Chromium Local State was not found for profile root {root}"
             ));
@@ -178,9 +191,9 @@ fn install_profile_decryptors(
         let (cng_key_file, elevation_exe) = if family == ChromiumFamily::Chrome {
             if chrome_materials.is_none() {
                 chrome_materials = Some((
-                    read_cng_chromekey_file(conn, data_source_id, cancel_token, file_reader)?,
+                    read_cng_chromekey_file(catalog, data_source_id, cancel_token, file_reader)?,
                     read_elevation_service(
-                        conn,
+                        catalog,
                         data_source_id,
                         ChromiumFamily::Chrome,
                         cancel_token,
@@ -258,13 +271,13 @@ fn build_profile_decryptor(
 }
 
 fn load_master_keys(
-    conn: &Connection,
+    catalog: &PreparationCatalog,
     data_source_id: &str,
     prekeys: &[[u8; 20]],
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> Result<Vec<DecryptedMasterKey>, AnalysisServiceError> {
-    let locators = locate_master_key_files(conn, data_source_id)?;
+    let locators = locate_master_key_files(catalog, data_source_id);
     let mut recovered = HashMap::<String, DecryptedMasterKey>::new();
     for locator in locators {
         if ensure_not_cancelled(cancel_token).is_err() {
@@ -332,54 +345,6 @@ fn chromium_user_data_root(normalized: &str) -> Option<String> {
             let position = normalized.find(marker)?;
             Some(normalized[..position + marker.len() - 1].to_string())
         })
-}
-
-pub(super) fn locate_by_suffix(
-    conn: &Connection,
-    data_source_id: &str,
-    suffix: &str,
-) -> Result<Option<EvidenceCandidate>, AnalysisServiceError> {
-    let normalized_suffix = suffix.replace('\\', "/").to_ascii_lowercase();
-    let mut found = None;
-    persistence_source::repositories::file_repo::FileRepo::new(conn).visit_all(
-        Some(data_source_id),
-        |entry| {
-            if found.is_none()
-                && !entry.deleted
-                && !entry.is_directory()
-                && normalize_evidence_path(&entry.path).ends_with(&normalized_suffix)
-            {
-                found = Some(locator_from_entry(data_source_id, &entry, "BrowserPreload"));
-            }
-            Ok(())
-        },
-    )?;
-    Ok(found)
-}
-
-pub(super) fn locator_from_entry(
-    data_source_id: &str,
-    entry: &domain::FileEntry,
-    category: &str,
-) -> EvidenceCandidate {
-    EvidenceCandidate {
-        file_id: entry.id.clone(),
-        data_source_id: data_source_id.to_owned(),
-        partition_index: None,
-        path: entry.path.clone(),
-        size: entry.size.unwrap_or_default(),
-        encrypted: entry.encrypted,
-        content_identity: format!(
-            "browser-preload:{data_source_id}:{}:{}",
-            entry.size.unwrap_or_default(),
-            entry.encrypted
-        ),
-        companions: Vec::new(),
-        modified_at: entry.modified_at,
-        evidence_kind: "browser_preload".to_owned(),
-        parser: "browser.dpapi".to_owned(),
-        category: category.to_owned(),
-    }
 }
 
 fn ensure_not_cancelled(cancel_token: &AtomicBool) -> Result<(), AnalysisServiceError> {

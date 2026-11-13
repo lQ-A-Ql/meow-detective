@@ -1980,8 +1980,7 @@ fn e01_ntfs_lvm_record_uses_logical_volume_reader() {
     };
     let conn = crate::source_db::open_source_db(dir.path(), &entry.data_source_id).unwrap();
     let storage =
-        crate::source_db::open_fjall_source_read_write(dir.path(), &entry.data_source_id.0)
-            .unwrap();
+        crate::source_db::open_fjall_source_for_build(&conn, &entry.data_source_id).unwrap();
     storage
         .partition_replace_by_source(
             &entry.data_source_id.0,
@@ -2013,6 +2012,7 @@ fn e01_ntfs_lvm_record_uses_logical_volume_reader() {
     storage
         .partition_projection_publish(&entry.data_source_id.0)
         .unwrap();
+    test_support::mark_source_projection_complete(&conn, &entry.data_source_id.0);
 
     let open_reader_calls = AtomicUsize::new(0);
     let result = image_open::e01::open_e01_file_with_reader_factory(

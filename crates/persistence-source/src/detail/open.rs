@@ -39,18 +39,16 @@ pub fn configure_source_identity(conn: &Connection, source_id: &str) -> DbResult
 }
 
 pub fn bind_generation(conn: &Connection, name: &str) -> DbResult<()> {
-    if name != "source.fjall" && !name.starts_with("source.fjall.build.") {
-        return Err(DbError::System("invalid source generation name".into()));
-    }
-    if name.contains(['/', '\\', ':']) || name.ends_with('.') {
-        return Err(DbError::System(
-            "invalid source generation component".into(),
-        ));
-    }
-    conn.execute(
+    crate::control::generation::validate_generation_name(name)?;
+    let changed = conn.execute(
         "UPDATE source_meta SET value = ?1 WHERE key = ?2",
         rusqlite::params![name, FJALL_ROOT_KEY],
     )?;
+    if changed != 1 {
+        return Err(DbError::System(
+            "source generation binding is missing".into(),
+        ));
+    }
     Ok(())
 }
 
@@ -142,14 +140,7 @@ fn open_store_with_policy(
         }
         return Ok(None);
     };
-    if name != "source.fjall" && !name.starts_with("source.fjall.build.") {
-        return Err(DbError::System("invalid source generation name".into()));
-    }
-    if name.contains(['/', '\\', ':']) || name.ends_with('.') {
-        return Err(DbError::System(
-            "invalid source generation component".into(),
-        ));
-    }
+    crate::control::generation::validate_generation_name(&name)?;
     let database_path: String = conn.query_row(
         "SELECT file FROM pragma_database_list WHERE name = 'main'",
         [],

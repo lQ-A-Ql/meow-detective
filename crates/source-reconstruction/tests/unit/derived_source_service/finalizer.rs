@@ -123,6 +123,7 @@ fn retryable_artifact_read_failure_cannot_publish_a_ready_phase_payload() {
         discovery_elapsed_ms: 1,
         processing_elapsed_ms: 2,
         persistence_elapsed_ms: 0,
+        work_metrics: Vec::new(),
         source_read_count: 1,
         source_read_elapsed_ms: 2,
         filesystem_read_metrics: evidence_core::FileSystemReadMetrics::default(),
@@ -156,6 +157,7 @@ fn artifact_phase_payload_records_runtime_throughput_and_memory() {
         discovery_elapsed_ms: 100,
         processing_elapsed_ms: 2_000,
         persistence_elapsed_ms: 50,
+        work_metrics: Vec::new(),
         source_read_count: 200,
         source_read_elapsed_ms: 1_500,
         filesystem_read_metrics: evidence_core::FileSystemReadMetrics {

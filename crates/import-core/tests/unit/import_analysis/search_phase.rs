@@ -4,7 +4,7 @@ use std::sync::Arc;
 use domain::{DataSourcePlatform, EntryType};
 use tempfile::TempDir;
 
-use super::{insert_file_with_options, setup_source_db};
+use super::{insert_file_with_options, seal_source_fixture, setup_source_db};
 use crate::import_analysis::{run_search_index_phase, SearchIndexPhaseOptions};
 
 #[test]
@@ -69,6 +69,7 @@ fn dedicated_search_phase_indexes_every_metadata_row_without_evidence_reads() {
         true,
     );
     drop(connection);
+    seal_source_fixture(&db_path, &data_source_id);
 
     let index_dir = tmp.path().join("search-index");
     let stats = run_search_index_phase(SearchIndexPhaseOptions {

@@ -2,7 +2,7 @@ use super::*;
 
 fn metrics() -> ImportPhaseMetricsDto {
     ImportPhaseMetricsDto {
-        elapsed_ms: 250,
+        elapsed_ms: Some(250),
         rss_mb: 512,
         workers: 4,
         rows_processed: 10,
@@ -15,6 +15,14 @@ fn metrics() -> ImportPhaseMetricsDto {
         skipped: 2,
         failed: 0,
     }
+}
+
+#[test]
+fn unavailable_elapsed_time_is_absent_from_phase_metrics() {
+    let mut metrics = metrics();
+    metrics.elapsed_ms = None;
+    let value = serde_json::to_value(metrics).unwrap();
+    assert!(value.get("elapsedMs").is_none());
 }
 
 fn partial_result() -> PartialResultDto {

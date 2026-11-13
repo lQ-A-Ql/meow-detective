@@ -232,7 +232,8 @@ pub(super) fn load_runtime(
     let db_path =
         source_kernel::source_db::registered_source_db_path(case_conn, case_root, data_source_id)?;
     source_kernel::source_db::verify_finalized_source_db(&db_path, data_source_id)?;
-    let source_connection = persistence_sqlite::open_existing_source_read_only(&db_path)?;
+    let source_connection =
+        persistence_source::control::opening::open_source_database_read_only(&db_path)?;
     let manifest = CephFsNamespaceRepo::new(&source_connection)
         .verify_published_catalog(
             &aggregate.lineage.filesystem_identity,

@@ -15,6 +15,8 @@ use super::open::open_parts;
 
 #[derive(Debug, Error)]
 pub enum StorageRuntimeError {
+    #[error("source control database operation failed: {0}")]
+    Control(#[source] persistence_sqlite::DbError),
     #[error("invalid source identifier: {0}")]
     InvalidSourceId(String),
     #[error("storage root is not a directory: {0}")]

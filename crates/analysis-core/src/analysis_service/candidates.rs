@@ -5,8 +5,10 @@
 
 mod common;
 mod companion_index;
+mod identity;
 mod linux;
 mod plugin;
+pub(crate) mod preparation;
 mod summary;
 mod windows;
 
@@ -15,7 +17,7 @@ pub use common::{
     normalize_evidence_path, EvidenceCandidate, EvidenceCategoryDef,
 };
 pub(crate) use common::{
-    evidence_candidates_for_categories_with_cancel_and_linux_catalog, evidence_relative_path,
+    evidence_candidates_for_categories_with_preparation, evidence_relative_path,
     find_candidate_by_path_suffix,
 };
 pub(crate) use linux::{
@@ -23,6 +25,7 @@ pub(crate) use linux::{
     LINUX_CATALOG_METADATA_KEY,
 };
 pub use plugin::discover_plugin_candidates;
+pub(crate) use preparation::PreparationCatalog;
 pub use summary::get_evidence_classification_summary;
 pub(crate) use windows::is_browser_history_path;
 

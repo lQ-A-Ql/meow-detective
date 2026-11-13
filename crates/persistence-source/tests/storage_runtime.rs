@@ -13,6 +13,31 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use tempfile::tempdir;
 
+fn prepare_source(root: &Path, source_id: &str) {
+    let id = domain::DataSourceId(source_id.into());
+    let control = persistence_source::control::open_source_db(root, &id).unwrap();
+    let path = persistence_source::control::bound_source_generation_root(&control, &id).unwrap();
+    let runtime = ReadWriteStorageRuntime::open(path).unwrap();
+    let source = runtime.source();
+    let receipt = source
+        .write_envelope(
+            KeyspaceName::Meta,
+            b"fixture-publication".to_vec(),
+            &VersionedEnvelope::new("publication", 1, "fixture", source_id, 1, vec![]),
+            PersistMode::SyncAll,
+        )
+        .unwrap();
+    persistence_fjall::seal_source_generation_with_control(
+        source.source_store(),
+        source_id,
+        "fixture",
+        &hex::encode(receipt.batch_digest),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
+}
+
 #[test]
 fn read_write_runtime_exposes_case_and_source_handles() {
     let root = tempdir().unwrap();
@@ -35,8 +60,9 @@ fn read_only_runtime_requires_an_existing_storage_layout() {
 }
 
 #[test]
-fn source_runtime_uses_the_fixed_case_source_layout() {
+fn source_runtime_uses_the_bound_case_source_layout() {
     let root = tempdir().unwrap();
+    prepare_source(root.path(), "source-01");
     let expected = root
         .path()
         .join("sources")
@@ -80,6 +106,7 @@ fn source_id_must_be_a_single_path_component() {
 #[test]
 fn read_only_source_reuses_an_active_write_handle() {
     let root = tempdir().unwrap();
+    prepare_source(root.path(), "source-shared");
     let writable = open_source_read_write(root.path(), "source-shared").unwrap();
     let readonly = open_source_read_only(root.path(), "source-shared").unwrap();
     let record = FileEntryRecord {
@@ -120,6 +147,7 @@ fn read_only_source_reuses_an_active_write_handle() {
 #[test]
 fn concurrent_source_opens_share_one_fjall_database() {
     let root = tempdir().unwrap();
+    prepare_source(root.path(), "source-concurrent");
     drop(open_source_read_write(root.path(), "source-concurrent").unwrap());
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
     let workers = (0..8)
@@ -142,6 +170,7 @@ fn concurrent_source_opens_share_one_fjall_database() {
 #[test]
 fn source_runtime_reopens_after_handles_are_dropped() {
     let root = tempdir().unwrap();
+    prepare_source(root.path(), "source-cached");
     drop(open_source_read_write(root.path(), "source-cached").unwrap());
     let reopened = open_source_read_only(root.path(), "source-cached").unwrap();
     assert_eq!(
@@ -154,6 +183,7 @@ fn source_runtime_reopens_after_handles_are_dropped() {
 fn incomplete_analysis_projection_hides_fjall_source_data_until_complete() {
     let root = tempdir().unwrap();
     let source_id = "source-projection-state";
+    prepare_source(root.path(), source_id);
     let writable = open_source_read_write(root.path(), source_id).unwrap();
     let marker = |family: &str, kind: &str| {
         let key = encode_key(family, &[KeyPart::Text(source_id.to_owned())]).unwrap();
@@ -196,6 +226,7 @@ fn incomplete_analysis_projection_hides_fjall_source_data_until_complete() {
 #[test]
 fn source_facade_reads_and_writes_catalog_records_with_keyset_pages() {
     let root = tempdir().unwrap();
+    prepare_source(root.path(), "source-catalog");
     let source = open_source_read_write(root.path(), "source-catalog").unwrap();
     let record = FileEntryRecord {
         id: "file-1".to_owned(),
@@ -246,6 +277,7 @@ fn source_facade_reads_and_writes_catalog_records_with_keyset_pages() {
 #[test]
 fn source_facade_reads_and_writes_timeline_records() {
     let root = tempdir().unwrap();
+    prepare_source(root.path(), "source-timeline");
     let source = open_source_read_write(root.path(), "source-timeline").unwrap();
     let event = TimelineRecord {
         id: "event-1".to_owned(),

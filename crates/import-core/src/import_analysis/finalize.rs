@@ -44,7 +44,8 @@ pub(super) fn merge_finished_analysis_staging(
     if let Some(lease) = &options.publication_lease {
         lease.validate()?;
     }
-    let source = persistence_sqlite::open_existing_source(&options.db_path)?;
+    let source =
+        persistence_source::control::opening::open_existing_source_database(&options.db_path)?;
     let fjall_root = analysis_fjall_root(options)?;
     let fjall_source = source_kernel::storage_runtime::open_source_read_write_at_path(&fjall_root)
         .map_err(|error| ImportAnalysisError::Other(error.to_string()))?;

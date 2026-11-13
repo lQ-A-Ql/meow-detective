@@ -203,6 +203,7 @@ pub fn emit_analysis_extraction_failed(
         timeline_event_count: 0,
         current_path: None,
         detail: detail.to_string(),
+        work: None,
     };
     emit_analysis_extraction_progress(app, &progress);
 }

@@ -9,7 +9,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub(crate) struct LinuxArtifactCatalogCandidate {
     pub file_id: String,
     pub path: String,
@@ -29,7 +29,7 @@ pub(crate) struct LinuxKernelCatalog {
     pub(crate) module_versions: Vec<String>,
 }
 
-#[derive(Clone, Default, Deserialize, Serialize)]
+#[derive(Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub(crate) struct LinuxCatalogMetadata {
     pub(crate) candidates: Vec<LinuxArtifactCatalogCandidate>,
     pub(crate) kernel_image_versions: Vec<String>,

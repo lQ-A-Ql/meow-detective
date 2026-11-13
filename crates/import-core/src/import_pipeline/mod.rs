@@ -26,6 +26,7 @@ pub(crate) use fjall_projection::{
     mirror_catalog_records_from_connection, mirror_partition_data_for_import,
 };
 pub mod options;
+mod outcome;
 pub mod partition;
 mod phases;
 mod post_ready;
@@ -46,4 +47,4 @@ pub use partition::{
 };
 pub use profile::progress::import_phase_progress_from_profile;
 pub use profile::results::{cache_statuses_from_profile, partial_results_from_profile};
-pub use profile::ImportProfiler;
+pub use profile::{ImportProfileOutputError, ImportProfiler};

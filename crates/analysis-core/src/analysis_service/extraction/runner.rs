@@ -17,8 +17,8 @@ use super::state::{existing_clean_scan_keys, existing_diagnostic_scan_keys, Extr
 use super::{PluginExtractFailure, PluginLoadRecord};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{
-    discover_plugin_candidates, evidence_candidates_for_categories_with_cancel_and_linux_catalog,
-    EvidenceCandidate, LinuxCatalogMetadata,
+    discover_plugin_candidates, evidence_candidates_for_categories_with_preparation,
+    EvidenceCandidate, LinuxCatalogMetadata, PreparationCatalog,
 };
 use crate::analysis_service::capability::{AnalysisCapability, CandidateReadPolicy};
 use crate::analysis_service::error::AnalysisServiceError;
@@ -31,22 +31,27 @@ use rusqlite::Connection;
 use std::io::Read;
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
-use transport::dto::AnalysisExtractionRunDto;
+use transport::dto::{AnalysisExtractionRunDto, AnalysisWorkProgressDto, AnalysisWorkStageDto};
 
 mod discovery;
 mod empty;
 mod finalization;
+mod observations;
+mod processing;
+mod reuse;
 
 use self::discovery::{
     begin_streamed_output, discover_run_candidates, guarded_candidate_reader, load_checkpoint_scans,
 };
-use self::finalization::{finalize_run, load_run_plugins};
+use self::finalization::load_run_plugins;
+use self::observations::{record_preload_warnings, register_candidates};
 pub struct AnalysisExtractionExecution {
     pub dto: AnalysisExtractionRunDto,
     pub retryable_failure_count: u64,
     pub discovery_elapsed_ms: u64,
     pub processing_elapsed_ms: u64,
     pub persistence_elapsed_ms: u64,
+    pub work_metrics: Vec<AnalysisWorkProgressDto>,
     pub source_read_count: u64,
     pub source_read_elapsed_ms: u64,
     pub filesystem_read_metrics: evidence_core::FileSystemReadMetrics,
@@ -213,8 +218,14 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
         progress_reporter.emit_waiting_for_scheduler(waited);
     })?;
     progress_reporter.emit_discovering();
-    let (candidates, linux_catalog) =
-        discover_run_candidates(conn, platform, &selected, &plugin_extractors, cancel_token)?;
+    let (candidates, linux_catalog, preparation_catalog) = discover_run_candidates(
+        conn,
+        platform,
+        &selected,
+        &plugin_extractors,
+        cancel_token,
+        &mut progress_reporter,
+    )?;
     if candidates.is_empty() && linux_catalog.is_none() && plugin_extractors.is_empty() {
         return empty::complete_empty_run(
             conn,
@@ -234,6 +245,7 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
         &selected,
         candidates,
         linux_catalog,
+        preparation_catalog,
         cancel_token,
         browser_password,
         &mut progress_reporter,
@@ -254,6 +266,7 @@ fn extract_discovered_candidates(
     selected: &[AnalysisCapability],
     mut candidates: Vec<EvidenceCandidate>,
     linux_catalog: Option<LinuxCatalogMetadata>,
+    preparation_catalog: PreparationCatalog,
     cancel_token: &AtomicBool,
     browser_password: Option<&str>,
     progress_reporter: &mut ExtractionProgressReporter<'_>,
@@ -263,7 +276,7 @@ fn extract_discovered_candidates(
     plugin_loads: Vec<PluginLoadRecord>,
     plugin_rejections: Vec<PluginRejection>,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
-    let checkpoint_scans = load_checkpoint_scans(conn)?;
+    let checkpoint_scans = load_checkpoint_scans(conn, progress_reporter)?;
     let checkpoints = checkpoint_scans.existing();
     let mut guarded_file_reader = guarded_candidate_reader(file_reader);
     let preloads = prepare_run_preloads(
@@ -272,12 +285,32 @@ fn extract_discovered_candidates(
         &candidates,
         selected,
         &checkpoints,
+        &preparation_catalog,
+        progress_reporter,
         cancel_token,
         browser_password,
         &mut guarded_file_reader,
     )?;
     preloads.systemd.annotate(&mut candidates);
     ensure_not_cancelled(cancel_token)?;
+    if let Some(execution) = reuse::try_reuse(
+        reuse::ReuseRequest {
+            conn,
+            selected,
+            candidates: &candidates,
+            linux_catalog: linux_catalog.as_ref(),
+            checkpoints: &checkpoints,
+            preloads: &preloads,
+            plugins: plugin_extractors,
+            plugin_loads: &plugin_loads,
+            plugin_rejections: &plugin_rejections,
+            cancel: cancel_token,
+            discovery_started,
+        },
+        progress_reporter,
+    )? {
+        return Ok(execution);
+    }
     let output = begin_streamed_output(
         conn,
         &candidates,
@@ -287,56 +320,22 @@ fn extract_discovered_candidates(
         cancel_token,
         progress_reporter,
     )?;
-    let discovery_elapsed_ms = elapsed_millis(discovery_started);
-    progress_reporter.begin_extraction();
-    let mut state = ExtractionState::new(selected);
-    if let Some(catalog) = linux_catalog {
-        state.record_linux_catalog(catalog);
-    }
-    record_preload_warnings(selected, &preloads, &mut state);
-    let processing_started = Instant::now();
-    let processing_context = CandidateProcessingContext::new(
+    processing::run(
         conn,
         selected,
-        &checkpoints,
-        preloads.as_refs(),
-        plugin_extractors,
-        &output,
-        cancel_token,
-    );
-    process_candidates(
-        &processing_context,
         candidates,
+        linux_catalog,
+        &checkpoints,
+        &preloads,
+        output,
         &mut guarded_file_reader,
-        &mut state,
         progress_reporter,
-    )?;
-    ensure_not_cancelled(cancel_token)?;
-    let processing_elapsed_ms = elapsed_millis(processing_started);
-    progress_reporter.begin_persisting();
-    ensure_not_cancelled(cancel_token)?;
-    let persistence_started = Instant::now();
-    output.rebuild_derived_metrics(cancel_token, |records| {
-        progress_reporter.report_count_progress(records);
-    })?;
-    let staged_generation = output.seal(cancel_token, |records, bytes| {
-        progress_reporter.report_seal_progress(records, bytes);
-    })?;
-    ensure_not_cancelled(cancel_token)?;
-    let result = finalize_run(
-        conn,
-        state,
-        progress_reporter,
-        staged_generation,
-        discovery_elapsed_ms,
-        processing_elapsed_ms,
-        persistence_started,
+        discovery_started,
+        plugin_extractors,
         plugin_loads,
         plugin_rejections,
         cancel_token,
-    )?;
-    preloads.systemd.persist_markers(conn)?;
-    Ok(result)
+    )
 }
 
 /// Owned preload contexts for one extraction run.
@@ -367,10 +366,13 @@ fn prepare_run_preloads(
     candidates: &[EvidenceCandidate],
     selected: &[AnalysisCapability],
     checkpoints: &ExistingCheckpoints<'_>,
+    catalog: &PreparationCatalog,
+    progress: &mut ExtractionProgressReporter<'_>,
     cancel_token: &AtomicBool,
     browser_password: Option<&str>,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> Result<RunPreloads, AnalysisServiceError> {
+    let started = Instant::now();
     let registry = prepare_registry_preload(
         conn,
         candidates,
@@ -379,23 +381,58 @@ fn prepare_run_preloads(
         cancel_token,
         file_reader,
     )?;
+    progress.report_work(
+        AnalysisWorkStageDto::RegistryPreload,
+        started,
+        registry.prepared_records(),
+        0,
+        true,
+    );
+    let pending_browser = candidates
+        .iter()
+        .filter(|candidate| {
+            candidate.category == "BrowserHistory"
+                && capability_for_candidate(selected, candidate)
+                    .is_some_and(|capability| !checkpoints.has_candidate(candidate, capability))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let started = Instant::now();
     let browser = prepare_browser_preload(
-        conn,
-        candidates,
+        catalog,
+        &registry,
+        &pending_browser,
         cancel_token,
         browser_password,
         file_reader,
     )?;
+    progress.report_work(
+        AnalysisWorkStageDto::BrowserPreload,
+        started,
+        pending_browser.len() as u64,
+        0,
+        true,
+    );
+    let started = Instant::now();
     let systemd = if platform == DataSourcePlatform::Linux {
-        super::systemd_preload::prepare(conn, candidates, cancel_token, file_reader)?
+        super::systemd_preload::prepare(catalog, candidates, cancel_token, file_reader)?
     } else {
         super::systemd_preload::SystemdPreload::default()
     };
+    progress.report_work(
+        AnalysisWorkStageDto::SystemdPreload,
+        started,
+        systemd.identities.len() as u64,
+        0,
+        true,
+    );
+    let started = Instant::now();
     let (linux_log_time, timezone_warnings) = if platform == DataSourcePlatform::Linux {
-        resolve_linux_log_time(conn, cancel_token, file_reader)
+        resolve_linux_log_time(catalog, cancel_token, file_reader)
     } else {
         (LinuxLogTimeContext::utc(), Vec::new())
     };
+    progress.report_work(AnalysisWorkStageDto::TimezonePreload, started, 0, 0, true);
     Ok(RunPreloads {
         systemd,
         registry,
@@ -403,61 +440,6 @@ fn prepare_run_preloads(
         linux_log_time,
         timezone_warnings,
     })
-}
-
-/// Record timezone resolution warnings as informational (non-retryable)
-/// warnings against any selected Linux capability.
-fn record_log_time_warnings(
-    selected: &[AnalysisCapability],
-    warnings: &[String],
-    state: &mut ExtractionState,
-) {
-    let Some(capability) = selected
-        .iter()
-        .find(|capability| capability.read_policy == CandidateReadPolicy::LinuxPathAware)
-        .copied()
-    else {
-        return;
-    };
-    for warning in warnings {
-        state.record_informational_warning(capability, warning.clone());
-    }
-}
-
-fn record_preload_warnings(
-    selected: &[AnalysisCapability],
-    preloads: &RunPreloads,
-    state: &mut ExtractionState,
-) {
-    if let Some(registry) = selected
-        .iter()
-        .find(|capability| capability.read_policy == CandidateReadPolicy::RegistryPreload)
-    {
-        for warning in preloads.registry.warnings.iter().cloned() {
-            state.record_warning(*registry, warning);
-        }
-    }
-    if let Some(browser) = selected
-        .iter()
-        .find(|capability| capability.key == "BrowserHistory")
-    {
-        for warning in preloads.browser.warnings.iter().cloned() {
-            state.record_warning(*browser, warning);
-        }
-    }
-    record_log_time_warnings(selected, &preloads.timezone_warnings, state);
-}
-
-fn register_candidates(
-    progress: &mut ExtractionProgressReporter<'_>,
-    selected: &[AnalysisCapability],
-    candidates: &[EvidenceCandidate],
-) {
-    for candidate in candidates {
-        if let Some(capability) = capability_for_candidate(selected, candidate) {
-            progress.register_candidate(capability, candidate);
-        }
-    }
 }
 
 fn elapsed_millis(started: Instant) -> u64 {

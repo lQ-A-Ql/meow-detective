@@ -138,7 +138,8 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
     );
     eprintln!("REAL_SAMPLE_CASE {}", active.case_root.display());
 
-    let profiler = ImportProfiler::default();
+    let profiler = ImportProfiler::with_output_directory(output.join("profile"))
+        .expect("create persistent import profile");
     let sink = ProgressSink::default();
     let memory = RssSampler::start();
     let started = Instant::now();
