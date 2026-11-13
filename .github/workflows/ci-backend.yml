@@ -34,6 +34,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Prepare workspace temporary files and diagnostics
+        shell: pwsh
+        run: |
+          $temporary = Join-Path $env:GITHUB_WORKSPACE 'output/ci-runtime/tmp'
+          $logs = Join-Path $env:GITHUB_WORKSPACE 'output/ci-runtime/logs'
+          New-Item -ItemType Directory -Path $temporary, $logs -Force | Out-Null
+          "TEMP=$temporary" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "TMP=$temporary" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
       - uses: dtolnay/rust-toolchain@1.99.0
         with:
           components: rustfmt, clippy, llvm-tools-preview
@@ -99,32 +107,52 @@ jobs:
           ./scripts/check-stage5-parser-boundary.ps1
           ./scripts/check-parser-ownership.ps1
           ./scripts/check-stage6-test-separation.ps1
+      - name: CI native command runner self-test
+        shell: pwsh
+        run: ./scripts/test-ci-native.ps1
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        shell: pwsh
+        run: ./scripts/run-ci-native.ps1 -FilePath cargo -Arguments @('clippy', '--workspace', '--all-targets', '--', '-D', 'warnings') -LogPath output/ci-runtime/logs/clippy.log
       - name: Test
+        shell: pwsh
         env:
           FORENSICS_BOLT_READER_EXE: ${{ github.workspace }}\target\debug\meow-bolt-worker.exe
         run: |
-          cargo build -p containers-bolt --bin meow-bolt-worker
-          cargo test --workspace
+          ./scripts/run-ci-native.ps1 -FilePath cargo -Arguments @('build', '-p', 'containers-bolt', '--bin', 'meow-bolt-worker') -LogPath output/ci-runtime/logs/bolt-worker-build.log
+          ./scripts/run-ci-native.ps1 -FilePath cargo -Arguments @('test', '--workspace') -LogPath output/ci-runtime/logs/workspace-tests.log
       - name: Benchmark catalog and baseline structure
         shell: pwsh
         run: ./scripts/check-benchmark-regression.ps1 -StructureOnly
       - name: Small performance structure regression
+        id: benchmark_small
         shell: pwsh
         run: |
-          ./scripts/check-benchmark-regression.ps1 -FixtureLevel small -Runs 1 -OutputDir output/ci-performance-small
-          $results = @(Get-ChildItem -LiteralPath output/ci-performance-small -Filter 'benchmark-*.json')
-          if ($results.Count -ne 1) { throw 'Expected exactly one performance result file' }
-          ./scripts/check-benchmark-result-validation.ps1 -ResultsPath $results[0].FullName -Runs 1 -FixtureLevel small
+          Start-Transcript -Path output/ci-runtime/logs/benchmark-small.log
+          try {
+            'started=true' | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+            ./scripts/check-benchmark-regression.ps1 -FixtureLevel small -Runs 1 -OutputDir output/ci-performance-small
+            $results = @(Get-ChildItem -LiteralPath output/ci-performance-small -Filter 'benchmark-*.json')
+            if ($results.Count -ne 1) { throw 'Expected exactly one performance result file' }
+            ./scripts/check-benchmark-result-validation.ps1 -ResultsPath $results[0].FullName -Runs 1 -FixtureLevel small
+          } finally {
+            Stop-Transcript
+          }
       - name: Extended performance regression
+        id: benchmark_extended
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         shell: pwsh
         env:
           BENCHMARK_LEVEL: ${{ github.event_name == 'schedule' && 'large' || inputs.benchmark_level }}
-        run: ./scripts/check-benchmark-regression.ps1 -FixtureLevel $env:BENCHMARK_LEVEL -Runs 3 -OutputDir output/ci-performance-extended
+        run: |
+          Start-Transcript -Path output/ci-runtime/logs/benchmark-extended.log
+          try {
+            'started=true' | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+            ./scripts/check-benchmark-regression.ps1 -FixtureLevel $env:BENCHMARK_LEVEL -Runs 3 -OutputDir output/ci-performance-extended
+          } finally {
+            Stop-Transcript
+          }
       - name: Upload performance evidence
-        if: always()
+        if: ${{ always() && (steps.benchmark_small.outputs.started == 'true' || steps.benchmark_extended.outputs.started == 'true') }}
         uses: actions/upload-artifact@v4
         with:
           name: performance-regression
@@ -147,16 +175,18 @@ jobs:
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
       - name: Rust coverage
+        shell: pwsh
         env:
           FORENSICS_BOLT_READER_EXE: ${{ github.workspace }}\target\debug\meow-bolt-worker.exe
-        run: cargo llvm-cov --workspace --all-targets --lcov --output-path rust-lcov.info
+        run: ./scripts/run-ci-native.ps1 -FilePath cargo -Arguments @('llvm-cov', '--workspace', '--all-targets', '--lcov', '--output-path', 'rust-lcov.info') -LogPath output/ci-runtime/logs/coverage.log
       - name: Upload Rust coverage
         uses: actions/upload-artifact@v4
         with:
           name: backend-coverage
           path: rust-lcov.info
       - name: Desktop build
-        run: cargo build -p forensics-desktop
+        shell: pwsh
+        run: ./scripts/run-ci-native.ps1 -FilePath cargo -Arguments @('build', '-p', 'forensics-desktop') -LogPath output/ci-runtime/logs/desktop-build.log
       - name: Release guard
         shell: pwsh
         run: ./scripts/check-release-guard.ps1
@@ -190,7 +220,7 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
       - name: Audit dependencies
-        run: cargo audit --db "${{ runner.temp }}/cargo-audit-db"
+        run: cargo audit --db "${{ github.workspace }}/output/ci-runtime/cargo-audit-db"
       - name: Install cargo-cyclonedx
         run: cargo install cargo-cyclonedx --locked
       - name: Generate backend SBOM
@@ -205,3 +235,10 @@ jobs:
         with:
           name: backend-sbom
           path: backend-sbom.json
+      - name: Upload backend diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-diagnostics
+          path: output/ci-runtime/logs
+          if-no-files-found: ignore
