@@ -22,6 +22,7 @@ mod progress;
 mod reader;
 pub(crate) mod registry;
 mod registry_preload;
+mod replacement_index;
 mod runner;
 mod scheduler;
 mod state;

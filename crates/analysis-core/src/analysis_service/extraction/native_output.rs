@@ -1,5 +1,5 @@
 use super::output_digest::OutputDigestAccumulator;
-use super::state::AnalysisOutputProducer;
+use super::replacement_index::ReplacementIndex;
 use super::state::PersistedExtractionOutcome;
 use crate::analysis_service::error::AnalysisServiceError;
 use domain::{Artifact, TimelineEvent};
@@ -323,6 +323,7 @@ fn delete_replacements(
     if replacements.is_empty() {
         return Ok(());
     }
+    let index = ReplacementIndex::new(replacements);
     let artifact_store = ArtifactRecordStore::from_source_store(store.clone());
     let timeline_store = TimelineRecordStore::from_source_store(store.clone());
     let artifacts = artifact_store.read_snapshot();
@@ -340,11 +341,7 @@ fn delete_replacements(
         let ids = page
             .records
             .into_iter()
-            .filter(|record| {
-                replacements
-                    .iter()
-                    .any(|replacement| matches_artifact(replacement, record, source_id))
-            })
+            .filter(|record| index.matches_artifact(record, source_id))
             .map(|record| record.id)
             .collect::<Vec<_>>();
         artifact_store
@@ -370,11 +367,7 @@ fn delete_replacements(
         let ids = page
             .records
             .into_iter()
-            .filter(|record| {
-                replacements
-                    .iter()
-                    .any(|replacement| matches_timeline(replacement, record))
-            })
+            .filter(|record| index.matches_timeline(record))
             .map(|record| record.id)
             .collect::<Vec<_>>();
         timeline_store
@@ -405,43 +398,6 @@ impl SourceCaseLayout {
             .ok_or_else(|| AnalysisServiceError::Other("source has no case root".into()))?;
         persistence_source::fjall::SourceBuildLayout::for_case_source(case_root, source_id, attempt)
             .map_err(|error| AnalysisServiceError::Other(error.to_string()))
-    }
-}
-
-fn matches_artifact(
-    replacement: &super::state::AnalysisOutputReplacement,
-    record: &persistence_source::fjall::ArtifactRecord,
-    source_id: &str,
-) -> bool {
-    if record.data_source_id != source_id
-        || replacement.source_object_id != record.source_object_id.clone().unwrap_or_default()
-    {
-        return false;
-    }
-    let producer = record
-        .attrs
-        .get("extractorId")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default();
-    match &replacement.producer {
-        AnalysisOutputProducer::Prefix(prefix) => producer.starts_with(prefix),
-        AnalysisOutputProducer::ExtractorId(id) => producer == id,
-    }
-}
-
-fn matches_timeline(
-    replacement: &super::state::AnalysisOutputReplacement,
-    record: &persistence_source::fjall::TimelineRecord,
-) -> bool {
-    if replacement.source_object_id != record.source_object_id {
-        return false;
-    }
-    match &replacement.producer {
-        AnalysisOutputProducer::Prefix(prefix) => record
-            .parser_id
-            .as_deref()
-            .is_some_and(|id| id.starts_with(prefix)),
-        AnalysisOutputProducer::ExtractorId(id) => record.parser_id.as_deref() == Some(id),
     }
 }
 

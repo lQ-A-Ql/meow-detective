@@ -1,4 +1,5 @@
 use super::super::candidate_processing::capability_for_candidate;
+use super::super::replacement_index::ReplacementSet;
 use super::super::state::{
     AnalysisCheckpointKey, AnalysisOutputProducer, AnalysisOutputReplacement, CleanScanKeys,
     DiagnosticScanKeys,
@@ -96,7 +97,7 @@ fn candidate_replacements(
     plugins: &[&dyn ArtifactExtractor],
     checkpoints: &ExistingCheckpoints<'_>,
 ) -> Vec<AnalysisOutputReplacement> {
-    let mut replacements = Vec::new();
+    let mut replacements = ReplacementSet::default();
     for candidate in candidates {
         let Some(capability) = capability_for_candidate(selected, candidate) else {
             continue;
@@ -106,32 +107,17 @@ fn candidate_replacements(
         }
         if capability.key == PLUGIN_CAPABILITY_KEY {
             for producer in super::super::plugin::matching_producer_ids(plugins, candidate) {
-                push_replacement(
-                    &mut replacements,
-                    AnalysisOutputReplacement {
-                        source_object_id: candidate.file_id.0.clone(),
-                        producer: AnalysisOutputProducer::ExtractorId(producer),
-                    },
-                );
+                replacements.insert(AnalysisOutputReplacement {
+                    source_object_id: candidate.file_id.0.clone(),
+                    producer: AnalysisOutputProducer::ExtractorId(producer),
+                });
             }
         } else {
-            push_replacement(
-                &mut replacements,
-                AnalysisOutputReplacement {
-                    source_object_id: candidate.file_id.0.clone(),
-                    producer: AnalysisOutputProducer::Prefix(capability.producer_prefix()),
-                },
-            );
+            replacements.insert(AnalysisOutputReplacement {
+                source_object_id: candidate.file_id.0.clone(),
+                producer: AnalysisOutputProducer::Prefix(capability.producer_prefix()),
+            });
         }
     }
-    replacements
-}
-
-fn push_replacement(
-    replacements: &mut Vec<AnalysisOutputReplacement>,
-    replacement: AnalysisOutputReplacement,
-) {
-    if !replacements.contains(&replacement) {
-        replacements.push(replacement);
-    }
+    replacements.into_vec()
 }

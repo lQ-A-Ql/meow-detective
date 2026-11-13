@@ -84,16 +84,16 @@ impl SectionProgress {
 /// How a replaced output set is addressed: built-in capabilities replace by
 /// `extractor_id` prefix (`registry.`, `browser.`, ...); plugin outputs carry
 /// the bare plugin id (M2 provenance contract) and are replaced by exact id.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum AnalysisOutputProducer {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum AnalysisOutputProducer {
     Prefix(&'static str),
     ExtractorId(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct AnalysisOutputReplacement {
-    pub(super) source_object_id: String,
-    pub(super) producer: AnalysisOutputProducer,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct AnalysisOutputReplacement {
+    pub(crate) source_object_id: String,
+    pub(crate) producer: AnalysisOutputProducer,
 }
 
 pub(super) struct ExtractionState {
