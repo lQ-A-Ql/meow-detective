@@ -118,6 +118,50 @@ impl SourceReadSnapshot {
         Ok(entries)
     }
 
+    /// Materializes at most `limit` entries of `bounds` in reverse key order.
+    ///
+    /// Reverse scans page from the high end of the range downwards, so `cursor`
+    /// is the last key returned by the previous page and becomes an excluded
+    /// upper bound; `bounds.start` remains the fixed lower bound.
+    pub fn range_keyset_reverse(
+        &self,
+        keyspace: KeyspaceName,
+        bounds: ScanBounds,
+        cursor: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<Vec<SnapshotEntry>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        if limit > MAX_SCAN_PAGE_ENTRIES {
+            return Err(FjallStorageError::InvalidEnvelope(format!(
+                "scan page limit exceeds {} entries",
+                MAX_SCAN_PAGE_ENTRIES
+            )));
+        }
+        let end = cursor
+            .map(|cursor| Bound::Excluded(cursor.to_vec()))
+            .unwrap_or(bounds.end);
+        let iter = self
+            .snapshot
+            .range(self.keyspace(keyspace), (bounds.start, end));
+        let mut entries = Vec::with_capacity(limit);
+        let mut bytes = 0usize;
+        for guard in iter.rev() {
+            let (key, value) = guard.into_inner()?;
+            bytes += key.len() + value.len();
+            entries.push(SnapshotEntry {
+                key: key.to_vec(),
+                value: value.to_vec(),
+            });
+            if entries.len() == limit {
+                break;
+            }
+        }
+        record_scan(entries.len(), bytes);
+        Ok(entries)
+    }
+
     pub fn prefix(
         &self,
         keyspace: KeyspaceName,

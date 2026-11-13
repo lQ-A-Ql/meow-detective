@@ -121,8 +121,9 @@ impl TimelineRecordStore {
             }
             return Err(FjallStorageError::TimelineIndexCorrupt);
         }
-        if start.is_none() && end.is_none() {
-            return read_count(snapshot, source_id, event_type, "total");
+        let total = read_count(snapshot, source_id, event_type, "total")?;
+        if total == 0 || (start.is_none() && end.is_none()) {
+            return Ok(total);
         }
         let start = match start {
             Some(v) => v,

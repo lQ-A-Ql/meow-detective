@@ -12,8 +12,12 @@ use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
+mod facet_index;
 mod timeline_batch;
 mod timeline_count;
+mod timeline_facets;
+
+pub use timeline_facets::FacetSummary;
 
 const RECORD_KIND: &str = "timeline_event";
 const SCHEMA_VERSION: u16 = 1;
