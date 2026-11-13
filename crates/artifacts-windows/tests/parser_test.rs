@@ -1,4 +1,6 @@
 mod fixture_builder;
+#[path = "support/parser_fixtures.rs"]
+mod parser_fixtures;
 
 use artifacts_core::{ArtifactContext, ArtifactExtractor, ExtractorRegistry, VecSink};
 use artifacts_windows::{
@@ -292,10 +294,10 @@ fn evtx_binary_parser_fail_closed_for_unsupported_log_path() {
 }
 
 #[test]
-fn jumplist_no_embedded_lnk_reports_generic_artifact() {
+fn jumplist_invalid_container_is_rejected() {
     let extractor = JumpListExtractor;
     assert!(extractor.supports_path(
-        "C:/Users/alice/AppData/Roaming/Microsoft/Windows/Recent/AutomaticDestinations/5f7b5f7e3243a7b8.ms-abc"
+        "C:/Users/alice/AppData/Roaming/Microsoft/Windows/Recent/AutomaticDestinations/5f7b5f7e3243a7b8.automaticDestinations-ms"
     ));
     assert!(extractor.supports_path(
         "C:/Users/alice/AppData/Roaming/Microsoft/Windows/Recent/CustomDestinations/example.customDestinations-ms"
@@ -304,35 +306,15 @@ fn jumplist_no_embedded_lnk_reports_generic_artifact() {
     assert!(!extractor.supports_path("C:/Users/alice/Documents/shortcut.lnk"));
 
     let data = b"valid-looking AutomaticDestinations data without embedded shell links".to_vec();
-    let expected_size = data.len() as u64;
     let ctx = ArtifactContext {
         file_id: t("jl-001"),
-        file_path: "5f7b5f7e3243a7b8.ms-abc".into(),
+        file_path: "5f7b5f7e3243a7b8.automaticDestinations-ms".into(),
         reader: Box::new(std::io::Cursor::new(data)),
     };
     let mut sink = VecSink::new();
-    let report = extractor.run(ctx, &mut sink).unwrap();
-
-    assert_eq!(report.artifacts_found, 1);
-    assert!(report.errors.is_empty());
+    assert!(extractor.run(ctx, &mut sink).is_err());
     assert!(sink.timeline_events.is_empty());
-    assert_eq!(sink.artifacts.len(), 1);
-    assert_eq!(sink.artifacts[0].family, "JumpList");
-    assert!(sink.artifacts[0].title.contains("5f7b5f7e3243a7b8.ms-abc"));
-    assert_eq!(
-        sink.artifacts[0]
-            .attrs
-            .get("format")
-            .and_then(|v| v.as_str()),
-        Some("AutomaticDestinations")
-    );
-    assert_eq!(
-        sink.artifacts[0]
-            .attrs
-            .get("file_size")
-            .and_then(|v| v.as_u64()),
-        Some(expected_size)
-    );
+    assert!(sink.artifacts.is_empty());
 }
 
 #[test]
@@ -348,9 +330,9 @@ fn thumbcache_minimal_header_extracts_metadata_artifact() {
 
     let mut data = vec![0u8; 24];
     data[0..4].copy_from_slice(b"CMMM");
-    data[4..8].copy_from_slice(&24u32.to_le_bytes());
-    data[8..12].copy_from_slice(&1u32.to_le_bytes());
-    data[12..16].copy_from_slice(&3u32.to_le_bytes());
+    data[4..8].copy_from_slice(&21u32.to_le_bytes());
+    data[8..12].copy_from_slice(&2u32.to_le_bytes());
+    data[16..20].copy_from_slice(&24u32.to_le_bytes());
 
     let ctx = ArtifactContext {
         file_id: t("tc-001"),
@@ -366,17 +348,16 @@ fn thumbcache_minimal_header_extracts_metadata_artifact() {
     assert_eq!(sink.artifacts[0].family, "Thumbcache");
     let attrs = &sink.artifacts[0].attrs;
     assert_eq!(attrs.get("file_size").and_then(|v| v.as_u64()), Some(24));
-    assert_eq!(attrs.get("header_size").and_then(|v| v.as_u64()), Some(24));
-    assert_eq!(attrs.get("version").and_then(|v| v.as_u64()), Some(1));
-    assert_eq!(attrs.get("cache_type").and_then(|v| v.as_u64()), Some(3));
+    assert_eq!(attrs.get("version").and_then(|v| v.as_u64()), Some(21));
+    assert_eq!(attrs.get("cache_type").and_then(|v| v.as_u64()), Some(2));
     assert_eq!(
         attrs.get("cache_type_desc").and_then(|v| v.as_str()),
-        Some("256x256")
+        Some("256")
     );
 }
 
 #[test]
-fn sru_invalid_minimal_content_reports_sqlite_error_without_artifacts() {
+fn sru_invalid_minimal_content_is_rejected() {
     let extractor = SruExtractor;
     assert!(extractor.supports_path("C:/Windows/System32/sru/SRUDB.DAT"));
     assert!(extractor.supports_path("C:\\Windows\\System32\\sru\\SRUDB.DAT"));
@@ -388,13 +369,9 @@ fn sru_invalid_minimal_content_reports_sqlite_error_without_artifacts() {
         reader: Box::new(std::io::Cursor::new(b"not sqlite".to_vec())),
     };
     let mut sink = VecSink::new();
-    let report = extractor.run(ctx, &mut sink).unwrap();
-
-    assert_eq!(report.artifacts_found, 0);
-    assert_eq!(report.timeline_events, 0);
+    assert!(extractor.run(ctx, &mut sink).is_err());
     assert!(sink.artifacts.is_empty());
     assert!(sink.timeline_events.is_empty());
-    assert_eq!(report.errors, vec!["Not a recognized SRU ESE database"]);
 }
 
 #[test]
@@ -409,22 +386,14 @@ fn sru_sqlite_header_reports_format_mismatch_without_artifacts() {
         reader: Box::new(std::io::Cursor::new(data)),
     };
     let mut sink = VecSink::new();
-    let report = extractor.run(ctx, &mut sink).unwrap();
-
-    assert_eq!(report.artifacts_found, 0);
-    assert_eq!(report.timeline_events, 0);
+    assert!(extractor.run(ctx, &mut sink).is_err());
     assert!(sink.artifacts.is_empty());
-    assert_eq!(
-        report.errors,
-        vec!["SRUDB.DAT uses ESE/Jet Blue format, not SQLite"]
-    );
 }
 
 #[test]
 fn sru_ese_header_reports_file_level_artifact() {
     let extractor = SruExtractor;
-    let mut data = vec![0u8; 1024];
-    data[4..8].copy_from_slice(&0x89AB_CDEFu32.to_le_bytes());
+    let data = parser_fixtures::bytes("SRUDB.dat.gz");
 
     let ctx = ArtifactContext {
         file_id: t("sru-ese"),
@@ -435,9 +404,81 @@ fn sru_ese_header_reports_file_level_artifact() {
     let report = extractor.run(ctx, &mut sink).unwrap();
 
     assert_eq!(report.artifacts_found, 1);
-    assert!(report.errors.is_empty());
     assert_eq!(sink.artifacts.len(), 1);
     assert_eq!(sink.artifacts[0].family, "SRU");
+    assert_eq!(sink.artifacts[0].attrs["metadata_only"], true);
+}
+
+#[test]
+fn lnk_public_xp_fixture_preserves_target_and_file_times() {
+    let ctx = ArtifactContext {
+        file_id: t("lnk-xp"),
+        file_path: "notepad-xp.lnk".into(),
+        reader: Box::new(std::io::Cursor::new(parser_fixtures::bytes(
+            "notepad-xp.lnk",
+        ))),
+    };
+    let mut sink = VecSink::new();
+    let report = LnkExtractor
+        .run(ctx, &mut sink)
+        .expect("parse public LNK fixture");
+    assert_eq!(report.artifacts_found, 1);
+    assert_eq!(report.timeline_events, 3);
+    let attrs = &sink.artifacts[0].attrs;
+    assert_eq!(attrs["target_path"], "C:\\WINDOWS\\system32\\notepad.exe");
+    assert_eq!(attrs["file_size"], 69120);
+    assert_eq!(attrs["creation_time"], "2008-04-14T12:00:00+00:00");
+    assert_eq!(attrs["write_time"], "2008-04-14T12:00:00+00:00");
+    assert_eq!(attrs["access_time"], "2016-01-13T11:21:06.109375+00:00");
+}
+
+#[test]
+fn lnk_wrong_clsid_and_truncated_fixed_header_are_rejected() {
+    let valid = build_lnk(None, None, None, 1);
+    let mut wrong_clsid = valid.clone();
+    wrong_clsid[4..20].fill(0);
+    for bytes in [wrong_clsid, valid[..20].to_vec()] {
+        let ctx = ArtifactContext {
+            file_id: t("lnk-invalid"),
+            file_path: "invalid.lnk".into(),
+            reader: Box::new(std::io::Cursor::new(bytes)),
+        };
+        let mut sink = VecSink::new();
+        assert!(LnkExtractor.run(ctx, &mut sink).is_err());
+        assert!(sink.artifacts.is_empty());
+    }
+}
+
+#[test]
+fn recycle_bin_public_versions_preserve_original_size_path_and_time() {
+    for (name, size, path, timestamp) in [
+        (
+            "recycle_v1.bin",
+            999,
+            "C:\\temp\\oldfile.txt",
+            "2015-06-01T00:00:00+00:00",
+        ),
+        (
+            "recycle_v2.bin",
+            1234,
+            "C:\\Users\\victim\\Documents\\secret plan.docx",
+            "2024-01-15T10:30:00+00:00",
+        ),
+    ] {
+        let ctx = ArtifactContext {
+            file_id: t(name),
+            file_path: format!("$RECYCLE.BIN/S-1-5-21/$I{name}"),
+            reader: Box::new(std::io::Cursor::new(parser_fixtures::bytes(name))),
+        };
+        let mut sink = VecSink::new();
+        let report = RecycleBinExtractor
+            .run(ctx, &mut sink)
+            .expect("parse public recycle index");
+        assert_eq!(report.timeline_events, 1);
+        assert_eq!(sink.artifacts[0].attrs["recovered_file_size"], size);
+        assert_eq!(sink.artifacts[0].attrs["original_path"], path);
+        assert_eq!(sink.timeline_events[0].timestamp.to_rfc3339(), timestamp);
+    }
 }
 
 #[test]

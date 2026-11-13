@@ -1,0 +1,35 @@
+Every file here was generated for this crate and is under its licence
+(MIT or Apache-2.0). No Windows system wrote them: no openly licensed
+thumbnail cache or .bmc bitmap cache exists to test with.
+
+  thumbcache/  python3 -I tests/oracle/make_thumbcache.py tests/fixtures/synthetic/thumbcache
+  rdp/         python3 -I tests/oracle/make_rdp.py tests/fixtures/synthetic/rdp
+
+Both scripts are deterministic (Python standard library only). The JPEG
+in the caches is tests/oracle/assets/tiny.jpg, an 8x8 picture made for
+this crate (a generated bitmap converted with macOS sips, metadata
+segments removed; SHA-256 68765b3e3b02ad4d6365c05927ee28f351bbd1834cce4925884d77780b65d8b8).
+
+SHA-256:
+
+  81ce988b0f5191bdf406fce3ad4e939984261137159442c697523bf455712fa3  rdp/Cache0002.bin
+  d4db18eec018ff3e6441002a4ae231c84d0a3a1685f658e30fd5e91507bfc931  rdp/bcache-depth3.bmc
+  fe87a53d1ab047dbca95dca00d8dca5294c58482aa680f505f02225dca5760f8  rdp/bcache2.bmc
+  55b1a602aaad368fe634cffac3cbe0301d4dce0364617025f4edd7719287ac04  rdp/bcache22.bmc
+  3a0effa3c7e971b0c8c17583d4c8ecb62597f51143af8bef821a8d9981734559  rdp/bcache24.bmc
+  55cc0a1f0463c1b040cab9628d7012c2c75cc9959bb56d8de3082280333b9185  thumbcache/vista/thumbcache_256.db
+  20f82936de60c458e034dcc23ff016c60c4a8ebec916e6bde1c5debf3f023b94  thumbcache/vista/thumbcache_32.db
+  65cb95e391e6868584e56ac88be6626a72c7494d98c0cd7242139922fbd0e60a  thumbcache/vista/thumbcache_idx.db
+  d978435bb2f059478aa5253ee77a92b34f284c02990a24bf659e729a202bc798  thumbcache/windows10/iconcache_16.db
+  c2508015df55e14c527cb69e1b4ff0b61d28e26f3adc9d74eba6d2814bf35867  thumbcache/windows10/thumbcache_256.db
+  8e562737574d2eb2d8661a7f227b4a88b3cd26bf8cf5f2b775df5479f83e573a  thumbcache/windows10/thumbcache_32.db
+  dee9c3ab55bfa7191cd165615acf57ecc15273ece40d22c2650c56ef62dd2c01  thumbcache/windows10/thumbcache_idx.db
+  76df2de7d86ff7fdfa931367b44926a43e827e33203f139b1f286acf06f29114  thumbcache/windows7/thumbcache_256.db
+  0d1a13e8a145e8d3bb55531673ef4674adc3e1c13752fed94072b77f7f88152f  thumbcache/windows7/thumbcache_32.db
+  942a1045f354e6533ced432eb08f1737975c1b5a79a5c2a6da1b7d7cad789a48  thumbcache/windows7/thumbcache_idx.db
+  bf0327f01cb6116e91e58d0d2616cdf48d5371d8c89a14f7c098416d25dc4446  thumbcache/windows8/thumbcache_256.db
+  220f4d7245da81a0ee873db4f150a837b5040f4f8a1373cb2b3546521d68ebf8  thumbcache/windows8/thumbcache_32.db
+  b1b196c4bbc2613a7733d3a027abb37230b7580dd3468f9a457ad58896390e46  thumbcache/windows8/thumbcache_idx.db
+  add06322973440b28adbdb3857126715cfa977a1717f266ab0d6b932d7b3d70f  thumbcache/windows81/thumbcache_256.db
+  4492c80cf57438f7d868bd942735e307fef3c3f3ecf8ee24fa99174da0da357c  thumbcache/windows81/thumbcache_32.db
+  ab8a9d39444c584223da35b3ddf56fff00b55e4512887105807e6e113d2029c3  thumbcache/windows81/thumbcache_idx.db

@@ -412,6 +412,7 @@ dependencies = [
  "des",
  "domain",
  "evtx",
+ "flate2",
  "hex",
  "hmac",
  "lz4_flex 0.13.1",
@@ -421,10 +422,14 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2 0.10.9",
+ "sootmark-ese",
+ "sootmark-imagecache",
+ "sootmark-shell",
  "tempfile",
  "testing",
  "thiserror 2.0.21",
  "tracing",
+ "trash-core",
  "uuid",
  "windows-sys 0.61.2",
  "zeroize",
@@ -6328,6 +6333,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "sootmark-common"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16039a30e3d12a335537236722ba00a8da0b5dfdfcf20785b75dea78f523160e"
+
+[[package]]
+name = "sootmark-ese"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4d9c42c816e3f6f07c5c4794cc1bd4661977e9b2443a894b3ae3adbbbe45bdf"
+
+[[package]]
+name = "sootmark-imagecache"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0553b3e212fd7137728f839f1eb8c9b82ef804b558e17f6d43fc528bbb92d790"
+dependencies = [
+ "sootmark-common",
+]
+
+[[package]]
+name = "sootmark-shell"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb16770f74ba791b7f341abd8532e9d89a747997fb4f55e09ba1566e5f0f448a"
+dependencies = [
+ "sootmark-common",
+]
+
+[[package]]
 name = "soup3"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7573,6 +7608,16 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tracing",
+]
+
+[[package]]
+name = "trash-core"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e67303ae01f37ace9a4ac7f28ef29a51d55db55182afb085299e81f167414afe"
+dependencies = [
+ "chrono",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
