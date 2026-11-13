@@ -18,7 +18,15 @@ pub fn get_file_metadata_for_case(
     let entry = FileRepo::new(&conn)
         .find_by_id(&global.local_id)?
         .ok_or_else(|| FileServiceError::not_found("File entry does not exist"))?;
-    scoped_row(&entry, &global.data_source_id)
+    let mut row = scoped_row(&entry, &global.data_source_id)?;
+    super::digests::apply_file_sha256(
+        case_conn,
+        case_root,
+        case_id,
+        &global.data_source_id,
+        std::slice::from_mut(&mut row),
+    )?;
+    Ok(row)
 }
 
 pub(super) fn scoped_row(

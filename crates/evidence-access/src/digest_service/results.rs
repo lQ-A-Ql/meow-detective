@@ -12,12 +12,23 @@ pub fn list(
     request: DigestResultsRequestDto,
 ) -> Result<Vec<DigestResultDto>, DigestServiceError> {
     load_source(conn, case, Some(&request.data_source_id))?;
+    let file_id = request
+        .file_id
+        .as_deref()
+        .map(|id| {
+            let (global, _) = crate::file_service::open_source_for_file_id(conn, root, case, id)?;
+            if global.data_source_id.0 != request.data_source_id {
+                return Err(DigestServiceError::InvalidInput);
+            }
+            Ok(global.encode().0)
+        })
+        .transpose()?;
     let records =
         persistence_sqlite::repositories::evidence_digest_repo::EvidenceDigestRepo::new(conn)
             .list(
                 &case.0,
                 &request.data_source_id,
-                request.file_id.as_deref(),
+                file_id.as_deref(),
                 request.partition_index,
             )?;
     records

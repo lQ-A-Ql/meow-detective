@@ -107,15 +107,6 @@ fn checkpointed_catalog_batch_persists_partition_index_with_parent_links() {
         )
         .expect("check source fingerprint table");
     assert_eq!(fingerprint_table, 0);
-    let hash = "b".repeat(64);
-    persistence_source::repositories::file_repo::FileRepo::new(&connection)
-        .update_hash_sha256(&FileEntryId("file".into()), &hash)
-        .unwrap();
-    let updated = catalog
-        .get(&catalog.read_snapshot(), "source-1", "file")
-        .unwrap()
-        .unwrap();
-    assert_eq!(updated.hash_sha256, Some(hash));
     assert_eq!(
         persistence_source::repositories::file_repo::FileRepo::new(&connection)
             .find_partition_index_by_id(&FileEntryId("file".into()))

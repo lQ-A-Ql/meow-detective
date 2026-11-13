@@ -3,6 +3,7 @@
 
 mod browse;
 mod data_source_summary;
+mod digests;
 mod file_metadata;
 mod file_page;
 mod ntfs_inspector;

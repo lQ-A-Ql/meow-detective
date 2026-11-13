@@ -155,6 +155,13 @@ pub fn get_file_rows_for_case(
     for row in &mut page.rows {
         wrap_row_id(row, &global_id.data_source_id);
     }
+    super::digests::apply_file_sha256(
+        case_conn,
+        case_root,
+        case_id,
+        &global_id.data_source_id,
+        &mut page.rows,
+    )?;
     Ok(page)
 }
 
@@ -170,5 +177,12 @@ pub fn get_file_jump_context_for_case(
     local_request.file_id = global_id.local_id.0.clone();
     let mut context = crate::file_service::get_file_jump_context(&source_conn, &local_request)?;
     wrap_jump_context(&mut context, &global_id.data_source_id);
+    super::digests::apply_file_sha256(
+        case_conn,
+        case_root,
+        case_id,
+        &global_id.data_source_id,
+        std::slice::from_mut(&mut context.target),
+    )?;
     Ok(context)
 }

@@ -170,9 +170,6 @@ fn native_queries_preserve_unknown_encryption_partition_and_read_only_boundary()
             .unwrap()
             .encrypted
     );
-    FileRepo::new(&conn)
-        .update_hash_sha256(&id, &"a".repeat(64))
-        .unwrap();
     assert_eq!(
         FileRepo::new(&conn)
             .find_partition_index_by_id(&id)
@@ -184,9 +181,6 @@ fn native_queries_preserve_unknown_encryption_partition_and_read_only_boundary()
         Some(domain::FileEncryptionStatus::Unknown)
     );
     let read_only = persistence_sqlite::open_existing_source_read_only(&path).unwrap();
-    assert!(FileRepo::new(&read_only)
-        .update_hash_sha256(&id, &"b".repeat(64))
-        .is_err());
     assert!(ArtifactRepo::new(&read_only)
         .delete_analysis_outputs_in_transaction("file", "parser")
         .is_err());
@@ -196,7 +190,7 @@ fn native_queries_preserve_unknown_encryption_partition_and_read_only_boundary()
             .unwrap()
             .unwrap()
             .hash_sha256,
-        Some("a".repeat(64))
+        None
     );
     let foreign = persistence_fjall::FileEntryRecord {
         data_source_id: "foreign".into(),

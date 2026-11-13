@@ -1,40 +1,9 @@
-use domain::{normalize_content_sha256, FileEntry, FileEntryId};
+use domain::FileEntry;
 use persistence_sqlite::connection::DbResult;
 
 use super::FileRepo;
 
 impl FileRepo<'_> {
-    pub fn update_hash_sha256(&self, id: &FileEntryId, hash: &str) -> DbResult<Option<FileEntry>> {
-        let hash = normalize_content_sha256(Some(hash)).ok_or_else(|| {
-            persistence_sqlite::connection::DbError::System(
-                "file SHA-256 must be hexadecimal".into(),
-            )
-        })?;
-        if let Some(store) = crate::detail::open_store_for_write(self.conn)? {
-            let source_id = crate::detail::source_id(self.conn)?.ok_or_else(|| {
-                persistence_sqlite::DbError::System("source identity is missing".into())
-            })?;
-            let catalog =
-                persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
-            let Some(mut record) = catalog
-                .get(&catalog.read_snapshot(), &source_id, &id.0)
-                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?
-            else {
-                return Ok(None);
-            };
-            record.hash_sha256 = Some(hash);
-            catalog
-                .upsert(&record, persistence_fjall::PersistMode::SyncAll)
-                .map_err(|error| {
-                    persistence_sqlite::connection::DbError::System(error.to_string())
-                })?;
-            return Ok(Some(crate::detail::file_entry(record)));
-        }
-        Err(persistence_sqlite::DbError::System(
-            "source detail storage is missing".into(),
-        ))
-    }
-
     pub fn remove_partition_placeholder_root(
         &self,
         data_source_id: &str,

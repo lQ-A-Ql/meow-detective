@@ -138,15 +138,6 @@ pub fn calculate_evidence_digest_with_cancel(
     }
     if let Ok(digest) = &result {
         after?;
-        if scope == DigestScopeDto::File && algorithm == DigestAlgorithmDto::Sha256 {
-            if let Some(file_id) = target.file_id {
-                let (global, source_conn) =
-                    file_service::open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
-                persistence_source::repositories::file_repo::FileRepo::new(&source_conn)
-                    .update_hash_sha256(&global.local_id, &digest.value)?
-                    .ok_or(DigestServiceError::NotFound)?;
-            }
-        }
         EvidenceDigestRepo::new(case_conn).upsert(&EvidenceDigestRecord {
             case_id: case_id.0.clone(),
             scope: format!("{:?}", digest.scope),

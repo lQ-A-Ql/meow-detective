@@ -46,10 +46,11 @@ pub fn list_file_entries_page_for_case(
             repo.count_root_entries()?,
         )
     };
-    let rows = entries
+    let mut rows = entries
         .iter()
         .map(|entry| scoped_row(entry, source_id))
         .collect::<Result<Vec<_>, _>>()?;
+    super::digests::apply_file_sha256(case_conn, case_root, case_id, source_id, &mut rows)?;
     let truncated = offset.saturating_add(rows.len() as u64) < total_count;
     Ok(FileRowsPageDto {
         rows,
