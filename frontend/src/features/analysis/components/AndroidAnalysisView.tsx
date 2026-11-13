@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { RunAnalysisAction } from '@/components/layout/EmptyStateActions';
 import { AppWindow } from '@/components/icons';
 import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
 import { Badge } from '@/app/components/ui/badge';
@@ -11,18 +10,14 @@ import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { EmptyState, KeyValueField, PanelFrame } from '@/components/data-display';
 import { VirtualGrid } from '@/components/lists/VirtualGrid';
 import { AnalysisErrorBanner, AnalysisLoadingPanel } from '@/features/analysis/components/AnalysisPanels';
-import type { AndroidAnalysisRun, AndroidDeviceInfo, AndroidPackageSummary } from '@/types/models';
+import type { AndroidDeviceInfo, AndroidPackageSummary } from '@/types/models';
 import type { AndroidAnalysisTabKey } from '@/features/analysis/types';
 
 interface AndroidAnalysisViewProps {
-  /** Runs platform analysis when the device has no packages yet. */
-  onRunAnalysis?: () => void;
   deviceInfo?: AndroidDeviceInfo;
   packageSummary?: AndroidPackageSummary;
   activePanel: AndroidAnalysisTabKey;
   loading: boolean;
-  running: boolean;
-  lastRun?: AndroidAnalysisRun;
   error?: string;
   hasMore: boolean;
   loadingMore: boolean;
@@ -35,13 +30,10 @@ const getPackageKey = (item: AndroidPackageSummary['packages'][number]) =>
 const renderPackage = (item: AndroidPackageSummary['packages'][number]) => <AndroidPackageCard item={item} />;
 
 export function AndroidAnalysisView({
-  onRunAnalysis,
   deviceInfo,
   packageSummary,
   activePanel,
   loading,
-  running,
-  lastRun,
   error,
   hasMore,
   loadingMore,
@@ -53,21 +45,10 @@ export function AndroidAnalysisView({
     <div className="flex h-full min-h-0 flex-1 flex-col">
       <ScrollArea className="min-h-0 flex-1" viewportClassName="p-6">
         {error ? <AnalysisErrorBanner message={error} onRetry={onRetry} /> : null}
-        {loading || running ? (
-          <AnalysisLoadingPanel text={t(running ? 'analysis.android.running' : 'analysis.android.loading')} />
+        {loading ? (
+          <AnalysisLoadingPanel text={t('analysis.android.loading')} />
         ) : (
           <>
-            {lastRun ? (
-              <div className="mb-4">
-                <Badge variant="outline">
-                  {t('analysis.android.lastRun', {
-                    scanned: lastRun.scannedFileCount,
-                    facts: lastRun.deviceFactCount,
-                    packages: lastRun.packageCount,
-                  })}
-                </Badge>
-              </div>
-            ) : null}
             {activePanel === 'device' ? (
               <AndroidDevicePanel deviceInfo={deviceInfo} />
             ) : (
@@ -76,7 +57,6 @@ export function AndroidAnalysisView({
                 hasMore={hasMore}
                 loadingMore={loadingMore}
                 onLoadMore={onLoadMore}
-                onRunAnalysis={onRunAnalysis}
               />
             )}
           </>
@@ -132,13 +112,11 @@ function AndroidPackagesPanel({
   hasMore,
   loadingMore,
   onLoadMore,
-  onRunAnalysis,
 }: {
   summary?: AndroidPackageSummary;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
-  onRunAnalysis?: () => void;
 }) {
   const { t } = useTranslation();
   const packages = summary?.packages ?? [];
@@ -146,10 +124,7 @@ function AndroidPackagesPanel({
   return (
     <div className="space-y-5">
       {packages.length === 0 ? (
-        <EmptyState
-          title={t('analysis.android.noPackages')}
-          action={onRunAnalysis ? <RunAnalysisAction onClick={onRunAnalysis} /> : undefined}
-        />
+        <EmptyState title={t('analysis.android.noPackages')} />
       ) : (
         <VirtualGrid items={packages} getItemKey={getPackageKey} renderItem={renderPackage} />
       )}

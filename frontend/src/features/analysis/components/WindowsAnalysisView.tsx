@@ -10,10 +10,10 @@ import {
   EventLogPanel,
   EvidenceClassificationPanel,
   RegistryExtractionPanel,
-  PluginModulePanel,
   SystemInfoPanel,
 } from '@/features/analysis/components/AnalysisPanels';
 import { FileClassificationBoardContainer } from '@/features/analysis/containers/FileClassificationBoardContainer';
+import { PluginWorkspaceContainer } from '@/features/analysis/containers/PluginWorkspaceContainer';
 import type {
   FileClassificationBoard as FileClassificationBoardData,
   AnalysisSystemInfo,
@@ -55,15 +55,12 @@ export interface WindowsAnalysisViewProps {
   registrySummary: QueryState<RegistryExtractionSummary>;
   registryStructured?: RegistryStructuredSummary;
   browserSummary: QueryState<BrowserHistorySummary>;
-  onRunBrowserPasswordExtraction: (password: string) => Promise<void>;
   emailSummary: QueryState<EmailExtractionSummary>;
   eventLogSummary: InfiniteQueryState<EvtxEventSummary>;
   eventLogView: EvtxEventView;
   eventLogLoadContextKey: string;
   onEventLogViewChange: (view: EvtxEventView) => void;
   classificationBoard: QueryState<FileClassificationBoardData>;
-  evidencePending: boolean;
-  onRunEvidence: () => void;
   summaryPending: boolean;
   onDownloadSummary: () => void;
   recoveryModel: DeletedRecoveryViewModel;
@@ -83,15 +80,12 @@ export function WindowsAnalysisView({
   registrySummary,
   registryStructured,
   browserSummary,
-  onRunBrowserPasswordExtraction,
   emailSummary,
   eventLogSummary,
   eventLogView,
   eventLogLoadContextKey,
   onEventLogViewChange,
   classificationBoard,
-  evidencePending,
-  onRunEvidence,
   summaryPending,
   onDownloadSummary,
   recoveryModel,
@@ -137,11 +131,7 @@ export function WindowsAnalysisView({
               {evidenceSummary.isLoading ? (
                 <AnalysisLoadingPanel text={t('analysis.loading.evidence')} />
               ) : (
-                <EvidenceClassificationPanel
-                  summary={evidenceSummary.data}
-                  pending={evidencePending}
-                  onRun={onRunEvidence}
-                />
+                <EvidenceClassificationPanel summary={evidenceSummary.data} />
               )}
             </TabsContent>
 
@@ -149,10 +139,7 @@ export function WindowsAnalysisView({
               {browserSummary.isLoading ? (
                 <AnalysisLoadingPanel text={t('analysis.loading.browser')} />
               ) : (
-                <BrowserHistoryPanel
-                  summary={browserSummary.data}
-                  onRunBrowserPasswordExtraction={onRunBrowserPasswordExtraction}
-                />
+                <BrowserHistoryPanel summary={browserSummary.data} />
               )}
             </TabsContent>
 
@@ -204,8 +191,8 @@ export function WindowsAnalysisView({
             </TabsContent>
 
             <TabsContent value="plugin" className="m-0 data-[state=inactive]:hidden">
-              {activePluginModule && dataSourceId ? (
-                <PluginModulePanel
+              {dataSourceId ? (
+                <PluginWorkspaceContainer
                   dataSourceId={dataSourceId}
                   module={activePluginModule}
                   loadContextKey={dataSourceId}

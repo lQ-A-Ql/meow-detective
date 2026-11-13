@@ -12,6 +12,7 @@ pub(super) fn delete_replacements(
     store: &SourceStore,
     source: &str,
     replacements: &[AnalysisOutputReplacement],
+    generation: Option<&persistence_source::fjall::VerifiedGenerationClone>,
     cancel: &AtomicBool,
     mut progress: impl FnMut(u64),
 ) -> Result<(), AnalysisServiceError> {
@@ -47,9 +48,16 @@ pub(super) fn delete_replacements(
                 .filter(|record| index.matches_artifact(record, source))
                 .map(|record| record.id)
                 .collect::<Vec<_>>();
-            artifacts
-                .delete_batch(source, &ids, PersistMode::Buffer)
-                .map_err(clone_error)?;
+            match generation {
+                Some(generation) => artifacts.delete_batch_in_generation(
+                    generation,
+                    source,
+                    &ids,
+                    PersistMode::Buffer,
+                ),
+                None => artifacts.delete_batch(source, &ids, PersistMode::Buffer),
+            }
+            .map_err(clone_error)?;
             progress(processed);
             cursor = page.next_cursor;
             if cursor.is_none() {
@@ -77,9 +85,16 @@ pub(super) fn delete_replacements(
                 .filter(|record| index.matches_timeline(record))
                 .map(|record| record.id)
                 .collect::<Vec<_>>();
-            timeline
-                .delete_batch(source, &ids, PersistMode::Buffer)
-                .map_err(clone_error)?;
+            match generation {
+                Some(generation) => timeline.delete_batch_in_generation(
+                    generation,
+                    source,
+                    &ids,
+                    PersistMode::Buffer,
+                ),
+                None => timeline.delete_batch(source, &ids, PersistMode::Buffer),
+            }
+            .map_err(clone_error)?;
             progress(processed);
             cursor = page.next_cursor;
             if cursor.is_none() {

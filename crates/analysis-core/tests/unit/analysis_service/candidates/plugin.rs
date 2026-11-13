@@ -137,3 +137,41 @@ fn database_candidate_carries_wal_companion_and_identity() {
         .content_identity
         .starts_with("plugin-candidate-v2:"));
 }
+
+fn partitioned_record(id: &str, partition: usize, path: &str) -> PluginFileRecord {
+    PluginFileRecord {
+        file_id: id.into(),
+        data_source_id: "source".into(),
+        partition_index: Some(partition),
+        path: path.into(),
+        size: 64,
+        encrypted: false,
+        content_identity: id.into(),
+        modified_at: None,
+    }
+}
+
+#[test]
+fn wal_selection_requires_the_primary_partition() {
+    let records = vec![
+        partitioned_record("primary", 1, "[P1]/data/app.db"),
+        partitioned_record("wal-one", 1, "[P1]/data/app.db-wal"),
+        partitioned_record("wal-two", 2, "[P2]/data/app.db-wal"),
+    ];
+    let selected = companion_records(&records[0], &records, &companion_index(&records)).unwrap();
+    assert_eq!(selected.len(), 1);
+    assert_eq!(selected[0].file_id.0, "wal-one");
+}
+
+#[test]
+fn duplicate_wal_in_one_partition_is_rejected() {
+    let records = vec![
+        partitioned_record("primary", 1, "[P1]/data/app.db"),
+        partitioned_record("wal-one", 1, "[P1]/data/app.db-wal"),
+        partitioned_record("wal-two", 1, "[P1]/data/app.db-wal"),
+    ];
+    assert!(matches!(
+        companion_records(&records[0], &records, &companion_index(&records)),
+        Err(AnalysisServiceError::InvalidInput(_))
+    ));
+}

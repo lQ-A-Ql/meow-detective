@@ -3,6 +3,8 @@ use crate::analysis_service::capability::CandidateReadPolicy;
 use crate::analysis_service::extraction::linux::linux_candidate_read_limit;
 use crate::analysis_service::extraction::reader::read_candidate_source_with_progress;
 
+const MAX_PLUGIN_INPUT_BYTES: usize = 128 * 1024 * 1024;
+
 pub(super) fn estimated_input_weight(item: &CandidateWorkItem) -> usize {
     if item.capability.read_policy == CandidateReadPolicy::RegistryPreload
         || item.candidate.encrypted
@@ -34,9 +36,7 @@ fn candidate_read_limit(candidate: &EvidenceCandidate, capability: AnalysisCapab
     }
     match capability.read_policy {
         CandidateReadPolicy::Bounded(limit) => limit,
-        CandidateReadPolicy::Full => usize::try_from(candidate.size)
-            .unwrap_or(usize::MAX)
-            .saturating_add(1),
+        CandidateReadPolicy::Full => MAX_PLUGIN_INPUT_BYTES.saturating_add(1),
         CandidateReadPolicy::LinuxPathAware => {
             linux_candidate_read_limit(&normalize_evidence_path(&candidate.path))
         }
@@ -53,6 +53,15 @@ where
     F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 {
     let read_limit = candidate_read_limit(&candidate, capability);
+    if capability.read_policy == CandidateReadPolicy::Full
+        && plugin_input_exceeds_budget(&candidate)
+    {
+        return Ok(ready_deferred(
+            candidate,
+            capability,
+            format!("plugin input and companions exceed the {MAX_PLUGIN_INPUT_BYTES} byte budget"),
+        ));
+    }
     if candidate.category == "EventLogs" {
         return prepare_evtx_source(coordinator, candidate, capability, read_limit);
     }
@@ -115,7 +124,19 @@ where
     } else {
         PreparedCandidateInput::Bytes(bytes)
     };
-    let weight_bytes = match &input {
+    let weight_bytes = prepared_input_bytes(&input);
+    Ok(PreparedWork::Parallel {
+        input: PreparedCandidate {
+            candidate,
+            capability,
+            input,
+        },
+        weight_bytes,
+    })
+}
+
+fn prepared_input_bytes(input: &PreparedCandidateInput) -> usize {
+    match input {
         PreparedCandidateInput::Plugin {
             primary,
             companions,
@@ -127,15 +148,17 @@ where
         PreparedCandidateInput::Browser { .. } => {
             unreachable!("browser candidates use the dedicated preparation path")
         }
-    };
-    Ok(PreparedWork::Parallel {
-        input: PreparedCandidate {
-            candidate,
-            capability,
-            input,
-        },
-        weight_bytes,
-    })
+    }
+}
+
+fn plugin_input_exceeds_budget(candidate: &EvidenceCandidate) -> bool {
+    candidate
+        .companions
+        .iter()
+        .try_fold(candidate.size, |total, companion| {
+            total.checked_add(companion.size)
+        })
+        .is_none_or(|size| size > MAX_PLUGIN_INPUT_BYTES as u64)
 }
 
 fn read_plugin_companions<F>(
@@ -207,6 +230,32 @@ where
             let warning = format!("{} read failed: {error}", candidate.path);
             return Ok(ready_deferred(candidate, capability, warning));
         }
+    };
+    let source = match source {
+        CandidateSource::Seekable(reader) => {
+            let result = super::super::evtx::persist_reader(
+                coordinator.context.output,
+                &candidate,
+                reader,
+                coordinator.context.cancel_token,
+            );
+            let kind = match result {
+                Ok(observation) => CandidateCompletionKind::Persisted {
+                    observation,
+                    plugin_failures: Vec::new(),
+                },
+                Err(AnalysisServiceError::Cancelled) => {
+                    return Err(AnalysisServiceError::Cancelled)
+                }
+                Err(error) => CandidateCompletionKind::Deferred(error.to_string()),
+            };
+            return Ok(PreparedWork::Ready(CandidateCompletion {
+                candidate,
+                capability,
+                kind,
+            }));
+        }
+        source => source,
     };
     let probe_limit = read_limit.saturating_add(1);
     let bytes = match read_candidate_source_with_progress(

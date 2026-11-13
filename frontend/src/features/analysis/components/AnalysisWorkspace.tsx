@@ -44,12 +44,7 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
           <AnalysisHeader
             loading={model.loading}
             hasCase={model.hasCase}
-            extractionPending={
-              model.selectedPlatform === 'android' ? model.analysisMutationPending : model.extractionPending
-            }
             onRefresh={model.refresh}
-            onRunExtraction={model.selectedPlatform === 'android' ? model.runAndroidAnalysis : model.runExtraction}
-            showRunExtraction={model.selectedPlatform === 'android'}
             selectedDataSourceId={model.selectedDataSourceId}
           />
 
@@ -67,15 +62,12 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
               registrySummary={model.registrySummary}
               registryStructured={model.registryStructured}
               browserSummary={model.browserSummary}
-              onRunBrowserPasswordExtraction={model.runBrowserPasswordExtraction}
               emailSummary={model.emailSummary}
               eventLogSummary={model.eventLogSummary}
               eventLogView={model.eventLogView}
               eventLogLoadContextKey={model.eventLogLoadContextKey}
               onEventLogViewChange={model.setEventLogView}
               classificationBoard={model.classificationBoard}
-              evidencePending={model.evidencePending}
-              onRunEvidence={model.runEvidenceScan}
               summaryPending={model.summaryPending}
               onDownloadSummary={model.downloadSummary}
               recoveryModel={model.recoveryModel}
@@ -111,8 +103,6 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
               packageSummary={model.androidPackages}
               activePanel={model.activeAndroidTab}
               loading={model.loading || model.androidLoading}
-              running={model.androidAnalysisRunning}
-              lastRun={model.androidAnalysisLastRun}
               error={model.androidError ? errorMessage(model.androidError) : undefined}
               hasMore={model.androidPackagesHasMore}
               loadingMore={model.androidPackagesLoadingMore}

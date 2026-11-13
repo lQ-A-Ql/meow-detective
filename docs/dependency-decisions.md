@@ -14,6 +14,33 @@ This document records non-trivial dependency license and sourcing decisions for 
 - **Reason**: These crates ship Mozilla/webpki root certificate data as a data bundle. The CDLA-Permissive-2.0 license is a data-specific permissive license that permits unrestricted use, modification, and distribution. The data is not executable code and does not impose copyleft or network-use obligations. It is pulled transitively by `rustls` / `tauri` networking stacks.
 - **Review cadence**: Re-evaluate on each monthly dependency audit or when the root-cert data crate license changes.
 
+## Windows artifact parsers — 2026-11-13
+
+Owner: Parser Maintenance. The application uses released, read-only parser libraries for
+Windows shell artifacts and ESE metadata. Versions are pinned in the workspace manifest.
+
+| Package | Version | Application use | License |
+|---|---|---|---|
+| trash-core | 0.3.2 | Windows Recycle Bin index records, Windows feature only | Apache-2.0 |
+| sootmark-shell | 0.3.0 | Shell Link, AutomaticDestinations and CustomDestinations | MIT OR Apache-2.0 |
+| sootmark-imagecache | 0.1.0 | Windows thumbnail cache entries and checksum diagnostics | MIT OR Apache-2.0 |
+| sootmark-ese | 0.1.1 | Typed ESE header metadata for SRU | MIT OR Apache-2.0 |
+
+The adapters preserve evidence file identity and FILETIME precision. They do not execute
+Shell Link targets or invoke ESE recovery. Recycle Bin versions 1/2, thumbnail cache
+versions 20/21/30/31/32, two Shell Link variants and both Jump List containers have
+committed public fixtures. Fixture origins, redistribution licenses, SHA-256 values and
+independent expected fields are in
+`testdata/fixtures/public-small/windows-parsers/README.md` and `expected.json`.
+The SRU scope remains database-header metadata.
+
+Published sources: [trash-core](https://github.com/SecurityRonin/trash-forensic),
+[sootmark-shell](https://github.com/Sootmark/shell),
+[sootmark-imagecache](https://github.com/Sootmark/imagecache),
+[sootmark-ese](https://github.com/Sootmark/ese).
+Their minimum Rust versions are 1.96, 1.80, 1.80 and 1.80 respectively; the workspace
+toolchain is 1.99.0. The existing dependency license policy covers these licenses.
+
 ## Advisory review — 2026-10-16
 
 Owner: Dependency Maintenance. The review preserves advisory checking for both configured targets; it does not change Cargo.lock or the default unmaintained-advisory enforcement.

@@ -546,7 +546,7 @@ fn malformed_registry_hive_presence_keeps_system_fields_empty_with_provenance() 
             && item
                 .warnings
                 .iter()
-                .any(|warning| warning.contains("registry cell is corrupt"))
+                .any(|warning| warning.contains("registry input was truncated or changed"))
     }));
 }
 
@@ -674,10 +674,19 @@ fn corrupted_registry_hive_records_warning_without_facts() {
 
     assert!(info.computer_name.is_none());
     assert!(info.boot_history.is_empty());
+    assert_eq!(info.status, AnalysisParseStatusDto::NotParsed);
     assert!(info
         .warnings
         .iter()
-        .any(|warning| warning.contains("不含 regf 头")));
+        .any(|warning| warning.contains("invalid hive: invalid hive input")));
+    assert!(info.provenance.iter().any(|source| {
+        source.artifact_path == "Windows/System32/config/SYSTEM"
+            && source.status == AnalysisParseStatusDto::NotParsed
+            && source
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("invalid hive: invalid hive input"))
+    }));
 }
 
 #[test]

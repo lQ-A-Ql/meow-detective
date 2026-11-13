@@ -361,12 +361,6 @@
     },
     "title": "Browser records",
     "unavailable": "Browser records unavailable.",
-    "manualPasswordHint": "If offline DPAPI keys are unavailable, enter the Windows account password for a one-time retry.",
-    "manualPasswordAction": "Retry with account password",
-    "manualPasswordTitle": "Decrypt browser passwords",
-    "manualPasswordDescription": "The password is used only for this extraction run and is never stored in the case.",
-    "manualPasswordPlaceholder": "Windows account password",
-    "manualPasswordSubmit": "Decrypt and retry",
     "stats": {
       "visits": "Browsing history",
       "downloads": "Downloads",
@@ -2040,15 +2034,19 @@
       }
     },
     "header": {
-      "refresh": "Refresh",
-      "run": "Run analysis",
-      "running": "Analyzing..."
+      "refresh": "Refresh"
     },
     "extraction": {
       "Registry": "Registry Extraction",
       "BrowserHistory": "Browser History Extraction",
       "Email": "Email Extraction",
       "EventLogs": "Event Log Extraction",
+      "ProgramExecution": "Program execution",
+      "UserActivity": "User activity",
+      "RecycleBin": "Recycle bin",
+      "Thumbnails": "Thumbnail cache",
+      "ResourceUsage": "Resource usage",
+      "PluginArtifacts": "Plugin analysis",
       "LinuxArtifacts": "Linux Artifact Extraction",
       "LinuxJournal": "Linux Journal Extraction",
       "LinuxLogin": "Linux Login Extraction",
@@ -2083,9 +2081,6 @@
       "noPackages": "No installed packages were found in parsed PackageManager records.",
       "loadMore": "Load more",
       "loading": "Loading Android analysis results...",
-      "running": "Running Android analysis...",
-      "lastRun": "Scanned {{scanned}} files, extracted {{facts}} device facts and {{packages}} installed packages",
-      "sourceUnavailable": "The current Android data source is not ready for analysis.",
       "unavailable": "Unavailable",
       "packageName": "Package name",
       "appName": "Application name",
@@ -2622,6 +2617,7 @@
     },
     "actions": {
       "title": "Plugin actions",
+      "runEnabled": "Run enabled plugins",
       "run": "Run",
       "running": "Running…",
       "selectFile": "Choose file",
@@ -2881,8 +2877,6 @@
       "unavailable": "The evidence classification summary is unavailable.",
       "title": "Evidence semantic classification",
       "description": "Candidates come from file-tree metadata; structured extraction reads Registry, browser history, and email candidates and returns auditable sources.",
-      "running": "Classifying...",
-      "run": "Start evidence classification",
       "statFamilies": "Evidence families",
       "statCandidateFiles": "Candidate files",
       "statCandidateSize": "Total candidate size",

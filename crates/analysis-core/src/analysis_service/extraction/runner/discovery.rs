@@ -82,7 +82,7 @@ pub(super) fn discover_run_candidates(
 > {
     let categories = discovery_categories(selected);
     let started = Instant::now();
-    let (mut candidates, kernel, preparation_catalog) =
+    let (mut candidates, kernel, mut preparation_catalog) =
         evidence_candidates_for_categories_with_preparation(
             conn,
             &categories,
@@ -96,9 +96,22 @@ pub(super) fn discover_run_candidates(
         plugin_extractors,
         cancel_token,
     )?);
+    if preparation_catalog.scanned_records() == 0
+        && candidates
+            .iter()
+            .any(|candidate| candidate.category == PLUGIN_CAPABILITY_KEY)
+    {
+        preparation_catalog =
+            PreparationCatalog::load_from_source(conn, cancel_token, |records| {
+                progress.report_work(AnalysisWorkStageDto::Discovery, started, records, 0, false);
+            })?;
+    }
     order_candidates_for_extraction(conn, platform, &mut candidates);
-    let linux_catalog = (platform == DataSourcePlatform::Linux)
-        .then(|| LinuxCatalogMetadata::from_discovery(&candidates, kernel));
+    let linux_catalog = (platform == DataSourcePlatform::Linux
+        && selected
+            .iter()
+            .any(|capability| capability.read_policy == CandidateReadPolicy::LinuxPathAware))
+    .then(|| LinuxCatalogMetadata::from_discovery(&candidates, kernel));
     progress.report_work(
         AnalysisWorkStageDto::Discovery,
         started,
@@ -120,17 +133,14 @@ pub(super) fn begin_streamed_output(
 ) -> Result<native_output::StreamingGeneration, AnalysisServiceError> {
     let output_source_id = resolve_output_data_source_id(conn)?;
     let replacements = candidate_replacements(candidates, selected, plugin_extractors, checkpoints);
-    let progress = std::cell::RefCell::new(progress);
     let started = Instant::now();
-    let deleting = std::cell::Cell::new(None);
-    let deleted = std::cell::Cell::new(0);
     let output = native_output::begin_streaming(
         conn,
         &output_source_id,
         &replacements,
         cancel_token,
         |copy| {
-            progress.borrow_mut().report_work(
+            progress.report_work(
                 AnalysisWorkStageDto::GenerationClone,
                 started,
                 copy.records_copied,
@@ -138,26 +148,8 @@ pub(super) fn begin_streamed_output(
                 copy.durable,
             );
         },
-        |records| {
-            let started = deleting.get().unwrap_or_else(Instant::now);
-            deleting.set(Some(started));
-            deleted.set(records);
-            progress.borrow_mut().report_work(
-                AnalysisWorkStageDto::ReplacementDelete,
-                started,
-                records,
-                0,
-                false,
-            );
-        },
+        |_| {},
     )?;
-    progress.borrow_mut().report_work(
-        AnalysisWorkStageDto::ReplacementDelete,
-        deleting.get().unwrap_or_else(Instant::now),
-        deleted.get(),
-        0,
-        true,
-    );
     Ok(output)
 }
 

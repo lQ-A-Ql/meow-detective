@@ -82,15 +82,7 @@ pub(super) fn extend_prekeys_from_lsa_secrets(
     let Some(security) = catalog.suffix(data_source_id, "/windows/system32/config/security") else {
         return Ok(());
     };
-    let security_bytes = match read_locator(&security, cancel_token, file_reader) {
-        Ok(bytes) => bytes,
-        Err(error) => {
-            warnings.push(format!(
-                "SECURITY hive could not be read for offline LSA secrets: {error}"
-            ));
-            return Ok(());
-        }
-    };
+    let security_bytes = read_locator(&security, cancel_token, file_reader)?;
     match decrypt_lsa_secrets(&security_bytes, seed.boot_key) {
         Ok(secrets) => apply_lsa_secrets(&secrets, seed.user_nt_hashes, prekeys, warnings),
         Err(error) => warnings.push(format!(
@@ -145,9 +137,7 @@ pub(super) fn read_cng_chromekey_file(
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> Result<Option<Vec<u8>>, AnalysisServiceError> {
     for locator in catalog.matching(data_source_id, "/crypto/systemkeys/") {
-        let Ok(bytes) = read_locator(&locator, cancel_token, file_reader) else {
-            continue;
-        };
+        let bytes = read_locator(&locator, cancel_token, file_reader)?;
         let Ok(cng) = parse_cng_system_key_file(&bytes) else {
             continue;
         };

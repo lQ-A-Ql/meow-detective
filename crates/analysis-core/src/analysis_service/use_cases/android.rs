@@ -37,7 +37,10 @@ pub fn run_source_android_analysis_with_cancel(
     cancel_token: &AtomicBool,
 ) -> Result<AndroidAnalysisRunDto, AnalysisServiceError> {
     super::super::cancellation::ensure_not_cancelled(cancel_token)?;
+    runtime.validate_publication()?;
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
+    let _source_fence = runtime.fence(&source.connection);
+    let _case_fence = runtime.fence(case_conn);
     validate_analysis_categories(source.platform, &["AndroidDevice", "AndroidPackages"])?;
     let mut reader = runtime.bind(SourceReadContext::new(
         &source.connection,
@@ -54,6 +57,7 @@ pub fn run_source_android_analysis_with_cancel(
         cancel_token,
     )?;
     super::super::cancellation::ensure_not_cancelled(cancel_token)?;
+    runtime.validate_publication()?;
     Ok(result)
 }
 

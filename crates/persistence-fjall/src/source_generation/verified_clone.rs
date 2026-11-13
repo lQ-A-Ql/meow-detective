@@ -21,6 +21,39 @@ pub struct VerifiedGenerationClone {
 }
 
 impl VerifiedGenerationClone {
+    pub(crate) fn validate_unpublished_target(
+        &self,
+        store: &SourceStore,
+        source_id: &str,
+    ) -> Result<()> {
+        if self.manifest.source_id != source_id {
+            return Err(FjallStorageError::InvalidEnvelope(
+                "verified clone belongs to another source".into(),
+            ));
+        }
+        if !Weak::ptr_eq(&self.target, &Arc::downgrade(&store.database().inner)) {
+            return Err(FjallStorageError::InvalidEnvelope(
+                "verified clone belongs to another target".into(),
+            ));
+        }
+        if store
+            .database()
+            .path()
+            .join(SOURCE_GENERATION_MANIFEST_FILE)
+            .exists()
+            || store
+                .database()
+                .path()
+                .join(SOURCE_GENERATION_SEAL_FILE)
+                .exists()
+        {
+            return Err(FjallStorageError::PublicationConflict(
+                store.database().path().to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
     pub fn seal(self, store: &SourceStore, attempt: &str, cancel: &AtomicBool) -> Result<String> {
         ensure_not_cancelled(cancel)?;
         validate_identity(attempt)?;

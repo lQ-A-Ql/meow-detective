@@ -13,6 +13,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 mod facet_index;
+mod staging;
 mod storage_cost;
 mod timeline_batch;
 mod timeline_count;

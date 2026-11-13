@@ -93,7 +93,12 @@ impl<'a> ReplacementIndex<'a> {
             .get(EXTRACTOR_ID_ATTR)
             .and_then(serde_json::Value::as_str)
             .unwrap_or_default();
-        producers.iter().any(|matcher| matcher.matches(producer))
+        producers.iter().any(|matcher| {
+            matcher.matches(producer)
+                || (producer.is_empty()
+                    && matches!(matcher, ProducerMatch::Prefix(prefix)
+                        if legacy_native_family_matches(prefix, &record.artifact_type)))
+        })
     }
 
     /// Same predicate as the pre-index timeline matcher: `parser_id` is
@@ -107,6 +112,17 @@ impl<'a> ReplacementIndex<'a> {
             .iter()
             .any(|matcher| matcher.matches_opt(parser_id))
     }
+}
+
+fn legacy_native_family_matches(prefix: &str, family: &str) -> bool {
+    matches!(
+        (prefix, family),
+        ("windows.native.prefetch.", "Prefetch")
+            | ("windows.native.activity.", "LNK" | "JumpList")
+            | ("windows.native.recycle_bin.", "RecycleBin")
+            | ("windows.native.thumbcache.", "Thumbcache")
+            | ("windows.native.sru.", "SRU")
+    )
 }
 
 #[cfg(test)]

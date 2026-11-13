@@ -187,21 +187,27 @@ pub fn build_lnk(
         // VolumeIDOffset (4), LocalBasePathOffset (4), ...
         // We'll embed the path as local_base_path
 
-        let volume_id_offset = 16u32; // 4 fields × 4 bytes = 16
-        let local_base_path_offset = volume_id_offset + 16; // 16 bytes for VolumeID placeholder
-
-        let linkinfo_size = local_base_path_offset + path_bytes.len() as u32 + 1;
+        let volume_id_offset = 28u32;
+        let local_base_path_offset = volume_id_offset + 16;
+        let common_path_suffix_offset = local_base_path_offset + path_bytes.len() as u32 + 1;
+        let linkinfo_size = common_path_suffix_offset + 1;
 
         data.extend_from_slice(&linkinfo_size.to_le_bytes());
-        data.extend_from_slice(&0x1Cu32.to_le_bytes()); // LinkInfoHeaderSize
+        data.extend_from_slice(&0x1Cu32.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
         data.extend_from_slice(&volume_id_offset.to_le_bytes());
         data.extend_from_slice(&local_base_path_offset.to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&common_path_suffix_offset.to_le_bytes());
 
-        // VolumeID (minimal: 16 bytes of zeros)
-        data.extend_from_slice(&[0u8; 16]);
+        data.extend_from_slice(&16u32.to_le_bytes());
+        data.extend_from_slice(&3u32.to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&16u32.to_le_bytes());
 
         // Local base path (null-terminated)
         data.extend_from_slice(path_bytes);
+        data.push(0);
         data.push(0);
     }
 
@@ -216,8 +222,7 @@ pub fn build_recycle_bin_i(
 ) -> Vec<u8> {
     let mut data = Vec::new();
 
-    // Header size (8 bytes) - v2 = 0x20 (32)
-    data.extend_from_slice(&0x20u64.to_le_bytes());
+    data.extend_from_slice(&2u64.to_le_bytes());
 
     // Physical file size (8 bytes)
     data.extend_from_slice(&file_size.to_le_bytes());
@@ -226,8 +231,8 @@ pub fn build_recycle_bin_i(
     let ft = dt_to_filetime(deletion_time);
     data.extend_from_slice(&ft.to_le_bytes());
 
-    // Remaining header (to reach 0x20): 32 - 24 = 8 bytes of zeros
-    data.extend_from_slice(&[0u8; 8]);
+    let name_len = original_path.encode_utf16().count() as u32 + 1;
+    data.extend_from_slice(&name_len.to_le_bytes());
 
     // Original path (UTF-16LE null-terminated)
     for c in original_path.encode_utf16() {

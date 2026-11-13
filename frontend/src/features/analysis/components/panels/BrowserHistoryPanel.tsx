@@ -7,21 +7,9 @@ import type {
   BrowserSessionTab,
   BrowserVisit,
 } from '@/types/models';
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/components/ui/dialog';
-import { Input } from '@/app/components/ui/input';
-import { ActionIcon } from '@/components/controls/ActionIcon';
-import { IconButton } from '@/components/controls/IconButton';
 import { ExtractionTableSection, formatSize, TableBlock } from './helpers';
 
 function groupByBrowser<T extends { browser: string }>(rows: T[]): Record<string, T[]> {
@@ -285,17 +273,8 @@ function BrowserTableSection<T extends { artifactId: string; browser: string }>(
   );
 }
 
-export function BrowserHistoryPanel({
-  summary,
-  onRunBrowserPasswordExtraction,
-}: {
-  summary?: BrowserHistorySummary;
-  onRunBrowserPasswordExtraction?: (password: string) => Promise<void>;
-}) {
+export function BrowserHistoryPanel({ summary }: { summary?: BrowserHistorySummary }) {
   const { t } = useTranslation();
-  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
-  const [password, setPassword] = useState('');
-  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const { visitColumns, downloadColumns, cookieColumns, sessionColumns, passwordColumns, extensionColumns } =
     browserColumns(t);
   const info = summary ?? {
@@ -319,18 +298,6 @@ export function BrowserHistoryPanel({
   const visitGroups = groupByBrowser(info.visits);
   const extensionRows = info.extensions ?? [];
 
-  async function submitPassword() {
-    if (!password || passwordSubmitting || !onRunBrowserPasswordExtraction) return;
-    setPasswordSubmitting(true);
-    try {
-      await onRunBrowserPasswordExtraction(password);
-      setPassword('');
-      setPasswordDialogOpen(false);
-    } finally {
-      setPasswordSubmitting(false);
-    }
-  }
-
   return (
     <ExtractionTableSection
       title={t('browser.title')}
@@ -347,45 +314,6 @@ export function BrowserHistoryPanel({
         [t('browser.stats.browsers'), Object.keys(visitGroups).sort(browserOrder).join(' / ') || '-'],
       ]}
     >
-      {onRunBrowserPasswordExtraction ? (
-        <>
-          <div className="mb-4 flex items-center justify-between gap-3 border-b border-forensics-divider pb-3">
-            <div className="text-[11px] text-forensics-muted">{t('browser.manualPasswordHint')}</div>
-            <IconButton
-              label={t('browser.manualPasswordAction')}
-              variant="forensicsOutline"
-              onClick={() => setPasswordDialogOpen(true)}
-            >
-              <ActionIcon name="key" />
-            </IconButton>
-          </div>
-          <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{t('browser.manualPasswordTitle')}</DialogTitle>
-                <DialogDescription>{t('browser.manualPasswordDescription')}</DialogDescription>
-              </DialogHeader>
-              <Input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder={t('browser.manualPasswordPlaceholder')}
-                autoFocus
-              />
-              <DialogFooter>
-                <IconButton
-                  label={t('browser.manualPasswordSubmit')}
-                  variant="forensicsPrimary"
-                  disabled={!password || passwordSubmitting}
-                  onClick={() => void submitPassword()}
-                >
-                  <ActionIcon name="unlock" />
-                </IconButton>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </>
-      ) : null}
       <div className="space-y-4">
         <BrowserTableSection
           title={t('browser.sections.visits')}

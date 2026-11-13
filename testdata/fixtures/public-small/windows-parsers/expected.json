@@ -1,0 +1,60 @@
+{
+  "description": "Windows parser regression samples with independent upstream format oracles.",
+  "samples": [
+    {
+      "file": "recycle_v1.bin",
+      "sha256": "d50f90ec14839f6b57752ad039965af7756369ea512b1ba0893722c7d7d116e3",
+      "class": "synthetic",
+      "expected": {"originalSize": 999, "originalPath": "C:\\temp\\oldfile.txt", "deletedAt": "2015-06-01T00:00:00+00:00"}
+    },
+    {
+      "file": "recycle_v2.bin",
+      "sha256": "e82b37eb8ed796eaa25fb97adc45f1ec4124b39d31ea949b0b815954b7c3953e",
+      "class": "synthetic",
+      "expected": {"originalSize": 1234, "originalPath": "C:\\Users\\victim\\Documents\\secret plan.docx", "deletedAt": "2024-01-15T10:30:00+00:00"}
+    },
+    {
+      "file": "notepad.lnk",
+      "sha256": "5e7a26e2d64f644e159a6bd5bceb5736c5c71fefe3d648425338b22dc840cbc2",
+      "class": "public-real",
+      "expected": {"targetContains": "notepad.exe", "fileSize": 0, "timelineEvents": 0}
+    },
+    {
+      "file": "notepad-xp.lnk",
+      "sha256": "6085270e804f7be9cd9d5d1ae0dbe26e3a89e8b28630129cad21ee039e34c82a",
+      "class": "public-real",
+      "expected": {"targetPath": "C:\\WINDOWS\\system32\\notepad.exe", "fileSize": 69120, "createdAt": "2008-04-14T12:00:00+00:00", "modifiedAt": "2008-04-14T12:00:00+00:00", "accessedAt": "2016-01-13T11:21:06.109375+00:00", "accessedFiletime": 130971576661093750, "accessedFiletimeLittleEndian": "76ad8e7ef44dd101", "timelineEvents": 3}
+    },
+    {
+      "file": "f01b4d95cf55d32a.automaticDestinations-ms",
+      "sha256": "a724713d2ff51d32e3f028c57ab906339f882de0c93dc9903f0f8b241c53fd56",
+      "class": "public-real",
+      "expected": {"format": "AutomaticDestinations", "linkCount": 9, "firstStream": "7", "firstPath": "C:\\Temp"}
+    },
+    {
+      "file": "368d807282ccde9d.customDestinations-ms",
+      "sha256": "3a0799df3433cfca1fa0284ba716d3f5502b047f665a1920089839ffeeef301a",
+      "class": "public-real",
+      "expected": {"format": "CustomDestinations", "linkCount": 3, "categoryCount": 5}
+    },
+    {
+      "file": "thumbcache_v21.db",
+      "sha256": "76df2de7d86ff7fdfa931367b44926a43e827e33203f139b1f286acf06f29114",
+      "class": "synthetic-oracle",
+      "expected": {"version": 21, "cacheType": 2, "entryCount": 8, "payloadBytes": 2597, "firstHash": "1111000000000001", "checksumWarnings": 2}
+    },
+    {
+      "file": "thumbcache_v32.db",
+      "sha256": "c2508015df55e14c527cb69e1b4ff0b61d28e26f3adc9d74eba6d2814bf35867",
+      "class": "synthetic-oracle",
+      "expected": {"version": 32, "cacheType": 4, "entryCount": 8, "payloadBytes": 2597, "firstHash": "1111000000000001", "checksumWarnings": 2}
+    },
+    {
+      "file": "SRUDB.dat.gz",
+      "sha256": "03216559303cc9ef2a2485c8a5312ef9011b9ad6e7007566bd6db42874f7e0dc",
+      "uncompressedSha256": "6536ae6bb5b91f6f8f37a4af26f6cfaecc8a1f745370bfba83af7ebae6694e3e",
+      "class": "public-real",
+      "expected": {"formatVersion": 1568, "pageSize": 4096, "databaseState": 3, "databaseStateDescription": "CleanShutdown", "metadataOnly": true}
+    }
+  ]
+}

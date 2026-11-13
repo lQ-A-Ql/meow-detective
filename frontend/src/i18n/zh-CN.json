@@ -361,12 +361,6 @@
     },
     "title": "浏览器记录",
     "unavailable": "浏览器记录暂不可用。",
-    "manualPasswordHint": "离线 DPAPI 密钥不可用时，可输入 Windows 账户密码重试一次。",
-    "manualPasswordAction": "使用账户密码重试",
-    "manualPasswordTitle": "解密浏览器密码",
-    "manualPasswordDescription": "密码仅用于本次提取，不会写入案件库或日志。",
-    "manualPasswordPlaceholder": "Windows 账户密码",
-    "manualPasswordSubmit": "解密并重试",
     "stats": {
       "visits": "浏览历史",
       "downloads": "下载记录",
@@ -2032,15 +2026,19 @@
       }
     },
     "header": {
-      "refresh": "刷新",
-      "run": "运行分析",
-      "running": "分析中..."
+      "refresh": "刷新"
     },
     "extraction": {
       "Registry": "注册表提取",
       "BrowserHistory": "浏览器记录提取",
       "Email": "邮件信息提取",
       "EventLogs": "事件日志提取",
+      "ProgramExecution": "程序执行",
+      "UserActivity": "用户活动",
+      "RecycleBin": "回收站",
+      "Thumbnails": "缩略图缓存",
+      "ResourceUsage": "资源使用",
+      "PluginArtifacts": "插件分析",
       "LinuxArtifacts": "Linux 痕迹提取",
       "LinuxJournal": "Linux 日志提取",
       "LinuxLogin": "Linux 登录记录提取",
@@ -2075,9 +2073,6 @@
       "noPackages": "未从已解析的 PackageManager 记录中发现安装包。",
       "loadMore": "加载更多",
       "loading": "正在读取 Android 分析结果...",
-      "running": "正在运行 Android 分析...",
-      "lastRun": "已扫描 {{scanned}} 个文件，提取 {{facts}} 项设备字段和 {{packages}} 个安装包",
-      "sourceUnavailable": "当前 Android 数据源尚未就绪，无法运行分析。",
       "unavailable": "不可用",
       "packageName": "包名",
       "appName": "应用名",
@@ -2611,6 +2606,7 @@
     },
     "actions": {
       "title": "插件操作",
+      "runEnabled": "运行已启用插件",
       "run": "运行",
       "running": "运行中…",
       "selectFile": "选择文件",
@@ -2870,8 +2866,6 @@
       "unavailable": "证据分类摘要暂不可用。",
       "title": "证据语义分类",
       "description": "候选来自文件树 metadata；结构化提取会读取 Registry、浏览器记录与邮件候选并返回可审计来源。",
-      "running": "分类中...",
-      "run": "开始证据分类",
       "statFamilies": "证据族",
       "statCandidateFiles": "候选文件",
       "statCandidateSize": "候选总大小",

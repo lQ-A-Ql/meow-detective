@@ -28,6 +28,7 @@ mod scheduler;
 mod state;
 mod summary;
 mod systemd_preload;
+pub(crate) mod windows_native;
 
 pub use self::evtx::extract_evtx_candidate;
 pub use self::linux::extract_linux_candidate;
@@ -50,6 +51,26 @@ pub use self::summary::{
 };
 use super::error::AnalysisServiceError;
 use domain::{Artifact, TimelineEvent};
+
+pub fn run_analysis_extraction_execution_with_cancel<E: std::fmt::Display>(
+    conn: &rusqlite::Connection,
+    case_id: &str,
+    platform: domain::DataSourcePlatform,
+    categories: &[&str],
+    cancel: &std::sync::atomic::AtomicBool,
+    mut file_reader: impl FnMut(&domain::FileEntryId, usize) -> Result<Box<dyn std::io::Read>, E>,
+) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
+    run_analysis_extraction_with_source_and_progress(
+        conn,
+        case_id,
+        platform,
+        categories,
+        cancel,
+        None,
+        &mut |_| {},
+        |candidate, limit| file_reader(&candidate.file_id, limit).map(CandidateSource::Reader),
+    )
+}
 
 pub fn stage_native_records(
     conn: &rusqlite::Connection,

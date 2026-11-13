@@ -8,8 +8,7 @@ const mocks = vi.hoisted(() => ({
   getSystemInfo: vi.fn(),
   getFileClassificationBoard: vi.fn(),
   getEvidenceClassificationSummary: vi.fn(),
-  runEvidenceClassification: vi.fn(),
-  runAnalysisExtraction: vi.fn(),
+  runPluginExtraction: vi.fn(),
   getRegistryExtractionSummary: vi.fn(),
   getRegistryStructuredSummary: vi.fn(),
   getBrowserHistorySummary: vi.fn(),
@@ -32,8 +31,7 @@ vi.mock('@/lib/api/analysis', () => ({
   getSystemInfo: mocks.getSystemInfo,
   getFileClassificationBoard: mocks.getFileClassificationBoard,
   getEvidenceClassificationSummary: mocks.getEvidenceClassificationSummary,
-  runEvidenceClassification: mocks.runEvidenceClassification,
-  runAnalysisExtraction: mocks.runAnalysisExtraction,
+  runPluginExtraction: mocks.runPluginExtraction,
   getRegistryExtractionSummary: mocks.getRegistryExtractionSummary,
   getRegistryStructuredSummary: mocks.getRegistryStructuredSummary,
   getBrowserHistorySummary: mocks.getBrowserHistorySummary,
@@ -63,7 +61,7 @@ import {
   usePluginModules,
   useRegistryExtractionSummary,
   useRegistryStructuredSummary,
-  useRunAnalysisExtraction,
+  useRunPluginExtraction,
   useV2GovernanceSnapshot,
 } from '@/features/analysis/hooks';
 
@@ -177,19 +175,7 @@ describe('analysis hooks', () => {
         artifactCount: 0,
       },
     });
-    mocks.runEvidenceClassification.mockResolvedValue({
-      status: 'parsed',
-      categories: [],
-      generatedAt: '2026-06-01T10:00:00Z',
-      warnings: [],
-      totals: {
-        categoryCount: 0,
-        candidateFileCount: 0,
-        totalSize: 0,
-        artifactCount: 0,
-      },
-    });
-    mocks.runAnalysisExtraction.mockResolvedValue({
+    mocks.runPluginExtraction.mockResolvedValue({
       status: 'parsed',
       scannedCount: 3,
       checkpointHitCount: 0,
@@ -703,7 +689,7 @@ describe('analysis hooks', () => {
     expect(result.current.hasNextPage).toBe(false);
   });
 
-  it('runs analysis extraction mutation with selected categories', async () => {
+  it('runs plugin extraction for the selected data source', async () => {
     mocks.useCurrentCase.mockReturnValue({
       isSuccess: true,
       data: { id: 'case-1' },
@@ -711,68 +697,21 @@ describe('analysis hooks', () => {
 
     const queryClient = createQueryClient();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-    const { result } = renderHook(() => useRunAnalysisExtraction(), {
+    const { result } = renderHook(() => useRunPluginExtraction(), {
       wrapper: createWrapper(queryClient),
     });
 
     await result.current.mutateAsync({
       dataSourceId: 'ds-1',
-      categories: ['Registry', 'BrowserHistory', 'Email'],
     });
 
-    expect(mocks.runAnalysisExtraction).toHaveBeenCalledWith({
+    expect(mocks.runPluginExtraction).toHaveBeenCalledWith({
       dataSourceId: 'ds-1',
-      categories: ['Registry', 'BrowserHistory', 'Email'],
     });
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['analysis', 'case-overview', 'case-1'],
       refetchType: 'active',
     });
-  });
-
-  it('refreshes an active Linux summary before extraction mutation resolves', async () => {
-    mocks.useCurrentCase.mockReturnValue({
-      isSuccess: true,
-      data: { id: 'case-1' },
-    });
-    let extracted = false;
-    mocks.getLinuxArtifactSummary.mockImplementation(async () =>
-      linuxSummaryFixture({
-        status: extracted ? 'parsed' : 'candidateFound',
-        bashCommandCount: extracted ? 4 : 0,
-        totalCount: extracted ? 4 : 0,
-      }),
-    );
-    mocks.runAnalysisExtraction.mockImplementation(async () => {
-      extracted = true;
-      return {
-        status: 'parsed',
-        scannedCount: 4,
-        checkpointHitCount: 0,
-        artifactCount: 4,
-        timelineEventCount: 0,
-        sections: [],
-        generatedAt: '2026-06-01T10:20:00Z',
-        warnings: [],
-      };
-    });
-
-    const { result } = renderHook(
-      () => ({
-        summary: useLinuxArtifactSummary({ source: linuxSource }),
-        extraction: useRunAnalysisExtraction(),
-      }),
-      { wrapper: createWrapper() },
-    );
-
-    await waitFor(() => expect(result.current.summary.data?.status).toBe('candidateFound'));
-    await result.current.extraction.mutateAsync({
-      dataSourceId: 'ds-linux',
-      categories: ['LinuxArtifacts'],
-    });
-
-    await waitFor(() => expect(result.current.summary.data?.status).toBe('parsed'));
-    expect(mocks.getLinuxArtifactSummary).toHaveBeenCalledTimes(2);
   });
 
   it('loads v2 governance snapshot when current case exists', async () => {

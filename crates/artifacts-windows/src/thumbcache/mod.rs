@@ -1,8 +1,6 @@
 //! Windows Explorer thumbnail cache parser.
 
-mod entries;
 mod extractor;
-mod header;
 
 pub use extractor::ThumbcacheExtractor;
 

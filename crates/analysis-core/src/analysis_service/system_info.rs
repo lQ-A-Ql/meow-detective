@@ -13,6 +13,8 @@ use transport::dto::analysis::{
 };
 use transport::dto::{AnalysisParseStatusDto, AnalysisSystemInfoDto};
 
+mod recovery;
+
 #[derive(Default)]
 struct SystemInfoExtraction {
     computer_name: Option<String>,
@@ -32,6 +34,11 @@ struct SystemInfoExtraction {
 pub(crate) struct AnalysisProvenanceContext<'a> {
     pub(crate) parsed_at: &'a str,
     pub(crate) data_source_id: Option<&'a str>,
+}
+
+struct RegistrySource<'a> {
+    entry: &'a FileEntry,
+    input: Option<&'a crate::analysis_service::candidates::EvidenceCandidate>,
 }
 
 impl SystemInfoExtraction {
@@ -78,8 +85,17 @@ pub fn extract_system_info_for_case<E: std::fmt::Display>(
                 system_evtx = candidates.system_evtx.is_some(),
                 "Windows system information candidate discovery completed"
             );
-            let system_hive = candidates.system_hive.as_ref();
-            let software_hive = candidates.software_hive.as_ref();
+            let system_hive = candidates.system_hive.as_ref().map(|entry| RegistrySource {
+                entry,
+                input: candidates.system_input.as_ref(),
+            });
+            let software_hive = candidates
+                .software_hive
+                .as_ref()
+                .map(|entry| RegistrySource {
+                    entry,
+                    input: candidates.software_input.as_ref(),
+                });
             let system_evtx = candidates.system_evtx.as_ref();
 
             inspect_registry_hive(
@@ -159,7 +175,7 @@ fn unique_registered_data_source_id(conn: &Connection) -> Option<String> {
 }
 
 fn inspect_registry_hive<E: std::fmt::Display>(
-    entry: Option<&FileEntry>,
+    source: Option<RegistrySource<'_>>,
     parser: &str,
     context: &AnalysisProvenanceContext<'_>,
     read_header_fn: &mut impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, E>,
@@ -167,16 +183,29 @@ fn inspect_registry_hive<E: std::fmt::Display>(
     provenance: &mut Vec<AnalysisProvenanceDto>,
     extraction: &mut SystemInfoExtraction,
 ) {
-    let Some(entry) = entry else {
+    let Some(source) = source else {
         record_missing_registry_hive(parser, context, warnings, provenance);
         return;
     };
+    let entry = source.entry;
 
     let started = Instant::now();
     tracing::info!(parser, path = %entry.path, "Windows system information registry parse started");
-    let (parsed_any, parser_warnings) = match read_header_fn(&entry.id, MAX_REGISTRY_ANALYSIS_BYTES)
-    {
-        Ok(bytes) => inspect_registry_bytes(&bytes, entry, parser, extraction),
+    let result = source
+        .input
+        .ok_or_else(|| "registry input metadata is unavailable".to_string())
+        .and_then(|input| {
+            recovery::snapshot(input, read_header_fn).map_err(|error| error.to_string())
+        });
+    let (parsed_any, parser_warnings) = match result {
+        Ok(snapshot) => {
+            let (parsed, mut warnings) =
+                inspect_registry_snapshot(&snapshot, entry, parser, extraction);
+            if let Some(report) = snapshot.report() {
+                warnings.extend(report.diagnostics.iter().map(ToString::to_string));
+            }
+            (parsed, warnings)
+        }
         Err(err) => (false, vec![format!("{} 读取失败: {}", entry.path, err)]),
     };
     warnings.extend(parser_warnings.iter().cloned());
@@ -200,12 +229,13 @@ fn inspect_registry_hive<E: std::fmt::Display>(
     );
 }
 
-fn inspect_registry_bytes(
-    bytes: &[u8],
+fn inspect_registry_snapshot(
+    snapshot: &artifacts_windows::registry::RegistrySnapshot<'_>,
     entry: &FileEntry,
     parser: &str,
     extraction: &mut SystemInfoExtraction,
 ) -> (bool, Vec<String>) {
+    let bytes = snapshot.bytes();
     if !bytes.starts_with(b"regf") {
         let warning = if bytes.len() >= MAX_REGISTRY_ANALYSIS_BYTES {
             format!(
@@ -219,14 +249,14 @@ fn inspect_registry_bytes(
     }
 
     match parser {
-        REGISTRY_SYSTEM_PARSER => inspect_system_registry_fields(bytes, entry, extraction),
-        REGISTRY_SOFTWARE_PARSER => inspect_software_registry_fields(bytes, entry, extraction),
+        REGISTRY_SYSTEM_PARSER => inspect_system_registry_fields(snapshot, entry, extraction),
+        REGISTRY_SOFTWARE_PARSER => inspect_software_registry_fields(snapshot, entry, extraction),
         _ => (false, vec![format!("{} parser unsupported", parser)]),
     }
 }
 
 fn inspect_system_registry_fields(
-    bytes: &[u8],
+    bytes: &(impl artifacts_windows::registry::RegistryHiveSource + ?Sized),
     entry: &FileEntry,
     extraction: &mut SystemInfoExtraction,
 ) -> (bool, Vec<String>) {
@@ -285,7 +315,7 @@ fn inspect_system_registry_fields(
 }
 
 fn inspect_software_registry_fields(
-    bytes: &[u8],
+    bytes: &(impl artifacts_windows::registry::RegistryHiveSource + ?Sized),
     entry: &FileEntry,
     extraction: &mut SystemInfoExtraction,
 ) -> (bool, Vec<String>) {

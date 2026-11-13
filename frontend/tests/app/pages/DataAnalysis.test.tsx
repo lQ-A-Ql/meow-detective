@@ -4,7 +4,6 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataAnalysis } from '@/app/pages/DataAnalysis';
 import { useAnalysisStore } from '@/stores/analysis-store';
-import type { AnalysisExtractionSectionRun } from '@/types/analysis';
 import type { DataSourceSummary } from '@/types/models';
 
 const mocks = vi.hoisted(() => ({
@@ -12,8 +11,6 @@ const mocks = vi.hoisted(() => ({
   dataSources: vi.fn(),
   systemInfo: vi.fn(),
   evidenceSummary: vi.fn(),
-  evidenceScan: vi.fn(),
-  extractionRun: vi.fn(),
   registrySummary: vi.fn(),
   registryStructured: vi.fn(),
   browserSummary: vi.fn(),
@@ -22,7 +19,6 @@ const mocks = vi.hoisted(() => ({
   linuxSummary: vi.fn(),
   androidDeviceInfo: vi.fn(),
   androidPackageSummary: vi.fn(),
-  androidAnalysisRun: vi.fn(),
   pluginModules: vi.fn(),
   classifications: vi.fn(),
   summaryMutation: vi.fn(),
@@ -36,8 +32,6 @@ vi.mock('@/features/case/hooks', () => ({
 vi.mock('@/features/analysis/hooks', () => ({
   useAnalysisSystemInfo: mocks.systemInfo,
   useEvidenceClassificationSummary: mocks.evidenceSummary,
-  useRunEvidenceClassification: mocks.evidenceScan,
-  useRunAnalysisExtraction: mocks.extractionRun,
   useRegistryExtractionSummary: mocks.registrySummary,
   useRegistryStructuredSummary: mocks.registryStructured,
   useBrowserHistorySummary: mocks.browserSummary,
@@ -46,7 +40,6 @@ vi.mock('@/features/analysis/hooks', () => ({
   useLinuxArtifactSummary: mocks.linuxSummary,
   useAndroidDeviceInfo: mocks.androidDeviceInfo,
   useAndroidPackageSummary: mocks.androidPackageSummary,
-  useRunAndroidAnalysis: mocks.androidAnalysisRun,
   usePluginModules: mocks.pluginModules,
   useFileClassificationBoard: mocks.classifications,
   useGenerateAnalysisSummary: mocks.summaryMutation,
@@ -76,23 +69,6 @@ function deferred<T>() {
     resolve = resolvePromise;
   });
   return { promise, resolve };
-}
-
-function extractionSection(
-  key: string,
-  artifactCount: number,
-  scannedCount = 8,
-  timelineEventCount = 3,
-): AnalysisExtractionSectionRun {
-  return {
-    key,
-    label: key,
-    status: 'parsed',
-    scannedCount,
-    artifactCount,
-    timelineEventCount,
-    warnings: [],
-  };
 }
 
 const windowsDataSource: DataSourceSummary = {
@@ -278,27 +254,6 @@ describe('DataAnalysis page', () => {
         },
       }),
     );
-    mocks.evidenceScan.mockReturnValue({
-      error: null,
-      isPending: false,
-      mutateAsync: vi.fn().mockResolvedValue({}),
-      reset: vi.fn(),
-    });
-    mocks.extractionRun.mockReturnValue({
-      data: undefined,
-      error: null,
-      isPending: false,
-      mutateAsync: vi.fn().mockResolvedValue({
-        status: 'parsed',
-        scannedCount: 8,
-        checkpointHitCount: 0,
-        artifactCount: 7,
-        timelineEventCount: 3,
-        generatedAt: '2026-06-01T10:15:00Z',
-        warnings: [],
-      }),
-      reset: vi.fn(),
-    });
     mocks.registrySummary.mockReturnValue(
       queryState({
         data: {
@@ -557,18 +512,6 @@ describe('DataAnalysis page', () => {
       isFetchingNextPage: false,
       fetchNextPage: vi.fn(),
     });
-    mocks.androidAnalysisRun.mockReturnValue({
-      error: null,
-      isPending: false,
-      mutateAsync: vi.fn().mockResolvedValue({
-        status: 'notFound',
-        scannedFileCount: 0,
-        deviceFactCount: 0,
-        packageCount: 0,
-        warnings: [],
-      }),
-      reset: vi.fn(),
-    });
     mocks.classifications.mockReturnValue(
       queryState({
         data: {
@@ -773,15 +716,7 @@ describe('DataAnalysis page', () => {
     expect(screen.queryByText('31232')).toBeNull();
   });
 
-  it('renders evidence semantic classification and can start targeted scan', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({});
-    mocks.evidenceScan.mockReturnValue({
-      error: null,
-      isPending: false,
-      mutateAsync,
-      reset: vi.fn(),
-    });
-
+  it('renders evidence semantic classification results', async () => {
     renderPage();
     fireEvent.click(screen.getByLabelText('Windows Evidence / 证据分类'));
 
@@ -791,54 +726,15 @@ describe('DataAnalysis page', () => {
     expect(screen.getAllByText('Windows/System32/winevt/Logs/System.evtx').length).toBeGreaterThan(0);
     expect(screen.getAllByText('已发现候选').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: /开始证据分类/ }));
-    await waitFor(() =>
-      expect(mutateAsync).toHaveBeenCalledWith({
-        dataSourceId: 'ds-win',
-        categories: [],
-      }),
-    );
+    expect(screen.queryByRole('button', { name: /开始证据分类/ })).toBeNull();
   });
 
   it('does not expose a manual Windows extraction action', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({
-      status: 'parsed',
-      scannedCount: 8,
-      checkpointHitCount: 0,
-      artifactCount: 7,
-      timelineEventCount: 3,
-      warnings: [],
-    });
-    mocks.extractionRun.mockReturnValue({
-      data: undefined,
-      error: null,
-      isPending: false,
-      mutateAsync,
-      reset: vi.fn(),
-    });
-
     renderPage();
     expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
-    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it('does not expose a manual Linux extraction action', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({
-      status: 'parsed',
-      scannedCount: 8,
-      checkpointHitCount: 0,
-      artifactCount: 7,
-      timelineEventCount: 3,
-      warnings: [],
-    });
-    mocks.extractionRun.mockReturnValue({
-      data: undefined,
-      error: null,
-      isPending: false,
-      mutateAsync,
-      reset: vi.fn(),
-    });
-
     mocks.dataSources.mockReturnValue(
       queryState({
         data: [windowsDataSource, linuxDataSource],
@@ -849,84 +745,6 @@ describe('DataAnalysis page', () => {
     fireEvent.click(screen.getByLabelText('Linux Server'));
     await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
     expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
-    expect(mutateAsync).not.toHaveBeenCalled();
-  });
-
-  it('tracks Windows per-section extraction progress for the bottom drawer', async () => {
-    const sectionArtifactCounts: Record<string, number> = {
-      Registry: 1,
-      BrowserHistory: 2,
-      Email: 3,
-      EventLogs: 4,
-    };
-    const mutateAsync = vi.fn().mockResolvedValue({
-      status: 'parsed',
-      scannedCount: 8,
-      checkpointHitCount: 0,
-      artifactCount: 158,
-      timelineEventCount: 3,
-      sections: Object.entries(sectionArtifactCounts).map(([key, artifactCount]) =>
-        extractionSection(key, artifactCount),
-      ),
-      generatedAt: '2026-06-01T10:15:00Z',
-      warnings: [],
-    });
-    mocks.extractionRun.mockReturnValue({
-      data: undefined,
-      error: null,
-      isPending: false,
-      mutateAsync,
-      reset: vi.fn(),
-    });
-
-    renderPage();
-
-    expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
-    expect(mutateAsync).not.toHaveBeenCalled();
-  });
-
-  it('tracks independent Linux extraction progress for the bottom drawer', async () => {
-    const linuxSections = [
-      extractionSection('LinuxJournal', 1),
-      extractionSection('LinuxLogin', 2),
-      extractionSection('LinuxCommands', 3),
-      extractionSection('LinuxPackages', 4),
-      extractionSection('LinuxCron', 5),
-      extractionSection('LinuxSudo', 6),
-      extractionSection('LinuxSystemConfig', 7),
-      extractionSection('LinuxWebServices', 8),
-      extractionSection('LinuxMysqlServices', 9),
-      extractionSection('UnknownCapability', 999),
-    ];
-    const mutateAsync = vi.fn().mockResolvedValue({
-      status: 'parsed',
-      scannedCount: 72,
-      checkpointHitCount: 0,
-      artifactCount: 158,
-      timelineEventCount: 27,
-      sections: linuxSections,
-      generatedAt: '2026-06-01T10:15:00Z',
-      warnings: [],
-    });
-    mocks.extractionRun.mockReturnValue({
-      data: undefined,
-      error: null,
-      isPending: false,
-      mutateAsync,
-      reset: vi.fn(),
-    });
-    mocks.dataSources.mockReturnValue(
-      queryState({
-        data: [windowsDataSource, linuxDataSource],
-      }),
-    );
-
-    renderPage();
-    fireEvent.click(screen.getByLabelText('Linux Server'));
-    await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
-
-    expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
-    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it('switches to the matching platform view when selecting a data source', async () => {
@@ -992,65 +810,33 @@ describe('DataAnalysis page', () => {
     expect(useAnalysisStore.getState().selectedDataSourceId).toBe('ds-linux');
   });
 
-  it.each(['evidence', 'extraction', 'summary'] as const)(
-    'prevents data-source switching while the %s mutation is pending',
-    async (mutation) => {
-      const pendingMutation = {
-        data: undefined,
-        error: null,
-        isPending: true,
-        mutateAsync: vi.fn(),
-        reset: vi.fn(),
-      };
-      if (mutation === 'evidence') {
-        mocks.evidenceScan.mockReturnValue(pendingMutation);
-      } else if (mutation === 'extraction') {
-        mocks.extractionRun.mockReturnValue(pendingMutation);
-      } else {
-        mocks.summaryMutation.mockReturnValue(pendingMutation);
-      }
-      mocks.dataSources.mockReturnValue(
-        queryState({
-          data: [windowsDataSource, linuxDataSource],
-        }),
-      );
+  it('prevents data-source switching while the summary mutation is pending', async () => {
+    const pendingMutation = {
+      data: undefined,
+      error: null,
+      isPending: true,
+      mutateAsync: vi.fn(),
+      reset: vi.fn(),
+    };
+    mocks.summaryMutation.mockReturnValue(pendingMutation);
+    mocks.dataSources.mockReturnValue(
+      queryState({
+        data: [windowsDataSource, linuxDataSource],
+      }),
+    );
 
-      renderPage();
-      await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
 
-      const linuxSelector = screen.getByLabelText('Linux Server');
-      expect(linuxSelector).toBeDisabled();
-      fireEvent.click(linuxSelector);
-      expect(useAnalysisStore.getState().selectedDataSourceId).toBe('ds-win');
-      expect(screen.queryByText('Linux 痕迹分析')).toBeNull();
-    },
-  );
+    const linuxSelector = screen.getByLabelText('Linux Server');
+    expect(linuxSelector).toBeDisabled();
+    fireEvent.click(linuxSelector);
+    expect(useAnalysisStore.getState().selectedDataSourceId).toBe('ds-win');
+    expect(screen.queryByText('Linux 痕迹分析')).toBeNull();
+  });
 
   it('resets source-bound mutation state when switching data sources', async () => {
-    const evidenceReset = vi.fn();
-    const extractionReset = vi.fn();
     const summaryReset = vi.fn();
-    mocks.evidenceScan.mockReturnValue({
-      error: new Error('old evidence error'),
-      isPending: false,
-      mutateAsync: vi.fn(),
-      reset: evidenceReset,
-    });
-    mocks.extractionRun.mockReturnValue({
-      data: {
-        status: 'failed',
-        scannedCount: 0,
-        checkpointHitCount: 0,
-        artifactCount: 0,
-        timelineEventCount: 0,
-        generatedAt: '2026-06-01T10:15:00Z',
-        warnings: [],
-      },
-      error: new Error('old extraction error'),
-      isPending: false,
-      mutateAsync: vi.fn(),
-      reset: extractionReset,
-    });
     mocks.summaryMutation.mockReturnValue({
       data: 'old report',
       error: new Error('old summary error'),
@@ -1066,78 +852,11 @@ describe('DataAnalysis page', () => {
 
     renderPage();
     await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
-    evidenceReset.mockClear();
-    extractionReset.mockClear();
     summaryReset.mockClear();
 
     fireEvent.click(screen.getByLabelText('Linux Server'));
     await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
-    expect(evidenceReset).toHaveBeenCalledTimes(1);
-    expect(extractionReset).toHaveBeenCalledTimes(1);
     expect(summaryReset).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not refetch the old evidence source after its generation changes', async () => {
-    const scan = deferred<Record<string, never>>();
-    const evidenceRefetch = vi.fn().mockResolvedValue(undefined);
-    const mutateAsync = vi.fn(() => scan.promise);
-    mocks.evidenceSummary.mockReturnValue(queryState({ refetch: evidenceRefetch }));
-    mocks.evidenceScan.mockReturnValue({
-      error: null,
-      isPending: false,
-      mutateAsync,
-      reset: vi.fn(),
-    });
-    mocks.dataSources.mockReturnValue(
-      queryState({
-        data: [windowsDataSource, linuxDataSource],
-      }),
-    );
-
-    renderPage();
-    fireEvent.click(screen.getByLabelText('Windows Evidence / 证据分类'));
-    fireEvent.click(await screen.findByRole('button', { name: /开始证据分类/ }));
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-
-    act(() => useAnalysisStore.getState().setSelectedDataSourceId('ds-linux'));
-    await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
-    await act(async () => {
-      scan.resolve({});
-      await scan.promise;
-    });
-
-    expect(evidenceRefetch).not.toHaveBeenCalled();
-  });
-
-  it('does not apply stale extraction progress to a newly selected source', async () => {
-    const run = deferred<{
-      status: 'parsed';
-      scannedCount: number;
-      checkpointHitCount: number;
-      artifactCount: number;
-      timelineEventCount: number;
-      generatedAt: string;
-      warnings: string[];
-      sections: AnalysisExtractionSectionRun[];
-    }>();
-    const mutateAsync = vi.fn(() => run.promise);
-    mocks.extractionRun.mockReturnValue({
-      data: undefined,
-      error: null,
-      isPending: false,
-      mutateAsync,
-      reset: vi.fn(),
-    });
-    mocks.dataSources.mockReturnValue(
-      queryState({
-        data: [windowsDataSource, linuxDataSource],
-      }),
-    );
-
-    renderPage();
-    await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
-    expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
-    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it('does not download a summary produced for an obsolete source generation', async () => {

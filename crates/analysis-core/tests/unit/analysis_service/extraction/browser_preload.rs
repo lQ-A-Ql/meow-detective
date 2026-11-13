@@ -86,6 +86,91 @@ fn encrypted_chromium_secret_store_does_not_trigger_preload_reads() {
 }
 
 #[test]
+fn identical_profile_paths_in_different_partitions_have_distinct_contexts() {
+    let first =
+        candidate("[P2]/Users/alice/AppData/Local/Google/Chrome/User Data/Default/Login Data");
+    let mut second = first.clone();
+    second.partition_index = Some(3);
+    second.path = second.path.replace("[P2]", "[P3]");
+    assert_eq!(browser_roots(&[first, second]).len(), 2);
+}
+
+fn input_workspace() -> tempfile::TempDir {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../.codex-tmp/browser-preload-tests");
+    std::fs::create_dir_all(&directory).unwrap();
+    tempfile::tempdir_in(directory).unwrap()
+}
+
+#[test]
+fn dependency_short_read_is_retryable() {
+    let directory = input_workspace();
+    let path = directory.path().join("dependency");
+    std::fs::write(&path, b"complete").unwrap();
+    let mut input = candidate("Windows/System32/config/SYSTEM");
+    input.size = 8;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_len(3)
+        .unwrap();
+    let result = read_locator(&input, &AtomicBool::new(false), &mut |_, _| {
+        std::fs::File::open(&path)
+            .map(|reader| CandidateSource::Reader(Box::new(reader)))
+            .map_err(|error| error.to_string())
+    });
+    assert!(matches!(result, Err(AnalysisServiceError::Read(_))));
+}
+
+#[cfg(windows)]
+#[test]
+fn temporarily_unreadable_key_input_blocks_only_secret_stores() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let directory = input_workspace();
+    let (_source_root, conn) = native_source();
+    let paths = [
+        "Windows/System32/config/SYSTEM",
+        "Windows/System32/config/SAM",
+    ];
+    let bytes = std::fs::read(testing::fixtures::tiny_registry_system_hive()).unwrap();
+    let mut files = Vec::new();
+    for path in paths {
+        let physical = directory.path().join(path);
+        std::fs::create_dir_all(physical.parent().unwrap()).unwrap();
+        std::fs::write(&physical, &bytes).unwrap();
+        let mut entry = file_entry(path, path);
+        entry.size = Some(bytes.len() as u64);
+        files.push(entry);
+    }
+    persistence_source::detail::upsert_files_with_partition(&conn, &files, 2).unwrap();
+    let catalog = preparation_catalog(&conn);
+    let locked = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .open(directory.path().join(paths[0]))
+        .unwrap();
+    let secret = candidate("Users/alice/AppData/Local/Google/Chrome/User Data/Default/Login Data");
+    let context = prepare_browser_preload(
+        &catalog,
+        &crate::analysis_service::extraction::registry_preload::RegistryPreloadContext::default(),
+        std::slice::from_ref(&secret),
+        &AtomicBool::new(false),
+        None,
+        &mut |input, _| {
+            std::fs::File::open(directory.path().join(&input.path))
+                .map(|reader| CandidateSource::Reader(Box::new(reader)))
+                .map_err(|error| error.to_string())
+        },
+    )
+    .unwrap();
+    assert!(context.dependency_read_failure(&secret).is_some());
+    let history = candidate("Users/alice/AppData/Local/Google/Chrome/User Data/Default/History");
+    assert!(context.dependency_read_failure(&history).is_none());
+    drop(locked);
+}
+
+#[test]
 #[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample"]
 fn liuyang_preload_builds_app_bound_decryptor_via_service_path() {
     use artifacts_windows::browser::{
@@ -139,7 +224,11 @@ fn liuyang_preload_builds_app_bound_decryptor_via_service_path() {
     let files = ntfs_paths
         .iter()
         .enumerate()
-        .map(|(index, path)| file_entry(&format!("file:{index}"), &format!("[P2]/{path}")))
+        .map(|(index, path)| {
+            let mut entry = file_entry(&format!("file:{index}"), &format!("[P2]/{path}"));
+            entry.size = Some(read_ntfs(path).len() as u64);
+            entry
+        })
         .collect::<Vec<_>>();
     persistence_source::repositories::file_repo::FileRepo::new(&conn)
         .insert_batch(&files)
@@ -275,7 +364,11 @@ fn elevation_service_selection_is_bound_to_the_chromium_family() {
         ),
     ]
     .into_iter()
-    .map(|(id, path)| file_entry(id, path))
+    .map(|(id, path)| {
+        let mut entry = file_entry(id, path);
+        entry.size = Some(id.len() as u64);
+        entry
+    })
     .collect::<Vec<_>>();
     persistence_source::repositories::file_repo::FileRepo::new(&conn)
         .insert_batch(&files)

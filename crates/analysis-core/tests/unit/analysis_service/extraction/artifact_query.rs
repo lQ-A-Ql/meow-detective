@@ -170,7 +170,7 @@ fn linux_system_config_page_preserves_host_filtering() {
 }
 
 #[test]
-fn unconditional_counts_read_only_persisted_type_counts() {
+fn unconditional_counts_read_only_persisted_counts() {
     use persistence_source::fjall::{
         encode_key, instrumentation, KeyPart, KeyspaceName, PersistMode,
     };
@@ -212,9 +212,9 @@ fn unconditional_counts_read_only_persisted_type_counts() {
         .is_err());
     instrumentation::enable();
     instrumentation::reset();
-    assert_eq!(count_analysis_artifacts(&conn).unwrap(), 1_002);
+    assert_eq!(count_analysis_artifacts(&conn).unwrap(), 1_009);
     let counters = instrumentation::snapshot();
-    assert_eq!(counters.scan_entries, 4);
+    assert_eq!(counters.scan_entries, 0);
     assert_eq!(counters.point_reads, 1);
     assert_eq!(count_artifacts_by_type(&conn, "RegistryHive").unwrap(), 2);
     assert_eq!(count_artifacts_by_type(&conn, "missing").unwrap(), 0);

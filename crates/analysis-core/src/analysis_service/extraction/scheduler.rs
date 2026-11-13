@@ -4,6 +4,8 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 mod gate;
+mod input_budget;
+use input_budget::reject_oversized;
 
 pub(super) use gate::acquire_extraction_slot;
 
@@ -154,10 +156,17 @@ where
 {
     let mut state = CoordinatorState::default();
     for item in items {
+        let estimated_weight = estimate_weight(&item);
+        if reject_oversized(estimated_weight, policy, state.submitted, panic_error)? {
+            state.skipped.insert(state.submitted);
+            state.submitted = state.submitted.saturating_add(1);
+            apply_ready(&mut state, coordinator, apply)?;
+            continue;
+        }
         make_capacity(
             &mut state,
             policy,
-            estimate_weight(&item),
+            estimated_weight,
             result_rx,
             coordinator,
             apply,
@@ -175,6 +184,11 @@ where
                 input,
                 weight_bytes,
             } => {
+                if reject_oversized(weight_bytes, policy, sequence, panic_error)? {
+                    state.skipped.insert(sequence);
+                    apply_ready(&mut state, coordinator, apply)?;
+                    continue;
+                }
                 make_capacity(
                     &mut state,
                     policy,

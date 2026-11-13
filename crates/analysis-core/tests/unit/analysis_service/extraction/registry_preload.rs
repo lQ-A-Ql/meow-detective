@@ -308,4 +308,62 @@ fn non_pending_dependency_failures_remain_separate_from_pending_results() {
         .find(|candidate| candidate.path.ends_with("/SAM"))
         .unwrap();
     assert!(context.snapshot(sam).is_some());
+    assert!(context.dependency_read_failure(sam).is_some());
+}
+
+#[cfg(windows)]
+#[test]
+fn second_system_read_failure_does_not_complete_sam_checkpoint() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let system_path = "Windows/System32/config/SYSTEM";
+    let sam_path = "Windows/System32/config/SAM";
+    let fixture = Fixture::new(&[system_path, sam_path], 0);
+    let sam_id = fixture
+        .candidates()
+        .into_iter()
+        .find(|candidate| candidate.path == sam_path)
+        .unwrap()
+        .file_id;
+    let mut system_reads = 0;
+    let mut locked = None;
+    let execution = run_analysis_extraction_with_source_and_progress(
+        &fixture.connection,
+        "case",
+        DataSourcePlatform::Windows,
+        &["Registry"],
+        &AtomicBool::new(false),
+        None,
+        &mut |_| {},
+        |candidate, _| {
+            if candidate.path == system_path {
+                system_reads += 1;
+                if system_reads == 2 {
+                    locked = Some(
+                        fs::OpenOptions::new()
+                            .read(true)
+                            .share_mode(0)
+                            .open(fixture.evidence.join(system_path))
+                            .unwrap(),
+                    );
+                }
+            }
+            fs::File::open(fixture.evidence.join(&candidate.path))
+                .map(|file| CandidateSource::Reader(Box::new(file)))
+        },
+    )
+    .unwrap();
+    assert!(execution.retryable_failure_count > 0);
+    let checkpoints = persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo::new(
+        &fixture.connection,
+    )
+    .list_complete_for_version(crate::analysis_service::capability::REGISTRY_EXTRACTOR_VERSION)
+    .unwrap();
+    assert!(!checkpoints
+        .iter()
+        .any(|checkpoint| checkpoint.source_object_id == sam_id.0));
+    drop(locked);
+    let mut reads = Vec::new();
+    let recovered = fixture.run(&mut reads);
+    assert!(reads.iter().any(|path| path == sam_path));
+    assert_eq!(recovered.retryable_failure_count, 0);
 }

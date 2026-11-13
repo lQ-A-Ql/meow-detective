@@ -1,8 +1,8 @@
 import { FileText, Shield } from '@/components/icons';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
-import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
+import { useTranslation } from 'react-i18next';
 import type { EvidenceClassificationSummary } from '@/types/models';
 import {
   CATEGORY_COLORS,
@@ -17,15 +17,7 @@ import {
 } from './helpers';
 import { TokenIcon } from '@/components/data-display';
 
-export function EvidenceClassificationPanel({
-  summary,
-  pending,
-  onRun,
-}: {
-  summary?: EvidenceClassificationSummary;
-  pending: boolean;
-  onRun: () => void;
-}) {
+export function EvidenceClassificationPanel({ summary }: { summary?: EvidenceClassificationSummary }) {
   const { t } = useTranslation();
   const info = summary ?? {
     status: 'unavailable' as const,
@@ -49,17 +41,6 @@ export function EvidenceClassificationPanel({
             {t('analysisPanels.classification.description')}
           </div>
         </div>
-        <Tooltip content={t('analysisPanels.classification.run')}>
-          <Button
-            aria-label={t('analysisPanels.classification.run')}
-            type="button"
-            onClick={onRun}
-            disabled={pending}
-            className="rounded-none border border-forensics-text bg-forensics-text text-[12px] text-white hover:bg-forensics-text-secondary"
-          >
-            <ActionIcon name="play" />
-          </Button>
-        </Tooltip>
       </div>
 
       <SummaryStrip

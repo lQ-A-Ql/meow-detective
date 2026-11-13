@@ -23,7 +23,18 @@ export {
 
 export type AnalysisPlatformView = DataSourceSummary['platform'];
 
-const WINDOWS_EXTRACTION_CATEGORIES: ExtractionCategory[] = ['Registry', 'BrowserHistory', 'Email', 'EventLogs'];
+const WINDOWS_PROGRESS_CATEGORIES: ExtractionCategory[] = [
+  'Registry',
+  'BrowserHistory',
+  'Email',
+  'EventLogs',
+  'ProgramExecution',
+  'UserActivity',
+  'RecycleBin',
+  'Thumbnails',
+  'ResourceUsage',
+  'PluginArtifacts',
+];
 
 export const LINUX_PROGRESS_CATEGORIES: ExtractionCategory[] = [
   'LinuxJournal',
@@ -35,16 +46,11 @@ export const LINUX_PROGRESS_CATEGORIES: ExtractionCategory[] = [
   'LinuxSystemConfig',
   'LinuxWebServices',
   'LinuxMysqlServices',
+  'PluginArtifacts',
 ];
 
-export const EXTRACTION_CATEGORIES_BY_PLATFORM: Record<AnalysisPlatformView, ExtractionCategory[]> = {
-  windows: WINDOWS_EXTRACTION_CATEGORIES,
-  linux: ['LinuxArtifacts'],
-  android: [],
-};
-
 export const PROGRESS_CATEGORIES_BY_PLATFORM: Record<AnalysisPlatformView, ExtractionCategory[]> = {
-  windows: WINDOWS_EXTRACTION_CATEGORIES,
+  windows: WINDOWS_PROGRESS_CATEGORIES,
   linux: LINUX_PROGRESS_CATEGORIES,
   android: [],
 };

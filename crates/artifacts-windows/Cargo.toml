@@ -35,12 +35,17 @@ md-5.workspace = true
 des.workspace = true
 aes.workspace = true
 cipher.workspace = true
+trash-core.workspace = true
+sootmark-shell.workspace = true
+sootmark-imagecache.workspace = true
+sootmark-ese.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+flate2.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 testing = { workspace = true }

@@ -13,9 +13,12 @@ pub(crate) const CONTAINERD_EXTRACTOR_VERSION: &str = "1.3.10";
 pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "1.3.10";
 pub(crate) const EMAIL_EXTRACTOR_VERSION: &str = "1.3.8";
 pub(crate) const BROWSER_EXTRACTOR_VERSION: &str = "1.3.9";
+pub(crate) const WINDOWS_NATIVE_EXTRACTOR_VERSION: &str = "1.4.0";
 
 pub(crate) fn producer_version(producer: &str) -> &'static str {
-    if producer.starts_with("registry.") {
+    if producer.starts_with("windows.native.") {
+        WINDOWS_NATIVE_EXTRACTOR_VERSION
+    } else if producer.starts_with("registry.") {
         REGISTRY_EXTRACTOR_VERSION
     } else if producer == "linux.docker_image" {
         CONTAINERD_EXTRACTOR_VERSION
@@ -39,6 +42,7 @@ pub(crate) const CHECKPOINT_VERSIONS: &[&str] = &[
     LINUX_SYSTEM_CONFIG_VERSION,
     EMAIL_EXTRACTOR_VERSION,
     BROWSER_EXTRACTOR_VERSION,
+    WINDOWS_NATIVE_EXTRACTOR_VERSION,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +69,9 @@ impl AnalysisCapability {
             "LinuxSystemConfig" => LINUX_SYSTEM_CONFIG_VERSION,
             "Email" => EMAIL_EXTRACTOR_VERSION,
             "BrowserHistory" => BROWSER_EXTRACTOR_VERSION,
+            "ProgramExecution" | "UserActivity" | "RecycleBin" | "Thumbnails" | "ResourceUsage" => {
+                WINDOWS_NATIVE_EXTRACTOR_VERSION
+            }
             _ => super::ANALYSIS_EXTRACTOR_VERSION,
         }
     }
@@ -75,6 +82,11 @@ impl AnalysisCapability {
             "BrowserHistory" => "browser.",
             "Email" => "email.",
             "EventLogs" => "evtx.",
+            "ProgramExecution" => "windows.native.prefetch.",
+            "UserActivity" => "windows.native.activity.",
+            "RecycleBin" => "windows.native.recycle_bin.",
+            "Thumbnails" => "windows.native.thumbcache.",
+            "ResourceUsage" => "windows.native.sru.",
             // Plugin outputs carry the bare plugin id as extractor_id (M2
             // contract); replacements for plugin candidates use exact-id
             // deletes, so this prefix intentionally matches nothing stored.
@@ -121,6 +133,11 @@ pub(crate) const WINDOWS_CAPABILITIES: &[AnalysisCapability] = &[
         PLUGIN_CAPABILITY_KEY,
         CandidateReadPolicy::Full,
     ),
+    windows_native("ProgramExecution", "Program execution"),
+    windows_native("UserActivity", "User activity"),
+    windows_native("RecycleBin", "Recycle bin"),
+    windows_native("Thumbnails", "Thumbnail cache"),
+    windows_native("ResourceUsage", "Resource usage"),
 ];
 
 pub(crate) const LINUX_CAPABILITIES: &[AnalysisCapability] = &[
@@ -182,6 +199,16 @@ const fn linux_capability(key: &'static str, section_label: &'static str) -> Ana
         section_label,
         LINUX_UMBRELLA_KEY,
         CandidateReadPolicy::LinuxPathAware,
+    )
+}
+
+const fn windows_native(key: &'static str, section_label: &'static str) -> AnalysisCapability {
+    capability(
+        key,
+        DataSourcePlatform::Windows,
+        section_label,
+        key,
+        CandidateReadPolicy::Bounded(infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize),
     )
 }
 

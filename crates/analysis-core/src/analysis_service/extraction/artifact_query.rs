@@ -17,6 +17,12 @@ pub(super) struct AnalysisArtifactRow {
 }
 
 const ANALYSIS_FAMILIES: &[&str] = &[
+    "Prefetch",
+    "LNK",
+    "JumpList",
+    "RecycleBin",
+    "Thumbcache",
+    "SRU",
     "RegistryValue",
     "RegistrySamUser",
     "RegistryUserAssist",
@@ -97,7 +103,7 @@ pub(super) fn already_has_v1_artifacts(
 }
 
 pub(super) fn count_analysis_artifacts(conn: &Connection) -> Result<u64, AnalysisServiceError> {
-    sum_type_counts(conn, |family| ANALYSIS_FAMILIES.contains(&family))
+    Ok(persistence_source::repositories::artifact_repo::ArtifactRepo::new(conn).count()?)
 }
 
 pub(super) fn count_artifacts_by_type(

@@ -87,7 +87,7 @@ fn current_case_sources_and_details_share_real_service_queries_with_no_host_path
 #[test]
 fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
     let catalog = tool_catalog();
-    assert_eq!(catalog.len(), 51);
+    assert_eq!(catalog.len(), 50);
     for name in [
         "forensics.get_analysis_system_info",
         "forensics.get_file_classification_board",
@@ -110,7 +110,6 @@ fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
         "forensics.get_task",
         "forensics.cancel_job",
         "forensics.start_content_index",
-        "forensics.start_analysis",
         "forensics.list_report_templates",
         "forensics.get_report_history",
         "forensics.start_report_export",
@@ -124,6 +123,9 @@ fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
     for tool in &catalog {
         assert_eq!(tool.input_schema["additionalProperties"], false);
     }
+    assert!(!catalog
+        .iter()
+        .any(|tool| tool.name == "forensics.start_analysis"));
     let jobs = catalog
         .iter()
         .find(|tool| tool.name == "forensics.list_jobs")
@@ -176,6 +178,34 @@ fn host_catalog_is_complete_and_policy_validation_rejects_unknown_tools() {
         .disabled_tools
         .push("forensics.arbitrary_execute".into());
     assert!(validate_settings(&mut settings).is_err());
+}
+
+#[test]
+fn unregistered_task_call_cannot_create_a_job() {
+    let temporary = tempfile::tempdir().unwrap();
+    let case = case_service::create_case(temporary.path(), "MCP Task Admission", None).unwrap();
+    let connection = case.connection().unwrap();
+    assert!(app_services::job_service::get_jobs_from_db(&connection)
+        .unwrap()
+        .is_empty());
+    let context = || McpHostQueryContext {
+        connection: &connection,
+        case_root: &case.case_root,
+        case_meta: &case.meta,
+    };
+    let result = execute_tool(
+        context(),
+        "forensics.start_analysis",
+        &json!({"dataSourceId":"source", "categories":[]}),
+    );
+    assert!(matches!(
+        result,
+        Err(McpHostServiceError::NotFoundDetail(_))
+    ));
+    assert!(app_services::job_service::get_jobs_from_db(&connection)
+        .unwrap()
+        .is_empty());
+    assert!(execute_tool(context(), "forensics.get_current_case", &json!({})).is_ok());
 }
 
 #[test]

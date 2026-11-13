@@ -1,11 +1,12 @@
-use super::entries::{enumerate, EntrySummary};
-use super::header::ThumbcacheHeader;
 use artifacts_core::{
     new_artifact, ArtifactContext, ArtifactExtractor, ArtifactSink, ExtractorReport,
 };
 use domain::ArtifactFamily;
 use std::collections::BTreeMap;
 use std::io::Read;
+
+const MAX_CACHE_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_REPORTED_ENTRIES: usize = 100;
 
 pub struct ThumbcacheExtractor;
 
@@ -26,8 +27,9 @@ impl ArtifactExtractor for ThumbcacheExtractor {
     }
 
     fn supports_path(&self, file_path: &str) -> bool {
-        let lower = file_path.to_lowercase();
-        lower.contains("thumbcache") && lower.ends_with(".db")
+        let lower = file_path.replace('\\', "/").to_ascii_lowercase();
+        let name = lower.rsplit('/').next().unwrap_or(&lower);
+        name.starts_with("thumbcache_") && name.ends_with(".db") && name != "thumbcache_idx.db"
     }
 
     fn run(
@@ -35,72 +37,82 @@ impl ArtifactExtractor for ThumbcacheExtractor {
         mut ctx: ArtifactContext,
         sink: &mut dyn ArtifactSink,
     ) -> Result<ExtractorReport, String> {
-        let mut data = Vec::new();
+        let mut bytes = Vec::new();
         ctx.reader
-            .read_to_end(&mut data)
+            .by_ref()
+            .take(MAX_CACHE_BYTES + 1)
+            .read_to_end(&mut bytes)
             .map_err(|error| error.to_string())?;
-        let header = match ThumbcacheHeader::parse(&data) {
-            Ok(header) => header,
-            Err(error) => return Ok(failure_report(error)),
-        };
-        let entries = enumerate(&data, header.entry_offset);
-        sink.write_artifact(build_artifact(&ctx, data.len(), &header, &entries));
+        if bytes.len() as u64 > MAX_CACHE_BYTES {
+            return Err("Thumbnail cache exceeds the supported input limit".into());
+        }
+        let cache = imagecache::thumbcache::read(&bytes);
+        let version = cache.version.ok_or_else(|| cache.problems.join("; "))?;
+        if !cache.problems.is_empty() {
+            return Err(cache.problems.join("; "));
+        }
+        let errors = cache
+            .entries
+            .iter()
+            .filter(|entry| !entry.header_checksum_valid || !entry.data_checksum_valid)
+            .map(|entry| {
+                format!(
+                    "Thumbnail cache entry at {} failed checksum verification",
+                    entry.offset
+                )
+            })
+            .collect();
+        let description = cache
+            .size_name()
+            .ok_or("Unsupported thumbnail cache type")?;
+        let entries = cache
+            .entries
+            .iter()
+            .take(MAX_REPORTED_ENTRIES)
+            .map(|entry| {
+                serde_json::json!({
+                    "hash": format!("{:016X}", entry.hash),
+                    "data_size": entry.data.len(),
+                    "identifier": entry.identifier,
+                    "data_offset": entry.data_offset,
+                    "header_checksum_verified": entry.header_checksum_valid,
+                    "data_checksum_verified": entry.data_checksum_valid,
+                })
+            })
+            .collect::<Vec<_>>();
+        let total_data_size = cache
+            .entries
+            .iter()
+            .map(|entry| entry.data.len() as u64)
+            .sum::<u64>();
+        let attrs = BTreeMap::from([
+            ("file_size".into(), (bytes.len() as u64).into()),
+            ("version".into(), version.number().into()),
+            ("cache_type".into(), cache.cache_type.into()),
+            ("cache_type_desc".into(), description.into()),
+            ("entry_count".into(), cache.entries.len().into()),
+            ("total_thumbnail_data_size".into(), total_data_size.into()),
+            ("entries".into(), entries.into()),
+            (
+                "entries_truncated".into(),
+                (cache.entries.len() > MAX_REPORTED_ENTRIES).into(),
+            ),
+        ]);
+        sink.write_artifact(new_artifact(
+            "Thumbcache",
+            format!("Thumbcache: {}", ctx.file_path),
+            format!(
+                "Windows Explorer thumbnail cache ({description}), {} entries, {} bytes",
+                cache.entries.len(),
+                bytes.len()
+            ),
+            Some(&ctx.file_id),
+            attrs,
+        ));
         Ok(ExtractorReport {
             artifacts_found: 1,
             timeline_events: 0,
-            errors: Vec::new(),
+            errors,
         })
-    }
-}
-
-fn build_artifact(
-    ctx: &ArtifactContext,
-    file_size: usize,
-    header: &ThumbcacheHeader,
-    entries: &EntrySummary,
-) -> domain::Artifact {
-    let description = header.cache_type_description();
-    let mut attrs = BTreeMap::new();
-    attrs.insert("file_size".into(), (file_size as u64).into());
-    attrs.insert("header_size".into(), header.header_size.into());
-    attrs.insert("version".into(), header.version.into());
-    attrs.insert("cache_type".into(), header.cache_type.into());
-    attrs.insert("cache_type_desc".into(), description.into());
-    if entries.count > 0 {
-        attrs.insert("entry_count".into(), entries.count.into());
-        attrs.insert(
-            "total_thumbnail_data_size".into(),
-            entries.total_data_size.into(),
-        );
-        attrs.insert(
-            "entries".into(),
-            serde_json::Value::Array(entries.entries.clone()),
-        );
-    }
-    new_artifact(
-        "Thumbcache",
-        format!("Thumbcache: {}", ctx.file_path),
-        summary(file_size, description, entries),
-        Some(&ctx.file_id),
-        attrs,
-    )
-}
-
-fn summary(file_size: usize, description: &str, entries: &EntrySummary) -> String {
-    if entries.count == 0 {
-        format!("Windows Explorer thumbnail cache ({description}), {file_size} bytes")
-    } else {
-        format!(
-            "Windows Explorer thumbnail cache ({}), {} entries, {} bytes ({} bytes thumbnail data)",
-            description, entries.count, file_size, entries.total_data_size
-        )
-    }
-}
-
-fn failure_report(error: String) -> ExtractorReport {
-    ExtractorReport {
-        artifacts_found: 0,
-        timeline_events: 0,
-        errors: vec![error],
     }
 }

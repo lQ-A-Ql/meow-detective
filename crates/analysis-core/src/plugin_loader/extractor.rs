@@ -13,7 +13,6 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::io::Read as _;
-use std::sync::Mutex;
 
 /// Validated plugin metadata, copied out of the DLL at load time.
 pub(crate) struct PluginMeta {
@@ -96,19 +95,14 @@ pub(crate) fn parse_families(json: &str) -> Result<Vec<String>, String> {
 }
 
 /// An `ArtifactExtractor` backed by a plugin DLL. The loaded library and
-/// metadata are shared process-wide (`Arc`); each registry build gets a
-/// fresh extractor with its own call lock.
+/// metadata and call gate are shared across every loaded instance of a DLL.
 pub struct PluginExtractor {
     pub(crate) shared: std::sync::Arc<SharedPlugin>,
-    pub(crate) call_lock: Mutex<()>,
 }
 
 impl PluginExtractor {
     pub(crate) fn shared(shared: std::sync::Arc<SharedPlugin>) -> Self {
-        Self {
-            shared,
-            call_lock: Mutex::new(()),
-        }
+        Self { shared }
     }
 
     /// Plugin-reported version string (host-verified present at load time).
@@ -422,6 +416,7 @@ impl ArtifactExtractor for PluginExtractor {
         // The contract serializes calls per plugin (§3): plugins need not be
         // internally thread-safe.
         let _serial = self
+            .shared
             .call_lock
             .lock()
             .map_err(|_| format!("plugin {} call lock poisoned", self.shared.id))?;

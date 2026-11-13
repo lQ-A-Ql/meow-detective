@@ -1,6 +1,6 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { getAndroidDeviceInfo, getAndroidPackageSummary, runAndroidAnalysis } from '@/lib/api/analysis';
+import { getAndroidDeviceInfo, getAndroidPackageSummary } from '@/lib/api/analysis';
 import { useCurrentCase } from '@/features/case/hooks';
 import type { AnalysisExtractionPageRequest, AndroidPackageSummary, DataSourceSummary } from '@/types/models';
 import { ANALYSIS_QUERY_OPTIONS, ANDROID_PACKAGE_PAGE_SIZE } from '../query-options';
@@ -64,24 +64,4 @@ export function useAndroidPackageSummary(request: OptionalAnalysisPageRequest = 
     ...query,
     data,
   };
-}
-
-export function useRunAndroidAnalysis() {
-  const queryClient = useQueryClient();
-  const currentCase = useCurrentCase();
-  return useMutation({
-    mutationFn: (dataSourceId: string) => runAndroidAnalysis(dataSourceId),
-    onSuccess: async (_data, dataSourceId) => {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ['analysis', 'android-device', currentCase.data?.id ?? null, dataSourceId],
-          refetchType: 'active',
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['analysis', 'android-packages', currentCase.data?.id ?? null, dataSourceId],
-          refetchType: 'active',
-        }),
-      ]);
-    },
-  });
 }

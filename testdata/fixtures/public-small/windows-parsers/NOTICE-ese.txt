@@ -1,0 +1,22 @@
+These files are plaso's test data, under the Apache License 2.0 (LICENSE,
+in this directory). Copyright the plaso authors.
+
+Source: https://github.com/log2timeline/plaso, test_data/, at commit
+a70dde825618050f6ce6c646f12fed386a9b4d73.
+
+  test_data/Catalog1.edb                  Catalog1.edb.gz
+  test_data/SRUDB.dat                     SRUDB.dat.gz
+  test_data/WebCacheV01.dat               WebCacheV01.dat.gz
+  test_data/PartitionsEx-WebCacheV01.dat  PartitionsEx-WebCacheV01.dat.gz
+  test_data/WebCacheV01_cookies.dat       WebCacheV01_cookies.dat.gz
+  test_data/Windows.edb                   Windows.edb.gz
+
+All are stored gzip-compressed (gzip -9n; 130 MB of mostly empty pages in
+4.5 MB); they are otherwise unmodified. SHA-256 of the uncompressed files:
+
+  Catalog1.edb                  8a6ca11fad99b39620f45e2420172e2c9ed137ad8a9c415a5e10bd9080e7ad78
+  SRUDB.dat                     6536ae6bb5b91f6f8f37a4af26f6cfaecc8a1f745370bfba83af7ebae6694e3e
+  WebCacheV01.dat               2713e7ff413c69659442c5dcb0f23f41230fa76bf760b8aeac0ffd430d10c83e
+  PartitionsEx-WebCacheV01.dat  3b2958f0283d20d38de63e110da59e03f58c927f4360e8fe5161fdb1a99c3330
+  WebCacheV01_cookies.dat       07062c1233215747be97a602ae5831e2d5e05ad9ab6ba16f34fe55eebf687a97
+  Windows.edb                   e96837a0ad37be5a55222fa98991bec6b5c5ba956610f9d241aa8c65f2e0714c

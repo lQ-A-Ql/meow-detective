@@ -128,6 +128,10 @@ artifacts-core = { path = "crates/artifacts-core" }
 artifacts-android = { path = "crates/artifacts-android" }
 artifacts-windows = { path = "crates/artifacts-windows" }
 artifacts-browser = { path = "crates/artifacts-browser" }
+trash-core = { version = "=0.3.2", default-features = false, features = ["windows"] }
+sootmark-shell = "=0.3.0"
+sootmark-imagecache = "=0.1.0"
+sootmark-ese = "=0.1.1"
 artifacts-linux = { path = "crates/artifacts-linux" }
 reports = { path = "crates/reports" }
 testing = { path = "crates/testing" }

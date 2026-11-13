@@ -83,12 +83,6 @@ fn core_tools() -> Vec<McpHostToolDto> {
             vec!["dataSourceId"],
         ),
         (
-            "forensics.start_analysis",
-            "为指定数据源创建证据分类分析任务并返回任务标识。",
-            json!({"dataSourceId":identifier(), "categories":{"type":"array","maxItems":32,"items":identifier()}, "idempotencyKey":{"type":"string","minLength":1,"maxLength":128}}),
-            vec!["dataSourceId"],
-        ),
-        (
             "forensics.list_report_templates",
             "读取当前版本支持的报告模板。",
             json!({}),
@@ -195,7 +189,6 @@ fn file_tools() -> Vec<McpHostToolDto> {
             "forensics.extract_file"
                 | "forensics.cancel_job"
                 | "forensics.start_content_index"
-                | "forensics.start_analysis"
                 | "forensics.start_report_export"
         ) {
             tool_with_access(name, description, properties, required, false, true)

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   usePluginActions: vi.fn(),
   useRecoverWeChatKeys: vi.fn(),
-  useRunAnalysisExtraction: vi.fn(),
+  useRunPluginExtraction: vi.fn(),
 }));
 
 vi.mock('@/features/analysis/plugin-action-hooks', () => ({
@@ -14,7 +14,7 @@ vi.mock('@/features/analysis/plugin-action-hooks', () => ({
 }));
 
 vi.mock('@/features/analysis/hooks', () => ({
-  useRunAnalysisExtraction: mocks.useRunAnalysisExtraction,
+  useRunPluginExtraction: mocks.useRunPluginExtraction,
 }));
 
 import { PluginActionsSection } from '@/features/analysis/containers/PluginActionsSection';
@@ -54,7 +54,7 @@ describe('PluginActionsSection', () => {
     vi.clearAllMocks();
     mocks.usePluginActions.mockReturnValue({ data: [], isLoading: false });
     mocks.useRecoverWeChatKeys.mockReturnValue(recoveryState());
-    mocks.useRunAnalysisExtraction.mockReturnValue(rerunState());
+    mocks.useRunPluginExtraction.mockReturnValue(rerunState());
   });
 
   it('renders nothing when the plugin declares no actions', () => {
@@ -181,7 +181,7 @@ describe('PluginActionsSection', () => {
       }),
     );
     const rerun = rerunState();
-    mocks.useRunAnalysisExtraction.mockReturnValue(rerun);
+    mocks.useRunPluginExtraction.mockReturnValue(rerun);
     render(
       createElement(PluginActionsSection, {
         dataSourceId: 'ds-1',
@@ -198,7 +198,6 @@ describe('PluginActionsSection', () => {
     await waitFor(() => {
       expect(rerun.mutateAsync).toHaveBeenCalledWith({
         dataSourceId: 'ds-1',
-        categories: ['PluginArtifacts'],
       });
     });
   });

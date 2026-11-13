@@ -24,6 +24,34 @@ V2 长期执行与发布口径见：
 - macOS 数据源请求、`MacArtifacts` 能力和旧 macOS 案件均返回 typed `Unsupported`，不会进入候选发现或提取流程。
 - 仅识别已知 Apple 分区类型标识符并记录为元数据；当前不识别 APFS/HFS+ 文件系统 magic/signature，不实例化文件系统 reader，也不提供文件树、预览、制品提取或已删除恢复。
 
+### 1.1 触发方式与结果生命周期
+
+Windows/Linux 原生解析由目录发布后的自动导入流程触发。Windows 包含 Registry、
+BrowserHistory、Email、EventLogs、ProgramExecution、UserActivity、RecycleBin、
+Thumbnails、ResourceUsage 以及可用插件；Linux 使用 LinuxArtifacts 能力集合。
+目录状态 `ready` 表示可以浏览，解析完成状态由后续处理阶段单独记录。
+
+插件系统提供专用 `run_plugin_extraction` 手动入口，请求仅含 dataSourceId，服务端
+固定执行 PluginArtifacts。通用手动扫描、通用手动解析以及 MCP start_analysis 不再提供。
+页面继续显示自动解析进度、结果与诊断。
+运行结果的顶层 artifactCount 表示该来源已发布记录总数，包含插件 family；
+各 section 的数量表示本次运行处理或复用的记录，已知 family 不重复计算。
+
+Android 的现有设备与应用包元数据解析也在目录发布后自动执行；分析页不再提供原生
+扫描按钮。Kubernetes 保留查询和内部服务，通用命令层不提供手动解析入口。
+
+解析记录写入独立 generation。候选成功后替换对应 producer 的旧记录；候选读取失败、
+依赖准备失败或插件失败时保留此前成功结果并报告失败。取消使用同一 Arc 传播到资源申请、
+读取、调度及发布检查；未发布的 generation 不进入查询结果。
+
+Registry 检查点包含 SYSTEM 恢复材料，Chromium 密钥来源和 Linux 时区来源参与相应
+候选身份。辅助文件按数据源与分区归属选择，歧义返回明确诊断。密码输入仅影响当前运行
+身份，不保存密码或密码摘要。系统信息与 Registry 页面读取同一类恢复后 hive 视图。
+
+EVTX 使用 Read+Seek reader 按批写入结果；仅不可定位 reader 使用缓冲大小限制。
+插件主文件及 companion 的合计输入受 128 MiB 上限约束，超限在读取前拒绝。同一 DLL
+的 extraction 与 action 调用共享串行锁。
+
 ## 2. 核心矩阵
 
 PNG carving 为 **Experimental**：在 RAW/E01 的 logicalDisk 视图中显式扫描指定区间，
@@ -45,11 +73,11 @@ PNG carving 为 **Experimental**：在 RAW/E01 的 logicalDisk 视图中显式�
 | exFAT parser | Windows | Experimental | 无 committed fixture | 37 个单元测试 | 基本枚举（boot/FAT/dir） | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` exFAT volume samples | deleted 不承诺。expected.json 待建 |
 | BitLocker volume layer | Windows | Experimental | `bdetogo.raw` / `bitlocker-1.dd` opt-in oracle；恢复密码 oracle 环境门控；liuyang E01 + memory 私有 opt-in oracle | 193 个 volume lib 测试 + 23 个 memory 常规测试 + app-service/runtime/DTO/API/report 回归；liuyang targeted 与生产服务 ignored 回归 | 无凭据 inspect；密码与 48 位恢复密码解锁；本地 UTF-8 密码字典的有界后台验证、进度和取消；匹配 Windows x64 raw memory 的结构化 VMK 恢复（PDB 门控的 fvevol keyring / device context）；五种已验证 cipher；Hex/文本/图片/文档/媒体预览；显式 source-local catalog 导入；分区级锁定；Windows Credential Manager 已验证密钥包恢复；前端真实解锁面板；内存解锁后恢复密码反推（同代 VMK 时）并以 recovered/unavailable 区分呈现；HTML/JSON 非秘密 inventory | 不提交镜像、内存或凭据，使用 `FORENSICS_BITLOCKER_*_ORACLE` / `FORENSICS_LIUYANG_MEMORY_FIXTURE` | 内存路径仅从首 1 MiB bootstrap 读取 ntoskrnl CodeView GUID，命中内嵌 1077 build 符号注册表（Windows 10 10240 → Windows 11 28000，约 96% 已索引 build）后经 Object Manager / Driver 对象链定位 FVEVol keyring / device context，注册表未覆盖的 build 走版本无关 driver-object 雕刻兜底；VMK 必须通过目标卷 FVEK datum CCM tag 与 NTFS `$UpCase`/`$Bitmap` oracle，明文预言机目前仅覆盖 NTFS 卷（exFAT/FAT 卷会按 typed failure 拒绝而非误判解锁）；恢复密码反推仅在反向 datum 与内存 VMK 同代时成立，否则显式报 unavailable。`0x8001`、TPM、启动密钥和 clear-key 解锁不支持；无公开内存 fixture，因此等级仍保持 Experimental。 |
 | Apple partition type recognition | Unsupported platform | Unsupported | 无受支持 fixture | known partition type identifiers only | 分区类型元数据标签；不承诺 filesystem magic/signature 或内容读取 | 不规划 | 识别结果必须保持 `Unsupported`，不得实例化 reader |
-| EVTX | Windows | Beta | `system.evtx` | 10 个测试 | 基本事件抽取（boot/shutdown） | **planned** (2026-Q3) — `testdata/fixtures/public-medium/evtx/` larger multi-channel samples | 大样本待补。expected.json 接入校验待加强 |
+| EVTX | Windows | Beta | `system.evtx`；文件流回归 | parser 与 analysis-core 流式回归 | boot/shutdown、Security、Application 等已声明事件；保留源文件归属与诊断 | **planned** — `testdata/fixtures/public-medium/evtx/` multi-channel samples | 自动解析使用 Read+Seek，按批写入；不可定位输入受缓冲上限限制。真实大样本覆盖仍需补充 |
 | Prefetch | Windows | Beta | 无 committed fixture | expected.json / 1 个 synthetic 测试 | executable、run_count 等核心字段 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/prefetch/` historical + compressed .pf variants | testdata/artifacts/windows/prefetch/ 仅含 .gitkeep。历史版本与压缩变体覆盖不足。**插件形态可用**：`plugins-src/prefetch` 提供同解析器的 DLL 形态（`meow.plugin.prefetch`），经 `scripts/build-plugins.ps1` 拷贝至 exe 旁 `plugins/windows/` 后由宿主 `plugin_loader` 加载，与内置 extractor 输出深度相等 |
-| LNK | Windows | Beta | 无 committed fixture | expected.json（无自动化测试） | target path、时间（expected.json 契约内） | **planned** (2026-Q3) — `testdata/fixtures/public-medium/lnk/` complex shell item samples | testdata/artifacts/windows/lnk/ 仅含 .gitkeep。未发现 #[test]。复杂 shell item 待补 |
+| LNK | Windows | Beta | `windows-parsers/notepad.lnk`、`notepad-xp.lnk` | `expected.json`、LECmd oracle、pipeline regression | target path、文件大小、100 ns 时间；合法 header/IDList/LinkInfo | **planned** — complex shell item samples | 使用 sootmark-shell；自动解析输出固定原文件 ID，时间线使用已声明类型 |
 | Registry | Windows | Beta | `tiny SYSTEM`、`tiny SOFTWARE`、`NTUSER` (liuyang_pc.E01)、`SAM` (liuyang_pc.E01)、`USRCLASS`、`Amcache.hve`、`SECURITY` (controlled) | expected.json / 48 个测试 | system info (computer_name, timezone, **services/drivers**, **USBSTOR/USB device history**, **MountedDevices**, **shutdown time**, **ShimCache**, network_adapters), software info (product_name, build, version, registered_owner, install_date), **machine persistence** (HKLM Run/RunOnce/RunOnceEx, Winlogon Shell/Userinit/Notify/AutoAdminLogon, LSA Authentication/Notification/Security Packages), NTUSER (user profiles, shell folders, recent files, typed paths, **OpenSavePidlMRU**, **LastVisitedPidlMRU**, **RunMRU**, mount points, UserAssist), USRCLASS (**ShellBags**, **MuiCache**), NetworkList (Profiles/Signatures first/last connect), AppCompatFlags Layers, Amcache.hve (InventoryApplication, InventoryApplicationFile), SAM (local users, group membership, login counts, password policy), SECURITY (local security policy, LSA Secrets metadata, cached domain credentials — encrypted blobs only) | **planned** (2026-Q3) — `testdata/fixtures/public-medium/registry/` full hive suite (SAM, SECURITY, NTUSER) | liuyang_pc.E01 回归已验证 SYSTEM/SOFTWARE/NTUSER/SAM 提取。R1–R4 已落地（服务/驱动、USB、MountedDevices、ShutdownTime、ShimCache、HKLM Run/Winlogon/LSA Packages、NTUSER MRU、USRCLASS ShellBags/MuiCache、NetworkList、Amcache、AppCompatFlags Layers、SECURITY 基础字段合成测试通过）。txlog dirty page 合并与键值恢复已完成。UserAssist ROT13 解码已实现。**SECURITY hive 支持以受控披露方式加入：仅输出策略字段与加密 blob 元数据，默认不解密 LSA Secrets / 缓存凭证。** 生产路径统一使用 `analysis_service::extraction::registry::extract_registry_candidate`；旧 base-block-only RegistryExtractor 已移除。 |
-| Recycle Bin | Windows | Beta | 无 committed fixture | expected.json（无自动化测试） | 原路径、删除时间（expected.json 契约内） | **planned** (2026-Q3) — `testdata/fixtures/public-medium/recycle-bin/` $I/$R paired samples | testdata/artifacts/windows/recycle-bin/ 仅含 .gitkeep。未发现 #[test]。损坏恢复不承诺 |
+| Recycle Bin | Windows | Beta | `windows-parsers/recycle_v1.bin`、`recycle_v2.bin` | `expected.json` 与格式 oracle | 原路径、原文件大小、删除时间、格式版本 | **planned** — $I/$R paired samples | 使用 trash-core；损坏与截断返回错误，完整内容恢复不在该解析器范围 |
 | 微信 4.x（插件形态） | Windows | Experimental | 倩倩PC镜像（4.1.8.67）私有真实样本 opt-in 回归（`FORENSICS_WECHAT_EXTRACT_DIR` 盘点层、`FORENSICS_WECHAT_DECRYPTED_DIR` 内容层）；合成 SQLite/INI/WAL/resource/XML 单元与宿主回归默认 CI | `plugins-src/wechat` 单元测试 / `wechat_plugin_regression` / `wechat_realdata_validation` / `wechat_content_realdata_validation` | 安装/账户/数据库盘点；明文/解密库的**内容解析**：联系人、会话、聊天记录（群聊 sender、收发方向、zstd、完整正文、quick-xml 有界解析、source/compress_content/packed_info_data 号主回复、富媒体/引用）、朋友圈（正文、媒体、点赞、评论及回复目标）、收藏；message_resource 投影为 WeChatMedia（BLOB 大小/SHA-256/MIME、包装头后的媒体签名及受限 base64），message_fts 投影为 WeChatSearchRecord；主库完整读取；`.db-wal` 作为 ABI companion 校验并合并；专用 UI 按证据时间分页展示并将资源图片关联回聊天气泡 | **planned** — 公开合成 fixture 集 | 仅以 DLL 插件形态提供（`meow.plugin.wechat` v0.4.2，`plugins/windows/`）；内存 dump 恢复的页 1 验证密钥写入受限 `keys.json`，并按取证需求在当前插件标题明文显示，但不进入日志/制品/报告；无密钥时加密库仅盘点并告警。媒体单项最多内联 2 MiB、单库累计最多 32 MiB，超限或未知 MIME 只保存元数据与 hash；内容解析单库封顶 20,000 条 |
 
 ### 2.1 镜像适配器组合语义
@@ -103,9 +131,9 @@ VMDK 是会话 COW overlay 的宿主材料，与“把用户选择的 VMDK 作�
 
 | 链路 | 平台 | 当前等级 | 已验证样本 | 字段承诺 | Medium Fixture | 备注 |
 |---|---|---|---|---|---|---|
-| JumpList | Windows | Experimental | 无 committed fixture | 基本提取 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` JumpList samples | 2 个单元测试。expected.json 待建 |
-| SRU | Windows | Experimental | 无 committed fixture | 基本提取 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` SRU samples | 4 个单元测试。expected.json 待建 |
-| Thumbcache | Windows | Experimental | 无 committed fixture | 基本提取 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` Thumbcache samples | 3 个单元测试。expected.json 待建 |
+| JumpList | Windows | Experimental | `windows-parsers/f01b4d95cf55d32a.automaticDestinations-ms`、`368d807282ccde9d.customDestinations-ms` | sootmark-shell 与 JLECmd oracle | **planned** — more JumpList samples | 支持标准 AutomaticDestinations/CustomDestinations 后缀与结构；内嵌项目保留原文件 ID |
+| SRU | Windows | Experimental | `windows-parsers/SRUDB.dat.gz` | sootmark-ese、esentutl header oracle | **planned** — SRU table samples | 仅 ESE header 元数据：版本、page size、database state；不承诺应用或网络用量表 |
+| Thumbcache | Windows | Experimental | `windows-parsers/thumbcache_v21.db`、`thumbcache_v32.db` | sootmark-imagecache 与独立 TSV oracle | **planned** — remaining format variants | 格式 20/21/30/31/32 使用版本化库；当前公开样本覆盖 21/32，checksum 异常明确标注 |
 | Chrome History | 跨平台 | Supported | 无 | URL / 标题 / 访问时间 / 下载 | **planned** (2026-Q3) — controlled VM snapshot, 500+ history entries, 50+ downloads, 100+ cookies, 2 profiles | medium fixture 规划中 (Chrome SQLite) |
 | Edge History | 跨平台 | Supported | 无 | URL / 标题 / 访问时间 / 下载 | **planned** (2026-Q3) — controlled VM snapshot, 300+ history, 20+ downloads, 80+ cookies | medium fixture 规划中 (Edge Chromium SQLite) |
 | Firefox History | 跨平台 | Supported | 无 | URL / 标题 / 访问时间 / 下载 | **planned** (2026-Q3) — controlled VM snapshot, 300+ URLs in places.sqlite, 500+ visits, 30+ downloads.json, 80+ cookies | medium fixture 规划中 (Firefox SQLite) |

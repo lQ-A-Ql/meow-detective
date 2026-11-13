@@ -2,16 +2,14 @@
 
 pub(crate) use crate::commands::{
     analysis_commands::{
-        classify_files, generate_analysis_summary, get_android_device_info,
-        get_android_package_summary, get_browser_history_summary, get_case_overview_snapshot,
-        get_correlation_snapshot, get_email_extraction_summary,
-        get_evidence_classification_summary, get_evtx_event_summary, get_file_classification_board,
-        get_kubernetes_cluster_summary, get_linux_artifact_summary, get_linux_evidence_events,
-        get_linux_evidence_set_summary, get_plugin_family_entries, get_registry_extraction_summary,
-        get_registry_structured_summary, get_system_info, get_v2_governance_snapshot,
-        get_v3_governance_snapshot, list_linux_evidence_sets, list_plugin_modules,
-        run_analysis_extraction, run_android_analysis, run_evidence_classification,
-        run_kubernetes_cluster_analysis,
+        generate_analysis_summary, get_android_device_info, get_android_package_summary,
+        get_browser_history_summary, get_case_overview_snapshot, get_correlation_snapshot,
+        get_email_extraction_summary, get_evidence_classification_summary, get_evtx_event_summary,
+        get_file_classification_board, get_kubernetes_cluster_summary, get_linux_artifact_summary,
+        get_linux_evidence_events, get_linux_evidence_set_summary, get_plugin_family_entries,
+        get_registry_extraction_summary, get_registry_structured_summary, get_system_info,
+        get_v2_governance_snapshot, get_v3_governance_snapshot, list_linux_evidence_sets,
+        list_plugin_modules, run_plugin_extraction,
     },
     app_update_commands::{check_app_update, get_app_update_info, install_app_update},
     artifact_commands::{

@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import {
   ANALYSIS_EXTRACTION_CATEGORIES,
   type AnalysisExtractionProgressInfo,
-  type AnalysisExtractionProgressState,
   type AnalysisTabKey,
   type AndroidAnalysisTabKey,
   type ExtractionCategory,
@@ -32,6 +31,12 @@ function createDefaultProgress(): Record<ExtractionCategory, Omit<AnalysisExtrac
     BrowserHistory: emptyProgress(),
     Email: emptyProgress(),
     EventLogs: emptyProgress(),
+    ProgramExecution: emptyProgress(),
+    UserActivity: emptyProgress(),
+    RecycleBin: emptyProgress(),
+    Thumbnails: emptyProgress(),
+    ResourceUsage: emptyProgress(),
+    PluginArtifacts: emptyProgress(),
     LinuxArtifacts: emptyProgress(),
     LinuxJournal: emptyProgress(),
     LinuxLogin: emptyProgress(),
@@ -126,16 +131,6 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
 
   reset: () => set(initialState),
 }));
-
-export function statusFromRun(status: string): AnalysisExtractionProgressState {
-  if (status === 'failed' || status === 'unavailable') {
-    return 'failed';
-  }
-  if (status === 'partial') {
-    return 'partial';
-  }
-  return 'success';
-}
 
 export function labeledProgress(
   progress: Record<ExtractionCategory, Omit<AnalysisExtractionProgressInfo, 'label'>>,

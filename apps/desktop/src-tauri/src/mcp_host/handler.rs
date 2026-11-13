@@ -420,9 +420,7 @@ fn validate_prompt_arguments(
 fn supports_tasks(name: &str, context: &RequestContext<RoleServer>) -> bool {
     matches!(
         name,
-        "forensics.start_content_index"
-            | "forensics.start_analysis"
-            | "forensics.start_report_export"
+        "forensics.start_content_index" | "forensics.start_report_export"
     ) && context
         .client_capabilities()
         .is_some_and(|capabilities| capabilities.supports_tasks())

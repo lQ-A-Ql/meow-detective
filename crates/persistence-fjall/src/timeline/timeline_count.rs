@@ -160,10 +160,7 @@ pub(super) fn count_write_policy(
     Ok((empty, empty))
 }
 pub(super) fn counts_ready(snapshot: &SourceReadSnapshot, source_id: &str) -> Result<bool> {
-    let key = encode_key(
-        "timeline.count-schema",
-        &[KeyPart::Text(source_id.to_owned())],
-    )?;
+    let key = count_schema_marker_key(source_id)?;
     let Some(value) = snapshot.get(KeyspaceName::Meta, &key)? else {
         return Ok(false);
     };
@@ -178,12 +175,16 @@ pub(super) fn counts_ready(snapshot: &SourceReadSnapshot, source_id: &str) -> Re
 pub(super) fn count_schema_marker_action(source_id: &str) -> Result<WriteAction> {
     Ok(WriteAction::Put {
         keyspace: KeyspaceName::Meta,
-        key: encode_key(
-            "timeline.count-schema",
-            &[KeyPart::Text(source_id.to_owned())],
-        )?,
+        key: count_schema_marker_key(source_id)?,
         value: COUNT_SCHEMA_VALUE.to_vec(),
     })
+}
+
+pub(super) fn count_schema_marker_key(source_id: &str) -> Result<Vec<u8>> {
+    encode_key(
+        "timeline.count-schema",
+        &[KeyPart::Text(source_id.to_owned())],
+    )
 }
 pub(super) fn adjust_count_deltas(
     deltas: &mut HashMap<Vec<u8>, i64>,

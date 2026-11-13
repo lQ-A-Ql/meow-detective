@@ -20,9 +20,16 @@ use super::browser_catalog::locate_master_key_files;
 const BROWSER_CONTEXT_READ_LIMIT: usize = 32 * 1024 * 1024;
 type ChromeMaterials = (Option<Vec<u8>>, Option<Vec<u8>>);
 
+#[derive(Clone, Copy)]
+struct BrowserSourceScope<'a> {
+    data_source_id: &'a str,
+    partition: Option<usize>,
+}
+
 /// Per-analysis browser key context built from evidence hives and Protect files.
 pub(super) struct BrowserPreloadContext {
-    decryptors: HashMap<(String, String), ChromiumDecryptor>,
+    decryptors: HashMap<(String, Option<usize>, String), ChromiumDecryptor>,
+    read_failures: HashMap<(String, Option<usize>, String), String>,
     pub(super) warnings: Vec<String>,
 }
 
@@ -30,6 +37,7 @@ impl BrowserPreloadContext {
     pub(super) fn empty() -> Self {
         Self {
             decryptors: HashMap::new(),
+            read_failures: HashMap::new(),
             warnings: Vec::new(),
         }
     }
@@ -39,8 +47,29 @@ impl BrowserPreloadContext {
         candidate: &EvidenceCandidate,
     ) -> Option<&ChromiumDecryptor> {
         let root = chromium_user_data_root(&normalize_evidence_path(&candidate.path))?;
-        self.decryptors
-            .get(&(candidate.data_source_id.clone(), root))
+        self.decryptors.get(&(
+            candidate.data_source_id.clone(),
+            candidate.partition_index,
+            root,
+        ))
+    }
+
+    pub(super) fn dependency_read_failure(&self, candidate: &EvidenceCandidate) -> Option<&str> {
+        if candidate.category != "BrowserHistory" {
+            return None;
+        }
+        let normalized = normalize_evidence_path(&candidate.path);
+        if !is_chromium_secret_store_path(&normalized) {
+            return None;
+        }
+        let root = chromium_user_data_root(&normalized)?;
+        self.read_failures
+            .get(&(
+                candidate.data_source_id.clone(),
+                candidate.partition_index,
+                root,
+            ))
+            .map(String::as_str)
     }
 }
 
@@ -68,24 +97,44 @@ pub(super) fn prepare_browser_preload(
         }
         file_reader(candidate, limit)
     };
-    let data_sources = roots
+    let scopes = roots
         .keys()
-        .map(|(data_source_id, _)| data_source_id.clone())
+        .map(|(data_source_id, partition, _)| (data_source_id.clone(), *partition))
         .collect::<HashSet<_>>();
-    for data_source_id in data_sources {
+    for (data_source_id, partition) in scopes {
+        let scoped_catalog = catalog.for_scope(&data_source_id, partition);
+        let scoped_roots = roots
+            .iter()
+            .filter(|((source, candidate_partition, _), _)| {
+                source == &data_source_id && *candidate_partition == partition
+            })
+            .map(|((_, _, root), _)| root.clone())
+            .collect::<Vec<_>>();
         if let Err(error) = prepare_source_context(
-            catalog,
-            &data_source_id,
-            roots
-                .iter()
-                .filter(|((source, _), _)| source == &data_source_id)
-                .map(|((_, root), _)| root.clone())
-                .collect(),
+            &scoped_catalog,
+            BrowserSourceScope {
+                data_source_id: &data_source_id,
+                partition,
+            },
+            scoped_roots.clone(),
             cancel_token,
             manual_password,
             &mut shared_reader,
             &mut context,
         ) {
+            if matches!(error, AnalysisServiceError::Cancelled) {
+                return Err(error);
+            }
+            if matches!(
+                error,
+                AnalysisServiceError::Read(_) | AnalysisServiceError::Io(_)
+            ) {
+                for root in scoped_roots {
+                    context
+                        .read_failures
+                        .insert((data_source_id.clone(), partition, root), error.to_string());
+                }
+            }
             context.warnings.push(format!(
                 "browser DPAPI context for data source {data_source_id} was not available: {error}"
             ));
@@ -96,13 +145,14 @@ pub(super) fn prepare_browser_preload(
 
 fn prepare_source_context(
     catalog: &PreparationCatalog,
-    data_source_id: &str,
+    scope: BrowserSourceScope<'_>,
     roots: Vec<String>,
     cancel_token: &AtomicBool,
     manual_password: Option<&str>,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
     context: &mut BrowserPreloadContext,
 ) -> Result<(), AnalysisServiceError> {
+    let data_source_id = scope.data_source_id;
     let system = catalog
         .suffix(data_source_id, "/windows/system32/config/system")
         .ok_or_else(|| AnalysisServiceError::Other("SYSTEM hive was not found".to_string()))?;
@@ -148,7 +198,7 @@ fn prepare_source_context(
 
     install_profile_decryptors(
         catalog,
-        data_source_id,
+        scope,
         roots,
         &master_keys,
         cancel_token,
@@ -159,13 +209,14 @@ fn prepare_source_context(
 
 fn install_profile_decryptors(
     catalog: &PreparationCatalog,
-    data_source_id: &str,
+    scope: BrowserSourceScope<'_>,
     roots: Vec<String>,
     master_keys: &[DecryptedMasterKey],
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
     context: &mut BrowserPreloadContext,
 ) -> Result<(), AnalysisServiceError> {
+    let data_source_id = scope.data_source_id;
     // CNG and elevation-service bytes are only needed for Google Chrome's
     // PostProcessData schemes; read them lazily on the first Chrome root.
     let mut chrome_materials: Option<ChromeMaterials> = None;
@@ -181,10 +232,7 @@ fn install_profile_decryptors(
         let local_state_bytes = match read_locator(&local_state, cancel_token, file_reader) {
             Ok(bytes) => bytes,
             Err(error) => {
-                context.warnings.push(format!(
-                    "Chromium Local State could not be read for profile root {root}: {error}"
-                ));
-                continue;
+                return Err(error);
             }
         };
         let family = chromium_family_for_root(&root);
@@ -218,9 +266,10 @@ fn install_profile_decryptors(
             &mut context.warnings,
         );
         if let Some(decryptor) = decryptor {
-            context
-                .decryptors
-                .insert((data_source_id.to_string(), root), decryptor);
+            context.decryptors.insert(
+                (data_source_id.to_string(), scope.partition, root),
+                decryptor,
+            );
         }
     }
     Ok(())
@@ -280,12 +329,8 @@ fn load_master_keys(
     let locators = locate_master_key_files(catalog, data_source_id);
     let mut recovered = HashMap::<String, DecryptedMasterKey>::new();
     for locator in locators {
-        if ensure_not_cancelled(cancel_token).is_err() {
-            break;
-        }
-        let Ok(bytes) = read_locator(&locator, cancel_token, file_reader) else {
-            continue;
-        };
+        ensure_not_cancelled(cancel_token)?;
+        let bytes = read_locator(&locator, cancel_token, file_reader)?;
         if let Ok(master_key) = decrypt_master_key_file(&bytes, prekeys) {
             recovered
                 .entry(master_key.guid.to_ascii_lowercase())
@@ -309,15 +354,26 @@ pub(super) fn read_locator(
     } else {
         MAX_ANALYSIS_SOURCE_BYTES
     };
-    read_candidate_bytes_with_progress(locator, limit, cancel_token, file_reader, |_| {}).map_err(
-        |error| match error {
-            CandidateExtractionError::Cancelled => AnalysisServiceError::Cancelled,
-            CandidateExtractionError::Warning(warning) => AnalysisServiceError::Read(warning),
-        },
-    )
+    if locator.size > limit as u64 {
+        return Err(AnalysisServiceError::Unsupported(
+            "browser dependency exceeds its byte limit".into(),
+        ));
+    }
+    let bytes =
+        read_candidate_bytes_with_progress(locator, limit, cancel_token, file_reader, |_| {})
+            .map_err(|error| match error {
+                CandidateExtractionError::Cancelled => AnalysisServiceError::Cancelled,
+                CandidateExtractionError::Warning(warning) => AnalysisServiceError::Read(warning),
+            })?;
+    if bytes.len() as u64 != locator.size {
+        return Err(AnalysisServiceError::Read(
+            "browser dependency input was truncated or changed".into(),
+        ));
+    }
+    Ok(bytes)
 }
 
-fn browser_roots(candidates: &[EvidenceCandidate]) -> HashMap<(String, String), ()> {
+fn browser_roots(candidates: &[EvidenceCandidate]) -> HashMap<(String, Option<usize>, String), ()> {
     candidates
         .iter()
         .filter_map(|candidate| {
@@ -328,8 +384,16 @@ fn browser_roots(candidates: &[EvidenceCandidate]) -> HashMap<(String, String), 
             if !is_chromium_secret_store_path(&normalized) {
                 return None;
             }
-            chromium_user_data_root(&normalized)
-                .map(|root| ((candidate.data_source_id.clone(), root), ()))
+            chromium_user_data_root(&normalized).map(|root| {
+                (
+                    (
+                        candidate.data_source_id.clone(),
+                        candidate.partition_index,
+                        root,
+                    ),
+                    (),
+                )
+            })
         })
         .collect()
 }

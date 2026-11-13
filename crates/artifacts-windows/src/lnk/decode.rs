@@ -1,131 +1,93 @@
-use super::shell_item;
-use byteorder::{LittleEndian, ReadBytesExt};
-use chrono::{DateTime, Datelike, TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use std::io::Read;
 
-const HAS_LINK_TARGET_ID_LIST: u32 = 0x0000_0001;
-const HAS_LINK_INFO: u32 = 0x0000_0002;
+const MAX_LINK_BYTES: u64 = 64 * 1024 * 1024;
+const LINK_HEADER_BYTES: usize = 76;
 
-pub(super) struct DecodedLnk {
-    pub(super) file_size: u32,
-    pub(super) target_path: String,
-    pub(super) timestamps: Vec<LnkTimestamp>,
+pub(crate) struct DecodedLnk {
+    pub(crate) file_size: u32,
+    pub(crate) target_path: String,
+    pub(crate) timestamps: Vec<LnkTimestamp>,
 }
 
-pub(super) struct LnkTimestamp {
-    pub(super) field: &'static str,
-    pub(super) event_type: &'static str,
-    pub(super) value: DateTime<Utc>,
+pub(crate) struct LnkTimestamp {
+    pub(crate) field: &'static str,
+    pub(crate) event_type: &'static str,
+    pub(crate) value: DateTime<Utc>,
 }
 
 pub(super) fn decode_lnk(reader: &mut impl Read) -> Result<DecodedLnk, String> {
-    let header_size = reader.read_u32::<LittleEndian>().unwrap_or(0x4c);
-    if header_size < 0x4c {
-        return Err("LNK header too small".to_string());
-    }
-    let mut clsid = [0u8; 16];
+    let mut bytes = Vec::new();
     reader
-        .read_exact(&mut clsid)
+        .take(MAX_LINK_BYTES + 1)
+        .read_to_end(&mut bytes)
         .map_err(|error| error.to_string())?;
-    let flags = reader.read_u32::<LittleEndian>().unwrap_or(0);
-    let _file_attributes = reader.read_u32::<LittleEndian>().unwrap_or(0);
-    let creation_time = reader.read_u64::<LittleEndian>().unwrap_or(0);
-    let access_time = reader.read_u64::<LittleEndian>().unwrap_or(0);
-    let write_time = reader.read_u64::<LittleEndian>().unwrap_or(0);
-    let file_size = reader.read_u32::<LittleEndian>().unwrap_or(0);
-    skip_header_tail(reader);
-
-    let id_list_path = read_id_list_path(reader, flags);
-    let link_info_path = read_link_info_path(reader, flags);
-    let target_path = link_info_path
-        .filter(|path| !path.is_empty())
-        .unwrap_or(id_list_path);
-    Ok(DecodedLnk {
-        file_size,
-        target_path,
-        timestamps: collect_timestamps(creation_time, access_time, write_time),
-    })
+    if bytes.len() as u64 > MAX_LINK_BYTES {
+        return Err("Shell Link exceeds the supported input limit".into());
+    }
+    if bytes.len() < LINK_HEADER_BYTES {
+        return Err("Shell Link header is truncated".into());
+    }
+    let link = shell::lnk::parse(&bytes).map_err(|error| error.to_string())?;
+    Ok(project_link(&link))
 }
 
-fn skip_header_tail(reader: &mut impl Read) {
-    let _icon_index = reader.read_i32::<LittleEndian>().unwrap_or(0);
-    let _show_command = reader.read_u32::<LittleEndian>().unwrap_or(0);
-    let mut tail = [0u8; 12];
-    let _ = reader.read_exact(&mut tail);
-}
-
-fn read_id_list_path(reader: &mut impl Read, flags: u32) -> String {
-    if flags & HAS_LINK_TARGET_ID_LIST == 0 {
-        return String::new();
-    }
-    let size = reader.read_u16::<LittleEndian>().unwrap_or(0) as usize;
-    if size <= 2 {
-        return String::new();
-    }
-    let mut data = vec![0u8; size - 2];
-    let _ = reader.read_exact(&mut data);
-    shell_item::parse_shell_items(&data)
-}
-
-fn read_link_info_path(reader: &mut impl Read, flags: u32) -> Option<String> {
-    if flags & HAS_LINK_INFO == 0 {
-        return None;
-    }
-    let size = reader.read_u32::<LittleEndian>().unwrap_or(0);
-    if size < 28 {
-        return None;
-    }
-    let _flags = reader.read_u32::<LittleEndian>().unwrap_or(0);
-    let _volume_offset = reader.read_u32::<LittleEndian>().unwrap_or(0);
-    let path_offset = reader.read_u32::<LittleEndian>().unwrap_or(0);
-    if path_offset < 16 || path_offset as u64 >= size as u64 {
-        return None;
-    }
-    let mut skipped = vec![0u8; path_offset.saturating_sub(16).min(256) as usize];
-    let _ = reader.read_exact(&mut skipped);
-    read_null_string(
-        reader,
-        (size as usize)
-            .saturating_sub(path_offset as usize)
-            .min(520),
-    )
-}
-
-fn read_null_string(reader: &mut impl Read, max_bytes: usize) -> Option<String> {
-    let mut buffer = vec![0u8; max_bytes];
-    let read = reader.read(&mut buffer).ok()?;
-    buffer.truncate(read);
-    let end = buffer.iter().position(|byte| *byte == 0).unwrap_or(read);
-    let bytes = buffer[..end].to_vec();
-    (!bytes.is_empty())
-        .then(|| String::from_utf8(bytes).ok())
-        .flatten()
-}
-
-fn collect_timestamps(creation: u64, access: u64, write: u64) -> Vec<LnkTimestamp> {
-    [
-        ("creation_time", "LINK_CREATED", creation),
-        ("access_time", "LINK_ACCESSED", access),
-        ("write_time", "LINK_MODIFIED", write),
-    ]
-    .into_iter()
-    .filter_map(|(field, event_type, value)| {
-        filetime_to_datetime(value)
-            .filter(|timestamp| timestamp.year() > 2000 && timestamp.year() < 2100)
-            .map(|value| LnkTimestamp {
+pub(crate) fn project_link(link: &shell::lnk::Link) -> DecodedLnk {
+    DecodedLnk {
+        file_size: link.size,
+        target_path: target_path(link),
+        timestamps: [
+            ("creation_time", "LINK_CREATED", link.created),
+            ("access_time", "LINK_ACCESSED", link.accessed),
+            ("write_time", "LINK_MODIFIED", link.modified),
+        ]
+        .into_iter()
+        .filter_map(|(field, event_type, ticks)| {
+            filetime_to_datetime(ticks).map(|value| LnkTimestamp {
                 field,
                 event_type,
                 value,
             })
-    })
-    .collect()
+        })
+        .collect(),
+    }
+}
+
+fn target_path(link: &shell::lnk::Link) -> String {
+    if !link.local_path.is_empty() {
+        return join_target(&link.local_path, &link.common_path);
+    }
+    if !link.network_path.is_empty() {
+        return join_target(&link.network_path, &link.common_path);
+    }
+    let shell_path = link.target_path();
+    if !shell_path.is_empty() {
+        return shell_path;
+    }
+    if !link.environment_target.is_empty() {
+        return link.environment_target.clone();
+    }
+    link.relative_path.clone()
+}
+
+fn join_target(base: &str, suffix: &str) -> String {
+    if suffix.is_empty() {
+        return base.to_string();
+    }
+    format!(
+        "{}\\{}",
+        base.trim_end_matches('\\'),
+        suffix.trim_start_matches('\\')
+    )
 }
 
 fn filetime_to_datetime(value: u64) -> Option<DateTime<Utc>> {
-    if value == 0 || value >= 0x8000_0000_0000_0000 {
+    if value == 0 {
         return None;
     }
-    let seconds = (value / 10_000_000) as i64 - 11_644_473_600;
+    let seconds = i64::try_from(value / 10_000_000)
+        .ok()?
+        .checked_sub(11_644_473_600)?;
     Utc.timestamp_opt(seconds, ((value % 10_000_000) * 100) as u32)
         .single()
 }

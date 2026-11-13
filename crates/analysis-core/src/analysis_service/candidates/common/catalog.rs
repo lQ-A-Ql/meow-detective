@@ -27,7 +27,7 @@ pub(super) fn visit_file_entries_from_fjall(
     })
 }
 
-pub(super) fn visit_catalog_records_from_fjall(
+pub(in crate::analysis_service::candidates) fn visit_catalog_records_from_fjall(
     conn: &Connection,
     mut visit: impl FnMut(FileEntryRecord) -> Result<(), AnalysisServiceError>,
 ) -> Result<(), AnalysisServiceError> {
