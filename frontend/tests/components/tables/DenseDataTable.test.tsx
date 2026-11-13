@@ -61,7 +61,7 @@ describe('DenseDataTable', () => {
 
     const scrollContainer = getScrollViewport(container);
 
-    fireEvent.scroll(scrollContainer, { target: { scrollTop: 310_000 } });
+    fireEvent.scroll(scrollContainer, { target: { scrollTop: 400_000 } });
 
     const bodyRows = container.querySelectorAll('tbody tr');
     expect(bodyRows.length).toBeLessThan(100);
@@ -332,7 +332,7 @@ describe('DenseDataTable', () => {
     );
     const scrollContainer = getScrollViewport(container);
 
-    fireEvent.scroll(scrollContainer, { target: { scrollTop: 310_000 } });
+    fireEvent.scroll(scrollContainer, { target: { scrollTop: 400_000 } });
     expect(container.textContent).toContain('First 9999');
 
     rerender(

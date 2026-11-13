@@ -31,7 +31,10 @@ export function DenseTableFilterBar({
 }: DenseTableFilterBarProps) {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-forensics-border bg-forensics-panel px-2 py-1.5 text-[11px]">
+    <div
+      data-slot="dense-table-filter"
+      className="flex shrink-0 flex-wrap items-center gap-2 border-b border-forensics-border bg-forensics-panel px-2 py-1.5 text-[11px]"
+    >
       <Input
         type="search"
         variant="mono"

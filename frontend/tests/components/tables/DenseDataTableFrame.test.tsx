@@ -11,7 +11,7 @@ describe('DenseDataTableFrame', () => {
     );
 
     expect(container.firstElementChild).toHaveStyle({
-      height: 'min(92px, min(60vh, 45rem))',
+      height: 'min(110px, min(60vh, 45rem))',
     });
   });
 
@@ -35,7 +35,7 @@ describe('DenseDataTableFrame', () => {
     );
 
     expect(container.firstElementChild).toHaveStyle({
-      height: 'min(126px, min(60vh, 35rem))',
+      height: 'min(144px, min(60vh, 35rem))',
     });
   });
 

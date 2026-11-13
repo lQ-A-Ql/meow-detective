@@ -110,7 +110,7 @@ export function HorizontalScroll({
   const trackWidth = metrics.clientWidth;
   const maxScroll = Math.max(0, metrics.scrollWidth - metrics.clientWidth);
   const thumbRatio = metrics.scrollWidth > 0 ? metrics.clientWidth / metrics.scrollWidth : 1;
-  const thumbWidth = Math.max(32, trackWidth * thumbRatio);
+  const thumbWidth = Math.max(40, trackWidth * thumbRatio);
   const thumbLeft = maxScroll > 0 ? (metrics.scrollLeft / maxScroll) * (trackWidth - thumbWidth) : 0;
   const showThumb = metrics.scrollWidth > metrics.clientWidth && trackWidth > 0;
 
@@ -168,12 +168,12 @@ export function HorizontalScroll({
       >
         {children}
       </div>
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[7px]">
+      <div className="scrollbar-thin-glow-track pointer-events-none absolute bottom-0 left-0 right-0">
         <div className="scrollbar-thin-glow-track-line absolute inset-x-0 top-1/2 -translate-y-1/2" />
         {showThumb && (
           <div
             className={cn(
-              'scrollbar-thin-glow-thumb pointer-events-auto absolute top-1/2 h-[7px] -translate-y-1/2 rounded-none cursor-pointer',
+              'scrollbar-thin-glow-thumb pointer-events-auto absolute top-1/2 -translate-y-1/2 rounded-none cursor-pointer',
               dragging && 'cursor-grabbing',
             )}
             style={{ left: thumbLeft, width: thumbWidth }}

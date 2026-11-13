@@ -32,9 +32,17 @@
 .scrollbar-thin-glow--cell .scrollbar-thin-glow-scroll {
   /* Reserve the lower edge for the custom thumb so evidence text remains
      completely visible when the scrollbar fades in. */
-  padding-bottom: 5px;
+  padding-bottom: 12px;
   margin-bottom: 0;
   overflow-y: hidden;
+}
+
+.scrollbar-thin-glow-track {
+  height: 7px;
+}
+
+.scrollbar-thin-glow--cell .scrollbar-thin-glow-track {
+  height: 12px;
 }
 
 /* A quiet, continuous track keeps horizontal navigation legible. */
@@ -46,6 +54,7 @@
 
 .scrollbar-thin-glow-thumb {
   min-width: 40px;
+  height: 7px;
   background: var(--scrollbar-glow-outer);
   border: 1px solid var(--scrollbar-line);
 }
@@ -57,10 +66,20 @@
 }
 
 .scrollbar-thin-glow--cell .scrollbar-thin-glow-thumb {
-  height: 4px;
+  height: 12px;
   border: 0;
-  background: var(--forensics-sakura-500, var(--scrollbar-glow-outer));
+  background: transparent;
   opacity: 0.8;
+}
+
+.scrollbar-thin-glow--cell .scrollbar-thin-glow-thumb::before {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 6px;
+  transform: translateY(-50%);
+  background: var(--forensics-sakura-500, var(--scrollbar-glow-outer));
+  content: '';
 }
 
 .scrollbar-thin-glow--reveal-on-hover .scrollbar-thin-glow-track-line,
