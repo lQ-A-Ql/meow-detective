@@ -261,71 +261,60 @@ fn run_source_analysis_extraction_execution_with_progress(
     ));
     let mut source_read_count = 0u64;
     let mut source_read_elapsed = Duration::ZERO;
-    let mut extraction = run_analysis_extraction_with_source_and_progress(
-        &source.connection,
-        &case_id.0,
-        source.platform,
-        categories,
-        control.cancel_token.as_ref(),
-        control.browser_password,
-        control.progress,
-        |candidate, read_limit| -> Result<CandidateSource, FileServiceError> {
-            if let Some(warning) = encrypted_candidate_warning(candidate) {
-                return Err(FileServiceError::Unsupported(warning));
-            }
-            let started = Instant::now();
-            let hint = SourceReadFileHint::new(
-                candidate.file_id.clone(),
-                DataSourceId(candidate.data_source_id.clone()),
-                candidate.partition_index,
-                candidate.path.clone(),
-                candidate.size,
-                candidate.encrypted,
-            );
-            let result = if candidate.category == "EventLogs" {
-                source_reader
-                    .open_file_range_with_metadata(hint)
-                    .map(candidate_source_from_range_reader)
+    let progress = control.progress;
+    let mut terminal = Vec::new();
+    let mut extraction = {
+        let mut forward_progress = |update: ExtractionProgressUpdate| {
+            if matches!(
+                update.phase,
+                transport::dto::AnalysisExtractionPhaseDto::Completed
+                    | transport::dto::AnalysisExtractionPhaseDto::Failed
+            ) {
+                terminal.push(update);
             } else {
-                source_reader
-                    .read_file_header_with_metadata(hint, read_limit)
-                    .map(CandidateSource::Bytes)
-            };
-            source_read_count = source_read_count.saturating_add(1);
-            source_read_elapsed = source_read_elapsed.saturating_add(started.elapsed());
-            result
-        },
-    );
-    if let Ok(execution) = &mut extraction {
-        record_extraction_metrics(
-            execution,
+                progress(update);
+            }
+        };
+        run_analysis_extraction_with_source_and_progress(
+            &source.connection,
+            &case_id.0,
+            source.platform,
+            categories,
+            control.cancel_token.as_ref(),
+            control.browser_password,
+            &mut forward_progress,
+            |candidate, read_limit| -> Result<CandidateSource, FileServiceError> {
+                if let Some(warning) = encrypted_candidate_warning(candidate) {
+                    return Err(FileServiceError::Unsupported(warning));
+                }
+                let started = Instant::now();
+                let result = read_candidate_source(&mut source_reader, candidate, read_limit);
+                source_read_count = source_read_count.saturating_add(1);
+                source_read_elapsed = source_read_elapsed.saturating_add(started.elapsed());
+                result
+            },
+        )
+    };
+    super::completion::finish(
+        super::completion::CompletionContext {
+            case_conn,
+            case_root,
+            case_id,
+            source_id: data_source_id,
+            runtime: control.source_runtime,
             admission_ms,
             source_read_count,
             source_read_elapsed,
-            &source_reader,
-        );
-        record_plugin_audit_trail(
-            case_conn,
-            case_id,
-            data_source_id,
-            &execution.plugin_loads,
-            &execution.plugin_rejections,
-            &execution.plugin_extract_failures,
-        );
-    }
-    finish_extraction(
+        },
         &mut extraction,
-        data_source_id,
-        control.source_runtime,
         &mut source_reader,
+        progress,
+        terminal,
     )?;
-    if extraction.is_ok() {
-        super::generation_gc::request(case_root, data_source_id)?;
-    }
     extraction
 }
 
-fn finish_extraction<'a>(
+pub(super) fn finish_extraction<'a>(
     extraction: &mut Result<AnalysisExtractionExecution, AnalysisServiceError>,
     data_source_id: &DataSourceId,
     source_runtime: &AnalysisSourceReadRuntime,
@@ -340,7 +329,7 @@ fn finish_extraction<'a>(
     Ok(())
 }
 
-fn record_extraction_metrics(
+pub(super) fn record_extraction_metrics(
     execution: &mut AnalysisExtractionExecution,
     admission_ms: u64,
     source_read_count: u64,
@@ -402,6 +391,30 @@ pub fn run_import_source_extraction(
     )
 }
 
+fn read_candidate_source(
+    reader: &mut SourceReadContext<'_>,
+    candidate: &crate::analysis_service::candidates::EvidenceCandidate,
+    limit: usize,
+) -> Result<CandidateSource, FileServiceError> {
+    let hint = SourceReadFileHint::new(
+        candidate.file_id.clone(),
+        DataSourceId(candidate.data_source_id.clone()),
+        candidate.partition_index,
+        candidate.path.clone(),
+        candidate.size,
+        candidate.encrypted,
+    );
+    if candidate.category == "EventLogs" {
+        reader
+            .open_file_range_with_metadata(hint)
+            .map(candidate_source_from_range_reader)
+    } else {
+        reader
+            .read_file_header_with_metadata(hint, limit)
+            .map(CandidateSource::Bytes)
+    }
+}
+
 fn candidate_source_from_range_reader(reader: RangeContentReader) -> CandidateSource {
     match reader {
         RangeContentReader::Seekable(reader) => CandidateSource::Seekable(reader),
@@ -412,7 +425,7 @@ fn candidate_source_from_range_reader(reader: RangeContentReader) -> CandidateSo
 /// Write the plugin audit trail of one extraction run into the case audit
 /// log (design doc §5: plugin load / refusal / extraction failure). Audit
 /// writes are non-fatal: a failing audit insert must never fail the run.
-fn record_plugin_audit_trail(
+pub(super) fn record_plugin_audit_trail(
     case_conn: &Connection,
     case_id: &CaseId,
     data_source_id: &DataSourceId,

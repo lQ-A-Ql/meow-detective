@@ -10,7 +10,7 @@ use transport::dto::{AnalysisExtractionPhaseDto, AnalysisWorkProgressDto, Analys
 const EVENT_INTERVAL: Duration = Duration::from_millis(100);
 const LOG_INTERVAL: Duration = Duration::from_secs(1);
 pub(crate) const PREPARING_DETAIL: &str = "preparing extraction";
-const PERSISTING_DETAIL: &str = "persisting extracted artifacts";
+pub(crate) const PERSISTING_DETAIL: &str = "persisting extracted artifacts";
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct CandidateProgressResult {
@@ -211,7 +211,11 @@ impl<'a> ExtractionProgressReporter<'a> {
             AnalysisWorkStageDto::Processing => AnalysisExtractionPhaseDto::Extracting,
             AnalysisWorkStageDto::CountRebuild
             | AnalysisWorkStageDto::GenerationSeal
-            | AnalysisWorkStageDto::Publication => AnalysisExtractionPhaseDto::Persisting,
+            | AnalysisWorkStageDto::Publication
+            | AnalysisWorkStageDto::ResultBuilding
+            | AnalysisWorkStageDto::Audit
+            | AnalysisWorkStageDto::LocatorFlush
+            | AnalysisWorkStageDto::Completion => AnalysisExtractionPhaseDto::Persisting,
             _ => AnalysisExtractionPhaseDto::Preparing,
         };
         if let Some(section) = self.sections.values().next() {

@@ -138,7 +138,11 @@ export type AnalysisWorkStage =
   | 'processing'
   | 'countRebuild'
   | 'generationSeal'
-  | 'publication';
+  | 'publication'
+  | 'resultBuilding'
+  | 'audit'
+  | 'locatorFlush'
+  | 'completion';
 
 export interface AnalysisWorkProgress {
   stage: AnalysisWorkStage;

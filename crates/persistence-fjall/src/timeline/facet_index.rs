@@ -68,7 +68,7 @@ pub(super) fn index_edge_timestamp(
     let Some(entry) = entry else {
         return Ok(None);
     };
-    timestamp_for_index_entry(snapshot, &entry.value).map(Some)
+    timestamp_for_index_entry(snapshot, &entry, source_id, event_type).map(Some)
 }
 
 pub(super) fn index_family_and_parts(
@@ -113,14 +113,27 @@ fn first_entry(entries: Vec<SnapshotEntry>) -> Option<SnapshotEntry> {
 
 fn timestamp_for_index_entry(
     snapshot: &SourceReadSnapshot,
-    index_value: &[u8],
+    entry: &SnapshotEntry,
+    source_id: &str,
+    event_type: Option<&str>,
 ) -> Result<DateTime<Utc>> {
     let bytes = snapshot
-        .get(KeyspaceName::TimelineRecords, index_value)?
+        .get(KeyspaceName::TimelineRecords, &entry.value)?
         .ok_or(FjallStorageError::TimelineIndexCorrupt)?;
     let record = decode_record(VersionedEnvelope::decode(&bytes)?)?;
-    if record_key(&record.data_source_id, &record.id)? != index_value {
+    if record_key(&record.data_source_id, &record.id)? != entry.value {
         return Err(FjallStorageError::TimelineRecordIdentityMismatch);
+    }
+    if record.data_source_id != source_id
+        || event_type.is_some_and(|kind| record.event_type != kind)
+    {
+        return Err(FjallStorageError::TimelineIndexCorrupt);
+    }
+    let (family, mut parts) = index_family_and_parts(source_id, event_type);
+    parts.push(KeyPart::InverseU64(timestamp_sort_value(record.timestamp)));
+    parts.push(KeyPart::Text(record.id.clone()));
+    if encode_key(family, &parts)? != entry.key {
+        return Err(FjallStorageError::TimelineIndexCorrupt);
     }
     Ok(record.timestamp)
 }

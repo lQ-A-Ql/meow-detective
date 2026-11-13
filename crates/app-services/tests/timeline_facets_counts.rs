@@ -73,19 +73,16 @@ fn register_ready_source(
     DataSourceRepo::new(case_conn).insert_with_storage(case_id, &source, &storage)?;
     let source_conn = app_services::source_db::open_source_db(case_root, &source.id)?;
     DataSourceRepo::new(&source_conn).upsert_source_local_metadata(case_id, &source)?;
-    mark_source_projection_complete(case_root, source_id)?;
+    mark_source_projection_complete(&source_conn, source_id)?;
     Ok(source_conn)
 }
 
 fn mark_source_projection_complete(
-    case_root: &std::path::Path,
+    source_conn: &rusqlite::Connection,
     source_id: &str,
 ) -> persistence_sqlite::DbResult<()> {
-    let source = app_services::source_db::open_registered_fjall_source_read_write(
-        case_root,
-        &DataSourceId(source_id.to_string()),
-    )
-    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let source = persistence_source::detail::open_store_for_write(source_conn)?
+        .expect("source fixture must have a builder");
     let key = persistence_source::fjall::encode_key(
         "projection",
         &[persistence_source::fjall::KeyPart::Text(
@@ -101,15 +98,24 @@ fn mark_source_projection_complete(
         1,
         source_id.as_bytes().to_vec(),
     );
-    source
+    let receipt = source
         .write_envelope(
             persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
             PersistMode::SyncAll,
         )
-        .map(|_| ())
-        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    persistence_source::fjall::seal_source_generation_with_control(
+        &source,
+        source_id,
+        "timeline-facets",
+        &hex::encode(receipt.batch_digest),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .map(|_| ())
+    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
 }
 
 fn publish(case_root: &std::path::Path, records: &[TimelineRecord], mode: WriteMode) {
@@ -476,7 +482,7 @@ fn nonempty_facets_retain_sources_with_zero_matching_events() {
 }
 
 #[test]
-fn rebuilt_full_window_materializes_each_record_only_once() {
+fn rebuilt_full_window_uses_count_indexes_without_materializing_records() {
     let temp = tempfile::TempDir::new().unwrap();
     let records = spread_records();
     let active = prepare_case(&temp, "facets-single-scan", &records, WriteMode::Rebuilt);
@@ -503,9 +509,84 @@ fn rebuilt_full_window_materializes_each_record_only_once() {
         result.total_events
     );
     assert!(
-        counters.point_reads <= records.len() as u64 + 16,
-        "duplicate record reads: {counters:?}"
+        counters.point_reads <= 32,
+        "histogram must use count indexes: {counters:?}"
     );
+}
+
+#[test]
+fn large_full_window_histogram_uses_rollups_and_matches_record_oracle() {
+    let scratch = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../output/repair-2026-11-13/timeline");
+    std::fs::create_dir_all(&scratch).unwrap();
+    let temporary = tempfile::tempdir_in(scratch).unwrap();
+    let base = Utc
+        .with_ymd_and_hms(2016, 1, 1, 0, 0, 0)
+        .unwrap()
+        .timestamp();
+    let records = (0..150_447)
+        .map(|index| {
+            let when = base + (index % 3650) * DAY_SECONDS + (index / 3650) * 2000;
+            record(
+                SOURCE,
+                &format!("rollup-{index}"),
+                if index % 2 == 0 { "a" } else { "b" },
+                at(when) + chrono::Duration::nanoseconds(index % 1000),
+            )
+        })
+        .collect::<Vec<_>>();
+    let active = prepare_case(&temporary, "facets-large-rollups", &[], WriteMode::Counted);
+    for batch in records.chunks(2000) {
+        publish(&active.case_root, batch, WriteMode::Counted);
+    }
+    for kind in [None, Some("a")] {
+        let filter = FacetFilter {
+            start: None,
+            end: None,
+            event_type: kind,
+            buckets: 12,
+        };
+        instrumentation::enable();
+        instrumentation::reset();
+        let result = facets(&active, &filter);
+        let counters = instrumentation::snapshot();
+        instrumentation::disable();
+        assert_eq!(
+            result.total_events,
+            records
+                .iter()
+                .filter(|r| kind.is_none_or(|k| r.event_type == k))
+                .count() as u64
+        );
+        for bucket in &result.histogram {
+            let start = DateTime::parse_from_rfc3339(&bucket.start_ts)
+                .unwrap()
+                .timestamp();
+            let end = DateTime::parse_from_rfc3339(&bucket.end_ts)
+                .unwrap()
+                .timestamp();
+            let expected = records
+                .iter()
+                .filter(|r| {
+                    kind.is_none_or(|k| r.event_type == k)
+                        && (start..=end).contains(&r.timestamp.timestamp())
+                })
+                .count() as u64;
+            assert_eq!(bucket.count, expected);
+        }
+        assert_eq!(
+            result.histogram.iter().map(|b| b.count).sum::<u64>(),
+            result.total_events
+        );
+        assert!(
+            counters.point_reads <= 1200,
+            "unexpected payload-sized point reads: {counters:?}"
+        );
+        assert!(
+            counters.scan_entries < 30_000,
+            "full-range scan instead of calendar rollups: {counters:?}"
+        );
+    }
 }
 
 #[test]
@@ -770,4 +851,102 @@ fn histogram_counts_match_uneven_integer_second_bucket_edges() {
             .count();
         assert_eq!(bucket.count, count as u64);
     }
+}
+
+#[test]
+fn swapped_time_index_values_return_corruption_without_panicking() {
+    let scratch = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../output/repair-2026-11-13/timeline");
+    std::fs::create_dir_all(&scratch).unwrap();
+    let temporary = tempfile::tempdir_in(scratch).unwrap();
+    let records = [
+        record(SOURCE, "swap-a", "a", base_time()),
+        record(
+            SOURCE,
+            "swap-b",
+            "b",
+            base_time() + chrono::Duration::seconds(1),
+        ),
+    ];
+    let active = prepare_case(
+        &temporary,
+        "facets-swapped-index",
+        &records,
+        WriteMode::Counted,
+    );
+    let handle = app_services::source_db::open_registered_fjall_source_read_write(
+        &active.case_root,
+        &DataSourceId(SOURCE.into()),
+    )
+    .unwrap();
+    let snapshot = handle.snapshot();
+    let keys = records
+        .iter()
+        .map(|record| {
+            persistence_source::fjall::encode_key(
+                "timeline.time",
+                &[
+                    persistence_source::fjall::KeyPart::Text(SOURCE.into()),
+                    persistence_source::fjall::KeyPart::InverseU64(
+                        (record.timestamp.timestamp_micros() as u64) ^ (1 << 63),
+                    ),
+                    persistence_source::fjall::KeyPart::Text(record.id.clone()),
+                ],
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let values = keys
+        .iter()
+        .map(|key| {
+            snapshot
+                .get(
+                    persistence_source::fjall::KeyspaceName::TimelineIndexes,
+                    key,
+                )
+                .unwrap()
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    handle
+        .source_store()
+        .database()
+        .write_batch(
+            &[
+                persistence_source::fjall::WriteAction::Put {
+                    keyspace: persistence_source::fjall::KeyspaceName::TimelineIndexes,
+                    key: keys[0].clone(),
+                    value: values[1].clone(),
+                },
+                persistence_source::fjall::WriteAction::Put {
+                    keyspace: persistence_source::fjall::KeyspaceName::TimelineIndexes,
+                    key: keys[1].clone(),
+                    value: values[0].clone(),
+                },
+            ],
+            PersistMode::SyncAll,
+        )
+        .unwrap();
+    drop(handle);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let connection = active.connection().unwrap();
+        get_timeline_facets_for_case(
+            &connection,
+            &active.case_root,
+            &active.meta.id,
+            None,
+            None,
+            None,
+            180,
+        )
+    }))
+    .expect("corrupt index must return an error, without a histogram panic");
+    assert!(matches!(
+        result,
+        Err(
+            app_services::timeline_service::TimelineServiceError::Storage(
+                persistence_source::fjall::FjallStorageError::TimelineIndexCorrupt
+            )
+        )
+    ));
 }

@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 
 use domain::{CaseId, DataSourceId};
-use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::linux_evidence_facts_repo::LinuxEvidenceFactsRepo;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -9,6 +8,8 @@ const IDENTITY_PARSER_VERSION: &str = "1.3.7";
 
 use evidence_access::file_service::{read_file_bytes_for_case, SourceReadContext};
 use source_kernel::source_db;
+
+mod catalog;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,9 +45,8 @@ pub fn persist_linux_evidence_facts(
     data_source_id: &DataSourceId,
     facts: &LinuxEvidenceFacts,
 ) -> persistence_sqlite::DbResult<()> {
-    // This cache is written only from the import publication lease, before the
-    // source transitions to ready. Post-ready analysis must remain read-only
-    // against the published source catalog.
+    // PostReady stores this derived cache in source.db under the import
+    // publication lease. Published catalog records remain read-only inputs.
     let mut value = serde_json::to_value(facts)
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
     let Value::Object(ref mut object) = value else {
@@ -84,27 +84,15 @@ pub fn collect_linux_evidence_facts(
         return facts;
     }
     let mut facts = LinuxEvidenceFacts::default();
-    let file_repo = FileRepo::new(&source_connection);
-    let mut entries = Vec::new();
-    for fragments in [
-        vec!["etc/hostname"],
-        vec!["os-release"],
-        vec!["etc/hosts"],
-        vec!["vmlinuz-"],
-        vec!["etc/kubernetes/manifests"],
-        vec!["etc/kubernetes/kubelet.conf"],
-        vec!["var/lib/docker/containers", "config.v2.json"],
-    ] {
-        if let Ok(mut matches) = file_repo.find_by_path_fragments(data_source_id, &fragments) {
-            entries.append(&mut matches);
+    let entries = match catalog::collect_entries(&source_connection, data_source_id) {
+        Ok(entries) => entries,
+        Err(error) => {
+            facts
+                .diagnostics
+                .push(format!("source catalog query failed: {error}"));
+            return facts;
         }
-    }
-    entries.sort_by(|left, right| {
-        left.path
-            .cmp(&right.path)
-            .then_with(|| left.id.0.cmp(&right.id.0))
-    });
-    entries.dedup_by(|left, right| left.id == right.id);
+    };
     let mut context = SourceReadContext::new(
         &source_connection,
         case_connection,

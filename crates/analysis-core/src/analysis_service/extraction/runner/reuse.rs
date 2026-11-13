@@ -41,8 +41,16 @@ pub(super) fn try_reuse(
     }
     progress.begin_persisting();
     ensure_not_cancelled(request.cancel)?;
+    let persistence_started = Instant::now();
     let failures = state.retryable_failure_count;
     let dto = state.into_dto(request.conn, Utc::now().to_rfc3339())?;
+    progress.report_work(
+        AnalysisWorkStageDto::ResultBuilding,
+        persistence_started,
+        dto.artifact_count,
+        0,
+        true,
+    );
     if failures == 0 {
         progress.complete();
     } else {
@@ -53,7 +61,7 @@ pub(super) fn try_reuse(
         retryable_failure_count: failures,
         discovery_elapsed_ms: elapsed_millis(request.discovery_started),
         processing_elapsed_ms: 0,
-        persistence_elapsed_ms: 0,
+        persistence_elapsed_ms: elapsed_millis(persistence_started),
         work_metrics: progress.take_work_metrics(),
         source_read_count: 0,
         source_read_elapsed_ms: 0,

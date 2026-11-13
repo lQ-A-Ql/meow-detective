@@ -265,6 +265,7 @@ impl Measurement {
                     | Phase::Catalog
                     | Phase::Finalize
                     | Phase::PostReady
+                    | Phase::SourceFacts
                     | Phase::SourceDatabaseOpen
                     | Phase::Enumeration
                     | Phase::Analysis

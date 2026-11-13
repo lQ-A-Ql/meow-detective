@@ -1215,7 +1215,13 @@ fn empty_candidate_run_skips_streamed_output_generation() {
     assert_eq!(execution.dto.sections[0].scanned_count, 0);
     assert_eq!(execution.retryable_failure_count, 0);
     assert_eq!(execution.processing_elapsed_ms, 0);
-    assert_eq!(execution.persistence_elapsed_ms, 0);
+    let result_building = execution
+        .work_metrics
+        .iter()
+        .find(|work| work.stage == transport::dto::AnalysisWorkStageDto::ResultBuilding)
+        .expect("empty runs measure result construction");
+    assert!(result_building.complete);
+    assert!(execution.persistence_elapsed_ms >= result_building.elapsed_ms);
     assert!(updates
         .iter()
         .any(|update| update.phase == transport::dto::AnalysisExtractionPhaseDto::Completed));

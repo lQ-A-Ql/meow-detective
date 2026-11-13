@@ -16,6 +16,50 @@ const COUNT_FAMILY: &str = "timeline.count";
 const COUNT_SCHEMA_VALUE: &[u8] = b"v1";
 
 impl TimelineRecordStore {
+    /// Counts at most 180 exact inclusive timestamp windows against one snapshot.
+    /// Complete calendar periods use rollups; partial periods scan timestamp keys.
+    pub fn count_windows(
+        &self,
+        snapshot: &SourceReadSnapshot,
+        source_id: &str,
+        event_type: Option<&str>,
+        windows: &[std::ops::RangeInclusive<DateTime<Utc>>],
+    ) -> Result<Vec<u64>> {
+        if windows.len() > 180 {
+            return Err(FjallStorageError::InvalidEnvelope(
+                "timeline count request exceeds 180 windows".to_owned(),
+            ));
+        }
+        let total = self.count_by_time_and_type(snapshot, source_id, event_type, None, None)?;
+        windows
+            .iter()
+            .map(|window| {
+                if total == 0 || window.is_empty() {
+                    return Ok(0);
+                }
+                if window.start().timestamp_subsec_nanos() == 0
+                    && window.end().timestamp_subsec_nanos() == 999_999_999
+                {
+                    timeline_count_ranges::count_indexed_interval(
+                        snapshot,
+                        source_id,
+                        event_type,
+                        *window.start(),
+                        *window.end(),
+                    )
+                } else {
+                    timeline_count_ranges::count_interval(
+                        snapshot,
+                        source_id,
+                        event_type,
+                        *window.start(),
+                        *window.end(),
+                    )
+                }
+            })
+            .collect()
+    }
+
     pub fn count_by_time(
         &self,
         snapshot: &SourceReadSnapshot,

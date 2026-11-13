@@ -4,6 +4,7 @@ use std::time::Instant;
 use transport::CommandError;
 
 mod progress;
+mod source_facts;
 use progress::AnalysisAuditProgress;
 
 pub(super) fn finish(
@@ -94,10 +95,14 @@ fn auto_extract_platform_artifacts(
                     analysis_started.elapsed().as_millis()
                 ),
             );
-    let warnings =
-        run.warnings
-            .len()
-            .saturating_add(cache_linux_facts(ctx, data_source, source_conn));
+    let warnings = run
+        .warnings
+        .len()
+        .saturating_add(source_facts::cache_linux_facts(
+            ctx,
+            data_source,
+            source_conn,
+        ));
     record_analysis_outcome(ctx, warnings, execution.retryable_failure_count)?;
     message.push_str(&format!(
                 "; {platform_label} artifacts auto-analyzed: artifacts={} timeline={} warnings={} failed={}",
@@ -141,31 +146,6 @@ fn record_analysis_outcome(
             ctx.counts.is_partial(),
         )
         .map_err(CommandError::from_service_error)
-}
-
-fn cache_linux_facts(
-    ctx: &ImportJobContext<'_>,
-    data_source: &domain::DataSource,
-    source_conn: &rusqlite::Connection,
-) -> usize {
-    if ctx.import_config.platform != domain::DataSourcePlatform::Linux {
-        return 0;
-    }
-    let facts = ::analysis_core::linux_evidence_facts::collect_linux_evidence_facts(
-        ctx.conn,
-        ctx.case_root,
-        ctx.case_id,
-        &data_source.id,
-    );
-    if let Err(error) = ::analysis_core::linux_evidence_facts::persist_linux_evidence_facts(
-        source_conn,
-        &data_source.id,
-        &facts,
-    ) {
-        tracing::warn!(data_source_id = %data_source.id.0, %error, "Linux evidence facts cache could not be persisted");
-        return 1;
-    }
-    0
 }
 
 fn analysis_plan(ctx: &ImportJobContext<'_>) -> Option<(&'static str, &'static [&'static str])> {

@@ -32,7 +32,7 @@ mod systemd_preload;
 pub use self::evtx::extract_evtx_candidate;
 pub use self::linux::extract_linux_candidate;
 pub use self::native_output::StagedGeneration as StagedSourceGeneration;
-pub(crate) use self::progress::ExtractionProgressUpdate;
+pub(crate) use self::progress::{ExtractionProgressUpdate, PERSISTING_DETAIL};
 pub(crate) use self::reader::{encrypted_candidate_warning, CandidateSource};
 pub use self::registry::extract_registry_candidate;
 pub use self::runner::run_analysis_extraction;

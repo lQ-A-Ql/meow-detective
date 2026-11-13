@@ -83,15 +83,23 @@ pub(super) fn finalize_run(
     let publication = Instant::now();
     commit_analysis_control(conn, &mut state, staged_generation)?;
     progress_reporter.report_work(AnalysisWorkStageDto::Publication, publication, 1, 0, true);
-    let persistence_elapsed_ms = elapsed_millis(persistence_started);
     let retryable_failure_count = state.retryable_failure_count;
     let plugin_extract_failures = state.take_plugin_failures();
+    let building = Instant::now();
     let dto = state.into_dto(conn, Utc::now().to_rfc3339())?;
+    progress_reporter.report_work(
+        AnalysisWorkStageDto::ResultBuilding,
+        building,
+        dto.artifact_count,
+        0,
+        true,
+    );
     if retryable_failure_count == 0 {
         progress_reporter.complete();
     } else {
         progress_reporter.fail(retryable_failure_count);
     }
+    let persistence_elapsed_ms = elapsed_millis(persistence_started);
     Ok(AnalysisExtractionExecution {
         dto,
         retryable_failure_count,

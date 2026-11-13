@@ -25,14 +25,22 @@ pub(super) fn complete_empty_run(
     progress_reporter.begin_extraction();
     progress_reporter.begin_persisting();
     crate::analysis_service::cancellation::ensure_not_cancelled(cancel_token)?;
-    progress_reporter.complete();
+    let persistence_started = Instant::now();
     let dto = ExtractionState::new(selected).into_dto(conn, Utc::now().to_rfc3339())?;
+    progress_reporter.report_work(
+        super::AnalysisWorkStageDto::ResultBuilding,
+        persistence_started,
+        dto.artifact_count,
+        0,
+        true,
+    );
+    progress_reporter.complete();
     Ok(AnalysisExtractionExecution {
         dto,
         retryable_failure_count: 0,
         discovery_elapsed_ms: super::elapsed_millis(discovery_started),
         processing_elapsed_ms: 0,
-        persistence_elapsed_ms: 0,
+        persistence_elapsed_ms: super::elapsed_millis(persistence_started),
         work_metrics: progress_reporter.take_work_metrics(),
         source_read_count: 0,
         source_read_elapsed_ms: 0,

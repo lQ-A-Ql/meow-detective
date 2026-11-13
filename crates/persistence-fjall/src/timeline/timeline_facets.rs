@@ -173,23 +173,33 @@ fn count_type_totals(
 ) -> Result<BTreeMap<String, u64>> {
     let prefix = encode_key(COUNT_FAMILY, &[KeyPart::Text(source_id.to_owned())])?;
     let mut totals = BTreeMap::new();
-    for entry in snapshot.prefix(
-        KeyspaceName::TimelineIndexes,
-        &prefix,
-        ScanDirection::Forward,
-    )? {
-        let (family, parts) = decode_key(&entry.key)?;
-        if family != COUNT_FAMILY {
-            return Err(FjallStorageError::TimelineIndexCorrupt);
+    let mut cursor = None;
+    loop {
+        let page = snapshot.keyset(
+            KeyspaceName::TimelineIndexes,
+            &prefix,
+            cursor.as_deref(),
+            ScanDirection::Forward,
+            512,
+        )?;
+        for entry in &page {
+            let (family, parts) = decode_key(&entry.key)?;
+            if family != COUNT_FAMILY {
+                return Err(FjallStorageError::TimelineIndexCorrupt);
+            }
+            let (scope, kind, period) = counter_parts(&parts)?;
+            if scope != TYPE_SCOPE || period != TOTAL_PERIOD {
+                continue;
+            }
+            let kind = std::str::from_utf8(kind)
+                .map_err(|_| FjallStorageError::TimelineIndexCorrupt)?
+                .to_owned();
+            totals.insert(kind, counter_value(&entry.value)?);
         }
-        let (scope, kind, period) = counter_parts(&parts)?;
-        if scope != TYPE_SCOPE || period != TOTAL_PERIOD {
-            continue;
+        if page.len() < 512 {
+            break;
         }
-        let kind = std::str::from_utf8(kind)
-            .map_err(|_| FjallStorageError::TimelineIndexCorrupt)?
-            .to_owned();
-        totals.insert(kind, counter_value(&entry.value)?);
+        cursor = page.last().map(|entry| entry.key.clone());
     }
     Ok(totals)
 }

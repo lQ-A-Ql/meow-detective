@@ -137,7 +137,7 @@ fn import_phase_from_profile(detail: &str, progress: u32) -> ImportPhaseDto {
         Some("timeline") => ImportPhaseDto::Timeline,
         Some("checkpoint") => ImportPhaseDto::Checkpoint,
         Some("post-import") => ImportPhaseDto::MergeAnalysis,
-        Some("post-ready") => ImportPhaseDto::PostReady,
+        Some("post-ready") | Some("source-facts") => ImportPhaseDto::PostReady,
         Some("finalize") | Some("post-import-skip") | Some("total") => ImportPhaseDto::Finalize,
         _ if progress < 25 => ImportPhaseDto::Attach,
         _ if progress < 70 => ImportPhaseDto::Enumerate,

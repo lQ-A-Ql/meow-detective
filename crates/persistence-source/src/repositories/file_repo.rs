@@ -12,7 +12,7 @@ mod registry_hives;
 mod visiting;
 mod writes;
 
-pub(crate) const MAX_FILE_QUERY_ROWS: usize = 100_000;
+pub const MAX_FILE_QUERY_ROWS: usize = 100_000;
 
 pub(super) fn push_bounded<T>(rows: &mut Vec<T>, row: T) -> DbResult<()> {
     if rows.len() >= MAX_FILE_QUERY_ROWS {

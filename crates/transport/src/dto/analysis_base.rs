@@ -73,6 +73,10 @@ pub enum AnalysisWorkStageDto {
     CountRebuild,
     GenerationSeal,
     Publication,
+    ResultBuilding,
+    Audit,
+    LocatorFlush,
+    Completion,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

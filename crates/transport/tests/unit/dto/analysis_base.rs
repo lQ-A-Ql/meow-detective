@@ -76,3 +76,25 @@ fn extraction_progress_serializes_runtime_counters_and_phase() {
     assert_eq!(value["work"]["records"], 414);
     assert!(value.get("processed_candidates").is_none());
 }
+
+#[test]
+fn result_completion_work_stages_round_trip_with_camel_case_names() {
+    for (stage, name) in [
+        (AnalysisWorkStageDto::ResultBuilding, "resultBuilding"),
+        (AnalysisWorkStageDto::Audit, "audit"),
+        (AnalysisWorkStageDto::LocatorFlush, "locatorFlush"),
+        (AnalysisWorkStageDto::Completion, "completion"),
+    ] {
+        let work = AnalysisWorkProgressDto {
+            stage,
+            elapsed_ms: 17,
+            records: 3,
+            bytes: 0,
+            complete: true,
+        };
+        let value = serde_json::to_value(&work).unwrap();
+        assert_eq!(value["stage"], name);
+        let restored: AnalysisWorkProgressDto = serde_json::from_value(value).unwrap();
+        assert_eq!(restored, work);
+    }
+}

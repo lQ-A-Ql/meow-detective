@@ -97,14 +97,14 @@ pub(super) fn already_has_v1_artifacts(
 }
 
 pub(super) fn count_analysis_artifacts(conn: &Connection) -> Result<u64, AnalysisServiceError> {
-    count(conn, Some(ANALYSIS_FAMILIES), |_| true)
+    sum_type_counts(conn, |family| ANALYSIS_FAMILIES.contains(&family))
 }
 
 pub(super) fn count_artifacts_by_type(
     conn: &Connection,
     artifact_type: &str,
 ) -> Result<u64, AnalysisServiceError> {
-    count(conn, Some(&[artifact_type]), |_| true)
+    sum_type_counts(conn, |family| family == artifact_type)
 }
 
 pub(super) fn count_artifacts_by_family_prefix(
@@ -112,9 +112,24 @@ pub(super) fn count_artifacts_by_family_prefix(
     prefix: &str,
 ) -> Result<u64, AnalysisServiceError> {
     let prefix = prefix.to_ascii_lowercase();
-    count(conn, None, |artifact| {
-        artifact.family.to_ascii_lowercase().starts_with(&prefix)
+    sum_type_counts(conn, |family| {
+        family.to_ascii_lowercase().starts_with(&prefix)
     })
+}
+
+fn sum_type_counts(
+    conn: &Connection,
+    include: impl Fn(&str) -> bool,
+) -> Result<u64, AnalysisServiceError> {
+    persistence_source::repositories::artifact_repo::ArtifactRepo::new(conn)
+        .count_by_family()?
+        .into_iter()
+        .filter(|(family, _)| include(family))
+        .try_fold(0u64, |total, (_, count)| {
+            total.checked_add(count).ok_or_else(|| {
+                AnalysisServiceError::Other("artifact type count total overflowed".into())
+            })
+        })
 }
 
 pub(super) fn query_artifact_rows(

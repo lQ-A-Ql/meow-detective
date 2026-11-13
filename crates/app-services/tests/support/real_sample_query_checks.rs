@@ -107,21 +107,22 @@ fn source_states(connection: &Connection, root: &Path, case: &CaseId) -> Vec<Sta
 }
 
 fn measured<T>(name: &str, output: &mut Vec<Value>, operation: impl FnOnce() -> T) -> T {
+    eprintln!("REAL_SAMPLE_QUERY_START {name}");
     let measurement = ProcessMeasurement::start().expect("isolated query measurement");
     let started = Instant::now();
     let result = operation();
     let elapsed = started.elapsed();
     let counters = measurement.snapshot();
     drop(measurement);
-    output.push(
-        json!({"operation": name, "elapsedMicros": elapsed.as_micros(),
+    let record = json!({"operation": name, "elapsedMicros": elapsed.as_micros(),
         "scanEntries": counters.scan_entries, "pointReads": counters.point_reads,
         "bytesRead": counters.bytes_read, "bytesWritten": counters.bytes_written,
         "sourceSessionOpens": counters.source_session_opens,
         "searchIndexOpens": counters.search_index_opens,
         "querySessionOpens": counters.query_session_opens,
-        "rankedHits": counters.ranked_hits, "mergeComparisons": counters.merge_comparisons}),
-    );
+        "rankedHits": counters.ranked_hits, "mergeComparisons": counters.merge_comparisons});
+    eprintln!("REAL_SAMPLE_QUERY {record}");
+    output.push(record);
     result
 }
 

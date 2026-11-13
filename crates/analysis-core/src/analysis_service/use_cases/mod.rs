@@ -1,5 +1,6 @@
 mod android;
 mod classification;
+mod completion;
 mod evidence;
 mod extraction;
 mod generation_gc;

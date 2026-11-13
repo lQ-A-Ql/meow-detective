@@ -255,9 +255,8 @@ impl FileRepo<'_> {
         ))
     }
 
-    /// Find non-deleted file entries whose path contains every fragment
-    /// (AND of escaped `LIKE '%fragment%'` terms), path-ordered. Fragments
-    /// are matched with SQLite's default case-insensitive ASCII LIKE.
+    /// Find non-deleted file entries whose path contains every fragment,
+    /// using case-sensitive substring matching and path ordering.
     pub fn find_by_path_fragments(
         &self,
         data_source_id: &DataSourceId,

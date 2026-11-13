@@ -9,8 +9,6 @@ use super::epoch_to_datetime;
 use super::histogram::Histogram;
 use crate::{source_db, timeline_service::TimelineServiceError};
 
-const PAGE_SIZE: usize = 512;
-
 pub(super) struct FacetFilter<'a> {
     pub start: Option<i64>,
     pub end: Option<i64>,
@@ -39,6 +37,9 @@ impl NativeFacetSource {
         let end = epoch_to_datetime("timeEnd", filter.end)?;
         let summary = store.facet_summary(&snapshot, &id.0, filter.event_type, start, end)?;
         let bounds = summary.min_timestamp.zip(summary.max_timestamp);
+        if bounds.is_some_and(|(first, last)| first > last) {
+            return Err(FjallStorageError::TimelineIndexCorrupt.into());
+        }
         Ok(Self {
             id: id.clone(),
             bounds,
@@ -72,26 +73,26 @@ impl NativeFacetSource {
         let Some((first, last)) = self.bounds else {
             return Ok(0);
         };
-        let mut cursor = None;
-        let mut count = 0;
-        loop {
-            let page = self.store.list_in_time_window(
-                &self.snapshot,
-                &self.id.0,
-                filter.event_type,
-                first..=last,
-                cursor.as_deref(),
-                PAGE_SIZE,
-            )?;
-            for record in page.records {
-                histogram.add(record.timestamp.timestamp())?;
-                count += 1;
-            }
-            cursor = page.next_cursor;
-            if cursor.is_none() {
-                return Ok(count);
-            }
-        }
+        let windows = histogram
+            .windows()
+            .into_iter()
+            .map(|(start, end)| {
+                let start = DateTime::<Utc>::from_timestamp(start.max(first.timestamp()), 0)
+                    .ok_or(FjallStorageError::InvalidTimelineTimestampEncoding)?;
+                let end = DateTime::<Utc>::from_timestamp(end.min(last.timestamp()), 999_999_999)
+                    .ok_or(FjallStorageError::InvalidTimelineTimestampEncoding)?;
+                Ok(start..=end)
+            })
+            .collect::<Result<Vec<_>, FjallStorageError>>()?;
+        let counts =
+            self.store
+                .count_windows(&self.snapshot, &self.id.0, filter.event_type, &windows)?;
+        let total = counts.iter().try_fold(0u64, |sum, count| {
+            sum.checked_add(*count)
+                .ok_or(FjallStorageError::TimelineIndexCorrupt)
+        })?;
+        histogram.add_counts(&counts)?;
+        Ok(total)
     }
 }
 

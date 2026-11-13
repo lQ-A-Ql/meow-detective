@@ -22,46 +22,43 @@ impl Histogram {
         }
     }
 
-    pub(super) fn add(&mut self, timestamp: i64) -> Result<(), TimelineServiceError> {
+    pub(super) fn windows(&self) -> Vec<(i64, i64)> {
         let Some((first, last)) = self.bounds else {
-            return Err(TimelineServiceError::Storage(
-                persistence_source::fjall::FjallStorageError::TimelineIndexCorrupt,
-            ));
+            return Vec::new();
         };
-        if timestamp < first || timestamp > last {
-            return Err(TimelineServiceError::Storage(
-                persistence_source::fjall::FjallStorageError::TimelineIndexCorrupt,
-            ));
-        }
         let span = i128::from(last) - i128::from(first) + 1;
-        let position = i128::from(timestamp) - i128::from(first);
-        let index = (((position + 1) * self.counts.len() as i128 - 1) / span) as usize;
-        self.counts[index] = self.counts[index].checked_add(1).ok_or_else(|| {
-            TimelineServiceError::Other("timeline histogram count overflow".to_owned())
-        })?;
+        let count = self.counts.len() as i128;
+        (0..self.counts.len())
+            .map(|index| {
+                (
+                    (i128::from(first) + span * index as i128 / count) as i64,
+                    (i128::from(first) + span * (index as i128 + 1) / count - 1) as i64,
+                )
+            })
+            .collect()
+    }
+
+    pub(super) fn add_counts(&mut self, counts: &[u64]) -> Result<(), TimelineServiceError> {
+        if self.counts.len() != counts.len() {
+            return Err(persistence_source::fjall::FjallStorageError::TimelineIndexCorrupt.into());
+        }
+        for (target, count) in self.counts.iter_mut().zip(counts) {
+            *target = target.checked_add(*count).ok_or_else(|| {
+                TimelineServiceError::Other("timeline histogram count overflow".to_owned())
+            })?;
+        }
         Ok(())
     }
 
     pub(super) fn finish(self) -> Result<Vec<TimelineHistogramBucketDto>, TimelineServiceError> {
-        let Some((first, last)) = self.bounds else {
-            return Ok(Vec::new());
-        };
-        let span = i128::from(last) - i128::from(first) + 1;
-        let count = self.counts.len() as i128;
+        let windows = self.windows();
         self.counts
             .into_iter()
-            .enumerate()
-            .map(|(index, value)| {
-                let start = i128::from(first) + span * index as i128 / count;
-                let end = (i128::from(first) + span * (index as i128 + 1) / count - 1)
-                    .min(i128::from(last));
+            .zip(windows)
+            .map(|(value, (start, end))| {
                 Ok(TimelineHistogramBucketDto {
-                    start_ts: format_epoch(i64::try_from(start).map_err(|_| {
-                        TimelineServiceError::Other("timeline histogram start overflow".to_owned())
-                    })?)?,
-                    end_ts: format_epoch(i64::try_from(end).map_err(|_| {
-                        TimelineServiceError::Other("timeline histogram end overflow".to_owned())
-                    })?)?,
+                    start_ts: format_epoch(start)?,
+                    end_ts: format_epoch(end)?,
                     count: value,
                 })
             })

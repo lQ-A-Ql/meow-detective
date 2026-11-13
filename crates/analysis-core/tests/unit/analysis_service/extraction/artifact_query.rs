@@ -168,3 +168,58 @@ fn linux_system_config_page_preserves_host_filtering() {
         "user"
     );
 }
+
+#[test]
+fn unconditional_counts_read_only_persisted_type_counts() {
+    use persistence_source::fjall::{
+        encode_key, instrumentation, KeyPart, KeyspaceName, PersistMode,
+    };
+    let root = tempfile::tempdir().unwrap();
+    let conn = source(root.path());
+    let records = [
+        ("LinuxBashCommand", 1_000),
+        ("RegistryHive", 2),
+        ("PluginUnrelated", 3),
+        ("lInUxCustom", 4),
+    ]
+    .into_iter()
+    .flat_map(|(family, count)| {
+        (0..count).map(move |index| artifact(&format!("{family}-{index}"), family, json!({})))
+    })
+    .collect::<Vec<_>>();
+    ArtifactRepo::new(&conn)
+        .insert_batch(&records, "case", "source")
+        .unwrap();
+    let store = persistence_source::detail::require_source_store(&conn).unwrap();
+    let key = encode_key(
+        "artifact.record",
+        &[
+            KeyPart::Text("source".into()),
+            KeyPart::Text("LinuxBashCommand-0".into()),
+        ],
+    )
+    .unwrap();
+    store
+        .write_raw(
+            KeyspaceName::ArtifactRecords,
+            key,
+            b"invalid artifact payload".to_vec(),
+            PersistMode::SyncAll,
+        )
+        .unwrap();
+    assert!(ArtifactRepo::new(&conn)
+        .find_by_id("LinuxBashCommand-0")
+        .is_err());
+    instrumentation::enable();
+    instrumentation::reset();
+    assert_eq!(count_analysis_artifacts(&conn).unwrap(), 1_002);
+    let counters = instrumentation::snapshot();
+    assert_eq!(counters.scan_entries, 4);
+    assert_eq!(counters.point_reads, 1);
+    assert_eq!(count_artifacts_by_type(&conn, "RegistryHive").unwrap(), 2);
+    assert_eq!(count_artifacts_by_type(&conn, "missing").unwrap(), 0);
+    assert_eq!(
+        count_artifacts_by_family_prefix(&conn, "LiNuX").unwrap(),
+        1_004
+    );
+}
