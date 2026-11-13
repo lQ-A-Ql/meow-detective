@@ -106,3 +106,12 @@ NTFS 导入使用 `scripts/run-import-profile.ps1`；固定可执行文件对比
 导入报告区分端到端耗时、各 phase 耗时与进程峰值。包含关系的 phase 不相加。实际输入的 SHA-256、源码/可执行文件摘要和语义 oracle 必须一致，取消后需验证资源释放和发布状态。
 
 真实 E01、RAW、PVE 等私有样本保持显式 opt-in。私有路径、文件名、hash 和原始日志存放在本地输出或受控 CI artifact。公开生成 fixture 的通过结果不替代真实大镜像验收。
+
+`real_sample_performance_acceptance` 提供 Windows/Linux E01 的完整导入与查询验收。分别设置 `FORENSICS_PERF_WINDOWS_E01` 或 `FORENSICS_PERF_LINUX_E01`，并设置独立的 `FORENSICS_PERF_OUTPUT`；`TEMP`、`TMP` 必须位于该输出目录内。测试使用默认自动分析流程和两个 worker，保留案件及 JSON 报告，逐项验证文件列表、Timeline/Artifact facets 与分页、文件搜索和预览。
+
+```powershell
+cargo test -p app-services --test real_sample_performance_acceptance windows_real_sample_performance_acceptance -- --ignored --exact --nocapture
+cargo test -p app-services --test real_sample_performance_acceptance linux_real_sample_performance_acceptance -- --ignored --exact --nocapture
+```
+
+报告区分 `passed`、`passedWithWarnings` 和 `failed`，记录自动分析警告、可重试失败、构建模式、进程内存及查询结构计数。查询测量排除独立 oracle 校验；检测到后台任务或源版本变化时，测量无效。E01 分段文件大小与修改时间的前后校验只证明元数据保持相同，不能替代完整内容摘要。
