@@ -42,7 +42,7 @@ fn auto_extract_platform_artifacts(
         runtime = runtime.with_publication(source.publication_lease());
     }
     let analysis_started = Instant::now();
-    let event_sink = ctx.event_sink();
+    let event_sink = ctx.options.event_sink;
     let job_id = ctx.job_id.0.as_str();
     let mut audit_progress = AnalysisAuditProgress::new(event_sink, job_id, analysis_started);
     let run = analysis_core::analysis_service::run_import_source_extraction(
@@ -66,58 +66,87 @@ fn auto_extract_platform_artifacts(
                 job_id,
                 96,
                 &format!(
-                    "analysis-audit: phase=summary discoveryMs={} processingMs={} persistenceMs={} sourceReads={} sourceReadMs={} retryableFailures={} fsReads={:?} radosReads={:?} totalMs={}",
+                    "analysis-audit: phase=summary discoveryMs={} processingMs={} persistenceMs={} sourceReads={} sourceReadMs={} retryableFailures={} warnings={} fsReads={:?} radosReads={:?} totalMs={}",
                     execution.discovery_elapsed_ms,
                     execution.processing_elapsed_ms,
                     execution.persistence_elapsed_ms,
                     execution.source_read_count,
                     execution.source_read_elapsed_ms,
                     execution.retryable_failure_count,
+                    run.warnings.len(),
                     execution.filesystem_read_metrics,
                     execution.rados_read_metrics,
                     analysis_started.elapsed().as_millis()
                 ),
             );
-            if ctx.import_config.platform == domain::DataSourcePlatform::Linux {
-                let facts = ::analysis_core::linux_evidence_facts::collect_linux_evidence_facts(
-                    ctx.conn,
-                    ctx.case_root,
-                    ctx.case_id,
-                    &data_source.id,
-                );
-                if let Err(error) =
-                    ::analysis_core::linux_evidence_facts::persist_linux_evidence_facts(
-                        source_conn,
-                        &data_source.id,
-                        &facts,
-                    )
-                {
-                    tracing::warn!(data_source_id = %data_source.id.0, %error, "Linux evidence facts cache could not be persisted");
-                }
-            }
+            let warnings =
+                run.warnings
+                    .len()
+                    .saturating_add(cache_linux_facts(ctx, data_source, source_conn));
+            record_analysis_outcome(ctx, warnings, execution.retryable_failure_count)?;
             message.push_str(&format!(
-                "; {platform_label} artifacts auto-analyzed: artifacts={} timeline={}",
-                run.artifact_count, run.timeline_event_count
+                "; {platform_label} artifacts auto-analyzed: artifacts={} timeline={} warnings={} failed={}",
+                run.artifact_count,
+                run.timeline_event_count,
+                warnings,
+                execution.retryable_failure_count
             ));
         }
         Err(error) => {
-            ctx.counts.warning_count = ctx.counts.warning_count.saturating_add(1);
-            ctx.counts.failed_count = ctx.counts.failed_count.saturating_add(1);
-            ctx.job_repo
-                .update_outcome_counts(
-                    ctx.job_id,
-                    ctx.counts.warning_count,
-                    ctx.counts.skipped_count,
-                    ctx.counts.failed_count,
-                    true,
-                )
-                .map_err(CommandError::from_service_error)?;
+            record_analysis_outcome(ctx, 1, 1)?;
             message.push_str(&format!(
                 "; {platform_label} artifact auto-analysis partial: {error}"
             ));
         }
     }
     Ok(message)
+}
+
+fn record_analysis_outcome(
+    ctx: &mut ImportJobContext<'_>,
+    warning_count: usize,
+    failed_count: u64,
+) -> Result<(), CommandError> {
+    if warning_count == 0 && failed_count == 0 {
+        return Ok(());
+    }
+    ctx.counts.add_warnings(warning_count);
+    ctx.counts
+        .add_failed(u32::try_from(failed_count).unwrap_or(u32::MAX));
+    ctx.job_repo
+        .update_outcome_counts(
+            ctx.job_id,
+            ctx.counts.warning_count,
+            ctx.counts.skipped_count,
+            ctx.counts.failed_count,
+            ctx.counts.is_partial(),
+        )
+        .map_err(CommandError::from_service_error)
+}
+
+fn cache_linux_facts(
+    ctx: &ImportJobContext<'_>,
+    data_source: &domain::DataSource,
+    source_conn: &rusqlite::Connection,
+) -> usize {
+    if ctx.import_config.platform != domain::DataSourcePlatform::Linux {
+        return 0;
+    }
+    let facts = ::analysis_core::linux_evidence_facts::collect_linux_evidence_facts(
+        ctx.conn,
+        ctx.case_root,
+        ctx.case_id,
+        &data_source.id,
+    );
+    if let Err(error) = ::analysis_core::linux_evidence_facts::persist_linux_evidence_facts(
+        source_conn,
+        &data_source.id,
+        &facts,
+    ) {
+        tracing::warn!(data_source_id = %data_source.id.0, %error, "Linux evidence facts cache could not be persisted");
+        return 1;
+    }
+    0
 }
 
 fn analysis_plan(ctx: &ImportJobContext<'_>) -> Option<(&'static str, &'static [&'static str])> {
