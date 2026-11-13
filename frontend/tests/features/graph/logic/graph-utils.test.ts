@@ -94,3 +94,51 @@ describe('graph-utils', () => {
     expect(transform).toEqual({ x: 0, y: 0, k: 1 });
   });
 });
+
+describe.skipIf(process.env.FORENSICS_GRAPH_PERF !== '1')('graph simulation performance', () => {
+  it.each([50, 250, 500])('measures 240 ticks with %i nodes', (nodeCount) => {
+    const positions = new Map(
+      Array.from({ length: nodeCount }, (_, index) => {
+        const id = `node-${index}`;
+        return [
+          id,
+          {
+            id,
+            ...deterministicNodePosition(id, 1200, 800, 300),
+            vx: 0,
+            vy: 0,
+            radius: 6,
+          },
+        ] as const;
+      }),
+    );
+    const edges = Array.from({ length: nodeCount * 4 }, (_, index) =>
+      makeEdge(
+        `edge-${index}`,
+        `node-${index % nodeCount}`,
+        `node-${(index + Math.floor(index / nodeCount) + 1) % nodeCount}`,
+      ),
+    );
+    const timings: number[] = [];
+    for (let tick = 0; tick < 240; tick += 1) {
+      const started = performance.now();
+      tickSimulation(positions, edges, 1200, 800);
+      timings.push(performance.now() - started);
+    }
+    expect(positions.size).toBe(nodeCount);
+    for (const node of positions.values()) {
+      expect([node.x, node.y, node.vx, node.vy].every(Number.isFinite)).toBe(true);
+    }
+    const ordered = [...timings].sort((left, right) => left - right);
+    process.stdout.write(
+      `[GRAPH-PERF] ${JSON.stringify({
+        nodes: nodeCount,
+        edges: edges.length,
+        ticks: timings.length,
+        elapsedMs: timings.reduce((total, elapsed) => total + elapsed, 0),
+        p95TickMs: ordered[Math.ceil(ordered.length * 0.95) - 1],
+        maxTickMs: ordered[ordered.length - 1],
+      })}\n`,
+    );
+  });
+});
