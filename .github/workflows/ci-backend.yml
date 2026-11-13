@@ -46,6 +46,8 @@ jobs:
         with:
           components: rustfmt, clippy, llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: frontend/package.json
@@ -119,7 +121,7 @@ jobs:
           FORENSICS_BOLT_READER_EXE: ${{ github.workspace }}\target\debug\meow-bolt-worker.exe
         run: |
           ./scripts/run-ci-native.ps1 -FilePath cargo -Arguments @('build', '-p', 'containers-bolt', '--bin', 'meow-bolt-worker') -LogPath output/ci-runtime/logs/bolt-worker-build.log
-          ./scripts/run-ci-native.ps1 -FilePath cargo -Arguments @('test', '--workspace') -LogPath output/ci-runtime/logs/workspace-tests.log
+          ./scripts/run-ci-native.ps1 -FilePath cargo -Arguments @('test', '--workspace', '--no-fail-fast') -LogPath output/ci-runtime/logs/workspace-tests.log
       - name: Benchmark catalog and baseline structure
         shell: pwsh
         run: ./scripts/check-benchmark-regression.ps1 -StructureOnly
