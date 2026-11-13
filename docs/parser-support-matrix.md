@@ -34,6 +34,8 @@ Thumbnails、ResourceUsage 以及可用插件；Linux 使用 LinuxArtifacts 能�
 插件系统提供专用 `run_plugin_extraction` 手动入口，请求仅含 dataSourceId，服务端
 固定执行 PluginArtifacts。通用手动扫描、通用手动解析以及 MCP start_analysis 不再提供。
 页面继续显示自动解析进度、结果与诊断。
+运行结果的顶层 artifactCount 表示该来源已发布记录总数，包含插件 family；
+各 section 的数量表示本次运行处理或复用的记录，已知 family 不重复计算。
 
 Android 的现有设备与应用包元数据解析也在目录发布后自动执行；分析页不再提供原生
 扫描按钮。Kubernetes 保留查询和内部服务，通用命令层不提供手动解析入口。
