@@ -1,6 +1,5 @@
 use super::*;
-#[path = "../../support/registry_browser_hive.rs"]
-mod hive_fixture;
+use crate::tests::registry_hive as hive_fixture;
 crate::native_source_test_support!();
 
 #[test]

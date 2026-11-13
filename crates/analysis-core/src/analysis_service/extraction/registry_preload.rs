@@ -13,8 +13,9 @@ const READ_BUFFER_BYTES: usize = 64 * 1024;
 #[derive(Default)]
 pub(super) struct RegistryPreloadContext {
     snapshots: HashMap<(String, String), RegistrySnapshot<'static>>,
+    failures: HashMap<(String, String), String>,
     boot_keys: HashMap<(String, Option<usize>), Option<[u8; 16]>>,
-    pub(super) warnings: Vec<String>,
+    pub(super) dependency_warnings: Vec<String>,
 }
 
 impl RegistryPreloadContext {
@@ -28,6 +29,12 @@ impl RegistryPreloadContext {
     ) -> Option<&RegistrySnapshot<'static>> {
         let key = registry_key(candidate);
         self.snapshots.get(&key)
+    }
+
+    pub(super) fn failure_reason(&self, candidate: &EvidenceCandidate) -> Option<&str> {
+        self.failures
+            .get(&registry_key(candidate))
+            .map(String::as_str)
     }
 
     pub(super) fn boot_key(&self, candidate: &EvidenceCandidate) -> Option<[u8; 16]> {
@@ -46,6 +53,7 @@ pub(super) fn preload_registry_context<E: std::fmt::Display>(
 ) -> Result<RegistryPreloadContext, AnalysisServiceError> {
     ensure_not_cancelled(cancel_token)?;
     let mut snapshots = HashMap::new();
+    let mut failures = HashMap::new();
     let mut boot_keys = HashMap::new();
     let mut warnings = Vec::new();
     let mut pending = HashSet::new();
@@ -77,13 +85,22 @@ pub(super) fn preload_registry_context<E: std::fmt::Display>(
         let needs_boot_key = is_system
             && boot_key_scopes
                 .contains(&(candidate.data_source_id.clone(), candidate.partition_index));
-        if !pending.contains(&registry_key(candidate)) && !needs_boot_key {
+        let key = registry_key(candidate);
+        let is_pending = pending.contains(&key);
+        if !is_pending && !needs_boot_key {
             continue;
         }
-        let Some(snapshot) =
-            load_snapshot(candidate, cancel_token, &mut file_reader, &mut warnings)?
-        else {
-            continue;
+        let snapshot = match load_snapshot(candidate, cancel_token, &mut file_reader) {
+            Ok(snapshot) => snapshot,
+            Err(RegistryPreparationError::Control(error)) => return Err(error),
+            Err(RegistryPreparationError::Input(reason)) => {
+                if is_pending {
+                    failures.insert(key, reason);
+                } else {
+                    warnings.push(reason);
+                }
+                continue;
+            }
         };
         if is_system {
             boot_keys.insert(
@@ -97,35 +114,38 @@ pub(super) fn preload_registry_context<E: std::fmt::Display>(
     ensure_not_cancelled(cancel_token)?;
     Ok(RegistryPreloadContext {
         snapshots,
+        failures,
         boot_keys,
-        warnings,
+        dependency_warnings: warnings,
     })
+}
+
+#[derive(Debug, thiserror::Error)]
+enum RegistryPreparationError {
+    #[error(transparent)]
+    Control(#[from] AnalysisServiceError),
+    #[error("{0}")]
+    Input(String),
 }
 
 fn load_snapshot<E: std::fmt::Display>(
     candidate: &EvidenceCandidate,
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&FileEntryId, usize) -> Result<Box<dyn Read>, E>,
-    warnings: &mut Vec<String>,
-) -> Result<Option<RegistrySnapshot<'static>>, AnalysisServiceError> {
-    let Some(bytes) = read_file_entry_bytes(
+) -> Result<RegistrySnapshot<'static>, RegistryPreparationError> {
+    let bytes = read_file_entry_bytes(
         file_reader,
         &candidate.file_id,
         &candidate.path,
         None,
         cancel_token,
-        warnings,
-    )?
-    else {
-        return Ok(None);
-    };
+    )?;
     if bytes.len() as u64 != candidate.size {
-        warnings.push(read_warning(
+        return Err(RegistryPreparationError::Input(read_warning(
             &candidate.path,
             None,
             &"registry hive was truncated",
-        ));
-        return Ok(None);
+        )));
     }
     let mut logs = Vec::with_capacity(2);
     for label in ["LOG1", "LOG2"] {
@@ -142,40 +162,31 @@ fn load_snapshot<E: std::fmt::Display>(
             logs.push(None);
             continue;
         };
-        let Some(bytes) = read_file_entry_bytes(
+        let bytes = read_file_entry_bytes(
             file_reader,
             &companion.file_id,
             &candidate.path,
             Some(label),
             cancel_token,
-            warnings,
-        )?
-        else {
-            return Ok(None);
-        };
+        )?;
         if bytes.len() as u64 != companion.size {
-            warnings.push(read_warning(
+            return Err(RegistryPreparationError::Input(read_warning(
                 &candidate.path,
                 Some(label),
                 &"registry log was truncated",
-            ));
-            return Ok(None);
+            )));
         }
         logs.push(Some(bytes));
     }
     ensure_not_cancelled(cancel_token)?;
-    let snapshot = RegistrySnapshot::from_owned(bytes, logs[0].as_deref(), logs[1].as_deref())
+    RegistrySnapshot::from_owned(bytes, logs[0].as_deref(), logs[1].as_deref())
         .and_then(|snapshot| {
             snapshot.registry_view()?;
             Ok(snapshot)
-        });
-    match snapshot {
-        Ok(snapshot) => Ok(Some(snapshot)),
-        Err(error) => {
-            warnings.push(read_warning(&candidate.path, None, &error));
-            Ok(None)
-        }
-    }
+        })
+        .map_err(|error| {
+            RegistryPreparationError::Input(read_warning(&candidate.path, None, &error))
+        })
 }
 
 fn read_file_entry_bytes<E: std::fmt::Display>(
@@ -184,44 +195,36 @@ fn read_file_entry_bytes<E: std::fmt::Display>(
     hive_path: &str,
     label: Option<&str>,
     cancel_token: &AtomicBool,
-    warnings: &mut Vec<String>,
-) -> Result<Option<Vec<u8>>, AnalysisServiceError> {
+) -> Result<Vec<u8>, RegistryPreparationError> {
     ensure_not_cancelled(cancel_token)?;
-    let mut reader = match file_reader(file_id, MAX_REGISTRY_ANALYSIS_BYTES) {
-        Ok(reader) => reader,
-        Err(err) => {
-            warnings.push(read_warning(hive_path, label, &err));
-            return Ok(None);
-        }
-    };
+    let result = file_reader(file_id, MAX_REGISTRY_ANALYSIS_BYTES);
     ensure_not_cancelled(cancel_token)?;
+    let mut reader = result
+        .map_err(|error| RegistryPreparationError::Input(read_warning(hive_path, label, &error)))?;
     let mut bytes = Vec::with_capacity(READ_BUFFER_BYTES);
     let mut buffer = [0u8; READ_BUFFER_BYTES];
     let mut limited = reader.by_ref().take(MAX_REGISTRY_ANALYSIS_BYTES as u64 + 1);
     loop {
         ensure_not_cancelled(cancel_token)?;
-        let read = match limited.read(&mut buffer) {
-            Ok(read) => read,
-            Err(err) => {
-                warnings.push(read_warning(hive_path, label, &err));
-                return Ok(None);
-            }
-        };
+        let result = limited.read(&mut buffer);
+        ensure_not_cancelled(cancel_token)?;
+        let read = result.map_err(|error| {
+            RegistryPreparationError::Input(read_warning(hive_path, label, &error))
+        })?;
         if read == 0 {
             break;
         }
         bytes.extend_from_slice(&buffer[..read]);
         if bytes.len() > MAX_REGISTRY_ANALYSIS_BYTES {
-            warnings.push(read_warning(
+            return Err(RegistryPreparationError::Input(read_warning(
                 hive_path,
                 label,
                 &"registry input exceeds the byte limit",
-            ));
-            return Ok(None);
+            )));
         }
     }
     ensure_not_cancelled(cancel_token)?;
-    Ok(Some(bytes))
+    Ok(bytes)
 }
 
 fn read_warning(hive_path: &str, label: Option<&str>, error: &impl std::fmt::Display) -> String {
@@ -237,3 +240,7 @@ fn registry_key(candidate: &EvidenceCandidate) -> (String, String) {
         candidate.file_id.0.clone(),
     )
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/analysis_service/extraction/registry_preload.rs"]
+mod tests;

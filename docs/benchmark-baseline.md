@@ -120,4 +120,4 @@ cargo test -p app-services --test real_sample_performance_acceptance linux_real_
 
 无条件 Artifact 数量查询使用当前快照的类型计数；包含字段过滤条件的查询保留记录级匹配。Timeline 直方图使用完整日、月、年的计数汇总与边界时间索引，整数秒范围无需逐条读取事件正文；纳秒范围保留精确边界校验。结构回归同时检查查询结果、记录读取次数和损坏索引的分类错误。
 
-保留案件的诊断入口同样属于显式启用的测试：设置 `FORENSICS_ANALYSIS_CASE_ROOT`、`FORENSICS_ANALYSIS_SOURCE_ID` 和工作区内的 `FORENSICS_PERF_OUTPUT`，并将 `TEMP`、`TMP` 置于输出目录内。`retained_source_registry_metadata` 只读取来源目录元数据；`retained_source_analysis_diagnostic` 重新执行该来源的分析并保存完整 DTO、警告、阶段记录及代际绑定。两个入口均要求来源已登记于指定案件，诊断结果保存后仍检查分析失败数量。
+保留案件的诊断入口同样属于显式启用的测试：设置 `FORENSICS_ANALYSIS_CASE_ROOT`、`FORENSICS_ANALYSIS_SOURCE_ID` 和工作区内的 `FORENSICS_PERF_OUTPUT`，并将 `TEMP`、`TMP` 置于输出目录内。`retained_source_registry_metadata` 只读取来源目录元数据；`retained_source_analysis_diagnostic` 重新执行该来源的分析并保存完整 DTO、警告、阶段记录及代际绑定。两个入口均要求来源已登记于指定案件；分析诊断在结果保存后仍检查分析失败数量。

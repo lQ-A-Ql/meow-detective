@@ -200,7 +200,7 @@ fn registry_parser_upgrade_expires_only_registry_checkpoints() {
     let mut clean = Vec::new();
     let mut diagnostics = Vec::new();
     for (id, capability, version) in [
-        ("old-registry", registry, ANALYSIS_EXTRACTOR_VERSION),
+        ("old-registry", registry, "1.3.5"),
         ("new-registry", registry, registry.extractor_version()),
         ("browser", browser, browser.extractor_version()),
     ] {

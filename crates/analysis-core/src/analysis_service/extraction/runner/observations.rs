@@ -9,7 +9,7 @@ pub(super) fn record_preload_warnings(
         .iter()
         .find(|capability| capability.read_policy == CandidateReadPolicy::RegistryPreload)
     {
-        for warning in preloads.registry.warnings.iter().cloned() {
+        for warning in preloads.registry.dependency_warnings.iter().cloned() {
             state.record_warning(*registry, warning);
         }
     }

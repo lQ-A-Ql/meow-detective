@@ -13,7 +13,6 @@ pub(super) use super::reader::read_candidate_bytes_with_progress;
 pub(super) use super::reader::{
     encrypted_candidate_warning, CandidateExtractionError, CandidateSource,
 };
-use super::registry::extract_snapshot_candidate;
 use super::registry_preload::RegistryPreloadContext;
 use super::scheduler::{
     run_bounded_ordered, ExtractionSchedulingPolicy, PreparedWork, SchedulerSnapshot,
@@ -42,6 +41,7 @@ mod browser_preparation;
 mod checkpoint;
 mod completion;
 mod panic_diagnostics;
+mod registry_input;
 mod routing;
 mod source_preparation;
 
@@ -334,20 +334,7 @@ fn parse_candidate(
         };
     }
     let kind = match input {
-        PreparedCandidateInput::Registry => match preload.snapshot(&candidate) {
-            Some(snapshot) => {
-                let boot_key = preload.boot_key(&candidate);
-                persist_candidate_outcome(
-                    output,
-                    extract_snapshot_candidate(&candidate, snapshot, boot_key),
-                    Vec::new(),
-                )
-            }
-            None => CandidateCompletionKind::Warning(format!(
-                "{} registry bytes not preloaded",
-                candidate.path
-            )),
-        },
+        PreparedCandidateInput::Registry => registry_input::parse(&candidate, preload, output),
         PreparedCandidateInput::Bytes(_) if capability.key == PLUGIN_CAPABILITY_KEY => {
             unreachable!("plugin candidates use PreparedCandidateInput::Plugin")
         }
