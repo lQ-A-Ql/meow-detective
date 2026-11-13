@@ -20,6 +20,7 @@ const NONCE_LEN: usize = 12;
 const GCM_TAG_LEN: usize = 16;
 const COOKIE_HOST_DIGEST_LEN: usize = 32;
 const MAX_PREVIEW_CHARS: usize = 512;
+type AppBoundMaterial = (Zeroizing<[u8; 32]>, bool);
 
 pub(crate) use artifacts_browser::BrowserDecryptionStatus as BrowserDecryption;
 
@@ -98,8 +99,15 @@ impl ChromiumDecryptor {
             serde_json::from_slice(local_state).map_err(|_| DpapiError::InvalidLocalStateKey)?;
         let local_state_key = decrypt_local_state_key(&root, &keyring)?;
         let (app_bound_key, app_bound_bound_to_elevation, app_bound_error) =
-            match unwrap_app_bound_material(&root, &keyring, family, cng_key_file, elevation_exe) {
-                Ok((key, bound)) => (Some(key), bound, None),
+            match unwrap_optional_app_bound_material(
+                &root,
+                &keyring,
+                family,
+                cng_key_file,
+                elevation_exe,
+            ) {
+                Ok(Some((key, bound))) => (Some(key), bound, None),
+                Ok(None) => (None, false, None),
                 Err(error) => (None, false, Some(error.to_string())),
             };
         Ok(Self {
@@ -180,6 +188,24 @@ fn decrypt_local_state_key(
     Ok(key)
 }
 
+/// Only attempt App-Bound decoding when its optional JSON field is present.
+fn unwrap_optional_app_bound_material(
+    root: &Value,
+    keyring: &HashMap<String, Zeroizing<[u8; 64]>>,
+    family: ChromiumFamily,
+    cng_key_file: Option<&[u8]>,
+    elevation_exe: Option<&[u8]>,
+) -> Result<Option<AppBoundMaterial>, DpapiError> {
+    if root
+        .get("os_crypt")
+        .and_then(|value| value.get("app_bound_encrypted_key"))
+        .is_none()
+    {
+        return Ok(None);
+    }
+    unwrap_app_bound_material(root, keyring, family, cng_key_file, elevation_exe).map(Some)
+}
+
 /// Run the App-Bound chain for the given family: APPB prefix -> SYSTEM DPAPI
 /// outer blob -> user DPAPI inner blob -> Chrome key blob -> family-specific
 /// unwrap. Returns the key and whether it was bound to the elevation binary
@@ -190,7 +216,7 @@ fn unwrap_app_bound_material(
     family: ChromiumFamily,
     cng_key_file: Option<&[u8]>,
     elevation_exe: Option<&[u8]>,
-) -> Result<(Zeroizing<[u8; 32]>, bool), DpapiError> {
+) -> Result<AppBoundMaterial, DpapiError> {
     let encoded = root
         .get("os_crypt")
         .and_then(|value| value.get("app_bound_encrypted_key"))
@@ -411,3 +437,7 @@ fn normalize_guid(guid: &str) -> String {
         .trim_matches('}')
         .to_ascii_lowercase()
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/dpapi_chrome.rs"]
+mod tests;
