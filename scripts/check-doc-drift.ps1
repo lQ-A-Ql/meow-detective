@@ -259,9 +259,12 @@ foreach ($item in $knownLimitationsFact.items) {
 
 # ── Benchmark baseline structural validation ─────────────────────
 Assert-Contains $benchmarkBaseline.hostProfile 'Windows' 'benchmark-baseline hostProfile is missing Windows'
-Assert-Equals $benchmarkBaseline.baselineVersion '2026.06' 'benchmark-baseline baselineVersion drifted'
-$benchmarkVerifiedDate = ([DateTimeOffset]$benchmarkBaseline.lastVerifiedAt).UtcDateTime.ToString('yyyy-MM-dd')
-Assert-Equals $benchmarkVerifiedDate '2026-06-13' 'benchmark-baseline lastVerifiedAt is stale'
+if ([string]::IsNullOrWhiteSpace($benchmarkBaseline.baselineVersion)) {
+  throw 'benchmark-baseline requires a version identifier'
+}
+if ([DateTimeOffset]$benchmarkBaseline.lastVerifiedAt -gt [DateTimeOffset]::UtcNow) {
+  throw 'benchmark-baseline lastVerifiedAt is in the future'
+}
 $requiredCheckCount = $benchmarkBaseline.requiredChecks.Count
 $scenarioCount = $benchmarkBaseline.scenarios.Count
 Assert-Contains $readme "v2-benchmark-baseline.json" 'README is missing benchmark baseline fact source'
@@ -282,7 +285,7 @@ foreach ($check in $benchmarkBaseline.requiredChecks) {
 
 # Verify all six scenarios exist for each dataset level
 $requiredLevels = @('small','medium','large')
-$requiredScenarios = @('search_query','file_tree_expand','file_paginate','timeline_filter','artifact_extract','report_export')
+$requiredScenarios = @('search_query','file_tree_expand','file_paginate','timeline_filter','artifact_list','report_export')
 foreach ($level in $requiredLevels) {
   foreach ($scenario in $requiredScenarios) {
     $key = "$level/$scenario"

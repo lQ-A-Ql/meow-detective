@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "harnessVersion": "2026.11",
+  "scenarioNames": [
+    "search_query",
+    "file_tree_expand",
+    "file_paginate",
+    "timeline_filter",
+    "artifact_list",
+    "report_export",
+    "reprocess_generation_clone",
+    "timeline_native_cursor_p50",
+    "timeline_native_cursor_p256",
+    "timeline_native_facets_narrow",
+    "timeline_native_facets_full",
+    "artifact_native_facets",
+    "case_search_cross_source",
+    "case_search_cross_source_offset",
+    "correlation_paths",
+    "file_header_reads"
+  ],
+  "smoke": ["search_query", "file_tree_expand", "file_paginate", "timeline_filter", "artifact_list", "report_export"],
+  "levels": {
+    "small": {"coreFiles": 4, "cloneRecords": 2000, "timelineRecords": 1000, "facetRecords": 2000, "artifactRecords": 2000, "correlationFiles": 2000, "headerFiles": 256, "searchSources": 8, "searchFilesPerSource": 128},
+    "medium": {"coreFiles": 5004, "cloneRecords": 100000, "timelineRecords": 10000, "facetRecords": 100000, "artifactRecords": 100000, "correlationFiles": 20000, "headerFiles": 20000, "searchSources": 8, "searchFilesPerSource": 1000},
+    "large": {"coreFiles": 20004, "cloneRecords": 1000000, "timelineRecords": 100000, "facetRecords": 1000000, "artifactRecords": 1000000, "correlationFiles": 100000, "headerFiles": 100000, "searchSources": 64, "searchFilesPerSource": 1000}
+  }
+}

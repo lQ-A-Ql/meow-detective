@@ -2,6 +2,14 @@ name: Backend CI
 
 on:
   workflow_dispatch:
+    inputs:
+      benchmark_level:
+        description: 'Performance fixture size'
+        type: choice
+        options: [small, medium, large]
+        default: small
+  schedule:
+    - cron: '17 21 * * 0'
   push:
     branches: [master]
     paths:
@@ -99,6 +107,29 @@ jobs:
         run: |
           cargo build -p containers-bolt --bin meow-bolt-worker
           cargo test --workspace
+      - name: Benchmark catalog and baseline structure
+        shell: pwsh
+        run: ./scripts/check-benchmark-regression.ps1 -StructureOnly
+      - name: Small performance structure regression
+        shell: pwsh
+        run: |
+          ./scripts/check-benchmark-regression.ps1 -FixtureLevel small -Runs 1 -OutputDir output/ci-performance-small
+          $results = @(Get-ChildItem -LiteralPath output/ci-performance-small -Filter 'benchmark-*.json')
+          if ($results.Count -ne 1) { throw 'Expected exactly one performance result file' }
+          ./scripts/check-benchmark-result-validation.ps1 -ResultsPath $results[0].FullName -Runs 1 -FixtureLevel small
+      - name: Extended performance regression
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          BENCHMARK_LEVEL: ${{ github.event_name == 'schedule' && 'large' || inputs.benchmark_level }}
+        run: ./scripts/check-benchmark-regression.ps1 -FixtureLevel $env:BENCHMARK_LEVEL -Runs 3 -OutputDir output/ci-performance-extended
+      - name: Upload performance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-regression
+          path: output/ci-performance-*
+          if-no-files-found: error
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

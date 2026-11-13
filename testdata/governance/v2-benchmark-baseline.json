@@ -25,7 +25,7 @@
     },
     {
       "datasetLevel": "small",
-      "scenario": "artifact_extract",
+      "scenario": "artifact_list",
       "thresholdP95Ms": 100
     },
     {
@@ -55,7 +55,7 @@
     },
     {
       "datasetLevel": "medium",
-      "scenario": "artifact_extract",
+      "scenario": "artifact_list",
       "thresholdP95Ms": 3000
     },
     {
@@ -85,7 +85,7 @@
     },
     {
       "datasetLevel": "large",
-      "scenario": "artifact_extract",
+      "scenario": "artifact_list",
       "thresholdP95Ms": 8000
     },
     {
@@ -125,7 +125,7 @@
     },
     {
       "datasetLevel": "small",
-      "scenario": "artifact_extract",
+      "scenario": "artifact_list",
       "p95Ms": 1,
       "memoryPeakMb": 32,
       "baselineVersion": "2026.06"
@@ -167,7 +167,7 @@
     },
     {
       "datasetLevel": "medium",
-      "scenario": "artifact_extract",
+      "scenario": "artifact_list",
       "p95Ms": 3000,
       "memoryPeakMb": 1536,
       "baselineVersion": "2026.06"
@@ -209,7 +209,7 @@
     },
     {
       "datasetLevel": "large",
-      "scenario": "artifact_extract",
+      "scenario": "artifact_list",
       "p95Ms": 8000,
       "memoryPeakMb": 4096,
       "baselineVersion": "2026.06"
