@@ -1,4 +1,5 @@
 use super::*;
+use std::time::{Duration, Instant};
 
 const CASE_ID: &str = "case-header-real-capacity";
 const SOURCE_ID: &str = "source-header-real-capacity";
@@ -11,6 +12,7 @@ struct WorkerResult {
 }
 
 fn prepare_files(count: usize) -> (tempfile::TempDir, NativeSourceFixture) {
+    let started = Instant::now();
     let root = tempfile::tempdir().unwrap();
     let evidence = root.path().join("evidence");
     std::fs::create_dir(&evidence).unwrap();
@@ -20,7 +22,11 @@ fn prepare_files(count: usize) -> (tempfile::TempDir, NativeSourceFixture) {
         evidence.clone(),
         DataSourceKind::LogicalDirectory,
     );
+    log_phase("initialize", 0, count, started.elapsed(), started.elapsed());
+    let mut file_creation = Duration::ZERO;
+    let mut catalog_write = Duration::ZERO;
     for start in (0..count).step_by(1024) {
+        let batch_started = Instant::now();
         let mut records = Vec::new();
         for index in start..(start + 1024).min(count) {
             let name = format!("{index:06}.bin");
@@ -48,21 +54,64 @@ fn prepare_files(count: usize) -> (tempfile::TempDir, NativeSourceFixture) {
                 hash_sha256: None,
             });
         }
+        let completed = (start + 1024).min(count);
+        let elapsed = batch_started.elapsed();
+        file_creation += elapsed;
+        log_phase("file-create", completed, count, elapsed, started.elapsed());
+        let batch_started = Instant::now();
         FileRepo::new(&fixture.connection)
             .insert_batch(&records)
             .unwrap();
+        let elapsed = batch_started.elapsed();
+        catalog_write += elapsed;
+        log_phase(
+            "catalog-write",
+            completed,
+            count,
+            elapsed,
+            started.elapsed(),
+        );
     }
+    let seal_started = Instant::now();
+    log_phase(
+        "seal-start",
+        count,
+        count,
+        seal_started.elapsed(),
+        started.elapsed(),
+    );
     fixture.seal();
+    let seal_elapsed = seal_started.elapsed();
+    log_phase(
+        "seal-complete",
+        count,
+        count,
+        seal_elapsed,
+        started.elapsed(),
+    );
+    eprintln!(
+        "[HEADER-CACHE-PREPARED] {}",
+        serde_json::json!({
+            "files": count,
+            "fileCreationMs": file_creation.as_millis(),
+            "catalogWriteMs": catalog_write.as_millis(),
+            "sealMs": seal_elapsed.as_millis(),
+            "totalMs": started.elapsed().as_millis()
+        })
+    );
     (root, fixture)
 }
 
 fn read_files(database: &std::path::Path, count: usize) -> WorkerResult {
+    let started = Instant::now();
     let connection =
         rusqlite::Connection::open_with_flags(database, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
             .unwrap();
     let cache = FileHeaderReadCache::new(CASE_ID);
     let mut peak_entries = 0;
     let mut peak_rss = crate::runtime_resources::current_rss_mb();
+    log_phase("read-start", 0, count, started.elapsed(), started.elapsed());
+    let mut report_started = Instant::now();
     for index in 0..count {
         let id = FileEntryId(format!("header-{index:06}"));
         let actual = cache.read_file_header_by_id(&connection, &id, 8).unwrap();
@@ -73,6 +122,16 @@ fn read_files(database: &std::path::Path, count: usize) -> WorkerResult {
         if index % 256 == 0 {
             peak_rss = peak_rss.max(crate::runtime_resources::current_rss_mb());
         }
+        if (index + 1) % 10_000 == 0 || index + 1 == count {
+            log_phase(
+                "read-progress",
+                index + 1,
+                count,
+                report_started.elapsed(),
+                started.elapsed(),
+            );
+            report_started = Instant::now();
+        }
     }
     assert_eq!(
         cache
@@ -81,12 +140,39 @@ fn read_files(database: &std::path::Path, count: usize) -> WorkerResult {
         0u64.to_le_bytes()
     );
     let final_entries = cache.descriptors.borrow().len();
+    log_phase(
+        "read-complete",
+        count,
+        count,
+        started.elapsed(),
+        started.elapsed(),
+    );
     WorkerResult {
         files_read: count,
         peak_entries,
         final_entries,
         sampled_peak_rss_mb: peak_rss,
     }
+}
+
+fn log_phase(
+    phase: &str,
+    completed: usize,
+    total: usize,
+    phase_elapsed: Duration,
+    total_elapsed: Duration,
+) {
+    eprintln!(
+        "[HEADER-CACHE-PHASE] {}",
+        serde_json::json!({
+            "phase": phase,
+            "worker": format!("{:?}", std::thread::current().id()),
+            "completedFiles": completed,
+            "totalFiles": total,
+            "phaseElapsedMs": phase_elapsed.as_millis(),
+            "totalElapsedMs": total_elapsed.as_millis()
+        })
+    );
 }
 
 #[test]
