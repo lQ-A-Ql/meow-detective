@@ -1,7 +1,8 @@
 use super::super::CorrelationError;
+use persistence_source::fjall::{ArtifactRecordStore, CatalogRecordStore, TimelineRecordStore};
 use persistence_source::repositories::correlation_repo;
 use rusqlite::Connection;
-use std::collections::BTreeSet;
+use sha2::{Digest, Sha256};
 use transport::dto::CorrelationSnapshotDto;
 
 pub(super) struct CachedSnapshot {
@@ -55,17 +56,30 @@ pub fn invalidate_correlation_cache(
     Ok(())
 }
 
-pub(super) fn compute_artifact_hash(conn: &Connection) -> Result<String, CorrelationError> {
-    correlation_repo::compute_artifact_hash_hex(conn)
-        .map_err(|error| CorrelationError::Other(format!("compute artifact hash: {error}")))
-}
-
-pub(super) fn collect_artifact_ids(
-    conn: &Connection,
-) -> Result<BTreeSet<String>, CorrelationError> {
-    let ids = correlation_repo::collect_artifact_ids(conn)
-        .map_err(|error| CorrelationError::Other(format!("collect artifact ids: {error}")))?;
-    Ok(ids.into_iter().collect())
+pub(super) fn artifact_generation_key(conn: &Connection) -> Result<String, CorrelationError> {
+    let source = persistence_source::detail::require_source_store(conn)?;
+    let snapshot = source.database().read_snapshot();
+    let artifact = ArtifactRecordStore::from_source_store((*source).clone())
+        .cursor_revision(&snapshot)
+        .map_err(|error| CorrelationError::Other(error.to_string()))?;
+    let timeline = TimelineRecordStore::from_source_store((*source).clone())
+        .cursor_revision(&snapshot)
+        .map_err(|error| CorrelationError::Other(error.to_string()))?;
+    let catalog = CatalogRecordStore::from_source_store((*source).clone())
+        .cursor_revision(&snapshot)
+        .map_err(|error| CorrelationError::Other(error.to_string()))?;
+    let path = source.database().path();
+    let mut generation = Sha256::new();
+    generation.update(path.as_os_str().as_encoded_bytes());
+    match std::fs::read(path.join(persistence_source::fjall::SOURCE_GENERATION_SEAL_FILE)) {
+        Ok(seal) => generation.update(seal),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(CorrelationError::Other(error.to_string())),
+    }
+    Ok(format!(
+        "v2:{artifact}:{timeline}:{catalog}:{:x}",
+        generation.finalize()
+    ))
 }
 
 pub(super) fn resolve_case_id(conn: &Connection) -> Result<Option<String>, CorrelationError> {

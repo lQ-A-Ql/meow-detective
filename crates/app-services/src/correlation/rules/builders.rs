@@ -1,20 +1,19 @@
 use super::super::{first_string_attr, string_array_attr, CorrelationRuleMatch};
 use super::{
     basename, dedup_rule_matches, extract_file_name_candidates, extract_linux_path_candidates,
-    extract_path_candidates, find_best_file_by_name, find_best_file_by_path,
+    extract_path_candidates, find_best_file_by_name, find_best_file_by_path, FileLookup,
 };
-use domain::FileEntry;
 use transport::dto::{ArtifactRowDto, CorrelationConfidenceDto, CorrelationEdgeKindDto};
 
 // ── Rule match builders ──
 
 pub(crate) fn build_artifact_rule_matches(
-    files: &[FileEntry],
+    lookup: &FileLookup<'_>,
     artifact: &ArtifactRowDto,
 ) -> Vec<CorrelationRuleMatch> {
     match artifact.artifact_type.as_str() {
         "LNK" => build_single_path_rule(
-            files,
+            lookup,
             artifact,
             first_string_attr(&artifact.attrs, &["target_path", "targetPath"]),
             "LNK 目标路径命中文件路径",
@@ -24,7 +23,7 @@ pub(crate) fn build_artifact_rule_matches(
             None,
         ),
         "BrowserDownload" => build_single_path_rule(
-            files,
+            lookup,
             artifact,
             first_string_attr(&artifact.attrs, &["targetPath"]),
             "浏览器下载目标路径命中文件路径",
@@ -33,9 +32,9 @@ pub(crate) fn build_artifact_rule_matches(
             "下载路径来自浏览器数据库记录，仍需结合文件内容与时间线复核。",
             None,
         ),
-        "BrowserHistory" => build_browser_history_rules(files, artifact),
+        "BrowserHistory" => build_browser_history_rules(lookup, artifact),
         "RecycleBin" => build_single_path_rule(
-            files,
+            lookup,
             artifact,
             first_string_attr(&artifact.attrs, &["original_path", "originalPath"]),
             "Recycle Bin 原路径命中已删除文件",
@@ -44,9 +43,9 @@ pub(crate) fn build_artifact_rule_matches(
             "回收站原路径反映删除前路径声明，需结合 deleted 文件与删除时间复核。",
             Some(true),
         ),
-        "RegistryValue" => build_registry_rules(files, artifact),
+        "RegistryValue" => build_registry_rules(lookup, artifact),
         "Prefetch" => build_name_rules(
-            files,
+            lookup,
             artifact,
             first_string_attr(&artifact.attrs, &["executable"])
                 .map(|value| vec![basename(&value)])
@@ -56,7 +55,7 @@ pub(crate) fn build_artifact_rule_matches(
             "名称匹配可能命中同名文件，需要结合路径与时间进一步复核。",
         ),
         "EmailMessage" => build_name_rules(
-            files,
+            lookup,
             artifact,
             string_array_attr(&artifact.attrs, "attachments")
                 .into_iter()
@@ -67,10 +66,10 @@ pub(crate) fn build_artifact_rule_matches(
             "附件名匹配只提供弱线索，需要结合时间、路径与邮件上下文复核。",
         )
         .into_iter()
-        .chain(build_email_subject_rules(files, artifact))
+        .chain(build_email_subject_rules(lookup, artifact))
         .collect(),
         "JumpList" => build_single_path_rule(
-            files,
+            lookup,
             artifact,
             first_string_attr(&artifact.attrs, &["target_path", "targetPath"]),
             "JumpList 目标路径命中文件路径",
@@ -79,17 +78,17 @@ pub(crate) fn build_artifact_rule_matches(
             "JumpList 命中依赖嵌入式 LNK 提取结果，需结合原始 JumpList 复核。",
             None,
         ),
-        _ => build_linux_rule_matches(files, artifact),
+        _ => build_linux_rule_matches(lookup, artifact),
     }
 }
 
 fn build_linux_rule_matches(
-    files: &[FileEntry],
+    lookup: &FileLookup<'_>,
     artifact: &ArtifactRowDto,
 ) -> Vec<CorrelationRuleMatch> {
     match artifact.artifact_type.as_str() {
         "LinuxJournal" => build_single_path_rule(
-            files,
+            lookup,
             artifact,
             first_string_attr(&artifact.attrs, &["executable"]),
             "Journal 可执行路径命中文件路径",
@@ -99,25 +98,25 @@ fn build_linux_rule_matches(
             None,
         ),
         "LinuxSudoEvent" => build_command_rules(
-            files,
+            lookup,
             artifact,
             "sudo 命令",
             "sudo COMMAND 来自 auth.log 记录，可能为裸命令名或相对路径，需回跳原始日志行复核。",
         ),
         "LinuxCronJob" => build_command_rules(
-            files,
+            lookup,
             artifact,
             "Cron 命令",
             "crontab 命令按首词提取，参数与环境变量替换需结合原始 crontab 复核。",
         ),
         "LinuxBashCommand" => build_command_rules(
-            files,
+            lookup,
             artifact,
             "Shell 命令",
             "交互式 shell 历史为自由文本，首词匹配只提供线索，需结合时间与上下文复核。",
         ),
         "LinuxSystemConfig" => build_single_path_rule(
-            files,
+            lookup,
             artifact,
             first_string_attr(&artifact.attrs, &["shell"]),
             "账户登录 shell 命中文件路径",
@@ -127,21 +126,21 @@ fn build_linux_rule_matches(
             None,
         ),
         "LinuxWebSite" => build_multi_path_rules(
-            files,
+            lookup,
             artifact,
             &["accessLogs", "errorLogs"],
             "站点声明日志路径命中文件路径",
             CorrelationConfidenceDto::Strong,
             "站点配置声明的日志路径反映部署声明，需结合配置原文复核。",
         ),
-        "LinuxWebErrorLog" => build_linux_message_path_rules(files, artifact),
+        "LinuxWebErrorLog" => build_linux_message_path_rules(lookup, artifact),
         _ => Vec::new(),
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_single_path_rule(
-    files: &[FileEntry],
+    lookup: &FileLookup<'_>,
     artifact: &ArtifactRowDto,
     path: Option<String>,
     summary: &str,
@@ -153,7 +152,7 @@ pub(crate) fn build_single_path_rule(
     let Some(path) = path else {
         return Vec::new();
     };
-    let Some(file) = find_best_file_by_path(files, &path, prefer_deleted) else {
+    let Some(file) = find_best_file_by_path(lookup, &path, prefer_deleted) else {
         return Vec::new();
     };
     vec![CorrelationRuleMatch {
@@ -170,7 +169,7 @@ pub(crate) fn build_single_path_rule(
 /// an absolute first token is a path lead, a bare name degrades to a weak
 /// name lead.
 fn build_command_rules(
-    files: &[FileEntry],
+    lookup: &FileLookup<'_>,
     artifact: &ArtifactRowDto,
     label: &str,
     caveat: &str,
@@ -183,7 +182,7 @@ fn build_command_rules(
     };
     if first_token.starts_with('/') {
         return build_single_path_rule(
-            files,
+            lookup,
             artifact,
             Some(first_token.to_string()),
             &format!("{label}路径命中文件路径"),
@@ -194,7 +193,7 @@ fn build_command_rules(
         );
     }
     build_name_rules(
-        files,
+        lookup,
         artifact,
         vec![basename(first_token)],
         &format!("{label}名命中文件名"),
@@ -204,7 +203,7 @@ fn build_command_rules(
 }
 
 fn build_multi_path_rules(
-    files: &[FileEntry],
+    lookup: &FileLookup<'_>,
     artifact: &ArtifactRowDto,
     keys: &[&str],
     summary: &str,
@@ -215,7 +214,7 @@ fn build_multi_path_rules(
     for key in keys {
         for path in string_array_attr(&artifact.attrs, key) {
             matches.extend(build_single_path_rule(
-                files,
+                lookup,
                 artifact,
                 Some(path),
                 summary,
@@ -231,7 +230,7 @@ fn build_multi_path_rules(
 }
 
 fn build_linux_message_path_rules(
-    files: &[FileEntry],
+    lookup: &FileLookup<'_>,
     artifact: &ArtifactRowDto,
 ) -> Vec<CorrelationRuleMatch> {
     let Some(message) = first_string_attr(&artifact.attrs, &["message"]) else {
@@ -239,7 +238,7 @@ fn build_linux_message_path_rules(
     };
     let mut matches = Vec::new();
     for path in extract_linux_path_candidates(&message).into_iter().take(2) {
-        if let Some(file) = find_best_file_by_path(files, &path, None) {
+        if let Some(file) = find_best_file_by_path(lookup, &path, None) {
             matches.push(CorrelationRuleMatch {
                 artifact: artifact.clone(),
                 file: file.clone(),
@@ -256,7 +255,7 @@ fn build_linux_message_path_rules(
 }
 
 pub(crate) fn build_registry_rules(
-    files: &[FileEntry],
+    lookup: &FileLookup<'_>,
     artifact: &ArtifactRowDto,
 ) -> Vec<CorrelationRuleMatch> {
     let mut matches = Vec::new();
@@ -265,7 +264,7 @@ pub(crate) fn build_registry_rules(
     };
 
     for path in extract_path_candidates(&data).into_iter().take(2) {
-        if let Some(file) = find_best_file_by_path(files, &path, None) {
+        if let Some(file) = find_best_file_by_path(lookup, &path, None) {
             matches.push(CorrelationRuleMatch {
                 artifact: artifact.clone(),
                 file: file.clone(),
@@ -281,7 +280,7 @@ pub(crate) fn build_registry_rules(
     if matches.is_empty() {
         let names = extract_file_name_candidates(&data);
         matches.extend(build_name_rules(
-            files,
+            lookup,
             artifact,
             names,
             "Registry 值数据命中文件名",
@@ -295,7 +294,7 @@ pub(crate) fn build_registry_rules(
 }
 
 pub(crate) fn build_browser_history_rules(
-    files: &[FileEntry],
+    lookup: &FileLookup<'_>,
     artifact: &ArtifactRowDto,
 ) -> Vec<CorrelationRuleMatch> {
     let mut names = Vec::new();
@@ -307,7 +306,7 @@ pub(crate) fn build_browser_history_rules(
     }
 
     build_name_rules(
-        files,
+        lookup,
         artifact,
         names,
         "BrowserHistory 标题或 URL 命中文件名",
@@ -317,7 +316,7 @@ pub(crate) fn build_browser_history_rules(
 }
 
 pub(crate) fn build_name_rules(
-    files: &[FileEntry],
+    lookup: &FileLookup<'_>,
     artifact: &ArtifactRowDto,
     names: Vec<String>,
     summary: &str,
@@ -326,7 +325,7 @@ pub(crate) fn build_name_rules(
 ) -> Vec<CorrelationRuleMatch> {
     let mut matches = Vec::new();
     for name in names {
-        let Some(file) = find_best_file_by_name(files, &name, None) else {
+        let Some(file) = find_best_file_by_name(lookup, &name, None) else {
             continue;
         };
         matches.push(CorrelationRuleMatch {
@@ -343,7 +342,7 @@ pub(crate) fn build_name_rules(
 }
 
 pub(crate) fn build_email_subject_rules(
-    files: &[FileEntry],
+    lookup: &FileLookup<'_>,
     artifact: &ArtifactRowDto,
 ) -> Vec<CorrelationRuleMatch> {
     let Some(subject) = first_string_attr(&artifact.attrs, &["subject"]) else {
@@ -356,7 +355,7 @@ pub(crate) fn build_email_subject_rules(
     }
 
     build_name_rules(
-        files,
+        lookup,
         artifact,
         names,
         "邮件主题命中文件名",

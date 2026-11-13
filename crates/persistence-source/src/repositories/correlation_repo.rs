@@ -66,24 +66,6 @@ pub fn clear_correlation_cache(conn: &Connection, case_id: &str) -> DbResult<()>
     Ok(())
 }
 
-/// Compute an artifact hash over (sorted id, created_at) pairs.
-/// Returns the hex-encoded SHA-256 digest.
-pub fn compute_artifact_hash_hex(conn: &Connection) -> DbResult<String> {
-    use sha2::{Digest, Sha256};
-    if crate::detail::source_id(conn)?.is_some() {
-        let mut hasher = Sha256::new();
-        super::artifact_repo::ArtifactRepo::new(conn).visit_by_family(None, |artifact| {
-            hasher.update(artifact.id.0.as_bytes());
-            hasher.update(b"|");
-            hasher.update(artifact.created_at.to_rfc3339().as_bytes());
-            hasher.update(b"\n");
-            Ok(())
-        })?;
-        return Ok(hex::encode(hasher.finalize()));
-    }
-    Err(DbError::System("source identity is missing".into()))
-}
-
 /// Resolve the case_id from the artifacts table (returns the first distinct id).
 pub fn resolve_case_id(conn: &Connection) -> DbResult<Option<String>> {
     if let Some(source_id) = crate::detail::source_id(conn)? {

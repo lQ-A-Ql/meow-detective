@@ -1,4 +1,5 @@
-use super::super::{deleted_preference_score, path_suffix_key, CorrelationRuleMatch};
+use super::super::{helpers::normalized_path_suffix_key, CorrelationRuleMatch};
+use super::lookup::FileLookup;
 use domain::FileEntry;
 use std::collections::BTreeSet;
 
@@ -14,7 +15,7 @@ pub(crate) fn dedup_rule_matches(matches: &mut Vec<CorrelationRuleMatch>) {
 }
 
 pub(crate) fn find_best_file_by_path<'a>(
-    files: &'a [FileEntry],
+    lookup: &FileLookup<'a>,
     candidate: &str,
     prefer_deleted: Option<bool>,
 ) -> Option<&'a FileEntry> {
@@ -22,44 +23,19 @@ pub(crate) fn find_best_file_by_path<'a>(
     if normalized.is_empty() {
         return None;
     }
-    if let Some(exact) = find_exact_path(files, &normalized, prefer_deleted) {
-        return Some(exact);
-    }
-    let suffix = path_suffix_key(&normalized);
-    if suffix.is_empty() {
-        return None;
-    }
-    files
-        .iter()
-        .filter(|file| eligible_file(file, prefer_deleted))
-        .filter(|file| path_suffix_key(&file.path).ends_with(&suffix))
-        .min_by_key(|file| {
-            (
-                deleted_preference_score(file, prefer_deleted),
-                file.path.len(),
-            )
+    lookup
+        .index()
+        .exact_best(&normalized, prefer_deleted)
+        .or_else(|| {
+            lookup
+                .index()
+                .suffix_best(normalized_path_suffix_key(&normalized), prefer_deleted)
         })
-}
-
-fn find_exact_path<'a>(
-    files: &'a [FileEntry],
-    normalized: &str,
-    prefer_deleted: Option<bool>,
-) -> Option<&'a FileEntry> {
-    files
-        .iter()
-        .filter(|file| eligible_file(file, prefer_deleted))
-        .filter(|file| normalize_path(&file.path) == normalized)
-        .min_by_key(|file| {
-            (
-                deleted_preference_score(file, prefer_deleted),
-                file.path.len(),
-            )
-        })
+        .map(|position| lookup.file(position))
 }
 
 pub(crate) fn find_best_file_by_name<'a>(
-    files: &'a [FileEntry],
+    lookup: &FileLookup<'a>,
     candidate: &str,
     prefer_deleted: Option<bool>,
 ) -> Option<&'a FileEntry> {
@@ -67,23 +43,14 @@ pub(crate) fn find_best_file_by_name<'a>(
     if normalized.is_empty() {
         return None;
     }
-    files
-        .iter()
-        .filter(|file| eligible_file(file, prefer_deleted))
-        .filter(|file| file.name.eq_ignore_ascii_case(&normalized))
-        .min_by_key(|file| {
-            (
-                deleted_preference_score(file, prefer_deleted),
-                file.path.len(),
-            )
-        })
-}
-
-fn eligible_file(file: &FileEntry, prefer_deleted: Option<bool>) -> bool {
-    file.is_file() && deleted_preference_score(file, prefer_deleted) < 2
+    lookup
+        .index()
+        .basename_best(&normalized, prefer_deleted)
+        .map(|position| lookup.file(position))
 }
 
 pub(crate) fn normalize_path(value: &str) -> String {
+    persistence_source::fjall::instrumentation::record_path_normalization();
     let trimmed = value
         .trim()
         .trim_matches('"')

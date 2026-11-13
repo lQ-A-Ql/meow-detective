@@ -163,11 +163,15 @@ pub(crate) fn parse_rfc3339_utc(value: &str) -> Option<chrono::DateTime<Utc>> {
 
 pub(crate) fn path_suffix_key(value: &str) -> String {
     let normalized = rules::normalize_path(value);
+    normalized_path_suffix_key(&normalized).to_owned()
+}
+
+pub(crate) fn normalized_path_suffix_key(normalized: &str) -> &str {
     let bytes = normalized.as_bytes();
     if normalized.len() >= 3 && bytes[1] == b':' && bytes[2] == b'/' {
-        normalized[3..].to_string()
+        &normalized[3..]
     } else {
-        normalized.trim_start_matches('/').to_string()
+        normalized.trim_start_matches('/')
     }
 }
 

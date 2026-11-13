@@ -126,36 +126,6 @@ fn clear_cache_removes_both_tables() {
 }
 
 #[test]
-fn compute_artifact_hash_is_stable() {
-    let (_root, conn) = setup_db();
-    crate::repositories::artifact_repo::ArtifactRepo::new(&conn)
-        .insert_batch(&[artifact("a1"), artifact("a2")], "case-1", "source-1")
-        .unwrap();
-
-    let h1 = compute_artifact_hash_hex(&conn).unwrap();
-    let h2 = compute_artifact_hash_hex(&conn).unwrap();
-    assert_eq!(h1, h2);
-    assert_eq!(h1.len(), 64); // SHA-256 hex is 64 chars
-}
-
-#[test]
-fn compute_artifact_hash_changes_when_data_changes() {
-    let (_root, conn) = setup_db();
-    crate::repositories::artifact_repo::ArtifactRepo::new(&conn)
-        .insert_batch(&[artifact("a1")], "case-1", "source-1")
-        .unwrap();
-
-    let h1 = compute_artifact_hash_hex(&conn).unwrap();
-
-    crate::repositories::artifact_repo::ArtifactRepo::new(&conn)
-        .insert_batch(&[artifact("a2")], "case-1", "source-1")
-        .unwrap();
-
-    let h2 = compute_artifact_hash_hex(&conn).unwrap();
-    assert_ne!(h1, h2);
-}
-
-#[test]
 fn resolve_case_id_returns_first_distinct() {
     let (_root, conn) = setup_db();
     crate::repositories::artifact_repo::ArtifactRepo::new(&conn)

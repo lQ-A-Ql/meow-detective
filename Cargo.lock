@@ -277,6 +277,7 @@ dependencies = [
  "import-core",
  "infrastructure",
  "libloading",
+ "lru 0.19.0",
  "memory-windows",
  "once_cell",
  "persistence-source",
@@ -288,6 +289,7 @@ dependencies = [
  "reports",
  "rusqlite",
  "search",
+ "segment-tree",
  "serde",
  "serde_json",
  "sha1",
@@ -3895,6 +3897,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lru"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a9f71e3591c7ec44d3e563e87bf14ddc2bada8519dca046e5b0e560cd004e2d"
+dependencies = [
+ "hashbrown 0.17.1",
+]
+
+[[package]]
 name = "lsm-tree"
 version = "3.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5890,6 +5901,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "segment-tree"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f7dbd0d32cabaa6c7c3286d756268247538d613b621227bfe59237d7bbb271a"
+
+[[package]]
 name = "selectors"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6598,7 +6615,7 @@ dependencies = [
  "itertools 0.14.0",
  "levenshtein_automata",
  "log",
- "lru",
+ "lru 0.18.5",
  "lz4_flex 0.14.0",
  "measure_time",
  "memmap2",

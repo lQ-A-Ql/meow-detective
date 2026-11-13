@@ -13,6 +13,8 @@ thiserror.workspace = true
 tracing.workspace = true
 crossbeam-channel.workspace = true
 rayon.workspace = true
+lru.workspace = true
+segment-tree.workspace = true
 
 domain.workspace = true
 transport.workspace = true

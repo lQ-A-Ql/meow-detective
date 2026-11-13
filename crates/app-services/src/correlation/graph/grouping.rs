@@ -2,14 +2,13 @@ use super::super::{
     confidence_rank, CorrelationError, CorrelationRuleGroup, CorrelationSourceGroup,
 };
 use super::{derive_rule_timeline_signals, group_title, rule_group_confidence};
-use crate::correlation::rules::build_artifact_rule_matches;
+use crate::correlation::rules::{build_artifact_rule_matches, FileLookup};
 use domain::FileEntryId;
 use persistence_source::repositories::file_repo::FileRepo;
 use rayon::prelude::*;
 use rusqlite::Connection;
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
-use std::sync::Mutex;
 use transport::dto::{ArtifactRowDto, TimelineEventDto};
 
 pub(crate) fn build_source_groups(
@@ -17,27 +16,36 @@ pub(crate) fn build_source_groups(
     artifacts: Vec<ArtifactRowDto>,
     timelines: Vec<TimelineEventDto>,
 ) -> Result<Vec<CorrelationSourceGroup>, CorrelationError> {
-    let groups = Mutex::new(BTreeMap::<String, CorrelationSourceGroup>::new());
-    artifacts.par_iter().for_each(|artifact| {
-        let Some(source_object_id) = artifact.source_object_id.as_ref() else {
-            return;
-        };
-        let mut groups = groups.lock().unwrap_or_else(|error| error.into_inner());
-        groups
-            .entry(source_object_id.clone())
-            .or_insert_with(|| source_group(source_object_id))
-            .artifacts
-            .push(artifact.clone());
-    });
-    timelines.par_iter().for_each(|timeline| {
-        let mut groups = groups.lock().unwrap_or_else(|error| error.into_inner());
-        groups
-            .entry(timeline.source_object_id.clone())
-            .or_insert_with(|| source_group(&timeline.source_object_id))
-            .timelines
-            .push(timeline.clone());
-    });
-    resolve_source_files(conn, groups.into_inner().unwrap())
+    // Thread-local maps merged by `reduce`, no shared lock on the hot path.
+    let artifact_groups = artifacts
+        .par_iter()
+        .filter_map(|artifact| {
+            artifact
+                .source_object_id
+                .as_ref()
+                .map(|source_object_id| (source_object_id, artifact))
+        })
+        .fold(BTreeMap::new, |mut groups, (source_object_id, artifact)| {
+            groups
+                .entry(source_object_id.clone())
+                .or_insert_with(|| source_group(source_object_id))
+                .artifacts
+                .push(artifact.clone());
+            groups
+        })
+        .reduce(BTreeMap::new, merge_source_groups);
+    let timeline_groups = timelines
+        .par_iter()
+        .fold(BTreeMap::new, |mut groups, timeline| {
+            groups
+                .entry(timeline.source_object_id.clone())
+                .or_insert_with(|| source_group(&timeline.source_object_id))
+                .timelines
+                .push(timeline.clone());
+            groups
+        })
+        .reduce(BTreeMap::new, merge_source_groups);
+    resolve_source_files(conn, merge_source_groups(artifact_groups, timeline_groups))
 }
 
 fn source_group(source_object_id: &str) -> CorrelationSourceGroup {
@@ -47,16 +55,34 @@ fn source_group(source_object_id: &str) -> CorrelationSourceGroup {
     }
 }
 
+fn merge_source_groups(
+    mut left: BTreeMap<String, CorrelationSourceGroup>,
+    right: BTreeMap<String, CorrelationSourceGroup>,
+) -> BTreeMap<String, CorrelationSourceGroup> {
+    for (source_object_id, mut group) in right {
+        let target = left
+            .entry(source_object_id.clone())
+            .or_insert_with(|| source_group(&source_object_id));
+        target.artifacts.append(&mut group.artifacts);
+        target.timelines.append(&mut group.timelines);
+    }
+    left
+}
+
 fn resolve_source_files(
     conn: &Connection,
     groups: BTreeMap<String, CorrelationSourceGroup>,
 ) -> Result<Vec<CorrelationSourceGroup>, CorrelationError> {
-    let repo = FileRepo::new(conn);
+    let ids = groups
+        .keys()
+        .map(|id| FileEntryId(id.clone()))
+        .collect::<Vec<_>>();
+    let files = FileRepo::new(conn)
+        .find_by_ids(&ids)
+        .map_err(|error| CorrelationError::Other(error.to_string()))?;
     let mut items = groups.into_values().collect::<Vec<_>>();
     for group in &mut items {
-        group.file = repo
-            .find_by_id(&FileEntryId(group.source_object_id.clone()))
-            .map_err(|error| CorrelationError::Other(error.to_string()))?;
+        group.file = files.get(&group.source_object_id).cloned();
         group
             .artifacts
             .sort_by(|left, right| left.id.cmp(&right.id));
@@ -84,16 +110,16 @@ pub(crate) fn build_rule_groups(
     }
     let files = crate::analysis_service::collect_file_entries(conn)
         .map_err(|error| CorrelationError::Other(error.to_string()))?;
+    // One normalized path index for the whole pass: matching each artifact is
+    // then a hash lookup instead of a scan over the file catalog.
+    let lookup = FileLookup::new(&files);
     let timeline_map = group_timelines(timelines);
-    let groups = Mutex::new(BTreeMap::<String, CorrelationRuleGroup>::new());
-    artifacts.par_iter().for_each(|artifact| {
-        append_artifact_matches(
-            &groups,
-            &timeline_map,
-            build_artifact_rule_matches(&files, artifact),
-        );
-    });
-    finalize_rule_groups(groups.into_inner().unwrap(), timelines)
+    let matches = artifacts
+        .par_iter()
+        .flat_map_iter(|artifact| build_artifact_rule_matches(&lookup, artifact))
+        .collect::<Vec<_>>();
+    let groups = group_rule_matches(matches, &timeline_map);
+    finalize_rule_groups(groups, timelines)
 }
 
 fn group_timelines(timelines: &[TimelineEventDto]) -> BTreeMap<String, Vec<TimelineEventDto>> {
@@ -106,14 +132,13 @@ fn group_timelines(timelines: &[TimelineEventDto]) -> BTreeMap<String, Vec<Timel
     })
 }
 
-fn append_artifact_matches(
-    groups: &Mutex<BTreeMap<String, CorrelationRuleGroup>>,
-    timeline_map: &BTreeMap<String, Vec<TimelineEventDto>>,
+fn group_rule_matches(
     matches: Vec<super::super::CorrelationRuleMatch>,
-) {
+    timeline_map: &BTreeMap<String, Vec<TimelineEventDto>>,
+) -> BTreeMap<String, CorrelationRuleGroup> {
+    let mut groups = BTreeMap::<String, CorrelationRuleGroup>::new();
     for rule_match in matches {
         let file_id = rule_match.file.id.0.clone();
-        let mut groups = groups.lock().unwrap_or_else(|error| error.into_inner());
         let group = groups
             .entry(file_id.clone())
             .or_insert_with(|| CorrelationRuleGroup {
@@ -130,6 +155,7 @@ fn append_artifact_matches(
             group.matches.push(rule_match);
         }
     }
+    groups
 }
 
 fn finalize_rule_groups(

@@ -1,6 +1,7 @@
 mod builders;
 mod context;
 mod extraction;
+mod lookup;
 mod matching;
 
 pub(crate) use builders::build_artifact_rule_matches;
@@ -11,6 +12,7 @@ pub(crate) use context::{
 pub(crate) use extraction::{
     extract_file_name_candidates, extract_linux_path_candidates, extract_path_candidates,
 };
+pub(crate) use lookup::FileLookup;
 pub(crate) use matching::{
     basename, dedup_rule_matches, find_best_file_by_name, find_best_file_by_path, looks_like_path,
     normalize_path,

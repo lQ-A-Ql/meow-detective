@@ -1,4 +1,6 @@
 use super::*;
+mod cache_revision;
+mod lookup;
 crate::native_source_test_support!();
 use chrono::Utc;
 use domain::{

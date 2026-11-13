@@ -1,5 +1,6 @@
 mod cache;
 mod grouping;
+mod inputs;
 mod nodes;
 mod ordering;
 mod persistence;

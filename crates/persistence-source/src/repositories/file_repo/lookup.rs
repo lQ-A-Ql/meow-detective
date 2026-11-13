@@ -1,8 +1,9 @@
 use domain::{DataSourceId, FileEncryptionStatus, FileEntry, FileEntryId};
 use persistence_sqlite::connection::DbResult;
 use rusqlite::params;
+use std::collections::BTreeMap;
 
-use super::{push_bounded, FileRepo};
+use super::{push_bounded, FileRepo, MAX_FILE_QUERY_ROWS};
 
 impl FileRepo<'_> {
     pub fn find_ancestor_chain(
@@ -150,6 +151,43 @@ impl FileRepo<'_> {
         Err(persistence_sqlite::DbError::System(
             "source identity is missing".into(),
         ))
+    }
+
+    /// Resolve a batch of entry ids inside one read snapshot.
+    ///
+    /// Ids are deduplicated and bounded by [`MAX_FILE_QUERY_ROWS`]; the result
+    /// only contains ids that exist. An empty input never touches storage.
+    pub fn find_by_ids(&self, ids: &[FileEntryId]) -> DbResult<BTreeMap<String, FileEntry>> {
+        let unique = ids
+            .iter()
+            .map(|id| id.0.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        if unique.is_empty() {
+            return Ok(BTreeMap::new());
+        }
+        if unique.len() > MAX_FILE_QUERY_ROWS {
+            return Err(persistence_sqlite::DbError::System(
+                "file id batch query exceeds the bounded row limit".into(),
+            ));
+        }
+        let Some(source_id) = crate::detail::source_id(self.conn)? else {
+            return Err(persistence_sqlite::DbError::System(
+                "source identity is missing".into(),
+            ));
+        };
+        let store = crate::detail::require_source_store(self.conn)?;
+        let snapshot = store.database().read_snapshot();
+        let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+        let mut resolved = BTreeMap::new();
+        for id in unique {
+            let record = catalog
+                .get(&snapshot, &source_id, id)
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            if let Some(record) = record {
+                resolved.insert(id.to_string(), crate::detail::file_entry(record));
+            }
+        }
+        Ok(resolved)
     }
 
     pub fn find_encryption_status(
