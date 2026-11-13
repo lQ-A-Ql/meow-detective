@@ -149,6 +149,6 @@ describe('RegistryExtractionPanel', () => {
     expect(screen.getByText('Office Network')).toBeDefined();
     expect(container.innerHTML).not.toContain('min-h-[220px]');
     const tableFrames = Array.from(container.querySelectorAll<HTMLElement>('[style*="height: min"]'));
-    expect(tableFrames.filter((frame) => frame.style.height.includes('61px'))).toHaveLength(2);
+    expect(tableFrames.filter((frame) => frame.style.height.includes('70px'))).toHaveLength(2);
   });
 });

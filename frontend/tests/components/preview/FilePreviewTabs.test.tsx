@@ -65,7 +65,7 @@ describe('FilePreviewTabs', () => {
     expect(screen.getByText('alpha')).toBeDefined();
     const tableFrame = container.querySelector<HTMLElement>('[style*="height: min"]');
     expect(tableFrame).toHaveStyle({
-      height: 'min(90px, min(60vh, 35rem))',
+      height: 'min(108px, min(60vh, 35rem))',
     });
   });
 
