@@ -296,6 +296,7 @@ pub(crate) fn walk_and_insert_children(
 
 pub(crate) struct ChildBatchWalker {
     queue: VecDeque<(FileEntryId, String)>,
+    pending: Option<(FileEntryId, std::vec::IntoIter<FsNode>)>,
     stats: EnumerationStats,
     total_processed: u64,
     finished: bool,
@@ -307,6 +308,7 @@ impl ChildBatchWalker {
         queue.push_back((root_id, String::new()));
         Self {
             queue,
+            pending: None,
             stats: EnumerationStats {
                 file_count: 0,
                 dir_count: 1,
@@ -331,56 +333,30 @@ impl ChildBatchWalker {
         }
         let mut batch = Vec::with_capacity(FILE_INSERT_BATCH_SIZE);
         while batch.len() < FILE_INSERT_BATCH_SIZE {
-            let Some((parent_id, dir_path)) = self.queue.pop_front() else {
+            let Some((parent_id, child)) = self.next_child(fs, cancel_token)? else {
                 self.finished = true;
                 if let Some(progress) = progress_fn {
                     progress(100);
                 }
                 break;
             };
-            if cancellation_requested(cancel_token) {
-                return Err(enumeration_cancelled_error());
+            if child.name == "." || child.name == ".." {
+                continue;
             }
-            let children_result = fs.list_children(&dir_path);
-            self.extend_diagnostics(fs.take_diagnostics(), &dir_path);
-            let children = match children_result {
-                Ok(children) => children,
-                Err(error) => {
-                    self.push_diagnostic(
-                        FileSystemDiagnostic::new(
-                            FileSystemDiagnosticKind::DirectoryUnreadable,
-                            format!("Cannot read '{dir_path}': {error}"),
-                        )
-                        .with_default_path(&dir_path),
-                    );
-                    continue;
-                }
-            };
-            for child in children {
-                if cancellation_requested(cancel_token) {
-                    return Err(enumeration_cancelled_error());
-                }
-                if child.name == "." || child.name == ".." {
-                    continue;
-                }
-                let id = FileEntryId(Uuid::new_v4().to_string());
-                let entry = file_entry_for_child(data_source_id, &parent_id, &id, &child);
-                if child.is_dir {
-                    self.stats.dir_count += 1;
-                    self.queue.push_back((id, child.path));
-                } else {
-                    self.stats.file_count += 1;
-                    self.stats.total_size = self.stats.total_size.saturating_add(child.size);
-                }
-                batch.push(entry);
-                self.total_processed = self.total_processed.saturating_add(1);
-                if self.total_processed.is_multiple_of(100) {
-                    if let Some(progress) = progress_fn {
-                        progress(compute_enumeration_progress(self.total_processed) as u32);
-                    }
-                }
-                if batch.len() == FILE_INSERT_BATCH_SIZE {
-                    break;
+            let id = FileEntryId(Uuid::new_v4().to_string());
+            let entry = file_entry_for_child(data_source_id, &parent_id, &id, &child);
+            if child.is_dir {
+                self.stats.dir_count += 1;
+                self.queue.push_back((id, child.path));
+            } else {
+                self.stats.file_count += 1;
+                self.stats.total_size = self.stats.total_size.saturating_add(child.size);
+            }
+            batch.push(entry);
+            self.total_processed = self.total_processed.saturating_add(1);
+            if self.total_processed.is_multiple_of(100) {
+                if let Some(progress) = progress_fn {
+                    progress(compute_enumeration_progress(self.total_processed) as u32);
                 }
             }
         }
@@ -388,6 +364,39 @@ impl ChildBatchWalker {
             return Err(enumeration_cancelled_error());
         }
         Ok((!batch.is_empty()).then_some(batch))
+    }
+
+    fn next_child(
+        &mut self,
+        fs: &dyn FileSystemReader,
+        cancel_token: Option<&AtomicBool>,
+    ) -> DbResult<Option<(FileEntryId, FsNode)>> {
+        loop {
+            if cancellation_requested(cancel_token) {
+                return Err(enumeration_cancelled_error());
+            }
+            if let Some((parent, children)) = &mut self.pending {
+                if let Some(child) = children.next() {
+                    return Ok(Some((parent.clone(), child)));
+                }
+            }
+            self.pending = None;
+            let Some((parent, path)) = self.queue.pop_front() else {
+                return Ok(None);
+            };
+            let children = fs.list_children(&path);
+            self.extend_diagnostics(fs.take_diagnostics(), &path);
+            match children {
+                Ok(children) => self.pending = Some((parent, children.into_iter())),
+                Err(error) => self.push_diagnostic(
+                    FileSystemDiagnostic::new(
+                        FileSystemDiagnosticKind::DirectoryUnreadable,
+                        format!("Cannot read '{path}': {error}"),
+                    )
+                    .with_default_path(&path),
+                ),
+            }
+        }
     }
 
     fn extend_diagnostics(&mut self, diagnostics: Vec<FileSystemDiagnostic>, directory_path: &str) {
@@ -445,3 +454,7 @@ fn file_entry_for_child(
         hash_sha256: None,
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/file_service/enumeration_batches.rs"]
+mod tests;
