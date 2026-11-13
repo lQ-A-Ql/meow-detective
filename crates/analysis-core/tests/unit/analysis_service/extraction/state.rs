@@ -124,6 +124,51 @@ fn clean_checkpoint_replay_counts_the_scanned_candidate() {
     assert_eq!(dto.sections[0].scanned_count, 1);
 }
 
+fn stored_plugin_result(family: &str) -> AnalysisExtractionRunDto {
+    let source = native_source();
+    let mut artifact = warning_artifact(&FileEntryId("plugin-input".into()));
+    artifact.family = family.into();
+    artifact.extractor_id = Some("plugin.example".into());
+    let mut digest =
+        crate::analysis_service::extraction::output_digest::OutputDigestAccumulator::default();
+    digest.record_artifact(&artifact);
+    persistence_source::repositories::artifact_repo::ArtifactRepo::new(&source.connection)
+        .insert_batch(&[artifact], "case-analysis", "source-linux")
+        .unwrap();
+    let capability =
+        crate::analysis_service::capability::find_capability("PluginArtifacts").unwrap();
+    let mut state = ExtractionState::new(&[capability]);
+    state.record_persisted_plugin_outcome(
+        capability,
+        PersistedExtractionOutcome {
+            artifact_count: 1,
+            timeline_event_count: 0,
+            warnings: Vec::new(),
+            output_digest: digest.finish(),
+        },
+        Vec::new(),
+    );
+    state
+        .into_dto(&source.connection, "2026-11-13T00:00:00Z".into())
+        .unwrap()
+}
+
+#[test]
+fn plugin_family_outside_builtin_catalog_is_counted_in_run_total() {
+    let result = stored_plugin_result("WeChatMessage");
+    assert_eq!(result.artifact_count, 1);
+    assert_eq!(result.sections.len(), 1);
+    assert_eq!(result.sections[0].artifact_count, 1);
+}
+
+#[test]
+fn plugin_record_in_builtin_family_is_counted_once() {
+    let result = stored_plugin_result("Prefetch");
+    assert_eq!(result.artifact_count, 1);
+    assert_eq!(result.sections.len(), 1);
+    assert_eq!(result.sections[0].artifact_count, 1);
+}
+
 #[test]
 fn failed_plugin_increments_retryable_count_without_creating_a_checkpoint() {
     let source = native_source();

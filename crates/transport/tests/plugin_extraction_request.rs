@@ -24,6 +24,8 @@ fn plugin_extraction_request_rejects_native_categories_and_browser_passwords() {
 
 #[test]
 fn plugin_extraction_request_requires_a_source() {
-    let request = RunPluginExtractionRequest { data_source_id: " ".into() };
+    let request = RunPluginExtractionRequest {
+        data_source_id: " ".into(),
+    };
     assert!(request.validate().is_err());
 }
