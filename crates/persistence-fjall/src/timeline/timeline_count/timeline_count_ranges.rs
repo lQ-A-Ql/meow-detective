@@ -192,7 +192,7 @@ fn count_index_range(
             let timestamp = index_timestamp(entry, source_id, event_type)?;
             let needs_payload = verify_payload
                 || (timestamp.timestamp_micros() == start.timestamp_micros()
-                    && start.timestamp_subsec_nanos() % 1000 != 0)
+                    && !start.timestamp_subsec_nanos().is_multiple_of(1000))
                 || (timestamp.timestamp_micros() == end.timestamp_micros()
                     && end.timestamp_subsec_nanos() % 1000 != 999);
             let matches = if needs_payload {

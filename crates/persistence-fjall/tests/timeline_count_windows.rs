@@ -19,7 +19,7 @@ fn record(id: usize, timestamp: DateTime<Utc>) -> TimelineRecord {
         id: format!("record-{id}"),
         data_source_id: "source".into(),
         source_object_id: "file".into(),
-        event_type: if id % 2 == 0 { "a" } else { "b" }.into(),
+        event_type: if id.is_multiple_of(2) { "a" } else { "b" }.into(),
         timestamp,
         title: "event".into(),
         description: "event payload".into(),
