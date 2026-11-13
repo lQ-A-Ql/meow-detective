@@ -15,6 +15,13 @@ pub struct EvidenceDigestRecord {
     pub source_revision: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileSha256Record {
+    pub file_id: String,
+    pub value: String,
+    pub source_revision: String,
+}
+
 pub struct EvidenceDigestRepo<'a> {
     conn: &'a Connection,
 }
@@ -50,6 +57,42 @@ impl<'a> EvidenceDigestRepo<'a> {
         tx.commit()?;
         Ok(())
     }
+
+    pub fn file_sha256_values(
+        &self,
+        case_id: &str,
+        source_id: &str,
+        file_ids: &[&str],
+    ) -> DbResult<Vec<FileSha256Record>> {
+        if file_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        if file_ids.len() > 500 {
+            return Err(crate::connection::DbError::System(
+                "file digest lookup exceeds 500 records".into(),
+            ));
+        }
+        let placeholders = vec!["?"; file_ids.len()].join(",");
+        let query = format!(
+            "SELECT file_id,value,source_revision FROM evidence_digests
+             WHERE case_id=? AND data_source_id=? AND scope='File' AND algorithm='sha256'
+               AND status='completed' AND partition_index=-1 AND file_id IN ({placeholders})"
+        );
+        let mut parameters = vec![case_id.to_owned(), source_id.to_owned()];
+        parameters.extend(file_ids.iter().map(|id| (*id).to_owned()));
+        self.conn
+            .prepare(&query)?
+            .query_map(rusqlite::params_from_iter(parameters), |row| {
+                Ok(FileSha256Record {
+                    file_id: row.get(0)?,
+                    value: row.get(1)?,
+                    source_revision: row.get(2)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
     pub fn list(
         &self,
         case: &str,
