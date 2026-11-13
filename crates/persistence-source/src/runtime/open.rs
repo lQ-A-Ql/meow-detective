@@ -39,6 +39,7 @@ pub(super) fn open_parts(
         ArtifactStore::from_objects_root(&artifact_root)?
     });
     let source_store = registry::open_shared_source_store(source_root, config)?;
+    persistence_fjall::instrumentation::record_source_session_open();
     tracing::debug!(
         source_root = %source_root.display(),
         read_only,

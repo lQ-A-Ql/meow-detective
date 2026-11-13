@@ -208,7 +208,7 @@ impl SingleWriterTxDatabase {
     {
         let transaction = self.inner.engine.write_tx().durability(Some(mode.into()));
         let snapshot = self.read_snapshot();
-        let mut stream = WriteStream::new(transaction, &self.inner.keyspaces);
+        let mut stream = WriteStream::new(transaction, &self.inner.keyspaces, mode);
         let value = plan(&snapshot, &mut stream)?;
         let receipt = stream.finish().map_err(E::from)?;
         Ok((value, receipt))
@@ -228,22 +228,28 @@ pub(crate) struct WriteStream<'a> {
     keyspaces: &'a HashMap<KeyspaceName, SingleWriterTxKeyspace>,
     hasher: Option<Sha256>,
     operation_count: usize,
+    action_bytes: usize,
+    mode: PersistMode,
 }
 
 impl<'a> WriteStream<'a> {
     fn new(
         transaction: SingleWriterWriteTx<'a>,
         keyspaces: &'a HashMap<KeyspaceName, SingleWriterTxKeyspace>,
+        mode: PersistMode,
     ) -> Self {
         Self {
             transaction,
             keyspaces,
             hasher: Some(Sha256::new()),
             operation_count: 0,
+            action_bytes: 0,
+            mode,
         }
     }
 
     pub(crate) fn put(&mut self, keyspace: KeyspaceName, key: Vec<u8>, value: Vec<u8>) {
+        self.action_bytes += key.len() + value.len();
         hash_action(
             self.hasher
                 .as_mut()
@@ -263,6 +269,7 @@ impl<'a> WriteStream<'a> {
     }
 
     pub(crate) fn delete(&mut self, keyspace: KeyspaceName, key: Vec<u8>) {
+        self.action_bytes += key.len();
         hash_action(
             self.hasher
                 .as_mut()
@@ -281,10 +288,15 @@ impl<'a> WriteStream<'a> {
     }
 
     pub(crate) fn get(&self, keyspace: KeyspaceName, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.transaction
+        let value = self
+            .transaction
             .get(self.keyspace(keyspace), key)
             .map(|value| value.map(|bytes| bytes.to_vec()))
-            .map_err(Into::into)
+            .map_err(FjallStorageError::from)?;
+        if let Some(bytes) = &value {
+            record_point_read(bytes.len());
+        }
+        Ok(value)
     }
 
     fn keyspace(&self, name: KeyspaceName) -> &SingleWriterTxKeyspace {
@@ -313,6 +325,13 @@ impl<'a> WriteStream<'a> {
         }
         let operation_count = self.operation_count;
         self.transaction.commit()?;
+        if operation_count > 0 {
+            record_write_batch(
+                operation_count,
+                self.action_bytes,
+                matches!(self.mode, PersistMode::SyncAll),
+            );
+        }
         Ok(WriteBatchReceipt {
             operation_count,
             batch_digest: digest,

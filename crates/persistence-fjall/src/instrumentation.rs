@@ -36,6 +36,8 @@ pub struct StorageCounters {
     pub query_session_opens: u64,
     pub source_session_opens: u64,
     pub path_normalizations: u64,
+    pub ranked_hits: u64,
+    pub merge_comparisons: u64,
 }
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
@@ -125,4 +127,12 @@ pub fn record_source_session_open() {
 
 pub fn record_path_normalization() {
     apply(|counters| counters.path_normalizations += 1);
+}
+
+pub fn record_ranked_hits(count: u64) {
+    apply(|counters| counters.ranked_hits += count);
+}
+
+pub fn record_merge_comparison() {
+    apply(|counters| counters.merge_comparisons += 1);
 }
