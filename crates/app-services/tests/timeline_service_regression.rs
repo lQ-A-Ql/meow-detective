@@ -17,9 +17,8 @@ use transport::dto::PerformanceReportDto;
 fn in_memory_db_with_timeline() -> rusqlite::Connection {
     let root = tempfile::TempDir::new().unwrap().keep();
     let db_path = root.join("source.db");
-    let conn = persistence_sqlite::open_or_create_source(&db_path).unwrap();
-    persistence_source::detail::configure_source_identity(&conn, "ds-1").unwrap();
-    persistence_source::detail::configure_source_fjall(&conn, &db_path).unwrap();
+    let conn =
+        persistence_source::control::opening::open_source_database(&db_path, "ds-1").unwrap();
     let source = DataSource {
         id: DataSourceId("ds-1".to_string()),
         name: "source".to_string(),
@@ -140,19 +139,18 @@ fn register_ready_source(
     DataSourceRepo::new(case_conn).insert_with_storage(case_id, &source, &storage)?;
     let source_conn = app_services::source_db::open_source_db(case_root, &source.id)?;
     DataSourceRepo::new(&source_conn).upsert_source_local_metadata(case_id, &source)?;
-    mark_source_projection_complete(case_root, source_id)?;
+    mark_source_projection_complete(&source_conn, source_id)?;
     Ok(source_conn)
 }
 
 fn mark_source_projection_complete(
-    case_root: &std::path::Path,
+    connection: &rusqlite::Connection,
     source_id: &str,
 ) -> persistence_sqlite::DbResult<()> {
-    let source = app_services::source_db::open_registered_fjall_source_read_write(
-        case_root,
-        &DataSourceId(source_id.to_string()),
-    )
-    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let source =
+        persistence_source::detail::open_store_for_write(connection)?.ok_or_else(|| {
+            persistence_sqlite::DbError::System("source fixture has no builder".into())
+        })?;
     let key = persistence_source::fjall::encode_key(
         "projection",
         &[persistence_source::fjall::KeyPart::Text(
@@ -168,15 +166,24 @@ fn mark_source_projection_complete(
         1,
         source_id.as_bytes().to_vec(),
     );
-    source
+    let receipt = source
         .write_envelope(
             persistence_source::fjall::KeyspaceName::Meta,
             key,
             &marker,
             persistence_source::fjall::PersistMode::SyncAll,
         )
-        .map(|_| ())
-        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    persistence_source::fjall::seal_source_generation_with_control(
+        &source,
+        source_id,
+        "timeline-service-fixture",
+        &hex::encode(receipt.batch_digest),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .map(|_| ())
+    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
 }
 
 fn timeline_event(id: &str, timestamp: chrono::DateTime<Utc>) -> domain::TimelineEvent {
@@ -247,7 +254,7 @@ fn timeline_source_database_query_wraps_event_and_source_object_ids() {
     TimelineRepo::new(&source_conn)
         .insert_batch_with_case(&[event], "case-1")
         .unwrap();
-    mark_source_projection_complete(tmp.path(), "ds-1").unwrap();
+    mark_source_projection_complete(&source_conn, "ds-1").unwrap();
 
     let case_id = domain::CaseId("case-1".to_string());
     let page = query_timeline_for_case(&case_conn, tmp.path(), &case_id, 0, 10).unwrap();
