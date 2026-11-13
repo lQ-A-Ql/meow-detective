@@ -82,6 +82,30 @@ impl ImportProfiler {
         Ok(())
     }
 
+    pub(crate) fn record_analysis_result(
+        &self,
+        case_id: &str,
+        source_id: &str,
+        run_id: &str,
+        retryable_failure_count: u64,
+        result: &transport::dto::AnalysisExtractionRunDto,
+    ) -> Result<(), super::journal::ImportProfileOutputError> {
+        let mut journal = self
+            .journal
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(journal) = journal.as_mut() {
+            journal.append(
+                "analysis-result",
+                &serde_json::json!({
+                    "caseId":case_id, "sourceId":source_id, "runId":run_id,
+                    "retryableFailureCount":retryable_failure_count, "result":result
+                }),
+            )?;
+        }
+        Ok(())
+    }
+
     pub fn output_error(&self) -> Option<super::journal::ImportProfileOutputError> {
         self.journal
             .lock()

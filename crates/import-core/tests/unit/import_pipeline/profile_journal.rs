@@ -174,3 +174,34 @@ fn invalid_output_directory_returns_a_typed_error() {
         Some("IMPORT_PROFILE_OUTPUT")
     );
 }
+
+#[test]
+fn analysis_result_io_failure_is_typed_and_retained() {
+    let root = tempfile::tempdir_in(scratch()).unwrap();
+    let profiler = ImportProfiler::with_output_directory(root.path()).unwrap();
+    let directory = fs::read_dir(root.path())
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    fs::rename(&directory, directory.with_extension("retained")).unwrap();
+    fs::write(&directory, b"journal directory replaced by a file").unwrap();
+    let result = transport::dto::AnalysisExtractionRunDto {
+        status: transport::dto::AnalysisParseStatusDto::NotFound,
+        scanned_count: 0,
+        checkpoint_hit_count: 0,
+        artifact_count: 0,
+        timeline_event_count: 0,
+        sections: Vec::new(),
+        generated_at: chrono::Utc::now().to_rfc3339(),
+        warnings: Vec::new(),
+    };
+    let error = profiler
+        .record_analysis_result("case", "source", "run", 0, &result)
+        .unwrap_err();
+    let dto = transport::CommandError::from_typed_service_error(error.clone());
+    assert_eq!(dto.code, "IMPORT_PROFILE_OUTPUT");
+    assert_eq!(dto.category, "io");
+    assert_eq!(profiler.check_output(), Err(error));
+}

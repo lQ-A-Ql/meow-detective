@@ -76,6 +76,17 @@ fn auto_extract_platform_artifacts(
     );
     ensure_active(ctx)?;
     let execution = run.map_err(CommandError::from_typed_service_error)?;
+    if let Some(profiler) = &ctx.profiler {
+        profiler
+            .record_analysis_result(
+                &ctx.case_id.0,
+                &data_source.id.0,
+                job_id,
+                execution.retryable_failure_count,
+                &execution.dto,
+            )
+            .map_err(CommandError::from_typed_service_error)?;
+    }
     let run = execution.dto;
     super::emit::emit_job_progress(
                 event_sink,
