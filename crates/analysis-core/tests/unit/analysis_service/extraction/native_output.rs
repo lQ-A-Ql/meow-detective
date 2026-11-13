@@ -127,3 +127,48 @@ fn analysis_generation_replacement_preserves_previous_source_until_commit() {
     drop(staged);
     assert!(!staged_path.exists());
 }
+
+#[test]
+fn rebuild_derived_metrics_without_writes_leaves_derived_counts_unchanged() {
+    let (_root, connection, source) = setup();
+    let snapshot = source.database().read_snapshot();
+    let published_artifacts = ArtifactRecordStore::from_source_store(source.clone())
+        .count(&snapshot, Some("source-1"))
+        .unwrap();
+    let published_events = TimelineRecordStore::from_source_store(source.clone())
+        .count_by_time(&snapshot, "source-1", None, None)
+        .unwrap();
+    assert_eq!((published_artifacts, published_events), (1, 1));
+    drop(snapshot);
+
+    let generation = super::begin_streaming(&connection, "source-1", &[]).unwrap();
+    generation.rebuild_derived_metrics().unwrap();
+
+    let snapshot = generation.store.database().read_snapshot();
+    let artifacts = ArtifactRecordStore::from_source_store(generation.store.clone());
+    let timeline = TimelineRecordStore::from_source_store(generation.store.clone());
+    assert_eq!(
+        artifacts.count(&snapshot, Some("source-1")).unwrap(),
+        published_artifacts
+    );
+    assert_eq!(
+        timeline
+            .count_by_time(&snapshot, "source-1", None, None)
+            .unwrap(),
+        published_events
+    );
+    assert!(artifacts
+        .get(&snapshot, "source-1", "old")
+        .unwrap()
+        .is_some());
+    assert!(timeline
+        .get(&snapshot, "source-1", "old-event")
+        .unwrap()
+        .is_some());
+    drop(snapshot);
+    drop(artifacts);
+    drop(timeline);
+    let super::StreamingGeneration { staged, store, .. } = generation;
+    drop(store);
+    drop(staged);
+}

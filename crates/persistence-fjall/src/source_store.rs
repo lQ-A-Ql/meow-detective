@@ -58,12 +58,14 @@ impl SourceStore {
                         value: entry.value.clone(),
                     })
                     .collect::<Vec<_>>();
-                target
-                    .database
-                    .write_batch(&actions, PersistMode::SyncAll)?;
+                target.database.write_batch(&actions, PersistMode::Buffer)?;
                 cursor = page.last().map(|entry| entry.key.clone());
             }
         }
+        // The clone is an unpublished build directory: buffered page writes are
+        // made durable by one SyncAll after every keyspace is copied, so the
+        // clone is durable when clone_to returns while nothing is published early.
+        target.database.persist(PersistMode::SyncAll)?;
         Ok(target)
     }
     pub fn write_envelope(

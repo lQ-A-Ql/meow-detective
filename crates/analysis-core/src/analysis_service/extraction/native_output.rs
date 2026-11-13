@@ -8,6 +8,7 @@ use persistence_source::fjall::{
 };
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use uuid::Uuid;
 
 pub struct StagedGeneration {
@@ -35,6 +36,8 @@ pub(super) struct StreamingGeneration {
     store: SourceStore,
     source_id: String,
     projection_batch_digest: String,
+    wrote_artifacts: AtomicBool,
+    wrote_events: AtomicBool,
 }
 
 pub(super) struct ConcurrentOutputBatch<'a> {
@@ -135,6 +138,7 @@ impl StreamingGeneration {
             ArtifactRecordStore::from_source_store(self.store.clone())
                 .upsert_batch_independent(&records, PersistMode::Buffer)
                 .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+            self.wrote_artifacts.store(true, Ordering::Relaxed);
         }
         if !events.is_empty() {
             let records = events
@@ -144,6 +148,7 @@ impl StreamingGeneration {
             TimelineRecordStore::from_source_store(self.store.clone())
                 .upsert_batch_independent(&records, PersistMode::Buffer)
                 .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+            self.wrote_events.store(true, Ordering::Relaxed);
         }
         Ok(())
     }
@@ -159,12 +164,19 @@ impl StreamingGeneration {
     }
 
     pub(super) fn rebuild_derived_metrics(&self) -> Result<(), AnalysisServiceError> {
-        ArtifactRecordStore::from_source_store(self.store.clone())
-            .rebuild_metrics_for_source(&self.source_id, PersistMode::Buffer)
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        TimelineRecordStore::from_source_store(self.store.clone())
-            .rebuild_count_indexes(&self.source_id, PersistMode::Buffer)
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        // The clone carries the published generation's derived metrics, and
+        // replacement deletes keep them exact, so only this run's record writes
+        // require a rebuild.
+        if self.wrote_artifacts.load(Ordering::Relaxed) {
+            ArtifactRecordStore::from_source_store(self.store.clone())
+                .rebuild_metrics_for_source(&self.source_id, PersistMode::Buffer)
+                .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        }
+        if self.wrote_events.load(Ordering::Relaxed) {
+            TimelineRecordStore::from_source_store(self.store.clone())
+                .rebuild_count_indexes(&self.source_id, PersistMode::Buffer)
+                .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        }
         Ok(())
     }
 
@@ -174,6 +186,7 @@ impl StreamingGeneration {
             store,
             source_id,
             projection_batch_digest,
+            ..
         } = self;
         store
             .database()
@@ -225,6 +238,8 @@ pub(super) fn begin_streaming(
         store: staged,
         source_id: source_id.to_owned(),
         projection_batch_digest: manifest.projection_batch_digest,
+        wrote_artifacts: AtomicBool::new(false),
+        wrote_events: AtomicBool::new(false),
     })
 }
 
@@ -276,78 +291,12 @@ fn replace_records(
     artifacts: &[Artifact],
     events: &[TimelineEvent],
 ) -> Result<(), AnalysisServiceError> {
-    let artifact_store = ArtifactRecordStore::from_source_store(store.clone());
-    let timeline_store = TimelineRecordStore::from_source_store(store.clone());
-    let snapshot = artifact_store.read_snapshot();
-    let mut artifact_ids = Vec::new();
-    let mut timeline_ids = Vec::new();
-    let mut artifact_cursor = None;
-    let mut timeline_cursor = None;
-    loop {
-        let page = artifact_store
-            .list_by_source(
-                &snapshot,
-                source_id,
-                artifact_cursor.as_deref(),
-                persistence_source::fjall::ScanDirection::Forward,
-                512,
-            )
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        for record in page.records {
-            if replacements
-                .iter()
-                .any(|replacement| matches_artifact(replacement, &record, source_id))
-            {
-                artifact_ids.push(record.id);
-            }
-        }
-        artifact_cursor = page.next_cursor;
-        if artifact_cursor.is_none() {
-            break;
-        }
-    }
-    loop {
-        let page = timeline_store
-            .list_by_source(
-                &snapshot,
-                source_id,
-                timeline_cursor.as_deref(),
-                persistence_source::fjall::ScanDirection::Forward,
-                512,
-            )
-            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-        for record in page.records {
-            if replacements
-                .iter()
-                .any(|replacement| matches_timeline(replacement, &record))
-            {
-                timeline_ids.push(record.id);
-            }
-        }
-        timeline_cursor = page.next_cursor;
-        if timeline_cursor.is_none() {
-            break;
-        }
-    }
-    artifact_store
-        .delete_batch(
-            source_id,
-            &artifact_ids,
-            persistence_source::fjall::PersistMode::Buffer,
-        )
-        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-    timeline_store
-        .delete_batch(
-            source_id,
-            &timeline_ids,
-            persistence_source::fjall::PersistMode::Buffer,
-        )
-        .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+    delete_replacements(store, source_id, replacements)?;
     let artifact_records = artifacts
         .iter()
         .map(|artifact| persistence_source::detail::artifact_record(artifact, source_id))
         .collect::<Vec<_>>();
-    artifact_store
+    ArtifactRecordStore::from_source_store(store.clone())
         .upsert_batch(
             &artifact_records,
             persistence_source::fjall::PersistMode::Buffer,
@@ -357,7 +306,7 @@ fn replace_records(
         .iter()
         .map(|event| persistence_source::detail::timeline_record(event, source_id))
         .collect::<Vec<_>>();
-    timeline_store
+    TimelineRecordStore::from_source_store(store.clone())
         .upsert_batch(
             &timeline_records,
             persistence_source::fjall::PersistMode::Buffer,
@@ -371,6 +320,9 @@ fn delete_replacements(
     source_id: &str,
     replacements: &[super::state::AnalysisOutputReplacement],
 ) -> Result<(), AnalysisServiceError> {
+    if replacements.is_empty() {
+        return Ok(());
+    }
     let artifact_store = ArtifactRecordStore::from_source_store(store.clone());
     let timeline_store = TimelineRecordStore::from_source_store(store.clone());
     let artifacts = artifact_store.read_snapshot();

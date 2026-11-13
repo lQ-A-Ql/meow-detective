@@ -13,19 +13,14 @@ use super::preparation::prepare_registry_preload;
 use super::progress::{ExtractionProgressReporter, ExtractionProgressUpdate};
 use super::registry_preload::RegistryPreloadContext;
 use super::scheduler::acquire_extraction_slot;
-use super::state::{
-    existing_clean_scan_keys, existing_diagnostic_scan_keys, AnalysisOutputProducer,
-    AnalysisOutputReplacement, ExtractionState,
-};
+use super::state::{existing_clean_scan_keys, existing_diagnostic_scan_keys, ExtractionState};
 use super::{PluginExtractFailure, PluginLoadRecord};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{
     discover_plugin_candidates, evidence_candidates_for_categories_with_cancel_and_linux_catalog,
     EvidenceCandidate, LinuxCatalogMetadata,
 };
-use crate::analysis_service::capability::{
-    AnalysisCapability, CandidateReadPolicy, PLUGIN_CAPABILITY_KEY,
-};
+use crate::analysis_service::capability::{AnalysisCapability, CandidateReadPolicy};
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::platforms::analyzer_for;
 use crate::plugin_loader::{PluginExtractor, PluginLoadReport, PluginRejection};
@@ -39,6 +34,7 @@ use std::time::Instant;
 use transport::dto::AnalysisExtractionRunDto;
 
 mod discovery;
+mod empty;
 mod finalization;
 
 use self::discovery::{
@@ -217,10 +213,55 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
         progress_reporter.emit_waiting_for_scheduler(waited);
     })?;
     progress_reporter.emit_discovering();
-    let (mut candidates, linux_catalog) =
+    let (candidates, linux_catalog) =
         discover_run_candidates(conn, platform, &selected, &plugin_extractors, cancel_token)?;
+    if candidates.is_empty() && linux_catalog.is_none() && plugin_extractors.is_empty() {
+        return empty::complete_empty_run(
+            conn,
+            &selected,
+            &mut progress_reporter,
+            discovery_started,
+            plugin_loads,
+            plugin_rejections,
+        );
+    }
     register_candidates(&mut progress_reporter, &selected, &candidates);
     progress_reporter.emit_preparing();
+    extract_discovered_candidates(
+        conn,
+        platform,
+        &selected,
+        candidates,
+        linux_catalog,
+        cancel_token,
+        browser_password,
+        &mut progress_reporter,
+        file_reader,
+        discovery_started,
+        &plugin_extractors,
+        plugin_loads,
+        plugin_rejections,
+    )
+}
+
+/// Preload, stream, process, and persist a discovery result that has candidates
+/// or platform/plugin side effects (Linux catalog or loaded plugins).
+#[allow(clippy::too_many_arguments)]
+fn extract_discovered_candidates(
+    conn: &Connection,
+    platform: DataSourcePlatform,
+    selected: &[AnalysisCapability],
+    mut candidates: Vec<EvidenceCandidate>,
+    linux_catalog: Option<LinuxCatalogMetadata>,
+    cancel_token: &AtomicBool,
+    browser_password: Option<&str>,
+    progress_reporter: &mut ExtractionProgressReporter<'_>,
+    file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    discovery_started: Instant,
+    plugin_extractors: &[&dyn ArtifactExtractor],
+    plugin_loads: Vec<PluginLoadRecord>,
+    plugin_rejections: Vec<PluginRejection>,
+) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     let checkpoint_scans = load_checkpoint_scans(conn)?;
     let checkpoints = checkpoint_scans.existing();
     let mut guarded_file_reader = guarded_candidate_reader(file_reader);
@@ -228,7 +269,7 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
         conn,
         platform,
         &candidates,
-        &selected,
+        selected,
         &checkpoints,
         cancel_token,
         browser_password,
@@ -236,27 +277,22 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
     )?;
     preloads.systemd.annotate(&mut candidates);
     ensure_not_cancelled(cancel_token)?;
-    let output = begin_streamed_output(
-        conn,
-        &candidates,
-        &selected,
-        &plugin_extractors,
-        &checkpoints,
-    )?;
+    let output =
+        begin_streamed_output(conn, &candidates, selected, plugin_extractors, &checkpoints)?;
     let discovery_elapsed_ms = elapsed_millis(discovery_started);
     progress_reporter.begin_extraction();
-    let mut state = ExtractionState::new(&selected);
+    let mut state = ExtractionState::new(selected);
     if let Some(catalog) = linux_catalog {
         state.record_linux_catalog(catalog);
     }
-    record_preload_warnings(&selected, &preloads, &mut state);
+    record_preload_warnings(selected, &preloads, &mut state);
     let processing_started = Instant::now();
     let processing_context = CandidateProcessingContext::new(
         conn,
-        &selected,
+        selected,
         &checkpoints,
         preloads.as_refs(),
-        &plugin_extractors,
+        plugin_extractors,
         &output,
         cancel_token,
     );
@@ -265,7 +301,7 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
         candidates,
         &mut guarded_file_reader,
         &mut state,
-        &mut progress_reporter,
+        progress_reporter,
     )?;
     ensure_not_cancelled(cancel_token)?;
     let processing_elapsed_ms = elapsed_millis(processing_started);
@@ -276,7 +312,7 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
     let result = finalize_run(
         conn,
         state,
-        &mut progress_reporter,
+        progress_reporter,
         staged_generation,
         discovery_elapsed_ms,
         processing_elapsed_ms,
@@ -286,52 +322,6 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
     )?;
     preloads.systemd.persist_markers(conn)?;
     Ok(result)
-}
-
-fn candidate_replacements(
-    candidates: &[EvidenceCandidate],
-    selected: &[AnalysisCapability],
-    plugins: &[&dyn ArtifactExtractor],
-    checkpoints: &ExistingCheckpoints<'_>,
-) -> Vec<AnalysisOutputReplacement> {
-    let mut replacements = Vec::new();
-    for candidate in candidates {
-        let Some(capability) = capability_for_candidate(selected, candidate) else {
-            continue;
-        };
-        if checkpoints.has_candidate(candidate, capability) {
-            continue;
-        }
-        if capability.key == PLUGIN_CAPABILITY_KEY {
-            for producer in super::plugin::matching_producer_ids(plugins, candidate) {
-                push_replacement(
-                    &mut replacements,
-                    AnalysisOutputReplacement {
-                        source_object_id: candidate.file_id.0.clone(),
-                        producer: AnalysisOutputProducer::ExtractorId(producer),
-                    },
-                );
-            }
-        } else {
-            push_replacement(
-                &mut replacements,
-                AnalysisOutputReplacement {
-                    source_object_id: candidate.file_id.0.clone(),
-                    producer: AnalysisOutputProducer::Prefix(capability.producer_prefix()),
-                },
-            );
-        }
-    }
-    replacements
-}
-
-fn push_replacement(
-    replacements: &mut Vec<AnalysisOutputReplacement>,
-    replacement: AnalysisOutputReplacement,
-) {
-    if !replacements.contains(&replacement) {
-        replacements.push(replacement);
-    }
 }
 
 /// Owned preload contexts for one extraction run.

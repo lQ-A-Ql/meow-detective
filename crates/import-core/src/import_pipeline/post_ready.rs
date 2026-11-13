@@ -78,18 +78,22 @@ fn auto_extract_platform_artifacts(
                     analysis_started.elapsed().as_millis()
                 ),
             );
-            let facts = ::analysis_core::linux_evidence_facts::collect_linux_evidence_facts(
-                ctx.conn,
-                ctx.case_root,
-                ctx.case_id,
-                &data_source.id,
-            );
-            if let Err(error) = ::analysis_core::linux_evidence_facts::persist_linux_evidence_facts(
-                source_conn,
-                &data_source.id,
-                &facts,
-            ) {
-                tracing::warn!(data_source_id = %data_source.id.0, %error, "Linux evidence facts cache could not be persisted");
+            if ctx.import_config.platform == domain::DataSourcePlatform::Linux {
+                let facts = ::analysis_core::linux_evidence_facts::collect_linux_evidence_facts(
+                    ctx.conn,
+                    ctx.case_root,
+                    ctx.case_id,
+                    &data_source.id,
+                );
+                if let Err(error) =
+                    ::analysis_core::linux_evidence_facts::persist_linux_evidence_facts(
+                        source_conn,
+                        &data_source.id,
+                        &facts,
+                    )
+                {
+                    tracing::warn!(data_source_id = %data_source.id.0, %error, "Linux evidence facts cache could not be persisted");
+                }
             }
             message.push_str(&format!(
                 "; {platform_label} artifacts auto-analyzed: artifacts={} timeline={}",

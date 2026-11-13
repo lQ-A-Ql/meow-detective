@@ -1,5 +1,10 @@
-use super::super::state::{AnalysisCheckpointKey, CleanScanKeys, DiagnosticScanKeys};
+use super::super::candidate_processing::capability_for_candidate;
+use super::super::state::{
+    AnalysisCheckpointKey, AnalysisOutputProducer, AnalysisOutputReplacement, CleanScanKeys,
+    DiagnosticScanKeys,
+};
 use super::*;
+use crate::analysis_service::capability::PLUGIN_CAPABILITY_KEY;
 use persistence_sqlite::repositories::analysis_scan_repo::CompleteAnalysisCandidateScan;
 use std::collections::HashMap;
 
@@ -81,7 +86,52 @@ pub(super) fn begin_streamed_output(
     checkpoints: &ExistingCheckpoints<'_>,
 ) -> Result<native_output::StreamingGeneration, AnalysisServiceError> {
     let output_source_id = resolve_output_data_source_id(conn)?;
-    let replacements =
-        super::candidate_replacements(candidates, selected, plugin_extractors, checkpoints);
+    let replacements = candidate_replacements(candidates, selected, plugin_extractors, checkpoints);
     native_output::begin_streaming(conn, &output_source_id, &replacements)
+}
+
+fn candidate_replacements(
+    candidates: &[EvidenceCandidate],
+    selected: &[AnalysisCapability],
+    plugins: &[&dyn ArtifactExtractor],
+    checkpoints: &ExistingCheckpoints<'_>,
+) -> Vec<AnalysisOutputReplacement> {
+    let mut replacements = Vec::new();
+    for candidate in candidates {
+        let Some(capability) = capability_for_candidate(selected, candidate) else {
+            continue;
+        };
+        if checkpoints.has_candidate(candidate, capability) {
+            continue;
+        }
+        if capability.key == PLUGIN_CAPABILITY_KEY {
+            for producer in super::super::plugin::matching_producer_ids(plugins, candidate) {
+                push_replacement(
+                    &mut replacements,
+                    AnalysisOutputReplacement {
+                        source_object_id: candidate.file_id.0.clone(),
+                        producer: AnalysisOutputProducer::ExtractorId(producer),
+                    },
+                );
+            }
+        } else {
+            push_replacement(
+                &mut replacements,
+                AnalysisOutputReplacement {
+                    source_object_id: candidate.file_id.0.clone(),
+                    producer: AnalysisOutputProducer::Prefix(capability.producer_prefix()),
+                },
+            );
+        }
+    }
+    replacements
+}
+
+fn push_replacement(
+    replacements: &mut Vec<AnalysisOutputReplacement>,
+    replacement: AnalysisOutputReplacement,
+) {
+    if !replacements.contains(&replacement) {
+        replacements.push(replacement);
+    }
 }

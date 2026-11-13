@@ -1,6 +1,9 @@
 use super::*;
 use crate::analysis_service::capability::LINUX_UMBRELLA_KEY;
 use crate::analysis_service::extraction::candidate_processing::read_candidate_bytes_with_progress;
+use crate::analysis_service::extraction::state::{
+    AnalysisOutputProducer, AnalysisOutputReplacement,
+};
 use crate::analysis_service::extraction::ExtractionOutcome;
 use chrono::Utc;
 use domain::{
@@ -1186,6 +1189,64 @@ fn plugin_loader_is_never_invoked_when_capability_not_selected() {
 
     assert_eq!(execution.dto.sections.len(), 1);
     assert_eq!(execution.dto.sections[0].key, "Registry");
+}
+
+#[test]
+fn empty_candidate_run_skips_streamed_output_generation() {
+    let fixture = source_connection();
+    let connection = &*fixture;
+    let cancel = AtomicBool::new(false);
+    let mut updates = Vec::new();
+    let mut collect_progress = |update: super::ExtractionProgressUpdate| updates.push(update);
+
+    let execution = run_analysis_extraction_with_plugin_loader(
+        connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["EventLogs"],
+        &cancel,
+        &mut collect_progress,
+        |_, _| Ok::<CandidateSource, String>(CandidateSource::Bytes(Vec::new())),
+        &crate::plugin_loader::load_all_report,
+    )
+    .expect("complete a run that discovered no candidates");
+
+    assert_eq!(execution.dto.artifact_count, 0);
+    assert_eq!(execution.dto.timeline_event_count, 0);
+    assert_eq!(execution.dto.scanned_count, 0);
+    assert_eq!(execution.dto.checkpoint_hit_count, 0);
+    assert_eq!(
+        execution.dto.status,
+        transport::dto::AnalysisParseStatusDto::NotFound
+    );
+    assert_eq!(execution.dto.sections.len(), 1);
+    assert_eq!(execution.dto.sections[0].key, "EventLogs");
+    assert_eq!(execution.dto.sections[0].scanned_count, 0);
+    assert_eq!(execution.retryable_failure_count, 0);
+    assert_eq!(execution.processing_elapsed_ms, 0);
+    assert_eq!(execution.persistence_elapsed_ms, 0);
+    assert!(updates
+        .iter()
+        .any(|update| update.phase == transport::dto::AnalysisExtractionPhaseDto::Completed));
+    assert!(updates
+        .iter()
+        .all(|update| update.phase != transport::dto::AnalysisExtractionPhaseDto::Failed));
+
+    let source_dir = fixture._root.path().join("case/sources/source-linux");
+    let build_prefix = format!(
+        "{}analysis-",
+        persistence_source::fjall::SOURCE_BUILD_DIRECTORY_PREFIX
+    );
+    let build_dirs = std::fs::read_dir(&source_dir)
+        .expect("list the source directory")
+        .map(|entry| entry.expect("read a source directory entry").file_name())
+        .map(|name| name.to_string_lossy().into_owned())
+        .filter(|name| name.starts_with(&build_prefix))
+        .collect::<Vec<_>>();
+    assert!(
+        build_dirs.is_empty(),
+        "an empty-candidate run must not stage an analysis generation: {build_dirs:?}"
+    );
 }
 
 #[test]
