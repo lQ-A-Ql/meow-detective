@@ -156,12 +156,9 @@ fn native_reader_adapters_use_source_catalog_and_native_details() {
         correlation_repo::resolve_case_id(&connection).unwrap(),
         Some("case-1".into())
     );
-    assert_eq!(
-        correlation_repo::compute_artifact_hash_hex(&connection)
-            .unwrap()
-            .len(),
-        64
-    );
+    // Artifact writes bump the artifact revision counter; reading it back also
+    // proves the correlation read path observes native storage read-only.
+    assert!(ArtifactRepo::new(&connection).cursor_revision().unwrap() > 0);
 }
 
 #[test]

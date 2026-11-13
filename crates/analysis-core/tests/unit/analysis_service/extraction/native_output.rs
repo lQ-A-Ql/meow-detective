@@ -172,3 +172,76 @@ fn rebuild_derived_metrics_without_writes_leaves_derived_counts_unchanged() {
     drop(store);
     drop(staged);
 }
+
+fn remove_artifact_type_count_marker(store: &SourceStore) {
+    let key = persistence_source::fjall::encode_key(
+        "artifact.type-count-schema",
+        &[persistence_source::fjall::KeyPart::Text("source-1".into())],
+    )
+    .unwrap();
+    store
+        .database()
+        .write_batch(
+            &[persistence_source::fjall::WriteAction::Delete {
+                keyspace: persistence_source::fjall::KeyspaceName::Meta,
+                key,
+            }],
+            PersistMode::SyncAll,
+        )
+        .unwrap();
+}
+
+#[test]
+fn reprocessing_without_new_outputs_prepares_legacy_artifact_type_counts() {
+    let (_root, connection, source) = setup();
+    remove_artifact_type_count_marker(&source);
+    let published = ArtifactRecordStore::from_source_store(source);
+    assert!(!published
+        .type_counts_ready(&published.read_snapshot(), "source-1")
+        .unwrap());
+
+    let generation = super::begin_streaming(&connection, "source-1", &[]).unwrap();
+    generation.rebuild_derived_metrics().unwrap();
+    let artifacts = ArtifactRecordStore::from_source_store(generation.store.clone());
+    let snapshot = artifacts.read_snapshot();
+    assert!(artifacts.type_counts_ready(&snapshot, "source-1").unwrap());
+    assert_eq!(
+        artifacts.type_counts(&snapshot, "source-1").unwrap(),
+        vec![("LinuxWebFinding".to_owned(), 1)]
+    );
+    assert!(!published
+        .type_counts_ready(&published.read_snapshot(), "source-1")
+        .unwrap());
+    drop(snapshot);
+    drop(artifacts);
+    let super::StreamingGeneration { staged, store, .. } = generation;
+    drop(store);
+    drop(staged);
+}
+
+#[test]
+fn reprocessing_empty_source_prepares_empty_artifact_type_counts() {
+    let (_root, connection, source) = setup();
+    let published = ArtifactRecordStore::from_source_store(source.clone());
+    published
+        .delete("source-1", "old", PersistMode::SyncAll)
+        .unwrap();
+    remove_artifact_type_count_marker(&source);
+    let generation = super::begin_streaming(&connection, "source-1", &[]).unwrap();
+    generation.rebuild_derived_metrics().unwrap();
+    let artifacts = ArtifactRecordStore::from_source_store(generation.store.clone());
+    let snapshot = artifacts.read_snapshot();
+    assert!(artifacts.type_counts_ready(&snapshot, "source-1").unwrap());
+    assert!(artifacts
+        .type_counts(&snapshot, "source-1")
+        .unwrap()
+        .is_empty());
+    assert!(!published
+        .type_counts_ready(&published.read_snapshot(), "source-1")
+        .unwrap());
+    drop(snapshot);
+    drop(artifacts);
+    let super::StreamingGeneration { staged, store, .. } = generation;
+    drop(store);
+    drop(staged);
+}

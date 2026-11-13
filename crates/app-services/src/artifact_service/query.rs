@@ -43,7 +43,7 @@ pub fn get_artifact_family_counts(
         .collect())
 }
 
-pub(super) fn artifact_to_dto(artifact: &domain::Artifact) -> ArtifactRowDto {
+pub(crate) fn artifact_to_dto(artifact: &domain::Artifact) -> ArtifactRowDto {
     ArtifactRowDto {
         id: artifact.id.0.clone(),
         artifact_type: artifact.family.clone(),

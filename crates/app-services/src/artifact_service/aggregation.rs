@@ -1,16 +1,13 @@
-use std::{collections::BTreeMap, path::Path};
+use std::path::Path;
 
-use domain::{CaseId, DataSourceId, DataSourcePlatform};
+use domain::{CaseId, DataSourceId};
 use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
-use transport::dto::{ArtifactRowDto, FamilyCountDto};
+use transport::dto::ArtifactRowDto;
 
 use crate::source_db;
 
-use super::{
-    query::get_artifact_families_from_db, source_routing::artifact_to_source_dto,
-    ArtifactServiceError,
-};
+use super::{source_routing::artifact_to_source_dto, ArtifactServiceError};
 
 const MAX_CASE_ARTIFACT_ROWS: usize = 1_000;
 
@@ -19,57 +16,6 @@ mod pagination;
 pub use pagination::{
     get_artifact_rows_page_for_case, get_artifact_rows_page_with_cursor_for_case,
 };
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SourceArtifactFamilyCount {
-    pub data_source_id: DataSourceId,
-    pub platform: DataSourcePlatform,
-    pub family: String,
-    pub count: u64,
-}
-
-pub fn get_artifact_families_for_case(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-) -> Result<Vec<String>, ArtifactServiceError> {
-    let mut families = BTreeMap::<String, ()>::new();
-    for (source_id, source_conn) in
-        source_db::open_ready_source_connections_read_only(case_conn, case_root, case_id)?
-    {
-        if let Some(source) = open_complete_fjall_source(case_root, &source_id)? {
-            let snapshot = source.snapshot();
-            let mut cursor = None;
-            let mut projected = false;
-            loop {
-                let page = source
-                    .artifact_list_by_source(
-                        &snapshot,
-                        &source_id.0,
-                        cursor.as_deref(),
-                        persistence_source::fjall::ScanDirection::Forward,
-                        256,
-                    )
-                    .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;
-                for record in page.records {
-                    projected = true;
-                    families.insert(record.artifact_type, ());
-                }
-                cursor = page.next_cursor;
-                if cursor.is_none() {
-                    break;
-                }
-            }
-            if projected {
-                continue;
-            }
-        }
-        for family in get_artifact_families_from_db(&source_conn)? {
-            families.insert(family, ());
-        }
-    }
-    Ok(families.into_keys().collect())
-}
 
 pub fn get_artifact_rows_for_case(
     case_conn: &Connection,
@@ -158,90 +104,6 @@ pub(crate) fn artifact_record_to_dto(
         created_at: field("createdAt").as_str().unwrap_or_default().to_owned(),
         attrs: serde_json::from_value(field("attrs")).unwrap_or_default(),
     }
-}
-
-pub fn get_artifact_family_counts_for_case(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-) -> Result<Vec<FamilyCountDto>, ArtifactServiceError> {
-    let mut counts = BTreeMap::<String, u64>::new();
-    for source_count in
-        get_source_attributed_artifact_family_counts_for_case(case_conn, case_root, case_id)?
-    {
-        *counts.entry(source_count.family).or_default() += source_count.count;
-    }
-    Ok(counts
-        .into_iter()
-        .map(|(family, count)| FamilyCountDto { family, count })
-        .collect())
-}
-
-pub(crate) fn get_source_attributed_artifact_family_counts_for_case(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-) -> Result<Vec<SourceArtifactFamilyCount>, ArtifactServiceError> {
-    let mut counts = Vec::new();
-    for (source, storage) in source_db::ready_data_sources(case_conn, case_id)? {
-        let platform = DataSourcePlatform::parse_explicit(&storage.platform)
-            .map_err(|error| ArtifactServiceError::Unsupported(error.to_string()))?;
-        let source_db = source_db::open_ready_source_read_only_by_id(
-            case_conn, case_root, case_id, &source.id,
-        )?;
-        if let Some(fjall) = open_complete_fjall_source(case_root, &source.id)? {
-            let snapshot = fjall.snapshot();
-            let mut cursor = None;
-            let mut by_family = BTreeMap::<String, u64>::new();
-            loop {
-                let page = fjall
-                    .artifact_list_by_source(
-                        &snapshot,
-                        &source.id.0,
-                        cursor.as_deref(),
-                        persistence_source::fjall::ScanDirection::Forward,
-                        256,
-                    )
-                    .map_err(|error| ArtifactServiceError::Other(error.to_string()))?;
-                for record in page.records {
-                    *by_family.entry(record.artifact_type).or_default() += 1;
-                }
-                cursor = page.next_cursor;
-                if cursor.is_none() {
-                    break;
-                }
-            }
-            if !by_family.is_empty() {
-                counts.extend(by_family.into_iter().map(|(family, count)| {
-                    SourceArtifactFamilyCount {
-                        data_source_id: source.id.clone(),
-                        platform,
-                        family,
-                        count,
-                    }
-                }));
-                continue;
-            }
-        }
-        counts.extend(
-            ArtifactRepo::new(&source_db.connection)
-                .count_by_family()?
-                .into_iter()
-                .map(|(family, count)| SourceArtifactFamilyCount {
-                    data_source_id: source.id.clone(),
-                    platform,
-                    family,
-                    count,
-                }),
-        );
-    }
-    counts.sort_by(|left, right| {
-        left.data_source_id
-            .0
-            .cmp(&right.data_source_id.0)
-            .then_with(|| left.family.cmp(&right.family))
-    });
-    Ok(counts)
 }
 
 pub(super) fn open_complete_fjall_source(

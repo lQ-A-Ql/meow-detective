@@ -14,6 +14,9 @@ use std::{
     time::Duration,
 };
 
+#[path = "artifact_family_facets.rs"]
+mod family_facets;
+
 fn in_memory_case_db() -> rusqlite::Connection {
     let conn = persistence_sqlite::connection::open_in_memory().unwrap();
     persistence_sqlite::runner::run_all(&conn).unwrap();

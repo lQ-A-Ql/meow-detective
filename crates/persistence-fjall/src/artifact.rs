@@ -12,6 +12,7 @@ use std::path::Path;
 
 mod artifact_batch;
 mod indexing;
+mod type_counts;
 use indexing::{created_index_key, family_created_index_key, CREATED_INDEX, FAMILY_CREATED_INDEX};
 pub(super) use indexing::{index_deletes, index_writes};
 
@@ -51,6 +52,7 @@ impl ArtifactRecordStore {
         let previous_source = crate::record_metrics::count(&snapshot, "artifact", Some(source_id))?;
         let previous_total = crate::record_metrics::count(&snapshot, "artifact", None)?;
         let mut record_count = 0u64;
+        let mut type_tally = std::collections::BTreeMap::<String, u64>::new();
         let mut cursor = None;
         loop {
             let page = self.list_by_source(
@@ -61,6 +63,10 @@ impl ArtifactRecordStore {
                 512,
             )?;
             record_count = record_count.saturating_add(page.records.len() as u64);
+            for record in &page.records {
+                let count = type_tally.entry(record.artifact_type.clone()).or_insert(0);
+                *count = count.saturating_add(1);
+            }
             cursor = page.next_cursor;
             if cursor.is_none() {
                 break;
@@ -84,6 +90,7 @@ impl ArtifactRecordStore {
                     FjallStorageError::InvalidEnvelope("artifact aggregate count overflowed".into())
                 })?,
         )?;
+        type_counts::append_rebuild_actions(&snapshot, &mut actions, source_id, &type_tally)?;
         actions.push(self.revision_action(&snapshot)?);
         self.source_store.database().write_batch(&actions, mode)?;
         Ok(())
@@ -161,6 +168,8 @@ impl ArtifactRecordStore {
             .write_planned(mode, |snapshot| {
                 let mut actions = Vec::new();
                 let mut deltas = crate::record_metrics::CountDeltas::new();
+                let mut type_deltas = type_counts::TypeCountDeltas::new();
+                let counts_ready = type_counts::counts_ready(snapshot, source_id)?;
                 let ids = ids.iter().collect::<std::collections::BTreeSet<_>>();
                 for id in ids {
                     let Some(record) = self.get(snapshot, source_id, id)? else {
@@ -172,10 +181,19 @@ impl ArtifactRecordStore {
                     });
                     actions.extend(index_deletes(&record)?);
                     crate::record_metrics::adjust(&mut deltas, "artifact", source_id, -1)?;
+                    if counts_ready {
+                        type_counts::adjust(
+                            &mut type_deltas,
+                            source_id,
+                            &record.artifact_type,
+                            -1,
+                        )?;
+                    }
                     deleted += 1;
                 }
                 if !actions.is_empty() {
                     crate::record_metrics::append(snapshot, &mut actions, deltas)?;
+                    type_counts::append_actions(snapshot, &mut actions, type_deltas)?;
                     actions.push(self.revision_action(snapshot)?);
                 }
                 Ok(actions)
@@ -293,23 +311,7 @@ impl ArtifactRecordStore {
         source_id: &str,
         artifact_type: &str,
     ) -> Result<u64> {
-        let mut cursor = None;
-        let mut count = 0u64;
-        loop {
-            let page = self.list_by_type(
-                snapshot,
-                source_id,
-                artifact_type,
-                cursor.as_deref(),
-                ScanDirection::Forward,
-                512,
-            )?;
-            count = count.saturating_add(page.records.len() as u64);
-            cursor = page.next_cursor;
-            if cursor.is_none() {
-                return Ok(count);
-            }
-        }
+        type_counts::count_by_type(self, snapshot, source_id, artifact_type)
     }
     fn page(
         &self,

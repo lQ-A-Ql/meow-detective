@@ -34,6 +34,40 @@ fn make_artifact_at(id: &str, family: &str, created_at: &str) -> Artifact {
     artifact
 }
 
+fn insert_artifacts(repo: &ArtifactRepo<'_>, families: &[(&str, usize)]) {
+    let mut artifacts = Vec::new();
+    for (family, count) in families {
+        for index in 0..*count {
+            artifacts.push(make_artifact(&format!("{family}-{index}"), family));
+        }
+    }
+    repo.insert_batch(&artifacts, "case-1", "ds-1").unwrap();
+}
+
+fn scan_oracle(repo: &ArtifactRepo<'_>) -> Vec<(String, u64)> {
+    let mut counts = BTreeMap::<String, u64>::new();
+    for artifact in repo.list_by_family(None).unwrap() {
+        *counts.entry(artifact.family).or_insert(0) += 1;
+    }
+    counts.into_iter().collect()
+}
+
+struct InstrumentationGuard;
+
+impl InstrumentationGuard {
+    fn enable() -> Self {
+        persistence_fjall::instrumentation::enable();
+        persistence_fjall::instrumentation::reset();
+        Self
+    }
+}
+
+impl Drop for InstrumentationGuard {
+    fn drop(&mut self) {
+        persistence_fjall::instrumentation::disable();
+    }
+}
+
 #[test]
 fn insert_batch_then_count_returns_correct_number() {
     let (_root, conn) = setup_db();
@@ -188,4 +222,63 @@ fn artifact_missing_provenance_round_trips_as_none() {
     assert!(rows[0].extractor_version.is_none());
     assert!(rows[0].confidence.is_none());
     assert!(rows[0].source_attribution.is_none());
+}
+
+#[test]
+fn families_and_counts_match_the_record_scan_oracle() {
+    let (_root, conn) = setup_db();
+    let repo = ArtifactRepo::new(&conn);
+    insert_artifacts(&repo, &[("evtx", 67), ("prefetch", 67), ("registry", 66)]);
+
+    let oracle = scan_oracle(&repo);
+    assert_eq!(repo.count_by_family().unwrap(), oracle);
+    let mut families = oracle
+        .iter()
+        .map(|(family, _)| family.clone())
+        .collect::<Vec<_>>();
+    families.sort();
+    assert_eq!(repo.families().unwrap(), families);
+    assert_eq!(repo.count_for_family(Some("evtx")).unwrap(), 67);
+    assert_eq!(repo.count_for_family(Some("registry")).unwrap(), 66);
+    assert_eq!(repo.count_for_family(None).unwrap(), 200);
+}
+
+#[test]
+fn base_queries_read_counts_without_scanning_artifact_records() {
+    let (_root, conn) = setup_db();
+    let repo = ArtifactRepo::new(&conn);
+    insert_artifacts(&repo, &[("evtx", 67), ("prefetch", 67), ("registry", 66)]);
+
+    let instrumentation = InstrumentationGuard::enable();
+    assert_eq!(repo.families().unwrap(), ["evtx", "prefetch", "registry"]);
+    assert_eq!(repo.count_by_family().unwrap().len(), 3);
+    assert_eq!(repo.count_for_family(Some("evtx")).unwrap(), 67);
+    assert_eq!(repo.count_for_family(None).unwrap(), 200);
+    let counters = persistence_fjall::instrumentation::snapshot();
+    drop(instrumentation);
+
+    assert!(counters.scan_entries <= 16, "scanned records: {counters:?}");
+    assert!(counters.scan_calls <= 4, "unexpected scan calls: {counters:?}");
+    assert!(counters.point_reads >= 4, "counts not point reads: {counters:?}");
+}
+
+#[test]
+fn family_queries_reject_more_than_the_bounded_type_limit() {
+    use persistence_fjall::{encode_key, KeyPart, KeyspaceName, PersistMode, WriteAction};
+    let (_root, conn) = setup_db();
+    let store = crate::detail::open_store_for_write(&conn).unwrap().unwrap();
+    let mut actions = (0..=MAX_ARTIFACT_QUERY_ROWS).map(|id| WriteAction::Put {
+        keyspace: KeyspaceName::ArtifactRecords,
+        key: encode_key("artifact.type-count", &[KeyPart::Text("ds-1".into()), KeyPart::Text(format!("type-{id}"))]).unwrap(),
+        value: 1u64.to_be_bytes().to_vec(),
+    }).collect::<Vec<_>>();
+    actions.push(WriteAction::Put {
+        keyspace: KeyspaceName::Meta,
+        key: encode_key("artifact.type-count-schema", &[KeyPart::Text("ds-1".into())]).unwrap(),
+        value: b"v1".to_vec(),
+    });
+    store.database().write_batch(&actions, PersistMode::Buffer).unwrap();
+    let repo = ArtifactRepo::new(&conn);
+    assert!(repo.families().is_err());
+    assert!(repo.count_by_family().is_err());
 }

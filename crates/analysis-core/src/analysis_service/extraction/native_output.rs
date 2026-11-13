@@ -164,11 +164,12 @@ impl StreamingGeneration {
     }
 
     pub(super) fn rebuild_derived_metrics(&self) -> Result<(), AnalysisServiceError> {
-        // The clone carries the published generation's derived metrics, and
-        // replacement deletes keep them exact, so only this run's record writes
-        // require a rebuild.
-        if self.wrote_artifacts.load(Ordering::Relaxed) {
-            ArtifactRecordStore::from_source_store(self.store.clone())
+        let artifacts = ArtifactRecordStore::from_source_store(self.store.clone());
+        let counts_ready = artifacts
+            .type_counts_ready(&artifacts.read_snapshot(), &self.source_id)
+            .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
+        if self.wrote_artifacts.load(Ordering::Relaxed) || !counts_ready {
+            artifacts
                 .rebuild_metrics_for_source(&self.source_id, PersistMode::Buffer)
                 .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
         }

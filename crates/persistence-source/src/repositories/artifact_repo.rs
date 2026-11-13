@@ -231,17 +231,7 @@ impl<'a> ArtifactRepo<'a> {
                 "source identity is missing".into(),
             ));
         }
-        let mut families = std::collections::BTreeSet::new();
-        self.visit_by_family(None, |artifact| {
-            if families.len() >= MAX_ARTIFACT_QUERY_ROWS {
-                return Err(persistence_sqlite::DbError::System(
-                    "artifact family query exceeds the bounded row limit".into(),
-                ));
-            }
-            families.insert(artifact.family);
-            Ok(())
-        })?;
-        Ok(families.into_iter().collect())
+        Ok(self.artifact_type_counts()?.into_iter().map(|(family, _)| family).collect())
     }
 
     pub fn count(&self) -> DbResult<u64> {
@@ -263,17 +253,28 @@ impl<'a> ArtifactRepo<'a> {
                 "source identity is missing".into(),
             ));
         }
-        let mut counts = std::collections::BTreeMap::<String, u64>::new();
-        self.visit_by_family(None, |artifact| {
-            if !counts.contains_key(&artifact.family) && counts.len() >= MAX_ARTIFACT_QUERY_ROWS {
-                return Err(persistence_sqlite::DbError::System(
-                    "artifact family query exceeds the bounded row limit".into(),
-                ));
-            }
-            *counts.entry(artifact.family).or_default() += 1;
-            Ok(())
+        self.artifact_type_counts()
+    }
+
+    fn artifact_type_counts(&self) -> DbResult<Vec<(String, u64)>> {
+        let store = crate::detail::open_store(self.conn)?.ok_or_else(|| {
+            persistence_sqlite::DbError::System("source detail storage is missing".into())
         })?;
-        Ok(counts.into_iter().collect())
+        let source_id = crate::detail::source_id(self.conn)?.ok_or_else(|| {
+            persistence_sqlite::DbError::System("source identity is missing".into())
+        })?;
+        let repository =
+            persistence_fjall::ArtifactRecordStore::from_source_store((*store).clone());
+        let snapshot = repository.read_snapshot();
+        let counts = repository
+            .type_counts(&snapshot, &source_id)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        if counts.len() > MAX_ARTIFACT_QUERY_ROWS {
+            return Err(persistence_sqlite::DbError::System(
+                "artifact family query exceeds the bounded row limit".into(),
+            ));
+        }
+        Ok(counts)
     }
 
     pub fn find_by_id(&self, artifact_id: &str) -> DbResult<Option<Artifact>> {
