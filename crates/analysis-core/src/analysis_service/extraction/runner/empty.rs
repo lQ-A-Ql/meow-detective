@@ -36,7 +36,8 @@ pub(super) fn complete_empty_run(
         source_read_count: 0,
         source_read_elapsed_ms: 0,
         filesystem_read_metrics: evidence_core::FileSystemReadMetrics::default(),
-        rados_read_metrics: crate::ceph_reconstruction::RadosProviderReadMetrics::default(),
+        rados_read_metrics:
+            ceph_reconstruction::ceph_reconstruction::RadosProviderReadMetrics::default(),
         plugin_loads,
         plugin_rejections,
         plugin_extract_failures: Vec::new(),
