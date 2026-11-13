@@ -60,7 +60,7 @@ fn replacement_removes_old_records_and_indexes_and_preserves_other_owners() {
         .replace_family_with_control(
             "source",
             "android",
-            &[next.clone()],
+            std::slice::from_ref(&next),
             PersistMode::SyncAll,
             &AtomicBool::new(false),
             |_| {},
@@ -140,7 +140,10 @@ fn cancelled_or_invalid_replacement_preserves_committed_records_and_indexes() {
         |_| cancel.store(true, Ordering::Release),
     );
     assert!(matches!(result, Err(crate::FjallStorageError::Cancelled)));
-    assert_eq!(family(&store, "source", "android"), [old.clone()]);
+    assert_eq!(
+        family(&store, "source", "android").as_slice(),
+        std::slice::from_ref(&old)
+    );
     cancel.store(false, Ordering::Release);
     assert!(store
         .replace_family_with_control(
@@ -163,7 +166,10 @@ fn cancelled_or_invalid_replacement_preserves_committed_records_and_indexes() {
             |_| {}
         )
         .is_err());
-    assert_eq!(family(&store, "source", "android"), [old.clone()]);
+    assert_eq!(
+        family(&store, "source", "android").as_slice(),
+        std::slice::from_ref(&old)
+    );
     assert_eq!(
         store
             .list_by_kind(
