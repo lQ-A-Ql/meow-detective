@@ -29,6 +29,8 @@ use transport::dto::{
 
 #[path = "support/real_sample_analysis_diagnostic.rs"]
 mod analysis_diagnostic;
+#[path = "support/real_sample_chromium_metadata.rs"]
+mod chromium_metadata;
 #[path = "support/real_sample_query_checks.rs"]
 mod query_checks;
 
@@ -42,6 +44,12 @@ fn retained_source_analysis_diagnostic() {
 #[ignore = "requires explicit FORENSICS_ANALYSIS_CASE_ROOT, FORENSICS_ANALYSIS_SOURCE_ID and FORENSICS_PERF_OUTPUT"]
 fn retained_source_registry_metadata() {
     analysis_diagnostic::dump_registry_metadata();
+}
+
+#[test]
+#[ignore = "requires explicit FORENSICS_ANALYSIS_CASE_ROOT, FORENSICS_ANALYSIS_SOURCE_ID and FORENSICS_PERF_OUTPUT"]
+fn retained_source_chromium_metadata() {
+    chromium_metadata::run();
 }
 
 #[test]

@@ -47,7 +47,7 @@ pub(super) fn dump_registry_metadata() {
     write_registry_metadata(&active, &source.id, &output);
 }
 
-fn open_diagnostic() -> (ActiveCase, domain::DataSource, DataSourcePlatform, PathBuf) {
+pub(super) fn open_diagnostic() -> (ActiveCase, domain::DataSource, DataSourcePlatform, PathBuf) {
     let case_root = std::fs::canonicalize(PathBuf::from(
         std::env::var_os("FORENSICS_ANALYSIS_CASE_ROOT").expect("set FORENSICS_ANALYSIS_CASE_ROOT"),
     ))
