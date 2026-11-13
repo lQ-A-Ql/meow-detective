@@ -1,8 +1,23 @@
 param(
-  [ValidateSet('search_query','file_tree_expand','file_paginate','timeline_filter','artifact_extract','report_export','all')]
+  [ValidateSet(
+    'search_query',
+    'file_tree_expand',
+    'file_paginate',
+    'timeline_filter',
+    'artifact_extract',
+    'report_export',
+    'timeline_native_cursor_p50',
+    'timeline_native_cursor_p256',
+    'timeline_native_facets_narrow',
+    'timeline_native_facets_full',
+    'all'
+  )]
   [string]$Scenario = 'all',
 
   [int]$Runs = 5,
+
+  [ValidateRange(0,10)]
+  [int]$WarmupRuns = 2,
 
   [switch]$Cold,
 
@@ -56,7 +71,7 @@ if ($Cold) {
 }
 
 # ── Run the benchmark test ───────────────────────────────────────
-Write-Host "Running benchmark scenario=$Scenario runs=$Runs cold=$Cold fixtureLevel=$FixtureLevel"
+Write-Host "Running benchmark scenario=$Scenario runs=$Runs warmupRuns=$WarmupRuns cold=$Cold fixtureLevel=$FixtureLevel"
 Write-Host "Repository: $repoRoot"
 
 Push-Location $repoRoot
@@ -78,6 +93,9 @@ try {
   $procInfo.RedirectStandardError = $true
   $procInfo.EnvironmentVariables['RUST_BACKTRACE'] = '1'
   $procInfo.EnvironmentVariables['FORENSICS_BENCH_FIXTURE_LEVEL'] = $FixtureLevel
+  $procInfo.EnvironmentVariables['FORENSICS_BENCH_SCENARIO'] = $Scenario
+  $procInfo.EnvironmentVariables['FORENSICS_BENCH_RUNS'] = [string]$Runs
+  $procInfo.EnvironmentVariables['FORENSICS_BENCH_WARMUP_RUNS'] = [string]$WarmupRuns
 
   $process = New-Object System.Diagnostics.Process
   $process.StartInfo = $procInfo
@@ -131,6 +149,17 @@ $exitCode
   $scenarios = @($benchData.scenarios)
   if ($Scenario -ne 'all') {
     $scenarios = @($scenarios | Where-Object { $_.scenario -eq $Scenario })
+    if ($scenarios.Count -ne 1) {
+      throw "Expected exactly one benchmark scenario entry for '$Scenario' but found $($scenarios.Count)."
+    }
+  }
+
+  # Validate measured run counts against -Runs
+  foreach ($s in $scenarios) {
+    $measuredRuns = @($s.runs).Count
+    if ($measuredRuns -ne $Runs) {
+      throw "Scenario '$($s.scenario)' reported $measuredRuns measured runs but $Runs were requested."
+    }
   }
 
   # ── Compute p95 from individual run timings ────────────────────
@@ -175,6 +204,7 @@ $exitCode
     fixtureLevel = $FixtureLevel
     coldStart = [bool]$Cold
     runs = $Runs
+    warmupRuns = $WarmupRuns
     scenarios = $enrichedScenarios
   }
 
