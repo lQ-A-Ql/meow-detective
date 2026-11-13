@@ -156,8 +156,8 @@ function Assert-NoRawButtonsOutsideAllowedCases {
 function Assert-NoTextInsideActionButtons {
   param([Parameter(Mandatory = $true)][System.IO.FileInfo[]]$Files)
 
-  # A button that carries content is a row, a card, a chart hotspot or a tab; the circular action
-  # shape must stay icon-only. asChild renders the primitive as a link, which may keep its label.
+  # Labeled actions use the pill shape; other content belongs to rows, cards, chart hotspots or tabs.
+  # Circular actions stay icon-only. asChild links may keep their labels.
   $violations = @()
   foreach ($file in $Files) {
     $relative = Get-RelativePath $file.FullName
@@ -165,7 +165,7 @@ function Assert-NoTextInsideActionButtons {
     foreach ($match in [regex]::Matches($content, '<Button\b((?:[^<>{}]|\{[^{}]*\})*?)>([\s\S]*?)</Button>')) {
       $openTag = $match.Groups[1].Value
       if ($openTag -match 'asChild') { continue }
-      if ($openTag -match 'shape="(row|card|bar|tab)"') { continue }
+      if ($openTag -match 'shape="(pill|row|card|bar|tab)"') { continue }
       $body = $match.Groups[2].Value
       $body = [regex]::Replace($body, '<Badge\b[\s\S]*?</Badge>', '')
       $body = [regex]::Replace($body, '<[A-Za-z][^>]*?/>', '')
@@ -177,7 +177,7 @@ function Assert-NoTextInsideActionButtons {
   }
 
   if ($violations.Count -gt 0) {
-    throw "Frontend action buttons must be icon-only; content belongs to row/card/tab shapes`n$($violations -join "`n")"
+    throw "Frontend circular action buttons must be icon-only; labeled actions use the pill shape`n$($violations -join "`n")"
   }
 }
 

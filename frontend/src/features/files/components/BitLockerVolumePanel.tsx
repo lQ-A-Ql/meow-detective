@@ -1,5 +1,6 @@
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { IconButton } from '@/components/controls/IconButton';
+import { Button } from '@/app/components/ui/button';
 import type { BitLockerPanelState } from '../hooks/use-bitlocker-panel-state';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/app/components/ui/input';
@@ -201,15 +202,10 @@ export function BitLockerVolumePanel({ partition, model, panel }: BitLockerVolum
               autoComplete="off"
               aria-label={t('fileBrowser.inspector.bitlocker.credentialLabel')}
             />
-            <IconButton
-              label={t('fileBrowser.inspector.bitlocker.unlock')}
-              variant="forensicsPrimary"
-              size="iconXs"
-              onClick={submitCredential}
-              disabled={!canSubmit}
-            >
+            <Button type="button" shape="pill" variant="solid" onClick={submitCredential} disabled={!canSubmit}>
               <ActionIcon name="unlock" />
-            </IconButton>
+              {t('fileBrowser.inspector.bitlocker.unlock')}
+            </Button>
           </div>
         ) : null}
 
@@ -232,15 +228,16 @@ export function BitLockerVolumePanel({ partition, model, panel }: BitLockerVolum
                 {t('fileBrowser.inspector.bitlocker.gpuRequirements')}
               </p>
             ) : null}
-            <IconButton
-              label={t('fileBrowser.inspector.bitlocker.importDictionary')}
-              variant="forensicsSurface"
-              size="iconXs"
+            <Button
+              type="button"
+              shape="pill"
+              variant="solid"
               onClick={() => void model.startDictionaryAttack(dictionaryBackend)}
               disabled={busy}
             >
               <ActionIcon name="upload" />
-            </IconButton>
+              {t('fileBrowser.inspector.bitlocker.importDictionary')}
+            </Button>
           </div>
         ) : null}
 
@@ -262,15 +259,16 @@ export function BitLockerVolumePanel({ partition, model, panel }: BitLockerVolum
                     total: model.dictionaryAttack.totalBytes,
                   })}
                 </div>
-                <IconButton
-                  label={t('fileBrowser.inspector.bitlocker.cancelDictionary')}
-                  variant="forensicsDangerGhost"
-                  size="iconXs"
+                <Button
+                  type="button"
+                  shape="pill"
+                  variant="solid"
                   onClick={() => void model.cancelDictionaryAttack()}
                   disabled={model.dictionaryCancelling || model.dictionaryAttack.phase === 'cancelling'}
                 >
                   <ActionIcon name="close" />
-                </IconButton>
+                  {t('fileBrowser.inspector.bitlocker.cancelDictionary')}
+                </Button>
               </>
             ) : (
               <div
@@ -298,63 +296,62 @@ export function BitLockerVolumePanel({ partition, model, panel }: BitLockerVolum
 
         {status && !status.unlocked ? (
           <div className="flex flex-wrap items-center gap-1.5 border-t border-forensics-border pt-3">
-            <IconButton
-              label={t('fileBrowser.inspector.bitlocker.memoryUnlock')}
-              variant="forensicsSurface"
-              size="iconXs"
+            <Button
+              type="button"
+              shape="pill"
+              variant="solid"
               onClick={() => void model.unlockFromMemoryImage()}
               disabled={model.memoryUnlocking || model.unlocking || model.loading || model.dictionaryAttacking}
             >
               <ActionIcon name="memory" />
-            </IconButton>
+              {t('fileBrowser.inspector.bitlocker.memoryUnlock')}
+            </Button>
             {status.storedKeyAvailable ? (
-              <IconButton
-                label={t('fileBrowser.inspector.bitlocker.restore')}
-                variant="forensicsSurface"
-                size="iconXs"
+              <Button
+                type="button"
+                shape="pill"
+                variant="solid"
                 onClick={() => void model.restore()}
                 disabled={model.loading || model.memoryUnlocking || model.dictionaryAttacking}
               >
                 <ActionIcon name="restore" />
-              </IconButton>
+                {t('fileBrowser.inspector.bitlocker.restore')}
+              </Button>
             ) : null}
           </div>
         ) : null}
 
         {status?.unlocked ? (
           <div className="flex flex-wrap items-center gap-1.5 border-t border-forensics-border pt-3">
-            <IconButton
-              label={t('fileBrowser.inspector.bitlocker.importCatalog')}
-              variant="forensicsPrimary"
-              size="iconXs"
+            <Button
+              type="button"
+              shape="pill"
+              variant="solid"
               onClick={() => void model.importCatalog()}
               disabled={model.importing || model.loading}
             >
               <ActionIcon name="upload" />
-            </IconButton>
-            <IconButton
-              label={t('fileBrowser.inspector.bitlocker.lock')}
-              variant="forensicsSurface"
-              size="iconXs"
+              {t('fileBrowser.inspector.bitlocker.importCatalog')}
+            </Button>
+            <Button
+              type="button"
+              shape="pill"
+              variant="solid"
               onClick={() => void model.lock()}
               disabled={model.loading || model.importing || model.dictionaryAttacking}
             >
               <ActionIcon name="lock" />
-            </IconButton>
+              {t('fileBrowser.inspector.bitlocker.lock')}
+            </Button>
           </div>
         ) : null}
 
         {status?.storedKeyAvailable ? (
           <div className="flex justify-end border-t border-forensics-border pt-3">
-            <IconButton
-              label={t('fileBrowser.inspector.bitlocker.forget')}
-              variant="forensicsDangerGhost"
-              size="iconXs"
-              onClick={() => void model.forget()}
-              disabled={busy}
-            >
+            <Button type="button" shape="pill" variant="solid" onClick={() => void model.forget()} disabled={busy}>
               <ActionIcon name="erase" />
-            </IconButton>
+              {t('fileBrowser.inspector.bitlocker.forget')}
+            </Button>
           </div>
         ) : null}
 

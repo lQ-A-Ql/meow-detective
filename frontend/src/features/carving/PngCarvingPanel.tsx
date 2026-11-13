@@ -1,4 +1,5 @@
 import { IconButton } from '@/components/controls/IconButton';
+import { Button } from '@/app/components/ui/button';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Input } from '@/app/components/ui/input';
 import { Badge } from '@/app/components/ui/badge';
@@ -40,21 +41,25 @@ export function PngCarvingPanel({
           onChange={(e) => model.setLength(e.target.value)}
           className="max-w-80"
         />
-        <IconButton
-          label={t(format === 'zip' ? 'carving.startZip' : 'carving.start')}
-          variant="forensicsOutline"
+        <Button
+          type="button"
+          shape="pill"
+          variant="solid"
           disabled={!model.valid || model.scanning}
           onClick={model.start}
         >
           <ActionIcon name="play" />
-        </IconButton>
-        <IconButton label={t('carving.load')} onClick={model.load}>
+          {t(format === 'zip' ? 'carving.startZip' : 'carving.start')}
+        </Button>
+        <Button type="button" shape="pill" variant="solid" onClick={model.load}>
           <ActionIcon name="list" />
-        </IconButton>
+          {t('carving.load')}
+        </Button>
         {model.scanning ? (
-          <IconButton label={t('carving.cancel')} onClick={model.cancel}>
+          <Button type="button" shape="pill" variant="solid" onClick={model.cancel}>
             <ActionIcon name="close" />
-          </IconButton>
+            {t('carving.cancel')}
+          </Button>
         ) : null}
       </div>
       {!model.valid ? <p className="text-[11px] text-forensics-error-text">{t('carving.invalid')}</p> : null}
@@ -89,13 +94,16 @@ export function PngCarvingPanel({
             <IconButton label={t('carving.preview')} disabled={model.busy} onClick={() => model.read(item)}>
               <ActionIcon name="eye" />
             </IconButton>
-            <IconButton
-              label={t(format === 'zip' ? 'carving.exportZip' : 'carving.export')}
+            <Button
+              type="button"
+              shape="pill"
+              variant="solid"
               disabled={model.busy}
               onClick={() => model.extract(item)}
             >
               <ActionIcon name="download" />
-            </IconButton>
+              {t(format === 'zip' ? 'carving.exportZip' : 'carving.export')}
+            </Button>
           </div>
         ))}
       </ScrollArea>

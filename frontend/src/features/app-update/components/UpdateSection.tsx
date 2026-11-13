@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '@/components/controls/ActionIcon';
-import { IconButton } from '@/components/controls/IconButton';
+import { Button } from '@/app/components/ui/button';
 import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 import { Progress } from '@/app/components/ui/progress';
 import { UPDATE_RELEASES_URL } from '@/design/app-update';
@@ -45,26 +45,33 @@ export function UpdateSection({ model }: { model: ReturnType<typeof useUpdateMod
           )}
         </div>
       )}
-      <div className="flex items-center gap-3">
-        <IconButton
-          label={t('appUpdate.check')}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          shape="pill"
+          variant="solid"
           disabled={pending || info?.configured === false}
           onClick={() => void model.check()}
         >
           <ActionIcon name="refresh" />
-        </IconButton>
+          {t('appUpdate.check')}
+        </Button>
         {available && (
-          <IconButton
-            label={t('appUpdate.install')}
+          <Button
+            type="button"
+            shape="pill"
+            variant="solid"
             disabled={!canInstall || pending}
             onClick={() => model.setConfirming(true)}
           >
             <ActionIcon name="download" />
-          </IconButton>
+            {t('appUpdate.install')}
+          </Button>
         )}
-        <IconButton label={t('appUpdate.copyLink')} onClick={() => void model.copyDownloadLink()}>
+        <Button type="button" shape="pill" variant="solid" onClick={() => void model.copyDownloadLink()}>
           <ActionIcon name="copy" />
-        </IconButton>
+          {t('appUpdate.copyLink')}
+        </Button>
         <span className="text-[12px] text-forensics-muted">
           {model.copied ? t('appUpdate.copied') : t('appUpdate.manual')}
         </span>
@@ -79,6 +86,7 @@ export function UpdateSection({ model }: { model: ReturnType<typeof useUpdateMod
         confirmLabel={t('appUpdate.install')}
         onConfirm={model.confirmInstall}
         pending={pending}
+        actionShape="pill"
       />
     </section>
   );

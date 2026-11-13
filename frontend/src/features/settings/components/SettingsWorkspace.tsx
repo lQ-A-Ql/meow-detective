@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '@/components/controls/ActionIcon';
-import { IconButton } from '@/components/controls/IconButton';
+import { Button } from '@/app/components/ui/button';
 
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
@@ -83,14 +83,16 @@ export function SettingsWorkspace({ model, update }: SettingsWorkspaceProps) {
           </section>
         </ScrollArea>
         <ActionBar note={settingsMessage}>
-          <IconButton
-            label={t('settings.actions.save')}
+          <Button
+            type="button"
+            shape="pill"
             variant="solid"
             onClick={() => void saveSettings()}
             disabled={savingSettings}
           >
             <ActionIcon name="save" />
-          </IconButton>
+            {t('settings.actions.save')}
+          </Button>
         </ActionBar>
         <BrandWatermark motif="settings" className="watermark-settings" />
       </WorkspaceCard>

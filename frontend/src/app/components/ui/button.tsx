@@ -8,9 +8,10 @@ const buttonVariants = cva(
   "ui-control-motion ui-focus inline-flex cursor-pointer items-center justify-center border-0 bg-transparent active:opacity-80 disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none aria-invalid:text-destructive",
   {
     variants: {
-      /** circle = action button; row = full-width content row owned by tree/list primitives. */
+      /** circle = icon action; pill = labeled action; row = full-width tree/list content. */
       shape: {
         circle: 'size-7 rounded-full',
+        pill: 'min-h-8 w-fit max-w-full gap-2 rounded-full px-4 py-1.5 text-center text-[12px] leading-5 whitespace-normal',
         row: 'h-[22px] w-full justify-start gap-1.5 rounded-none px-2 text-left',
         /** Selectable surface in a grid or list: full-width card with a status edge. */
         card: 'h-auto w-full items-start justify-between gap-3 rounded-none border-l-2 border-l-transparent p-3 text-left',
@@ -42,7 +43,7 @@ const buttonVariants = cva(
         autocompleteOption: 'rounded-none text-left font-mono hover:bg-forensics-highlight',
       },
       size: {
-        // Width and height belong to the shape (circle = 28px); only the media bar is denser.
+        // Width and height belong to the shape; labeled actions grow with their content.
         none: '',
         default: '',
         sm: '',

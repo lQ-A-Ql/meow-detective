@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
-import { IconButton } from '@/components/controls/IconButton';
+import { Button } from './button';
+import { Tooltip } from './tooltip';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog';
 
 export interface ConfirmationDialogProps {
@@ -13,6 +14,7 @@ export interface ConfirmationDialogProps {
   onConfirm: () => void;
   pending?: boolean;
   destructive?: boolean;
+  actionShape?: 'circle' | 'pill';
 }
 
 /** Shared confirmation primitive for irreversible case operations. */
@@ -26,6 +28,7 @@ export function ConfirmationDialog({
   onConfirm,
   pending = false,
   destructive = false,
+  actionShape = 'circle',
 }: ConfirmationDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -35,22 +38,32 @@ export function ConfirmationDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <IconButton
-            variant="forensicsOutline"
-            onClick={() => onOpenChange(false)}
-            disabled={pending}
-            label={cancelLabel}
-          >
-            <ActionIcon name="close" />
-          </IconButton>
-          <IconButton
-            variant={destructive ? 'destructive' : 'solid'}
-            onClick={onConfirm}
-            disabled={pending}
-            label={confirmLabel}
-          >
-            <ActionIcon name="check" />
-          </IconButton>
+          <Tooltip content={cancelLabel}>
+            <Button
+              type="button"
+              shape={actionShape}
+              variant={actionShape === 'pill' ? 'solid' : 'forensicsOutline'}
+              onClick={() => onOpenChange(false)}
+              disabled={pending}
+              aria-label={cancelLabel}
+            >
+              <ActionIcon name="close" />
+              {actionShape === 'pill' ? cancelLabel : null}
+            </Button>
+          </Tooltip>
+          <Tooltip content={confirmLabel}>
+            <Button
+              type="button"
+              shape={actionShape}
+              variant={destructive && actionShape === 'circle' ? 'destructive' : 'solid'}
+              onClick={onConfirm}
+              disabled={pending}
+              aria-label={confirmLabel}
+            >
+              <ActionIcon name="check" />
+              {actionShape === 'pill' ? confirmLabel : null}
+            </Button>
+          </Tooltip>
         </DialogFooter>
       </DialogContent>
     </Dialog>
