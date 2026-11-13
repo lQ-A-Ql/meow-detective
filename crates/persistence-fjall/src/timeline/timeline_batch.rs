@@ -12,7 +12,8 @@ use std::collections::{BTreeMap, HashMap};
 
 mod stream;
 
-use self::stream::{record_action, stream_action, stream_delete};
+pub(super) use self::stream::record_action;
+use self::stream::{stream_action, stream_delete};
 
 impl TimelineRecordStore {
     pub fn upsert_batch(&self, records: &[TimelineRecord], mode: PersistMode) -> Result<()> {

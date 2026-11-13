@@ -202,42 +202,163 @@ fn concurrent_real_projections_obey_workspace_admission() {
 }
 
 #[test]
+fn large_input_rejects_insufficient_workspace_before_projection_writes() {
+    let policy = policy();
+    let pool = pool(policy);
+    let fixture = fixture(20_000);
+    let cancel = AtomicBool::new(false);
+    let error = run(&pool, policy, &cancel, || {
+        project(&fixture, policy, &cancel)
+    })
+    .unwrap_err();
+    assert_eq!(error.code, "TIMELINE_WORKSPACE_LIMIT");
+    assert_eq!(error.category, "validation");
+    let details = error.details.as_ref().unwrap();
+    assert_eq!(details["projectedEvents"], 20_000);
+    assert_eq!(
+        details["availableBytes"],
+        policy.reservation_bytes().unwrap()
+    );
+    assert!(details["requiredBytes"].as_u64().unwrap() > policy.reservation_bytes().unwrap());
+    let store = persistence_source::detail::open_store(&fixture.connection)
+        .unwrap()
+        .unwrap();
+    let timeline =
+        persistence_source::fjall::TimelineRecordStore::from_source_store((*store).clone());
+    assert!(timeline
+        .list_by_source(
+            &timeline.read_snapshot(),
+            &fixture.source_id,
+            None,
+            persistence_source::fjall::ScanDirection::Forward,
+            1
+        )
+        .unwrap()
+        .records
+        .is_empty());
+    let graph_rows: i64 = fixture
+        .connection
+        .query_row("SELECT COUNT(*) FROM graph_nodes", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(graph_rows, 0);
+    assert_eq!(pool.snapshot().0, Resources::default());
+}
+
+#[test]
+fn sufficient_workspace_executes_large_input_and_completed_input_needs_no_rewrite() {
+    let policy = TimelineProjectionPolicy {
+        workspace_kib: 256 * 1024,
+    };
+    let pool = pool(policy);
+    let fixture = fixture(20_000);
+    let cancel = AtomicBool::new(false);
+    let result = run(&pool, policy, &cancel, || {
+        project(&fixture, policy, &cancel)
+    })
+    .unwrap();
+    assert_eq!(result.inserted_count, 20_000);
+    assert!(result.workspace_required_bytes <= result.workspace_available_bytes);
+    assert!(result.workspace_required_bytes > 128 * 1024 * 1024);
+    assert_eq!(pool.snapshot().0, Resources::default());
+    let lower = TimelineProjectionPolicy {
+        workspace_kib: 128 * 1024,
+    };
+    let repeated = run(&pool, lower, &cancel, || project(&fixture, lower, &cancel)).unwrap();
+    assert!(repeated.already_projected);
+    assert_eq!(repeated.inserted_count, 0);
+    assert_eq!(pool.snapshot().0, Resources::default());
+}
+
+#[test]
+fn graph_only_workspace_tracks_page_width_instead_of_existing_row_count() {
+    fn graph_only_required(count: usize) -> u64 {
+        let policy = policy();
+        let pool = pool(policy);
+        let fixture = fixture(count);
+        let cancel = AtomicBool::new(false);
+        let initial = run(&pool, policy, &cancel, || {
+            project(&fixture, policy, &cancel)
+        })
+        .unwrap();
+        assert_eq!(initial.inserted_count, count as u64);
+        persistence_sqlite::repositories::timeline_projection_repo::TimelineProjectionRepo::new(
+            &fixture.connection,
+        )
+        .mark_done("timeline_graph_v3", 0, "graph-rebuild-required")
+        .unwrap();
+        let graph = run(&pool, policy, &cancel, || {
+            project(&fixture, policy, &cancel)
+        })
+        .unwrap();
+        assert_eq!(graph.inserted_count, 0);
+        assert!(graph.graph_complete);
+        assert_eq!(graph.workspace_projected_events, 0);
+        assert_eq!(graph.workspace_graph_events, count as u64);
+        assert_eq!(pool.snapshot().0, Resources::default());
+        graph.workspace_required_bytes
+    }
+    let small = graph_only_required(32);
+    let large = graph_only_required(4096);
+    assert!(large.saturating_sub(small) <= 1024 * 1024);
+}
+
+#[test]
 #[ignore = "explicit projection workspace RSS measurement on a 50K catalog"]
 fn projection_workspace_memory_measurement() {
-    for workspace_kib in [128 * 1024, 256 * 1024, 1_000_000] {
-        let policy = TimelineProjectionPolicy { workspace_kib };
-        let pool = pool(policy);
-        let fixture = fixture(50_000);
-        let before = source_kernel::runtime_resources::current_rss_mb();
-        let stop = Arc::new(AtomicBool::new(false));
-        let sampled_stop = stop.clone();
-        let sampler = std::thread::spawn(move || {
-            let mut peak = before;
-            while !sampled_stop.load(Ordering::Acquire) {
-                peak = peak.max(source_kernel::runtime_resources::current_rss_mb());
-                std::thread::sleep(Duration::from_millis(2));
-            }
-            peak.max(source_kernel::runtime_resources::current_rss_mb())
-        });
-        let cancel = AtomicBool::new(false);
-        let started = Instant::now();
-        let result = run(&pool, policy, &cancel, || {
-            project(&fixture, policy, &cancel)
-        });
-        let elapsed = started.elapsed();
-        stop.store(true, Ordering::Release);
-        let peak = sampler.join().unwrap();
-        let result = result.unwrap();
-        assert_eq!(result.inserted_count, 50_000);
-        assert_eq!(pool.snapshot().0, Resources::default());
-        eprintln!(
-            "[PROJECTION-WORKSPACE] {}",
-            serde_json::json!({
-                "rows": 50_000, "workspaceKiB": workspace_kib, "reservationBytes": policy.reservation_bytes().unwrap(),
-                "rssAtStartMiB": before, "sampledPeakRssMiB": peak, "sampleIntervalMs": 2,
-                "processLifetimePeakRssMiB": source_kernel::runtime_resources::peak_rss_mb(),
-                "elapsedMs": elapsed.as_millis(), "reservedBytesAfter": pool.snapshot().0.bytes
-            })
-        );
-    }
+    let started = Instant::now();
+    eprintln!(
+        "[PROJECTION-WORKSPACE-PHASE] phase=prepare-start rows=50000 elapsedMs={}",
+        started.elapsed().as_millis()
+    );
+    let policy = TimelineProjectionPolicy::default();
+    let workspace_kib = policy.workspace_kib;
+    let pool = pool(policy);
+    let fixture = fixture(50_000);
+    eprintln!(
+        "[PROJECTION-WORKSPACE-PHASE] phase=prepare-complete rows=50000 elapsedMs={}",
+        started.elapsed().as_millis()
+    );
+    let before = source_kernel::runtime_resources::current_rss_mb();
+    let stop = Arc::new(AtomicBool::new(false));
+    let sampled_stop = stop.clone();
+    let sampler = std::thread::spawn(move || {
+        let mut peak = before;
+        while !sampled_stop.load(Ordering::Acquire) {
+            peak = peak.max(source_kernel::runtime_resources::current_rss_mb());
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        peak.max(source_kernel::runtime_resources::current_rss_mb())
+    });
+    let cancel = AtomicBool::new(false);
+    eprintln!(
+        "[PROJECTION-WORKSPACE-PHASE] phase=projection-start elapsedMs={}",
+        started.elapsed().as_millis()
+    );
+    let started = Instant::now();
+    let result = run(&pool, policy, &cancel, || {
+        project(&fixture, policy, &cancel)
+    });
+    let elapsed = started.elapsed();
+    stop.store(true, Ordering::Release);
+    let peak = sampler.join().unwrap();
+    let result = result.unwrap();
+    assert_eq!(result.inserted_count, 50_000);
+    assert_eq!(pool.snapshot().0, Resources::default());
+    assert!(result.workspace_required_bytes <= result.workspace_available_bytes);
+    eprintln!(
+        "[PROJECTION-WORKSPACE-PHASE] phase=projection-complete elapsedMs={}",
+        elapsed.as_millis()
+    );
+    eprintln!(
+        "[PROJECTION-WORKSPACE] {}",
+        serde_json::json!({
+            "rows": 50_000, "workspaceKiB": workspace_kib, "reservationBytes": policy.reservation_bytes().unwrap(),
+            "requiredBytes": result.workspace_required_bytes, "availableBytes": result.workspace_available_bytes,
+            "mutationBytes": result.workspace_mutation_bytes, "projectedEvents": result.workspace_projected_events,
+            "graphEvents": result.workspace_graph_events, "budgetModel": "timeline-workspace-v1",
+            "rssAtStartMiB": before, "sampledPeakRssMiB": peak, "sampleIntervalMs": 2,
+            "processLifetimePeakRssMiB": source_kernel::runtime_resources::peak_rss_mb(),
+            "elapsedMs": elapsed.as_millis(), "reservedBytesAfter": pool.snapshot().0.bytes
+        })
+    );
 }

@@ -13,10 +13,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 mod facet_index;
+mod storage_cost;
 mod timeline_batch;
 mod timeline_count;
 mod timeline_facets;
 
+pub use storage_cost::TimelineRecordStorageCost;
 pub use timeline_facets::FacetSummary;
 
 const RECORD_KIND: &str = "timeline_event";

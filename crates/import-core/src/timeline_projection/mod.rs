@@ -6,53 +6,15 @@ use std::sync::atomic::AtomicBool;
 
 use timeline::TimelineProjectionPolicy;
 
+mod error;
 mod fjall;
 mod timing;
+mod workspace;
 
+pub use error::TimelineProjectionError;
 pub use timing::TimelineWriteTimings;
 
 use crate::timeline_projection::fjall as projection_fjall;
-
-#[derive(Debug, thiserror::Error)]
-pub enum TimelineProjectionError {
-    #[error("database error: {0}")]
-    Db(#[from] persistence_sqlite::DbError),
-    #[error("source storage error: {0}")]
-    Storage(#[from] persistence_source::fjall::FjallStorageError),
-    #[error("invalid input: {0}")]
-    InvalidInput(String),
-    #[error("timeline projection cancelled")]
-    Cancelled,
-    #[error("{0}")]
-    Other(String),
-}
-
-impl From<timeline::TimelineProjectionPolicyError> for TimelineProjectionError {
-    fn from(error: timeline::TimelineProjectionPolicyError) -> Self {
-        Self::InvalidInput(error.to_string())
-    }
-}
-
-impl From<rusqlite::Error> for TimelineProjectionError {
-    fn from(error: rusqlite::Error) -> Self {
-        Self::Db(persistence_sqlite::DbError::from(error))
-    }
-}
-
-impl transport::ServiceErrorCategory for TimelineProjectionError {
-    fn category(&self) -> transport::ErrorCategory {
-        match self {
-            Self::Db(_) | Self::Storage(_) => transport::ErrorCategory::Io,
-            Self::InvalidInput(_) => transport::ErrorCategory::Validation,
-            Self::Cancelled => transport::ErrorCategory::Cancelled,
-            Self::Other(_) => transport::ErrorCategory::Internal,
-        }
-    }
-
-    fn recoverable(&self) -> Option<bool> {
-        matches!(self, Self::Cancelled).then_some(true)
-    }
-}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TimelineProjectionStats {
@@ -64,6 +26,11 @@ pub struct TimelineProjectionStats {
     pub already_projected: bool,
     pub graph_complete: bool,
     pub warnings: Vec<String>,
+    pub workspace_required_bytes: u64,
+    pub workspace_available_bytes: u64,
+    pub workspace_mutation_bytes: u64,
+    pub workspace_projected_events: u64,
+    pub workspace_graph_events: u64,
 }
 
 pub fn project_and_store_file_activity(
@@ -100,7 +67,9 @@ pub fn materialize_file_activity_with_policy(
     cancel_token: &AtomicBool,
     policy: TimelineProjectionPolicy,
 ) -> Result<TimelineProjectionStats, TimelineProjectionError> {
-    let identity = projection_fjall::identity(conn, platform)?;
+    policy.validate()?;
+    ensure_not_cancelled(cancel_token)?;
+    let identity = projection_fjall::identity(conn, platform, cancel_token)?;
     materialize_file_activity_with_identity_and_policy(
         conn,
         platform,
@@ -139,7 +108,7 @@ pub fn materialize_file_activity_with_identity_and_policy(
             "timeline projection input identity must not be empty".into(),
         ));
     }
-    projection_fjall::materialize(conn, platform, cancel_token, input_identity)
+    projection_fjall::materialize(conn, platform, cancel_token, input_identity, policy)
 }
 
 pub fn materialize_file_activity_unknown(

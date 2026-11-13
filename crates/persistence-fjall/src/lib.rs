@@ -56,5 +56,5 @@ pub use source_generation::{
 pub use source_store::{open_shared_source_store, SourceCloneProgress, SourceStore};
 pub use timeline::{
     decode_timestamp_desc, encode_timestamp_desc, FacetSummary, TimelinePage, TimelineRecord,
-    TimelineRecordStore, TimelineStreamError, TimelineTypeAfterQuery,
+    TimelineRecordStorageCost, TimelineRecordStore, TimelineStreamError, TimelineTypeAfterQuery,
 };

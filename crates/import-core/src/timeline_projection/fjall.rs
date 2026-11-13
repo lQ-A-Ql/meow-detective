@@ -16,6 +16,7 @@ const GRAPH_KEY: &str = "timeline_graph_v3";
 pub(super) fn identity(
     conn: &Connection,
     platform: DataSourcePlatform,
+    cancel: &AtomicBool,
 ) -> Result<String, TimelineProjectionError> {
     use sha2::Digest;
     let store = persistence_source::detail::open_store(conn)?
@@ -28,6 +29,7 @@ pub(super) fn identity(
     hasher.update(platform.as_storage_str());
     let mut cursor = None;
     loop {
+        ensure_active(cancel)?;
         let page = catalog.list_all(
             &snapshot,
             &source,
@@ -36,6 +38,7 @@ pub(super) fn identity(
             512,
         )?;
         for record in page.records {
+            ensure_active(cancel)?;
             let bytes = serde_json::to_vec(&record)
                 .map_err(|error| TimelineProjectionError::Other(error.to_string()))?;
             hasher.update((bytes.len() as u64).to_be_bytes());
@@ -56,6 +59,7 @@ pub(super) fn materialize(
     platform: DataSourcePlatform,
     cancel: &AtomicBool,
     identity: &str,
+    policy: timeline::TimelineProjectionPolicy,
 ) -> Result<TimelineProjectionStats, TimelineProjectionError> {
     let store = persistence_source::detail::open_store(conn)?
         .ok_or_else(|| TimelineProjectionError::Other("source generation is missing".into()))?;
@@ -76,6 +80,21 @@ pub(super) fn materialize(
             ..Default::default()
         });
     }
+    let estimate =
+        super::workspace::estimate(&store, &source, platform, cancel, !file_done, !graph_done)?;
+    estimate.require(policy)?;
+    tracing::debug!(
+        required_bytes = estimate.required_bytes,
+        configured_bytes = policy.reservation_bytes()?,
+        catalog_records = estimate.catalog_records,
+        eligible_files = estimate.eligible_files,
+        projected_events = estimate.projected_events,
+        removed_events = estimate.removed_events,
+        graph_events = estimate.graph_events,
+        mutation_bytes = estimate.mutation_bytes,
+        mutation_entries = estimate.mutation_entries,
+        "Timeline projection workspace estimated"
+    );
     let timeline = TimelineRecordStore::from_source_store((*store).clone());
     let count = if file_done {
         0
@@ -106,6 +125,11 @@ pub(super) fn materialize(
         already_projected: false,
         graph_complete: true,
         warnings: Vec::new(),
+        workspace_required_bytes: estimate.required_bytes,
+        workspace_available_bytes: policy.reservation_bytes()?,
+        workspace_mutation_bytes: estimate.mutation_bytes,
+        workspace_projected_events: estimate.projected_events,
+        workspace_graph_events: estimate.graph_events,
     })
 }
 
@@ -169,7 +193,7 @@ fn stream_file_events(
     Ok(count)
 }
 
-fn file_events_for_record(
+pub(super) fn file_events_for_record(
     record: persistence_source::fjall::FileEntryRecord,
     source: &str,
     platform: DataSourcePlatform,
@@ -200,7 +224,7 @@ fn file_events_for_record(
         .collect()
 }
 
-fn eligible(
+pub(super) fn eligible(
     record: &persistence_source::fjall::FileEntryRecord,
     platform: DataSourcePlatform,
 ) -> bool {

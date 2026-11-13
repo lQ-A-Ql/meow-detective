@@ -22,7 +22,7 @@ pub(super) fn stream_action(writer: &mut WriteStream<'_>, action: WriteAction) {
     }
 }
 
-pub(super) fn record_action(record: &TimelineRecord) -> Result<WriteAction> {
+pub(crate) fn record_action(record: &TimelineRecord) -> Result<WriteAction> {
     let payload = serde_json::to_vec(record)
         .map_err(|error| crate::FjallStorageError::Serialization(error.to_string()))?;
     let envelope = VersionedEnvelope::new(
