@@ -11,7 +11,9 @@ use transport::{
     paging::{decode_opaque_cursor, encode_opaque_cursor, PageResponse},
 };
 
-const CURSOR_VERSION: u8 = 3;
+/// v4 changed `after` from the prefetched head key to the last consumed key,
+/// so v3 cursors are rejected instead of silently skipping one row on resume.
+const CURSOR_VERSION: u8 = 4;
 const CURSOR_KIND: &str = "timeline-fjall";
 const FETCH_LIMIT: usize = 1;
 
@@ -50,6 +52,10 @@ struct FjallSourcePage {
     source: ReadOnlySourceStorageHandle,
     snapshot: SourceReadSnapshot,
     head: Option<TimelineRecord>,
+    /// Fjall key of the current head record. The cursor's `after` key stays on
+    /// the last consumed row so a restored cursor can resume with an exclusive
+    /// scan, and this key only advances the position once the head is taken.
+    head_after: Option<Vec<u8>>,
     exhausted: bool,
     skip_remaining: u64,
 }
@@ -230,6 +236,9 @@ fn take_next(
     };
     let page = &mut pages[index];
     let record = page.head.take().expect("timeline head selected above");
+    if let Some(after) = page.head_after.take() {
+        page.state.after = Some(after);
+    }
     page.state.consumed = page.state.consumed.saturating_add(1);
     Ok(Some((index, record)))
 }
@@ -273,6 +282,7 @@ impl FjallSourcePage {
             source,
             snapshot,
             head: None,
+            head_after: None,
             exhausted: count == 0,
             skip_remaining: 0,
         }
@@ -281,66 +291,82 @@ impl FjallSourcePage {
     fn from_state(
         source: ReadOnlySourceStorageHandle,
         snapshot: SourceReadSnapshot,
-        mut state: FjallSourceCursor,
+        state: FjallSourceCursor,
     ) -> Self {
-        let skip_remaining = state.consumed;
-        state.after = None;
+        // A cursor that saved the Fjall key of its last consumed record resumes
+        // with an exclusive scan from that key instead of replaying the consumed
+        // prefix. Only legacy or incomplete cursors fall back to counting the
+        // records that still have to be skipped.
+        let skip_remaining = restored_skip_remaining(state.consumed, state.after.is_some());
         Self {
             exhausted: state.consumed >= state.count,
             state,
             source,
             snapshot,
             head: None,
+            head_after: None,
             skip_remaining,
         }
     }
 
     fn ensure_head(&mut self, context: &FjallContext) -> Result<(), TimelineServiceError> {
-        if self.state.consumed >= self.state.count {
-            self.exhausted = true;
+        loop {
+            if self.state.consumed >= self.state.count {
+                self.exhausted = true;
+            }
+            if self.exhausted || self.head.is_some() {
+                return Ok(());
+            }
+            let page = if let Some(event_type) = context.event_type.as_deref() {
+                self.source.timeline_list_by_type(
+                    &self.snapshot,
+                    &self.state.source_id,
+                    event_type,
+                    self.state.after.as_deref(),
+                    ScanDirection::Forward,
+                    FETCH_LIMIT,
+                )?
+            } else {
+                self.source.timeline_list_by_time(
+                    &self.snapshot,
+                    &self.state.source_id,
+                    self.state.after.as_deref(),
+                    ScanDirection::Forward,
+                    FETCH_LIMIT,
+                )?
+            };
+            let Some(record) = page.records.into_iter().next() else {
+                self.exhausted = true;
+                return Ok(());
+            };
+            let next_after = page.next_cursor;
+            if next_after.is_none() {
+                self.exhausted = true;
+            }
+            if self.skip_remaining > 0 {
+                self.skip_remaining = self.skip_remaining.saturating_sub(1);
+                self.state.after = next_after;
+                continue;
+            }
+            if record.timestamp <= self.state.snapshot_upper_bound.unwrap_or(record.timestamp)
+                && matches_context(&record, context)?
+            {
+                self.head_after = next_after;
+                self.head = Some(record);
+                return Ok(());
+            }
+            self.state.after = next_after;
         }
-        if self.exhausted || self.head.is_some() {
-            return Ok(());
-        }
-        let page = if let Some(event_type) = context.event_type.as_deref() {
-            self.source.timeline_list_by_type(
-                &self.snapshot,
-                &self.state.source_id,
-                event_type,
-                self.state.after.as_deref(),
-                ScanDirection::Forward,
-                FETCH_LIMIT,
-            )?
-        } else {
-            self.source.timeline_list_by_time(
-                &self.snapshot,
-                &self.state.source_id,
-                self.state.after.as_deref(),
-                ScanDirection::Forward,
-                FETCH_LIMIT,
-            )?
-        };
-        let Some(record) = page.records.into_iter().next() else {
-            self.exhausted = true;
-            return Ok(());
-        };
-        self.state.after = page.next_cursor;
-        if self.state.after.is_none() {
-            self.exhausted = true;
-        }
-        if self.skip_remaining > 0 {
-            self.skip_remaining = self.skip_remaining.saturating_sub(1);
-            self.ensure_head(context)?;
-            return Ok(());
-        }
-        if record.timestamp <= self.state.snapshot_upper_bound.unwrap_or(record.timestamp)
-            && matches_context(&record, context)?
-        {
-            self.head = Some(record);
-        } else {
-            self.ensure_head(context)?;
-        }
-        Ok(())
+    }
+}
+
+/// Restored cursors carry the Fjall key of the last consumed record, so nothing
+/// has to be replayed; cursors without a saved key keep the legacy replay rule.
+pub(crate) fn restored_skip_remaining(consumed: u64, after_present: bool) -> u64 {
+    if after_present {
+        0
+    } else {
+        consumed
     }
 }
 

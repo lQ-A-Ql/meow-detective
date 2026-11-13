@@ -1,7 +1,7 @@
 mod error;
 mod export;
 mod facets;
-mod fjall;
+pub(crate) mod fjall;
 mod pagination;
 mod query;
 
