@@ -1,4 +1,5 @@
 use super::common::{EvidenceCategoryDef, EvidencePathPattern};
+use artifacts_core::ArtifactExtractor;
 
 pub(super) const SYSTEM_INFORMATION_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
     category: "SystemInformation",
@@ -58,10 +59,9 @@ pub(super) const PROGRAM_EXECUTION_CATEGORY_DEF: EvidenceCategoryDef = EvidenceC
     ],
     patterns: &[
         EvidencePathPattern::Suffix(".pf"),
-        EvidencePathPattern::Suffix("/windows/appcompat/programs/amcache.hve"),
         EvidencePathPattern::Contains("/windows/prefetch/"),
     ],
-    matcher: None,
+    matcher: Some(is_program_execution_path),
 };
 
 pub(super) const USER_ACTIVITY_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -77,7 +77,7 @@ pub(super) const USER_ACTIVITY_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCateg
         EvidencePathPattern::Contains("/recent/"),
         EvidencePathPattern::Contains("/shellbags"),
     ],
-    matcher: None,
+    matcher: Some(is_user_activity_path),
 };
 
 pub(super) const RECYCLE_BIN_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -90,7 +90,7 @@ pub(super) const RECYCLE_BIN_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategor
         EvidencePathPattern::Contains("/$recycle.bin/"),
         EvidencePathPattern::Contains("/recycler/"),
     ],
-    matcher: None,
+    matcher: Some(is_recycle_bin_path),
 };
 
 pub(super) const THUMBNAILS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -103,7 +103,7 @@ pub(super) const THUMBNAILS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategory
         EvidencePathPattern::Contains("/thumbcache_"),
         EvidencePathPattern::Contains("/iconcache_"),
     ],
-    matcher: None,
+    matcher: Some(is_thumbnail_path),
 };
 
 pub(super) const RESOURCE_USAGE_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -152,6 +152,23 @@ pub(super) const BROWSER_HISTORY_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCat
     ],
     matcher: Some(is_browser_history_path),
 };
+
+fn is_program_execution_path(path: &str) -> bool {
+    artifacts_windows::PrefetchExtractor.supports_path(path)
+}
+
+fn is_user_activity_path(path: &str) -> bool {
+    artifacts_windows::LnkExtractor.supports_path(path)
+        || artifacts_windows::JumpListExtractor.supports_path(path)
+}
+
+fn is_recycle_bin_path(path: &str) -> bool {
+    artifacts_windows::RecycleBinExtractor.supports_path(path)
+}
+
+fn is_thumbnail_path(path: &str) -> bool {
+    artifacts_windows::ThumbcacheExtractor.supports_path(path)
+}
 
 pub(crate) fn is_browser_history_path(normalized: &str) -> bool {
     if normalized.contains("/google/chrome/user data/")

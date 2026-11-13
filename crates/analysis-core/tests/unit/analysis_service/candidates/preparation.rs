@@ -108,3 +108,41 @@ fn discovery_reuses_catalog_fields_and_preparation_never_requeries_storage() {
     );
     assert!(matches!(result, Err(AnalysisServiceError::Cancelled)));
 }
+
+#[test]
+fn preparation_keeps_identical_paths_within_their_partition() {
+    let mut catalog = PreparationCatalog::default();
+    let mut first = record(1, "[P1]/Windows/System32/config/SYSTEM");
+    first.partition_index = Some(1);
+    let mut second = record(2, "[P2]/Windows/System32/config/SYSTEM");
+    second.partition_index = Some(2);
+    catalog.observe(&first).unwrap();
+    catalog.observe(&second).unwrap();
+    assert!(catalog
+        .suffix("source", "/windows/system32/config/system")
+        .is_none());
+    let scoped = catalog.for_scope("source", Some(1));
+    assert_eq!(
+        scoped
+            .suffix("source", "/windows/system32/config/system")
+            .unwrap()
+            .file_id
+            .0,
+        first.id
+    );
+    assert!(catalog
+        .for_scope("source", Some(3))
+        .suffix("source", "/windows/system32/config/system")
+        .is_none());
+}
+
+#[test]
+fn preparation_rejects_duplicate_paths_in_one_partition() {
+    let mut catalog = PreparationCatalog::default();
+    catalog.observe(&record(1, "/etc/timezone")).unwrap();
+    catalog.observe(&record(2, "/etc/timezone")).unwrap();
+    assert!(catalog
+        .for_scope("source", Some(17))
+        .shortest_suffix("/etc/timezone")
+        .is_none());
+}

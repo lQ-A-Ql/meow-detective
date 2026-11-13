@@ -37,11 +37,14 @@ use std::time::{Duration, Instant};
 
 const SCHEDULER_LOG_INTERVAL: Duration = Duration::from_secs(1);
 
+mod admission;
 mod browser_preparation;
 mod checkpoint;
 mod completion;
+mod output;
 mod panic_diagnostics;
 mod registry_input;
+mod result;
 mod routing;
 mod source_preparation;
 
@@ -52,6 +55,7 @@ use completion::{
 
 use checkpoint::checkpoint_key;
 use panic_diagnostics::PanicDiagnostics;
+use result::{CandidateCompletion, CandidateCompletionKind};
 pub(super) use routing::{capability_for_candidate, discovery_categories};
 
 pub(super) struct ExistingCheckpoints<'a> {
@@ -156,7 +160,7 @@ where
         work_items,
         policy,
         &mut coordinator,
-        source_preparation::estimated_input_weight,
+        |item| admission::estimated_input_weight(context, item),
         prepare_candidate,
         |prepared| {
             parse_candidate(
@@ -185,7 +189,7 @@ where
             }
         },
     )?;
-    panics.drain_into(coordinator.state);
+    panics.drain_into(coordinator.state, context)?;
     ensure_not_cancelled(context.cancel_token)
 }
 
@@ -221,27 +225,6 @@ enum PreparedCandidateInput {
     },
 }
 
-struct CandidateCompletion {
-    candidate: EvidenceCandidate,
-    capability: AnalysisCapability,
-    kind: CandidateCompletionKind,
-}
-
-enum CandidateCompletionKind {
-    Persisted {
-        observation: PersistedExtractionOutcome,
-        plugin_failures: Vec<super::PluginExtractFailure>,
-    },
-    Deferred(String),
-    Warning(String),
-    ReplayDiagnostic(Vec<String>),
-    ReplayClean,
-    ReplayComplete(CompleteAnalysisCandidateScan),
-    ExistingV1,
-    Failed(AnalysisServiceError),
-    Cancelled,
-}
-
 fn prepare_candidate<F>(
     coordinator: &mut CandidateCoordinator<'_, '_, '_, F>,
     item: CandidateWorkItem,
@@ -258,7 +241,27 @@ where
 
     if let Some(warning) = encrypted_candidate_warning(&candidate) {
         return Ok(PreparedWork::Ready(CandidateCompletion {
-            kind: CandidateCompletionKind::Warning(warning),
+            kind: CandidateCompletionKind::Blocked(warning),
+            candidate,
+            capability,
+        }));
+    }
+
+    if let Some(reason) = coordinator
+        .context
+        .preloads
+        .registry
+        .dependency_read_failure(&candidate)
+        .or_else(|| {
+            coordinator
+                .context
+                .preloads
+                .browser
+                .dependency_read_failure(&candidate)
+        })
+    {
+        return Ok(PreparedWork::Ready(CandidateCompletion {
+            kind: CandidateCompletionKind::Warning(reason.to_owned()),
             candidate,
             capability,
         }));
@@ -275,6 +278,7 @@ where
         .context
         .preloads
         .systemd
+        .filter(|_| candidate.category == LINUX_UMBRELLA_KEY)
         .and_then(|preload| preload.outcome(&candidate))
     {
         return Ok(PreparedWork::Parallel {
@@ -326,6 +330,8 @@ fn parse_candidate(
         capability,
         input,
     } = prepared;
+    let scoped_log_time = linux_log_time.for_candidate(&candidate);
+    let linux_log_time = &scoped_log_time;
     if ensure_not_cancelled(cancel_token).is_err() {
         return CandidateCompletion {
             candidate,
@@ -415,27 +421,15 @@ where
         CandidateCompletionKind::Persisted {
             observation,
             plugin_failures,
-        } => {
-            let result = CandidateProgressResult {
-                artifact_count: observation.artifact_count,
-                timeline_event_count: observation.timeline_event_count,
-                warning: !observation.warnings.is_empty(),
-                ..CandidateProgressResult::default()
-            };
-            if capability.key == PLUGIN_CAPABILITY_KEY {
-                coordinator.state.record_persisted_plugin_outcome(
-                    capability,
-                    observation,
-                    plugin_failures,
-                );
-            } else {
-                coordinator
-                    .state
-                    .record_persisted_outcome(capability, &candidate, observation);
-            }
-            result
-        }
+        } => output::apply_outcome(
+            coordinator,
+            &candidate,
+            capability,
+            observation,
+            plugin_failures,
+        )?,
         CandidateCompletionKind::Deferred(warning) => {
+            output::preserve_failed_candidate(coordinator.context, &candidate, capability)?;
             coordinator
                 .state
                 .record_retryable_failure(capability, warning);
@@ -445,11 +439,15 @@ where
             }
         }
         CandidateCompletionKind::Warning(warning) => {
+            output::preserve_failed_candidate(coordinator.context, &candidate, capability)?;
             coordinator.state.record_warning(capability, warning);
             CandidateProgressResult {
                 warning: true,
                 ..CandidateProgressResult::default()
             }
+        }
+        CandidateCompletionKind::Blocked(warning) => {
+            output::retire_blocked_candidate(coordinator, &candidate, capability, warning)?
         }
         CandidateCompletionKind::ReplayDiagnostic(warnings) => {
             coordinator.state.replay_diagnostic(capability, &warnings);

@@ -125,6 +125,40 @@ fn clean_checkpoint_replay_counts_the_scanned_candidate() {
 }
 
 #[test]
+fn failed_plugin_increments_retryable_count_without_creating_a_checkpoint() {
+    let source = native_source();
+    let capability = crate::analysis_service::capability::find_capability("PluginArtifacts")
+        .expect("plugin capability");
+    let mut state = ExtractionState::new(&[capability]);
+    state.record_persisted_plugin_outcome(
+        capability,
+        PersistedExtractionOutcome {
+            artifact_count: 0,
+            timeline_event_count: 0,
+            warnings: vec!["plugin input could not be decoded".into()],
+            output_digest: crate::analysis_service::extraction::output_digest::OutputDigestAccumulator::default().finish(),
+        },
+        vec![PluginExtractFailure {
+            plugin_id: "plugin.reader".into(),
+            source_path: "data.db".into(),
+            error: "input could not be decoded".into(),
+        }],
+    );
+    assert_eq!(state.retryable_failure_count, 1);
+    assert!(state.complete_scans.is_empty());
+    assert!(state.clean_scans.is_empty());
+    assert!(state.diagnostic_scans.is_empty());
+    assert_eq!(state.take_plugin_failures().len(), 1);
+    assert_eq!(
+        state
+            .into_dto(&source.connection, "2026-11-13T00:00:00Z".into())
+            .unwrap()
+            .status,
+        AnalysisParseStatusDto::Partial
+    );
+}
+
+#[test]
 fn output_digest_is_canonical_across_insertion_order() {
     let source = FileEntryId("web-1".to_string());
     let mut first = warning_artifact(&source);

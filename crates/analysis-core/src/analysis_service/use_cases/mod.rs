@@ -3,6 +3,7 @@ mod classification;
 mod completion;
 mod evidence;
 mod extraction;
+mod extraction_progress;
 mod generation_gc;
 mod queries;
 mod runtime;
@@ -17,6 +18,7 @@ pub use android::{
 pub use classification::{classify_source_files, get_file_classification_board};
 pub use evidence::get_source_evidence_summary;
 pub use extraction::run_source_analysis_extraction_execution_with_cancel;
+pub use extraction::run_source_analysis_extraction_execution_with_progress_and_cancel;
 pub use extraction::{run_import_source_extraction, ImportSourceExtractionRequest};
 pub use extraction::{
     run_source_analysis_extraction, run_source_analysis_extraction_with_cancel,

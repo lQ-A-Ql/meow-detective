@@ -49,6 +49,7 @@ impl PluginExtractor {
         };
         // Same serialization discipline as extraction (contract §3).
         let _serial = self
+            .shared
             .call_lock
             .lock()
             .map_err(|_| format!("plugin {} call lock poisoned", self.shared.id))?;

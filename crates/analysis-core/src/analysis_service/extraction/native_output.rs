@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use uuid::Uuid;
 mod replacement;
 use replacement::delete_replacements;
+mod candidate;
 
 pub struct StagedGeneration {
     pub name: String,
@@ -52,6 +53,7 @@ impl Drop for StagedGeneration {
 pub(super) struct StreamingGeneration {
     // Release the database before the staging guard removes its directory.
     store: SourceStore,
+    original: SourceStore,
     staged: StagedGeneration,
     source_id: String,
     verified_clone: persistence_source::fjall::VerifiedGenerationClone,
@@ -86,7 +88,15 @@ impl<'a> ConcurrentOutputBatch<'a> {
             self.artifacts.push(artifact);
             self.artifact_count = self.artifact_count.saturating_add(1);
         }
-        timeline::retain_analysis_events(&mut outcome.timeline_events);
+        outcome.timeline_events.retain(|event| {
+            timeline::TimelineEventKind::parse(&event.event_type).is_some_and(|kind| {
+                event
+                    .parser_id
+                    .as_deref()
+                    .is_some_and(|producer| producer.starts_with("windows.native."))
+                    || kind.is_analysis_event()
+            })
+        });
         for event in outcome.timeline_events {
             self.digest.record_timeline_event(&event);
             self.events.push(event);
@@ -247,10 +257,10 @@ impl StreamingGeneration {
 pub(super) fn begin_streaming(
     conn: &Connection,
     source_id: &str,
-    replacements: &[super::state::AnalysisOutputReplacement],
+    _replacements: &[super::state::AnalysisOutputReplacement],
     cancel_token: &AtomicBool,
     progress: impl FnMut(SourceCloneProgress),
-    deletion_progress: impl FnMut(u64),
+    mut deletion_progress: impl FnMut(u64),
 ) -> Result<StreamingGeneration, AnalysisServiceError> {
     crate::analysis_service::cancellation::ensure_not_cancelled(cancel_token)?;
     let owner = persistence_source::detail::source_id(conn)?
@@ -278,16 +288,11 @@ pub(super) fn begin_streaming(
         )
         .map_err(clone_error)?;
     crate::analysis_service::cancellation::ensure_not_cancelled(cancel_token)?;
-    delete_replacements(
-        &store,
-        source_id,
-        replacements,
-        cancel_token,
-        deletion_progress,
-    )?;
+    deletion_progress(0);
     Ok(StreamingGeneration {
         staged,
         store,
+        original: source,
         source_id: source_id.to_owned(),
         verified_clone,
         wrote_artifacts: AtomicBool::new(false),
@@ -352,6 +357,7 @@ fn replace_records(
         store,
         source_id,
         replacements,
+        None,
         &AtomicBool::new(false),
         |_| {},
     )?;

@@ -14,6 +14,40 @@ pub(crate) struct PreparationCatalog {
 }
 
 impl PreparationCatalog {
+    pub(crate) fn load_from_source(
+        connection: &rusqlite::Connection,
+        cancel: &std::sync::atomic::AtomicBool,
+        mut progress: impl FnMut(u64),
+    ) -> Result<Self, AnalysisServiceError> {
+        let mut catalog = Self::default();
+        super::common::catalog::visit_catalog_records_from_fjall(connection, |record| {
+            crate::analysis_service::cancellation::ensure_not_cancelled(cancel)?;
+            catalog.observe(&record)?;
+            if catalog.scanned_records.is_multiple_of(512) {
+                progress(catalog.scanned_records);
+            }
+            Ok(())
+        })?;
+        progress(catalog.scanned_records);
+        Ok(catalog)
+    }
+
+    pub(crate) fn for_scope(&self, source: &str, partition: Option<usize>) -> Self {
+        Self {
+            records: self
+                .records
+                .iter()
+                .filter(|record| {
+                    record.data_source_id == source
+                        && record.partition_index.map(|value| value as usize) == partition
+                })
+                .cloned()
+                .collect(),
+            bytes: self.bytes,
+            scanned_records: self.scanned_records,
+        }
+    }
+
     pub(crate) fn observe(&mut self, record: &FileEntryRecord) -> Result<(), AnalysisServiceError> {
         self.scanned_records = self.scanned_records.saturating_add(1);
         let path = normalize_evidence_path(&record.path);
@@ -47,27 +81,22 @@ impl PreparationCatalog {
 
     pub(crate) fn suffix(&self, source: &str, suffix: &str) -> Option<EvidenceCandidate> {
         let suffix = normalize_evidence_path(suffix);
-        self.files(source)
-            .filter(|record| normalize_evidence_path(&record.path).ends_with(&suffix))
-            .min_by(|left, right| left.id.cmp(&right.id))
-            .map(locator)
+        let mut matching = self
+            .files(source)
+            .filter(|record| normalize_evidence_path(&record.path).ends_with(&suffix));
+        let record = matching.next()?;
+        matching.next().is_none().then(|| locator(record))
     }
 
     pub(crate) fn shortest_suffix(&self, suffix: &str) -> Option<EvidenceCandidate> {
         let suffix = normalize_evidence_path(suffix);
-        self.records
-            .iter()
-            .filter(|record| {
-                record.entry_type == CatalogEntryType::File
-                    && normalize_evidence_path(&record.path).ends_with(&suffix)
-            })
-            .min_by(|left, right| {
-                left.path
-                    .len()
-                    .cmp(&right.path.len())
-                    .then_with(|| left.path.cmp(&right.path))
-            })
-            .map(locator)
+        let mut matching = self.records.iter().filter(|record| {
+            record.entry_type == CatalogEntryType::File
+                && !record.deleted
+                && normalize_evidence_path(&record.path).ends_with(&suffix)
+        });
+        let record = matching.next()?;
+        matching.next().is_none().then(|| locator(record))
     }
 
     pub(crate) fn matching(&self, source: &str, marker: &str) -> Vec<EvidenceCandidate> {
@@ -107,6 +136,12 @@ fn relevant(path: &str, name: &str) -> bool {
             "/windows/system32/config/system",
             "/windows/system32/config/sam",
             "/windows/system32/config/security",
+            "/windows/system32/config/system.log1",
+            "/windows/system32/config/system.log2",
+            "/windows/system32/config/sam.log1",
+            "/windows/system32/config/sam.log2",
+            "/windows/system32/config/security.log1",
+            "/windows/system32/config/security.log2",
         ]
         .iter()
         .any(|suffix| path.ends_with(suffix))

@@ -33,6 +33,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 use transport::dto::{AnalysisExtractionRunDto, AnalysisWorkProgressDto, AnalysisWorkStageDto};
 
+mod dependency_identity;
 mod discovery;
 mod empty;
 mod finalization;
@@ -279,6 +280,13 @@ fn extract_discovered_candidates(
     let checkpoint_scans = load_checkpoint_scans(conn, progress_reporter)?;
     let checkpoints = checkpoint_scans.existing();
     let mut guarded_file_reader = guarded_candidate_reader(file_reader);
+    dependency_identity::annotate(
+        &mut candidates,
+        &preparation_catalog,
+        browser_password,
+        cancel_token,
+        &mut guarded_file_reader,
+    )?;
     let preloads = prepare_run_preloads(
         conn,
         platform,
@@ -414,7 +422,11 @@ fn prepare_run_preloads(
         true,
     );
     let started = Instant::now();
-    let systemd = if platform == DataSourcePlatform::Linux {
+    let systemd = if platform == DataSourcePlatform::Linux
+        && selected
+            .iter()
+            .any(|capability| capability.key == "LinuxSystemConfig")
+    {
         super::systemd_preload::prepare(catalog, candidates, cancel_token, file_reader)?
     } else {
         super::systemd_preload::SystemdPreload::default()

@@ -21,6 +21,9 @@ use std::collections::BTreeMap;
 
 const EVTX_EXTRACTOR_ID: &str = "evtx.structured";
 
+mod stream;
+pub(super) use stream::persist_reader;
+
 pub fn extract_evtx_candidate(
     candidate: &EvidenceCandidate,
     bytes: &[u8],

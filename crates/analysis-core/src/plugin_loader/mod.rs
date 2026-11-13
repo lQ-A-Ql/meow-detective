@@ -7,6 +7,7 @@
 //! (`extractor`), and the optional self-describing action channel (`action`).
 
 mod action;
+mod call_gate;
 mod directory;
 mod extractor;
 mod library;

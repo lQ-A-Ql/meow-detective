@@ -28,6 +28,7 @@ pub use candidates::{
 };
 pub use classification::{classify_files_by_magic, classify_files_by_metadata};
 pub use error::AnalysisServiceError;
+pub use extraction::run_analysis_extraction_execution_with_cancel;
 pub use extraction::stage_native_records;
 pub use extraction::warm_linux_artifact_summary;
 pub use extraction::AnalysisExtractionExecution;
@@ -48,6 +49,7 @@ pub use summary::generate_analysis_summary;
 pub use system_info::extract_system_info_for_case;
 mod system_info_boot;
 pub use use_cases::run_source_analysis_extraction_execution_with_cancel;
+pub use use_cases::run_source_analysis_extraction_execution_with_progress_and_cancel;
 pub use use_cases::{
     classify_source_files, generate_source_analysis_summary, get_file_classification_board,
     get_source_android_device_info, get_source_android_package_summary, get_source_browser_summary,

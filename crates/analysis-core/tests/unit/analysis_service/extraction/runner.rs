@@ -133,6 +133,7 @@ fn persist_outcome_for_test(
         |_| {},
     )?;
     let observation = output.persist_outcome(outcome)?;
+    output.complete_replacements(&replacements, &AtomicBool::new(false))?;
     let mut state = ExtractionState::new(&[capability]);
     state.record_persisted_outcome(capability, candidate, observation);
     output.rebuild_derived_metrics(&AtomicBool::new(false), |_| {})?;
@@ -170,6 +171,7 @@ fn persist_plugin_outcome_for_test(
         |_| {},
     )?;
     let observation = output.persist_outcome(outcome)?;
+    output.complete_replacements(&replacements, &AtomicBool::new(false))?;
     let mut state = ExtractionState::new(&[capability]);
     state.record_persisted_plugin_outcome(capability, observation, Vec::new());
     output.rebuild_derived_metrics(&AtomicBool::new(false), |_| {})?;
@@ -421,6 +423,198 @@ fn file_entry(id: &str, path: &str, size: u64, encrypted: bool) -> FileEntry {
         changed_at: None,
         hash_sha256: None,
     }
+}
+
+#[test]
+#[cfg(windows)]
+fn unreadable_changed_candidate_preserves_last_published_records() {
+    use std::fs::{File, OpenOptions};
+    use std::io::Read;
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let connection = source_connection();
+    let path = connection._root.path().join("inbox.mbox");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/fixtures/public-small/email/simple.mbox");
+    std::fs::copy(fixture, &path).expect("copy the public mbox fixture");
+    let mut file = file_entry(
+        "mail",
+        "mail/inbox.mbox",
+        path.metadata().unwrap().len(),
+        false,
+    );
+    insert_file(&connection, file.clone());
+    let first = run_analysis_extraction(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["Email"],
+        |_| File::open(&path).map(|file| Box::new(file) as Box<dyn Read>),
+    )
+    .expect("extract the readable mbox");
+    assert!(first.artifact_count > 0);
+    let before = native_artifact_ids(&connection);
+
+    let modified = std::time::SystemTime::now();
+    File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(modified)
+        .unwrap();
+    file.modified_at = Some(modified.into());
+    insert_file(&connection, file);
+    let _exclusive = OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .open(&path)
+        .unwrap();
+    let second = run_analysis_extraction(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["Email"],
+        |_| File::open(&path).map(|file| Box::new(file) as Box<dyn Read>),
+    )
+    .expect("report the read failure without removing the prior result");
+    assert!(!second.warnings.is_empty());
+    assert_eq!(native_artifact_ids(&connection), before);
+}
+
+#[test]
+fn plugin_only_preparation_uses_partition_timezones_without_systemd_parsing() {
+    use std::fs::File;
+    let connection = source_connection();
+    let inputs = [
+        (
+            "zone-one",
+            "[P1]/etc/timezone",
+            1,
+            b"Asia/Shanghai\n".as_slice(),
+        ),
+        ("zone-two", "[P2]/etc/timezone", 2, b"UTC\n".as_slice()),
+        (
+            "unit",
+            "[P1]/etc/systemd/system/demo.service",
+            1,
+            b"[Service]\nExecStart=/usr/bin/demo\n".as_slice(),
+        ),
+    ];
+    let mut paths = std::collections::HashMap::new();
+    for (id, path, partition, bytes) in inputs {
+        let input_path = connection._root.path().join(id);
+        std::fs::write(&input_path, bytes).unwrap();
+        paths.insert(id.to_string(), input_path);
+        insert_partitioned_file(
+            &connection,
+            file_entry(id, path, bytes.len() as u64, false),
+            partition,
+        );
+    }
+    let catalog =
+        PreparationCatalog::load_from_source(&connection, &AtomicBool::new(false), |_| {}).unwrap();
+    assert_eq!(catalog.scanned_records(), 3);
+    let selected = analyzer_for(DataSourcePlatform::Linux)
+        .unwrap()
+        .select_capabilities(&["PluginArtifacts"])
+        .unwrap();
+    let candidate = EvidenceCandidate {
+        file_id: FileEntryId("unit".into()),
+        data_source_id: "source-linux".into(),
+        partition_index: Some(1),
+        path: "[P1]/etc/systemd/system/demo.service".into(),
+        size: paths["unit"].metadata().unwrap().len(),
+        encrypted: false,
+        content_identity: "unit-input".into(),
+        companions: Vec::new(),
+        evidence_kind: "plugin".into(),
+        parser: "plugin.unit".into(),
+        category: "PluginArtifacts".into(),
+        modified_at: None,
+    };
+    let mut updates = |_| {};
+    let mut progress =
+        ExtractionProgressReporter::new(DataSourcePlatform::Linux, &selected, &mut updates);
+    let scans = load_checkpoint_scans(&connection, &mut progress).unwrap();
+    let checkpoints = scans.existing();
+    let mut reads = Vec::new();
+    let mut reader = |candidate: &EvidenceCandidate, _| {
+        reads.push(candidate.file_id.0.clone());
+        File::open(&paths[&candidate.file_id.0])
+            .map(|file| CandidateSource::Reader(Box::new(file)))
+            .map_err(|error| error.to_string())
+    };
+    let preloads = prepare_run_preloads(
+        &connection,
+        DataSourcePlatform::Linux,
+        std::slice::from_ref(&candidate),
+        &selected,
+        &checkpoints,
+        &catalog,
+        &mut progress,
+        &AtomicBool::new(false),
+        None,
+        &mut reader,
+    )
+    .unwrap();
+    assert!(preloads.systemd.identities.is_empty());
+    assert!(reads.iter().all(|id| id == "zone-one" || id == "zone-two"));
+    assert_eq!(
+        preloads.linux_log_time.for_candidate(&candidate).tz_label(),
+        "Asia/Shanghai"
+    );
+    let mut second_partition = candidate;
+    second_partition.partition_index = Some(2);
+    assert_eq!(
+        preloads
+            .linux_log_time
+            .for_candidate(&second_partition)
+            .tz_label(),
+        "UTC"
+    );
+}
+
+#[test]
+fn empty_plugin_run_preserves_native_linux_catalog_metadata() {
+    use persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo;
+    let connection = source_connection();
+    let previous = LinuxCatalogMetadata {
+        kernel_image_versions: vec!["6.1.0".into()],
+        ..Default::default()
+    };
+    let previous = serde_json::to_string(&previous).unwrap();
+    let key = crate::analysis_service::candidates::LINUX_CATALOG_METADATA_KEY;
+    SourceMetaRepo::new(&connection)
+        .write(key, &previous)
+        .unwrap();
+    let mut updates = |_| {};
+    let mut reads = 0;
+    let path = connection._root.path().join("input");
+    std::fs::write(&path, b"input").unwrap();
+    run_analysis_extraction_with_plugin_loader(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Linux,
+        &["PluginArtifacts"],
+        &AtomicBool::new(false),
+        &mut updates,
+        |_, _| {
+            reads += 1;
+            std::fs::File::open(&path)
+                .map(|file| CandidateSource::Reader(Box::new(file)))
+                .map_err(|error| error.to_string())
+        },
+        &PluginLoadReport::default,
+    )
+    .unwrap();
+    assert_eq!(reads, 0);
+    assert_eq!(
+        SourceMetaRepo::new(&connection)
+            .read(key)
+            .unwrap()
+            .as_deref(),
+        Some(previous.as_str())
+    );
 }
 
 #[test]

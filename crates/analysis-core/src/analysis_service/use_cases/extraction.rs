@@ -23,6 +23,7 @@ use transport::dto::{
     AnalysisWorkStageDto,
 };
 
+use super::extraction_progress::analysis_progress_dto;
 use super::runtime::AnalysisSourceReadRuntime;
 
 pub struct AnalysisExtractionProgressContext<'a> {
@@ -52,34 +53,6 @@ struct AnalysisExecutionControl<'a> {
     source_runtime: &'a AnalysisSourceReadRuntime,
     progress: &'a mut dyn FnMut(ExtractionProgressUpdate),
     browser_password: Option<&'a str>,
-}
-
-fn analysis_progress_dto(
-    case_id: &CaseId,
-    data_source_id: &DataSourceId,
-    run_id: &str,
-    update: ExtractionProgressUpdate,
-) -> AnalysisExtractionProgressDto {
-    AnalysisExtractionProgressDto {
-        run_id: run_id.to_string(),
-        case_id: case_id.0.clone(),
-        data_source_id: data_source_id.0.clone(),
-        category: update.category,
-        label: update.label,
-        phase: update.phase,
-        total_candidates: update.total_candidates,
-        processed_candidates: update.processed_candidates,
-        structured_candidates: update.structured_candidates,
-        unsupported_candidates: update.unsupported_candidates,
-        text_fallback_candidates: update.text_fallback_candidates,
-        warning_candidates: update.warning_candidates,
-        checkpoint_hit_count: update.checkpoint_hit_count,
-        artifact_count: update.artifact_count,
-        timeline_event_count: update.timeline_event_count,
-        current_path: update.current_path,
-        detail: update.detail,
-        work: update.work,
-    }
 }
 
 pub fn run_source_analysis_extraction(
@@ -135,7 +108,7 @@ pub fn run_source_analysis_extraction_with_progress(
         data_source_id,
         categories,
         context,
-        &AtomicBool::new(false),
+        Arc::new(AtomicBool::new(false)),
         progress,
     )
 }
@@ -148,13 +121,34 @@ pub fn run_source_analysis_extraction_with_progress_and_cancel(
     data_source_id: &DataSourceId,
     categories: &[&str],
     context: AnalysisExtractionProgressContext<'_>,
-    cancel_token: &AtomicBool,
-    mut progress: impl FnMut(AnalysisExtractionProgressDto),
+    cancel_token: Arc<AtomicBool>,
+    progress: impl FnMut(AnalysisExtractionProgressDto),
 ) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
-    super::super::cancellation::ensure_not_cancelled(cancel_token)?;
-    let cancel_token = Arc::new(AtomicBool::new(
-        cancel_token.load(std::sync::atomic::Ordering::Relaxed),
-    ));
+    run_source_analysis_extraction_execution_with_progress_and_cancel(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        categories,
+        context,
+        cancel_token,
+        progress,
+    )
+    .map(|execution| execution.dto)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_source_analysis_extraction_execution_with_progress_and_cancel(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+    categories: &[&str],
+    context: AnalysisExtractionProgressContext<'_>,
+    cancel_token: Arc<AtomicBool>,
+    mut progress: impl FnMut(AnalysisExtractionProgressDto),
+) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
+    super::super::cancellation::ensure_not_cancelled(&cancel_token)?;
     let mut emit = |update: ExtractionProgressUpdate| {
         progress(analysis_progress_dto(
             case_id,
@@ -164,7 +158,7 @@ pub fn run_source_analysis_extraction_with_progress_and_cancel(
         ));
     };
     let control = AnalysisExecutionControl {
-        cancel_token: Arc::clone(&cancel_token),
+        cancel_token,
         source_runtime: context.source_runtime,
         progress: &mut emit,
         browser_password: context.browser_password.as_deref().map(String::as_str),
@@ -177,10 +171,6 @@ pub fn run_source_analysis_extraction_with_progress_and_cancel(
         categories,
         control,
     )
-    .and_then(|execution| {
-        super::super::cancellation::ensure_not_cancelled(&cancel_token)?;
-        Ok(execution.dto)
-    })
 }
 
 pub fn run_source_analysis_extraction_execution_with_cancel(
@@ -223,7 +213,12 @@ fn admit_extraction(
             },
             Some(&control.cancel_token),
         )
-        .map_err(|e| AnalysisServiceError::Io(e.into_io()))?;
+        .map_err(|error| match error {
+            source_kernel::resource_budget::ResourceError::Cancelled => {
+                AnalysisServiceError::Cancelled
+            }
+            error => AnalysisServiceError::Io(error.into_io()),
+        })?;
     Ok(budget)
 }
 

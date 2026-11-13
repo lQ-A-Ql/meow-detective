@@ -13,6 +13,7 @@ use std::sync::atomic::AtomicBool;
 
 mod artifact_batch;
 mod indexing;
+mod staging;
 mod type_counts;
 use indexing::{created_index_key, family_created_index_key, CREATED_INDEX, FAMILY_CREATED_INDEX};
 pub(super) use indexing::{index_deletes, index_writes};

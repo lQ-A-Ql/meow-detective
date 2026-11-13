@@ -189,6 +189,29 @@ fn replacement_index_rejects_artifacts_from_other_data_sources() {
 }
 
 #[test]
+fn native_replacement_matches_only_its_unsigned_legacy_family() {
+    let scopes = [replacement(
+        "object",
+        AnalysisOutputProducer::Prefix("windows.native.activity."),
+    )];
+    let index = ReplacementIndex::new(&scopes);
+    let mut legacy = artifact_record(Some("object"), DATA_SOURCE_ID, "");
+    legacy.artifact_type = "LNK".into();
+    legacy.attrs = serde_json::json!({});
+    assert!(index.matches_artifact(&legacy, DATA_SOURCE_ID));
+    legacy.artifact_type = "JumpList".into();
+    assert!(index.matches_artifact(&legacy, DATA_SOURCE_ID));
+    legacy.artifact_type = "Prefetch".into();
+    assert!(!index.matches_artifact(&legacy, DATA_SOURCE_ID));
+    legacy.artifact_type = "LNK".into();
+    legacy.attrs = serde_json::json!({ "extractorId": "other.parser" });
+    assert!(!index.matches_artifact(&legacy, DATA_SOURCE_ID));
+    legacy.attrs = serde_json::json!({});
+    legacy.source_object_id = Some("other-object".into());
+    assert!(!index.matches_artifact(&legacy, DATA_SOURCE_ID));
+}
+
+#[test]
 fn replacement_index_treats_missing_source_object_ids_as_empty() {
     let empty = [replacement("", AnalysisOutputProducer::Prefix("registry."))];
     let index = ReplacementIndex::new(&empty);

@@ -55,6 +55,71 @@ fn bounded_scheduler_runs_work_in_parallel_and_applies_in_input_order() {
 }
 
 #[test]
+fn oversized_estimate_is_rejected_before_preparation() {
+    let preparations = AtomicUsize::new(0);
+    let result = run_bounded_ordered(
+        [129usize],
+        ExtractionSchedulingPolicy {
+            worker_count: 1,
+            max_in_flight_items: 1,
+            max_in_flight_bytes: 128,
+        },
+        &mut (),
+        |size| *size,
+        |_, size| {
+            preparations.fetch_add(1, Ordering::Relaxed);
+            Ok(PreparedWork::Parallel {
+                input: size,
+                weight_bytes: size,
+            })
+        },
+        |size| size,
+        |_, _| Ok(()),
+        |_, message| Some(message),
+        |_| {},
+    );
+    assert!(result
+        .unwrap_err()
+        .contains("exceeding the 128 byte input budget"));
+    assert_eq!(preparations.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn oversized_work_can_be_skipped_without_reordering_remaining_inputs() {
+    let mut applied = Vec::new();
+    let skipped = Mutex::new(Vec::new());
+    run_bounded_ordered(
+        [1usize, 129, 2],
+        ExtractionSchedulingPolicy {
+            worker_count: 1,
+            max_in_flight_items: 1,
+            max_in_flight_bytes: 128,
+        },
+        &mut applied,
+        |size| *size,
+        |_, size| {
+            Ok::<_, String>(PreparedWork::Parallel {
+                input: size,
+                weight_bytes: size,
+            })
+        },
+        |size| size,
+        |applied, size| {
+            applied.push(size);
+            Ok(())
+        },
+        |sequence, _| {
+            skipped.lock().unwrap().push(sequence);
+            None
+        },
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(applied, [1, 2]);
+    assert_eq!(*skipped.lock().unwrap(), [1]);
+}
+
+#[test]
 fn scheduling_policy_throttles_workers_at_the_memory_soft_limit() {
     let cpu_bound = source_kernel::resource_budget::default_cpu_budget().min(6);
     let normal = ExtractionSchedulingPolicy::for_runtime(6, 384, 1536);

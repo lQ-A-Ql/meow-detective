@@ -30,6 +30,8 @@ struct PluginFileRecord {
     modified_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+type CompanionPath = (String, Option<usize>, String);
+
 /// Discover file entries matched by at least one loaded plugin's declared
 /// path patterns. Returns an empty vector when no plugins are loaded, which
 /// keeps the `plugins.enabled=false` / no-plugin path zero-overhead.
@@ -42,11 +44,7 @@ pub fn discover_plugin_candidates(
         return Ok(Vec::new());
     }
     let records = load_plugin_files(conn, cancel_token)?;
-    let by_path = records
-        .iter()
-        .enumerate()
-        .map(|(index, record)| (normalize_evidence_path(&record.path).to_lowercase(), index))
-        .collect::<HashMap<_, _>>();
+    let by_path = companion_index(&records);
     let mut candidates = Vec::new();
     for record in &records {
         ensure_not_cancelled(cancel_token)?;
@@ -62,7 +60,7 @@ pub fn discover_plugin_candidates(
             .map(|plugin| plugin.id().to_string())
             .collect::<Vec<_>>()
             .join(",");
-        let companions = companion_records(record, &records, &by_path);
+        let companions = companion_records(record, &records, &by_path)?;
         let content_identity = companions.iter().fold(
             format!("plugin-candidate-v2:{}", record.content_identity),
             |mut identity, companion| {
@@ -90,6 +88,22 @@ pub fn discover_plugin_candidates(
     Ok(candidates)
 }
 
+fn companion_index(records: &[PluginFileRecord]) -> HashMap<CompanionPath, Option<usize>> {
+    let mut by_path = HashMap::new();
+    for (index, record) in records.iter().enumerate() {
+        let key = (
+            record.data_source_id.clone(),
+            record.partition_index,
+            normalize_evidence_path(&record.path),
+        );
+        by_path
+            .entry(key)
+            .and_modify(|value| *value = None)
+            .or_insert(Some(index));
+    }
+    by_path
+}
+
 fn load_plugin_files(
     conn: &Connection,
     cancel_token: &AtomicBool,
@@ -99,7 +113,7 @@ fn load_plugin_files(
     let repository = persistence_source::repositories::file_repo::FileRepo::new(conn);
     for entry in entries {
         ensure_not_cancelled(cancel_token)?;
-        if !entry.is_file() {
+        if !entry.is_file() || entry.deleted {
             continue;
         }
         let partition_index = repository.find_partition_index_by_id(&entry.id)?;
@@ -141,27 +155,33 @@ fn load_plugin_files(
 fn companion_records(
     primary: &PluginFileRecord,
     records: &[PluginFileRecord],
-    by_path: &HashMap<String, usize>,
-) -> Vec<EvidenceCompanion> {
+    by_path: &HashMap<CompanionPath, Option<usize>>,
+) -> Result<Vec<EvidenceCompanion>, AnalysisServiceError> {
     let normalized = normalize_evidence_path(&primary.path);
     if !normalized.to_lowercase().ends_with(".db") {
-        return Vec::new();
+        return Ok(Vec::new());
     }
-    let wal_path = format!("{normalized}-wal").to_lowercase();
-    let Some(companion) = by_path
-        .get(&wal_path)
-        .and_then(|index| records.get(*index))
-        .filter(|record| record.data_source_id == primary.data_source_id)
-    else {
-        return Vec::new();
+    let key = (
+        primary.data_source_id.clone(),
+        primary.partition_index,
+        format!("{normalized}-wal"),
+    );
+    let Some(index) = by_path.get(&key) else {
+        return Ok(Vec::new());
     };
-    vec![EvidenceCompanion {
+    let index = index.ok_or_else(|| {
+        AnalysisServiceError::InvalidInput(
+            "plugin companion path is ambiguous within its partition".into(),
+        )
+    })?;
+    let companion = &records[index];
+    Ok(vec![EvidenceCompanion {
         file_id: FileEntryId(companion.file_id.clone()),
         path: companion.path.clone(),
         size: companion.size,
         encrypted: companion.encrypted,
         content_identity: companion.content_identity.clone(),
-    }]
+    }])
 }
 
 #[cfg(test)]

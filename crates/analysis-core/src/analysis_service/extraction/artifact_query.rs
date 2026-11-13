@@ -17,6 +17,12 @@ pub(super) struct AnalysisArtifactRow {
 }
 
 const ANALYSIS_FAMILIES: &[&str] = &[
+    "Prefetch",
+    "LNK",
+    "JumpList",
+    "RecycleBin",
+    "Thumbcache",
+    "SRU",
     "RegistryValue",
     "RegistrySamUser",
     "RegistryUserAssist",

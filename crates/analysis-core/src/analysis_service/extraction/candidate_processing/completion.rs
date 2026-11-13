@@ -9,6 +9,9 @@ pub(super) fn extract_bytes(
     match candidate.category.as_str() {
         "BrowserHistory" => extract_browser_candidate(candidate, bytes, browser_preload),
         "Email" => extract_email_candidate(candidate, bytes),
+        "ProgramExecution" | "UserActivity" | "RecycleBin" | "Thumbnails" | "ResourceUsage" => {
+            super::super::windows_native::extract(candidate, bytes)
+        }
         LINUX_UMBRELLA_KEY => extract_linux_candidate_with_time(candidate, bytes, linux_log_time),
         _ => ExtractionOutcome::default(),
     }

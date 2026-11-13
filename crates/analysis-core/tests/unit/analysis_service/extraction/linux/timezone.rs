@@ -212,3 +212,76 @@ fn dst_zone_applies_historical_offsets() {
         .expect("fold timestamp");
     assert_eq!(fold.to_rfc3339(), "2024-11-03T05:30:00+00:00");
 }
+
+#[test]
+fn timezone_files_are_resolved_for_each_partition() {
+    use persistence_source::fjall::{CatalogEntryType, FileEntryRecord};
+    let workspace =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.codex-tmp/timezone-tests");
+    std::fs::create_dir_all(&workspace).unwrap();
+    let root = tempfile::tempdir_in(workspace).unwrap();
+    std::fs::write(root.path().join("zone-one"), b"UTC\n").unwrap();
+    std::fs::write(root.path().join("zone-two"), b"Asia/Shanghai\n").unwrap();
+    let mut catalog = PreparationCatalog::default();
+    for (id, partition, size) in [("zone-one", 1, 4), ("zone-two", 2, 14)] {
+        catalog
+            .observe(&FileEntryRecord {
+                id: id.into(),
+                parent_id: None,
+                data_source_id: "source".into(),
+                path: format!("[P{partition}]/etc/timezone"),
+                name: "timezone".into(),
+                entry_type: CatalogEntryType::File,
+                size: Some(size),
+                ext: None,
+                deleted: false,
+                hidden: false,
+                system: false,
+                read_only: false,
+                archive: false,
+                encrypted: Some(false),
+                created: None,
+                modified: None,
+                accessed: None,
+                changed: None,
+                hash_sha256: None,
+                partition_index: Some(partition),
+                unix_mode: None,
+            })
+            .unwrap();
+    }
+    let (context, _) =
+        resolve_linux_log_time(&catalog, &AtomicBool::new(false), &mut |candidate, _| {
+            std::fs::File::open(root.path().join(&candidate.file_id.0))
+                .map(|reader| CandidateSource::Reader(Box::new(reader)))
+                .map_err(|error| error.to_string())
+        });
+    for (partition, expected) in [
+        (1, "2024-01-15T10:30:00+00:00"),
+        (2, "2024-01-15T02:30:00+00:00"),
+    ] {
+        let candidate = EvidenceCandidate {
+            file_id: FileEntryId("log".into()),
+            data_source_id: "source".into(),
+            partition_index: Some(partition),
+            path: "/var/log/dpkg.log".into(),
+            size: 1,
+            encrypted: false,
+            content_identity: "log".into(),
+            companions: Vec::new(),
+            evidence_kind: "log".into(),
+            parser: "linux.apt".into(),
+            category: "LinuxArtifacts".into(),
+            modified_at: None,
+        };
+        assert_eq!(
+            context
+                .for_candidate(&candidate)
+                .clock()
+                .local_to_utc(naive(2024, 1, 15, 10, 30, 0))
+                .unwrap()
+                .to_rfc3339(),
+            expected
+        );
+    }
+}

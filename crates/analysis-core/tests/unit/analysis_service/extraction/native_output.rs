@@ -326,6 +326,15 @@ fn replacement_reads_only_selected_source_objects_and_preserves_published_data()
         },
     )
     .unwrap();
+    generation
+        .complete_replacements(
+            &[AnalysisOutputReplacement {
+                source_object_id: "old".into(),
+                producer: AnalysisOutputProducer::Prefix("linux.web."),
+            }],
+            &AtomicBool::new(false),
+        )
+        .unwrap();
     let counters = persistence_source::fjall::instrumentation::snapshot();
     assert!(
         counters.scan_entries < 20,
@@ -343,10 +352,10 @@ fn replacement_reads_only_selected_source_objects_and_preserves_published_data()
 }
 
 #[test]
-fn cancellation_during_targeted_replacement_discards_the_new_generation() {
+fn cancellation_before_candidate_commit_discards_the_new_generation() {
     let (root, connection, source) = setup();
     let cancel = AtomicBool::new(false);
-    let result = super::begin_streaming(
+    let generation = super::begin_streaming(
         &connection,
         "source-1",
         &[AnalysisOutputReplacement {
@@ -355,20 +364,196 @@ fn cancellation_during_targeted_replacement_discards_the_new_generation() {
         }],
         &cancel,
         |_| {},
-        |processed| {
-            if processed > 0 {
-                cancel.store(true, Ordering::Release);
-            }
-        },
+        |_| {},
+    )
+    .unwrap();
+    generation
+        .write_batch(&[artifact("new", "old", "linux.web.new")], &[])
+        .unwrap();
+    cancel.store(true, Ordering::Release);
+    let result = generation.complete_replacements(
+        &[AnalysisOutputReplacement {
+            source_object_id: "old".into(),
+            producer: AnalysisOutputProducer::Prefix("linux.web."),
+        }],
+        &cancel,
     );
     assert!(matches!(
         result,
         Err(crate::analysis_service::AnalysisServiceError::Cancelled)
     ));
+    drop(generation);
     assert_no_build_generation(root.path());
     let published = ArtifactRecordStore::from_source_store(source);
     assert!(published
         .get(&published.read_snapshot(), "source-1", "old")
         .unwrap()
         .is_some());
+}
+
+#[test]
+fn candidate_output_retains_original_records_until_successful_completion() {
+    let (_root, connection, source) = setup();
+    let scope = AnalysisOutputReplacement {
+        source_object_id: "old".into(),
+        producer: AnalysisOutputProducer::Prefix("linux.web."),
+    };
+    let cancel = AtomicBool::new(false);
+    let generation = super::begin_streaming(
+        &connection,
+        "source-1",
+        std::slice::from_ref(&scope),
+        &cancel,
+        |_| {},
+        |_| {},
+    )
+    .unwrap();
+    let current = ArtifactRecordStore::from_source_store(generation.store.clone());
+    assert!(current
+        .get(&current.read_snapshot(), "source-1", "old")
+        .unwrap()
+        .is_some());
+    generation
+        .write_batch(&[artifact("new", "old", "linux.web.new")], &[])
+        .unwrap();
+    generation.complete_replacements(&[scope], &cancel).unwrap();
+    assert!(current
+        .get(&current.read_snapshot(), "source-1", "old")
+        .unwrap()
+        .is_none());
+    assert!(current
+        .get(&current.read_snapshot(), "source-1", "new")
+        .unwrap()
+        .is_some());
+    let published = ArtifactRecordStore::from_source_store(source);
+    assert!(published
+        .get(&published.read_snapshot(), "source-1", "old")
+        .unwrap()
+        .is_some());
+}
+
+#[test]
+fn failed_streamed_candidate_removes_partial_outputs_and_restores_original_records() {
+    let (_root, connection, _source) = setup();
+    let scope = AnalysisOutputReplacement {
+        source_object_id: "old".into(),
+        producer: AnalysisOutputProducer::Prefix("linux.web."),
+    };
+    let cancel = AtomicBool::new(false);
+    let generation = super::begin_streaming(
+        &connection,
+        "source-1",
+        std::slice::from_ref(&scope),
+        &cancel,
+        |_| {},
+        |_| {},
+    )
+    .unwrap();
+    generation
+        .write_batch(
+            &[artifact("partial", "old", "linux.web.new")],
+            &[event("partial-event", "old", "linux.web.new")],
+        )
+        .unwrap();
+    assert_eq!(
+        generation.preserve_replacements(&[scope], &cancel).unwrap(),
+        2
+    );
+    generation.rebuild_derived_metrics(&cancel, |_| {}).unwrap();
+    let current = ArtifactRecordStore::from_source_store(generation.store.clone());
+    let timeline = TimelineRecordStore::from_source_store(generation.store.clone());
+    assert!(current
+        .get(&current.read_snapshot(), "source-1", "old")
+        .unwrap()
+        .is_some());
+    assert!(current
+        .get(&current.read_snapshot(), "source-1", "partial")
+        .unwrap()
+        .is_none());
+    assert!(timeline
+        .get(&timeline.read_snapshot(), "source-1", "old-event")
+        .unwrap()
+        .is_some());
+    assert!(timeline
+        .get(&timeline.read_snapshot(), "source-1", "partial-event")
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        current
+            .count(&current.read_snapshot(), Some("source-1"))
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn plugin_failure_preserves_only_its_own_previous_producer() {
+    let (_root, connection, source) = setup();
+    let originals = ArtifactRecordStore::from_source_store(source.clone());
+    originals
+        .upsert_batch(
+            &[
+                persistence_source::detail::artifact_record(
+                    &artifact("plugin-a-old", "plugins", "plugin.a"),
+                    "source-1",
+                ),
+                persistence_source::detail::artifact_record(
+                    &artifact("plugin-b-old", "plugins", "plugin.b"),
+                    "source-1",
+                ),
+            ],
+            PersistMode::SyncAll,
+        )
+        .unwrap();
+    persistence_source::fjall::replace_source_generation(
+        &source,
+        "source-1",
+        "plugins",
+        &"b".repeat(64),
+    )
+    .unwrap();
+    let cancel = AtomicBool::new(false);
+    let generation =
+        super::begin_streaming(&connection, "source-1", &[], &cancel, |_| {}, |_| {}).unwrap();
+    generation
+        .write_batch(
+            &[
+                artifact("plugin-a-new", "plugins", "plugin.a"),
+                artifact("plugin-b-partial", "plugins", "plugin.b"),
+            ],
+            &[],
+        )
+        .unwrap();
+    generation
+        .complete_replacements(
+            &[AnalysisOutputReplacement {
+                source_object_id: "plugins".into(),
+                producer: AnalysisOutputProducer::ExtractorId("plugin.a".into()),
+            }],
+            &cancel,
+        )
+        .unwrap();
+    generation
+        .preserve_replacements(
+            &[AnalysisOutputReplacement {
+                source_object_id: "plugins".into(),
+                producer: AnalysisOutputProducer::ExtractorId("plugin.b".into()),
+            }],
+            &cancel,
+        )
+        .unwrap();
+    let current = ArtifactRecordStore::from_source_store(generation.store.clone());
+    let snapshot = current.read_snapshot();
+    for id in ["plugin-a-new", "plugin-b-old"] {
+        assert!(
+            current.get(&snapshot, "source-1", id).unwrap().is_some(),
+            "{id}"
+        );
+    }
+    for id in ["plugin-a-old", "plugin-b-partial"] {
+        assert!(
+            current.get(&snapshot, "source-1", id).unwrap().is_none(),
+            "{id}"
+        );
+    }
 }

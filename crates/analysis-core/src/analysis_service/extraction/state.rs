@@ -188,6 +188,9 @@ impl ExtractionState {
         outcome: PersistedExtractionOutcome,
         failures: Vec<PluginExtractFailure>,
     ) {
+        self.retryable_failure_count = self
+            .retryable_failure_count
+            .saturating_add(failures.len() as u64);
         self.plugin_failures.extend(failures);
         self.record_persisted_observation(capability, &outcome);
     }
@@ -239,6 +242,17 @@ impl ExtractionState {
 
     pub(super) fn record_warning(&mut self, capability: AnalysisCapability, warning: String) {
         self.record_retryable_failure(capability, warning);
+    }
+
+    pub(super) fn record_retained_failure(
+        &mut self,
+        capability: AnalysisCapability,
+        warnings: Vec<String>,
+    ) {
+        self.retryable_failure_count = self.retryable_failure_count.saturating_add(1);
+        for warning in warnings {
+            self.record_informational_warning(capability, warning);
+        }
     }
 
     /// Warning surfaced in the run DTO and section progress that does not

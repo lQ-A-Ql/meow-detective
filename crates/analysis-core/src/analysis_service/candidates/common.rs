@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 
-mod catalog;
+pub(super) mod catalog;
 mod path_matching;
 pub(crate) use super::identity::candidate_content_identity;
 use super::PreparationCatalog;

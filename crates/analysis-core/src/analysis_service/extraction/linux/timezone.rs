@@ -25,7 +25,9 @@ use crate::analysis_service::candidates::{EvidenceCandidate, PreparationCatalog}
 use artifacts_linux::LogClock;
 use chrono::{DateTime, LocalResult, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::Tz;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 /// Cap on timezone hint file reads; the zone name is a few dozen bytes.
 const TIMEZONE_READ_LIMIT: usize = 4096;
@@ -41,6 +43,7 @@ pub(super) const UNVERIFIED_TIMEZONE_LABEL: &str = "unverified-timezone";
 /// Resolved host timezone backing naive-to-UTC log timestamp conversion.
 pub(in crate::analysis_service::extraction) struct LinuxLogTimeContext {
     zone: HostTimeZone,
+    scoped_zones: Arc<BTreeMap<(String, Option<usize>), HostTimeZone>>,
 }
 
 impl LinuxLogTimeContext {
@@ -52,6 +55,7 @@ impl LinuxLogTimeContext {
                 tz: Tz::UTC,
                 assumed_utc: true,
             },
+            scoped_zones: Arc::default(),
         }
     }
 
@@ -61,6 +65,25 @@ impl LinuxLogTimeContext {
                 tz,
                 assumed_utc: false,
             },
+            scoped_zones: Arc::default(),
+        }
+    }
+
+    pub fn for_candidate(&self, candidate: &EvidenceCandidate) -> Self {
+        let key = (candidate.data_source_id.clone(), candidate.partition_index);
+        let zone = self.scoped_zones.get(&key).copied().unwrap_or_else(|| {
+            if self.scoped_zones.is_empty() {
+                self.zone
+            } else {
+                HostTimeZone {
+                    tz: Tz::UTC,
+                    assumed_utc: true,
+                }
+            }
+        });
+        Self {
+            zone,
+            scoped_zones: Arc::clone(&self.scoped_zones),
         }
     }
 
@@ -150,6 +173,49 @@ const TIMEZONE_SOURCES: &[(&str, ZoneExtractor)] = &[
 /// Returns the context plus any warnings to record against the Linux
 /// capability (unreadable files, unrecognized zone names, UTC fallback).
 pub(in crate::analysis_service::extraction) fn resolve_linux_log_time(
+    catalog: &PreparationCatalog,
+    cancel_token: &AtomicBool,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+) -> (LinuxLogTimeContext, Vec<String>) {
+    let scopes = catalog
+        .records()
+        .filter(|record| !record.deleted)
+        .map(|record| {
+            (
+                record.data_source_id.clone(),
+                record.partition_index.map(|value| value as usize),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    if scopes.is_empty() {
+        return resolve_scoped_log_time(catalog, cancel_token, file_reader);
+    }
+    let mut scoped_zones = BTreeMap::new();
+    let mut warnings = Vec::new();
+    for (source, partition) in scopes {
+        let scoped = catalog.for_scope(&source, partition);
+        let (context, scope_warnings) = resolve_scoped_log_time(&scoped, cancel_token, file_reader);
+        scoped_zones.insert((source, partition), context.zone);
+        warnings.extend(scope_warnings);
+    }
+    let zone = if scoped_zones.len() == 1 {
+        *scoped_zones.values().next().expect("one timezone scope")
+    } else {
+        HostTimeZone {
+            tz: Tz::UTC,
+            assumed_utc: true,
+        }
+    };
+    (
+        LinuxLogTimeContext {
+            zone,
+            scoped_zones: Arc::new(scoped_zones),
+        },
+        warnings,
+    )
+}
+
+fn resolve_scoped_log_time(
     catalog: &PreparationCatalog,
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,

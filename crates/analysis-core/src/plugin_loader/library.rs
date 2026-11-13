@@ -49,12 +49,14 @@ pub(crate) struct SharedPlugin {
     pub(crate) declared_families: Vec<String>,
     pub(crate) patterns: Vec<PathPattern>,
     pub(crate) library: PluginLibrary,
+    pub(crate) call_lock: std::sync::Arc<std::sync::Mutex<()>>,
 }
 
 impl SharedPlugin {
     /// Leak the identity strings once per process load; plugin DLLs are
     /// never unloaded, so this is bounded by the number of plugins.
-    fn new(meta: PluginMeta, library: PluginLibrary) -> Self {
+    fn new(meta: PluginMeta, library: PluginLibrary) -> Result<Self, String> {
+        let call_lock = super::call_gate::for_entry(library.extract_fn() as usize)?;
         let id: &'static str = Box::leak(meta.plugin_id.into_boxed_str());
         let display_name: &'static str = Box::leak(meta.display_name.into_boxed_str());
         let primary_family = meta
@@ -62,7 +64,7 @@ impl SharedPlugin {
             .first()
             .cloned()
             .unwrap_or_else(|| id.to_string());
-        Self {
+        Ok(Self {
             id,
             display_name,
             version: meta.version,
@@ -72,7 +74,8 @@ impl SharedPlugin {
             declared_families: meta.families,
             patterns: meta.patterns,
             library,
-        }
+            call_lock,
+        })
     }
 }
 
@@ -199,7 +202,7 @@ fn try_load_plugin(path: &Path, seen_ids: &mut HashSet<String>) -> Result<Shared
     if !seen_ids.insert(meta.plugin_id.clone()) {
         return Err(format!("duplicate plugin id '{}'", meta.plugin_id));
     }
-    Ok(SharedPlugin::new(
+    SharedPlugin::new(
         meta,
         PluginLibrary {
             _library: library,
@@ -207,7 +210,7 @@ fn try_load_plugin(path: &Path, seen_ids: &mut HashSet<String>) -> Result<Shared
             free_buffer,
             action,
         },
-    ))
+    )
 }
 
 #[cfg(windows)]
