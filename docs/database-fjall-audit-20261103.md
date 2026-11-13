@@ -1,7 +1,7 @@
 # SQLite 与 Fjall 数据库审计
 
 审计日期：2026-11-10；并发写入更新：2026-11-11
-当前 source 格式：`source_041_fjall_detail_ownership`
+当前 source 格式：`source_042_android_fjall_only`
 验证分支基线：`044c5566`
 
 ## 存储规则
@@ -9,6 +9,7 @@
 - 案件数据库保存案件、来源注册、导入任务、Graph、审计和领域控制信息。
 - Source SQLite 只保存来源身份、Fjall 代际、导入/分析作业、候选检查点、发布回执和恢复控制，不建立 `file_entries`、`artifacts`、`timeline_events`、`forensic_fingerprints`。
 - Catalog、Artifact、Timeline 记录由该来源的 Fjall generation 保存。
+- Android facts 与 packages 由该来源的 `android` parser family 保存；重分析通过一个 Fjall 事务替换整个 family，查询校验当前 generation，保留事实来源优先级与字段归属。
 - Analysis worker 直接使用 Fjall 原生 `Database::batch` 并发写入记录与索引；同一数据库的 journal append 由 Fjall 排定顺序，不再持有应用层单写事务锁。
 - Artifact/Timeline 的共享计数与 revision 在 worker 全部结束后汇总一次；SQLite 仅在候选检查点全部准备后提交生命周期控制事务。
 - 文件枚举和分析 worker 使用独立 staging SQLite；staging 表不属于已发布 source 或案件数据库。

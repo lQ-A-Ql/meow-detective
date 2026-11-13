@@ -15,26 +15,17 @@ use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
 };
 
+#[path = "support/android_fjall_regression.rs"]
+mod fjall_regression;
+
 #[test]
 fn android_analysis_persists_standard_device_and_package_manager_metadata() {
-    let case_root = tempfile::TempDir::new().expect("case root");
-    let evidence_root = tempfile::TempDir::new().expect("logical evidence root");
+    let case_root = temporary_directory();
+    let evidence_root = temporary_directory();
     write_android_artifacts(evidence_root.path());
 
-    let case_connection = persistence_sqlite::open_in_memory().expect("open case database");
-    persistence_sqlite::runner::run_all(&case_connection).expect("run case migrations");
     let case_id = CaseId("case-android-analysis".to_string());
-    CaseRepo::new(&case_connection)
-        .create(&CaseMeta {
-            id: case_id.clone(),
-            name: "Android analysis".to_string(),
-            number: None,
-            examiner: None,
-            notes: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        })
-        .expect("create case");
+    let case_connection = case_connection(&case_id);
 
     let source = register_ready_source(
         &case_connection,
@@ -43,6 +34,7 @@ fn android_analysis_persists_standard_device_and_package_manager_metadata() {
         evidence_root.path(),
     );
     let runtime = AnalysisSourceReadRuntime::default();
+    let before = source_manifest(case_root.path(), &source.id);
     let run = run_source_android_analysis(
         &case_connection,
         case_root.path(),
@@ -114,6 +106,110 @@ fn android_analysis_persists_standard_device_and_package_manager_metadata() {
         .expect("read Android parser projection");
     assert_eq!(parser_records.records.len(), 9);
     assert!(parser_records.next_cursor.is_none());
+    assert_eq!(source_manifest(case_root.path(), &source.id), before);
+}
+
+fn temporary_directory() -> tempfile::TempDir {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../output/repair-2026-11-13/android");
+    fs::create_dir_all(&path).expect("create Android test directory");
+    tempfile::tempdir_in(path).expect("create isolated Android fixture")
+}
+
+fn case_connection(case_id: &CaseId) -> rusqlite::Connection {
+    let connection = persistence_sqlite::open_in_memory().expect("open case database");
+    persistence_sqlite::runner::run_all(&connection).expect("run case migrations");
+    CaseRepo::new(&connection)
+        .create(&CaseMeta {
+            id: case_id.clone(),
+            name: "Android analysis".into(),
+            number: None,
+            examiner: None,
+            notes: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        })
+        .expect("create case");
+    connection
+}
+
+#[test]
+fn android_analysis_rejects_missing_generation_manifest_before_writing_results() {
+    let case_root = temporary_directory();
+    let evidence_root = temporary_directory();
+    write_android_artifacts(evidence_root.path());
+    let case_id = CaseId("case-android-missing-manifest".into());
+    let connection = case_connection(&case_id);
+    let source = register_ready_source(
+        &connection,
+        &case_id,
+        case_root.path(),
+        evidence_root.path(),
+    );
+    let generation = case_root
+        .path()
+        .join("sources")
+        .join(&source.id.0)
+        .join("source.fjall");
+    fs::remove_file(generation.join(persistence_source::fjall::SOURCE_GENERATION_MANIFEST_FILE))
+        .unwrap();
+    let error = run_source_android_analysis(
+        &connection,
+        case_root.path(),
+        &case_id,
+        &source.id,
+        &AnalysisSourceReadRuntime::default(),
+    )
+    .expect_err("missing publication must fail");
+    assert!(error.to_string().contains("manifest"));
+    let source_connection = app_services::source_db::open_registered_source_db_read_only(
+        &connection,
+        case_root.path(),
+        &source.id,
+    )
+    .unwrap();
+    let store = persistence_source::detail::require_source_store(&source_connection).unwrap();
+    let records = persistence_source::fjall::ParserRecordStore::from_source_store((*store).clone());
+    assert!(records
+        .list_by_family(
+            &records.read_snapshot(),
+            &source.id.0,
+            "android",
+            None,
+            ScanDirection::Forward,
+            100
+        )
+        .unwrap()
+        .records
+        .is_empty());
+    assert!(
+        get_source_android_device_info(&connection, case_root.path(), &case_id, &source.id)
+            .is_err()
+    );
+    assert!(get_source_android_package_summary(
+        &connection,
+        case_root.path(),
+        &case_id,
+        &source.id,
+        0,
+        10,
+        &AnalysisSourceReadRuntime::default()
+    )
+    .is_err());
+}
+
+fn source_manifest(
+    root: &std::path::Path,
+    source_id: &DataSourceId,
+) -> persistence_source::fjall::SourceGenerationManifest {
+    app_services::source_db::open_registered_fjall_source_read_only(root, source_id)
+        .expect("open published Android source")
+        .verify_source_generation_with_control(
+            &source_id.0,
+            &std::sync::atomic::AtomicBool::new(false),
+            |_, _| {},
+        )
+        .expect("validate Android generation")
 }
 
 fn register_ready_source(
@@ -163,6 +259,41 @@ fn register_ready_source(
             ),
         ])
         .expect("catalog fixture files");
+    let store = persistence_source::detail::open_store_for_write(&source_connection)
+        .expect("open Android builder")
+        .expect("Android source has a builder");
+    let key = persistence_source::fjall::encode_key(
+        "projection",
+        &[persistence_source::fjall::KeyPart::Text(
+            source.id.0.clone(),
+        )],
+    )
+    .unwrap();
+    let marker = persistence_source::fjall::VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{}", source.id.0),
+        &source.id.0,
+        1,
+        source.id.0.as_bytes().to_vec(),
+    );
+    let receipt = store
+        .write_envelope(
+            persistence_source::fjall::KeyspaceName::Meta,
+            key,
+            &marker,
+            persistence_source::fjall::PersistMode::SyncAll,
+        )
+        .expect("commit Android projection marker");
+    persistence_source::fjall::seal_source_generation_with_control(
+        &store,
+        &source.id.0,
+        "android-fixture",
+        &hex::encode(receipt.batch_digest),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .expect("seal Android catalog");
     drop(source_connection);
     source
 }

@@ -90,7 +90,7 @@ fn source_migration_installs_device_binding_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_041_fjall_detail_ownership"
+        "source_042_android_fjall_only"
     );
     for table in ["ceph_osd_device_bindings", "ceph_osd_device_binding_pvs"] {
         let exists: bool = conn

@@ -177,7 +177,7 @@ fn source_migration_installs_bluefs_inventory_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_041_fjall_detail_ownership"
+        "source_042_android_fjall_only"
     );
     for table in [
         "ceph_bluefs_superblocks",

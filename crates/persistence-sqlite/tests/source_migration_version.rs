@@ -25,6 +25,8 @@ fn fresh_source_schema_contains_control_tables_without_detail_tables() {
         "artifacts",
         "timeline_events",
         "forensic_fingerprints",
+        "android_system_facts",
+        "android_packages",
     ] {
         let count: i64 = connection
             .query_row(
@@ -66,6 +68,6 @@ fn source_with_sqlite_details_is_rejected_without_migration_or_data_changes() {
     assert_eq!(migrations, 0);
     assert_eq!(
         runner::latest_source_version(),
-        "source_041_fjall_detail_ownership"
+        "source_042_android_fjall_only"
     );
 }

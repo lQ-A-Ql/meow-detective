@@ -13,6 +13,7 @@ pub(crate) fn run_android_source_analysis(
     case_root: &std::path::Path,
     source_reader: &mut SourceReadContext<'_>,
     data_source_id: &DataSourceId,
+    cancel: &std::sync::atomic::AtomicBool,
 ) -> Result<AndroidAnalysisRunDto, AnalysisServiceError> {
     let mut warnings = Vec::new();
     let mut scanned_file_count = 0u64;
@@ -29,7 +30,7 @@ pub(crate) fn run_android_source_analysis(
         &mut scanned_file_count,
     )?;
     sort_device_facts(&mut facts);
-    persist_android_analysis(source_conn, case_root, data_source_id, &facts, &packages)?;
+    persist_android_analysis(case_root, data_source_id, &facts, &packages, cancel)?;
 
     Ok(AndroidAnalysisRunDto {
         status: parse_status(facts.is_empty(), packages.is_empty(), &warnings),

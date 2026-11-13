@@ -230,7 +230,7 @@ fn source_migrations_install_raw_free_omap_schema_and_targeted_indexes() {
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_041_fjall_detail_ownership"
+        "source_042_android_fjall_only"
     );
     for table in [
         "ceph_bluestore_omap_scans",

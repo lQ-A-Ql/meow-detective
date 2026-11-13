@@ -5,7 +5,6 @@
 //! SQLite utilities.
 
 pub mod analysis_scan_repo;
-pub mod android_analysis_repo;
 pub mod audit_repo;
 pub mod batch_repo;
 pub mod bitlocker_restore_intent_repo;

@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 
 mod parser_batch;
+mod parser_family;
 
 const RECORD_KIND: &str = "parser_record";
 const SCHEMA_VERSION: u16 = 1;
@@ -82,49 +83,26 @@ impl ParserRecordStore {
     }
 
     pub fn upsert(&self, record: &ParserRecord, mode: PersistMode) -> Result<()> {
-        validate(record)?;
-        let key = record_key(&record.data_source_id, &record.id)?;
-        let snapshot = self.read_snapshot();
-        let mut actions = Vec::new();
-        let previous = self.get(&snapshot, &record.data_source_id, &record.id)?;
-        if previous.as_ref().is_some_and(|previous| previous == record) {
-            return Ok(());
-        }
-        if let Some(previous) = previous {
-            actions.extend(index_deletes(&previous)?);
-        }
-        let payload = serde_json::to_vec(record)
-            .map_err(|error| FjallStorageError::Serialization(error.to_string()))?;
-        let envelope = VersionedEnvelope::new(
-            RECORD_KIND,
-            SCHEMA_VERSION,
-            &record.id,
-            &record.data_source_id,
-            1,
-            payload,
-        );
-        actions.push(WriteAction::Put {
-            keyspace: KeyspaceName::ParserRecords,
-            key,
-            value: envelope.encode()?,
-        });
-        actions.extend(index_writes(record)?);
-        self.source_store.database().write_batch(&actions, mode)?;
-        Ok(())
+        self.upsert_batch(std::slice::from_ref(record), mode)
     }
 
     pub fn delete(&self, source_id: &str, id: &str, mode: PersistMode) -> Result<bool> {
-        let snapshot = self.read_snapshot();
-        let Some(previous) = self.get(&snapshot, source_id, id)? else {
-            return Ok(false);
-        };
-        let mut actions = vec![WriteAction::Delete {
-            keyspace: KeyspaceName::ParserRecords,
-            key: record_key(source_id, id)?,
-        }];
-        actions.extend(index_deletes(&previous)?);
-        self.source_store.database().write_batch(&actions, mode)?;
-        Ok(true)
+        let mut deleted = false;
+        self.source_store
+            .database()
+            .write_planned(mode, |snapshot| {
+                let Some(previous) = self.get(snapshot, source_id, id)? else {
+                    return Ok(Vec::new());
+                };
+                let mut actions = vec![WriteAction::Delete {
+                    keyspace: KeyspaceName::ParserRecords,
+                    key: record_key(source_id, id)?,
+                }];
+                actions.extend(index_deletes(&previous)?);
+                deleted = true;
+                Ok(actions)
+            })?;
+        Ok(deleted)
     }
 
     pub fn list_by_family(

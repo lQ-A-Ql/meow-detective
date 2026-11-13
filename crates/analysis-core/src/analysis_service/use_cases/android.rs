@@ -51,6 +51,7 @@ pub fn run_source_android_analysis_with_cancel(
         case_root,
         &mut reader,
         data_source_id,
+        cancel_token,
     )?;
     super::super::cancellation::ensure_not_cancelled(cancel_token)?;
     Ok(result)
@@ -65,7 +66,7 @@ pub fn get_source_android_device_info(
     let source =
         open_ready_analysis_source_read_only(case_conn, case_root, case_id, data_source_id)?;
     validate_analysis_categories(source.platform, &["AndroidDevice"])?;
-    android::get_android_device_info(&source.connection, case_root, data_source_id)
+    android::get_android_device_info(case_root, data_source_id)
 }
 
 pub fn get_source_android_package_summary(
@@ -87,13 +88,8 @@ pub fn get_source_android_package_summary(
         case_id,
         data_source_id,
     ));
-    let mut summary = android::get_android_package_summary(
-        &source.connection,
-        case_root,
-        data_source_id,
-        offset,
-        limit,
-    )?;
+    let mut summary =
+        android::get_android_package_summary(case_root, data_source_id, offset, limit)?;
     android::hydrate_package_presentations(&source.connection, &mut reader, &mut summary)?;
     Ok(summary)
 }

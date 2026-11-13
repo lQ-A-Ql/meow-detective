@@ -31,44 +31,50 @@ impl ParserRecordStore {
         if records.is_empty() {
             return Ok(());
         }
-        let snapshot = self.read_snapshot();
-        let mut actions = Vec::with_capacity(records.len().saturating_mul(4));
-        for record in records {
-            validate(record)?;
-            let key = record_key(&record.data_source_id, &record.id)?;
-            let previous = self.get(&snapshot, &record.data_source_id, &record.id)?;
-            if previous.as_ref().is_some_and(|previous| previous == record) {
-                continue;
-            }
-            if let Some(previous) = previous {
-                actions.extend(index_deletes(&previous)?);
-            }
-            let payload = serde_json::to_vec(record).map_err(|error| {
-                crate::errors::FjallStorageError::Serialization(error.to_string())
+        self.source_store
+            .database()
+            .write_planned(mode, |snapshot| {
+                let mut actions = Vec::with_capacity(records.len().saturating_mul(4));
+                let mut ids = std::collections::HashSet::with_capacity(records.len());
+                for record in records {
+                    validate(record)?;
+                    if !ids.insert((&record.data_source_id, &record.id)) {
+                        return Err(crate::FjallStorageError::InvalidEnvelope(
+                            "parser batch repeats a record identity".into(),
+                        ));
+                    }
+                    let key = record_key(&record.data_source_id, &record.id)?;
+                    let previous = self.get(snapshot, &record.data_source_id, &record.id)?;
+                    if previous.as_ref().is_some_and(|previous| previous == record) {
+                        continue;
+                    }
+                    if let Some(previous) = previous {
+                        actions.extend(index_deletes(&previous)?);
+                    }
+                    let payload = serde_json::to_vec(record).map_err(|error| {
+                        crate::errors::FjallStorageError::Serialization(error.to_string())
+                    })?;
+                    let envelope = VersionedEnvelope::new(
+                        RECORD_KIND,
+                        SCHEMA_VERSION,
+                        &record.id,
+                        &record.data_source_id,
+                        1,
+                        payload,
+                    );
+                    actions.push(WriteAction::Put {
+                        keyspace: KeyspaceName::ParserRecords,
+                        key,
+                        value: envelope.encode()?,
+                    });
+                    actions.extend(if include_field_indexes {
+                        index_writes(record)?
+                    } else {
+                        index_writes_without_fields(record)?
+                    });
+                }
+                Ok(actions)
             })?;
-            let envelope = VersionedEnvelope::new(
-                RECORD_KIND,
-                SCHEMA_VERSION,
-                &record.id,
-                &record.data_source_id,
-                1,
-                payload,
-            );
-            actions.push(WriteAction::Put {
-                keyspace: KeyspaceName::ParserRecords,
-                key,
-                value: envelope.encode()?,
-            });
-            actions.extend(if include_field_indexes {
-                index_writes(record)?
-            } else {
-                index_writes_without_fields(record)?
-            });
-        }
-        if actions.is_empty() {
-            return Ok(());
-        }
-        self.source_store.database().write_batch(&actions, mode)?;
         Ok(())
     }
 }

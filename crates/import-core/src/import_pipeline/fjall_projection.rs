@@ -355,7 +355,6 @@ fn mirror_projection_records(
             source,
             source_id,
         )?;
-        records::mirror_android_parser_records(source_connection, source, source_id)?;
         records::mirror_linux_parser_record(source_connection, source, source_id)?;
         records::mirror_parser_tables(source_connection, source, source_id)?;
     }

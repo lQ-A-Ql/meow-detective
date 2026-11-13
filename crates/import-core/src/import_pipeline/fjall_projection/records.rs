@@ -30,7 +30,7 @@ fn parser_table_names(connection: &Connection) -> Result<Vec<String>, CommandErr
         .prepare(
             "SELECT name FROM sqlite_master
              WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-               AND (name LIKE 'android_%' OR name LIKE 'linux_%' OR name LIKE 'ceph_%'
+               AND (name LIKE 'linux_%' OR name LIKE 'ceph_%'
                     OR name LIKE 'nested_%' OR name LIKE 'correlation_%')
              ORDER BY name ASC",
         )
@@ -179,101 +179,4 @@ pub(super) fn mirror_linux_parser_record(
     source
         .parser_upsert(&record, PersistMode::Buffer)
         .map_err(|error| CommandError::internal(error.to_string()))
-}
-
-pub(super) fn mirror_android_parser_records(
-    connection: &Connection,
-    source: &ReadWriteSourceStorageHandle,
-    source_id: &str,
-) -> Result<(), CommandError> {
-    let mut facts = connection
-        .prepare(
-            "SELECT id, field_key, field_value, confidence, source_file_id, source_path, parser, warning
-             FROM android_system_facts WHERE data_source_id = ?1 ORDER BY id ASC",
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let rows = facts
-        .query_map([source_id], |row| {
-            let field: String = row.get(1)?;
-            let source_file_id: String = row.get(4)?;
-            let id = format!("android-fact:{field}:{source_file_id}");
-            let payload = serde_json::json!({
-                "field": field, "value": row.get::<_, String>(2)?,
-                "confidence": row.get::<_, String>(3)?, "sourceFileId": source_file_id,
-                "sourcePath": row.get::<_, String>(5)?, "parser": row.get::<_, String>(6)?,
-                "warning": row.get::<_, Option<String>>(7)?,
-            });
-            Ok(parser_record(id, source_id, "system_fact", payload))
-        })
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    flush_parser_rows(source, rows)?;
-
-    let mut packages = connection
-        .prepare(
-            "SELECT id, package_name, app_name, version_code, install_time, update_time,
-                    installer, uid, code_path, source_file_id, source_path, parser, warning
-             FROM android_packages WHERE data_source_id = ?1 ORDER BY id ASC",
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let rows = packages
-        .query_map([source_id], |row| {
-            let package_name: String = row.get(1)?;
-            let source_file_id: String = row.get(9)?;
-            let id = format!("android-package:{package_name}:{source_file_id}");
-            let payload = serde_json::json!({
-                "packageName": package_name, "appName": row.get::<_, Option<String>>(2)?,
-                "versionCode": row.get::<_, Option<String>>(3)?, "installTime": row.get::<_, Option<String>>(4)?,
-                "updateTime": row.get::<_, Option<String>>(5)?, "installer": row.get::<_, Option<String>>(6)?,
-                "uid": row.get::<_, Option<u32>>(7)?, "codePath": row.get::<_, Option<String>>(8)?,
-                "sourceFileId": source_file_id, "sourcePath": row.get::<_, String>(10)?,
-                "parser": row.get::<_, String>(11)?, "warning": row.get::<_, Option<String>>(12)?,
-            });
-            Ok(parser_record(
-                id,
-                source_id,
-                "package",
-                payload,
-            ))
-        })
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    flush_parser_rows(source, rows)
-}
-
-fn parser_record(
-    id: String,
-    source_id: &str,
-    kind: &str,
-    payload: serde_json::Value,
-) -> persistence_source::fjall::ParserRecord {
-    persistence_source::fjall::ParserRecord {
-        id,
-        data_source_id: source_id.to_owned(),
-        family: "android".to_owned(),
-        kind: kind.to_owned(),
-        status: "ready".to_owned(),
-        summary_sha256: infrastructure::hashing::sha256_bytes(payload.to_string().as_bytes()),
-        payload,
-    }
-}
-
-fn flush_parser_rows<I>(source: &ReadWriteSourceStorageHandle, rows: I) -> Result<(), CommandError>
-where
-    I: Iterator<Item = rusqlite::Result<persistence_source::fjall::ParserRecord>>,
-{
-    let mut batch = Vec::with_capacity(BATCH_SIZE);
-    for row in rows {
-        batch.push(row.map_err(|error| CommandError::internal(error.to_string()))?);
-        if batch.len() == BATCH_SIZE {
-            source
-                .parser_upsert_batch(&batch, PersistMode::Buffer)
-                .map_err(|error| CommandError::internal(error.to_string()))?;
-            batch.clear();
-        }
-    }
-    if !batch.is_empty() {
-        source
-            .parser_upsert_batch(&batch, PersistMode::Buffer)
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-    }
-    Ok(())
 }

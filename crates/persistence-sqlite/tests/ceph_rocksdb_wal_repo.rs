@@ -264,7 +264,7 @@ fn source_migration_installs_normalized_wal_schema_without_raw_keys_or_values() 
     let conn = setup();
     assert_eq!(
         runner::latest_source_version(),
-        "source_041_fjall_detail_ownership"
+        "source_042_android_fjall_only"
     );
     for table in ["ceph_rocksdb_wal_files", "ceph_rocksdb_wal_records"] {
         let columns = conn

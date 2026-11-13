@@ -100,6 +100,10 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_041_fjall_detail_ownership",
         include_str!("scripts/source_041_fjall_detail_ownership.sql"),
     ),
+    (
+        "source_042_android_fjall_only",
+        include_str!("scripts/source_042_android_fjall_only.sql"),
+    ),
 ];
 
 pub(super) fn version_is_at_least(actual: &str, minimum: &str) -> bool {

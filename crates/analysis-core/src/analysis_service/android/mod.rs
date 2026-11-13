@@ -4,6 +4,7 @@ mod model;
 mod package_metadata;
 mod persistence;
 mod query;
+mod records;
 mod source_files;
 
 pub(crate) use extraction::run_android_source_analysis;
