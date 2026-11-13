@@ -1,6 +1,4 @@
 import { useTranslation } from 'react-i18next';
-import { ActionIcon } from '@/components/controls/ActionIcon';
-import { Tooltip } from '@/app/components/ui/tooltip';
 
 import { Link } from 'react-router';
 import { Button } from '@/app/components/ui/button';
@@ -12,23 +10,5 @@ export function ImportDataAction() {
     <Button asChild variant="outline" size="sm">
       <Link to="/">{t('common.emptyGoToImport')}</Link>
     </Button>
-  );
-}
-
-export function RunAnalysisAction({ onClick, disabled = false }: { onClick: () => void; disabled?: boolean }) {
-  const { t } = useTranslation();
-  return (
-    <Tooltip content={t('analysis.header.run')}>
-      <Button
-        aria-label={t('analysis.header.run')}
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={onClick}
-        disabled={disabled}
-      >
-        <ActionIcon name="play" />
-      </Button>
-    </Tooltip>
   );
 }
