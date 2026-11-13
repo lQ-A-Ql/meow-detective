@@ -53,7 +53,7 @@ pub(crate) fn resident_attr_content(
     let content_start = attr_pos.checked_add(content_off)?;
     let content_end = content_start.checked_add(content_size)?;
 
-    if content_off < 0x18 || content_start >= attr_end || content_end > attr_end {
+    if content_off < 0x18 || content_start > attr_end || content_end > attr_end {
         return None;
     }
 

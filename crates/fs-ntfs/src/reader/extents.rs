@@ -238,6 +238,21 @@ fn validate_extent_chain(extents: &[DataAttributeExtent]) -> io::Result<()> {
         };
     }
 
+    if let [DataAttributeExtent::NonResident {
+        lowest_vcn: 0,
+        highest_vcn,
+        allocated_size: 0,
+        real_size: 0,
+        initialized_size: 0,
+        runs,
+        ..
+    }] = extents
+    {
+        if runs.is_empty() && matches!(*highest_vcn, 0 | u64::MAX) {
+            return Ok(());
+        }
+    }
+
     let mut expected_vcn = 0u64;
     for extent in extents {
         let DataAttributeExtent::NonResident {
