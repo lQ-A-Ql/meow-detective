@@ -17,8 +17,7 @@ import {
   getSystemInfo,
   getV2GovernanceSnapshot,
   getV3GovernanceSnapshot,
-  runAnalysisExtraction,
-  runEvidenceClassification,
+  runPluginExtraction,
 } from '@/lib/api/analysis';
 
 vi.mock('@/lib/api/client', () => ({
@@ -66,27 +65,11 @@ describe('analysis API', () => {
     });
   });
 
-  it('runEvidenceClassification sends categories in request', async () => {
+  it('runPluginExtraction sends the data source request', async () => {
     requestMock.mockResolvedValueOnce({} as never);
-    await runEvidenceClassification('ds-1', ['browser', 'registry']);
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.RUN_EVIDENCE_CLASSIFICATION, {
-      request: { dataSourceId: 'ds-1', categories: ['browser', 'registry'] },
-    });
-  });
-
-  it('runEvidenceClassification defaults categories to empty array', async () => {
-    requestMock.mockResolvedValueOnce({} as never);
-    await runEvidenceClassification('ds-1');
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.RUN_EVIDENCE_CLASSIFICATION, {
-      request: { dataSourceId: 'ds-1', categories: [] },
-    });
-  });
-
-  it('runAnalysisExtraction sends the request payload', async () => {
-    requestMock.mockResolvedValueOnce({} as never);
-    const req = { dataSourceId: 'ds-1', categories: ['registry'] };
-    await runAnalysisExtraction(req);
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.RUN_ANALYSIS_EXTRACTION, {
+    const req = { dataSourceId: 'ds-1' };
+    await runPluginExtraction(req);
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.RUN_PLUGIN_EXTRACTION, {
       request: req,
     });
   });

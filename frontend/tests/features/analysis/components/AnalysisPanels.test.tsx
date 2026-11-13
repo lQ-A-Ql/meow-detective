@@ -116,7 +116,7 @@ describe('AnalysisPanels sub-components', () => {
 
   describe('EvidenceClassificationPanel', () => {
     it('renders empty state when no summary is provided', () => {
-      render(createElement(EvidenceClassificationPanel, { summary: undefined, pending: false, onRun: () => {} }));
+      render(createElement(EvidenceClassificationPanel, { summary: undefined }));
       expect(screen.getByText('未发现证据语义分类数据。')).toBeDefined();
     });
   });
@@ -254,9 +254,7 @@ describe('AnalysisPanels sub-components', () => {
         createElement(AnalysisHeader, {
           loading: false,
           hasCase: false,
-          extractionPending: false,
           onRefresh: () => {},
-          onRunExtraction: () => {},
         }),
       );
       expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
@@ -270,9 +268,7 @@ describe('AnalysisPanels sub-components', () => {
         createElement(AnalysisHeader, {
           loading: false,
           hasCase: true,
-          extractionPending: false,
           onRefresh: () => {},
-          onRunExtraction: () => {},
         }),
       );
       expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(true);
@@ -284,15 +280,12 @@ describe('AnalysisPanels sub-components', () => {
         createElement(AnalysisHeader, {
           loading: false,
           hasCase: true,
-          extractionPending: false,
           onRefresh: () => {},
-          onRunExtraction: () => {},
           selectedDataSourceId: 'ds-1',
-          showRunExtraction: true,
         }),
       );
       expect(screen.getByRole('button', { name: /刷新/ }).hasAttribute('disabled')).toBe(false);
-      expect(screen.getByRole('button', { name: /运行分析/ }).hasAttribute('disabled')).toBe(false);
+      expect(screen.queryByRole('button', { name: /运行分析/ })).toBeNull();
     });
   });
 });

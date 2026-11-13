@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ANALYSIS_EXTRACTION_CATEGORIES, isExtractionCategory } from '@/types/analysisUi';
-import { labeledProgress, statusFromRun, useAnalysisStore } from '@/stores/analysis-store';
+import { labeledProgress, useAnalysisStore } from '@/stores/analysis-store';
 
 describe('analysis-store', () => {
   beforeEach(() => {
@@ -192,17 +192,6 @@ describe('analysis-store', () => {
 
     state.setActiveTab('files');
     expect(useAnalysisStore.getState().activeTab).toBe('files');
-  });
-
-  it.each([
-    ['failed', 'failed'],
-    ['unavailable', 'failed'],
-    ['partial', 'partial'],
-    ['success', 'success'],
-    ['running', 'success'],
-    ['idle', 'success'],
-  ])('maps run status %s to progress state %s', (runStatus, expected) => {
-    expect(statusFromRun(runStatus)).toBe(expected);
   });
 
   it('labels every extraction category without mutating the source record', () => {

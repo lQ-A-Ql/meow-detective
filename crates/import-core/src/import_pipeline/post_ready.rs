@@ -3,6 +3,7 @@ use super::context::ImportJobContext;
 use std::time::Instant;
 use transport::CommandError;
 
+mod android;
 mod progress;
 mod source_facts;
 use progress::AnalysisAuditProgress;
@@ -45,6 +46,9 @@ fn auto_extract_platform_artifacts(
     source_conn: &rusqlite::Connection,
     mut message: String,
 ) -> Result<String, CommandError> {
+    if ctx.import_config.platform == domain::DataSourcePlatform::Android {
+        return android::analyze(ctx, data_source, message);
+    }
     let Some((platform_label, categories)) = analysis_plan(ctx) else {
         return Ok(message);
     };
@@ -175,7 +179,18 @@ fn analysis_plan(ctx: &ImportJobContext<'_>) -> Option<(&'static str, &'static [
         domain::DataSourcePlatform::Linux => Some(("Linux", &["LinuxArtifacts"][..])),
         domain::DataSourcePlatform::Windows => Some((
             "Windows",
-            &["Registry", "BrowserHistory", "Email", "EventLogs"][..],
+            &[
+                "Registry",
+                "BrowserHistory",
+                "Email",
+                "EventLogs",
+                "ProgramExecution",
+                "UserActivity",
+                "RecycleBin",
+                "Thumbnails",
+                "ResourceUsage",
+                "PluginArtifacts",
+            ][..],
         )),
         _ => unreachable!("platform was checked above"),
     }

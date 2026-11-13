@@ -55,6 +55,12 @@ export type ExtractionCategory =
   | 'BrowserHistory'
   | 'Email'
   | 'EventLogs'
+  | 'ProgramExecution'
+  | 'UserActivity'
+  | 'RecycleBin'
+  | 'Thumbnails'
+  | 'ResourceUsage'
+  | 'PluginArtifacts'
   | 'LinuxArtifacts'
   | 'LinuxJournal'
   | 'LinuxLogin'
@@ -71,6 +77,12 @@ export const ANALYSIS_EXTRACTION_CATEGORIES = [
   'BrowserHistory',
   'Email',
   'EventLogs',
+  'ProgramExecution',
+  'UserActivity',
+  'RecycleBin',
+  'Thumbnails',
+  'ResourceUsage',
+  'PluginArtifacts',
   'LinuxArtifacts',
   'LinuxJournal',
   'LinuxLogin',

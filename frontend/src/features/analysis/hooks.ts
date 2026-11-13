@@ -15,11 +15,10 @@ import {
   getV2GovernanceSnapshot,
   getV3GovernanceSnapshot,
   getCaseOverviewSnapshot,
-  runAnalysisExtraction,
-  runEvidenceClassification,
+  runPluginExtraction,
 } from '@/lib/api/analysis';
 import { useCurrentCase } from '@/features/case/hooks';
-import { AnalysisExtractionRequest } from '@/types/models';
+import { PluginExtractionRequest } from '@/types/models';
 import type { EvtxEventSummary, EvtxEventView } from '@/types/models';
 import type { PluginFamilyEntries } from '@/types/models';
 import type { AnalysisSource, OptionalAnalysisPageRequest } from './hooks/types';
@@ -44,57 +43,12 @@ function mergeEvtxPages(pages: EvtxEventSummary[]): EvtxEventSummary | undefined
   };
 }
 
-const ALL_EXTRACTION_QUERY_FAMILIES = [
-  'evidence-classification',
-  'system-info',
-  'registry-extraction',
-  'registry-structured',
-  'browser-history',
-  'email-extraction',
-  'evtx-events',
-  'linux-artifacts',
-] as const;
-
-const EXTRACTION_QUERY_FAMILIES: Readonly<Record<string, readonly string[]>> = {
-  SystemInformation: ['evidence-classification', 'system-info'],
-  Registry: ['evidence-classification', 'system-info', 'registry-extraction', 'registry-structured'],
-  BrowserHistory: ['evidence-classification', 'browser-history'],
-  Email: ['evidence-classification', 'email-extraction'],
-  EventLogs: ['evidence-classification', 'evtx-events'],
-  LinuxArtifacts: ['linux-artifacts'],
-  LinuxJournal: ['linux-artifacts'],
-  LinuxLogin: ['linux-artifacts'],
-  LinuxCommands: ['linux-artifacts'],
-  LinuxPackages: ['linux-artifacts'],
-  LinuxCron: ['linux-artifacts'],
-  LinuxSudo: ['linux-artifacts'],
-  LinuxSystemConfig: ['linux-artifacts'],
-  LinuxWebServices: ['linux-artifacts'],
-  LinuxMysqlServices: ['linux-artifacts'],
-};
-
-function extractionQueryFamilies(categories: readonly string[]): readonly string[] {
-  if (categories.length === 0) {
-    return ALL_EXTRACTION_QUERY_FAMILIES;
-  }
-
-  return [...new Set(categories.flatMap((category) => EXTRACTION_QUERY_FAMILIES[category] ?? []))];
-}
-
-async function refreshExtractionQueries(
+async function refreshPluginQueries(
   queryClient: QueryClient,
   caseId: string | null,
-  request: AnalysisExtractionRequest,
+  request: PluginExtractionRequest,
 ): Promise<void> {
-  const sourceQueries = extractionQueryFamilies(request.categories).map((family) =>
-    queryClient.invalidateQueries({
-      queryKey: ['analysis', family, caseId, request.dataSourceId],
-      refetchType: 'active',
-    }),
-  );
-
   await Promise.all([
-    ...sourceQueries,
     queryClient.invalidateQueries({ queryKey: ['artifacts'], refetchType: 'active' }),
     queryClient.invalidateQueries({ queryKey: ['timeline'], refetchType: 'active' }),
     queryClient.invalidateQueries({
@@ -435,34 +389,12 @@ export function useCaseOverviewSnapshot() {
   });
 }
 
-export function useRunEvidenceClassification() {
+export function useRunPluginExtraction() {
   const qc = useQueryClient();
   const currentCase = useCurrentCase();
   return useMutation({
-    mutationFn: (request: { dataSourceId: string; categories?: string[] }) =>
-      runEvidenceClassification(request.dataSourceId, request.categories ?? []),
-    onSuccess: async (_data, variables) => {
-      await Promise.all([
-        qc.invalidateQueries({
-          queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null, variables.dataSourceId],
-          refetchType: 'active',
-        }),
-        qc.invalidateQueries({ queryKey: ['artifacts'], refetchType: 'active' }),
-        qc.invalidateQueries({
-          queryKey: caseOverviewQueryKey(currentCase.data?.id ?? null),
-          refetchType: 'active',
-        }),
-      ]);
-    },
-  });
-}
-
-export function useRunAnalysisExtraction() {
-  const qc = useQueryClient();
-  const currentCase = useCurrentCase();
-  return useMutation({
-    mutationFn: (request: AnalysisExtractionRequest) => runAnalysisExtraction(request),
-    onSuccess: (_data, variables) => refreshExtractionQueries(qc, currentCase.data?.id ?? null, variables),
+    mutationFn: (request: PluginExtractionRequest) => runPluginExtraction(request),
+    onSuccess: (_data, variables) => refreshPluginQueries(qc, currentCase.data?.id ?? null, variables),
   });
 }
 
@@ -472,6 +404,6 @@ export function useGenerateAnalysisSummary(dataSourceId?: string) {
   });
 }
 
-export { useAndroidDeviceInfo, useAndroidPackageSummary, useRunAndroidAnalysis } from './hooks/android';
+export { useAndroidDeviceInfo, useAndroidPackageSummary } from './hooks/android';
 
 export { useLinuxArtifactSummary } from './hooks/linux';

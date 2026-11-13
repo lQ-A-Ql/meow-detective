@@ -49,7 +49,6 @@ describe('AndroidAnalysisView', () => {
         packageSummary,
         activePanel: 'device',
         loading: false,
-        running: false,
         hasMore: false,
         loadingMore: false,
         onRetry: vi.fn(),
@@ -68,7 +67,6 @@ describe('AndroidAnalysisView', () => {
         packageSummary,
         activePanel: 'packages',
         loading: false,
-        running: false,
         hasMore: false,
         loadingMore: false,
         onRetry: vi.fn(),
@@ -86,7 +84,6 @@ describe('AndroidAnalysisView', () => {
       createElement(AndroidAnalysisView, {
         activePanel: 'device',
         loading: false,
-        running: false,
         hasMore: false,
         loadingMore: false,
         onRetry: vi.fn(),

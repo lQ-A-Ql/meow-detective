@@ -14,11 +14,7 @@ import {
   usePluginModules,
   useRegistryExtractionSummary,
   useRegistryStructuredSummary,
-  useRunAnalysisExtraction,
-  useRunAndroidAnalysis,
-  useRunEvidenceClassification,
 } from '@/features/analysis/hooks';
-import { runSelectedSourceExtraction } from '@/features/analysis/extraction-runner';
 import { refreshAnalysisQueries } from '@/features/analysis/refresh';
 import {
   AnalysisSourceEpoch,
@@ -31,8 +27,7 @@ import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useDeletedRecoveryModel } from '@/features/recovery/hooks';
 import { subscribeToEvent } from '@/lib/events/subscribers';
 import { labeledProgress, useAnalysisStore } from '@/stores/analysis-store';
-import { useUiStore } from '@/stores/ui-store';
-import type { AnalysisExtractionProgress, AndroidAnalysisRun, EvtxEventView } from '@/types/models';
+import type { AnalysisExtractionProgress, EvtxEventView } from '@/types/models';
 
 export function useAnalysisWorkspaceModel() {
   const { t } = useTranslation();
@@ -56,16 +51,11 @@ export function useAnalysisWorkspaceModel() {
   const selectedPlatform = selectedDataSource?.platform;
   const selectedSourceContextKey = analysisSourceContextKey(currentCase.data?.id, selectedDataSource);
   const sourceEpoch = useRef(new AnalysisSourceEpoch(selectedSourceContextKey)).current;
-  const extractionOperationRef = useRef<ReturnType<AnalysisSourceEpoch['begin']>>();
   const [analysisRefreshError, setAnalysisRefreshError] = useState<unknown>();
-  const [androidAnalysisRunning, setAndroidAnalysisRunning] = useState(false);
-  const [androidAnalysisLastRun, setAndroidAnalysisLastRun] = useState<AndroidAnalysisRun>();
   const [eventLogView, setEventLogView] = useState<EvtxEventView>('boot');
 
   const systemInfo = useAnalysisSystemInfo(selectedDataSource);
   const evidenceSummary = useEvidenceClassificationSummary(selectedDataSource);
-  const evidenceScan = useRunEvidenceClassification();
-  const extractionRun = useRunAnalysisExtraction();
   const registrySummary = useRegistryExtractionSummary({ source: selectedDataSource, limit: 200 });
   const registryStructured = useRegistryStructuredSummary(selectedDataSource);
   const browserSummary = useBrowserHistorySummary({ source: selectedDataSource, limit: 200 });
@@ -77,12 +67,9 @@ export function useAnalysisWorkspaceModel() {
   const linuxSummary = useLinuxArtifactSummary({ source: selectedDataSource, limit: 200 });
   const androidDeviceInfo = useAndroidDeviceInfo(selectedDataSource);
   const androidPackages = useAndroidPackageSummary({ source: selectedDataSource, limit: 100 });
-  const androidAnalysisRun = useRunAndroidAnalysis();
   const pluginModulesQuery = usePluginModules(selectedDataSource);
   const classificationBoard = useFileClassificationBoard(selectedDataSource, 300);
   const summaryMutation = useGenerateAnalysisSummary(selectedDataSource?.id);
-  const resetEvidenceScan = evidenceScan.reset;
-  const resetExtractionRun = extractionRun.reset;
   const resetSummaryMutation = summaryMutation.reset;
 
   const extractionProgress = useAnalysisStore((state) => state.extractionProgress);
@@ -98,7 +85,6 @@ export function useAnalysisWorkspaceModel() {
   const setActiveAndroidTab = useAnalysisStore((state) => state.setActiveAndroidTab);
   const activePluginId = useAnalysisStore((state) => state.activePluginId);
   const setActivePluginId = useAnalysisStore((state) => state.setActivePluginId);
-  const setDrawerOpen = useUiStore((state) => state.setDrawerOpen);
   const deletedRecovery = useDeletedRecoveryModel(
     selectedDataSource,
     (selectedPlatform === 'windows' && activeTab === 'deletedRecovery') ||
@@ -106,15 +92,7 @@ export function useAnalysisWorkspaceModel() {
   );
 
   const analysisMutationPending =
-    evidenceScan.isPending ||
-    extractionRun.isPending ||
-    androidAnalysisRun.isPending ||
-    androidAnalysisRunning ||
-    summaryMutation.isPending ||
-    extractionRunning ||
-    deletedRecovery.scanning ||
-    deletedRecovery.reading ||
-    deletedRecovery.exporting;
+    summaryMutation.isPending || deletedRecovery.scanning || deletedRecovery.reading || deletedRecovery.exporting;
 
   const labeledExtractionProgress = useMemo(() => labeledProgress(extractionProgress, t), [extractionProgress, t]);
   const linuxNodeCounts = useMemo<Partial<Record<LinuxAnalysisTabKey, number>>>(() => {
@@ -151,8 +129,6 @@ export function useAnalysisWorkspaceModel() {
   const loading = currentCase.isLoading;
   const windowsError =
     currentCase.error ??
-    evidenceScan.error ??
-    extractionRun.error ??
     systemInfo.error ??
     evidenceSummary.error ??
     registrySummary.error ??
@@ -162,45 +138,25 @@ export function useAnalysisWorkspaceModel() {
     classificationBoard.error ??
     summaryMutation.error ??
     analysisRefreshError;
-  const linuxError = currentCase.error ?? extractionRun.error ?? linuxSummary.error ?? analysisRefreshError;
-  const androidError =
-    currentCase.error ??
-    androidAnalysisRun.error ??
-    androidDeviceInfo.error ??
-    androidPackages.error ??
-    analysisRefreshError;
+  const linuxError = currentCase.error ?? linuxSummary.error ?? analysisRefreshError;
+  const androidError = currentCase.error ?? androidDeviceInfo.error ?? androidPackages.error ?? analysisRefreshError;
 
   useLayoutEffect(() => {
     if (sourceEpoch.sync(selectedSourceContextKey)) {
       setAnalysisRefreshError(undefined);
-      setAndroidAnalysisLastRun(undefined);
       resetExtractionProgress();
-      resetEvidenceScan();
-      resetExtractionRun();
       resetSummaryMutation();
-      if (extractionOperationRef.current) {
-        extractionOperationRef.current = undefined;
-        setExtractionRunning(false);
-      }
+      setExtractionRunning(false);
     }
-  }, [
-    resetEvidenceScan,
-    resetExtractionProgress,
-    resetExtractionRun,
-    resetSummaryMutation,
-    selectedSourceContextKey,
-    setExtractionRunning,
-    sourceEpoch,
-  ]);
+  }, [resetExtractionProgress, resetSummaryMutation, selectedSourceContextKey, setExtractionRunning, sourceEpoch]);
 
   useEffect(() => {
     if (!readyDataSources.length) {
       if (selectedDataSourceId) {
         sourceEpoch.sync(undefined);
         resetExtractionProgress();
-        resetEvidenceScan();
-        resetExtractionRun();
         resetSummaryMutation();
+        setExtractionRunning(false);
         setSelectedDataSourceId(undefined);
       }
       return;
@@ -211,33 +167,27 @@ export function useAnalysisWorkspaceModel() {
       const nextContextKey = analysisSourceContextKey(currentCase.data?.id, nextSource);
       sourceEpoch.sync(nextContextKey);
       resetExtractionProgress();
-      resetEvidenceScan();
-      resetExtractionRun();
       resetSummaryMutation();
+      setExtractionRunning(false);
       setSelectedDataSourceId(nextSource.id);
     }
   }, [
     currentCase.data?.id,
     readyDataSources,
-    resetEvidenceScan,
     resetExtractionProgress,
-    resetExtractionRun,
     resetSummaryMutation,
     selectedDataSource,
     selectedDataSourceId,
     sourceEpoch,
     setSelectedDataSourceId,
+    setExtractionRunning,
   ]);
 
   useEffect(
     () => () => {
       sourceEpoch.sync(undefined);
-      if (extractionOperationRef.current) {
-        extractionOperationRef.current = undefined;
-        setExtractionRunning(false);
-      }
     },
-    [setExtractionRunning, sourceEpoch],
+    [sourceEpoch],
   );
 
   useEffect(() => {
@@ -264,6 +214,9 @@ export function useAnalysisWorkspaceModel() {
         detail: progress.detail,
         error: failed ? progress.detail : undefined,
       });
+      setExtractionRunning(
+        Object.values(useAnalysisStore.getState().extractionProgress).some((item) => item.status === 'running'),
+      );
     };
     const flush = () => {
       flushTimer = undefined;
@@ -297,7 +250,7 @@ export function useAnalysisWorkspaceModel() {
       }
       unsubscribe();
     };
-  }, [currentCase.data?.id, selectedDataSource?.id, updateExtractionProgress]);
+  }, [currentCase.data?.id, selectedDataSource?.id, updateExtractionProgress, setExtractionRunning]);
 
   async function refresh() {
     try {
@@ -326,89 +279,6 @@ export function useAnalysisWorkspaceModel() {
     }
   }
 
-  async function runEvidenceScan() {
-    if (!selectedDataSource || selectedDataSource.platform !== 'windows') {
-      return;
-    }
-    const operation = sourceEpoch.begin(selectedSourceContextKey);
-    if (!operation) {
-      return;
-    }
-    try {
-      await evidenceScan.mutateAsync({ dataSourceId: selectedDataSource.id, categories: [] });
-    } finally {
-      sourceEpoch.finish(operation);
-    }
-  }
-
-  async function runExtraction() {
-    await runSelectedSourceExtraction({
-      source: selectedDataSource,
-      sourceContextKey: selectedSourceContextKey,
-      sourceEpoch,
-      execute: extractionRun.mutateAsync,
-      updateProgress: updateExtractionProgress,
-      resetProgress: resetExtractionProgress,
-      setExtractionRunning,
-      setDrawerOpen,
-      setRefreshError: setAnalysisRefreshError,
-      setActiveOperation: (operation) => {
-        extractionOperationRef.current = operation;
-      },
-      isActiveOperation: (operation) => extractionOperationRef.current === operation,
-    });
-  }
-
-  async function runBrowserPasswordExtraction(password: string) {
-    if (!selectedDataSource || selectedDataSource.platform !== 'windows' || !password) {
-      return;
-    }
-    await runSelectedSourceExtraction({
-      source: selectedDataSource,
-      sourceContextKey: selectedSourceContextKey,
-      sourceEpoch,
-      categories: ['BrowserHistory'],
-      browserPassword: password,
-      execute: extractionRun.mutateAsync,
-      updateProgress: updateExtractionProgress,
-      resetProgress: resetExtractionProgress,
-      setExtractionRunning,
-      setDrawerOpen,
-      setRefreshError: setAnalysisRefreshError,
-      setActiveOperation: (operation) => {
-        extractionOperationRef.current = operation;
-      },
-      isActiveOperation: (operation) => extractionOperationRef.current === operation,
-    });
-  }
-
-  async function runAndroidAnalysis() {
-    if (!selectedDataSource || selectedDataSource.platform !== 'android') {
-      return;
-    }
-    const operation = sourceEpoch.begin(selectedSourceContextKey);
-    if (!operation) {
-      setAnalysisRefreshError(new Error(t('analysis.android.sourceUnavailable')));
-      return;
-    }
-    try {
-      setAnalysisRefreshError(undefined);
-      setAndroidAnalysisRunning(true);
-      const result = await androidAnalysisRun.mutateAsync(selectedDataSource.id);
-      if (sourceEpoch.isCurrent(operation)) {
-        setAndroidAnalysisLastRun(result);
-        await Promise.all([androidDeviceInfo.refetch(), androidPackages.refetch()]);
-      }
-    } catch (error) {
-      if (sourceEpoch.isCurrent(operation)) {
-        setAnalysisRefreshError(error);
-      }
-    } finally {
-      setAndroidAnalysisRunning(false);
-      sourceEpoch.finish(operation);
-    }
-  }
-
   function selectPluginModule(pluginId: string) {
     setActivePluginId(pluginId);
     if (selectedPlatform === 'windows') {
@@ -429,9 +299,8 @@ export function useAnalysisWorkspaceModel() {
     const nextContextKey = analysisSourceContextKey(currentCase.data?.id, nextSource);
     sourceEpoch.sync(nextContextKey);
     resetExtractionProgress();
-    resetEvidenceScan();
-    resetExtractionRun();
     resetSummaryMutation();
+    setExtractionRunning(false);
     setSelectedDataSourceId(id);
   }
 
@@ -473,11 +342,7 @@ export function useAnalysisWorkspaceModel() {
     activeTab,
     activeLinuxTab,
     activeAndroidTab,
-    extractionPending: extractionRun.isPending || extractionRunning,
     extractionRunning,
-    runBrowserPasswordExtraction,
-    androidAnalysisRunning,
-    androidAnalysisLastRun,
     windowsError,
     linuxError,
     androidError,
@@ -491,7 +356,6 @@ export function useAnalysisWorkspaceModel() {
     eventLogView,
     eventLogLoadContextKey: selectedSourceContextKey ?? '',
     classificationBoard,
-    evidencePending: evidenceScan.isPending,
     summaryPending: summaryMutation.isPending,
     linuxSummary: linuxSummary.data,
     linuxSummaryLoading: linuxSummary.isLoading,
@@ -517,9 +381,6 @@ export function useAnalysisWorkspaceModel() {
     activePluginId,
     selectPluginModule,
     refresh,
-    runEvidenceScan,
-    runExtraction,
-    runAndroidAnalysis,
     selectDataSource,
     setActiveTab,
     setActiveLinuxTab,

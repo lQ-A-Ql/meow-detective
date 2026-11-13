@@ -8,7 +8,7 @@ import { Input } from '@/app/components/ui/input';
 import { errorMessage } from '@/lib/errors';
 import { openDialog, singleDialogPath } from '@/lib/platform/dialog';
 import { usePluginActions, useRecoverWeChatKeys } from '@/features/analysis/plugin-action-hooks';
-import { useRunAnalysisExtraction } from '@/features/analysis/hooks';
+import { useRunPluginExtraction } from '@/features/analysis/hooks';
 import type { PluginActionDescriptor, WeChatKeyRecoveryResult, WeChatRecoveredKey } from '@/types/models';
 
 /**
@@ -17,9 +17,6 @@ import type { PluginActionDescriptor, WeChatKeyRecoveryResult, WeChatRecoveredKe
  * today is the dump-scan key recovery behind `recover_wechat_keys`.
  */
 const RECOVER_KEYS_ACTION_ID = 'recoverKeys';
-
-/** Capability key that re-runs plugin extraction for a data source. */
-const PLUGIN_RERUN_CATEGORIES = ['PluginArtifacts'];
 
 export type PickFilePath = () => Promise<string | undefined>;
 
@@ -106,7 +103,7 @@ function PluginActionCard({
   const [filePath, setFilePath] = useState('');
   const [inputError, setInputError] = useState('');
   const recovery = useRecoverWeChatKeys();
-  const rerun = useRunAnalysisExtraction();
+  const rerun = useRunPluginExtraction();
 
   const supported = action.id === RECOVER_KEYS_ACTION_ID;
   const needsFile = action.inputKind === 'file';
@@ -134,7 +131,7 @@ function PluginActionCard({
   }
 
   async function handleRerun() {
-    await rerun.mutateAsync({ dataSourceId, categories: PLUGIN_RERUN_CATEGORIES }).catch(() => undefined);
+    await rerun.mutateAsync({ dataSourceId }).catch(() => undefined);
   }
 
   return (

@@ -90,22 +90,50 @@ if (Test-Path -LiteralPath $analysisCommandPath -PathType Leaf) {
   }
   foreach ($required in @(
     'require_active_case(',
-    'analysis_task_jobs::run(',
+    'analysis_task_jobs::run_with_outcome(',
     'analysis_service::get_source_system_info(',
-    'analysis_service::run_source_evidence_scan',
     'analysis_service::generate_source_analysis_summary('
   )) {
     if (-not $analysisCommand.Contains($required)) {
       $errors.Add("analysis command is missing a thin service delegation: $required")
     }
   }
-  $extractionDelegations = @(
-    'analysis_service::run_source_analysis_extraction(',
-    'analysis_service::run_source_analysis_extraction_with_progress(',
-    'analysis_service::run_source_analysis_extraction_with_progress_and_cancel('
-  )
-  if (-not ($extractionDelegations | Where-Object { $analysisCommand.Contains($_) })) {
-    $errors.Add('analysis command is missing a thin service delegation: source analysis extraction')
+  foreach ($required in @(
+    'pub async fn run_plugin_extraction(',
+    'RunPluginExtractionRequest',
+    'analysis_service::run_source_analysis_extraction_execution_with_progress_and_cancel(',
+    'PLUGIN_CATEGORIES,'
+  )) {
+    if (-not $analysisCommand.Contains($required)) {
+      $errors.Add("plugin extraction command is missing its bounded delegation: $required")
+    }
+  }
+  if ($analysisCommand -notmatch 'PLUGIN_CATEGORIES\s*:\s*&\s*\[\s*&str\s*\]\s*=\s*&\[\s*"PluginArtifacts"\s*\]') {
+    $errors.Add('plugin extraction command must select only PluginArtifacts')
+  }
+  foreach ($forbidden in @(
+    'pub async fn run_analysis_extraction(',
+    'pub async fn run_evidence_classification(',
+    'pub async fn classify_files(',
+    'pub async fn run_android_analysis(',
+    'pub async fn run_kubernetes_cluster_analysis(',
+    'request.categories',
+    'request.browser_password'
+  )) {
+    if ($analysisCommand.Contains($forbidden)) {
+      $errors.Add("analysis commands expose a native manual-extraction override: $forbidden")
+    }
+  }
+}
+
+$commandHandlerPath = Join-Path $repoRoot 'apps/desktop/src-tauri/src/command_handler.rs'
+if (Test-Path -LiteralPath $commandHandlerPath -PathType Leaf) {
+  $commandHandler = Read-StrictUtf8 $commandHandlerPath
+  if (-not $commandHandler.Contains('run_plugin_extraction,')) {
+    $errors.Add('desktop command handler is missing the plugin extraction entry')
+  }
+  if ($commandHandler -match '\b(run_analysis_extraction|run_evidence_classification|classify_files|run_android_analysis|run_kubernetes_cluster_analysis)\s*,') {
+    $errors.Add('desktop command handler retains a native manual-extraction entry')
   }
 }
 

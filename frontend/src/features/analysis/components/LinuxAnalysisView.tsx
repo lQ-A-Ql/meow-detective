@@ -4,12 +4,12 @@ import {
   AnalysisErrorBanner,
   AnalysisLoadingPanel,
   LinuxArtifactsPanel,
-  PluginModulePanel,
 } from '@/features/analysis/components/AnalysisPanels';
 import type { LinuxArtifactSummary, PluginModule } from '@/types/models';
 import type { LinuxAnalysisTabKey } from '@/features/analysis/types';
 import { DeletedRecoveryPanel } from '@/features/recovery/components/DeletedRecoveryPanel';
 import type { DeletedRecoveryViewModel } from '@/features/recovery/types';
+import { PluginWorkspaceContainer } from '@/features/analysis/containers/PluginWorkspaceContainer';
 
 export interface LinuxAnalysisViewProps {
   activeTab: LinuxAnalysisTabKey;
@@ -64,8 +64,12 @@ export function LinuxAnalysisView({
         {activeTab === 'deletedRecovery' ? (
           <DeletedRecoveryPanel model={recoveryModel} />
         ) : activeTab === 'plugin' ? (
-          activePluginModule && dataSourceId ? (
-            <PluginModulePanel dataSourceId={dataSourceId} module={activePluginModule} loadContextKey={dataSourceId} />
+          dataSourceId ? (
+            <PluginWorkspaceContainer
+              dataSourceId={dataSourceId}
+              module={activePluginModule}
+              loadContextKey={dataSourceId}
+            />
           ) : null
         ) : loading || summaryLoading ? (
           <AnalysisLoadingPanel text={loading ? t('analysis.loading.case') : t('analysis.loading.linuxArtifacts')} />

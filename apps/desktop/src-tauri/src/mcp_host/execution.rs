@@ -19,7 +19,7 @@ use transport::{
 };
 mod tasks;
 
-use tasks::{cancel_job, start_analysis, start_content_index, start_report_export};
+use tasks::{cancel_job, start_content_index, start_report_export};
 
 pub async fn call_tool(
     state: AppState,
@@ -265,9 +265,6 @@ fn query_active_case(
     }
     if request.name == "forensics.get_task" {
         authorize_task_access(state, active, request, invocation)?;
-    }
-    if request.name == "forensics.start_analysis" {
-        return start_analysis(state, active, request, invocation);
     }
     if request.name == "forensics.start_report_export" {
         return start_report_export(state, active, request, invocation);

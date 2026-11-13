@@ -78,7 +78,7 @@ plugins-src/
 `MeowExtractRequest` 由宿主拥有：
 
 - `file_path` 是逻辑证据路径，可能带 `[P{n}]` 分区前缀，只用于匹配和 provenance；
-- `file_id` 是 `ds:<dataSourceId>:<localId>` 形式的 FileEntryId；
+- `file_id` 是当前数据源目录中的 FileEntryId，宿主负责保持来源归属；
 - `data/data_len` 是宿主按分析上限提供的只读主文件缓冲；
 - `companions/companion_count` 是可选的同目录伴随文件数组，例如 SQLite `.db-wal`。
 
@@ -119,7 +119,7 @@ plugins-src/
   "timelineEvents": [
     {
       "timestampUtc": "2026-01-02T03:04:05Z",
-      "eventType": "Execution",
+      "eventType": "FILE_EXECUTED",
       "description": "CMD.EXE executed",
       "attrs": {}
     }
@@ -194,6 +194,14 @@ meow_plugin_action(*const u8, u64) -> MeowExtractResponse
 - 动作不是候选发现或普通 artifact extraction 的旁路权限，不得借此修改原始证据。
 
 ## 7. 宿主加载与运行生命周期
+
+插件的手动运行使用 `run_plugin_extraction({ dataSourceId })`。服务端固定选择
+`PluginArtifacts`，请求不接受原生解析类别或浏览器密码。原生 Windows/Linux 解析由
+自动导入链路执行；插件的独立动作和查询接口继续保留。
+
+主文件和 companion 按同一数据源及分区选择。合计输入上限为 128 MiB，超限输入在读取前
+返回诊断。同一已加载 DLL 的 extraction/action 共享调用锁，重新构造 extractor 不改变
+串行范围。插件失败时保留该 producer 上一次成功结果，并记录真实失败数量。
 
 宿主从运行中 exe 的同级目录扫描：
 

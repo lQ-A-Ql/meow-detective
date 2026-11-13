@@ -80,7 +80,6 @@ impl McpPrincipal {
             tool.name.as_str(),
             "forensics.cancel_job"
                 | "forensics.start_content_index"
-                | "forensics.start_analysis"
                 | "forensics.start_report_export"
         );
         let evidence_tool = matches!(

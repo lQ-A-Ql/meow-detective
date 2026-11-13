@@ -24,13 +24,6 @@ pub fn store_artifacts(
     Ok(())
 }
 
-pub(super) fn already_has_artifact_for_source(
-    conn: &Connection,
-    source_object_id: &str,
-) -> Result<bool, ArtifactServiceError> {
-    Ok(ArtifactRepo::new(conn).count_by_source_object(source_object_id)? > 0)
-}
-
 fn populate_artifact_graph(
     conn: &Connection,
     artifacts: &[domain::Artifact],

@@ -115,10 +115,8 @@ export interface EvidenceSource {
   warnings: string[];
 }
 
-export interface AnalysisExtractionRequest {
+export interface PluginExtractionRequest {
   dataSourceId: string;
-  categories: string[];
-  browserPassword?: string;
 }
 
 export type AnalysisExtractionPhase =

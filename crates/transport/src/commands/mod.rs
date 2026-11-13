@@ -17,8 +17,7 @@ pub use analysis::{
     ClassifyFilesRequest, GetAnalysisExtractionRequest, GetAnalysisSourceRequest,
     GetAndroidPackagesRequest, GetEvtxEventSummaryRequest, GetLinuxEvidenceEventsRequest,
     GetLinuxEvidenceSetSummaryRequest, GetPluginFamilyEntriesRequest, ListLinuxEvidenceSetsRequest,
-    ListPluginActionsRequest, RecoverWeChatKeysRequest, RunAnalysisExtractionRequest,
-    RunEvidenceClassificationRequest,
+    ListPluginActionsRequest, RecoverWeChatKeysRequest, RunPluginExtractionRequest,
 };
 pub use artifacts::{GetArtifactByIdRequest, GetArtifactRowsRequest};
 pub use case::{

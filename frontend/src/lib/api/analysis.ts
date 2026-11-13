@@ -1,9 +1,8 @@
 import {
   AnalysisExtractionPageRequest,
-  AnalysisExtractionRequest,
+  PluginExtractionRequest,
   AnalysisExtractionRun,
   AnalysisSystemInfo,
-  AndroidAnalysisRun,
   AndroidDeviceInfo,
   AndroidPackageSummary,
   BrowserHistorySummary,
@@ -18,7 +17,6 @@ import {
   LinuxEvidenceSetSummary,
   LinuxEvidenceSetListItem,
   LinuxEvidenceEvent,
-  KubernetesAnalysisRun,
   PluginActionDescriptor,
   PluginFamilyEntries,
   PluginFamilyEntriesRequest,
@@ -49,17 +47,8 @@ export async function getEvidenceClassificationSummary(dataSourceId: string): Pr
   return apiClient.request(COMMANDS.analysis.GET_EVIDENCE_CLASSIFICATION_SUMMARY, { request: { dataSourceId } });
 }
 
-export async function runEvidenceClassification(
-  dataSourceId: string,
-  categories: string[] = [],
-): Promise<EvidenceClassificationSummary> {
-  return apiClient.request(COMMANDS.analysis.RUN_EVIDENCE_CLASSIFICATION, {
-    request: { dataSourceId, categories },
-  });
-}
-
-export async function runAnalysisExtraction(request: AnalysisExtractionRequest): Promise<AnalysisExtractionRun> {
-  return apiClient.request(COMMANDS.analysis.RUN_ANALYSIS_EXTRACTION, { request });
+export async function runPluginExtraction(request: PluginExtractionRequest): Promise<AnalysisExtractionRun> {
+  return apiClient.request(COMMANDS.analysis.RUN_PLUGIN_EXTRACTION, { request });
 }
 
 export async function getRegistryExtractionSummary(
@@ -116,16 +105,6 @@ export async function getLinuxEvidenceEvents(
   return apiClient.request(COMMANDS.analysis.GET_LINUX_EVIDENCE_EVENTS, {
     request: { importSetId, offset, limit },
   });
-}
-
-export async function runKubernetesClusterAnalysis(importSetId: string): Promise<KubernetesAnalysisRun> {
-  return apiClient.request(COMMANDS.analysis.RUN_KUBERNETES_CLUSTER_ANALYSIS, {
-    request: { importSetId },
-  });
-}
-
-export async function runAndroidAnalysis(dataSourceId: string): Promise<AndroidAnalysisRun> {
-  return apiClient.request(COMMANDS.analysis.RUN_ANDROID_ANALYSIS, { request: { dataSourceId } });
 }
 
 export async function getAndroidDeviceInfo(dataSourceId: string): Promise<AndroidDeviceInfo> {

@@ -31,7 +31,7 @@ impl transport::ServiceErrorCategory for ArtifactServiceError {
             Self::Extractor(_) => transport::ErrorCategory::Parser,
             Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
-            Self::Cancelled => transport::ErrorCategory::Timeout,
+            Self::Cancelled => transport::ErrorCategory::Cancelled,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
     }

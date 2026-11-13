@@ -82,7 +82,6 @@ $policies = [ordered]@{
   )
   "analysis_commands/linux_events.rs" = @("get_linux_evidence_events")
   "analysis_commands/classification.rs" = @(
-    "classify_files",
     "get_file_classification_board"
   )
   "analysis_commands/extraction/summaries.rs" = @(

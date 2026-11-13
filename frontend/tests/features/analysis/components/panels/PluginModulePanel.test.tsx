@@ -6,12 +6,12 @@ const mocks = vi.hoisted(() => ({
   usePluginFamilyEntries: vi.fn(),
   usePluginActions: vi.fn(),
   useRecoverWeChatKeys: vi.fn(),
-  useRunAnalysisExtraction: vi.fn(),
+  useRunPluginExtraction: vi.fn(),
 }));
 
 vi.mock('@/features/analysis/hooks', () => ({
   usePluginFamilyEntries: mocks.usePluginFamilyEntries,
-  useRunAnalysisExtraction: mocks.useRunAnalysisExtraction,
+  useRunPluginExtraction: mocks.useRunPluginExtraction,
 }));
 
 vi.mock('@/features/analysis/plugin-action-hooks', () => ({
@@ -20,6 +20,7 @@ vi.mock('@/features/analysis/plugin-action-hooks', () => ({
 }));
 
 import { PluginModulePanel, deriveDynamicAttrKeys } from '@/features/analysis/containers/PluginModulePanel';
+import { PluginWorkspaceContainer } from '@/features/analysis/containers/PluginWorkspaceContainer';
 import type { PluginArtifactEntry, PluginModule } from '@/types/models';
 
 function entry(artifactId: string, attrs: Record<string, unknown> = {}): PluginArtifactEntry {
@@ -96,13 +97,27 @@ describe('PluginModulePanel', () => {
       data: undefined,
       error: null,
     });
-    mocks.useRunAnalysisExtraction.mockReturnValue({
+    mocks.useRunPluginExtraction.mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue(undefined),
       isPending: false,
       isSuccess: false,
       error: null,
       reset: vi.fn(),
     });
+  });
+
+  it('runs enabled plugins for the data source from the plugin workspace action', () => {
+    const mutate = vi.fn();
+    mocks.useRunPluginExtraction.mockReturnValue({ mutate, isPending: false, error: null });
+    render(createElement(PluginWorkspaceContainer, { dataSourceId: 'source-one', loadContextKey: 'source-one' }));
+    fireEvent.click(screen.getByRole('button', { name: '运行已启用插件' }));
+    expect(mutate).toHaveBeenCalledWith({ dataSourceId: 'source-one' });
+  });
+
+  it('disables the plugin workspace action while enabled plugins are running', () => {
+    mocks.useRunPluginExtraction.mockReturnValue({ mutate: vi.fn(), isPending: true, error: null });
+    render(createElement(PluginWorkspaceContainer, { dataSourceId: 'source-one', loadContextKey: 'source-one' }));
+    expect(screen.getByRole('button', { name: '运行已启用插件' })).toBeDisabled();
   });
 
   it('renders header with display name, version and warnings', () => {
