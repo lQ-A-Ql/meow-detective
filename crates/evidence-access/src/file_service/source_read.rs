@@ -33,7 +33,7 @@ use derived_cache::DerivedSourceReadCache;
 pub use parallel::ParallelSourceReaders;
 pub use stream::SourceExtractionMode;
 
-const MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES: usize = 4_096;
+pub(crate) const MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES: usize = 4_096;
 const MAX_SOURCE_PARTITION_CACHE_ENTRIES: usize = 64;
 const MAX_CEPHFS_PREPARED_READERS: usize = 8;
 

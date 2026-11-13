@@ -6,6 +6,7 @@ crate::native_source_test_support!();
 use crate::e01_reader_cache::{E01_READER_CACHE, E01_READER_CACHE_PER_CASE_MAX_SIZE};
 use crate::file_service::{
     preview_runtime::{PreparedFile, PreviewRuntimeRegistry, PreviewSession},
+    source_read::MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES,
     FileServiceError,
 };
 use domain::{
@@ -1394,6 +1395,65 @@ fn header_read_cache_reuses_preview_descriptor_across_chunks() {
         .read_file_header_by_id(conn, &FileEntryId("file-header-cache".to_string()), 8)
         .unwrap();
     assert_eq!(again, bytes[..8].to_vec());
+}
+
+#[test]
+fn header_read_cache_bounds_distinct_descriptors() {
+    let cache = FileHeaderReadCache::new("case-header-cache-bounded");
+    for index in 0..5_000 {
+        cache.cache_descriptor(
+            &format!("file-{index}"),
+            &serde_json::json!({"fileId": index}),
+        );
+    }
+
+    assert!(cache.descriptors.borrow().len() <= MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES);
+    assert!(!cache.descriptors.borrow().is_empty());
+}
+
+#[test]
+fn header_read_cache_recovers_after_capacity_clear() {
+    let cache = FileHeaderReadCache::new("case-header-cache-refill");
+    for index in 0..20_000 {
+        cache.cache_descriptor(
+            &format!("file-{index}"),
+            &serde_json::json!({"fileId": index}),
+        );
+    }
+
+    assert!(cache.descriptors.borrow().len() <= MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES);
+    assert!(!cache.descriptors.borrow().is_empty());
+
+    cache.cache_descriptor(
+        "file-after-clear",
+        &serde_json::json!({"fileId": "after-clear"}),
+    );
+    assert!(cache.descriptors.borrow().len() <= MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES);
+    assert!(!cache.descriptors.borrow().is_empty());
+}
+
+#[test]
+fn header_read_cache_updates_at_capacity_without_clearing() {
+    let cache = FileHeaderReadCache::new("case-header-cache-update");
+    for index in 0..MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES {
+        cache.cache_descriptor(
+            &format!("file-{index}"),
+            &serde_json::json!({"fileId": index}),
+        );
+    }
+    assert_eq!(
+        cache.descriptors.borrow().len(),
+        MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES
+    );
+
+    cache.cache_descriptor("file-0", &serde_json::json!({"fileId": "updated"}));
+    assert_eq!(
+        cache.descriptors.borrow().len(),
+        MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES
+    );
+
+    cache.cache_descriptor("file-new", &serde_json::json!({"fileId": "new"}));
+    assert_eq!(cache.descriptors.borrow().len(), 1);
 }
 
 #[test]

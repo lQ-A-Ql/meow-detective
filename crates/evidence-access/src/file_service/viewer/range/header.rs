@@ -4,6 +4,7 @@ use domain::FileEntryId;
 use rusqlite::Connection;
 use serde_json::Value;
 
+use crate::file_service::source_read::MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES;
 use crate::file_service::FileServiceError;
 
 use super::api::{read_file_bytes_for_case, read_file_bytes_for_descriptor_with_context};
@@ -47,7 +48,7 @@ where
 
 pub struct FileHeaderReadCache {
     case_id: String,
-    descriptors: RefCell<HashMap<String, Value>>,
+    pub(crate) descriptors: RefCell<HashMap<String, Value>>,
 }
 
 impl FileHeaderReadCache {
@@ -69,11 +70,7 @@ impl FileHeaderReadCache {
         }
         read_header_chunks(max_bytes, |offset, length| {
             let get_cache = |key: &str| self.descriptors.borrow().get(key).cloned();
-            let set_cache = |key: &str, value: &Value| {
-                self.descriptors
-                    .borrow_mut()
-                    .insert(key.to_string(), value.clone());
-            };
+            let set_cache = |key: &str, value: &Value| self.cache_descriptor(key, value);
             read_file_bytes_for_case(
                 (conn, self.case_id.as_str(), get_cache, set_cache),
                 file_id,
@@ -81,6 +78,20 @@ impl FileHeaderReadCache {
                 length,
             )
         })
+    }
+
+    /// Stores one descriptor while keeping the map bounded per worker.
+    ///
+    /// Mirrors the `source_read` cache policy: clear-all only when the map is
+    /// at capacity and the key is new, so updates of retained keys are free.
+    pub(crate) fn cache_descriptor(&self, key: &str, value: &Value) {
+        let mut descriptors = self.descriptors.borrow_mut();
+        if descriptors.len() >= MAX_SOURCE_DESCRIPTOR_CACHE_ENTRIES
+            && !descriptors.contains_key(key)
+        {
+            descriptors.clear();
+        }
+        descriptors.insert(key.to_string(), value.clone());
     }
 }
 
