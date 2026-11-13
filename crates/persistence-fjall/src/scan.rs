@@ -1,6 +1,7 @@
 use crate::{
     database::SourceReadSnapshot,
     errors::{FjallStorageError, Result},
+    instrumentation::record_scan,
     keyspaces::KeyspaceName,
 };
 use fjall::Readable;
@@ -101,8 +102,10 @@ impl SourceReadSnapshot {
             .snapshot
             .range(self.keyspace(keyspace), (start, bounds.end));
         let mut entries = Vec::with_capacity(limit);
+        let mut bytes = 0usize;
         for guard in iter {
             let (key, value) = guard.into_inner()?;
+            bytes += key.len() + value.len();
             entries.push(SnapshotEntry {
                 key: key.to_vec(),
                 value: value.to_vec(),
@@ -111,6 +114,7 @@ impl SourceReadSnapshot {
                 break;
             }
         }
+        record_scan(entries.len(), bytes);
         Ok(entries)
     }
 
@@ -209,8 +213,10 @@ impl SourceReadSnapshot {
             ScanDirection::Forward => Box::new(iter) as Box<dyn Iterator<Item = fjall::Guard>>,
             ScanDirection::Reverse => Box::new(iter.rev()),
         };
+        let mut bytes = 0usize;
         for guard in iter {
             let (key, value) = guard.into_inner()?;
+            bytes += key.len() + value.len();
             entries.push(SnapshotEntry {
                 key: key.to_vec(),
                 value: value.to_vec(),
@@ -219,6 +225,7 @@ impl SourceReadSnapshot {
                 break;
             }
         }
+        record_scan(entries.len(), bytes);
         Ok(entries)
     }
 
@@ -265,12 +272,17 @@ fn collect(iter: fjall::Iter, direction: ScanDirection) -> Result<Vec<SnapshotEn
         ScanDirection::Forward => Box::new(iter) as Box<dyn Iterator<Item = fjall::Guard>>,
         ScanDirection::Reverse => Box::new(iter.rev()),
     };
-    iter.map(|guard| {
-        let (key, value) = guard.into_inner()?;
-        Ok(SnapshotEntry {
-            key: key.to_vec(),
-            value: value.to_vec(),
+    let mut bytes = 0usize;
+    let entries = iter
+        .map(|guard| {
+            let (key, value) = guard.into_inner()?;
+            bytes += key.len() + value.len();
+            Ok(SnapshotEntry {
+                key: key.to_vec(),
+                value: value.to_vec(),
+            })
         })
-    })
-    .collect()
+        .collect::<Result<Vec<_>>>()?;
+    record_scan(entries.len(), bytes);
+    Ok(entries)
 }

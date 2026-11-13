@@ -5,6 +5,7 @@ mod database;
 mod deleted_recovery;
 mod deleted_recovery_types;
 mod errors;
+pub mod instrumentation;
 mod keyspaces;
 mod parser;
 mod partition;

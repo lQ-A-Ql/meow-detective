@@ -1,5 +1,8 @@
 use crate::{
     errors::{FjallStorageError, Result},
+    instrumentation::{
+        record_database_open, record_persist, record_point_read, record_write_batch,
+    },
     keyspaces::{open_keyspaces, KeyspaceName},
 };
 use fjall::{Readable, SingleWriterTxKeyspace, SingleWriterWriteTx};
@@ -70,6 +73,7 @@ impl SingleWriterTxDatabase {
             other => FjallStorageError::Engine(other),
         })?;
         let keyspaces = open_keyspaces(&inner)?.into_iter().collect();
+        record_database_open();
         Ok(Self {
             inner: Arc::new(DatabaseState {
                 engine: inner,
@@ -103,14 +107,19 @@ impl SingleWriterTxDatabase {
         let receipt_key = [b"batch/".as_slice(), batch_digest.as_slice()].concat();
         let database = self.inner.engine.inner().clone();
         let mut batch = database.batch().durability(Some(mode.into()));
+        let mut action_bytes = 0usize;
         for action in actions {
             match action {
                 WriteAction::Put {
                     keyspace,
                     key,
                     value,
-                } => batch.insert(self.keyspace(*keyspace).inner(), key.clone(), value.clone()),
+                } => {
+                    action_bytes += key.len() + value.len();
+                    batch.insert(self.keyspace(*keyspace).inner(), key.clone(), value.clone())
+                }
                 WriteAction::Delete { keyspace, key } => {
+                    action_bytes += key.len();
                     batch.remove(self.keyspace(*keyspace).inner(), key.clone())
                 }
             }
@@ -121,6 +130,11 @@ impl SingleWriterTxDatabase {
             actions.len().to_be_bytes().to_vec(),
         );
         batch.commit()?;
+        record_write_batch(
+            actions.len(),
+            action_bytes,
+            matches!(mode, PersistMode::SyncAll),
+        );
         Ok(WriteBatchReceipt {
             operation_count: actions.len(),
             batch_digest,
@@ -128,7 +142,12 @@ impl SingleWriterTxDatabase {
     }
 
     pub fn persist(&self, mode: PersistMode) -> Result<()> {
-        self.inner.engine.persist(mode.into()).map_err(Into::into)
+        self.inner
+            .engine
+            .persist(mode.into())
+            .map_err(FjallStorageError::from)?;
+        record_persist(matches!(mode, PersistMode::SyncAll));
+        Ok(())
     }
 
     pub(crate) fn write_planned(
@@ -145,14 +164,19 @@ impl SingleWriterTxDatabase {
                 batch_digest,
             });
         }
+        let mut action_bytes = 0usize;
         for action in &actions {
             match action {
                 WriteAction::Put {
                     keyspace,
                     key,
                     value,
-                } => transaction.insert(self.keyspace(*keyspace), key.clone(), value.clone()),
+                } => {
+                    action_bytes += key.len() + value.len();
+                    transaction.insert(self.keyspace(*keyspace), key.clone(), value.clone())
+                }
                 WriteAction::Delete { keyspace, key } => {
+                    action_bytes += key.len();
                     transaction.remove(self.keyspace(*keyspace), key.clone())
                 }
             }
@@ -163,6 +187,11 @@ impl SingleWriterTxDatabase {
             actions.len().to_be_bytes().to_vec(),
         );
         transaction.commit()?;
+        record_write_batch(
+            actions.len(),
+            action_bytes,
+            matches!(mode, PersistMode::SyncAll),
+        );
         Ok(WriteBatchReceipt {
             operation_count: actions.len(),
             batch_digest,
@@ -384,7 +413,8 @@ pub struct SourceReadSnapshot {
 
 impl SourceReadSnapshot {
     pub fn get(&self, keyspace: KeyspaceName, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.snapshot
+        let value = self
+            .snapshot
             .get(
                 self.keyspaces
                     .get(&keyspace)
@@ -392,6 +422,10 @@ impl SourceReadSnapshot {
                 key,
             )
             .map(|value| value.map(|bytes| bytes.to_vec()))
-            .map_err(Into::into)
+            .map_err(FjallStorageError::from)?;
+        if let Some(bytes) = value.as_ref() {
+            record_point_read(bytes.len());
+        }
+        Ok(value)
     }
 }
