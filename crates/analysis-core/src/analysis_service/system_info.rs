@@ -36,6 +36,11 @@ pub(crate) struct AnalysisProvenanceContext<'a> {
     pub(crate) data_source_id: Option<&'a str>,
 }
 
+struct RegistrySource<'a> {
+    entry: &'a FileEntry,
+    input: Option<&'a crate::analysis_service::candidates::EvidenceCandidate>,
+}
+
 impl SystemInfoExtraction {
     fn has_registry_field(&self) -> bool {
         self.computer_name.is_some()
@@ -80,13 +85,21 @@ pub fn extract_system_info_for_case<E: std::fmt::Display>(
                 system_evtx = candidates.system_evtx.is_some(),
                 "Windows system information candidate discovery completed"
             );
-            let system_hive = candidates.system_hive.as_ref();
-            let software_hive = candidates.software_hive.as_ref();
+            let system_hive = candidates.system_hive.as_ref().map(|entry| RegistrySource {
+                entry,
+                input: candidates.system_input.as_ref(),
+            });
+            let software_hive = candidates
+                .software_hive
+                .as_ref()
+                .map(|entry| RegistrySource {
+                    entry,
+                    input: candidates.software_input.as_ref(),
+                });
             let system_evtx = candidates.system_evtx.as_ref();
 
             inspect_registry_hive(
                 system_hive,
-                candidates.system_input.as_ref(),
                 REGISTRY_SYSTEM_PARSER,
                 &provenance_context,
                 &mut read_header_fn,
@@ -96,7 +109,6 @@ pub fn extract_system_info_for_case<E: std::fmt::Display>(
             );
             inspect_registry_hive(
                 software_hive,
-                candidates.software_input.as_ref(),
                 REGISTRY_SOFTWARE_PARSER,
                 &provenance_context,
                 &mut read_header_fn,
@@ -163,8 +175,7 @@ fn unique_registered_data_source_id(conn: &Connection) -> Option<String> {
 }
 
 fn inspect_registry_hive<E: std::fmt::Display>(
-    entry: Option<&FileEntry>,
-    input: Option<&crate::analysis_service::candidates::EvidenceCandidate>,
+    source: Option<RegistrySource<'_>>,
     parser: &str,
     context: &AnalysisProvenanceContext<'_>,
     read_header_fn: &mut impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, E>,
@@ -172,14 +183,16 @@ fn inspect_registry_hive<E: std::fmt::Display>(
     provenance: &mut Vec<AnalysisProvenanceDto>,
     extraction: &mut SystemInfoExtraction,
 ) {
-    let Some(entry) = entry else {
+    let Some(source) = source else {
         record_missing_registry_hive(parser, context, warnings, provenance);
         return;
     };
+    let entry = source.entry;
 
     let started = Instant::now();
     tracing::info!(parser, path = %entry.path, "Windows system information registry parse started");
-    let result = input
+    let result = source
+        .input
         .ok_or_else(|| "registry input metadata is unavailable".to_string())
         .and_then(|input| {
             recovery::snapshot(input, read_header_fn).map_err(|error| error.to_string())

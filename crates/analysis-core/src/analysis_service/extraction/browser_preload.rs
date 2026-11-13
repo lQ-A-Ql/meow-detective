@@ -20,6 +20,12 @@ use super::browser_catalog::locate_master_key_files;
 const BROWSER_CONTEXT_READ_LIMIT: usize = 32 * 1024 * 1024;
 type ChromeMaterials = (Option<Vec<u8>>, Option<Vec<u8>>);
 
+#[derive(Clone, Copy)]
+struct BrowserSourceScope<'a> {
+    data_source_id: &'a str,
+    partition: Option<usize>,
+}
+
 /// Per-analysis browser key context built from evidence hives and Protect files.
 pub(super) struct BrowserPreloadContext {
     decryptors: HashMap<(String, Option<usize>, String), ChromiumDecryptor>,
@@ -106,8 +112,10 @@ pub(super) fn prepare_browser_preload(
             .collect::<Vec<_>>();
         if let Err(error) = prepare_source_context(
             &scoped_catalog,
-            &data_source_id,
-            partition,
+            BrowserSourceScope {
+                data_source_id: &data_source_id,
+                partition,
+            },
             scoped_roots.clone(),
             cancel_token,
             manual_password,
@@ -137,14 +145,14 @@ pub(super) fn prepare_browser_preload(
 
 fn prepare_source_context(
     catalog: &PreparationCatalog,
-    data_source_id: &str,
-    partition: Option<usize>,
+    scope: BrowserSourceScope<'_>,
     roots: Vec<String>,
     cancel_token: &AtomicBool,
     manual_password: Option<&str>,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
     context: &mut BrowserPreloadContext,
 ) -> Result<(), AnalysisServiceError> {
+    let data_source_id = scope.data_source_id;
     let system = catalog
         .suffix(data_source_id, "/windows/system32/config/system")
         .ok_or_else(|| AnalysisServiceError::Other("SYSTEM hive was not found".to_string()))?;
@@ -190,8 +198,7 @@ fn prepare_source_context(
 
     install_profile_decryptors(
         catalog,
-        data_source_id,
-        partition,
+        scope,
         roots,
         &master_keys,
         cancel_token,
@@ -202,14 +209,14 @@ fn prepare_source_context(
 
 fn install_profile_decryptors(
     catalog: &PreparationCatalog,
-    data_source_id: &str,
-    partition: Option<usize>,
+    scope: BrowserSourceScope<'_>,
     roots: Vec<String>,
     master_keys: &[DecryptedMasterKey],
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
     context: &mut BrowserPreloadContext,
 ) -> Result<(), AnalysisServiceError> {
+    let data_source_id = scope.data_source_id;
     // CNG and elevation-service bytes are only needed for Google Chrome's
     // PostProcessData schemes; read them lazily on the first Chrome root.
     let mut chrome_materials: Option<ChromeMaterials> = None;
@@ -259,9 +266,10 @@ fn install_profile_decryptors(
             &mut context.warnings,
         );
         if let Some(decryptor) = decryptor {
-            context
-                .decryptors
-                .insert((data_source_id.to_string(), partition, root), decryptor);
+            context.decryptors.insert(
+                (data_source_id.to_string(), scope.partition, root),
+                decryptor,
+            );
         }
     }
     Ok(())
