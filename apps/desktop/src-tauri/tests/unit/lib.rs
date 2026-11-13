@@ -2,6 +2,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
+pub(crate) mod source_fixture;
+
 #[cfg(windows)]
 #[link(name = "windows-test-manifest", kind = "static")]
 // SAFETY: The block declares no foreign functions; it only links the dedicated

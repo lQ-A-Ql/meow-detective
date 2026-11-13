@@ -57,7 +57,7 @@ fn with_raw_exfat_case_file(
             },
         )
         .unwrap();
-    publish_exfat_partition_metadata(tmp.path(), &ds_id);
+    publish_exfat_partition_metadata(&source_conn, &ds_id);
     let file_id = domain::FileEntryId("file-protocol-raw-exfat".to_string());
     FileRepo::new(&source_conn)
         .insert_batch(&[domain::FileEntry {
@@ -83,6 +83,7 @@ fn with_raw_exfat_case_file(
             hash_sha256: None,
         }])
         .unwrap();
+    crate::tests::source_fixture::seal_source(&source_conn, &ds_id).unwrap();
 
     let state = AppState::default();
     let global_file_id = app_services::source_db::GlobalFileId::new(ds_id, file_id)
@@ -92,12 +93,11 @@ fn with_raw_exfat_case_file(
 }
 
 fn publish_exfat_partition_metadata(
-    case_root: &std::path::Path,
+    connection: &rusqlite::Connection,
     data_source_id: &domain::DataSourceId,
 ) {
-    let storage =
-        app_services::source_db::open_fjall_source_read_write(case_root, &data_source_id.0)
-            .expect("open Fjall source storage");
+    let storage = app_services::source_db::open_fjall_source_for_build(connection, data_source_id)
+        .expect("open Fjall source builder");
     let record = persistence_source::fjall::PartitionRecord {
         id: "partition:0".to_string(),
         data_source_id: data_source_id.0.clone(),

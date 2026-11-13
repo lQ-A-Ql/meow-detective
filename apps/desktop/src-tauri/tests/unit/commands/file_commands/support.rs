@@ -169,7 +169,7 @@ pub(super) fn with_raw_exfat_case_file(
                 app_services::source_db::open_source_db(&case_root, &data_source_id)?;
             DataSourceRepo::new(&source_connection)
                 .upsert_source_local_metadata(&case_id, &data_source)?;
-            publish_exfat_partition_metadata(&case_root, &data_source_id)?;
+            publish_exfat_partition_metadata(&source_connection, &data_source_id)?;
 
             let file_id = domain::FileEntryId("file-raw-exfat-large".to_string());
             FileRepo::new(&source_connection).insert_batch(&[domain::FileEntry {
@@ -194,6 +194,7 @@ pub(super) fn with_raw_exfat_case_file(
                 changed_at: None,
                 hash_sha256: None,
             }])?;
+            crate::tests::source_fixture::seal_source(&source_connection, &data_source_id)?;
             let global_file_id =
                 app_services::source_db::GlobalFileId::new(data_source_id, file_id)
                     .encode()
@@ -210,12 +211,11 @@ pub(super) fn with_raw_exfat_case_file(
 }
 
 fn publish_exfat_partition_metadata(
-    case_root: &Path,
+    connection: &rusqlite::Connection,
     data_source_id: &domain::DataSourceId,
 ) -> Result<(), persistence_sqlite::DbError> {
-    let storage =
-        app_services::source_db::open_fjall_source_read_write(case_root, &data_source_id.0)
-            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let storage = app_services::source_db::open_fjall_source_for_build(connection, data_source_id)
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
     let record = persistence_source::fjall::PartitionRecord {
         id: "partition:0".to_string(),
         data_source_id: data_source_id.0.clone(),

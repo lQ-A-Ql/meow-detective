@@ -2298,6 +2298,7 @@ dependencies = [
  "fs-fat",
  "fs-ntfs",
  "headers",
+ "hex",
  "image-e01",
  "infrastructure",
  "mimalloc",
