@@ -1,8 +1,7 @@
 use super::*;
 use artifacts_core::{ArtifactContext, ArtifactExtractor, VecSink};
 
-#[path = "../support/parser_fixtures.rs"]
-mod fixtures;
+use crate::tests::parser_fixtures as fixtures;
 
 fn context(data: Vec<u8>) -> ArtifactContext {
     ArtifactContext {

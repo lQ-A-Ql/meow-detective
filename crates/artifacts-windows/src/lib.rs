@@ -67,3 +67,7 @@ pub use registry::recovery::{
 pub use registry::sam_structs::{extract_boot_key, SamPasswordPolicy};
 pub use sru::SruExtractor;
 pub use thumbcache::ThumbcacheExtractor;
+
+#[cfg(test)]
+#[path = "../tests/unit/mod.rs"]
+mod tests;
