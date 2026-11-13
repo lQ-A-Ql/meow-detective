@@ -35,8 +35,8 @@ fn seed_source_connection(case_root: &std::path::Path) -> Connection {
     conn
 }
 
-fn seed_partitions_table(case_root: &std::path::Path) {
-    let storage = app_services::source_db::open_fjall_source_read_write(case_root, DS_ID).unwrap();
+fn seed_partitions_table(conn: &Connection) {
+    let storage = source_storage(conn);
     storage
         .partition_replace_by_source(
             DS_ID,
@@ -92,25 +92,15 @@ fn seed_partitions_table(case_root: &std::path::Path) {
     storage.partition_projection_publish(DS_ID).unwrap();
 }
 
-fn source_storage(
-    case_root: &std::path::Path,
-) -> app_services::source_db::FjallReadWriteSourceStorageHandle {
-    app_services::source_db::open_fjall_source_read_write(case_root, DS_ID).unwrap()
+fn source_storage(conn: &Connection) -> app_services::source_db::FjallReadWriteSourceStorageHandle {
+    app_services::source_db::open_fjall_source_for_build(conn, &DataSourceId(DS_ID.to_string()))
+        .unwrap()
 }
 
 fn publish_source_projection(conn: &Connection) {
     let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
-    persistence_source::fjall::seal_source_generation_with_control(
-        &store,
-        DS_ID,
-        "fixture",
-        &"a".repeat(64),
-        &std::sync::atomic::AtomicBool::new(false),
-        |_, _| {},
-    )
-    .unwrap();
     let key = persistence_source::fjall::encode_key(
         "projection",
         &[persistence_source::fjall::KeyPart::Text(DS_ID.to_string())],
@@ -124,7 +114,7 @@ fn publish_source_projection(conn: &Connection) {
         1,
         DS_ID.as_bytes().to_vec(),
     );
-    store
+    let receipt = store
         .write_envelope(
             persistence_source::fjall::KeyspaceName::Meta,
             key,
@@ -132,6 +122,15 @@ fn publish_source_projection(conn: &Connection) {
             persistence_source::fjall::PersistMode::SyncAll,
         )
         .unwrap();
+    persistence_source::fjall::seal_source_generation_with_control(
+        &store,
+        DS_ID,
+        "fixture",
+        &hex::encode(receipt.batch_digest),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
 }
 
 fn catalog_records(
@@ -233,8 +232,8 @@ fn full_merge_yields_only_partition_roots_no_bare_fs_roots() {
     let tmp = TempDir::new().unwrap();
     let case_root = tmp.path();
     let main_conn = seed_source_connection(case_root);
-    seed_partitions_table(case_root);
-    let storage = source_storage(case_root);
+    seed_partitions_table(&main_conn);
+    let storage = source_storage(&main_conn);
 
     // (A) Insert index-bound placeholder roots, exactly as the import pipeline does.
     file_service::insert_partition_placeholder_root(
@@ -374,8 +373,8 @@ fn repeated_merge_is_idempotent_and_stays_folded() {
     let tmp = TempDir::new().unwrap();
     let case_root = tmp.path();
     let main_conn = seed_source_connection(case_root);
-    seed_partitions_table(case_root);
-    let storage = source_storage(case_root);
+    seed_partitions_table(&main_conn);
+    let storage = source_storage(&main_conn);
 
     file_service::insert_partition_placeholder_root(
         &main_conn,
@@ -437,7 +436,7 @@ fn redirected_lvm_placeholder_root_can_be_removed_on_resume_repair() {
     let main_conn = seed_source_connection(tmp.path());
     let ds_id = DataSourceId(DS_ID.to_string());
 
-    let storage = app_services::source_db::open_fjall_source_read_write(tmp.path(), DS_ID).unwrap();
+    let storage = source_storage(&main_conn);
     storage
         .partition_replace_by_source(
             DS_ID,
@@ -526,6 +525,7 @@ fn redirected_lvm_placeholder_root_can_be_removed_on_resume_repair() {
         .unwrap();
 
     let removed = file_service::remove_partition_placeholder_root(&main_conn, &ds_id, 1).unwrap();
+    publish_source_projection(&main_conn);
 
     assert_eq!(removed, 1);
     let roots = persistence_source::repositories::file_repo::FileRepo::new(&main_conn)

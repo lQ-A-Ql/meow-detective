@@ -3,7 +3,9 @@ use app_services::{
 };
 use chrono::Utc;
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, FileEntryId};
-use persistence_source::fjall::{CatalogEntryType, FileEntryRecord, PersistMode};
+use persistence_source::fjall::{
+    CatalogEntryType, FileEntryRecord, PersistMode, WriteBatchReceipt,
+};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use transport::commands::GetFileRowsRequest;
 
@@ -53,7 +55,7 @@ fn scoped(local: &str) -> String {
     .0
 }
 
-fn write_catalog(source: &ReadWriteSourceStorageHandle) {
+fn write_catalog(source: &ReadWriteSourceStorageHandle) -> WriteBatchReceipt {
     for record in [
         record(
             "root",
@@ -121,7 +123,14 @@ fn write_catalog(source: &ReadWriteSourceStorageHandle) {
     ] {
         source.catalog_upsert(&record, PersistMode::Buffer).unwrap();
     }
-    source.persist(PersistMode::SyncAll).unwrap();
+    let (keyspace, key, marker) =
+        persistence_source::runtime::partition_marker::partition_projection_marker(
+            "browser-source",
+        )
+        .unwrap();
+    source
+        .write_envelope(keyspace, key, &marker, PersistMode::SyncAll)
+        .unwrap()
 }
 
 #[test]
@@ -147,23 +156,18 @@ fn file_browser_fjall_matches_visibility_sorting_and_orphan_root_rules() {
         .upsert_source_local_metadata(&case.meta.id, &source)
         .unwrap();
 
-    let fjall =
-        source_db::open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
-    write_catalog(&fjall);
-    drop(fjall);
-    let store = persistence_source::detail::open_store_for_write(&source_conn)
-        .unwrap()
-        .unwrap();
+    let fjall = source_db::open_fjall_source_for_build(&source_conn, &source.id).unwrap();
+    let receipt = write_catalog(&fjall);
     persistence_source::fjall::seal_source_generation_with_control(
-        &store,
+        fjall.source_store(),
         &source.id.0,
         "fixture",
-        &"a".repeat(64),
+        &hex::encode(receipt.batch_digest),
         &std::sync::atomic::AtomicBool::new(false),
         |_, _| {},
     )
     .unwrap();
-    drop(store);
+    drop(fjall);
     drop(source_conn);
 
     let incomplete_tree = case

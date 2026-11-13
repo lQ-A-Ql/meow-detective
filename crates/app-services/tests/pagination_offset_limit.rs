@@ -32,8 +32,7 @@ fn register_source(case: &app_services::active_case::ActiveCase) {
     DataSourceRepo::new(&connection)
         .upsert_source_local_metadata(&case.meta.id, &source)
         .unwrap();
-    let handle =
-        source_db::open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
+    let handle = source_db::open_fjall_source_for_build(&connection, &source.id).unwrap();
     let base = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
     for start in (0..RECORDS).step_by(500) {
         let indexes = start..(start + 500).min(RECORDS);
@@ -77,16 +76,16 @@ fn register_source(case: &app_services::active_case::ActiveCase) {
             .unwrap();
     }
     handle.persist(PersistMode::SyncAll).unwrap();
+    let receipt = projection_support::mark_source_projection_complete(&handle, SOURCE);
     persistence_source::fjall::seal_source_generation_with_control(
         handle.source_store(),
         SOURCE,
         "offset-fixture",
-        &"a".repeat(64),
+        &hex::encode(receipt.batch_digest),
         &std::sync::atomic::AtomicBool::new(false),
         |_, _| {},
     )
     .unwrap();
-    projection_support::mark_source_projection_complete(&handle, SOURCE);
 }
 
 fn artifact_cursor_page(

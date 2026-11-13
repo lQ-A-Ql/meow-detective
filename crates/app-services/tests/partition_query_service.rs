@@ -20,7 +20,7 @@ fn published_partition_reads_use_fjall_and_unpublished_sources_fail() {
         .find_by_data_source(&source_id.0)
         .is_err());
 
-    let source = source_db::open_fjall_source_read_write(&active.case_root, &source_id.0).unwrap();
+    let source = source_db::open_fjall_source_for_build(&source_connection, &source_id).unwrap();
     source
         .partition_replace_by_source(
             &source_id.0,
@@ -57,7 +57,7 @@ fn published_partition_reads_use_fjall_and_unpublished_sources_fail() {
         1,
         source_id.0.as_bytes().to_vec(),
     );
-    source
+    let receipt = source
         .write_envelope(
             persistence_source::fjall::KeyspaceName::Meta,
             encode_key("projection", &[KeyPart::Text(source_id.0.clone())]).unwrap(),
@@ -65,6 +65,15 @@ fn published_partition_reads_use_fjall_and_unpublished_sources_fail() {
             PersistMode::SyncAll,
         )
         .unwrap();
+    persistence_source::fjall::seal_source_generation_with_control(
+        source.source_store(),
+        &source_id.0,
+        "partition-query-fixture",
+        &hex::encode(receipt.batch_digest),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
     drop(source);
 
     let published = PartitionQueryRepo::new(&source_connection)
@@ -126,8 +135,7 @@ fn active_import_partition_queries_read_the_attempt_build() {
     DataSourceRepo::new(&source_connection)
         .upsert_source_local_metadata(&active.meta.id, &data_source)
         .unwrap();
-    let published =
-        source_db::open_fjall_source_read_write(&active.case_root, &source_id.0).unwrap();
+    let published = source_db::open_fjall_source_for_build(&source_connection, &source_id).unwrap();
     published
         .partition_replace_by_source(
             &source_id.0,
@@ -135,9 +143,21 @@ fn active_import_partition_queries_read_the_attempt_build() {
             PersistMode::SyncAll,
         )
         .unwrap();
-    published
-        .partition_projection_publish(&source_id.0)
+    let (keyspace, key, marker) =
+        persistence_source::runtime::partition_marker::partition_projection_marker(&source_id.0)
+            .unwrap();
+    let receipt = published
+        .write_envelope(keyspace, key, &marker, PersistMode::SyncAll)
         .unwrap();
+    persistence_source::fjall::seal_source_generation_with_control(
+        published.source_store(),
+        &source_id.0,
+        "partition-build-fixture",
+        &hex::encode(receipt.batch_digest),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
     drop(published);
     let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         &active.case_root,

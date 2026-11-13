@@ -22,8 +22,7 @@ impl NativeSourceFixture {
             [source_id],
         )
         .unwrap();
-        let storage =
-            app_services::source_db::open_fjall_source_read_write(case_root, source_id).unwrap();
+        let storage = app_services::source_db::open_fjall_source_for_build(&conn, &id).unwrap();
         Self {
             conn,
             storage,

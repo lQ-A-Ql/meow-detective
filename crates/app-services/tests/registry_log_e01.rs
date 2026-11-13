@@ -72,9 +72,9 @@ fn validates_original_clean_hives_and_controlled_real_log_recovery() {
     let mut report = Vec::new();
     case.active.with_conn(|conn| {
         let source=case.source(conn,"real-source",&image,domain::DataSourceKind::E01);
-        let storage = app_services::source_db::open_fjall_source_read_write(
-            &case.active.case_root,
-            "real-source",
+        let storage = app_services::source_db::open_fjall_source_for_build(
+            &source,
+            &domain::DataSourceId("real-source".into()),
         )
         .unwrap();
         storage
@@ -105,7 +105,7 @@ fn validates_original_clean_hives_and_controlled_real_log_recovery() {
                 persistence_source::fjall::PersistMode::SyncAll,
             )
             .unwrap();
-        storage.partition_projection_publish("real-source").unwrap();
+        let mut present = Vec::new();
         for (index,path) in paths.iter().enumerate() {
             let Ok(file)=fs.preview_file(path) else {continue};let id=format!("mft:0:{}",file.inode());
             let mut bytes=Vec::new();fs.open_file(path).unwrap().read_to_end(&mut bytes).unwrap();
@@ -118,6 +118,31 @@ fn validates_original_clean_hives_and_controlled_real_log_recovery() {
                 let mut data=Vec::new();if size>0 {fs.open_file(&log_path).unwrap().read_to_end(&mut data).unwrap();}
                 fixture::entry(&source,"real-source",&log_id,&format!("[P0]/{log_path}"),data.len() as u64);FileRepo::new(&source).set_partition_index_by_id(&domain::FileEntryId(log_id),0).unwrap();logs.push((slot,data));
             }
+            present.push((index, id, bytes, logs));
+        }
+        let (keyspace, key, marker) =
+            persistence_source::runtime::partition_marker::partition_projection_marker(
+                "real-source",
+            )
+            .unwrap();
+        let receipt = storage
+            .write_envelope(
+                keyspace,
+                key,
+                &marker,
+                persistence_source::fjall::PersistMode::SyncAll,
+            )
+            .unwrap();
+        persistence_source::fjall::seal_source_generation_with_control(
+            storage.source_store(),
+            "real-source",
+            "registry-log-fixture",
+            &hex::encode(receipt.batch_digest),
+            &std::sync::atomic::AtomicBool::new(false),
+            |_, _| {},
+        )
+        .unwrap();
+        for (index, id, bytes, logs) in present {
             let ctx=case.context(conn);let opened=open_hive(&registry,&ctx,RegistryHiveOpenRequestDto {file_id:format!("ds:real-source:{id}"),view:RegistryHiveViewDto::Recovered}).unwrap();let details=opened.recovery.unwrap();
             assert_eq!(details.status,RegistryRecoveryStatusDto::NotNeeded);assert_eq!(details.base_sha256,details.result_sha256);assert_eq!(details.applied_entries,0);
             assert_eq!(details.base_sha256.as_deref(),Some(hex::encode(Sha256::digest(&bytes)).as_str()));

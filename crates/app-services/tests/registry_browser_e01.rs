@@ -42,9 +42,9 @@ fn registry_browser_reads_real_hives_and_hot_navigation_preserves_source_bytes()
     assert!(case.temp.path().exists());
     case.active.with_conn(|conn| {
         let source=case.source(conn,"sample-source",&image,domain::DataSourceKind::E01);
-        let storage = app_services::source_db::open_fjall_source_read_write(
-            &case.active.case_root,
-            "sample-source",
+        let storage = app_services::source_db::open_fjall_source_for_build(
+            &source,
+            &domain::DataSourceId("sample-source".into()),
         )
         .unwrap();
         storage
@@ -75,7 +75,6 @@ fn registry_browser_reads_real_hives_and_hot_navigation_preserves_source_bytes()
                 persistence_source::fjall::PersistMode::SyncAll,
             )
             .unwrap();
-        storage.partition_projection_publish("sample-source").unwrap();
         let mut paths=vec!["Windows/System32/config/SYSTEM".to_string(),"Windows/System32/config/SOFTWARE".to_string(),"Windows/System32/config/SAM".to_string(),"Windows/System32/config/SECURITY".to_string(),"Windows/System32/config/DEFAULT".to_string(),"Windows/appcompat/Programs/Amcache.hve".to_string()];
         for user in fs.list_children("Users").unwrap().into_iter().filter(|c|c.is_dir) {
             paths.push(format!("Users/{}/NTUSER.DAT",user.name));paths.push(format!("Users/{}/AppData/Local/Microsoft/Windows/UsrClass.dat",user.name));
@@ -90,6 +89,28 @@ fn registry_browser_reads_real_hives_and_hot_navigation_preserves_source_bytes()
             present.push((id,path,bytes));
         }
         assert!(present.len()>=6);
+        let (keyspace, key, marker) =
+            persistence_source::runtime::partition_marker::partition_projection_marker(
+                "sample-source",
+            )
+            .unwrap();
+        let receipt = storage
+            .write_envelope(
+                keyspace,
+                key,
+                &marker,
+                persistence_source::fjall::PersistMode::SyncAll,
+            )
+            .unwrap();
+        persistence_source::fjall::seal_source_generation_with_control(
+            storage.source_store(),
+            "sample-source",
+            "registry-browser-fixture",
+            &hex::encode(receipt.batch_digest),
+            &std::sync::atomic::AtomicBool::new(false),
+            |_, _| {},
+        )
+        .unwrap();
         let ctx=case.context(conn);let mut all=Vec::new();let mut cursor=None;
         loop {
             let page=list_hives(&registry,&ctx,RegistryHiveListRequestDto {data_source_id:"sample-source".into(),limit:2,cursor}).unwrap();all.extend(page.hives);cursor=page.next_cursor;if cursor.is_none(){break;}

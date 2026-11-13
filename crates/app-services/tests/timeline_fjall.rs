@@ -1,6 +1,8 @@
 use app_services::{
     case_service,
-    source_db::{open_registered_fjall_source_read_write, open_source_db},
+    source_db::{
+        open_fjall_source_for_build, open_registered_fjall_source_read_write, open_source_db,
+    },
     timeline_service::{query_timeline_filtered_for_case, TimelineQuery},
 };
 use chrono::{TimeZone, Utc};
@@ -59,28 +61,23 @@ fn publish_source(
     DataSourceRepo::new(&source_conn)
         .upsert_source_local_metadata(&case.meta.id, &source)
         .unwrap();
-    let fjall = open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
+    let fjall = open_fjall_source_for_build(&source_conn, &source.id).unwrap();
     for record in records {
         fjall.timeline_upsert(record, PersistMode::Buffer).unwrap();
     }
     fjall.persist(PersistMode::SyncAll).unwrap();
-    drop(fjall);
-    let store = persistence_source::detail::open_store_for_write(&source_conn)
-        .unwrap()
-        .unwrap();
+    let receipt = projection_support::mark_source_projection_complete(&fjall, source_id);
     persistence_source::fjall::seal_source_generation_with_control(
-        &store,
+        fjall.source_store(),
         source_id,
         "fixture",
-        &"a".repeat(64),
+        &hex::encode(receipt.batch_digest),
         &std::sync::atomic::AtomicBool::new(false),
         |_, _| {},
     )
     .unwrap();
-    drop(store);
+    drop(fjall);
     drop(source_conn);
-    let fjall = open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
-    projection_support::mark_source_projection_complete(&fjall, source_id);
 }
 
 /// Walks the whole result with `next_cursor` and returns the row ids in page
@@ -202,7 +199,7 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
         .upsert_source_local_metadata(&case.meta.id, &source)
         .unwrap();
 
-    let fjall = open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
+    let fjall = open_fjall_source_for_build(&source_conn, &source.id).unwrap();
     let base = Utc.with_ymd_and_hms(2026, 11, 2, 0, 0, 0).unwrap();
     for (id, offset) in [("new", 2), ("old", 1), ("oldest", 0)] {
         fjall
@@ -213,20 +210,22 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
             .unwrap();
     }
     fjall.persist(PersistMode::SyncAll).unwrap();
-    drop(fjall);
-    let store = persistence_source::detail::open_store_for_write(&source_conn)
-        .unwrap()
+    let (keyspace, key, marker) =
+        persistence_source::runtime::partition_marker::partition_projection_marker(&source.id.0)
+            .unwrap();
+    let receipt = fjall
+        .write_envelope(keyspace, key, &marker, PersistMode::SyncAll)
         .unwrap();
     persistence_source::fjall::seal_source_generation_with_control(
-        &store,
+        fjall.source_store(),
         &source.id.0,
         "fixture",
-        &"a".repeat(64),
+        &hex::encode(receipt.batch_digest),
         &std::sync::atomic::AtomicBool::new(false),
         |_, _| {},
     )
     .unwrap();
-    drop(store);
+    drop(fjall);
     drop(source_conn);
 
     let incomplete = case

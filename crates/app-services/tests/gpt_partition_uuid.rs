@@ -63,12 +63,32 @@ fn gpt_unique_uuid_survives_probe_and_source_partition_storage() {
     let case_root = temp.path().join("case");
     let source_id = DataSourceId("source".into());
     let connection = source_db::open_source_db(&case_root, &source_id).unwrap();
-    let source = source_db::open_fjall_source_read_write(&case_root, &source_id.0).unwrap();
+    let source = source_db::open_fjall_source_for_build(&connection, &source_id).unwrap();
     app_services::partition_storage_service::replace_from_probe(
         &source,
         &source_id,
         &probe.partitions,
         probe.gpt_disk_guid.as_deref(),
+    )
+    .unwrap();
+    let (keyspace, key, marker) =
+        persistence_source::runtime::partition_marker::partition_projection_marker(&source_id.0)
+            .unwrap();
+    let receipt = source
+        .write_envelope(
+            keyspace,
+            key,
+            &marker,
+            persistence_source::fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
+    persistence_source::fjall::seal_source_generation_with_control(
+        source.source_store(),
+        &source_id.0,
+        "gpt-partition-fixture",
+        &hex::encode(receipt.batch_digest),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
     )
     .unwrap();
     let identities = PartitionQueryRepo::new(&connection)

@@ -1,9 +1,12 @@
 use app_services::storage_runtime::ReadWriteSourceStorageHandle;
 use persistence_source::fjall::{
-    encode_key, KeyPart, KeyspaceName, PersistMode, VersionedEnvelope,
+    encode_key, KeyPart, KeyspaceName, PersistMode, VersionedEnvelope, WriteBatchReceipt,
 };
 
-pub fn mark_source_projection_complete(source: &ReadWriteSourceStorageHandle, source_id: &str) {
+pub fn mark_source_projection_complete(
+    source: &ReadWriteSourceStorageHandle,
+    source_id: &str,
+) -> WriteBatchReceipt {
     let key = encode_key("projection", &[KeyPart::Text(source_id.to_owned())]).unwrap();
     let marker = VersionedEnvelope::new(
         "source_projection_complete",
@@ -15,5 +18,5 @@ pub fn mark_source_projection_complete(source: &ReadWriteSourceStorageHandle, so
     );
     source
         .write_envelope(KeyspaceName::Meta, key, &marker, PersistMode::SyncAll)
-        .unwrap();
+        .unwrap()
 }
