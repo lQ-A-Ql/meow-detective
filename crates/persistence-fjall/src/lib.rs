@@ -48,12 +48,17 @@ pub use source_build::{
     SOURCE_BUILD_DIRECTORY_PREFIX, SOURCE_PUBLISHED_DIRECTORY_NAME,
 };
 pub use source_generation::{
-    publish_source_generation, read_source_generation_manifest, replace_source_generation,
-    seal_source_generation_with_control, source_generation_manifest_digest,
-    verify_source_generation_with_control, SourceGenerationManifest, SourceGenerationReceipt,
+    clone_verified_generation_with_control, publish_source_generation,
+    read_source_generation_manifest, read_source_generation_manifest_at_path,
+    replace_source_generation, seal_source_generation_with_control,
+    source_generation_manifest_digest, verify_source_generation_with_control,
+    SourceGenerationManifest, SourceGenerationReceipt, VerifiedGenerationClone,
     SOURCE_GENERATION_MANIFEST_FILE, SOURCE_GENERATION_SEAL_FILE,
 };
-pub use source_store::{open_shared_source_store, SourceCloneProgress, SourceStore};
+pub use source_store::{
+    close_shared_source_stores_under, open_shared_source_store, SharedSourceStoreCloseGuard,
+    SourceCloneProgress, SourceStore,
+};
 pub use timeline::{
     decode_timestamp_desc, encode_timestamp_desc, FacetSummary, TimelinePage, TimelineRecord,
     TimelineRecordStorageCost, TimelineRecordStore, TimelineStreamError, TimelineTypeAfterQuery,

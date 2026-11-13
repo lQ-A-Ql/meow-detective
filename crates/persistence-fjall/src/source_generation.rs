@@ -15,7 +15,9 @@ use std::{
 };
 
 mod digest;
+mod verified_clone;
 use digest::immutable_data_digest;
+pub use verified_clone::{clone_verified_generation_with_control, VerifiedGenerationClone};
 
 pub const SOURCE_GENERATION_MANIFEST_FILE: &str = "source-generation.manifest.json";
 pub const SOURCE_GENERATION_SEAL_FILE: &str = "source-generation.seal";
@@ -106,9 +108,6 @@ fn write_source_generation_markers(
     cancel: &AtomicBool,
     progress: &mut impl FnMut(u64, u64),
 ) -> Result<String> {
-    let path = source.database().path();
-    let manifest_path = path.join(SOURCE_GENERATION_MANIFEST_FILE);
-    let seal_path = path.join(SOURCE_GENERATION_SEAL_FILE);
     let manifest = SourceGenerationManifest {
         version: SOURCE_GENERATION_VERSION,
         source_id: source_id.to_owned(),
@@ -116,6 +115,17 @@ fn write_source_generation_markers(
         immutable_data_digest: immutable_data_digest(source, cancel, progress)?,
         projection_batch_digest: projection_batch_digest.to_owned(),
     };
+    write_manifest(source, &manifest, cancel)
+}
+
+fn write_manifest(
+    source: &SourceStore,
+    manifest: &SourceGenerationManifest,
+    cancel: &AtomicBool,
+) -> Result<String> {
+    let path = source.database().path();
+    let manifest_path = path.join(SOURCE_GENERATION_MANIFEST_FILE);
+    let seal_path = path.join(SOURCE_GENERATION_SEAL_FILE);
     let bytes = serde_json::to_vec(&manifest)
         .map_err(|error| FjallStorageError::Serialization(error.to_string()))?;
     let digest = digest_hex(&bytes);
@@ -164,8 +174,15 @@ pub fn read_source_generation_manifest(
     source: &SourceStore,
     expected_source_id: &str,
 ) -> Result<SourceGenerationManifest> {
+    read_source_generation_manifest_at_path(source.database().path(), expected_source_id)
+}
+
+pub fn read_source_generation_manifest_at_path(
+    path: impl AsRef<Path>,
+    expected_source_id: &str,
+) -> Result<SourceGenerationManifest> {
     validate_identity(expected_source_id)?;
-    let (manifest, _) = read_manifest(source.database().path())?;
+    let (manifest, _) = read_manifest(path.as_ref())?;
     if manifest.version != SOURCE_GENERATION_VERSION
         || manifest.source_id != expected_source_id
         || !valid_identity(&manifest.attempt_id)
