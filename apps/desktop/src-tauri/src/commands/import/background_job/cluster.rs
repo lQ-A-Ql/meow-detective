@@ -1,7 +1,10 @@
 mod completion;
+mod completion_finish;
 mod execution;
 mod failures;
 mod ledger;
+mod mdraid;
+mod topology;
 
 use super::{
     gate::acquire_import_slot,

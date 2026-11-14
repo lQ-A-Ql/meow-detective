@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use super::super::{
-    status::{cancel_job, fail_job, update_import_set_state_logged},
+    status::{fail_job, update_import_set_state_logged},
     types::{BackgroundLinuxEvidenceSetImportJob, EvidenceSetImportSummary},
 };
 use crate::events::event_bridge;
@@ -13,12 +13,7 @@ use tauri::AppHandle;
 use transport::CommandError;
 
 use super::ledger::record_cluster_phase;
-
-enum MdRaidFailurePhase {
-    Ready(Vec<domain::DataSource>),
-    Cancelled,
-    Failed(CommandError),
-}
+use super::mdraid::{record_mdraid_cancellation, MdRaidOutcome};
 
 pub(super) fn complete_evidence_set_import_with_failures(
     connection: &rusqlite::Connection,
@@ -38,9 +33,9 @@ pub(super) fn complete_evidence_set_import_with_failures(
         total_members,
         cancel_token,
     ) {
-        MdRaidFailurePhase::Ready(sources) => sources,
-        MdRaidFailurePhase::Cancelled => return Ok(()),
-        MdRaidFailurePhase::Failed(error) => {
+        MdRaidOutcome::Ready(sources) => sources,
+        MdRaidOutcome::Cancelled => return Ok(()),
+        MdRaidOutcome::Failed(error) => {
             return fail_job(job_repo, &job.job_id, app, error);
         }
     };
@@ -95,7 +90,7 @@ fn materialize_mdraid_after_member_failures(
     summary: &EvidenceSetImportSummary,
     total_members: u32,
     cancel_token: &Arc<AtomicBool>,
-) -> MdRaidFailurePhase {
+) -> MdRaidOutcome {
     if let Some(app) = app {
         event_bridge::emit_job_progress(
             app,
@@ -126,11 +121,11 @@ fn materialize_mdraid_after_member_failures(
                 derived_sources = sources.len(),
                 "Materialized nested MD RAID source catalogs after member import failure"
             );
-            MdRaidFailurePhase::Ready(sources)
+            MdRaidOutcome::Ready(sources)
         }
         Err(_) if cancel_token.load(Ordering::Acquire) => {
             record_mdraid_cancellation(connection, job_repo, job, app, summary);
-            MdRaidFailurePhase::Cancelled
+            MdRaidOutcome::Cancelled
         }
         Err(error) => {
             let detail = format!(
@@ -164,40 +159,7 @@ fn materialize_mdraid_after_member_failures(
                 %error,
                 "Linux evidence-set import completed with failures and an unavailable MD RAID catalog"
             );
-            MdRaidFailurePhase::Failed(CommandError::from_typed_service_error(error))
+            MdRaidOutcome::Failed(CommandError::from_typed_service_error(error))
         }
     }
-}
-
-fn record_mdraid_cancellation(
-    connection: &rusqlite::Connection,
-    job_repo: &super::JobRepo<'_>,
-    job: &BackgroundLinuxEvidenceSetImportJob,
-    app: Option<&AppHandle>,
-    summary: &EvidenceSetImportSummary,
-) {
-    record_cluster_phase(
-        connection,
-        job,
-        "mdraid_catalog",
-        false,
-        Some("cancelled"),
-        summary.ready_count,
-        summary.failed_count,
-    );
-    update_import_set_state_logged(
-        connection,
-        &job.plan.import_set_id,
-        "cancelled",
-        summary.ready_count,
-        summary.failed_count,
-        Some("Linux evidence-set import cancelled during MD RAID catalog materialization"),
-        "Failed to mark Linux evidence set cancelled after MD RAID cancellation",
-    );
-    cancel_job(
-        job_repo,
-        &job.job_id,
-        app,
-        "Linux evidence-set import cancelled during MD RAID catalog materialization",
-    );
 }
