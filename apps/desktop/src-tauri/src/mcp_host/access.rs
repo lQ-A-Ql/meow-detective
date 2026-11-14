@@ -3,8 +3,7 @@ use crate::{commands::command_support::require_active_case, state::AppState};
 use std::io::Write;
 use transport::{
     dto::mcp_host::access::{
-        McpHostClientDto, McpHostCreateClientRequestDto, McpHostCreatedClientDto,
-        McpHostCredentialRecordDto,
+        McpHostCreateClientRequestDto, McpHostCreatedClientDto, McpHostCredentialRecordDto,
     },
     CommandError,
 };
@@ -28,13 +27,6 @@ impl McpHostRuntime {
         persist(state, &records).map_err(CommandError::from_typed_service_error)?;
         access.insert(record);
         Ok(created)
-    }
-
-    pub fn list_clients(&self) -> Result<Vec<McpHostClientDto>, CommandError> {
-        self.access
-            .lock()
-            .map(|access| access.clients())
-            .map_err(|_| CommandError::internal("客户端授权状态不可用"))
     }
 
     pub fn revoke_client(&self, state: &AppState, id: &str) -> Result<(), CommandError> {

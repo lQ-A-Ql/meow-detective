@@ -110,28 +110,6 @@ impl AppState {
             .map_err(|e| format!("Failed to clear runtime cache: {}", e))
     }
 
-    pub fn clear_preview_runtime_for_case(&self, case_id: &str) -> Result<(), String> {
-        self.registry_browser
-            .invalidate_case(case_id)
-            .map_err(|error| error.to_string())?;
-        self.preview_runtime
-            .invalidate_case(case_id)
-            .map_err(|error| format!("Failed to clear preview runtime: {error}"))
-    }
-
-    pub fn clear_preview_runtime_for_source(
-        &self,
-        case_id: &str,
-        data_source_id: &str,
-    ) -> Result<(), String> {
-        self.registry_browser
-            .invalidate_source(case_id, data_source_id)
-            .map_err(|error| error.to_string())?;
-        self.preview_runtime
-            .invalidate_source(case_id, data_source_id)
-            .map_err(|error| format!("Failed to clear preview runtime: {error}"))
-    }
-
     pub fn retire_preview_case(&self, case_id: &str, timeout: Duration) -> Result<bool, String> {
         self.registry_browser
             .invalidate_case(case_id)
