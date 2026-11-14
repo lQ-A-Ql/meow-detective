@@ -21,7 +21,9 @@ if ($Rust) {
   $llvmCov = Get-Command cargo-llvm-cov -ErrorAction SilentlyContinue
   if ($llvmCov) {
     Write-Host 'Running Rust coverage with cargo-llvm-cov...'
-    cargo llvm-cov --workspace --all-targets --lcov --output-path (Join-Path $coverageRoot 'rust-lcov.info')
+    cargo llvm-cov --workspace --all-targets --no-report
+    if ($LASTEXITCODE -ne 0) { throw "cargo llvm-cov exited with code $LASTEXITCODE" }
+    & (Join-Path $PSScriptRoot 'export-rust-lcov.ps1') -OutputPath (Join-Path $coverageRoot 'rust-lcov.info')
   } elseif ($StrictRustTool) {
     throw 'cargo-llvm-cov is required for Rust coverage. Install it with: cargo install cargo-llvm-cov --locked'
   } else {

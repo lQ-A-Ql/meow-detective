@@ -197,7 +197,9 @@ jobs:
         env:
           CARGO_PROFILE_DEV_DEBUG: line-tables-only
           FORENSICS_BOLT_READER_EXE: ${{ github.workspace }}\target\debug\meow-bolt-worker.exe
-        run: ./scripts/run-ci-native.ps1 -FilePath cargo -Arguments @('llvm-cov', '--workspace', '--all-targets', '--lcov', '--output-path', 'rust-lcov.info') -LogPath output/ci-runtime/logs/coverage.log
+        run: |
+          ./scripts/run-ci-native.ps1 -FilePath cargo -Arguments @('llvm-cov', '--workspace', '--all-targets', '--no-report') -LogPath output/ci-runtime/logs/coverage.log
+          ./scripts/export-rust-lcov.ps1 -OutputPath rust-lcov.info
       - name: Upload Rust coverage
         uses: actions/upload-artifact@v4
         with:
