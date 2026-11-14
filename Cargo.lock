@@ -116,7 +116,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "analysis-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "artifacts-android",
  "artifacts-browser",
@@ -241,7 +241,7 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "app-services"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "analysis-core",
  "artifact-storage",
@@ -331,7 +331,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "artifact-storage"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "sha2 0.10.9",
  "tempfile",
@@ -340,7 +340,7 @@ dependencies = [
 
 [[package]]
 name = "artifacts-android"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "android-abx",
  "chrono",
@@ -351,7 +351,7 @@ dependencies = [
 
 [[package]]
 name = "artifacts-browser"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "lz4_flex 0.13.1",
@@ -365,7 +365,7 @@ dependencies = [
 
 [[package]]
 name = "artifacts-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -378,7 +378,7 @@ dependencies = [
 
 [[package]]
 name = "artifacts-linux"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "etc-os-release",
@@ -395,7 +395,7 @@ dependencies = [
 
 [[package]]
 name = "artifacts-windows"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aes 0.8.4",
  "aes-gcm",
@@ -940,7 +940,7 @@ checksum = "4f4c707c6a209cbe82d10abd08e1ea8995e9ea937d2550646e02798948992be0"
 
 [[package]]
 name = "ceph-reconstruction"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ceph-wire",
  "chrono",
@@ -968,7 +968,7 @@ dependencies = [
 
 [[package]]
 name = "ceph-wire"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hex",
  "sha2 0.10.9",
@@ -1190,7 +1190,7 @@ checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
 name = "containers-bolt"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bbolt-rs",
  "hex",
@@ -1205,7 +1205,7 @@ dependencies = [
 
 [[package]]
 name = "containers-pst"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1763,7 +1763,7 @@ dependencies = [
 
 [[package]]
 name = "domain"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1892,7 +1892,7 @@ checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 
 [[package]]
 name = "emulation-services"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "artifacts-linux",
  "artifacts-windows",
@@ -1990,7 +1990,7 @@ dependencies = [
 
 [[package]]
 name = "evidence-access"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "artifacts-linux",
  "artifacts-windows",
@@ -2043,7 +2043,7 @@ dependencies = [
 
 [[package]]
 name = "evidence-block"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "evidence-core",
  "image-e01",
@@ -2054,7 +2054,7 @@ dependencies = [
 
 [[package]]
 name = "evidence-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2070,7 +2070,7 @@ dependencies = [
 
 [[package]]
 name = "evidence-emulation"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "evidence-block",
  "sha2 0.10.9",
@@ -2080,7 +2080,7 @@ dependencies = [
 
 [[package]]
 name = "evidence-mount"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "domain",
  "tempfile",
@@ -2282,7 +2282,7 @@ checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
 name = "forensics-desktop"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "app-services",
  "artifacts-core",
@@ -2353,7 +2353,7 @@ checksum = "9e2488a10218a17366ce6bd38b6d081b4387a9548d350029db9feddc9bb44d6d"
 
 [[package]]
 name = "fs-btrfs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "evidence-core",
  "rust-fs-btrfs",
@@ -2365,7 +2365,7 @@ dependencies = [
 
 [[package]]
 name = "fs-erofs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "evidence-core",
  "lz4_flex 0.13.1",
@@ -2375,7 +2375,7 @@ dependencies = [
 
 [[package]]
 name = "fs-exfat"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -2390,7 +2390,7 @@ dependencies = [
 
 [[package]]
 name = "fs-ext4"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "evidence-core",
  "hex",
@@ -2405,7 +2405,7 @@ dependencies = [
 
 [[package]]
 name = "fs-f2fs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "evidence-core",
  "testing",
@@ -2414,7 +2414,7 @@ dependencies = [
 
 [[package]]
 name = "fs-fat"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2426,7 +2426,7 @@ dependencies = [
 
 [[package]]
 name = "fs-lvm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "evidence-core",
  "serde",
@@ -2435,7 +2435,7 @@ dependencies = [
 
 [[package]]
 name = "fs-ntfs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2449,7 +2449,7 @@ dependencies = [
 
 [[package]]
 name = "fs-xfs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "evidence-core",
  "tempfile",
@@ -3312,7 +3312,7 @@ dependencies = [
 
 [[package]]
 name = "image-android"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "evidence-core",
  "tempfile",
@@ -3321,7 +3321,7 @@ dependencies = [
 
 [[package]]
 name = "image-e01"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3338,7 +3338,7 @@ dependencies = [
 
 [[package]]
 name = "import-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "analysis-core",
  "artifact-storage",
@@ -3417,7 +3417,7 @@ dependencies = [
 
 [[package]]
 name = "infrastructure"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4068,7 +4068,7 @@ dependencies = [
 
 [[package]]
 name = "memory-windows"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "tempfile",
  "thiserror 2.0.21",
@@ -4678,7 +4678,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "persistence-fjall"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "fjall",
@@ -4693,7 +4693,7 @@ dependencies = [
 
 [[package]]
 name = "persistence-source"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "artifact-storage",
  "chrono",
@@ -4715,7 +4715,7 @@ dependencies = [
 
 [[package]]
 name = "persistence-sqlite"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "domain",
@@ -4804,7 +4804,7 @@ dependencies = [
 
 [[package]]
 name = "physical-mount"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "evidence-block",
  "iscsi-target",
@@ -4869,7 +4869,7 @@ dependencies = [
 
 [[package]]
 name = "plugin-api"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "png"
@@ -4937,7 +4937,7 @@ dependencies = [
 
 [[package]]
 name = "portable-updater"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "minisign-verify",
@@ -5358,7 +5358,7 @@ checksum = "cadadef317c2f20755a64d7fdc48f9e7178ee6b0e1f7fce33fa60f1d68a276e6"
 
 [[package]]
 name = "reports"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5542,7 +5542,7 @@ dependencies = [
 
 [[package]]
 name = "rocksdb-wire"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "lz4_flex 0.13.1",
  "thiserror 2.0.21",
@@ -5560,7 +5560,7 @@ dependencies = [
 
 [[package]]
 name = "runtime-cache"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "rusqlite",
@@ -5867,7 +5867,7 @@ dependencies = [
 
 [[package]]
 name = "search"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6388,7 +6388,7 @@ dependencies = [
 
 [[package]]
 name = "source-kernel"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "artifact-storage",
  "chrono",
@@ -6415,7 +6415,7 @@ dependencies = [
 
 [[package]]
 name = "source-reconstruction"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "analysis-core",
  "artifacts-linux",
@@ -7171,7 +7171,7 @@ dependencies = [
 
 [[package]]
 name = "testing"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7261,7 +7261,7 @@ dependencies = [
 
 [[package]]
 name = "timeline"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "domain",
@@ -7598,7 +7598,7 @@ dependencies = [
 
 [[package]]
 name = "transport"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -7912,7 +7912,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "volume-bitlocker"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aes 0.8.4",
  "cbc 0.1.2",
@@ -8661,7 +8661,7 @@ dependencies = [
 
 [[package]]
 name = "winpe-maintenance"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
