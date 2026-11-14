@@ -104,6 +104,10 @@ pub fn build(
     std::fs::write(next.join("content-coverage.json"), manifest.to_string())
         .map_err(CommandError::from_service_error)?;
     drop(index);
+    // Cached search sessions hold open handles inside the published generation;
+    // Windows refuses the directory rename while they are alive.
+    crate::search_service::clear_source_file_search_cache(root, source_id)
+        .map_err(CommandError::from_service_error)?;
     crate::import_analysis::replace_index_generation(&next, &current)
         .map_err(CommandError::from_service_error)?;
     repo.publish(&key)

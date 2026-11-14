@@ -131,11 +131,12 @@ pub fn build_recycle_bin_i(
     deletion_time: DateTime<Utc>,
 ) -> Vec<u8> {
     let mut data = Vec::new();
-    data.extend_from_slice(&0x20u64.to_le_bytes()); // Header size
+    data.extend_from_slice(&2u64.to_le_bytes());
     data.extend_from_slice(&file_size.to_le_bytes());
     let ft = dt_to_filetime(deletion_time);
     data.extend_from_slice(&ft.to_le_bytes());
-    data.extend_from_slice(&[0u8; 8]); // Remaining header
+    let name_len = original_path.encode_utf16().count() as u32 + 1;
+    data.extend_from_slice(&name_len.to_le_bytes());
 
     for c in original_path.encode_utf16() {
         data.extend_from_slice(&c.to_le_bytes());

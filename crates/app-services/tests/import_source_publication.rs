@@ -101,11 +101,12 @@ fn reject_stale_source(progress: u32, platform: domain::DataSourcePlatform) {
                     [],
                     |row| row.get(0),
                 )?);
-                let storage_root =
-                    source_db::fjall_source_storage_root(&active.case_root, &source_id.0)
-                        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+                let published_root = source_db::source_db_path(&active.case_root, &source_id)
+                    .parent()
+                    .expect("source database path has a parent")
+                    .join("source.fjall");
                 assert!(
-                    !storage_root.exists(),
+                    !published_root.exists(),
                     "invalidated import must not publish a partial Fjall generation"
                 );
             }

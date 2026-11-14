@@ -37,7 +37,7 @@ pub(crate) fn open_current_source_generation(
     }
     persistence_fjall::read_source_generation_manifest_at_path(&actual, &source_id.0)
         .map_err(|error| DbError::System(error.to_string()))?;
-    Ok((connection, actual))
+    Ok((connection, generation))
 }
 
 pub fn bound_source_generation_root(

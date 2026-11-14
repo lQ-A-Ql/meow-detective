@@ -772,7 +772,7 @@ fn image_import_without_supported_filesystem_fails_closed() {
 }
 
 #[test]
-fn logical_import_post_pipeline_indexes_marker_and_defers_artifact() {
+fn logical_import_post_pipeline_indexes_marker_and_completes_platform_artifacts() {
     let tmp = TempDir::new().unwrap();
     let evidence_dir = tmp.path().join("evidence");
     std::fs::create_dir_all(&evidence_dir).unwrap();
@@ -859,8 +859,19 @@ fn logical_import_post_pipeline_indexes_marker_and_defers_artifact() {
                     &data_source_id.0, &std::sync::atomic::AtomicBool::new(false), |_, _| {},
                 )
                 .expect("published Fjall source generation is valid");
-            assert_eq!(generation.attempt_id, job_id.0);
             assert_eq!(generation.projection_batch_digest.len(), 64);
+            let published_root =
+                source_kernel::source_db::source_db_path(&active.case_root, &data_source_id)
+                    .parent()
+                    .expect("source database path has a parent")
+                    .join("source.fjall");
+            let published = persistence_source::fjall::read_source_generation_manifest_at_path(
+                &published_root,
+                &data_source_id.0,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            assert_eq!(published.attempt_id, job_id.0);
+            assert_eq!(published.projection_batch_digest.len(), 64);
             let timeline_events: i64 = conn.query_row(
                 "SELECT COUNT(*) FROM sqlite_master
                  WHERE type = 'table' AND name = 'timeline_events'",
@@ -914,7 +925,13 @@ fn logical_import_post_pipeline_indexes_marker_and_defers_artifact() {
             assert_eq!(metrics.data_source_count, 1);
             assert!(metrics.indexed_file_count > 0);
             assert!(metrics.timeline_event_count > 0);
-            assert_eq!(metrics.artifact_count, 0);
+            assert!(metrics.artifact_count > 0);
+            let artifact_repo =
+                persistence_source::repositories::artifact_repo::ArtifactRepo::new(&source_conn);
+            assert!(artifact_repo
+                .families()?
+                .iter()
+                .any(|family| family == "Prefetch"));
 
             Ok(())
         })

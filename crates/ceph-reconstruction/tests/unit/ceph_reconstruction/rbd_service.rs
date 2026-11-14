@@ -226,9 +226,14 @@ fn conflicting_replica_identity_fails_before_source_database_access() {
 fn rbd_header_lookup_prefers_bounded_fjall_parser_projection() {
     let root = tempfile::tempdir().expect("temporary case root");
     let source_id = DataSourceId("source-fjall".to_owned());
-    let source =
-        source_kernel::source_db::open_registered_fjall_source_read_write(root.path(), &source_id)
-            .expect("open source storage");
+    let control = persistence_source::control::open_source_db(root.path(), &source_id)
+        .expect("open source control database");
+    let generation =
+        persistence_source::control::bound_source_generation_root(&control, &source_id)
+            .expect("bound source generation");
+    let runtime = persistence_source::runtime::ReadWriteStorageRuntime::open(generation)
+        .expect("open source storage");
+    let source = runtime.source();
     let payload = serde_json::json!({
         "inventory_id": "inventory-fjall",
         "scope_identity": "perPool:i8",
@@ -283,6 +288,15 @@ fn rbd_header_lookup_prefers_bounded_fjall_parser_projection() {
             PersistMode::SyncAll,
         )
         .expect("persist source projection marker");
+    persistence_source::fjall::seal_source_generation_with_control(
+        source.source_store(),
+        &source_id.0,
+        "fixture",
+        &"a".repeat(64),
+        &std::sync::atomic::AtomicBool::new(false),
+        |_, _| {},
+    )
+    .expect("seal source generation");
     drop(source);
     let replica = RadosReplicaSource::new(
         source_id,

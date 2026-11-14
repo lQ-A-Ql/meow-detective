@@ -135,12 +135,11 @@ fn setup(image: &[u8]) -> RepairFixture {
     DataSourceRepo::new(&conn)
         .insert_with_storage(&case_id, &source, &storage)
         .unwrap();
-    let source_path = source_kernel::source_db::source_db_path(&case_root, &data_source_id);
-    std::fs::create_dir_all(source_path.parent().unwrap()).unwrap();
-    let source_conn = persistence_sqlite::open_or_create_source(&source_path).unwrap();
-    drop(source_conn);
+    let source_conn =
+        source_kernel::source_db::open_source_db(&case_root, &data_source_id).unwrap();
     let storage =
-        source_kernel::source_db::open_fjall_source_read_write(&case_root, "ds-xfs").unwrap();
+        source_kernel::source_db::open_fjall_source_for_build(&source_conn, &data_source_id)
+            .unwrap();
     storage
         .partition_replace_by_source(
             "ds-xfs",
@@ -249,9 +248,12 @@ fn dirty_log_is_cleared_and_mount_metadata_normalized() {
 fn unsupported_second_volume_prevents_writes_to_the_first() {
     let image = dirty_xfs_disk();
     let fixture = setup(&image);
-    let storage = source_kernel::source_db::open_fjall_source_read_write(
-        &fixture.case_root,
-        &fixture.data_source_id.0,
+    let source_conn =
+        source_kernel::source_db::open_source_db(&fixture.case_root, &fixture.data_source_id)
+            .unwrap();
+    let storage = source_kernel::source_db::open_fjall_source_for_build(
+        &source_conn,
+        &fixture.data_source_id,
     )
     .unwrap();
     let snapshot = storage.snapshot();

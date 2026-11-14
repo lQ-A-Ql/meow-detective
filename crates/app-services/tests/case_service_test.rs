@@ -593,7 +593,9 @@ fn delete_case_requires_fjall_source_handles_to_close() {
             let storage = DataSourceStorage::source_db(&source.id.0, Some("linux"), None);
             DataSourceRepo::new(connection).insert_with_storage(&case_id, &source, &storage)?;
             let source_connection = source_db::open_source_db(&case_root, &source.id)?;
-            DataSourceRepo::new(&source_connection).upsert_source_local_metadata(&case_id, &source)
+            DataSourceRepo::new(&source_connection)
+                .upsert_source_local_metadata(&case_id, &source)?;
+            publish_source_projection(&source_connection, &source.id)
         })
         .unwrap();
     let fjall_handle = open_source_read_write(&case_root, &source.id.0).unwrap();

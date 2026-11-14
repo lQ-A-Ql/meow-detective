@@ -94,7 +94,17 @@ fn empty_category_selection_is_scoped_to_windows() {
 
     assert_eq!(
         section_keys(&run),
-        vec!["BrowserHistory", "Email", "EventLogs", "Registry"]
+        vec![
+            "BrowserHistory",
+            "Email",
+            "EventLogs",
+            "ProgramExecution",
+            "RecycleBin",
+            "Registry",
+            "ResourceUsage",
+            "Thumbnails",
+            "UserActivity",
+        ]
     );
     assert!(run
         .sections

@@ -190,7 +190,7 @@ fn setup_recoverable_catalog(
     persistence_source::detail::set_partition_index(&source_connection, "root", 0).unwrap();
     persistence_source::detail::set_partition_index(&source_connection, "file", 0).unwrap();
     let fjall_source =
-        source_kernel::source_db::open_fjall_source_read_write(case_root, &source.id.0)
+        source_kernel::source_db::open_fjall_source_for_build(&source_connection, &source.id)
             .expect("open Fjall source storage");
     fjall_source
         .partition_replace_by_source(
@@ -623,8 +623,11 @@ fn catalog_recovery_rejects_partition_drift_without_deleting_source() {
     let temp = tempfile::tempdir().expect("create temporary case root");
     let (connection, source, _, _) = setup_recoverable_catalog(temp.path());
     let source_path = source_kernel::source_db::source_db_path(temp.path(), &source.id);
-    let storage = source_kernel::source_db::open_fjall_source_read_write(temp.path(), &source.id.0)
-        .expect("open Fjall source storage");
+    let source_connection = source_kernel::source_db::open_source_db(temp.path(), &source.id)
+        .expect("open source database");
+    let storage =
+        source_kernel::source_db::open_fjall_source_for_build(&source_connection, &source.id)
+            .expect("open Fjall source storage");
     storage
         .partition_replace_by_source(
             &source.id.0,
@@ -821,8 +824,11 @@ fn cancelled_catalog_is_deferred_and_remains_retryable() {
 fn catalog_recovery_rejects_changed_partition_uuid_metadata() {
     let temp = tempfile::tempdir().unwrap();
     let (connection, source, _, _) = setup_recoverable_catalog(temp.path());
+    let source_connection = source_kernel::source_db::open_source_db(temp.path(), &source.id)
+        .expect("open source database");
     let storage =
-        source_kernel::source_db::open_fjall_source_read_write(temp.path(), &source.id.0).unwrap();
+        source_kernel::source_db::open_fjall_source_for_build(&source_connection, &source.id)
+            .unwrap();
     let snapshot = storage.snapshot();
     let mut records = storage
         .partition_list_by_source(

@@ -217,7 +217,7 @@ fn catalog_manifest_supports_fast_reuse_and_explicit_deep_verification() {
     let summary =
         catalog_manifest::summarize_source_connection(&connection, source.clone()).unwrap();
     let fjall_source =
-        source_kernel::source_db::open_fjall_source_read_write(temp.path(), &source.id.0)
+        source_kernel::source_db::open_fjall_source_for_build(&connection, &source.id)
             .expect("open Fjall source storage");
     fjall_source
         .partition_projection_publish(&source.id.0)

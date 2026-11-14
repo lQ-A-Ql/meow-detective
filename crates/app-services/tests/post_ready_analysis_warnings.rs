@@ -130,7 +130,7 @@ fn automatic_analysis_persists_real_parser_warnings_in_job_outcome() {
     let recorded_dto: transport::dto::AnalysisExtractionRunDto =
         serde_json::from_value(recorded["result"].clone()).unwrap();
     assert_eq!(recorded_dto.warnings, analysis_result.warnings);
-    assert_eq!(recorded_dto.sections.len(), analysis_result.sections.len());
+    assert!(recorded_dto.sections.len() > analysis_result.sections.len());
     assert_eq!(recorded_dto.status, analysis_result.status);
     assert_eq!(recorded_dto.scanned_count, analysis_result.scanned_count);
     assert_eq!(
