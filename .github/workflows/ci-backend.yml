@@ -176,9 +176,26 @@ jobs:
           if-no-files-found: ignore
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --locked
+      - name: Reclaim test build space before coverage
+        shell: pwsh
+        run: |
+          # The instrumented build doubles target size; drop non-cacheable test outputs so the runner disk does not fill.
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free -AutoSize | Out-String | Write-Host
+          $debug = Join-Path $env:GITHUB_WORKSPACE 'target/debug'
+          foreach ($name in @('incremental', 'examples')) {
+            $path = Join-Path $debug $name
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }
+          }
+          $deps = Join-Path $debug 'deps'
+          if (Test-Path -LiteralPath $deps) {
+            Get-ChildItem -LiteralPath $deps -File | Where-Object { $_.Extension -in '.exe', '.pdb' } | Remove-Item -Force
+          }
+          Get-ChildItem -LiteralPath $env:TEMP -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free -AutoSize | Out-String | Write-Host
       - name: Rust coverage
         shell: pwsh
         env:
+          CARGO_PROFILE_DEV_DEBUG: line-tables-only
           FORENSICS_BOLT_READER_EXE: ${{ github.workspace }}\target\debug\meow-bolt-worker.exe
         run: ./scripts/run-ci-native.ps1 -FilePath cargo -Arguments @('llvm-cov', '--workspace', '--all-targets', '--lcov', '--output-path', 'rust-lcov.info') -LogPath output/ci-runtime/logs/coverage.log
       - name: Upload Rust coverage
