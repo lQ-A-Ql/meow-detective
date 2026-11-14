@@ -52,7 +52,6 @@ fn current_generation_changes_only_after_the_sqlite_binding_commits() {
         .join("source.fjall.build.analysis-next");
     write_generation(&original, &id.0, b"original");
     write_generation(&next, &id.0, b"next");
-    let next = std::fs::canonicalize(next).unwrap();
     let pinned_original = open_source_read_only(root.path(), &id.0).unwrap();
 
     let transaction = control.transaction().unwrap();
@@ -74,7 +73,10 @@ fn current_generation_changes_only_after_the_sqlite_binding_commits() {
     );
     assert_eq!(read_value(&pinned_original), b"original");
     let details = persistence_source::detail::require_source_store(&control).unwrap();
-    assert_eq!(details.database().path(), current.source_root());
+    assert_eq!(
+        details.database().path(),
+        std::fs::canonicalize(current.source_root()).unwrap()
+    );
 }
 
 #[test]
