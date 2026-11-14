@@ -86,10 +86,6 @@ pub struct MdRaidSuperblockProbe {
 }
 
 impl MdRaidSuperblock {
-    pub fn is_raid0(&self) -> bool {
-        self.level == 0
-    }
-
     pub fn chunk_bytes(&self) -> Result<u64, MdRaidError> {
         u64::from(self.chunk_sectors)
             .checked_mul(SECTOR_SIZE)
@@ -100,10 +96,6 @@ impl MdRaidSuperblock {
     pub fn slot_index(&self) -> Option<u32> {
         let role = *self.dev_roles.get(self.dev_number as usize)?;
         (role < ROLE_MAX && u32::from(role) < self.raid_disks).then_some(u32::from(role))
-    }
-
-    pub fn is_active_slot(&self) -> bool {
-        self.slot_index().is_some()
     }
 
     pub fn is_rebuilding(&self) -> bool {

@@ -415,7 +415,6 @@ dependencies = [
  "flate2",
  "hex",
  "hmac",
- "lz4_flex 0.13.1",
  "md-5 0.10.6",
  "rusqlite",
  "serde",
@@ -2432,7 +2431,6 @@ dependencies = [
  "evidence-core",
  "serde",
  "thiserror 2.0.21",
- "tracing",
 ]
 
 [[package]]
@@ -5569,7 +5567,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
- "tracing",
  "uuid",
 ]
 

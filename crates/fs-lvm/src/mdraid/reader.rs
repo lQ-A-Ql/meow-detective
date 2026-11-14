@@ -24,7 +24,6 @@ pub struct RaidMemberGeometry {
 pub struct MdRaidReader {
     members: Vec<MdRaidMember>,
     slots: Vec<Option<usize>>,
-    geometry: Vec<RaidMemberGeometry>,
     backend: Backend,
     info: ReaderInfo,
     logical_size: u64,
@@ -54,7 +53,6 @@ impl MdRaidReader {
         Ok(Self {
             members: prepared.members,
             slots: prepared.slots,
-            geometry: prepared.geometry,
             backend,
             info: ReaderInfo {
                 path: PathBuf::from(format!("mdraid://{array_id}")),
@@ -68,10 +66,6 @@ impl MdRaidReader {
 
     pub fn logical_size(&self) -> u64 {
         self.logical_size
-    }
-
-    pub fn member_geometry(&self) -> &[RaidMemberGeometry] {
-        &self.geometry
     }
 
     fn read_at_inner(&mut self, logical: u64, output: &mut [u8]) -> std::io::Result<usize> {

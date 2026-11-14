@@ -166,10 +166,6 @@ impl CatalogRecordStore {
         self.page_from_index(snapshot, &prefix, cursor, direction, limit)
     }
 
-    pub fn count_records(&self, snapshot: &SourceReadSnapshot, source_id: &str) -> Result<u64> {
-        crate::record_metrics::count(snapshot, "catalog", Some(source_id))
-    }
-
     pub fn list_orphan_directories(
         &self,
         snapshot: &SourceReadSnapshot,

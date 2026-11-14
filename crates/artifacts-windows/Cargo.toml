@@ -28,7 +28,6 @@ byteorder.workspace = true
 evtx.workspace = true
 rusqlite.workspace = true
 tempfile.workspace = true
-lz4_flex = { workspace = true }
 binread = { workspace = true }
 hex.workspace = true
 md-5.workspace = true

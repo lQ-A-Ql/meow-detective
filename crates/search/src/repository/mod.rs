@@ -1,1 +1,0 @@
-//! Search index storage repository.

@@ -4,7 +4,6 @@ macro_rules! native_source_test_support {
         mod test_support {
             #![allow(dead_code)]
 
-            use domain::FileEntry;
             use rusqlite::Connection;
             use std::ops::Deref;
 
@@ -12,7 +11,6 @@ macro_rules! native_source_test_support {
                 _root: tempfile::TempDir,
                 pub(crate) connection: Connection,
                 pub(crate) source_id: String,
-                pub(crate) source_dir: std::path::PathBuf,
             }
 
             impl NativeSourceFixture {
@@ -43,17 +41,9 @@ macro_rules! native_source_test_support {
                         _root: root,
                         connection,
                         source_id: source_id.to_owned(),
-                        source_dir,
                     };
                     fixture.refresh_generation();
                     fixture
-                }
-
-                pub(crate) fn insert_files(&self, files: &[FileEntry]) {
-                    persistence_source::repositories::file_repo::FileRepo::new(&self.connection)
-                        .insert_batch(files)
-                        .expect("insert native catalog records");
-                    self.refresh_generation();
                 }
 
                 pub(crate) fn seal(&self) {
@@ -114,31 +104,6 @@ macro_rules! native_source_test_support {
                         persistence_source::fjall::PersistMode::SyncAll,
                     )
                     .expect("mark source projection complete");
-            }
-
-            pub(crate) fn create_case(
-                root: &std::path::Path,
-                name: &str,
-            ) -> (domain::CaseMeta, std::path::PathBuf, Connection) {
-                let case_root = root.join(name);
-                std::fs::create_dir_all(&case_root).expect("create case root");
-                let connection = persistence_sqlite::open_or_create(&case_root.join("app.db"))
-                    .expect("open case database");
-                persistence_sqlite::runner::run_all(&connection).expect("run case migrations");
-                let now = chrono::Utc::now();
-                let case = domain::CaseMeta {
-                    id: domain::CaseId(uuid::Uuid::new_v4().to_string()),
-                    name: name.to_owned(),
-                    number: None,
-                    examiner: None,
-                    notes: None,
-                    created_at: now,
-                    updated_at: now,
-                };
-                persistence_sqlite::repositories::case_repo::CaseRepo::new(&connection)
-                    .create(&case)
-                    .expect("insert case row");
-                (case, case_root, connection)
             }
         }
     };

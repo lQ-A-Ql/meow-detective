@@ -230,36 +230,6 @@ impl PartitionRecordStore {
         self.page_from_index(snapshot, &prefix, cursor, direction, limit)
     }
 
-    pub fn list_by_data_source(
-        &self,
-        snapshot: &SourceReadSnapshot,
-        source_id: &str,
-        cursor: Option<&[u8]>,
-        direction: ScanDirection,
-        limit: usize,
-    ) -> Result<PartitionPage> {
-        self.list_by_source(snapshot, source_id, cursor, direction, limit)
-    }
-
-    pub fn find_by_type_guid(
-        &self,
-        snapshot: &SourceReadSnapshot,
-        source_id: &str,
-        type_guid: &str,
-        cursor: Option<&[u8]>,
-        direction: ScanDirection,
-        limit: usize,
-    ) -> Result<PartitionPage> {
-        let prefix = encode_key(
-            INDEX_FAMILY,
-            &[
-                KeyPart::Text(source_id.to_owned()),
-                KeyPart::Text(type_guid.to_owned()),
-            ],
-        )?;
-        self.page_from_index(snapshot, &prefix, cursor, direction, limit)
-    }
-
     fn page_from_index(
         &self,
         snapshot: &SourceReadSnapshot,

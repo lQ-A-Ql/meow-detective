@@ -5,7 +5,7 @@ use crate::{
     keyspaces::KeyspaceName,
 };
 use fjall::Readable;
-use std::ops::{Bound, RangeBounds};
+use std::ops::Bound;
 
 const MAX_SCAN_PAGE_ENTRIES: usize = 8_192;
 
@@ -46,28 +46,6 @@ impl ScanBounds {
         Self {
             start: Bound::Excluded(start.into()),
             end: Bound::Excluded(end.into()),
-        }
-    }
-
-    pub fn from_start(start: impl Into<Vec<u8>>, inclusive: bool) -> Self {
-        Self {
-            start: if inclusive {
-                Bound::Included(start.into())
-            } else {
-                Bound::Excluded(start.into())
-            },
-            end: Bound::Unbounded,
-        }
-    }
-
-    pub fn through_end(end: impl Into<Vec<u8>>, inclusive: bool) -> Self {
-        Self {
-            start: Bound::Unbounded,
-            end: if inclusive {
-                Bound::Included(end.into())
-            } else {
-                Bound::Excluded(end.into())
-            },
         }
     }
 }
@@ -195,18 +173,6 @@ impl SourceReadSnapshot {
         )
     }
 
-    pub fn scan_range<R>(
-        &self,
-        keyspace: KeyspaceName,
-        bounds: R,
-        direction: ScanDirection,
-    ) -> Result<Vec<SnapshotEntry>>
-    where
-        R: RangeBounds<Vec<u8>>,
-    {
-        self.range(keyspace, clone_bounds(bounds), direction)
-    }
-
     pub fn keyset(
         &self,
         keyspace: KeyspaceName,
@@ -291,24 +257,6 @@ fn prefix_end(prefix: &[u8]) -> Option<Vec<u8>> {
         }
     }
     None
-}
-
-fn clone_bounds<R>(bounds: R) -> ScanBounds
-where
-    R: RangeBounds<Vec<u8>>,
-{
-    ScanBounds {
-        start: clone_bound(bounds.start_bound()),
-        end: clone_bound(bounds.end_bound()),
-    }
-}
-
-fn clone_bound(bound: Bound<&Vec<u8>>) -> Bound<Vec<u8>> {
-    match bound {
-        Bound::Included(value) => Bound::Included(value.clone()),
-        Bound::Excluded(value) => Bound::Excluded(value.clone()),
-        Bound::Unbounded => Bound::Unbounded,
-    }
 }
 
 fn collect(iter: fjall::Iter, direction: ScanDirection) -> Result<Vec<SnapshotEntry>> {

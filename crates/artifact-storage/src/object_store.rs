@@ -54,8 +54,6 @@ pub enum ArtifactStorageError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ObjectAddress(String);
 
-pub type ArtifactAddress = ObjectAddress;
-
 impl ObjectAddress {
     pub fn parse(value: &str) -> Result<Self, ArtifactStorageError> {
         if value.len() != DIGEST_HEX_LENGTH
@@ -118,9 +116,6 @@ pub struct ArtifactStore {
     objects_root: PathBuf,
 }
 
-pub type ArtifactStorage = ArtifactStore;
-pub type StorageError = ArtifactStorageError;
-
 impl ArtifactStore {
     pub fn case_root(&self) -> &Path {
         &self.case_root
@@ -139,10 +134,6 @@ impl ArtifactStore {
 
     pub fn put_bytes(&self, bytes: &[u8]) -> Result<StoredObject, ArtifactStorageError> {
         self.put_reader(io::Cursor::new(bytes))
-    }
-
-    pub fn store_bytes(&self, bytes: &[u8]) -> Result<StoredObject, ArtifactStorageError> {
-        self.put_bytes(bytes)
     }
 
     pub fn put_file(&self, source: impl AsRef<Path>) -> Result<StoredObject, ArtifactStorageError> {
@@ -258,21 +249,6 @@ impl ArtifactStore {
             });
         }
         Ok(length)
-    }
-
-    pub fn verify_digest(&self, address: &ObjectAddress) -> Result<u64, ArtifactStorageError> {
-        self.verify(address)
-    }
-
-    pub fn check_digest(&self, address: &ObjectAddress) -> Result<u64, ArtifactStorageError> {
-        self.verify(address)
-    }
-
-    pub fn resolve_relative_path(
-        &self,
-        relative: impl AsRef<Path>,
-    ) -> Result<PathBuf, ArtifactStorageError> {
-        safe_relative_path(&self.case_root, relative)
     }
 
     fn verify_bytes(
