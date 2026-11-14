@@ -13,8 +13,8 @@ mod write;
 pub use mapping::{artifact_record, file_entry, file_record, timeline_record};
 pub(crate) use open::require_owner;
 pub use open::{
-    bind_generation, configure_source_fjall, configure_source_identity, has_source_store,
-    open_store, open_store_for_write, require_source_store, source_id,
+    bind_generation, configure_source_fjall, configure_source_identity, open_store,
+    open_store_for_write, require_source_store, source_id,
 };
 pub use read::partition_index;
 pub use write::{

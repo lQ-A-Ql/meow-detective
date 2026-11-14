@@ -83,10 +83,6 @@ pub(crate) fn require_owner(conn: &Connection, requested: &str) -> DbResult<()> 
     Ok(())
 }
 
-pub fn has_source_store(conn: &Connection) -> DbResult<bool> {
-    Ok(open_store(conn)?.is_some())
-}
-
 pub fn require_source_store(conn: &Connection) -> DbResult<Arc<SourceStore>> {
     if source_id(conn)?.is_none() {
         return Err(DbError::System("source identity is missing".into()));

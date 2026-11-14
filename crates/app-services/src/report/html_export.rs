@@ -20,19 +20,13 @@ pub fn generate_html_report(
     output_dir: &Path,
     scope: &ExportScopeDto,
 ) -> Result<String, ReportError> {
-    if let Some(case_root) = case_root_from_connection(conn) {
+    if let Some(case_root) = persistence_sqlite::connection::case_root_from_connection(conn)
+        .ok()
+        .flatten()
+    {
         return generate_html_report_for_case(conn, case, &case_root, output_dir, scope);
     }
     generate_html_report_with_analysis(conn, case, output_dir, scope, || current_analysis(conn))
-}
-
-fn case_root_from_connection(conn: &Connection) -> Option<std::path::PathBuf> {
-    let path = conn
-        .query_row("PRAGMA database_list", [], |row| row.get::<_, String>(2))
-        .ok()?;
-    std::path::Path::new(&path)
-        .parent()
-        .map(std::path::Path::to_path_buf)
 }
 
 pub fn generate_html_report_for_case(

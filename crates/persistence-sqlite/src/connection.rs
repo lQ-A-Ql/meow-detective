@@ -1,5 +1,5 @@
 use rusqlite::{Connection, OpenFlags};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -67,6 +67,28 @@ fn sqlite_error_is_busy(error: &rusqlite::Error) -> bool {
 }
 
 pub type DbResult<T> = Result<T, DbError>;
+
+/// Resolve the case root owning the database file behind `connection`.
+///
+/// `app.db` sits directly in the case root, while `source.db` lives at
+/// `<case_root>/sources/<source_id>/source.db`. Any other database file has no
+/// defined case-root layout and yields `None`.
+pub fn case_root_from_connection(conn: &Connection) -> DbResult<Option<PathBuf>> {
+    let database_path: String = conn.query_row(
+        "SELECT file FROM pragma_database_list WHERE name = 'main'",
+        [],
+        |row| row.get(0),
+    )?;
+    let path = Path::new(&database_path);
+    let root = match path.file_name().and_then(|name| name.to_str()) {
+        Some(name) if name.eq_ignore_ascii_case("app.db") => path.parent(),
+        Some(name) if name.eq_ignore_ascii_case("source.db") => {
+            path.parent().and_then(Path::parent).and_then(Path::parent)
+        }
+        _ => None,
+    };
+    Ok(root.map(Path::to_path_buf))
+}
 
 pub fn open_or_create(path: &Path) -> DbResult<Connection> {
     if let Some(parent) = path.parent() {

@@ -44,9 +44,9 @@ pub(super) fn open(
 pub(super) fn source_context(
     conn: &rusqlite::Connection,
 ) -> Option<(std::path::PathBuf, DataSourceId)> {
-    let database_path: String = conn
-        .query_row("PRAGMA database_list", [], |row| row.get(2))
-        .ok()?;
+    let case_root = persistence_sqlite::connection::case_root_from_connection(conn)
+        .ok()
+        .flatten()?;
     let source_id = conn
         .query_row(
             "SELECT id FROM data_sources ORDER BY id LIMIT 2",
@@ -54,11 +54,6 @@ pub(super) fn source_context(
             |row| row.get::<_, String>(0),
         )
         .ok()?;
-    let case_root = Path::new(&database_path)
-        .parent()
-        .and_then(Path::parent)
-        .and_then(Path::parent)?
-        .to_path_buf();
     Some((case_root, DataSourceId(source_id)))
 }
 

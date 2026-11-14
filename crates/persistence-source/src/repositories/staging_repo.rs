@@ -398,49 +398,6 @@ fn staging_db_file_path(conn: &Connection) -> rusqlite::Result<String> {
 // ---------------------------------------------------------------------------
 
 impl StagingRepo {
-    /// Merge analysis staging rows into main artifacts and timeline_events via ATTACH.
-    pub fn merge_analysis_staging_to_main(
-        main_conn: &Connection,
-        staging_conn: &Connection,
-        case_id: &str,
-        data_source_id: &str,
-    ) -> rusqlite::Result<(u64, u64)> {
-        let transaction = main_conn.unchecked_transaction()?;
-        let result = Self::merge_analysis_staging_to_main_in_transaction(
-            &transaction,
-            staging_conn,
-            case_id,
-            data_source_id,
-        );
-        match result {
-            Ok(stats) => {
-                transaction.commit()?;
-                let _ = main_conn.execute_batch("DETACH DATABASE analysis_stage");
-                Ok(stats)
-            }
-            Err(error) => {
-                let _ = transaction.rollback();
-                let _ = main_conn.execute_batch("DETACH DATABASE analysis_stage");
-                Err(error)
-            }
-        }
-    }
-
-    pub fn merge_analysis_staging_to_main_in_transaction(
-        main_conn: &rusqlite::Transaction<'_>,
-        staging_conn: &Connection,
-        case_id: &str,
-        data_source_id: &str,
-    ) -> rusqlite::Result<(u64, u64)> {
-        Self::merge_analysis_staging_to_main_in_transaction_with_alias(
-            main_conn,
-            staging_conn,
-            case_id,
-            data_source_id,
-            "analysis_stage",
-        )
-    }
-
     pub fn merge_analysis_staging_to_main_in_transaction_with_alias(
         main_conn: &rusqlite::Transaction<'_>,
         staging_conn: &Connection,

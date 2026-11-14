@@ -1,8 +1,8 @@
 use super::error::StagingError;
 use super::partition_root::{merge_partition_into_main, PartitionMergeStats};
 use super::schema::{
-    analysis_staging_db_path, enum_staging_db_path, open_analysis_staging, open_partition_staging,
-    PartitionStatus, StagingManifest,
+    enum_staging_db_path, open_analysis_staging, open_partition_staging, PartitionStatus,
+    StagingManifest,
 };
 use super::writer::{get_staging_meta, get_worker_meta, set_staging_meta, set_worker_meta};
 use persistence_source::repositories::staging_repo::StagingRepo;
@@ -196,44 +196,6 @@ pub fn merge_all_staging_to_main_with_catalog(
     Ok(stats)
 }
 
-pub fn merge_analysis_staging_to_main(
-    main_conn: &Connection,
-    case_root: &Path,
-    data_source_id: &str,
-    worker_ids: &[usize],
-    case_id: &str,
-    index_dir: &Path,
-    progress_cb: Option<&dyn Fn(usize, usize)>,
-) -> Result<AnalysisMergeStats, StagingError> {
-    let mut stats = AnalysisMergeStats::default();
-    let total = worker_ids.len().max(1);
-
-    for (position, worker_id) in worker_ids.iter().copied().enumerate() {
-        if !analysis_staging_db_path(case_root, data_source_id, worker_id).exists() {
-            report_progress(progress_cb, position + 1, total);
-            continue;
-        }
-        if analysis_worker_already_merged(case_root, data_source_id, worker_id)? {
-            report_progress(progress_cb, position + 1, total);
-            continue;
-        }
-
-        let worker_conn = open_analysis_worker(case_root, data_source_id, worker_id)?;
-        let worker_stats = merge_analysis_worker(main_conn, &worker_conn, case_id, data_source_id)?;
-        stats.artifact_count += worker_stats.artifact_count;
-        stats.timeline_count += worker_stats.timeline_count;
-        stats.indexed_count += merge_analysis_index(&worker_conn, index_dir, worker_id)?;
-        set_worker_meta(&worker_conn, "merged", "true").map_err(|error| {
-            StagingError::Other(format!(
-                "Mark analysis staging DB {worker_id} merged: {error}"
-            ))
-        })?;
-        report_progress(progress_cb, position + 1, total);
-    }
-
-    Ok(stats)
-}
-
 #[allow(clippy::too_many_arguments)]
 pub fn merge_analysis_staging_to_main_with_fjall(
     main_conn: &Connection,
@@ -346,28 +308,6 @@ fn open_analysis_worker(
     })
 }
 
-fn merge_analysis_worker(
-    main_conn: &Connection,
-    staging_conn: &Connection,
-    case_id: &str,
-    data_source_id: &str,
-) -> Result<AnalysisMergeStats, StagingError> {
-    let started = Instant::now();
-    let (artifact_count, timeline_count) = StagingRepo::merge_analysis_staging_to_main(
-        main_conn,
-        staging_conn,
-        case_id,
-        data_source_id,
-    )
-    .map_err(|error| StagingError::Other(format!("Merge analysis staging: {error}")))?;
-    log_analysis_db_merge(artifact_count, timeline_count, started.elapsed());
-    Ok(AnalysisMergeStats {
-        artifact_count,
-        timeline_count,
-        indexed_count: 0,
-    })
-}
-
 fn merge_analysis_index(
     staging_conn: &Connection,
     index_dir: &Path,
@@ -451,16 +391,6 @@ fn log_enum_merge(index: usize, stats: PartitionMergeStats, elapsed: Duration) {
         stats.ignored_rows,
         elapsed.as_millis(),
         rows_per_sec(stats.merged_rows, elapsed)
-    );
-}
-
-fn log_analysis_db_merge(artifacts: u64, timeline: u64, elapsed: Duration) {
-    tracing::info!(
-        "Analysis DB merge profile: artifacts={} timeline={} elapsedMs={} rowsPerSec={}",
-        artifacts,
-        timeline,
-        elapsed.as_millis(),
-        rows_per_sec(artifacts + timeline, elapsed)
     );
 }
 

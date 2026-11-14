@@ -13,7 +13,8 @@ mod projections;
 mod records;
 use cephfs::mirror_namespace_locators;
 use generation::{
-    active_root as active_import_generation_root, publish as publish_source_generation,
+    active_generation_root, active_root as active_import_generation_root,
+    publish as publish_source_generation,
 };
 use nested::mirror_nested_lineage;
 use projection_state::{
@@ -45,12 +46,7 @@ pub(super) fn mirror_source_records(
         &ctx.job_id.0,
     )
     .map_err(|error| CommandError::internal(error.to_string()))?;
-    let existing_generation = layout.published_path().is_dir();
-    let target_root = if existing_generation {
-        layout.published_path()
-    } else {
-        layout.build_path()
-    };
+    let (existing_generation, target_root) = active_generation_root(&layout);
     std::fs::create_dir_all(&target_root)
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let result = mirror_source_records_into_root(
@@ -88,11 +84,7 @@ pub(crate) fn mirror_partition_data_for_import(
         &ctx.job_id.0,
     )
     .map_err(|error| CommandError::internal(error.to_string()))?;
-    let target_root = if layout.published_path().is_dir() {
-        layout.published_path()
-    } else {
-        layout.build_path()
-    };
+    let (_, target_root) = active_generation_root(&layout);
     std::fs::create_dir_all(&target_root)
         .map_err(|error| CommandError::internal(error.to_string()))?;
     let source = source_kernel::storage_runtime::open_source_read_write_at_path(&target_root)

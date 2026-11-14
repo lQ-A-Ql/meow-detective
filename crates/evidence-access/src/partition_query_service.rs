@@ -103,7 +103,8 @@ fn partition_records(
     connection: &Connection,
     source_id: &str,
 ) -> DbResult<Option<Vec<PartitionRecord>>> {
-    let Some(case_root) = case_root_from_connection(connection)? else {
+    let Some(case_root) = persistence_sqlite::connection::case_root_from_connection(connection)?
+    else {
         return Ok(None);
     };
     let source_id = DataSourceId(source_id.to_owned());
@@ -227,20 +228,6 @@ fn active_import_storage_root(
     )
     .map_err(|error| DbError::System(error.to_string()))?;
     Ok(Some(layout.build_path()))
-}
-
-fn case_root_from_connection(connection: &Connection) -> DbResult<Option<PathBuf>> {
-    let database_path: String =
-        connection.query_row("PRAGMA database_list", [], |row| row.get(2))?;
-    let path = Path::new(&database_path);
-    let root = match path.file_name().and_then(|name| name.to_str()) {
-        Some(name) if name.eq_ignore_ascii_case("app.db") => path.parent(),
-        Some(name) if name.eq_ignore_ascii_case("source.db") => {
-            path.parent().and_then(Path::parent).and_then(Path::parent)
-        }
-        _ => None,
-    };
-    Ok(root.map(Path::to_path_buf))
 }
 
 fn storage_error(error: crate::source_db::FjallStorageRuntimeError) -> DbError {

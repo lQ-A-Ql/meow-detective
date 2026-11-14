@@ -7,7 +7,7 @@ use crate::file_service::{metadata::lookup::mime_for_entry, FileServiceError};
 use domain::{FileEntry, FileEntryId};
 use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::{Connection, OptionalExtension};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub fn preview_descriptor_for_case(
     conn: &Connection,
@@ -132,7 +132,10 @@ fn cephfs_descriptor(
     conn: &Connection,
     entry: &FileEntry,
 ) -> Result<PreviewCephFsDescriptor, FileServiceError> {
-    if let Some(case_root) = case_root_from_connection(conn) {
+    if let Some(case_root) = persistence_sqlite::connection::case_root_from_connection(conn)
+        .ok()
+        .flatten()
+    {
         if let Ok(source) = crate::source_db::open_registered_fjall_source_read_only(
             &case_root,
             &entry.data_source_id,
@@ -207,17 +210,6 @@ fn cephfs_descriptor(
             )
             .collect(),
     })
-}
-
-fn case_root_from_connection(conn: &Connection) -> Option<PathBuf> {
-    let path = conn
-        .query_row("PRAGMA database_list", [], |row| row.get::<_, String>(2))
-        .ok()?;
-    Path::new(&path)
-        .parent()
-        .and_then(Path::parent)
-        .and_then(Path::parent)
-        .map(Path::to_path_buf)
 }
 
 fn cephfs_descriptor_from_parser_record(

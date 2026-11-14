@@ -333,3 +333,35 @@ fn open_existing_source_does_not_migrate_existing_database() {
         0
     );
 }
+
+#[test]
+fn case_root_from_connection_resolves_app_db() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let connection = rusqlite::Connection::open(tmp.path().join("app.db")).unwrap();
+    assert_eq!(
+        case_root_from_connection(&connection).unwrap(),
+        Some(tmp.path().to_path_buf())
+    );
+}
+
+#[test]
+fn case_root_from_connection_resolves_source_db() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source_dir = tmp.path().join("sources").join("ds-1");
+    std::fs::create_dir_all(&source_dir).unwrap();
+    let connection = rusqlite::Connection::open(source_dir.join("source.db")).unwrap();
+    assert_eq!(
+        case_root_from_connection(&connection).unwrap(),
+        Some(tmp.path().to_path_buf())
+    );
+}
+
+#[test]
+fn case_root_from_connection_ignores_unrelated_database_names() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let connection = rusqlite::Connection::open(tmp.path().join("other.db")).unwrap();
+    assert_eq!(case_root_from_connection(&connection).unwrap(), None);
+
+    let memory = open_in_memory().unwrap();
+    assert_eq!(case_root_from_connection(&memory).unwrap(), None);
+}

@@ -5,6 +5,16 @@ use persistence_sqlite::repositories::storage_control_repo::{
 use std::path::{Path, PathBuf};
 use transport::CommandError;
 
+pub(super) fn active_generation_root(layout: &SourceBuildLayout) -> (bool, PathBuf) {
+    let published = layout.published_path().is_dir();
+    let root = if published {
+        layout.published_path()
+    } else {
+        layout.build_path()
+    };
+    (published, root)
+}
+
 pub(super) fn publication_receipt(
     connection: &rusqlite::Connection,
     source_id: &str,
@@ -108,9 +118,5 @@ pub(super) fn active_root(
     }
     let layout = SourceBuildLayout::for_case_source(case_root, source, &operation.attempt_id)
         .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(Some(if layout.published_path().is_dir() {
-        layout.published_path()
-    } else {
-        layout.build_path()
-    }))
+    Ok(Some(active_generation_root(&layout).1))
 }
