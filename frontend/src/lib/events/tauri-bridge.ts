@@ -1,8 +1,7 @@
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import { eventBus } from './bus';
 import type { EventEnvelope, EventTopic } from '@/types/models';
 
-let unlisteners: UnlistenFn[] = [];
 let started = false;
 
 /**
@@ -38,21 +37,11 @@ export async function startTauriEventBridge(): Promise<void> {
     'file-extract-progress',
   ];
 
-  const listeners = await Promise.all(
+  await Promise.all(
     topics.map((topic) =>
       listen<EventEnvelope>(topic, (event) => {
         eventBus.publishEvent(event.payload);
       }),
     ),
   );
-  unlisteners.push(...listeners);
-}
-
-/**
- * Stop all Tauri event listeners.
- */
-export function stopTauriEventBridge(): void {
-  unlisteners.forEach((unlisten) => unlisten());
-  unlisteners = [];
-  started = false;
 }

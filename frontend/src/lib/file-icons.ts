@@ -22,7 +22,6 @@ import {
   type IconComponent,
 } from '@/components/icons';
 import { fileIconColor } from '@/design/file-icon-tokens';
-import i18n from '@/i18n';
 
 export interface FileIconInfo {
   icon: IconComponent;
@@ -178,38 +177,4 @@ export function getFileIcon(node: {
   // 文件 - 根据扩展名
   const ext = node.name.split('.').pop()?.toLowerCase() ?? '';
   return EXTENSION_ICON_MAP[ext] ?? { icon: File, color: fileIconColor('default') };
-}
-
-/**
- * 获取文件类型标签
- */
-export function getFileTypeLabel(node: { name: string; entryType?: string }): string {
-  if (node.entryType === 'directory') {
-    return i18n.t('common.fileTypes.directory');
-  }
-
-  const ext = node.name.split('.').pop()?.toLowerCase();
-  if (!ext) return i18n.t('common.fileTypes.file');
-
-  const labelMap: Record<string, string> = {
-    exe: i18n.t('common.fileTypes.executable'),
-    dll: i18n.t('common.fileTypes.dynamicLibrary'),
-    txt: i18n.t('common.fileTypes.text'),
-    pdf: i18n.t('common.fileTypes.pdfDocument'),
-    doc: i18n.t('common.fileTypes.wordDocument'),
-    docx: i18n.t('common.fileTypes.wordDocument'),
-    jpg: i18n.t('media.image'),
-    jpeg: i18n.t('media.image'),
-    png: i18n.t('media.image'),
-    gif: i18n.t('media.image'),
-    zip: i18n.t('common.fileTypes.archive'),
-    rar: i18n.t('common.fileTypes.archive'),
-    '7z': i18n.t('common.fileTypes.archive'),
-    mp4: i18n.t('media.video'),
-    mp3: i18n.t('media.audio'),
-    db: i18n.t('settings.sections.systemInfo.database'),
-    sqlite: i18n.t('settings.sections.systemInfo.database'),
-  };
-
-  return labelMap[ext] ?? i18n.t('common.fileTypes.extension', { extension: ext.toUpperCase() });
 }

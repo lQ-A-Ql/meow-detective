@@ -32,5 +32,3 @@ export function useBottomDrawerModel() {
     t,
   });
 }
-
-export type BottomDrawerModel = ReturnType<typeof useBottomDrawerModel>;

@@ -2,11 +2,6 @@ import type { InfrastructureGraphEdge, InfrastructureGraphNode } from '@/types/m
 import type { InfrastructureNetworkFact } from '@/types/infrastructure';
 import type { InfrastructureHostFact } from '../types';
 
-export interface InfrastructureHostView {
-  node: InfrastructureGraphNode;
-  fact?: InfrastructureHostFact;
-}
-
 export function buildClusterPresentation(
   nodes: InfrastructureGraphNode[],
   edges: InfrastructureGraphEdge[],

@@ -46,9 +46,3 @@ export const registryBrowserClient: RegistryBrowserClient = {
   searchHive: (request) => apiClient.request(COMMANDS.registryBrowser.SEARCH_HIVE, { request }),
   locateSearchHit: (request) => apiClient.request(COMMANDS.registryBrowser.LOCATE_SEARCH_HIT, { request }),
 };
-export async function searchRegistryHive(request: {
-  sessionId: string;
-  query: string;
-}): Promise<import('@/types/registryBrowser').RegistrySearchPage> {
-  return apiClient.request(COMMANDS.registryBrowser.SEARCH_HIVE, { request });
-}

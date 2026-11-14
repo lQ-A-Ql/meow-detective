@@ -205,5 +205,3 @@ export const COMMANDS = {
     GET_LEDGER_PROOF: 'get_ledger_proof',
   },
 } as const;
-
-export type CommandName = (typeof COMMANDS)[keyof typeof COMMANDS][keyof (typeof COMMANDS)[keyof typeof COMMANDS]];

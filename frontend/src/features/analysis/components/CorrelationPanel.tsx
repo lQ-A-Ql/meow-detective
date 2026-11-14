@@ -2,32 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, BarChart3, CheckCircle2, Database } from '@/components/icons';
 import type { ReleaseScorecard, V2GovernanceSnapshot } from '@/types/models';
 import { Metric, MessageBlock } from './V2GovernancePanels';
-
-function coverageTone(status: 'covered' | 'review' | 'missing') {
-  switch (status) {
-    case 'covered':
-      return 'border-forensics-success-border bg-forensics-success-bg text-forensics-success-text';
-    case 'review':
-      return 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text';
-    case 'missing':
-      return 'border-forensics-border-strong bg-forensics-panel text-forensics-text-secondary';
-    default:
-      return 'border-forensics-border bg-forensics-surface text-forensics-text-tertiary';
-  }
-}
-
-function coverageLabel(status: 'covered' | 'review' | 'missing') {
-  switch (status) {
-    case 'covered':
-      return 'Covered';
-    case 'review':
-      return 'Review';
-    case 'missing':
-      return 'Missing';
-    default:
-      return status;
-  }
-}
+import { coverageLabel, coverageTone } from './correlation-helpers';
 
 export function ReleaseScorecardPanel({
   scorecard,

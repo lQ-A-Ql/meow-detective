@@ -14,8 +14,3 @@ export interface AppUpdateProgress {
   downloadedBytes: number;
   totalBytes?: number;
 }
-export interface PortablePackage {
-  format: number;
-  version: string;
-  caseSchema: string;
-}

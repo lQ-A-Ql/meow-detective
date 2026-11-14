@@ -11,7 +11,6 @@
  */
 
 import { FileEntryRow } from '@/types/models';
-import i18n from '@/i18n';
 
 /**
  * 排序键类型
@@ -168,24 +167,4 @@ export function sortFileEntries(
   }
 
   return result;
-}
-
-/**
- * 切换排序方向
- */
-export function toggleSortDirection(current: FileSortDirection): FileSortDirection {
-  return current === 'asc' ? 'desc' : 'asc';
-}
-
-/**
- * 获取排序键的显示名称
- */
-export function getSortKeyLabel(key: FileSortKey): string {
-  const labels: Record<FileSortKey, string> = {
-    name: i18n.t('common.sort.name'),
-    size: i18n.t('common.sort.size'),
-    modifiedAt: i18n.t('common.sort.modifiedAt'),
-    ext: i18n.t('common.sort.extension'),
-  };
-  return labels[key];
 }

@@ -77,5 +77,3 @@ export function useLinuxClusterWorkspaceModel() {
     fallback,
   };
 }
-
-export type LinuxClusterWorkspaceModel = ReturnType<typeof useLinuxClusterWorkspaceModel>;

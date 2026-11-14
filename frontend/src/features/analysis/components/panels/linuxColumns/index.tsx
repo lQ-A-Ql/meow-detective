@@ -37,5 +37,3 @@ export function useLinuxColumns() {
     [t],
   );
 }
-
-export type LinuxColumns = ReturnType<typeof useLinuxColumns>;

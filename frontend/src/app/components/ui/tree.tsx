@@ -10,10 +10,6 @@ export const Tree = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(f
   return <div {...props} ref={ref} role="tree" className={cn('ui-tree', className)} />;
 });
 
-export function TreeGroup(props: HTMLAttributes<HTMLDivElement>) {
-  return <div {...props} role="group" />;
-}
-
 export function TreeToggle({
   expanded,
   hasChildren,
