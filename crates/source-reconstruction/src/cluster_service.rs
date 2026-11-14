@@ -74,9 +74,9 @@ pub use manifest_parser::{
     parse_static_pod_manifests, ManifestContainer, StaticPodManifestSummary,
 };
 pub use mdraid_materialization::{
-    materialize_linux_evidence_set_mdraid, materialize_mdraid_array,
-    materialize_mdraid_source_catalog, materialize_mdraid_source_catalog_with_cancel,
-    register_linux_evidence_set_mdraid,
+    materialize_linux_evidence_set_mdraid, materialize_linux_evidence_set_mdraid_with_cancel,
+    materialize_mdraid_array, materialize_mdraid_source_catalog,
+    materialize_mdraid_source_catalog_with_cancel,
 };
 pub use member_binding::get_linux_import_member_source_id;
 pub use network_parser::{

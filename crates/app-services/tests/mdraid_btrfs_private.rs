@@ -5,7 +5,6 @@ use domain::{CaseId, CaseMeta};
 use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
 use std::time::Instant;
-
 #[test]
 #[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real mdraid Btrfs E01 directory"]
 fn mdraid_btrfs_catalog_materializes_to_completion() {
@@ -76,6 +75,33 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
     assert!(native
         .partition_projection_complete(&snapshot, &source.id.0)
         .expect("verify partition projection marker"));
+    assert!(native
+        .source_projection_complete(&snapshot, &source.id.0)
+        .expect("verify source projection marker"));
+    assert!(FileRepo::new(&source_conn)
+        .find_data_source_location(&source.id)
+        .expect("read source-local location")
+        .is_some());
+    let tree =
+        app_services::file_service::get_file_tree_for_case(&conn, &case_root, &case_id, false)
+            .expect("browseable case tree");
+    assert!(
+        tree.iter()
+            .any(|node| node.data_source_id.as_deref() == Some(source.id.0.as_str())),
+        "case tree should expose the MD RAID source"
+    );
+    let entry = FileRepo::new(&source_conn)
+        .find_by_partition_and_path(&source.id, 0, "@rootfs/etc/passwd")
+        .expect("look up passwd")
+        .expect("passwd entry");
+    let header_cache = app_services::file_service::FileHeaderReadCache::new(case_id.0.clone());
+    let header = header_cache
+        .read_file_header_by_id(&source_conn, &entry.id, 256)
+        .expect("read MD RAID preview header");
+    assert!(
+        !header.is_empty() && header.windows(5).any(|window| window == b"root:"),
+        "preview should read /etc/passwd through the published MD RAID source"
+    );
     let storage = DataSourceRepo::new(&conn)
         .find_storage(&source.id)
         .expect("read storage")

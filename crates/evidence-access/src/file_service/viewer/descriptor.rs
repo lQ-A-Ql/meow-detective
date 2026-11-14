@@ -72,7 +72,7 @@ fn preview_descriptor_for_entry(
         .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
 
     let partition_candidates = match source_kind.as_str() {
-        "logical_directory" | "logical_archive" | "ceph_fs" => Vec::new(),
+        "logical_directory" | "logical_archive" | "ceph_fs" | "md_raid" => Vec::new(),
         "e01" | "ceph_rbd" => {
             let expected_partition_index =
                 crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
@@ -99,6 +99,11 @@ fn preview_descriptor_for_entry(
         }
     };
     let selected = partition_candidates.first();
+    let partition_index = if source_kind == "md_raid" {
+        crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?
+    } else {
+        selected.map(|candidate| candidate.partition_index)
+    };
     let ceph_fs = if source_kind == "ceph_fs" {
         Some(cephfs_descriptor(conn, entry)?)
     } else {
@@ -110,7 +115,7 @@ fn preview_descriptor_for_entry(
         file_id: entry.id.0.clone(),
         source_kind,
         source_path,
-        partition_index: selected.map(|candidate| candidate.partition_index),
+        partition_index,
         filesystem_kind: selected.map(|candidate| candidate.filesystem_kind.clone()),
         path: entry.path.clone(),
         mime: mime_for_entry(entry),

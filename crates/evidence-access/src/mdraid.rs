@@ -20,6 +20,8 @@ pub enum MdRaidPlanError {
     MdRaid(#[from] fs_lvm::mdraid::MdRaidError),
     #[error("MD RAID descriptor serialization failed: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("MD RAID catalog materialization cancelled")]
+    Cancelled,
 }
 
 impl transport::ServiceErrorCategory for MdRaidPlanError {
@@ -29,6 +31,7 @@ impl transport::ServiceErrorCategory for MdRaidPlanError {
             Self::MdRaid(_) => transport::ErrorCategory::Unsupported,
             Self::Classification(error) => error.category(),
             Self::Json(_) => transport::ErrorCategory::Parser,
+            Self::Cancelled => transport::ErrorCategory::Cancelled,
         }
     }
 }

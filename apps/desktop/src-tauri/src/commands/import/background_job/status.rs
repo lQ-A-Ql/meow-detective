@@ -50,6 +50,32 @@ pub(super) fn fail_job(
     Err(error)
 }
 
+pub(super) fn update_import_set_state_logged(
+    connection: &rusqlite::Connection,
+    import_set_id: &str,
+    state: &str,
+    ready_count: u32,
+    failed_count: u32,
+    detail: Option<&str>,
+    context: &str,
+) {
+    if let Err(error) = cluster_service::update_linux_evidence_set_import_state(
+        connection,
+        import_set_id,
+        state,
+        ready_count,
+        failed_count,
+        detail,
+    ) {
+        tracing::error!(
+            import_set_id,
+            error = %error,
+            context,
+            "Failed to update Linux evidence-set import state"
+        );
+    }
+}
+
 pub(super) fn fail_linux_evidence_set_job(
     job_repo: &JobRepo<'_>,
     job_id: &domain::JobId,

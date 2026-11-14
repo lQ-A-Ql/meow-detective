@@ -6,7 +6,8 @@ use evidence_core::filesystem::{
     child_nodes_with_parent_path, fs_node, is_special_directory_name, path_components,
     path_is_directory, root_node, FileSystemReader, FsNode, FsTimestamp,
 };
-use std::io::{self, Read};
+use std::io::{self, Read, Seek, SeekFrom};
+use std::sync::Arc;
 
 impl FileSystemReader for BtrfsReader {
     fn root(&self) -> io::Result<FsNode> {
@@ -71,8 +72,78 @@ impl FileSystemReader for BtrfsReader {
         Ok(output)
     }
 
+    fn open_file_seekable(
+        &self,
+        path: &str,
+    ) -> io::Result<Box<dyn evidence_core::filesystem::ReadSeek>> {
+        let normalized = normalize_path(path);
+        let target = self
+            .filesystem
+            .resolve_path(&normalized)
+            .map_err(btrfs_error)?;
+        if target.inode.is_dir() {
+            return Err(path_is_directory(path));
+        }
+        Ok(Box::new(BtrfsSeekableFile {
+            filesystem: Arc::clone(&self.filesystem),
+            path: normalized,
+            position: 0,
+            size: target.inode.size,
+        }))
+    }
+
     fn data_source_name(&self) -> &str {
         "btrfs"
+    }
+}
+
+struct BtrfsSeekableFile {
+    filesystem: Arc<btrfs_driver::Filesystem>,
+    path: String,
+    position: u64,
+    size: u64,
+}
+
+impl Read for BtrfsSeekableFile {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if buffer.is_empty() || self.position >= self.size {
+            return Ok(0);
+        }
+        let remaining = usize::try_from(self.size - self.position).unwrap_or(usize::MAX);
+        let length = buffer.len().min(remaining);
+        let target = self
+            .filesystem
+            .resolve_path(&self.path)
+            .map_err(btrfs_error)?;
+        let read = target
+            .fs(&self.filesystem)
+            .read_at(target.inode.ino, self.position, &mut buffer[..length])
+            .map_err(btrfs_error)?;
+        self.position += read as u64;
+        Ok(read)
+    }
+}
+
+impl Seek for BtrfsSeekableFile {
+    fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+        let next = match position {
+            SeekFrom::Start(offset) => i128::from(offset),
+            SeekFrom::Current(delta) => i128::from(self.position) + i128::from(delta),
+            SeekFrom::End(delta) => i128::from(self.size) + i128::from(delta),
+        };
+        if next < 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "seek before the start of the Btrfs file",
+            ));
+        }
+        self.position = u64::try_from(next).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "seek beyond the addressable range",
+            )
+        })?;
+        Ok(self.position)
     }
 }
 

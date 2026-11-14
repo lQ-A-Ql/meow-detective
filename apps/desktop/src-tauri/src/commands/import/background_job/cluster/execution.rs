@@ -46,15 +46,7 @@ pub(super) fn publish_evidence_set(
     cancel_token: Arc<AtomicBool>,
     projection_task_manager: Option<Arc<TaskManager>>,
 ) -> Result<Option<BrowseableEvidenceSetImport>, CommandError> {
-    match complete_evidence_set_import(
-        connection,
-        job_repo,
-        job,
-        app,
-        summary,
-        cancel_token,
-        projection_task_manager.clone(),
-    ) {
+    match complete_evidence_set_import(connection, job_repo, job, app, summary, cancel_token) {
         Ok(outcome) => {
             if outcome.is_some() {
                 record_cluster_phase(

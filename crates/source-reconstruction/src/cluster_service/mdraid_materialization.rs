@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
@@ -11,7 +12,10 @@ use ::evidence_access::mdraid::{
     discover_linux_evidence_set_mdraid, open_mdraid_reader, open_persisted_mdraid_reader,
     write_mdraid_descriptor, MdRaidArrayPlan, MdRaidDiscoveryMember, MdRaidPlanError,
 };
-use persistence_source::fjall::{PartitionRecord, PartitionRecordStore, PersistMode};
+use persistence_source::fjall::{
+    encode_key, KeyPart, KeyspaceName, PartitionRecord, PartitionRecordStore, PersistMode,
+    VersionedEnvelope,
+};
 use sha2::{Digest, Sha256};
 
 pub fn materialize_mdraid_array(
@@ -20,8 +24,22 @@ pub fn materialize_mdraid_array(
     case_id: &CaseId,
     plan: &MdRaidArrayPlan,
 ) -> Result<DataSource, MdRaidPlanError> {
+    let cancel_token = AtomicBool::new(false);
+    materialize_mdraid_array_with_cancel(conn, case_root, case_id, plan, &cancel_token)
+}
+
+fn materialize_mdraid_array_with_cancel(
+    conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    plan: &MdRaidArrayPlan,
+    cancel_token: &AtomicBool,
+) -> Result<DataSource, MdRaidPlanError> {
+    if cancel_token.load(Ordering::Acquire) {
+        return Err(MdRaidPlanError::Cancelled);
+    }
     let source = register_mdraid_array(conn, case_root, case_id, plan)?;
-    materialize_mdraid_source_catalog(conn, case_root, &source.id)?;
+    materialize_mdraid_source_catalog_with_cancel(conn, case_root, &source.id, cancel_token)?;
     Ok(source)
 }
 
@@ -107,7 +125,7 @@ pub fn materialize_mdraid_source_catalog(
     case_root: &std::path::Path,
     source_id: &DataSourceId,
 ) -> Result<(), MdRaidPlanError> {
-    let cancel_token = std::sync::atomic::AtomicBool::new(false);
+    let cancel_token = AtomicBool::new(false);
     materialize_mdraid_source_catalog_with_cancel(conn, case_root, source_id, &cancel_token)
 }
 
@@ -115,27 +133,69 @@ pub fn materialize_mdraid_source_catalog_with_cancel(
     conn: &rusqlite::Connection,
     case_root: &std::path::Path,
     source_id: &DataSourceId,
-    cancel_token: &std::sync::atomic::AtomicBool,
+    cancel_token: &AtomicBool,
 ) -> Result<(), MdRaidPlanError> {
     let repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
-    let source = load_mdraid_source(&repo, case_root, source_id)?;
-    if source.1 {
+    let (source, case_id) = load_mdraid_source(&repo, source_id)?;
+    let source_conn = source_kernel::source_db::open_source_db(case_root, &source.id)
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&source_conn)
+        .upsert_source_local_metadata(&case_id, &source)
+        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
+    if mdraid_catalog_is_consumable(&repo, &source_conn, case_root, &source) {
         return Ok(());
     }
-    let source_conn = source_kernel::source_db::open_source_db(case_root, &source.0.id)
-        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
-    if let Err(error) = enumerate_mdraid_catalog(&source.0, &source_conn, cancel_token) {
+    if cancel_token.load(Ordering::Acquire) {
+        return Err(MdRaidPlanError::Cancelled);
+    }
+    if let Err(error) = enumerate_mdraid_catalog(&source, &source_conn, cancel_token) {
+        if cancel_token.load(Ordering::Acquire) {
+            let _ = repo.update_import_state(&source.id, "pending", Some("cancelled"));
+            return Err(MdRaidPlanError::Cancelled);
+        }
         let message = error.to_string();
-        let _ = repo.update_import_state(&source.0.id, "failed", Some(&message));
+        let _ = repo.update_import_state(&source.id, "failed", Some(&message));
         return Err(MdRaidPlanError::Io(std::io::Error::other(message)));
     }
-    publish_mdraid_catalog_generation(&source.0, &source_conn)
+    if cancel_token.load(Ordering::Acquire) {
+        let _ = repo.update_import_state(&source.id, "pending", Some("cancelled"));
+        return Err(MdRaidPlanError::Cancelled);
+    }
+    publish_mdraid_catalog_generation(&source, &source_conn)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
     source_kernel::source_db::checkpoint_source_db(&source_conn)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error.to_string())))?;
-    repo.update_import_state(&source.0.id, "ready", None)
+    repo.update_import_state(&source.id, "ready", None)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
     Ok(())
+}
+
+fn mdraid_catalog_is_consumable(
+    repo: &persistence_sqlite::repositories::datasource_repo::DataSourceRepo<'_>,
+    source_conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    source: &DataSource,
+) -> bool {
+    let state_ready = repo
+        .find_storage(&source.id)
+        .ok()
+        .flatten()
+        .is_some_and(|storage| storage.import_state.eq_ignore_ascii_case("ready"));
+    let location_present = persistence_source::repositories::file_repo::FileRepo::new(source_conn)
+        .find_data_source_location(&source.id)
+        .ok()
+        .flatten()
+        .is_some();
+    let projection_complete =
+        source_kernel::source_db::open_registered_fjall_source_read_only(case_root, &source.id)
+            .ok()
+            .is_some_and(|native| {
+                let snapshot = native.snapshot();
+                native
+                    .source_projection_complete(&snapshot, &source.id.0)
+                    .unwrap_or(false)
+            });
+    state_ready && location_present && projection_complete
 }
 
 fn publish_mdraid_catalog_generation(
@@ -176,6 +236,24 @@ fn publish_mdraid_catalog_generation(
     store
         .write_envelope(keyspace, key, &marker, PersistMode::Buffer)
         .map_err(|error| error.to_string())?;
+    let projection_key = encode_key("projection", &[KeyPart::Text(source.id.0.clone())])
+        .map_err(|error| error.to_string())?;
+    let projection_marker = VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{}", source.id.0),
+        source.id.0.clone(),
+        1,
+        source.id.0.as_bytes().to_vec(),
+    );
+    store
+        .write_envelope(
+            KeyspaceName::Meta,
+            projection_key,
+            &projection_marker,
+            PersistMode::Buffer,
+        )
+        .map_err(|error| error.to_string())?;
     store
         .database()
         .persist(PersistMode::SyncAll)
@@ -211,16 +289,11 @@ fn publish_mdraid_catalog_generation(
 
 fn load_mdraid_source(
     repo: &persistence_sqlite::repositories::datasource_repo::DataSourceRepo<'_>,
-    _case_root: &std::path::Path,
     source_id: &DataSourceId,
-) -> Result<(DataSource, bool), MdRaidPlanError> {
+) -> Result<(DataSource, CaseId), MdRaidPlanError> {
     let case_id = repo
         .case_id(source_id)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?;
-    let ready = repo
-        .find_storage(source_id)
-        .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?
-        .is_some_and(|storage| storage.import_state.eq_ignore_ascii_case("ready"));
     let source = repo
         .find_by_case(&case_id)
         .map_err(|error| MdRaidPlanError::Io(std::io::Error::other(error)))?
@@ -232,7 +305,7 @@ fn load_mdraid_source(
                 format!("MD RAID data source '{}' was not found", source_id.0),
             ))
         })?;
-    Ok((source, ready))
+    Ok((source, case_id))
 }
 
 fn enumerate_mdraid_catalog(
@@ -327,26 +400,30 @@ fn discover_evidence_set_arrays(
     discover_linux_evidence_set_mdraid(&plan.root_path, &members)
 }
 
-pub fn register_linux_evidence_set_mdraid(
-    conn: &rusqlite::Connection,
-    case_root: &std::path::Path,
-    case_id: &CaseId,
-    plan: &LinuxEvidenceSetImportPlan,
-) -> Result<Vec<DataSource>, MdRaidPlanError> {
-    discover_evidence_set_arrays(plan)?
-        .iter()
-        .map(|array| register_mdraid_array(conn, case_root, case_id, array))
-        .collect()
-}
-
 pub fn materialize_linux_evidence_set_mdraid(
     conn: &rusqlite::Connection,
     case_root: &std::path::Path,
     case_id: &CaseId,
     plan: &LinuxEvidenceSetImportPlan,
 ) -> Result<Vec<DataSource>, MdRaidPlanError> {
+    let cancel_token = AtomicBool::new(false);
+    materialize_linux_evidence_set_mdraid_with_cancel(conn, case_root, case_id, plan, &cancel_token)
+}
+
+pub fn materialize_linux_evidence_set_mdraid_with_cancel(
+    conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    plan: &LinuxEvidenceSetImportPlan,
+    cancel_token: &AtomicBool,
+) -> Result<Vec<DataSource>, MdRaidPlanError> {
+    if cancel_token.load(Ordering::Acquire) {
+        return Err(MdRaidPlanError::Cancelled);
+    }
     discover_evidence_set_arrays(plan)?
         .iter()
-        .map(|array| materialize_mdraid_array(conn, case_root, case_id, array))
+        .map(|array| {
+            materialize_mdraid_array_with_cancel(conn, case_root, case_id, array, cancel_token)
+        })
         .collect()
 }

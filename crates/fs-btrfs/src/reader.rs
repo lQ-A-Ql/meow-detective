@@ -32,7 +32,9 @@ impl BtrfsReader {
             NODE_CACHE_BLOCKS,
         )
         .map_err(btrfs_error)?;
-        Ok(Self { filesystem })
+        Ok(Self {
+            filesystem: Arc::new(filesystem),
+        })
     }
 
     pub fn has_unreplayed_log(&self) -> bool {
