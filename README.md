@@ -4,7 +4,7 @@
 
 ## 项目介绍
 
-Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 51 Rust crates。案件控制信息和每个数据源的取证数据分库存储：案件级数据库负责案件、数据源注册、任务和审计；分区、文件树、制品、时间线和源内索引保存于对应数据源的 `source.db`；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
+Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 51 Rust crates。存储按控制面与明细分层：案件级数据库负责案件、数据源注册、任务和审计；每个数据源的 `source.db` 保存控制面、处理阶段与发布回执，分区、文件树、制品、时间线和源内索引以 Fjall 原子 generation 持久化于案件工作区；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
 当前工程事实快照：12 frontend pages（其中 `/v2` V2 workbench 仅在 dev/audit 模式注册，生产路由 11 个）、168 Tauri commands、55 source modules、migration scripts (78)、161 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
@@ -40,18 +40,25 @@ RAW/E01 导入采用作业级 SourceRuntime、独立 reader 与共享 E01 OpenPl
 - 当前数据源入口：E01/EWF、单文件 RAW/dd/img、VHD（fixed/dynamic/differencing）、VHDX、QCOW/QCOW2、Android sparse、逻辑目录、tar/gzip 逻辑包及 Linux 集群目录；Windows 主机物理磁盘可通过 `\\.\PhysicalDriveN` 以只读方式导入。
 - ISO9660/Joliet 与 monolithic-flat VMDK 的只读 reader 已实现，可用于镜像内嵌套卷解析；但数据源分类器当前没有为 `.iso`/`.vmdk` 直选入口接线，从文件选择器直选这两类文件会返回 `unrecognized evidence container`（已知限制，见“支持边界”）。
 - 镜像格式先进入统一的只读 reader，再进行分区探测和文件系统解析：E01/EWF 使用 E01 reader；RAW/dd/img 使用原始字节 reader；VHD/VHDX/QCOW/QCOW2 由 RawImageReader 按 footer/magic 识别为只读逻辑字节流；主机物理磁盘使用 LocalDiskReader；Android sparse 由 AndroidSparseReader 展开为逻辑镜像；ISO9660/Joliet 与 monolithic-flat VMDK 使用各自的只读 reader（直选入口见上一条限制）。适配器不会修改原始文件，也不会把不支持的容器猜测成 RAW。
-- 文件选择器过滤器列出 `.e01`/`.E01`/`.ewf`、`.dd`/`.raw`/`.img`、`.iso`、`.vmdk`、`.simg`/`.sparse`、`.tar`/`.tar.gz`/`.tgz`/`.gz`/`.gzip`；VHD/VHDX/QCOW/QCOW2 未列入过滤器，可通过选择器“所有文件”选择。扩展名参与数据源类型判定（`.dd/.raw/.img/.bin/.001` 兜底为 RAW），最终是否可读仍由 magic、descriptor、PVD、分区与长度校验决定。
+- 文件选择器过滤器列出 `.e01`/`.E01`/`.ewf`、`.dd`/`.raw`/`.img`、`.iso`、`.vhd`/`.vhdx`/`.qcow2`/`.vmdk`、`.simg`/`.sparse`、`.tar`/`.tar.gz`/`.tgz`/`.gz`/`.gzip`；`.qcow`（v1）与 `.bin`/`.001` 等扩展名未列入过滤器，可通过选择器“所有文件”选择。扩展名参与数据源类型判定（`.dd/.raw/.img/.bin/.001` 兜底为 RAW），最终是否可读仍由 magic、descriptor、PVD、分区与长度校验决定。
 - VMDK 目前仅接受 UTF-8、`createType="monolithicFlat"`、单个零偏移 `FLAT` extent；descriptor 与 extent 的逻辑长度、截断、溢出和路径边界都会校验。`.001/.002/...` 分卷集合、sparse/streamOptimized VMDK 明确拒绝；分卷 RAW（`.001/.002`）同样拒绝，只接受单文件镜像。VHD fixed/dynamic/differencing、带相对父链的 VHDX，以及无压缩 QCOW/QCOW2 backing chain 提供只读读取，按 footer/magic 分类、不依赖扩展名；压缩 QCOW2 cluster 和损坏的虚拟磁盘元数据 fail-closed。
 - ISO 适配器优先使用 Joliet 名称，目录和文件 extent 均受卷边界限制；可解析嵌套在 E01/RAW/VHD/受支持 flat VMDK 字节流中的 ISO 卷，直接打开卷由同一 reader 完成。`.iso` 直选导入入口当前未接线（见上）。UDF、Rock Ridge、交错或 multi-extent 记录不在当前承诺范围。
-- NTFS 导入复用数据源 reader 工厂，按资源预算并行读取和解析 MFT，再按记录顺序由单一 writer 写入数值 staging。新 source DB 的次级索引在合并后重建并执行 ANALYZE，完成前不会发布 Ready；异常退出后的索引状态可随导入恢复。
+- NTFS 导入复用数据源 reader 工厂，按资源预算并行读取和解析 MFT，再分批由单一 writer 按记录顺序写入数值 staging；分析记录合并进主库投影并同步到 Fjall generation，搜索索引文档合并进数据源索引，分析合并完成前不会发布 Ready，异常退出后的索引与 staging 状态可随导入恢复。
 - 自动识别 MBR/GPT、常见分区与文件系统；支持 NTFS、FAT、exFAT、ext4、XFS、Btrfs、F2FS、EROFS 以及 Linux LVM 直接逻辑卷映射（F2FS/EROFS 主要面向 Android 镜像）。
 - 文件树、目录分页、筛选、自然排序、文件属性与数据源分区信息均由后端统一提供。
-- 文本、Hex、图片、音视频、PDF/Office/SQLite 等预览走受限的只读证据读取链路；大文件使用范围读取，避免一次性载入完整文件。
+- 文本、Hex、图片、音视频、PDF/Office/SQLite 等预览走受限的只读证据读取链路；大文件使用范围读取，避免一次性载入完整文件。文本预览支持 Python、PowerShell、Shell、JSON、YAML、INI、JavaScript 与 TypeScript 语法高亮及整页复制；Hex 预览支持连续区间高亮、后端分块流式全文件搜索（可取消、匹配数有上限）与结果跳转。
 - 支持向调查员指定的路径提取文件，默认禁止覆盖，提取过程返回真实进度和完整性信息。
 - 提供 NTFS、ext4 与 XFS 的删除文件恢复/雕刻能力，恢复范围和完整性状态会显式标注。
 - 镜像挂载提供逻辑分区和完整物理磁盘两种只读模式；逻辑分区通过 Dokan Mount Manager
   发布为普通资源管理器可见的只读盘符，物理磁盘模式通过本机回环 iSCSI 交给 Windows
   原生卷管理，不依赖自写驱动或 Arsenal 授权。
+- Linux MD RAID 提供独立导入入口，可读取成员盘上的阵列元数据并组装目录；导入过程按成员进度可取消，目录持久化后可直接浏览。
+
+### 存储与完整性
+
+- 每个数据源的 `source.db` 只保留控制面：处理阶段、发布回执、版本指纹与源身份；分区、文件目录、产物、时间线和搜索投影以 Fjall 原子 generation 发布，查询固定在已发布 generation 上，避免新旧快照混合。
+- 案件根目录要求 `storage-manifest.json`（`formatVersion=1`，模型 `sqlite-fjall-v1`）；缺失、版本不符或案件身份不匹配的目录按 typed 错误拒绝打开，需新建案件并重新导入。
+- 发布回执绑定导入操作；启动时执行恢复收敛与一致性扫描，缺失或损坏的投影可通过修复 IPC 重建。
 
 ### Windows 权限与系统服务
 
@@ -69,9 +76,10 @@ RAW/E01 导入采用作业级 SourceRuntime、独立 reader 与共享 E01 OpenPl
 
 ### Windows 取证分析
 
-- 注册表：SYSTEM、SOFTWARE、NTUSER、SAM、SECURITY、USRCLASS、Amcache 与事务日志基础解析。
+- 注册表：SYSTEM、SOFTWARE、NTUSER、SAM、SECURITY、USRCLASS、Amcache 解析，LOG1/LOG2 分页日志恢复与产物提取统一。
 - 事件日志：EVTX 解析、开关机、登录、进程、账户与应用事件分类。
 - 用户行为：Prefetch、LNK、Jump List、Recycle Bin、SRU、Thumbcache、UsrClass.dat 中的 Shellbags/MuiCache、浏览器历史/下载/会话等。
+- 外设与邮件：USB 存储历史关联卷标与盘符；Foxmail 原生邮箱与账号凭据并入邮件分析。
 - 浏览器与凭据：Chrome、Edge、Firefox 浏览器数据提取；离线 DPAPI 相关链路按前置材料与支持边界处理。
 - BitLocker：卷元数据检查、密码/恢复密码解锁，以及在文件浏览器为已锁定卷选择本地 UTF-8 密码字典并逐行验证；字典任务显示已尝试数与读取进度，可取消，且不向前端返回候选密码。匹配成功后只沿既有已验证密钥链路解锁和持久化；原始证据始终只读。匹配的 Windows x64 内存镜像可用于受限的密钥恢复与卷级验证，定位链路经内嵌的 1077 build 内核符号注册表（Windows 10 10240 → Windows 11 28000），不绑定单一 Windows 版本。
 
@@ -79,6 +87,9 @@ RAW/E01 导入采用作业级 SourceRuntime、独立 reader 与共享 E01 OpenPl
 
 - Linux 取证能力：systemd journal、wtmp、bash history、apt/dpkg/yum/dnf、cron、sudo/auth.log(/var/log/secure)、系统配置、Git/GitLab 配置与提交记录、Nginx/Apache 站点与日志、MySQL/MariaDB 配置和日志。
 - Linux 数据源自动进入独立分析视图；Windows 与 Linux 提取能力不会交叉调度。
+- Linux 服务与容器：systemd 服务配置/启用状态、Docker 容器与镜像元数据在 Linux 分析页签中按数据源隔离展示。
+- Linux MD RAID：支持成员识别、跨 VG 组装、不等尺寸 RAID0 zone、可取消目录枚举；目录持久化后可从基础设施页签直接打开文件浏览器。
+- Btrfs：嵌套 chunk tree、多 stripe 边界、畸形 chunk fail closed、稀疏文件读取与根目录预览。
 - PVE/Ceph 相关能力包括成员发现、宿主 LVM/ext4、BlueStore/BlueFS/RocksDB 元数据读取、RBD 派生虚拟磁盘与文件预览。RBD 只有在 OSD inventory 覆盖报告为完整、报告摘要和副本策略指纹均匹配时才会物化或复用；覆盖不足或显式多池证据无法绑定到数据池时仅保留元数据并失败关闭。该部分仍以私有真实样本基线为主，完整 CRUSH/EC、降级副本、通用 CephFS 重建等场景尚未承诺支持。
 
 ### Android 分析
@@ -99,7 +110,7 @@ RAW/E01 导入采用作业级 SourceRuntime、独立 reader 与共享 E01 OpenPl
 
 - 全文检索、时间线、实体归并、关联图、Notebook 调查记录、规则包（加载/校验/覆盖度）与批处理计划。批处理执行控制（启动/暂停/恢复/取消）当前返回 typed unsupported，仅创建与查询可用。
 - HTML、CSV、JSON 与证据包报告导出；报告和错误信息遵循脱敏规则。
-- 内置本机 MCP 服务端监听 `http://127.0.0.1:3001/mcp`，设置页管理启停、地址复制及工具开关。HTTP 请求必须不带 `Origin`、`Host` 为 `127.0.0.1` 或 `localhost`，并且存在活动案件；客户端无需提供 Bearer 凭据。目录包括 50 个工具，覆盖案件、数据源、插件结果、文件、分析摘要、时间线、搜索、内容索引及报告；文件内容每块最多 64 KiB，支持 UTF-8/Base64。外部文件提取限定在数据源对应的受控导出目录，默认拒绝覆盖。工具调用受当前案件会话约束并记录访问审计，原始证据保持只读。
+- 内置本机 MCP 服务端监听 `http://127.0.0.1:3001/mcp`，设置页管理启停、地址复制及工具开关；支持 tools/resources/prompts 与案件任务查询。HTTP 请求必须不带 `Origin`、`Host` 为 `127.0.0.1` 或 `localhost`，并且存在活动案件；本机客户端无需 Bearer 凭据。目录包含 50 个工具，覆盖案件、数据源、插件结果、文件与注册表浏览、分析摘要、Linux services/Docker、时间线、搜索、内容索引、图查询与溯源、任务取消、运行指标及报告导出；写操作绑定数据源访问范围与幂等键，文件内容每块最多 64 KiB，支持 UTF-8/Base64。外部文件提取限定在数据源对应的受控导出目录，默认拒绝覆盖。工具调用受当前案件会话约束并记录访问审计，原始证据保持只读。
 - NTFS WOF 文件压缩支持 XPRESS 4K/8K/16K 与 LZX 32K 的按需解压，适用于预览、导出、流式读取及 MCP；大文件按块定位并限制缓存。外置 WIM 提供器需要关联 WIM 数据源，当前明确返回不支持。
 
 ### 制品查询与分页
@@ -122,6 +133,8 @@ RAW/E01 导入采用作业级 SourceRuntime、独立 reader 与共享 E01 OpenPl
 | ISO / flat VMDK 直选导入 | 入口未接通 | 只读 reader 已实现并可解析镜像内嵌套卷；`.iso`/`.vmdk` 直选会被数据源分类拒绝，需作为嵌套卷或改为 RAW 扩展名（`.img` 等）读取。 |
 | 逻辑包（tar/gzip） | 支持 | `LogicalArchive` 只读枚举与范围读取；7z/RAR 等其它容器不作为数据源入口。 |
 | PVE / Ceph          | 实验性  | 已覆盖私有样本中的部分 BlueStore、RBD 与派生 VM 文件树；不宣称通用集群重建。 |
+| Linux MD RAID | 支持（有界） | 成员识别、跨 VG 组装、RAID0 zone 与目录持久化；降级或缺失成员按解析状态标注，不承诺重建损坏阵列。 |
+| Linux 服务 / Docker | 支持（有界） | systemd 服务配置与 Docker 容器/镜像元数据；容器运行态与镜像私有层内容不在解析范围。 |
 | BitLocker           | 部分支持 | 仅在受支持加密方法、保护器和可验证密钥材料范围内可用。                     |
 | 仿真取证               | 部分支持 | 仅 VMware Workstation 后端；Windows 与 Linux 镜像可仿真；输入支持 E01、单文件 RAW/dd/img 和已验证 flat VMDK（flat VMDK 需以 RAW 扩展名导入，见上）；btrfs 根卷不支持主机侧绕密编辑。 |
 | 原始证据写入              | 禁止   | 系统仅读取原始证据；派生数据写入案件工作区或调查员显式选择的导出目录。             |
@@ -139,7 +152,7 @@ flowchart TB
     CMD["桌面命令层\n校验、DTO 适配、调用服务"]
     SVC["应用服务层\n案件、导入、预览、分析、导出编排"]
     CORE["核心能力层\n证据读取、文件系统、制品、检索、时间线、报告"]
-    STORE["持久化与运行时\nSQLite、索引、受限句柄、密钥存储"]
+    STORE["持久化与运行时\nSQLite 控制面、Fjall 明细投影、索引、受限句柄、密钥存储"]
     EVIDENCE["只读证据源\nE01 / RAW / VHD / VHDX / QCOW2 / ISO / flat VMDK / Android sparse / 目录 / 逻辑包 / 集群成员"]
 
     UI --> IPC --> CMD --> SVC
@@ -157,7 +170,8 @@ erDiagram
     CASE ||--|| CASE_CONTROL_DB : "拥有 app.db"
     CASE ||--o{ DATA_SOURCE : "注册"
     CASE ||--o{ JOB : "调度"
-    DATA_SOURCE ||--|| SOURCE_DB : "独立 source.db"
+    DATA_SOURCE ||--|| SOURCE_DB : "控制面"
+    DATA_SOURCE ||--|| SOURCE_STORE : "Fjall 明细"
     DATA_SOURCE ||--|| SOURCE_INDEX : "独立索引"
     DATA_SOURCE ||--o{ PARTITION : "包含"
     PARTITION ||--o{ FILE_ENTRY : "枚举"
@@ -177,6 +191,11 @@ erDiagram
         string source_db_rel_path
     }
     SOURCE_DB {
+        string processing_phases
+        string publication_receipts
+        string source_revision
+    }
+    SOURCE_STORE {
         string partitions
         string file_entries
         string artifacts
@@ -190,7 +209,23 @@ erDiagram
     }
 ```
 
-全局文件 ID 采用 `ds:<dataSourceId>:<localId>` 形式。前端只接收 DTO 和逻辑 ID，不接触主机原始路径或数据库物理路径。
+全局文件 ID 采用 `ds:<dataSourceId>:<localId>` 形式。`source.db` 不保存可重建的文件/制品明细，明细由 Fjall generation 承载并与发布回执绑定。前端只接收 DTO 和逻辑 ID，不接触主机原始路径或数据库物理路径。
+
+### 存储分层与发布
+
+```mermaid
+flowchart LR
+    WRITER["导入 / 分析写者"] --> CTRL["source.db 控制面\n处理阶段 · 发布回执 · 版本指纹"]
+    WRITER --> GEN["Fjall generation\n分区 · 文件 · 制品 · 时间线 · 搜索"]
+    GEN --> PUB["原子发布\nreceipt(revision, generation)"]
+    PUB --> CTRL
+    READER["浏览 / 分析 / 检索 / MCP"] --> CTRL
+    READER --> GEN
+    RECOVER["启动恢复收敛"] --> CTRL
+    RECOVER --> GEN
+```
+
+写者先完成 generation 内的键空间写入，再以回执切换可读 generation；读者固定在同一 generation 上查询。异常中断时，未发布 generation 不对外可见，启动恢复按回执收敛并触发一致性扫描。
 
 ### 导入状态与处理阶段
 
@@ -214,7 +249,7 @@ stateDiagram-v2
     }
 ```
 
-`ready` 表示文件目录已可浏览；Catalog、Graph、Platform、Artifacts、Timeline、Search 的完成情况分别记录，避免把“已导入”误判为“所有分析已完成”。
+`ready` 表示文件目录已可浏览；Catalog、Graph、Platform、Artifacts、Timeline、Search 的完成情况分别记录在 `source.db` 控制面，明细写入对应 Fjall generation，避免把“已导入”误判为“所有分析已完成”。
 
 ## 模型与算法图
 
@@ -238,14 +273,14 @@ flowchart LR
     LVM --> LINUXFS
     ROUTE -->|"BitLocker"| BDE["保护器解锁与扇区解密\n卷级验证"]
     BDE --> WINFS
-    WINFS --> CATALOG["分区文件目录与 source.db"]
+    WINFS --> CATALOG["分区文件目录\nFjall generation + source.db 控制面"]
     LINUXFS --> CATALOG
     CATALOG --> ANALYSIS["平台制品提取\n检索、时间线、关联"]
     CATALOG --> VIEWER["文件句柄 + 范围读取\n文本/Hex/媒体/文档预览"]
     ANALYSIS --> REPORT["可追溯报告与调查视图"]
 ```
 
-关键算法约束：I/O 密集的镜像读取保持有界和顺序化，CPU 密集的独立解析任务可使用 Rayon 并行；SQLite 每个数据源单写者、多读者；大文件预览和媒体读取使用范围请求与短生命周期句柄。
+关键算法约束：I/O 密集的镜像读取保持有界和顺序化，CPU 密集的独立解析任务可使用 Rayon 并行；`source.db` 控制面单写者、多读者，Fjall 明细按原子 generation 发布且读侧固定 generation；大文件预览和媒体读取使用范围请求与短生命周期句柄。
 
 ### BitLocker 内存辅助验证模型
 
@@ -356,9 +391,17 @@ cargo build --release
 | `frontend/` | React 18、TypeScript、Vite、Tailwind 4 调查界面与前端测试。 |
 | `apps/desktop/src-tauri/` | Tauri shell、命令薄适配器、事件桥接和桌面运行时。 |
 | `crates/transport/` | Rust DTO、请求、事件与错误契约的唯一事实源。 |
-| `crates/app-services/` | 案件、导入、预览、分析、BitLocker、恢复、导出等用例编排。 |
-| `crates/persistence-sqlite/` | SQLite 迁移、仓储与 source-local 数据库访问。 |
-| `crates/persistence-fjall/` | Fjall source 数据、批次写入、版本化记录和查询索引。 |
+| `crates/app-services/` | 应用层用例编排；facade 保持 `crate::<module>` 路径稳定。 |
+| `crates/source-kernel/` | 数据源生命周期、source.db 与存储运行时、reader 缓存、资源预算与存储清单校验。 |
+| `crates/import-core/` | 导入流水线、staging、并行枚举、调度检查点、发布与导入后分析。 |
+| `crates/analysis-core/` | 分析服务、候选与提取、平台摘要、插件宿主与注册表浏览会话。 |
+| `crates/evidence-access/` | 证据读取、预览、提取、分区查询、BitLocker 运行时与摘要/哈希。 |
+| `crates/emulation-services/` | 受控仿真编排、COW reader、EFI 回退与 ext4/xfs 修复。 |
+| `crates/ceph-reconstruction/` | Ceph RBD/CephFS 重建、BlueFS/BlueStore/RocksDB 解码与范围报告。 |
+| `crates/source-reconstruction/` | 集群/CEPH 范围、派生源物化、删除恢复与挂载编排。 |
+| `crates/persistence-source/` | source 存储所有者：source.db 控制面、Fjall generation 生命周期、发布回执与源内仓储。 |
+| `crates/persistence-sqlite/` | 案件级 `app.db` / `case-graph.db` 的迁移、仓储与连接辅助；source 存储所有权归 `persistence-source`。 |
+| `crates/persistence-fjall/` | 纯 Fjall KV/keyspace 运行时，仅由 `persistence-source` 消费。 |
 | `crates/artifact-storage/` | SHA-256 内容地址对象、摘要校验和安全对象读取。 |
 | `crates/evidence-core/`、`image-e01/` | 统一证据 reader、RAW/dd/img、tar/gzip 逻辑包、ISO9660/Joliet、flat VMDK 适配、镜像探测、分区和 E01 读取。 |
 | `crates/fs-*/`、`fs-lvm/` | NTFS/FAT/exFAT/ext4/XFS/Btrfs 与 LVM 文件系统能力。 |
@@ -402,7 +445,7 @@ cargo build --release
 
 ## 许可证
 
-本项目采用 [MIT License](LICENSE)；如仓库未包含独立许可证文件，以根目录 `Cargo.toml` 中的 `license = "MIT"` 声明为准。
+本项目采用 [MIT License](LICENSE)。
 
 ## 致谢与第三方版权声明
 
@@ -431,4 +474,4 @@ cargo build --release
 
 ### 主要开源依赖
 
-桌面端与前端构建在以下开源项目之上（各项目许可证归其作者所有，完整依赖清单以 `Cargo.lock`/`pnpm-lock.yaml` 为准）：Tauri 2、tauri-plugin-updater、dokan-rust、React 18、React Router、Radix UI、Tailwind CSS 4、TanStack Query/Virtual、zustand、i18next、lucide-react、recharts；Rust 侧 SQLite/rusqlite（SQLite 为公有领域）、tantivy、flate2/tar、serde、tokio、rayon、mimalloc、zip 等。
+桌面端与前端构建在以下开源项目之上（各项目许可证归其作者所有，完整依赖清单以 `Cargo.lock`/`pnpm-lock.yaml` 为准）：Tauri 2、tauri-plugin-updater、dokan-rust、React 18、React Router、Radix UI、Tailwind CSS 4、TanStack Query/Virtual、zustand、i18next、Prism、Font Awesome Free、sonner；Rust 侧 SQLite/rusqlite（SQLite 为公有领域）、tantivy、flate2/tar、serde、tokio、rayon、mimalloc、zip 等。
