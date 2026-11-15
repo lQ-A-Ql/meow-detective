@@ -80,6 +80,18 @@
   --forensics-highlight: #eef1f4;
   --forensics-selection-bg: #fff2f2;
   --forensics-selection-text: #000000;
+  --forensics-hex-selection-bg: #d7dee8;
+  --forensics-hex-selection-text: #111827;
+  --forensics-hex-match-bg: #eef1f4;
+  --forensics-hex-match-active-bg: #000000;
+  --forensics-hex-match-active-text: #ffffff;
+  --forensics-syntax-keyword: #1f2937;
+  --forensics-syntax-string: #7a1622;
+  --forensics-syntax-comment: #9ca3af;
+  --forensics-syntax-number: #374151;
+  --forensics-syntax-variable: #6b7280;
+  --forensics-syntax-function: #000000;
+  --forensics-syntax-operator: #4b5563;
   --forensics-hover: #eef1f4;
   --forensics-border: #e5e7eb;
   --forensics-border-light: #eef1f4;

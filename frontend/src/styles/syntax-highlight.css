@@ -1,0 +1,30 @@
+[data-token='keyword'] {
+  color: var(--forensics-syntax-keyword);
+  font-weight: 600;
+}
+
+[data-token='string'] {
+  color: var(--forensics-syntax-string);
+}
+
+[data-token='comment'] {
+  color: var(--forensics-syntax-comment);
+  font-style: italic;
+}
+
+[data-token='number'] {
+  color: var(--forensics-syntax-number);
+}
+
+[data-token='variable'] {
+  color: var(--forensics-syntax-variable);
+}
+
+[data-token='function'] {
+  color: var(--forensics-syntax-function);
+}
+
+[data-token='operator'],
+[data-token='punctuation'] {
+  color: var(--forensics-syntax-operator);
+}

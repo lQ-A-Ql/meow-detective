@@ -8,6 +8,7 @@
 @import './case-welcome.css';
 @import './watermarks.css';
 @import './text-search.css';
+@import './syntax-highlight.css';
 @import './tree.css';
 @import './resizable.css';
 @import './registry-browser.css';

@@ -2300,7 +2300,11 @@
       "ready": "Ready"
     },
     "nextPage": "Next page",
-    "previousPage": "Previous page"
+    "previousPage": "Previous page",
+    "copyAll": "Copy all text",
+    "copiedAll": "Copied all text ({{count}} characters)",
+    "copyFailed": "Copy failed",
+    "syntaxDisabled": "Syntax highlighting skipped for this oversized page"
   },
   "eventLog": {
     "title": "Event Log Analysis",
@@ -2970,7 +2974,31 @@
       "loaded": "Loaded",
       "jump": "Jump",
       "chunkedHint": "Paged read-only browsing with vertical scrolling and offset jumps; the whole file is never loaded at once.",
-      "fullHint": "Full hex preview; scroll vertically to browse the entire content."
+      "fullHint": "Full hex preview; scroll vertically to browse the entire content.",
+      "search": {
+        "label": "Search file bytes",
+        "hexMode": "HEX",
+        "asciiMode": "ASCII",
+        "hexPlaceholder": "48 65 6C 6C 6F",
+        "asciiPlaceholder": "Text to find",
+        "start": "Search",
+        "clear": "Clear hex search",
+        "previousMatch": "Previous match",
+        "nextMatch": "Next match",
+        "matches": "Match {{current}}/{{total}}",
+        "scanned": "Scanned {{scanned}} / {{total}}",
+        "scanning": "Scanning...",
+        "cancelling": "Cancelling...",
+        "cancel": "Cancel search",
+        "noMatches": "No matches in file",
+        "truncated": "Stopped at the match limit",
+        "invalidPattern": "Invalid pattern",
+        "busy": "Another hex search is running; retry after it finishes",
+        "errorSourceUnavailable": "The evidence source is no longer available",
+        "errorUnsupportedSource": "This source cannot be hex-searched",
+        "errorIo": "The scan could not read evidence data",
+        "errorFallback": "Hex search failed ({{code}})"
+      }
     },
     "document": {
       "loading": "Loading document preview...",
