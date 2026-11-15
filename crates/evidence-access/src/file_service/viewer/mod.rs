@@ -35,7 +35,8 @@ pub(crate) use range::open_range_content_for_descriptor_with_context;
 pub(crate) use range::read_file_bytes_for_descriptor_with_context;
 pub use range::{
     open_file_content_by_id, read_file_bytes_for_case, read_file_header_by_id,
-    read_file_range_for_case, FileHeaderReadCache,
+    read_file_range_for_case, scan_chunks, scan_preview_session_bytes, FileHeaderReadCache,
+    HexScanOutcome, HexScanProgress, HexScanSessionRequest, HEX_SCAN_CHUNK_BYTES,
 };
 pub(crate) use range::{
     read_file_header_for_descriptor_with_context, read_file_header_with_context,

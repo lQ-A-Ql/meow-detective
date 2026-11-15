@@ -256,6 +256,154 @@ pub struct MediaRangeResponseDto {
     pub eof: bool,
 }
 
+pub const DEFAULT_HEX_SEARCH_MAX_MATCHES: u32 = 1_000;
+pub const MAX_HEX_SEARCH_MATCHES: u32 = 5_000;
+pub const MAX_HEX_SEARCH_PATTERN_BYTES: usize = 64;
+pub const MAX_ASCII_SEARCH_PATTERN_BYTES: usize = 256;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HexSearchModeDto {
+    Hex,
+    Ascii,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HexSearchPhaseDto {
+    Queued,
+    Running,
+    Cancelling,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+impl HexSearchPhaseDto {
+    #[must_use]
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Cancelled | Self::Failed)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HexSearchRequestDto {
+    pub file_id: String,
+    pub mode: HexSearchModeDto,
+    pub pattern: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_matches: Option<u32>,
+}
+
+impl HexSearchRequestDto {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.file_id.trim().is_empty() {
+            return Err("fileId is required".to_string());
+        }
+        self.normalized_pattern().map(|_| ())
+    }
+
+    /// Decode the requested pattern into the bytes the scanner matches.
+    pub fn normalized_pattern(&self) -> Result<Vec<u8>, String> {
+        match self.mode {
+            HexSearchModeDto::Hex => normalize_hex_pattern(&self.pattern),
+            HexSearchModeDto::Ascii => {
+                let bytes = self.pattern.as_bytes().to_vec();
+                if bytes.is_empty() {
+                    return Err("ASCII pattern is empty".to_string());
+                }
+                if bytes.len() > MAX_ASCII_SEARCH_PATTERN_BYTES {
+                    return Err(format!(
+                        "ASCII pattern exceeds {MAX_ASCII_SEARCH_PATTERN_BYTES} bytes"
+                    ));
+                }
+                Ok(bytes)
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn max_matches(&self) -> usize {
+        self.max_matches
+            .unwrap_or(DEFAULT_HEX_SEARCH_MAX_MATCHES)
+            .clamp(1, MAX_HEX_SEARCH_MATCHES) as usize
+    }
+}
+
+fn normalize_hex_pattern(pattern: &str) -> Result<Vec<u8>, String> {
+    let mut digits = String::with_capacity(pattern.len());
+    let mut chars = pattern.chars().peekable();
+    while let Some(current) = chars.next() {
+        if current.is_ascii_whitespace() || current == ',' {
+            continue;
+        }
+        if current == '0' && matches!(chars.peek(), Some('x' | 'X')) {
+            chars.next();
+            continue;
+        }
+        if !current.is_ascii_hexdigit() {
+            return Err("Hex pattern contains non-hex characters".to_string());
+        }
+        digits.push(current);
+    }
+    if digits.is_empty() {
+        return Err("Hex pattern is empty".to_string());
+    }
+    if !digits.len().is_multiple_of(2) {
+        return Err("Hex pattern must contain whole bytes".to_string());
+    }
+    let byte_len = digits.len() / 2;
+    if byte_len > MAX_HEX_SEARCH_PATTERN_BYTES {
+        return Err(format!(
+            "Hex pattern exceeds {MAX_HEX_SEARCH_PATTERN_BYTES} bytes"
+        ));
+    }
+    let raw = digits.as_bytes();
+    let mut bytes = Vec::with_capacity(byte_len);
+    for pair in raw.chunks(2) {
+        bytes.push((hex_nibble(pair[0]) << 4) | hex_nibble(pair[1]));
+    }
+    Ok(bytes)
+}
+
+fn hex_nibble(byte: u8) -> u8 {
+    match byte {
+        b'0'..=b'9' => byte - b'0',
+        b'a'..=b'f' => byte - b'a' + 10,
+        _ => byte - b'A' + 10,
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HexSearchFileRequestDto {
+    pub file_id: String,
+}
+
+impl HexSearchFileRequestDto {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.file_id.trim().is_empty() {
+            return Err("fileId is required".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HexSearchStatusDto {
+    pub task_id: String,
+    pub file_id: String,
+    pub phase: HexSearchPhaseDto,
+    pub scanned_bytes: u64,
+    pub total_bytes: u64,
+    pub matches: Vec<u64>,
+    pub truncated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 #[cfg(test)]
 #[path = "../../tests/unit/dto/viewer.rs"]
 mod tests;

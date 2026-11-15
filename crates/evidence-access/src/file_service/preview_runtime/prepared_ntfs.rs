@@ -23,7 +23,7 @@ impl PreparedNtfsFile {
         length: usize,
     ) -> Result<Vec<u8>, FileServiceError> {
         self.stream.seek(SeekFrom::Start(offset))?;
-        let mut bytes = Vec::new();
+        let mut bytes = Vec::with_capacity(length);
         self.stream
             .by_ref()
             .take(length as u64)

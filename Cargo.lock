@@ -2019,6 +2019,7 @@ dependencies = [
  "kamadak-exif",
  "libc",
  "lopdf",
+ "memchr",
  "num_cpus",
  "persistence-source",
  "persistence-sqlite",

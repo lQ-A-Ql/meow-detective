@@ -87,8 +87,9 @@ pub use viewer::{
     image_preview_for_file, media_preview_plan_for_file, media_range_for_file,
     open_file_content_by_id, open_file_handle_real, read_file_bytes_for_case,
     read_file_header_by_id, read_file_range_for_case, read_preview_bytes_for_file,
-    safe_relative_path, skip_reader_bytes, text_preview_for_file, FileHeaderReadCache,
-    MediaPreviewPlan,
+    safe_relative_path, scan_chunks, scan_preview_session_bytes, skip_reader_bytes,
+    text_preview_for_file, FileHeaderReadCache, HexScanOutcome, HexScanProgress,
+    HexScanSessionRequest, MediaPreviewPlan, HEX_SCAN_CHUNK_BYTES,
 };
 pub use viewer::{
     entry_image_path_candidates, open_candidate_block_reader_with_lvm_cache,
