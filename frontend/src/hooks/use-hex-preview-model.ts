@@ -3,7 +3,7 @@ import type { FilePreviewTabsProps } from '@/components/preview/FilePreviewTabs'
 export type HexPreviewProps = Pick<
   FilePreviewTabsProps,
   'viewer' | 'onHexJumpInputChange' | 'onHexJump' | 'onLoadNextHexRange' | 'onLoadPreviousHexRange'
->;
+> & { fileId?: string };
 export function useHexPreviewModel(props: HexPreviewProps) {
   const { onLoadNextHexRange, onLoadPreviousHexRange } = props;
   const key = props.viewer?.handle.handleId;

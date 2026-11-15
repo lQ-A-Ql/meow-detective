@@ -90,6 +90,31 @@ export interface BitLockerDictionaryAttack {
   error?: string;
 }
 
+export type HexSearchMode = 'hex' | 'ascii';
+export type HexSearchPhase = 'queued' | 'running' | 'cancelling' | 'completed' | 'cancelled' | 'failed';
+
+export interface HexSearchRequest {
+  fileId: string;
+  mode: HexSearchMode;
+  pattern: string;
+  maxMatches?: number;
+}
+
+export interface HexSearchFileRequest {
+  fileId: string;
+}
+
+export interface HexSearchStatus {
+  taskId: string;
+  fileId: string;
+  phase: HexSearchPhase;
+  scannedBytes: number;
+  totalBytes: number;
+  matches: number[];
+  truncated: boolean;
+  error?: string;
+}
+
 export interface ExtractFileRequest {
   operationId: string;
   fileId: string;

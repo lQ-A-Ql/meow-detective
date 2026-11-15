@@ -19,6 +19,8 @@ interface HexViewerProps {
   highlightRange?: { start: number; end: number };
   loadedRanges?: HexLoadedRange[];
   onNeedMoreRange?: (direction: 'previous' | 'next') => void;
+  searchRanges?: Array<{ start: number; end: number }>;
+  activeMatchStart?: number;
 }
 
 const DEFAULT_CONTAINER_HEIGHT = 600;
@@ -71,6 +73,8 @@ export function useHexViewerModel({
   highlightRange,
   loadedRanges,
   onNeedMoreRange,
+  searchRanges,
+  activeMatchStart,
 }: HexViewerProps) {
   const { t } = useTranslation();
 
@@ -397,5 +401,7 @@ export function useHexViewerModel({
     offsetWidth,
     selectionStart,
     selectionEnd,
+    searchRanges,
+    activeMatchStart,
   };
 }

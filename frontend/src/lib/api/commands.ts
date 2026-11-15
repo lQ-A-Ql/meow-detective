@@ -79,6 +79,9 @@ export const COMMANDS = {
     START_BITLOCKER_DICTIONARY_ATTACK: 'start_bitlocker_dictionary_attack',
     GET_BITLOCKER_DICTIONARY_ATTACK_STATUS: 'get_bitlocker_dictionary_attack_status',
     CANCEL_BITLOCKER_DICTIONARY_ATTACK: 'cancel_bitlocker_dictionary_attack',
+    START_HEX_SEARCH: 'start_hex_search',
+    GET_HEX_SEARCH_STATUS: 'get_hex_search_status',
+    CANCEL_HEX_SEARCH: 'cancel_hex_search',
   },
   mount: {
     MOUNT_IMAGE: 'mount_image',

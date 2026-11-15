@@ -27,6 +27,9 @@ import {
   NtfsTechnicalFile,
   ImageMetadata,
   RegistryBrowserKey,
+  HexSearchFileRequest,
+  HexSearchRequest,
+  HexSearchStatus,
 } from '@/types/models';
 import { type FileSortKey, type FileSortDirection } from '@/lib/file-sort';
 import { COMMANDS } from './commands';
@@ -230,6 +233,18 @@ export async function cancelBitLockerDictionaryAttack(dataSourceId: string, part
 
 export async function cancelImport(jobId: string) {
   return apiClient.request(COMMANDS.files.CANCEL_IMPORT, { jobId });
+}
+
+export async function startHexSearch(request: HexSearchRequest): Promise<HexSearchStatus> {
+  return apiClient.request(COMMANDS.files.START_HEX_SEARCH, { request });
+}
+
+export async function getHexSearchStatus(request: HexSearchFileRequest): Promise<HexSearchStatus | null> {
+  return apiClient.request(COMMANDS.files.GET_HEX_SEARCH_STATUS, { request });
+}
+
+export async function cancelHexSearch(request: HexSearchFileRequest): Promise<boolean> {
+  return apiClient.request(COMMANDS.files.CANCEL_HEX_SEARCH, { request });
 }
 
 /**

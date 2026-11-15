@@ -227,4 +227,60 @@ describe('HexViewer', () => {
     expect(screen.getByTestId('hex-byte-81')).toHaveAttribute('data-selected', 'true');
     expect(screen.getByTestId('ascii-byte-81')).toHaveAttribute('data-selected', 'true');
   });
+
+  it('renders one continuous selection band per row instead of per-byte backgrounds', () => {
+    render(<HexViewer lines={[]} rawBytes={[0x41, 0x42, 0x43, 0x44, 0x45]} baseOffset={16} />);
+
+    fireEvent.pointerDown(screen.getByTestId('hex-byte-17'), { button: 0, pointerId: 6 });
+    fireEvent.pointerMove(screen.getByTestId('ascii-byte-19'), { buttons: 1, pointerId: 6 });
+    fireEvent.pointerUp(window, { pointerId: 6 });
+
+    const hexBands = screen.getAllByTestId('hex-selection-band');
+    const asciiBands = screen.getAllByTestId('ascii-selection-band');
+    expect(hexBands).toHaveLength(1);
+    expect(asciiBands).toHaveLength(1);
+    expect(hexBands[0].style.left).toBe('3ch');
+    expect(hexBands[0].style.width).toBe('8ch');
+    expect(asciiBands[0].style.left).toBe('1ch');
+    expect(asciiBands[0].style.width).toBe('3ch');
+    expect(screen.getByTestId('hex-byte-17').className).not.toContain('--forensics-selection-bg');
+  });
+
+  it('splits a selection band across the byte-8 group gap', () => {
+    render(<HexViewer lines={[]} rawBytes={Array.from({ length: 16 }, (_, index) => index)} baseOffset={0} />);
+
+    fireEvent.pointerDown(screen.getByTestId('hex-byte-6'), { button: 0, pointerId: 7 });
+    fireEvent.pointerMove(screen.getByTestId('ascii-byte-9'), { buttons: 1, pointerId: 7 });
+    fireEvent.pointerUp(window, { pointerId: 7 });
+
+    const [hexBand] = screen.getAllByTestId('hex-selection-band');
+    const [asciiBand] = screen.getAllByTestId('ascii-selection-band');
+    expect(hexBand.style.left).toBe('18ch');
+    expect(hexBand.style.width).toBe('12ch');
+    expect(asciiBand.style.left).toBe('6ch');
+    expect(asciiBand.style.width).toBe('5ch');
+  });
+
+  it('draws search hits and the active match above the selection layer', () => {
+    render(
+      <HexViewer
+        lines={[]}
+        rawBytes={Array.from({ length: 16 }, (_, index) => index)}
+        baseOffset={0}
+        searchRanges={[
+          { start: 1, end: 5 },
+          { start: 8, end: 9 },
+        ]}
+        activeMatchStart={8}
+      />,
+    );
+
+    expect(screen.getAllByTestId('hex-search-band')).toHaveLength(2);
+    expect(screen.getAllByTestId('ascii-search-band')).toHaveLength(2);
+    expect(screen.getAllByTestId('hex-active-match-band')).toHaveLength(1);
+    expect(screen.getByTestId('hex-active-match-band').style.left).toBe('25ch');
+    expect(screen.getByTestId('hex-active-match-band').style.width).toBe('2ch');
+    expect(screen.getByTestId('hex-byte-8').className).toContain('--forensics-hex-match-active-text');
+    expect(screen.getByTestId('hex-byte-1').className).not.toContain('--forensics-hex-match-active-text');
+  });
 });

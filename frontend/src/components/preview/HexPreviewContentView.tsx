@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp } from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
@@ -5,11 +6,23 @@ import { Input } from '@/app/components/ui/input';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { HexViewer } from '@/components/viewers/HexViewer';
+import { HexSearchToolbar } from '@/components/preview/HexSearchToolbar';
+import { useHexSearch, hexPatternByteLength } from '@/features/files/hooks/use-hex-search';
 import type { useHexPreviewModel } from '@/hooks/use-hex-preview-model';
 import { formatBytes } from '@/lib/format-bytes';
 export function HexPreviewContentView({ model }: { model: ReturnType<typeof useHexPreviewModel> }) {
   const { t } = useTranslation();
-  const { viewer, onHexJumpInputChange, onHexJump, inspectorExpanded, handleNeedMoreRange, toggleInspector } = model;
+  const { viewer, fileId, onHexJumpInputChange, onHexJump, inspectorExpanded, handleNeedMoreRange, toggleInspector } =
+    model;
+  const search = useHexSearch({ fileId, onJump: onHexJump });
+  const matchLength = search.state ? hexPatternByteLength(search.state.mode, search.state.pattern) : undefined;
+  const matches = search.state?.matches;
+  const searchRanges = useMemo(() => {
+    if (!matches || matchLength === undefined) return undefined;
+    return matches.map((start) => ({ start, end: start + matchLength }));
+  }, [matchLength, matches]);
+  const activeMatchStart =
+    search.state && search.state.activeIndex >= 0 ? search.state.matches[search.state.activeIndex] : undefined;
   if (!viewer) {
     return <div className="text-forensics-muted">{t('viewer.hex.empty')}</div>;
   }
@@ -24,6 +37,15 @@ export function HexPreviewContentView({ model }: { model: ReturnType<typeof useH
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <HexSearchToolbar
+        fileId={fileId}
+        state={search.state}
+        onStart={(mode, pattern) => void search.start(mode, pattern)}
+        onCancel={() => void search.cancel()}
+        onReset={() => void search.reset()}
+        onPrevious={search.previous}
+        onNext={search.next}
+      />
       <div className="min-h-0 flex-1">
         <HexViewer
           lines={viewer.lines}
@@ -33,6 +55,8 @@ export function HexPreviewContentView({ model }: { model: ReturnType<typeof useH
           activeOffset={viewer.activeOffset}
           loadedRanges={viewer.loadedRanges}
           onNeedMoreRange={handleNeedMoreRange}
+          searchRanges={searchRanges}
+          activeMatchStart={activeMatchStart}
         />
       </div>
       {viewer.error ? <div className="mt-2 shrink-0 text-[10px] text-forensics-error-text">{viewer.error}</div> : null}

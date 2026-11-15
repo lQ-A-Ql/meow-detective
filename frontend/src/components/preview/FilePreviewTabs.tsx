@@ -300,6 +300,7 @@ export function FilePreviewTabs({
               contentClassName: 'min-h-0 flex-1 overflow-hidden p-0 text-[11px]',
               content: (
                 <HexPreviewContent
+                  fileId={selectedFile?.id}
                   viewer={viewer}
                   onHexJumpInputChange={onHexJumpInputChange}
                   onHexJump={onHexJump}

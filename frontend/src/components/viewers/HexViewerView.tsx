@@ -21,6 +21,8 @@ export function HexViewerView({ model }: { model: ReturnType<typeof useHexViewer
     offsetWidth,
     selectionStart,
     selectionEnd,
+    searchRanges,
+    activeMatchStart,
   } = model;
 
   return (
@@ -60,6 +62,8 @@ export function HexViewerView({ model }: { model: ReturnType<typeof useHexViewer
                 selectionStart={selectionStart}
                 selectionEnd={selectionEnd}
                 selectionFocus={selection?.focus}
+                searchRanges={searchRanges}
+                activeMatchStart={activeMatchStart}
               />
             ))}
           </div>
