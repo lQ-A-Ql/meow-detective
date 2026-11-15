@@ -196,4 +196,43 @@ describe('TextViewer', () => {
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+
+  it('highlights python, powershell, and shell scripts without changing the text', () => {
+    const { rerender } = render(
+      <TextViewer content={'def greet():\n    return "hi"'} encoding="UTF-8" extension="py" />,
+    );
+    expect(document.querySelector('span[data-token="keyword"]')).toHaveTextContent('def');
+    expect(document.querySelector('span[data-token="function"]')).toHaveTextContent('greet');
+    expect(screen.getAllByTestId('text-line-content')[0]).toHaveTextContent('def greet():');
+
+    rerender(<TextViewer content={'function Get-Thing { Write-Output "hi" }'} encoding="UTF-8" extension="ps1" />);
+    expect(document.querySelector('span[data-token="keyword"]')).toHaveTextContent('function');
+
+    rerender(<TextViewer content={'echo "hi"'} encoding="UTF-8" extension="sh" />);
+    expect(document.querySelector('span[data-token="string"]')).toHaveTextContent('"hi"');
+  });
+
+  it('keeps search marks on top of syntax tokens', () => {
+    render(<TextViewer content={'def pass():\n    return 1'} encoding="UTF-8" extension="py" searchQuery="pass" />);
+    expect(document.querySelector('mark[data-current="true"]')).toHaveTextContent('pass');
+    expect(document.querySelector('span[data-token="keyword"]')).toHaveTextContent('def');
+  });
+
+  it('copies the whole preview text on ctrl+a but leaves search input ctrl+a native', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const content = 'first line\nsecond line';
+    render(<TextViewer content={content} encoding="UTF-8" />);
+
+    const root = screen.getByTestId('text-viewer-root');
+    fireEvent.pointerDown(root);
+    fireEvent.keyDown(root, { key: 'a', ctrlKey: true });
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(content));
+    expect(screen.getByText('已复制全文（22 字符）')).toBeInTheDocument();
+
+    const input = screen.getByRole('textbox', { name: '搜索文本' });
+    writeText.mockClear();
+    fireEvent.keyDown(input, { key: 'a', ctrlKey: true });
+    expect(writeText).not.toHaveBeenCalled();
+  });
 });

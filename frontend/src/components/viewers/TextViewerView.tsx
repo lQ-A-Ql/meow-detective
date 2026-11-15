@@ -1,5 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { SearchHighlight } from '@/app/components/ui/search-highlight';
+import { HighlightedLineText } from '@/components/viewers/HighlightedLineText';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { ActionIcon } from '@/components/controls/ActionIcon';
@@ -8,24 +9,85 @@ import { TEXT_ROW_HEIGHT } from '@/design/text-viewer';
 import type { TextViewerModel } from '@/features/files/text-viewer/use-text-viewer-model';
 import type { useTextViewerViewport } from '@/features/files/text-viewer/use-text-viewer-viewport';
 import type { SearchHighlightRange } from '@/app/components/ui/search-highlight';
+import type { SyntaxRange } from '@/features/files/text-viewer/syntax-highlight';
 import type { TextPageLine } from '@/features/files/text-viewer/types';
 import type { KeyboardEvent } from 'react';
 
 interface Props {
+  content: string;
   encoding: string;
   isTruncated?: boolean;
+  syntaxDisabled?: boolean;
   model: TextViewerModel;
   viewport: ReturnType<typeof useTextViewerViewport>;
   gutterWidth: number;
-  rows: Array<{ line: TextPageLine; rowIndex: number; ranges: SearchHighlightRange[]; active: boolean }>;
+  rows: Array<{
+    line: TextPageLine;
+    rowIndex: number;
+    ranges: SearchHighlightRange[];
+    syntax: SyntaxRange[];
+    active: boolean;
+  }>;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
 }
 
-export function TextViewerView({ encoding, isTruncated, model, viewport, gutterWidth, rows, onSearchKeyDown }: Props) {
+export function TextViewerView({
+  content,
+  encoding,
+  isTruncated,
+  syntaxDisabled,
+  model,
+  viewport,
+  gutterWidth,
+  rows,
+  onSearchKeyDown,
+}: Props) {
   const { t } = useTranslation();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const noticeTimer = useRef<number>();
+  const [notice, setNotice] = useState<string>();
   const count = viewport.range.end - viewport.range.start;
+
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
+
+  const showNotice = (message: string) => {
+    window.clearTimeout(noticeTimer.current);
+    setNotice(message);
+    noticeTimer.current = window.setTimeout(() => setNotice(undefined), 2000);
+  };
+
+  const copyAll = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(content);
+      showNotice(t('textViewer.copiedAll', { count: content.length }));
+    } catch {
+      showNotice(t('textViewer.copyFailed'));
+    }
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'a') return;
+    const target = event.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+    event.preventDefault();
+    void copyAll();
+  };
+
   return (
-    <div className="flex h-full min-h-0 flex-col" data-slot="text-viewer">
+    <div
+      ref={rootRef}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      onPointerDown={(event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('input, textarea, button, [contenteditable="true"]')) return;
+        rootRef.current?.focus();
+      }}
+      className="flex h-full min-h-0 flex-col outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-forensics-border-light"
+      data-slot="text-viewer"
+      data-testid="text-viewer-root"
+    >
       <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-forensics-panel px-3 py-1.5 text-[11px]">
         <div className="flex min-w-0 flex-1 items-center gap-2 text-forensics-muted">
           <ActionIcon name="file" className="size-3" />
@@ -125,7 +187,7 @@ export function TextViewerView({ encoding, isTruncated, model, viewport, gutterW
             className="absolute left-0 min-w-full w-max"
             style={{ top: viewport.range.start * TEXT_ROW_HEIGHT }}
           >
-            {rows.map(({ line, rowIndex, ranges, active }) => {
+            {rows.map(({ line, rowIndex, ranges, syntax, active }) => {
               return (
                 <div
                   key={`${line.startOffset}:${rowIndex}`}
@@ -143,7 +205,7 @@ export function TextViewerView({ encoding, isTruncated, model, viewport, gutterW
                   </div>
                   <div className="min-w-0 whitespace-pre px-3">
                     <span data-testid="text-line-content">
-                      <SearchHighlight text={line.content} ranges={ranges} />
+                      <HighlightedLineText text={line.content} syntax={syntax} search={ranges} />
                     </span>
                   </div>
                 </div>
@@ -162,6 +224,8 @@ export function TextViewerView({ encoding, isTruncated, model, viewport, gutterW
         {model.query && model.matchCount === 0 ? <span>{t('textViewer.noMatches')}</span> : null}
         {model.query && model.position ? <span>{t('textViewer.position', model.position)}</span> : null}
         {isTruncated ? <span>{t('textViewer.previewScope')}</span> : null}
+        {syntaxDisabled ? <span>{t('textViewer.syntaxDisabled')}</span> : null}
+        {notice ? <span>{notice}</span> : null}
       </div>
     </div>
   );
