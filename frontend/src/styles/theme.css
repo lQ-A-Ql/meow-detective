@@ -521,6 +521,17 @@
   animation: forensics-caret-blink 1.06s steps(1, end) infinite;
 }
 
+/* Transient copy confirmation ends through the animation timeline, not a JS timer. */
+@keyframes forensics-notice-dismiss {
+  to {
+    opacity: 0;
+  }
+}
+
+.forensics-notice {
+  animation: forensics-notice-dismiss 160ms ease-out 1840ms forwards;
+}
+
 /* ── 统一滚动条：细、无轨道底色，与应用其他面板一致 ── */
 .forensics-scrollbar {
   scrollbar-width: thin;

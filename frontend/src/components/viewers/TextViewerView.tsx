@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HighlightedLineText } from '@/components/viewers/HighlightedLineText';
 import { Input } from '@/app/components/ui/input';
@@ -44,16 +44,13 @@ export function TextViewerView({
 }: Props) {
   const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
-  const noticeTimer = useRef<number>();
-  const [notice, setNotice] = useState<string>();
+  const noticeSequence = useRef(0);
+  const [notice, setNotice] = useState<{ message: string; sequence: number }>();
   const count = viewport.range.end - viewport.range.start;
 
-  useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
-
   const showNotice = (message: string) => {
-    window.clearTimeout(noticeTimer.current);
-    setNotice(message);
-    noticeTimer.current = window.setTimeout(() => setNotice(undefined), 2000);
+    noticeSequence.current += 1;
+    setNotice({ message, sequence: noticeSequence.current });
   };
 
   const copyAll = async () => {
@@ -225,7 +222,11 @@ export function TextViewerView({
         {model.query && model.position ? <span>{t('textViewer.position', model.position)}</span> : null}
         {isTruncated ? <span>{t('textViewer.previewScope')}</span> : null}
         {syntaxDisabled ? <span>{t('textViewer.syntaxDisabled')}</span> : null}
-        {notice ? <span>{notice}</span> : null}
+        {notice ? (
+          <span key={notice.sequence} className="forensics-notice" onAnimationEnd={() => setNotice(undefined)}>
+            {notice.message}
+          </span>
+        ) : null}
       </div>
     </div>
   );
