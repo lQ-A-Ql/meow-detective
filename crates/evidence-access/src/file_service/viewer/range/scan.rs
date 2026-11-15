@@ -163,16 +163,12 @@ where
             "Search pattern must not be empty",
         ));
     }
-    let max_matches = max_matches.max(1);
-    let overlap = pattern.len() - 1;
-    let finder = (pattern.len() > 1).then(|| memmem::Finder::new(pattern));
+    let mut matcher = ChunkMatcher::new(pattern, max_matches.max(1));
     let mut matches = Vec::new();
-    let mut tail: Vec<u8> = Vec::with_capacity(overlap);
     let mut scanned_bytes = 0u64;
     let mut offset = 0u64;
     let mut truncated = false;
     let mut cancelled = false;
-
     while offset < total_bytes {
         if cancel.load(Ordering::Relaxed) {
             cancelled = true;
@@ -183,53 +179,7 @@ where
         if chunk.is_empty() {
             break;
         }
-
-        if pattern.len() == 1 {
-            for position in memchr::memchr_iter(pattern[0], &chunk) {
-                matches.push(offset + position as u64);
-                if matches.len() >= max_matches {
-                    truncated = true;
-                    break;
-                }
-            }
-        } else if let Some(finder) = finder.as_ref() {
-            if !tail.is_empty() {
-                let prefix_len = chunk.len().min(overlap);
-                let mut boundary = Vec::with_capacity(tail.len() + prefix_len);
-                boundary.extend_from_slice(&tail);
-                boundary.extend_from_slice(&chunk[..prefix_len]);
-                let mut search_start = 0usize;
-                while let Some(position) = finder.find(&boundary[search_start..]) {
-                    let start = search_start + position;
-                    if start >= tail.len() {
-                        break;
-                    }
-                    matches.push(offset - tail.len() as u64 + start as u64);
-                    if matches.len() >= max_matches {
-                        truncated = true;
-                        break;
-                    }
-                    search_start = start + 1;
-                }
-            }
-            if !truncated {
-                let mut search_start = 0usize;
-                while let Some(position) = finder.find(&chunk[search_start..]) {
-                    let start = search_start + position;
-                    matches.push(offset + start as u64);
-                    if matches.len() >= max_matches {
-                        truncated = true;
-                        break;
-                    }
-                    search_start = start + 1;
-                }
-            }
-        }
-
-        if overlap > 0 {
-            tail.clear();
-            tail.extend_from_slice(&chunk[chunk.len().saturating_sub(overlap)..]);
-        }
+        truncated = matcher.scan(&chunk, offset, &mut matches);
         scanned_bytes = scanned_bytes.saturating_add(chunk.len() as u64);
         offset = offset.saturating_add(chunk.len() as u64);
         on_progress(HexScanProgress {
@@ -242,7 +192,6 @@ where
             break;
         }
     }
-
     Ok(HexScanOutcome {
         matches,
         scanned_bytes,
@@ -250,4 +199,82 @@ where
         truncated,
         cancelled,
     })
+}
+
+struct ChunkMatcher<'a> {
+    pattern: &'a [u8],
+    finder: Option<memmem::Finder<'a>>,
+    max_matches: usize,
+    tail: Vec<u8>,
+}
+
+impl<'a> ChunkMatcher<'a> {
+    fn new(pattern: &'a [u8], max_matches: usize) -> Self {
+        Self {
+            pattern,
+            finder: (pattern.len() > 1).then(|| memmem::Finder::new(pattern)),
+            max_matches,
+            tail: Vec::with_capacity(pattern.len().saturating_sub(1)),
+        }
+    }
+
+    /// Scan one chunk and refresh the boundary tail. Returns `true` when the
+    /// match cap was reached.
+    fn scan(&mut self, chunk: &[u8], offset: u64, matches: &mut Vec<u64>) -> bool {
+        let mut truncated = false;
+        if self.pattern.len() == 1 {
+            for position in memchr::memchr_iter(self.pattern[0], chunk) {
+                matches.push(offset + position as u64);
+                if matches.len() >= self.max_matches {
+                    truncated = true;
+                    break;
+                }
+            }
+        } else {
+            self.scan_multi(chunk, offset, matches, &mut truncated);
+            let overlap = self.pattern.len() - 1;
+            self.tail.clear();
+            self.tail
+                .extend_from_slice(&chunk[chunk.len().saturating_sub(overlap)..]);
+        }
+        truncated
+    }
+
+    fn scan_multi(&self, chunk: &[u8], offset: u64, matches: &mut Vec<u64>, truncated: &mut bool) {
+        let Some(finder) = self.finder.as_ref() else {
+            return;
+        };
+        if !self.tail.is_empty() {
+            let prefix_len = chunk.len().min(self.pattern.len() - 1);
+            let mut boundary = Vec::with_capacity(self.tail.len() + prefix_len);
+            boundary.extend_from_slice(&self.tail);
+            boundary.extend_from_slice(&chunk[..prefix_len]);
+            let mut search_start = 0usize;
+            while let Some(position) = finder.find(&boundary[search_start..]) {
+                let start = search_start + position;
+                if start >= self.tail.len() {
+                    break;
+                }
+                matches.push(offset - self.tail.len() as u64 + start as u64);
+                if matches.len() >= self.max_matches {
+                    *truncated = true;
+                    break;
+                }
+                search_start = start + 1;
+            }
+        }
+        if *truncated {
+            return;
+        }
+        let mut search_start = 0usize;
+        while let Some(position) = finder.find(&chunk[search_start..]) {
+            let start = search_start + position;
+            matches.push(offset + start as u64);
+            if matches.len() >= self.max_matches {
+                *truncated = true;
+                break;
+            }
+            search_start = start + 1;
+        }
+    }
 }
