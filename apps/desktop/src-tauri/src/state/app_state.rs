@@ -9,6 +9,7 @@ use tauri::AppHandle;
 use tokio::sync::RwLock;
 
 use super::bitlocker_dictionary::BitLockerDictionaryAttackRegistry;
+use super::hex_search::HexSearchJobRegistry;
 use super::task_manager::TaskManager;
 use crate::emulation_registry::EmulationRegistry;
 use crate::mount_registry::MountRegistry;
@@ -47,6 +48,8 @@ pub struct AppState {
     pub bitlocker_key_store: Arc<dyn BitLockerKeyStore>,
     /// In-memory progress and terminal state for BitLocker dictionary jobs.
     pub bitlocker_dictionary_attacks: Arc<BitLockerDictionaryAttackRegistry>,
+    /// In-memory progress and terminal state for whole-file hex searches.
+    pub hex_search_jobs: Arc<HexSearchJobRegistry>,
     /// Active user-mode read-only logical mounts.
     pub mount_registry: Arc<MountRegistry>,
     /// Active loopback iSCSI read-only physical-disk mounts.
@@ -82,6 +85,7 @@ impl Default for AppState {
             bitlocker_runtime: Arc::new(BitLockerUnlockRegistry::default()),
             bitlocker_key_store: crate::bitlocker_key_store::platform_bitlocker_key_store(),
             bitlocker_dictionary_attacks: Arc::new(BitLockerDictionaryAttackRegistry::default()),
+            hex_search_jobs: Arc::new(HexSearchJobRegistry::default()),
             mount_registry: Arc::new(MountRegistry::default()),
             physical_mount_registry: Arc::new(PhysicalMountRegistry::default()),
             emulation_registry: Arc::new(EmulationRegistry::default()),

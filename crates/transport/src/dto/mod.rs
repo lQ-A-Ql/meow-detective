@@ -196,7 +196,5 @@ pub use viewer::{
     HexSearchModeDto, HexSearchPhaseDto, HexSearchRequestDto, HexSearchStatusDto, ImageMetadataDto,
     ImageMetadataStatusDto, ImagePreviewDto, MediaPreviewModeDto, MediaRangeRequestDto,
     MediaRangeResponseDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto, ViewerPreviewKindDto,
-    ViewerRangeRequestDto, ViewerRangeResponseDto, DEFAULT_HEX_SEARCH_MAX_MATCHES,
-    MAX_ASCII_SEARCH_PATTERN_BYTES, MAX_HEX_SEARCH_MATCHES, MAX_HEX_SEARCH_PATTERN_BYTES,
-    MAX_VIEWER_RANGE_LENGTH,
+    ViewerRangeRequestDto, ViewerRangeResponseDto, MAX_VIEWER_RANGE_LENGTH,
 };

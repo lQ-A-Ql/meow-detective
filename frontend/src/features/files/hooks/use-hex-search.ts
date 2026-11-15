@@ -13,7 +13,7 @@ export function isHexSearchActive(phase: HexSearchPhase | undefined) {
 }
 
 export function hexSearchErrorKey(error: string | undefined) {
-  switch (error) {
+  switch (error?.toLowerCase()) {
     case 'source_unavailable':
       return 'preview.hex.search.errorSourceUnavailable';
     case 'unsupported_source':

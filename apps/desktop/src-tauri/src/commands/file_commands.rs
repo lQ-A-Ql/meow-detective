@@ -4,6 +4,7 @@ mod bitlocker;
 mod browse;
 mod extract;
 mod extract_progress;
+mod hex_search;
 mod media;
 mod ntfs;
 mod preview;
@@ -24,6 +25,7 @@ pub use browse::{
     list_local_disks,
 };
 pub use extract::extract_file;
+pub use hex_search::{cancel_hex_search, get_hex_search_status, start_hex_search};
 pub use media::{get_media_url, read_media_range};
 pub use ntfs::inspect_ntfs_file;
 pub use preview::{get_document_preview, get_image_metadata, get_image_preview, get_text_preview};

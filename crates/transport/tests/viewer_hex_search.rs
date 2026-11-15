@@ -1,7 +1,10 @@
+use transport::dto::viewer::{
+    DEFAULT_HEX_SEARCH_MAX_MATCHES, MAX_ASCII_SEARCH_PATTERN_BYTES, MAX_HEX_SEARCH_MATCHES,
+    MAX_HEX_SEARCH_PATTERN_BYTES,
+};
 use transport::dto::{
     HexSearchFileRequestDto, HexSearchModeDto, HexSearchPhaseDto, HexSearchRequestDto,
-    HexSearchStatusDto, DEFAULT_HEX_SEARCH_MAX_MATCHES, MAX_ASCII_SEARCH_PATTERN_BYTES,
-    MAX_HEX_SEARCH_MATCHES, MAX_HEX_SEARCH_PATTERN_BYTES,
+    HexSearchStatusDto,
 };
 
 fn hex_request(pattern: &str) -> HexSearchRequestDto {
