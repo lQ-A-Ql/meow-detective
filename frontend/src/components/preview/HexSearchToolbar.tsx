@@ -57,20 +57,22 @@ export function HexSearchToolbar({ fileId, state, onStart, onCancel, onReset, on
     >
       <div className="flex items-center" role="group" aria-label={t('preview.hex.search.label')}>
         {(['hex', 'ascii'] as const).map((value) => (
-          <button
+          <Button
             key={value}
             type="button"
+            shape="pill"
+            variant="forensicsOutline"
             aria-pressed={mode === value}
             onClick={() => setMode(value)}
             className={cn(
-              'h-5 border px-1.5 font-mono text-[10px] uppercase',
+              'h-5 min-h-0 w-auto gap-0 rounded-none border px-1.5 py-0 font-mono text-[10px] leading-none uppercase',
               mode === value
                 ? 'border-forensics-border bg-forensics-panel-strong text-forensics-ink'
                 : 'border-transparent text-forensics-muted hover:bg-forensics-hover',
             )}
           >
             {value === 'hex' ? t('preview.hex.search.hexMode') : t('preview.hex.search.asciiMode')}
-          </button>
+          </Button>
         ))}
       </div>
       <Input
