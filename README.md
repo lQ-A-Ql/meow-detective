@@ -463,10 +463,20 @@ cargo build --release
 | [XFS 内核日志格式](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/fs/xfs) / [xfsprogs](https://git.kernel.org/pub/scm/fs/xfs/xfsprogs-dev.git) | GPL-2.0 | `crates/fs-xfs` 的日志解析按 `xfs_log_format.h`、`xfs_log_recover.c` 与 xfsprogs log-print/recovery 的结构和行为对照实现，见 `crates/fs-xfs/src/log/mod.rs`；仅解析已提交事务元数据，仓库未包含上游源码文件 |
 | [iscsi-target](https://github.com/lawless-m/iscsi-crate) | MIT OR Apache-2.0 | 物理磁盘模式的本机 loopback iSCSI target 基础实现；仓库在 `vendor/iscsi-target` 保留许可证并增加写保护 SCSI 与 Windows 互操作补丁，修改说明见 `vendor/iscsi-target/MEOW_PATCH.md` |
 | [Microsoft Windows iSCSI API](https://learn.microsoft.com/windows/win32/iscsi/portal) | Microsoft Learn / Windows SDK 使用条款 | 物理挂载使用系统 `iscsidsc.dll`、Microsoft iSCSI Initiator 和 Service Control Manager API；不复制或分发 Windows 组件，服务修改范围见本文“Windows 权限与系统服务” |
-| [omerbenamram/EVTX](https://github.com/omerbenamram/EVTX) | MIT OR Apache-2.0 | `crates/evtx-patched` 为其本地补丁分支（去除失维护依赖），上游许可证文本保留于 `crates/evtx-patched/LICENSE-APACHE` 与 `crates/evtx-patched/LICENSE-MIT` |
+| [omerbenamram/EVTX](https://github.com/omerbenamram/EVTX) | MIT OR Apache-2.0 | `crates/evtx-patched` 为其本地补丁分支（去除失维护依赖），上游许可证文本保留于 `crates/evtx-patched/LICENSE-APACHE` 与 `crates/evtx-patched/LICENSE-MIT`；`testdata/fixtures/public-small/evtx` 的 `system.evtx` 取自该仓库 `samples/system.evtx` |
 | [SecurityRonin/bitlocker-forensic](https://github.com/SecurityRonin/bitlocker-forensic)（含 [elephant-diffuser](https://github.com/SecurityRonin/elephant-diffuser)） | Apache-2.0 | `crates/volume-bitlocker` 派生自 bitlocker-core 0.3.5 与 elephant-diffuser（Albert Hui 著）。上游许可证文本保留于 `crates/volume-bitlocker/LICENSE-APACHE-2.0-UPSTREAM`，修改声明（Apache-2.0 §4(b)）与逐文件来源校验见 `crates/volume-bitlocker/NOTICE` 和 `docs/bitlocker-dependency-decision.md` |
 | [shadcn/ui](https://ui.shadcn.com/) | MIT | 前端 `frontend/src/app/components/ui/` 的 UI 原语组件集（Radix Slot + cva + `cn()` 结构，已按本项目主题改写），见 `frontend/ATTRIBUTIONS.md` |
 | [winbindex](https://github.com/m417z/winbindex) | GPL-3.0 | ntoskrnl 各 build 元数据索引，作为内嵌内核符号注册表的采集入口（配合微软公共符号服务器 PDB），见 `crates/memory-windows/symbols/README.md`；仅消费其公开索引数据，未复用其源码 |
+| [fjall](https://github.com/fjall-rs/fjall) | MIT OR Apache-2.0 | `crates/persistence-fjall` 的 LSM 键值存储基础；仓库在 `vendor/fjall-3.1.13` 保留上游许可证并加入 worker 线程 join 补丁（修复 Windows 下数据库销毁后的目录发布竞争），修改说明与上游归档 SHA-256 见 `vendor/fjall-3.1.13/LOCAL-PATCH.md` |
+| [bbolt-rs](https://github.com/ambaxter/bbolt-rs) | MIT | `crates/containers-bolt` 的 Bolt 页解码基础；仓库在 `vendor/bbolt-rs` 保留上游许可证（含 etcd-io/bbolt 与 CJP10/object-pool 的 MIT 声明），按平台 cfg 收敛 Unix-only API 并以 `fnv 1.0.7` 替换 `fnv_rs`，见 `vendor/bbolt-rs/PLATFORM.md` |
+| [rust-fs-btrfs](https://github.com/antimatter-studios/rust-fs-btrfs) | MIT | `crates/fs-btrfs` 的 Btrfs 解析核心；仓库在 `vendor/rust-fs-btrfs` 保留上游许可证并增加只读 committed-trees 入口，支持边界见 `docs/lv-mapping-and-mdraid-development.md` |
+| [systemd](https://github.com/systemd/systemd) | LGPL-2.1+（引用的 `lookup3.c` 为公有领域、`siphash24.c` 为 CC0） | `crates/artifacts-linux/src/journal/hash.rs` 按 journal 磁盘格式移植 Jenkins lookup3 与 SipHash-2-4 字段哈希；仅算法移植，仓库未包含 systemd 源码 |
+| [Linux 内核 ext4/jbd2](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/fs/ext4) | GPL-2.0 | `crates/fs-ext4` 的日志解析与离线重放计划按 ext4 挂载恢复语义独立实现（按序复制已提交事务、清除 `s_start` checkpoint），见 `crates/fs-ext4/src/journal/repair.rs`；仓库未包含上游源码文件 |
+| [plaso](https://github.com/log2timeline/plaso) | Apache-2.0 | 公共夹具中的 `SRUDB.dat`（经 [Sootmark/ese](https://github.com/Sootmark/ese) 分发）与 `customDestinations-ms` 样本来自 plaso `test_data`，来源与许可证见 `testdata/fixtures/public-small/windows-parsers/README.md`、同目录 `LICENSE-plaso.txt` 与 `NOTICE-ese.txt` |
+| [Sootmark/shell](https://github.com/Sootmark/shell) / [Sootmark/imagecache](https://github.com/Sootmark/imagecache) | MIT | LNK/JumpList 与 Thumbcache 公共夹具的字节及期望字段；其中 LNK 样本属 Eric Zimmerman 的公开测试集（MIT），许可证见 `testdata/fixtures/public-small/windows-parsers/` 下的 `LICENSE-zimmerman.txt`、`LICENSE-sootmark.txt` 与 `NOTICE-imagecache.txt` |
+| [SecurityRonin/trash-forensic](https://github.com/SecurityRonin/trash-forensic) | Apache-2.0 | Recycle Bin `$I` 公共夹具与原始路径期望值，经 rifiuti2 独立校验；许可证见 `testdata/fixtures/public-small/windows-parsers/LICENSE-trash.txt` |
+
+公共夹具的期望字段由 LECmd、JLECmd、rifiuti2、dissect.thumbcache、libesedb、esentutl 与 LnkParse3 独立校验，仅作为测试 oracle 使用，不随产品分发。
 
 此外，DPAPI / TBAL 离线恢复链路参考了公开研究（[TBAL: an (accidental?) DPAPI Backdoor for local users](https://vztekoverflow.com/2018/07/31/tbal-dpapi-backdoor/) 与 [pypykatz](https://github.com/skelsec/pypykatz) 的算法说明），仅作算法对照，未复用其代码。仿真取证的绕密与维护引导设计（SAM/Utilman 绕密、OSDATA 命名空间处理、Linux `/etc/shadow` 编辑与 GRUB 单用户路线）参考了公开技术资料中的通用技术原理，实现为本项目独立代码。
 
@@ -474,4 +484,4 @@ cargo build --release
 
 ### 主要开源依赖
 
-桌面端与前端构建在以下开源项目之上（各项目许可证归其作者所有，完整依赖清单以 `Cargo.lock`/`pnpm-lock.yaml` 为准）：Tauri 2、tauri-plugin-updater、dokan-rust、React 18、React Router、Radix UI、Tailwind CSS 4、TanStack Query/Virtual、zustand、i18next、Prism、Font Awesome Free、sonner；Rust 侧 SQLite/rusqlite（SQLite 为公有领域）、tantivy、flate2/tar、serde、tokio、rayon、mimalloc、zip 等。
+桌面端与前端构建在以下开源项目之上（各项目许可证归其作者所有，完整依赖清单以 `Cargo.lock`/`pnpm-lock.yaml` 为准）：Tauri 2、tauri-plugin-updater、dokan-rust、React 18、React Router、Radix UI、Tailwind CSS 4、TanStack Query/Virtual、zustand、i18next、Prism、Font Awesome Free、sonner；Rust 侧 SQLite/rusqlite（SQLite 为公有领域）、tantivy、fjall、bbolt-rs、rust-fs-btrfs、flate2/tar、serde、tokio、rayon、mimalloc、zip 等；fjall、bbolt-rs、rust-fs-btrfs 使用带本地补丁的 vendored 副本。
