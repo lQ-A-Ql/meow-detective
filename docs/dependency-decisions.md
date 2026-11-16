@@ -41,6 +41,37 @@ Published sources: [trash-core](https://github.com/SecurityRonin/trash-forensic)
 Their minimum Rust versions are 1.96, 1.80, 1.80 and 1.80 respectively; the workspace
 toolchain is 1.99.0. The existing dependency license policy covers these licenses.
 
+## Advisory review — 2026-11-16
+
+Owner: Dependency Maintenance. This review resolves the expired 2026-10-16 exceptions by
+updating the upstream dependency path instead of renewing them.
+
+### Resolved by tauri-utils refresh
+
+`tauri-utils` was updated from 2.9.3 to 2.10.3 (compatible with the retained `tauri`
+2.11.3 requirement `^2.9.3`). The new release requires `urlpattern` `^0.6`; the lockfile now
+resolves `urlpattern` 0.6.0, which replaced the `unic-*` family with `icu_properties`.
+Cargo.lock no longer contains any `unic-*` package, so RUSTSEC-2025-0075, RUSTSEC-2025-0080,
+RUSTSEC-2025-0081, RUSTSEC-2025-0098 and RUSTSEC-2025-0100 no longer match the graph and
+their `deny.toml` exceptions were deleted (`unused-ignored-advisory = "deny"` enforces this).
+
+### Remaining unmaintained dependency
+
+| Advisory | Resolved dependency | Exposure and disposition |
+|---|---|---|
+| [RUSTSEC-2024-0370](https://rustsec.org/advisories/RUSTSEC-2024-0370.html) | proc-macro-error 1.0.4 | Build-time only via glib-macros 0.18.5 / gtk3-macros 0.18.2 on the Linux GTK path of tauri 2.11.3. `cargo tree --locked --target x86_64-pc-windows-msvc -i proc-macro-error` prints nothing; Windows is the only shipped target. |
+
+This is the second Low-severity renewal and therefore an escalation, not a routine extension:
+gtk 0.18 has no release that removes `proc-macro-error`, and replacing it requires an
+upstream GTK/Tauri refresh or a workspace patch of the GTK macro stack. The exception expires
+on **2026-12-16**. If the dependency path still exists at that date, the release gate stays
+red until the GTK/Tauri stack is upgraded or the macro crates are patched locally.
+
+Validation: `cargo update -p tauri-utils --precise 2.10.3`,
+`cargo tree --locked --target x86_64-unknown-linux-gnu -i proc-macro-error`,
+`cargo tree --locked --target x86_64-pc-windows-msvc -i proc-macro-error`,
+`cargo deny check advisories bans licenses sources`, and `scripts/check-deny-exceptions.ps1`.
+
 ## Advisory review — 2026-10-16
 
 Owner: Dependency Maintenance. The review preserves advisory checking for both configured targets; it does not change Cargo.lock or the default unmaintained-advisory enforcement.
