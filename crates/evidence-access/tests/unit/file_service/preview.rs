@@ -57,11 +57,12 @@ fn text_preview_assembles_dto_from_service_bytes() {
 
 #[test]
 fn image_preview_uses_direct_logical_path_without_range_fallback() {
-    let content = b"\x89PNG\r\n\x1a\ntiny image bytes";
-    with_logical_case_file("image-preview", "tiny.png", content, |conn, file_id| {
+    let content = tiny_png();
+    with_logical_case_file("image-preview", "tiny.png", &content, |conn, file_id| {
         let image = image_preview_for_file(conn, &file_id)
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
         assert_eq!(image.mime_type, "image/png");
+        assert_eq!((image.width, image.height), (2, 3));
         let (_, encoded) = image.data_url.split_once(',').expect("data URL payload");
         assert_eq!(
             base64::engine::general_purpose::STANDARD
@@ -69,6 +70,76 @@ fn image_preview_uses_direct_logical_path_without_range_fallback() {
                 .unwrap(),
             content
         );
+        Ok(())
+    });
+}
+
+fn tiny_png() -> Vec<u8> {
+    let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut ihdr = [0; 13];
+    ihdr[3] = 2;
+    ihdr[7] = 3;
+    ihdr[8] = 8;
+    ihdr[9] = 2;
+    png_chunk(&mut bytes, b"IHDR", &ihdr);
+    png_chunk(&mut bytes, b"IEND", &[]);
+    bytes
+}
+
+fn png_chunk(bytes: &mut Vec<u8>, kind: &[u8; 4], payload: &[u8]) {
+    bytes.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    bytes.extend_from_slice(kind);
+    bytes.extend_from_slice(payload);
+    let mut hash = crc32fast::Hasher::new();
+    hash.update(kind);
+    hash.update(payload);
+    bytes.extend_from_slice(&hash.finalize().to_be_bytes());
+}
+
+#[test]
+fn tiff_handles_are_metadata_only_and_reject_inline_preview() {
+    let content = b"II*\0\x08\0\0\0\0\0\0\0";
+    with_logical_case_file("tiff-handle", "scan.tif", content, |conn, file_id| {
+        let handle = super::open_file_handle_real(conn, &file_id)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        assert_eq!(
+            handle.preview_kind,
+            Some(transport::dto::ViewerPreviewKindDto::ImageMetadataOnly)
+        );
+        assert_eq!(handle.mime.as_deref(), Some("image/tiff"));
+        assert!(matches!(
+            super::image_preview_for_file(conn, &file_id),
+            Err(crate::file_service::FileServiceError::Unsupported(_))
+        ));
+        Ok(())
+    });
+}
+
+#[test]
+fn inline_image_preview_rejects_decoder_bomb_dimensions() {
+    let mut content = vec![0u8; 34];
+    content[..2].copy_from_slice(b"BM");
+    content[14..18].copy_from_slice(&40u32.to_le_bytes());
+    content[18..22].copy_from_slice(&20_000i32.to_le_bytes());
+    content[22..26].copy_from_slice(&20_000i32.to_le_bytes());
+    content[28..30].copy_from_slice(&24u16.to_le_bytes());
+    with_logical_case_file("bomb-image", "bomb.bmp", &content, |conn, file_id| {
+        assert!(matches!(
+            super::image_preview_for_file(conn, &file_id),
+            Err(crate::file_service::FileServiceError::Unsupported(_))
+        ));
+        Ok(())
+    });
+}
+
+#[test]
+fn inline_image_preview_rejects_unknown_dimensions() {
+    let content = b"\x89PNG\r\n\x1a\ntiny image bytes";
+    with_logical_case_file("unknown-dims", "broken.png", content, |conn, file_id| {
+        assert!(matches!(
+            super::image_preview_for_file(conn, &file_id),
+            Err(crate::file_service::FileServiceError::Unsupported(_))
+        ));
         Ok(())
     });
 }

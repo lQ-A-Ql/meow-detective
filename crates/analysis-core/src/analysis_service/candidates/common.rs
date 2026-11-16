@@ -19,44 +19,10 @@ pub(crate) use path_matching::evidence_relative_path;
 pub use path_matching::normalize_evidence_path;
 pub(super) use path_matching::EvidencePathPattern;
 
-#[derive(Debug, Clone, Copy)]
-pub struct EvidenceCategoryDef {
-    pub category: &'static str,
-    pub display_name: &'static str,
-    pub evidence_kind: &'static str,
-    pub parser: &'static str,
-    pub artifact_families: &'static [&'static str],
-    pub(super) patterns: &'static [EvidencePathPattern],
-    pub(super) matcher: Option<fn(&str) -> bool>,
-}
-
-pub(super) const EMAIL_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
-    category: "Email",
-    display_name: "电子邮件",
-    evidence_kind: "email",
-    parser: "email",
-    artifact_families: &["EmailMessage", "EmailAccount"],
-    patterns: &[
-        EvidencePathPattern::Suffix(".eml"),
-        EvidencePathPattern::Suffix(".emlx"),
-        EvidencePathPattern::Suffix(".mbox"),
-        EvidencePathPattern::FoxmailBox,
-        EvidencePathPattern::FoxmailIndex,
-        EvidencePathPattern::FoxmailAccount,
-        EvidencePathPattern::Suffix(".pst"),
-        EvidencePathPattern::Suffix(".ost"),
-    ],
-    matcher: None,
-};
-
-pub(super) const FILE_TYPE_INVENTORY_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
-    category: "FileTypeInventory",
-    display_name: "File type inventory",
-    evidence_kind: "metadata_inventory",
-    parser: "metadata.extension_path",
-    artifact_families: &[],
-    patterns: &[],
-    matcher: None,
+pub use super::definitions::EvidenceCategoryDef;
+pub(crate) use super::definitions::IMAGE_METADATA_CATEGORY_DEF;
+pub(super) use super::definitions::{
+    EvidenceDiscovery, EMAIL_CATEGORY_DEF, FILE_TYPE_INVENTORY_CATEGORY_DEF,
 };
 
 pub(crate) fn ensure_supported_analysis_categories(
@@ -107,6 +73,8 @@ pub(crate) struct EvidenceCandidateDiscovery {
     pub(crate) preparation: PreparationCatalog,
 }
 
+pub(crate) use super::discovery::magic_probe_candidate;
+
 pub fn collect_file_entries(conn: &Connection) -> Result<Vec<FileEntry>, AnalysisServiceError> {
     collect_file_entries_from_fjall(conn)
 }
@@ -137,6 +105,7 @@ pub fn discover_evidence_candidates(
         conn,
         evidence_category_defs(),
         &cancel_token,
+        &mut |_| Ok(None),
         &mut |_| {},
     )
     .map(|discovery| discovery.candidates)
@@ -146,9 +115,10 @@ fn discover_evidence_candidates_with_definitions(
     conn: &Connection,
     definitions: &[EvidenceCategoryDef],
     cancel_token: &AtomicBool,
+    probe: &mut dyn FnMut(&FileEntryRecord) -> Result<Option<&'static str>, String>,
     progress: &mut dyn FnMut(u64),
 ) -> Result<EvidenceCandidateDiscovery, AnalysisServiceError> {
-    let mut discovery = CandidateDiscovery::new(definitions);
+    let mut discovery = CandidateDiscovery::new(definitions, probe);
     let mut records = 0u64;
     visit_catalog_records_from_fjall(conn, |entry| {
         discovery.visit_entry(entry, cancel_token)?;
@@ -162,17 +132,20 @@ fn discover_evidence_candidates_with_definitions(
     discovery.finish(cancel_token)
 }
 
-struct CandidateDiscovery<'a> {
+use super::discovery::{MagicDiscovery, MagicProbe};
+
+struct CandidateDiscovery<'a, 'p> {
     definitions: &'a [EvidenceCategoryDef],
     candidates: HashMap<String, Vec<EvidenceCandidate>>,
     companions: super::companion_index::CompanionIndex,
     requires_companions: bool,
     linux_kernel_catalog: Option<LinuxKernelCatalog>,
     preparation: PreparationCatalog,
+    magic: MagicDiscovery<'p>,
 }
 
-impl<'a> CandidateDiscovery<'a> {
-    fn new(definitions: &'a [EvidenceCategoryDef]) -> Self {
+impl<'a, 'p> CandidateDiscovery<'a, 'p> {
+    fn new(definitions: &'a [EvidenceCategoryDef], probe: MagicProbe<'p>) -> Self {
         Self {
             definitions,
             candidates: definitions
@@ -188,6 +161,7 @@ impl<'a> CandidateDiscovery<'a> {
                 .any(|definition| definition.category == "LinuxArtifacts")
                 .then(LinuxKernelCatalog::default),
             preparation: PreparationCatalog::default(),
+            magic: MagicDiscovery::new(definitions, probe),
         }
     }
 
@@ -205,20 +179,23 @@ impl<'a> CandidateDiscovery<'a> {
         if let Some(catalog) = &mut self.linux_kernel_catalog {
             super::linux::observe_kernel_paths(&normalized, catalog);
         }
-        let matches_candidate = self.definitions.iter().any(|definition| {
-            !definition.patterns.is_empty()
-                && evidence_path_matches(&normalized, definition.patterns)
-                && definition
-                    .matcher
-                    .is_none_or(|matcher| matcher(&normalized))
-        });
+        let matches_candidate = self
+            .definitions
+            .iter()
+            .any(|definition| super::discovery::path_discovery_matches(definition, &normalized));
         let matches_companion = self.requires_companions
             && super::companion_index::CompanionIndex::matches(&entry.path);
-        if matches_candidate || matches_companion {
+        let magic_file_type = if matches_candidate {
+            None
+        } else {
+            self.magic.probe(&entry)
+        };
+        if matches_candidate || magic_file_type.is_some() || matches_companion {
             self.record_candidate(
                 entry,
                 normalized,
                 matches_candidate,
+                magic_file_type,
                 matches_companion,
                 cancel_token,
             )?;
@@ -231,6 +208,7 @@ impl<'a> CandidateDiscovery<'a> {
         entry: FileEntryRecord,
         normalized: String,
         matches_candidate: bool,
+        magic_file_type: Option<&'static str>,
         matches_companion: bool,
         cancel_token: &AtomicBool,
     ) -> Result<(), AnalysisServiceError> {
@@ -273,11 +251,12 @@ impl<'a> CandidateDiscovery<'a> {
                 },
             );
         }
-        if matches_candidate {
+        if matches_candidate || magic_file_type.is_some() {
             add_matching_candidates(
                 &mut self.candidates,
                 self.definitions,
                 &normalized,
+                magic_file_type,
                 CandidateRow {
                     file_id: &file_id,
                     data_source_id: &data_source_id,
@@ -307,6 +286,7 @@ impl<'a> CandidateDiscovery<'a> {
             }
         }
         ensure_not_cancelled(cancel_token)?;
+        self.magic.log_summary();
         Ok(EvidenceCandidateDiscovery {
             candidates: self.candidates,
             linux_kernel_catalog: self.linux_kernel_catalog,
@@ -330,17 +310,13 @@ fn add_matching_candidates(
     candidates: &mut HashMap<String, Vec<EvidenceCandidate>>,
     definitions: &[EvidenceCategoryDef],
     normalized: &str,
+    magic_file_type: Option<&'static str>,
     row: CandidateRow<'_>,
     cancel_token: &AtomicBool,
 ) -> Result<(), AnalysisServiceError> {
     for definition in definitions {
         ensure_not_cancelled(cancel_token)?;
-        if definition.patterns.is_empty()
-            || !evidence_path_matches(normalized, definition.patterns)
-            || definition
-                .matcher
-                .is_some_and(|matcher| !matcher(normalized))
-        {
+        if !super::discovery::definition_matches(definition, normalized, magic_file_type) {
             continue;
         }
         let (evidence_kind, parser) = candidate_kind_and_parser(definition, normalized);
@@ -430,10 +406,33 @@ pub(crate) fn evidence_candidates_for_categories_with_cancel(
         .map(|(candidates, _, _)| candidates)
 }
 
-pub(crate) fn evidence_candidates_for_categories_with_preparation(
+fn evidence_candidates_for_categories_with_preparation(
     conn: &Connection,
     categories: &[&str],
     cancel_token: &AtomicBool,
+    progress: impl FnMut(u64),
+) -> Result<
+    (
+        Vec<EvidenceCandidate>,
+        Option<LinuxKernelCatalog>,
+        PreparationCatalog,
+    ),
+    AnalysisServiceError,
+> {
+    evidence_candidates_for_categories_with_preparation_and_probe(
+        conn,
+        categories,
+        cancel_token,
+        &mut |_| Ok(None),
+        progress,
+    )
+}
+
+pub(crate) fn evidence_candidates_for_categories_with_preparation_and_probe(
+    conn: &Connection,
+    categories: &[&str],
+    cancel_token: &AtomicBool,
+    probe: &mut dyn FnMut(&FileEntryRecord) -> Result<Option<&'static str>, String>,
     mut progress: impl FnMut(u64),
 ) -> Result<
     (
@@ -453,6 +452,7 @@ pub(crate) fn evidence_candidates_for_categories_with_preparation(
         conn,
         &definitions,
         cancel_token,
+        probe,
         &mut progress,
     )?;
     ensure_not_cancelled(cancel_token)?;

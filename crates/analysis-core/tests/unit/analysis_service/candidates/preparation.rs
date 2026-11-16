@@ -1,5 +1,5 @@
 use super::*;
-use crate::analysis_service::candidates::evidence_candidates_for_categories_with_preparation;
+use crate::analysis_service::candidates::evidence_candidates_for_categories_with_preparation_and_probe;
 use persistence_source::fjall::{instrumentation, CatalogRecordStore, PersistMode};
 use std::sync::atomic::AtomicBool;
 crate::native_source_test_support!();
@@ -55,13 +55,15 @@ fn discovery_reuses_catalog_fields_and_preparation_never_requeries_storage() {
     instrumentation::enable();
     instrumentation::reset();
     let mut progress = Vec::new();
-    let (candidates, _, preparation) = evidence_candidates_for_categories_with_preparation(
-        &fixture,
-        &["Registry", "BrowserHistory", "LinuxArtifacts"],
-        &AtomicBool::new(false),
-        |records| progress.push(records),
-    )
-    .unwrap();
+    let (candidates, _, preparation) =
+        evidence_candidates_for_categories_with_preparation_and_probe(
+            &fixture,
+            &["Registry", "BrowserHistory", "LinuxArtifacts"],
+            &AtomicBool::new(false),
+            &mut |_| Ok(None),
+            |records| progress.push(records),
+        )
+        .unwrap();
     let discovered = instrumentation::snapshot();
     assert_eq!(discovered.point_reads, 0);
     assert!(discovered.scan_entries <= records.len() as u64 + 10);
@@ -96,10 +98,11 @@ fn discovery_reuses_catalog_fields_and_preparation_never_requeries_storage() {
     assert_eq!(instrumentation::snapshot(), discovered);
     assert_eq!(progress, [512, 1024, 1204]);
     let cancel = AtomicBool::new(false);
-    let result = evidence_candidates_for_categories_with_preparation(
+    let result = evidence_candidates_for_categories_with_preparation_and_probe(
         &fixture,
         &["LinuxArtifacts"],
         &cancel,
+        &mut |_| Ok(None),
         |records| {
             if records >= 512 {
                 cancel.store(true, std::sync::atomic::Ordering::Release);

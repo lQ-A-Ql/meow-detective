@@ -202,6 +202,8 @@ export function useFileBrowserModel() {
     viewer: preview.viewer,
     fileHandle: preview.fileHandle,
     previewKind: preview.previewKind,
+    imagePreviewOversized: preview.imagePreviewOversized,
+    imageMetadataOnly: preview.imageMetadataOnly,
     setViewerTab,
     setJumpOffsetInput: preview.setJumpOffsetInput,
     jumpToOffset: preview.jumpToOffset,

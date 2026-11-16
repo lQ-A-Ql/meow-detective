@@ -1,7 +1,39 @@
+import type { ComponentProps } from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { FilePreviewTabs } from '@/components/preview/FilePreviewTabs';
-import type { FileHexViewerState } from '@/types/viewer';
+import type { FileHexViewerState, ImageMetadata } from '@/types/viewer';
+
+const metadata: ImageMetadata = {
+  status: 'present',
+  format: 'tiff',
+  width: 640,
+  height: 480,
+  make: 'Canon',
+  warnings: [],
+  exifBlocks: [],
+};
+
+function renderPreview(overrides: Partial<ComponentProps<typeof FilePreviewTabs>>) {
+  return render(
+    <FilePreviewTabs
+      viewerTab="preview"
+      setViewerTab={vi.fn()}
+      viewer={undefined}
+      previewKind={undefined}
+      onHexJumpInputChange={vi.fn()}
+      onHexJump={async () => false}
+      onLoadNextHexRange={vi.fn()}
+      onLoadPreviousHexRange={vi.fn()}
+      textPreview={null}
+      imagePreview={null}
+      mediaUrl={null}
+      documentPreview={null}
+      selectedFile={undefined}
+      {...overrides}
+    />,
+  );
+}
 
 function emptyHexState(overrides: Partial<FileHexViewerState>): FileHexViewerState {
   return {
@@ -101,6 +133,68 @@ describe('FilePreviewTabs', () => {
 
     expect(screen.getByText(/空文件（0 字节）/)).toBeDefined();
     expect(screen.queryByText('选择文件后显示十六进制预览')).toBeNull();
+  });
+
+  it('shows the metadata-only hint for TIFF without rendering an image viewer', () => {
+    const { container } = renderPreview({
+      previewKind: 'imageMetadataOnly',
+      selectedFile: {
+        id: 'file:tiff',
+        path: '/evidence/page.tif',
+        name: 'page.tif',
+        entryType: 'file',
+        size: 1024,
+        deleted: false,
+        hidden: false,
+        system: false,
+        readOnly: false,
+        archive: false,
+      },
+    });
+
+    expect(screen.getByText('仅元数据图片')).toBeDefined();
+    expect(screen.getByText('TIFF 仅支持元数据解析，浏览器不支持内联预览。')).toBeDefined();
+    expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('renders the metadata panel for image and metadata-only kinds', () => {
+    const { rerender } = renderPreview({
+      viewerTab: 'metadata',
+      previewKind: 'image',
+      imageMetadata: metadata,
+      fileHandle: { handleId: 'handle:1', size: 1024, mime: 'image/jpeg', previewKind: 'image' },
+    });
+    expect(screen.getByText('EXIF 属性')).toBeDefined();
+    expect(screen.getByText('tiff')).toBeDefined();
+
+    rerender(
+      <FilePreviewTabs
+        viewerTab="metadata"
+        setViewerTab={vi.fn()}
+        viewer={undefined}
+        previewKind="imageMetadataOnly"
+        onHexJumpInputChange={vi.fn()}
+        onHexJump={async () => false}
+        onLoadNextHexRange={vi.fn()}
+        onLoadPreviousHexRange={vi.fn()}
+        textPreview={null}
+        imagePreview={null}
+        imageMetadata={metadata}
+        mediaUrl={null}
+        documentPreview={null}
+        selectedFile={undefined}
+      />,
+    );
+    expect(screen.getByText('仅元数据图片')).toBeDefined();
+  });
+
+  it('shows the oversized hint instead of an image viewer', () => {
+    const { container } = renderPreview({
+      previewKind: 'image',
+      imagePreviewOversized: true,
+    });
+    expect(screen.getByText('已跳过内联预览')).toBeDefined();
+    expect(container.querySelector('img')).toBeNull();
   });
 
   it('keeps the selection prompt when no file is selected', () => {

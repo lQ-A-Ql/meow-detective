@@ -1609,3 +1609,418 @@ fn plugin_reextraction_replaces_outputs_by_exact_extractor_id() {
         "plugin candidates record no checkpoints"
     );
 }
+
+#[test]
+fn magic_probe_reads_only_the_header_budget_and_maps_image_types() {
+    let entry = persistence_source::fjall::FileEntryRecord {
+        id: "probe-image".to_string(),
+        parent_id: None,
+        data_source_id: "source".to_string(),
+        path: "[P0]/evidence/photo".to_string(),
+        name: "photo".to_string(),
+        entry_type: persistence_source::fjall::CatalogEntryType::File,
+        size: Some(4096),
+        ext: None,
+        deleted: false,
+        hidden: false,
+        system: false,
+        read_only: false,
+        archive: false,
+        encrypted: Some(false),
+        created: None,
+        modified: None,
+        accessed: None,
+        changed: None,
+        hash_sha256: None,
+        partition_index: Some(0),
+        unix_mode: None,
+    };
+    let mut limits = Vec::new();
+    let mut reader = |candidate: &EvidenceCandidate, limit: usize| {
+        assert_eq!(candidate.category, "ImageMetadataProbe");
+        limits.push(limit);
+        Ok::<CandidateSource, String>(CandidateSource::Bytes(b"\xff\xd8\xff\xe0".to_vec()))
+    };
+    {
+        let mut probe = super::build_magic_probe(&mut reader);
+        assert_eq!(probe(&entry).unwrap(), Some("JPEG"));
+    }
+    assert_eq!(
+        limits,
+        vec![infrastructure::constants::IMAGE_MAGIC_HEADER_BYTES]
+    );
+    assert_eq!(infrastructure::constants::IMAGE_MAGIC_HEADER_BYTES, 32);
+}
+
+#[test]
+fn magic_probe_ignores_non_image_headers_and_streaming_sources() {
+    let entry = persistence_source::fjall::FileEntryRecord {
+        id: "probe-text".to_string(),
+        parent_id: None,
+        data_source_id: "source".to_string(),
+        path: "[P0]/evidence/notes".to_string(),
+        name: "notes".to_string(),
+        entry_type: persistence_source::fjall::CatalogEntryType::File,
+        size: Some(16),
+        ext: None,
+        deleted: false,
+        hidden: false,
+        system: false,
+        read_only: false,
+        archive: false,
+        encrypted: Some(false),
+        created: None,
+        modified: None,
+        accessed: None,
+        changed: None,
+        hash_sha256: None,
+        partition_index: Some(0),
+        unix_mode: None,
+    };
+    let mut text_reader = |_: &EvidenceCandidate, _: usize| {
+        Ok::<CandidateSource, String>(CandidateSource::Bytes(b"plain text".to_vec()))
+    };
+    let mut text_probe = super::build_magic_probe(&mut text_reader);
+    assert_eq!(text_probe(&entry).unwrap(), None);
+
+    let mut streaming_reader = |_: &EvidenceCandidate, _: usize| {
+        Ok::<CandidateSource, String>(CandidateSource::Reader(Box::new(std::io::empty())))
+    };
+    let mut streaming_probe = super::build_magic_probe(&mut streaming_reader);
+    assert_eq!(streaming_probe(&entry).unwrap(), None);
+}
+
+fn image_source_reader(
+    bytes: Vec<u8>,
+    seekable: bool,
+) -> impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String> {
+    move |candidate, limit| {
+        if candidate.category == "ImageMetadataProbe" {
+            let available = bytes.len().min(limit);
+            return Ok(CandidateSource::Bytes(bytes[..available].to_vec()));
+        }
+        let cursor = std::io::Cursor::new(bytes.clone());
+        if seekable {
+            Ok(CandidateSource::Seekable(Box::new(cursor)))
+        } else {
+            Ok(CandidateSource::Reader(Box::new(cursor)))
+        }
+    }
+}
+
+fn tiff_with_orientation(orientation: u16) -> Vec<u8> {
+    let mut bytes = vec![0u8; 26];
+    bytes[..4].copy_from_slice(b"II*\0");
+    bytes[4..8].copy_from_slice(&8u32.to_le_bytes());
+    bytes[8..10].copy_from_slice(&1u16.to_le_bytes());
+    bytes[10..12].copy_from_slice(&0x0112u16.to_le_bytes());
+    bytes[12..14].copy_from_slice(&3u16.to_le_bytes());
+    bytes[14..18].copy_from_slice(&1u32.to_le_bytes());
+    bytes[18..20].copy_from_slice(&orientation.to_le_bytes());
+    bytes
+}
+
+fn jpeg_with_trailing(trailing: usize) -> Vec<u8> {
+    let mut bytes = vec![0xff, 0xd8, 0xff, 0xd9];
+    bytes.extend_from_slice(&vec![0x5a; trailing]);
+    bytes
+}
+
+#[test]
+fn image_metadata_extraction_emits_one_artifact_without_timeline_events() {
+    let connection = source_connection();
+    let bytes = tiff_with_orientation(6);
+    insert_file(
+        &connection,
+        file_entry(
+            "image-tiff",
+            "evidence/photo.tif",
+            bytes.len() as u64,
+            false,
+        ),
+    );
+    let cancel = AtomicBool::new(false);
+    let mut ignore_progress = |_update: ExtractionProgressUpdate| {};
+
+    let execution = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["ImageMetadata"],
+        &cancel,
+        &mut ignore_progress,
+        image_source_reader(bytes, true),
+    )
+    .expect("extract image metadata through the seekable range reader");
+
+    assert_eq!(execution.dto.artifact_count, 1);
+    assert_eq!(execution.dto.timeline_event_count, 0);
+    let artifacts = native_files(&connection);
+    assert_eq!(artifacts.len(), 1);
+    let artifact = &artifacts[0];
+    assert_eq!(artifact.family, "ImageMetadata");
+    assert!(!artifact.id.0.is_empty());
+    assert_eq!(
+        artifact.source_object_id.as_ref().map(|id| id.0.as_str()),
+        Some("image-tiff")
+    );
+    assert_eq!(
+        artifact.extractor_id.as_deref(),
+        Some("image.metadata.container")
+    );
+    assert_eq!(artifact.extractor_version.as_deref(), Some("1.0.0"));
+    assert_eq!(artifact.attrs["format"], serde_json::json!("tiff"));
+    assert_eq!(artifact.attrs["orientation"], serde_json::json!(6));
+    assert!(!artifact.attrs["exifBlocks"]
+        .as_array()
+        .expect("exif blocks")
+        .is_empty());
+    assert_eq!(
+        artifact.attrs["structure"]["truncated"],
+        serde_json::json!(false)
+    );
+    assert!(native_events(&connection).is_empty());
+}
+
+#[test]
+fn clean_image_writes_a_checkpoint_and_skips_the_second_extraction() {
+    let connection = source_connection();
+    let bytes = vec![0xff, 0xd8, 0xff, 0xd9];
+    insert_file(
+        &connection,
+        file_entry("image-clean", "evidence/clean.jpg", 4, false),
+    );
+    let cancel = AtomicBool::new(false);
+    let mut ignore_progress = |_update: ExtractionProgressUpdate| {};
+    let structure_opens = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = structure_opens.clone();
+    let mut reader = move |candidate: &EvidenceCandidate, limit: usize| {
+        if candidate.category == "ImageMetadataProbe" {
+            let available = bytes.len().min(limit);
+            return Ok(CandidateSource::Bytes(bytes[..available].to_vec()));
+        }
+        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Ok(CandidateSource::Seekable(Box::new(std::io::Cursor::new(
+            bytes.clone(),
+        ))))
+    };
+
+    let first = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["ImageMetadata"],
+        &cancel,
+        &mut ignore_progress,
+        &mut reader,
+    )
+    .expect("first image metadata run");
+    assert_eq!(first.dto.artifact_count, 0);
+    assert_eq!(
+        structure_opens.load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
+
+    let second = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["ImageMetadata"],
+        &cancel,
+        &mut ignore_progress,
+        &mut reader,
+    )
+    .expect("second image metadata run");
+    assert_eq!(second.dto.artifact_count, 0);
+    assert_eq!(
+        structure_opens.load(std::sync::atomic::Ordering::Relaxed),
+        1,
+        "a clean scan checkpoint must skip re-extraction"
+    );
+    assert!(native_files(&connection).is_empty());
+}
+
+#[test]
+fn changed_image_content_replaces_the_previous_artifact() {
+    let connection = source_connection();
+    let first_bytes = jpeg_with_trailing(5);
+    let mut entry = file_entry(
+        "image-jpeg",
+        "evidence/photo.jpg",
+        first_bytes.len() as u64,
+        false,
+    );
+    insert_file(&connection, entry.clone());
+    let cancel = AtomicBool::new(false);
+    let mut ignore_progress = |_update: ExtractionProgressUpdate| {};
+
+    let first = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["ImageMetadata"],
+        &cancel,
+        &mut ignore_progress,
+        image_source_reader(first_bytes, true),
+    )
+    .expect("first image metadata run");
+    assert_eq!(first.dto.artifact_count, 1);
+
+    let second_bytes = jpeg_with_trailing(9);
+    entry.size = Some(second_bytes.len() as u64);
+    entry.modified_at = Some(Utc::now());
+    insert_file(&connection, entry);
+    let second = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["ImageMetadata"],
+        &cancel,
+        &mut ignore_progress,
+        image_source_reader(second_bytes, true),
+    )
+    .expect("second image metadata run");
+
+    assert_eq!(second.dto.artifact_count, 1);
+    let artifacts = native_files(&connection);
+    assert_eq!(artifacts.len(), 1, "prefix replacement must not accumulate");
+    assert_eq!(
+        artifacts[0].attrs["structure"]["trailingBytes"],
+        serde_json::json!(9)
+    );
+}
+
+#[test]
+fn trailing_image_data_records_findings_and_hashes() {
+    let connection = source_connection();
+    let bytes = jpeg_with_trailing(7);
+    insert_file(
+        &connection,
+        file_entry(
+            "image-trailing",
+            "evidence/carved.jpg",
+            bytes.len() as u64,
+            false,
+        ),
+    );
+    let cancel = AtomicBool::new(false);
+    let mut ignore_progress = |_update: ExtractionProgressUpdate| {};
+
+    let execution = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["ImageMetadata"],
+        &cancel,
+        &mut ignore_progress,
+        image_source_reader(bytes, true),
+    )
+    .expect("extract trailing image data");
+
+    assert_eq!(execution.dto.artifact_count, 1);
+    let artifacts = native_files(&connection);
+    let structure = artifacts[0].attrs["structure"]
+        .as_object()
+        .expect("structure object");
+    assert_eq!(structure["trailingBytes"], serde_json::json!(7));
+    assert_eq!(
+        structure["findings"][0]["code"],
+        serde_json::json!("image.trailing-data")
+    );
+    assert!(structure["hashes"]["wholeFileSha256"].is_string());
+    assert!(structure["hashes"]["trailingSha256"].is_string());
+    assert_eq!(
+        structure["hashes"]["trailingHashedBytes"],
+        serde_json::json!(7)
+    );
+}
+
+#[test]
+fn non_seekable_image_reader_falls_back_within_the_buffer_limit() {
+    let connection = source_connection();
+    let bytes = jpeg_with_trailing(4);
+    insert_file(
+        &connection,
+        file_entry(
+            "image-streamed",
+            "evidence/streamed.jpg",
+            bytes.len() as u64,
+            false,
+        ),
+    );
+    let cancel = AtomicBool::new(false);
+    let mut ignore_progress = |_update: ExtractionProgressUpdate| {};
+
+    let execution = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["ImageMetadata"],
+        &cancel,
+        &mut ignore_progress,
+        image_source_reader(bytes, false),
+    )
+    .expect("analyse a streamed image within the buffered fallback limit");
+
+    assert_eq!(execution.dto.artifact_count, 1);
+    assert_eq!(execution.retryable_failure_count, 0);
+}
+
+#[test]
+fn oversized_streamed_image_is_deferred_without_failing_the_run() {
+    let connection = source_connection();
+    let bytes = jpeg_with_trailing(4);
+    insert_file(
+        &connection,
+        file_entry(
+            "image-oversized-stream",
+            "evidence/huge.jpg",
+            evidence_access::file_service::BUFFER_FALLBACK_LIMIT as u64 + 1,
+            false,
+        ),
+    );
+    let cancel = AtomicBool::new(false);
+    let mut ignore_progress = |_update: ExtractionProgressUpdate| {};
+
+    let execution = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["ImageMetadata"],
+        &cancel,
+        &mut ignore_progress,
+        image_source_reader(bytes, false),
+    )
+    .expect("defer an oversized streamed image");
+
+    assert_eq!(execution.retryable_failure_count, 1);
+    assert_eq!(
+        execution.dto.status,
+        transport::dto::AnalysisParseStatusDto::Failed
+    );
+    assert!(execution
+        .dto
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("buffered fallback limit")));
+    assert!(native_files(&connection).is_empty());
+}
+
+#[test]
+fn cancelled_image_metadata_run_returns_cancelled() {
+    let connection = source_connection();
+    let cancel = AtomicBool::new(true);
+    let mut ignore_progress = |_update: ExtractionProgressUpdate| {};
+
+    let result = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["ImageMetadata"],
+        &cancel,
+        &mut ignore_progress,
+        |_, _| Err::<CandidateSource, String>("reader must not be called".to_string()),
+    );
+
+    assert!(matches!(result, Err(AnalysisServiceError::Cancelled)));
+}

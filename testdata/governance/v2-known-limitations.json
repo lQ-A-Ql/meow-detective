@@ -1,6 +1,6 @@
 {
-  "lastVerifiedAt": "2026-09-08T00:00:00Z",
-  "documentedLimitCount": 58,
+  "lastVerifiedAt": "2026-11-16T00:00:00Z",
+  "documentedLimitCount": 63,
   "items": [
     {
       "category": "E01",
@@ -108,7 +108,7 @@
       "category": "BitLocker",
       "item": "已验证密钥包持久化与调查员 UI",
       "status": "partial",
-        "summary": "注册表未覆盖的 build 走版本无关 driver-object 雕刻兜底。卷级 oracle 要求目标卷 NTFS boot/MFT、`$UpCase`、`$Bitmap` 全部通过，物理读取有独立硬预算。密钥和物理地址不进入 DTO、日志、报告或 SQLite；因无公开镜像/内存 fixture，支持等级仍为 Experimental",
+      "summary": "注册表未覆盖的 build 走版本无关 driver-object 雕刻兜底。卷级 oracle 要求目标卷 NTFS boot/MFT、`$UpCase`、`$Bitmap` 全部通过，物理读取有独立硬预算。密钥和物理地址不进入 DTO、日志、报告或 SQLite；因无公开镜像/内存 fixture，支持等级仍为 Experimental",
       "affectedChains": [
         "BitLocker"
       ],
@@ -251,6 +251,56 @@
       "summary": "有实现 (3 测试)，无 fixture，无 expected.json",
       "affectedChains": [
         "Thumbcache"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "图片",
+      "item": "HEIC/HEIF、AVIF、JPEG XL、RAW 相机格式",
+      "status": "unsupported",
+      "summary": "当前 image metadata / S0 结构分析仅覆盖 JPEG/PNG/WebP/GIF/BMP/ICO/TIFF；上述容器不参与 magic 候选发现或解析",
+      "affectedChains": [
+        "ImageMetadata"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "图片",
+      "item": "统计隐写分析（RS/SPA/DCT）与 LSB 提取",
+      "status": "unsupported",
+      "summary": "当前只做容器结构与 EXIF 元数据分析，不解码像素，不评估隐写容量，也不提取隐藏载荷",
+      "affectedChains": [
+        "ImageMetadata"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "图片",
+      "item": "TIFF 内联渲染",
+      "status": "unsupported",
+      "summary": "TIFF viewer 返回 `imageMetadataOnly`，浏览器不渲染像素；EXIF 解码限定在有界前缀窗口内",
+      "affectedChains": [
+        "ImageMetadata"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "图片",
+      "item": "ICO 内嵌 PNG 的 EXIF",
+      "status": "unsupported",
+      "summary": "ICO 目录与入口结构可见，内嵌 PNG 载荷不进入 EXIF 解析",
+      "affectedChains": [
+        "ImageMetadata"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "图片",
+      "item": "committed image fixture",
+      "status": "unsupported",
+      "summary": "共享分析器与提取链只有 synthetic 测试，无 JPEG/PNG/WebP/GIF/BMP/ICO/TIFF fixture 与 expected.json",
+      "affectedChains": [
+        "ImageMetadata"
       ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },

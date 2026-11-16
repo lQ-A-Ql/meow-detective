@@ -2,6 +2,11 @@ use super::*;
 use crate::analysis_service::capability::CandidateReadPolicy;
 use crate::analysis_service::extraction::linux::linux_candidate_read_limit;
 use crate::analysis_service::extraction::reader::read_candidate_source_with_progress;
+use evidence_access::file_service::{
+    analyze_image, ImageAnalyzeOptions, ImageByteSource, ImageStructureError, SeekableSource,
+    ANALYSIS_SCAN_LIMIT, BUFFER_FALLBACK_LIMIT,
+};
+use std::io::Cursor;
 
 const MAX_PLUGIN_INPUT_BYTES: usize = 128 * 1024 * 1024;
 
@@ -11,6 +16,10 @@ pub(super) fn estimated_input_weight(item: &CandidateWorkItem) -> usize {
         || is_unsupported_linux_candidate(&item.candidate)
     {
         return 0;
+    }
+    if item.capability.read_policy == CandidateReadPolicy::ImageStructure {
+        return usize::try_from(item.candidate.size.min(ANALYSIS_SCAN_LIMIT as u64))
+            .unwrap_or(ANALYSIS_SCAN_LIMIT);
     }
     let read_limit = candidate_read_limit(&item.candidate, item.capability);
     let primary = usize::try_from(item.candidate.size.min(read_limit as u64)).unwrap_or(read_limit);
@@ -41,6 +50,7 @@ fn candidate_read_limit(candidate: &EvidenceCandidate, capability: AnalysisCapab
             linux_candidate_read_limit(&normalize_evidence_path(&candidate.path))
         }
         CandidateReadPolicy::RegistryPreload => 0,
+        CandidateReadPolicy::ImageStructure => BUFFER_FALLBACK_LIMIT,
     }
 }
 
@@ -61,6 +71,9 @@ where
             capability,
             format!("plugin input and companions exceed the {MAX_PLUGIN_INPUT_BYTES} byte budget"),
         ));
+    }
+    if capability.read_policy == CandidateReadPolicy::ImageStructure {
+        return prepare_image_structure(coordinator, candidate, capability);
     }
     if candidate.category == "EventLogs" {
         return prepare_evtx_source(coordinator, candidate, capability, read_limit);
@@ -213,6 +226,102 @@ where
         });
     }
     Ok(loaded)
+}
+
+fn prepare_image_structure<F>(
+    coordinator: &mut CandidateCoordinator<'_, '_, '_, F>,
+    candidate: EvidenceCandidate,
+    capability: AnalysisCapability,
+) -> Result<PreparedWork<PreparedCandidate, CandidateCompletion>, AnalysisServiceError>
+where
+    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+{
+    let source = match (coordinator.file_reader)(&candidate, 0) {
+        Ok(source) => source,
+        Err(_) => return Ok(image_read_failure(candidate, capability)),
+    };
+    let mut source: Box<dyn ImageByteSource> = match source {
+        CandidateSource::Seekable(reader) => match SeekableSource::new(reader) {
+            Ok(source) => Box::new(source),
+            Err(_) => return Ok(image_read_failure(candidate, capability)),
+        },
+        CandidateSource::Bytes(bytes) => match SeekableSource::new(Cursor::new(bytes)) {
+            Ok(source) => Box::new(source),
+            Err(_) => return Ok(image_read_failure(candidate, capability)),
+        },
+        CandidateSource::Reader(reader) => {
+            if candidate.size > BUFFER_FALLBACK_LIMIT as u64 {
+                let warning = format!(
+                    "{} image structure exceeds the buffered fallback limit",
+                    candidate.path
+                );
+                return Ok(ready_deferred(candidate, capability, warning));
+            }
+            let bytes = match read_candidate_source_with_progress(
+                &candidate,
+                CandidateSource::Reader(reader),
+                BUFFER_FALLBACK_LIMIT,
+                coordinator.context.cancel_token,
+                |bytes_read| {
+                    coordinator.progress.report_read_progress(
+                        capability,
+                        &candidate,
+                        bytes_read,
+                        BUFFER_FALLBACK_LIMIT,
+                    );
+                },
+            ) {
+                Ok(bytes) => bytes,
+                Err(CandidateExtractionError::Warning(_)) => {
+                    return Ok(image_read_failure(candidate, capability));
+                }
+                Err(CandidateExtractionError::Cancelled) => {
+                    return Err(AnalysisServiceError::Cancelled);
+                }
+            };
+            match SeekableSource::new(Cursor::new(bytes)) {
+                Ok(source) => Box::new(source),
+                Err(_) => return Ok(image_read_failure(candidate, capability)),
+            }
+        }
+    };
+    let report = match analyze_image(
+        &mut *source,
+        &ImageAnalyzeOptions::analysis(),
+        coordinator.context.cancel_token,
+    ) {
+        Ok(report) => report,
+        Err(ImageStructureError::Cancelled) => return Err(AnalysisServiceError::Cancelled),
+        Err(ImageStructureError::Read(_)) => {
+            return Ok(image_read_failure(candidate, capability));
+        }
+    };
+    let bytes_read = usize::try_from(report.bytes_read)
+        .unwrap_or(usize::MAX)
+        .min(ANALYSIS_SCAN_LIMIT);
+    coordinator.progress.report_read_progress(
+        capability,
+        &candidate,
+        bytes_read,
+        ANALYSIS_SCAN_LIMIT,
+    );
+    let outcome = super::image_metadata::extract(&candidate, &report);
+    Ok(PreparedWork::Parallel {
+        input: PreparedCandidate {
+            candidate,
+            capability,
+            input: PreparedCandidateInput::Extraction(outcome),
+        },
+        weight_bytes: 0,
+    })
+}
+
+fn image_read_failure(
+    candidate: EvidenceCandidate,
+    capability: AnalysisCapability,
+) -> PreparedWork<PreparedCandidate, CandidateCompletion> {
+    let warning = format!("{} structure read failed", candidate.path);
+    ready_deferred(candidate, capability, warning)
 }
 
 fn prepare_evtx_source<F>(

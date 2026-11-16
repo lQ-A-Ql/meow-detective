@@ -82,6 +82,12 @@ pub use partition_roots::{
 };
 pub use preview_runtime::{PreviewRuntimeRegistry, PreviewRuntimeStats};
 pub use source_read::{PreparedSourceReadState, SourceReadContext, SourceReadFileHint};
+pub use viewer::image_structure::{
+    analyze_image, to_dto as image_analysis_to_dto, ExifBlockReport, ExifFields,
+    ImageAnalysisReport, ImageAnalysisStatus, ImageAnalyzeOptions, ImageByteSource, ImageFinding,
+    ImageFormat, ImageIssueSeverity, ImageSegmentReport, ImageStructureError, ImageStructureHashes,
+    ImageStructureReport, ImageWarning, SeekableSource, ANALYSIS_SCAN_LIMIT, BUFFER_FALLBACK_LIMIT,
+};
 pub use viewer::{
     clear_e01_reader_cache, clear_e01_reader_cache_for_case, get_file_path_for_entry,
     image_preview_for_file, media_preview_plan_for_file, media_range_for_file,

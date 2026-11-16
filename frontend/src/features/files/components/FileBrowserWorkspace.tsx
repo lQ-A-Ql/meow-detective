@@ -97,6 +97,7 @@ export function FileBrowserWorkspace({ model, mountModel }: FileBrowserWorkspace
               viewer={model.hexPreviewEnabled ? model.viewer : undefined}
               fileHandle={model.fileHandle}
               previewKind={model.previewKind}
+              imagePreviewOversized={model.imagePreviewOversized}
               onHexJumpInputChange={model.setJumpOffsetInput}
               onHexJump={model.jumpToOffset}
               onLoadNextHexRange={model.loadNextRange}
@@ -124,6 +125,7 @@ export function FileBrowserWorkspace({ model, mountModel }: FileBrowserWorkspace
             bitLockerTargetKey={model.bitLockerTargetKey}
             bitLocker={model.bitLocker}
             imageMetadata={model.imageMetadata}
+            imageMetadataOnly={model.imageMetadataOnly}
             imageMetadataLoading={model.imageMetadataLoading}
             imageMetadataError={model.imageMetadataError}
             onRetryImageMetadata={model.onRetryImageMetadata}

@@ -47,6 +47,11 @@ V2 长期计划与能力评级请同时参考：
 | JumpList | committed fixture | 缺失 | 有实现 (2 测试)，无 fixture，无 expected.json |
 | SRU | committed fixture | 缺失 | 有实现 (4 测试)，无 fixture，无 expected.json |
 | Thumbcache | committed fixture | 缺失 | 有实现 (3 测试)，无 fixture，无 expected.json |
+| 图片 | HEIC/HEIF、AVIF、JPEG XL、RAW 相机格式 | 不支持 | 当前 image metadata / S0 结构分析仅覆盖 JPEG/PNG/WebP/GIF/BMP/ICO/TIFF；上述容器不参与 magic 候选发现或解析 |
+| 图片 | 统计隐写分析（RS/SPA/DCT）与 LSB 提取 | 不支持 | 当前只做容器结构与 EXIF 元数据分析，不解码像素，不评估隐写容量，也不提取隐藏载荷 |
+| 图片 | TIFF 内联渲染 | 不支持 | TIFF viewer 返回 `imageMetadataOnly`，浏览器不渲染像素；EXIF 解码限定在有界前缀窗口内 |
+| 图片 | ICO 内嵌 PNG 的 EXIF | 不支持 | ICO 目录与入口结构可见，内嵌 PNG 载荷不进入 EXIF 解析 |
+| 图片 | committed image fixture | 缺失 | 共享分析器与提取链只有 synthetic 测试，无 JPEG/PNG/WebP/GIF/BMP/ICO/TIFF fixture 与 expected.json |
 | Browser | Chrome/Edge/Firefox 全版本完整兼容 | 部分支持 | Chromium/Firefox history、download、cookie、session 与 password metadata 解析链路已实现；缺公开完整 fixture/expected JSON、加密凭据解密和全部历史版本覆盖 |
 | Email | MSG (Outlook .msg) | 不支持 | OLE2 复合文档，超出当前范围，规划于 V4 或后续评估 |
 | Email | TNEF / winmail.dat | 不支持 | MS-OXTNEF 格式，规划于 V4 或后续评估 |

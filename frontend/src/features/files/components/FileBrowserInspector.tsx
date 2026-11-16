@@ -28,6 +28,7 @@ interface FileBrowserInspectorProps {
   bitLockerTargetKey?: string;
   bitLocker?: BitLockerVolumeModel;
   imageMetadata?: ImageMetadata | null;
+  imageMetadataOnly?: boolean;
   imageMetadataLoading?: boolean;
   imageMetadataError?: ApiErrorDto | null;
   onRetryImageMetadata?: () => void;
@@ -56,6 +57,7 @@ export function FileBrowserInspector({
   bitLockerTargetKey,
   bitLocker,
   imageMetadata,
+  imageMetadataOnly,
   imageMetadataLoading,
   imageMetadataError,
   onRetryImageMetadata,
@@ -117,6 +119,8 @@ export function FileBrowserInspector({
         {selectedFile?.entryType === 'file' && (imageMetadata || imageMetadataLoading || imageMetadataError) ? (
           <ImageMetadataInspector
             metadata={imageMetadata}
+            fileSize={selectedFile?.size}
+            metadataOnly={imageMetadataOnly}
             loading={Boolean(imageMetadataLoading)}
             error={imageMetadataError}
             onRetry={onRetryImageMetadata}

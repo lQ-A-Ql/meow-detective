@@ -36,6 +36,7 @@ function createDefaultProgress(): Record<ExtractionCategory, Omit<AnalysisExtrac
     RecycleBin: emptyProgress(),
     Thumbnails: emptyProgress(),
     ResourceUsage: emptyProgress(),
+    ImageMetadata: emptyProgress(),
     PluginArtifacts: emptyProgress(),
     LinuxArtifacts: emptyProgress(),
     LinuxJournal: emptyProgress(),

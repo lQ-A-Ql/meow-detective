@@ -60,6 +60,7 @@ export type ExtractionCategory =
   | 'RecycleBin'
   | 'Thumbnails'
   | 'ResourceUsage'
+  | 'ImageMetadata'
   | 'PluginArtifacts'
   | 'LinuxArtifacts'
   | 'LinuxJournal'
@@ -82,6 +83,7 @@ export const ANALYSIS_EXTRACTION_CATEGORIES = [
   'RecycleBin',
   'Thumbnails',
   'ResourceUsage',
+  'ImageMetadata',
   'PluginArtifacts',
   'LinuxArtifacts',
   'LinuxJournal',

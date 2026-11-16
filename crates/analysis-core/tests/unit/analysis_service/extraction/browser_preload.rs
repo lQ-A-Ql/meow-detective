@@ -403,10 +403,11 @@ fn elevation_service_selection_is_bound_to_the_chromium_family() {
 }
 
 fn preparation_catalog(conn: &rusqlite::Connection) -> PreparationCatalog {
-    crate::analysis_service::candidates::evidence_candidates_for_categories_with_preparation(
+    crate::analysis_service::candidates::evidence_candidates_for_categories_with_preparation_and_probe(
         conn,
         &["Registry", "BrowserHistory"],
         &AtomicBool::new(false),
+        &mut |_| Ok(None),
         |_| {},
     )
     .unwrap()

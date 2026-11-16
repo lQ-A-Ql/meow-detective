@@ -51,6 +51,39 @@ fn normal_windows_and_linux_sources_pass_platform_integrity() {
 }
 
 #[test]
+fn image_metadata_is_counted_as_cross_platform_without_a_mismatch() {
+    let snapshot = governance_snapshot(
+        "governance-cross-platform-image-metadata",
+        &[
+            ("windows-image", "windows", &["ImageMetadata"]),
+            ("linux-image", "linux", &["ImageMetadata"]),
+        ],
+    );
+
+    assert_eq!(
+        integrity_gate(&snapshot).status,
+        ReleaseGateStatusDto::Passed
+    );
+    assert_eq!(snapshot.platform_coverage.total_families, 1);
+    assert_eq!(
+        snapshot.platform_coverage.cross_platform_artifact_families,
+        1
+    );
+    assert!(snapshot
+        .platform_coverage
+        .cross_platform_families
+        .contains(&"ImageMetadata".to_string()));
+    assert!(!snapshot
+        .platform_coverage
+        .windows_families
+        .contains(&"ImageMetadata".to_string()));
+    assert!(!snapshot
+        .platform_coverage
+        .linux_families
+        .contains(&"ImageMetadata".to_string()));
+}
+
+#[test]
 fn windows_source_with_linux_artifact_is_blocked_and_not_counted_as_linux_coverage() {
     let snapshot = governance_snapshot(
         "governance-windows-pollution",

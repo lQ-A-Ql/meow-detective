@@ -33,6 +33,7 @@ const WINDOWS_PROGRESS_CATEGORIES: ExtractionCategory[] = [
   'RecycleBin',
   'Thumbnails',
   'ResourceUsage',
+  'ImageMetadata',
   'PluginArtifacts',
 ];
 
@@ -46,6 +47,7 @@ export const LINUX_PROGRESS_CATEGORIES: ExtractionCategory[] = [
   'LinuxSystemConfig',
   'LinuxWebServices',
   'LinuxMysqlServices',
+  'ImageMetadata',
   'PluginArtifacts',
 ];
 

@@ -98,6 +98,7 @@ fn empty_category_selection_is_scoped_to_windows() {
             "BrowserHistory",
             "Email",
             "EventLogs",
+            "ImageMetadata",
             "ProgramExecution",
             "RecycleBin",
             "Registry",
@@ -124,11 +125,13 @@ fn empty_category_selection_is_scoped_to_linux() {
     )
     .expect("run Linux analysis");
 
-    assert_eq!(run.sections.len(), 9);
+    assert_eq!(run.sections.len(), 10);
     assert!(run
         .sections
         .iter()
+        .filter(|section| section.key != "ImageMetadata")
         .all(|section| section.key.starts_with("Linux")));
+    assert!(section_keys(&run).contains(&"ImageMetadata"));
     assert!(!section_keys(&run).contains(&"Registry"));
 }
 

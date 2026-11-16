@@ -47,6 +47,17 @@ fn all_current_windows_capability_families_are_classified_as_windows() {
 }
 
 #[test]
+fn image_metadata_is_classified_as_cross_platform() {
+    let platform = classify_artifact_family("ImageMetadata");
+    assert_eq!(platform, ArtifactFamilyPlatform::CrossPlatform);
+    assert_eq!(platform.as_str(), "cross-platform");
+    assert!(platform.matches(domain::DataSourcePlatform::Windows));
+    assert!(platform.matches(domain::DataSourcePlatform::Linux));
+    assert!(!platform.matches(domain::DataSourcePlatform::Android));
+    assert!(!platform.matches(domain::DataSourcePlatform::Unknown));
+}
+
+#[test]
 fn unknown_family_is_not_silently_classified_as_windows() {
     assert_eq!(
         classify_artifact_family("UnknownFamily"),

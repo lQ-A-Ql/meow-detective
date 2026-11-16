@@ -18,8 +18,16 @@ interface UseFilePreviewOptions {
   caseId?: string;
 }
 
+const IMAGE_PREVIEW_BYTES_LIMIT = 5 * 1024 * 1024;
+
 function getPreviewKindFromHandle(value: unknown): FilePreviewKind | undefined {
-  return value === 'image' || value === 'video' || value === 'audio' || value === 'document' ? value : undefined;
+  return value === 'image' ||
+    value === 'video' ||
+    value === 'audio' ||
+    value === 'document' ||
+    value === 'imageMetadataOnly'
+    ? value
+    : undefined;
 }
 
 function normalizePreviewError(error: unknown): ApiErrorDto | null {
@@ -39,10 +47,13 @@ export function useFilePreview({ selectedFile, viewerTab, caseId }: UseFilePrevi
   const handleQuery = useFileHandle(selectedFile?.id, needsPreviewHandle || needsMetadataHandle, caseId);
   const fileHandle = handleQuery.data;
   const detectedPreviewKind = getPreviewKindFromHandle(fileHandle?.previewKind);
-  const previewKind = viewerTab === 'preview' ? detectedPreviewKind : undefined;
+  const previewKind = detectedPreviewKind;
+  const imagePreviewOversized =
+    detectedPreviewKind === 'image' && Boolean(selectedFile?.size && selectedFile.size > IMAGE_PREVIEW_BYTES_LIMIT);
   const hexPreviewEnabled = viewerTab === 'hex' && Boolean(selectedFile?.id);
   const textPreviewEnabled = viewerTab === 'text' && Boolean(selectedFile?.id);
-  const imagePreviewEnabled = viewerTab === 'preview' && previewKind === 'image' && Boolean(selectedFile?.id);
+  const imagePreviewEnabled =
+    viewerTab === 'preview' && previewKind === 'image' && !imagePreviewOversized && Boolean(selectedFile?.id);
   const mediaPreviewEnabled =
     viewerTab === 'preview' && (previewKind === 'video' || previewKind === 'audio') && Boolean(selectedFile?.id);
   const documentPreviewEnabled = viewerTab === 'preview' && previewKind === 'document' && Boolean(selectedFile?.id);
@@ -52,7 +63,7 @@ export function useFilePreview({ selectedFile, viewerTab, caseId }: UseFilePrevi
   const imageQuery = useImagePreview(selectedFile?.id, imagePreviewEnabled, caseId);
   const imageMetadataQuery = useImageMetadata(
     selectedFile?.id,
-    Boolean(selectedFile?.id) && detectedPreviewKind === 'image',
+    Boolean(selectedFile?.id) && (detectedPreviewKind === 'image' || detectedPreviewKind === 'imageMetadataOnly'),
     caseId,
   );
   const mediaQuery = useMediaUrl(selectedFile?.id, mediaPreviewEnabled, caseId);
@@ -62,7 +73,7 @@ export function useFilePreview({ selectedFile, viewerTab, caseId }: UseFilePrevi
       ? viewerQuery
       : viewerTab === 'text'
         ? textQuery
-        : viewerTab === 'metadata' || (viewerTab === 'preview' && !previewKind)
+        : viewerTab === 'metadata' || (viewerTab === 'preview' && (!previewKind || previewKind === 'imageMetadataOnly'))
           ? handleQuery
           : previewKind === 'image'
             ? imageQuery
@@ -79,6 +90,8 @@ export function useFilePreview({ selectedFile, viewerTab, caseId }: UseFilePrevi
   return {
     fileHandle,
     previewKind,
+    imagePreviewOversized,
+    imageMetadataOnly: detectedPreviewKind === 'imageMetadataOnly',
     hexPreviewEnabled,
     viewer,
     setJumpOffsetInput,

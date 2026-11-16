@@ -41,6 +41,7 @@ mod admission;
 mod browser_preparation;
 mod checkpoint;
 mod completion;
+mod image_metadata;
 mod output;
 mod panic_diagnostics;
 mod registry_input;

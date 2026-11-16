@@ -28,7 +28,10 @@
       "derivedEvidence": "Derived evidence"
     }
   },
-  "nestedEvidence": { "title": "Nested evidence import", "openResult": "Browse derived evidence" },
+  "nestedEvidence": {
+    "title": "Nested evidence import",
+    "openResult": "Browse derived evidence"
+  },
   "contentIndex": {
     "build": "Build content index",
     "selectSource": "Choose an index source",
@@ -497,7 +500,14 @@
     }
   },
   "artifacts": {
-    "systemd": { "states": { "enabled": "Enabled", "disabled": "Disabled", "masked": "Masked", "static": "Static" } },
+    "systemd": {
+      "states": {
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "masked": "Masked",
+        "static": "Static"
+      }
+    },
     "columns": {
       "familyPath": "{{family}} path",
       "targetPath": "Target path",
@@ -977,7 +987,98 @@
       "resizeHandle": "Drag to resize the preview height",
       "imageMetadata": {
         "loading": "Reading image metadata…",
-        "status": "Status"
+        "status": "Status",
+        "states": {
+          "present": "Present",
+          "absent": "No EXIF",
+          "unsupported": "Unsupported",
+          "corrupt": "Corrupt",
+          "oversized": "Exceeds bounded read limit"
+        },
+        "statuses": {
+          "present": "Present",
+          "absent": "No EXIF",
+          "unsupported": "Unsupported",
+          "corrupt": "Corrupt",
+          "oversized": "Exceeds bounded read limit"
+        },
+        "sections": {
+          "exif": "EXIF attributes",
+          "structure": "Container structure",
+          "warnings": "Warnings",
+          "hashes": "Hashes"
+        },
+        "fields": {
+          "format": "Format",
+          "width": "Width",
+          "height": "Height",
+          "dimensions": "Dimensions",
+          "fileSize": "File size",
+          "orientation": "Orientation",
+          "make": "Make",
+          "model": "Model",
+          "software": "Software",
+          "dateTimeOriginal": "Captured",
+          "createDate": "Created",
+          "modifyDate": "Modified",
+          "lensModel": "Lens",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "altitude": "Altitude",
+          "gpsDateTime": "GPS time",
+          "declaredEnd": "Declared end",
+          "trailingBytes": "Trailing bytes",
+          "truncated": "Truncated",
+          "segmentCount": "Segments",
+          "segments": "Segment list",
+          "findings": "Structure findings",
+          "offset": "Offset",
+          "length": "Length",
+          "decoded": "Decoded",
+          "fieldCount": "Fields"
+        },
+        "hashLabels": {
+          "wholeFile": "Whole-file SHA-256",
+          "trailing": "Trailing-data SHA-256"
+        },
+        "warningCodes": {
+          "image": {
+            "truncated": "The container is truncated before its declared end.",
+            "trailing-data": "Bytes follow the declared end of the container.",
+            "segment-limit": "Segment enumeration stopped at the analysis limit.",
+            "hash": {
+              "skipped-oversized": "Hashing was skipped because the trailing data exceeds the limit."
+            },
+            "exif": {
+              "multiple-blocks": "Multiple EXIF blocks were found.",
+              "decode-failed": "An EXIF block could not be decoded.",
+              "block-too-large": "An EXIF block exceeds the read limit.",
+              "block-limit": "The EXIF block count reached the analysis limit."
+            },
+            "jpeg": {
+              "eoi-missing": "The JPEG end-of-image marker is missing."
+            },
+            "png": {
+              "crc-invalid": "A PNG chunk failed its CRC check.",
+              "missing-iend": "The PNG IEND chunk is missing."
+            },
+            "gif": {
+              "missing-trailer": "The GIF trailer is missing."
+            },
+            "tiff": {
+              "ifd-outside-window": "An IFD points outside the bounded read window.",
+              "window-limited": "TIFF metadata is limited to the bounded read window."
+            }
+          }
+        },
+        "metadataOnlyTitle": "Metadata-only image",
+        "metadataOnlyDetail": "TIFF is parsed for metadata only; inline browser preview is not supported.",
+        "truncatedList": "Segment list truncated to the analysis limit.",
+        "copyHash": "Copy hash",
+        "copied": "Copied",
+        "absent": "No readable EXIF or media metadata was found.",
+        "unsupported": "This image format does not support metadata parsing.",
+        "corrupt": "The image metadata structure is corrupt; no fields were returned."
       }
     }
   },
@@ -1228,7 +1329,10 @@
       "modifiedAt": "Modified",
       "source": "Source"
     },
-    "sources": { "content": "Content", "metadata": "Metadata" },
+    "sources": {
+      "content": "Content",
+      "metadata": "Metadata"
+    },
     "empty": {
       "noMatch": "No matching files",
       "noMatchDescription": "Try changing the name, path or filters.",
@@ -2046,6 +2150,7 @@
       "RecycleBin": "Recycle bin",
       "Thumbnails": "Thumbnail cache",
       "ResourceUsage": "Resource usage",
+      "ImageMetadata": "Image metadata",
       "PluginArtifacts": "Plugin analysis",
       "LinuxArtifacts": "Linux Artifact Extraction",
       "LinuxJournal": "Linux Journal Extraction",
@@ -3008,7 +3113,9 @@
       "tableEmptyDescription": "This section has no data rows to display."
     },
     "image": {
-      "loading": "Loading image preview..."
+      "loading": "Loading image preview...",
+      "oversizedTitle": "Inline preview skipped",
+      "oversizedDetail": "This image exceeds the inline preview limit (5 MiB). Use the metadata tab or extract the file for analysis."
     },
     "media": {
       "loading": "Loading {{type}} preview...",

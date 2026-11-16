@@ -28,7 +28,10 @@
       "derivedEvidence": "派生证据"
     }
   },
-  "nestedEvidence": { "title": "嵌套证据导入", "openResult": "浏览派生证据" },
+  "nestedEvidence": {
+    "title": "嵌套证据导入",
+    "openResult": "浏览派生证据"
+  },
   "contentIndex": {
     "build": "构建内容索引",
     "selectSource": "选择索引数据源",
@@ -497,7 +500,14 @@
     }
   },
   "artifacts": {
-    "systemd": { "states": { "enabled": "已启用", "disabled": "已禁用", "masked": "已屏蔽", "static": "静态" } },
+    "systemd": {
+      "states": {
+        "enabled": "已启用",
+        "disabled": "已禁用",
+        "masked": "已屏蔽",
+        "static": "静态"
+      }
+    },
     "columns": {
       "familyPath": "{{family}} 路径",
       "targetPath": "目标路径",
@@ -556,7 +566,11 @@
       "actions": "关联动作"
     },
     "rangeTo": "至",
-    "rangeSelector": { "label": "拖动时间轴选择区间", "start": "拖动起始时间", "end": "拖动结束时间" },
+    "rangeSelector": {
+      "label": "拖动时间轴选择区间",
+      "start": "拖动起始时间",
+      "end": "拖动结束时间"
+    },
     "histogram": {
       "label": "事件密度图",
       "noRange": "无时间区间",
@@ -973,7 +987,98 @@
       "resizeHandle": "拖拽调整预览区高度",
       "imageMetadata": {
         "loading": "正在读取图片元数据…",
-        "status": "状态"
+        "status": "状态",
+        "states": {
+          "present": "已发现",
+          "absent": "无 EXIF",
+          "unsupported": "不支持",
+          "corrupt": "结构损坏",
+          "oversized": "超出有界读取限制"
+        },
+        "statuses": {
+          "present": "已发现",
+          "absent": "无 EXIF",
+          "unsupported": "不支持",
+          "corrupt": "结构损坏",
+          "oversized": "超出有界读取限制"
+        },
+        "sections": {
+          "exif": "EXIF 属性",
+          "structure": "容器结构",
+          "warnings": "警告",
+          "hashes": "哈希"
+        },
+        "fields": {
+          "format": "格式",
+          "width": "宽度",
+          "height": "高度",
+          "dimensions": "尺寸",
+          "fileSize": "文件大小",
+          "orientation": "方向",
+          "make": "厂商",
+          "model": "型号",
+          "software": "软件",
+          "dateTimeOriginal": "拍摄时间",
+          "createDate": "创建时间",
+          "modifyDate": "修改时间",
+          "lensModel": "镜头",
+          "latitude": "纬度",
+          "longitude": "经度",
+          "altitude": "海拔",
+          "gpsDateTime": "GPS 时间",
+          "declaredEnd": "声明结束位置",
+          "trailingBytes": "尾部字节",
+          "truncated": "截断",
+          "segmentCount": "段数量",
+          "segments": "段列表",
+          "findings": "结构发现",
+          "offset": "偏移",
+          "length": "长度",
+          "decoded": "已解码",
+          "fieldCount": "字段数"
+        },
+        "hashLabels": {
+          "wholeFile": "整文件 SHA-256",
+          "trailing": "尾部数据 SHA-256"
+        },
+        "warningCodes": {
+          "image": {
+            "truncated": "容器在声明结束位置之前被截断。",
+            "trailing-data": "容器声明结束位置之后仍存在数据。",
+            "segment-limit": "段枚举已达到分析上限。",
+            "hash": {
+              "skipped-oversized": "尾部数据超出上限，已跳过哈希计算。"
+            },
+            "exif": {
+              "multiple-blocks": "发现多个 EXIF 区块。",
+              "decode-failed": "某个 EXIF 区块无法解码。",
+              "block-too-large": "某个 EXIF 区块超出读取上限。",
+              "block-limit": "EXIF 区块数量已达到分析上限。"
+            },
+            "jpeg": {
+              "eoi-missing": "缺少 JPEG 图像结束标记。"
+            },
+            "png": {
+              "crc-invalid": "某个 PNG 区块未通过 CRC 校验。",
+              "missing-iend": "缺少 PNG IEND 区块。"
+            },
+            "gif": {
+              "missing-trailer": "缺少 GIF 结束标记。"
+            },
+            "tiff": {
+              "ifd-outside-window": "某个 IFD 指向有界读取窗口之外。",
+              "window-limited": "TIFF 元数据仅覆盖有界读取窗口。"
+            }
+          }
+        },
+        "metadataOnlyTitle": "仅元数据图片",
+        "metadataOnlyDetail": "TIFF 仅支持元数据解析，浏览器不支持内联预览。",
+        "truncatedList": "段列表已按分析上限截断。",
+        "copyHash": "复制哈希",
+        "copied": "已复制",
+        "absent": "未发现可解析的 EXIF 或媒体元数据。",
+        "unsupported": "当前图片格式不支持元数据解析。",
+        "corrupt": "图片元数据结构损坏，未返回字段。"
       }
     }
   },
@@ -1224,7 +1329,10 @@
       "modifiedAt": "修改时间",
       "source": "数据源"
     },
-    "sources": { "content": "内容", "metadata": "元数据" },
+    "sources": {
+      "content": "内容",
+      "metadata": "元数据"
+    },
     "empty": {
       "noMatch": "没有匹配的文件",
       "noMatchDescription": "尝试修改文件名、路径或筛选条件。",
@@ -1437,7 +1545,11 @@
         "chunk": "块大小",
         "members": "成员",
         "filesystem": "后续文件系统",
-        "filesystemStatus": { "candidate": "文件系统候选", "confirmed": "文件系统已确认", "unknown": "文件系统未知" },
+        "filesystemStatus": {
+          "candidate": "文件系统候选",
+          "confirmed": "文件系统已确认",
+          "unknown": "文件系统未知"
+        },
         "device": "设备",
         "dataSize": "可用数据",
         "dataOffset": "数据偏移（扇区）",
@@ -2038,6 +2150,7 @@
       "RecycleBin": "回收站",
       "Thumbnails": "缩略图缓存",
       "ResourceUsage": "资源使用",
+      "ImageMetadata": "图片元数据与结构",
       "PluginArtifacts": "插件分析",
       "LinuxArtifacts": "Linux 痕迹提取",
       "LinuxJournal": "Linux 日志提取",
@@ -2112,7 +2225,10 @@
     "title": "镜像仿真",
     "statusTitle": "虚拟机状态",
     "activeSummary": "当前活跃虚拟机 {{count}} 台",
-    "settings": { "title": "仿真设置", "description": "配置启动介质、客体资源和系统绕密选项。" },
+    "settings": {
+      "title": "仿真设置",
+      "description": "配置启动介质、客体资源和系统绕密选项。"
+    },
     "emptyCase": "打开案件后可管理镜像仿真会话。",
     "loading": "正在读取仿真状态...",
     "metrics": {
@@ -2997,7 +3113,9 @@
       "tableEmptyDescription": "该段没有可展示的数据行。"
     },
     "image": {
-      "loading": "加载图片预览..."
+      "loading": "加载图片预览...",
+      "oversizedTitle": "已跳过内联预览",
+      "oversizedDetail": "图片超过内联预览上限（5 MiB）。请使用元数据页签或提取文件进行分析。"
     },
     "media": {
       "loading": "加载{{type}}预览...",

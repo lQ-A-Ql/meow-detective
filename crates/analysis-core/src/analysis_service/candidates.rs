@@ -5,6 +5,8 @@
 
 mod common;
 mod companion_index;
+mod definitions;
+mod discovery;
 mod identity;
 mod linux;
 mod plugin;
@@ -17,8 +19,8 @@ pub use common::{
     normalize_evidence_path, EvidenceCandidate, EvidenceCategoryDef,
 };
 pub(crate) use common::{
-    evidence_candidates_for_categories_with_preparation, evidence_relative_path,
-    find_candidate_by_path_suffix,
+    evidence_candidates_for_categories_with_preparation_and_probe, evidence_relative_path,
+    find_candidate_by_path_suffix, magic_probe_candidate,
 };
 pub(crate) use linux::{
     collect_linux_artifact_catalog, LinuxArtifactCatalogSummary, LinuxCatalogMetadata,
@@ -29,7 +31,7 @@ pub(crate) use preparation::PreparationCatalog;
 pub use summary::get_evidence_classification_summary;
 pub(crate) use windows::is_browser_history_path;
 
-use common::{EMAIL_CATEGORY_DEF, FILE_TYPE_INVENTORY_CATEGORY_DEF};
+use common::{EMAIL_CATEGORY_DEF, FILE_TYPE_INVENTORY_CATEGORY_DEF, IMAGE_METADATA_CATEGORY_DEF};
 use linux::LINUX_ARTIFACTS_CATEGORY_DEF;
 use windows::{
     BROWSER_HISTORY_CATEGORY_DEF, EVENT_LOGS_CATEGORY_DEF, PROGRAM_EXECUTION_CATEGORY_DEF,
@@ -51,6 +53,7 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
     BROWSER_HISTORY_CATEGORY_DEF,
     EMAIL_CATEGORY_DEF,
     FILE_TYPE_INVENTORY_CATEGORY_DEF,
+    IMAGE_METADATA_CATEGORY_DEF,
     LINUX_ARTIFACTS_CATEGORY_DEF,
 ];
 

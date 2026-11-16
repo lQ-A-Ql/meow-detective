@@ -34,6 +34,7 @@ where
     };
     let kind = match magic.file_type {
         "JPEG" | "PNG" | "GIF" | "BMP" | "WEBP" | "ICO" => ViewerPreviewKindDto::Image,
+        "TIFF" => ViewerPreviewKindDto::ImageMetadataOnly,
         "MP4" | "MKV" | "AVI" => ViewerPreviewKindDto::Video,
         "MP3" | "M4A" | "WAV" | "FLAC" | "OGG" => ViewerPreviewKindDto::Audio,
         "PDF" | "DOCX" | "XLSX" | "PPTX" | "SQLite" => ViewerPreviewKindDto::Document,
@@ -58,9 +59,7 @@ where
 
     let descriptor =
         descriptor_for_file_with_cache(&mut context, &FileEntryId(file_id.to_string()))?;
-    let detected = detect_preview_for_file(&mut context, file_id)
-        .ok()
-        .flatten();
+    let detected = detect_preview_for_file(&mut context, file_id)?;
     let mime = detected
         .as_ref()
         .map(|value| value.mime.to_string())
@@ -85,9 +84,7 @@ pub(crate) fn open_file_handle_uncached(
 
     validate_readable_file_entry(conn, &entry)?;
     let mut read_conn = conn;
-    let detected = detect_preview_for_file(&mut read_conn, file_id)
-        .ok()
-        .flatten();
+    let detected = detect_preview_for_file(&mut read_conn, file_id)?;
     let mime = detected
         .as_ref()
         .map(|value| value.mime.to_string())

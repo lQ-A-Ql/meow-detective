@@ -9,6 +9,8 @@ pub enum ViewerPreviewKindDto {
     Video,
     Audio,
     Document,
+    /// Container metadata is available, but the format has no inline preview.
+    ImageMetadataOnly,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,6 +185,12 @@ pub struct ImageMetadataDto {
     pub altitude: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gps_date_time: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<ImageMetadataWarningDto>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exif_blocks: Vec<ImageExifBlockDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structure: Option<ImageStructureDto>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -193,6 +201,86 @@ pub enum ImageMetadataStatusDto {
     Unsupported,
     Corrupt,
     Oversized,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ImageIssueSeverityDto {
+    Info,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageMetadataWarningDto {
+    pub code: String,
+    pub severity: ImageIssueSeverityDto,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageExifBlockDto {
+    pub source: String,
+    pub offset: u64,
+    pub length: u64,
+    pub decoded: bool,
+    pub field_count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<ImageMetadataWarningDto>,
+}
+
+/// Bounded container-level (S0) structure evidence for one image.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageStructureDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub declared_end: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trailing_bytes: Option<u64>,
+    pub truncated: bool,
+    pub segment_count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<ImageSegmentDto>,
+    pub segments_truncated: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<ImageStructureFindingDto>,
+    pub hashes: ImageStructureHashesDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageSegmentDto {
+    pub kind: String,
+    pub offset: u64,
+    pub length: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageStructureFindingDto {
+    pub code: String,
+    pub severity: ImageIssueSeverityDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageStructureHashesDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub whole_file_sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trailing_sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trailing_hashed_bytes: Option<u64>,
 }
 
 /// Media URL DTO

@@ -5,11 +5,34 @@ use super::super::state::{
     DiagnosticScanKeys,
 };
 use super::*;
+use crate::analysis_service::candidates::{
+    evidence_candidates_for_categories_with_preparation_and_probe, magic_probe_candidate,
+};
 use crate::analysis_service::capability::PLUGIN_CAPABILITY_KEY;
+use infrastructure::constants::IMAGE_MAGIC_HEADER_BYTES;
+use infrastructure::file_magic;
+use persistence_source::fjall::FileEntryRecord;
 use persistence_sqlite::repositories::analysis_scan_repo::CompleteAnalysisCandidateScan;
 use std::collections::HashMap;
 
 type CompleteScanKeys = HashMap<AnalysisCheckpointKey, CompleteAnalysisCandidateScan>;
+
+pub(super) fn build_magic_probe<'a, F>(
+    file_reader: &'a mut F,
+) -> impl FnMut(&FileEntryRecord) -> Result<Option<&'static str>, String> + 'a
+where
+    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+{
+    move |entry| {
+        let candidate = magic_probe_candidate(entry);
+        match file_reader(&candidate, IMAGE_MAGIC_HEADER_BYTES)? {
+            CandidateSource::Bytes(bytes) => Ok(file_magic::detect(&bytes, "")
+                .filter(|magic| magic.family == "images")
+                .map(|magic| magic.file_type)),
+            CandidateSource::Seekable(_) | CandidateSource::Reader(_) => Ok(None),
+        }
+    }
+}
 
 pub(super) struct CheckpointScans {
     clean: CleanScanKeys,
@@ -72,6 +95,7 @@ pub(super) fn discover_run_candidates(
     plugin_extractors: &[&dyn ArtifactExtractor],
     cancel_token: &AtomicBool,
     progress: &mut ExtractionProgressReporter<'_>,
+    probe: &mut dyn FnMut(&FileEntryRecord) -> Result<Option<&'static str>, String>,
 ) -> Result<
     (
         Vec<EvidenceCandidate>,
@@ -83,10 +107,11 @@ pub(super) fn discover_run_candidates(
     let categories = discovery_categories(selected);
     let started = Instant::now();
     let (mut candidates, kernel, mut preparation_catalog) =
-        evidence_candidates_for_categories_with_preparation(
+        evidence_candidates_for_categories_with_preparation_and_probe(
             conn,
             &categories,
             cancel_token,
+            probe,
             |records| {
                 progress.report_work(AnalysisWorkStageDto::Discovery, started, records, 0, false);
             },

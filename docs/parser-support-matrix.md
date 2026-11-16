@@ -28,7 +28,8 @@ V2 长期执行与发布口径见：
 
 Windows/Linux 原生解析由目录发布后的自动导入流程触发。Windows 包含 Registry、
 BrowserHistory、Email、EventLogs、ProgramExecution、UserActivity、RecycleBin、
-Thumbnails、ResourceUsage 以及可用插件；Linux 使用 LinuxArtifacts 能力集合。
+Thumbnails、ResourceUsage、ImageMetadata 以及可用插件；Linux 使用 LinuxArtifacts
+能力集合与 ImageMetadata。
 目录状态 `ready` 表示可以浏览，解析完成状态由后续处理阶段单独记录。
 
 插件系统提供专用 `run_plugin_extraction` 手动入口，请求仅含 dataSourceId，服务端
@@ -134,6 +135,7 @@ VMDK 是会话 COW overlay 的宿主材料，与“把用户选择的 VMDK 作�
 | JumpList | Windows | Experimental | `windows-parsers/f01b4d95cf55d32a.automaticDestinations-ms`、`368d807282ccde9d.customDestinations-ms` | sootmark-shell 与 JLECmd oracle | **planned** — more JumpList samples | 支持标准 AutomaticDestinations/CustomDestinations 后缀与结构；内嵌项目保留原文件 ID |
 | SRU | Windows | Experimental | `windows-parsers/SRUDB.dat.gz` | sootmark-ese、esentutl header oracle | **planned** — SRU table samples | 仅 ESE header 元数据：版本、page size、database state；不承诺应用或网络用量表 |
 | Thumbcache | Windows | Experimental | `windows-parsers/thumbcache_v21.db`、`thumbcache_v32.db` | sootmark-imagecache 与独立 TSV oracle | **planned** — remaining format variants | 格式 20/21/30/31/32 使用版本化库；当前公开样本覆盖 21/32，checksum 异常明确标注 |
+| Image metadata / S0 structure | Windows / Linux | Experimental | synthetic unit/integration tests；无 committed 图片 fixture | `evidence-access::file_service::viewer::image_structure` 共享分析器 + `analysis-core` ImageMetadata extraction + magic 候选发现；JPEG/PNG/WebP/GIF/BMP/ICO/TIFF 的 format、dimensions、EXIF 扁平字段与 `exifBlocks`、容器结构（`declaredEnd`/`trailingBytes`/`truncated`/`segments`/`findings`）与有界哈希；TIFF viewer 返回 metadata-only | **planned** — public-small JPEG/PNG/WebP/GIF/BMP/ICO/TIFF + malformed/truncated/trailing variants | 候选发现只使用 magic 分类器，不使用扩展名；不承诺统计隐写分析、LSB 提取、HEIC/AVIF/JPEG XL/RAW、TIFF 渲染或 ICO 内嵌 PNG 的 EXIF |
 | Chrome History | 跨平台 | Supported | 无 | URL / 标题 / 访问时间 / 下载 | **planned** (2026-Q3) — controlled VM snapshot, 500+ history entries, 50+ downloads, 100+ cookies, 2 profiles | medium fixture 规划中 (Chrome SQLite) |
 | Edge History | 跨平台 | Supported | 无 | URL / 标题 / 访问时间 / 下载 | **planned** (2026-Q3) — controlled VM snapshot, 300+ history, 20+ downloads, 80+ cookies | medium fixture 规划中 (Edge Chromium SQLite) |
 | Firefox History | 跨平台 | Supported | 无 | URL / 标题 / 访问时间 / 下载 | **planned** (2026-Q3) — controlled VM snapshot, 300+ URLs in places.sqlite, 500+ visits, 30+ downloads.json, 80+ cookies | medium fixture 规划中 (Firefox SQLite) |

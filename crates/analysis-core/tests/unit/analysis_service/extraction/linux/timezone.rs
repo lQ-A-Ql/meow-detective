@@ -52,10 +52,11 @@ fn bytes_reader(
 }
 
 fn preparation_catalog(conn: &rusqlite::Connection) -> PreparationCatalog {
-    crate::analysis_service::candidates::evidence_candidates_for_categories_with_preparation(
+    crate::analysis_service::candidates::evidence_candidates_for_categories_with_preparation_and_probe(
         conn,
         &["LinuxArtifacts"],
         &AtomicBool::new(false),
+        &mut |_| Ok(None),
         |_| {},
     )
     .unwrap()

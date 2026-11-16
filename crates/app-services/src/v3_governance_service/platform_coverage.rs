@@ -46,6 +46,7 @@ pub(super) fn build_platform_coverage(
         .map_err(|error| V3GovernanceError::Other(error.to_string()))?;
     let mut windows = BTreeSet::new();
     let mut linux = BTreeSet::new();
+    let mut cross = BTreeSet::new();
     let mut unknown = BTreeSet::new();
     let mut observed = BTreeSet::new();
 
@@ -58,19 +59,16 @@ pub(super) fn build_platform_coverage(
             ArtifactFamilyPlatform::Linux => {
                 linux.insert(family);
             }
+            ArtifactFamilyPlatform::CrossPlatform => {
+                cross.insert(family);
+            }
             ArtifactFamilyPlatform::Unknown => {
                 unknown.insert(family);
             }
         }
     }
 
-    Ok(coverage_dto(
-        windows,
-        linux,
-        BTreeSet::new(),
-        unknown,
-        observed.len(),
-    ))
+    Ok(coverage_dto(windows, linux, cross, unknown, observed.len()))
 }
 
 pub(super) fn build_platform_coverage_for_case(
@@ -90,6 +88,7 @@ pub(super) fn assess_source_artifact_counts(
 ) -> PlatformCoverageAssessment {
     let mut windows = BTreeSet::new();
     let mut linux = BTreeSet::new();
+    let mut cross = BTreeSet::new();
     let mut unknown = BTreeSet::new();
     let mut observed = BTreeSet::new();
     let mut mismatches = Vec::new();
@@ -109,6 +108,9 @@ pub(super) fn assess_source_artifact_counts(
             ArtifactFamilyPlatform::Linux if family_platform.matches(source_count.platform) => {
                 linux.insert(source_count.family);
             }
+            ArtifactFamilyPlatform::CrossPlatform => {
+                cross.insert(source_count.family);
+            }
             expected_platform => mismatches.push(PlatformMismatch {
                 observed: source_count,
                 expected_platform,
@@ -117,7 +119,7 @@ pub(super) fn assess_source_artifact_counts(
     }
 
     PlatformCoverageAssessment {
-        coverage: coverage_dto(windows, linux, BTreeSet::new(), unknown, observed.len()),
+        coverage: coverage_dto(windows, linux, cross, unknown, observed.len()),
         mismatches,
         unclassified,
     }

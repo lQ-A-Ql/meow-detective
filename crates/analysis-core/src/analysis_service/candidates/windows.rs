@@ -1,4 +1,4 @@
-use super::common::{EvidenceCategoryDef, EvidencePathPattern};
+use super::common::{EvidenceCategoryDef, EvidenceDiscovery, EvidencePathPattern};
 use artifacts_core::ArtifactExtractor;
 
 pub(super) const SYSTEM_INFORMATION_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -16,6 +16,7 @@ pub(super) const SYSTEM_INFORMATION_CATEGORY_DEF: EvidenceCategoryDef = Evidence
         EvidencePathPattern::Suffix("/usrclass.dat"),
     ],
     matcher: None,
+    discovery: EvidenceDiscovery::PathPatterns,
 };
 
 pub(super) const REGISTRY_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -35,6 +36,7 @@ pub(super) const REGISTRY_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDe
         EvidencePathPattern::Suffix("/windows/appcompat/programs/amcache.hve"),
     ],
     matcher: None,
+    discovery: EvidenceDiscovery::PathPatterns,
 };
 
 pub(super) const EVENT_LOGS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -45,6 +47,7 @@ pub(super) const EVENT_LOGS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategory
     artifact_families: &[],
     patterns: &[EvidencePathPattern::Suffix(".evtx")],
     matcher: None,
+    discovery: EvidenceDiscovery::PathPatterns,
 };
 
 pub(super) const PROGRAM_EXECUTION_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -62,6 +65,7 @@ pub(super) const PROGRAM_EXECUTION_CATEGORY_DEF: EvidenceCategoryDef = EvidenceC
         EvidencePathPattern::Contains("/windows/prefetch/"),
     ],
     matcher: Some(is_program_execution_path),
+    discovery: EvidenceDiscovery::PathPatterns,
 };
 
 pub(super) const USER_ACTIVITY_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -78,6 +82,7 @@ pub(super) const USER_ACTIVITY_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCateg
         EvidencePathPattern::Contains("/shellbags"),
     ],
     matcher: Some(is_user_activity_path),
+    discovery: EvidenceDiscovery::PathPatterns,
 };
 
 pub(super) const RECYCLE_BIN_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -91,6 +96,7 @@ pub(super) const RECYCLE_BIN_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategor
         EvidencePathPattern::Contains("/recycler/"),
     ],
     matcher: Some(is_recycle_bin_path),
+    discovery: EvidenceDiscovery::PathPatterns,
 };
 
 pub(super) const THUMBNAILS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -104,6 +110,7 @@ pub(super) const THUMBNAILS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategory
         EvidencePathPattern::Contains("/iconcache_"),
     ],
     matcher: Some(is_thumbnail_path),
+    discovery: EvidenceDiscovery::PathPatterns,
 };
 
 pub(super) const RESOURCE_USAGE_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -116,6 +123,7 @@ pub(super) const RESOURCE_USAGE_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCate
         "/windows/system32/sru/srudb.dat",
     )],
     matcher: None,
+    discovery: EvidenceDiscovery::PathPatterns,
 };
 
 pub(super) const BROWSER_HISTORY_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCategoryDef {
@@ -151,6 +159,7 @@ pub(super) const BROWSER_HISTORY_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCat
         EvidencePathPattern::Suffix("/extensions.json"),
     ],
     matcher: Some(is_browser_history_path),
+    discovery: EvidenceDiscovery::PathPatterns,
 };
 
 fn is_program_execution_path(path: &str) -> bool {

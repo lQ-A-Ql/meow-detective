@@ -2,7 +2,7 @@ export interface ViewerHandle {
   handleId: string;
   size: number;
   mime?: string;
-  previewKind?: 'image' | 'video' | 'audio' | 'document';
+  previewKind?: 'image' | 'video' | 'audio' | 'document' | 'imageMetadataOnly';
 }
 
 export interface ViewerRangeRequest {
@@ -98,6 +98,54 @@ export interface ImagePreviewResponse {
 }
 
 export type ImageMetadataStatus = 'present' | 'absent' | 'unsupported' | 'corrupt' | 'oversized';
+export type ImageIssueSeverity = 'info' | 'warning' | 'error';
+
+export interface ImageMetadataWarning {
+  code: string;
+  severity: ImageIssueSeverity;
+  message: string;
+  offset?: number;
+}
+
+export interface ImageExifBlock {
+  source: string;
+  offset: number;
+  length: number;
+  decoded: boolean;
+  fieldCount: number;
+  warnings: ImageMetadataWarning[];
+}
+
+export interface ImageSegment {
+  kind: string;
+  offset: number;
+  length: number;
+  detail?: string;
+}
+
+export interface ImageStructureFinding {
+  code: string;
+  severity: ImageIssueSeverity;
+  offset?: number;
+  detail?: string;
+}
+
+export interface ImageStructureHashes {
+  wholeFileSha256?: string;
+  trailingSha256?: string;
+  trailingHashedBytes?: number;
+}
+
+export interface ImageStructure {
+  declaredEnd?: number;
+  trailingBytes?: number;
+  truncated: boolean;
+  segmentCount: number;
+  segments: ImageSegment[];
+  segmentsTruncated: boolean;
+  findings: ImageStructureFinding[];
+  hashes: ImageStructureHashes;
+}
 
 export interface ImageMetadata {
   status: ImageMetadataStatus;
@@ -116,6 +164,9 @@ export interface ImageMetadata {
   longitude?: number;
   altitude?: number;
   gpsDateTime?: string;
+  warnings: ImageMetadataWarning[];
+  exifBlocks: ImageExifBlock[];
+  structure?: ImageStructure;
 }
 
 export interface DocumentTable {

@@ -399,7 +399,7 @@ fn read_candidate_source(
         candidate.size,
         candidate.encrypted,
     );
-    if candidate.category == "EventLogs" {
+    if matches!(candidate.category.as_str(), "EventLogs" | "ImageMetadata") {
         reader
             .open_file_range_with_metadata(hint)
             .map(candidate_source_from_range_reader)

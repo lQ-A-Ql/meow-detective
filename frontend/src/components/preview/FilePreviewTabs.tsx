@@ -30,7 +30,7 @@ import type {
 
 export type PreviewViewerTab = 'metadata' | 'text' | 'hex' | 'preview';
 
-export type FilePreviewKind = 'image' | 'video' | 'audio' | 'document';
+export type FilePreviewKind = 'image' | 'video' | 'audio' | 'document' | 'imageMetadataOnly';
 
 export interface FilePreviewTabsProps {
   viewerTab: PreviewViewerTab;
@@ -38,6 +38,7 @@ export interface FilePreviewTabsProps {
   viewer: FileHexViewerState | undefined;
   fileHandle?: ViewerHandle;
   previewKind?: FilePreviewKind;
+  imagePreviewOversized?: boolean;
   onHexJumpInputChange: (value: string) => void;
   onHexJump: (input?: string) => Promise<boolean>;
   onLoadNextHexRange: () => Promise<void> | void;
@@ -225,18 +226,44 @@ function MediaPreviewContent({
 function KindPreviewContent({
   previewKind,
   imagePreview,
+  imagePreviewOversized,
   mediaUrl,
   documentPreview,
   selectedFile,
-}: Pick<FilePreviewTabsProps, 'previewKind' | 'imagePreview' | 'mediaUrl' | 'documentPreview' | 'selectedFile'>) {
+}: Pick<
+  FilePreviewTabsProps,
+  'previewKind' | 'imagePreview' | 'imagePreviewOversized' | 'mediaUrl' | 'documentPreview' | 'selectedFile'
+>) {
   const { t } = useTranslation();
   if (previewKind === 'image') {
     if (imagePreview?.dataUrl) {
       return <ImageViewer src={imagePreview.dataUrl} mimeType={imagePreview.mimeType} fileName={selectedFile?.name} />;
     }
+    if (imagePreviewOversized) {
+      return (
+        <div className="flex h-full items-center justify-center px-6 text-center text-forensics-text-tertiary">
+          <div className="max-w-md space-y-2">
+            <div className="text-[12px] font-light text-forensics-text">{t('preview.image.oversizedTitle')}</div>
+            <div className="text-[11px] leading-5">{t('preview.image.oversizedDetail')}</div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex h-full items-center justify-center text-forensics-muted-light">
         {t('preview.image.loading')}
+      </div>
+    );
+  }
+  if (previewKind === 'imageMetadataOnly') {
+    return (
+      <div className="flex h-full items-center justify-center px-6 text-center text-forensics-text-tertiary">
+        <div className="max-w-md space-y-2">
+          <div className="text-[12px] font-light text-forensics-text">
+            {t('fileBrowser.preview.imageMetadata.metadataOnlyTitle')}
+          </div>
+          <div className="text-[11px] leading-5">{t('fileBrowser.preview.imageMetadata.metadataOnlyDetail')}</div>
+        </div>
       </div>
     );
   }
@@ -266,6 +293,7 @@ export function FilePreviewTabs({
   viewer,
   fileHandle,
   previewKind,
+  imagePreviewOversized,
   onHexJumpInputChange,
   onHexJump,
   onLoadNextHexRange,
@@ -334,6 +362,7 @@ export function FilePreviewTabs({
                 <KindPreviewContent
                   previewKind={previewKind}
                   imagePreview={imagePreview}
+                  imagePreviewOversized={imagePreviewOversized}
                   mediaUrl={mediaUrl}
                   documentPreview={documentPreview}
                   selectedFile={selectedFile}
@@ -344,12 +373,20 @@ export function FilePreviewTabs({
               value: 'metadata',
               label: t('preview.tabs.metadata'),
               content: (
-                <div className="space-y-2 font-mono text-[11px] text-forensics-text-secondary">
-                  <div>handle_id: {fileHandle?.handleId ?? viewer?.handle.handleId ?? '-'}</div>
-                  <div>size: {fileHandle?.size ?? viewer?.handle.size ?? selectedFile?.size ?? '-'}</div>
-                  <div>mime: {fileHandle?.mime ?? viewer?.handle.mime ?? '-'}</div>
-                  <div>path: {selectedFile?.path ?? '-'}</div>
-                  {previewKind === 'image' ? <ImageMetadataPanel metadata={imageMetadata} /> : null}
+                <div className="space-y-3 font-mono text-[11px] text-forensics-text-secondary">
+                  {previewKind === 'image' || previewKind === 'imageMetadataOnly' ? (
+                    <ImageMetadataPanel
+                      metadata={imageMetadata}
+                      fileSize={selectedFile?.size}
+                      metadataOnly={previewKind === 'imageMetadataOnly'}
+                    />
+                  ) : null}
+                  <div className="space-y-1">
+                    <div>handle_id: {fileHandle?.handleId ?? viewer?.handle.handleId ?? '-'}</div>
+                    <div>size: {fileHandle?.size ?? viewer?.handle.size ?? selectedFile?.size ?? '-'}</div>
+                    <div>mime: {fileHandle?.mime ?? viewer?.handle.mime ?? '-'}</div>
+                    <div>path: {selectedFile?.path ?? '-'}</div>
+                  </div>
                 </div>
               ),
             },

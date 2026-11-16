@@ -16,6 +16,15 @@ pub const DEFAULT_PAGE_LIMIT: u32 = 100;
 /// Maximum inline image preview size.
 pub const MAX_INLINE_IMAGE_PREVIEW_BYTES: u64 = 5 * 1024 * 1024;
 
+/// Bounded header used for magic-based image candidate discovery.
+pub const IMAGE_MAGIC_HEADER_BYTES: usize = 32;
+
+/// Maximum width or height decoded for an inline image preview.
+pub const MAX_IMAGE_PREVIEW_DIMENSION: u32 = 16_384;
+
+/// Maximum pixel count decoded for an inline image preview.
+pub const MAX_IMAGE_PREVIEW_PIXELS: u64 = 64_000_000;
+
 /// Maximum inline media preview size before scoped range streaming is required.
 pub const MAX_INLINE_MEDIA_PREVIEW_BYTES: u64 = 20 * 1024 * 1024;
 

@@ -2,8 +2,11 @@
 pub(super) enum ArtifactFamilyPlatform {
     Windows,
     Linux,
+    CrossPlatform,
     Unknown,
 }
+
+const CROSS_PLATFORM_FAMILIES: &[&str] = &["ImageMetadata"];
 
 const WINDOWS_FAMILIES: &[&str] = &[
     "LNK",
@@ -76,7 +79,9 @@ const LINUX_FAMILIES: &[&str] = &[
 ];
 
 pub(super) fn classify_artifact_family(family: &str) -> ArtifactFamilyPlatform {
-    if family_starts_with(family, "Registry")
+    if family_in(family, CROSS_PLATFORM_FAMILIES) {
+        ArtifactFamilyPlatform::CrossPlatform
+    } else if family_starts_with(family, "Registry")
         || family_starts_with(family, "Evtx")
         || family_in(family, WINDOWS_FAMILIES)
     {
@@ -93,6 +98,7 @@ impl ArtifactFamilyPlatform {
         match self {
             Self::Windows => "windows",
             Self::Linux => "linux",
+            Self::CrossPlatform => "cross-platform",
             Self::Unknown => "unknown",
         }
     }
@@ -102,6 +108,8 @@ impl ArtifactFamilyPlatform {
             (self, platform),
             (Self::Windows, domain::DataSourcePlatform::Windows)
                 | (Self::Linux, domain::DataSourcePlatform::Linux)
+                | (Self::CrossPlatform, domain::DataSourcePlatform::Windows)
+                | (Self::CrossPlatform, domain::DataSourcePlatform::Linux)
         )
     }
 }

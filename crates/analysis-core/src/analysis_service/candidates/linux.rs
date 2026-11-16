@@ -1,6 +1,6 @@
 use super::common::{
     evidence_path_matches, normalize_evidence_path, EvidenceCandidate, EvidenceCategoryDef,
-    EvidencePathPattern,
+    EvidenceDiscovery, EvidencePathPattern,
 };
 use crate::analysis_service::error::AnalysisServiceError;
 use persistence_source::repositories::file_repo::FileRepo;
@@ -375,6 +375,7 @@ pub(super) const LINUX_ARTIFACTS_CATEGORY_DEF: EvidenceCategoryDef = EvidenceCat
         EvidencePathPattern::Contains("/var/log/gitlab/"),
     ],
     matcher: None,
+    discovery: EvidenceDiscovery::PathPatterns,
 };
 
 #[cfg(test)]

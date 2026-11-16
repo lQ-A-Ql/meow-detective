@@ -191,10 +191,4 @@ pub use v3_governance::{
     NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto, RulePackStatusDto,
     V3GovernanceSnapshotDto,
 };
-pub use viewer::{
-    DocumentPreviewDto, DocumentSectionDto, DocumentTableDto, HexSearchFileRequestDto,
-    HexSearchModeDto, HexSearchPhaseDto, HexSearchRequestDto, HexSearchStatusDto, ImageMetadataDto,
-    ImageMetadataStatusDto, ImagePreviewDto, MediaPreviewModeDto, MediaRangeRequestDto,
-    MediaRangeResponseDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto, ViewerPreviewKindDto,
-    ViewerRangeRequestDto, ViewerRangeResponseDto, MAX_VIEWER_RANGE_LENGTH,
-};
+pub use viewer::*;

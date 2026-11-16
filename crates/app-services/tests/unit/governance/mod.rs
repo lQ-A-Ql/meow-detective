@@ -164,7 +164,7 @@ fn governance_snapshot_aggregates_runtime_signals() {
     assert!(audit_actions.contains(&"mcp.tool.call"));
     assert!(!snapshot.verification_chains.is_empty());
     assert!(!snapshot.support_matrix_entries.is_empty());
-    assert_eq!(snapshot.known_limitations.len(), 58);
+    assert_eq!(snapshot.known_limitations.len(), 63);
     assert_eq!(
         snapshot.support_matrix.documented_limit_count,
         snapshot.known_limitations.len() as u32
@@ -179,6 +179,11 @@ fn governance_snapshot_aggregates_runtime_signals() {
         .iter()
         .any(|item| item.category == "Browser"
             && item.affected_chains.contains(&"ChromeHistory".to_string())));
+    assert!(snapshot
+        .known_limitations
+        .iter()
+        .any(|item| item.category == "图片"
+            && item.affected_chains.contains(&"ImageMetadata".to_string())));
     assert!(snapshot
         .fact_sources
         .iter()

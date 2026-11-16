@@ -14,12 +14,15 @@ pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "1.3.10";
 pub(crate) const EMAIL_EXTRACTOR_VERSION: &str = "1.3.8";
 pub(crate) const BROWSER_EXTRACTOR_VERSION: &str = "1.3.9";
 pub(crate) const WINDOWS_NATIVE_EXTRACTOR_VERSION: &str = "1.4.0";
+pub(crate) const IMAGE_METADATA_EXTRACTOR_VERSION: &str = "1.0.0";
 
 pub(crate) fn producer_version(producer: &str) -> &'static str {
     if producer.starts_with("windows.native.") {
         WINDOWS_NATIVE_EXTRACTOR_VERSION
     } else if producer.starts_with("registry.") {
         REGISTRY_EXTRACTOR_VERSION
+    } else if producer.starts_with("image.metadata.") {
+        IMAGE_METADATA_EXTRACTOR_VERSION
     } else if producer == "linux.docker_image" {
         CONTAINERD_EXTRACTOR_VERSION
     } else if producer == "linux.os_release" {
@@ -43,6 +46,7 @@ pub(crate) const CHECKPOINT_VERSIONS: &[&str] = &[
     EMAIL_EXTRACTOR_VERSION,
     BROWSER_EXTRACTOR_VERSION,
     WINDOWS_NATIVE_EXTRACTOR_VERSION,
+    IMAGE_METADATA_EXTRACTOR_VERSION,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +55,7 @@ pub(crate) enum CandidateReadPolicy {
     Bounded(usize),
     Full,
     LinuxPathAware,
+    ImageStructure,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,6 +74,7 @@ impl AnalysisCapability {
             "LinuxSystemConfig" => LINUX_SYSTEM_CONFIG_VERSION,
             "Email" => EMAIL_EXTRACTOR_VERSION,
             "BrowserHistory" => BROWSER_EXTRACTOR_VERSION,
+            "ImageMetadata" => IMAGE_METADATA_EXTRACTOR_VERSION,
             "ProgramExecution" | "UserActivity" | "RecycleBin" | "Thumbnails" | "ResourceUsage" => {
                 WINDOWS_NATIVE_EXTRACTOR_VERSION
             }
@@ -82,6 +88,7 @@ impl AnalysisCapability {
             "BrowserHistory" => "browser.",
             "Email" => "email.",
             "EventLogs" => "evtx.",
+            "ImageMetadata" => "image.metadata.",
             "ProgramExecution" => "windows.native.prefetch.",
             "UserActivity" => "windows.native.activity.",
             "RecycleBin" => "windows.native.recycle_bin.",
@@ -127,6 +134,13 @@ pub(crate) const WINDOWS_CAPABILITIES: &[AnalysisCapability] = &[
         CandidateReadPolicy::Bounded(artifacts_windows::MAX_EVTX_ANALYSIS_BYTES),
     ),
     capability(
+        "ImageMetadata",
+        DataSourcePlatform::Windows,
+        "Image metadata",
+        "ImageMetadata",
+        CandidateReadPolicy::ImageStructure,
+    ),
+    capability(
         PLUGIN_CAPABILITY_KEY,
         DataSourcePlatform::Windows,
         "应用插件",
@@ -150,6 +164,13 @@ pub(crate) const LINUX_CAPABILITIES: &[AnalysisCapability] = &[
     linux_capability("LinuxSystemConfig", "Linux 系统配置"),
     linux_capability("LinuxWebServices", "Linux Web 服务"),
     linux_capability("LinuxMysqlServices", "Linux MySQL Services"),
+    capability(
+        "ImageMetadata",
+        DataSourcePlatform::Linux,
+        "图片元数据",
+        "ImageMetadata",
+        CandidateReadPolicy::ImageStructure,
+    ),
     capability(
         PLUGIN_CAPABILITY_KEY,
         DataSourcePlatform::Linux,

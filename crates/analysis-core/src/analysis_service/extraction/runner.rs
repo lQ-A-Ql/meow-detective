@@ -17,8 +17,7 @@ use super::state::{existing_clean_scan_keys, existing_diagnostic_scan_keys, Extr
 use super::{PluginExtractFailure, PluginLoadRecord};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{
-    discover_plugin_candidates, evidence_candidates_for_categories_with_preparation,
-    EvidenceCandidate, LinuxCatalogMetadata, PreparationCatalog,
+    discover_plugin_candidates, EvidenceCandidate, LinuxCatalogMetadata, PreparationCatalog,
 };
 use crate::analysis_service::capability::{AnalysisCapability, CandidateReadPolicy};
 use crate::analysis_service::error::AnalysisServiceError;
@@ -42,7 +41,8 @@ mod processing;
 mod reuse;
 
 use self::discovery::{
-    begin_streamed_output, discover_run_candidates, guarded_candidate_reader, load_checkpoint_scans,
+    begin_streamed_output, build_magic_probe, discover_run_candidates, guarded_candidate_reader,
+    load_checkpoint_scans,
 };
 use self::finalization::load_run_plugins;
 use self::observations::{record_preload_warnings, register_candidates};
@@ -202,7 +202,7 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
     cancel_token: &AtomicBool,
     browser_password: Option<&str>,
     progress: &mut dyn FnMut(ExtractionProgressUpdate),
-    file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
     plugin_loader: &dyn Fn() -> PluginLoadReport,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     let discovery_started = Instant::now();
@@ -219,14 +219,18 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
         progress_reporter.emit_waiting_for_scheduler(waited);
     })?;
     progress_reporter.emit_discovering();
-    let (candidates, linux_catalog, preparation_catalog) = discover_run_candidates(
-        conn,
-        platform,
-        &selected,
-        &plugin_extractors,
-        cancel_token,
-        &mut progress_reporter,
-    )?;
+    let (candidates, linux_catalog, preparation_catalog) = {
+        let mut magic_probe = build_magic_probe(&mut file_reader);
+        discover_run_candidates(
+            conn,
+            platform,
+            &selected,
+            &plugin_extractors,
+            cancel_token,
+            &mut progress_reporter,
+            &mut magic_probe,
+        )?
+    };
     if candidates.is_empty() && linux_catalog.is_none() && plugin_extractors.is_empty() {
         return empty::complete_empty_run(
             conn,
