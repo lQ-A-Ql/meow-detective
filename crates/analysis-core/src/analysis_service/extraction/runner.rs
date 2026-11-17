@@ -22,7 +22,7 @@ use crate::analysis_service::candidates::{
 use crate::analysis_service::capability::{AnalysisCapability, CandidateReadPolicy};
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::platforms::analyzer_for;
-use crate::plugin_loader::{PluginExtractor, PluginLoadReport, PluginRejection};
+use analysis_plugins::plugin_loader::{PluginExtractor, PluginLoadReport, PluginRejection};
 use artifacts_core::ArtifactExtractor;
 use domain::{DataSourcePlatform, FileEntryId};
 use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
@@ -145,7 +145,7 @@ pub fn run_analysis_extraction_with_source_and_progress<E: std::fmt::Display>(
         |candidate, read_limit| {
             file_reader(candidate, read_limit).map_err(|error| error.to_string())
         },
-        &crate::plugin_loader::load_all_report,
+        &analysis_plugins::plugin_loader::load_all_report,
     )
 }
 
@@ -166,7 +166,7 @@ fn run_analysis_extraction_with_source(
         cancel_token,
         progress,
         file_reader,
-        &crate::plugin_loader::load_all_report,
+        &analysis_plugins::plugin_loader::load_all_report,
     )
 }
 /// Full extraction run with an injectable plugin loader.

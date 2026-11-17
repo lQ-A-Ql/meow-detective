@@ -3,7 +3,7 @@
 ## 1. 状态与范围
 
 本文档是 Meow~Detective DLL 解析器插件的公开开发契约，当前固定为 **ABI v1**。
-它约束插件作者、宿主 `app-services/plugin_loader`、构建脚本和发布包之间的边界。
+它约束插件作者、宿主 `analysis-plugins/plugin_loader`、构建脚本和发布包之间的边界。
 
 - 宿主运行平台始终是 Windows x64；`Windows`/`Linux` 表示被分析证据的平台，不表示
   插件 DLL 可以在对应操作系统上直接运行。

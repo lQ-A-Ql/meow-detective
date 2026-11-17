@@ -26,6 +26,7 @@ source-kernel.workspace = true
 ceph-reconstruction.workspace = true
 evidence-access.workspace = true
 analysis-core.workspace = true
+analysis-plugins.workspace = true
 emulation-services.workspace = true
 import-core.workspace = true
 source-reconstruction.workspace = true

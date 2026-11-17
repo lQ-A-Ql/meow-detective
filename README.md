@@ -4,7 +4,7 @@
 
 ## 项目介绍
 
-Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 52 Rust crates。存储按控制面与明细分层：案件级数据库负责案件、数据源注册、任务和审计；每个数据源的 `source.db` 保存控制面、处理阶段与发布回执，分区、文件树、制品、时间线和源内索引以 Fjall 原子 generation 持久化于案件工作区；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
+Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 53 Rust crates。存储按控制面与明细分层：案件级数据库负责案件、数据源注册、任务和审计；每个数据源的 `source.db` 保存控制面、处理阶段与发布回执，分区、文件树、制品、时间线和源内索引以 Fjall 原子 generation 持久化于案件工作区；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
 当前工程事实快照：12 frontend pages（其中 `/v2` V2 workbench 仅在 dev/audit 模式注册，生产路由 11 个）、169 Tauri commands、55 source modules、migration scripts (78)、166 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
@@ -394,7 +394,8 @@ cargo build --release
 | `crates/app-services/` | 应用层用例编排；facade 保持 `crate::<module>` 路径稳定。 |
 | `crates/source-kernel/` | 数据源生命周期、source.db 与存储运行时、reader 缓存、资源预算与存储清单校验。 |
 | `crates/import-core/` | 导入流水线、staging、并行枚举、调度检查点、发布与导入后分析。 |
-| `crates/analysis-core/` | 分析服务、候选与提取、平台摘要、插件宿主与注册表浏览会话。 |
+| `crates/analysis-core/` | 分析服务、候选与提取、平台摘要与注册表浏览会话。 |
+| `crates/analysis-plugins/` | 解析器插件宿主：发现与设置、DLL 加载与 ABI 握手、ArtifactExtractor 适配器与自描述 action 通道。 |
 | `crates/evidence-access/` | 证据读取、预览、提取、分区查询、BitLocker 运行时与摘要/哈希。 |
 | `crates/emulation-services/` | 受控仿真编排、COW reader、EFI 回退与 ext4/xfs 修复。 |
 | `crates/ceph-reconstruction/` | Ceph RBD/CephFS 重建、BlueFS/BlueStore/RocksDB 解码与范围报告。 |

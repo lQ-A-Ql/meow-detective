@@ -133,6 +133,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 name = "analysis-core"
 version = "0.1.1"
 dependencies = [
+ "analysis-plugins",
  "artifacts-android",
  "artifacts-browser",
  "artifacts-core",
@@ -144,7 +145,6 @@ dependencies = [
  "chrono-tz",
  "containers-pst",
  "crossbeam-channel",
- "dirs",
  "domain",
  "evidence-access",
  "evidence-core",
@@ -153,7 +153,6 @@ dependencies = [
  "hex",
  "image-e01",
  "infrastructure",
- "libloading",
  "persistence-source",
  "persistence-sqlite",
  "plugin-api",
@@ -174,6 +173,25 @@ dependencies = [
  "uuid",
  "zeroize",
  "zip",
+]
+
+[[package]]
+name = "analysis-plugins"
+version = "0.1.1"
+dependencies = [
+ "artifacts-core",
+ "chrono",
+ "dirs",
+ "domain",
+ "libloading",
+ "persistence-sqlite",
+ "plugin-api",
+ "serde",
+ "serde_json",
+ "source-kernel",
+ "thiserror 2.0.21",
+ "tracing",
+ "transport",
 ]
 
 [[package]]
@@ -259,6 +277,7 @@ name = "app-services"
 version = "0.1.1"
 dependencies = [
  "analysis-core",
+ "analysis-plugins",
  "artifact-storage",
  "artifacts-core",
  "artifacts-linux",

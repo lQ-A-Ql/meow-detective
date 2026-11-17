@@ -5,7 +5,7 @@ use super::super::PluginLoadRecord;
 use super::AnalysisExtractionExecution;
 use crate::analysis_service::capability::AnalysisCapability;
 use crate::analysis_service::error::AnalysisServiceError;
-use crate::plugin_loader::PluginRejection;
+use analysis_plugins::plugin_loader::PluginRejection;
 use chrono::Utc;
 use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;

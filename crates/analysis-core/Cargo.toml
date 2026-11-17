@@ -42,8 +42,7 @@ artifacts-browser.workspace = true
 artifacts-linux.workspace = true
 containers-pst.workspace = true
 tempfile.workspace = true
-libloading.workspace = true
-dirs.workspace = true
+analysis-plugins.workspace = true
 plugin-api = { path = "../plugin-api" }
 
 [dev-dependencies]

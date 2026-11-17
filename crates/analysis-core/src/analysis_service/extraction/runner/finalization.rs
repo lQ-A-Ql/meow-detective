@@ -1,7 +1,7 @@
 use super::super::output_persistence::commit_analysis_control;
 use super::*;
 use crate::analysis_service::capability::{retain_active_plugin_capability, PLUGIN_CAPABILITY_KEY};
-use crate::plugin_loader::PluginLoadReport;
+use analysis_plugins::plugin_loader::PluginLoadReport;
 use chrono::Utc;
 
 #[allow(clippy::too_many_arguments)]

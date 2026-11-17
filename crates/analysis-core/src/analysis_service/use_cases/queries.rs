@@ -18,7 +18,7 @@ use crate::analysis_service::{
     get_linux_artifact_summary, get_linux_system_config_page, get_registry_extraction_summary,
     get_registry_structured_summary, validate_analysis_categories, AnalysisServiceError,
 };
-use crate::plugin_loader::PluginModuleMeta;
+use analysis_plugins::plugin_loader::PluginModuleMeta;
 
 fn open_for_capability(
     case_conn: &Connection,
@@ -228,7 +228,7 @@ fn plugin_metas_for_platform(platform: DataSourcePlatform) -> Vec<PluginModuleMe
         DataSourcePlatform::Android => return Vec::new(),
         DataSourcePlatform::Unknown => return Vec::new(),
     };
-    crate::plugin_loader::load_all()
+    analysis_plugins::plugin_loader::load_all()
         .iter()
         .map(|plugin| plugin.module_meta())
         .filter(|meta| meta.evidence_platform == expected)

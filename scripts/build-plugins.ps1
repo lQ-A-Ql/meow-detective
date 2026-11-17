@@ -1,7 +1,7 @@
 # Builds the standalone parser-plugin workspace (plugins-src/, plugin system
 # M4) in release mode and stages each plugin DLL into the exe-adjacent layout
 # the host plugin_loader scans: plugins/<evidence-platform>/ next to the
-# executable (crates/app-services/src/plugin_loader/directory.rs).
+# executable (crates/analysis-plugins/src/plugin_loader/directory.rs).
 #
 # Outputs:
 #   target/release/plugins/<platform>/*.dll                       (repo-root cargo build -p forensics-desktop layout)

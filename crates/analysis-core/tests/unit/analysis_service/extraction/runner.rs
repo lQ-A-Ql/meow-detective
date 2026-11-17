@@ -1323,7 +1323,7 @@ fn plugin_capability_stays_zero_overhead_without_loaded_plugins() {
     let loader_calls = std::cell::Cell::new(0u32);
     let plugin_loader = || {
         loader_calls.set(loader_calls.get() + 1);
-        crate::plugin_loader::PluginLoadReport::default()
+        analysis_plugins::plugin_loader::PluginLoadReport::default()
     };
     let mut ignore_progress = |_update: super::ExtractionProgressUpdate| {};
 
@@ -1355,7 +1355,7 @@ fn plugin_capability_stays_zero_overhead_without_loaded_plugins() {
 fn plugin_loader_is_never_invoked_when_capability_not_selected() {
     let connection = source_connection();
     let cancel = AtomicBool::new(false);
-    let plugin_loader = || -> crate::plugin_loader::PluginLoadReport {
+    let plugin_loader = || -> analysis_plugins::plugin_loader::PluginLoadReport {
         panic!("plugin loader must not run for built-in-only selections")
     };
     let mut ignore_progress = |_update: super::ExtractionProgressUpdate| {};
@@ -1392,7 +1392,7 @@ fn empty_candidate_run_skips_streamed_output_generation() {
         &cancel,
         &mut collect_progress,
         |_, _| Ok::<CandidateSource, String>(CandidateSource::Bytes(Vec::new())),
-        &crate::plugin_loader::load_all_report,
+        &analysis_plugins::plugin_loader::load_all_report,
     )
     .expect("complete a run that discovered no candidates");
 
@@ -1466,7 +1466,7 @@ fn copy_progress_cancellation_stops_the_real_extraction_run() {
         |_, _| -> Result<CandidateSource, String> {
             panic!("candidate content requested after copy cancellation")
         },
-        &crate::plugin_loader::load_all_report,
+        &analysis_plugins::plugin_loader::load_all_report,
     );
     assert!(preparation_updates >= 2);
     assert!(matches!(result, Err(AnalysisServiceError::Cancelled)));

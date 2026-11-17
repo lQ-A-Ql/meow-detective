@@ -1,5 +1,6 @@
 crate,maxInternalDeps,maxSrcLoc,owner,reason,expires
-analysis-core,19,32000,architecture,analysis capability layer including bounded image metadata and container structure analysis,2027-06-30
+analysis-core,19,31000,architecture,analysis capability layer with ten percent headroom,2027-06-30
+analysis-plugins,8,1500,architecture,parser plugin host and self-describing action channel,2027-06-30
 app-services,26,31500,architecture,use-case orchestration plus artifact report search and bitlocker services,2027-06-30
 ceph-reconstruction,13,22500,architecture,ceph reconstruction and wire decoders with ten percent headroom,2027-06-30
 emulation-services,16,3000,architecture,controlled emulation workflows with ten percent headroom,2027-06-30

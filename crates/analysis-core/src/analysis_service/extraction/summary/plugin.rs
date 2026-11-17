@@ -6,7 +6,7 @@
 //! metadata and the extraction diagnostics.
 
 use crate::analysis_service::error::AnalysisServiceError;
-use crate::plugin_loader::PluginModuleMeta;
+use analysis_plugins::plugin_loader::PluginModuleMeta;
 use domain::Artifact;
 use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;

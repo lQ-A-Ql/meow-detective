@@ -1,3 +1,3 @@
-//! Facade over `analysis-core`; keeps `crate::plugin_action_service::*` paths
+//! Facade over `analysis-plugins`; keeps `crate::plugin_action_service::*` paths
 //! stable.
-pub use ::analysis_core::plugin_action_service::*;
+pub use ::analysis_plugins::plugin_action_service::*;

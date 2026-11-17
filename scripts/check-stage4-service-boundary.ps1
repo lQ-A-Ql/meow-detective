@@ -284,7 +284,7 @@ foreach ($entry in $moduleManifest) {
 }
 
 $metadata = Invoke-RustGuardCargoMetadata -RepoRoot $repoRoot
-foreach ($packageName in @('app-services', 'analysis-core', 'emulation-services')) {
+foreach ($packageName in @('app-services', 'analysis-core', 'analysis-plugins', 'emulation-services')) {
   $packages = @($metadata.packages | Where-Object { $_.name -ceq $packageName })
   if ($packages.Count -ne 1) {
     $errors.Add("cargo metadata must contain exactly one $packageName package; found $($packages.Count)")
@@ -305,6 +305,7 @@ foreach ($packageName in @('app-services', 'analysis-core', 'emulation-services'
 $serviceRoots = @(
   (Join-Path $repoRoot 'crates/app-services/src'),
   (Join-Path $repoRoot 'crates/analysis-core/src'),
+  (Join-Path $repoRoot 'crates/analysis-plugins/src'),
   (Join-Path $repoRoot 'crates/emulation-services/src'),
   (Join-Path $repoRoot 'crates/import-core/src'),
   (Join-Path $repoRoot 'crates/source-reconstruction/src')
@@ -319,7 +320,7 @@ $serviceMaskedSources = (
 ) -join "`n"
 
 if ($serviceMaskedSources -cmatch '\btauri(?:::|_)|\bAppHandle\b|\bEmitter\b') {
-  $errors.Add('app-services and analysis-core must remain independent from the Tauri runtime')
+  $errors.Add('app-services, analysis-core, and analysis-plugins must remain independent from the Tauri runtime')
 }
 
 Assert-NoModuleReferencesUnder `

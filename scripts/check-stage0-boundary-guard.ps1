@@ -123,6 +123,7 @@ function Is-FrontendTestFile {
 $backendSrcRoots = @(
   (Join-Path $repoRoot "crates/app-services/src"),
   (Join-Path $repoRoot "crates/analysis-core/src"),
+  (Join-Path $repoRoot "crates/analysis-plugins/src"),
   (Join-Path $repoRoot "crates/emulation-services/src"),
   (Join-Path $repoRoot "crates/import-core/src"),
   (Join-Path $repoRoot "crates/source-reconstruction/src")

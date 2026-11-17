@@ -13,7 +13,7 @@ use crate::analysis_service::extraction::{
     PluginLoadRecord,
 };
 use crate::analysis_service::AnalysisServiceError;
-use crate::plugin_loader::PluginRejection;
+use analysis_plugins::plugin_loader::PluginRejection;
 use evidence_access::file_service::{
     FileServiceError, RangeContentReader, SourceReadContext, SourceReadFileHint,
 };

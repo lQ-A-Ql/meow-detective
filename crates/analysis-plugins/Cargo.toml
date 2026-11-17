@@ -1,0 +1,21 @@
+[package]
+name = "analysis-plugins"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+artifacts-core.workspace = true
+domain.workspace = true
+persistence-sqlite.workspace = true
+source-kernel.workspace = true
+transport.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+libloading.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+plugin-api = { path = "../plugin-api" }

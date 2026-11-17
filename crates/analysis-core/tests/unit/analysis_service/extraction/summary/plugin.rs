@@ -1,5 +1,5 @@
 use super::*;
-use crate::plugin_loader::PluginModuleMeta;
+use analysis_plugins::plugin_loader::PluginModuleMeta;
 use chrono::Utc;
 use domain::{Artifact, ArtifactId, FileEntryId};
 use persistence_source::repositories::artifact_repo::ArtifactRepo;
