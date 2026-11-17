@@ -635,6 +635,14 @@ fn open_file_content_rejects_traversal_paths_from_database() {
                 .map(|row| row.id.clone())
                 .unwrap();
 
+            let handle = file_service::open_file_handle_for_case(
+                conn,
+                &active.case_root,
+                &active.meta.id,
+                &file_id,
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
             let source_id = domain::DataSourceId("ds-logical".to_string());
             let source_conn = app_services::source_db::open_registered_source_db(
                 conn,
@@ -651,13 +659,6 @@ fn open_file_content_rejects_traversal_paths_from_database() {
                 &global_file_id.data_source_id.0,
             )?;
 
-            let handle = file_service::open_file_handle_for_case(
-                conn,
-                &active.case_root,
-                &active.meta.id,
-                &file_id,
-            )
-            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let err = file_service::read_file_range_for_source_case(
                 conn,
                 &active.case_root,
