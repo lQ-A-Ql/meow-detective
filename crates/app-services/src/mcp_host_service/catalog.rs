@@ -128,6 +128,12 @@ fn file_tools() -> Vec<McpHostToolDto> {
             vec!["fileId"],
         ),
         (
+            "forensics.analyze_image_steg",
+            "对当前案件中的 PNG/BMP 文件执行只读统计隐写分诊，返回三法融合评分、平面统计与局部热点；不写入证据。",
+            json!({"fileId":identifier()}),
+            vec!["fileId"],
+        ),
+        (
             "forensics.browse_registry_key",
             "读取 source-scoped Registry hive 的指定键，返回键元数据、值和子键。",
             json!({"fileId":identifier(), "keyPath":{"type":"string","maxLength":4096,"default":""}}),

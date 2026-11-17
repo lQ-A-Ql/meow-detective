@@ -703,6 +703,7 @@
         "timestamps": "时间戳 (MACB)",
         "summary": "摘要字段",
         "imageMetadata": "图片 EXIF / 媒体元数据",
+        "imageSteg": "统计隐写分析",
         "hash": "文件哈希",
         "ntfsTechnical": "NTFS 技术结构",
         "status": "对象状态",
@@ -733,6 +734,69 @@
           "unsupported": "不支持",
           "corrupt": "结构损坏",
           "oversized": "图片元数据超出有界读取限制"
+        }
+      },
+      "imageSteg": {
+        "description": "对文件浏览器中选中的 PNG/BMP 文件执行只读统计 LSB 隐写分诊。",
+        "run": "运行隐写分析",
+        "running": "正在分析像素统计…",
+        "retry": "重试",
+        "status": "状态",
+        "statuses": {
+          "completed": "已完成",
+          "unsupported": "不支持的格式",
+          "oversized": "超出分析上限",
+          "corrupt": "图片损坏或无法解码"
+        },
+        "reason": "原因",
+        "reasons": {
+          "image": {
+            "format": "文件魔数既不是 PNG 也不是 BMP。",
+            "decode": "无法解码图片数据。",
+            "truncated": "图片数据在声明尺寸之前结束。"
+          },
+          "limit": {
+            "bytes": "文件超出整文件读取上限。",
+            "side": "图片边长超出分析上限。",
+            "pixels": "图片超出 1600 万像素分析上限。"
+          }
+        },
+        "format": "格式",
+        "dimensions": "尺寸",
+        "dominantPlane": "主平面",
+        "global": "整图评估",
+        "score": "融合评分",
+        "bands": {
+          "low": "低",
+          "medium": "中",
+          "high": "高",
+          "inconclusive": "无法判定"
+        },
+        "methodsUsed": "方法数",
+        "methods": {
+          "chiSquare": "卡方",
+          "rs": "RS",
+          "spa": "SPA"
+        },
+        "planes": "分平面估计",
+        "planeSamples": "{{samples}} 个样本 · {{unique}} 个唯一值",
+        "hotspots": "局部分析热点",
+        "blockSummary": "已评分 {{scored}} / {{total}} 个块",
+        "warnings": "警告",
+        "sessionOnly": "仅会话展示：结果不会写入案件。",
+        "warningCodes": {
+          "image": {
+            "steg": {
+              "alpha-excluded": "Alpha 通道不参与隐写分析。",
+              "palette-index-domain": "调色板图片仅在索引域上用卡方检验检测。",
+              "blocks-truncated": "块数量超出预算，已按固定步长抽样。",
+              "small-image": "至少一个平面的样本数低于配置下限，已跳过。",
+              "low-texture": "至少一个平面的唯一值少于两个，已跳过。",
+              "rs-degenerate": "至少一个平面无法给出 RS 估计。",
+              "spa-degenerate": "至少一个平面无法给出 SPA 估计。",
+              "single-method": "至少一个平面少于两种方法，未计算融合评分。"
+            }
+          }
         }
       },
       "hash": {

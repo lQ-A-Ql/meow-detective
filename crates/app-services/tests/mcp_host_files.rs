@@ -16,10 +16,10 @@ fn file_listing_pages_roots_and_children_and_preserves_scoped_metadata() {
     assert_eq!(root["rows"][0]["id"], fixture.id("evidence"));
     assert_eq!(root["totalCount"], 1);
     let mut names = Vec::new();
-    for offset in 0..4 {
+    for offset in 0..5 {
         let page = fixture.call("forensics.list_files", json!({"dataSourceId":"mcp-files", "parentId":fixture.id("evidence"), "limit":1, "offset":offset})).unwrap();
-        assert_eq!(page["totalCount"], 4);
-        assert_eq!(page["truncated"], offset < 3);
+        assert_eq!(page["totalCount"], 5);
+        assert_eq!(page["truncated"], offset < 4);
         let row = &page["rows"][0];
         assert_eq!(row["parentId"], fixture.id("evidence"));
         let metadata = fixture
@@ -33,7 +33,7 @@ fn file_listing_pages_roots_and_children_and_preserves_scoped_metadata() {
     }
     names.sort();
     names.dedup();
-    assert_eq!(names.len(), 4);
+    assert_eq!(names.len(), 5);
     let nested = fixture
         .call(
             "forensics.list_files",

@@ -266,11 +266,12 @@
     },
     {
       "category": "图片",
-      "item": "统计隐写分析（RS/SPA/DCT）与 LSB 提取",
-      "status": "unsupported",
-      "summary": "当前只做容器结构与 EXIF 元数据分析，不解码像素，不评估隐写容量，也不提取隐藏载荷",
+      "item": "统计隐写检测（PNG/BMP 空间域三法分诊）与 LSB 提取",
+      "status": "partial",
+      "summary": "PNG/BMP 支持只读卡方/RS/SPA 分诊（`analyze_image_steg`，会话内展示，不落库）；DCT 域、LSB matching、自适应/扩频隐写、位平面可视化与载荷提取不支持",
       "affectedChains": [
-        "ImageMetadata"
+        "ImageMetadata",
+        "ImageSteg"
       ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },

@@ -11,6 +11,7 @@ import {
   getFileTree,
   getImagePreview,
   getImageMetadata,
+  analyzeImageSteg,
   getMediaUrl,
   getTextPreview,
   exportDeletedRecovery,
@@ -298,6 +299,14 @@ describe('files API', () => {
     await getImageMetadata('file-image');
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.GET_IMAGE_METADATA, {
       fileId: 'file-image',
+    });
+  });
+
+  it('analyzeImageSteg sends fileId', async () => {
+    requestMock.mockResolvedValueOnce({ status: 'completed' } as never);
+    await analyzeImageSteg('file-steg');
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.ANALYZE_IMAGE_STEG, {
+      fileId: 'file-steg',
     });
   });
 

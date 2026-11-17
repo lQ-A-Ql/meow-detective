@@ -54,7 +54,7 @@ pub use metadata::preview_sessions::{
 };
 pub use metadata::source_bitlocker::{
     document_preview_for_source_case_with_bitlocker, image_metadata_for_source_case_with_bitlocker,
-    image_preview_for_source_case_with_bitlocker,
+    image_preview_for_source_case_with_bitlocker, image_steg_for_source_case_with_bitlocker,
     media_preview_plan_for_source_case_with_bitlocker,
     read_file_range_for_source_case_with_bitlocker, text_preview_for_source_case_with_bitlocker,
 };

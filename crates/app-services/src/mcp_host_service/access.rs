@@ -86,6 +86,7 @@ impl McpPrincipal {
             tool.name.as_str(),
             "forensics.read_file"
                 | "forensics.get_file_metadata"
+                | "forensics.analyze_image_steg"
                 | "forensics.browse_registry_key"
                 | "forensics.open_registry_hive"
                 | "forensics.resolve_registry_key"

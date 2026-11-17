@@ -20,12 +20,12 @@ MCP 服务仅接受本机回环请求，并在每次请求中绑定当前案件�
 
 ## 工具目录
 
-当前提供 50 个 `forensics.` 工具，其中 46 个查询工具、三个任务工具和一个文件提取工具。
+当前提供 51 个 `forensics.` 工具，其中 47 个查询工具、三个任务工具和一个文件提取工具。
 
 | 功能 | 工具名称，省略 `forensics.` |
 |---|---|
 | 案件与数据源 | `get_current_case`、`list_data_sources`、`get_data_source`、`list_jobs`、`get_job`、`get_task`、`cancel_job`、`start_content_index`、`list_report_templates`、`get_report_history`、`start_report_export`、`get_mcp_metrics` |
-| 文件目录与内容 | `list_files`、`get_file_metadata`、`browse_registry_key`、`read_file`、`extract_file` |
+| 文件目录与内容 | `list_files`、`get_file_metadata`、`analyze_image_steg`、`browse_registry_key`、`read_file`、`extract_file` |
 | 文件分类 | `get_evidence_classification_summary`、`get_file_classification_board` |
 | Windows 分析 | `get_analysis_system_info`、`get_registry_summary`、`get_registry_structured_summary`、`get_browser_history_summary`、`get_email_summary`、`get_event_log_events`、`get_analysis_report` |
 | Linux 分析 | `get_linux_artifact_summary`、`list_linux_services`、`list_docker_containers`、`list_docker_images` |

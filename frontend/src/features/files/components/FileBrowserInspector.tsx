@@ -10,12 +10,14 @@ import { formatUnixMode } from '@/features/files/components/FileListPanel';
 import type { BitLockerVolumeModel } from '@/features/files/hooks/use-bitlocker-volume';
 import type { ApiErrorDto, ImageMetadata } from '@/types/models';
 import { ImageMetadataInspector } from '@/features/files/components/ImageMetadataInspector';
+import { ImageStegInspector } from '@/features/files/components/ImageStegInspector';
 import { NtfsTechnicalInspector } from '@/features/files/components/NtfsTechnicalInspector';
 import { EvidenceDigestInspector } from './EvidenceDigestInspector';
 import type { useEvidenceDigestModel } from '../hooks/use-evidence-digest-model';
 import type { NtfsTechnicalFile } from '@/types/files';
 import type { ntfsInspectorRuns } from '../ntfs-inspector-runs';
 import type { useNtfsTechnicalFile } from '../hooks/use-ntfs-technical-file';
+import type { ImageStegModel } from '../hooks/use-image-steg';
 
 interface FileBrowserInspectorProps {
   selectedFile?: FileEntryRow;
@@ -44,6 +46,7 @@ interface FileBrowserInspectorProps {
     'hex' | 'selectHex' | 'setDecoded' | 'previousRuns' | 'nextRuns'
   >;
   evidenceDigest: ReturnType<typeof useEvidenceDigestModel>;
+  imageSteg: ImageStegModel;
 }
 
 export function FileBrowserInspector({
@@ -70,6 +73,7 @@ export function FileBrowserInspector({
   retryNtfsTechnical,
   ntfsNavigation,
   evidenceDigest,
+  imageSteg,
 }: FileBrowserInspectorProps) {
   const { t } = useTranslation();
 
@@ -126,6 +130,8 @@ export function FileBrowserInspector({
             onRetry={onRetryImageMetadata}
           />
         ) : null}
+
+        {selectedFile?.entryType === 'file' ? <ImageStegInspector model={imageSteg} /> : null}
 
         <InspectorSection title={t('fileBrowser.inspector.sections.status')}>
           <div className="font-mono text-[11px] grid grid-cols-[60px_1fr] gap-1">

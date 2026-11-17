@@ -58,6 +58,28 @@ pub async fn get_image_metadata(
 }
 
 #[tauri::command]
+pub async fn analyze_image_steg(
+    state: State<'_, AppState>,
+    file_id: String,
+) -> Result<transport::dto::ImageStegDto, CommandError> {
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let connection = crate::commands::command_support::get_case_read_connection(&app_state)?;
+        let active = crate::commands::command_support::require_active_case(&app_state)?;
+        file_service::image_steg_for_source_case_with_bitlocker(
+            &app_state.bitlocker_runtime,
+            &connection,
+            &active.case_root,
+            &active.meta.id,
+            &file_id,
+        )
+        .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+#[tauri::command]
 pub async fn get_document_preview(
     state: State<'_, AppState>,
     file_id: String,

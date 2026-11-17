@@ -60,6 +60,7 @@ macro_rules! desktop_command_handler {
             get_text_preview,
             get_image_preview,
             get_image_metadata,
+            analyze_image_steg,
             browse_registry_key,
             list_registry_hives,
             open_registry_hive,

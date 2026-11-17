@@ -1,4 +1,5 @@
 export { useFileDigest } from './hooks/use-file-digest';
+export { useImageSteg } from './hooks/use-image-steg';
 export { useNtfsTechnicalFile } from './hooks/use-ntfs-technical-file';
 export {
   useFileChildren,

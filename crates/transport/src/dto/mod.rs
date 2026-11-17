@@ -50,6 +50,7 @@ pub mod timeline;
 pub mod topology;
 pub mod v3_governance;
 pub mod viewer;
+pub mod viewer_steg;
 pub use analysis::{
     AmcacheApplicationDto, AmcacheApplicationFileDto, AnalysisBootRecordDto,
     AnalysisClassifiedFileDto, AnalysisExtractionPhaseDto, AnalysisExtractionProgressDto,
@@ -192,3 +193,4 @@ pub use v3_governance::{
     V3GovernanceSnapshotDto,
 };
 pub use viewer::*;
+pub use viewer_steg::*;

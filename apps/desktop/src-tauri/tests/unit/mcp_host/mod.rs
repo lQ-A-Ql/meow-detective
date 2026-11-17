@@ -131,10 +131,16 @@ async fn real_http_handshake_discovery_call_policy_and_shutdown() {
     .unwrap();
     assert_eq!(result["id"], "tool-list");
     let tools = result["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 50);
+    assert_eq!(tools.len(), 51);
     assert!(tools
         .iter()
         .any(|tool| tool["name"] == "forensics.extract_file"));
+    let steg = tools
+        .iter()
+        .find(|tool| tool["name"] == "forensics.analyze_image_steg")
+        .unwrap();
+    assert_eq!(steg["annotations"]["readOnlyHint"], true);
+    assert_eq!(steg["annotations"]["destructiveHint"], false);
     let reader = tools
         .iter()
         .find(|tool| tool["name"] == "forensics.read_file")

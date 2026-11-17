@@ -48,6 +48,21 @@ pub fn execute_file_tool(
             })?;
             Ok(serde_json::to_value(metadata)?)
         }
+        "forensics.analyze_image_steg" => {
+            let request: McpHostFileRequestDto = serde_json::from_value(arguments.clone())?;
+            let report = crate::file_service::image_steg_for_source_case_with_bitlocker(
+                context.bitlocker_runtime,
+                context.query.connection,
+                context.query.case_root,
+                &context.query.case_meta.id,
+                &request.file_id,
+            )
+            .map_err(|source| McpHostServiceError::FileRead {
+                file_id: request.file_id.clone(),
+                source,
+            })?;
+            Ok(serde_json::to_value(report)?)
+        }
         "forensics.browse_registry_key"
         | "forensics.open_registry_hive"
         | "forensics.resolve_registry_key"

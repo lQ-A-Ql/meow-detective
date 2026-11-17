@@ -56,6 +56,7 @@ export const COMMANDS = {
     GET_TEXT_PREVIEW: 'get_text_preview',
     GET_IMAGE_PREVIEW: 'get_image_preview',
     GET_IMAGE_METADATA: 'get_image_metadata',
+    ANALYZE_IMAGE_STEG: 'analyze_image_steg',
     BROWSE_REGISTRY_KEY: 'browse_registry_key',
     GET_DOCUMENT_PREVIEW: 'get_document_preview',
     GET_MEDIA_URL: 'get_media_url',

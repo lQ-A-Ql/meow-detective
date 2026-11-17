@@ -169,6 +169,63 @@ export interface ImageMetadata {
   structure?: ImageStructure;
 }
 
+export type ImageStegStatus = 'completed' | 'unsupported' | 'oversized' | 'corrupt';
+export type ImageStegBand = 'low' | 'medium' | 'high' | 'inconclusive';
+export type ImageStegMethodKind = 'chiSquare' | 'rs' | 'spa';
+
+export interface ImageStegMethod {
+  method: ImageStegMethodKind;
+  estimate?: number;
+  score?: number;
+  samples: number;
+}
+
+export interface ImageStegAssessment {
+  score?: number;
+  band: ImageStegBand;
+  methodsUsed: number;
+  methods: ImageStegMethod[];
+}
+
+export interface ImageStegPlane {
+  plane: string;
+  samples: number;
+  uniqueValues: number;
+  assessment?: ImageStegAssessment;
+}
+
+export interface ImageStegBlock {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  plane: string;
+  score: number;
+  band: ImageStegBand;
+  methodsUsed: number;
+}
+
+export interface ImageStegWarning {
+  code: string;
+  severity: ImageIssueSeverity;
+  message: string;
+}
+
+export interface ImageStegReport {
+  status: ImageStegStatus;
+  format?: string;
+  width?: number;
+  height?: number;
+  reason?: string;
+  global?: ImageStegAssessment;
+  dominantPlane?: string;
+  planes: ImageStegPlane[];
+  blocks: ImageStegBlock[];
+  blocksScored: number;
+  blocksTotal: number;
+  warnings: ImageStegWarning[];
+}
+
 export interface DocumentTable {
   columns: string[];
   rows: string[][];

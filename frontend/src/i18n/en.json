@@ -703,6 +703,7 @@
         "timestamps": "Timestamps (MACB)",
         "summary": "Summary",
         "imageMetadata": "Image EXIF / media metadata",
+        "imageSteg": "Statistical steganalysis",
         "hash": "File hashes",
         "ntfsTechnical": "NTFS technical structure",
         "status": "Object Status",
@@ -733,6 +734,69 @@
           "unsupported": "Unsupported",
           "corrupt": "Corrupt",
           "oversized": "Image metadata exceeds the bounded read limit"
+        }
+      },
+      "imageSteg": {
+        "description": "Read-only statistical LSB triage for PNG/BMP files selected in the file browser.",
+        "run": "Run steganalysis",
+        "running": "Analyzing pixel statistics…",
+        "retry": "Retry",
+        "status": "Status",
+        "statuses": {
+          "completed": "Completed",
+          "unsupported": "Unsupported format",
+          "oversized": "Exceeds analysis limit",
+          "corrupt": "Corrupt or undecodable image"
+        },
+        "reason": "Reason",
+        "reasons": {
+          "image": {
+            "format": "The file magic is neither PNG nor BMP.",
+            "decode": "The image payload could not be decoded.",
+            "truncated": "The image data ends before its declared size."
+          },
+          "limit": {
+            "bytes": "The file exceeds the whole-file read limit.",
+            "side": "An image side exceeds the analysis limit.",
+            "pixels": "The image exceeds the 16-megapixel analysis limit."
+          }
+        },
+        "format": "Format",
+        "dimensions": "Dimensions",
+        "dominantPlane": "Dominant plane",
+        "global": "Whole image",
+        "score": "Fused score",
+        "bands": {
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High",
+          "inconclusive": "Inconclusive"
+        },
+        "methodsUsed": "Methods",
+        "methods": {
+          "chiSquare": "Chi-square",
+          "rs": "RS",
+          "spa": "SPA"
+        },
+        "planes": "Per-plane estimates",
+        "planeSamples": "{{samples}} samples · {{unique}} unique values",
+        "hotspots": "Local hotspots",
+        "blockSummary": "Scored {{scored}} of {{total}} blocks",
+        "warnings": "Warnings",
+        "sessionOnly": "Session-only: results are not written to the case.",
+        "warningCodes": {
+          "image": {
+            "steg": {
+              "alpha-excluded": "Alpha channels are excluded from steganalysis.",
+              "palette-index-domain": "Palette images are tested in the index domain with the chi-square test only.",
+              "blocks-truncated": "The block budget was exceeded; a deterministic stride was applied.",
+              "small-image": "At least one plane has fewer samples than the configured minimum and was skipped.",
+              "low-texture": "At least one plane has fewer than two unique values and was skipped.",
+              "rs-degenerate": "The RS estimate was unavailable for at least one plane.",
+              "spa-degenerate": "The SPA estimate was unavailable for at least one plane.",
+              "single-method": "At least one plane produced fewer than two methods, so no fused score was computed."
+            }
+          }
         }
       },
       "hash": {

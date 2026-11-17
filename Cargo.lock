@@ -2079,6 +2079,7 @@ dependencies = [
  "hex",
  "image-android",
  "image-e01",
+ "image-steg",
  "infrastructure",
  "kamadak-exif",
  "libc",
@@ -3409,6 +3410,14 @@ dependencies = [
  "testing",
  "thiserror 2.0.21",
  "tracing",
+]
+
+[[package]]
+name = "image-steg"
+version = "0.1.1"
+dependencies = [
+ "png 0.18.1",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

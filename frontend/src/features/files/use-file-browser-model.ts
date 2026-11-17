@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useNtfsTechnicalFile } from '@/features/files/hooks';
+import { useImageSteg } from '@/features/files/hooks/use-image-steg';
 import { useFilePagination } from '@/features/files/hooks/use-file-pagination';
 import { useFilePreview } from '@/features/files/hooks/use-file-preview';
 import { useFileSelection } from '@/features/files/hooks/use-file-selection';
@@ -140,6 +141,7 @@ export function useFileBrowserModel() {
     selectedFile?.id,
     selectedFile?.entryType === 'file',
   );
+  const imageSteg = useImageSteg(selectedFile?.entryType === 'file' ? selectedFile.id : undefined, currentCase?.id);
   const digestSource = dataSources?.find(
     (source) =>
       source.id ===
@@ -215,6 +217,7 @@ export function useFileBrowserModel() {
     imageMetadataLoading: preview.imageMetadataLoading,
     imageMetadataError: preview.imageMetadataError,
     onRetryImageMetadata: preview.onRetryImageMetadata,
+    imageSteg,
     ntfsTechnical: ntfsTechnicalQuery.technical,
     ntfsTechnicalEligible: ntfsTechnicalQuery.eligible,
     ntfsTechnicalRuns: ntfsTechnicalQuery.runs,

@@ -26,6 +26,7 @@ import {
   FileExtractionResult,
   NtfsTechnicalFile,
   ImageMetadata,
+  ImageStegReport,
   RegistryBrowserKey,
   HexSearchFileRequest,
   HexSearchRequest,
@@ -45,6 +46,11 @@ export async function inspectNtfsFile(fileId: string): Promise<NtfsTechnicalFile
 
 export async function getImageMetadata(fileId: string): Promise<ImageMetadata> {
   return apiClient.request<ImageMetadata>(COMMANDS.files.GET_IMAGE_METADATA, { fileId });
+}
+
+/** Read-only statistical steganalysis triage for one PNG/BMP file. */
+export async function analyzeImageSteg(fileId: string): Promise<ImageStegReport> {
+  return apiClient.request<ImageStegReport>(COMMANDS.files.ANALYZE_IMAGE_STEG, { fileId });
 }
 
 export async function browseRegistryKey(fileId: string, keyPath = ''): Promise<RegistryBrowserKey> {

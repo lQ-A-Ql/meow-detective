@@ -48,7 +48,10 @@ pub(super) async fn call_tool_as(
         &state,
         principal,
         cancel,
-        request.name == "forensics.read_file",
+        matches!(
+            request.name.as_str(),
+            "forensics.read_file" | "forensics.analyze_image_steg"
+        ),
     ) {
         Ok(invocation) => Arc::new(invocation),
         Err(error) => return reject(state, None, actor, safe_name, error).await,
@@ -413,6 +416,7 @@ fn dispatch_tool(
         request.name.as_str(),
         "forensics.list_files"
             | "forensics.get_file_metadata"
+            | "forensics.analyze_image_steg"
             | "forensics.browse_registry_key"
             | "forensics.open_registry_hive"
             | "forensics.resolve_registry_key"

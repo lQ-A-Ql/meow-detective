@@ -36,6 +36,7 @@ fn credentials_are_unique_bounded_and_revocation_invalidates_existing_principals
         |name: &str| principal.allows(catalog.iter().find(|tool| tool.name == name).unwrap());
     assert!(allowed("forensics.get_current_case"));
     assert!(!allowed("forensics.read_file"));
+    assert!(!allowed("forensics.analyze_image_steg"));
     assert!(allowed("forensics.extract_file"));
     assert!(registry.authenticate(&second.token).is_err());
     registry.revoke(&first.client.id);

@@ -138,6 +138,7 @@ export function FileBrowserWorkspace({ model, mountModel }: FileBrowserWorkspace
             retryNtfsTechnical={model.retryNtfsTechnical}
             ntfsNavigation={model.ntfsNavigation}
             evidenceDigest={model.evidenceDigest}
+            imageSteg={model.imageSteg}
           />
         </WorkspaceCard>
       </InteractionLock>
