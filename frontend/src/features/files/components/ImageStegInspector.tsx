@@ -203,7 +203,14 @@ export function ImageStegInspector({ model }: { model: ImageStegModel }) {
     <InspectorSection title={t('fileBrowser.inspector.sections.imageSteg')}>
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <Button type="button" size="xs" variant="forensicsOutline" onClick={model.run} disabled={model.running}>
+          <Button
+            type="button"
+            shape="pill"
+            size="xs"
+            variant="forensicsOutline"
+            onClick={model.run}
+            disabled={model.running}
+          >
             {model.running ? t('fileBrowser.inspector.imageSteg.running') : t('fileBrowser.inspector.imageSteg.run')}
           </Button>
         </div>
