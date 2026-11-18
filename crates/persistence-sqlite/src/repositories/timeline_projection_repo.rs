@@ -1,6 +1,23 @@
 use crate::connection::DbResult;
 use rusqlite::{params, Connection, OptionalExtension};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimelineProjectionMetaState {
+    Done,
+    Deferred,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimelineProjectionMetaStatus {
+    pub state: TimelineProjectionMetaState,
+    pub inserted_count: u64,
+    pub input_identity: String,
+    pub required_bytes: u64,
+    pub available_bytes: u64,
+    pub deferred_reason: Option<String>,
+    pub updated_at: String,
+}
+
 pub struct TimelineProjectionRepo<'a> {
     conn: &'a Connection,
 }
@@ -20,6 +37,24 @@ impl<'a> TimelineProjectionRepo<'a> {
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );",
         )?;
+        self.ensure_column("deferred_reason", "TEXT")?;
+        self.ensure_column("required_bytes", "INTEGER NOT NULL DEFAULT 0")?;
+        self.ensure_column("available_bytes", "INTEGER NOT NULL DEFAULT 0")?;
+        Ok(())
+    }
+
+    fn ensure_column(&self, name: &str, definition: &str) -> DbResult<()> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT name FROM pragma_table_info('timeline_projection_meta')")?;
+        let existing = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        for column in existing {
+            if column? == name {
+                return Ok(());
+            }
+        }
+        let sql = format!("ALTER TABLE timeline_projection_meta ADD COLUMN {name} {definition}");
+        self.conn.execute(&sql, [])?;
         Ok(())
     }
 
@@ -48,6 +83,59 @@ impl<'a> TimelineProjectionRepo<'a> {
             params![key, inserted_count as i64, input_identity],
         )?;
         Ok(())
+    }
+
+    pub fn mark_deferred(
+        &self,
+        key: &str,
+        input_identity: &str,
+        required_bytes: u64,
+        available_bytes: u64,
+        reason: &str,
+    ) -> DbResult<()> {
+        self.conn.execute(
+            "INSERT INTO timeline_projection_meta
+             (projection_key, status, inserted_count, input_identity, deferred_reason, required_bytes, available_bytes, updated_at)
+             VALUES (?1, 'deferred', 0, ?2, ?3, ?4, ?5, datetime('now'))
+             ON CONFLICT(projection_key) DO UPDATE SET
+                status = 'deferred',
+                inserted_count = 0,
+                input_identity = excluded.input_identity,
+                deferred_reason = excluded.deferred_reason,
+                required_bytes = excluded.required_bytes,
+                available_bytes = excluded.available_bytes,
+                updated_at = excluded.updated_at",
+            params![key, input_identity, reason, required_bytes as i64, available_bytes as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn status(&self, key: &str) -> DbResult<Option<TimelineProjectionMetaStatus>> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT status, inserted_count, input_identity, required_bytes, available_bytes, deferred_reason, updated_at
+                 FROM timeline_projection_meta WHERE projection_key = ?1",
+                [key],
+                |row| {
+                    let status: String = row.get(0)?;
+                    let state = match status.as_str() {
+                        "done" => TimelineProjectionMetaState::Done,
+                        _ => TimelineProjectionMetaState::Deferred,
+                    };
+                    Ok(TimelineProjectionMetaStatus {
+                        state,
+                        inserted_count: row.get::<_, i64>(1)?.max(0) as u64,
+                        input_identity: row.get(2)?,
+                        required_bytes: row.get::<_, i64>(3)?.max(0) as u64,
+                        available_bytes: row.get::<_, i64>(4)?.max(0) as u64,
+                        deferred_reason: row.get(5)?,
+                        updated_at: row.get(6)?,
+                    })
+                },
+            )
+            .optional()?;
+        Ok(row)
     }
 
     pub fn clear_file_activity_projection(&self, graph_tables_present: bool) -> DbResult<()> {

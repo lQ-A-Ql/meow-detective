@@ -10,6 +10,7 @@ use crate::{
 };
 use std::collections::{BTreeMap, HashMap};
 
+mod segmented;
 mod stream;
 
 pub(super) use self::stream::record_action;

@@ -9,6 +9,7 @@ mod registry;
 pub mod search_marker;
 mod source_counts;
 mod storage;
+mod timeline_gate;
 
 use std::path::{Path, PathBuf};
 

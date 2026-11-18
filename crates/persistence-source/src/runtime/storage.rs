@@ -35,6 +35,12 @@ pub enum StorageRuntimeError {
     SourceClosing(PathBuf),
     #[error("source details are not ready: {0}")]
     SourceNotReady(String),
+    #[error("timeline projection for source {source_id} is not ready: {status}")]
+    TimelineProjectionNotReady {
+        source_id: String,
+        status: String,
+        reason: Option<String>,
+    },
 }
 
 impl From<FjallStorageError> for StorageRuntimeError {

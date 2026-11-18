@@ -227,6 +227,7 @@ impl ReadOnlySourceStorageHandle {
             .read_envelope(snapshot, persistence_fjall::KeyspaceName::Meta, &key)?
             .is_some_and(|envelope| envelope.record_kind == "search_projection_generation"))
     }
+
     pub fn artifact_list_by_source(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -467,6 +468,7 @@ impl ReadWriteSourceStorageHandle {
             .delete_batch(source_id, ids, mode)
             .map_err(StorageRuntimeError::Source)
     }
+
     pub fn catalog_upsert_batch(
         &self,
         records: &[FileEntryRecord],

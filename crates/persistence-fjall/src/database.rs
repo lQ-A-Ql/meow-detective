@@ -273,8 +273,40 @@ impl SingleWriterTxDatabase {
             .immutable_gate
             .lock()
             .map_err(|_| E::from(FjallStorageError::LockPoisoned))?;
-        let transaction = self.inner.engine.write_tx().durability(Some(mode.into()));
         let snapshot = self.read_snapshot();
+        self.write_streamed_locked(mode, &snapshot, plan)
+    }
+
+    /// Same transaction semantics as [`Self::write_streamed`], but the read
+    /// snapshot is supplied by the caller so a fixed snapshot can be reused
+    /// across several segment transactions.
+    pub(crate) fn write_streamed_with_snapshot<T, E>(
+        &self,
+        mode: PersistMode,
+        snapshot: &SourceReadSnapshot,
+        plan: impl FnOnce(&SourceReadSnapshot, &mut WriteStream<'_>) -> std::result::Result<T, E>,
+    ) -> std::result::Result<(T, WriteBatchReceipt), E>
+    where
+        E: From<FjallStorageError>,
+    {
+        let _guard = self
+            .inner
+            .immutable_gate
+            .lock()
+            .map_err(|_| E::from(FjallStorageError::LockPoisoned))?;
+        self.write_streamed_locked(mode, snapshot, plan)
+    }
+
+    fn write_streamed_locked<T, E>(
+        &self,
+        mode: PersistMode,
+        snapshot: &SourceReadSnapshot,
+        plan: impl FnOnce(&SourceReadSnapshot, &mut WriteStream<'_>) -> std::result::Result<T, E>,
+    ) -> std::result::Result<(T, WriteBatchReceipt), E>
+    where
+        E: From<FjallStorageError>,
+    {
+        let transaction = self.inner.engine.write_tx().durability(Some(mode.into()));
         let mut stream = WriteStream::new(
             transaction,
             &self.inner.keyspaces,
@@ -282,11 +314,10 @@ impl SingleWriterTxDatabase {
             &self.inner.immutable_epoch,
             &self.inner.immutable_sealed,
         );
-        let value = plan(&snapshot, &mut stream)?;
+        let value = plan(snapshot, &mut stream)?;
         let receipt = stream.finish().map_err(E::from)?;
         Ok((value, receipt))
     }
-
     pub fn read_snapshot(&self) -> SourceReadSnapshot {
         SourceReadSnapshot {
             snapshot: self.inner.engine.read_tx(),

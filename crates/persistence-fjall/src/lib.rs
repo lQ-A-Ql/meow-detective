@@ -59,6 +59,11 @@ pub use source_store::{
     close_shared_source_stores_under, open_shared_source_store, SharedSourceStoreCloseGuard,
     SourceCloneProgress, SourceStore,
 };
+pub use timeline::projection_state::{
+    decode_timeline_projection_state, timeline_projection_marker_envelope,
+    timeline_projection_state_key, SegmentLimits, SegmentedReplaceOutcome, TimelineProjectionState,
+    TimelineProjectionStatePayload, TIMELINE_PROJECTION_STATE_FAMILY,
+};
 pub use timeline::{
     decode_timestamp_desc, encode_timestamp_desc, FacetSummary, TimelinePage, TimelineRecord,
     TimelineRecordStorageCost, TimelineRecordStore, TimelineStreamError, TimelineTypeAfterQuery,

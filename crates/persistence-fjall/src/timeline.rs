@@ -13,6 +13,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 mod facet_index;
+pub mod projection_state;
 mod staging;
 mod storage_cost;
 mod timeline_batch;
@@ -24,9 +25,9 @@ pub use timeline_facets::FacetSummary;
 
 const RECORD_KIND: &str = "timeline_event";
 const SCHEMA_VERSION: u16 = 1;
+const TIME_FAMILY: &str = "timeline.time";
 const RECORD_FAMILY: &str = "timeline.record";
 const SOURCE_FAMILY: &str = "timeline.source";
-const TIME_FAMILY: &str = "timeline.time";
 const TYPE_FAMILY: &str = "timeline.type";
 const OBJECT_FAMILY: &str = "timeline.object";
 const CLUSTER_FAMILY: &str = "timeline.cluster";
