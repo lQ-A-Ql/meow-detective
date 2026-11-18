@@ -34,6 +34,7 @@ export function CollapsibleSection({
         <CollapsiblePrimitive.Trigger asChild>
           <Button
             type="button"
+            shape="row"
             variant="forensicsGhost"
             size="inline"
             className="min-w-0 flex-1 justify-start gap-2 whitespace-normal text-left"

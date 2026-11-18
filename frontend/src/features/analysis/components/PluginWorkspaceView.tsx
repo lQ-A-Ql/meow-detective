@@ -13,21 +13,23 @@ interface PluginWorkspaceViewProps {
 
 export function PluginWorkspaceView({ running, error, onRun, children }: PluginWorkspaceViewProps) {
   const { t } = useTranslation();
+  const runLabel = t(running ? 'pluginModule.actions.running' : 'pluginModule.actions.runEnabled');
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-3 border-b border-forensics-divider pb-3">
         <span className="text-[12px] text-forensics-text">{t('pluginModule.groupTitle')}</span>
-        <Tooltip content={t('pluginModule.actions.runEnabled')}>
+        <Tooltip content={runLabel}>
           <Button
             type="button"
+            shape="pill"
             variant="forensicsOutline"
             size="xs"
             disabled={running}
             onClick={onRun}
-            aria-label={t('pluginModule.actions.runEnabled')}
+            aria-label={runLabel}
           >
             <ActionIcon name="play" />
-            {t(running ? 'pluginModule.actions.running' : 'pluginModule.actions.runEnabled')}
+            {runLabel}
           </Button>
         </Tooltip>
       </div>

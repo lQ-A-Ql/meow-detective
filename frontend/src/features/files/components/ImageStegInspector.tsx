@@ -34,6 +34,7 @@ function SectionLabel({ label }: { label: string }) {
 
 function AssessmentBlock({ assessment }: { assessment: ImageStegAssessment }) {
   const { t } = useTranslation();
+  const methods = assessment.methods ?? [];
   return (
     <div className="space-y-1">
       <div className="grid grid-cols-[92px_1fr] gap-1 font-mono text-[10px]">
@@ -44,9 +45,9 @@ function AssessmentBlock({ assessment }: { assessment: ImageStegAssessment }) {
         <span className="text-forensics-muted-light">{t('fileBrowser.inspector.imageSteg.methodsUsed')}</span>
         <span className="text-forensics-text-secondary">{assessment.methodsUsed}</span>
       </div>
-      {assessment.methods.length > 0 ? (
+      {methods.length > 0 ? (
         <div className="space-y-0.5">
-          {assessment.methods.map((method) => (
+          {methods.map((method) => (
             <div
               key={method.method}
               className="grid grid-cols-[64px_1fr] gap-1 font-mono text-[10px] text-forensics-text-secondary"
@@ -69,6 +70,9 @@ function StegReportView({ report }: { report: ImageStegReport }) {
   const { t } = useTranslation();
   const dimensions =
     report.width !== undefined && report.height !== undefined ? `${report.width} × ${report.height}` : undefined;
+  const planes = report.planes ?? [];
+  const blocks = report.blocks ?? [];
+  const warnings = report.warnings ?? [];
 
   return (
     <div className="space-y-2" data-testid="image-steg-report">
@@ -112,11 +116,11 @@ function StegReportView({ report }: { report: ImageStegReport }) {
         </div>
       ) : null}
 
-      {report.planes.length > 0 ? (
+      {planes.length > 0 ? (
         <div>
           <SectionLabel label={t('fileBrowser.inspector.imageSteg.planes')} />
           <div className="max-h-40 space-y-1 overflow-auto">
-            {report.planes.map((plane) => (
+            {planes.map((plane) => (
               <div
                 key={plane.plane}
                 className="grid grid-cols-[48px_1fr] gap-1 font-mono text-[10px] text-forensics-text-secondary"
@@ -139,11 +143,11 @@ function StegReportView({ report }: { report: ImageStegReport }) {
         </div>
       ) : null}
 
-      {report.blocks.length > 0 ? (
+      {blocks.length > 0 ? (
         <div>
           <SectionLabel label={t('fileBrowser.inspector.imageSteg.hotspots')} />
           <div className="max-h-32 space-y-0.5 overflow-auto">
-            {report.blocks.map((block) => (
+            {blocks.map((block) => (
               <div
                 key={`${block.plane}-${block.x}-${block.y}`}
                 className={`grid grid-cols-[48px_1fr] gap-1 font-mono text-[10px] ${bandClass(block.band)}`}
@@ -167,11 +171,11 @@ function StegReportView({ report }: { report: ImageStegReport }) {
         </div>
       ) : null}
 
-      {report.warnings.length > 0 ? (
+      {warnings.length > 0 ? (
         <div>
           <SectionLabel label={t('fileBrowser.inspector.imageSteg.warnings')} />
           <div className="space-y-1">
-            {report.warnings.map((warning, index) => (
+            {warnings.map((warning, index) => (
               <div
                 key={`${warning.code}-${index}`}
                 className={`space-y-0.5 font-mono text-[10px] ${severityClass(warning.severity)}`}
@@ -198,21 +202,26 @@ function StegReportView({ report }: { report: ImageStegReport }) {
 export function ImageStegInspector({ model }: { model: ImageStegModel }) {
   const { t } = useTranslation();
   const idle = !model.report && !model.running && !model.errorText;
+  const runLabel = model.running
+    ? t('fileBrowser.inspector.imageSteg.running')
+    : t('fileBrowser.inspector.imageSteg.run');
 
   return (
     <InspectorSection title={t('fileBrowser.inspector.sections.imageSteg')}>
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            shape="pill"
-            size="xs"
-            variant="forensicsOutline"
-            onClick={model.run}
-            disabled={model.running}
-          >
-            {model.running ? t('fileBrowser.inspector.imageSteg.running') : t('fileBrowser.inspector.imageSteg.run')}
-          </Button>
+          <Tooltip content={runLabel}>
+            <Button
+              aria-label={runLabel}
+              type="button"
+              size="xs"
+              variant="forensicsOutline"
+              onClick={model.run}
+              disabled={model.running}
+            >
+              <ActionIcon name="play" />
+            </Button>
+          </Tooltip>
         </div>
         {idle ? (
           <div className="space-y-1 text-[10px] text-forensics-muted">

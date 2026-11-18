@@ -50,13 +50,18 @@ describe('ImageStegInspector', () => {
     render(<ImageStegInspector model={model({ run })} />);
     expect(screen.getByText('对文件浏览器中选中的 PNG/BMP 文件执行只读统计 LSB 隐写分诊。')).toBeInTheDocument();
     expect(screen.getByText('仅会话展示：结果不会写入案件。')).toBeInTheDocument();
-    screen.getByRole('button', { name: '运行隐写分析' }).click();
+    const button = screen.getByRole('button', { name: '运行隐写分析' });
+    expect(button).toHaveAttribute('data-shape', 'circle');
+    expect(button.textContent).toBe('');
+    expect(button.querySelector('svg')).not.toBeNull();
+    button.click();
     expect(run).toHaveBeenCalledTimes(1);
   });
 
   it('disables the trigger while the analysis is running', () => {
     render(<ImageStegInspector model={model({ running: true })} />);
     const button = screen.getByRole('button', { name: '正在分析像素统计…' });
+    expect(button).toHaveAttribute('data-shape', 'circle');
     expect(button).toBeDisabled();
   });
 
@@ -74,6 +79,43 @@ describe('ImageStegInspector', () => {
     expect(screen.getByText('已评分 1 / 1 个块')).toBeInTheDocument();
     expect(screen.getByText('块数量超出预算，已按固定步长抽样。')).toBeInTheDocument();
     expect(screen.getByText('Backend fallback text.')).toBeInTheDocument();
+  });
+
+  it('renders a completed report whose optional arrays are omitted from the wire payload', () => {
+    render(
+      <ImageStegInspector
+        model={model({
+          report: {
+            status: 'completed',
+            format: 'bmp',
+            width: 2,
+            height: 1,
+            global: { score: 0.5, band: 'medium', methodsUsed: 1 },
+            blocksScored: 0,
+            blocksTotal: 0,
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText('已完成')).toBeInTheDocument();
+    expect(screen.getByText('bmp')).toBeInTheDocument();
+    expect(screen.getByText('2 × 1')).toBeInTheDocument();
+    expect(screen.getByText('整图评估')).toBeInTheDocument();
+    expect(screen.getByText('融合评分')).toBeInTheDocument();
+    expect(screen.getByText('50.0% · 中')).toBeInTheDocument();
+  });
+
+  it('renders a status-only unsupported report without optional arrays', () => {
+    render(
+      <ImageStegInspector
+        model={model({
+          report: { status: 'unsupported', reason: 'image.format', blocksScored: 0, blocksTotal: 0 },
+        })}
+      />,
+    );
+    expect(screen.getByText('不支持的格式')).toBeInTheDocument();
+    expect(screen.getByText('文件魔数既不是 PNG 也不是 BMP。')).toBeInTheDocument();
+    expect(screen.queryByText('整图评估')).not.toBeInTheDocument();
   });
 
   it('renders status-only failures with a localized reason', () => {

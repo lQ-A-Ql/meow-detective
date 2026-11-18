@@ -139,6 +139,7 @@ export function LeadCard({
           <Button
             key={`${lead.id}-${jump.route}-${jump.targetId}`}
             type="button"
+            shape="pill"
             variant="forensicsOutline"
             size="compact"
             onClick={(event) => {

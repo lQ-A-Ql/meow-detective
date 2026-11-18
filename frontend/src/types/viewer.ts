@@ -113,7 +113,7 @@ export interface ImageExifBlock {
   length: number;
   decoded: boolean;
   fieldCount: number;
-  warnings: ImageMetadataWarning[];
+  warnings?: ImageMetadataWarning[];
 }
 
 export interface ImageSegment {
@@ -141,9 +141,9 @@ export interface ImageStructure {
   trailingBytes?: number;
   truncated: boolean;
   segmentCount: number;
-  segments: ImageSegment[];
+  segments?: ImageSegment[];
   segmentsTruncated: boolean;
-  findings: ImageStructureFinding[];
+  findings?: ImageStructureFinding[];
   hashes: ImageStructureHashes;
 }
 
@@ -164,8 +164,8 @@ export interface ImageMetadata {
   longitude?: number;
   altitude?: number;
   gpsDateTime?: string;
-  warnings: ImageMetadataWarning[];
-  exifBlocks: ImageExifBlock[];
+  warnings?: ImageMetadataWarning[];
+  exifBlocks?: ImageExifBlock[];
   structure?: ImageStructure;
 }
 
@@ -184,7 +184,7 @@ export interface ImageStegAssessment {
   score?: number;
   band: ImageStegBand;
   methodsUsed: number;
-  methods: ImageStegMethod[];
+  methods?: ImageStegMethod[];
 }
 
 export interface ImageStegPlane {
@@ -219,11 +219,11 @@ export interface ImageStegReport {
   reason?: string;
   global?: ImageStegAssessment;
   dominantPlane?: string;
-  planes: ImageStegPlane[];
-  blocks: ImageStegBlock[];
+  planes?: ImageStegPlane[];
+  blocks?: ImageStegBlock[];
   blocksScored: number;
   blocksTotal: number;
-  warnings: ImageStegWarning[];
+  warnings?: ImageStegWarning[];
 }
 
 export interface DocumentTable {

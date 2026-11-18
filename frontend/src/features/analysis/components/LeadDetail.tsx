@@ -51,6 +51,7 @@ export function LeadDetailPanel({
           <Button
             key={`${lead.id}-detail-${jump.route}-${jump.targetId}`}
             type="button"
+            shape="pill"
             variant="forensicsOutline"
             size="compact"
             onClick={() => onJump(jump.route, jump.targetId)}
@@ -238,6 +239,7 @@ function NodeSummaryCard({
             <Button
               key={`${node.id}-${jump.route}-${jump.targetId}`}
               type="button"
+              shape="pill"
               variant="forensicsOutline"
               size="compact"
               onClick={() => onJump(jump.route, jump.targetId)}

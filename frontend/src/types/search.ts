@@ -7,7 +7,7 @@ export interface SearchCoverage {
   indexedSourceCount: number;
   expectedEntryCount: number;
   indexedEntryCount: number;
-  missingSourceIds: string[];
+  missingSourceIds?: string[];
   complete: boolean;
 }
 

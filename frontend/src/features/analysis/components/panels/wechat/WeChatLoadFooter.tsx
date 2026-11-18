@@ -20,7 +20,7 @@ export function WeChatLoadFooter({ state }: { state: WeChatLoadState }) {
           </Button>
         </Tooltip>
       ) : state.hasMore ? (
-        <Button variant="forensicsGhost" size="xs" disabled={state.loadingMore} onClick={state.loadMore}>
+        <Button shape="pill" variant="forensicsGhost" size="xs" disabled={state.loadingMore} onClick={state.loadMore}>
           {state.loadingMore ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
           {t(state.loadingMore ? 'wechatWorkspace.loadingMore' : 'wechatWorkspace.loadMore')}
         </Button>

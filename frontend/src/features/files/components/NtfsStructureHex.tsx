@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { HexViewer } from '@/components/viewers/HexViewer';
 import { Button } from '@/app/components/ui/button';
+import { Tooltip } from '@/app/components/ui/tooltip';
+import { ActionIcon } from '@/components/controls/ActionIcon';
 import { KeyValueField } from '@/components/data-display';
 import type { NtfsRecordSourceRange } from '@/types/files';
 
@@ -13,6 +15,9 @@ export interface NtfsStructureHexProps {
 export function NtfsStructureHex({ hex, sourceRanges, onDecodedChange }: NtfsStructureHexProps) {
   const { t } = useTranslation();
   if (!hex) return null;
+  const label = t(
+    hex.decoded ? 'fileBrowser.inspector.ntfs.showSourceBytes' : 'fileBrowser.inspector.ntfs.showDecodedBytes',
+  );
   return (
     <div className="space-y-2">
       <div>
@@ -22,9 +27,17 @@ export function NtfsStructureHex({ hex, sourceRanges, onDecodedChange }: NtfsStr
             : 'fileBrowser.inspector.ntfs.sourceRecordBytes',
         )}
       </div>
-      <Button size="xs" variant="forensicsOutline" onClick={() => onDecodedChange?.(!hex.decoded)}>
-        {t(hex.decoded ? 'fileBrowser.inspector.ntfs.showSourceBytes' : 'fileBrowser.inspector.ntfs.showDecodedBytes')}
-      </Button>
+      <Tooltip content={label}>
+        <Button
+          aria-label={label}
+          type="button"
+          size="xs"
+          variant="forensicsOutline"
+          onClick={() => onDecodedChange?.(!hex.decoded)}
+        >
+          <ActionIcon name={hex.decoded ? 'eye-off' : 'eye'} />
+        </Button>
+      </Tooltip>
       {sourceRanges.map((range) => (
         <KeyValueField
           key={range.recordOffset}

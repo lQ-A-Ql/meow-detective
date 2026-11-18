@@ -97,6 +97,30 @@ describe('ImageMetadataPanel', () => {
     expect(await screen.findByRole('button', { name: '已复制' })).toBeInTheDocument();
   });
 
+  it('renders structure and EXIF blocks whose optional arrays are omitted', () => {
+    render(
+      <ImageMetadataPanel
+        metadata={{
+          status: 'present',
+          structure: {
+            declaredEnd: 0x200,
+            trailingBytes: 0,
+            truncated: false,
+            segmentCount: 0,
+            segmentsTruncated: false,
+            hashes: {},
+          },
+          exifBlocks: [{ source: 'exif.app1', offset: 12, length: 4, decoded: true, fieldCount: 1 }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('容器结构')).toBeInTheDocument();
+    expect(screen.getByText(/exif\.app1/)).toBeInTheDocument();
+    expect(screen.queryByText('警告')).not.toBeInTheDocument();
+    expect(screen.queryByText('结构发现')).not.toBeInTheDocument();
+  });
+
   it('shows the metadata-only hint when requested', () => {
     render(<ImageMetadataPanel metadataOnly metadata={metadata({ format: 'tiff' })} />);
     expect(screen.getByText('仅元数据图片')).toBeInTheDocument();

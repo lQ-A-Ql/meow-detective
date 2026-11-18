@@ -115,6 +115,7 @@ export function InfrastructureContainer() {
                   <Button
                     key={item}
                     type="button"
+                    shape="row"
                     variant="forensicsGhost"
                     size="sm"
                     onClick={() => setSection(item)}

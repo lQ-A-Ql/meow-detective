@@ -40,6 +40,7 @@ export function ClusterCard({
         <div className="mt-3 flex flex-wrap gap-2">
           <Button
             type="button"
+            shape="pill"
             variant="forensicsOutline"
             size="compact"
             onClick={() => onJump(primaryJump.route, primaryJump.targetId)}

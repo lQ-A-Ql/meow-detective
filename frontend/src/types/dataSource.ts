@@ -142,5 +142,5 @@ export interface BitLockerCatalogImport {
   fileCount?: number;
   directoryCount?: number;
   totalSize?: number;
-  warnings: string[];
+  warnings?: string[];
 }

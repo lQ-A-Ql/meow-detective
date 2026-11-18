@@ -11,7 +11,7 @@ export interface NotebookEntry {
   bodyMarkdown: string;
   entryType: NotebookEntryType;
   status: NotebookEntryStatus;
-  tags: string[];
+  tags?: string[];
   createdAt: string;
   updatedAt: string;
 }

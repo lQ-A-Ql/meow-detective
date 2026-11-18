@@ -69,6 +69,14 @@ describe('ImageMetadataInspector', () => {
     expect(screen.getAllByRole('button', { name: '复制哈希' }).length).toBeGreaterThan(0);
   });
 
+  it('renders sparse metadata whose optional arrays are omitted', () => {
+    render(<ImageMetadataInspector loading={false} metadata={{ status: 'present' }} />);
+    expect(screen.getByText('已发现')).toBeInTheDocument();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+    expect(screen.queryByText('警告')).not.toBeInTheDocument();
+    expect(screen.queryByText('EXIF 属性')).not.toBeInTheDocument();
+  });
+
   it('renders loading and retryable error states', () => {
     const retry = vi.fn();
     const { rerender } = render(<ImageMetadataInspector loading metadata={null} />);

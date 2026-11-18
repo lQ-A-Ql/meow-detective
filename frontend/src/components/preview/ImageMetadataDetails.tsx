@@ -74,11 +74,12 @@ function IssueLine({
   );
 }
 
-function WarningList({ warnings }: { warnings: ImageMetadataWarning[] }) {
-  if (warnings.length === 0) return null;
+function WarningList({ warnings }: { warnings?: ImageMetadataWarning[] }) {
+  const items = warnings ?? [];
+  if (items.length === 0) return null;
   return (
     <div className="space-y-1">
-      {warnings.map((warning, index) => (
+      {items.map((warning, index) => (
         <IssueLine
           key={`${warning.code}-${warning.offset ?? index}`}
           code={warning.code}
@@ -91,11 +92,12 @@ function WarningList({ warnings }: { warnings: ImageMetadataWarning[] }) {
   );
 }
 
-function FindingList({ findings }: { findings: ImageStructureFinding[] }) {
-  if (findings.length === 0) return null;
+function FindingList({ findings }: { findings?: ImageStructureFinding[] }) {
+  const items = findings ?? [];
+  if (items.length === 0) return null;
   return (
     <div className="space-y-1">
-      {findings.map((finding, index) => (
+      {items.map((finding, index) => (
         <IssueLine
           key={`${finding.code}-${finding.offset ?? index}`}
           code={finding.code}
@@ -149,6 +151,10 @@ export function ImageMetadataDetails({ metadata, fileSize, metadataOnly = false 
   const { t } = useTranslation();
   if (!metadata) return null;
   const structure = metadata.structure;
+  const warnings = metadata.warnings ?? [];
+  const exifBlocks = metadata.exifBlocks ?? [];
+  const segments = structure?.segments ?? [];
+  const findings = structure?.findings ?? [];
   const visibleExif = exifFields.filter(([key]) => {
     const value = metadata[key];
     return value !== undefined && value !== null && value !== '';
@@ -183,14 +189,14 @@ export function ImageMetadataDetails({ metadata, fileSize, metadataOnly = false 
         <div className="text-forensics-text-secondary">{formatBytes(fileSize)}</div>
       </div>
 
-      {metadata.warnings.length > 0 ? (
+      {warnings.length > 0 ? (
         <div>
           {sectionLabel('warnings')}
-          <WarningList warnings={metadata.warnings} />
+          <WarningList warnings={warnings} />
         </div>
       ) : null}
 
-      {visibleExif.length > 0 || metadata.exifBlocks.length > 0 ? (
+      {visibleExif.length > 0 || exifBlocks.length > 0 ? (
         <div className="space-y-1">
           {sectionLabel('exif')}
           {visibleExif.map(([key, label]) => (
@@ -201,7 +207,7 @@ export function ImageMetadataDetails({ metadata, fileSize, metadataOnly = false 
               <span className="break-all text-forensics-text-secondary">{String(metadata[key])}</span>
             </div>
           ))}
-          {metadata.exifBlocks.map((block, index) => (
+          {exifBlocks.map((block, index) => (
             <details key={`${block.source}-${block.offset}-${index}`} className="font-mono text-[10px]">
               <summary className="cursor-pointer text-forensics-text-secondary">
                 {block.source} · {formatOffset(block.offset)} · {block.length} B
@@ -255,14 +261,14 @@ export function ImageMetadataDetails({ metadata, fileSize, metadataOnly = false 
             </span>
             <span className="text-forensics-text-secondary">{structure.segmentCount}</span>
           </div>
-          {structure.segments.length > 0 ? (
+          {segments.length > 0 ? (
             <div className="text-[10px] text-forensics-muted-light">
               {t('fileBrowser.preview.imageMetadata.fields.segments')}
             </div>
           ) : null}
-          {structure.segments.length > 0 ? (
+          {segments.length > 0 ? (
             <div className="max-h-40 space-y-0.5 overflow-auto">
-              {structure.segments.map((segment, index) => (
+              {segments.map((segment, index) => (
                 <div
                   key={`${segment.kind}-${segment.offset}-${index}`}
                   className="grid grid-cols-[72px_64px_1fr] gap-1 font-mono text-[10px] text-forensics-text-secondary"
@@ -281,12 +287,12 @@ export function ImageMetadataDetails({ metadata, fileSize, metadataOnly = false 
               {t('fileBrowser.preview.imageMetadata.truncatedList')}
             </div>
           ) : null}
-          {structure.findings.length > 0 ? (
+          {findings.length > 0 ? (
             <div className="text-[10px] text-forensics-muted-light">
               {t('fileBrowser.preview.imageMetadata.fields.findings')}
             </div>
           ) : null}
-          <FindingList findings={structure.findings} />
+          <FindingList findings={findings} />
           {structure.hashes.wholeFileSha256 || structure.hashes.trailingSha256 ? (
             <div className="space-y-1">
               {sectionLabel('hashes')}

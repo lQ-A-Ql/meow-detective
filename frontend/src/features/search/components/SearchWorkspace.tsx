@@ -237,7 +237,9 @@ export function SearchWorkspace({ model }: SearchWorkspaceProps) {
             {coverage && !coverage.complete ? (
               <span
                 className="flex items-center gap-1 text-forensics-error-text"
-                title={t('search.coverage.missingTitle', { sources: coverage.missingSourceIds.join(', ') })}
+                title={t('search.coverage.missingTitle', {
+                  sources: (coverage.missingSourceIds ?? []).join(', '),
+                })}
               >
                 <AlertTriangle size={12} />
                 {t('search.coverage.incomplete', {

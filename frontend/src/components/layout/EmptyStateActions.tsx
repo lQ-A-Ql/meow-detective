@@ -7,7 +7,7 @@ import { Button } from '@/app/components/ui/button';
 export function ImportDataAction() {
   const { t } = useTranslation();
   return (
-    <Button asChild variant="outline" size="sm">
+    <Button asChild shape="pill" variant="outline" size="sm">
       <Link to="/">{t('common.emptyGoToImport')}</Link>
     </Button>
   );

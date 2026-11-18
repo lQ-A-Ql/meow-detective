@@ -117,7 +117,7 @@ describe('PluginModulePanel', () => {
   it('disables the plugin workspace action while enabled plugins are running', () => {
     mocks.useRunPluginExtraction.mockReturnValue({ mutate: vi.fn(), isPending: true, error: null });
     render(createElement(PluginWorkspaceContainer, { dataSourceId: 'source-one', loadContextKey: 'source-one' }));
-    expect(screen.getByRole('button', { name: '运行已启用插件' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '运行中…' })).toBeDisabled();
   });
 
   it('renders header with display name, version and warnings', () => {
