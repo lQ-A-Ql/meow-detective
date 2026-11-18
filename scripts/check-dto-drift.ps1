@@ -17,11 +17,19 @@
   case-sensitive: silent acronym-casing drift (`appcompatLayers` vs
   `appCompatLayers`) is a real wire break, so ordinal semantics are required.
 
+  Intentional renames are declared in `$dtoTsAliases` and applied before the
+  default strip-`Dto` mapping. An alias keeps the renamed pair *checked*; without
+  it the DTO would only show up as "unpaired", which silently hides a real
+  contract break (e.g. `ImageStegDto` <-> `ImageStegReport`).
+
   For paired types the guard checks:
     - field-name sets (missing/extra fields),
     - optionality: a Rust `Option<T>` must surface as an optional or nullable
       TS field, and a Rust field that is neither optional, defaulted, nor
-      conditionally skipped must not be optional in TS.
+      conditionally skipped must not be optional in TS,
+    - asymmetric omission: a non-`Option` Rust field carrying
+      `skip_serializing_if` may be absent on the wire, so the TS field must be
+      optional or nullable.
 
   TypeScript `extends` chains are resolved so inherited fields are compared
   against the Rust struct. Rust structs with no same-name TS type (kept under a
@@ -247,12 +255,23 @@ function Resolve-TsFields {
 }
 
 # ── Pair by name (FooDto <-> Foo) and compare ─────────────────────────
+# Intentional renames only. Listing a DTO here makes the renamed pair part of
+# the checked contract instead of leaving it silently "unpaired"; keep the map
+# tiny and justified, it is not a place to silence real drift.
+$dtoTsAliases = @{
+  'ImageStegDto' = 'ImageStegReport'
+}
+
 $mismatches = @()
 $paired = 0
 $unpairedRust = @()
 
 foreach ($structName in $rustStructs.Keys | Sort-Object) {
-  $tsName = $structName -replace 'Dto$', ''
+  $tsName = if ($dtoTsAliases.ContainsKey($structName)) {
+    $dtoTsAliases[$structName]
+  } else {
+    $structName -replace 'Dto$', ''
+  }
   $tsFields = Resolve-TsFields -Name $tsName -Visiting ([System.Collections.Generic.HashSet[string]]::new())
   if ($null -eq $tsFields) {
     $unpairedRust += $structName
@@ -287,6 +306,11 @@ foreach ($structName in $rustStructs.Keys | Sort-Object) {
     }
     if (-not $rustField.IsOption -and -not $rustField.HasSkipIf -and $tsNullable) {
       $optionality += "$rustFieldName (Rust never serializes null, TS allows null)"
+    }
+    # A non-Option field with skip_serializing_if can still be absent on the
+    # wire, so a TS field that requires it is an asymmetric contract break.
+    if (-not $rustField.IsOption -and $rustField.HasSkipIf -and -not $tsField.Optional -and -not $tsNullable) {
+      $optionality += "$rustFieldName (Rust can omit it via skip_serializing_if, TS requires it)"
     }
   }
 
