@@ -5,7 +5,8 @@ use transport::commands::{
     GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest, GetTimelineEventByIdRequest,
     GetTimelineFacetsRequest, GetTimelineRequest, ImportDataSourceRequest, ImportSourceKindDto,
     ImportTargetPlatformDto, ListDeletedRecoveriesRequest, ReadDeletedRecoveryRangeRequest,
-    RunDeletedRecoveryRequest, SearchDeletedRecoveriesByHashRequest, SearchFilesRequest,
+    RebuildTimelineProjectionRequest, RunDeletedRecoveryRequest,
+    SearchDeletedRecoveriesByHashRequest, SearchFilesRequest,
 };
 use transport::dto::{EvtxEventViewDto, LocalDiskDto};
 
@@ -527,4 +528,15 @@ fn timeline_event_by_id_request_requires_id() {
     }
     .validate()
     .is_err());
+}
+
+#[test]
+fn rebuild_timeline_projection_request_accepts_empty_body_and_camel_case_source() {
+    let empty: RebuildTimelineProjectionRequest =
+        serde_json::from_str("{}").expect("empty body must parse");
+    assert!(empty.data_source_id.is_none());
+
+    let scoped: RebuildTimelineProjectionRequest =
+        serde_json::from_str(r#"{"dataSourceId":"ds-1"}"#).expect("camelCase source must parse");
+    assert_eq!(scoped.data_source_id.as_deref(), Some("ds-1"));
 }

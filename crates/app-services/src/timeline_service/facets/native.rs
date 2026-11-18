@@ -20,10 +20,13 @@ pub(super) fn get(
         end: time_end,
         event_type,
     };
-    let sources = source_ids
-        .iter()
-        .map(|id| NativeFacetSource::open(case_root, id, &filter))
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut sources = Vec::with_capacity(source_ids.len());
+    for id in source_ids {
+        match NativeFacetSource::open(case_root, id, &filter)? {
+            Some(source) => sources.push(source),
+            None => continue,
+        }
+    }
     let min_epoch = sources
         .iter()
         .filter_map(|source| source.bounds.map(|(first, _)| first.timestamp()))

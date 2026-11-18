@@ -82,6 +82,8 @@ macro_rules! desktop_command_handler {
             get_timeline_events,
             get_timeline_event_by_id,
             get_timeline_facets,
+            get_timeline_projection_status,
+            rebuild_timeline_projection,
             get_artifact_families,
             get_artifact_rows,
             get_artifact_rows_request,

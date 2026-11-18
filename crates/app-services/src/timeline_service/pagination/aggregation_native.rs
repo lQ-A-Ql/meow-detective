@@ -47,6 +47,7 @@ pub(super) fn query(
         .ok_or_else(|| TimelineServiceError::Other("source identity is missing".into()))?;
     let repository = TimelineRecordStore::from_source_store((*source).clone());
     let snapshot = repository.read_snapshot();
+    enforce_timeline_projection_ready(&source, &snapshot, &source_id)?;
     let (clusters, totals) = load_clusters(
         &repository,
         &snapshot,
@@ -237,4 +238,39 @@ fn page_capacity(offset: u64, limit: u32) -> usize {
     usize::try_from(offset)
         .unwrap_or(usize::MAX)
         .saturating_add(limit as usize)
+}
+
+/// Single-source explicit query gate: a building/deferred marker blocks this
+/// reader with the typed `ProjectionNotReady` error; a missing marker (legacy
+/// case) stays complete.
+fn enforce_timeline_projection_ready(
+    source: &persistence_source::fjall::SourceStore,
+    snapshot: &persistence_source::fjall::SourceReadSnapshot,
+    source_id: &str,
+) -> Result<(), TimelineServiceError> {
+    let key = persistence_source::fjall::timeline_projection_state_key(source_id)
+        .map_err(|error| TimelineServiceError::Other(error.to_string()))?;
+    let Some(envelope) = source
+        .read_envelope(
+            snapshot,
+            persistence_source::fjall::KeyspaceName::Meta,
+            &key,
+        )
+        .map_err(|error| TimelineServiceError::Other(error.to_string()))?
+    else {
+        return Ok(());
+    };
+    let Some(payload) = persistence_source::fjall::decode_timeline_projection_state(&envelope)
+        .map_err(|error| TimelineServiceError::Other(error.to_string()))?
+    else {
+        return Ok(());
+    };
+    if payload.status == persistence_source::fjall::TimelineProjectionState::Complete {
+        return Ok(());
+    }
+    Err(TimelineServiceError::ProjectionNotReady {
+        source_id: source_id.to_owned(),
+        status: payload.status.as_str().to_owned(),
+        reason: payload.reason,
+    })
 }

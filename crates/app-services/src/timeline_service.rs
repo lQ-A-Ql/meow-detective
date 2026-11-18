@@ -2,8 +2,11 @@ mod error;
 mod export;
 mod facets;
 pub(crate) mod fjall;
+mod gate;
 mod pagination;
+mod projection_status;
 mod query;
+mod rebuild;
 
 pub use error::TimelineServiceError;
 pub use export::{
@@ -22,8 +25,10 @@ pub use import_core::timeline_projection::{
 pub use pagination::{
     query_timeline_aggregated, query_timeline_filtered_for_case, query_timeline_for_case,
 };
+pub use projection_status::get_timeline_projection_status;
 pub use query::{
     count_timeline_events_for_case, get_timeline_event_by_id, get_timeline_event_by_id_for_case,
     query_timeline, query_timeline_filtered, TimelineQuery,
 };
+pub use rebuild::{acquire_rebuild_guard, rebuild_timeline_projection};
 pub use timeline::TimelineProjectionPolicy;

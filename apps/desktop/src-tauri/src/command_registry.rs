@@ -86,5 +86,8 @@ pub(crate) use crate::commands::{
     search_commands::search_files_request,
     settings_commands::{get_app_settings, save_app_settings},
     storage_recovery_commands::{get_storage_recovery_report, repair_storage_operation},
-    timeline_commands::{get_timeline_event_by_id, get_timeline_events, get_timeline_facets},
+    timeline_commands::{
+        get_timeline_event_by_id, get_timeline_events, get_timeline_facets,
+        get_timeline_projection_status, rebuild_timeline_projection,
+    },
 };

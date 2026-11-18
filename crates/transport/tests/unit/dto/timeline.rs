@@ -81,3 +81,58 @@ fn timeline_facets_serialize_global_source_and_histogram_facts() {
     assert_eq!(value["dataSources"][0]["value"], "source-1");
     assert_eq!(value["histogram"][0]["startTs"], "2026-06-04T00:00:00Z");
 }
+
+#[test]
+fn timeline_projection_status_dto_serializes_camel_case_and_skips_options() {
+    let dto = TimelineProjectionStatusDto {
+        state: TimelineProjectionStateDto::Deferred,
+        sources: vec![TimelineProjectionSourceStatusDto {
+            data_source_id: "ds-1".to_string(),
+            state: TimelineProjectionStateDto::Building,
+            identity: Some("gen-1".to_string()),
+            inserted_events: 7,
+            required_bytes: Some(1024),
+            available_bytes: Some(512),
+            reason: Some("busy".to_string()),
+            updated_at: Some("2026-11-18T00:00:00Z".to_string()),
+        }],
+    };
+
+    let value = serde_json::to_value(&dto).unwrap();
+    assert_eq!(value["state"], "deferred");
+    let source = &value["sources"][0];
+    assert_eq!(source["dataSourceId"], "ds-1");
+    assert_eq!(source["state"], "building");
+    assert_eq!(source["identity"], "gen-1");
+    assert_eq!(source["insertedEvents"], 7);
+    assert_eq!(source["requiredBytes"], 1024);
+    assert_eq!(source["availableBytes"], 512);
+    assert_eq!(source["reason"], "busy");
+    assert!(source.get("data_source_id").is_none());
+
+    let round: TimelineProjectionStatusDto = serde_json::from_value(value).unwrap();
+    assert_eq!(round.state, TimelineProjectionStateDto::Deferred);
+    assert_eq!(round.sources[0].inserted_events, 7);
+}
+
+#[test]
+fn timeline_projection_source_status_dto_skips_missing_optional_fields() {
+    let dto = TimelineProjectionSourceStatusDto {
+        data_source_id: "ds-2".to_string(),
+        state: TimelineProjectionStateDto::Complete,
+        identity: None,
+        inserted_events: 0,
+        required_bytes: None,
+        available_bytes: None,
+        reason: None,
+        updated_at: None,
+    };
+
+    let value = serde_json::to_value(&dto).unwrap();
+    assert!(value.get("identity").is_none());
+    assert!(value.get("requiredBytes").is_none());
+    assert!(value.get("availableBytes").is_none());
+    assert!(value.get("reason").is_none());
+    assert!(value.get("updatedAt").is_none());
+    assert_eq!(value["insertedEvents"], 0);
+}

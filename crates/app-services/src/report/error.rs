@@ -104,6 +104,10 @@ impl From<crate::timeline_service::TimelineServiceError> for ReportError {
             crate::timeline_service::TimelineServiceError::Cancelled => {
                 Self::Other("Timeline projection cancelled".to_string())
             }
+            crate::timeline_service::TimelineServiceError::ProjectionNotReady { .. }
+            | crate::timeline_service::TimelineServiceError::RebuildInProgress { .. } => {
+                Self::Other(error.to_string())
+            }
             crate::timeline_service::TimelineServiceError::Other(message) => Self::Other(message),
         }
     }

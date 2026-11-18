@@ -181,7 +181,8 @@ pub use storage_recovery::{
 };
 pub use timeline::{
     TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto, TimelineFacetCountDto,
-    TimelineFacetsDto, TimelineHistogramBucketDto, TimelineStripeDto,
+    TimelineFacetsDto, TimelineHistogramBucketDto, TimelineProjectionSourceStatusDto,
+    TimelineProjectionStateDto, TimelineProjectionStatusDto, TimelineStripeDto,
 };
 pub use topology::{
     AnalysisObjectKindDto, EnvironmentObjectKindDto, InfrastructureRelationKindDto,

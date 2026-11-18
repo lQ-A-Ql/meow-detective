@@ -78,6 +78,10 @@ pub fn count_timeline_events_for_case(
             .map_err(TimelineServiceError::from)?;
         let snapshot = source.snapshot();
         source.require_projection_complete(&snapshot, &source_id.0)?;
+        if let Err(error) = source.require_timeline_projection_complete(&snapshot, &source_id.0) {
+            super::gate::skip_if_not_ready(error, &source_id.0)?;
+            continue;
+        }
         total = total.saturating_add(source.timeline_count_by_time(
             &snapshot,
             &source_id.0,
@@ -114,6 +118,7 @@ pub fn get_timeline_event_by_id_for_case(
         .map_err(TimelineServiceError::from)?;
     let snapshot = fjall.snapshot();
     fjall.require_projection_complete(&snapshot, &data_source_id.0)?;
+    fjall.require_timeline_projection_complete(&snapshot, &data_source_id.0)?;
     Ok(fjall
         .timeline_get(&snapshot, &data_source_id.0, &local_id)
         .map_err(|error| TimelineServiceError::Other(error.to_string()))?

@@ -1,4 +1,4 @@
-use super::{export::timeline_event_to_source_dto, TimelineQuery, TimelineServiceError};
+use super::{export::timeline_event_to_source_dto, gate, TimelineQuery, TimelineServiceError};
 use crate::source_db;
 use crate::storage_runtime::ReadOnlySourceStorageHandle;
 use chrono::{DateTime, Utc};
@@ -76,6 +76,10 @@ pub(super) fn query(
         let handle = source_db::open_registered_fjall_source_read_only(case_root, &source.id)?;
         let snapshot = handle.snapshot();
         handle.require_projection_complete(&snapshot, &source.id.0)?;
+        if let Err(error) = handle.require_timeline_projection_complete(&snapshot, &source.id.0) {
+            gate::skip_if_not_ready(error, &source.id.0)?;
+            continue;
+        }
         sources.push((source.id, handle));
     }
     sources.sort_by(|left, right| left.0 .0.cmp(&right.0 .0));

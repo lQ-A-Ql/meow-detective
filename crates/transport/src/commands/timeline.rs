@@ -51,6 +51,15 @@ pub struct GetTimelineEventByIdRequest {
     pub event_id: String,
 }
 
+/// Optional scope for a timeline projection rebuild. An empty body (`{}`) or a
+/// missing request rebuilds every not-ready source of the active case.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RebuildTimelineProjectionRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_source_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetTimelineFacetsRequest {

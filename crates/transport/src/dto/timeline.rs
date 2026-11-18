@@ -79,6 +79,44 @@ pub struct TimelineAggregatedDto {
     pub stripes_by_type: HashMap<String, TimelineStripeDto>,
 }
 
+/// Readiness of one source's timeline projection marker. A missing marker means
+/// `complete` for legacy-case compatibility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TimelineProjectionStateDto {
+    Complete,
+    Building,
+    Deferred,
+}
+
+/// Per-source timeline projection status returned by the status command.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineProjectionSourceStatusDto {
+    pub data_source_id: String,
+    pub state: TimelineProjectionStateDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity: Option<String>,
+    pub inserted_events: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub available_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+}
+
+/// Case-wide timeline projection status; `state` is the worst per-source state
+/// (deferred > building > complete).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineProjectionStatusDto {
+    pub state: TimelineProjectionStateDto,
+    pub sources: Vec<TimelineProjectionSourceStatusDto>,
+}
+
 #[cfg(test)]
 #[path = "../../tests/unit/dto/timeline.rs"]
 mod tests;

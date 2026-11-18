@@ -28,10 +28,14 @@ impl NativeFacetSource {
         case_root: &Path,
         id: &DataSourceId,
         filter: &FacetFilter<'_>,
-    ) -> Result<Self, TimelineServiceError> {
+    ) -> Result<Option<Self>, TimelineServiceError> {
         let handle = source_db::open_registered_fjall_source_read_only(case_root, id)?;
         let snapshot = handle.snapshot();
         handle.require_projection_complete(&snapshot, &id.0)?;
+        if let Err(error) = handle.require_timeline_projection_complete(&snapshot, &id.0) {
+            super::super::gate::skip_if_not_ready(error, &id.0)?;
+            return Ok(None);
+        }
         let store = TimelineRecordStore::from_source_store(handle.source_store().clone());
         let start = epoch_to_datetime("timeStart", filter.start)?;
         let end = epoch_to_datetime("timeEnd", filter.end)?;
@@ -40,13 +44,13 @@ impl NativeFacetSource {
         if bounds.is_some_and(|(first, last)| first > last) {
             return Err(FjallStorageError::TimelineIndexCorrupt.into());
         }
-        Ok(Self {
+        Ok(Some(Self {
             id: id.clone(),
             bounds,
             store,
             snapshot,
             summary,
-        })
+        }))
     }
 
     pub(super) fn collect(
