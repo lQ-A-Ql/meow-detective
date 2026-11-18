@@ -1,6 +1,6 @@
 import { COMMANDS } from './commands';
 import { apiClient } from './client';
-import type { TimelineEvent, TimelineFacets, TimelineFacetsRequest } from '@/types/models';
+import type { TimelineEvent, TimelineFacets, TimelineFacetsRequest, TimelineProjectionStatus } from '@/types/models';
 
 export interface PagedResponse<T> {
   total: number;
@@ -47,5 +47,15 @@ export async function getTimelineFacets(request?: TimelineFacetsRequest): Promis
       eventType: request?.eventType,
       bucketCount: request?.bucketCount ?? 60,
     },
+  });
+}
+
+export async function getTimelineProjectionStatus(): Promise<TimelineProjectionStatus> {
+  return apiClient.request(COMMANDS.timeline.GET_TIMELINE_PROJECTION_STATUS, undefined);
+}
+
+export async function rebuildTimelineProjection(dataSourceId?: string): Promise<TimelineProjectionStatus> {
+  return apiClient.request(COMMANDS.timeline.REBUILD_TIMELINE_PROJECTION, {
+    request: dataSourceId ? { dataSourceId } : {},
   });
 }

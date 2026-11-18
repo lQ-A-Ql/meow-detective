@@ -10,6 +10,17 @@ const mocks = vi.hoisted(() => ({
   infiniteTimelineEvents: vi.fn(),
   timelineEventById: vi.fn(),
   timelineFacets: vi.fn(),
+  projectionStatus: vi.fn(() => ({
+    data: undefined,
+    error: null,
+    isLoading: false,
+    isSuccess: true,
+  })),
+  rebuildProjection: vi.fn(() => ({
+    isPending: false,
+    error: null,
+    mutate: vi.fn(),
+  })),
   navigate: vi.fn(),
   selectionState: {
     selectedTimelineId: undefined as string | undefined,
@@ -25,6 +36,8 @@ vi.mock('@/features/timeline/hooks', () => ({
   useTimelineEventById: mocks.timelineEventById,
   useInfiniteTimelineEvents: mocks.infiniteTimelineEvents,
   useTimelineFacets: mocks.timelineFacets,
+  useTimelineProjectionStatus: mocks.projectionStatus,
+  useRebuildTimelineProjection: mocks.rebuildProjection,
 }));
 
 vi.mock('@/stores/selection-store', () => ({

@@ -119,6 +119,8 @@ export const COMMANDS = {
     GET_TIMELINE_EVENTS: 'get_timeline_events',
     GET_TIMELINE_EVENT_BY_ID: 'get_timeline_event_by_id',
     GET_TIMELINE_FACETS: 'get_timeline_facets',
+    GET_TIMELINE_PROJECTION_STATUS: 'get_timeline_projection_status',
+    REBUILD_TIMELINE_PROJECTION: 'rebuild_timeline_projection',
   },
   search: {
     SEARCH_FILES_REQUEST: 'search_files_request',

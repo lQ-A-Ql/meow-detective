@@ -1,5 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useInfiniteTimelineEvents, useTimelineEventById, useTimelineFacets } from '@/features/timeline/hooks';
+import {
+  useInfiniteTimelineEvents,
+  useRebuildTimelineProjection,
+  useTimelineEventById,
+  useTimelineFacets,
+  useTimelineProjectionStatus,
+} from '@/features/timeline/hooks';
 import { useTimelineSelectionModel } from '@/features/timeline/use-timeline-page-model';
 import type { TimelineEvent } from '@/types/models';
 
@@ -75,6 +81,12 @@ export function useTimelineWorkspaceModel() {
     eventType: eventType || undefined,
     bucketCount,
   });
+  const projectionStatusQuery = useTimelineProjectionStatus();
+  const rebuildProjectionMutation = useRebuildTimelineProjection();
+  const rebuildProjection = useCallback(
+    (dataSourceId?: string) => rebuildProjectionMutation.mutate(dataSourceId),
+    [rebuildProjectionMutation],
+  );
   const { fetchNextPage, refetch: refetchTimeline } = timelineQuery;
   const { refetch: refetchFacets } = facetsQuery;
   const loadContextKey = JSON.stringify([normalizedTimeStart ?? null, normalizedTimeEnd ?? null, eventType || null]);
@@ -206,6 +218,11 @@ export function useTimelineWorkspaceModel() {
     onEventRowClick,
     applyDateRange,
     retry,
+    projectionState: projectionStatusQuery.data?.state,
+    projectionSources: projectionStatusQuery.data?.sources ?? [],
+    projectionRebuilding: rebuildProjectionMutation.isPending,
+    projectionRebuildError: rebuildProjectionMutation.error,
+    rebuildProjection,
     selectedEvent,
     setDraftTimeEnd,
     setDraftTimeStart,

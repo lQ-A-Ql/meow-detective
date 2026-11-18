@@ -1,5 +1,12 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { getTimelineEventById, getTimelineEvents, getTimelineFacets, TimelineRequest } from '@/lib/api/timeline';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  getTimelineEventById,
+  getTimelineEvents,
+  getTimelineFacets,
+  getTimelineProjectionStatus,
+  rebuildTimelineProjection,
+  TimelineRequest,
+} from '@/lib/api/timeline';
 import type { TimelineFacetsRequest } from '@/types/timeline';
 import { timelineQueryKeys } from '@/features/cache-invalidation';
 import { useCurrentCase } from '@/features/case/hooks';
@@ -55,5 +62,29 @@ export function useTimelineFacets(request?: TimelineFacetsRequest) {
     queryKey: scopeKey(timelineQueryKeys.facets(request), currentCase.data?.id),
     queryFn: () => getTimelineFacets(request),
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
+  });
+}
+
+const PROJECTION_STATUS_KEY = ['timeline', 'projection-status'] as const;
+
+export function useTimelineProjectionStatus() {
+  const currentCase = useCurrentCase();
+  return useQuery({
+    queryKey: scopeKey(PROJECTION_STATUS_KEY, currentCase.data?.id),
+    queryFn: () => getTimelineProjectionStatus(),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    refetchInterval: (query) => (query.state.data?.state === 'building' ? 3000 : false),
+  });
+}
+
+export function useRebuildTimelineProjection() {
+  const currentCase = useCurrentCase();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dataSourceId?: string) => rebuildTimelineProjection(dataSourceId),
+    onSuccess: async (status) => {
+      queryClient.setQueryData(scopeKey(PROJECTION_STATUS_KEY, currentCase.data?.id), status);
+      await queryClient.invalidateQueries({ queryKey: timelineQueryKeys.root });
+    },
   });
 }

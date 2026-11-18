@@ -576,6 +576,19 @@
       "noRange": "No time range",
       "barTitle": "{{range}}: {{count}} events",
       "selectRange": "Filter this time range, {{count}} events total"
+    },
+    "projection": {
+      "buildingTitle": "Timeline projection is being built",
+      "buildingDescription": "Some events are temporarily unavailable; the list refreshes when building completes.",
+      "buildingAction": "Building, unavailable",
+      "deferredTitle": "Timeline projection not generated (deferred due to insufficient capacity)",
+      "deferredDescription": "The timeline projection was deferred due to workspace capacity limits. You can rebuild it now.",
+      "reasonLabel": "Reason",
+      "bytesRequired": "Required {{required}}",
+      "bytesAvailable": "Available {{available}}",
+      "rebuild": "Rebuild now",
+      "rebuilding": "Rebuilding…",
+      "rebuildFailed": "Rebuild failed: {{message}}"
     }
   },
   "reports": {

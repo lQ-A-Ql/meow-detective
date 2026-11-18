@@ -576,6 +576,19 @@
       "noRange": "无时间区间",
       "barTitle": "{{range}}：{{count}} 条事件",
       "selectRange": "筛选该时间区间，共 {{count}} 条事件"
+    },
+    "projection": {
+      "buildingTitle": "时间线正在生成中",
+      "buildingDescription": "部分事件暂不可见，生成完成后列表将自动刷新。",
+      "buildingAction": "生成中，暂不可用",
+      "deferredTitle": "时间线未生成（容量不足，已推迟）",
+      "deferredDescription": "时间线投影因工作区容量不足被推迟，可手动立即重建。",
+      "reasonLabel": "原因",
+      "bytesRequired": "需要 {{required}}",
+      "bytesAvailable": "可用 {{available}}",
+      "rebuild": "立即重建",
+      "rebuilding": "重建中…",
+      "rebuildFailed": "重建失败：{{message}}"
     }
   },
   "reports": {

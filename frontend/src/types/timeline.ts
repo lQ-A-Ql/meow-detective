@@ -39,3 +39,24 @@ export interface TimelineFacets {
   dataSources: TimelineFacetCount[];
   histogram: TimelineHistogramBucket[];
 }
+
+/** Mirrors `TimelineProjectionStateDto` (camelCase) from the transport contract. */
+export type TimelineProjectionState = 'complete' | 'building' | 'deferred';
+
+/** Mirrors `TimelineProjectionSourceStatusDto` (camelCase; optional fields skip when none). */
+export interface TimelineProjectionSourceStatus {
+  dataSourceId: string;
+  state: TimelineProjectionState;
+  identity?: string;
+  insertedEvents: number;
+  requiredBytes?: number;
+  availableBytes?: number;
+  reason?: string;
+  updatedAt?: string;
+}
+
+/** Mirrors `TimelineProjectionStatusDto` (camelCase). Worst-of-source aggregate state. */
+export interface TimelineProjectionStatus {
+  state: TimelineProjectionState;
+  sources: TimelineProjectionSourceStatus[];
+}

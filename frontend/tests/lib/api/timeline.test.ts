@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '@/lib/api/client';
 import { COMMANDS } from '@/lib/api/commands';
-import { getTimelineEventById, getTimelineEvents, getTimelineFacets } from '@/lib/api/timeline';
+import {
+  getTimelineEventById,
+  getTimelineEvents,
+  getTimelineFacets,
+  getTimelineProjectionStatus,
+  rebuildTimelineProjection,
+} from '@/lib/api/timeline';
 
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
@@ -98,6 +104,31 @@ describe('timeline API', () => {
         eventType: 'FILE_MODIFIED',
         bucketCount: 80,
       },
+    });
+  });
+
+  it('getTimelineProjectionStatus calls the status command with no payload', async () => {
+    const status = { state: 'complete', sources: [] } as never;
+    requestMock.mockResolvedValueOnce(status);
+    const result = await getTimelineProjectionStatus();
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.timeline.GET_TIMELINE_PROJECTION_STATUS, undefined);
+    expect(result).toEqual(status);
+  });
+
+  it('rebuildTimelineProjection sends an empty request object when no source is given', async () => {
+    const status = { state: 'complete', sources: [] } as never;
+    requestMock.mockResolvedValueOnce(status);
+    const result = await rebuildTimelineProjection();
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.timeline.REBUILD_TIMELINE_PROJECTION, { request: {} });
+    expect(result).toEqual(status);
+  });
+
+  it('rebuildTimelineProjection forwards dataSourceId when a source is specified', async () => {
+    const status = { state: 'complete', sources: [] } as never;
+    requestMock.mockResolvedValueOnce(status);
+    await rebuildTimelineProjection('source-1');
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.timeline.REBUILD_TIMELINE_PROJECTION, {
+      request: { dataSourceId: 'source-1' },
     });
   });
 });

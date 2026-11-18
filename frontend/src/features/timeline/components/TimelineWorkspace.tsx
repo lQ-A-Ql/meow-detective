@@ -10,6 +10,7 @@ import { ContextBar } from '@/components/layout/ContextBar';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { TimelineHistogram } from '@/features/timeline/components/TimelineHistogram';
+import { TimelineProjectionBanner } from '@/features/timeline/components/TimelineProjectionBanner';
 import { TimelineRangeSelector } from '@/features/timeline/components/TimelineRangeSelector';
 import type { TimelineWorkspaceModel } from '@/features/timeline/use-timeline-workspace-model';
 import type { TimelineEvent } from '@/types/models';
@@ -180,6 +181,13 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
             data-testid="timeline-table-pane"
             className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-r border-forensics-border"
           >
+            <TimelineProjectionBanner
+              state={model.projectionState}
+              sources={model.projectionSources}
+              rebuilding={model.projectionRebuilding}
+              rebuildError={model.projectionRebuildError}
+              onRebuild={model.rebuildProjection}
+            />
             <DenseDataTableFrame layout="fill" variant="plain">
               <DenseDataTable<TimelineEvent>
                 rows={model.tableEvents}

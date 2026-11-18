@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   getTimelineEvents: vi.fn(),
   getTimelineEventById: vi.fn(),
   getTimelineFacets: vi.fn(),
+  getTimelineProjectionStatus: vi.fn(),
+  rebuildTimelineProjection: vi.fn(),
 }));
 const caseState = vi.hoisted(() => ({ id: 'case-1' }));
 
@@ -14,6 +16,8 @@ vi.mock('@/lib/api/timeline', () => ({
   getTimelineEvents: mocks.getTimelineEvents,
   getTimelineEventById: mocks.getTimelineEventById,
   getTimelineFacets: mocks.getTimelineFacets,
+  getTimelineProjectionStatus: mocks.getTimelineProjectionStatus,
+  rebuildTimelineProjection: mocks.rebuildTimelineProjection,
 }));
 
 vi.mock('@/features/case/hooks', () => ({
@@ -62,9 +66,11 @@ vi.mock('@/features/cache-invalidation', async (importOriginal) => {
 
 import {
   useInfiniteTimelineEvents,
+  useRebuildTimelineProjection,
   useTimelineEvents,
   useTimelineEventById,
   useTimelineFacets,
+  useTimelineProjectionStatus,
 } from '@/features/timeline/hooks';
 
 function createWrapper() {
@@ -231,6 +237,59 @@ describe('timeline hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toEqual(facets);
       expect(mocks.getTimelineFacets).toHaveBeenCalledWith({ bucketCount: 60 });
+    });
+  });
+
+  describe('useTimelineProjectionStatus', () => {
+    it('fetches projection status when a case is active', async () => {
+      const status = { state: 'deferred', sources: [] };
+      mocks.getTimelineProjectionStatus.mockResolvedValue(status);
+
+      const { result } = renderHook(() => useTimelineProjectionStatus(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mocks.getTimelineProjectionStatus).toHaveBeenCalledTimes(1);
+      expect(result.current.data).toEqual(status);
+    });
+  });
+
+  describe('useRebuildTimelineProjection', () => {
+    it('rebuilds case-wide and invalidates the timeline query family on success', async () => {
+      const status = { state: 'complete', sources: [] };
+      mocks.rebuildTimelineProjection.mockResolvedValue(status);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+      const wrapper = ({ children }: { children: React.ReactNode }) =>
+        createElement(QueryClientProvider, { client: queryClient }, children);
+
+      const { result } = renderHook(() => useRebuildTimelineProjection(), { wrapper });
+
+      await act(async () => {
+        await result.current.mutateAsync(undefined);
+      });
+
+      expect(mocks.rebuildTimelineProjection).toHaveBeenCalledWith(undefined);
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['timeline'] });
+      await waitFor(() => expect(result.current.data).toEqual(status));
+    });
+
+    it('surfaces rebuild errors instead of swallowing them', async () => {
+      mocks.rebuildTimelineProjection.mockRejectedValue(new Error('capacity limit'));
+
+      const { result } = renderHook(() => useRebuildTimelineProjection(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await expect(result.current.mutateAsync(undefined)).rejects.toThrow('capacity limit');
+      });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect((result.current.error as Error).message).toBe('capacity limit');
     });
   });
 });
