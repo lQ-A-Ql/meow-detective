@@ -9,12 +9,20 @@ use timeline::TimelineProjectionPolicy;
 mod error;
 mod fjall;
 mod timing;
-mod workspace;
+pub(crate) mod workspace;
 
 pub use error::TimelineProjectionError;
 pub use timing::TimelineWriteTimings;
 
+pub(crate) use workspace::plan_required_bytes;
+
 use crate::timeline_projection::fjall as projection_fjall;
+
+/// SQLite `timeline_projection_meta` key for the file-activity projection row.
+pub(crate) const FILE_PROJECTION_KEY: &str = "file_activity_v2";
+
+/// SQLite `timeline_projection_meta` key for the graph projection row.
+pub(crate) const GRAPH_PROJECTION_KEY: &str = "timeline_graph_v3";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TimelineProjectionStats {
@@ -26,11 +34,24 @@ pub struct TimelineProjectionStats {
     pub already_projected: bool,
     pub graph_complete: bool,
     pub warnings: Vec<String>,
+    /// Constant plan bytes (not measured) compared against the policy cap.
     pub workspace_required_bytes: u64,
+    /// Policy reservation bytes the plan was checked against.
     pub workspace_available_bytes: u64,
+    /// Legacy plan artifact field; constant plan leaves it at zero.
     pub workspace_mutation_bytes: u64,
+    /// Legacy plan artifact field; constant plan leaves it at zero.
     pub workspace_projected_events: u64,
+    /// Legacy plan artifact field; constant plan leaves it at zero.
     pub workspace_graph_events: u64,
+    /// Segments committed by the segmented replace (delete + insert transactions).
+    pub workspace_segments: u64,
+    /// Largest committed segment payload in bytes.
+    pub workspace_max_segment_bytes: u64,
+    /// Constant engine-retained plan allowance (pending calibration).
+    pub workspace_engine_retained_bytes: u64,
+    /// Number of committed write transactions (equals committed segments).
+    pub commit_count: u64,
 }
 
 pub fn project_and_store_file_activity(

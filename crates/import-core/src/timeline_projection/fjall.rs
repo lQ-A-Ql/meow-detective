@@ -1,7 +1,11 @@
-use super::{TimelineProjectionError, TimelineProjectionStats, TimelineWriteTimings};
+use super::{
+    TimelineProjectionError, TimelineProjectionStats, TimelineWriteTimings, FILE_PROJECTION_KEY,
+    GRAPH_PROJECTION_KEY,
+};
 use domain::{DataSourcePlatform, EdgeType, GraphEdge, GraphNode, NodeType};
 use persistence_source::fjall::{
-    CatalogRecordStore, PersistMode, ScanDirection, TimelineRecord, TimelineRecordStore,
+    CatalogRecordStore, PersistMode, ScanDirection, SegmentLimits, SegmentedReplaceOutcome,
+    TimelineRecord, TimelineRecordStore,
 };
 use persistence_sqlite::repositories::graph_repo::GraphRepo;
 use rusqlite::Connection;
@@ -9,9 +13,6 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
-
-const FILE_KEY: &str = "file_activity_v2";
-const GRAPH_KEY: &str = "timeline_graph_v3";
 
 pub(super) fn identity(
     conn: &Connection,
@@ -71,8 +72,8 @@ pub(super) fn materialize(
         );
     meta.ensure_meta_table()?;
     let started = Instant::now();
-    let file_done = meta.is_done(FILE_KEY, identity)?;
-    let graph_done = meta.is_done(GRAPH_KEY, identity)?;
+    let file_done = meta.is_done(FILE_PROJECTION_KEY, identity)?;
+    let graph_done = meta.is_done(GRAPH_PROJECTION_KEY, identity)?;
     if file_done && graph_done {
         return Ok(TimelineProjectionStats {
             already_projected: true,
@@ -80,44 +81,47 @@ pub(super) fn materialize(
             ..Default::default()
         });
     }
-    let estimate =
-        super::workspace::estimate(&store, &source, platform, cancel, !file_done, !graph_done)?;
-    estimate.require(policy)?;
+    let estimate = super::workspace::estimate(cancel)?;
+    estimate
+        .require(policy)
+        .map_err(|error| attach_identity(error, identity))?;
     tracing::debug!(
         required_bytes = estimate.required_bytes,
         configured_bytes = policy.reservation_bytes()?,
-        catalog_records = estimate.catalog_records,
-        eligible_files = estimate.eligible_files,
-        projected_events = estimate.projected_events,
-        removed_events = estimate.removed_events,
-        graph_events = estimate.graph_events,
-        mutation_bytes = estimate.mutation_bytes,
-        mutation_entries = estimate.mutation_entries,
-        "Timeline projection workspace estimated"
+        engine_retained_bytes = estimate.engine_retained_bytes,
+        "Timeline projection workspace planned (constant segment plan)"
     );
     let timeline = TimelineRecordStore::from_source_store((*store).clone());
-    let count = if file_done {
-        0
+    let mut timings = TimelineWriteTimings::default();
+    let outcome = if file_done {
+        None
     } else {
-        stream_file_events(
+        let outcome = stream_file_events(
             &timeline,
             CatalogRecordStore::from_source_store((*store).clone()),
             &source,
             platform,
             cancel,
             identity,
-            &meta,
-        )?
+            &mut timings,
+        )?;
+        meta.mark_done(FILE_PROJECTION_KEY, outcome.inserted_records, identity)?;
+        Some(outcome)
     };
     let events_elapsed_ms = started.elapsed().as_millis();
     let graph_started = Instant::now();
-    let mut timings = TimelineWriteTimings::default();
     if !graph_done {
         project_graph(conn, &timeline, &source, cancel, &mut timings)?;
-        meta.mark_done(GRAPH_KEY, 0, identity)?;
+        meta.mark_done(GRAPH_PROJECTION_KEY, 0, identity)?;
     }
+    let outcome = outcome.unwrap_or(SegmentedReplaceOutcome {
+        inserted_records: 0,
+        deleted_records: 0,
+        segments: 0,
+        max_segment_bytes: 0,
+    });
     Ok(TimelineProjectionStats {
-        inserted_count: count,
+        inserted_count: outcome.inserted_records,
         elapsed_ms: started.elapsed().as_millis(),
         events_elapsed_ms,
         graph_elapsed_ms: graph_started.elapsed().as_millis(),
@@ -130,7 +134,36 @@ pub(super) fn materialize(
         workspace_mutation_bytes: estimate.mutation_bytes,
         workspace_projected_events: estimate.projected_events,
         workspace_graph_events: estimate.graph_events,
+        workspace_segments: outcome.segments,
+        workspace_max_segment_bytes: outcome.max_segment_bytes,
+        workspace_engine_retained_bytes: estimate.engine_retained_bytes,
+        commit_count: outcome.segments,
     })
+}
+
+fn attach_identity(error: TimelineProjectionError, identity: &str) -> TimelineProjectionError {
+    match error {
+        TimelineProjectionError::WorkspaceLimit {
+            required_bytes,
+            available_bytes,
+            projected_events,
+            removed_events,
+            graph_events,
+            mutation_bytes,
+            mutation_entries,
+            ..
+        } => TimelineProjectionError::WorkspaceLimit {
+            required_bytes,
+            available_bytes,
+            projected_events,
+            removed_events,
+            graph_events,
+            mutation_bytes,
+            mutation_entries,
+            identity: identity.to_owned(),
+        },
+        other => other,
+    }
 }
 
 fn stream_file_events(
@@ -140,8 +173,8 @@ fn stream_file_events(
     platform: DataSourcePlatform,
     cancel: &AtomicBool,
     identity: &str,
-    meta: &persistence_sqlite::repositories::timeline_projection_repo::TimelineProjectionRepo<'_>,
-) -> Result<u64, TimelineProjectionError> {
+    timings: &mut TimelineWriteTimings,
+) -> Result<SegmentedReplaceOutcome, TimelineProjectionError> {
     let snapshot = catalog.read_snapshot();
     let mut cursor = None;
     let mut complete = false;
@@ -175,11 +208,17 @@ fn stream_file_events(
             }
         }
     };
-    let count = timeline
-        .replace_by_parser_prefix_streamed(
+    // The segmented host owns cutting commits; the producer only pages records.
+    // Commit wall time accumulates across every committed segment instead of
+    // being overwritten by a single measurement.
+    let commit_started = Instant::now();
+    let outcome = timeline
+        .replace_by_parser_prefix_segmented(
             source,
             "timeline.file_",
+            identity,
             PersistMode::SyncAll,
+            SegmentLimits::default_limits(),
             &mut next_batch,
         )
         .map_err(|error| match error {
@@ -188,9 +227,9 @@ fn stream_file_events(
             }
             persistence_source::fjall::TimelineStreamError::Producer(error) => error,
         })?;
+    timings.event_commit += commit_started.elapsed();
     ensure_active(cancel)?;
-    meta.mark_done(FILE_KEY, count, identity)?;
-    Ok(count)
+    Ok(outcome)
 }
 
 pub(super) fn file_events_for_record(

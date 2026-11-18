@@ -1,15 +1,31 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
+use transport::dto::{
+    ImportPhaseDto, ImportPhaseStateDto, PartialResultDto, PartialResultKindDto, ResultFreshnessDto,
+};
 use transport::CommandError;
 
-use crate::timeline_projection;
+use crate::timeline_projection::{self, TimelineProjectionError, FILE_PROJECTION_KEY};
 use evidence_access::file_service;
 use source_kernel::source_db;
 
 use crate::import_pipeline::context::ImportJobContext;
+use crate::import_pipeline::emit;
 use crate::import_pipeline::profile::elapsed_ms;
 
 mod budget;
+
+/// Three-state materialization result: completed with an event count, or
+/// capacity-deferred (import keeps running as partial), or propagated as a
+/// fatal error by the caller.
+enum TimelineOutcome {
+    Completed(u64),
+    Deferred {
+        required_bytes: u64,
+        available_bytes: u64,
+        identity: String,
+    },
+}
 
 pub(crate) fn run_finalize_phase(
     ctx: &mut ImportJobContext<'_>,
@@ -18,16 +34,30 @@ pub(crate) fn run_finalize_phase(
     pipeline_message: &str,
 ) -> Result<String, CommandError> {
     super::super::runtime::validate_current(ctx.runtime.as_deref())?;
-    let timeline_count =
+    let timeline_outcome =
         if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::Filesystem {
             Some(materialize_timeline(ctx, data_source)?)
         } else {
             None
         };
+    if let Some(TimelineOutcome::Deferred {
+        required_bytes,
+        available_bytes,
+        identity,
+    }) = &timeline_outcome
+    {
+        defer_timeline(
+            ctx,
+            data_source,
+            *required_bytes,
+            *available_bytes,
+            identity,
+        )?;
+    }
     ctx.report_job_progress(95, "Finalizing...")?;
     checkpoint_source_database(ctx, data_source)?;
-    if let Some(timeline_count) = timeline_count {
-        emit_projection_ready_events(ctx, timeline_count);
+    if let Some(TimelineOutcome::Completed(timeline_count)) = &timeline_outcome {
+        emit_projection_ready_events(ctx, *timeline_count);
     }
     Ok(match ctx.content_kind {
         crate::import_pipeline::context::ImportContentKind::Filesystem => {
@@ -52,17 +82,20 @@ fn emit_projection_ready_events(ctx: &ImportJobContext<'_>, timeline_count: u64)
 fn materialize_timeline(
     ctx: &mut ImportJobContext<'_>,
     data_source: &domain::DataSource,
-) -> Result<u64, CommandError> {
+) -> Result<TimelineOutcome, CommandError> {
     let pool = source_kernel::resource_budget::pool_for(
         ctx.runtime.as_ref().map(|r| r.publication_lease()).as_ref(),
     );
+    let planned = timeline_projection::plan_required_bytes();
     let projection = budget::run(
         &pool,
         ctx.options.projection_policy,
-        ctx.options.cancel_token,
+        planned,
+        ctx.options.cancel_token.as_ref(),
         || {
-            let source_conn = ctx.source_connection()?;
-            ctx.report_job_progress(94, "Materializing timeline...")?;
+            let source_conn = ctx.source_connection().map_err(other_command_error)?;
+            ctx.report_job_progress(94, "Materializing timeline...")
+                .map_err(other_command_error)?;
             super::super::profile::measure_optional(
                 ctx.profiler.as_ref(),
                 transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Timeline,
@@ -75,36 +108,155 @@ fn materialize_timeline(
                     )
                 },
             )
-            .map_err(CommandError::from_typed_service_error)
         },
+    );
+    match projection {
+        Ok(projection) => {
+            record_timeline_subphases(ctx, &projection);
+            super::super::profile::emit_timed_phase_profile(
+                ctx,
+                ImportPhaseDto::Timeline,
+                if projection.graph_complete {
+                    ImportPhaseStateDto::Completed
+                } else {
+                    ImportPhaseStateDto::Partial
+                },
+                94,
+                Duration::from_millis(projection.elapsed_ms.min(u64::MAX as u128) as u64),
+                format!(
+                    "Timeline materialization complete: phase=timeline elapsedMs={} eventMs={} graphMs={} rows={} warnings={} rssMb={}",
+                    projection.elapsed_ms,
+                    projection.events_elapsed_ms,
+                    projection.graph_elapsed_ms,
+                    projection.inserted_count,
+                    projection.warnings.len(),
+                    source_kernel::runtime_resources::current_rss_mb()
+                ),
+            )?;
+            ctx.counts.add_warnings(projection.warnings.len());
+            for warning in &projection.warnings {
+                tracing::warn!(
+                    data_source_id = %data_source.id.0,
+                    warning,
+                    "Timeline graph materialization warning"
+                );
+            }
+            Ok(TimelineOutcome::Completed(projection.inserted_count))
+        }
+        Err(TimelineProjectionError::WorkspaceLimit {
+            required_bytes,
+            available_bytes,
+            identity,
+            ..
+        }) => Ok(TimelineOutcome::Deferred {
+            required_bytes,
+            available_bytes,
+            identity,
+        }),
+        Err(error) => Err(CommandError::from_typed_service_error(error)),
+    }
+}
+
+fn other_command_error(error: CommandError) -> TimelineProjectionError {
+    TimelineProjectionError::Other(error.to_string())
+}
+
+/// Capacity-deferred side effects, in contract order: SQLite meta `deferred` →
+/// fjall `deferred` marker → warning count → Partial phase=timeline progress →
+/// `TimelineEvents` partial result with `Deferred` freshness. Never emits
+/// `timeline_updated(0)`, never writes the graph done marker, and never fails
+/// the job.
+fn defer_timeline(
+    ctx: &mut ImportJobContext<'_>,
+    data_source: &domain::DataSource,
+    required_bytes: u64,
+    available_bytes: u64,
+    identity: &str,
+) -> Result<(), CommandError> {
+    let source_conn = ctx.source_connection()?;
+    let source_id = persistence_source::detail::source_id(source_conn)
+        .map_err(|error| CommandError::internal(error.to_string()))?
+        .ok_or_else(|| CommandError::internal("source identity is missing"))?;
+    let reason =
+        format!("estimated {required_bytes} bytes exceeds configured {available_bytes} bytes");
+    write_deferred_marker(
+        source_conn,
+        data_source,
+        identity,
+        required_bytes,
+        available_bytes,
+        &reason,
     )?;
-    record_timeline_subphases(ctx, &projection);
+    ctx.counts.add_warnings(1);
+    let detail = format!(
+        "Timeline projection deferred: status=deferred requiredBytes={required_bytes} availableBytes={available_bytes} reason={reason}"
+    );
     super::super::profile::emit_timed_phase_profile(
         ctx,
-        transport::dto::ImportPhaseDto::Timeline,
-        if projection.graph_complete { transport::dto::ImportPhaseStateDto::Completed }
-        else { transport::dto::ImportPhaseStateDto::Partial },
+        ImportPhaseDto::Timeline,
+        ImportPhaseStateDto::Partial,
         94,
-        std::time::Duration::from_millis(projection.elapsed_ms.min(u64::MAX as u128) as u64),
-        format!(
-            "Timeline materialization complete: phase=timeline elapsedMs={} eventMs={} graphMs={} rows={} warnings={} rssMb={}",
-            projection.elapsed_ms,
-            projection.events_elapsed_ms,
-            projection.graph_elapsed_ms,
-            projection.inserted_count,
-            projection.warnings.len(),
-            source_kernel::runtime_resources::current_rss_mb()
-        ),
+        Duration::ZERO,
+        detail,
     )?;
-    ctx.counts.add_warnings(projection.warnings.len());
-    for warning in &projection.warnings {
-        tracing::warn!(
-            data_source_id = %data_source.id.0,
-            warning,
-            "Timeline graph materialization warning"
+    let partial = PartialResultDto {
+        kind: PartialResultKindDto::TimelineEvents,
+        scope_id: source_id.clone(),
+        ready_count: 0,
+        total_estimate: None,
+        query_key: format!("timeline:events:{source_id}"),
+        freshness: ResultFreshnessDto::Deferred,
+    };
+    emit::emit_import_partial_result(ctx.event_sink(), &partial);
+    Ok(())
+}
+
+/// Writes the SQLite `timeline_projection_meta` deferred row and the fjall
+/// `timeline_projection_deferred` marker. Split out for unit testing without a
+/// full import job context.
+pub(crate) fn write_deferred_marker(
+    source_conn: &rusqlite::Connection,
+    data_source: &domain::DataSource,
+    identity: &str,
+    required_bytes: u64,
+    available_bytes: u64,
+    reason: &str,
+) -> Result<(), CommandError> {
+    let source_id = persistence_source::detail::source_id(source_conn)
+        .map_err(|error| CommandError::internal(error.to_string()))?
+        .ok_or_else(|| CommandError::internal("source identity is missing"))?;
+    let meta =
+        persistence_sqlite::repositories::timeline_projection_repo::TimelineProjectionRepo::new(
+            source_conn,
         );
-    }
-    Ok(projection.inserted_count)
+    meta.ensure_meta_table()
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    meta.mark_deferred(
+        FILE_PROJECTION_KEY,
+        identity,
+        required_bytes,
+        available_bytes,
+        reason,
+    )
+    .map_err(|error| CommandError::internal(error.to_string()))?;
+    let handle = source_db::open_fjall_source_for_build(source_conn, &data_source.id)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let payload = persistence_source::fjall::TimelineProjectionStatePayload::new(
+        persistence_source::fjall::TimelineProjectionState::Deferred,
+        identity.to_owned(),
+        0,
+        required_bytes,
+        available_bytes,
+        Some(reason.to_owned()),
+    );
+    handle
+        .timeline_projection_mark_deferred(
+            &source_id,
+            &payload,
+            persistence_source::fjall::PersistMode::SyncAll,
+        )
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    Ok(())
 }
 
 fn record_timeline_subphases(

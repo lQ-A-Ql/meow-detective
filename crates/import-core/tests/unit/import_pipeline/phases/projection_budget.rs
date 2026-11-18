@@ -1,25 +1,42 @@
 use super::*;
-use crate::timeline_projection::materialize_file_activity_with_policy;
+use crate::timeline_projection::{self, TimelineProjectionError};
 use chrono::{TimeZone, Utc};
-use domain::{DataSourceId, DataSourcePlatform, EntryType, FileEntry, FileEntryId};
+use domain::{
+    DataSource, DataSourceId, DataSourceKind, DataSourcePlatform, DataSourceProvenance, EntryType,
+    FileEntry, FileEntryId,
+};
+use persistence_sqlite::repositories::timeline_projection_repo::{
+    TimelineProjectionMetaState, TimelineProjectionRepo,
+};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     mpsc, Arc,
 };
 use std::time::{Duration, Instant};
+use transport::{CommandError, ServiceErrorCategory};
 
 crate::native_source_test_support!();
 use test_support::NativeSourceFixture;
 
-fn policy() -> TimelineProjectionPolicy {
+fn default_policy() -> TimelineProjectionPolicy {
+    TimelineProjectionPolicy::default()
+}
+
+fn policy_128mib() -> TimelineProjectionPolicy {
     TimelineProjectionPolicy {
         workspace_kib: 128 * 1024,
     }
 }
 
-fn pool(policy: TimelineProjectionPolicy) -> ResourcePool {
+fn policy_384mib() -> TimelineProjectionPolicy {
+    TimelineProjectionPolicy {
+        workspace_kib: 384 * 1024,
+    }
+}
+
+fn pool(limit_bytes: u64) -> ResourcePool {
     ResourcePool::new(Resources {
-        bytes: policy.reservation_bytes().unwrap(),
+        bytes: limit_bytes,
         ..Default::default()
     })
 }
@@ -66,70 +83,164 @@ fn project(
     fixture: &NativeSourceFixture,
     policy: TimelineProjectionPolicy,
     cancel: &AtomicBool,
-) -> Result<crate::timeline_projection::TimelineProjectionStats, CommandError> {
-    materialize_file_activity_with_policy(
+) -> Result<crate::timeline_projection::TimelineProjectionStats, TimelineProjectionError> {
+    timeline_projection::materialize_file_activity_with_policy(
         &fixture.connection,
         DataSourcePlatform::Unknown,
         cancel,
         policy,
     )
-    .map_err(CommandError::from_typed_service_error)
 }
 
 #[test]
-fn reservation_covers_the_real_projection_and_releases_after_success() {
-    let policy = policy();
-    let pool = pool(policy);
+fn constant_plan_passes_default_policy_and_fails_128mib() {
+    let cancel = AtomicBool::new(false);
+    let estimate = crate::timeline_projection::workspace::estimate(&cancel).unwrap();
+    estimate.require(default_policy()).unwrap();
+    let error = estimate.require(policy_128mib()).unwrap_err();
+    assert_eq!(error.code(), Some("TIMELINE_WORKSPACE_LIMIT"));
+    let TimelineProjectionError::WorkspaceLimit {
+        required_bytes,
+        available_bytes,
+        ..
+    } = error
+    else {
+        panic!("expected WorkspaceLimit")
+    };
+    assert_eq!(required_bytes, timeline_projection::plan_required_bytes());
+    assert_eq!(
+        available_bytes,
+        policy_128mib().reservation_bytes().unwrap()
+    );
+}
+
+#[test]
+fn estimate_is_decoupled_from_catalog_size() {
+    let _small = fixture(16);
+    let _large = fixture(20_000);
+    let cancel = AtomicBool::new(false);
+    let first = crate::timeline_projection::workspace::estimate(&cancel).unwrap();
+    let second = crate::timeline_projection::workspace::estimate(&cancel).unwrap();
+    assert_eq!(first.required_bytes, second.required_bytes);
+    assert_eq!(
+        first.required_bytes,
+        timeline_projection::plan_required_bytes()
+    );
+    assert_eq!(
+        first.engine_retained_bytes,
+        160 * 1024 * 1024,
+        "engine retained stays at the calibrated constant pending measurement"
+    );
+}
+
+#[test]
+fn reservation_covers_the_plan_and_releases_after_success() {
+    let policy = default_policy();
+    let pool = pool(policy.reservation_bytes().unwrap());
     let fixture = fixture(16);
     let cancel = AtomicBool::new(false);
-    let result = run(&pool, policy, &cancel, || {
-        assert_eq!(pool.snapshot().0.bytes, policy.reservation_bytes().unwrap());
+    let planned = timeline_projection::plan_required_bytes();
+    let result = run(&pool, policy, planned, &cancel, || {
+        assert_eq!(pool.snapshot().0.bytes, planned);
         project(&fixture, policy, &cancel)
     })
     .unwrap();
     assert_eq!(result.inserted_count, 16);
     assert!(result.graph_complete);
+    assert!(result.workspace_segments >= 1);
+    assert_eq!(result.commit_count, result.workspace_segments);
+    assert!(result.workspace_max_segment_bytes > 0);
+    assert_eq!(result.workspace_engine_retained_bytes, 160 * 1024 * 1024);
     assert_eq!(pool.snapshot().0, Resources::default());
-    assert_eq!(pool.snapshot().1.bytes, policy.reservation_bytes().unwrap());
 }
 
 #[test]
 fn invalid_policy_fails_before_admission() {
-    let pool = pool(policy());
+    let pool = pool(default_policy().reservation_bytes().unwrap());
     let fixture = fixture(1);
     let invalid = TimelineProjectionPolicy { workspace_kib: 0 };
     let cancel = AtomicBool::new(false);
-    let error = run(&pool, invalid, &cancel, || {
-        project(&fixture, invalid, &cancel)
-    })
-    .unwrap_err();
+    let error = CommandError::from_typed_service_error(
+        run(
+            &pool,
+            invalid,
+            timeline_projection::plan_required_bytes(),
+            &cancel,
+            || project(&fixture, invalid, &cancel),
+        )
+        .unwrap_err(),
+    );
     assert_eq!(error.category, "validation");
     assert_eq!(pool.snapshot().1, Resources::default());
 }
 
 #[test]
 fn real_projection_failure_releases_admission() {
-    let policy = policy();
-    let pool = pool(policy);
+    let policy = default_policy();
+    let pool = pool(policy.reservation_bytes().unwrap());
     let connection = rusqlite::Connection::open_in_memory().unwrap();
     let cancel = AtomicBool::new(false);
-    let result = run(&pool, policy, &cancel, || {
-        materialize_file_activity_with_policy(
-            &connection,
-            DataSourcePlatform::Unknown,
-            &cancel,
-            policy,
-        )
-        .map_err(CommandError::from_typed_service_error)
-    });
+    let result = run(
+        &pool,
+        policy,
+        timeline_projection::plan_required_bytes(),
+        &cancel,
+        || {
+            timeline_projection::materialize_file_activity_with_policy(
+                &connection,
+                DataSourcePlatform::Unknown,
+                &cancel,
+                policy,
+            )
+        },
+    );
     assert!(result.is_err());
     assert_eq!(pool.snapshot().0, Resources::default());
 }
 
 #[test]
+fn pool_limit_maps_to_workspace_limit_with_the_same_code() {
+    let policy = default_policy();
+    let planned = timeline_projection::plan_required_bytes();
+    let pool = pool(planned - 1);
+    let fixture = fixture(1);
+    let cancel = AtomicBool::new(false);
+    let error = CommandError::from_typed_service_error(
+        run(&pool, policy, planned, &cancel, || {
+            project(&fixture, policy, &cancel)
+        })
+        .unwrap_err(),
+    );
+    assert_eq!(error.code, "TIMELINE_WORKSPACE_LIMIT");
+    assert_eq!(error.category, "validation");
+    assert_eq!(pool.snapshot().0, Resources::default());
+}
+
+#[test]
+fn cancellation_before_admission_is_propagated_not_deferred() {
+    let policy = default_policy();
+    let pool = pool(policy.reservation_bytes().unwrap());
+    let fixture = fixture(1);
+    let cancel = AtomicBool::new(true);
+    let error = CommandError::from_typed_service_error(
+        run(
+            &pool,
+            policy,
+            timeline_projection::plan_required_bytes(),
+            &cancel,
+            || project(&fixture, policy, &cancel),
+        )
+        .unwrap_err(),
+    );
+    assert_eq!(error.category, "cancelled");
+    assert_ne!(error.code, "TIMELINE_WORKSPACE_LIMIT");
+    assert_eq!(pool.snapshot().0, Resources::default());
+}
+
+#[test]
 fn waiting_projection_cancellation_preserves_the_existing_reservation() {
-    let policy = policy();
-    let pool = pool(policy);
+    let policy = default_policy();
+    let pool = pool(policy.reservation_bytes().unwrap());
     let owner = pool
         .acquire(
             Resources {
@@ -145,9 +256,13 @@ fn waiting_projection_cancellation_preserves_the_existing_reservation() {
     let worker_cancel = cancel.clone();
     let (tx, rx) = mpsc::channel();
     let worker = std::thread::spawn(move || {
-        let result = run(&worker_pool, policy, &worker_cancel, || {
-            project(&fixture, policy, &worker_cancel)
-        });
+        let result = run(
+            &worker_pool,
+            policy,
+            timeline_projection::plan_required_bytes(),
+            &worker_cancel,
+            || project(&fixture, policy, &worker_cancel),
+        );
         tx.send(result.map(|stats| stats.inserted_count)).unwrap();
     });
     assert!(matches!(
@@ -159,7 +274,7 @@ fn waiting_projection_cancellation_preserves_the_existing_reservation() {
         .recv_timeout(Duration::from_secs(2))
         .unwrap()
         .unwrap_err();
-    assert_eq!(error.category, "cancelled");
+    assert_eq!(error.category().as_str(), "cancelled");
     worker.join().unwrap();
     assert_eq!(pool.snapshot().0.bytes, policy.reservation_bytes().unwrap());
     drop(owner);
@@ -168,8 +283,9 @@ fn waiting_projection_cancellation_preserves_the_existing_reservation() {
 
 #[test]
 fn concurrent_real_projections_obey_workspace_admission() {
-    let policy = policy();
-    let pool = pool(policy);
+    let policy = default_policy();
+    let planned = timeline_projection::plan_required_bytes();
+    let pool = pool(planned);
     let active = Arc::new(AtomicUsize::new(0));
     let maximum = Arc::new(AtomicUsize::new(0));
     let fixtures = [fixture(32), fixture(32)];
@@ -182,13 +298,19 @@ fn concurrent_real_projections_obey_workspace_admission() {
                 let maximum = maximum.clone();
                 scope.spawn(move || {
                     let cancel = AtomicBool::new(false);
-                    run(&pool, policy, &cancel, || {
-                        let count = active.fetch_add(1, Ordering::AcqRel) + 1;
-                        maximum.fetch_max(count, Ordering::AcqRel);
-                        let result = project(&fixture, policy, &cancel);
-                        active.fetch_sub(1, Ordering::AcqRel);
-                        result
-                    })
+                    run(
+                        &pool,
+                        policy,
+                        timeline_projection::plan_required_bytes(),
+                        &cancel,
+                        || {
+                            let count = active.fetch_add(1, Ordering::AcqRel) + 1;
+                            maximum.fetch_max(count, Ordering::AcqRel);
+                            let result = project(&fixture, policy, &cancel);
+                            active.fetch_sub(1, Ordering::AcqRel);
+                            result
+                        },
+                    )
                     .unwrap()
                 })
             })
@@ -203,23 +325,31 @@ fn concurrent_real_projections_obey_workspace_admission() {
 
 #[test]
 fn large_input_rejects_insufficient_workspace_before_projection_writes() {
-    let policy = policy();
-    let pool = pool(policy);
+    let policy = policy_128mib();
+    let pool = pool(policy.reservation_bytes().unwrap());
     let fixture = fixture(20_000);
     let cancel = AtomicBool::new(false);
-    let error = run(&pool, policy, &cancel, || {
-        project(&fixture, policy, &cancel)
-    })
-    .unwrap_err();
+    let error = CommandError::from_typed_service_error(
+        run(
+            &pool,
+            policy,
+            timeline_projection::plan_required_bytes(),
+            &cancel,
+            || project(&fixture, policy, &cancel),
+        )
+        .unwrap_err(),
+    );
     assert_eq!(error.code, "TIMELINE_WORKSPACE_LIMIT");
     assert_eq!(error.category, "validation");
     let details = error.details.as_ref().unwrap();
-    assert_eq!(details["projectedEvents"], 20_000);
     assert_eq!(
-        details["availableBytes"],
+        details["requiredBytes"].as_u64().unwrap(),
+        timeline_projection::plan_required_bytes()
+    );
+    assert_eq!(
+        details["availableBytes"].as_u64().unwrap(),
         policy.reservation_bytes().unwrap()
     );
-    assert!(details["requiredBytes"].as_u64().unwrap() > policy.reservation_bytes().unwrap());
     let store = persistence_source::detail::open_store(&fixture.connection)
         .unwrap()
         .unwrap();
@@ -231,7 +361,7 @@ fn large_input_rejects_insufficient_workspace_before_projection_writes() {
             &fixture.source_id,
             None,
             persistence_source::fjall::ScanDirection::Forward,
-            1
+            1,
         )
         .unwrap()
         .records
@@ -246,60 +376,91 @@ fn large_input_rejects_insufficient_workspace_before_projection_writes() {
 
 #[test]
 fn sufficient_workspace_executes_large_input_and_completed_input_needs_no_rewrite() {
-    let policy = TimelineProjectionPolicy {
-        workspace_kib: 256 * 1024,
-    };
-    let pool = pool(policy);
+    let policy = policy_384mib();
+    let pool = pool(policy.reservation_bytes().unwrap());
     let fixture = fixture(20_000);
     let cancel = AtomicBool::new(false);
-    let result = run(&pool, policy, &cancel, || {
-        project(&fixture, policy, &cancel)
-    })
+    let result = run(
+        &pool,
+        policy,
+        timeline_projection::plan_required_bytes(),
+        &cancel,
+        || project(&fixture, policy, &cancel),
+    )
     .unwrap();
     assert_eq!(result.inserted_count, 20_000);
     assert!(result.workspace_required_bytes <= result.workspace_available_bytes);
     assert!(result.workspace_required_bytes > 128 * 1024 * 1024);
+    assert!(result.workspace_segments >= 1);
+    assert_eq!(result.commit_count, result.workspace_segments);
     assert_eq!(pool.snapshot().0, Resources::default());
-    let lower = TimelineProjectionPolicy {
-        workspace_kib: 128 * 1024,
-    };
-    let repeated = run(&pool, lower, &cancel, || project(&fixture, lower, &cancel)).unwrap();
+    let lower = policy_128mib();
+    let repeated = run(
+        &pool,
+        lower,
+        timeline_projection::plan_required_bytes(),
+        &cancel,
+        || project(&fixture, lower, &cancel),
+    )
+    .unwrap();
     assert!(repeated.already_projected);
     assert_eq!(repeated.inserted_count, 0);
     assert_eq!(pool.snapshot().0, Resources::default());
 }
 
 #[test]
-fn graph_only_workspace_tracks_page_width_instead_of_existing_row_count() {
-    fn graph_only_required(count: usize) -> u64 {
-        let policy = policy();
-        let pool = pool(policy);
-        let fixture = fixture(count);
-        let cancel = AtomicBool::new(false);
-        let initial = run(&pool, policy, &cancel, || {
-            project(&fixture, policy, &cancel)
-        })
+fn deferred_marker_writes_sqlite_row_and_fjall_deferred_marker() {
+    let fixture = fixture(1);
+    let data_source = DataSource {
+        id: DataSourceId(fixture.source_id.clone()),
+        name: "projection-source".into(),
+        kind: DataSourceKind::LogicalDirectory,
+        source_path: Default::default(),
+        imported_at: Utc::now(),
+        provenance: DataSourceProvenance::unknown(),
+    };
+    let required = timeline_projection::plan_required_bytes();
+    let available = policy_128mib().reservation_bytes().unwrap();
+    super::super::write_deferred_marker(
+        &fixture.connection,
+        &data_source,
+        "identity-deferred",
+        required,
+        available,
+        "capacity",
+    )
+    .unwrap();
+    let meta = TimelineProjectionRepo::new(&fixture.connection);
+    let status = meta.status("file_activity_v2").unwrap().unwrap();
+    assert_eq!(status.state, TimelineProjectionMetaState::Deferred);
+    assert_eq!(status.input_identity, "identity-deferred");
+    assert_eq!(status.required_bytes, required);
+    assert_eq!(status.available_bytes, available);
+    assert_eq!(status.deferred_reason.as_deref(), Some("capacity"));
+
+    let store = persistence_source::detail::open_store(&fixture.connection)
+        .unwrap()
         .unwrap();
-        assert_eq!(initial.inserted_count, count as u64);
-        persistence_sqlite::repositories::timeline_projection_repo::TimelineProjectionRepo::new(
-            &fixture.connection,
+    let snapshot = store.database().read_snapshot();
+    let key = persistence_source::fjall::timeline_projection_state_key(&fixture.source_id).unwrap();
+    let envelope = store
+        .read_envelope(
+            &snapshot,
+            persistence_source::fjall::KeyspaceName::Meta,
+            &key,
         )
-        .mark_done("timeline_graph_v3", 0, "graph-rebuild-required")
+        .unwrap()
         .unwrap();
-        let graph = run(&pool, policy, &cancel, || {
-            project(&fixture, policy, &cancel)
-        })
+    let state = persistence_source::fjall::decode_timeline_projection_state(&envelope)
+        .unwrap()
         .unwrap();
-        assert_eq!(graph.inserted_count, 0);
-        assert!(graph.graph_complete);
-        assert_eq!(graph.workspace_projected_events, 0);
-        assert_eq!(graph.workspace_graph_events, count as u64);
-        assert_eq!(pool.snapshot().0, Resources::default());
-        graph.workspace_required_bytes
-    }
-    let small = graph_only_required(32);
-    let large = graph_only_required(4096);
-    assert!(large.saturating_sub(small) <= 1024 * 1024);
+    assert_eq!(
+        state.status,
+        persistence_source::fjall::TimelineProjectionState::Deferred
+    );
+    assert_eq!(state.identity, "identity-deferred");
+    assert_eq!(state.required_bytes, required);
+    assert_eq!(state.available_bytes, available);
 }
 
 #[test]
@@ -310,9 +471,9 @@ fn projection_workspace_memory_measurement() {
         "[PROJECTION-WORKSPACE-PHASE] phase=prepare-start rows=50000 elapsedMs={}",
         started.elapsed().as_millis()
     );
-    let policy = TimelineProjectionPolicy::default();
+    let policy = default_policy();
     let workspace_kib = policy.workspace_kib;
-    let pool = pool(policy);
+    let pool = pool(policy.reservation_bytes().unwrap());
     let fixture = fixture(50_000);
     eprintln!(
         "[PROJECTION-WORKSPACE-PHASE] phase=prepare-complete rows=50000 elapsedMs={}",
@@ -335,9 +496,13 @@ fn projection_workspace_memory_measurement() {
         started.elapsed().as_millis()
     );
     let started = Instant::now();
-    let result = run(&pool, policy, &cancel, || {
-        project(&fixture, policy, &cancel)
-    });
+    let result = run(
+        &pool,
+        policy,
+        timeline_projection::plan_required_bytes(),
+        &cancel,
+        || project(&fixture, policy, &cancel),
+    );
     let elapsed = started.elapsed();
     stop.store(true, Ordering::Release);
     let peak = sampler.join().unwrap();
@@ -354,8 +519,10 @@ fn projection_workspace_memory_measurement() {
         serde_json::json!({
             "rows": 50_000, "workspaceKiB": workspace_kib, "reservationBytes": policy.reservation_bytes().unwrap(),
             "requiredBytes": result.workspace_required_bytes, "availableBytes": result.workspace_available_bytes,
-            "mutationBytes": result.workspace_mutation_bytes, "projectedEvents": result.workspace_projected_events,
-            "graphEvents": result.workspace_graph_events, "budgetModel": "timeline-workspace-v1",
+            "engineRetainedBytes": result.workspace_engine_retained_bytes,
+            "segments": result.workspace_segments, "commitCount": result.commit_count,
+            "maxSegmentBytes": result.workspace_max_segment_bytes,
+            "budgetModel": "timeline-workspace-constant-v2",
             "rssAtStartMiB": before, "sampledPeakRssMiB": peak, "sampleIntervalMs": 2,
             "processLifetimePeakRssMiB": source_kernel::runtime_resources::peak_rss_mb(),
             "elapsedMs": elapsed.as_millis(), "reservedBytesAfter": pool.snapshot().0.bytes

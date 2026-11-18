@@ -17,6 +17,7 @@ pub enum TimelineProjectionError {
         graph_events: u64,
         mutation_bytes: u64,
         mutation_entries: u64,
+        identity: String,
     },
     #[error("{0}")]
     Other(String),
@@ -64,12 +65,19 @@ impl transport::ServiceErrorCategory for TimelineProjectionError {
                 graph_events,
                 mutation_bytes,
                 mutation_entries,
-            } => Some(serde_json::json!({
-                "requiredBytes": required_bytes, "availableBytes": available_bytes,
-                "projectedEvents": projected_events, "removedEvents": removed_events,
-                "graphEvents": graph_events, "estimateKind": "projectionWorkspace"
-                , "mutationBytes": mutation_bytes, "mutationEntries": mutation_entries
-            })),
+                identity,
+            } => {
+                let mut details = serde_json::json!({
+                    "requiredBytes": required_bytes, "availableBytes": available_bytes,
+                    "projectedEvents": projected_events, "removedEvents": removed_events,
+                    "graphEvents": graph_events, "estimateKind": "projectionWorkspace",
+                    "mutationBytes": mutation_bytes, "mutationEntries": mutation_entries
+                });
+                if !identity.is_empty() {
+                    details["identity"] = serde_json::Value::String(identity.clone());
+                }
+                Some(details)
+            }
             _ => None,
         }
     }
