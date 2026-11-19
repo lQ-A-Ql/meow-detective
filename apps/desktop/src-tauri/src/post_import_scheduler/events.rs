@@ -13,11 +13,15 @@ use super::QueuedTask;
 
 /// Write a task-confirmed capability row and emit `capability-status-changed`.
 /// Revision carries over and bumps only on a transition into `ready`.
+/// `phase` records the L4 measurement hook (`admitted`/`running`/`done`) on the
+/// existing `phase` column; no new table or topic is introduced.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn write_row(
     task: &QueuedTask,
     state: &str,
     detail: Option<&str>,
     error_code: Option<&str>,
+    phase: Option<&str>,
 ) {
     let db_path = task.case_root.join("app.db");
     let conn = match app_services::connection::open_existing_case_db(&db_path) {
@@ -46,7 +50,7 @@ pub(super) fn write_row(
         revision,
         progress_done: 0,
         progress_total: None,
-        phase: None,
+        phase: phase.map(str::to_string),
         detail: detail.map(str::to_string),
         error_code: error_code.map(str::to_string),
         derived: 0,
@@ -120,6 +124,30 @@ pub(super) fn emit_capability_progress(
         crate::events::event_bridge::emit_event(app, TOPIC_CAPABILITY_PROGRESS, &envelope)
     {
         tracing::warn!(error = %error, "failed to emit capability-progress");
+    }
+}
+
+/// L4 measurement hook: mark `phase=admitted` on the existing row without
+/// changing its state, right after queue admission. A missing row or failed
+/// write degrades to a warning and never blocks enqueue.
+pub(super) fn mark_admitted(
+    case_id: &str,
+    case_root: &std::path::Path,
+    source_id: &str,
+    capability: &str,
+) {
+    let db_path = case_root.join("app.db");
+    let conn = match app_services::connection::open_existing_case_db(&db_path) {
+        Ok(conn) => conn,
+        Err(error) => {
+            tracing::warn!(error = %error, "post-import: cannot open case DB for admitted phase");
+            return;
+        }
+    };
+    if let Err(error) =
+        SourceCapabilityRepo::new(&conn).set_phase(case_id, source_id, capability, "admitted")
+    {
+        tracing::warn!(error = %error, "post-import: phase=admitted write failed");
     }
 }
 

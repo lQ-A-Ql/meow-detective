@@ -5,7 +5,7 @@
 //! those phases from multiplying workers across ordinary sources and cluster
 //! members.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
 
@@ -166,6 +166,12 @@ struct AdmissionInner {
     changed: Condvar,
     cpu_capacity: usize,
     memory_capacity_mb: u64,
+    /// Lock-free live permit count for external observers. Incremented on
+    /// successful admission and decremented on [`ImportPermit`] Drop. It sits
+    /// outside the `state` mutex on purpose: the post-import scheduler probes
+    /// it before claiming new work and must never block on the
+    /// Condvar-protected bookkeeping importers wait on.
+    active_permits: AtomicU64,
 }
 
 /// Process-local weighted admission controller.
@@ -189,6 +195,7 @@ impl ImportAdmission {
                 changed: Condvar::new(),
                 cpu_capacity: cpu_capacity.max(1),
                 memory_capacity_mb: memory_capacity_mb.max(1),
+                active_permits: AtomicU64::new(0),
             }),
         }
     }
@@ -226,6 +233,7 @@ impl ImportAdmission {
                 state.peak_cpu_in_use = state.peak_cpu_in_use.max(state.cpu_in_use);
                 state.peak_memory_in_use_mb =
                     state.peak_memory_in_use_mb.max(state.memory_in_use_mb);
+                self.inner.active_permits.fetch_add(1, Ordering::AcqRel);
                 return Ok(ImportPermit {
                     inner: Arc::clone(&self.inner),
                     request,
@@ -242,6 +250,14 @@ impl ImportAdmission {
                 .unwrap_or_else(|error| error.into_inner())
                 .0;
         }
+    }
+
+    /// Read-only count of currently held import permits (live imports).
+    /// Lock-free relaxed-style probe; callers must not rely on it for
+    /// admission decisions themselves — the weighted controller in
+    /// `acquire_with_timeout` remains the only admission authority.
+    pub fn active_weight(&self) -> u64 {
+        self.inner.active_permits.load(Ordering::Acquire)
     }
 
     pub fn snapshot(&self) -> ImportAdmissionSnapshot {
@@ -293,6 +309,10 @@ pub struct ImportPermit {
 
 impl Drop for ImportPermit {
     fn drop(&mut self) {
+        // Decrement the lock-free probe before touching the Condvar mutex so a
+        // waiting observer never blocks on bookkeeping; the mutex below only
+        // updates the tracked snapshot and wakes importers.
+        self.inner.active_permits.fetch_sub(1, Ordering::AcqRel);
         let mut state = self
             .inner
             .state

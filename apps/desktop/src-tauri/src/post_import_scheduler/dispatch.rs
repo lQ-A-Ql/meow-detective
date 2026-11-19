@@ -19,7 +19,9 @@ use app_services::timeline_service::{
 use domain::{DataSourceId, DataSourcePlatform};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRepo;
-use transport::dto::{AnalysisExtractionProgressDto, TimelineProjectionStateDto};
+use transport::dto::{
+    AnalysisExtractionProgressDto, TimelineProjectionStateDto, TimelineProjectionStatusDto,
+};
 use transport::ServiceErrorCategory;
 
 use super::events::{emit_capability_progress, emit_timeline_updated, write_row};
@@ -57,7 +59,7 @@ fn run_timeline(task: &QueuedTask, conn: &rusqlite::Connection, token: &Arc<Atom
             .map(|entry| entry.state == TimelineProjectionStateDto::Complete)
             .unwrap_or(false);
         if complete {
-            write_row(task, "ready", None, None);
+            write_row(task, "ready", None, None, Some("done"));
             return;
         }
     }
@@ -70,34 +72,7 @@ fn run_timeline(task: &QueuedTask, conn: &rusqlite::Connection, token: &Arc<Atom
         &**token,
     );
     match status {
-        Ok(projection) => {
-            let entry = projection
-                .sources
-                .iter()
-                .find(|entry| entry.data_source_id == task.source_id);
-            match entry {
-                Some(entry) => match entry.state {
-                    TimelineProjectionStateDto::Complete => {
-                        write_row(task, "ready", None, None);
-                        if entry.inserted_events > 0 {
-                            emit_timeline_updated(task.app.as_ref(), entry.inserted_events);
-                        }
-                    }
-                    TimelineProjectionStateDto::Deferred => {
-                        write_row(task, "deferred", entry.reason.as_deref(), None);
-                    }
-                    TimelineProjectionStateDto::Building => {
-                        write_row(task, "queued", Some("projection still building"), None);
-                    }
-                },
-                None => write_row(
-                    task,
-                    "failed",
-                    Some("projection status missing for source"),
-                    None,
-                ),
-            }
-        }
+        Ok(projection) => apply_timeline_projection(task, &projection),
         Err(TimelineServiceError::RebuildInProgress { .. }) => {
             // Another worker owns the rebuild; leave the row untouched.
             tracing::info!(
@@ -106,14 +81,65 @@ fn run_timeline(task: &QueuedTask, conn: &rusqlite::Connection, token: &Arc<Atom
                 "timeline rebuild already in progress; post-import task leaves row as-is"
             );
         }
-        Err(TimelineServiceError::Cancelled) => write_row(task, "cancelled", None, None),
+        Err(TimelineServiceError::Cancelled) => {
+            write_row(task, "cancelled", None, None, Some("done"))
+        }
         Err(error) => {
             let error_code = error
                 .code()
                 .unwrap_or("TIMELINE_REBUILD_FAILED")
                 .to_string();
-            write_row(task, "failed", Some(&error.to_string()), Some(&error_code));
+            write_row(
+                task,
+                "failed",
+                Some(&error.to_string()),
+                Some(&error_code),
+                Some("done"),
+            );
         }
+    }
+}
+
+/// Translate a completed projection status into the terminal capability row.
+fn apply_timeline_projection(task: &QueuedTask, projection: &TimelineProjectionStatusDto) {
+    let entry = projection
+        .sources
+        .iter()
+        .find(|entry| entry.data_source_id == task.source_id);
+    match entry {
+        Some(entry) => match entry.state {
+            TimelineProjectionStateDto::Complete => {
+                write_row(task, "ready", None, None, Some("done"));
+                if entry.inserted_events > 0 {
+                    emit_timeline_updated(task.app.as_ref(), entry.inserted_events);
+                }
+            }
+            TimelineProjectionStateDto::Deferred => {
+                write_row(
+                    task,
+                    "deferred",
+                    entry.reason.as_deref(),
+                    None,
+                    Some("done"),
+                );
+            }
+            TimelineProjectionStateDto::Building => {
+                write_row(
+                    task,
+                    "queued",
+                    Some("projection still building"),
+                    None,
+                    None,
+                );
+            }
+        },
+        None => write_row(
+            task,
+            "failed",
+            Some("projection status missing for source"),
+            None,
+            Some("done"),
+        ),
     }
 }
 
@@ -127,18 +153,30 @@ fn run_artifacts(task: &QueuedTask, conn: &rusqlite::Connection, token: &Arc<Ato
         .map(|row| row.derived == 0 && row.state == "ready")
         .unwrap_or(false);
     if already_ready {
-        write_row(task, "ready", None, None);
+        write_row(task, "ready", None, None, Some("done"));
         return;
     }
     let storage =
         match DataSourceRepo::new(conn).find_storage(&DataSourceId(task.source_id.clone())) {
             Ok(Some(storage)) => storage,
             Ok(None) => {
-                write_row(task, "failed", Some("source storage record missing"), None);
+                write_row(
+                    task,
+                    "failed",
+                    Some("source storage record missing"),
+                    None,
+                    Some("done"),
+                );
                 return;
             }
             Err(error) => {
-                write_row(task, "failed", Some(&error.to_string()), Some("DB"));
+                write_row(
+                    task,
+                    "failed",
+                    Some(&error.to_string()),
+                    Some("DB"),
+                    Some("done"),
+                );
                 return;
             }
         };
@@ -150,7 +188,13 @@ fn run_artifacts(task: &QueuedTask, conn: &rusqlite::Connection, token: &Arc<Ato
             run_artifacts_host(task, conn, token, platform)
         }
         DataSourcePlatform::Unknown => {
-            write_row(task, "notApplicable", Some("unsupported platform"), None);
+            write_row(
+                task,
+                "notApplicable",
+                Some("unsupported platform"),
+                None,
+                Some("done"),
+            );
         }
     }
 }
@@ -168,9 +212,17 @@ fn run_artifacts_android(task: &QueuedTask, conn: &rusqlite::Connection, token: 
         &**token,
     );
     match result {
-        Ok(_) => write_row(task, "ready", None, None),
-        Err(AnalysisServiceError::Cancelled) => write_row(task, "cancelled", None, None),
-        Err(error) => write_row(task, "failed", Some(&error.to_string()), Some("EXTRACTION")),
+        Ok(_) => write_row(task, "ready", None, None, Some("done")),
+        Err(AnalysisServiceError::Cancelled) => {
+            write_row(task, "cancelled", None, None, Some("done"))
+        }
+        Err(error) => write_row(
+            task,
+            "failed",
+            Some(&error.to_string()),
+            Some("EXTRACTION"),
+            Some("done"),
+        ),
     }
 }
 
@@ -182,7 +234,7 @@ fn run_artifacts_host(
 ) {
     let Some(categories) = app_services::import_pipeline::artifact_extraction_categories(platform)
     else {
-        write_row(task, "notApplicable", None, None);
+        write_row(task, "notApplicable", None, None, Some("done"));
         return;
     };
     let runtime = AnalysisSourceReadRuntime::with_bitlocker_runtime(Arc::clone(
@@ -230,11 +282,19 @@ fn run_artifacts_host(
                 None,
                 Some("complete"),
             );
-            write_row(task, "ready", None, None);
+            write_row(task, "ready", None, None, Some("done"));
         }
-        Err(AnalysisServiceError::Cancelled) => write_row(task, "cancelled", None, None),
+        Err(AnalysisServiceError::Cancelled) => {
+            write_row(task, "cancelled", None, None, Some("done"))
+        }
         Err(error) => {
-            write_row(task, "failed", Some(&error.to_string()), Some("EXTRACTION"));
+            write_row(
+                task,
+                "failed",
+                Some(&error.to_string()),
+                Some("EXTRACTION"),
+                Some("done"),
+            );
         }
     }
 }

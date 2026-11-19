@@ -22,6 +22,7 @@ mod cancel;
 mod dispatch;
 mod enqueue;
 mod events;
+mod resource;
 mod state;
 mod worker;
 

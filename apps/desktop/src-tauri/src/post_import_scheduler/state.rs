@@ -6,6 +6,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::{Condvar, Mutex, OnceLock};
 
+use super::resource::MAX_AUTO_TASKS_PER_CASE;
 use super::QueuedTask;
 
 /// Bounded worker count: derived from
@@ -89,6 +90,22 @@ pub(super) fn admit(task: QueuedTask) -> Admission {
             .count();
         if p0_outstanding >= MAX_P0_RETRY_PER_CASE {
             return Admission::Busy;
+        }
+    } else {
+        // Auto work: natural per-case bound is MAX_AUTO_TASKS_PER_CASE
+        // capabilities per source (timeline + artifacts), i.e. 2 × sources.
+        // A source already holding that many auto queue slots drops the
+        // duplicate silently (AlreadyQueued) instead of raising an error.
+        let source_key = task.source_key();
+        let auto_for_source = guard
+            .queue
+            .iter()
+            .filter(|existing| {
+                existing.priority == super::Priority::Auto && existing.source_key() == source_key
+            })
+            .count();
+        if auto_for_source >= MAX_AUTO_TASKS_PER_CASE {
+            return Admission::AlreadyQueued;
         }
     }
     match task.priority {

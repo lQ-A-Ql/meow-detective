@@ -171,6 +171,38 @@ impl<'a> SourceCapabilityRepo<'a> {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    /// L4 measurement hook: update only the `phase` column (`admitted` /
+    /// `running` / `done`) without touching state, revision, or detail.
+    pub fn set_phase(
+        &self,
+        case_id: &str,
+        data_source_id: &str,
+        capability: &str,
+        phase: &str,
+    ) -> DbResult<()> {
+        self.conn.execute(
+            "UPDATE source_capability SET
+                phase = ?4, updated_at = datetime('now')
+             WHERE case_id = ?1 AND data_source_id = ?2 AND capability = ?3",
+            params![case_id, data_source_id, capability, phase],
+        )?;
+        Ok(())
+    }
+
+    /// Case-close teardown: flip every `queued`/`running` row of this case to
+    /// `cancelled` with a fixed detail and `derived = 0`; terminal rows are
+    /// untouched. Returns the number of rows marked.
+    pub fn mark_open_cancelled(&self, case_id: &str, detail: &str) -> DbResult<u64> {
+        let changed = self.conn.execute(
+            "UPDATE source_capability SET
+                state = 'cancelled', detail = ?2, error_code = NULL, phase = NULL,
+                derived = 0, updated_at = datetime('now')
+             WHERE case_id = ?1 AND state IN ('queued', 'running')",
+            params![case_id, detail],
+        )?;
+        Ok(u64::try_from(changed).unwrap_or(0))
+    }
+
     pub fn update_state(
         &self,
         case_id: &str,

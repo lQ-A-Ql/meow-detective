@@ -8,6 +8,7 @@ use persistence_sqlite::repositories::{
 };
 use tauri::AppHandle;
 
+use super::events;
 use super::state::admit;
 use super::{Admission, Priority, QueuedCapability, QueuedTask};
 use crate::state::AppState;
@@ -105,7 +106,7 @@ pub(crate) fn enqueue_for_source(
             continue;
         }
         let revision = row.map(|entry| entry.revision).unwrap_or(0);
-        admit(build_task(
+        let admitted = admit(build_task(
             app_state,
             app,
             case_id,
@@ -115,6 +116,9 @@ pub(crate) fn enqueue_for_source(
             Priority::Auto,
             revision,
         ));
+        if matches!(admitted, Admission::Accepted) {
+            events::mark_admitted(case_id, case_root, &source_id, capability.wire());
+        }
     }
 }
 
@@ -151,7 +155,7 @@ pub(crate) fn enqueue_case_pending(
         let Some(capability) = QueuedCapability::parse(&row.capability) else {
             continue;
         };
-        admit(build_task(
+        let admitted = admit(build_task(
             app_state,
             app,
             case_id,
@@ -161,6 +165,9 @@ pub(crate) fn enqueue_case_pending(
             Priority::Auto,
             row.revision,
         ));
+        if matches!(admitted, Admission::Accepted) {
+            events::mark_admitted(case_id, case_root, &row.data_source_id, capability.wire());
+        }
     }
 }
 
@@ -183,7 +190,7 @@ pub(crate) fn retry_admission(
             0
         }
     };
-    admit(build_task(
+    let admitted = admit(build_task(
         app_state,
         app,
         case_id,
@@ -192,5 +199,9 @@ pub(crate) fn retry_admission(
         capability,
         Priority::UserRetry,
         revision,
-    ))
+    ));
+    if matches!(admitted, Admission::Accepted) {
+        events::mark_admitted(case_id, case_root, source_id, capability.wire());
+    }
+    admitted
 }
