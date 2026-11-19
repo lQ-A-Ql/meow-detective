@@ -18,7 +18,9 @@ export type EventTopic =
   | 'cache-index-status'
   | 'performance-report-ready'
   | 'analysis-extraction-progress'
-  | 'file-extract-progress';
+  | 'file-extract-progress'
+  | 'capability-status-changed'
+  | 'capability-progress';
 
 export interface EventEnvelope<T = unknown> {
   eventId: string;

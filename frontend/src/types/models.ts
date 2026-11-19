@@ -30,6 +30,7 @@ export * from './correlation';
 export * from './graph';
 export * from './notebook';
 export * from './batch';
+export * from './capability';
 export * from './mount';
 export * from './emulation';
 export * from './ledger';

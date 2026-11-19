@@ -198,6 +198,9 @@ export const COMMANDS = {
     GET_BATCH_JOB: 'get_batch_job',
     LIST_BATCH_JOBS: 'list_batch_jobs',
   },
+  capability: {
+    GET_SOURCE_CAPABILITIES: 'get_source_capabilities',
+  },
   notebook: {
     LIST_NOTEBOOK_ENTRIES: 'list_notebook_entries',
     GET_NOTEBOOK_THREAD: 'get_notebook_thread',

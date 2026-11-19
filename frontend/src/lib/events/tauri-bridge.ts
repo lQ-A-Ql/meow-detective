@@ -35,6 +35,8 @@ export async function startTauriEventBridge(): Promise<void> {
     'performance-report-ready',
     'analysis-extraction-progress',
     'file-extract-progress',
+    'capability-status-changed',
+    'capability-progress',
   ];
 
   await Promise.all(
