@@ -32,6 +32,30 @@ pub enum SingleImportOutcome {
 
 pub type MemberImportOutcome = SingleImportOutcome;
 
+/// Post-import lifecycle chosen for a single-source import by the
+/// `capabilityLifecycle.enabled` app-settings switch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SingleImportMode {
+    /// Legacy inline rollback: timeline materialization and artifact extraction
+    /// run inside the import job; the shell scheduler never enqueues them.
+    Inline,
+    /// Default detached path: the job ends after catalog publication and the
+    /// desktop post-import scheduler runs timeline/artifacts.
+    Detached,
+}
+
+impl SingleImportMode {
+    /// Map the persisted switch: enabled (default) → Detached; disabled →
+    /// Inline rollback.
+    pub fn from_enabled(enabled: bool) -> Self {
+        if enabled {
+            Self::Detached
+        } else {
+            Self::Inline
+        }
+    }
+}
+
 pub struct MemberImportRequest<'a> {
     pub connection: &'a rusqlite::Connection,
     pub case_id: &'a domain::CaseId,
@@ -133,6 +157,17 @@ pub struct SingleImportRequest<'a> {
 pub fn run_single_import(
     request: SingleImportRequest<'_>,
 ) -> Result<SingleImportOutcome, CommandError> {
+    run_single_import_with_mode(request, SingleImportMode::Detached)
+}
+
+/// Mode-aware variant of [`run_single_import`]. `Detached` preserves the
+/// catalog-only production path; `Inline` rolls back to running
+/// timeline/artifacts inside the job. The shell selects the mode from
+/// `capabilityLifecycle.enabled`; the legacy entry keeps its signature.
+pub fn run_single_import_with_mode(
+    request: SingleImportRequest<'_>,
+    mode: SingleImportMode,
+) -> Result<SingleImportOutcome, CommandError> {
     let SingleImportRequest {
         connection,
         case_id,
@@ -191,17 +226,42 @@ pub fn run_single_import(
         analysis_mode,
         defer_linux_artifacts: false,
     };
-    // Catalog-only production path: the job ends after catalog publication;
-    // timeline/artifacts are queued for the desktop post-import scheduler.
-    match execute_import_job_until_catalog(
-        connection,
-        case_id,
-        case_root,
-        import_config,
-        job_id,
-        options,
-    ) {
-        Ok((message, _counts)) => {
+    // Detached: catalog-only production path, job ends after catalog
+    // publication and timeline/artifacts are queued for the desktop
+    // post-import scheduler. Inline: legacy rollback, timeline/artifacts run
+    // inside the job.
+    let result = match mode {
+        SingleImportMode::Detached => execute_import_job_until_catalog(
+            connection,
+            case_id,
+            case_root,
+            import_config,
+            job_id,
+            options,
+        )
+        .map(|(message, _counts)| message),
+        SingleImportMode::Inline => execute_import_job(
+            connection,
+            case_id,
+            case_root,
+            import_config,
+            job_id,
+            options,
+        ),
+    };
+    finalize_single_import(&repo, job_id, cancel_token, result)
+}
+
+/// Translate a finished single-source import into the job outcome: commit on
+/// success, cancel on cancellation/token signal, fail otherwise.
+fn finalize_single_import(
+    repo: &JobRepo<'_>,
+    job_id: &domain::JobId,
+    cancel_token: &AtomicBool,
+    result: Result<String, CommandError>,
+) -> Result<SingleImportOutcome, CommandError> {
+    match result {
+        Ok(message) => {
             repo.complete_committed(job_id, &message)
                 .map_err(command_error_from_db)?;
             Ok(SingleImportOutcome::Completed(message))
@@ -221,3 +281,7 @@ pub fn run_single_import(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/import_job_coordinator.rs"]
+mod tests;

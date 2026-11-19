@@ -176,5 +176,8 @@ fn run_task(task: &QueuedTask, token: &Arc<AtomicBool>) {
         }
     }
     events::write_row(task, "running", None, None, Some("running"));
+    // Manual-acceptance injection hook: MEOW_POST_IMPORT_DELAY_MS (default 0)
+    // pauses before execution to observe a slow timeline; no-op in production.
+    super::injection::apply_injection_delay();
     super::dispatch::run(task, &conn, token);
 }

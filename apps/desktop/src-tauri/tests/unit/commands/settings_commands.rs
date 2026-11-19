@@ -39,3 +39,63 @@ fn persisted_app_settings_roundtrip() {
     assert_eq!(loaded.max_analysis_workers, Some(2));
     assert_eq!(loaded.import_analysis_mode, "budgetedContent");
 }
+
+#[test]
+fn capability_lifecycle_switch_defaults_to_enabled_when_file_missing() {
+    let temp = tempfile::tempdir().unwrap();
+    assert!(read_capability_lifecycle_enabled(
+        &temp.path().join("missing.json")
+    ));
+}
+
+#[test]
+fn capability_lifecycle_switch_defaults_to_enabled_when_absent() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("settings.json");
+    std::fs::write(&path, r#"{ "caseRoot": "C:\\cases" }"#).unwrap();
+    assert!(read_capability_lifecycle_enabled(&path));
+}
+
+#[test]
+fn capability_lifecycle_switch_false_selects_inline_rollback() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("settings.json");
+    std::fs::write(
+        &path,
+        r#"{ "caseRoot": "C:\\cases", "capabilityLifecycle": { "enabled": false } }"#,
+    )
+    .unwrap();
+    assert!(!read_capability_lifecycle_enabled(&path));
+}
+
+#[test]
+fn capability_lifecycle_switch_explicit_true_is_enabled() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("settings.json");
+    std::fs::write(
+        &path,
+        r#"{ "caseRoot": "C:\\cases", "capabilityLifecycle": { "enabled": true } }"#,
+    )
+    .unwrap();
+    assert!(read_capability_lifecycle_enabled(&path));
+}
+
+#[test]
+fn capability_lifecycle_switch_tolerates_invalid_json_and_wrong_type() {
+    let temp = tempfile::tempdir().unwrap();
+    let broken = temp.path().join("broken.json");
+    std::fs::write(&broken, "{ not json").unwrap();
+    assert!(read_capability_lifecycle_enabled(&broken));
+
+    let wrong_type = temp.path().join("wrong-type.json");
+    std::fs::write(
+        &wrong_type,
+        r#"{ "capabilityLifecycle": { "enabled": "false" } }"#,
+    )
+    .unwrap();
+    assert!(read_capability_lifecycle_enabled(&wrong_type));
+
+    let missing_enabled = temp.path().join("missing-enabled.json");
+    std::fs::write(&missing_enabled, r#"{ "capabilityLifecycle": {} }"#).unwrap();
+    assert!(read_capability_lifecycle_enabled(&missing_enabled));
+}
