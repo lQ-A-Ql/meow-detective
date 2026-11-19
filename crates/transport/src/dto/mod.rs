@@ -120,10 +120,13 @@ pub use emulation::{
     EmulationEfiFallbackResultDto, EmulationEfiFallbackStrategyDto, EmulationFsRepairItemDto,
     EmulationFsRepairResultDto, EmulationFsVolumeStateDto, EmulationGuestPhaseDto,
     EmulationInstallDto, EmulationInstallPlatformDto, EmulationLinuxAccountDto,
-    EmulationLinuxBypassRequestDto, EmulationLinuxBypassResultDto, EmulationNetworkModeDto,
-    EmulationOptionsDto, EmulationOsdataCleanupDto, EmulationOsdataCleanupRequestDto,
-    EmulationOsdataCleanupStateDto, EmulationPreflightDto, EmulationSessionStatusDto,
-    EmulationStateDto, PrepareEmulationRequestDto,
+    EmulationLinuxBypassAlternativeDto, EmulationLinuxBypassBlockerDto,
+    EmulationLinuxBypassInspectRequestDto, EmulationLinuxBypassInspectionDto,
+    EmulationLinuxBypassMethodDto, EmulationLinuxBypassRequestDto, EmulationLinuxBypassResultDto,
+    EmulationLinuxBypassStatusDto, EmulationNetworkModeDto, EmulationOptionsDto,
+    EmulationOsdataCleanupDto, EmulationOsdataCleanupRequestDto, EmulationOsdataCleanupStateDto,
+    EmulationPreflightDto, EmulationSessionStatusDto, EmulationStateDto,
+    PrepareEmulationRequestDto,
 };
 pub use evidence_task::*;
 pub use files::{

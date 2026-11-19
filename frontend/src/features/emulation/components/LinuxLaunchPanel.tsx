@@ -5,6 +5,7 @@ import { Field, FieldLabel } from '@/app/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import type { EmulationWorkspaceModel } from '@/features/emulation/use-emulation-workspace-model';
 import { LaunchPanelShell } from './launch-shared';
+import { LinuxBypassOutcomePanel } from './LinuxBypassOutcomePanel';
 
 interface LinuxLaunchPanelProps {
   model: EmulationWorkspaceModel;
@@ -240,6 +241,7 @@ export function LinuxLaunchPanel({ model }: LinuxLaunchPanelProps) {
       inspection={<LinuxPreflightList model={model} />}
       maintenance={
         <>
+          <LinuxBypassOutcomePanel model={model} />
           <LinuxBypassFieldset model={model} />
           <FsRepairRow model={model} />
           <EfiFallbackRow model={model} />

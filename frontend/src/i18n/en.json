@@ -2401,6 +2401,59 @@
       "selectLinuxAccount": "Select a target account, or set the target partition to Disabled when no bypass is needed.",
       "linuxPasswordHint": "After bypass, the password for {{username}} is 123456. It is written only to this COW overlay; SSH or root-login policies may still restrict password authentication."
     },
+    "bypassUnavailable": {
+      "title": "Host-side in-place bypass unavailable; session kept",
+      "description": "Host in-place rewrite was refused. The prepared emulation session was not released. You can boot the guest with your own rescue ISO and patch /etc/shadow manually; nothing is bypassed automatically.",
+      "payloadStaged": "A payload CD containing SHADOW.NEW, BYPASS.JSON, and BYPASS.SH is attached as this session's second CD. Boot from your own rescue ISO and run BYPASS.SH manually; nothing is bypassed automatically.",
+      "reasonLabel": "Reason",
+      "retryApplianceDisabled": "No own rescue ISO detected; specify one when creating the session.",
+      "inspection": {
+        "filesystem": "Filesystem",
+        "volumeReflink": "Volume reflink",
+        "targetInodeReflink": "Target inode reflink",
+        "logClean": "Log state",
+        "recommendedMethod": "Recommended method",
+        "applianceAvailable": "Own rescue ISO",
+        "yes": "Specified",
+        "no": "Not specified",
+        "unknown": "Unknown",
+        "clean": "Clean",
+        "dirty": "Unverified / dirty"
+      },
+      "stepsTitle": "Manual steps (payload is attached as the session's second CD; scripts and new-password placeholder only)",
+      "steps": {
+        "step1": "Boot the guest with your own rescue ISO; the evidence disk stays read-only",
+        "step2": "Mount the payload CD (second CD; contains SHADOW.NEW, BYPASS.JSON, BYPASS.SH) inside the guest",
+        "step3": "Run BYPASS.SH --disk <root partition> --dry-run to validate the target partition and preview changes",
+        "step4": "Drop --dry-run and apply the write yourself after confirmation",
+        "step5": "Log in as the modified account with password 123456"
+      },
+      "blockers": {
+        "sharedExtents": "The target file shares XFS extents (reflink); host-side in-place rewrite is unsafe",
+        "dirtyLog": "The XFS log is dirty or unverified",
+        "encryptedVolume": "The target volume is encrypted",
+        "unsupportedLayout": "Unsupported volume layout or inode version",
+        "applianceUnavailable": "No own rescue ISO provided",
+        "accountNotFound": "The target account was not found",
+        "hashSchemeUnknown": "The password hash scheme is unrecognized"
+      },
+      "alternatives": {
+        "launchWithoutBypass": "Boot without bypass",
+        "externalRescueIso": "Manual edit via external ISO",
+        "retryAppliance": "Launch with your own rescue ISO and patch /etc/shadow manually"
+      },
+      "methods": {
+        "hostInPlace": "Host in-place rewrite",
+        "linuxAppliance": "External rescue ISO (manual)",
+        "none": "No bypass"
+      },
+      "actions": {
+        "retryAppliance": "Launch with your own rescue ISO and patch /etc/shadow manually",
+        "launchWithoutBypass": "Boot without bypass",
+        "externalRescueIso": "Manual edit via external ISO",
+        "release": "Release session"
+      }
+    },
     "source": {
       "kind": "Image type",
       "platform": "Platform",
@@ -2459,6 +2512,7 @@
       "linuxAccountRequired": "Linux logon bypass is enabled, but the target account has not been resolved and selected.",
       "osdataNonEmpty": "OSDATA is a non-empty directory; automatic removal was refused.",
       "fsRepairUnsupported": "At least one XFS volume could not be repaired safely. Launch was cancelled and the emulation session was released.",
+      "bypassOutcomeMissing": "The bypass result expired; start emulation again.",
       "operationFailed": "Emulation operation failed."
     }
   },

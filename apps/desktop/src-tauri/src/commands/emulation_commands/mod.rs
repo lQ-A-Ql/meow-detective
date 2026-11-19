@@ -14,6 +14,7 @@ use crate::state::AppState;
 mod bypass;
 mod efi_fallback;
 mod fs_repair;
+mod linux_bypass;
 mod preflight;
 mod status_dto;
 mod worker;
@@ -22,10 +23,11 @@ use status_dto::to_dto;
 
 pub use bypass::{
     apply_emulation_bypass, apply_emulation_linux_bypass, cleanup_emulation_osdata,
-    get_emulation_bypass_accounts, get_emulation_linux_accounts,
+    get_emulation_bypass_accounts,
 };
 pub use efi_fallback::install_emulation_efi_fallback;
 pub use fs_repair::repair_emulation_fs_journals;
+pub use linux_bypass::{get_emulation_linux_accounts, inspect_emulation_linux_bypass};
 pub use preflight::get_emulation_preflight;
 
 #[tauri::command]

@@ -28,10 +28,11 @@ use super::{
 use crate::emulation_backend::EmulationBackendHandle;
 
 /// A session resolved for a host-side edit: disk, data source and op-lock.
-struct EditSession {
-    disk: Arc<CowDisk>,
-    data_source_id: String,
-    op_lock: Arc<Mutex<()>>,
+/// Fields are visible to sibling operation modules (`linux_bypass_ops`).
+pub(super) struct EditSession {
+    pub(super) disk: Arc<CowDisk>,
+    pub(super) data_source_id: String,
+    pub(super) op_lock: Arc<Mutex<()>>,
 }
 
 impl EmulationRegistry {
@@ -131,34 +132,10 @@ impl EmulationRegistry {
         Ok(result)
     }
 
-    pub fn apply_linux_bypass(
-        &self,
-        case: &BypassCaseRef<'_>,
-        session_id: &str,
-        partition_index: u32,
-        username: &str,
-    ) -> Result<transport::dto::EmulationLinuxBypassResultDto, EmulationRegistryError> {
-        let session = self.edit_session_entry(
-            session_id,
-            "bypass edits are only allowed before the guest is launched",
-        )?;
-        let _op_guard = session.op_lock.lock().map_err(|_| Self::lock_error())?;
-        self.require_state(session_id, EmulationState::DescriptorReady)?;
-        let mut result = app_services::emulation_linux_bypass::apply_linux_bypass(
-            &session.disk,
-            &app_services::emulation_bypass::BypassCaseContext {
-                case_conn: case.case_conn,
-                case_root: case.case_root,
-                case_id: case.case_id,
-                data_source_id: &DataSourceId(session.data_source_id),
-            },
-            partition_index,
-            username,
-        )?;
-        result.session_id = session_id.to_string();
-        Ok(result)
-    }
-
+    /// Read-only pre-flight inspection: assesses the bypass options without
+    /// writing the overlay or invalidating the disk. `appliance_available` is
+    /// overridden here with the real host-side probe (a configured, readable
+    /// investigator-supplied rescue ISO).
     /// Install the UEFI fallback boot path (`\EFI\BOOT\BOOTX64.EFI`) into the
     /// session overlay. Pure disk edit: no case database access is needed.
     pub fn install_efi_fallback(
@@ -207,7 +184,7 @@ impl EmulationRegistry {
     }
 
     /// Resolve a session in `DescriptorReady` for a host-side edit.
-    fn edit_session_entry(
+    pub(super) fn edit_session_entry(
         &self,
         session_id: &str,
         state_error: &str,
@@ -227,7 +204,7 @@ impl EmulationRegistry {
         })
     }
 
-    fn require_state(
+    pub(super) fn require_state(
         &self,
         session_id: &str,
         expected: EmulationState,

@@ -78,22 +78,64 @@ impl EmulationRegistry {
             workspace.remove_best_effort();
             return Err(error);
         }
-        let status = descriptor_ready_status(
+        self.publish_descriptor_ready(
             &session_id,
             data_source_id,
             parent.identity.logical_length(),
+            &guest,
+            firmware,
+            options,
+            recovery_media.as_ref(),
+            workspace,
+            disk,
+            backend,
             maintenance.is_some(),
+        )
+    }
+
+    /// Captures the VMX inputs and publishes the session in `DescriptorReady`.
+    /// The blueprint lets a later re-stage attach the Linux rescue payload CD
+    /// without re-probing the source.
+    #[allow(clippy::too_many_arguments)]
+    fn publish_descriptor_ready(
+        &self,
+        session_id: &str,
+        data_source_id: &DataSourceId,
+        logical_length: u64,
+        guest: &guest::GuestProfile,
+        firmware: VmwareFirmware,
+        options: VmOptions,
+        recovery_media: Option<&RecoveryMedia>,
+        workspace: SessionWorkspace,
+        disk: Arc<CowDisk>,
+        backend: EmulationBackendHandle,
+        maintenance_media: bool,
+    ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
+        let vmx_blueprint = linux_rescue::VmxBlueprint::new(
+            firmware,
+            guest.guest_os.clone(),
+            guest.disk_adapter,
+            guest.network_pci_slot,
+            options,
+            recovery_media.map(|media| media.vmware_path().to_string()),
+        );
+        let status = descriptor_ready_status(
+            session_id,
+            data_source_id,
+            logical_length,
+            maintenance_media,
         );
         self.insert_entry(
-            session_id,
+            session_id.to_string(),
             EmulationEntry {
-                case_id: case_id.0.clone(),
+                case_id: data_source_id.0.clone(),
                 status: status.clone(),
                 workspace,
                 disk,
                 backend: Some(backend),
                 vmware: None,
                 boot_started_at: None,
+                vmx_blueprint: Some(vmx_blueprint),
                 op_lock: Arc::new(Mutex::new(())),
             },
         )?;

@@ -3,6 +3,7 @@ import { apiClient } from '@/lib/api/client';
 import { COMMANDS } from '@/lib/api/commands';
 import {
   getEmulationStatus,
+  inspectEmulationLinuxBypass,
   installEmulationEfiFallback,
   launchEmulation,
   listEmulationSessions,
@@ -78,6 +79,30 @@ describe('emulation API', () => {
     });
     expect(result.strategy).toBe('grub');
     expect(result.alreadyPresent).toBe(false);
+  });
+
+  it('inspects the Linux bypass layout through the registered command', async () => {
+    requestMock.mockResolvedValueOnce({
+      sessionId: 'emulation-1',
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+      filesystem: 'xfs',
+      volumeReflinkEnabled: true,
+      targetInodeReflink: false,
+      logClean: true,
+      recommendedMethod: 'hostInPlace',
+      blockers: [],
+      alternatives: ['launchWithoutBypass'],
+      applianceAvailable: false,
+    } as never);
+
+    const result = await inspectEmulationLinuxBypass({ sessionId: 'emulation-1', partitionIndex: 2 });
+
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.emulation.INSPECT_LINUX_BYPASS, {
+      request: { sessionId: 'emulation-1', partitionIndex: 2 },
+    });
+    expect(result.recommendedMethod).toBe('hostInPlace');
+    expect(result.applianceAvailable).toBe(false);
   });
 
   it('repairs filesystem journals through the prepared session', async () => {

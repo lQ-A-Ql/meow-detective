@@ -275,6 +275,70 @@ pub struct EmulationLinuxBypassRequestDto {
     pub username: String,
 }
 
+/// Outcome of a Linux account bypass attempt for the active emulation session.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulationLinuxBypassStatusDto {
+    /// The password was cleared (or was already configured) in the overlay.
+    #[default]
+    Applied,
+    /// The bypass could not be applied on this layout; see `reason`/`alternatives`.
+    Unavailable,
+}
+
+/// Which bypass channel served (or would serve) the edit.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulationLinuxBypassMethodDto {
+    /// Direct in-place edit on the mounted COW volume (XFS/ext4).
+    #[default]
+    HostInPlace,
+    /// External-rescue path: a self-authored payload CD is staged for a
+    /// user-supplied rescue ISO. The enum name is retained for wire
+    /// compatibility; no Linux appliance image is bundled or downloaded.
+    LinuxAppliance,
+    /// No bypass channel available.
+    None,
+}
+
+/// Why the host in-place bypass was refused; surfaced to the UI without raw
+/// filesystem error text.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulationLinuxBypassBlockerDto {
+    /// Target inode shares its extents (XFS reflink); in-place edit would
+    /// corrupt the sibling file.
+    SharedExtents,
+    /// The XFS internal log is dirty and cannot be cleared for this layout.
+    DirtyLog,
+    /// The volume is encrypted and the host cannot unlock it offline.
+    EncryptedVolume,
+    /// The filesystem layout cannot be edited in place (local forks, BMBT,
+    /// NREXT64, sparse/unwritten extents, ...).
+    UnsupportedLayout,
+    /// No usable self-supplied rescue ISO is configured for the external
+    /// rescue path.
+    ApplianceUnavailable,
+    /// The requested account was not found in /etc/shadow.
+    AccountNotFound,
+    /// The shadow hash scheme is not recognized by the offline editor.
+    HashSchemeUnknown,
+}
+
+/// Suggested fallback when the preferred method is unavailable.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulationLinuxBypassAlternativeDto {
+    /// Boot the guest without an account bypass and log in normally.
+    LaunchWithoutBypass,
+    /// Attach an external rescue ISO for manual shadow editing.
+    ExternalRescueIso,
+    /// Retry the external-rescue path after attaching or reselecting a
+    /// user-supplied rescue ISO. The enum name is retained for wire
+    /// compatibility.
+    RetryAppliance,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct EmulationLinuxBypassResultDto {
@@ -284,6 +348,46 @@ pub struct EmulationLinuxBypassResultDto {
     pub username: String,
     pub password_set: bool,
     pub already_configured: bool,
+    pub status: EmulationLinuxBypassStatusDto,
+    pub method: EmulationLinuxBypassMethodDto,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<EmulationLinuxBypassBlockerDto>,
+    #[serde(default)]
+    pub alternatives: Vec<EmulationLinuxBypassAlternativeDto>,
+    /// Whether the external-rescue payload CD was staged for this session.
+    /// The frontend renders the corresponding instruction; the backend never
+    /// returns user-facing prose.
+    #[serde(default)]
+    pub payload_staged: bool,
+}
+
+/// Read-only pre-flight inspection request; no overlay writes.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationLinuxBypassInspectRequestDto {
+    pub session_id: String,
+    pub partition_index: u32,
+}
+
+/// Read-only assessment of the bypass options for one partition, gathered
+/// before any edit is attempted.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulationLinuxBypassInspectionDto {
+    pub session_id: String,
+    pub data_source_id: String,
+    pub partition_index: u32,
+    pub filesystem: String,
+    /// Whether the volume advertises reflink (XFS `sb_features_ro_compat`).
+    pub volume_reflink_enabled: bool,
+    /// Whether the target inode itself carries the reflink flag; `None` when
+    /// the inode could not be inspected.
+    pub target_inode_reflink: Option<bool>,
+    pub log_clean: bool,
+    pub recommended_method: EmulationLinuxBypassMethodDto,
+    pub blockers: Vec<EmulationLinuxBypassBlockerDto>,
+    pub alternatives: Vec<EmulationLinuxBypassAlternativeDto>,
+    pub appliance_available: bool,
 }
 
 /// Which loader the EFI fallback path was populated from.

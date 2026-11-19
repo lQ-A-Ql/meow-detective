@@ -143,6 +143,21 @@ export interface EmulationFsRepairResult {
   items: EmulationFsRepairItem[];
 }
 
+export type EmulationLinuxBypassStatus = 'applied' | 'unavailable';
+
+export type EmulationLinuxBypassMethod = 'hostInPlace' | 'linuxAppliance' | 'none';
+
+export type EmulationLinuxBypassBlocker =
+  | 'sharedExtents'
+  | 'dirtyLog'
+  | 'encryptedVolume'
+  | 'unsupportedLayout'
+  | 'applianceUnavailable'
+  | 'accountNotFound'
+  | 'hashSchemeUnknown';
+
+export type EmulationLinuxBypassAlternative = 'launchWithoutBypass' | 'externalRescueIso' | 'retryAppliance';
+
 export interface EmulationLinuxBypassResult {
   sessionId: string;
   dataSourceId: string;
@@ -150,4 +165,28 @@ export interface EmulationLinuxBypassResult {
   username: string;
   passwordSet: boolean;
   alreadyConfigured: boolean;
+  status: EmulationLinuxBypassStatus;
+  method: EmulationLinuxBypassMethod;
+  reason?: EmulationLinuxBypassBlocker | null;
+  alternatives: EmulationLinuxBypassAlternative[];
+  payloadStaged: boolean;
+}
+
+export interface EmulationLinuxBypassInspectRequest {
+  sessionId: string;
+  partitionIndex: number;
+}
+
+export interface EmulationLinuxBypassInspection {
+  sessionId: string;
+  dataSourceId: string;
+  partitionIndex: number;
+  filesystem: string;
+  volumeReflinkEnabled: boolean;
+  targetInodeReflink?: boolean | null;
+  logClean: boolean;
+  recommendedMethod: EmulationLinuxBypassMethod;
+  blockers: EmulationLinuxBypassBlocker[];
+  alternatives: EmulationLinuxBypassAlternative[];
+  applianceAvailable: boolean;
 }

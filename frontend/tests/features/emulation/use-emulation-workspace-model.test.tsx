@@ -2,7 +2,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useEmulationWorkspaceModel } from '@/features/emulation/use-emulation-workspace-model';
+import {
+  useEmulationWorkspaceModel,
+  type EmulationWorkspaceModel,
+} from '@/features/emulation/use-emulation-workspace-model';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
@@ -12,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   bypassAccounts: vi.fn(),
   linuxAccounts: vi.fn(),
   applyBypass: vi.fn(),
+  applyLinuxBypass: vi.fn(),
+  inspectBypass: vi.fn(),
   cleanupOsdata: vi.fn(),
   installEfiFallback: vi.fn(),
   repairFsJournals: vi.fn(),
@@ -31,6 +36,8 @@ vi.mock('@/lib/api/emulation', () => ({
   getEmulationBypassAccounts: mocks.bypassAccounts,
   getEmulationLinuxAccounts: mocks.linuxAccounts,
   applyEmulationBypass: mocks.applyBypass,
+  applyEmulationLinuxBypass: mocks.applyLinuxBypass,
+  inspectEmulationLinuxBypass: mocks.inspectBypass,
   cleanupEmulationOsdata: mocks.cleanupOsdata,
   installEmulationEfiFallback: mocks.installEfiFallback,
   repairEmulationFsJournals: mocks.repairFsJournals,
@@ -490,5 +497,140 @@ describe('useEmulationWorkspaceModel', () => {
     act(() => result.current.selectBypassPartition(2));
 
     await waitFor(() => expect(result.current.linuxAccountsError).toBe('linux accounts unsupported'));
+  });
+
+  function useLinuxBypassSelectionFixture() {
+    useLinuxEfiSource([]);
+    mocks.linuxAccounts.mockResolvedValue([{ username: 'root', hasPassword: true, locked: false }]);
+    mocks.inspectBypass.mockResolvedValue({
+      sessionId: 'emulation-1',
+      dataSourceId: 'source-1',
+      partitionIndex: 2,
+      filesystem: 'xfs',
+      volumeReflinkEnabled: true,
+      targetInodeReflink: true,
+      logClean: false,
+      recommendedMethod: 'linuxAppliance',
+      blockers: ['sharedExtents'],
+      alternatives: ['retryAppliance'],
+      applianceAvailable: false,
+    });
+  }
+
+  const unavailableResult = {
+    sessionId: 'emulation-1',
+    dataSourceId: 'source-1',
+    partitionIndex: 2,
+    username: 'root',
+    passwordSet: false,
+    alreadyConfigured: false,
+    status: 'unavailable',
+    method: 'linuxAppliance',
+    reason: 'sharedExtents',
+    alternatives: ['retryAppliance'],
+    payloadStaged: true,
+  };
+
+  async function selectLinuxBypass(hook: { result: { current: EmulationWorkspaceModel } }) {
+    await waitFor(() => expect(hook.result.current.canStart).toBe(true));
+    act(() => hook.result.current.selectBypassPartition(2));
+    await waitFor(() => expect(hook.result.current.linuxAccounts).toHaveLength(1));
+    act(() => hook.result.current.selectLinuxUsername('root'));
+    await waitFor(() => expect(hook.result.current.canStart).toBe(true));
+  }
+
+  it('keeps the prepared session when the Linux bypass is unavailable and does not launch', async () => {
+    useLinuxBypassSelectionFixture();
+    mocks.applyLinuxBypass.mockResolvedValue(unavailableResult);
+    const hook = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await selectLinuxBypass(hook);
+
+    await act(async () => {
+      await hook.result.current.start();
+      await hook.result.current.confirmDirectBoot!();
+    });
+
+    expect(mocks.inspectBypass).toHaveBeenCalledWith({ sessionId: 'emulation-1', partitionIndex: 2 });
+    expect(mocks.applyLinuxBypass).toHaveBeenCalledWith({
+      sessionId: 'emulation-1',
+      partitionIndex: 2,
+      username: 'root',
+    });
+    expect(mocks.release).not.toHaveBeenCalled();
+    expect(mocks.launch).not.toHaveBeenCalled();
+    expect(hook.result.current.linuxBypassOutcome?.result.status).toBe('unavailable');
+    expect(hook.result.current.linuxBypassOutcome?.result.reason).toBe('sharedExtents');
+  });
+
+  it('launches without bypass through the kept prepared session', async () => {
+    useLinuxBypassSelectionFixture();
+    mocks.applyLinuxBypass.mockResolvedValue(unavailableResult);
+    const hook = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await selectLinuxBypass(hook);
+    await act(async () => {
+      await hook.result.current.start();
+      await hook.result.current.confirmDirectBoot!();
+    });
+
+    await act(async () => hook.result.current.launchWithoutBypass());
+
+    expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
+    expect(mocks.release).not.toHaveBeenCalled();
+    expect(hook.result.current.linuxBypassOutcome).toBeUndefined();
+  });
+
+  it('launches the prepared session with the rescue payload without a second bypass call', async () => {
+    useLinuxBypassSelectionFixture();
+    mocks.applyLinuxBypass.mockResolvedValue(unavailableResult);
+    const hook = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await selectLinuxBypass(hook);
+    await act(async () => {
+      await hook.result.current.start();
+      await hook.result.current.confirmDirectBoot!();
+    });
+    expect(mocks.applyLinuxBypass).toHaveBeenCalledTimes(1);
+
+    await act(async () => hook.result.current.retryBypassWithAppliance());
+
+    expect(mocks.applyLinuxBypass).toHaveBeenCalledTimes(1);
+    expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
+    expect(mocks.release).not.toHaveBeenCalled();
+    expect(hook.result.current.linuxBypassOutcome).toBeUndefined();
+  });
+
+  it('releases the prepared session only on the poisoned overlay error', async () => {
+    useLinuxBypassSelectionFixture();
+    mocks.applyLinuxBypass.mockRejectedValue({
+      code: 'LINUX_BYPASS_OVERLAY_POISONED',
+      message: 'overlay poisoned',
+      category: 'internal',
+      recoverable: false,
+    });
+    const hook = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await selectLinuxBypass(hook);
+
+    await act(async () => {
+      await hook.result.current.start();
+      await expect(hook.result.current.confirmDirectBoot!()).rejects.toThrow('overlay poisoned');
+    });
+
+    expect(mocks.release).toHaveBeenCalledWith('emulation-1');
+    expect(mocks.launch).not.toHaveBeenCalled();
+  });
+
+  it('keeps the prepared session on an ordinary bypass failure', async () => {
+    useLinuxBypassSelectionFixture();
+    mocks.applyLinuxBypass.mockRejectedValue(new Error('generic bypass failure'));
+    const hook = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
+    await selectLinuxBypass(hook);
+
+    await act(async () => {
+      await hook.result.current.start();
+      await expect(hook.result.current.confirmDirectBoot!()).rejects.toThrow('generic bypass failure');
+    });
+
+    expect(mocks.release).not.toHaveBeenCalled();
+    expect(mocks.launch).not.toHaveBeenCalled();
+    expect(hook.result.current.error).toBe('generic bypass failure');
   });
 });

@@ -6,9 +6,11 @@
 //! copy-on-write layer.
 
 use crate::log::{assess_log_state, XfsLogState, XFS_LOG_MAX_SNAPSHOT_BYTES};
-use crate::reader::S_IFMT;
+use crate::reader::{S_IFMT, XFS_DIFLAG2_REFLINK};
 use crate::{be_u16, be_u64, di_off, XfsExtent, XfsReader, FORMAT_BTREE, FORMAT_EXTENTS};
 use evidence_core::filesystem::{file_not_found, invalid_fs_data, path_is_directory};
+use std::error::Error;
+use std::fmt;
 use std::io;
 
 const XFS_DIFLAG_REALTIME: u16 = 1 << 0;
@@ -26,6 +28,88 @@ pub struct XfsFileRewritePatch {
 pub struct XfsFileRewritePlan {
     pub old_size: u64,
     pub patches: Vec<XfsFileRewritePatch>,
+}
+
+/// Identifiable reason an in-place rewrite cannot proceed. Carried as the
+/// payload of an `io::Error` so callers can `downcast_ref` instead of matching
+/// message substrings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum XfsRewriteBlocker {
+    /// The internal log holds pending transactions or could not be verified
+    /// clean.
+    DirtyLog,
+    /// The target inode carries the reflink flag; its extents are shared with
+    /// another file and rewriting them in place would corrupt the sibling.
+    SharedExtents,
+    /// The file lives on the realtime subvolume.
+    RealtimeFile,
+    /// A v3 inode using the 64-bit extent counter layout.
+    Nrext64,
+    /// The data fork is a local (inline) fork rather than extents or a BMBT.
+    LocalFork,
+    /// An extent is unwritten or empty.
+    UnwrittenExtent,
+    /// Logical extents leave a gap before the requested size.
+    ExtentGap,
+    /// Logical or physical extents overlap.
+    ExtentOverlap,
+    /// `di_nextents` does not match the decoded extent count.
+    ExtentCountMismatch,
+    /// The written allocation does not cover the requested size.
+    InsufficientAllocation,
+    /// The target is not a regular file or its core metadata is malformed.
+    InvalidMetadata,
+    /// The inode version is incompatible with the volume metadata-CRC mode.
+    UnsupportedInodeVersion,
+}
+
+impl fmt::Display for XfsRewriteBlocker {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::DirtyLog => {
+                "XFS internal log is dirty; repair it in the overlay before rewriting files"
+            }
+            Self::SharedExtents => {
+                "reflink-capable XFS inode shares extents; shared extents cannot be rewritten in place"
+            }
+            Self::RealtimeFile => "realtime XFS files cannot be rewritten",
+            Self::Nrext64 => "XFS NREXT64 inode rewrites are not supported",
+            Self::LocalFork => "XFS file does not use an extent or BMBT data fork",
+            Self::UnwrittenExtent => "unwritten or empty XFS extents cannot be rewritten",
+            Self::ExtentGap => "XFS extent map contains a gap",
+            Self::ExtentOverlap => "XFS extent map contains a physical overlap",
+            Self::ExtentCountMismatch => "XFS extent count does not match di_nextents",
+            Self::InsufficientAllocation => {
+                "XFS written extent map does not cover the requested file size"
+            }
+            Self::InvalidMetadata => "only regular XFS files can be rewritten",
+            Self::UnsupportedInodeVersion => {
+                "XFS inode version is incompatible with the volume metadata CRC configuration"
+            }
+        };
+        f.write_str(message)
+    }
+}
+
+impl Error for XfsRewriteBlocker {}
+
+/// Read-only verdict for a candidate rewrite. Every field is gathered without
+/// writing evidence; the assessment reuses the planner's checks but never
+/// applies a patch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XfsInPlaceAssessment {
+    /// Whether the superblock advertises reflink support. Volume capability
+    /// alone does not block a rewrite.
+    pub volume_reflink_enabled: bool,
+    /// Whether the internal log was assessed clean.
+    pub log_clean: bool,
+    /// Whether the target inode itself carries the reflink flag; `None` when
+    /// the inode could not be read or validated.
+    pub target_inode_reflink: Option<bool>,
+    /// Whether the planned rewrite is accepted.
+    pub supported: bool,
+    /// The first recognized blocker, when the failure is classifiable.
+    pub blocker: Option<XfsRewriteBlocker>,
 }
 
 impl XfsReader {
@@ -46,20 +130,17 @@ impl XfsReader {
 
     /// Plan a rewrite over the file's existing written allocation.
     ///
-    /// Dirty or incomplete internal logs, sparse/unwritten/reflink/realtime
-    /// layouts, local forks, malformed extent maps, and growth beyond existing
-    /// written extents are rejected.
+    /// Dirty or incomplete internal logs, shared (reflink) inode extents,
+    /// sparse/unwritten/realtime layouts, local forks, malformed extent maps,
+    /// and growth beyond existing written extents are rejected. A volume that
+    /// advertises reflink support but whose target inode is not shared remains
+    /// eligible.
     pub fn plan_in_place_file_rewrite(
         &self,
         path: &str,
         content: &[u8],
     ) -> io::Result<XfsFileRewritePlan> {
         self.require_clean_log()?;
-        if self.has_reflink {
-            return Err(unsupported(
-                "reflink-capable XFS volumes cannot be rewritten safely",
-            ));
-        }
         let (inode_number, mut inode, old_size, extents) = self.rewrite_target(path)?;
         let rewrite_size = old_size.max(content.len() as u64);
         let extents = self.validate_rewrite_extents(extents, rewrite_size)?;
@@ -75,19 +156,63 @@ impl XfsReader {
         Ok(XfsFileRewritePlan { old_size, patches })
     }
 
+    /// Read-only assessment of a candidate rewrite; performs no writes and
+    /// never applies a patch.
+    pub fn assess_in_place_file_rewrite(&self, path: &str, content: &[u8]) -> XfsInPlaceAssessment {
+        let volume_reflink_enabled = self.volume_reflink_enabled();
+        let log_clean = self.internal_log_clean();
+        let target_inode_reflink = self.inspect_target_inode_reflink(path);
+        match self.plan_in_place_file_rewrite(path, content) {
+            Ok(_) => XfsInPlaceAssessment {
+                volume_reflink_enabled,
+                log_clean,
+                target_inode_reflink,
+                supported: true,
+                blocker: None,
+            },
+            Err(error) => {
+                let blocker = error
+                    .get_ref()
+                    .and_then(|payload| payload.downcast_ref::<XfsRewriteBlocker>())
+                    .copied();
+                XfsInPlaceAssessment {
+                    volume_reflink_enabled,
+                    log_clean,
+                    target_inode_reflink,
+                    supported: false,
+                    blocker,
+                }
+            }
+        }
+    }
+
+    fn internal_log_clean(&self) -> bool {
+        let Ok(snapshot) = self.read_internal_log_snapshot(XFS_LOG_MAX_SNAPSHOT_BYTES) else {
+            return false;
+        };
+        snapshot.complete && assess_log_state(&snapshot) == XfsLogState::Clean
+    }
+
+    fn inspect_target_inode_reflink(&self, path: &str) -> Option<bool> {
+        let resolved = self.resolve_path_with_inode(path).ok()??;
+        let inode = resolved
+            .inode
+            .map_or_else(|| self.read_inode(resolved.inode_number), Ok)
+            .ok()?;
+        Self::validate_inode_magic(&inode).ok()?;
+        Self::validate_inode_core_length(&inode).ok()?;
+        if inode.get(di_off::VERSION) != Some(&3) {
+            return Some(false);
+        }
+        Some(be_u64(&inode, di_off::FLAGS2) & XFS_DIFLAG2_REFLINK != 0)
+    }
+
     fn require_clean_log(&self) -> io::Result<()> {
         let snapshot = self
             .read_internal_log_snapshot(XFS_LOG_MAX_SNAPSHOT_BYTES)
             .map_err(|error| invalid_fs_data(format!("cannot assess XFS log: {error}")))?;
-        if !snapshot.complete {
-            return Err(invalid_fs_data(
-                "XFS internal log exceeds the complete assessment limit",
-            ));
-        }
-        if assess_log_state(&snapshot) != XfsLogState::Clean {
-            return Err(invalid_fs_data(
-                "XFS internal log is dirty; repair it in the overlay before rewriting files",
-            ));
+        if !snapshot.complete || assess_log_state(&snapshot) != XfsLogState::Clean {
+            return Err(blocker_error(XfsRewriteBlocker::DirtyLog));
         }
         Ok(())
     }
@@ -105,30 +230,28 @@ impl XfsReader {
         Self::validate_inode_magic(&inode)?;
         Self::validate_inode_core_length(&inode)?;
         if be_u16(&inode, di_off::MODE) & S_IFMT != XFS_S_IFREG {
-            return Err(unsupported("only regular XFS files can be rewritten"));
+            return Err(blocker_error(XfsRewriteBlocker::InvalidMetadata));
         }
         if be_u16(&inode, XFS_DI_FLAGS_OFFSET) & XFS_DIFLAG_REALTIME != 0 {
-            return Err(unsupported("realtime XFS files cannot be rewritten"));
+            return Err(blocker_error(XfsRewriteBlocker::RealtimeFile));
         }
-        if inode.get(di_off::VERSION) == Some(&3)
-            && be_u64(&inode, di_off::FLAGS2) & XFS_DIFLAG2_NREXT64 != 0
-        {
-            return Err(unsupported("XFS NREXT64 inode rewrites are not supported"));
+        if inode.get(di_off::VERSION) == Some(&3) {
+            let flags2 = be_u64(&inode, di_off::FLAGS2);
+            if flags2 & XFS_DIFLAG2_REFLINK != 0 {
+                return Err(blocker_error(XfsRewriteBlocker::SharedExtents));
+            }
+            if flags2 & XFS_DIFLAG2_NREXT64 != 0 {
+                return Err(blocker_error(XfsRewriteBlocker::Nrext64));
+            }
         }
         let old_size = be_u64(&inode, di_off::SIZE);
         let extents = match Self::inode_format(&inode)? {
             FORMAT_EXTENTS => Self::inline_extents(&inode)?,
             FORMAT_BTREE => self.collect_btree_extents(&inode)?,
-            _ => {
-                return Err(unsupported(
-                    "XFS file does not use an extent or BMBT data fork",
-                ))
-            }
+            _ => return Err(blocker_error(XfsRewriteBlocker::LocalFork)),
         };
         if extents.len() != Self::nextents(&inode) as usize {
-            return Err(invalid_fs_data(
-                "XFS extent count does not match di_nextents",
-            ));
+            return Err(blocker_error(XfsRewriteBlocker::ExtentCountMismatch));
         }
         Ok((resolved.inode_number, inode, old_size, extents))
     }
@@ -146,9 +269,7 @@ impl XfsReader {
                 break;
             }
             if extent.unwritten || extent.block_count == 0 {
-                return Err(unsupported(
-                    "unwritten or empty XFS extents cannot be rewritten",
-                ));
+                return Err(blocker_error(XfsRewriteBlocker::UnwrittenExtent));
             }
             let start = extent
                 .logical
@@ -162,12 +283,12 @@ impl XfsReader {
                 .checked_add(length)
                 .ok_or_else(|| invalid_fs_data("XFS logical extent end overflows"))?;
             if start != covered_until {
-                let kind = if start < covered_until {
-                    "overlap"
+                let blocker = if start < covered_until {
+                    XfsRewriteBlocker::ExtentOverlap
                 } else {
-                    "gap"
+                    XfsRewriteBlocker::ExtentGap
                 };
-                return Err(unsupported(format!("XFS extent map contains a {kind}")));
+                return Err(blocker_error(blocker));
             }
             let physical_start = self.fsblock_to_linear_block(extent.start_block)?;
             let last = self.add_fsblocks_within_ag(extent.start_block, extent.block_count - 1)?;
@@ -180,12 +301,10 @@ impl XfsReader {
         }
         physical_ranges.sort_unstable();
         if physical_ranges.windows(2).any(|pair| pair[0].1 > pair[1].0) {
-            return Err(unsupported("XFS extent map contains a physical overlap"));
+            return Err(blocker_error(XfsRewriteBlocker::ExtentOverlap));
         }
         if covered_until < required_size {
-            return Err(unsupported(
-                "XFS written extent map does not cover the requested file size",
-            ));
+            return Err(blocker_error(XfsRewriteBlocker::InsufficientAllocation));
         }
         Ok(extents)
     }
@@ -246,9 +365,7 @@ impl XfsReader {
                 }
                 Ok(())
             }
-            (metadata_crc, version) => Err(unsupported(format!(
-                "XFS inode version {version} is incompatible with metadata_crc={metadata_crc}"
-            ))),
+            (_, _) => Err(blocker_error(XfsRewriteBlocker::UnsupportedInodeVersion)),
         }
     }
 
@@ -266,8 +383,8 @@ impl XfsReader {
     }
 }
 
-fn unsupported(message: impl Into<String>) -> io::Error {
-    io::Error::new(io::ErrorKind::Unsupported, message.into())
+fn blocker_error(blocker: XfsRewriteBlocker) -> io::Error {
+    io::Error::new(io::ErrorKind::Unsupported, blocker)
 }
 
 #[cfg(test)]

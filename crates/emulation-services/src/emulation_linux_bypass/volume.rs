@@ -6,27 +6,28 @@ use evidence_access::partition_query_service::PartitionQueryRepo as PartitionRep
 use evidence_core::{EvidenceReader, FileSystemReader, PartitionWindowReader};
 use evidence_emulation::CowDisk;
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+use transport::dto::EmulationLinuxBypassBlockerDto;
 
 use crate::emulation_bypass::{BypassCaseContext, EmulationBypassError};
 
-pub(super) enum LinuxFilesystem {
+pub(crate) enum LinuxFilesystem {
     Ext4(Box<fs_ext4::Ext4Reader>),
     Xfs(Box<fs_xfs::XfsReader>),
 }
 
 impl LinuxFilesystem {
-    pub(super) fn supports_file_resize(&self) -> bool {
+    pub(crate) fn supports_file_resize(&self) -> bool {
         matches!(self, Self::Xfs(_))
     }
 
-    pub(super) fn file_size(&self, path: &str) -> io::Result<u64> {
+    pub(crate) fn file_size(&self, path: &str) -> io::Result<u64> {
         match self {
             Self::Ext4(fs) => fs.file_size_by_path(path),
             Self::Xfs(fs) => fs.file_size_by_path(path),
         }
     }
 
-    pub(super) fn read_file_range(
+    pub(crate) fn read_file_range(
         &self,
         path: &str,
         offset: u64,
@@ -38,14 +39,14 @@ impl LinuxFilesystem {
         }
     }
 
-    pub(super) fn list_children(&self, path: &str) -> io::Result<Vec<evidence_core::FsNode>> {
+    pub(crate) fn list_children(&self, path: &str) -> io::Result<Vec<evidence_core::FsNode>> {
         match self {
             Self::Ext4(fs) => fs.list_children(path),
             Self::Xfs(fs) => fs.list_children(path),
         }
     }
 
-    pub(super) fn verify_rewrite_state(
+    pub(crate) fn verify_rewrite_state(
         &self,
         path: &str,
         expected: &str,
@@ -64,12 +65,12 @@ impl LinuxFilesystem {
     }
 }
 
-pub(super) struct LinuxPartition {
-    pub(super) fs: LinuxFilesystem,
-    pub(super) mapping: WriteMapping,
+pub(crate) struct LinuxPartition {
+    pub(crate) fs: LinuxFilesystem,
+    pub(crate) mapping: WriteMapping,
 }
 
-pub(super) enum WriteMapping {
+pub(crate) enum WriteMapping {
     Direct {
         partition_offset: u64,
         partition_length: u64,
@@ -80,7 +81,7 @@ pub(super) enum WriteMapping {
 }
 
 impl WriteMapping {
-    pub(super) fn translate_run(
+    pub(crate) fn translate_run(
         &self,
         volume_offset: u64,
     ) -> Result<(u64, u64), EmulationBypassError> {
@@ -136,16 +137,40 @@ fn translate_lvm(
 }
 
 #[derive(Clone, Copy)]
-enum FilesystemKind {
+pub(crate) enum FilesystemKind {
     Ext4,
     Xfs,
 }
 
-pub(super) fn open_linux_partition(
+pub(crate) fn open_linux_partition(
     context: &BypassCaseContext<'_>,
     partition_index: u32,
     overlay: Option<&Arc<CowDisk>>,
 ) -> Result<LinuxPartition, EmulationBypassError> {
+    let (source, record) = load_partition_record(context, partition_index)?;
+    let kind = filesystem_kind(&record)?;
+    let count = lvm_reader_count(&record)?;
+    let readers = open_readers(&source, overlay, count)?;
+    if record.lvm_lv_name.is_some() {
+        open_lvm_partition(readers, &record, kind)
+    } else {
+        open_direct_partition(readers, &record, kind)
+    }
+}
+
+/// Load the data source and the partition record without opening a filesystem.
+/// Used by the read-only plan/inspect paths that must classify an encrypted or
+/// unsupported layout before attempting to open it.
+pub(crate) fn load_partition_record(
+    context: &BypassCaseContext<'_>,
+    partition_index: u32,
+) -> Result<
+    (
+        DataSource,
+        evidence_access::partition_query_service::PartitionRecord,
+    ),
+    EmulationBypassError,
+> {
     let source = DataSourceRepo::new(context.case_conn)
         .find_by_case(context.case_id)?
         .into_iter()
@@ -161,26 +186,40 @@ pub(super) fn open_linux_partition(
     let record = PartitionRepo::new(&source_conn.connection)
         .find_by_data_source_and_index(&context.data_source_id.0, partition_index as usize)?
         .ok_or(EmulationBypassError::PartitionNotFound { partition_index })?;
-    let kind = filesystem_kind(&record)?;
-    let count = lvm_reader_count(&record)?;
-    let readers = open_readers(&source, overlay, count)?;
-    if record.lvm_lv_name.is_some() {
-        open_lvm_partition(readers, &record, kind)
-    } else {
-        open_direct_partition(readers, &record, kind)
-    }
+    Ok((source, record))
 }
 
 fn filesystem_kind(
     record: &evidence_access::partition_query_service::PartitionRecord,
 ) -> Result<FilesystemKind, EmulationBypassError> {
-    match record.filesystem.as_deref() {
-        Some("Ext4") => Ok(FilesystemKind::Ext4),
-        Some("XFS") => Ok(FilesystemKind::Xfs),
-        other => Err(EmulationBypassError::Unsupported(format!(
-            "partition filesystem {other:?} is not supported for Linux bypass"
+    match record_filesystem_kind(record) {
+        Some(kind) => Ok(kind),
+        None => Err(EmulationBypassError::Unsupported(format!(
+            "partition filesystem {:?} is not supported for Linux bypass",
+            record.filesystem
         ))),
     }
+}
+
+/// Classify the probed filesystem without erroring; `None` means neither Ext4
+/// nor XFS (callers map that to `UnsupportedLayout` unless the volume is
+/// encrypted).
+pub(crate) fn record_filesystem_kind(
+    record: &evidence_access::partition_query_service::PartitionRecord,
+) -> Option<FilesystemKind> {
+    match record.filesystem.as_deref() {
+        Some("Ext4") => Some(FilesystemKind::Ext4),
+        Some("XFS") => Some(FilesystemKind::Xfs),
+        _ => None,
+    }
+}
+
+/// A locked/encrypted volume (BitLocker today; LUKS shares the locked marker)
+/// cannot be unlocked offline by the host in-place editor.
+pub(crate) fn record_encrypted(
+    record: &evidence_access::partition_query_service::PartitionRecord,
+) -> bool {
+    record.status == "locked" || record.filesystem.as_deref() == Some("BitLocker")
 }
 
 fn lvm_reader_count(
@@ -296,8 +335,47 @@ fn open_filesystem(
     }
 }
 
-pub(super) fn map_xfs_rewrite_error(error: io::Error) -> EmulationBypassError {
-    if error.kind() == io::ErrorKind::Unsupported {
+/// Map a classifiable `XfsRewriteBlocker` payload to the UI-facing blocker
+/// DTO. Layout-level failures that the appliance could also serve collapse into
+/// `UnsupportedLayout`; only `DirtyLog` and `SharedExtents` keep their own
+/// variant.
+pub(crate) fn xfs_blocker_to_dto(
+    blocker: fs_xfs::XfsRewriteBlocker,
+) -> EmulationLinuxBypassBlockerDto {
+    use fs_xfs::XfsRewriteBlocker;
+    match blocker {
+        XfsRewriteBlocker::DirtyLog => EmulationLinuxBypassBlockerDto::DirtyLog,
+        XfsRewriteBlocker::SharedExtents => EmulationLinuxBypassBlockerDto::SharedExtents,
+        XfsRewriteBlocker::RealtimeFile
+        | XfsRewriteBlocker::Nrext64
+        | XfsRewriteBlocker::LocalFork
+        | XfsRewriteBlocker::UnwrittenExtent
+        | XfsRewriteBlocker::ExtentGap
+        | XfsRewriteBlocker::ExtentOverlap
+        | XfsRewriteBlocker::ExtentCountMismatch
+        | XfsRewriteBlocker::InsufficientAllocation
+        | XfsRewriteBlocker::InvalidMetadata
+        | XfsRewriteBlocker::UnsupportedInodeVersion => {
+            EmulationLinuxBypassBlockerDto::UnsupportedLayout
+        }
+    }
+}
+
+/// Recover the typed blocker from an `io::Error` payload via `downcast_ref`,
+/// without matching message substrings.
+pub(crate) fn classify_xfs_blocker(error: &io::Error) -> Option<EmulationLinuxBypassBlockerDto> {
+    error
+        .get_ref()
+        .and_then(|payload| payload.downcast_ref::<fs_xfs::XfsRewriteBlocker>())
+        .copied()
+        .map(xfs_blocker_to_dto)
+}
+
+/// Translate a planner `io::Error` into the service error taxonomy. Classifiable
+/// blockers and `Unsupported`-kind errors remain `Unsupported`; everything else
+/// is an `Edit`/read-side failure rather than a layout refusal.
+pub(crate) fn map_xfs_rewrite_error(error: io::Error) -> EmulationBypassError {
+    if classify_xfs_blocker(&error).is_some() || error.kind() == io::ErrorKind::Unsupported {
         EmulationBypassError::Unsupported(error.to_string())
     } else {
         EmulationBypassError::Edit(error.to_string())

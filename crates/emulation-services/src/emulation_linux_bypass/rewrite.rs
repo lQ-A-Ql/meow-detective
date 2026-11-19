@@ -2,16 +2,16 @@ use std::sync::Arc;
 
 use evidence_emulation::CowDisk;
 
+use super::common::SHADOW_PATH;
 use super::volume::{map_xfs_rewrite_error, LinuxFilesystem, LinuxPartition, WriteMapping};
-use super::SHADOW_PATH;
 use crate::emulation_bypass::EmulationBypassError;
 
-pub(super) struct VolumePatch {
-    pub(super) volume_offset: u64,
-    pub(super) bytes: Vec<u8>,
+pub(crate) struct VolumePatch {
+    pub(crate) volume_offset: u64,
+    pub(crate) bytes: Vec<u8>,
 }
 
-pub(super) fn plan_file_rewrite(
+pub(crate) fn plan_file_rewrite(
     partition: &LinuxPartition,
     path: &str,
     content: &[u8],
@@ -53,7 +53,7 @@ pub(super) fn plan_file_rewrite(
 /// size would require an additional metadata transaction and block-allocation
 /// update.  A shorter replacement is padded with blank lines, which the
 /// shadow grammar ignores.  Growing content remains unsupported.
-pub(super) fn fit_shadow_content(
+pub(crate) fn fit_shadow_content(
     partition: &LinuxPartition,
     content: String,
 ) -> Result<String, EmulationBypassError> {
@@ -81,30 +81,7 @@ pub(super) fn fit_shadow_content(
     Ok(fitted)
 }
 
-pub(super) fn plan_shadow_rewrite(
-    partition: &LinuxPartition,
-    content: &[u8],
-) -> Result<Vec<VolumePatch>, EmulationBypassError> {
-    let patches = match &partition.fs {
-        LinuxFilesystem::Ext4(fs) => plan_ext4_rewrite(fs, content)?,
-        LinuxFilesystem::Xfs(fs) => fs
-            .plan_in_place_file_rewrite(SHADOW_PATH, content)
-            .map_err(map_xfs_rewrite_error)?
-            .patches
-            .into_iter()
-            .map(|patch| (patch.volume_offset, patch.bytes))
-            .collect(),
-    };
-    Ok(patches
-        .into_iter()
-        .map(|(volume_offset, bytes)| VolumePatch {
-            volume_offset,
-            bytes,
-        })
-        .collect())
-}
-
-fn plan_ext4_rewrite(
+pub(crate) fn plan_ext4_rewrite(
     fs: &fs_ext4::Ext4Reader,
     content: &[u8],
 ) -> Result<Vec<(u64, Vec<u8>)>, EmulationBypassError> {
@@ -181,7 +158,7 @@ fn extent_range_patches(
     Ok(patches)
 }
 
-pub(super) fn validate_rewrite_plan(
+pub(crate) fn validate_rewrite_plan(
     mapping: &WriteMapping,
     patches: &[VolumePatch],
 ) -> Result<(), EmulationBypassError> {
@@ -203,7 +180,7 @@ pub(super) fn validate_rewrite_plan(
     Ok(())
 }
 
-pub(super) fn apply_rewrite_plan(
+pub(crate) fn apply_rewrite_plan(
     disk: &Arc<CowDisk>,
     mapping: &WriteMapping,
     patches: &[VolumePatch],
@@ -233,7 +210,7 @@ fn write_patch(
     Ok(())
 }
 
-pub(super) fn verify_patch_bytes(
+pub(crate) fn verify_patch_bytes(
     disk: &Arc<CowDisk>,
     mapping: &WriteMapping,
     patches: &[VolumePatch],

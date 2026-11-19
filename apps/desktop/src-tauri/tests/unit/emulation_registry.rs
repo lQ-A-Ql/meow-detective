@@ -96,6 +96,7 @@ fn poisoned_overlay_cannot_launch() {
             backend: None,
             vmware: None,
             boot_started_at: None,
+            vmx_blueprint: None,
             op_lock: Arc::new(std::sync::Mutex::new(())),
         },
     );

@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::log::replay::{metadata_crc_is_valid, stamp_metadata_crc};
-use crate::reader::{sb_off, S_IFDIR, XFS_INODE_MAGIC, XFS_SUPER_MAGIC};
+use crate::reader::{sb_off, S_IFDIR, XFS_DIFLAG2_REFLINK, XFS_INODE_MAGIC, XFS_SUPER_MAGIC};
 use crate::{FORMAT_LOCAL, INODE_CORE_SIZE, INODE_CORE_SIZE_V3};
 use evidence_core::{EvidenceReader, FileSystemReader, ReaderInfo};
 use std::io::{self, Read, Seek, SeekFrom};
@@ -221,14 +221,34 @@ fn rejects_sparse_unwritten_and_reflink_layouts() {
             .contains(expected));
     }
 
-    let mut reflink = rewrite_fixture();
-    reflink[sb_off::FEATURES_RO_COMPAT..sb_off::FEATURES_RO_COMPAT + 4]
+    // A reflink-capable volume whose target inode is NOT shared stays eligible:
+    // volume capability alone no longer blocks the rewrite.
+    let mut volume_reflink = rewrite_fixture();
+    volume_reflink[sb_off::FEATURES_RO_COMPAT..sb_off::FEATURES_RO_COMPAT + 4]
         .copy_from_slice(&(1u32 << 2).to_be_bytes());
-    assert!(open(reflink)
+    open(volume_reflink)
         .plan_in_place_file_rewrite("test.txt", b"Hi")
-        .unwrap_err()
-        .to_string()
-        .contains("reflink"));
+        .expect("a reflink-capable volume with an unshared inode can be rewritten in place");
+
+    // A shared (reflink) target inode is rejected with a recognizable blocker,
+    // independent of the volume-level reflink capability bit.
+    let mut shared = rewrite_fixture();
+    shared[sb_off::FEATURES_RO_COMPAT..sb_off::FEATURES_RO_COMPAT + 4]
+        .copy_from_slice(&(1u32 << 2).to_be_bytes());
+    let inode = target_inode(&mut shared);
+    inode[di_off::FLAGS2..di_off::FLAGS2 + 8].copy_from_slice(&XFS_DIFLAG2_REFLINK.to_be_bytes());
+    stamp_metadata_crc(inode);
+    let error = open(shared)
+        .plan_in_place_file_rewrite("test.txt", b"Hi")
+        .expect_err("shared extents must be rejected");
+    assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+    assert!(error.to_string().contains("reflink"));
+    assert_eq!(
+        error
+            .get_ref()
+            .and_then(|payload| payload.downcast_ref::<XfsRewriteBlocker>()),
+        Some(&XfsRewriteBlocker::SharedExtents)
+    );
 }
 
 #[test]
@@ -248,4 +268,50 @@ fn rejects_two_logical_extents_that_alias_one_physical_block() {
         .unwrap_err()
         .to_string()
         .contains("physical overlap"));
+}
+
+#[test]
+fn assess_accepts_a_plain_volume_with_an_unshared_inode() {
+    let assessment = open(rewrite_fixture()).assess_in_place_file_rewrite("test.txt", b"Hi");
+    assert!(assessment.supported);
+    assert_eq!(assessment.blocker, None);
+    assert!(assessment.log_clean);
+    assert!(!assessment.volume_reflink_enabled);
+    assert_eq!(assessment.target_inode_reflink, Some(false));
+}
+
+#[test]
+fn assess_marks_a_shared_inode_as_shared_extents_without_planning_a_write() {
+    let mut shared = rewrite_fixture();
+    let inode = target_inode(&mut shared);
+    inode[di_off::FLAGS2..di_off::FLAGS2 + 8].copy_from_slice(&XFS_DIFLAG2_REFLINK.to_be_bytes());
+    stamp_metadata_crc(inode);
+    let assessment = open(shared).assess_in_place_file_rewrite("test.txt", b"Hi");
+    assert!(!assessment.supported);
+    assert_eq!(assessment.blocker, Some(XfsRewriteBlocker::SharedExtents));
+    assert_eq!(assessment.target_inode_reflink, Some(true));
+    assert!(assessment.log_clean);
+}
+
+#[test]
+fn assess_accepts_a_reflink_capable_volume_when_the_inode_is_not_shared() {
+    let mut image = rewrite_fixture();
+    image[sb_off::FEATURES_RO_COMPAT..sb_off::FEATURES_RO_COMPAT + 4]
+        .copy_from_slice(&(1u32 << 2).to_be_bytes());
+    let assessment = open(image).assess_in_place_file_rewrite("test.txt", b"Hi");
+    assert!(assessment.volume_reflink_enabled);
+    assert!(assessment.supported);
+    assert_eq!(assessment.blocker, None);
+    assert_eq!(assessment.target_inode_reflink, Some(false));
+}
+
+#[test]
+fn assess_reports_dirty_log_and_its_blocker_without_writing() {
+    let mut dirty = rewrite_fixture();
+    dirty[LOG_OFFSET..LOG_OFFSET + 4].copy_from_slice(&1u32.to_be_bytes());
+    let assessment = open(dirty).assess_in_place_file_rewrite("test.txt", b"Hi");
+    assert!(!assessment.supported);
+    assert!(!assessment.log_clean);
+    assert_eq!(assessment.blocker, Some(XfsRewriteBlocker::DirtyLog));
+    assert_eq!(assessment.target_inode_reflink, Some(false));
 }

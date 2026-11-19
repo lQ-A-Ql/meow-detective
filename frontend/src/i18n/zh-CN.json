@@ -2401,6 +2401,59 @@
       "selectLinuxAccount": "请选择目标账户；若不需要绕密，请将目标分区改为“不启用”。",
       "linuxPasswordHint": "绕密后 {{username}} 的密码为 123456。密码仅写入本次 COW 覆盖层；SSH 或 root 登录策略仍可能限制密码登录。"
     },
+    "bypassUnavailable": {
+      "title": "主机侧原地绕密不可用，会话已保留",
+      "description": "主机侧原地改写被拒绝；准备好的仿真会话未释放。你可以使用自备的救援 ISO 启动客体，并按下方步骤手动修改 /etc/shadow，不会自动完成绕密。",
+      "payloadStaged": "已将会话第二张 CD 挂载为 payload CD（包含 SHADOW.NEW、BYPASS.JSON、BYPASS.SH）。请使用你自备的救援 ISO 启动，并手动执行 BYPASS.SH；不会自动完成绕密。",
+      "reasonLabel": "拒绝原因",
+      "retryApplianceDisabled": "未检测到自备 rescue ISO，可在新建会话时指定。",
+      "inspection": {
+        "filesystem": "文件系统",
+        "volumeReflink": "卷 reflink",
+        "targetInodeReflink": "目标 inode reflink",
+        "logClean": "日志状态",
+        "recommendedMethod": "推荐方式",
+        "applianceAvailable": "自备救援 ISO",
+        "yes": "已指定",
+        "no": "未指定",
+        "unknown": "未知",
+        "clean": "干净",
+        "dirty": "未验证/脏"
+      },
+      "stepsTitle": "手动修改步骤（payload 已作为第二张 CD 附到会话，仅含脚本与新密码占位）",
+      "steps": {
+        "step1": "用自备 rescue ISO 启动客体，证据盘保持只读",
+        "step2": "在客体中挂载 payload CD（第二张 CD，内含 SHADOW.NEW、BYPASS.JSON、BYPASS.SH）",
+        "step3": "运行 BYPASS.SH --disk <根分区> --dry-run，校验目标分区与改动预览",
+        "step4": "去掉 --dry-run，由你手动确认后实际执行写入",
+        "step5": "用被改账号以密码 123456 登录"
+      },
+      "blockers": {
+        "sharedExtents": "目标文件为 XFS 共享 extent（reflink），主机侧无法安全就地改写",
+        "dirtyLog": "XFS 日志未干净或未验证",
+        "encryptedVolume": "目标卷已加密",
+        "unsupportedLayout": "不支持的卷布局或 inode 版本",
+        "applianceUnavailable": "未提供自备救援 ISO",
+        "accountNotFound": "目标账户未找到",
+        "hashSchemeUnknown": "密码哈希方案无法识别"
+      },
+      "alternatives": {
+        "launchWithoutBypass": "无绕密直接启动",
+        "externalRescueIso": "外部 ISO 手动修改",
+        "retryAppliance": "使用外部救援 ISO 启动并手动修改"
+      },
+      "methods": {
+        "hostInPlace": "主机原地改写",
+        "linuxAppliance": "外部救援 ISO（手动）",
+        "none": "不绕密"
+      },
+      "actions": {
+        "retryAppliance": "使用外部救援 ISO 启动并手动修改",
+        "launchWithoutBypass": "无绕密启动",
+        "externalRescueIso": "外部 ISO 手动修改",
+        "release": "释放会话"
+      }
+    },
     "source": {
       "kind": "镜像类型",
       "platform": "平台",
@@ -2459,6 +2512,7 @@
       "linuxAccountRequired": "已启用 Linux 绕密，但目标账户尚未成功解析或选择。",
       "osdataNonEmpty": "OSDATA 为非空目录，已拒绝自动清除。",
       "fsRepairUnsupported": "至少一个 XFS 卷无法安全修复，已取消启动并释放仿真会话。",
+      "bypassOutcomeMissing": "绕密结果已失效，请重新启动仿真。",
       "operationFailed": "仿真操作失败。"
     }
   },

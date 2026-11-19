@@ -10,6 +10,12 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::sync::Arc;
 
+use crate::features::{XFS_SB_VERSION2_FTYPE, XFS_SB_VERSION_5, XFS_SB_VERSION_NUMBITS};
+// Re-exported so callers and fixtures keep importing feature masks through
+// `crate::reader`; `XFS_DIFLAG2_REFLINK` is part of the public inode-flag API.
+pub use crate::features::XFS_DIFLAG2_REFLINK;
+pub(crate) use crate::features::{XFS_SB_FEAT_INCOMPAT_FTYPE, XFS_SB_FEAT_INCOMPAT_SUPPORTED};
+
 pub(crate) const XFS_SUPER_MAGIC: u32 = 0x5846_5342;
 pub(crate) const XFS_INODE_MAGIC: u16 = 0x494E;
 pub(crate) const BMAP_MAGIC: u32 = 0x424D_4150;
@@ -26,24 +32,6 @@ pub(crate) const BMBT_REC_SIZE: usize = 16;
 pub(crate) const BMBT_SHORT_ROOT_HDR_SIZE: usize = 4;
 pub(crate) const BMBT_BLOCK_HDR_SIZE: usize = 24;
 pub(crate) const BMBT_CRC_BLOCK_HDR_SIZE: usize = 72;
-const XFS_SB_VERSION2_FTYPE: u32 = 0x0000_0200;
-pub(crate) const XFS_SB_FEAT_INCOMPAT_FTYPE: u32 = 1 << 0;
-pub(crate) const XFS_SB_FEAT_INCOMPAT_SPINODES: u32 = 1 << 1;
-pub(crate) const XFS_SB_FEAT_INCOMPAT_META_UUID: u32 = 1 << 2;
-pub(crate) const XFS_SB_FEAT_INCOMPAT_BIGTIME: u32 = 1 << 3;
-pub(crate) const XFS_SB_FEAT_INCOMPAT_NEEDSREPAIR: u32 = 1 << 4;
-pub(crate) const XFS_SB_FEAT_INCOMPAT_NREXT64: u32 = 1 << 5;
-/// Incompatible-feature bits whose on-disk dinode/directory layout this
-/// parser understands. Anything outside this mask may change the layout, so
-/// the filesystem is rejected instead of being misparsed.
-pub(crate) const XFS_SB_FEAT_INCOMPAT_SUPPORTED: u32 = XFS_SB_FEAT_INCOMPAT_FTYPE
-    | XFS_SB_FEAT_INCOMPAT_SPINODES
-    | XFS_SB_FEAT_INCOMPAT_META_UUID
-    | XFS_SB_FEAT_INCOMPAT_BIGTIME
-    | XFS_SB_FEAT_INCOMPAT_NEEDSREPAIR
-    | XFS_SB_FEAT_INCOMPAT_NREXT64;
-const XFS_SB_VERSION_NUMBITS: u16 = 0x000F;
-const XFS_SB_VERSION_5: u16 = 5;
 const MIN_BLOCK_SIZE: u64 = 512;
 const MAX_BLOCK_SIZE: u64 = 65536;
 /// Cap on a fully buffered file read, mirroring fs-ntfs.

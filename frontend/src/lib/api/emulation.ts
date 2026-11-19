@@ -7,6 +7,8 @@ import type {
   EmulationEfiFallbackResult,
   EmulationFsRepairResult,
   EmulationLinuxAccount,
+  EmulationLinuxBypassInspectRequest,
+  EmulationLinuxBypassInspection,
   EmulationLinuxBypassRequest,
   EmulationLinuxBypassResult,
   EmulationOsdataCleanupRequest,
@@ -60,6 +62,14 @@ export async function applyEmulationLinuxBypass(
   request: EmulationLinuxBypassRequest,
 ): Promise<EmulationLinuxBypassResult> {
   return apiClient.request<EmulationLinuxBypassResult>(COMMANDS.emulation.APPLY_LINUX_BYPASS, {
+    request,
+  });
+}
+
+export async function inspectEmulationLinuxBypass(
+  request: EmulationLinuxBypassInspectRequest,
+): Promise<EmulationLinuxBypassInspection> {
+  return apiClient.request<EmulationLinuxBypassInspection>(COMMANDS.emulation.INSPECT_LINUX_BYPASS, {
     request,
   });
 }

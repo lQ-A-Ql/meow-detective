@@ -34,6 +34,7 @@ pub(super) struct SessionWorkspace {
     vmx: PathBuf,
     provenance: PathBuf,
     maintenance_iso: PathBuf,
+    payload_iso: PathBuf,
 }
 
 impl SessionWorkspace {
@@ -65,6 +66,7 @@ impl SessionWorkspace {
             vmx: root.join("machine.vmx"),
             provenance: root.join("provenance.json"),
             maintenance_iso: root.join("maintenance.iso"),
+            payload_iso: root.join("linux-bypass-payload.iso"),
             root,
             mount,
         })
@@ -125,6 +127,22 @@ impl SessionWorkspace {
 
     pub(super) fn maintenance_iso_present(&self) -> bool {
         self.maintenance_iso.is_file()
+    }
+
+    /// Writes the Linux rescue bypass payload CD (`SHADOW.NEW`, `BYPASS.JSON`,
+    /// `BYPASS.SH`) as an independent file. Re-staging after a failed attempt
+    /// replaces only this payload image; the Windows maintenance CD and every
+    /// other derived material are left untouched.
+    pub(super) fn write_payload_iso(&self, bytes: &[u8]) -> Result<PathBuf, WorkspaceError> {
+        atomic_write_replace(&self.payload_iso, bytes)?;
+        Ok(self.payload_iso.clone())
+    }
+
+    /// Replaces the published VMX during a `DescriptorReady` re-stage: the
+    /// descriptor already exists from prepare, so the create-only `write_vmx`
+    /// guard must not apply here.
+    pub(super) fn replace_vmx(&self, value: &str) -> Result<(), WorkspaceError> {
+        atomic_write_replace(&self.vmx, value.as_bytes())
     }
 
     /// Removes the whole session directory. Used both for prepare rollback
@@ -252,6 +270,22 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), WorkspaceError> {
     if path.exists() {
         return Err(WorkspaceError::MaterialExists);
     }
+    let temporary = path.with_extension("tmp");
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&temporary)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    fs::rename(temporary, path)?;
+    Ok(())
+}
+
+/// Atomic replace-style write for materials that may be re-staged inside the
+/// same `DescriptorReady` session (the bypass payload CD and the regenerated
+/// VMX). The create-only guard of [`atomic_write`] deliberately still protects
+/// the one-shot VMDK/provenance/maintenance materials.
+fn atomic_write_replace(path: &Path, bytes: &[u8]) -> Result<(), WorkspaceError> {
     let temporary = path.with_extension("tmp");
     let mut file = OpenOptions::new()
         .create_new(true)

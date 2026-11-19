@@ -6,6 +6,7 @@
 
 mod directory;
 mod extents;
+mod features;
 mod filesystem;
 mod geometry;
 mod inode;
@@ -17,7 +18,9 @@ mod rewrite;
 
 pub mod log;
 pub use repair::{XfsLogClearPlan, XfsRepairPatch};
-pub use rewrite::{XfsFileRewritePatch, XfsFileRewritePlan};
+pub use rewrite::{
+    XfsFileRewritePatch, XfsFileRewritePlan, XfsInPlaceAssessment, XfsRewriteBlocker,
+};
 
 pub use reader::XfsReader;
 
