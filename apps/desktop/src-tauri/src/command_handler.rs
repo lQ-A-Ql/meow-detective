@@ -173,6 +173,7 @@ macro_rules! desktop_command_handler {
             release_emulation,
             get_storage_recovery_report,
             repair_storage_operation,
+            get_source_capabilities,
         ]
     };
 }

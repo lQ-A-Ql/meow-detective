@@ -38,6 +38,18 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
             Some(&active.meta.id.0),
         )
     });
+    // L0 shadow model: best-effort cheap backfill; never blocks case open.
+    let backfill = active.with_conn(|conn| {
+        crate::capability_service::backfill_case_capabilities(
+            conn,
+            &active.case_root,
+            &active.meta.id,
+        )
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+    });
+    if let Err(error) = backfill {
+        tracing::warn!(error = %error, "per-source capability backfill skipped");
+    }
     Ok(active)
 }
 

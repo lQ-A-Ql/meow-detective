@@ -81,6 +81,14 @@ fn new_event_topics_match_constant_strings() {
         EventTopic::FileExtractProgress.as_str(),
         TOPIC_FILE_EXTRACT_PROGRESS
     );
+    assert_eq!(
+        EventTopic::CapabilityStatusChanged.as_str(),
+        TOPIC_CAPABILITY_STATUS_CHANGED
+    );
+    assert_eq!(
+        EventTopic::CapabilityProgress.as_str(),
+        TOPIC_CAPABILITY_PROGRESS
+    );
 }
 
 #[test]

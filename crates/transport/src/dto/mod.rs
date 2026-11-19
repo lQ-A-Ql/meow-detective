@@ -19,6 +19,7 @@ pub mod artifacts;
 pub mod batch;
 pub mod bitlocker;
 pub mod bitlocker_dictionary;
+pub mod capability;
 pub mod carving;
 pub mod case;
 pub mod correlation;
@@ -89,11 +90,7 @@ pub use analysis::{
     WeChatRecoveredKeyDto, WinlogonConfigDto,
 };
 pub use analysis_linux::LinuxSystemConfigPageDto;
-pub use analysis_linux_cluster::{
-    LinuxDerivedSourceSummaryDto, LinuxEvidenceSetListItemDto, LinuxEvidenceSetMemberSummaryDto,
-    LinuxEvidenceSetSummaryDto, LinuxMdRaidArrayDto, LinuxMdRaidMemberDto,
-    LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto, LinuxTopologyScopeSummaryDto,
-};
+pub use analysis_linux_cluster::*;
 pub use analysis_linux_events::LinuxEvidenceEventDto;
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use batch::{BatchJobDto, BatchPhaseDto, BatchPlanDto, BatchResourceLimitsDto, BatchResumeDto};
@@ -102,6 +99,7 @@ pub use bitlocker::{
     RecoveryPasswordReconstructionDto,
 };
 pub use bitlocker_dictionary::{BitLockerDictionaryAttackDto, BitLockerDictionaryBackendDto};
+pub use capability::*;
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceProcessingPhaseDto,
     DataSourceProcessingSummaryDto, DataSourceSummaryDto, DirectNtfsVolumeDto, LinuxRootMountDto,

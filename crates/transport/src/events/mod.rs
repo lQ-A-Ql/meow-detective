@@ -21,6 +21,8 @@ pub const TOPIC_CACHE_INDEX_STATUS: &str = "cache-index-status";
 pub const TOPIC_PERFORMANCE_REPORT_READY: &str = "performance-report-ready";
 pub const TOPIC_ANALYSIS_EXTRACTION_PROGRESS: &str = "analysis-extraction-progress";
 pub const TOPIC_FILE_EXTRACT_PROGRESS: &str = "file-extract-progress";
+pub const TOPIC_CAPABILITY_STATUS_CHANGED: &str = "capability-status-changed";
+pub const TOPIC_CAPABILITY_PROGRESS: &str = "capability-progress";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -53,6 +55,8 @@ pub enum EventTopic {
     AnalysisExtractionProgress,
     #[serde(rename = "file-extract-progress")]
     FileExtractProgress,
+    CapabilityStatusChanged,
+    CapabilityProgress,
 }
 
 impl EventTopic {
@@ -78,6 +82,8 @@ impl EventTopic {
             Self::PerformanceReportReady => TOPIC_PERFORMANCE_REPORT_READY,
             Self::AnalysisExtractionProgress => TOPIC_ANALYSIS_EXTRACTION_PROGRESS,
             Self::FileExtractProgress => TOPIC_FILE_EXTRACT_PROGRESS,
+            Self::CapabilityStatusChanged => TOPIC_CAPABILITY_STATUS_CHANGED,
+            Self::CapabilityProgress => TOPIC_CAPABILITY_PROGRESS,
         }
     }
 }

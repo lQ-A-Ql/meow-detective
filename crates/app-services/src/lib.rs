@@ -20,6 +20,7 @@ pub mod batch_service;
 pub mod bitlocker_runtime;
 pub mod bitlocker_service;
 pub mod bolt_reader_service;
+pub mod capability_service;
 pub mod carving_service;
 pub mod case_projection_service;
 pub mod case_service;

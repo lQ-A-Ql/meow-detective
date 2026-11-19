@@ -2,6 +2,7 @@ pub mod analysis_commands;
 pub mod app_update_commands;
 pub mod artifact_commands;
 pub mod batch_commands;
+pub mod capability_commands;
 pub mod carving_commands;
 pub mod case_commands;
 pub(crate) mod command_support;
