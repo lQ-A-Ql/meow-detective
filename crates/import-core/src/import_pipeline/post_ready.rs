@@ -18,7 +18,14 @@ pub(super) fn finish(
         ensure_active(ctx)?;
         let lease = ctx.runtime.as_ref().map(|r| r.publication_lease());
         let _source = lease.as_ref().map(|l| l.fence_connection(source));
-        let message = auto_extract_platform_artifacts(ctx, ds, source, message)?;
+        let message = if matches!(
+            ctx.post_import_mode,
+            crate::import_pipeline::options::PostImportMode::Detached
+        ) {
+            finish_detached_artifacts(ctx, ds, message)?
+        } else {
+            auto_extract_platform_artifacts(ctx, ds, source, message)?
+        };
         ensure_active(ctx)?;
         super::phases::emit_data_source_ready(ctx, ds)?;
         Ok(message)
@@ -163,22 +170,16 @@ fn record_analysis_outcome(
         .map_err(CommandError::from_service_error)
 }
 
-fn analysis_plan(ctx: &ImportJobContext<'_>) -> Option<(&'static str, &'static [&'static str])> {
-    let should_run = matches!(
-        ctx.import_config.platform,
-        domain::DataSourcePlatform::Linux | domain::DataSourcePlatform::Windows
-    ) && matches!(
-        ctx.content_kind,
-        crate::import_pipeline::context::ImportContentKind::Filesystem
-    ) && ctx.import_config.import_set.is_none()
-        && !ctx.options.defer_linux_artifacts;
-    if !should_run {
-        return None;
-    }
-    match ctx.import_config.platform {
-        domain::DataSourcePlatform::Linux => Some(("Linux", &["LinuxArtifacts"][..])),
-        domain::DataSourcePlatform::Windows => Some((
-            "Windows",
+/// Extraction categories consumed by `analysis_service::run_import_source_extraction`
+/// for a platform. Android uses its own analysis entry and returns `None` here;
+/// other platforms have no host-platform artifact extraction. Shared by the
+/// inline auto-extractor and the detached post-import scheduler so category
+/// lists are not hard-coded twice.
+pub fn artifact_extraction_categories(
+    platform: domain::DataSourcePlatform,
+) -> Option<&'static [&'static str]> {
+    match platform {
+        domain::DataSourcePlatform::Windows => Some(
             &[
                 "Registry",
                 "BrowserHistory",
@@ -191,7 +192,79 @@ fn analysis_plan(ctx: &ImportJobContext<'_>) -> Option<(&'static str, &'static [
                 "ResourceUsage",
                 "PluginArtifacts",
             ][..],
-        )),
-        _ => unreachable!("platform was checked above"),
+        ),
+        domain::DataSourcePlatform::Linux => Some(&["LinuxArtifacts"][..]),
+        domain::DataSourcePlatform::Android | domain::DataSourcePlatform::Unknown => None,
     }
+}
+
+/// Whether host-platform artifact extraction applies to this source: supported
+/// platform, filesystem content, standalone (not an evidence-set member), and
+/// not deferred. Android qualifies for its own entry; this guard mirrors the
+/// inline `android::analyze` preconditions.
+fn detached_artifacts_eligible(ctx: &ImportJobContext<'_>) -> bool {
+    matches!(
+        ctx.import_config.platform,
+        domain::DataSourcePlatform::Windows
+            | domain::DataSourcePlatform::Linux
+            | domain::DataSourcePlatform::Android
+    ) && matches!(
+        ctx.content_kind,
+        crate::import_pipeline::context::ImportContentKind::Filesystem
+    ) && ctx.import_config.import_set.is_none()
+        && !ctx.options.defer_linux_artifacts
+}
+
+/// Detached catalog-only post-ready: skip inline extraction, queue (or mark
+/// not-applicable) the artifacts capability, then emit `data-source-ready`
+/// immediately so catalog availability is not blocked by artifact work.
+fn finish_detached_artifacts(
+    ctx: &mut ImportJobContext<'_>,
+    ds: &domain::DataSource,
+    message: String,
+) -> Result<String, CommandError> {
+    let (state, detail) = if detached_artifacts_eligible(ctx) {
+        (
+            crate::import_pipeline::capability::QUEUED,
+            Some("queued for post-import artifact extraction"),
+        )
+    } else {
+        (
+            crate::import_pipeline::capability::NOT_APPLICABLE,
+            Some("artifact extraction is not applicable for this source"),
+        )
+    };
+    crate::import_pipeline::capability::mark_capability(
+        ctx.conn,
+        ctx.case_id,
+        &ds.id,
+        "artifacts",
+        state,
+        detail,
+        None,
+    )?;
+    Ok(message)
+}
+
+fn analysis_plan(ctx: &ImportJobContext<'_>) -> Option<(&'static str, &'static [&'static str])> {
+    let should_run = matches!(
+        ctx.import_config.platform,
+        domain::DataSourcePlatform::Linux | domain::DataSourcePlatform::Windows
+    ) && matches!(
+        ctx.content_kind,
+        crate::import_pipeline::context::ImportContentKind::Filesystem
+    ) && ctx.import_config.import_set.is_none()
+        && !ctx.options.defer_linux_artifacts;
+    if !should_run {
+        return None;
+    }
+    let label = match ctx.import_config.platform {
+        domain::DataSourcePlatform::Linux => "Linux",
+        domain::DataSourcePlatform::Windows => "Windows",
+        _ => unreachable!("platform was checked above"),
+    };
+    Some((
+        label,
+        artifact_extraction_categories(ctx.import_config.platform)?,
+    ))
 }

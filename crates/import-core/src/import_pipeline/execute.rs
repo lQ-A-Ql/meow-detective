@@ -10,7 +10,7 @@ use transport::{dto::CancellationStateDto, CommandError};
 use crate::import_pipeline::{
     context::ImportJobContext,
     emit::ImportEventSink,
-    options::{ImportJobOptions, JobOutcomeCounts},
+    options::{ImportJobOptions, JobOutcomeCounts, PostImportMode},
     phases, profile,
 };
 use crate::import_precheck;
@@ -45,6 +45,32 @@ pub fn execute_import_job_with_counts(
         import_config,
         job_id,
         options,
+        PostImportMode::Inline,
+        None,
+    )
+}
+
+/// Catalog-only production path: the job ends after catalog publication.
+///
+/// Timeline materialization and artifact extraction are not run here; the
+/// finalize/post-ready stages mark them `queued` for the desktop post-import
+/// scheduler instead. `ImportJobOptions` is unchanged.
+pub fn execute_import_job_until_catalog(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+    case_root: &std::path::Path,
+    import_config: import_precheck::ImportSourceConfig,
+    job_id: &domain::JobId,
+    options: ImportJobOptions<'_>,
+) -> Result<(String, JobOutcomeCounts), CommandError> {
+    execute_and_record(
+        conn,
+        case_id,
+        case_root,
+        import_config,
+        job_id,
+        options,
+        PostImportMode::Detached,
         None,
     )
 }
@@ -72,6 +98,7 @@ pub fn execute_import_job_profiled(
         import_config,
         job_id,
         options,
+        PostImportMode::Inline,
         Some(profiler.clone()),
     );
     let state = if result.is_ok() {
@@ -115,6 +142,7 @@ fn execute_and_record(
     import_config: import_precheck::ImportSourceConfig,
     job_id: &domain::JobId,
     options: ImportJobOptions<'_>,
+    post_import_mode: PostImportMode,
     profiler: Option<super::ImportProfiler>,
 ) -> Result<(String, JobOutcomeCounts), CommandError> {
     let params = super::outcome::parameters(&import_config);
@@ -126,6 +154,7 @@ fn execute_and_record(
         import_config,
         job_id,
         options,
+        post_import_mode,
         profiler,
     );
     super::outcome::record(
@@ -146,6 +175,7 @@ fn execute_import_job_internal(
     import_config: import_precheck::ImportSourceConfig,
     job_id: &domain::JobId,
     options: ImportJobOptions<'_>,
+    post_import_mode: PostImportMode,
     profiler: Option<super::ImportProfiler>,
 ) -> Result<(String, JobOutcomeCounts), CommandError> {
     // First local, so the observer drops after all pre-existing workflow locals.
@@ -171,6 +201,7 @@ fn execute_import_job_internal(
         content_kind: crate::import_pipeline::context::ImportContentKind::Filesystem,
         profiler,
         runtime: None,
+        post_import_mode,
     };
 
     let ds = profile::measure_command(profiling.as_ref(), Phase::Attach, || {

@@ -4,6 +4,7 @@
 //! and post-import analysis. Tauri-specific command wrappers live in the
 //! `forensics-desktop` crate.
 
+mod capability;
 mod ceph;
 mod ceph_metadata_audit;
 mod ceph_persistence;
@@ -36,15 +37,16 @@ mod setup;
 
 pub use emit::{ImportEventSink, NoopImportEventSink};
 pub use execute::{
-    execute_import_job, execute_import_job_profiled, execute_import_job_with_counts,
-    job_cancellation_dto,
+    execute_import_job, execute_import_job_profiled, execute_import_job_until_catalog,
+    execute_import_job_with_counts, job_cancellation_dto,
 };
-pub use options::{ImportJobOptions, JobOutcomeCounts};
+pub use options::{ImportJobOptions, JobOutcomeCounts, PostImportMode};
 pub use partition::{
     build_partition_work, enumerate_image_data_source, enumerate_partition_with_fs,
     format_partition_progress_detail, format_partition_record_root_name,
     format_partition_root_name, PartitionEnumerationRequest,
 };
+pub use post_ready::artifact_extraction_categories;
 pub use profile::progress::import_phase_progress_from_profile;
 pub use profile::results::{cache_statuses_from_profile, partial_results_from_profile};
 pub use profile::{ImportProfileOutputError, ImportProfiler};

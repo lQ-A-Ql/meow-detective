@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use crate::import_analysis::ImportAnalysisMode;
 pub use crate::import_group_gate::{ImportGroupGateError, ImportGroupLease};
-use crate::import_pipeline::{execute_import_job, ImportEventSink, ImportJobOptions};
+use crate::import_pipeline::{
+    execute_import_job, execute_import_job_until_catalog, ImportEventSink, ImportJobOptions,
+};
 use crate::import_precheck::ImportSourceConfig;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use source_kernel::connection::command_error_from_db;
@@ -189,7 +191,9 @@ pub fn run_single_import(
         analysis_mode,
         defer_linux_artifacts: false,
     };
-    match execute_import_job(
+    // Catalog-only production path: the job ends after catalog publication;
+    // timeline/artifacts are queued for the desktop post-import scheduler.
+    match execute_import_job_until_catalog(
         connection,
         case_id,
         case_root,
@@ -197,7 +201,7 @@ pub fn run_single_import(
         job_id,
         options,
     ) {
-        Ok(message) => {
+        Ok((message, _counts)) => {
             repo.complete_committed(job_id, &message)
                 .map_err(command_error_from_db)?;
             Ok(SingleImportOutcome::Completed(message))

@@ -34,12 +34,21 @@ pub(crate) fn run_finalize_phase(
     pipeline_message: &str,
 ) -> Result<String, CommandError> {
     super::super::runtime::validate_current(ctx.runtime.as_deref())?;
-    let timeline_outcome =
-        if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::Filesystem {
-            Some(materialize_timeline(ctx, data_source)?)
-        } else {
-            None
-        };
+    let detached = matches!(
+        ctx.post_import_mode,
+        crate::import_pipeline::options::PostImportMode::Detached
+    );
+    let timeline_outcome = if detached {
+        // Catalog-only path: timeline materialization runs in the post-import
+        // scheduler. Mark the capability instead of materializing here, and
+        // never emit synthetic timeline/search-index completion events.
+        mark_detached_timeline_capability(ctx, data_source)?;
+        None
+    } else if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::Filesystem {
+        Some(materialize_timeline(ctx, data_source)?)
+    } else {
+        None
+    };
     if let Some(TimelineOutcome::Deferred {
         required_bytes,
         available_bytes,
@@ -68,6 +77,37 @@ pub(crate) fn run_finalize_phase(
             ctx.import_config.source_name, pipeline_message
         ),
     })
+}
+
+/// Detached catalog-only finalize: queue timeline for the post-import
+/// scheduler on filesystem sources; metadata-only sources cannot carry a
+/// timeline projection. The graph capability is derived from the timeline
+/// marker and is not written separately here.
+fn mark_detached_timeline_capability(
+    ctx: &ImportJobContext<'_>,
+    data_source: &domain::DataSource,
+) -> Result<(), CommandError> {
+    let (state, detail) =
+        if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::Filesystem {
+            (
+                crate::import_pipeline::capability::QUEUED,
+                Some("queued for post-import timeline projection"),
+            )
+        } else {
+            (
+                crate::import_pipeline::capability::NOT_APPLICABLE,
+                Some("metadata-only source has no filesystem timeline"),
+            )
+        };
+    crate::import_pipeline::capability::mark_capability(
+        ctx.conn,
+        ctx.case_id,
+        &data_source.id,
+        "timeline",
+        state,
+        detail,
+        None,
+    )
 }
 
 fn emit_projection_ready_events(ctx: &ImportJobContext<'_>, timeline_count: u64) {
