@@ -64,6 +64,9 @@ pub async fn close_case(state: State<'_, AppState>, app: AppHandle) -> Result<()
     let Some(identity) = active_case_identity(&app_state)? else {
         return Ok(());
     };
+    // L2: cancel every queued/running post-processing task for this case before
+    // draining background jobs; running tasks stop at the next chunk boundary.
+    crate::post_import_scheduler::cancel_case(&identity.case_id);
     drain_active_case_jobs(&app_state, &identity.case_id, timeout)?;
     let drained = app_state
         .retire_preview_case(&identity.case_id, timeout)

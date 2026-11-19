@@ -174,6 +174,8 @@ macro_rules! desktop_command_handler {
             get_storage_recovery_report,
             repair_storage_operation,
             get_source_capabilities,
+            retry_source_capability,
+            cancel_source_capability,
         ]
     };
 }
