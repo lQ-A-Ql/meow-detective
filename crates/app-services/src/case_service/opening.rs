@@ -50,6 +50,22 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
     if let Err(error) = backfill {
         tracing::warn!(error = %error, "per-source capability backfill skipped");
     }
+    // L2 restart reconciliation: rows left `running` by a dead process fall back
+    // to `queued`; the shell scheduler re-enqueues them after open. Best-effort,
+    // never blocks case open.
+    let requeue = active.with_conn(|conn| {
+        crate::capability_service::requeue_running(conn, &active.meta.id)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+    });
+    match requeue {
+        Ok(recovered) if recovered > 0 => {
+            tracing::info!(recovered, "requeued stale running capability rows");
+        }
+        Ok(_) => {}
+        Err(error) => {
+            tracing::warn!(error = %error, "capability requeue_running skipped");
+        }
+    }
     Ok(active)
 }
 

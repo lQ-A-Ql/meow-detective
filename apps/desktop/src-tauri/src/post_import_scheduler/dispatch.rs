@@ -1,5 +1,10 @@
 //! Task execution: timeline projection rebuild and host-platform artifact
-//! extraction for one queued capability.
+//! extraction for one claimed capability.
+//!
+//! Idempotency pre-checks run before any expensive work: a Complete projection
+//! or a task-confirmed ready artifacts row short-circuits to `ready` without
+//! re-running. The shared cancel token is signalled by `cancel_source_capability`
+//! and observed at chunk boundaries.
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -13,6 +18,7 @@ use app_services::timeline_service::{
 };
 use domain::{DataSourceId, DataSourcePlatform};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+use persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRepo;
 use transport::dto::{AnalysisExtractionProgressDto, TimelineProjectionStateDto};
 use transport::ServiceErrorCategory;
 
@@ -22,15 +28,46 @@ use super::QueuedTask;
 /// Capability-progress emit throttle; the final frame always goes out.
 pub(super) const PROGRESS_THROTTLE: Duration = Duration::from_millis(250);
 
-pub(super) fn run_timeline(task: &QueuedTask, conn: &rusqlite::Connection) {
-    let cancel = Arc::new(AtomicBool::new(false));
+pub(super) fn run(task: &QueuedTask, conn: &rusqlite::Connection, token: &Arc<AtomicBool>) {
+    match task.capability {
+        super::QueuedCapability::Timeline => run_timeline(task, conn, token),
+        super::QueuedCapability::Artifacts => run_artifacts(task, conn, token),
+    }
+}
+
+fn run_timeline(task: &QueuedTask, conn: &rusqlite::Connection, token: &Arc<AtomicBool>) {
+    // Idempotency: projection already Complete for this source → ready, no
+    // rebuild. The marker itself is the revision source of truth.
+    let status = match app_services::timeline_service::get_timeline_projection_status(
+        conn,
+        &task.case_root,
+        &domain::CaseId(task.case_id.clone()),
+    ) {
+        Ok(status) => Some(status),
+        Err(error) => {
+            tracing::warn!(error = %error, "timeline status pre-check failed; proceeding to rebuild");
+            None
+        }
+    };
+    if let Some(status) = status.as_ref() {
+        let complete = status
+            .sources
+            .iter()
+            .find(|entry| entry.data_source_id == task.source_id)
+            .map(|entry| entry.state == TimelineProjectionStateDto::Complete)
+            .unwrap_or(false);
+        if complete {
+            write_row(task, "ready", None, None);
+            return;
+        }
+    }
     let status = rebuild_timeline_projection(
         conn,
         &task.case_root,
         &domain::CaseId(task.case_id.clone()),
         Some(&task.source_id),
         TimelineProjectionPolicy::default(),
-        &cancel,
+        &**token,
     );
     match status {
         Ok(projection) => {
@@ -80,7 +117,19 @@ pub(super) fn run_timeline(task: &QueuedTask, conn: &rusqlite::Connection) {
     }
 }
 
-pub(super) fn run_artifacts(task: &QueuedTask, conn: &rusqlite::Connection) {
+fn run_artifacts(task: &QueuedTask, conn: &rusqlite::Connection, token: &Arc<AtomicBool>) {
+    // Idempotency: no run_id column exists, so a task-confirmed (derived=0)
+    // ready row means a prior extraction already succeeded; skip re-running.
+    let already_ready = SourceCapabilityRepo::new(conn)
+        .get(&task.case_id, &task.source_id, "artifacts")
+        .ok()
+        .flatten()
+        .map(|row| row.derived == 0 && row.state == "ready")
+        .unwrap_or(false);
+    if already_ready {
+        write_row(task, "ready", None, None);
+        return;
+    }
     let storage =
         match DataSourceRepo::new(conn).find_storage(&DataSourceId(task.source_id.clone())) {
             Ok(Some(storage)) => storage,
@@ -95,11 +144,10 @@ pub(super) fn run_artifacts(task: &QueuedTask, conn: &rusqlite::Connection) {
         };
     let platform = DataSourcePlatform::from_storage_str(Some(storage.platform.as_ref()))
         .unwrap_or(DataSourcePlatform::Unknown);
-    let cancel = Arc::new(AtomicBool::new(false));
     match platform {
-        DataSourcePlatform::Android => run_artifacts_android(task, conn, &cancel),
+        DataSourcePlatform::Android => run_artifacts_android(task, conn, token),
         DataSourcePlatform::Windows | DataSourcePlatform::Linux => {
-            run_artifacts_host(task, conn, &cancel, platform)
+            run_artifacts_host(task, conn, token, platform)
         }
         DataSourcePlatform::Unknown => {
             write_row(task, "notApplicable", Some("unsupported platform"), None);
@@ -107,7 +155,7 @@ pub(super) fn run_artifacts(task: &QueuedTask, conn: &rusqlite::Connection) {
     }
 }
 
-fn run_artifacts_android(task: &QueuedTask, conn: &rusqlite::Connection, cancel: &AtomicBool) {
+fn run_artifacts_android(task: &QueuedTask, conn: &rusqlite::Connection, token: &Arc<AtomicBool>) {
     let runtime = AnalysisSourceReadRuntime::with_bitlocker_runtime(Arc::clone(
         &task.app_state.bitlocker_runtime,
     ));
@@ -117,7 +165,7 @@ fn run_artifacts_android(task: &QueuedTask, conn: &rusqlite::Connection, cancel:
         &domain::CaseId(task.case_id.clone()),
         &DataSourceId(task.source_id.clone()),
         &runtime,
-        cancel,
+        &**token,
     );
     match result {
         Ok(_) => write_row(task, "ready", None, None),
@@ -129,7 +177,7 @@ fn run_artifacts_android(task: &QueuedTask, conn: &rusqlite::Connection, cancel:
 fn run_artifacts_host(
     task: &QueuedTask,
     conn: &rusqlite::Connection,
-    cancel: &Arc<AtomicBool>,
+    token: &Arc<AtomicBool>,
     platform: DataSourcePlatform,
 ) {
     let Some(categories) = app_services::import_pipeline::artifact_extraction_categories(platform)
@@ -152,7 +200,7 @@ fn run_artifacts_host(
             source: &DataSourceId(task.source_id.clone()),
             categories,
             runtime: &runtime,
-            cancel_token: cancel.clone(),
+            cancel_token: token.clone(),
             run_id: &format!("post-import-{}", task.source_id),
         },
         |update: AnalysisExtractionProgressDto| {

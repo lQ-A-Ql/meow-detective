@@ -123,6 +123,54 @@ impl<'a> SourceCapabilityRepo<'a> {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    /// Compare-and-swap claim: flip `queued`/`pending` to `running` exactly when
+    /// the row still admits a worker. Returns `false` when another worker already
+    /// owns the row, the row finished, or it is absent. The scheduler must only
+    /// execute after a successful claim.
+    pub fn try_claim(
+        &self,
+        case_id: &str,
+        data_source_id: &str,
+        capability: &str,
+    ) -> DbResult<bool> {
+        let changed = self.conn.execute(
+            "UPDATE source_capability SET
+                state = 'running', updated_at = datetime('now')
+             WHERE case_id = ?1 AND data_source_id = ?2 AND capability = ?3
+               AND state IN ('queued', 'pending')",
+            params![case_id, data_source_id, capability],
+        )?;
+        Ok(changed == 1)
+    }
+
+    /// Restart reconciliation: rows left `running` by a dead process fall back to
+    /// `queued`. No attempts column exists, so only the state reverts. Returns
+    /// the number of rows recovered.
+    pub fn requeue_running(&self, case_id: &str) -> DbResult<u64> {
+        let changed = self.conn.execute(
+            "UPDATE source_capability SET
+                state = 'queued', updated_at = datetime('now')
+             WHERE case_id = ?1 AND state = 'running'",
+            params![case_id],
+        )?;
+        Ok(u64::try_from(changed).unwrap_or(0))
+    }
+
+    /// Rows eligible for shell-side re-enqueue after case open: `queued` or
+    /// `pending` for this case only.
+    pub fn list_pending(&self, case_id: &str) -> DbResult<Vec<SourceCapabilityRow>> {
+        let mut statement = self.conn.prepare(
+            "SELECT case_id, data_source_id, capability, state, revision,
+                    progress_done, progress_total, phase, detail, error_code,
+                    derived, updated_at
+             FROM source_capability
+             WHERE case_id = ?1 AND state IN ('queued', 'pending')
+             ORDER BY data_source_id ASC, capability ASC",
+        )?;
+        let rows = statement.query_map([case_id], read_row)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     pub fn update_state(
         &self,
         case_id: &str,

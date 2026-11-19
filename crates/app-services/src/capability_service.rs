@@ -26,6 +26,25 @@ pub enum CapabilityServiceError {
     Database(#[from] persistence_sqlite::DbError),
     #[error("timeline projection status failed: {0}")]
     Timeline(#[from] timeline_service::TimelineServiceError),
+    #[error("data source not found in case: {0}")]
+    SourceNotFound(String),
+}
+
+/// Validate that a data source belongs to the active case before a retry or
+/// cancel. Keeps the repository lookup out of the command layer (Stage 3).
+pub fn ensure_source_belongs(
+    conn: &Connection,
+    case_id: &CaseId,
+    data_source_id: &str,
+) -> Result<(), CapabilityServiceError> {
+    let sources = DataSourceRepo::new(conn).find_by_case(case_id)?;
+    if sources.iter().any(|source| source.id.0 == data_source_id) {
+        Ok(())
+    } else {
+        Err(CapabilityServiceError::SourceNotFound(
+            data_source_id.to_string(),
+        ))
+    }
 }
 
 /// Derive the per-source capability matrix at read time.
@@ -237,6 +256,13 @@ pub fn backfill_case_capabilities(
         );
     }
     Ok(())
+}
+
+/// Restart reconciliation: rows left `running` by a dead process fall back to
+/// `queued` so the shell scheduler can re-enqueue them on case open. No attempts
+/// column exists, so only the state reverts. Returns the recovered row count.
+pub fn requeue_running(conn: &Connection, case_id: &CaseId) -> Result<u64, CapabilityServiceError> {
+    Ok(SourceCapabilityRepo::new(conn).requeue_running(&case_id.0)?)
 }
 
 /// Single-writer helper used by later waves to record a task-confirmed state.

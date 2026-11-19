@@ -1,28 +1,35 @@
-//! Minimal single-worker post-import capability scheduler (L1).
+//! Hardened post-import capability scheduler (L2).
 //!
 //! After a catalog-only import job completes, `timeline` and `artifacts` rows
-//! marked `queued` are executed one at a time on a dedicated worker thread.
-//! L2 hardens queue priority, publication leases, fencing and restart
-//! recovery; this module intentionally stays small: one worker, a
-//! Mutex/Condvar queue, active-case fencing before dispatch, and task-confirmed
-//! row writes with status/progress events.
+//! marked `queued`/`pending` are executed on a bounded worker pool. L2 adds:
+//!
+//! * priority admission: P0 `user_retry` (manual retry) ahead of P1
+//!   `post_import_auto` (import completion / case-open replay);
+//! * per-source serialization: the same source runs one post-processing task
+//!   at a time, different sources may run in parallel;
+//! * CAS claim: a worker only executes after `SourceCapabilityRepo::try_claim`
+//!   flips `queued`/`pending` to `running`;
+//! * restart reconciliation, cancel tokens, and bounded P0 retry slots;
+//! * idempotent pre-checks (Complete projection / task-confirmed ready) before
+//!   re-running work.
+//!
+//! The pool size mirrors `resolve_analysis_worker_count(None)`: CPU-bound
+//! analysis workers default to a cap of 2, so the pool never grows unbounded.
+//! State and admission live in `state.rs`, execution in `worker.rs`, teardown
+//! in `cancel.rs`; this file stays the API surface.
 
+mod cancel;
 mod dispatch;
 mod enqueue;
 mod events;
+mod state;
+mod worker;
 
-use std::collections::VecDeque;
-use std::path::PathBuf;
-use std::sync::{Condvar, Mutex, OnceLock};
-
-use tauri::AppHandle;
-
-use crate::state::AppState;
-
-pub(crate) use enqueue::enqueue_for_source;
+pub(crate) use cancel::{cancel_case, cancel_source};
+pub(crate) use state::Admission;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum QueuedCapability {
+pub(crate) enum QueuedCapability {
     Timeline,
     Artifacts,
 }
@@ -34,95 +41,63 @@ impl QueuedCapability {
             Self::Artifacts => "artifacts",
         }
     }
+
+    pub(crate) fn parse(wire: &str) -> Option<Self> {
+        match wire {
+            "timeline" => Some(Self::Timeline),
+            "artifacts" => Some(Self::Artifacts),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Priority {
+    /// P0: manual user retry (`retry_source_capability`).
+    UserRetry,
+    /// P1: automatic post-import work (completion hook / case-open replay).
+    Auto,
 }
 
 pub(super) struct QueuedTask {
-    pub(super) app_state: AppState,
-    pub(super) app: Option<AppHandle>,
+    pub(super) app_state: crate::state::AppState,
+    pub(super) app: Option<tauri::AppHandle>,
     pub(super) case_id: String,
-    pub(super) case_root: PathBuf,
+    pub(super) case_root: std::path::PathBuf,
     pub(super) source_id: String,
     pub(super) capability: QueuedCapability,
+    pub(super) priority: Priority,
+    pub(super) revision: i64,
 }
 
-struct SchedulerState {
-    queue: VecDeque<QueuedTask>,
-    worker_started: bool,
-}
+impl QueuedTask {
+    /// Dedup key: `(case_id, source_id, capability, revision)`. A revision bump
+    /// (e.g. after a state transition) breaks dedup and admits the newer
+    /// generation instead of reusing a stale slot.
+    fn key(&self) -> String {
+        format!(
+            "{}|{}|{}|{}",
+            self.case_id,
+            self.source_id,
+            self.capability.wire(),
+            self.revision
+        )
+    }
 
-fn state() -> &'static Mutex<SchedulerState> {
-    static STATE: OnceLock<Mutex<SchedulerState>> = OnceLock::new();
-    STATE.get_or_init(|| {
-        Mutex::new(SchedulerState {
-            queue: VecDeque::new(),
-            worker_started: false,
-        })
-    })
-}
+    /// Family prefix locating the live token / queued entry without revision.
+    fn family_key(&self) -> String {
+        format!(
+            "{}|{}|{}",
+            self.case_id,
+            self.source_id,
+            self.capability.wire()
+        )
+    }
 
-fn condvar() -> &'static Condvar {
-    static CV: OnceLock<Condvar> = OnceLock::new();
-    CV.get_or_init(Condvar::new)
-}
-
-fn worker_loop() {
-    loop {
-        let task = {
-            let mut guard = match state().lock() {
-                Ok(guard) => guard,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            while guard.queue.is_empty() {
-                guard = match condvar().wait(guard) {
-                    Ok(guard) => guard,
-                    Err(poisoned) => poisoned.into_inner(),
-                };
-            }
-            guard.queue.pop_front()
-        };
-        let Some(task) = task else { continue };
-        run_task(&task);
+    /// Per-source serialization key within this case.
+    fn source_key(&self) -> String {
+        format!("{}|{}", self.case_id, self.source_id)
     }
 }
 
-fn active_case_matches(task: &QueuedTask) -> bool {
-    let guard = match task.app_state.active_case.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    guard
-        .as_ref()
-        .map(|active| active.meta.id.0 == task.case_id)
-        .unwrap_or(false)
-}
-
-fn run_task(task: &QueuedTask) {
-    if !active_case_matches(task) {
-        tracing::info!(
-            case_id = %task.case_id,
-            source_id = %task.source_id,
-            capability = task.capability.wire(),
-            "post-import task dropped: active case changed or closed"
-        );
-        return;
-    }
-    let db_path = task.case_root.join("app.db");
-    let conn = match app_services::connection::open_existing_case_db(&db_path) {
-        Ok(conn) => conn,
-        Err(error) => {
-            tracing::warn!(error = %error, "post-import task: cannot open case DB");
-            events::write_row(
-                task,
-                "failed",
-                Some("case database unavailable"),
-                Some("IO"),
-            );
-            return;
-        }
-    };
-    events::write_row(task, "running", None, None);
-    match task.capability {
-        QueuedCapability::Timeline => dispatch::run_timeline(task, &conn),
-        QueuedCapability::Artifacts => dispatch::run_artifacts(task, &conn),
-    }
-}
+pub(crate) use enqueue::{enqueue_case_pending, enqueue_for_source, retry_admission};

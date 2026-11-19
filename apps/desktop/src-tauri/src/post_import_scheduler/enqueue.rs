@@ -8,7 +8,8 @@ use persistence_sqlite::repositories::{
 };
 use tauri::AppHandle;
 
-use super::{condvar, state, worker_loop, QueuedCapability, QueuedTask};
+use super::state::admit;
+use super::{Admission, Priority, QueuedCapability, QueuedTask};
 use crate::state::AppState;
 
 /// Resolve the just-imported data source by its registered `source_path`; the
@@ -26,10 +27,41 @@ fn resolve_source_id(
         .map(|source| source.id.0)
 }
 
-/// Read the queued/pending `timeline`/`artifacts` rows for one source and enqueue
-/// them. Called from the import job's Completed branch after `job-completed`;
-/// never blocks the job. Rows that are not queued/pending are ignored, and an
-/// already-queued identical task is deduplicated.
+fn read_revision(conn: &rusqlite::Connection, case_id: &str, source_id: &str, wire: &str) -> i64 {
+    SourceCapabilityRepo::new(conn)
+        .get(case_id, source_id, wire)
+        .ok()
+        .flatten()
+        .map(|row| row.revision)
+        .unwrap_or(0)
+}
+
+fn build_task(
+    app_state: &AppState,
+    app: Option<&AppHandle>,
+    case_id: &str,
+    case_root: &Path,
+    source_id: &str,
+    capability: QueuedCapability,
+    priority: Priority,
+    revision: i64,
+) -> QueuedTask {
+    QueuedTask {
+        app_state: app_state.clone(),
+        app: app.cloned(),
+        case_id: case_id.to_string(),
+        case_root: case_root.to_path_buf(),
+        source_id: source_id.to_string(),
+        capability,
+        priority,
+        revision,
+    }
+}
+
+/// Read the queued/pending `timeline`/`artifacts` rows for one source and admit
+/// them as P1 auto work. Called from the import job's Completed branch after
+/// `job-completed`; never blocks the job. An identical task already queued or
+/// running is deduplicated by admission.
 pub(crate) fn enqueue_for_source(
     app_state: &AppState,
     app: Option<&AppHandle>,
@@ -56,45 +88,109 @@ pub(crate) fn enqueue_for_source(
         );
         return;
     };
-    let repo = SourceCapabilityRepo::new(&conn);
     let candidates = [
         (QueuedCapability::Timeline, "timeline"),
         (QueuedCapability::Artifacts, "artifacts"),
     ];
-    let mut guard = match state().lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
     for (capability, wire) in candidates {
-        let queued = repo
+        let row = SourceCapabilityRepo::new(&conn)
             .get(case_id, &source_id, wire)
             .ok()
-            .flatten()
-            .map(|row| matches!(row.state.as_str(), "queued" | "pending"))
+            .flatten();
+        let queued = row
+            .as_ref()
+            .map(|entry| matches!(entry.state.as_str(), "queued" | "pending"))
             .unwrap_or(false);
         if !queued {
             continue;
         }
-        if guard.queue.iter().any(|task| {
-            task.case_id == case_id && task.source_id == source_id && task.capability == capability
-        }) {
-            continue;
-        }
-        guard.queue.push_back(QueuedTask {
-            app_state: app_state.clone(),
-            app: app.cloned(),
-            case_id: case_id.to_string(),
-            case_root: case_root.to_path_buf(),
-            source_id: source_id.clone(),
+        let revision = row.map(|entry| entry.revision).unwrap_or(0);
+        admit(build_task(
+            app_state,
+            app,
+            case_id,
+            case_root,
+            &source_id,
             capability,
-        });
+            Priority::Auto,
+            revision,
+        ));
     }
-    if !guard.queue.is_empty() && !guard.worker_started {
-        guard.worker_started = true;
-        std::thread::Builder::new()
-            .name("post-import-scheduler".to_string())
-            .spawn(worker_loop)
-            .expect("post-import scheduler thread must start");
+}
+
+/// After case open, re-admit every `queued`/`pending` executable row of the
+/// active case as P1 auto work. `requeue_running` already flipped stale
+/// `running` rows to `queued` inside `case_service::open_case`; rows for
+/// non-active cases are never scanned.
+pub(crate) fn enqueue_case_pending(
+    app_state: &AppState,
+    app: Option<&AppHandle>,
+    case_id: &str,
+    case_root: &Path,
+) {
+    let db_path = case_root.join("app.db");
+    let conn = match app_services::connection::open_existing_case_db(&db_path) {
+        Ok(conn) => conn,
+        Err(error) => {
+            tracing::warn!(
+                case_id,
+                error = %error,
+                "post-import scheduler: cannot open case DB for replay enqueue"
+            );
+            return;
+        }
+    };
+    let pending = match SourceCapabilityRepo::new(&conn).list_pending(case_id) {
+        Ok(rows) => rows,
+        Err(error) => {
+            tracing::warn!(error = %error, "post-import scheduler: cannot list pending rows");
+            return;
+        }
+    };
+    for row in pending {
+        let Some(capability) = QueuedCapability::parse(&row.capability) else {
+            continue;
+        };
+        admit(build_task(
+            app_state,
+            app,
+            case_id,
+            case_root,
+            &row.data_source_id,
+            capability,
+            Priority::Auto,
+            row.revision,
+        ));
     }
-    condvar().notify_one();
+}
+
+/// Admit a P0 user-retry task. The caller has already flipped the row to
+/// `queued`; admission reports whether the task was accepted, deduped, or
+/// rejected for a full P0 slot.
+pub(crate) fn retry_admission(
+    app_state: &AppState,
+    app: Option<&AppHandle>,
+    case_id: &str,
+    case_root: &Path,
+    source_id: &str,
+    capability: QueuedCapability,
+) -> Admission {
+    let db_path = case_root.join("app.db");
+    let revision = match app_services::connection::open_existing_case_db(&db_path) {
+        Ok(conn) => read_revision(&conn, case_id, source_id, capability.wire()),
+        Err(error) => {
+            tracing::warn!(error = %error, "post-import scheduler: retry revision read failed");
+            0
+        }
+    };
+    admit(build_task(
+        app_state,
+        app,
+        case_id,
+        case_root,
+        source_id,
+        capability,
+        Priority::UserRetry,
+        revision,
+    ))
 }

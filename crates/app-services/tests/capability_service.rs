@@ -170,3 +170,72 @@ fn task_confirmed_artifact_row_is_preserved_and_revision_bumps() {
     assert_eq!(artifacts.detail.as_deref(), Some("task confirmed"));
     assert_eq!(artifacts.revision, 1);
 }
+
+#[test]
+fn try_claim_flips_queued_once_and_requeue_running_recovers() {
+    let fixture = fixture("ready", Some("windows"));
+    let case_id = fixture.case.meta.id.0.clone();
+    let source_id = fixture.source.0.clone();
+    fixture
+        .case
+        .with_conn(|conn| -> Result<(), persistence_sqlite::DbError> {
+            let repo = SourceCapabilityRepo::new(conn);
+            let row =
+                persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRow {
+                    case_id: case_id.clone(),
+                    data_source_id: source_id.clone(),
+                    capability: "timeline".to_string(),
+                    state: "queued".to_string(),
+                    revision: 0,
+                    progress_done: 0,
+                    progress_total: None,
+                    phase: None,
+                    detail: None,
+                    error_code: None,
+                    derived: 0,
+                    updated_at: chrono::Utc::now().to_rfc3339(),
+                };
+            repo.insert_if_missing(&row)?;
+            // First claim wins; a second claim loses because state moved to running.
+            assert!(repo.try_claim(&case_id, &source_id, "timeline")?);
+            assert!(!repo.try_claim(&case_id, &source_id, "timeline")?);
+            // A finished row can never be claimed.
+            repo.update_state(&case_id, &source_id, "timeline", "ready", None, None, 0)?;
+            assert!(!repo.try_claim(&case_id, &source_id, "timeline")?);
+            Ok(())
+        })
+        .unwrap();
+
+    fixture
+        .case
+        .with_conn(|conn| -> Result<(), persistence_sqlite::DbError> {
+            let repo = SourceCapabilityRepo::new(conn);
+            // Leave another row running to be recovered by restart reconciliation.
+            let row =
+                persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRow {
+                    case_id: case_id.clone(),
+                    data_source_id: source_id.clone(),
+                    capability: "artifacts".to_string(),
+                    state: "running".to_string(),
+                    revision: 0,
+                    progress_done: 0,
+                    progress_total: None,
+                    phase: None,
+                    detail: None,
+                    error_code: None,
+                    derived: 0,
+                    updated_at: chrono::Utc::now().to_rfc3339(),
+                };
+            repo.upsert(&row)?;
+            let recovered = capability_service::requeue_running(conn, &fixture.case.meta.id)
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            assert_eq!(recovered, 1);
+            let pending = repo.list_pending(&case_id)?;
+            assert!(pending
+                .iter()
+                .any(|entry| entry.capability == "artifacts" && entry.state == "queued"));
+            assert!(!pending.iter().any(|entry| entry.capability == "timeline"));
+            Ok(())
+        })
+        .unwrap();
+}
