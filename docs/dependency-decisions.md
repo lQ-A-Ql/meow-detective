@@ -41,6 +41,26 @@ Published sources: [trash-core](https://github.com/SecurityRonin/trash-forensic)
 Their minimum Rust versions are 1.96, 1.80, 1.80 and 1.80 respectively; the workspace
 toolchain is 1.99.0. The existing dependency license policy covers these licenses.
 
+## Advisory review — 2026-11-19 (chrono family unmaintained)
+
+Owner: Dependency Maintenance. RustSec issued RUSTSEC-2026-0543 (`chrono`) and
+RUSTSEC-2026-0555 (`chrono-tz`) on 2026-11-17. Both are INFO/unmaintained advisories,
+cover all versions, and have no patched release.
+
+`chrono 0.4.45` is the workspace-wide timestamp type used by domain, transport,
+artifacts, analysis, import, and Ceph code. `chrono-tz 0.10.4` is used only by
+analysis-core Linux timezone resolution. Disposition: time-bounded exceptions in
+`deny.toml` through 2027-06-30; both crates are maintenance-only findings with no
+known exploitable vulnerability. Replacement is deferred to one coordinated
+chrono-to-jiff/time migration so the timestamp representation and IANA timezone
+database change together; no safe upgrade exists today. New direct `chrono` usage
+must be reviewed against that migration rather than extending this exception.
+
+Validation: `cargo tree --locked --target x86_64-pc-windows-msvc -i chrono`,
+`cargo tree --locked --target x86_64-pc-windows-msvc -i chrono-tz`,
+`cargo deny check advisories bans licenses sources`, and
+`scripts/check-deny-exceptions.ps1`.
+
 ## Advisory review — 2026-11-16
 
 Owner: Dependency Maintenance. This review resolves the expired 2026-10-16 exceptions by

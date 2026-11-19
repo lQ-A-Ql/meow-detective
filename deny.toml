@@ -30,6 +30,8 @@ db-path = "~/.cargo/advisory-db"
 unused-ignored-advisory = "deny"
 ignore = [
     { id = "RUSTSEC-2024-0370", reason = "owner: Dependency Maintenance; expires: 2026-12-16; reviewed: 2026-11-16, Low, second renewal. proc-macro-error 1.0.4 is build-time only via glib-macros 0.18.5 on the Linux GTK path of tauri 2.11.3; cargo tree confirms it is absent from the Windows target graph. No patched release and gtk 0.18 still requires it; replacement depends on an upstream GTK/Tauri refresh. The five unic advisories were removed by upgrading tauri-utils to 2.10.3 (urlpattern 0.6). See docs/dependency-decisions.md." },
+    { id = "RUSTSEC-2026-0543", reason = "owner: Dependency Maintenance; expires: 2027-06-30; reviewed: 2026-11-19, INFO unmaintained, all versions. chrono 0.4.45 is the workspace-wide timestamp type and has no patched release; the advisory is maintenance-only, not a known exploitable vulnerability. Replacement is pending the larger chrono-to-jiff/time migration; no safe upgrade is available." },
+    { id = "RUSTSEC-2026-0555", reason = "owner: Dependency Maintenance; expires: 2027-06-30; reviewed: 2026-11-19, INFO unmaintained, all versions. chrono-tz 0.10.4 is used only by analysis-core Linux timezone resolution and has no patched release; the advisory is maintenance-only. Replacement is coupled to the chrono-to-jiff/time migration; no safe upgrade is available." },
 ]
 
 [licenses]
