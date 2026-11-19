@@ -1,11 +1,5 @@
 /** Mirrors `CapabilityKindDto` (camelCase) from the transport contract. */
-export type CapabilityKind =
-  | 'catalog'
-  | 'search'
-  | 'timeline'
-  | 'graph'
-  | 'platformFacts'
-  | 'artifacts';
+export type CapabilityKind = 'catalog' | 'search' | 'timeline' | 'graph' | 'platformFacts' | 'artifacts';
 
 /** Mirrors `CapabilityStateDto` (camelCase) from the transport contract. */
 export type CapabilityState =
