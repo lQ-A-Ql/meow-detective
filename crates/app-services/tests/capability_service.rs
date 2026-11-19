@@ -172,6 +172,198 @@ fn task_confirmed_artifact_row_is_preserved_and_revision_bumps() {
 }
 
 #[test]
+fn backfill_is_idempotent_and_preserves_task_confirmed_rows() {
+    let fixture = fixture("ready", Some("windows"));
+    let case_id = fixture.case.meta.id.0.clone();
+    let source_id = fixture.source.0.clone();
+    // First backfill writes the four cheap derived rows.
+    fixture
+        .case
+        .with_conn(|conn| {
+            capability_service::backfill_case_capabilities(
+                conn,
+                &fixture.case.case_root,
+                &fixture.case.meta.id,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    let before = fixture
+        .case
+        .with_conn(|conn| SourceCapabilityRepo::new(conn).list_for_case(&case_id))
+        .unwrap();
+    assert_eq!(before.len(), 4);
+
+    // A task-confirmed artifacts row replaces the derived placeholder.
+    fixture
+        .case
+        .with_conn(|conn| {
+            capability_service::mark_capability_state(
+                conn,
+                &fixture.case.meta.id,
+                &source_id,
+                CapabilityKindDto::Artifacts,
+                CapabilityStateDto::Ready,
+                None,
+                Some("task confirmed".into()),
+                None,
+                false,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+
+    // A second backfill must not add rows or overwrite the task-confirmed row.
+    fixture
+        .case
+        .with_conn(|conn| {
+            capability_service::backfill_case_capabilities(
+                conn,
+                &fixture.case.case_root,
+                &fixture.case.meta.id,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    let rows = fixture
+        .case
+        .with_conn(|conn| SourceCapabilityRepo::new(conn).list_for_case(&case_id))
+        .unwrap();
+    assert_eq!(rows.len(), 4, "repeated backfill must not add rows");
+    let artifacts = rows
+        .iter()
+        .find(|row| row.capability == "artifacts")
+        .expect("artifacts row");
+    assert_eq!(artifacts.state, "ready");
+    assert_eq!(artifacts.derived, 0);
+    assert_eq!(artifacts.detail.as_deref(), Some("task confirmed"));
+    assert_eq!(artifacts.revision, 1);
+    // Derived placeholder rows remain untouched.
+    for kind in ["catalog", "search", "platformFacts"] {
+        let row = rows
+            .iter()
+            .find(|entry| entry.capability == kind)
+            .expect("derived row");
+        assert_eq!(row.derived, 1, "{kind} row must stay derived");
+    }
+}
+
+#[test]
+fn requeue_running_recovers_running_without_losing_rows() {
+    let fixture = fixture("ready", Some("windows"));
+    let case_id = fixture.case.meta.id.0.clone();
+    let source_id = fixture.source.0.clone();
+    fixture
+        .case
+        .with_conn(|conn| {
+            capability_service::backfill_case_capabilities(
+                conn,
+                &fixture.case.case_root,
+                &fixture.case.meta.id,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    // Leave a stale running timeline row behind from a dead process; the
+    // backfilled catalog row stays terminal ready.
+    fixture
+        .case
+        .with_conn(|conn| -> Result<(), persistence_sqlite::DbError> {
+            SourceCapabilityRepo::new(conn).upsert(
+                &persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRow {
+                    case_id: case_id.clone(),
+                    data_source_id: source_id.clone(),
+                    capability: "timeline".to_string(),
+                    state: "running".to_string(),
+                    revision: 2,
+                    progress_done: 0,
+                    progress_total: None,
+                    phase: None,
+                    detail: None,
+                    error_code: None,
+                    derived: 0,
+                    updated_at: chrono::Utc::now().to_rfc3339(),
+                },
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let total_before = fixture
+        .case
+        .with_conn(|conn| SourceCapabilityRepo::new(conn).list_for_case(&case_id))
+        .unwrap()
+        .len();
+
+    let recovered = fixture
+        .case
+        .with_conn(|conn| {
+            capability_service::requeue_running(conn, &fixture.case.meta.id)
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    assert_eq!(recovered, 1);
+
+    fixture
+        .case
+        .with_conn(|conn| -> Result<(), persistence_sqlite::DbError> {
+            let repo = SourceCapabilityRepo::new(conn);
+            let rows = repo.list_for_case(&case_id)?;
+            assert_eq!(rows.len(), total_before, "requeue must not drop rows");
+            let pending = repo.list_pending(&case_id)?;
+            // The backfilled artifacts placeholder is still pending; the stale
+            // running timeline row recovered to queued alongside it.
+            assert_eq!(pending.len(), 2);
+            let timeline = pending
+                .iter()
+                .find(|row| row.capability == "timeline")
+                .expect("timeline row");
+            assert_eq!(timeline.state, "queued");
+            assert_eq!(timeline.revision, 2, "revision preserved across requeue");
+            let artifacts = pending
+                .iter()
+                .find(|row| row.capability == "artifacts")
+                .expect("artifacts row");
+            assert_eq!(artifacts.state, "pending");
+            // Terminal ready rows are never eligible for re-enqueue.
+            for kind in ["catalog", "search", "platformFacts"] {
+                assert!(!pending.iter().any(|row| row.capability == kind));
+            }
+            let catalog = rows
+                .iter()
+                .find(|row| row.capability == "catalog")
+                .expect("catalog row");
+            assert_eq!(catalog.state, "ready");
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn unknown_platform_derives_artifacts_and_facts_not_applicable() {
+    let fixture = fixture("ready", None);
+    let matrix = derive(&fixture);
+    let find = |kind: CapabilityKindDto| {
+        matrix
+            .sources
+            .iter()
+            .find(|entry| entry.capability == kind && entry.data_source_id == fixture.source.0)
+            .expect("capability entry")
+    };
+    assert_eq!(
+        find(CapabilityKindDto::Artifacts).state,
+        CapabilityStateDto::NotApplicable
+    );
+    assert_eq!(
+        find(CapabilityKindDto::PlatformFacts).state,
+        CapabilityStateDto::NotApplicable
+    );
+    assert_eq!(
+        find(CapabilityKindDto::Catalog).state,
+        CapabilityStateDto::Ready
+    );
+}
+
+#[test]
 fn try_claim_flips_queued_once_and_requeue_running_recovers() {
     let fixture = fixture("ready", Some("windows"));
     let case_id = fixture.case.meta.id.0.clone();
