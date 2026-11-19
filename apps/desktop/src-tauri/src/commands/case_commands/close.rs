@@ -64,6 +64,30 @@ pub async fn close_case(state: State<'_, AppState>, app: AppHandle) -> Result<()
     let Some(identity) = active_case_identity(&app_state)? else {
         return Ok(());
     };
+    // L4: persist cancelled state for queued/running post-import rows while the
+    // transition connection is still usable, before cancelling the in-memory
+    // scheduler. A missing/failed connection degrades to a warning and skip;
+    // it must never block case close.
+    match app_state.get_transition_connection() {
+        Ok(conn) => {
+            if let Err(error) =
+                case_service::mark_open_capabilities_cancelled(&conn, &identity.case_id)
+            {
+                tracing::warn!(
+                    error = %error,
+                    case_id = %identity.case_id,
+                    "close_case: failed to mark post-import rows cancelled"
+                );
+            }
+        }
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                case_id = %identity.case_id,
+                "close_case: transition connection unavailable; skipping cancelled marking"
+            );
+        }
+    }
     // L2: cancel every queued/running post-processing task for this case before
     // draining background jobs; running tasks stop at the next chunk boundary.
     crate::post_import_scheduler::cancel_case(&identity.case_id);

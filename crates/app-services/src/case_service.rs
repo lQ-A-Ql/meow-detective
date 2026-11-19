@@ -16,7 +16,7 @@ mod metrics;
 mod opening;
 mod platform_compatibility;
 
-pub use close_drain::{close_case_drain, DrainResult};
+pub use close_drain::{close_case_drain, mark_open_capabilities_cancelled, DrainResult};
 pub use create_case::create_case;
 pub use data_source_deletion::{delete_data_source, delete_data_source_in};
 pub use delete_case::{delete_case, delete_case_in};
