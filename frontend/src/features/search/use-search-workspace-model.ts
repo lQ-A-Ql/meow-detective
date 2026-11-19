@@ -7,6 +7,8 @@ import { useFileNavigation } from '@/features/files/hooks/use-file-navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchSelection } from '@/features/search/use-search-page-model';
 import { useSearchPreviewModel } from '@/features/search/use-search-preview-model';
+import { useCapabilityMatrix } from '@/features/capability/hooks';
+import { isSourceCapabilityEligible } from '@/features/capability/gating';
 import type { SearchFileHit, SearchRequestOptions, SearchSortDirection, SearchSortKey } from '@/types/models';
 
 /**
@@ -45,9 +47,18 @@ export function useSearchWorkspaceModel() {
     setOptions(DEFAULT_OPTIONS);
     setExtensionInputState('');
   }
+  const { data: capabilityMatrix } = useCapabilityMatrix();
   const indexSources = useMemo(
-    () => (dataSources ?? []).filter((source) => !source.importState || source.importState === 'ready'),
-    [dataSources],
+    () =>
+      (dataSources ?? []).filter((source) =>
+        isSourceCapabilityEligible(
+          capabilityMatrix,
+          source.id,
+          'catalog',
+          !source.importState || source.importState === 'ready',
+        ),
+      ),
+    [dataSources, capabilityMatrix],
   );
   const [indexTarget, setIndexTarget] = useState<{ caseId?: string; sourceId?: string }>({ caseId });
   const indexSourceId =

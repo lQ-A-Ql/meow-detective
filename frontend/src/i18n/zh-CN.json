@@ -500,6 +500,11 @@
     }
   },
   "artifacts": {
+    "capability": {
+      "running": "制品抽取中，列表为已提交结果。",
+      "partial": "仅显示部分制品结果，不代表完整清单。",
+      "deferred": "制品抽取已推迟"
+    },
     "systemd": {
       "states": {
         "enabled": "已启用",
@@ -588,7 +593,14 @@
       "bytesAvailable": "可用 {{available}}",
       "rebuild": "立即重建",
       "rebuilding": "重建中…",
-      "rebuildFailed": "重建失败：{{message}}"
+      "rebuildFailed": "重建失败：{{message}}",
+      "capabilityRunningTitle": "时间线正在生成中",
+      "capabilityRunningDescription": "部分事件暂不可见，已有事件可查看，生成完成后列表将自动刷新。",
+      "capabilityPartialTitle": "时间线仅为部分结果",
+      "capabilityPartialDescription": "后台仍在补充事件，当前展示的是已提交的部分行，不代表完整时间线。",
+      "capabilityFailedTitle": "时间线生成失败",
+      "capabilityFailedDescription": "时间线投影未能完成，可手动重试重建。",
+      "capabilityRetry": "重试重建"
     }
   },
   "reports": {
@@ -2035,6 +2047,13 @@
     }
   },
   "analysis": {
+    "capability": {
+      "artifactsRunning": "制品抽取中，已有结果可查看。",
+      "artifactsRunningWithProgress": "制品抽取中 {{progress}}，已有结果可查看。",
+      "artifactsPartial": "仅显示部分制品结果，抽取仍在后台继续。",
+      "artifactsDeferred": "制品抽取已推迟",
+      "artifactsFailed": "制品抽取失败，可刷新重试"
+    },
     "registry": {
       "title": "注册表提取",
       "context": "Windows 注册表",

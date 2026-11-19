@@ -78,4 +78,57 @@ describe('TimelineProjectionBanner', () => {
     renderBanner({ state: 'deferred', sources: [deferredSource], rebuildError: new Error('boom') });
     expect(screen.getByTestId('timeline-projection-banner')).toHaveTextContent('boom');
   });
+
+  it('shows running progress from the capability row with a disabled action', () => {
+    const { onRebuild } = renderBanner({
+      state: undefined,
+      capabilityState: 'running',
+      capabilityProgress: { done: 42, total: 100, phase: 'indexing' },
+    });
+    const banner = screen.getByTestId('timeline-projection-banner');
+    expect(banner).toHaveTextContent('42/100');
+    expect(banner).toHaveTextContent('indexing');
+    const button = banner.querySelector('button')!;
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(onRebuild).not.toHaveBeenCalled();
+  });
+
+  it('marks partial results as non-complete and keeps rebuild available', () => {
+    const { onRebuild } = renderBanner({ state: undefined, capabilityState: 'partial' });
+    const banner = screen.getByTestId('timeline-projection-banner');
+    expect(banner).toHaveTextContent('部分');
+    const button = screen.getByRole('button', { name: /立即重建/ });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    expect(onRebuild).toHaveBeenCalledWith(undefined);
+  });
+
+  it('shows failed capability state with a retry action and the error code', () => {
+    const { onRebuild } = renderBanner({
+      state: undefined,
+      capabilityState: 'failed',
+      capabilityError: 'PROJECTION_WRITE_FAILED',
+    });
+    const banner = screen.getByTestId('timeline-projection-banner');
+    expect(banner).toHaveTextContent('时间线生成失败');
+    expect(banner).toHaveTextContent('PROJECTION_WRITE_FAILED');
+    const button = screen.getByRole('button', { name: /重试重建/ });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    expect(onRebuild).toHaveBeenCalledWith(undefined);
+  });
+
+  it('uses the deferred capability detail with a rebuild action', () => {
+    renderBanner({ state: undefined, capabilityState: 'deferred', capabilityDetail: 'workspace limit' });
+    const banner = screen.getByTestId('timeline-projection-banner');
+    expect(banner).toHaveTextContent('workspace limit');
+    expect(screen.getByRole('button', { name: /立即重建/ })).toBeEnabled();
+  });
+
+  it('keeps the legacy building branch when the capability row is ready', () => {
+    renderBanner({ state: 'building', sources: [buildingSource], capabilityState: 'ready' });
+    const button = screen.getByTestId('timeline-projection-banner').querySelector('button')!;
+    expect(button).toBeDisabled();
+  });
 });

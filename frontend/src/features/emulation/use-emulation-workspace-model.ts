@@ -21,6 +21,9 @@ import {
 } from '@/lib/api/emulation';
 import { errorMessage } from '@/lib/errors';
 import { shouldReleaseOnBypassError } from '@/features/emulation/linux-bypass-policy';
+import { useCapabilityMatrix } from '@/features/capability/hooks';
+import { isSourceCapabilityEligible } from '@/features/capability/gating';
+import type { CapabilityMatrix } from '@/types/models';
 import type {
   DataSourceSummary,
   EmulationBypassAccount,
@@ -136,10 +139,18 @@ function isActiveSession(session: EmulationSessionStatus): boolean {
   return ACTIVE_STATES.has(session.state);
 }
 
-function isEmulationSource(source: DataSourceSummary): boolean {
-  return (
-    (source.kind === 'e01' || source.kind === 'raw' || source.kind === 'md_raid') &&
-    (source.importState === 'ready' || source.importState === 'ready_metadata')
+function isEmulationSource(source: DataSourceSummary, matrix: CapabilityMatrix | undefined): boolean {
+  const kindOk = source.kind === 'e01' || source.kind === 'raw' || source.kind === 'md_raid';
+  if (!kindOk) {
+    return false;
+  }
+  // Matrix row wins when present; the legacy ready/ready_metadata check keeps
+  // metadata-only sources emulable and covers old cases without matrix rows.
+  return isSourceCapabilityEligible(
+    matrix,
+    source.id,
+    'catalog',
+    source.importState === 'ready' || source.importState === 'ready_metadata',
   );
 }
 
@@ -159,6 +170,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const queryClient = useQueryClient();
   const currentCase = useCurrentCase();
   const dataSourcesQuery = useDataSources();
+  const { data: capabilityMatrix } = useCapabilityMatrix();
   const [selectedSourceId, setSelectedSourceId] = useState('');
   const [recoveryIsoPath, setRecoveryIsoPath] = useState('');
   const [options, setOptions] = useState<EmulationOptions>({
@@ -185,8 +197,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     retry: false,
   });
   const sourceOptions = useMemo(
-    () => (dataSourcesQuery.data ?? []).filter(isEmulationSource).map(toSourceView),
-    [dataSourcesQuery.data],
+    () =>
+      (dataSourcesQuery.data ?? []).filter((source) => isEmulationSource(source, capabilityMatrix)).map(toSourceView),
+    [dataSourcesQuery.data, capabilityMatrix],
   );
 
   useEffect(() => {

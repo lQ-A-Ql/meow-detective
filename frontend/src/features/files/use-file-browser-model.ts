@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
+import { useCapabilityMatrix } from '@/features/capability/hooks';
+import { isSourceCapabilityEligible } from '@/features/capability/gating';
 import { useNtfsTechnicalFile } from '@/features/files/hooks';
 import { useImageSteg } from '@/features/files/hooks/use-image-steg';
 import { useFilePagination } from '@/features/files/hooks/use-file-pagination';
@@ -46,9 +48,20 @@ export function useFileBrowserModel() {
 
   const { selectedDirectoryId, selectedFileId, setSelectedTimelineId } = useFileSelection();
 
+  const { data: capabilityMatrix } = useCapabilityMatrix();
+  // Catalog-not-ready sources must not appear as browse candidates. When the
+  // matrix has no row for a source (old cases / command failure) the legacy
+  // behavior — list every source — is preserved by passing `true` as the
+  // legacy decision.
+  const browsableDataSources = useMemo(
+    () =>
+      (dataSources ?? []).filter((source) => isSourceCapabilityEligible(capabilityMatrix, source.id, 'catalog', true)),
+    [dataSources, capabilityMatrix],
+  );
+
   const partitions: DataSourcePartition[] = useMemo(
-    () => dataSources?.flatMap((source) => source.partitions ?? []) ?? [],
-    [dataSources],
+    () => browsableDataSources.flatMap((source) => source.partitions ?? []),
+    [browsableDataSources],
   );
   const fileSortKey = useUiStore((s) => s.fileSortKey);
   const fileSortDirection = useUiStore((s) => s.fileSortDirection);
@@ -70,7 +83,7 @@ export function useFileBrowserModel() {
     setSelectedDirectoryId,
     setSelectedFileId,
     partitions,
-    dataSources,
+    dataSources: browsableDataSources,
     caseId: currentCase?.id,
     revealDirectoryIds: location.revealDirectoryIds,
     jumpPathNodes: location.pathNodes,

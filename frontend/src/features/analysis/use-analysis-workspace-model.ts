@@ -24,6 +24,8 @@ import {
   isExtractionCategory,
 } from '@/features/analysis/types';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
+import { useCapabilityMatrix, useSourceCapability } from '@/features/capability/hooks';
+import { selectAnalysisCandidates } from '@/features/analysis/capability-filter';
 import { useDeletedRecoveryModel } from '@/features/recovery/hooks';
 import { subscribeToEvent } from '@/lib/events/subscribers';
 import { labeledProgress, useAnalysisStore } from '@/stores/analysis-store';
@@ -35,19 +37,19 @@ export function useAnalysisWorkspaceModel() {
   const { data: dataSources } = useDataSources();
   const selectedDataSourceId = useAnalysisStore((state) => state.selectedDataSourceId);
   const setSelectedDataSourceId = useAnalysisStore((state) => state.setSelectedDataSourceId);
+  const { data: capabilityMatrix } = useCapabilityMatrix();
   const readyDataSources = useMemo(
-    () =>
-      (dataSources ?? []).filter(
-        (source) =>
-          source.importState === 'ready' &&
-          (source.platform === 'windows' || source.platform === 'linux' || source.platform === 'android'),
-      ),
-    [dataSources],
+    () => selectAnalysisCandidates(dataSources, capabilityMatrix),
+    [dataSources, capabilityMatrix],
   );
   const selectedDataSource = useMemo(
     () => readyDataSources.find((source) => source.id === selectedDataSourceId),
     [readyDataSources, selectedDataSourceId],
   );
+  // Advisory only: artifacts/platformFacts rows never block entry; running/partial
+  // states surface "抽取中/部分" hints while existing results stay visible.
+  const artifactsCapability = useSourceCapability(selectedDataSource?.id, 'artifacts');
+  const platformFactsCapability = useSourceCapability(selectedDataSource?.id, 'platformFacts');
   const selectedPlatform = selectedDataSource?.platform;
   const selectedSourceContextKey = analysisSourceContextKey(currentCase.data?.id, selectedDataSource);
   const sourceEpoch = useRef(new AnalysisSourceEpoch(selectedSourceContextKey)).current;
@@ -343,6 +345,10 @@ export function useAnalysisWorkspaceModel() {
     activeLinuxTab,
     activeAndroidTab,
     extractionRunning,
+    artifactsCapabilityState: artifactsCapability?.state,
+    artifactsCapabilityProgress: artifactsCapability?.progress,
+    artifactsCapabilityDetail: artifactsCapability?.detail,
+    platformFactsCapabilityState: platformFactsCapability?.state,
     windowsError,
     linuxError,
     androidError,

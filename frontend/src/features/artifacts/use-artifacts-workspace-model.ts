@@ -6,7 +6,8 @@ import {
   useInfiniteArtifactRows,
 } from '@/features/artifacts/hooks';
 import { useArtifactsSelectionModel } from '@/features/artifacts/use-artifacts-page-model';
-import type { ArtifactRow } from '@/types/models';
+import { useCapabilityMatrix } from '@/features/capability/hooks';
+import type { ArtifactRow, SourceCapability } from '@/types/models';
 
 /** Owns artifact queries, persisted selection state, and cross-workspace navigation. */
 export function useArtifactsWorkspaceModel() {
@@ -43,6 +44,17 @@ export function useArtifactsWorkspaceModel() {
   }, [rows, selectedArtifactQuery.data]);
   const selectedArtifact =
     selectedArtifactQuery.data ?? tableRows.find((row) => row?.id === selectedArtifactId) ?? tableRows[0];
+  // Case-wide advisory: surface the first non-ready artifacts row so partial
+  // results are never presented as complete; running/deferred stay informational.
+  const { data: capabilityMatrix } = useCapabilityMatrix();
+  const artifactsCapability = useMemo<SourceCapability | undefined>(() => {
+    const rows = (capabilityMatrix?.sources ?? []).filter((row) => row.capability === 'artifacts');
+    return (
+      rows.find((row) => row.state === 'running' || row.state === 'queued') ??
+      rows.find((row) => row.state === 'partial') ??
+      rows.find((row) => row.state === 'deferred')
+    );
+  }, [capabilityMatrix]);
   const families = useMemo(() => {
     const counts = new Map(artifactFamilyCounts.data?.map((entry) => [entry.family, entry.count]));
     return (artifactFamilies.data ?? []).map((family) => ({
@@ -79,6 +91,8 @@ export function useArtifactsWorkspaceModel() {
     selectArtifactFamily: setSelectedArtifactFamily,
     tableRows,
     totalRows,
+    artifactsCapabilityState: artifactsCapability?.state,
+    artifactsCapabilityDetail: artifactsCapability?.detail,
   };
 }
 

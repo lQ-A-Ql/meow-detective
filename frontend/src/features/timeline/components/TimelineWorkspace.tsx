@@ -187,6 +187,10 @@ export function TimelineWorkspace({ model }: TimelineWorkspaceProps) {
               rebuilding={model.projectionRebuilding}
               rebuildError={model.projectionRebuildError}
               onRebuild={model.rebuildProjection}
+              capabilityState={model.timelineCapability?.state}
+              capabilityProgress={model.timelineCapability?.progress}
+              capabilityDetail={model.timelineCapability?.detail}
+              capabilityError={model.timelineCapability?.errorCode}
             />
             <DenseDataTableFrame layout="fill" variant="plain">
               <DenseDataTable<TimelineEvent>

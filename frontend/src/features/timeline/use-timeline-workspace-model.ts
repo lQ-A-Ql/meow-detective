@@ -7,6 +7,8 @@ import {
   useTimelineProjectionStatus,
 } from '@/features/timeline/hooks';
 import { useTimelineSelectionModel } from '@/features/timeline/use-timeline-page-model';
+import { useCapabilityMatrix } from '@/features/capability/hooks';
+import { mostUrgentTimelineRow } from '@/features/capability/gating';
 import type { TimelineEvent } from '@/types/models';
 
 const MIN_BUCKET_COUNT = 20;
@@ -82,6 +84,10 @@ export function useTimelineWorkspaceModel() {
     bucketCount,
   });
   const projectionStatusQuery = useTimelineProjectionStatus();
+  const { data: capabilityMatrix } = useCapabilityMatrix();
+  // Case-wide urgent timeline row (failed > deferred > running/queued > partial);
+  // undefined when every timeline row is ready or the matrix has no rows.
+  const timelineCapability = useMemo(() => mostUrgentTimelineRow(capabilityMatrix), [capabilityMatrix]);
   const rebuildProjectionMutation = useRebuildTimelineProjection();
   const rebuildProjection = useCallback(
     (dataSourceId?: string) => rebuildProjectionMutation.mutate(dataSourceId),
@@ -222,6 +228,7 @@ export function useTimelineWorkspaceModel() {
     projectionSources: projectionStatusQuery.data?.sources ?? [],
     projectionRebuilding: rebuildProjectionMutation.isPending,
     projectionRebuildError: rebuildProjectionMutation.error,
+    timelineCapability,
     rebuildProjection,
     selectedEvent,
     setDraftTimeEnd,

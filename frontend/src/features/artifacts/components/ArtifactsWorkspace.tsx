@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
+import { CircleAlert, LoaderCircle } from '@/components/icons';
 import { Tooltip } from '@/app/components/ui/tooltip';
 
 import { useTranslation } from 'react-i18next';
@@ -80,6 +81,25 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
             ))}
           </div>
         </ContextBar>
+        {model.artifactsCapabilityState === 'running' || model.artifactsCapabilityState === 'queued' ? (
+          <div className="flex items-center gap-2 border-b border-forensics-warning-border bg-forensics-warning-bg px-4 py-2 text-[11px] text-forensics-warning-text">
+            <LoaderCircle size={12} className="shrink-0 animate-spin" />
+            <span className="min-w-0 flex-1">{t('artifacts.capability.running')}</span>
+          </div>
+        ) : model.artifactsCapabilityState === 'partial' ? (
+          <div className="flex items-center gap-2 border-b border-forensics-border bg-forensics-panel px-4 py-2 text-[11px] text-forensics-muted">
+            <CircleAlert size={12} className="shrink-0" />
+            <span className="min-w-0 flex-1">{t('artifacts.capability.partial')}</span>
+          </div>
+        ) : model.artifactsCapabilityState === 'deferred' ? (
+          <div className="flex items-center gap-2 border-b border-forensics-warning-border bg-forensics-warning-bg px-4 py-2 text-[11px] text-forensics-warning-text">
+            <CircleAlert size={12} className="shrink-0" />
+            <span className="min-w-0 flex-1">
+              {t('artifacts.capability.deferred')}
+              {model.artifactsCapabilityDetail ? `: ${model.artifactsCapabilityDetail}` : ''}
+            </span>
+          </div>
+        ) : null}
         {systemdStateCounts ? (
           <div className="flex flex-wrap gap-3 border-b border-forensics-divider px-4 py-2 font-mono text-[10px] text-forensics-muted">
             {['enabled', 'disabled', 'masked', 'static'].map((state) => (

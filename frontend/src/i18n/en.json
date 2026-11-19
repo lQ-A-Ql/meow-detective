@@ -500,6 +500,11 @@
     }
   },
   "artifacts": {
+    "capability": {
+      "running": "Artifact extraction in progress; the list shows committed results only.",
+      "partial": "Only partial artifact results are shown; this is not the complete inventory.",
+      "deferred": "Artifact extraction was deferred"
+    },
     "systemd": {
       "states": {
         "enabled": "Enabled",
@@ -588,7 +593,14 @@
       "bytesAvailable": "Available {{available}}",
       "rebuild": "Rebuild now",
       "rebuilding": "Rebuilding…",
-      "rebuildFailed": "Rebuild failed: {{message}}"
+      "rebuildFailed": "Rebuild failed: {{message}}",
+      "capabilityRunningTitle": "Timeline projection is being built",
+      "capabilityRunningDescription": "Some events are temporarily unavailable; committed events stay visible and the list refreshes when building completes.",
+      "capabilityPartialTitle": "Timeline shows partial results",
+      "capabilityPartialDescription": "Events are still being appended in the background; committed rows are shown and are not the complete timeline.",
+      "capabilityFailedTitle": "Timeline projection failed",
+      "capabilityFailedDescription": "The timeline projection did not finish; you can retry the rebuild manually.",
+      "capabilityRetry": "Retry rebuild"
     }
   },
   "reports": {
@@ -2035,6 +2047,13 @@
     }
   },
   "analysis": {
+    "capability": {
+      "artifactsRunning": "Artifact extraction in progress; existing results remain visible.",
+      "artifactsRunningWithProgress": "Artifact extraction in progress {{progress}}; existing results remain visible.",
+      "artifactsPartial": "Only partial artifact results are shown; extraction continues in the background.",
+      "artifactsDeferred": "Artifact extraction was deferred",
+      "artifactsFailed": "Artifact extraction failed; refresh to retry"
+    },
     "registry": {
       "title": "Registry extraction",
       "context": "Windows registry",

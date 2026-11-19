@@ -1,13 +1,80 @@
 import { errorMessage } from '@/lib/errors';
 import { useTranslation } from 'react-i18next';
+import { LoaderCircle, CircleAlert } from '@/components/icons';
 import { AnalysisEmptyState, AnalysisHeader } from '@/features/analysis/components/AnalysisPanels';
 import { AnalysisSourceSidebar } from '@/features/analysis/components/AnalysisSourceSidebar';
 import { AndroidAnalysisView } from '@/features/analysis/components/AndroidAnalysisView';
 import { LinuxAnalysisView } from '@/features/analysis/components/LinuxAnalysisView';
 import { WindowsAnalysisView } from '@/features/analysis/components/WindowsAnalysisView';
 import type { AnalysisWorkspaceModel } from '@/features/analysis/use-analysis-workspace-model';
+import type { CapabilityProgress } from '@/types/models';
 import { WorkspaceFrame } from '@/components/layout/WorkspaceFrame';
 import { WorkspaceCard } from '@/components/layout/WorkspaceCard';
+
+function formatArtifactProgress(progress?: CapabilityProgress): string | undefined {
+  if (!progress) return undefined;
+  const total = progress.total;
+  const done = progress.done;
+  const phase = progress.phase ? ` · ${progress.phase}` : '';
+  return total !== undefined ? `${done}/${total}${phase}` : `${done}${phase}`;
+}
+
+/** Lightweight advisory strip: extraction in progress / partial / deferred / failed never blocks viewing. */
+function AnalysisCapabilityHint({
+  artifactsState,
+  artifactsProgress,
+  artifactsDetail,
+}: {
+  artifactsState: string;
+  artifactsProgress?: CapabilityProgress;
+  artifactsDetail?: string;
+}) {
+  const { t } = useTranslation();
+  const progressText = formatArtifactProgress(artifactsProgress);
+  if (artifactsState === 'running' || artifactsState === 'queued') {
+    return (
+      <div className="flex items-center gap-2 border-b border-forensics-warning-border bg-forensics-warning-bg px-4 py-2 text-[11px] text-forensics-warning-text">
+        <LoaderCircle size={12} className="shrink-0 animate-spin" />
+        <span className="min-w-0 flex-1">
+          {progressText
+            ? t('analysis.capability.artifactsRunningWithProgress', { progress: progressText })
+            : t('analysis.capability.artifactsRunning')}
+        </span>
+      </div>
+    );
+  }
+  if (artifactsState === 'partial') {
+    return (
+      <div className="flex items-center gap-2 border-b border-forensics-border bg-forensics-panel px-4 py-2 text-[11px] text-forensics-muted">
+        <CircleAlert size={12} className="shrink-0" />
+        <span className="min-w-0 flex-1">{t('analysis.capability.artifactsPartial')}</span>
+      </div>
+    );
+  }
+  if (artifactsState === 'deferred') {
+    return (
+      <div className="flex items-center gap-2 border-b border-forensics-warning-border bg-forensics-warning-bg px-4 py-2 text-[11px] text-forensics-warning-text">
+        <CircleAlert size={12} className="shrink-0" />
+        <span className="min-w-0 flex-1">
+          {t('analysis.capability.artifactsDeferred')}
+          {artifactsDetail ? `: ${artifactsDetail}` : ''}
+        </span>
+      </div>
+    );
+  }
+  if (artifactsState === 'failed') {
+    return (
+      <div className="flex items-center gap-2 border-b border-forensics-error-border bg-forensics-error-bg px-4 py-2 text-[11px] text-forensics-error-text">
+        <CircleAlert size={12} className="shrink-0" />
+        <span className="min-w-0 flex-1">
+          {t('analysis.capability.artifactsFailed')}
+          {artifactsDetail ? `: ${artifactsDetail}` : ''}
+        </span>
+      </div>
+    );
+  }
+  return null;
+}
 
 interface AnalysisWorkspaceProps {
   model: AnalysisWorkspaceModel;
@@ -47,6 +114,13 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
             onRefresh={model.refresh}
             selectedDataSourceId={model.selectedDataSourceId}
           />
+          {model.artifactsCapabilityState && model.selectedPlatform ? (
+            <AnalysisCapabilityHint
+              artifactsState={model.artifactsCapabilityState}
+              artifactsProgress={model.artifactsCapabilityProgress}
+              artifactsDetail={model.artifactsCapabilityDetail}
+            />
+          ) : null}
 
           {!model.hasCase && model.currentCaseIsSuccess ? (
             <AnalysisEmptyState />
