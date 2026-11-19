@@ -15,6 +15,7 @@ pub fn schedule_import_for_active_case(
     import_config: import_precheck::ImportSourceConfig,
     app: Option<&AppHandle>,
     task_manager: Arc<crate::state::TaskManager>,
+    app_state: &crate::state::AppState,
     max_import_workers: Option<usize>,
     max_analysis_workers: Option<usize>,
     analysis_mode: import_analysis::ImportAnalysisMode,
@@ -50,6 +51,7 @@ pub fn schedule_import_for_active_case(
         max_import_workers,
         max_analysis_workers,
         analysis_mode,
+        app_state: app_state.clone(),
     };
     if let Err(error) = task_manager.spawn_scoped(
         job_id_string.clone(),

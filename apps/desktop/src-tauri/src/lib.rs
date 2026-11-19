@@ -18,6 +18,7 @@ mod mount_backend;
 mod mount_registry;
 mod physical_mount_registry;
 mod platform_security;
+mod post_import_scheduler;
 pub mod state;
 
 use command_registry::*;

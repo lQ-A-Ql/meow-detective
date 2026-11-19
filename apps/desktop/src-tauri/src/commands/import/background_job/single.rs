@@ -4,7 +4,8 @@ use std::sync::Arc;
 use tauri::AppHandle;
 use transport::CommandError;
 
-use super::{super::events::TauriImportEventSink, types::BackgroundImportJob};
+use super::super::events::TauriImportEventSink;
+use super::types::BackgroundImportJob;
 use crate::events::event_bridge;
 use crate::state::TaskManager;
 
@@ -17,6 +18,9 @@ pub(crate) fn run_background_import_job(
     let connection = app_services::connection::open_existing_case_db(&job.db_path)
         .map_err(app_services::connection::command_error_from_db)?;
     let event_sink = app.map(TauriImportEventSink::new);
+    // Captured before `import_config` moves into the coordinator request; the
+    // Completed branch resolves the new source row by this path.
+    let source_path = job.import_config.source_path.clone();
     match app_services::import_job_coordinator::run_single_import(
         app_services::import_job_coordinator::SingleImportRequest {
             connection: &connection,
@@ -36,6 +40,13 @@ pub(crate) fn run_background_import_job(
         Ok(app_services::import_job_coordinator::SingleImportOutcome::Completed(message)) => {
             if let Some(app) = app {
                 event_bridge::emit_job_completed(app, &job.job_id.0, &message);
+                crate::post_import_scheduler::enqueue_for_source(
+                    &job.app_state,
+                    Some(app),
+                    &job.case_id.0,
+                    &job.case_root,
+                    &source_path,
+                );
                 crate::case_projection_jobs::schedule(
                     &task_manager,
                     app,

@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use app_services::{cluster_service, import_analysis, import_precheck};
 
+use crate::state::AppState;
+
 pub(crate) struct BackgroundImportJob {
     pub(crate) db_path: PathBuf,
     pub(crate) case_id: domain::CaseId,
@@ -11,6 +13,10 @@ pub(crate) struct BackgroundImportJob {
     pub(crate) max_import_workers: Option<usize>,
     pub(crate) max_analysis_workers: Option<usize>,
     pub(crate) analysis_mode: import_analysis::ImportAnalysisMode,
+    /// App state captured at scheduling time so the post-import scheduler can
+    /// fence against the active case after the job thread finishes.
+    /// `AppState` itself is cheap to clone (all fields are `Arc`).
+    pub(crate) app_state: AppState,
 }
 
 pub(crate) struct BackgroundLinuxEvidenceSetImportJob {
