@@ -44,9 +44,6 @@ pub(crate) mod block_group_item {
     /// Bytes in use within the group. Their sum over every group is the
     /// superblock's `bytes_used`.
     pub const USED: usize = 0;
-    /// The chunk this group is backed by.
-    #[allow(dead_code)]
-    pub const CHUNK_OBJECTID: usize = 8;
     /// What the group may hold — data, metadata, system, and the
     /// replication profile.
     pub const FLAGS: usize = 16;

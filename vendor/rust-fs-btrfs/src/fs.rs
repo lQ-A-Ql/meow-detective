@@ -295,11 +295,9 @@ pub(crate) fn required_root_item_target(
 
 /// Byte offsets within `struct btrfs_file_extent_item`.
 ///
-/// The full field list is kept even where a read-only driver does not
-/// consult every one, because the offsets that follow are only checkable
-/// against the format documentation when the fields between them are
-/// named too.
-#[allow(dead_code)]
+/// The full field list is kept so the offsets that follow stay checkable
+/// against the format documentation: naming the fields between them keeps
+/// the layout honest for both the read path and the transaction write path.
 pub(crate) mod file_extent {
     /// Generation of the transaction that created it.
     pub const GENERATION: usize = 0;
