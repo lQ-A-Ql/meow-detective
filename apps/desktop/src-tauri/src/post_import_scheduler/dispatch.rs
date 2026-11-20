@@ -69,7 +69,7 @@ fn run_timeline(task: &QueuedTask, conn: &rusqlite::Connection, token: &Arc<Atom
         &domain::CaseId(task.case_id.clone()),
         Some(&task.source_id),
         TimelineProjectionPolicy::default(),
-        &**token,
+        token,
     );
     match status {
         Ok(projection) => apply_timeline_projection(task, &projection),
@@ -209,7 +209,7 @@ fn run_artifacts_android(task: &QueuedTask, conn: &rusqlite::Connection, token: 
         &domain::CaseId(task.case_id.clone()),
         &DataSourceId(task.source_id.clone()),
         &runtime,
-        &**token,
+        token,
     );
     match result {
         Ok(_) => write_row(task, "ready", None, None, Some("done")),

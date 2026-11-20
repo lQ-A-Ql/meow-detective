@@ -21,6 +21,16 @@ pub struct SourceCapabilityRow {
     pub updated_at: String,
 }
 
+/// Grouped mutable fields for `SourceCapabilityRepo::update_state`; keeps the
+/// call signature below the too-many-arguments threshold.
+#[derive(Debug, Clone, Copy)]
+pub struct CapabilityStateUpdate<'a> {
+    pub state: &'a str,
+    pub detail: Option<&'a str>,
+    pub error_code: Option<&'a str>,
+    pub derived: i64,
+}
+
 impl<'a> SourceCapabilityRepo<'a> {
     pub fn new(conn: &'a Connection) -> Self {
         Self { conn }
@@ -208,10 +218,7 @@ impl<'a> SourceCapabilityRepo<'a> {
         case_id: &str,
         data_source_id: &str,
         capability: &str,
-        state: &str,
-        detail: Option<&str>,
-        error_code: Option<&str>,
-        derived: i64,
+        update: CapabilityStateUpdate<'_>,
     ) -> DbResult<()> {
         self.conn.execute(
             "UPDATE source_capability SET
@@ -222,10 +229,10 @@ impl<'a> SourceCapabilityRepo<'a> {
                 case_id,
                 data_source_id,
                 capability,
-                state,
-                detail,
-                error_code,
-                derived
+                update.state,
+                update.detail,
+                update.error_code,
+                update.derived
             ],
         )?;
         Ok(())

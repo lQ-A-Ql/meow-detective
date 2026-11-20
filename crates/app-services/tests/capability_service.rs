@@ -1,7 +1,9 @@
 use app_services::capability_service;
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
-use persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRepo;
+use persistence_sqlite::repositories::source_capability_repo::{
+    CapabilityStateUpdate, SourceCapabilityRepo,
+};
 use transport::dto::{CapabilityKindDto, CapabilityStateDto};
 
 struct Fixture {
@@ -392,7 +394,17 @@ fn try_claim_flips_queued_once_and_requeue_running_recovers() {
             assert!(repo.try_claim(&case_id, &source_id, "timeline")?);
             assert!(!repo.try_claim(&case_id, &source_id, "timeline")?);
             // A finished row can never be claimed.
-            repo.update_state(&case_id, &source_id, "timeline", "ready", None, None, 0)?;
+            repo.update_state(
+                &case_id,
+                &source_id,
+                "timeline",
+                CapabilityStateUpdate {
+                    state: "ready",
+                    detail: None,
+                    error_code: None,
+                    derived: 0,
+                },
+            )?;
             assert!(!repo.try_claim(&case_id, &source_id, "timeline")?);
             Ok(())
         })

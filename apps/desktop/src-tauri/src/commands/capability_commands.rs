@@ -47,7 +47,7 @@ fn ensure_source(
     active: &crate::commands::command_support::ActiveCaseSnapshot,
     data_source_id: &str,
 ) -> Result<(), CommandError> {
-    capability_service::ensure_source_belongs(&conn, &active.meta.id, data_source_id).map_err(
+    capability_service::ensure_source_belongs(conn, &active.meta.id, data_source_id).map_err(
         |error| match error {
             app_services::capability_service::CapabilityServiceError::SourceNotFound(_) => {
                 CommandError::not_found("data source")

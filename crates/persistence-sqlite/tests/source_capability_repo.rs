@@ -1,6 +1,8 @@
 use persistence_sqlite::{
     open_in_memory,
-    repositories::source_capability_repo::{SourceCapabilityRepo, SourceCapabilityRow},
+    repositories::source_capability_repo::{
+        CapabilityStateUpdate, SourceCapabilityRepo, SourceCapabilityRow,
+    },
     runner,
 };
 
@@ -122,10 +124,12 @@ fn update_state_changes_row_in_place() {
         CASE_ID,
         SOURCE_ID,
         "timeline",
-        "ready",
-        Some("projection complete"),
-        None,
-        0,
+        CapabilityStateUpdate {
+            state: "ready",
+            detail: Some("projection complete"),
+            error_code: None,
+            derived: 0,
+        },
     )
     .expect("update state");
 
