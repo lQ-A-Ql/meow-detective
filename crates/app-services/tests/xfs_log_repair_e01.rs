@@ -269,14 +269,14 @@ fn xfs_log_repair_and_materialization() {
         .expect("run the XFS shadow bypass plan");
 
     eprintln!(
-        "apply result: status={:?} method={:?} password_set={} already_configured={} reason={:?} alternatives={:?} message={:?}",
+        "apply result: status={:?} method={:?} password_set={} already_configured={} reason={:?} alternatives={:?} payload_staged={}",
         bypass.status,
         bypass.method,
         bypass.password_set,
         bypass.already_configured,
         bypass.reason,
         bypass.alternatives,
-        bypass.message
+        bypass.payload_staged
     );
 
     match bypass.status {
