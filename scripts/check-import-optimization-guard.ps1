@@ -19,6 +19,11 @@ $numericMergePath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositor
 # Import finalization owns the bounded file-activity Timeline projection.
 $pipelineFinalizePath = Join-Path $repoRoot "crates/import-core/src/import_pipeline/phases/finalize.rs"
 $timelineProjectionPath = Join-Path $repoRoot "crates/import-core/src/timeline_projection/fjall.rs"
+# The streamed bounded prefix-replacement primitive moved from import-core's
+# timeline projection into the persistence-fjall TimelineRecordStore during
+# the 63f9e66e constant-cost projection refactor; import-core now pages
+# through the segmented variant on top of it.
+$timelineBatchPath = Join-Path $repoRoot "crates/persistence-fjall/src/timeline/timeline_batch.rs"
 # Post-import skip logging lives in the analysis worker pool.
 $workerPoolPath = Join-Path $repoRoot "crates/import-core/src/import_analysis/worker_pool.rs"
 $appStatePath = Join-Path $repoRoot "apps/desktop/src-tauri/src/state/app_state.rs"
@@ -35,6 +40,7 @@ foreach ($path in @(
     $numericMergePath,
     $pipelineFinalizePath,
     $timelineProjectionPath,
+    $timelineBatchPath,
     $workerPoolPath,
     $appStatePath,
     $caseDatabasePath,
@@ -54,6 +60,7 @@ $numericMergeOwner = Get-Content -LiteralPath $numericMergeOwnerPath -Raw -Encod
 $numericMerge = Get-Content -LiteralPath $numericMergePath -Raw -Encoding UTF8
 $pipelineFinalize = Get-Content -LiteralPath $pipelineFinalizePath -Raw -Encoding UTF8
 $timelineProjection = Get-Content -LiteralPath $timelineProjectionPath -Raw -Encoding UTF8
+$timelineBatch = Get-Content -LiteralPath $timelineBatchPath -Raw -Encoding UTF8
 $workerPool = Get-Content -LiteralPath $workerPoolPath -Raw -Encoding UTF8
 $appState = Get-Content -LiteralPath $appStatePath -Raw -Encoding UTF8
 $caseDatabase = Get-Content -LiteralPath $caseDatabasePath -Raw -Encoding UTF8
@@ -80,13 +87,15 @@ foreach ($pattern in @(
     'catalog\.list_all\(',
     'ScanDirection::Forward',
     '512',
-    'replace_by_parser_prefix_streamed',
     'DataSourcePlatform::Windows',
     'platform\s*!=\s*DataSourcePlatform::Windows'
   )) {
   if ($timelineProjection -notmatch $pattern) {
     throw "Timeline finalization lost its bounded or platform-specific projection policy: $pattern"
   }
+}
+if ($timelineBatch -notmatch 'replace_by_parser_prefix_streamed') {
+  throw "Timeline finalization lost its bounded streamed prefix replacement primitive in persistence-fjall: replace_by_parser_prefix_streamed"
 }
 if ($workerPool -notmatch 'timeline=finalize content=disabled text=disabled') {
   throw "E01/RAW metadata-only import must report Timeline finalization explicitly"

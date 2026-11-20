@@ -120,7 +120,9 @@ $policies = [ordered]@{
   "plugin_action_commands.rs" = @("list_plugin_actions")
   "emulation_commands/preflight.rs" = @("get_emulation_preflight")
   "emulation_commands/bypass.rs" = @(
-    "get_emulation_bypass_accounts",
+    "get_emulation_bypass_accounts"
+  )
+  "emulation_commands/linux_bypass.rs" = @(
     "get_emulation_linux_accounts"
   )
 }
