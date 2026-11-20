@@ -135,9 +135,7 @@ pub fn execute_import_job_profiled(
     result
 }
 
-// Pre-existing signature, not expanded by lifecycle work; the shared seven
-// parameters predate the capability lifecycle and were threaded through rather
-// than refactored into the context struct.
+// Pre-existing signature, not expanded by lifecycle work; narrow allow.
 #[allow(clippy::too_many_arguments)]
 fn execute_and_record(
     conn: &rusqlite::Connection,
@@ -172,9 +170,7 @@ fn execute_and_record(
     result
 }
 
-// Pre-existing signature, not expanded by lifecycle work; the shared seven
-// parameters predate the capability lifecycle and were threaded through rather
-// than refactored into the context struct.
+// Pre-existing signature, not expanded by lifecycle work; narrow allow.
 #[allow(clippy::too_many_arguments)]
 fn execute_import_job_internal(
     conn: &rusqlite::Connection,
