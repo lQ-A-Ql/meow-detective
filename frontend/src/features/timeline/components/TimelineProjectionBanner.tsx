@@ -110,13 +110,14 @@ export function TimelineProjectionBanner({
             {progressText ? <div className="mt-1 font-mono text-[11px]">{progressText}</div> : null}
           </div>
           {running ? (
-            <Button type="button" variant="forensicsOutline" size="xs" disabled>
+            <Button type="button" shape="pill" variant="forensicsOutline" size="xs" disabled>
               <LoaderCircle size={12} className="animate-spin" />
               {t('timeline.projection.buildingAction')}
             </Button>
           ) : (
             <Button
               type="button"
+              shape="pill"
               variant="forensicsOutline"
               size="xs"
               disabled={rebuilding}
@@ -172,13 +173,14 @@ export function TimelineProjectionBanner({
           </div>
         </div>
         {state === 'building' ? (
-          <Button type="button" variant="forensicsOutline" size="xs" disabled>
+          <Button type="button" shape="pill" variant="forensicsOutline" size="xs" disabled>
             <LoaderCircle size={12} className="animate-spin" />
             {t('timeline.projection.buildingAction')}
           </Button>
         ) : (
           <Button
             type="button"
+            shape="pill"
             variant="forensicsOutline"
             size="xs"
             disabled={rebuilding}
