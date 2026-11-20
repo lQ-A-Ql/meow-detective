@@ -226,6 +226,25 @@ fn run_artifacts_android(task: &QueuedTask, conn: &rusqlite::Connection, token: 
     }
 }
 
+/// Translate a finished host-platform extraction into the terminal capability
+/// row. A positive `retryable_failure_count` means some candidates failed
+/// transiently while partial results still committed: the row becomes `partial`
+/// (never `ready`) with a readable `retryableFailures=N warnings=M` reason and
+/// the `EXTRACTION_PARTIAL` marker. A zero count yields `ready` with no detail;
+/// informational warnings alone do not downgrade the row.
+pub(super) fn artifact_capability_state(
+    retryable_failures: u64,
+    warning_count: usize,
+) -> (&'static str, Option<String>, Option<&'static str>) {
+    if retryable_failures > 0 {
+        let detail = format!(
+            "extraction finished with retryable failures: retryableFailures={retryable_failures} warnings={warning_count}"
+        );
+        return ("partial", Some(detail), Some("EXTRACTION_PARTIAL"));
+    }
+    ("ready", None, None)
+}
+
 fn run_artifacts_host(
     task: &QueuedTask,
     conn: &rusqlite::Connection,
@@ -282,7 +301,11 @@ fn run_artifacts_host(
                 None,
                 Some("complete"),
             );
-            write_row(task, "ready", None, None, Some("done"));
+            let (state, detail, error_code) = artifact_capability_state(
+                execution.retryable_failure_count,
+                execution.dto.warnings.len(),
+            );
+            write_row(task, state, detail.as_deref(), error_code, Some("done"));
         }
         Err(AnalysisServiceError::Cancelled) => {
             write_row(task, "cancelled", None, None, Some("done"))
@@ -298,3 +321,7 @@ fn run_artifacts_host(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/post_import_scheduler/dispatch.rs"]
+mod tests;

@@ -9,6 +9,21 @@ import { useArtifactsSelectionModel } from '@/features/artifacts/use-artifacts-p
 import { useCapabilityMatrix } from '@/features/capability/hooks';
 import type { ArtifactRow, SourceCapability } from '@/types/models';
 
+/**
+ * Pick the case-wide artifacts advisory row: an in-flight (`running`/`queued`)
+ * row wins over a `partial` row, which in turn wins over a `deferred` row. A
+ * `ready` row never surfaces here, so partial results are never presented as
+ * complete. Rows for other capabilities are ignored.
+ */
+export function pickArtifactsCapabilityAdvisory(rows: SourceCapability[]): SourceCapability | undefined {
+  const artifacts = rows.filter((row) => row.capability === 'artifacts');
+  return (
+    artifacts.find((row) => row.state === 'running' || row.state === 'queued') ??
+    artifacts.find((row) => row.state === 'partial') ??
+    artifacts.find((row) => row.state === 'deferred')
+  );
+}
+
 /** Owns artifact queries, persisted selection state, and cross-workspace navigation. */
 export function useArtifactsWorkspaceModel() {
   const {
@@ -47,14 +62,10 @@ export function useArtifactsWorkspaceModel() {
   // Case-wide advisory: surface the first non-ready artifacts row so partial
   // results are never presented as complete; running/deferred stay informational.
   const { data: capabilityMatrix } = useCapabilityMatrix();
-  const artifactsCapability = useMemo<SourceCapability | undefined>(() => {
-    const rows = (capabilityMatrix?.sources ?? []).filter((row) => row.capability === 'artifacts');
-    return (
-      rows.find((row) => row.state === 'running' || row.state === 'queued') ??
-      rows.find((row) => row.state === 'partial') ??
-      rows.find((row) => row.state === 'deferred')
-    );
-  }, [capabilityMatrix]);
+  const artifactsCapability = useMemo<SourceCapability | undefined>(
+    () => pickArtifactsCapabilityAdvisory(capabilityMatrix?.sources ?? []),
+    [capabilityMatrix],
+  );
   const families = useMemo(() => {
     const counts = new Map(artifactFamilyCounts.data?.map((entry) => [entry.family, entry.count]));
     return (artifactFamilies.data ?? []).map((family) => ({
