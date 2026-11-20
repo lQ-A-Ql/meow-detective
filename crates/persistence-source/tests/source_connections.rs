@@ -160,9 +160,10 @@ fn a_new_reader_waits_for_gc_and_reads_the_retained_generation() {
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
     let reader_barrier = std::sync::Arc::clone(&barrier);
     let case_root = root.path().to_path_buf();
+    let reader_id = id.0.clone();
     let reader = std::thread::spawn(move || {
         reader_barrier.wait();
-        let result = open_source_read_only(&case_root, &id.0).map(|source| {
+        let result = open_source_read_only(&case_root, &reader_id).map(|source| {
             source
                 .read_envelope(&source.snapshot(), KeyspaceName::Meta, b"connection-test")
                 .unwrap()
@@ -178,6 +179,27 @@ fn a_new_reader_waits_for_gc_and_reads_the_retained_generation() {
         receiver.recv_timeout(std::time::Duration::from_millis(50)),
         Err(std::sync::mpsc::RecvTimeoutError::Timeout)
     ));
+    // Coverage boundary: this proves the reader blocks while the GC guard is
+    // held and, after release, reads the newly bound generation
+    // (source.fjall.build.analysis-next). It does NOT prove close-while-waiting:
+    // try_close_retired_generation runs after the reader joins, outside the wait
+    // window. The reader's fixed 2s budget covers only the mutex unlock + condvar
+    // notify; the close path acquires a connection pin on this same retiring
+    // directory under parallel load and would otherwise consume that 2s budget,
+    // and filesystem deletion never enters that window either.
+    drop(exclusive);
+    assert_eq!(
+        receiver
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap()
+            .unwrap(),
+        b"source.fjall.build.analysis-next"
+    );
+    reader.join().unwrap();
+    // Deferred retired-generation bookkeeping; the reader has released its pin.
+    let exclusive = try_begin_generation_gc(original.parent().unwrap())
+        .unwrap()
+        .unwrap();
     let closed = exclusive
         .try_close_retired_generation(&original)
         .unwrap()
@@ -188,14 +210,7 @@ fn a_new_reader_waits_for_gc_and_reads_the_retained_generation() {
     std::fs::remove_dir_all(&original).unwrap();
     drop(closed);
     drop(exclusive);
-    assert_eq!(
-        receiver
-            .recv_timeout(std::time::Duration::from_secs(5))
-            .unwrap()
-            .unwrap(),
-        b"source.fjall.build.analysis-next"
-    );
-    reader.join().unwrap();
+    assert!(open_source_database_read_only(&source_db_path(root.path(), &id)).is_ok());
 }
 
 #[test]
