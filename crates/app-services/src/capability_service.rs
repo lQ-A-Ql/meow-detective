@@ -108,21 +108,22 @@ fn push_source_rows(
         source_id,
         CapabilityKindDto::Catalog,
         catalog_state,
-        0,
-        None,
-        None,
-        true,
         now,
+        DerivedRowMeta {
+            derived: true,
+            ..Default::default()
+        },
     ));
     out.push(base_dto(
         source_id,
         CapabilityKindDto::Search,
         catalog_state,
-        0,
-        Some("derived from catalog".to_string()),
-        None,
-        true,
         now,
+        DerivedRowMeta {
+            detail: Some("derived from catalog".to_string()),
+            derived: true,
+            ..Default::default()
+        },
     ));
 
     let entry = timeline
@@ -134,21 +135,23 @@ fn push_source_rows(
         source_id,
         CapabilityKindDto::Timeline,
         tl_state,
-        0,
-        tl_detail.clone(),
-        None,
-        tl_derived,
         now,
+        DerivedRowMeta {
+            detail: tl_detail.clone(),
+            derived: tl_derived,
+            ..Default::default()
+        },
     ));
     out.push(base_dto(
         source_id,
         CapabilityKindDto::Graph,
         tl_state,
-        0,
-        tl_detail,
-        None,
-        tl_derived,
         now,
+        DerivedRowMeta {
+            detail: tl_detail,
+            derived: tl_derived,
+            ..Default::default()
+        },
     ));
 
     let facts_state = match (supported, import_ready) {
@@ -160,11 +163,11 @@ fn push_source_rows(
         source_id,
         CapabilityKindDto::PlatformFacts,
         facts_state,
-        0,
-        None,
-        None,
-        true,
         now,
+        DerivedRowMeta {
+            derived: true,
+            ..Default::default()
+        },
     ));
 
     out.push(artifact_dto(
@@ -265,6 +268,16 @@ pub fn requeue_running(conn: &Connection, case_id: &CaseId) -> Result<u64, Capab
     Ok(SourceCapabilityRepo::new(conn).requeue_running(&case_id.0)?)
 }
 
+/// Optional per-call overrides for `mark_capability_state`; defaults produce a
+/// plain task-confirmed row without progress, detail, or error code.
+#[derive(Default)]
+pub struct MarkStateOptions {
+    pub progress: Option<CapabilityProgressDto>,
+    pub detail: Option<String>,
+    pub error_code: Option<String>,
+    pub derived: bool,
+}
+
 /// Single-writer helper used by later waves to record a task-confirmed state.
 pub fn mark_capability_state(
     conn: &Connection,
@@ -272,11 +285,14 @@ pub fn mark_capability_state(
     data_source_id: &str,
     kind: CapabilityKindDto,
     state: CapabilityStateDto,
-    progress: Option<CapabilityProgressDto>,
-    detail: Option<String>,
-    error_code: Option<String>,
-    derived: bool,
+    options: MarkStateOptions,
 ) -> Result<(), CapabilityServiceError> {
+    let MarkStateOptions {
+        progress,
+        detail,
+        error_code,
+        derived,
+    } = options;
     let cap_repo = SourceCapabilityRepo::new(conn);
     let wire = kind_wire(kind);
     let existing = cap_repo.get(&case_id.0, data_source_id, wire)?;
@@ -357,11 +373,11 @@ fn artifact_dto(
         source_id,
         CapabilityKindDto::Artifacts,
         state,
-        0,
-        None,
-        None,
-        true,
         now,
+        DerivedRowMeta {
+            derived: true,
+            ..Default::default()
+        },
     ))
 }
 
@@ -390,16 +406,29 @@ fn insert_if_missing(
     let _ = cap_repo.insert_if_missing(&row);
 }
 
-fn base_dto(
-    source_id: &str,
-    capability: CapabilityKindDto,
-    state: CapabilityStateDto,
+/// Non-identity metadata for a derived matrix row; derived rows never carry
+/// progress, so it is fixed to `None` by the constructor.
+#[derive(Default)]
+struct DerivedRowMeta {
     revision: i64,
     detail: Option<String>,
     error_code: Option<String>,
     derived: bool,
+}
+
+fn base_dto(
+    source_id: &str,
+    capability: CapabilityKindDto,
+    state: CapabilityStateDto,
     updated_at: &str,
+    meta: DerivedRowMeta,
 ) -> SourceCapabilityDto {
+    let DerivedRowMeta {
+        revision,
+        detail,
+        error_code,
+        derived,
+    } = meta;
     SourceCapabilityDto {
         data_source_id: source_id.to_string(),
         capability,

@@ -82,10 +82,10 @@ pub async fn retry_source_capability(
             &data_source_id,
             kind,
             CapabilityStateDto::Queued,
-            None,
-            Some("user retry".to_string()),
-            None,
-            false,
+            capability_service::MarkStateOptions {
+                detail: Some("user retry".to_string()),
+                ..Default::default()
+            },
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
         match retry_admission(
@@ -137,10 +137,10 @@ pub async fn cancel_source_capability(
             &data_source_id,
             kind,
             CapabilityStateDto::Cancelled,
-            None,
-            Some("cancelled by user".to_string()),
-            None,
-            false,
+            capability_service::MarkStateOptions {
+                detail: Some("cancelled by user".to_string()),
+                ..Default::default()
+            },
         )
         .map_err(|error| CommandError::internal(error.to_string()))?;
         Ok(())

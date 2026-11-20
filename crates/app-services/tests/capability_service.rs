@@ -149,10 +149,10 @@ fn task_confirmed_artifact_row_is_preserved_and_revision_bumps() {
                 &fixture.source.0,
                 CapabilityKindDto::Artifacts,
                 CapabilityStateDto::Ready,
-                None,
-                Some("task confirmed".into()),
-                None,
-                false,
+                capability_service::MarkStateOptions {
+                    detail: Some("task confirmed".into()),
+                    ..Default::default()
+                },
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
         })
@@ -206,10 +206,10 @@ fn backfill_is_idempotent_and_preserves_task_confirmed_rows() {
                 &source_id,
                 CapabilityKindDto::Artifacts,
                 CapabilityStateDto::Ready,
-                None,
-                Some("task confirmed".into()),
-                None,
-                false,
+                capability_service::MarkStateOptions {
+                    detail: Some("task confirmed".into()),
+                    ..Default::default()
+                },
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
         })

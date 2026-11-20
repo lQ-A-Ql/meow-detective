@@ -1,6 +1,6 @@
 //! Source lookup and queue admission for the post-import scheduler.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use domain::CaseId;
 use persistence_sqlite::repositories::{
@@ -37,25 +37,31 @@ fn read_revision(conn: &rusqlite::Connection, case_id: &str, source_id: &str, wi
         .unwrap_or(0)
 }
 
+/// Identity tuple locating one schedulable capability work item; the runtime
+/// fields (`app_state`, `app`, `priority`) are supplied by the admission path.
+struct TaskIdentity {
+    case_id: String,
+    case_root: PathBuf,
+    source_id: String,
+    capability: QueuedCapability,
+    revision: i64,
+}
+
 fn build_task(
     app_state: &AppState,
     app: Option<&AppHandle>,
-    case_id: &str,
-    case_root: &Path,
-    source_id: &str,
-    capability: QueuedCapability,
+    identity: TaskIdentity,
     priority: Priority,
-    revision: i64,
 ) -> QueuedTask {
     QueuedTask {
         app_state: app_state.clone(),
         app: app.cloned(),
-        case_id: case_id.to_string(),
-        case_root: case_root.to_path_buf(),
-        source_id: source_id.to_string(),
-        capability,
+        case_id: identity.case_id,
+        case_root: identity.case_root,
+        source_id: identity.source_id,
+        capability: identity.capability,
         priority,
-        revision,
+        revision: identity.revision,
     }
 }
 
@@ -109,12 +115,14 @@ pub(crate) fn enqueue_for_source(
         let admitted = admit(build_task(
             app_state,
             app,
-            case_id,
-            case_root,
-            &source_id,
-            capability,
+            TaskIdentity {
+                case_id: case_id.to_string(),
+                case_root: case_root.to_path_buf(),
+                source_id: source_id.clone(),
+                capability,
+                revision,
+            },
             Priority::Auto,
-            revision,
         ));
         if matches!(admitted, Admission::Accepted) {
             events::mark_admitted(case_id, case_root, &source_id, capability.wire());
@@ -158,12 +166,14 @@ pub(crate) fn enqueue_case_pending(
         let admitted = admit(build_task(
             app_state,
             app,
-            case_id,
-            case_root,
-            &row.data_source_id,
-            capability,
+            TaskIdentity {
+                case_id: case_id.to_string(),
+                case_root: case_root.to_path_buf(),
+                source_id: row.data_source_id.clone(),
+                capability,
+                revision: row.revision,
+            },
             Priority::Auto,
-            row.revision,
         ));
         if matches!(admitted, Admission::Accepted) {
             events::mark_admitted(case_id, case_root, &row.data_source_id, capability.wire());
@@ -193,12 +203,14 @@ pub(crate) fn retry_admission(
     let admitted = admit(build_task(
         app_state,
         app,
-        case_id,
-        case_root,
-        source_id,
-        capability,
+        TaskIdentity {
+            case_id: case_id.to_string(),
+            case_root: case_root.to_path_buf(),
+            source_id: source_id.to_string(),
+            capability,
+            revision,
+        },
         Priority::UserRetry,
-        revision,
     ));
     if matches!(admitted, Admission::Accepted) {
         events::mark_admitted(case_id, case_root, source_id, capability.wire());
