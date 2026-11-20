@@ -20,6 +20,10 @@ pub async fn import_data_source(
     request::import_data_source(state, app, request).await
 }
 
+// Pre-existing signature, not expanded by lifecycle work; the seven-parameter
+// worker/analysis group predates the capability lifecycle, and `app_state` was
+// threaded through to feed `BackgroundImportJob` rather than restructured here.
+#[allow(clippy::too_many_arguments)]
 pub fn schedule_import_for_active_case(
     active: &active_case::ActiveCase,
     import_config: import_precheck::ImportSourceConfig,
