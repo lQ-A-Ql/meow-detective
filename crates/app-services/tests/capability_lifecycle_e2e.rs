@@ -4,7 +4,7 @@
 //! filesystem sample. Run:
 //!
 //! ```text
-//! $env:FORENSICS_E01_FIXTURE = "C:/path/real.e01"
+//! $env:FORENSICS_E01_FIXTURE = "<path-to-real.e01>"
 //! cargo test -p app-services --test capability_lifecycle_e2e -- --include-ignored --nocapture
 //! ```
 //!
