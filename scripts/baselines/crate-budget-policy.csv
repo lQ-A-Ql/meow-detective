@@ -6,5 +6,5 @@ ceph-reconstruction,13,22500,architecture,ceph reconstruction and wire decoders 
 emulation-services,16,3600,architecture,controlled emulation workflows plus linux bypass plan apply inspect split and typed xfs blocker mapping,2027-06-30
 evidence-access,26,26000,architecture,evidence read preview and partition services with ten percent headroom,2027-06-30
 import-core,30,17500,architecture,import pipeline staging scheduling and projection with ten percent headroom,2027-06-30
-source-kernel,12,4500,architecture,source lifecycle probe model and reader cache with ten percent headroom,2027-06-30
+source-kernel,12,5500,architecture,source lifecycle reader cache and shared scoped task runtime with serial and parallel executors,2027-06-30
 source-reconstruction,27,16500,architecture,cluster derived deleted and mount reconstruction with ten percent headroom,2027-06-30

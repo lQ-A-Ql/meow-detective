@@ -3,8 +3,8 @@
 //! This crate owns the business-neutral foundation of the application-service
 //! layer: case/source database connections, source build and ready-state
 //! routing, source storage handles, process resource budgets and admission,
-//! E01 reader plans and caching, source publication leases, and the partition
-//! probe model. It must never depend on `app-services`.
+//! E01 reader plans and caching, source publication leases, scoped background
+//! task execution, and the partition probe model. It must never depend on `app-services`.
 
 pub mod active_case;
 pub mod artifact_storage_service;
@@ -20,6 +20,7 @@ pub mod source_db;
 pub mod source_runtime;
 pub mod storage_manifest;
 pub mod storage_runtime;
+pub mod task_runtime;
 
 pub use e01_reader_cache::{
     clear_e01_reader_cache, clear_e01_reader_cache_for_case, open_e01_reader_cached,

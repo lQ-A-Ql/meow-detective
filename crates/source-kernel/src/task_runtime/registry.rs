@@ -1,3 +1,5 @@
+//! Shared task identity, admission, cancellation and completion registry.
+
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -106,6 +108,29 @@ pub(super) struct TaskRegistry {
 }
 
 impl TaskRegistry {
+    pub(super) fn register(
+        &self,
+        task_id: &str,
+        scope: Option<&TaskScope>,
+        cancel: &Arc<AtomicBool>,
+    ) -> Result<(), TaskRegistrationError> {
+        let mut state = self.state.lock().expect("task registry lock poisoned");
+        validate_registration(&state, task_id, scope)?;
+        state.completed.remove(task_id);
+        state
+            .completed_order
+            .retain(|candidate| candidate != task_id);
+        state.tasks.insert(
+            task_id.to_owned(),
+            TaskEntry {
+                cancel_token: Arc::clone(cancel),
+                started_at: Instant::now(),
+                scope: scope.cloned(),
+            },
+        );
+        Ok(())
+    }
+
     pub(super) fn complete(&self, task_id: String, result: TaskResult) {
         let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
         state.tasks.remove(&task_id);

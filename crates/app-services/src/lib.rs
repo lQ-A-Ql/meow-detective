@@ -11,7 +11,7 @@ pub use source_kernel::e01_reader_cache::{
 };
 pub use source_kernel::{
     active_case, artifact_storage_service, connection, performance, processing_phase_service,
-    resource_budget, runtime_resources, source_db, storage_manifest, storage_runtime,
+    resource_budget, runtime_resources, source_db, storage_manifest, storage_runtime, task_runtime,
 };
 
 pub mod analysis_service;

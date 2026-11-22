@@ -4,6 +4,23 @@ This document records non-trivial dependency license and sourcing decisions for 
 
 ## License decisions
 
+### sysinfo — process execution ownership
+
+- **Date**: 2026-11-22
+- **Owner**: Source Lifecycle Maintenance
+- **Version**: `0.40.4`, `system` feature, default features disabled.
+- **License**: MIT, covered by the existing `deny.toml` policy.
+- **Use**: Query PID and process start time before reclaiming an abandoned
+  persisted execution attempt. A targeted process refresh does not request
+  command-line arguments, environment variables, CPU, memory, or task lists.
+- **Redistribution**: Preserve the copyright and license notice in
+  `crates/source-kernel/THIRD-PARTY-NOTICES` with source and binary distributions.
+- **Validation**: Actual child-process exit detection and scoped task queue tests.
+
+Sources: [upstream MIT license](https://github.com/GuillaumeGomez/sysinfo/blob/main/LICENSE),
+[process identity API](https://docs.rs/sysinfo/0.40.4/sysinfo/struct.Process.html),
+[targeted refresh API](https://docs.rs/sysinfo/0.40.4/sysinfo/struct.ProcessRefreshKind.html).
+
 ### CDLA-Permissive-2.0
 
 - **Date**: 2026-06-21

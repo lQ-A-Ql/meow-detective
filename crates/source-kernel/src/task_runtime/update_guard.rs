@@ -1,3 +1,5 @@
+//! Exclusive update admission while the scoped task registry is idle.
+
 use super::{registry::TaskRegistry, TaskManager};
 use std::sync::Arc;
 
