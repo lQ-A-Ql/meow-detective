@@ -1,10 +1,31 @@
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 export interface SearchHighlightRange {
   start: number;
   end: number;
   matchIndex: number;
   active: boolean;
+}
+
+export function SearchMatch({
+  children,
+  matchIndex,
+  active,
+}: {
+  children: ReactNode;
+  matchIndex: number;
+  active: boolean;
+}) {
+  return (
+    <mark
+      className="text-search-match"
+      data-match-index={matchIndex}
+      data-current={active ? 'true' : undefined}
+      aria-current={active ? 'true' : undefined}
+    >
+      {children}
+    </mark>
+  );
 }
 
 /** One inline highlight primitive: never changes glyph widths or row height. */
@@ -18,14 +39,9 @@ export function SearchHighlight({ text, ranges }: { text: string; ranges: readon
     return (
       <Fragment key={range.matchIndex}>
         {before}
-        <mark
-          className="text-search-match"
-          data-match-index={range.matchIndex}
-          data-current={range.active ? 'true' : undefined}
-          aria-current={range.active ? 'true' : undefined}
-        >
+        <SearchMatch matchIndex={range.matchIndex} active={range.active}>
           {match}
-        </mark>
+        </SearchMatch>
       </Fragment>
     );
   });

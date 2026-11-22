@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -6,48 +5,13 @@ import { Tooltip } from '@/app/components/ui/tooltip';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { IconButton } from '@/components/controls/IconButton';
 import { cn } from '@/app/components/ui/utils';
-import { hexPatternByteLength, hexSearchErrorKey, isHexSearchActive } from '@/features/files/hooks/use-hex-search';
-import type { HexSearchFileState } from '@/stores/hex-search-store';
 import { formatBytes } from '@/lib/format-bytes';
-import type { HexSearchMode } from '@/types/models';
+import type { HexSearchToolbarModel } from '@/features/files/hooks/use-hex-search-toolbar-model';
 
-interface Props {
-  fileId?: string;
-  state?: HexSearchFileState;
-  onStart: (mode: HexSearchMode, pattern: string) => void;
-  onCancel: () => void;
-  onReset: () => void;
-  onPrevious: () => void;
-  onNext: () => void;
-}
-
-export function HexSearchToolbar({ fileId, state, onStart, onCancel, onReset, onPrevious, onNext }: Props) {
+export function HexSearchToolbar({ model }: { model: HexSearchToolbarModel }) {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<HexSearchMode>(state?.mode ?? 'hex');
-  const [pattern, setPattern] = useState(state?.pattern ?? '');
-  const [invalid, setInvalid] = useState(false);
-
-  useEffect(() => {
-    setMode(state?.mode ?? 'hex');
-    setPattern(state?.pattern ?? '');
-    setInvalid(false);
-  }, [fileId, state?.mode, state?.pattern]);
-
-  const active = isHexSearchActive(state?.phase);
-  const matches = state?.matches.length ?? 0;
-  const submit = () => {
-    if (hexPatternByteLength(mode, pattern) === undefined) {
-      setInvalid(true);
-      return;
-    }
-    setInvalid(false);
-    onStart(mode, pattern);
-  };
-  const clear = () => {
-    setPattern('');
-    setInvalid(false);
-    onReset();
-  };
+  const { state, mode, setMode, pattern, invalid, active, matches, submit, clear, onCancel, onPrevious, onNext } =
+    model;
 
   return (
     <div
@@ -77,19 +41,8 @@ export function HexSearchToolbar({ fileId, state, onStart, onCancel, onReset, on
       </div>
       <Input
         value={pattern}
-        onChange={(event) => {
-          setPattern(event.target.value);
-          setInvalid(false);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            submit();
-          } else if (event.key === 'Escape') {
-            event.preventDefault();
-            clear();
-          }
-        }}
+        onChange={(event) => model.changePattern(event.target.value)}
+        onKeyDown={model.onKeyDown}
         aria-label={t('preview.hex.search.label')}
         aria-invalid={invalid || undefined}
         placeholder={mode === 'hex' ? t('preview.hex.search.hexPlaceholder') : t('preview.hex.search.asciiPlaceholder')}
@@ -147,7 +100,7 @@ export function HexSearchToolbar({ fileId, state, onStart, onCancel, onReset, on
       ) : null}
       {invalid ? <span className="text-forensics-error-text">{t('preview.hex.search.invalidPattern')}</span> : null}
       {state?.error ? (
-        <span className="text-forensics-error-text">{t(hexSearchErrorKey(state.error), { code: state.error })}</span>
+        <span className="text-forensics-error-text">{t(model.errorKey!, { code: state.error })}</span>
       ) : null}
       {active ? (
         <IconButton label={t('preview.hex.search.cancel')} size="iconXs" onClick={onCancel}>

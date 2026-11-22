@@ -1,6 +1,6 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HexSearchToolbar } from '@/components/preview/HexSearchToolbar';
+import { HexSearchToolbarContainer as HexSearchToolbar } from '@/features/files/containers/HexSearchToolbarContainer';
 import { useHexSearch } from '@/features/files/hooks/use-hex-search';
 import { useHexSearchStore } from '@/stores/hex-search-store';
 import * as filesApi from '@/lib/api/files';

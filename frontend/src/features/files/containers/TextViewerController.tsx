@@ -11,9 +11,12 @@ import {
   syntaxRangesForLine,
 } from '../text-viewer/syntax-highlight';
 import { useTextSearchKeyboard } from '../text-viewer/use-text-search-keyboard';
+import { useTextViewerInteraction } from '../hooks/use-text-viewer-interaction';
+import { highlightPieces } from '../text-viewer/highlight-pieces';
 
 export function TextViewerController(props: TextViewerProps) {
   const model = useTextViewerModel(props);
+  const interaction = useTextViewerInteraction(props.content);
   const gutterWidth = Math.max(String(model.page.endLine).length, 4) * 8 + 16;
   const viewport = useTextViewerViewport(model.page.lines, model.scrollRequest, gutterWidth);
   const pageStartOffset = model.page.lines[0]?.startOffset ?? 0;
@@ -31,19 +34,19 @@ export function TextViewerController(props: TextViewerProps) {
       line,
       rowIndex: viewport.range.start + offset,
       ranges,
-      syntax: syntaxRanges,
+      pieces: highlightPieces(line.content, syntaxRanges, ranges),
       active: ranges.some((range) => range.active),
     };
   });
   const onSearchKeyDown = useTextSearchKeyboard(model, viewport.viewportRef);
   return (
     <TextViewerView
-      content={props.content}
       encoding={props.encoding}
       isTruncated={props.isTruncated}
       syntaxDisabled={language !== undefined && pageText.length > MAX_SYNTAX_PAGE_LENGTH}
       model={model}
       viewport={viewport}
+      interaction={interaction}
       gutterWidth={gutterWidth}
       rows={rows}
       onSearchKeyDown={onSearchKeyDown}
