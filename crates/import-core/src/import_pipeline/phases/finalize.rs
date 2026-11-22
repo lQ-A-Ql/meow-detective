@@ -87,6 +87,19 @@ fn mark_detached_timeline_capability(
     ctx: &ImportJobContext<'_>,
     data_source: &domain::DataSource,
 ) -> Result<(), CommandError> {
+    if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::Filesystem {
+        write_deferred_marker(
+            ctx.source_connection()?,
+            data_source,
+            &format!("pending:{}", data_source.id.0),
+            timeline_projection::plan_required_bytes(),
+            ctx.options
+                .projection_policy
+                .reservation_bytes()
+                .map_err(|error| CommandError::invalid_input(error.to_string()))?,
+            "queued for post-import timeline projection",
+        )?;
+    }
     let (state, detail) =
         if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::Filesystem {
             (

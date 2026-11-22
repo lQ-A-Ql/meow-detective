@@ -12,6 +12,7 @@ pub mod import_precheck;
 pub mod import_scheduler;
 pub mod import_state;
 pub mod parallel_enum;
+pub mod post_import_service;
 pub(crate) mod resume;
 pub mod search_metadata_projection;
 pub mod staging;

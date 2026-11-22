@@ -18,9 +18,6 @@ pub(crate) fn run_background_import_job(
     let connection = app_services::connection::open_existing_case_db(&job.db_path)
         .map_err(app_services::connection::command_error_from_db)?;
     let event_sink = app.map(TauriImportEventSink::new);
-    // Captured before `import_config` moves into the coordinator request; the
-    // Completed branch resolves the new source row by this path.
-    let source_path = job.import_config.source_path.clone();
     // L5 rollback switch: `capabilityLifecycle.enabled = false` selects Inline
     // (timeline/artifacts run inside the job) and suppresses shell enqueue.
     // Read once at job start; a change never flips a running import mid-way.
@@ -53,13 +50,12 @@ pub(crate) fn run_background_import_job(
                     mode,
                     app_services::import_job_coordinator::SingleImportMode::Detached
                 ) {
-                    crate::post_import_scheduler::enqueue_for_source(
+                    crate::post_import_scheduler::enqueue_case_pending(
                         &job.app_state,
                         Some(app),
                         &job.case_id.0,
                         &job.case_root,
-                        &source_path,
-                    );
+                    )?;
                 }
                 crate::case_projection_jobs::schedule(
                     &task_manager,

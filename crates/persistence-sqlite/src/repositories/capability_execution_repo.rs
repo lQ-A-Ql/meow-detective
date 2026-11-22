@@ -37,14 +37,14 @@ pub struct CapabilityExecutionAttempt {
 }
 
 pub enum CapabilityClaimOutcome {
-    Acquired(CapabilityExecutionAttempt),
-    Ready(SourceCapabilityRow),
+    Acquired(Box<CapabilityExecutionAttempt>),
+    Ready(Box<SourceCapabilityRow>),
     Busy,
     Superseded,
 }
 
 pub enum CapabilityQueueOutcome {
-    Queued(SourceCapabilityRow),
+    Queued(Box<SourceCapabilityRow>),
     AlreadyActive,
     Full,
 }
@@ -99,7 +99,7 @@ impl<'a> CapabilityExecutionRepo<'a> {
         row.updated_at = chrono::Utc::now().to_rfc3339();
         repo.upsert(&row)?;
         transaction.commit()?;
-        Ok(CapabilityQueueOutcome::Queued(row))
+        Ok(CapabilityQueueOutcome::Queued(Box::new(row)))
     }
 
     pub fn claim(&self, request: CapabilityClaimRequest<'_>) -> DbResult<CapabilityClaimOutcome> {
@@ -130,13 +130,19 @@ impl<'a> CapabilityExecutionRepo<'a> {
         )?;
         let outcome = match claim {
             ProcessingPhaseClaim::Busy(_) => CapabilityClaimOutcome::Busy,
-            ProcessingPhaseClaim::Ready(_) => {
-                row.state = "ready".into();
+            ProcessingPhaseClaim::Ready(attempt) => {
+                row.state = ready_state(&attempt)?;
+                if row.state == "ready" {
+                    row.revision = row
+                        .revision
+                        .checked_add(1)
+                        .ok_or_else(|| invalid("capability revision overflow"))?;
+                }
                 row.phase = Some("done".into());
                 row.derived = 0;
                 row.updated_at = chrono::Utc::now().to_rfc3339();
                 repo.upsert(&row)?;
-                CapabilityClaimOutcome::Ready(row)
+                CapabilityClaimOutcome::Ready(Box::new(row))
             }
             ProcessingPhaseClaim::Acquired(attempt) => {
                 row.state = "running".into();
@@ -144,10 +150,10 @@ impl<'a> CapabilityExecutionRepo<'a> {
                 row.derived = 0;
                 row.updated_at = chrono::Utc::now().to_rfc3339();
                 repo.upsert(&row)?;
-                CapabilityClaimOutcome::Acquired(CapabilityExecutionAttempt {
+                CapabilityClaimOutcome::Acquired(Box::new(CapabilityExecutionAttempt {
                     row,
                     phase: attempt,
-                })
+                }))
             }
         };
         transaction.commit()?;
@@ -202,6 +208,26 @@ impl<'a> CapabilityExecutionRepo<'a> {
     }
 
     pub fn cancel(&self, case: &str, source: &str, capability: &str) -> DbResult<bool> {
+        self.cancel_matching(case, source, capability, None)
+    }
+
+    pub fn cancel_request(
+        &self,
+        case: &str,
+        source: &str,
+        capability: &str,
+        revision: i64,
+    ) -> DbResult<bool> {
+        self.cancel_matching(case, source, capability, Some(revision))
+    }
+
+    fn cancel_matching(
+        &self,
+        case: &str,
+        source: &str,
+        capability: &str,
+        revision: Option<i64>,
+    ) -> DbResult<bool> {
         let phase = phase_kind(capability)?;
         let transaction = self.conn.unchecked_transaction()?;
         ensure_source(&transaction, case, source)?;
@@ -209,6 +235,9 @@ impl<'a> CapabilityExecutionRepo<'a> {
         let Some(mut row) = repo.get(case, source, capability)? else {
             return Ok(false);
         };
+        if revision.is_some_and(|revision| row.revision != revision) {
+            return Ok(false);
+        }
         if !matches!(row.state.as_str(), "pending" | "queued" | "running") {
             return Ok(false);
         }
@@ -279,6 +308,18 @@ fn finish_attempt(
         ),
     )?;
     Ok(())
+}
+
+fn ready_state(attempt: &DataSourceProcessingPhaseRecord) -> DbResult<String> {
+    let stats: serde_json::Value =
+        serde_json::from_str(&attempt.stats_json).map_err(|error| invalid(&error.to_string()))?;
+    match stats
+        .get("capabilityState")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some(state @ ("ready" | "notApplicable")) => Ok(state.to_owned()),
+        _ => Err(invalid("ready capability attempt has no terminal result")),
+    }
 }
 
 fn phase_kind(capability: &str) -> DbResult<ProcessingPhase> {

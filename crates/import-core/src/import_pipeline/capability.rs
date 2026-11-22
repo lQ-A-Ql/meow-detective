@@ -21,8 +21,7 @@ pub(crate) const READY: &str = "ready";
 /// Write (or upsert) a task-confirmed capability row for one source.
 ///
 /// `derived = 0` marks the row as task-confirmed; revision is carried over and
-/// only bumped on a transition into `ready`, mirroring
-/// `capability_service::mark_capability_state`.
+/// only bumped on a transition into `ready`.
 pub(crate) fn mark_capability(
     conn: &Connection,
     case_id: &domain::CaseId,

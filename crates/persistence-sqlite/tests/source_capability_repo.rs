@@ -1,8 +1,6 @@
 use persistence_sqlite::{
     open_in_memory,
-    repositories::source_capability_repo::{
-        CapabilityStateUpdate, SourceCapabilityRepo, SourceCapabilityRow,
-    },
+    repositories::source_capability_repo::{SourceCapabilityRepo, SourceCapabilityRow},
     runner,
 };
 
@@ -111,37 +109,4 @@ fn insert_if_missing_never_overwrites_existing_row() {
         .expect("row exists");
     assert_eq!(stored.state, "ready");
     assert_eq!(stored.derived, 0);
-}
-
-#[test]
-fn update_state_changes_row_in_place() {
-    let conn = setup_case_db();
-    let repo = SourceCapabilityRepo::new(&conn);
-    repo.upsert(&row(CASE_ID, SOURCE_ID, "timeline", "building", 1))
-        .expect("insert timeline row");
-
-    repo.update_state(
-        CASE_ID,
-        SOURCE_ID,
-        "timeline",
-        CapabilityStateUpdate {
-            state: "ready",
-            detail: Some("projection complete"),
-            error_code: None,
-            derived: 0,
-        },
-    )
-    .expect("update state");
-
-    let stored = repo
-        .get(CASE_ID, SOURCE_ID, "timeline")
-        .expect("get row")
-        .expect("row exists");
-    assert_eq!(stored.state, "ready");
-    assert_eq!(stored.detail.as_deref(), Some("projection complete"));
-    assert_eq!(stored.derived, 0);
-    assert!(repo
-        .get(CASE_ID, SOURCE_ID, "missing")
-        .expect("get missing")
-        .is_none());
 }

@@ -1,4 +1,3 @@
-use std::sync::atomic::AtomicBool;
 use tauri::{AppHandle, State};
 use transport::{
     commands::{
@@ -16,6 +15,7 @@ use transport::{
 use super::command_support::{get_case_read_connection, require_active_case, snapshot_active_case};
 use crate::events::event_bridge;
 use crate::state::AppState;
+mod rebuild;
 
 /// Get timeline events with optional filtering.
 #[tauri::command]
@@ -162,32 +162,6 @@ pub async fn rebuild_timeline_projection(
     app: AppHandle,
     request: Option<RebuildTimelineProjectionRequest>,
 ) -> Result<TimelineProjectionStatusDto, CommandError> {
-    let app_state = state.inner().clone();
     let data_source_id = request.and_then(|req| req.data_source_id);
-    tauri::async_runtime::spawn_blocking(move || {
-        if snapshot_active_case(&app_state)?.is_none() {
-            return Err(CommandError::no_active_case());
-        }
-        let active = require_active_case(&app_state)?;
-        let conn = get_case_read_connection(&app_state)?;
-        let cancel = AtomicBool::new(false);
-        let status = app_services::timeline_service::rebuild_timeline_projection(
-            &conn,
-            &active.case_root,
-            &active.meta.id,
-            data_source_id.as_deref(),
-            app_services::timeline_service::TimelineProjectionPolicy::default(),
-            &cancel,
-        )
-        .map_err(CommandError::from_typed_service_error)?;
-        let event_count = status
-            .sources
-            .iter()
-            .map(|source| source.inserted_events)
-            .sum();
-        event_bridge::emit_timeline_updated(&app, event_count);
-        Ok(status)
-    })
-    .await
-    .map_err(CommandError::from_join_error)?
+    rebuild::run(state.inner().clone(), app, data_source_id).await
 }

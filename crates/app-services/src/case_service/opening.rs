@@ -38,33 +38,23 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
             Some(&active.meta.id.0),
         )
     });
-    // L0 shadow model: best-effort cheap backfill; never blocks case open.
-    let backfill = active.with_conn(|conn| {
+    active.with_conn(|conn| {
         crate::capability_service::backfill_case_capabilities(
             conn,
             &active.case_root,
             &active.meta.id,
         )
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
-    });
-    if let Err(error) = backfill {
-        tracing::warn!(error = %error, "per-source capability backfill skipped");
-    }
-    // L2 restart reconciliation: rows left `running` by a dead process fall back
-    // to `queued`; the shell scheduler re-enqueues them after open. Best-effort,
-    // never blocks case open.
-    let requeue = active.with_conn(|conn| {
+    })?;
+    let recovered = active.with_conn(|conn| {
         crate::capability_service::requeue_running(conn, &active.meta.id)
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
-    });
-    match requeue {
-        Ok(recovered) if recovered > 0 => {
-            tracing::info!(recovered, "requeued stale running capability rows");
-        }
-        Ok(_) => {}
-        Err(error) => {
-            tracing::warn!(error = %error, "capability requeue_running skipped");
-        }
+    })?;
+    if recovered > 0 {
+        tracing::info!(
+            recovered,
+            "requeued interrupted capability presentation rows"
+        );
     }
     Ok(active)
 }

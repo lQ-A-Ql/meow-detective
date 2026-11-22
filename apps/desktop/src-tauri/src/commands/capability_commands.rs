@@ -5,7 +5,7 @@ use crate::post_import_scheduler::{cancel_source, retry_admission, Admission, Qu
 use crate::state::AppState;
 use app_services::capability_service;
 use tauri::State;
-use transport::dto::{CapabilityKindDto, CapabilityMatrixDto, CapabilityStateDto};
+use transport::dto::CapabilityMatrixDto;
 use transport::CommandError;
 
 /// Read the derived per-source capability matrix for the active case.
@@ -30,14 +30,9 @@ pub async fn get_source_capabilities(
 /// Parse the caller-supplied capability wire string into a schedulable kind.
 /// Only `timeline` and `artifacts` are executable by the post-import scheduler;
 /// the other capabilities are derived at read time and have no worker path.
-fn parse_schedulable(wire: &str) -> Result<(QueuedCapability, CapabilityKindDto), CommandError> {
-    match wire {
-        "timeline" => Ok((QueuedCapability::Timeline, CapabilityKindDto::Timeline)),
-        "artifacts" => Ok((QueuedCapability::Artifacts, CapabilityKindDto::Artifacts)),
-        other => Err(CommandError::invalid_input(format!(
-            "capability '{other}' cannot be retried; only timeline and artifacts are schedulable"
-        ))),
-    }
+fn parse_schedulable(wire: &str) -> Result<QueuedCapability, CommandError> {
+    QueuedCapability::parse(wire)
+        .ok_or_else(|| CommandError::invalid_input("capability has no executable task"))
 }
 
 /// Map the service-layer source check onto a command error: unknown source →
@@ -73,21 +68,9 @@ pub async fn retry_source_capability(
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let active = require_active_case(&app_state)?;
-        let (schedulable, kind) = parse_schedulable(&capability)?;
+        let schedulable = parse_schedulable(&capability)?;
         let conn = get_case_connection(&app_state)?;
         ensure_source(&conn, &active, &data_source_id)?;
-        capability_service::mark_capability_state(
-            &conn,
-            &active.meta.id,
-            &data_source_id,
-            kind,
-            CapabilityStateDto::Queued,
-            capability_service::MarkStateOptions {
-                detail: Some("user retry".to_string()),
-                ..Default::default()
-            },
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
         match retry_admission(
             &app_state,
             Some(&app),
@@ -95,14 +78,14 @@ pub async fn retry_source_capability(
             &active.case_root,
             &data_source_id,
             schedulable,
-        ) {
+        )? {
             Admission::Accepted => {}
-            Admission::AlreadyQueued => {
+            Admission::AlreadyActive => {
                 return Err(CommandError::conflict(
                     "capability rebuild already in progress",
                 ));
             }
-            Admission::Busy => {
+            Admission::Full => {
                 return Err(CommandError::conflict(
                     "retry queue for this case is full; try again shortly",
                 ));
@@ -121,28 +104,24 @@ pub async fn retry_source_capability(
 #[tauri::command]
 pub async fn cancel_source_capability(
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
     data_source_id: String,
     capability: String,
 ) -> Result<(), CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let active = require_active_case(&app_state)?;
-        let (schedulable, kind) = parse_schedulable(&capability)?;
+        let schedulable = parse_schedulable(&capability)?;
         let conn = get_case_connection(&app_state)?;
         ensure_source(&conn, &active, &data_source_id)?;
-        cancel_source(&active.meta.id.0, &data_source_id, schedulable);
-        capability_service::mark_capability_state(
-            &conn,
-            &active.meta.id,
+        cancel_source(
+            &app_state,
+            Some(&app),
+            &active.meta.id.0,
+            &active.case_root,
             &data_source_id,
-            kind,
-            CapabilityStateDto::Cancelled,
-            capability_service::MarkStateOptions {
-                detail: Some("cancelled by user".to_string()),
-                ..Default::default()
-            },
-        )
-        .map_err(|error| CommandError::internal(error.to_string()))?;
+            schedulable,
+        )?;
         Ok(())
     })
     .await

@@ -21,16 +21,6 @@ pub struct SourceCapabilityRow {
     pub updated_at: String,
 }
 
-/// Grouped mutable fields for `SourceCapabilityRepo::update_state`; keeps the
-/// call signature below the too-many-arguments threshold.
-#[derive(Debug, Clone, Copy)]
-pub struct CapabilityStateUpdate<'a> {
-    pub state: &'a str,
-    pub detail: Option<&'a str>,
-    pub error_code: Option<&'a str>,
-    pub derived: i64,
-}
-
 impl<'a> SourceCapabilityRepo<'a> {
     pub fn new(conn: &'a Connection) -> Self {
         Self { conn }
@@ -133,26 +123,6 @@ impl<'a> SourceCapabilityRepo<'a> {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
-    /// Compare-and-swap claim: flip `queued`/`pending` to `running` exactly when
-    /// the row still admits a worker. Returns `false` when another worker already
-    /// owns the row, the row finished, or it is absent. The scheduler must only
-    /// execute after a successful claim.
-    pub fn try_claim(
-        &self,
-        case_id: &str,
-        data_source_id: &str,
-        capability: &str,
-    ) -> DbResult<bool> {
-        let changed = self.conn.execute(
-            "UPDATE source_capability SET
-                state = 'running', updated_at = datetime('now')
-             WHERE case_id = ?1 AND data_source_id = ?2 AND capability = ?3
-               AND state IN ('queued', 'pending')",
-            params![case_id, data_source_id, capability],
-        )?;
-        Ok(changed == 1)
-    }
-
     /// Restart reconciliation: rows left `running` by a dead process fall back to
     /// `queued`. No attempts column exists, so only the state reverts. Returns
     /// the number of rows recovered.
@@ -179,63 +149,6 @@ impl<'a> SourceCapabilityRepo<'a> {
         )?;
         let rows = statement.query_map([case_id], read_row)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-    }
-
-    /// L4 measurement hook: update only the `phase` column (`admitted` /
-    /// `running` / `done`) without touching state, revision, or detail.
-    pub fn set_phase(
-        &self,
-        case_id: &str,
-        data_source_id: &str,
-        capability: &str,
-        phase: &str,
-    ) -> DbResult<()> {
-        self.conn.execute(
-            "UPDATE source_capability SET
-                phase = ?4, updated_at = datetime('now')
-             WHERE case_id = ?1 AND data_source_id = ?2 AND capability = ?3",
-            params![case_id, data_source_id, capability, phase],
-        )?;
-        Ok(())
-    }
-
-    /// Case-close teardown: flip every `queued`/`running` row of this case to
-    /// `cancelled` with a fixed detail and `derived = 0`; terminal rows are
-    /// untouched. Returns the number of rows marked.
-    pub fn mark_open_cancelled(&self, case_id: &str, detail: &str) -> DbResult<u64> {
-        let changed = self.conn.execute(
-            "UPDATE source_capability SET
-                state = 'cancelled', detail = ?2, error_code = NULL, phase = NULL,
-                derived = 0, updated_at = datetime('now')
-             WHERE case_id = ?1 AND state IN ('queued', 'running')",
-            params![case_id, detail],
-        )?;
-        Ok(u64::try_from(changed).unwrap_or(0))
-    }
-
-    pub fn update_state(
-        &self,
-        case_id: &str,
-        data_source_id: &str,
-        capability: &str,
-        update: CapabilityStateUpdate<'_>,
-    ) -> DbResult<()> {
-        self.conn.execute(
-            "UPDATE source_capability SET
-                state = ?4, detail = ?5, error_code = ?6, derived = ?7,
-                updated_at = datetime('now')
-             WHERE case_id = ?1 AND data_source_id = ?2 AND capability = ?3",
-            params![
-                case_id,
-                data_source_id,
-                capability,
-                update.state,
-                update.detail,
-                update.error_code,
-                update.derived
-            ],
-        )?;
-        Ok(())
     }
 }
 

@@ -38,7 +38,7 @@ fn claim(conn: &rusqlite::Connection, revision: i64) -> CapabilityExecutionAttem
         })
         .unwrap()
     {
-        CapabilityClaimOutcome::Acquired(attempt) => attempt,
+        CapabilityClaimOutcome::Acquired(attempt) => *attempt,
         _ => panic!("queued attempt must be acquired"),
     }
 }
@@ -75,6 +75,9 @@ fn cancelled_worker_cannot_publish_over_a_new_queued_request() {
     assert!(repo.cancel("case", "source-0", "artifacts").unwrap());
     let next_revision = queue(&conn, "source-0");
     assert!(next_revision > revision);
+    assert!(!repo
+        .cancel_request("case", "source-0", "artifacts", revision)
+        .unwrap());
     assert!(repo.complete(&old, ready()).unwrap().is_none());
     assert_eq!(
         SourceCapabilityRepo::new(&conn)
@@ -87,6 +90,39 @@ fn cancelled_worker_cannot_publish_over_a_new_queued_request() {
     let next = claim(&conn, next_revision);
     assert_ne!(old.phase.attempt_id, next.phase.attempt_id);
     assert!(repo.complete(&next, ready()).unwrap().is_some());
+}
+
+#[test]
+fn cached_not_applicable_result_keeps_its_terminal_state() {
+    let conn = setup();
+    let revision = queue(&conn, "source-0");
+    let attempt = claim(&conn, revision);
+    let repo = CapabilityExecutionRepo::new(&conn);
+    repo.complete(
+        &attempt,
+        CapabilityCompletion {
+            state: "notApplicable",
+            detail: None,
+            error_code: None,
+        },
+    )
+    .unwrap();
+    let revision = queue(&conn, "source-0");
+    let result = repo
+        .claim(CapabilityClaimRequest {
+            case_id: "case",
+            source_id: "source-0",
+            capability: "artifacts",
+            revision,
+            input_fingerprint: &"a".repeat(64),
+            owner: "process-a",
+        })
+        .unwrap();
+    let CapabilityClaimOutcome::Ready(row) = result else {
+        panic!("completed attempt must be reused")
+    };
+    assert_eq!(row.state, "notApplicable");
+    assert_eq!(row.revision, revision);
 }
 
 #[test]

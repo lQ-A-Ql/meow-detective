@@ -1,10 +1,46 @@
 use app_services::capability_service;
 use domain::{DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
-use persistence_sqlite::repositories::source_capability_repo::{
-    CapabilityStateUpdate, SourceCapabilityRepo,
-};
+use persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRepo;
 use transport::dto::{CapabilityKindDto, CapabilityStateDto};
+
+fn confirm_artifacts(
+    conn: &rusqlite::Connection,
+    case: &domain::CaseId,
+    source: &str,
+) -> persistence_sqlite::DbResult<()> {
+    use persistence_sqlite::repositories::capability_execution_repo::{
+        CapabilityClaimOutcome, CapabilityClaimRequest, CapabilityCompletion,
+        CapabilityExecutionRepo, CapabilityQueueOutcome,
+    };
+    let repo = CapabilityExecutionRepo::new(conn);
+    let CapabilityQueueOutcome::Queued(row) = repo.queue_retry(&case.0, source, "artifacts")?
+    else {
+        panic!("artifact request must be queued")
+    };
+    let CapabilityClaimOutcome::Acquired(attempt) = repo.claim(CapabilityClaimRequest {
+        case_id: &case.0,
+        source_id: source,
+        capability: "artifacts",
+        revision: row.revision,
+        input_fingerprint: &"a".repeat(64),
+        owner: "capability-service-test",
+    })?
+    else {
+        panic!("artifact request must be acquired")
+    };
+    assert!(repo
+        .complete(
+            &attempt,
+            CapabilityCompletion {
+                state: "ready",
+                detail: Some("task confirmed"),
+                error_code: None
+            }
+        )?
+        .is_some());
+    Ok(())
+}
 
 struct Fixture {
     _root: tempfile::TempDir,
@@ -99,15 +135,15 @@ fn backfill_writes_cheap_rows_and_derive_maps_ready_catalog() {
         find(CapabilityKindDto::Artifacts).state,
         CapabilityStateDto::Pending
     );
-    // No source DB marker in this fixture: legacy missing marker derives ready.
+    // This fixture has no source store, so availability cannot be confirmed.
     assert_eq!(
         find(CapabilityKindDto::Timeline).state,
-        CapabilityStateDto::Ready
+        CapabilityStateDto::Failed
     );
     assert!(find(CapabilityKindDto::Timeline).derived);
     assert_eq!(
         find(CapabilityKindDto::Graph).state,
-        CapabilityStateDto::Ready
+        CapabilityStateDto::Failed
     );
 }
 
@@ -142,20 +178,7 @@ fn task_confirmed_artifact_row_is_preserved_and_revision_bumps() {
         .unwrap();
     fixture
         .case
-        .with_conn(|conn| {
-            capability_service::mark_capability_state(
-                conn,
-                &fixture.case.meta.id,
-                &fixture.source.0,
-                CapabilityKindDto::Artifacts,
-                CapabilityStateDto::Ready,
-                capability_service::MarkStateOptions {
-                    detail: Some("task confirmed".into()),
-                    ..Default::default()
-                },
-            )
-            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
-        })
+        .with_conn(|conn| confirm_artifacts(conn, &fixture.case.meta.id, &fixture.source.0))
         .unwrap();
 
     let matrix = derive(&fixture);
@@ -170,7 +193,7 @@ fn task_confirmed_artifact_row_is_preserved_and_revision_bumps() {
     assert_eq!(artifacts.state, CapabilityStateDto::Ready);
     assert!(!artifacts.derived);
     assert_eq!(artifacts.detail.as_deref(), Some("task confirmed"));
-    assert_eq!(artifacts.revision, 1);
+    assert_eq!(artifacts.revision, 2);
 }
 
 #[test]
@@ -199,20 +222,7 @@ fn backfill_is_idempotent_and_preserves_task_confirmed_rows() {
     // A task-confirmed artifacts row replaces the derived placeholder.
     fixture
         .case
-        .with_conn(|conn| {
-            capability_service::mark_capability_state(
-                conn,
-                &fixture.case.meta.id,
-                &source_id,
-                CapabilityKindDto::Artifacts,
-                CapabilityStateDto::Ready,
-                capability_service::MarkStateOptions {
-                    detail: Some("task confirmed".into()),
-                    ..Default::default()
-                },
-            )
-            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
-        })
+        .with_conn(|conn| confirm_artifacts(conn, &fixture.case.meta.id, &source_id))
         .unwrap();
 
     // A second backfill must not add rows or overwrite the task-confirmed row.
@@ -239,7 +249,7 @@ fn backfill_is_idempotent_and_preserves_task_confirmed_rows() {
     assert_eq!(artifacts.state, "ready");
     assert_eq!(artifacts.derived, 0);
     assert_eq!(artifacts.detail.as_deref(), Some("task confirmed"));
-    assert_eq!(artifacts.revision, 1);
+    assert_eq!(artifacts.revision, 2);
     // Derived placeholder rows remain untouched.
     for kind in ["catalog", "search", "platformFacts"] {
         let row = rows
@@ -363,83 +373,4 @@ fn unknown_platform_derives_artifacts_and_facts_not_applicable() {
         find(CapabilityKindDto::Catalog).state,
         CapabilityStateDto::Ready
     );
-}
-
-#[test]
-fn try_claim_flips_queued_once_and_requeue_running_recovers() {
-    let fixture = fixture("ready", Some("windows"));
-    let case_id = fixture.case.meta.id.0.clone();
-    let source_id = fixture.source.0.clone();
-    fixture
-        .case
-        .with_conn(|conn| -> Result<(), persistence_sqlite::DbError> {
-            let repo = SourceCapabilityRepo::new(conn);
-            let row =
-                persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRow {
-                    case_id: case_id.clone(),
-                    data_source_id: source_id.clone(),
-                    capability: "timeline".to_string(),
-                    state: "queued".to_string(),
-                    revision: 0,
-                    progress_done: 0,
-                    progress_total: None,
-                    phase: None,
-                    detail: None,
-                    error_code: None,
-                    derived: 0,
-                    updated_at: chrono::Utc::now().to_rfc3339(),
-                };
-            repo.insert_if_missing(&row)?;
-            // First claim wins; a second claim loses because state moved to running.
-            assert!(repo.try_claim(&case_id, &source_id, "timeline")?);
-            assert!(!repo.try_claim(&case_id, &source_id, "timeline")?);
-            // A finished row can never be claimed.
-            repo.update_state(
-                &case_id,
-                &source_id,
-                "timeline",
-                CapabilityStateUpdate {
-                    state: "ready",
-                    detail: None,
-                    error_code: None,
-                    derived: 0,
-                },
-            )?;
-            assert!(!repo.try_claim(&case_id, &source_id, "timeline")?);
-            Ok(())
-        })
-        .unwrap();
-
-    fixture
-        .case
-        .with_conn(|conn| -> Result<(), persistence_sqlite::DbError> {
-            let repo = SourceCapabilityRepo::new(conn);
-            // Leave another row running to be recovered by restart reconciliation.
-            let row =
-                persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRow {
-                    case_id: case_id.clone(),
-                    data_source_id: source_id.clone(),
-                    capability: "artifacts".to_string(),
-                    state: "running".to_string(),
-                    revision: 0,
-                    progress_done: 0,
-                    progress_total: None,
-                    phase: None,
-                    detail: None,
-                    error_code: None,
-                    derived: 0,
-                    updated_at: chrono::Utc::now().to_rfc3339(),
-                };
-            repo.upsert(&row)?;
-            let recovered = capability_service::requeue_running(conn, &fixture.case.meta.id)
-                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-            assert_eq!(recovered, 1);
-            let pending = repo.list_pending(&case_id)?;
-            assert!(pending
-                .iter()
-                .any(|entry| entry.capability == "artifacts" && entry.state == "queued"));
-            assert!(!pending.iter().any(|entry| entry.capability == "timeline"));
-            Ok(())
-        })
-        .unwrap();
 }

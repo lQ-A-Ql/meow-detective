@@ -1,4 +1,5 @@
 use super::Result;
+use persistence_sqlite::repositories::capability_execution_repo::CapabilityExecutionRepo;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRepo;
 use rusqlite::Connection;
@@ -59,15 +60,19 @@ pub fn close_case_drain(conn: &Connection, _case_id: &str, timeout_ms: u64) -> R
     })
 }
 
-/// L4 case-close teardown: flip every `queued`/`running` post-import capability
-/// row of this case to `cancelled` (detail `interrupted by case close`,
-/// `derived = 0`) while the caller still holds a usable connection. Terminal
-/// rows are untouched. Returns the number of rows marked. The caller runs this
-/// before `cancel_case` and before draining background jobs; a connection
-/// failure there is handled by the command layer (warn + skip) and must not
-/// block close.
+/// Revoke executable capability attempts before draining the case tasks.
 pub fn mark_open_capabilities_cancelled(conn: &Connection, case_id: &str) -> Result<u64> {
-    let marked = SourceCapabilityRepo::new(conn)
-        .mark_open_cancelled(case_id, "interrupted by case close")?;
+    let mut marked = 0;
+    for row in SourceCapabilityRepo::new(conn).list_for_case(case_id)? {
+        if matches!(row.capability.as_str(), "timeline" | "artifacts")
+            && CapabilityExecutionRepo::new(conn).cancel(
+                case_id,
+                &row.data_source_id,
+                &row.capability,
+            )?
+        {
+            marked += 1;
+        }
+    }
     Ok(marked)
 }

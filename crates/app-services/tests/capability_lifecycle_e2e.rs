@@ -1,25 +1,13 @@
-//! Ignored acceptance harness for the detached import capability lifecycle.
-//!
-//! Requires a real E01 image; synthetic tiny.E01 must NOT be used as a
-//! filesystem sample. Run:
+//! Real-E01 acceptance for detached catalog publication and managed timeline work.
+//! Set FORENSICS_E01_FIXTURE to an existing E01 filesystem image and run:
 //!
 //! ```text
 //! $env:FORENSICS_E01_FIXTURE = "<path-to-real.e01>"
 //! cargo test -p app-services --test capability_lifecycle_e2e -- --include-ignored --nocapture
 //! ```
 //!
-//! Covered by this harness:
-//! - `run_single_import_with_mode(Detached)` on a real E01 completes;
-//! - pre-rebuild matrix: catalog/search ready, timeline pending, artifacts
-//!   notApplicable under `MetadataOnly`;
-//! - an explicit `rebuild_timeline_projection` moves timeline/graph to ready.
-//!
-//! Not covered here (design-only, requires dedicated real-sample runs):
-//! - slow timeline buckets (500ms / 5s / 5min) timing measurement;
-//! - process kill mid-import and resume re-run;
-//! - two-source concurrent import admission;
-//! - Android partial (no retryable counter field, stays ready);
-//! - preview retention budget P95.
+//! Catalog/search are ready while timeline/artifacts remain queued. A managed
+//! timeline request completes Timeline/Graph and leaves artifact work queued.
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -29,17 +17,12 @@ use app_services::import_analysis::ImportAnalysisMode;
 use app_services::import_job_coordinator::{
     run_single_import_with_mode, SingleImportMode, SingleImportOutcome, SingleImportRequest,
 };
-use app_services::timeline_service::{rebuild_timeline_projection, TimelineProjectionPolicy};
+use app_services::post_import_service::{self, PostImportRuntime};
+use app_services::task_runtime::TaskManager;
 use domain::DataSourcePlatform;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use persistence_sqlite::DbError;
 use transport::dto::{CapabilityKindDto, CapabilityStateDto};
-
-fn sample_path() -> Option<PathBuf> {
-    std::env::var_os("FORENSICS_E01_FIXTURE")
-        .map(PathBuf::from)
-        .or_else(testing::fixtures::local_e01_fixture)
-}
 
 fn matrix_state(
     sources: &[transport::dto::SourceCapabilityDto],
@@ -56,10 +39,11 @@ fn matrix_state(
 #[test]
 #[ignore = "requires a real E01 image; runs minutes; use --include-ignored"]
 fn detached_import_lifecycle_capability_matrix() {
-    let Some(image) = sample_path() else {
-        eprintln!("FORENSICS_E01_FIXTURE not set; acceptance harness skipped");
-        return;
-    };
+    let image = PathBuf::from(
+        std::env::var_os("FORENSICS_E01_FIXTURE")
+            .expect("FORENSICS_E01_FIXTURE must identify a real E01 image"),
+    );
+    assert!(image.is_file(), "configured E01 image must exist");
     let temp = tempfile::TempDir::new().unwrap();
     std::fs::create_dir_all(temp.path().join("cases")).unwrap();
     let active = app_services::case_service::create_case(
@@ -118,22 +102,27 @@ fn detached_import_lifecycle_capability_matrix() {
             );
             assert_eq!(
                 matrix_state(&before.sources, &source_id, CapabilityKindDto::Timeline),
-                CapabilityStateDto::Pending,
-                "timeline must stay pending before projection rebuild"
+                CapabilityStateDto::Queued,
+                "timeline must be queued before its worker starts"
             );
             assert_eq!(
                 matrix_state(&before.sources, &source_id, CapabilityKindDto::Artifacts),
-                CapabilityStateDto::NotApplicable,
-                "artifacts are notApplicable under MetadataOnly"
+                CapabilityStateDto::Queued,
+                "detached artifact extraction must be queued"
             );
 
-            rebuild_timeline_projection(
-                case_conn,
-                &active.case_root,
+            let runtime = PostImportRuntime {
+                tasks: Arc::new(TaskManager::new()),
+                bitlocker: Arc::new(
+                    app_services::bitlocker_runtime::BitLockerUnlockRegistry::default(),
+                ),
+                events: None,
+            };
+            post_import_service::rebuild_timeline(
+                &runtime,
                 &active.meta.id,
+                &active.case_root,
                 Some(&source_id),
-                TimelineProjectionPolicy::default(),
-                &cancel,
             )
             .map_err(|error| DbError::System(error.to_string()))?;
 
@@ -152,6 +141,10 @@ fn detached_import_lifecycle_capability_matrix() {
                 matrix_state(&after.sources, &source_id, CapabilityKindDto::Graph),
                 CapabilityStateDto::Ready,
                 "graph mirrors timeline and must be ready"
+            );
+            assert_eq!(
+                matrix_state(&after.sources, &source_id, CapabilityKindDto::Artifacts),
+                CapabilityStateDto::Queued,
             );
             Ok(outcome)
         })

@@ -66,6 +66,7 @@ pub mod partition_query_service;
 pub mod partition_storage_service;
 pub mod plugin_action_service;
 pub mod plugin_loader;
+pub mod post_import_service;
 pub mod registry_browser_service;
 pub mod report;
 pub mod rule_pack;

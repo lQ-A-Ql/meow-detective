@@ -39,7 +39,7 @@ pub async fn open_case(
     recover_interrupted_jobs(&app_state);
     // L2: re-admit queued/pending capability rows (requeue_running already
     // flipped stale running rows to queued inside case_service::open_case).
-    crate::post_import_scheduler::enqueue_case_pending(&app_state, Some(&app), &dto.id, &root);
+    crate::post_import_scheduler::enqueue_case_pending(&app_state, Some(&app), &dto.id, &root)?;
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
 }
