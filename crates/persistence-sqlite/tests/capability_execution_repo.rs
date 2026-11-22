@@ -125,6 +125,40 @@ fn duplicate_retry_does_not_change_the_running_attempt() {
 }
 
 #[test]
+fn expired_lease_cannot_replace_an_existing_capability_owner() {
+    let conn = setup();
+    let revision = queue(&conn, "source-0");
+    let attempt = claim(&conn, revision);
+    conn.execute(
+        "UPDATE data_source_processing_phases SET lease_expires_at = datetime('now', '-1 second')",
+        [],
+    )
+    .unwrap();
+    SourceCapabilityRepo::new(&conn)
+        .requeue_running("case")
+        .unwrap();
+    assert!(matches!(
+        CapabilityExecutionRepo::new(&conn)
+            .claim(CapabilityClaimRequest {
+                case_id: "case",
+                source_id: "source-0",
+                capability: "artifacts",
+                revision,
+                input_fingerprint: &"a".repeat(64),
+                owner: "process-b",
+            })
+            .unwrap(),
+        CapabilityClaimOutcome::Busy
+    ));
+    let current = persistence_sqlite::repositories::processing_phase_repo::DataSourceProcessingPhaseRepo::new(&conn)
+        .find(&domain::DataSourceId("source-0".into()), attempt.phase.phase)
+        .unwrap()
+        .unwrap();
+    assert_eq!(current.attempt_id, attempt.phase.attempt_id);
+    assert_eq!(current.owner_id, attempt.phase.owner_id);
+}
+
+#[test]
 fn wrong_case_and_stale_queue_revision_cannot_claim_work() {
     let conn = setup();
     assert!(CapabilityExecutionRepo::new(&conn)

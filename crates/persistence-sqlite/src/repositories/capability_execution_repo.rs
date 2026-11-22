@@ -114,7 +114,14 @@ impl<'a> CapabilityExecutionRepo<'a> {
         if row.revision != request.revision || !matches!(row.state.as_str(), "pending" | "queued") {
             return Ok(CapabilityClaimOutcome::Superseded);
         }
-        let claim = DataSourceProcessingPhaseRepo::new(&transaction).claim_in_transaction(
+        let phase_repo = DataSourceProcessingPhaseRepo::new(&transaction);
+        if phase_repo
+            .find(&DataSourceId(request.source_id.to_owned()), phase)?
+            .is_some_and(|attempt| attempt.state == ProcessingPhaseState::Running)
+        {
+            return Ok(CapabilityClaimOutcome::Busy);
+        }
+        let claim = phase_repo.claim_in_transaction(
             &DataSourceId(request.source_id.to_owned()),
             phase,
             CAPABILITY_EXECUTION_VERSION,
