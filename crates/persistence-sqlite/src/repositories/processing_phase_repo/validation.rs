@@ -7,20 +7,20 @@ use super::types::{
     DataSourceProcessingPhaseRecord, ProcessingPhaseState, ProcessingPhaseTransition,
 };
 
-pub(super) fn ensure_derived_source(
+pub(super) fn ensure_registered_source(
     conn: &Connection,
     data_source_id: &DataSourceId,
 ) -> DbResult<()> {
     let valid: bool = conn.query_row(
         "SELECT EXISTS(
             SELECT 1 FROM data_sources
-            WHERE id = ?1 AND kind IN ('ceph_rbd', 'ceph_fs')
+            WHERE id = ?1
          )",
         [&data_source_id.0],
         |row| row.get(0),
     )?;
     if !valid {
-        return invalid("processing phases require a Ceph derived data source");
+        return invalid("processing phases require a registered data source");
     }
     Ok(())
 }

@@ -10,7 +10,7 @@ mod validation;
 
 use storage::{decode_record, find_on, read_stored, update_transition};
 use validation::{
-    ensure_derived_source, invalid, transition_matches, valid_text, validate_attempt,
+    ensure_registered_source, invalid, transition_matches, valid_text, validate_attempt,
     validate_data_source_id, validate_identity, validate_transition_identity,
     validate_transition_payload,
 };
@@ -40,7 +40,7 @@ impl<'a> DataSourceProcessingPhaseRepo<'a> {
         input_fingerprint: &str,
     ) -> DbResult<DataSourceProcessingPhaseRecord> {
         validate_identity(data_source_id, version, input_fingerprint)?;
-        ensure_derived_source(self.conn, data_source_id)?;
+        ensure_registered_source(self.conn, data_source_id)?;
         if let Some(current) = self.find(data_source_id, phase)? {
             let identity_changed =
                 current.version != version || current.input_fingerprint != input_fingerprint;
@@ -112,7 +112,7 @@ impl<'a> DataSourceProcessingPhaseRepo<'a> {
         Ok(claim)
     }
 
-    fn claim_in_transaction(
+    pub(crate) fn claim_in_transaction(
         &self,
         data_source_id: &DataSourceId,
         phase: ProcessingPhase,

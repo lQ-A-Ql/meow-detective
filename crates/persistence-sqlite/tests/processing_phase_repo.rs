@@ -469,11 +469,11 @@ fn repository_rejects_invalid_sources_payloads_and_stale_attempts() {
     let conn = setup_case_db();
     let repo = DataSourceProcessingPhaseRepo::new(&conn);
     let source_id = DataSourceId(DERIVED_SOURCE_ID.to_string());
-    let ordinary_id = DataSourceId(ORDINARY_SOURCE_ID.to_string());
+    let unknown_id = DataSourceId("missing-source".to_string());
     let input = fingerprint('f');
 
     assert!(repo
-        .claim(&ordinary_id, ProcessingPhase::Artifacts, 1, &input, OWNER_A)
+        .claim(&unknown_id, ProcessingPhase::Artifacts, 1, &input, OWNER_A)
         .is_err());
     assert!(repo
         .claim(&source_id, ProcessingPhase::Artifacts, 0, &input, OWNER_A)

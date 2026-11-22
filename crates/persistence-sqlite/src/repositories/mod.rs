@@ -10,6 +10,7 @@ pub mod batch_repo;
 pub mod bitlocker_restore_intent_repo;
 pub mod case_graph_repo;
 pub mod case_repo;
+pub mod capability_execution_repo;
 pub mod catalog_publication_repo;
 pub mod ceph_bluefs_replay_repo;
 pub mod ceph_bluefs_repo;
