@@ -82,6 +82,16 @@ pub fn stage_native_records(
     native_output::stage(conn, case_root, source_id, artifacts, events, &[])
 }
 
+/// Prepare a verified mutable generation without changing its SQL publication.
+pub fn stage_source_generation(
+    conn: &rusqlite::Connection,
+    source_id: &str,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<StagedSourceGeneration, AnalysisServiceError> {
+    native_output::begin_streaming(conn, source_id, &[], cancel, |_| {}, |_| {})?
+        .seal(cancel, |_, _| {})
+}
+
 #[derive(Default)]
 pub struct ExtractionOutcome {
     pub artifacts: Vec<Artifact>,

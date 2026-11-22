@@ -414,6 +414,18 @@ fn rebuild_second_concurrent_call_is_rejected_in_flight() {
 }
 
 #[test]
+fn case_wide_and_single_source_rebuild_guards_conflict_in_both_directions() {
+    let case = domain::CaseId("guard-overlap".into());
+    let source = DataSourceId("guard-source".into());
+    let whole_case = acquire_rebuild_guard(&case, None).unwrap();
+    assert!(acquire_rebuild_guard(&case, Some(&source)).is_err());
+    drop(whole_case);
+    let single_source = acquire_rebuild_guard(&case, Some(&source)).unwrap();
+    assert!(acquire_rebuild_guard(&case, None).is_err());
+    drop(single_source);
+}
+
+#[test]
 fn rebuild_moves_fixture_source_back_to_complete() {
     let temporary = tempfile::tempdir().unwrap();
     let case = case_service::create_case(temporary.path(), "rebuild complete", None).unwrap();
@@ -427,22 +439,15 @@ fn rebuild_moves_fixture_source_back_to_complete() {
 
     let cancel = AtomicBool::new(false);
     let connection = case.connection().expect("case connection");
-    let status = match rebuild_timeline_projection(
+    let status = rebuild_timeline_projection(
         &connection,
         &case.case_root,
         &case.meta.id,
         Some("building"),
         TimelineProjectionPolicy::default(),
         &cancel,
-    ) {
-        Ok(status) => status,
-        Err(error) => {
-            eprintln!(
-                "rebuild on empty fixture source did not run (recorded as evidence): {error}"
-            );
-            return;
-        }
-    };
+    )
+    .expect("timeline rebuild must complete");
     let row = status
         .sources
         .iter()

@@ -29,7 +29,6 @@ pub use candidates::{
 pub use classification::{classify_files_by_magic, classify_files_by_metadata};
 pub use error::AnalysisServiceError;
 pub use extraction::run_analysis_extraction_execution_with_cancel;
-pub use extraction::stage_native_records;
 pub use extraction::warm_linux_artifact_summary;
 pub use extraction::AnalysisExtractionExecution;
 pub use extraction::{
@@ -40,6 +39,7 @@ pub use extraction::{
     run_analysis_extraction, run_analysis_extraction_with_cancel,
     run_analysis_extraction_with_reader_limits, ExtractionOutcome,
 };
+pub use extraction::{stage_native_records, stage_source_generation};
 pub use file_classification::build_file_classification_board;
 pub use platforms::{
     resolve_data_source_platform, select_evidence_scan_categories, validate_analysis_categories,

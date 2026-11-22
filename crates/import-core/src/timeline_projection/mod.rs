@@ -14,7 +14,7 @@ pub(crate) mod workspace;
 pub use error::TimelineProjectionError;
 pub use timing::TimelineWriteTimings;
 
-pub(crate) use workspace::plan_required_bytes;
+pub use workspace::plan_required_bytes;
 
 use crate::timeline_projection::fjall as projection_fjall;
 

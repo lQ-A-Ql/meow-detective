@@ -6,6 +6,8 @@ pub enum TimelineServiceError {
     Db(#[from] persistence_sqlite::DbError),
     #[error("source storage error: {0}")]
     Storage(#[from] persistence_source::fjall::FjallStorageError),
+    #[error(transparent)]
+    Resources(#[from] source_kernel::resource_budget::ResourceError),
     #[error("not found: {0}")]
     NotFound(String),
     #[error("invalid input: {0}")]
@@ -38,6 +40,7 @@ impl transport::ServiceErrorCategory for TimelineServiceError {
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
             Self::Cancelled => transport::ErrorCategory::Cancelled,
             Self::Other(_) => transport::ErrorCategory::Internal,
+            Self::Resources(error) => transport::ServiceErrorCategory::category(error),
         }
     }
 

@@ -16,6 +16,7 @@ mod candidate;
 
 pub struct StagedGeneration {
     pub name: String,
+    parent_generation: String,
     path: PathBuf,
     committed: bool,
 }
@@ -25,8 +26,18 @@ impl StagedGeneration {
         self.committed = true;
     }
 
+    pub fn bind(&self, conn: &Connection) -> Result<(), AnalysisServiceError> {
+        persistence_source::detail::bind_generation_if_current(
+            conn,
+            &self.parent_generation,
+            &self.name,
+        )?;
+        Ok(())
+    }
+
     fn create(
         layout: &persistence_source::fjall::SourceBuildLayout,
+        source: &SourceStore,
     ) -> Result<Self, AnalysisServiceError> {
         let path = layout.build_path();
         let parent = path.parent().ok_or_else(|| {
@@ -36,6 +47,15 @@ impl StagedGeneration {
         std::fs::create_dir(&path)?;
         Ok(Self {
             name: format!("source.fjall.build.{}", layout.attempt_id()),
+            parent_generation: source
+                .database()
+                .path()
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or_else(|| {
+                    AnalysisServiceError::InvalidInput("source generation name is invalid".into())
+                })?
+                .to_owned(),
             path,
             committed: false,
         })
@@ -276,7 +296,7 @@ pub(super) fn begin_streaming(
     let source = (*source).clone();
     let attempt = format!("analysis-{}", Uuid::new_v4());
     let layout = SourceCaseLayout::from_published_store(&source, source_id, &attempt)?;
-    let staged = StagedGeneration::create(&layout)?;
+    let staged = StagedGeneration::create(&layout, &source)?;
     let (store, verified_clone) =
         persistence_source::fjall::clone_verified_generation_with_control(
             &source,
@@ -316,7 +336,7 @@ pub(super) fn stage(
         case_root, source_id, &attempt,
     )
     .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
-    let staged = StagedGeneration::create(&layout)?;
+    let staged = StagedGeneration::create(&layout, &source)?;
     let (store, verified_clone) =
         persistence_source::fjall::clone_verified_generation_with_control(
             &source,

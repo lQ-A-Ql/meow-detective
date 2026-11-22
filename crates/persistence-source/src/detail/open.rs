@@ -52,6 +52,21 @@ pub fn bind_generation(conn: &Connection, name: &str) -> DbResult<()> {
     Ok(())
 }
 
+pub fn bind_generation_if_current(conn: &Connection, expected: &str, name: &str) -> DbResult<()> {
+    crate::control::generation::validate_generation_name(expected)?;
+    crate::control::generation::validate_generation_name(name)?;
+    let changed = conn.execute(
+        "UPDATE source_meta SET value = ?1 WHERE key = ?2 AND value = ?3",
+        rusqlite::params![name, FJALL_ROOT_KEY, expected],
+    )?;
+    if changed != 1 {
+        return Err(DbError::System(
+            "source generation changed before publication".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub fn source_id(conn: &Connection) -> DbResult<Option<String>> {
     match conn.query_row(
         "SELECT value FROM source_meta WHERE key = ?1",

@@ -1,6 +1,6 @@
 use domain::DataSourceId;
 use persistence_source::control::{open_source_db, source_db_path};
-use persistence_source::detail::bind_generation;
+use persistence_source::detail::{bind_generation, bind_generation_if_current};
 use persistence_source::fjall::{KeyspaceName, PersistMode, VersionedEnvelope};
 use persistence_source::runtime::{
     open_source_read_only, open_source_read_write, source_storage_root,
@@ -76,6 +76,28 @@ fn current_generation_changes_only_after_the_sqlite_binding_commits() {
     assert_eq!(
         details.database().path(),
         std::fs::canonicalize(current.source_root()).unwrap()
+    );
+}
+
+#[test]
+fn conditional_publication_rejects_a_stale_generation_without_changing_the_binding() {
+    let root = tempfile::tempdir().unwrap();
+    let id = DataSourceId("conditional-publication".into());
+    let control = open_source_db(root.path(), &id).unwrap();
+    bind_generation_if_current(&control, "source.fjall", "source.fjall.build.first").unwrap();
+    assert!(
+        bind_generation_if_current(&control, "source.fjall", "source.fjall.build.second").is_err()
+    );
+    let name: String = control
+        .query_row(
+            "SELECT value FROM source_meta WHERE key='fjall_root'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(name, "source.fjall.build.first");
+    assert!(
+        bind_generation_if_current(&control, "source.fjall.build.first", "../invalid").is_err()
     );
 }
 

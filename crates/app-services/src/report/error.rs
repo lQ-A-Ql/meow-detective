@@ -7,6 +7,8 @@ pub enum ReportError {
     Sqlite(#[from] rusqlite::Error),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Resources(#[from] source_kernel::resource_budget::ResourceError),
     #[error("not found: {0}")]
     NotFound(String),
     #[error("unsupported: {0}")]
@@ -22,6 +24,7 @@ impl transport::ServiceErrorCategory for ReportError {
             Self::NotFound(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
             Self::Other(_) => transport::ErrorCategory::Internal,
+            Self::Resources(error) => transport::ServiceErrorCategory::category(error),
         }
     }
 }
@@ -94,6 +97,9 @@ impl From<crate::timeline_service::TimelineServiceError> for ReportError {
                 Self::Other(error.to_string())
             }
             crate::timeline_service::TimelineServiceError::Db(error) => Self::Db(error),
+            crate::timeline_service::TimelineServiceError::Resources(error) => {
+                Self::Resources(error)
+            }
             crate::timeline_service::TimelineServiceError::NotFound(message)
             | crate::timeline_service::TimelineServiceError::InvalidInput(message) => {
                 Self::NotFound(message)

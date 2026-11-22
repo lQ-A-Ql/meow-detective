@@ -91,7 +91,26 @@ pub(super) fn materialize(
         engine_retained_bytes = estimate.engine_retained_bytes,
         "Timeline projection workspace planned (constant segment plan)"
     );
+    drop(store);
+    let mut generation = analysis_core::analysis_service::stage_source_generation(
+        conn, &source, cancel,
+    )
+    .map_err(|error| match error {
+        analysis_core::analysis_service::AnalysisServiceError::Cancelled => {
+            TimelineProjectionError::Cancelled
+        }
+        other => TimelineProjectionError::Other(other.to_string()),
+    })?;
+    let transaction = conn.unchecked_transaction()?;
+    generation
+        .bind(&transaction)
+        .map_err(|error| TimelineProjectionError::Other(error.to_string()))?;
+    let store = persistence_source::detail::require_source_store(&transaction)?;
     let timeline = TimelineRecordStore::from_source_store((*store).clone());
+    let meta =
+        persistence_sqlite::repositories::timeline_projection_repo::TimelineProjectionRepo::new(
+            &transaction,
+        );
     let mut timings = TimelineWriteTimings::default();
     let outcome = if file_done {
         None
@@ -111,7 +130,7 @@ pub(super) fn materialize(
     let events_elapsed_ms = started.elapsed().as_millis();
     let graph_started = Instant::now();
     if !graph_done {
-        project_graph(conn, &timeline, &source, cancel, &mut timings)?;
+        project_graph(&transaction, &timeline, &source, cancel, &mut timings)?;
         meta.mark_done(GRAPH_PROJECTION_KEY, 0, identity)?;
     }
     let outcome = outcome.unwrap_or(SegmentedReplaceOutcome {
@@ -120,11 +139,34 @@ pub(super) fn materialize(
         segments: 0,
         max_segment_bytes: 0,
     });
+    ensure_active(cancel)?;
+    transaction.commit()?;
+    generation.commit();
+    projection_stats(
+        outcome,
+        timings,
+        estimate,
+        started,
+        events_elapsed_ms,
+        graph_started.elapsed().as_millis(),
+        policy,
+    )
+}
+
+fn projection_stats(
+    outcome: SegmentedReplaceOutcome,
+    timings: TimelineWriteTimings,
+    estimate: super::workspace::WorkspaceEstimate,
+    started: Instant,
+    events_elapsed_ms: u128,
+    graph_elapsed_ms: u128,
+    policy: timeline::TimelineProjectionPolicy,
+) -> Result<TimelineProjectionStats, TimelineProjectionError> {
     Ok(TimelineProjectionStats {
         inserted_count: outcome.inserted_records,
         elapsed_ms: started.elapsed().as_millis(),
         events_elapsed_ms,
-        graph_elapsed_ms: graph_started.elapsed().as_millis(),
+        graph_elapsed_ms,
         timings,
         already_projected: false,
         graph_complete: true,
@@ -302,13 +344,12 @@ fn project_graph(
         |row| row.get(0),
     )?;
     let created = chrono::Utc::now().to_rfc3339();
-    let tx = conn.unchecked_transaction()?;
-    tx.execute("DELETE FROM graph_edges WHERE source_id IN (SELECT id FROM graph_nodes WHERE case_id = ?1 AND node_type = 'timeline_event')",[&case_id])?;
-    tx.execute(
+    conn.execute("DELETE FROM graph_edges WHERE source_id IN (SELECT id FROM graph_nodes WHERE case_id = ?1 AND node_type = 'timeline_event')",[&case_id])?;
+    conn.execute(
         "DELETE FROM graph_nodes WHERE case_id = ?1 AND node_type = 'timeline_event'",
         [&case_id],
     )?;
-    let graph = GraphRepo::new(&tx);
+    let graph = GraphRepo::new(conn);
     let snapshot = timeline.read_snapshot();
     let mut cursor = None;
     loop {
@@ -354,7 +395,6 @@ fn project_graph(
         }
     }
     ensure_active(cancel)?;
-    tx.commit()?;
     Ok(())
 }
 

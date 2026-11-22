@@ -26,8 +26,9 @@ const COUNT_ALLOWANCE_BYTES: u64 = 8 * MIB;
 /// segmented path.
 const GRAPH_ALLOWANCE_BYTES: u64 = 32 * MIB;
 
-/// Per-record container overhead inside one segment: 96 B × segment record cap.
-const SEGMENT_RECORD_CONTAINER_BYTES: u64 = 96;
+/// Per-record container allocation inside one segment.
+const SEGMENT_RECORD_CONTAINER_BYTES: u64 =
+    std::mem::size_of::<persistence_source::fjall::TimelineRecord>() as u64;
 const SEGMENT_MAX_RECORDS: u64 = 100_000;
 
 /// Constant segment plan. The estimate is intentionally decoupled from the
@@ -47,7 +48,7 @@ pub(crate) struct WorkspaceEstimate {
 /// Fixed plan bytes: BASE + ENGINE_RETAINED + SEGMENT + segment container +
 /// COUNT_ALLOWANCE + GRAPH_ALLOWANCE. Compile-time constant so the plan never
 /// depends on how many files or events the case holds.
-pub(crate) const fn plan_required_bytes() -> u64 {
+pub const fn plan_required_bytes() -> u64 {
     let segment_container = SEGMENT_RECORD_CONTAINER_BYTES * SEGMENT_MAX_RECORDS;
     BASE_WORKSPACE_BYTES
         + ENGINE_RETAINED_BYTES

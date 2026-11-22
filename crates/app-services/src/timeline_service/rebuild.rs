@@ -47,7 +47,9 @@ pub fn acquire_rebuild_guard(
     let key = (case_id.0.clone(), source_id.map(|id| id.0.clone()));
     let set = ACTIVE_REBUILDS.get_or_init(|| Mutex::new(HashSet::new()));
     let mut locked = set.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if locked.contains(&key) {
+    if locked.iter().any(|(case, source)| {
+        case == &key.0 && (source.is_none() || key.1.is_none() || source == &key.1)
+    }) {
         return Err(TimelineServiceError::RebuildInProgress { source_id: key.1 });
     }
     locked.insert(key.clone());
@@ -74,18 +76,15 @@ pub fn rebuild_timeline_projection(
         } else if !needs_rebuild(case_root, &source.id)? {
             continue;
         }
-        let ready =
-            match source_db::open_ready_source_by_id(case_conn, case_root, case_id, &source.id) {
-                Ok(ready) => ready,
-                Err(error) => {
-                    tracing::warn!(
-                        source_id = %source.id.0,
-                        error = %error,
-                        "skipping source that cannot be opened for timeline rebuild"
-                    );
-                    continue;
-                }
-            };
+        let ready = source_db::open_ready_source_by_id(case_conn, case_root, case_id, &source.id)?;
+        let _budget = source_kernel::resource_budget::global_pool().acquire(
+            source_kernel::resource_budget::Resources {
+                bytes: import_core::timeline_projection::plan_required_bytes(),
+                workers: 1,
+                ..Default::default()
+            },
+            Some(cancel),
+        )?;
         materialize_file_activity_with_policy(&ready.connection, ready.platform, cancel, policy)?;
         rebuilt = true;
     }
@@ -101,17 +100,7 @@ pub fn rebuild_timeline_projection(
 }
 
 fn needs_rebuild(case_root: &Path, source_id: &DataSourceId) -> Result<bool, TimelineServiceError> {
-    let handle = match source_db::open_registered_fjall_source_read_only(case_root, source_id) {
-        Ok(handle) => handle,
-        Err(error) => {
-            tracing::warn!(
-                source_id = %source_id.0,
-                error = %error,
-                "skipping unavailable source during timeline rebuild scan"
-            );
-            return Ok(false);
-        }
-    };
+    let handle = source_db::open_registered_fjall_source_read_only(case_root, source_id)?;
     let snapshot = handle.snapshot();
     let Some(payload) = handle.timeline_projection_state(&snapshot, &source_id.0)? else {
         return Ok(false);

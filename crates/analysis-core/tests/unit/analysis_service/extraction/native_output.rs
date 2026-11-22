@@ -91,6 +91,44 @@ fn event(id: &str, object: &str, parser: &str) -> TimelineEvent {
 }
 
 #[test]
+fn concurrent_staged_generations_require_the_original_publication() {
+    let (root, connection, _source) = setup();
+    let case_root = root.path().join("case");
+    let mut first = super::stage(
+        &connection,
+        &case_root,
+        "source-1",
+        &[artifact("first", "object", "linux.web.current")],
+        &[],
+        &[],
+    )
+    .unwrap();
+    let second = super::stage(
+        &connection,
+        &case_root,
+        "source-1",
+        &[artifact("second", "object", "linux.web.current")],
+        &[],
+        &[],
+    )
+    .unwrap();
+    first.bind(&connection).unwrap();
+    first.commit();
+    assert!(second.bind(&connection).is_err());
+    let current = persistence_source::detail::require_source_store(&connection).unwrap();
+    let artifacts = ArtifactRecordStore::from_source_store((*current).clone());
+    let snapshot = artifacts.read_snapshot();
+    assert!(artifacts
+        .get(&snapshot, "source-1", "first")
+        .unwrap()
+        .is_some());
+    assert!(artifacts
+        .get(&snapshot, "source-1", "second")
+        .unwrap()
+        .is_none());
+}
+
+#[test]
 fn analysis_generation_replacement_preserves_previous_source_until_commit() {
     let (root, connection, source) = setup();
     let replacement = AnalysisOutputReplacement {

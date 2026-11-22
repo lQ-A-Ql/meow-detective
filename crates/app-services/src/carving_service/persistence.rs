@@ -53,8 +53,9 @@ pub(super) fn persist(
     let transaction = conn
         .unchecked_transaction()
         .map_err(CommandError::from_service_error)?;
-    persistence_source::detail::bind_generation(&transaction, &staged.name)
-        .map_err(CommandError::from_service_error)?;
+    staged
+        .bind(&transaction)
+        .map_err(CommandError::from_typed_service_error)?;
     persist_artifact_fingerprints(&transaction, case, source, &artifacts)?;
     GraphRepo::new(&transaction)
         .insert_nodes_in_transaction(&nodes)
