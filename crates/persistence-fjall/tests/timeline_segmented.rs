@@ -243,8 +243,7 @@ fn producer_failure_leaves_zero_effect_and_rerun_is_exact_and_idempotent() {
     assert!(store.get(&failed, "source", "old-0000").unwrap().is_some());
     assert!(store.get(&failed, "source", "new-0000").unwrap().is_none());
     assert_eq!(store.cursor_revision(&failed).unwrap(), revision);
-    let marker = read_marker(&failed, "source").unwrap();
-    assert_eq!(marker.status, TimelineProjectionState::Building);
+    assert!(read_marker(&failed, "source").is_none());
 
     let rerun: Vec<TimelineRecord> = (0..10).map(new_record).collect();
     let mut rerun_calls = 0usize;
@@ -334,4 +333,82 @@ fn empty_replacement_writes_complete_in_its_own_transaction() {
     let marker = read_marker(&after, "source").unwrap();
     assert_eq!(marker.status, TimelineProjectionState::Complete);
     assert_eq!(marker.inserted_events, 0);
+}
+
+#[test]
+fn invalid_replacement_identity_preserves_records_revision_and_marker() {
+    for malformed in ["source", "parser", "id"] {
+        let root = tempfile::tempdir().unwrap();
+        let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+        let mut initial = Some(vec![old_record(0)]);
+        store
+            .replace_by_parser_prefix_segmented(
+                "source",
+                "timeline.",
+                "published",
+                PersistMode::SyncAll,
+                SegmentLimits::default_limits(),
+                || -> ProducerResult { Ok(initial.take()) },
+            )
+            .unwrap();
+        let before = store.read_snapshot();
+        let revision = store.cursor_revision(&before).unwrap();
+        let mut invalid = new_record(0);
+        match malformed {
+            "source" => invalid.data_source_id = "another-source".into(),
+            "parser" => invalid.parser_id = Some("another.parser".into()),
+            "id" => invalid.id.clear(),
+            _ => unreachable!(),
+        }
+        let mut replacement = Some(vec![new_record(1), invalid]);
+        assert!(store
+            .replace_by_parser_prefix_segmented(
+                "source",
+                "timeline.",
+                "replacement",
+                PersistMode::SyncAll,
+                SegmentLimits::default_limits(),
+                || -> ProducerResult { Ok(replacement.take()) },
+            )
+            .is_err());
+        let after = store.read_snapshot();
+        assert_eq!(store.cursor_revision(&after).unwrap(), revision);
+        assert_eq!(
+            store.count_by_time(&after, "source", None, None).unwrap(),
+            1
+        );
+        assert!(store.get(&after, "source", "old-0000").unwrap().is_some());
+        assert!(store.get(&after, "source", "new-0001").unwrap().is_none());
+        let marker = read_marker(&after, "source").unwrap();
+        assert_eq!(marker.identity, "published");
+        assert_eq!(marker.status, TimelineProjectionState::Complete);
+    }
+}
+
+#[test]
+fn oversized_record_is_rejected_before_replacing_existing_projection() {
+    let root = tempfile::tempdir().unwrap();
+    let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    store
+        .upsert_batch(&[old_record(0)], PersistMode::SyncAll)
+        .unwrap();
+    let revision = store.cursor_revision(&store.read_snapshot()).unwrap();
+    let mut replacement = Some(vec![new_record(0)]);
+    assert!(store
+        .replace_by_parser_prefix_segmented(
+            "source",
+            "timeline.",
+            "oversized",
+            PersistMode::SyncAll,
+            SegmentLimits {
+                max_bytes: 1,
+                max_records: 1
+            },
+            || -> ProducerResult { Ok(replacement.take()) },
+        )
+        .is_err());
+    let after = store.read_snapshot();
+    assert_eq!(store.cursor_revision(&after).unwrap(), revision);
+    assert!(store.get(&after, "source", "old-0000").unwrap().is_some());
+    assert!(read_marker(&after, "source").is_none());
 }

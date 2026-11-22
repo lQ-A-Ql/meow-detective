@@ -20,6 +20,8 @@ use crate::{
     ScanDirection, TimelineStreamError,
 };
 use std::collections::{BTreeMap, HashMap};
+mod spool;
+use spool::RecordSpool;
 
 const DELETE_SEGMENT_MAX_RECORDS: usize = 512;
 
@@ -49,26 +51,19 @@ where
 {
     validate_segmented_request(source_id, prefix, identity)
         .map_err(TimelineStreamError::Storage)?;
-    write_building_marker(store, source_id, identity).map_err(TimelineStreamError::Storage)?;
-
-    let mut collected: Vec<TimelineRecord> = Vec::new();
-    let mut next_batch = next_batch;
-    while let Some(batch) = next_batch().map_err(TimelineStreamError::Producer)? {
-        if batch.is_empty() {
-            return Err(TimelineStreamError::Storage(
-                FjallStorageError::InvalidEnvelope(
-                    "streamed timeline replacement produced an empty batch".into(),
-                ),
-            ));
-        }
-        collected.extend(batch);
+    if limits.max_bytes == 0 || limits.max_records == 0 {
+        return Err(TimelineStreamError::Storage(
+            FjallStorageError::InvalidEnvelope("timeline segment limits must be positive".into()),
+        ));
     }
+    let mut staged = RecordSpool::stage(store, source_id, prefix, &limits, next_batch)?;
+    write_building_marker(store, source_id, identity).map_err(TimelineStreamError::Storage)?;
 
     let snapshot = store.source_store().database().read_snapshot();
     let (deleted_records, delete_segments) =
         delete_prefix_segmented(store, &snapshot, source_id, prefix, mode)
             .map_err(TimelineStreamError::Storage)?;
-    let summary = insert_collected(store, source_id, prefix, identity, mode, limits, collected)
+    let summary = insert_staged(store, source_id, identity, mode, limits, &mut staged)
         .map_err(TimelineStreamError::Storage)?;
 
     Ok(SegmentedReplaceOutcome {
@@ -218,16 +213,15 @@ fn commit_delete_segment(
         .map(|_| ())
 }
 
-fn insert_collected(
+fn insert_staged(
     store: &TimelineRecordStore,
     source_id: &str,
-    prefix: &str,
     identity: &str,
     mode: PersistMode,
     limits: SegmentLimits,
-    records: Vec<TimelineRecord>,
+    staged: &mut RecordSpool,
 ) -> Result<InsertPhaseSummary> {
-    if records.is_empty() {
+    if staged.records == 0 {
         write_complete_marker(store, source_id, identity, 0)?;
         return Ok(InsertPhaseSummary {
             inserted: 0,
@@ -236,18 +230,20 @@ fn insert_collected(
         });
     }
 
-    let total = records.len() as u64;
+    let total = staged.records;
     let mut inserted = 0u64;
     let mut segments = 0u64;
     let mut max_segment_bytes = 0u64;
     let mut buffered: Vec<TimelineRecord> = Vec::new();
     let mut buffered_bytes = 0u64;
 
-    for record in records {
-        validate_replacement_record(&record, source_id, prefix)?;
-        let cost = TimelineRecordStore::record_storage_cost(&record)?;
+    for staged_record in staged.reader() {
+        let spool::StagedRecord {
+            record,
+            write_bytes,
+        } = staged_record?;
         if !buffered.is_empty()
-            && segment_full(buffered.len(), buffered_bytes, cost.write_bytes, &limits)
+            && segment_full(buffered.len(), buffered_bytes, write_bytes, &limits)
         {
             let committed = commit_insert_segment(
                 store,
@@ -264,7 +260,7 @@ fn insert_collected(
             max_segment_bytes = max_segment_bytes.max(committed.bytes);
             buffered_bytes = 0;
         }
-        buffered_bytes = buffered_bytes.saturating_add(cost.write_bytes);
+        buffered_bytes = buffered_bytes.saturating_add(write_bytes);
         buffered.push(record);
     }
 
