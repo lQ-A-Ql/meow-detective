@@ -158,6 +158,10 @@ where
     if descriptor.source_kind == "ceph_rbd" {
         return read_ceph_rbd_descriptor_range(context, descriptor, offset, length);
     }
+    if descriptor.source_kind == "nested_range" {
+        return open_range_content_for_descriptor_with_context(context, descriptor)
+            .and_then(|reader| read_from_range_reader(reader, offset, length));
+    }
     if matches!(
         descriptor.source_kind.as_str(),
         "e01" | "raw" | "local_disk"

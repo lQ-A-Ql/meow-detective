@@ -33,6 +33,17 @@ impl PreviewReadContext for SourceReadContext<'_> {
                 .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
                 .map_err(|error| FileServiceError::other(error.to_string()));
         }
+        if descriptor.source_kind == "nested_range" {
+            use evidence_core::EvidenceReaderFactory;
+            return crate::source_runtime::nested_range::NestedRangeFactory::for_source(
+                self.case_conn,
+                self.case_root,
+                self.case_id,
+                self.data_source_id,
+            )?
+            .open_reader()
+            .map_err(FileServiceError::Io);
+        }
         open_host_evidence_reader(
             &descriptor.source_kind,
             Path::new(&descriptor.source_path),

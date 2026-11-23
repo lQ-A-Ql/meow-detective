@@ -43,6 +43,7 @@ pub(crate) fn run_enumeration_phase(
         domain::DataSourceKind::E01
         | domain::DataSourceKind::Raw
         | domain::DataSourceKind::LocalDisk
+        | domain::DataSourceKind::NestedRange
         | domain::DataSourceKind::AndroidSparse => {
             enumerate_image_data_source_with_staging(ctx, data_source)?
         }

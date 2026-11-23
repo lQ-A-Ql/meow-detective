@@ -7,7 +7,6 @@ use transport::CommandError;
 
 mod cephfs;
 mod generation;
-mod nested;
 mod projection_state;
 mod projections;
 mod records;
@@ -16,7 +15,6 @@ use generation::{
     active_generation_root, active_root as active_import_generation_root,
     publish as publish_source_generation,
 };
-use nested::mirror_nested_lineage;
 use projection_state::{
     analysis_projection_marker, analysis_projection_revision, catalog_projection_is_published,
     ensure_analysis_projection_building, ensure_projection_building, publish_projection_marker,
@@ -352,7 +350,6 @@ fn mirror_projection_records(
     }
     if include_catalog {
         mirror_namespace_locators(source_connection, source, source_id)?;
-        mirror_nested_lineage(case_connection, source, source_id)?;
         source
             .partition_projection_publish(source_id)
             .map_err(|error| CommandError::internal(error.to_string()))?;

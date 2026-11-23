@@ -4,6 +4,9 @@ use std::path::PathBuf;
 use domain::{CaseId, DataSourceId, FileEntryId};
 use evidence_core::{EvidenceReader, EvidenceReaderFactory, ReaderCapabilities, ReaderInfo};
 use persistence_source::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::nested_evidence_repo::{
+    NestedEvidenceRepo, NestedRangeLocator,
+};
 
 use crate::digest_service::{identity, DigestTarget};
 use crate::file_service::{read_file_bytes_for_case, SourceReadContext};
@@ -19,25 +22,71 @@ pub struct NestedRangeFactory {
 }
 
 impl NestedRangeFactory {
+    pub fn for_source(
+        conn: &rusqlite::Connection,
+        case_root: &std::path::Path,
+        case_id: &CaseId,
+        source_id: &DataSourceId,
+    ) -> io::Result<Self> {
+        let locator = NestedEvidenceRepo::new(conn)
+            .find_range(source_id)
+            .map_err(io::Error::other)?
+            .ok_or_else(|| io::Error::other(super::SourceInvalidated))?;
+        Ok(Self::from_locator(case_root, case_id, &locator))
+    }
+
+    pub fn from_locator(
+        case_root: &std::path::Path,
+        case_id: &CaseId,
+        locator: &NestedRangeLocator,
+    ) -> Self {
+        Self {
+            case_root: case_root.to_path_buf(),
+            case_id: case_id.clone(),
+            parent_id: locator.parent_id.clone(),
+            file_id: locator.file_id.clone(),
+            revision: locator.revision.clone(),
+            length: locator.length,
+        }
+    }
+
     fn open_case(&self) -> io::Result<rusqlite::Connection> {
-        let conn = crate::connection::open_existing_case_db(&self.case_root.join("app.db"))
-            .map_err(io::Error::other)?;
-        let file_id = crate::source_db::encode_source_scoped_id(&self.parent_id, &self.file_id.0);
-        let current = identity::snapshot(
-            &conn,
-            &self.case_root,
-            &self.case_id,
-            &DigestTarget {
-                data_source_id: Some(&self.parent_id.0),
-                file_id: Some(&file_id),
-                partition_index: None,
-            },
+        let conn = rusqlite::Connection::open_with_flags(
+            self.case_root.join("app.db"),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
         )
         .map_err(io::Error::other)?;
-        if current.revision != self.revision {
-            return Err(io::Error::other(super::SourceInvalidated));
+        let repo = NestedEvidenceRepo::new(&conn);
+        let mut parent = self.parent_id.clone();
+        let mut file = self.file_id.clone();
+        let mut revision = self.revision.clone();
+        for _ in 0..4 {
+            let file_id = crate::source_db::encode_source_scoped_id(&parent, &file.0);
+            let current = identity::snapshot(
+                &conn,
+                &self.case_root,
+                &self.case_id,
+                &DigestTarget {
+                    data_source_id: Some(&parent.0),
+                    file_id: Some(&file_id),
+                    partition_index: None,
+                },
+            )
+            .map_err(io::Error::other)?;
+            if current.revision != revision {
+                return Err(io::Error::other(super::SourceInvalidated));
+            }
+            let Some(locator) = repo.find_range(&parent).map_err(io::Error::other)? else {
+                return Ok(conn);
+            };
+            parent = locator.parent_id;
+            file = locator.file_id;
+            revision = locator.revision;
         }
-        Ok(conn)
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "nested evidence exceeds four levels",
+        ))
     }
 }
 

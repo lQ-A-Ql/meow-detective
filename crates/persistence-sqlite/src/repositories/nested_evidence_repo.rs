@@ -1,6 +1,14 @@
 use crate::connection::DbResult;
 use domain::{DataSourceId, NestedEvidenceLineage};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct NestedRangeLocator {
+    pub parent_id: DataSourceId,
+    pub file_id: domain::FileEntryId,
+    pub revision: String,
+    pub length: u64,
+}
 
 pub struct NestedEvidenceRepo<'a> {
     conn: &'a Connection,
@@ -9,6 +17,36 @@ pub struct NestedEvidenceRepo<'a> {
 impl<'a> NestedEvidenceRepo<'a> {
     pub fn new(conn: &'a Connection) -> Self {
         Self { conn }
+    }
+
+    pub fn insert_range(&self, id: &DataSourceId, locator: &NestedRangeLocator) -> DbResult<()> {
+        let length = i64::try_from(locator.length)
+            .map_err(|_| crate::connection::DbError::System("nested range is too large".into()))?;
+        self.conn.execute(
+            "INSERT INTO nested_range_sources(source_id,parent_id,file_id,parent_revision,payload_length)
+             VALUES (?1,?2,?3,?4,?5)",
+            params![id.0, locator.parent_id.0, locator.file_id.0, locator.revision, length],
+        )?;
+        Ok(())
+    }
+
+    pub fn find_range(&self, id: &DataSourceId) -> DbResult<Option<NestedRangeLocator>> {
+        self.conn
+            .query_row(
+                "SELECT parent_id,file_id,parent_revision,payload_length
+             FROM nested_range_sources WHERE source_id=?1",
+                [&id.0],
+                |row| {
+                    Ok(NestedRangeLocator {
+                        parent_id: DataSourceId(row.get(0)?),
+                        file_id: domain::FileEntryId(row.get(1)?),
+                        revision: row.get(2)?,
+                        length: row.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     pub fn upsert(&self, lineage: &NestedEvidenceLineage) -> DbResult<()> {

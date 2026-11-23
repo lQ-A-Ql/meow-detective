@@ -47,7 +47,7 @@ where
     {
         return open_file_content_for_descriptor(descriptor);
     }
-    if descriptor.source_kind != "ceph_rbd"
+    if !matches!(descriptor.source_kind.as_str(), "ceph_rbd" | "nested_range")
         && !matches!(
             descriptor.source_kind.as_str(),
             "e01" | "raw" | "local_disk" | "android_sparse"
@@ -94,7 +94,7 @@ where
     {
         return open_range_content_for_descriptor(descriptor);
     }
-    if descriptor.source_kind != "ceph_rbd"
+    if !matches!(descriptor.source_kind.as_str(), "ceph_rbd" | "nested_range")
         && !matches!(
             descriptor.source_kind.as_str(),
             "e01" | "raw" | "local_disk" | "android_sparse"

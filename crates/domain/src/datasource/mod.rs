@@ -26,6 +26,8 @@ pub enum DataSourceKind {
     CephFs,
     /// A persisted read-only Linux MD RAID0 array descriptor.
     MdRaid,
+    /// A fixed VHD payload read from a registered parent file.
+    NestedRange,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -88,6 +90,7 @@ impl fmt::Display for DataSourceKind {
             Self::CephRbd => write!(f, "ceph_rbd"),
             Self::CephFs => write!(f, "ceph_fs"),
             Self::MdRaid => write!(f, "md_raid"),
+            Self::NestedRange => write!(f, "nested_range"),
         }
     }
 }

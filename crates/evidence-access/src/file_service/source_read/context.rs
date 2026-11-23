@@ -197,11 +197,13 @@ impl<'a> SourceReadContext<'a> {
         }
         let entry = metadata::hint_file_entry(hint);
         let candidates = match source_kind {
-            "e01" | "ceph_rbd" => crate::file_service::viewer::e01_partition_candidates(
-                self.source_conn,
-                &entry,
-                Some(partition_index),
-            )?,
+            "e01" | "ceph_rbd" | "nested_range" => {
+                crate::file_service::viewer::e01_partition_candidates(
+                    self.source_conn,
+                    &entry,
+                    Some(partition_index),
+                )?
+            }
             "raw" | "local_disk" | "android_sparse" => {
                 crate::file_service::viewer::block_partition_candidates(
                     source_path,

@@ -53,7 +53,7 @@ fn setup_case_db() -> rusqlite::Connection {
 #[test]
 fn latest_migration_registers_source_capability_table() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0068_source_capability");
+    assert_eq!(runner::latest_version(), "0069_nested_range_sources");
     let tables: Vec<String> = conn
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='source_capability'")
         .expect("prepare table query")

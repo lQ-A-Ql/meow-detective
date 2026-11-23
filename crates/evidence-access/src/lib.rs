@@ -24,7 +24,6 @@ pub mod file_service;
 pub mod hash_service;
 pub mod linux_identity_service;
 pub mod mdraid;
-pub mod nested_lineage;
 pub mod partition_capabilities;
 pub mod partition_query_service;
 pub mod partition_storage_service;

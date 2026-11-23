@@ -180,6 +180,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0068_source_capability",
         include_str!("scripts/0068_source_capability.sql"),
     ),
+    (
+        "0069_nested_range_sources",
+        include_str!("scripts/0069_nested_range_sources.sql"),
+    ),
 ];
 
 pub use super::case_graph::{

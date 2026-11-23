@@ -138,6 +138,15 @@ fn source_base(
         hasher.update(storage.source_db_rel_path.unwrap_or_default().as_bytes());
         hasher.update(storage.schema_version.unwrap_or_default().as_bytes());
     }
+    if source.kind == DataSourceKind::NestedRange {
+        let locator =
+            persistence_sqlite::repositories::nested_evidence_repo::NestedEvidenceRepo::new(conn)
+                .find_range(source_id)?
+                .ok_or(DigestServiceError::NotFound)?;
+        hasher.update(locator.revision.as_bytes());
+        hasher.update(locator.length.to_le_bytes());
+        return Ok((hasher, source.kind));
+    }
     hash_metadata(&mut hasher, &source.source_path)?;
     if include_tree && source.source_path.is_dir() {
         hash_tree(&mut hasher, &source.source_path)?;

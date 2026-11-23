@@ -2,12 +2,12 @@
 mod fixture;
 use app_services::{
     import_pipeline::{execute_import_job, ImportJobOptions},
-    import_precheck::prepare_import_source_config_from_path,
+    import_precheck::ImportSourceConfig,
     nested_evidence_service,
 };
 use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 
 fn vhd_bytes() -> Vec<u8> {
     let mut bytes = testing::builders::ext4::minimal_ext4_image();
@@ -69,12 +69,14 @@ fn nested_pipeline_reuses_registered_id_and_exposes_child_catalog_and_bytes() {
                 .find(|source| source.id.0 == result.derived_data_source_id)
                 .unwrap();
             let job = JobRepo::new(conn).create(&case.active.meta.id.0, "nestedImport")?;
-            let mut config = prepare_import_source_config_from_path(
-                &source.source_path.to_string_lossy(),
-                domain::DataSourcePlatform::Linux,
-            )
-            .unwrap();
-            config.existing_data_source_id = Some(source.id.clone());
+            assert_eq!(source.kind, domain::DataSourceKind::NestedRange);
+            assert!(!case
+                .active
+                .case_root
+                .join("derived/nested-evidence")
+                .exists());
+            let mut config =
+                ImportSourceConfig::for_nested_range(&source, domain::DataSourcePlatform::Linux);
             config.prepared_probe = prepared_probe;
             execute_import_job(
                 conn,
@@ -131,7 +133,7 @@ fn nested_pipeline_reuses_registered_id_and_exposes_child_catalog_and_bytes() {
                 &case.active.case_root,
                 &case.active.meta.id,
                 &transport::dto::ViewerRangeRequestDto {
-                    handle_id: handle.handle_id,
+                    handle_id: handle.handle_id.clone(),
                     offset: 0,
                     length: 11,
                 },
@@ -155,18 +157,30 @@ fn nested_pipeline_reuses_registered_id_and_exposes_child_catalog_and_bytes() {
                 std::fs::read(case.temp.path().join("nested-parent/child.vhd")).unwrap(),
                 vhd_bytes()
             );
+            change_parent_revision(&case);
+            assert!(app_services::file_service::read_file_range_for_source_case(
+                conn,
+                &case.active.case_root,
+                &case.active.meta.id,
+                &transport::dto::ViewerRangeRequestDto {
+                    handle_id: handle.handle_id,
+                    offset: 0,
+                    length: 11,
+                },
+            )
+            .is_err());
             Ok(())
         })
         .unwrap();
 }
 #[test]
-fn mid_copy_cancel_leaves_no_derived_source_and_retry_succeeds() {
+fn cancelled_registration_leaves_no_derived_source_and_retry_succeeds() {
     let case = setup();
     case.active
         .with_conn(|conn| {
-            let cancel = AtomicBool::new(false);
+            let cancel = AtomicBool::new(true);
             let revision = parent_revision(conn, &case);
-            let result = nested_evidence_service::materialize_fixed_vhd_with_cancel_prepared(
+            let result = nested_evidence_service::register_fixed_vhd_range(
                 conn,
                 &case.active.case_root,
                 &case.active.meta.id,
@@ -174,7 +188,6 @@ fn mid_copy_cancel_leaves_no_derived_source_and_retry_succeeds() {
                 "child",
                 &revision,
                 &cancel,
-                &|_, _| cancel.store(true, Ordering::Release),
             );
             assert!(matches!(
                 result,
@@ -186,33 +199,34 @@ fn mid_copy_cancel_leaves_no_derived_source_and_retry_succeeds() {
                     .len(),
                 1
             );
-            assert_eq!(
-                std::fs::read_dir(case.active.case_root.join("derived/nested-evidence"))
-                    .unwrap()
-                    .count(),
-                0
-            );
+            assert!(!case
+                .active
+                .case_root
+                .join("derived/nested-evidence")
+                .exists());
             assert!(materialize(conn, &case, &revision).is_ok());
             Ok(())
         })
         .unwrap();
 }
 #[test]
-fn changed_materialized_bytes_are_rejected_on_retry() {
+fn invalid_fixed_vhd_footer_prevents_registration() {
     let case = setup();
     case.active
         .with_conn(|conn| {
-            let revision = parent_revision(conn, &case);
-            let result = materialize(conn, &case, &revision).unwrap();
-            let path = case
-                .active
-                .case_root
-                .join("derived/nested-evidence")
-                .join(format!("{}.vhd", result.result.derived_data_source_id));
+            let path = case.temp.path().join("nested-parent/child.vhd");
             let mut bytes = std::fs::read(&path).unwrap();
-            bytes[0] ^= 1;
+            let footer = bytes.len() - 512;
+            bytes[footer] ^= 1;
             std::fs::write(path, bytes).unwrap();
+            let revision = parent_revision(conn, &case);
             assert!(materialize(conn, &case, &revision).is_err());
+            assert_eq!(
+                DataSourceRepo::new(conn)
+                    .find_by_case(&case.active.meta.id)?
+                    .len(),
+                1
+            );
             Ok(())
         })
         .unwrap();
@@ -225,21 +239,18 @@ fn changed_parent_revision_rejects_reuse() {
         .with_conn(|conn| {
             let revision = parent_revision(conn, &case);
             materialize(conn, &case, &revision).unwrap();
-            let path = case.temp.path().join("nested-parent/child.vhd");
-            let file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
-            file.set_modified(
-                std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000),
-            )
-            .unwrap();
+            change_parent_revision(&case);
             assert_ne!(parent_revision(conn, &case), revision);
-            assert!(matches!(
-                materialize(conn, &case, &revision),
-                Err(nested_evidence_service::NestedEvidenceError::Materialization(
-                    nested_evidence_service::MaterializeError::Source(message)
-                )) if message == "parent evidence changed before nested evidence reuse"
-            ));
+            assert!(materialize(conn, &case, &revision).is_err());
             Ok(())
         })
+        .unwrap();
+}
+
+fn change_parent_revision(case: &fixture::EvidenceCase) {
+    let path = case.temp.path().join("nested-parent/child.vhd");
+    let file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+    file.set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000))
         .unwrap();
 }
 
@@ -251,7 +262,7 @@ fn materialize(
     nested_evidence_service::NestedEvidenceMaterialized,
     nested_evidence_service::NestedEvidenceError,
 > {
-    nested_evidence_service::materialize_fixed_vhd_with_cancel_prepared(
+    nested_evidence_service::register_fixed_vhd_range(
         conn,
         &case.active.case_root,
         &case.active.meta.id,
@@ -259,7 +270,6 @@ fn materialize(
         "child",
         revision,
         &AtomicBool::new(false),
-        &|_, _| {},
     )
 }
 

@@ -132,14 +132,31 @@ pub(super) fn prepare_runtime(
         domain::DataSourceKind::Raw
             | domain::DataSourceKind::E01
             | domain::DataSourceKind::LocalDisk
+            | domain::DataSourceKind::NestedRange
     ) {
-        let factory = evidence_access::source_runtime::factory::open_factory_for_case(
-            &ctx.import_config.source_path,
-            &ctx.import_config.kind,
-            ctx.options.cancel_token,
-            &ctx.case_id.0,
-        )
-        .map_err(CommandError::from_typed_service_error)?;
+        let factory: evidence_core::SharedReaderFactory =
+            if ds.kind == domain::DataSourceKind::NestedRange {
+                evidence_access::source_runtime::nested_range::NestedRangeFactory::for_source(
+                    ctx.conn,
+                    ctx.case_root,
+                    ctx.case_id,
+                    &ds.id,
+                )
+                .map(|factory| std::sync::Arc::new(factory) as evidence_core::SharedReaderFactory)
+            } else {
+                evidence_access::source_runtime::factory::open_factory_for_case(
+                    &ctx.import_config.source_path,
+                    &ctx.import_config.kind,
+                    ctx.options.cancel_token,
+                    &ctx.case_id.0,
+                )
+            }
+            .map_err(CommandError::from_typed_service_error)?;
+        if ds.kind == domain::DataSourceKind::NestedRange {
+            factory
+                .validate_snapshot()
+                .map_err(CommandError::from_typed_service_error)?;
+        }
         crate::resume::bind_source_view(
             ctx.source_connection()?,
             &ds.id,

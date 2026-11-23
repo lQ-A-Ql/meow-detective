@@ -152,7 +152,8 @@ fn source_kind(kind: &domain::DataSourceKind) -> Result<&'static str, CommandErr
         }
         domain::DataSourceKind::CephRbd
         | domain::DataSourceKind::CephFs
-        | domain::DataSourceKind::MdRaid => Err(CommandError::unsupported(
+        | domain::DataSourceKind::MdRaid
+        | domain::DataSourceKind::NestedRange => Err(CommandError::unsupported(
             "BlueStore LVM devices cannot be bound to derived sources",
         )),
     }

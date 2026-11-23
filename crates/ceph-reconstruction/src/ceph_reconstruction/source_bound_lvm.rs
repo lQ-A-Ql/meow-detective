@@ -184,11 +184,12 @@ impl SourceBoundEvidenceOpener for FilesystemEvidenceOpener {
             | DataSourceKind::AndroidSparse => Err(BoundEvidenceOpenError {
                 kind: io::ErrorKind::Unsupported,
             }),
-            DataSourceKind::CephRbd | DataSourceKind::CephFs | DataSourceKind::MdRaid => {
-                Err(BoundEvidenceOpenError {
-                    kind: io::ErrorKind::Unsupported,
-                })
-            }
+            DataSourceKind::CephRbd
+            | DataSourceKind::CephFs
+            | DataSourceKind::MdRaid
+            | DataSourceKind::NestedRange => Err(BoundEvidenceOpenError {
+                kind: io::ErrorKind::Unsupported,
+            }),
         }
     }
 }
@@ -249,7 +250,8 @@ impl SourceBoundEvidenceOpener for CaseScopedFilesystemEvidenceOpener<'_> {
             | DataSourceKind::AndroidSparse
             | DataSourceKind::CephRbd
             | DataSourceKind::CephFs
-            | DataSourceKind::MdRaid => Err(BoundEvidenceOpenError {
+            | DataSourceKind::MdRaid
+            | DataSourceKind::NestedRange => Err(BoundEvidenceOpenError {
                 kind: io::ErrorKind::Unsupported,
             }),
         }

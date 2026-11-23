@@ -347,7 +347,8 @@ fn candidate_reader(
                 | domain::DataSourceKind::LogicalArchive
                 | domain::DataSourceKind::CephRbd
                 | domain::DataSourceKind::CephFs
-                | domain::DataSourceKind::MdRaid => Err(std::io::Error::new(
+                | domain::DataSourceKind::MdRaid
+                | domain::DataSourceKind::NestedRange => Err(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
                     format!("data source kind {source_kind} is not an image reader"),
                 )),
@@ -374,7 +375,8 @@ fn candidate_reader(
                 | domain::DataSourceKind::LogicalArchive
                 | domain::DataSourceKind::CephRbd
                 | domain::DataSourceKind::CephFs
-                | domain::DataSourceKind::MdRaid => {
+                | domain::DataSourceKind::MdRaid
+                | domain::DataSourceKind::NestedRange => {
                     return Err(FileServiceError::Unsupported(format!(
                         "data source kind {source_kind} is not an image reader"
                     )))

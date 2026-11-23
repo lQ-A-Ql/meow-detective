@@ -20,8 +20,14 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
     let mut warnings = Vec::new();
     let mut errors = Vec::new();
 
-    if matches!(kind, DataSourceKind::CephRbd) {
-        errors.push("Ceph RBD derived data sources are not ordinary import sources".to_string());
+    if matches!(
+        kind,
+        DataSourceKind::CephRbd
+            | DataSourceKind::CephFs
+            | DataSourceKind::MdRaid
+            | DataSourceKind::NestedRange
+    ) {
+        errors.push("Derived data sources require case registration".to_string());
         return PreCheckResult {
             plan: ImportPlan::new(ImportStrategy::Sequential, 0, 0),
             warnings,
@@ -47,8 +53,11 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
         | DataSourceKind::Raw
         | DataSourceKind::LocalDisk
         | DataSourceKind::AndroidSparse => analyze_image(source_path, kind, &mut warnings),
-        DataSourceKind::CephRbd | DataSourceKind::CephFs | DataSourceKind::MdRaid => {
-            unreachable!("derived Ceph sources are rejected before filesystem access")
+        DataSourceKind::CephRbd
+        | DataSourceKind::CephFs
+        | DataSourceKind::MdRaid
+        | DataSourceKind::NestedRange => {
+            unreachable!("derived sources are rejected before filesystem access")
         }
     };
 

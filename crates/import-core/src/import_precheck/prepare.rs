@@ -37,6 +37,23 @@ pub enum ImportSourceMode {
 }
 
 impl ImportSourceConfig {
+    pub fn for_nested_range(source: &domain::DataSource, platform: DataSourcePlatform) -> Self {
+        Self {
+            source_path: source.source_path.clone(),
+            source_path_display: source.name.clone(),
+            source_name: source.name.clone(),
+            kind: DataSourceKind::NestedRange,
+            platform,
+            profile: None,
+            mode: ImportSourceMode::Image {
+                staging_kind: "NestedRange",
+            },
+            import_set: None,
+            lvm_extra_sources: Vec::new(),
+            existing_data_source_id: Some(source.id.clone()),
+            prepared_probe: None,
+        }
+    }
     pub fn is_image_backed(&self) -> bool {
         matches!(self.mode, ImportSourceMode::Image { .. })
     }
@@ -169,6 +186,9 @@ fn import_source_mode(kind: &DataSourceKind) -> Option<ImportSourceMode> {
         DataSourceKind::LocalDisk => Some(ImportSourceMode::Image {
             staging_kind: "LocalDisk",
         }),
-        DataSourceKind::CephRbd | DataSourceKind::CephFs | DataSourceKind::MdRaid => None,
+        DataSourceKind::CephRbd
+        | DataSourceKind::CephFs
+        | DataSourceKind::MdRaid
+        | DataSourceKind::NestedRange => None,
     }
 }

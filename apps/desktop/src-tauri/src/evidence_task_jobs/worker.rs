@@ -153,9 +153,7 @@ fn dispatch(
             .map(EvidenceTaskResultDto::Digest)
             .map_err(CommandError::from_typed_service_error)
         }
-        EvidenceTaskRequestDto::NestedImport(request) => {
-            execute_nested(ctx, conn, cancel, &progress, request)
-        }
+        EvidenceTaskRequestDto::NestedImport(request) => execute_nested(ctx, conn, cancel, request),
         EvidenceTaskRequestDto::ContentIndex { data_source_id } => {
             app_services::content_index_service::build(
                 conn,
@@ -210,21 +208,18 @@ fn execute_nested(
     ctx: &TaskContext,
     conn: &rusqlite::Connection,
     cancel: &Arc<AtomicBool>,
-    progress: &(dyn Fn(u64, u64) + Sync),
     request: &transport::commands::MaterializeNestedEvidenceRequest,
 ) -> Result<EvidenceTaskResultDto, CommandError> {
-    let prepared =
-        app_services::nested_evidence_service::materialize_fixed_vhd_with_cancel_prepared(
-            conn,
-            &ctx.root,
-            &ctx.case,
-            &request.parent_data_source_id,
-            &request.file_entry_id,
-            &ctx.plan.task.source_revision,
-            cancel,
-            progress,
-        )
-        .map_err(CommandError::from_typed_service_error)?;
+    let prepared = app_services::nested_evidence_service::register_fixed_vhd_range(
+        conn,
+        &ctx.root,
+        &ctx.case,
+        &request.parent_data_source_id,
+        &request.file_entry_id,
+        &ctx.plan.task.source_revision,
+        cancel,
+    )
+    .map_err(CommandError::from_typed_service_error)?;
     let mut result = prepared.result;
     let prepared_probe = prepared.probe;
     let source = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
@@ -246,12 +241,8 @@ fn execute_nested(
         .platform
         .parse::<domain::DataSourcePlatform>()
         .map_err(CommandError::from_service_error)?;
-    let mut config = app_services::import_precheck::prepare_import_source_config_from_path(
-        &source.source_path.to_string_lossy(),
-        platform,
-    )
-    .map_err(CommandError::from_typed_service_error)?;
-    config.existing_data_source_id = Some(source.id);
+    let mut config =
+        app_services::import_precheck::ImportSourceConfig::for_nested_range(&source, platform);
     config.prepared_probe = prepared_probe;
     let sink = crate::commands::import::events::TauriImportEventSink::new(&ctx.app);
     app_services::import_pipeline::execute_import_job(
