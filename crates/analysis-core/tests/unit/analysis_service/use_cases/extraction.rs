@@ -91,7 +91,7 @@ fn cancellation_during_resource_admission_remains_a_cancelled_error() {
         browser_password: None,
     };
     assert!(matches!(
-        admit_extraction(&control),
+        runtime.admit_extraction(&control.cancel_token),
         Err(AnalysisServiceError::Cancelled)
     ));
 }
