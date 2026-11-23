@@ -66,6 +66,7 @@ exclude = [
   "vendor/kamadak-exif-0.6.1",
   "vendor/gif-0.14.2",
   "vendor/ico-0.6.0",
+  "vendor/image-webp-0.2.4",
 ]
 
 [workspace.package]
@@ -149,6 +150,8 @@ kamadak-exif = "0.6.1"
 png = "0.18"
 gif = { version = "=0.14.2", default-features = false, features = ["std", "raii_no_panic"] }
 ico = "=0.6.0"
+image-webp = "=0.2.4"
+riff = "=2.0.0"
 tinybmp = "=0.7.0"
 crc32fast = "1.5"
 crc32c = "0.6"
@@ -240,6 +243,7 @@ import-core = { path = "crates/import-core" }
 source-reconstruction = { path = "crates/source-reconstruction" }
 
 [patch.crates-io]
+image-webp = { path = "vendor/image-webp-0.2.4" }
 ico = { path = "vendor/ico-0.6.0" }
 gif = { path = "vendor/gif-0.14.2" }
 kamadak-exif = { path = "vendor/kamadak-exif-0.6.1" }

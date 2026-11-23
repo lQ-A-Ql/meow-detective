@@ -70,14 +70,10 @@ pub(super) fn png(exif: Option<&[u8]>) -> Vec<u8> {
 }
 
 pub(super) fn webp(exif: &[u8]) -> Vec<u8> {
-    let mut bytes = b"RIFF\0\0\0\0WEBP".to_vec();
-    bytes.extend_from_slice(b"EXIF");
-    bytes.extend_from_slice(&(exif.len() as u32).to_le_bytes());
-    bytes.extend_from_slice(exif);
-    if !exif.len().is_multiple_of(2) {
-        bytes.push(0);
-    }
-    let size = bytes.len() as u32 - 8;
-    bytes[4..8].copy_from_slice(&size.to_le_bytes());
+    use image_inspection::webp_codec::{ColorType, WebPEncoder};
+    let mut bytes = Vec::new();
+    let mut encoder = WebPEncoder::new(&mut bytes);
+    encoder.set_exif_metadata(exif.to_vec());
+    encoder.encode(&[255; 18], 2, 3, ColorType::Rgb8).unwrap();
     bytes
 }

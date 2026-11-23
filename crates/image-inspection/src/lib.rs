@@ -16,6 +16,8 @@ mod warnings;
 pub use gif as gif_codec;
 /// Shared ICO directory and image codec.
 pub use ico as ico_codec;
+/// Shared WebP container and image-header codec.
+pub use image_webp as webp_codec;
 /// Shared PNG codec and structural decoder.
 pub use png as png_codec;
 /// Shared BMP parser used by metadata inspection and pixel analysis.

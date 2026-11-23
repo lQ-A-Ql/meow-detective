@@ -60,6 +60,7 @@ windows-sys.workspace = true
 libc.workspace = true
 
 [dev-dependencies]
+riff.workspace = true
 rusqlite = { workspace = true, features = ["functions"] }
 tempfile.workspace = true
 sha2.workspace = true

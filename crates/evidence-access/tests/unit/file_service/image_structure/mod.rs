@@ -3,6 +3,7 @@ mod fixture;
 mod gif_native;
 mod ico_native;
 mod tiff_native;
+mod webp_native;
 
 use std::sync::atomic::AtomicBool;
 

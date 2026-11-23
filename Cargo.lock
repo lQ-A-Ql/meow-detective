@@ -2137,6 +2137,7 @@ dependencies = [
  "persistence-sqlite",
  "quick-xml",
  "rayon",
+ "riff",
  "rusqlite",
  "search",
  "serde",
@@ -3489,9 +3490,18 @@ version = "0.1.1"
 dependencies = [
  "gif",
  "ico 0.6.0",
+ "image-webp",
  "png 0.18.1",
  "thiserror 2.0.21",
  "tinybmp",
+]
+
+[[package]]
+name = "image-webp"
+version = "0.2.4"
+dependencies = [
+ "byteorder-lite",
+ "quick-error",
 ]
 
 [[package]]
@@ -5337,6 +5347,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-error"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
+
+[[package]]
 name = "quick-xml"
 version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5692,6 +5708,12 @@ dependencies = [
  "web-sys",
  "windows-sys 0.60.2",
 ]
+
+[[package]]
+name = "riff"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c601484456988d75017d86700d3743b949c21cdc7399f940c75e34680d185c5"
 
 [[package]]
 name = "ring"
