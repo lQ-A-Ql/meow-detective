@@ -67,6 +67,8 @@ exclude = [
   "vendor/gif-0.14.2",
   "vendor/ico-0.6.0",
   "vendor/image-webp-0.2.4",
+  "vendor/jpeg-decoder-0.3.2",
+  "vendor/skia-jpeg-scanner",
 ]
 
 [workspace.package]
@@ -152,6 +154,9 @@ gif = { version = "=0.14.2", default-features = false, features = ["std", "raii_
 ico = "=0.6.0"
 image-webp = "=0.2.4"
 riff = "=2.0.0"
+jpeg-decoder = { version = "=0.3.2", default-features = false }
+skia-jpeg-scanner = { path = "vendor/skia-jpeg-scanner" }
+img-parts = "=0.4.2"
 tinybmp = "=0.7.0"
 crc32fast = "1.5"
 crc32c = "0.6"
@@ -243,6 +248,7 @@ import-core = { path = "crates/import-core" }
 source-reconstruction = { path = "crates/source-reconstruction" }
 
 [patch.crates-io]
+jpeg-decoder = { path = "vendor/jpeg-decoder-0.3.2" }
 image-webp = { path = "vendor/image-webp-0.2.4" }
 ico = { path = "vendor/ico-0.6.0" }
 gif = { path = "vendor/gif-0.14.2" }

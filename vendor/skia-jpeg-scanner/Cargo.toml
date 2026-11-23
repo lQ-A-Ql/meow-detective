@@ -1,0 +1,10 @@
+[package]
+name = "skia-jpeg-scanner"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+description = "Pinned upstream Skia incremental JPEG segment scanner"
+repository = "https://github.com/google/skia"
+
+[lib]
+path = "src/lib.rs"

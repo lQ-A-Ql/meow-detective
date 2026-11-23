@@ -2,6 +2,7 @@
 mod fixture;
 mod gif_native;
 mod ico_native;
+mod jpeg_native;
 mod tiff_native;
 mod webp_native;
 
@@ -45,15 +46,7 @@ fn ico() -> Vec<u8> {
 }
 
 fn jpeg_with_frame() -> Vec<u8> {
-    let mut bytes = vec![0xff, 0xd8];
-    bytes.extend_from_slice(&[0xff, 0xc0, 0x00, 0x0b]);
-    bytes.push(8);
-    bytes.extend_from_slice(&3u16.to_be_bytes());
-    bytes.extend_from_slice(&2u16.to_be_bytes());
-    bytes.push(1);
-    bytes.extend_from_slice(&[1, 0x11, 0]);
-    bytes.extend_from_slice(&[0xff, 0xd9]);
-    bytes
+    jpeg_native::BASELINE.to_vec()
 }
 
 fn png_with_two_exif(tiff: &[u8]) -> Vec<u8> {

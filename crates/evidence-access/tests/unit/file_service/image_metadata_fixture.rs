@@ -44,12 +44,7 @@ fn rational(values: &[(u32, u32)]) -> Value {
 }
 
 pub(super) fn jpeg(exif: &[u8]) -> Vec<u8> {
-    let mut bytes = vec![0xff, 0xd8, 0xff, 0xe1];
-    bytes.extend_from_slice(&((exif.len() + 8) as u16).to_be_bytes());
-    bytes.extend_from_slice(b"Exif\0\0");
-    bytes.extend_from_slice(exif);
-    bytes.extend_from_slice(&[0xff, 0xd9]);
-    bytes
+    super::jpeg_native::with_exif(exif, false)
 }
 
 pub(super) fn png(exif: Option<&[u8]>) -> Vec<u8> {
