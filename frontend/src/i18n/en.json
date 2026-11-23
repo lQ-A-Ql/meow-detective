@@ -1,5 +1,6 @@
 {
   "taskProgress": {
+    "additionalJobs": "View {{count}} additional tasks",
     "items": "Items processed",
     "data": "Data processed",
     "count": "{{processed}} / {{total}}",

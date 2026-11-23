@@ -37,6 +37,9 @@ export function BottomDrawerJobs({ model, analysisProgress }: BottomDrawerJobsPr
         {model.runningJobs.map((job) => (
           <JobStatusCard key={job.id} job={job} tone="running" phase={model.importSignals.phasesByJob[job.id]} />
         ))}
+        {model.pendingJobs.map((job) => (
+          <JobStatusCard key={job.id} job={job} tone="pending" />
+        ))}
         {model.completedJobs.map((job) => (
           <JobStatusCard key={job.id} job={job} tone="completed" />
         ))}

@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { subscribeToEvent } from '@/lib/events/subscribers';
+import { subscribeToJobSnapshotEvents } from '@/features/jobs/job-snapshot-events';
 import {
   PROJECTION_EVENT_TOPICS,
   invalidateCacheStatusQueries,
@@ -10,6 +11,7 @@ import {
 import type { CapabilityStatusChangedPayload, IndexCacheStatus, PartialResult } from '@/types/models';
 
 function subscribeToProjectionInvalidations(queryClient: QueryClient) {
+  const unsubscribeJobs = subscribeToJobSnapshotEvents(queryClient);
   const unsubs = PROJECTION_EVENT_TOPICS.map((topic) =>
     subscribeToEvent<CapabilityStatusChangedPayload>(topic, (event) => {
       invalidateEventProjectionQueries(queryClient, topic, event.payload);
@@ -25,7 +27,10 @@ function subscribeToProjectionInvalidations(queryClient: QueryClient) {
       invalidateCacheStatusQueries(queryClient, event.payload);
     }),
   );
-  return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  return () => {
+    unsubscribeJobs();
+    unsubs.forEach((unsubscribe) => unsubscribe());
+  };
 }
 
 export function useWorkbenchQueryClient() {

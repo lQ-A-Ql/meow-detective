@@ -10,7 +10,7 @@ import type { ImportPhaseProgress, JobSnapshot } from '@/types/models';
 interface JobStatusCardProps {
   job: JobSnapshot;
   phase?: ImportPhaseProgress;
-  tone: 'running' | 'completed' | 'failed' | 'warning' | 'cancelling' | 'cancelled';
+  tone: 'pending' | 'running' | 'completed' | 'failed' | 'warning' | 'cancelling' | 'cancelled';
 }
 
 export function JobStatusCard({ job, tone, phase }: JobStatusCardProps) {
@@ -18,7 +18,7 @@ export function JobStatusCard({ job, tone, phase }: JobStatusCardProps) {
   const className = cardClass(tone);
   const currentPhase = phase?.jobId === job.id ? phase : undefined;
   const stage = currentPhase ? getImportPhaseLabel(currentPhase.phase) : job.name;
-  const active = tone === 'running' || tone === 'cancelling';
+  const active = tone === 'running' || tone === 'cancelling' || tone === 'pending';
   const stateLabel =
     tone === 'cancelling'
       ? t('taskProgress.cancelling')
@@ -42,6 +42,7 @@ export function JobStatusCard({ job, tone, phase }: JobStatusCardProps) {
         {job.scope || (tone === 'failed' ? t('bottomDrawer.jobs.failedFallback') : '')}
       </div>
       <JobOutcomeBadges job={job} />
+      {tone === 'pending' ? <div role="status">{t('evidenceTask.states.queued')}</div> : null}
       {currentPhase && active ? (
         <>
           <div className="mt-2 text-forensics-text-secondary" role="status">
@@ -51,9 +52,7 @@ export function JobStatusCard({ job, tone, phase }: JobStatusCardProps) {
         </>
       ) : null}
       {tone === 'running' && job.currentPartition ? <PartitionProgress job={job} /> : null}
-      {tone === 'running' || tone === 'cancelling' ? (
-        <OverallProgress job={job} stage={stage} value={activeJobProgress(job, currentPhase)} />
-      ) : null}
+      {active ? <OverallProgress job={job} stage={stage} value={activeJobProgress(job, currentPhase)} /> : null}
       {currentPhase?.detail ? (
         <Disclosure summary={t('taskProgress.diagnostics')}>{currentPhase.detail}</Disclosure>
       ) : null}
@@ -112,6 +111,7 @@ function OverallProgress({ job, value, stage }: { job: JobSnapshot; value: numbe
 function cardClass(tone: JobStatusCardProps['tone']) {
   switch (tone) {
     case 'running':
+    case 'pending':
       return 'bg-transparent p-3 text-[11px]';
     case 'completed':
       return 'border-b border-forensics-border-light pb-2 text-[11px] text-forensics-text-tertiary';

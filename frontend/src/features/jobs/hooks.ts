@@ -3,16 +3,19 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 import { getJobsSnapshot, getTraceItems, getWarnings } from '@/lib/api/jobs';
 import { invalidatePostJobProjectionQueries } from '@/features/cache-invalidation';
 import type { JobSnapshot } from '@/types/models';
+import { isActiveJob, jobsSnapshotPollInterval, mergeJobSnapshots } from './job-snapshot-events';
 
-const JOB_POLL_INTERVAL_MS = 1500;
 const JOB_HANDOFF_POLL_WINDOW_MS = 10000;
-const runningJobIds = new Set<string>();
-const refreshedSettledJobIds = new Set<string>();
+interface JobObservation {
+  runningJobIds: Set<string>;
+  refreshedSettledJobIds: Set<string>;
+}
+const observedCases = new WeakMap<QueryClient, Map<string, JobObservation>>();
 let handoffBaselineJobIds = new Set<string>();
 let pollJobsUntil = 0;
 
 function hasRunningJobs(jobs?: JobSnapshot[]) {
-  return jobs?.some((job) => job.status === 'running') ?? false;
+  return jobs?.some(isActiveJob) ?? false;
 }
 
 function shouldPollJobs(jobs?: JobSnapshot[]) {
@@ -31,12 +34,23 @@ function invalidatePostJobQueries(queryClient: QueryClient) {
   invalidatePostJobProjectionQueries(queryClient);
 }
 
-function refreshWhenObservedJobsSettle(queryClient: QueryClient, jobs?: JobSnapshot[]) {
-  if (!jobs) {
+function refreshWhenObservedJobsSettle(queryClient: QueryClient, caseId?: string, jobs?: JobSnapshot[]) {
+  if (!jobs || !caseId) {
     return;
   }
+  let cases = observedCases.get(queryClient);
+  if (!cases) {
+    cases = new Map();
+    observedCases.set(queryClient, cases);
+  }
+  let observation = cases.get(caseId);
+  if (!observation) {
+    observation = { runningJobIds: new Set(), refreshedSettledJobIds: new Set() };
+    cases.set(caseId, observation);
+  }
+  const { runningJobIds, refreshedSettledJobIds } = observation;
 
-  const nextRunningJobIds = new Set(jobs.filter((job) => job.status === 'running').map((job) => job.id));
+  const nextRunningJobIds = new Set(jobs.filter(isActiveJob).map((job) => job.id));
   const settledJobIds = Array.from(runningJobIds).filter(
     (jobId) => !nextRunningJobIds.has(jobId) && !refreshedSettledJobIds.has(jobId),
   );
@@ -44,8 +58,7 @@ function refreshWhenObservedJobsSettle(queryClient: QueryClient, jobs?: JobSnaps
     Date.now() < pollJobsUntil
       ? jobs
           .filter(
-            (job) =>
-              job.status !== 'running' && !handoffBaselineJobIds.has(job.id) && !refreshedSettledJobIds.has(job.id),
+            (job) => !isActiveJob(job) && !handoffBaselineJobIds.has(job.id) && !refreshedSettledJobIds.has(job.id),
           )
           .map((job) => job.id)
       : [];
@@ -79,14 +92,18 @@ export function useJobsSnapshot(caseId?: string) {
     queryKey: ['jobs', 'snapshot', caseId ?? null],
     queryFn: getJobsSnapshot,
     enabled: Boolean(caseId),
+    structuralSharing: mergeJobSnapshots,
+    refetchOnWindowFocus: true,
     refetchInterval: (activeQuery) =>
-      shouldPollJobs(activeQuery.state.data as JobSnapshot[] | undefined) ? JOB_POLL_INTERVAL_MS : false,
+      shouldPollJobs(activeQuery.state.data as JobSnapshot[] | undefined)
+        ? jobsSnapshotPollInterval(queryClient, caseId ?? '')
+        : false,
     refetchIntervalInBackground: true,
   });
 
   useEffect(() => {
-    refreshWhenObservedJobsSettle(queryClient, query.data);
-  }, [queryClient, query.data]);
+    refreshWhenObservedJobsSettle(queryClient, caseId, query.data);
+  }, [queryClient, caseId, query.data]);
 
   return query;
 }

@@ -25,6 +25,7 @@ export function BottomDrawerView({
   const { height, isResizing, onResizeStart } = resize;
   const { activeJob } = model;
   const progress = activeJob ? activeJobProgress(activeJob, model.activePhase) : null;
+  const additionalJobs = model.runningJobs.length + model.cancellingJobs.length + model.pendingJobs.length - 1;
 
   return (
     <div
@@ -75,6 +76,17 @@ export function BottomDrawerView({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {!model.drawerOpen && additionalJobs > 0 ? (
+            <Button
+              shape="pill"
+              variant="forensicsGhost"
+              size="sm"
+              onClick={model.toggleDrawer}
+              aria-label={t('taskProgress.additionalJobs', { count: additionalJobs })}
+            >
+              +{additionalJobs}
+            </Button>
+          ) : null}
           {!model.drawerOpen && progress !== null ? (
             <span aria-hidden="true" className="w-8 text-right tabular-nums text-forensics-text">
               {progress}%

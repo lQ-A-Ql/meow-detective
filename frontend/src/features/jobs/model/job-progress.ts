@@ -5,6 +5,7 @@ export function importPhaseProgress(phase: ImportPhaseProgress): number | null {
 }
 
 export function activeJobProgress(job: JobSnapshot, phase?: ImportPhaseProgress): number | null {
+  if (job.status === 'pending') return 0;
   if (job.status === 'running' && phase?.jobId === job.id && importPhaseProgress(phase) === null) {
     return null;
   }

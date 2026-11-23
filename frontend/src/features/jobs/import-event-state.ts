@@ -76,7 +76,9 @@ export function useImportEventState(caseId?: string) {
     importEventStateStore.setCase(caseId);
     importEventStateStore.connect();
   }, [caseId]);
-  return useStore(importEventStateStore.api, (state) => (state.caseId === caseId ? state : emptyImportSignals));
+  return useStore(importEventStateStore.api, (state) =>
+    caseId && state.caseId === caseId ? state : emptyImportSignals,
+  );
 }
 
 export function resetImportEventStateForTests() {

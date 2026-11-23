@@ -51,6 +51,14 @@ export function createImportEventStateStore(initialCaseId?: string) {
   let unsubs: Array<() => void> = [];
 
   function ingestPartial(eventTs: string, payload: PartialResult) {
+    const state = api.getState();
+    if (
+      state.caseId &&
+      !state.partialResults.some((result) => result.scopeId === payload.scopeId) &&
+      !Object.values(state.phasesByJob).some((phase) => phase.dataSourceId === payload.scopeId)
+    ) {
+      return;
+    }
     api.setState((state) => ({
       partialResults: mergePartials(state.partialResults, [payload]),
       lastUpdatedAt: eventTs,
@@ -102,6 +110,15 @@ export function createImportEventStateStore(initialCaseId?: string) {
   }
 
   function ingestCache(eventTs: string, payload: IndexCacheStatus) {
+    const state = api.getState();
+    if (
+      state.caseId &&
+      !Object.values(state.phasesByJob).some(
+        (phase) => phase.dataSourceId && payload.cacheKey.endsWith(`:${phase.dataSourceId}`),
+      )
+    ) {
+      return;
+    }
     api.setState((state) => ({
       cacheStatuses: [...state.cacheStatuses.filter((status) => status.cacheKey !== payload.cacheKey), payload].sort(
         (left, right) => right.updatedAt.localeCompare(left.updatedAt),
@@ -111,6 +128,8 @@ export function createImportEventStateStore(initialCaseId?: string) {
   }
 
   function ingestReport(eventTs: string, payload: PerformanceReport) {
+    const state = api.getState();
+    if (state.caseId && payload.summary.jobId && !state.phasesByJob[payload.summary.jobId]) return;
     api.setState({ latestReport: payload, lastUpdatedAt: eventTs });
   }
 
@@ -128,7 +147,7 @@ export function createImportEventStateStore(initialCaseId?: string) {
       subscribeToEvent<JobCancellation>('job-cancellation', (event) => ingestCancellation(event.ts, event.payload)),
       subscribeToEvent<IndexCacheStatus>('cache-index-status', (event) => ingestCache(event.ts, event.payload)),
       subscribeToEvent<PerformanceReport>('performance-report-ready', (event) => ingestReport(event.ts, event.payload)),
-      subscribeToEvent('case-closed', () => reset(api.getState().caseId)),
+      subscribeToEvent('case-closed', () => reset()),
     ];
   }
 

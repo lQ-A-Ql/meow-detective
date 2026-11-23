@@ -39,6 +39,7 @@ export interface BottomDrawerModel {
   activeJob?: JobSnapshot;
   activePhase?: ImportPhaseProgress;
   runningJobs: JobSnapshot[];
+  pendingJobs: JobSnapshot[];
   completedJobs: JobSnapshot[];
   failedJobs: JobSnapshot[];
   warningJobs: JobSnapshot[];
@@ -74,6 +75,7 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
   const jobs = input.jobs ?? [];
   const dataSources = input.dataSources ?? [];
   const runningJobs = jobs.filter((job) => job.status === 'running');
+  const pendingJobs = jobs.filter((job) => job.status === 'pending');
   const completedJobs = jobs.filter((job) => job.status === 'completed');
   const failedJobs = jobs.filter((job) => job.status === 'failed');
   const warningJobs = jobs.filter((job) => job.status === 'warning');
@@ -98,7 +100,7 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
     ...buildJobWarningIssues(jobs, input.t),
     ...processingIssues.filter((issue) => issue.severity === 'warning'),
   ];
-  const activeJob = runningJobs[0] ?? cancellingJobs[0];
+  const activeJob = runningJobs[0] ?? cancellingJobs[0] ?? pendingJobs[0];
   const phase = activeJob ? input.importSignals.phasesByJob[activeJob.id] : input.importSignals.latestPhase;
   const cancellation = activeJob
     ? input.importSignals.cancellationsByJob[activeJob.id]
@@ -122,6 +124,7 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
     activeJob,
     activePhase: phase,
     runningJobs,
+    pendingJobs,
     completedJobs,
     failedJobs,
     warningJobs,

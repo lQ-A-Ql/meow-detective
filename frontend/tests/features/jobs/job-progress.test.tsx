@@ -86,6 +86,14 @@ describe('task progress ownership', () => {
     expect(store.getSnapshot().latestPhase).toBeUndefined();
     expect(store.getSnapshot().latestCancellation).toBeUndefined();
     expect(store.getSnapshot().phasesByJob).toEqual({});
+    store.ingestPartial('2026-11-23T10:00:03Z', {
+      scopeId: 'old-source',
+      queryKey: 'search:index:old-source',
+      kind: 'searchIndex',
+      readyCount: 10,
+      freshness: 'ready',
+    });
+    expect(store.getSnapshot().partialResults).toEqual([]);
     store.setCase(undefined);
     expect(store.getSnapshot().caseId).toBeUndefined();
   });
@@ -126,5 +134,22 @@ describe('task progress ownership', () => {
     rerender(<Progress aria-label="Entries" value={null} />);
     expect(screen.getByRole('progressbar')).toHaveAttribute('data-state', 'indeterminate');
     expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
+  });
+
+  it('keeps queued tasks visible with a static progress indicator', () => {
+    const pending = { ...job, status: 'pending' as const, progress: 0 };
+    const model = buildBottomDrawerModel({
+      drawerOpen: false,
+      toggleDrawer() {},
+      jobs: [pending],
+      importSignals: createImportEventStateStore('case-1').getSnapshot(),
+      t: i18n.t,
+    });
+    expect(model.activeJob?.id).toBe(pending.id);
+    expect(model.pendingJobs).toEqual([pending]);
+    render(<JobStatusCard tone="pending" job={pending} />);
+    expect(screen.getByRole('status')).toHaveTextContent('排队中');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('data-state', 'loading');
   });
 });

@@ -1,5 +1,6 @@
 {
   "taskProgress": {
+    "additionalJobs": "查看另外 {{count}} 项任务",
     "items": "已处理条目",
     "data": "已处理数据",
     "count": "{{processed}} / {{total}}",
