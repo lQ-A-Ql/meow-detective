@@ -16,13 +16,13 @@ function completedReport(overrides: Partial<ImageStegReport> = {}): ImageStegRep
     height: 1,
     dominantPlane: 'r',
     global: {
-      score: 0.82,
+      score: 82,
       band: 'high',
       methodsUsed: 3,
       methods: [
-        { method: 'chiSquare', estimate: 0.9, score: 0.86, samples: 6 },
-        { method: 'rs', estimate: 0.78, score: 0.8, samples: 6 },
-        { method: 'spa', score: 0.79, samples: 6 },
+        { method: 'chiSquare', estimate: 0.9, score: 86, samples: 6 },
+        { method: 'rs', estimate: 0.78, score: 80, samples: 6 },
+        { method: 'spa', score: 79, samples: 6 },
       ],
     },
     planes: [
@@ -30,10 +30,10 @@ function completedReport(overrides: Partial<ImageStegReport> = {}): ImageStegRep
         plane: 'r',
         samples: 6,
         uniqueValues: 4,
-        assessment: { score: 0.82, band: 'high', methodsUsed: 3, methods: [] },
+        assessment: { score: 82, band: 'high', methodsUsed: 3, methods: [] },
       },
     ],
-    blocks: [{ x: 0, y: 0, width: 2, height: 1, plane: 'r', score: 0.77, band: 'high', methodsUsed: 3 }],
+    blocks: [{ x: 0, y: 0, width: 2, height: 1, plane: 'r', score: 77, band: 'high', methodsUsed: 3 }],
     blocksScored: 1,
     blocksTotal: 1,
     warnings: [
@@ -72,10 +72,10 @@ describe('ImageStegInspector', () => {
     expect(screen.getByText('2 × 1')).toBeInTheDocument();
     expect(screen.getByText('整图评估')).toBeInTheDocument();
     expect(screen.getByText('融合评分')).toBeInTheDocument();
-    expect(screen.getAllByText(/82\.0%/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/82\.0 \/ 100/).length).toBeGreaterThan(0);
     expect(screen.getByText('卡方')).toBeInTheDocument();
     expect(screen.getByText(/6 个样本 · 4 个唯一值/)).toBeInTheDocument();
-    expect(screen.getByText('0,0 · 2×1 · 77.0%')).toBeInTheDocument();
+    expect(screen.getByText('0,0 · 2×1 · 77.0 / 100')).toBeInTheDocument();
     expect(screen.getByText('已评分 1 / 1 个块')).toBeInTheDocument();
     expect(screen.getByText('块数量超出预算，已按固定步长抽样。')).toBeInTheDocument();
     expect(screen.getByText('Backend fallback text.')).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe('ImageStegInspector', () => {
             format: 'bmp',
             width: 2,
             height: 1,
-            global: { score: 0.5, band: 'medium', methodsUsed: 1 },
+            global: { score: 50, band: 'medium', methodsUsed: 1 },
             blocksScored: 0,
             blocksTotal: 0,
           },
@@ -102,7 +102,7 @@ describe('ImageStegInspector', () => {
     expect(screen.getByText('2 × 1')).toBeInTheDocument();
     expect(screen.getByText('整图评估')).toBeInTheDocument();
     expect(screen.getByText('融合评分')).toBeInTheDocument();
-    expect(screen.getByText('50.0% · 中')).toBeInTheDocument();
+    expect(screen.getByText('50.0 / 100 · 中')).toBeInTheDocument();
   });
 
   it('renders a status-only unsupported report without optional arrays', () => {

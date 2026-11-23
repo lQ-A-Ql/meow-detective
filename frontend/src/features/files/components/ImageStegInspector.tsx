@@ -5,11 +5,7 @@ import { Button } from '@/app/components/ui/button';
 import { InspectorSection } from '@/components/layout/InspectorPane';
 import type { ImageIssueSeverity, ImageStegAssessment, ImageStegBand, ImageStegReport } from '@/types/models';
 import type { ImageStegModel } from '@/features/files/hooks/use-image-steg';
-
-function formatPercent(value?: number) {
-  if (value === undefined || !Number.isFinite(value)) return '-';
-  return `${(value * 100).toFixed(1)}%`;
-}
+import { formatStegRatio, formatStegScore } from '@/features/files/image-steg-format';
 
 function bandClass(band: ImageStegBand) {
   if (band === 'high') return 'text-forensics-error-text';
@@ -40,7 +36,7 @@ function AssessmentBlock({ assessment }: { assessment: ImageStegAssessment }) {
       <div className="grid grid-cols-[92px_1fr] gap-1 font-mono text-[10px]">
         <span className="text-forensics-muted-light">{t('fileBrowser.inspector.imageSteg.score')}</span>
         <span className={bandClass(assessment.band)}>
-          {formatPercent(assessment.score)} · {t(`fileBrowser.inspector.imageSteg.bands.${assessment.band}`)}
+          {formatStegScore(assessment.score)} · {t(`fileBrowser.inspector.imageSteg.bands.${assessment.band}`)}
         </span>
         <span className="text-forensics-muted-light">{t('fileBrowser.inspector.imageSteg.methodsUsed')}</span>
         <span className="text-forensics-text-secondary">{assessment.methodsUsed}</span>
@@ -56,7 +52,7 @@ function AssessmentBlock({ assessment }: { assessment: ImageStegAssessment }) {
                 {t(`fileBrowser.inspector.imageSteg.methods.${method.method}`)}
               </span>
               <span>
-                {formatPercent(method.estimate)} · {formatPercent(method.score)} · {method.samples}
+                {formatStegRatio(method.estimate)} · {formatStegScore(method.score)} · {method.samples}
               </span>
             </div>
           ))}
@@ -132,7 +128,7 @@ function StegReportView({ report }: { report: ImageStegReport }) {
                     unique: plane.uniqueValues,
                   })}
                   {plane.assessment
-                    ? ` · ${formatPercent(plane.assessment.score)} · ${t(
+                    ? ` · ${formatStegScore(plane.assessment.score)} · ${t(
                         `fileBrowser.inspector.imageSteg.bands.${plane.assessment.band}`,
                       )}`
                     : ''}
@@ -154,7 +150,7 @@ function StegReportView({ report }: { report: ImageStegReport }) {
               >
                 <span>{block.plane}</span>
                 <span>
-                  {block.x},{block.y} · {block.width}×{block.height} · {formatPercent(block.score)}
+                  {block.x},{block.y} · {block.width}×{block.height} · {formatStegScore(block.score)}
                 </span>
               </div>
             ))}

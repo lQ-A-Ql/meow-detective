@@ -175,12 +175,15 @@ export type ImageStegMethodKind = 'chiSquare' | 'rs' | 'spa';
 
 export interface ImageStegMethod {
   method: ImageStegMethodKind;
+  /** Detector estimate expressed as a ratio from 0 to 1. */
   estimate?: number;
+  /** Suspicion score in points from 0 to 100. */
   score?: number;
   samples: number;
 }
 
 export interface ImageStegAssessment {
+  /** Suspicion score in points from 0 to 100. */
   score?: number;
   band: ImageStegBand;
   methodsUsed: number;
@@ -200,6 +203,7 @@ export interface ImageStegBlock {
   width: number;
   height: number;
   plane: string;
+  /** Suspicion score in points from 0 to 100. */
   score: number;
   band: ImageStegBand;
   methodsUsed: number;
