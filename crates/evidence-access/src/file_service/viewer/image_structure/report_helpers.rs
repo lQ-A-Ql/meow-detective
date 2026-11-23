@@ -1,4 +1,4 @@
-//! Small mutation and endian helpers shared by the format scanners.
+//! Shared mutations for image structure reports.
 
 use super::limits;
 use super::types::{
@@ -78,22 +78,4 @@ pub(super) fn mark_truncated(report: &mut ImageAnalysisReport, code: &'static st
             detail: None,
         });
     }
-}
-
-pub(super) fn read_u16(bytes: &[u8], offset: usize, little: bool) -> Option<u16> {
-    let value: [u8; 2] = bytes.get(offset..offset + 2)?.try_into().ok()?;
-    Some(if little {
-        u16::from_le_bytes(value)
-    } else {
-        u16::from_be_bytes(value)
-    })
-}
-
-pub(super) fn read_u32(bytes: &[u8], offset: usize, little: bool) -> Option<u32> {
-    let value: [u8; 4] = bytes.get(offset..offset + 4)?.try_into().ok()?;
-    Some(if little {
-        u32::from_le_bytes(value)
-    } else {
-        u32::from_be_bytes(value)
-    })
 }

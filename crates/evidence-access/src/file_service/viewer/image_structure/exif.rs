@@ -1,24 +1,44 @@
-//! Tolerant EXIF block decoding with per-field warnings.
+//! Bounded native EXIF decoding with per-field warnings.
 
 use exif::{Exif, In, Tag, Value};
 
-use super::limits::{EXIF_BLOCK_LIMIT, IFD_ENTRY_LIMIT, IFD_LIMIT};
+use super::limits::{EXIF_BLOCK_LIMIT, EXIF_BLOCK_READ_LIMIT, IFD_ENTRY_LIMIT, IFD_LIMIT};
 use super::{
     push_warning, ExifBlockReport, ExifFields, ImageAnalysisReport, ImageIssueSeverity,
     ImageWarning,
 };
-
-#[derive(Debug, Clone, Copy)]
-enum BudgetError {
-    Corrupt,
-    Limit,
-}
 
 pub(super) fn decode_block(
     report: &mut ImageAnalysisReport,
     source: &'static str,
     offset: u64,
     bytes: Vec<u8>,
+) {
+    let length = bytes.len() as u64;
+    if report.exif_blocks.len() >= EXIF_BLOCK_LIMIT || bytes.len() > EXIF_BLOCK_READ_LIMIT {
+        record_skipped_block(report, source, offset, length);
+        return;
+    }
+    record_parsed_block(report, source, offset, length, read_tiff(bytes));
+}
+
+pub(super) fn read_tiff(bytes: Vec<u8>) -> Result<Exif, exif::Error> {
+    exif::Reader::new()
+        .limits(exif::ParseLimits {
+            max_directories: IFD_LIMIT,
+            max_entries: IFD_ENTRY_LIMIT,
+            max_value_bytes: 4096,
+            max_total_value_bytes: super::limits::VIEWER_RANDOM_READ_LIMIT,
+        })
+        .read_raw(bytes)
+}
+
+pub(super) fn record_parsed_block(
+    report: &mut ImageAnalysisReport,
+    source: &'static str,
+    offset: u64,
+    length: u64,
+    parsed: Result<Exif, exif::Error>,
 ) {
     if report.exif_blocks.len() >= EXIF_BLOCK_LIMIT {
         push_warning(
@@ -30,30 +50,24 @@ pub(super) fn decode_block(
         );
         return;
     }
-    let length = bytes.len() as u64;
     let mut block_warnings = Vec::new();
     let mut decoded = false;
     let mut field_count = 0;
-    match validate_budget(&bytes) {
-        Err(BudgetError::Corrupt) => {
-            block_warnings.push(block_warning("image.exif.decode-failed", offset));
-        }
-        Err(BudgetError::Limit) => {
+    match parsed {
+        Err(exif::Error::TooBig(_)) => {
             block_warnings.push(block_warning("image.exif.limit", offset));
         }
-        Ok(()) => match exif::Reader::new().read_raw(bytes) {
-            Ok(parsed) => {
-                decoded = true;
-                let mut field_warnings = Vec::new();
-                let fields = interpret(&parsed, &mut field_warnings);
-                field_count = fields.field_count();
-                report.warnings.extend(field_warnings);
-                if report.exif.is_empty() {
-                    report.exif = fields;
-                }
+        Ok(parsed) => {
+            decoded = true;
+            let mut field_warnings = Vec::new();
+            let fields = interpret(&parsed, &mut field_warnings);
+            field_count = fields.field_count();
+            report.warnings.extend(field_warnings);
+            if report.exif.is_empty() {
+                report.exif = fields;
             }
-            Err(_) => block_warnings.push(block_warning("image.exif.decode-failed", offset)),
-        },
+        }
+        Err(_) => block_warnings.push(block_warning("image.exif.decode-failed", offset)),
     }
     let successful_before = report
         .exif_blocks
@@ -328,87 +342,4 @@ fn gps_date_time(exif: &Exif, warnings: &mut Vec<ImageWarning>) -> Option<String
     let time =
         date.and_hms_nano_opt(values[0] as u32, values[1] as u32, values[2] as u32, nanos)?;
     Some(time.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string())
-}
-
-fn validate_budget(bytes: &[u8]) -> Result<(), BudgetError> {
-    let little = match bytes.get(..4) {
-        Some(b"II*\0") => true,
-        Some(b"MM\0*") => false,
-        _ => return Err(BudgetError::Corrupt),
-    };
-    let u16_at = |offset: usize| -> Result<u16, BudgetError> {
-        let value = bytes
-            .get(offset..offset.checked_add(2).ok_or(BudgetError::Corrupt)?)
-            .ok_or(BudgetError::Corrupt)?
-            .try_into()
-            .map_err(|_| BudgetError::Corrupt)?;
-        Ok(if little {
-            u16::from_le_bytes(value)
-        } else {
-            u16::from_be_bytes(value)
-        })
-    };
-    let u32_at = |offset: usize| -> Result<u32, BudgetError> {
-        let value = bytes
-            .get(offset..offset.checked_add(4).ok_or(BudgetError::Corrupt)?)
-            .ok_or(BudgetError::Corrupt)?
-            .try_into()
-            .map_err(|_| BudgetError::Corrupt)?;
-        Ok(if little {
-            u32::from_le_bytes(value)
-        } else {
-            u32::from_be_bytes(value)
-        })
-    };
-    let mut pending = vec![u32_at(4)? as usize];
-    let mut visited = std::collections::HashSet::new();
-    let mut entries = 0usize;
-    let mut allocation = 0usize;
-    while let Some(offset) = pending.pop() {
-        if offset == 0 {
-            continue;
-        }
-        if !visited.insert(offset) {
-            return Err(BudgetError::Corrupt);
-        }
-        let count = usize::from(u16_at(offset)?);
-        let table_end = offset
-            .checked_add(2 + count * 12 + 4)
-            .ok_or(BudgetError::Corrupt)?;
-        if table_end > bytes.len() {
-            return Err(BudgetError::Corrupt);
-        }
-        entries += count;
-        if entries > IFD_ENTRY_LIMIT || visited.len() > IFD_LIMIT {
-            return Err(BudgetError::Limit);
-        }
-        for index in 0..count {
-            let position = offset + 2 + index * 12;
-            let tag = u16_at(position)?;
-            let width = match u16_at(position + 2)? {
-                1 | 2 | 6 | 7 => 1,
-                3 | 8 => 2,
-                4 | 9 | 11 => 4,
-                5 | 10 | 12 => 8,
-                _ => 0,
-            };
-            let size = width * u64::from(u32_at(position + 4)?);
-            if size > 4096 {
-                return Err(BudgetError::Limit);
-            }
-            allocation += size as usize;
-            if allocation > super::limits::VIEWER_RANDOM_READ_LIMIT {
-                return Err(BudgetError::Limit);
-            }
-            let value = u32_at(position + 8)?;
-            if size > 4 && (value as u64 + size) > bytes.len() as u64 {
-                return Err(BudgetError::Corrupt);
-            }
-            if matches!(tag, 0x8769 | 0x8825 | 0xa005) {
-                pending.push(value as usize);
-            }
-        }
-        pending.push(u32_at(offset + 2 + count * 12)? as usize);
-    }
-    Ok(())
 }

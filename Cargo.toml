@@ -63,6 +63,7 @@ exclude = [
   "vendor/fjall-3.1.13",
   "vendor/rust-fs-btrfs",
   "vendor/tinybmp-0.7.0",
+  "vendor/kamadak-exif-0.6.1",
 ]
 
 [workspace.package]
@@ -235,6 +236,7 @@ import-core = { path = "crates/import-core" }
 source-reconstruction = { path = "crates/source-reconstruction" }
 
 [patch.crates-io]
+kamadak-exif = { path = "vendor/kamadak-exif-0.6.1" }
 tinybmp = { path = "vendor/tinybmp-0.7.0" }
 fjall = { path = "vendor/fjall-3.1.13" }
 bbolt-rs = { path = "vendor/bbolt-rs" }

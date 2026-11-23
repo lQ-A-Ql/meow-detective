@@ -1,5 +1,6 @@
 #[path = "../image_metadata_fixture.rs"]
 mod fixture;
+mod tiff_native;
 
 use std::sync::atomic::AtomicBool;
 
@@ -126,13 +127,15 @@ fn detects_and_walks_every_supported_container() {
 
 #[test]
 fn records_exif_blocks_and_declared_container_end() {
-    let tiff = viewer(fixture::tiff(true));
+    let bytes = fixture::tiff(true);
+    let expected_end = bytes.len() as u64 - 37;
+    let tiff = viewer(bytes);
     assert_eq!(tiff.exif_blocks.len(), 1);
     assert_eq!(tiff.exif_blocks[0].source, "tiff.ifd0");
     assert!(tiff.exif_blocks[0].decoded);
     assert_eq!(tiff.exif_blocks[0].field_count, 8);
     let structure = tiff.structure.expect("structure report");
-    assert_eq!(structure.declared_end, Some(475));
+    assert_eq!(structure.declared_end, Some(expected_end));
     assert_eq!(structure.trailing_bytes, Some(37));
     assert!(structure.findings.iter().any(|finding| {
         finding.code == "image.trailing-data" && finding.severity == super::ImageIssueSeverity::Info

@@ -25,9 +25,7 @@ pub use map::to_dto;
 pub use source::SeekableSource;
 pub use types::*;
 
-use report_helpers::{
-    mark_truncated, push_finding, push_segment, push_warning, read_u16, read_u32, set_declared_end,
-};
+use report_helpers::{mark_truncated, push_finding, push_segment, push_warning, set_declared_end};
 
 #[cfg(test)]
 #[path = "../../../../tests/unit/file_service/image_structure/mod.rs"]

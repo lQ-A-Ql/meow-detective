@@ -1,80 +1,46 @@
-//! Synthetic EXIF in both byte orders, independent of image decoders and disk fixtures.
+//! EXIF and PNG fixtures encoded with the native libraries.
+
+use exif::{experimental::Writer, Field, In, Tag, Value};
 
 pub(super) fn tiff(little: bool) -> Vec<u8> {
-    let mut bytes = vec![0; 512];
-    bytes[..4].copy_from_slice(if little { b"II*\0" } else { b"MM\0*" });
-    write_u32(&mut bytes, 4, 8, little);
-    write_u16(&mut bytes, 8, 3, little);
-    entry(&mut bytes, 10, (0x0112, 3, 1, 0), little);
-    write_u16(&mut bytes, 18, 6, little);
-    entry(&mut bytes, 22, (0x8769, 4, 1, 64), little);
-    entry(&mut bytes, 34, (0x8825, 4, 1, 128), little);
-    write_u16(&mut bytes, 64, 3, little);
-    entry(&mut bytes, 66, (0x9003, 2, 20, 320), little);
-    entry(&mut bytes, 78, (0x9004, 2, 20, 340), little);
-    entry(&mut bytes, 90, (0xa434, 2, 8, 360), little);
-    bytes[320..340].copy_from_slice(b"2026:10:14 12:34:56\0");
-    bytes[340..360].copy_from_slice(b"2026:10:14 12:34:57\0");
-    bytes[360..368].copy_from_slice(b"Lens 50\0");
-    write_u16(&mut bytes, 128, 8, little);
-    for (index, values) in [
-        (1, 2, 2, 0),
-        (2, 5, 3, 384),
-        (3, 2, 2, 0),
-        (4, 5, 3, 408),
-        (5, 1, 1, 0),
-        (6, 5, 1, 432),
-        (7, 5, 3, 440),
-        (29, 2, 11, 464),
+    let fields = [
+        (Tag::Orientation, Value::Short(vec![6])),
+        (Tag::DateTimeOriginal, ascii(b"2026:10:14 12:34:56")),
+        (Tag::DateTimeDigitized, ascii(b"2026:10:14 12:34:57")),
+        (Tag::LensModel, ascii(b"Lens 50")),
+        (Tag::GPSLatitudeRef, ascii(b"S")),
+        (Tag::GPSLatitude, rational(&[(1, 1), (30, 1), (0, 1)])),
+        (Tag::GPSLongitudeRef, ascii(b"W")),
+        (Tag::GPSLongitude, rational(&[(2, 1), (0, 1), (0, 1)])),
+        (Tag::GPSAltitudeRef, Value::Byte(vec![1])),
+        (Tag::GPSAltitude, rational(&[(10, 1)])),
+        (Tag::GPSTimeStamp, rational(&[(12, 1), (34, 1), (113, 2)])),
+        (Tag::GPSDateStamp, ascii(b"2026:10:14")),
     ]
     .into_iter()
-    .enumerate()
-    {
-        entry(&mut bytes, 130 + index * 12, values, little);
+    .map(|(tag, value)| Field {
+        tag,
+        ifd_num: In::PRIMARY,
+        value,
+    })
+    .collect::<Vec<_>>();
+    let mut writer = Writer::new();
+    for field in &fields {
+        writer.push_field(field);
     }
-    bytes[138] = b'S';
-    bytes[162] = b'W';
-    bytes[186] = 1;
-    for (offset, num, denom) in [
-        (384, 1, 1),
-        (392, 30, 1),
-        (400, 0, 1),
-        (408, 2, 1),
-        (416, 0, 1),
-        (424, 0, 1),
-        (432, 10, 1),
-        (440, 12, 1),
-        (448, 34, 1),
-        (456, 113, 2),
-    ] {
-        write_u32(&mut bytes, offset, num, little);
-        write_u32(&mut bytes, offset + 4, denom, little);
-    }
-    bytes[464..475].copy_from_slice(b"2026:10:14\0");
+    let mut output = std::io::Cursor::new(Vec::new());
+    writer.write(&mut output, little).unwrap();
+    let mut bytes = output.into_inner();
+    bytes.extend_from_slice(&[0; 37]);
     bytes
 }
 
-fn entry(bytes: &mut [u8], offset: usize, value: (u16, u16, u32, u32), little: bool) {
-    write_u16(bytes, offset, value.0, little);
-    write_u16(bytes, offset + 2, value.1, little);
-    write_u32(bytes, offset + 4, value.2, little);
-    write_u32(bytes, offset + 8, value.3, little);
+fn ascii(value: &[u8]) -> Value {
+    Value::Ascii(vec![value.to_vec()])
 }
 
-pub(super) fn write_u16(bytes: &mut [u8], offset: usize, value: u16, little: bool) {
-    bytes[offset..offset + 2].copy_from_slice(&if little {
-        value.to_le_bytes()
-    } else {
-        value.to_be_bytes()
-    });
-}
-
-pub(super) fn write_u32(bytes: &mut [u8], offset: usize, value: u32, little: bool) {
-    bytes[offset..offset + 4].copy_from_slice(&if little {
-        value.to_le_bytes()
-    } else {
-        value.to_be_bytes()
-    });
+fn rational(values: &[(u32, u32)]) -> Value {
+    Value::Rational(values.iter().copied().map(Into::into).collect())
 }
 
 pub(super) fn jpeg(exif: &[u8]) -> Vec<u8> {
