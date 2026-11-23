@@ -199,29 +199,6 @@ pub fn run_source_analysis_extraction_execution_with_cancel(
     )
 }
 
-fn admit_extraction(
-    control: &AnalysisExecutionControl<'_>,
-) -> Result<source_kernel::resource_budget::ResourcePermit, AnalysisServiceError> {
-    let budget = control
-        .source_runtime
-        .resource_pool()
-        .acquire(
-            source_kernel::resource_budget::Resources {
-                bytes: 384 * source_kernel::resource_budget::MIB,
-                workers: 1,
-                ..Default::default()
-            },
-            Some(&control.cancel_token),
-        )
-        .map_err(|error| match error {
-            source_kernel::resource_budget::ResourceError::Cancelled => {
-                AnalysisServiceError::Cancelled
-            }
-            error => AnalysisServiceError::Io(error.into_io()),
-        })?;
-    Ok(budget)
-}
-
 fn run_source_analysis_extraction_execution_with_progress(
     case_conn: &Connection,
     case_root: &Path,
@@ -232,7 +209,9 @@ fn run_source_analysis_extraction_execution_with_progress(
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     control.source_runtime.validate_publication()?;
     let admission = Instant::now();
-    let _budget = admit_extraction(&control)?;
+    let _budget = control
+        .source_runtime
+        .admit_extraction(&control.cancel_token)?;
     let admission_ms = u64::try_from(admission.elapsed().as_millis()).unwrap_or(u64::MAX);
     let source = open_ready_analysis_source(case_conn, case_root, case_id, data_source_id)?;
     let _source_fence = control.source_runtime.fence(&source.connection);

@@ -25,16 +25,30 @@ struct ImportedCase {
 }
 
 fn import_directory() -> ImportedCase {
+    import_directory_with_entries(
+        DataSourcePlatform::Windows,
+        &[("document.txt", "investigation text\n")],
+    )
+}
+
+fn import_directory_with_entries(
+    platform: DataSourcePlatform,
+    entries: &[(&str, &str)],
+) -> ImportedCase {
     let root = tempfile::tempdir().unwrap();
     let evidence = root.path().join("evidence");
     std::fs::create_dir_all(&evidence).unwrap();
-    std::fs::write(evidence.join("document.txt"), "investigation text\n").unwrap();
+    for (relative, contents) in entries {
+        let path = evidence.join(relative);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, contents).unwrap();
+    }
     let case = case_service::create_case(root.path(), "capability lifecycle", None).unwrap();
     let source = case
         .with_conn(|conn| {
             let config = app_services::import_precheck::prepare_import_source_config_from_path(
                 &evidence.to_string_lossy(),
-                DataSourcePlatform::Windows,
+                platform,
             )
             .unwrap();
             let job = JobRepo::new(conn).create(&case.meta.id.0, "directory import")?;
@@ -223,6 +237,92 @@ fn rejected_registration_cannot_leave_a_retry_queued() {
         runtime.tasks.task_count_for_case(&fixture.case.meta.id.0),
         0
     );
+}
+
+#[test]
+fn explicit_artifact_retry_executes_a_new_canonical_attempt() {
+    use persistence_sqlite::repositories::processing_phase_repo::{
+        DataSourceProcessingPhaseRepo, ProcessingPhase,
+    };
+    let fixture = import_directory();
+    let runtime = runtime();
+    post_import_service::enqueue_case_pending(
+        &runtime,
+        &fixture.case.meta.id,
+        &fixture.case.case_root,
+    )
+    .unwrap();
+    for (_, result) in runtime.tasks.wait_all(Duration::from_secs(20)) {
+        result.unwrap();
+    }
+    let conn = fixture.case.connection().unwrap();
+    let repo = DataSourceProcessingPhaseRepo::new(&conn);
+    let before = repo
+        .find(&fixture.source, ProcessingPhase::Artifacts)
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        post_import_service::retry_capability(
+            &runtime,
+            &fixture.case.meta.id,
+            &fixture.case.case_root,
+            &fixture.source.0,
+            post_import_service::ExecutableCapability::Artifacts,
+        )
+        .unwrap(),
+        post_import_service::RetryOutcome::Accepted
+    ));
+    for (_, result) in runtime.tasks.wait_all(Duration::from_secs(20)) {
+        result.unwrap();
+    }
+    let after = repo
+        .find(&fixture.source, ProcessingPhase::Artifacts)
+        .unwrap()
+        .unwrap();
+    assert_ne!(before.attempt_id, after.attempt_id);
+    drop(conn);
+    assert_eq!(
+        state(&fixture, CapabilityKindDto::Artifacts),
+        CapabilityStateDto::Ready
+    );
+}
+
+#[test]
+fn android_partial_extraction_publishes_available_facts_and_a_partial_capability() {
+    let fixture = import_directory_with_entries(
+        DataSourcePlatform::Android,
+        &[
+            ("system/build.prop", "ro.product.model=Inspection phone\n"),
+            ("system/packages.xml", "<packages><package"),
+        ],
+    );
+    let runtime = runtime();
+    post_import_service::enqueue_case_pending(
+        &runtime,
+        &fixture.case.meta.id,
+        &fixture.case.case_root,
+    )
+    .unwrap();
+    for (_, result) in runtime.tasks.wait_all(Duration::from_secs(20)) {
+        result.unwrap();
+    }
+    assert_eq!(
+        runtime.tasks.task_count_for_case(&fixture.case.meta.id.0),
+        0
+    );
+    assert_eq!(
+        state(&fixture, CapabilityKindDto::Artifacts),
+        CapabilityStateDto::Partial
+    );
+    let conn = fixture.case.connection().unwrap();
+    let facts = app_services::analysis_service::get_source_android_device_info(
+        &conn,
+        &fixture.case.case_root,
+        &fixture.case.meta.id,
+        &fixture.source,
+    )
+    .unwrap();
+    assert_eq!(facts.model.as_deref(), Some("Inspection phone"));
 }
 
 #[test]

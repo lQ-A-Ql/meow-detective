@@ -90,6 +90,7 @@ fn input_fingerprint(work: &CapabilityWork) -> Result<String, PostImportError> {
     digest.update(b"post-import-v2\0");
     digest.update(work.kind.wire().as_bytes());
     digest.update(manifest.immutable_data_digest.as_bytes());
+    digest.update(work.row.revision.to_be_bytes());
     Ok(hex::encode(digest.finalize()))
 }
 

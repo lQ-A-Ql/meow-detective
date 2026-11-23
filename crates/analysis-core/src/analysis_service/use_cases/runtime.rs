@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::analysis_service::AnalysisServiceError;
 use evidence_access::bitlocker_runtime::BitLockerUnlockRegistry;
 use evidence_access::file_service::SourceReadContext;
 
@@ -33,6 +34,27 @@ impl AnalysisSourceReadRuntime {
     }
     pub(crate) fn resource_pool(&self) -> source_kernel::resource_budget::ResourcePool {
         source_kernel::resource_budget::pool_for(self.publication.as_ref())
+    }
+    /// Reserve the shared extraction workspace estimate and one worker.
+    pub(crate) fn admit_extraction(
+        &self,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<source_kernel::resource_budget::ResourcePermit, AnalysisServiceError> {
+        self.resource_pool()
+            .acquire(
+                source_kernel::resource_budget::Resources {
+                    bytes: 384 * source_kernel::resource_budget::MIB,
+                    workers: 1,
+                    ..Default::default()
+                },
+                Some(cancel),
+            )
+            .map_err(|error| match error {
+                source_kernel::resource_budget::ResourceError::Cancelled => {
+                    AnalysisServiceError::Cancelled
+                }
+                error => AnalysisServiceError::Io(error.into_io()),
+            })
     }
     pub(crate) fn validate_publication(&self) -> std::io::Result<()> {
         if let Some(lease) = &self.publication {
