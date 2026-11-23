@@ -9,6 +9,7 @@ mod heavy_queue;
 pub mod process_owner;
 mod registry;
 mod update_guard;
+mod waiting;
 pub use update_guard::UpdateTaskGuard;
 
 use heavy_queue::HeavyTaskQueue;
@@ -287,8 +288,25 @@ impl TaskManager {
     }
 
     pub fn wait_all(&self, timeout: Duration) -> Vec<(String, TaskResult)> {
-        let task_ids = self.task_ids_matching(|_| true);
-        self.wait_task_ids(task_ids, timeout)
+        let started = Instant::now();
+        let mut results = Vec::new();
+        loop {
+            let remaining = timeout.saturating_sub(started.elapsed());
+            let task_ids = self.task_ids_matching(|_| true);
+            if remaining.is_zero() || task_ids.is_empty() {
+                return results;
+            }
+            results.extend(self.wait_task_ids(task_ids, remaining));
+        }
+    }
+
+    pub fn wait_for_group_prefix(
+        &self,
+        case_id: &str,
+        prefix: &str,
+        cancel: &AtomicBool,
+    ) -> std::io::Result<()> {
+        waiting::wait_for_group_prefix(&self.registry, case_id, prefix, cancel)
     }
 
     fn wait_task_ids(&self, task_ids: Vec<String>, timeout: Duration) -> Vec<(String, TaskResult)> {

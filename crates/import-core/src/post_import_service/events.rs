@@ -1,9 +1,9 @@
-use super::{CapabilityEventSink, CapabilityWork};
+use super::{ApplicationEventSink, CapabilityWork};
 use persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRow;
 use transport::events::{EventEnvelope, EventTopic};
 
-fn emit(
-    sink: Option<&dyn CapabilityEventSink>,
+pub fn emit(
+    sink: Option<&dyn ApplicationEventSink>,
     topic: EventTopic,
     payload: serde_json::Value,
 ) -> std::io::Result<()> {
@@ -19,7 +19,7 @@ fn emit(
 }
 
 pub(super) fn status(
-    sink: Option<&dyn CapabilityEventSink>,
+    sink: Option<&dyn ApplicationEventSink>,
     row: &SourceCapabilityRow,
 ) -> std::io::Result<()> {
     emit(

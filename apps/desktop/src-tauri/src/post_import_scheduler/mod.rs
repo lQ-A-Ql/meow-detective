@@ -1,7 +1,7 @@
 //! Desktop event adapter for application-owned post-import processing.
 
 use crate::state::AppState;
-use app_services::post_import_service::{self, CapabilityEventSink, PostImportRuntime};
+use app_services::post_import_service::{self, ApplicationEventSink, PostImportRuntime};
 use domain::CaseId;
 use std::{path::Path, sync::Arc};
 use tauri::AppHandle;
@@ -12,7 +12,7 @@ pub(crate) use post_import_service::{
 };
 
 struct DesktopCapabilityEvents(AppHandle);
-impl CapabilityEventSink for DesktopCapabilityEvents {
+impl ApplicationEventSink for DesktopCapabilityEvents {
     fn emit(&self, event: &EventEnvelope<serde_json::Value>) -> std::io::Result<()> {
         crate::events::event_bridge::emit_event(&self.0, event.topic.as_str(), event)
             .map_err(std::io::Error::other)
@@ -23,10 +23,12 @@ pub(crate) fn runtime(state: &AppState, app: Option<&AppHandle>) -> PostImportRu
     PostImportRuntime {
         tasks: Arc::clone(&state.task_manager),
         bitlocker: Arc::clone(&state.bitlocker_runtime),
-        events: app.map(|app| {
-            Arc::new(DesktopCapabilityEvents(app.clone())) as Arc<dyn CapabilityEventSink>
-        }),
+        events: app.map(event_sink),
     }
+}
+
+pub(crate) fn event_sink(app: &AppHandle) -> Arc<dyn ApplicationEventSink> {
+    Arc::new(DesktopCapabilityEvents(app.clone()))
 }
 
 pub(crate) fn enqueue_case_pending(

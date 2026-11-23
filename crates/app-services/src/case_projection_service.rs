@@ -2,6 +2,11 @@ use std::{path::Path, sync::atomic::AtomicBool};
 
 use serde::{Deserialize, Serialize};
 
+mod scheduler;
+mod worker;
+pub use scheduler::{schedule_case_projection, CaseProjectionRuntime, CaseProjectionScheduleError};
+pub const CASE_PROJECTION_TASK_GROUP_PREFIX: &str = "case-projections|";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CaseProjectionBuildReport {
@@ -21,6 +26,8 @@ pub enum CaseProjectionError {
     Infrastructure(#[from] crate::infrastructure_graph_service::InfrastructureProjectionError),
     #[error("case projection build cancelled")]
     Cancelled,
+    #[error("case projection runtime failed: {0}")]
+    Runtime(#[from] std::io::Error),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,6 +44,7 @@ impl transport::ServiceErrorCategory for CaseProjectionError {
             Self::Correlation(error) => error.category(),
             Self::Infrastructure(error) => error.category(),
             Self::Cancelled => transport::ErrorCategory::Cancelled,
+            Self::Runtime(_) => transport::ErrorCategory::Io,
         }
     }
 }
@@ -83,7 +91,20 @@ pub fn run_case_projection_job(
         return Ok(CaseProjectionJobOutcome::Cancelled);
     }
     repo.update_progress(job_id, 5, "Building case projections")?;
-    match rebuild_case_projections(connection, case_root, case_id, cancel_token) {
+    finish_case_projection_job(
+        connection,
+        job_id,
+        rebuild_case_projections(connection, case_root, case_id, cancel_token),
+    )
+}
+
+fn finish_case_projection_job(
+    connection: &rusqlite::Connection,
+    job_id: &domain::JobId,
+    result: Result<CaseProjectionBuildReport, CaseProjectionError>,
+) -> Result<CaseProjectionJobOutcome, crate::job_service::JobServiceError> {
+    let repo = persistence_sqlite::repositories::job_repo::JobRepo::new(connection);
+    match result {
         Ok(report) => {
             let detail = format!("Case projections ready at {}", report.completed_at);
             repo.complete_committed(job_id, &detail)?;

@@ -92,6 +92,7 @@ pub(super) fn enqueue(
         bitlocker: Arc::clone(&runtime.bitlocker),
         events: runtime.events.clone(),
         timeline: Arc::clone(&runtime.timeline),
+        case_projections: Arc::clone(&runtime.case_projections),
     };
     events::status(runtime.events.as_deref(), &row)?;
     match runtime
@@ -106,5 +107,9 @@ pub(super) fn enqueue(
 }
 
 pub(super) fn family(case: &str, source: &str, kind: ExecutableCapability) -> String {
-    format!("post-import|{case}|{source}|{}", kind.wire())
+    format!(
+        "{}{case}|{source}|{}",
+        super::CAPABILITY_TASK_GROUP_PREFIX,
+        kind.wire()
+    )
 }

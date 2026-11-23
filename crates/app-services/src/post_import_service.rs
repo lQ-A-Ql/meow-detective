@@ -4,20 +4,22 @@ use domain::CaseId;
 use source_kernel::task_runtime::TaskManager;
 use std::{path::Path, sync::Arc};
 
+mod case_projections;
 mod rebuild;
 mod timeline;
 
 pub use rebuild::rebuild_timeline;
 
 pub use import_core::post_import_service::{
-    CapabilityEventSink, ExecutableCapability, PostImportError, RetryOutcome,
+    ApplicationEventSink, ExecutableCapability, PostImportError, RetryOutcome,
+    CAPABILITY_TASK_GROUP_PREFIX,
 };
 
 #[derive(Clone)]
 pub struct PostImportRuntime {
     pub tasks: Arc<TaskManager>,
     pub bitlocker: Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>,
-    pub events: Option<Arc<dyn CapabilityEventSink>>,
+    pub events: Option<Arc<dyn ApplicationEventSink>>,
 }
 
 impl PostImportRuntime {
@@ -27,6 +29,10 @@ impl PostImportRuntime {
             bitlocker: Arc::clone(&self.bitlocker),
             events: self.events.clone(),
             timeline: Arc::new(timeline::SourceTimelineProjection),
+            case_projections: Arc::new(case_projections::CaseProjectionRequests {
+                tasks: Arc::clone(&self.tasks),
+                events: self.events.clone(),
+            }),
         }
     }
 }

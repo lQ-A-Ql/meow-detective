@@ -12,9 +12,12 @@ mod execution;
 mod wait;
 
 pub use enqueue::{cancel_capability, enqueue_case_pending, retry_capability};
+pub use events::emit as publish_application_event;
 pub use wait::request_and_wait;
 
-pub trait CapabilityEventSink: Send + Sync {
+pub const CAPABILITY_TASK_GROUP_PREFIX: &str = "post-import|";
+
+pub trait ApplicationEventSink: Send + Sync {
     fn emit(&self, event: &EventEnvelope<serde_json::Value>) -> std::io::Result<()>;
 }
 
@@ -22,8 +25,13 @@ pub trait CapabilityEventSink: Send + Sync {
 pub struct PostImportRuntime {
     pub tasks: Arc<TaskManager>,
     pub bitlocker: Arc<evidence_access::bitlocker_runtime::BitLockerUnlockRegistry>,
-    pub events: Option<Arc<dyn CapabilityEventSink>>,
+    pub events: Option<Arc<dyn ApplicationEventSink>>,
     pub timeline: Arc<dyn TimelineProjectionExecutor>,
+    pub case_projections: Arc<dyn CaseProjectionPublisher>,
+}
+
+pub trait CaseProjectionPublisher: Send + Sync {
+    fn request(&self, case_id: &str, case_root: &std::path::Path) -> std::io::Result<()>;
 }
 
 pub struct TimelineProjectionRequest<'a> {
@@ -116,8 +124,9 @@ struct CapabilityWork {
     case_root: PathBuf,
     kind: ExecutableCapability,
     bitlocker: Arc<evidence_access::bitlocker_runtime::BitLockerUnlockRegistry>,
-    events: Option<Arc<dyn CapabilityEventSink>>,
+    events: Option<Arc<dyn ApplicationEventSink>>,
     timeline: Arc<dyn TimelineProjectionExecutor>,
+    case_projections: Arc<dyn CaseProjectionPublisher>,
 }
 
 pub struct CapabilityOutcome {

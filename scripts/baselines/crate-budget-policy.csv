@@ -1,7 +1,7 @@
 crate,maxInternalDeps,maxSrcLoc,owner,reason,expires
 analysis-core,19,31000,architecture,analysis capability layer with ten percent headroom,2027-06-30
 analysis-plugins,8,1500,architecture,parser plugin host and self-describing action channel,2027-06-30
-app-services,26,31500,architecture,use-case orchestration plus artifact report search and bitlocker services,2027-06-30
+app-services,26,32000,architecture,application orchestration and coalesced case projection scheduling moved from desktop,2027-06-30
 ceph-reconstruction,13,22500,architecture,ceph reconstruction and wire decoders with ten percent headroom,2027-06-30
 emulation-services,16,3600,architecture,controlled emulation workflows plus linux bypass plan apply inspect split and typed xfs blocker mapping,2027-06-30
 evidence-access,26,26000,architecture,evidence read preview and partition services with ten percent headroom,2027-06-30

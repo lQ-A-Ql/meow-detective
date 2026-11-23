@@ -175,6 +175,178 @@ fn scoped_executor_completes_both_capabilities_after_real_directory_import() {
 }
 
 #[test]
+fn completed_capabilities_refresh_the_case_graph_publication() {
+    let fixture = import_directory();
+    let before = fixture
+        .case
+        .with_conn(|conn| {
+            app_services::case_projection_service::rebuild_case_projections(
+                conn,
+                &fixture.case.case_root,
+                &fixture.case.meta.id.0,
+                &AtomicBool::new(false),
+            )
+            .unwrap();
+            Ok(
+                app_services::graph_service::get_graph_snapshot_for_case_read_only(
+                    conn,
+                    &fixture.case.case_root,
+                    &fixture.case.meta.id.0,
+                )
+                .unwrap(),
+            )
+        })
+        .unwrap();
+    let runtime = runtime();
+    post_import_service::enqueue_case_pending(
+        &runtime,
+        &fixture.case.meta.id,
+        &fixture.case.case_root,
+    )
+    .unwrap();
+    for (_, result) in runtime.tasks.wait_all(Duration::from_secs(20)) {
+        result.unwrap();
+    }
+    let after = fixture
+        .case
+        .with_conn(|conn| {
+            Ok(
+                app_services::graph_service::get_graph_snapshot_for_case_read_only(
+                    conn,
+                    &fixture.case.case_root,
+                    &fixture.case.meta.id.0,
+                )
+                .unwrap(),
+            )
+        })
+        .unwrap();
+    assert_eq!(after.projection_status, "ready");
+    assert!(after.total_nodes > before.total_nodes);
+}
+
+#[test]
+fn case_projection_requests_coalesce_until_source_work_finishes() {
+    use app_services::case_projection_service::{schedule_case_projection, CaseProjectionRuntime};
+    let fixture = import_directory();
+    let runtime = runtime();
+    let root = fixture.case.case_root.clone();
+    let source = fixture.source.clone();
+    let case = fixture.case.meta.id.clone();
+    let (entered, observed) = mpsc::channel();
+    let (release, wait) = mpsc::sync_channel(0);
+    runtime
+        .tasks
+        .spawn_scoped_parallel(
+            "source-graph-writer".into(),
+            TaskScope::data_source(
+                &case.0,
+                &source.0,
+                format!(
+                    "{}source-graph",
+                    app_services::post_import_service::CAPABILITY_TASK_GROUP_PREFIX
+                ),
+            ),
+            TaskPriority::Background,
+            Arc::new(AtomicBool::new(false)),
+            move || {
+                entered.send(()).unwrap();
+                wait.recv().unwrap();
+                let conn = source_db::open_source_db(&root, &source).unwrap();
+                persistence_sqlite::repositories::graph_repo::GraphRepo::new(&conn)
+                    .insert_nodes_batch(&[domain::GraphNode {
+                        id: "published-source-node".into(),
+                        case_id: case.0,
+                        node_type: domain::NodeType::Artifact,
+                        label: "Source result".into(),
+                        summary: "Published source graph".into(),
+                        tags: Vec::new(),
+                        created_at: chrono::Utc::now().to_rfc3339(),
+                    }])
+                    .unwrap();
+                Ok(())
+            },
+        )
+        .unwrap();
+    observed.recv_timeout(Duration::from_secs(2)).unwrap();
+    let projections = CaseProjectionRuntime {
+        tasks: Arc::clone(&runtime.tasks),
+        events: None,
+    };
+    assert!(schedule_case_projection(
+        &projections,
+        &fixture.case.meta.id.0,
+        &fixture.case.case_root
+    )
+    .unwrap()
+    .is_some());
+    assert!(schedule_case_projection(
+        &projections,
+        &fixture.case.meta.id.0,
+        &fixture.case.case_root
+    )
+    .unwrap()
+    .is_none());
+    release.send(()).unwrap();
+    for (_, result) in runtime.tasks.wait_all(Duration::from_secs(20)) {
+        result.unwrap();
+    }
+    fixture
+        .case
+        .with_conn(|conn| {
+            let jobs = JobRepo::new(conn).list_recent(20)?;
+            assert_eq!(
+                jobs.iter()
+                    .filter(|job| job.kind == "Case projections")
+                    .count(),
+                1
+            );
+            let graph = app_services::graph_service::get_graph_snapshot_for_case_read_only(
+                conn,
+                &fixture.case.case_root,
+                &fixture.case.meta.id.0,
+            )
+            .unwrap();
+            assert_eq!(graph.projection_status, "ready");
+            assert!(graph.total_nodes > 0);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn rejected_case_projection_registration_leaves_a_terminal_job() {
+    let fixture = import_directory();
+    let runtime = runtime();
+    runtime
+        .tasks
+        .retire_case_and_drain(&fixture.case.meta.id.0, Duration::from_secs(1));
+    let projections = app_services::case_projection_service::CaseProjectionRuntime {
+        tasks: runtime.tasks,
+        events: None,
+    };
+    assert!(
+        app_services::case_projection_service::schedule_case_projection(
+            &projections,
+            &fixture.case.meta.id.0,
+            &fixture.case.case_root,
+        )
+        .is_err()
+    );
+    fixture
+        .case
+        .with_conn(|conn| {
+            let job = JobRepo::new(conn)
+                .list_recent(20)?
+                .into_iter()
+                .find(|job| job.kind == "Case projections")
+                .unwrap();
+            assert_eq!(job.status, "failed");
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
 fn requested_rebuild_uses_the_same_capability_executor_and_read_model() {
     let fixture = import_directory();
     let runtime = runtime();

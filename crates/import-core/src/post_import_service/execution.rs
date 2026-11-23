@@ -29,7 +29,11 @@ pub(super) fn run(work: CapabilityWork, cancel: Arc<AtomicBool>) -> Result<(), P
     let attempt = match claimed {
         CapabilityClaimOutcome::Acquired(attempt) => attempt,
         CapabilityClaimOutcome::Ready(row) => {
-            return events::status(work.events.as_deref(), &row).map_err(Into::into)
+            if !cancel.load(Ordering::Acquire) {
+                work.case_projections
+                    .request(&row.case_id, &work.case_root)?;
+            }
+            return events::status(work.events.as_deref(), &row).map_err(Into::into);
         }
         CapabilityClaimOutcome::Busy | CapabilityClaimOutcome::Superseded => return Ok(()),
     };
@@ -68,6 +72,10 @@ pub(super) fn run(work: CapabilityWork, cancel: Arc<AtomicBool>) -> Result<(), P
         error_code: outcome.error_code,
     };
     if let Some(row) = CapabilityExecutionRepo::new(&conn).complete(&attempt, update)? {
+        if !cancel.load(Ordering::Acquire) {
+            work.case_projections
+                .request(&row.case_id, &work.case_root)?;
+        }
         events::status(work.events.as_deref(), &row)?;
         if row.state == "ready" && work.kind == ExecutableCapability::Timeline {
             events::timeline_updated(&work, outcome.timeline_events)?;
